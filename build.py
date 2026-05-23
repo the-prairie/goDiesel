@@ -766,10 +766,47 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
 
 .no-sv { position: absolute; inset: 0; display: flex; align-items: center;
          justify-content: center; flex-direction: column; padding: 32px;
-         text-align: center; color: var(--text-dim); }
+         text-align: center; color: var(--text-dim);
+         background:
+           radial-gradient(circle at 50% 40%, rgba(0,241,159,0.12), transparent 28%),
+           linear-gradient(155deg, #0E1718 0%, #101418 42%, #16140F 100%); }
 .no-sv .icon { font-size: 36px; opacity: 0.4; margin-bottom: 12px; }
 .no-sv .msg { font-family: 'JetBrains Mono', monospace; font-size: 11px;
               letter-spacing: 1.5px; text-transform: uppercase; }
+.vista-fallback { width: min(88%, 560px); min-height: min(82%, 680px);
+                  display: grid; grid-template-rows: auto 1fr auto;
+                  gap: 18px; text-align: left; }
+.vista-kicker { font-family: 'JetBrains Mono', monospace; font-size: 10px;
+                color: var(--teal); letter-spacing: 1.8px; text-transform: uppercase; }
+.vista-title { margin-top: 8px; color: #FFF; font-size: 28px; line-height: 1;
+               font-weight: 800; letter-spacing: 0.02em; text-transform: uppercase; }
+.vista-subtitle { margin-top: 8px; color: var(--text-muted); font-size: 13px;
+                  line-height: 1.6; max-width: 460px; }
+.vista-art { position: relative; min-height: 300px; border: 1px solid rgba(255,255,255,0.08);
+             border-radius: 12px; overflow: hidden; background:
+               linear-gradient(180deg, rgba(0,0,0,0), rgba(0,0,0,0.58)),
+               radial-gradient(circle at 42% 48%, rgba(0,241,159,0.22), transparent 34%),
+               linear-gradient(140deg, #263F49 0%, #7D6F52 44%, #D4C18E 100%); }
+.vista-art svg { position: absolute; inset: 16%; width: 68%; height: 68%;
+                 filter: drop-shadow(0 0 20px rgba(0,241,159,0.34)); }
+.vista-photo-grid { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(3, 1fr); }
+.vista-photo-grid img { width: 100%; height: 100%; object-fit: cover;
+                        filter: brightness(0.78) saturate(1.08); }
+.vista-photo-grid::after { content: ''; position: absolute; inset: 0;
+                           background: linear-gradient(180deg, rgba(0,0,0,0.08), rgba(0,0,0,0.56)); }
+.vista-point { position: absolute; left: 50%; top: 50%; width: 16px; height: 16px;
+               border: 3px solid #FFF; border-radius: 999px; background: var(--teal);
+               box-shadow: 0 0 24px rgba(0,241,159,0.85); transform: translate(-50%, -50%); }
+.vista-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.vista-stat { border: 1px solid rgba(255,255,255,0.10); border-radius: 8px;
+              padding: 10px; background: rgba(0,0,0,0.22); }
+.vista-stat b { display: block; color: #FFF; font-family: 'JetBrains Mono', monospace;
+                font-size: 12px; letter-spacing: 1px; }
+.vista-stat span { display: block; margin-top: 5px; color: var(--text-dim);
+                  font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px; }
+.vista-profile { height: 70px; border: 1px solid rgba(255,255,255,0.10); border-radius: 8px;
+                 background: rgba(0,0,0,0.22); padding: 8px; }
+.vista-profile svg { width: 100%; height: 100%; overflow: visible; }
 
 .photo-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.92);
                backdrop-filter: blur(10px); z-index: 1000;
@@ -1364,11 +1401,7 @@ function initFallbackRoute() {
       <div class="map-fallback-copy">Google Maps did not authorize this local URL, so this preview is using the generated route silhouette.</div>
       <div class="map-fallback-code">ALLOW localhost IN GOOGLE MAPS API REFERRERS</div>
     </div>`;
-  document.getElementById('pano').innerHTML = `
-    <div class="map-fallback">
-      <div class="map-fallback-title">Street View unavailable</div>
-      <div class="map-fallback-copy">The quest still works locally. Add localhost to the Google Maps browser key to enable maps and Street View.</div>
-    </div>`;
+  document.getElementById('pano').innerHTML = routeVistaHtml(r, r.route[0], 'Street View unavailable');
   document.getElementById('noSv').style.display = 'none';
   renderStrip();
   const scrubber = document.getElementById('scrubber');
@@ -1390,6 +1423,61 @@ function setFallbackRouteIndex(i) {
   document.getElementById('elevHere').textContent = Math.round(p.elev) + ' m';
   document.getElementById('poiTitle').textContent =
     i < 10 ? 'Route start' : (i > r.route.length - 10 ? 'Route end' : 'Along route');
+}
+
+function elevationProfileSvg(route, point) {
+  const pts = route.route || [];
+  if (pts.length < 2) return '';
+  const elevations = pts.map(p => Number(p.elev || 0));
+  const min = Math.min(...elevations);
+  const max = Math.max(...elevations);
+  const span = Math.max(max - min, 1);
+  const d = pts.map((p, idx) => {
+    const x = (idx / (pts.length - 1)) * 100;
+    const y = 54 - ((Number(p.elev || 0) - min) / span) * 44;
+    return `${idx === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
+  }).join(' ');
+  const total = pts[pts.length - 1].d || 1;
+  const markerX = Math.max(0, Math.min(100, ((point?.d || 0) / total) * 100));
+  return `<svg viewBox="0 0 100 60" preserveAspectRatio="none" aria-hidden="true">
+    <path d="M 0 58 L ${d.replace(/^M /, '')} L 100 58 Z" fill="rgba(0,241,159,0.12)"></path>
+    <path d="${d}" fill="none" stroke="#00F19F" stroke-width="2.2" vector-effect="non-scaling-stroke"></path>
+    <line x1="${markerX.toFixed(2)}" y1="4" x2="${markerX.toFixed(2)}" y2="58" stroke="rgba(255,255,255,0.42)" stroke-dasharray="3 4" vector-effect="non-scaling-stroke"></line>
+  </svg>`;
+}
+
+function routeVistaHtml(route, point, label = 'No Street View here') {
+  const photos = [...(route.baseline_photos || []), ...getStoredPhotos(route.slug)].slice(0, 3);
+  const photoGrid = photos.length
+    ? `<div class="vista-photo-grid">${photos.map(ph => {
+        const src = ph.thumb_url || ('data:image/jpeg;base64,' + ph.thumb);
+        return `<img src="${src}" alt="" loading="lazy" decoding="async">`;
+      }).join('')}</div>`
+    : '';
+  const totalKm = route.distance_km.toFixed(1);
+  const currentKm = ((point?.d || 0) / 1000).toFixed(1);
+  const elevation = Math.round(point?.elev || 0).toLocaleString();
+  const climb = Math.round(route.elevation_gain_m || 0).toLocaleString();
+  return `<div class="vista-fallback">
+    <div>
+      <div class="vista-kicker">${escapeHtml(label)}</div>
+      <div class="vista-title">${escapeHtml(route.name)}</div>
+      <div class="vista-subtitle">${escapeHtml(route.quest_blurb || route.subtitle || 'Route preview built from the quest track.')}</div>
+    </div>
+    <div class="vista-art">
+      ${photoGrid}
+      ${route.svg || ''}
+      <div class="vista-point"></div>
+    </div>
+    <div>
+      <div class="vista-stats">
+        <div class="vista-stat"><b>${currentKm} / ${totalKm} km</b><span>along route</span></div>
+        <div class="vista-stat"><b>${elevation} m</b><span>current elev</span></div>
+        <div class="vista-stat"><b>${climb} m</b><span>total climb</span></div>
+      </div>
+      <div class="vista-profile">${elevationProfileSvg(route, point)}</div>
+    </div>
+  </div>`;
 }
 
 function renderStrip() {
@@ -1445,6 +1533,7 @@ function setRouteIndex(i) {
           document.getElementById('noSv').style.display = 'none';
           panorama.setPano(data.location.pano); panorama.setVisible(true);
         } else {
+          document.getElementById('noSv').innerHTML = routeVistaHtml(r, p);
           document.getElementById('noSv').style.display = 'flex';
           panorama.setVisible(false);
         }
