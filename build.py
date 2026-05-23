@@ -530,6 +530,7 @@ template_html = '''<!DOCTYPE html>
 <meta name="theme-color" content="#0B1014">
 <meta name="description" content="Lauren&rsquo;s quest atlas — real runs and rides turned into repeatable adventure challenges.">
 <title>godiesel quest atlas · Lauren Zary</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.18.0/dist/maplibre-gl.css">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap');
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -685,6 +686,24 @@ header { position: sticky; top: 0; z-index: 50;
 .panel-map { position: relative; border-right: 1px solid var(--border); }
 .panel-sv { position: relative; background: #0A0F12; overflow: hidden; }
 #map, #pano { width: 100%; height: 100%; }
+.route-cinema { position: absolute; inset: 0; }
+.route-cinema .maplibregl-control-container { display: none; }
+.route-cinema-overlay { position: absolute; left: 16px; right: 16px; bottom: 16px;
+                        display: flex; align-items: flex-end; justify-content: space-between;
+                        gap: 16px; padding: 14px 16px; border: 1px solid var(--border);
+                        border-radius: 10px; background: rgba(10,12,14,0.82);
+                        backdrop-filter: blur(10px); z-index: 4; pointer-events: none; }
+.route-cinema-kicker { font-family: 'JetBrains Mono', monospace; font-size: 10px;
+                       color: var(--teal); letter-spacing: 1.8px; text-transform: uppercase; }
+.route-cinema-copy { margin-top: 5px; color: var(--text-dim); font-size: 12px;
+                     line-height: 1.45; max-width: 360px; }
+.route-cinema-stats { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.route-cinema-stat { min-width: 92px; border: 1px solid rgba(255,255,255,0.10);
+                     border-radius: 7px; padding: 8px 10px; background: rgba(0,0,0,0.22); }
+.route-cinema-stat b { display: block; color: #FFF; font-family: 'JetBrains Mono', monospace;
+                       font-size: 11px; letter-spacing: 1px; white-space: nowrap; }
+.route-cinema-stat span { display: block; margin-top: 5px; color: var(--text-dim);
+                          font-size: 9px; text-transform: uppercase; letter-spacing: 1.2px; }
 .map-fallback { width: 100%; height: 100%; display: flex; align-items: center;
                 justify-content: center; flex-direction: column; padding: 32px;
                 background: #11171C; color: var(--text-dim); text-align: center; }
@@ -773,40 +792,6 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
              color: var(--text-faint); letter-spacing: 1.5px; text-transform: uppercase;
              line-height: 1.8; }
 .empty-msg b { color: var(--teal); display: block; }
-
-.no-sv { position: absolute; inset: 0; display: flex; align-items: stretch;
-         justify-content: stretch; color: var(--text-dim); background: #0A0F12; }
-.no-sv .icon, .no-sv .msg { display: none; }
-.vista-fallback { width: 100%; height: 100%; min-height: 0; display: grid;
-                  grid-template-rows: 1fr auto; gap: 0; text-align: left;
-                  background:
-                    radial-gradient(circle at 50% 42%, rgba(0,241,159,0.13), transparent 29%),
-                    linear-gradient(155deg, #10191A 0%, #11161A 45%, #17140F 100%); }
-.vista-kicker { font-family: 'JetBrains Mono', monospace; font-size: 10px;
-                color: var(--teal); letter-spacing: 1.8px; text-transform: uppercase; }
-.vista-subtitle { margin-top: 6px; color: var(--text-dim); font-size: 12px;
-                  line-height: 1.55; max-width: 360px; }
-.vista-art { position: relative; min-height: 0; overflow: hidden; }
-.vista-art svg { position: absolute; inset: 18%; width: 64%; height: 64%;
-                 filter: drop-shadow(0 0 24px rgba(0,241,159,0.34)); opacity: 0.95; }
-.vista-photo-grid { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(3, 1fr); }
-.vista-photo-grid img { width: 100%; height: 100%; object-fit: cover;
-                        filter: brightness(0.58) saturate(1.02); }
-.vista-photo-grid::after { content: ''; position: absolute; inset: 0;
-                           background: rgba(0,0,0,0.38); }
-.vista-point { position: absolute; left: 50%; top: 50%; width: 16px; height: 16px;
-               border: 3px solid #FFF; border-radius: 999px; background: var(--teal);
-               box-shadow: 0 0 24px rgba(0,241,159,0.85); transform: translate(-50%, -50%); }
-.vista-bottom { display: flex; align-items: flex-end; justify-content: space-between;
-                gap: 16px; padding: 18px 22px; border-top: 1px solid var(--border);
-                background: rgba(10,12,14,0.78); backdrop-filter: blur(10px); }
-.vista-stats { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-.vista-stat { border: 1px solid rgba(255,255,255,0.10); border-radius: 7px;
-              padding: 8px 10px; background: rgba(0,0,0,0.22); min-width: 92px; }
-.vista-stat b { display: block; color: #FFF; font-family: 'JetBrains Mono', monospace;
-                font-size: 11px; letter-spacing: 1px; white-space: nowrap; }
-.vista-stat span { display: block; margin-top: 5px; color: var(--text-dim);
-                  font-size: 9px; text-transform: uppercase; letter-spacing: 1.2px; }
 
 .photo-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.92);
                backdrop-filter: blur(10px); z-index: 1000;
@@ -924,10 +909,6 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
   .photo-strip-label { display: none; }
   .photo-strip.empty { display: none; }
   .photo-thumb { flex: 0 0 92px; height: 72px; }
-
-  /* Visual source pane */
-  .no-sv .icon { font-size: 30px; }
-  .no-sv .msg { font-size: 10px; }
 
   /* Photo modal */
   .photo-modal { padding: 20px; }
@@ -1058,10 +1039,17 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
       </div>
     </div>
     <div class="panel-sv">
-      <div id="pano"></div>
-      <div id="noSv" class="no-sv" style="display:none">
-        <div class="icon">⌖</div>
-        <div class="msg">NO STREET VIEW HERE</div>
+      <div id="pano" class="route-cinema"></div>
+      <div class="route-cinema-overlay">
+        <div>
+          <div class="route-cinema-kicker" id="routeVisualSource">MapLibre terrain</div>
+          <div class="route-cinema-copy" id="routeVisualCopy">Animated route over real terrain tiles.</div>
+        </div>
+        <div class="route-cinema-stats">
+          <div class="route-cinema-stat"><b id="visualKm">0.0 / 0.0 km</b><span>along route</span></div>
+          <div class="route-cinema-stat"><b id="visualElev">0 m</b><span>current elev</span></div>
+          <div class="route-cinema-stat"><b id="visualClimb">0 m</b><span>total climb</span></div>
+        </div>
       </div>
     </div>
   </div>
@@ -1087,11 +1075,13 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
   </div>
 </div>
 
+<script src="https://unpkg.com/maplibre-gl@5.18.0/dist/maplibre-gl.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/exifr/dist/full.umd.js"></script>
 <script>
 const ROUTES = __ROUTES_JSON__;
 let activeRouteIdx = -1;
-let map, marker, panorama, polyline;
+let map, marker, polyline;
+let routeCinemaMap, routeCinemaSlug = null;
 let photoMarkers = [];
 let allPhotos = [];
 const STORAGE_KEY_PREFIX = 'quests:photos:';
@@ -1384,6 +1374,7 @@ function initRoute() {
     photoMarkers.push(m);
   });
   renderStrip();
+  initRouteCinema(r);
   const scrubber = document.getElementById('scrubber');
   scrubber.max = r.route.length - 1; scrubber.value = 0;
   setRouteIndex(0);
@@ -1401,9 +1392,8 @@ function initFallbackRoute() {
       <div class="map-fallback-copy">Google Maps did not authorize this local URL, so this preview is using the generated route silhouette.</div>
       <div class="map-fallback-code">ALLOW localhost IN GOOGLE MAPS API REFERRERS</div>
     </div>`;
-  document.getElementById('pano').innerHTML = routeVisualHtml(r, r.route[0]);
-  document.getElementById('noSv').style.display = 'none';
   renderStrip();
+  initRouteCinema(r);
   const scrubber = document.getElementById('scrubber');
   scrubber.max = r.route.length - 1; scrubber.value = 0;
   if (!fallbackSliderBound) {
@@ -1423,46 +1413,108 @@ function setFallbackRouteIndex(i) {
   document.getElementById('elevHere').textContent = Math.round(p.elev) + ' m';
   document.getElementById('poiTitle').textContent =
     i < 10 ? 'Route start' : (i > r.route.length - 10 ? 'Route end' : 'Along route');
+  updateRouteCinemaProgress(r, i);
 }
 
-function routeVisualHtml(route, point) {
-  const source = route.visual_source || { kind: 'generated_route', label: 'Generated route preview' };
-  const photos = source.kind === 'route_photos' ? (route.baseline_photos || []).slice(0, 3) : [];
-  const photoGrid = photos.length
-    ? `<div class="vista-photo-grid">${photos.map(ph => {
-        const src = ph.thumb_url || ('data:image/jpeg;base64,' + ph.thumb);
-        return `<img src="${src}" alt="" loading="lazy" decoding="async">`;
-      }).join('')}</div>`
-    : '';
-  const totalKm = route.distance_km.toFixed(1);
-  const currentKm = ((point?.d || 0) / 1000).toFixed(1);
-  const elevation = Math.round(point?.elev || 0).toLocaleString();
-  const climb = Math.round(route.elevation_gain_m || 0).toLocaleString();
-  return `<div class="vista-fallback">
-    <div class="vista-art">
-      ${photoGrid}
-      ${route.svg || ''}
-      <div class="vista-point"></div>
-    </div>
-    <div class="vista-bottom">
-      <div>
-        <div class="vista-kicker">${escapeHtml(source.label || 'Route visual')}</div>
-        <div class="vista-subtitle">${escapeHtml(source.description || 'One stable visual source stays synced to the scrubber.')}</div>
-      </div>
-      <div class="vista-stats">
-        <div class="vista-stat"><b>${currentKm} / ${totalKm} km</b><span>along route</span></div>
-        <div class="vista-stat"><b>${elevation} m</b><span>current elev</span></div>
-        <div class="vista-stat"><b>${climb} m</b><span>total climb</span></div>
-      </div>
-    </div>
-  </div>`;
+function routeCinemaStyle() {
+  return {
+    version: 8,
+    sources: {
+      osm: {
+        type: 'raster',
+        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+        tileSize: 256,
+        attribution: '© OpenStreetMap contributors',
+      },
+      terrain: {
+        type: 'raster-dem',
+        url: 'https://demotiles.maplibre.org/terrain-tiles/tiles.json',
+        tileSize: 256,
+      },
+    },
+    layers: [
+      { id: 'osm', type: 'raster', source: 'osm', paint: { 'raster-saturation': -0.45, 'raster-brightness-min': 0.05, 'raster-brightness-max': 0.68 } },
+      { id: 'hillshade', type: 'hillshade', source: 'terrain', paint: { 'hillshade-shadow-color': '#061014', 'hillshade-highlight-color': '#E5D2A0', 'hillshade-accent-color': '#00F19F' } },
+    ],
+  };
 }
 
-function updateVisualPane(route, point) {
-  const pane = document.getElementById('noSv');
-  pane.innerHTML = routeVisualHtml(route, point);
-  pane.style.display = 'flex';
-  if (panorama) panorama.setVisible(false);
+function routeFeature(route, endIdx = route.route.length - 1) {
+  const coords = route.route.slice(0, Math.max(1, endIdx + 1)).map(p => [p.lng, p.lat]);
+  return { type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: {} };
+}
+
+function pointFeature(point) {
+  return { type: 'Feature', geometry: { type: 'Point', coordinates: [point.lng, point.lat] }, properties: {} };
+}
+
+function routeBounds(route) {
+  const bounds = new maplibregl.LngLatBounds();
+  route.route.forEach(p => bounds.extend([p.lng, p.lat]));
+  return bounds;
+}
+
+function initRouteCinema(route) {
+  if (typeof maplibregl === 'undefined') return;
+  if (routeCinemaMap) {
+    routeCinemaMap.remove();
+    routeCinemaMap = null;
+  }
+  routeCinemaSlug = route.slug;
+  document.getElementById('routeVisualSource').textContent = 'MapLibre terrain';
+  document.getElementById('routeVisualCopy').textContent = 'Animated route over real terrain tiles.';
+  routeCinemaMap = new maplibregl.Map({
+    container: 'pano',
+    style: routeCinemaStyle(),
+    center: [route.center_lng, route.center_lat],
+    zoom: 10,
+    pitch: 58,
+    bearing: -20,
+    interactive: false,
+    attributionControl: false,
+  });
+  routeCinemaMap.on('load', () => {
+    if (!routeCinemaMap || routeCinemaSlug !== route.slug) return;
+    routeCinemaMap.setTerrain({ source: 'terrain', exaggeration: 1.35 });
+    routeCinemaMap.addSource('route-full', { type: 'geojson', data: routeFeature(route) });
+    routeCinemaMap.addSource('route-progress', { type: 'geojson', data: routeFeature(route, 0) });
+    routeCinemaMap.addSource('route-point', { type: 'geojson', data: pointFeature(route.route[0]) });
+    routeCinemaMap.addLayer({
+      id: 'route-full-glow', type: 'line', source: 'route-full',
+      paint: { 'line-color': '#00F19F', 'line-opacity': 0.20, 'line-width': 8, 'line-blur': 8 },
+    });
+    routeCinemaMap.addLayer({
+      id: 'route-full', type: 'line', source: 'route-full',
+      paint: { 'line-color': '#BFEFE1', 'line-opacity': 0.35, 'line-width': 3 },
+    });
+    routeCinemaMap.addLayer({
+      id: 'route-progress', type: 'line', source: 'route-progress',
+      paint: { 'line-color': '#00F19F', 'line-opacity': 0.98, 'line-width': 5 },
+    });
+    routeCinemaMap.addLayer({
+      id: 'route-point-halo', type: 'circle', source: 'route-point',
+      paint: { 'circle-radius': 15, 'circle-color': '#00F19F', 'circle-opacity': 0.24, 'circle-blur': 0.45 },
+    });
+    routeCinemaMap.addLayer({
+      id: 'route-point', type: 'circle', source: 'route-point',
+      paint: { 'circle-radius': 7, 'circle-color': '#FFFFFF', 'circle-stroke-color': '#00F19F', 'circle-stroke-width': 3 },
+    });
+    routeCinemaMap.fitBounds(routeBounds(route), { padding: 72, duration: 1200, pitch: 58, bearing: -20 });
+    updateRouteCinemaProgress(route, 0);
+  });
+}
+
+function updateRouteCinemaProgress(route, idx) {
+  const p = route.route[idx];
+  document.getElementById('visualKm').textContent =
+    `${(p.d / 1000).toFixed(1)} / ${route.distance_km.toFixed(1)} km`;
+  document.getElementById('visualElev').textContent = `${Math.round(p.elev).toLocaleString()} m`;
+  document.getElementById('visualClimb').textContent = `${Math.round(route.elevation_gain_m || 0).toLocaleString()} m`;
+  if (!routeCinemaMap || !routeCinemaMap.isStyleLoaded() || routeCinemaSlug !== route.slug) return;
+  const progress = routeCinemaMap.getSource('route-progress');
+  const point = routeCinemaMap.getSource('route-point');
+  if (progress) progress.setData(routeFeature(route, idx));
+  if (point) point.setData(pointFeature(p));
 }
 
 function renderStrip() {
@@ -1510,7 +1562,7 @@ function setRouteIndex(i) {
   document.getElementById('elevHere').textContent = Math.round(p.elev) + ' m';
   document.getElementById('poiTitle').textContent =
     i < 10 ? 'Route start' : (i > r.route.length - 10 ? 'Route end' : 'Along route');
-  updateVisualPane(r, p);
+  updateRouteCinemaProgress(r, i);
 }
 
 function jumpToPhoto(idx) {
@@ -1660,12 +1712,6 @@ function initMap() {
   map = new google.maps.Map(document.getElementById('map'), {
     center: { lat: 0, lng: 0 }, zoom: 2, mapTypeId: 'hybrid',
     disableDefaultUI: true, zoomControl: true,
-  });
-  panorama = new google.maps.StreetViewPanorama(document.getElementById('pano'), {
-    position: { lat: 0, lng: 0 }, pov: { heading: 0, pitch: 0 }, zoom: 1,
-    addressControl: false, fullscreenControl: false, panControl: true,
-    zoomControl: false, enableCloseButton: false,
-    motionTracking: false, motionTrackingControl: false,
   });
   document.getElementById('scrubber').addEventListener('input', e => {
     setRouteIndex(parseInt(e.target.value));
