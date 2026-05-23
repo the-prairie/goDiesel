@@ -457,6 +457,15 @@ for spec in quest_specs:
         except Exception:
             pass
     baseline_photos.sort(key=lambda x: x['dt_full'])
+    visual_source = {
+        'kind': 'route_photos' if baseline_photos else 'generated_route',
+        'label': 'Route photos' if baseline_photos else 'Generated route preview',
+        'description': (
+            'Matched photos from Lauren’s route archive.'
+            if baseline_photos
+            else 'Stable route art shown when no photo source is available.'
+        ),
+    }
 
     route_js = [{'lat': pt[0], 'lng': pt[1], 'elev': pt[2], 'd': pt[3]} for pt in route]
     quest_meta = build_quest_meta(
@@ -492,6 +501,7 @@ for spec in quest_specs:
         'center_lat': cx, 'center_lng': cy,
         'mid_idx': len(route_js) // 2,
         'baseline_photos': baseline_photos,
+        'visual_source': visual_source,
         'svg': route_svg(route_js),
         **quest_meta,
     }
@@ -915,7 +925,7 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
   .photo-strip.empty { display: none; }
   .photo-thumb { flex: 0 0 92px; height: 72px; }
 
-  /* "No Street View" placeholder */
+  /* Visual source pane */
   .no-sv .icon { font-size: 30px; }
   .no-sv .msg { font-size: 10px; }
 
@@ -1391,7 +1401,7 @@ function initFallbackRoute() {
       <div class="map-fallback-copy">Google Maps did not authorize this local URL, so this preview is using the generated route silhouette.</div>
       <div class="map-fallback-code">ALLOW localhost IN GOOGLE MAPS API REFERRERS</div>
     </div>`;
-  document.getElementById('pano').innerHTML = routeVistaHtml(r, r.route[0], 'Street View unavailable');
+  document.getElementById('pano').innerHTML = routeVisualHtml(r, r.route[0]);
   document.getElementById('noSv').style.display = 'none';
   renderStrip();
   const scrubber = document.getElementById('scrubber');
@@ -1415,8 +1425,9 @@ function setFallbackRouteIndex(i) {
     i < 10 ? 'Route start' : (i > r.route.length - 10 ? 'Route end' : 'Along route');
 }
 
-function routeVistaHtml(route, point, label = 'No Street View here') {
-  const photos = [...(route.baseline_photos || []), ...getStoredPhotos(route.slug)].slice(0, 3);
+function routeVisualHtml(route, point) {
+  const source = route.visual_source || { kind: 'generated_route', label: 'Generated route preview' };
+  const photos = source.kind === 'route_photos' ? (route.baseline_photos || []).slice(0, 3) : [];
   const photoGrid = photos.length
     ? `<div class="vista-photo-grid">${photos.map(ph => {
         const src = ph.thumb_url || ('data:image/jpeg;base64,' + ph.thumb);
@@ -1435,8 +1446,8 @@ function routeVistaHtml(route, point, label = 'No Street View here') {
     </div>
     <div class="vista-bottom">
       <div>
-        <div class="vista-kicker">${escapeHtml(label)}</div>
-        <div class="vista-subtitle">Route preview stays synced to the scrubber when imagery coverage is missing.</div>
+        <div class="vista-kicker">${escapeHtml(source.label || 'Route visual')}</div>
+        <div class="vista-subtitle">${escapeHtml(source.description || 'One stable visual source stays synced to the scrubber.')}</div>
       </div>
       <div class="vista-stats">
         <div class="vista-stat"><b>${currentKm} / ${totalKm} km</b><span>along route</span></div>
@@ -1445,6 +1456,13 @@ function routeVistaHtml(route, point, label = 'No Street View here') {
       </div>
     </div>
   </div>`;
+}
+
+function updateVisualPane(route, point) {
+  const pane = document.getElementById('noSv');
+  pane.innerHTML = routeVisualHtml(route, point);
+  pane.style.display = 'flex';
+  if (panorama) panorama.setVisible(false);
 }
 
 function renderStrip() {
@@ -1492,20 +1510,7 @@ function setRouteIndex(i) {
   document.getElementById('elevHere').textContent = Math.round(p.elev) + ' m';
   document.getElementById('poiTitle').textContent =
     i < 10 ? 'Route start' : (i > r.route.length - 10 ? 'Route end' : 'Along route');
-  if (panorama) {
-    const sv = new google.maps.StreetViewService();
-    sv.getPanorama({ location: { lat: p.lat, lng: p.lng }, radius: 80 },
-      (data, status) => {
-        if (status === 'OK') {
-          document.getElementById('noSv').style.display = 'none';
-          panorama.setPano(data.location.pano); panorama.setVisible(true);
-        } else {
-          document.getElementById('noSv').innerHTML = routeVistaHtml(r, p);
-          document.getElementById('noSv').style.display = 'flex';
-          panorama.setVisible(false);
-        }
-      });
-  }
+  updateVisualPane(r, p);
 }
 
 function jumpToPhoto(idx) {
