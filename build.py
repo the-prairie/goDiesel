@@ -650,43 +650,44 @@ header { position: sticky; top: 0; z-index: 50;
 
 .detail { display: none; height: calc(100dvh - 67px); flex-direction: column; overflow: hidden; }
 .detail.active { display: flex; }
-.detail-header { display: grid; grid-template-columns: minmax(0, 1fr) auto;
-                 align-items: start; column-gap: 22px; row-gap: 12px;
-                 padding: 14px 32px 12px; border-bottom: 1px solid var(--border);
-                 background: #0A0F12; }
-.detail-title-block { min-width: 0; display: grid; grid-template-columns: minmax(220px, auto) minmax(280px, 1fr);
-                      align-items: start; gap: 10px 18px; }
+.detail-header { display: grid; grid-template-columns: minmax(0, 1fr);
+                 row-gap: 10px; padding: 12px 32px 11px;
+                 border-bottom: 1px solid var(--border); background: #0A0F12; }
+.detail-topline { display: grid; grid-template-columns: minmax(0, 1fr) auto;
+                  align-items: start; gap: 18px; min-width: 0; }
+.detail-identity { min-width: 0; }
 .detail-name { font-size: 18px; font-weight: 800; letter-spacing: 0.10em;
                text-transform: uppercase; }
 .detail-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px;
                color: var(--text-dim); letter-spacing: 1.2px; text-transform: uppercase; }
+.detail-brief { display: grid; grid-template-columns: minmax(260px, 0.9fr) minmax(280px, 1.1fr);
+                align-items: stretch; gap: 12px; min-width: 0; }
 .detail-quote { color: #C7D0D5; font-style: italic; font-size: 13px;
-                border-left: 2px solid var(--teal); padding-left: 12px; max-width: 560px;
-                align-self: center; }
+                border-left: 2px solid var(--teal); padding-left: 12px;
+                align-self: center; min-width: 0; }
 .detail-desc { width: 100%; color: #999; font-size: 13px; line-height: 1.6;
                font-style: italic; padding-left: 12px;
                border-left: 2px solid var(--sleep); max-width: 700px; }
 .detail-quest-meta { display: flex; gap: 8px; flex-wrap: wrap; width: 100%; }
-.completion-panel { grid-column: 1 / -1; width: 100%; display: grid;
-                    grid-template-columns: minmax(260px, 1fr) auto;
-                    gap: 10px; max-width: 920px; }
+.completion-panel { width: 100%; display: grid;
+                    grid-template-columns: minmax(240px, 1fr) auto;
+                    gap: 9px; min-width: 0; }
 .completion-item { background: transparent; border: 1px solid rgba(123,161,187,0.18);
                    border-radius: 7px; padding: 8px 10px; min-width: 0; }
 .completion-item.objective { background: rgba(0,241,159,0.04); border-color: rgba(0,241,159,0.22); }
-.completion-stack { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-.completion-stack .completion-item { min-width: 96px; }
+.completion-stack { display: grid; grid-template-columns: repeat(4, minmax(78px, 1fr)); gap: 8px; }
 .completion-label { font-family: 'JetBrains Mono', monospace; font-size: 8px;
                     color: var(--teal); letter-spacing: 1.4px;
                     text-transform: uppercase; }
 .completion-value { margin-top: 5px; color: #DDD; font-size: 12px;
                     line-height: 1.45; overflow-wrap: anywhere; }
-.share-btn { background: var(--bg-card); border: 1px solid var(--border);
-             color: var(--text); padding: 8px 11px; border-radius: 6px;
-             font-family: 'JetBrains Mono', monospace; font-size: 10px;
-             letter-spacing: 1.5px; text-transform: uppercase; cursor: pointer;
+.share-btn { background: rgba(20,26,31,0.88); border: 1px solid var(--border);
+             color: var(--text); padding: 8px 10px; border-radius: 6px;
+             font-family: 'JetBrains Mono', monospace; font-size: 9px;
+             letter-spacing: 1.3px; text-transform: uppercase; cursor: pointer;
              transition: all 200ms ease; display: inline-flex; align-items: center; gap: 6px; }
 .share-btn:hover { border-color: var(--teal); color: var(--teal); }
-.detail-actions { display: flex; gap: 8px; flex-wrap: wrap; flex-shrink: 0; justify-content: flex-end; }
+.detail-actions { display: flex; gap: 8px; flex-wrap: nowrap; flex-shrink: 0; justify-content: flex-end; }
 
 .stage { flex: 1; display: grid; grid-template-columns: minmax(0, 1.06fr) minmax(360px, 0.94fr); min-height: 0; }
 .panel-map { position: relative; border-right: 1px solid var(--border); }
@@ -695,17 +696,18 @@ header { position: sticky; top: 0; z-index: 50;
 .route-cinema { position: absolute; inset: 0; }
 .route-cinema .maplibregl-control-container { display: none; }
 .route-cinema-overlay { position: absolute; left: 16px; right: 16px; bottom: 16px;
-                        display: flex; align-items: flex-end; justify-content: space-between;
-                        gap: 16px; padding: 12px 14px; border: 1px solid var(--border);
-                        border-radius: 10px; background: rgba(10,12,14,0.82);
+                        display: flex; align-items: center; justify-content: space-between;
+                        gap: 12px; padding: 10px 12px; border: 1px solid rgba(42,53,64,0.76);
+                        border-radius: 8px; background: rgba(10,12,14,0.72);
                         backdrop-filter: blur(10px); z-index: 4; pointer-events: none; }
-.route-cinema-kicker { font-family: 'JetBrains Mono', monospace; font-size: 10px;
-                       color: var(--teal); letter-spacing: 1.8px; text-transform: uppercase; }
-.route-cinema-copy { margin-top: 5px; color: var(--text-dim); font-size: 11px;
-                     line-height: 1.45; max-width: 360px; }
-.route-cinema-stats { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-.route-cinema-stat { min-width: 92px; border: 1px solid rgba(255,255,255,0.10);
-                     border-radius: 7px; padding: 8px 10px; background: rgba(0,0,0,0.22); }
+.route-cinema-kicker { font-family: 'JetBrains Mono', monospace; font-size: 9px;
+                       color: var(--teal); letter-spacing: 1.6px; text-transform: uppercase; }
+.route-cinema-copy { margin-top: 4px; color: var(--text-dim); font-size: 11px;
+                     line-height: 1.35; max-width: 230px; }
+.route-cinema-stats { display: grid; grid-template-columns: repeat(3, minmax(78px, 1fr));
+                      justify-content: flex-end; gap: 8px; }
+.route-cinema-stat { min-width: 0; border: 1px solid rgba(255,255,255,0.10);
+                     border-radius: 6px; padding: 7px 9px; background: rgba(0,0,0,0.18); }
 .route-cinema-stat b { display: block; color: #FFF; font-family: 'JetBrains Mono', monospace;
                        font-size: 11px; letter-spacing: 1px; white-space: nowrap; }
 .route-cinema-stat span { display: block; margin-top: 5px; color: var(--text-dim);
@@ -877,8 +879,9 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
 
   /* Detail header: stack vertically so title doesn't fight with action buttons */
   .detail { height: auto; min-height: calc(100dvh - 57px); overflow: visible; }
-  .detail-header { padding: 12px 14px; grid-template-columns: 1fr; gap: 10px; }
-  .detail-title-block { grid-template-columns: 1fr; gap: 8px; width: 100%; }
+  .detail-header { padding: 12px 14px; gap: 10px; }
+  .detail-topline { grid-template-columns: 1fr; gap: 10px; }
+  .detail-brief { grid-template-columns: 1fr; gap: 8px; }
   .detail-name { font-size: 16px; letter-spacing: 0.06em;
                  white-space: normal; word-break: keep-all; }
   .detail-meta { font-size: 10px; white-space: nowrap;
@@ -887,10 +890,11 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
                   border-left-width: 2px; }
   .detail-desc { font-size: 12px; padding-left: 10px; max-width: 100%; }
   .completion-panel { grid-template-columns: 1fr; gap: 7px; }
-  .completion-stack { justify-content: flex-start; gap: 7px; }
+  .completion-stack { grid-template-columns: 1fr 1fr; gap: 7px; }
   .completion-stack .completion-item { flex: 1 1 calc(50% - 7px); }
   .completion-value { font-size: 11px; }
   .detail-actions { width: 100%; }
+  .detail-actions { flex-wrap: wrap; }
   .detail-actions .share-btn { flex: 1; justify-content: center;
                                padding: 9px 12px; font-size: 10px; }
 
@@ -1015,25 +1019,27 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
 
 <div class="detail" id="detail">
   <div class="detail-header">
-    <div class="detail-title-block">
-      <div>
+    <div class="detail-topline">
+      <div class="detail-identity">
         <div class="detail-name" id="detailName"></div>
         <div class="detail-meta" id="detailMeta"></div>
       </div>
-      <div class="detail-quote" id="detailQuote"></div>
-      <div class="detail-desc" id="detailDesc" style="display:none"></div>
-      <div class="completion-panel" id="completionPanel"></div>
+      <div class="detail-actions">
+        <a class="share-btn strava-btn" id="stravaBtn" href="#" target="_blank" rel="noopener" title="Open this activity on Strava">
+          <svg class="icon"><use href="#i-external"/></svg> OPEN ON STRAVA
+        </a>
+        <button class="share-btn" id="copyLinkBtn" onclick="copyQuestLink()" title="Copy a direct link to this quest">
+          <svg class="icon"><use href="#i-external"/></svg> COPY LINK
+        </button>
+        <button class="share-btn" id="shareBtn" onclick="openShareCard()">
+          <svg class="icon"><use href="#i-camera"/></svg> SHARE CARD
+        </button>
+      </div>
     </div>
-    <div class="detail-actions">
-      <a class="share-btn strava-btn" id="stravaBtn" href="#" target="_blank" rel="noopener" title="Open this activity on Strava">
-        <svg class="icon"><use href="#i-external"/></svg> OPEN ON STRAVA
-      </a>
-      <button class="share-btn" id="copyLinkBtn" onclick="copyQuestLink()" title="Copy a direct link to this quest">
-        <svg class="icon"><use href="#i-external"/></svg> COPY LINK
-      </button>
-      <button class="share-btn" id="shareBtn" onclick="openShareCard()">
-        <svg class="icon"><use href="#i-camera"/></svg> SHARE CARD
-      </button>
+    <div class="detail-brief">
+      <div class="detail-quote" id="detailQuote"></div>
+      <div class="completion-panel" id="completionPanel"></div>
+      <div class="detail-desc" id="detailDesc" style="display:none"></div>
     </div>
   </div>
   <div class="stage">
