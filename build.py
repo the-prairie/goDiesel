@@ -1015,10 +1015,6 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
           &nbsp;·&nbsp; <b id="elevHere">0 m</b> elev
         </div>
       </div>
-      <div class="photo-strip" id="photoStrip">
-        <div class="photo-strip-label">YOUR<br>PHOTOS</div>
-        <div class="photo-strip-scroll" id="photoStripScroll"></div>
-      </div>
       <div class="scrubber-wrap">
         <div class="scrubber-pos" id="scrubberPos">0.00 / 0.00 km</div>
         <input type="range" id="scrubber" min="0" max="100" value="0">
@@ -1398,6 +1394,7 @@ function setFallbackRouteIndex(i) {
 
 function renderStrip() {
   const strip = document.getElementById('photoStripScroll');
+  if (!strip) return;
   const wrap = strip.closest('.photo-strip');
   strip.innerHTML = '';
   if (allPhotos.length === 0) {
