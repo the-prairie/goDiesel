@@ -997,6 +997,9 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
       <a class="share-btn strava-btn" id="stravaBtn" href="#" target="_blank" rel="noopener" title="Open this activity on Strava">
         <svg class="icon"><use href="#i-external"/></svg> OPEN ON STRAVA
       </a>
+      <button class="share-btn" id="copyLinkBtn" onclick="copyQuestLink()" title="Copy a direct link to this quest">
+        <svg class="icon"><use href="#i-external"/></svg> COPY LINK
+      </button>
       <button class="share-btn" id="shareBtn" onclick="openShareCard()">
         <svg class="icon"><use href="#i-camera"/></svg> SHARE CARD
       </button>
@@ -1145,6 +1148,40 @@ function resetFilters() {
   renderGallery();
 }
 
+function questHash(slug) {
+  return `#quest/${encodeURIComponent(slug)}`;
+}
+
+function questUrl(route) {
+  return `${location.origin}${location.pathname}${location.search}${questHash(route.slug)}`;
+}
+
+function routeIndexBySlug(slug) {
+  return ROUTES.findIndex(route => route.slug === slug);
+}
+
+function setQuestUrl(route) {
+  if (!route || location.hash === questHash(route.slug)) return;
+  history.pushState({ quest: route.slug }, '', questHash(route.slug));
+}
+
+function setGalleryUrl() {
+  if (!location.hash) return;
+  history.pushState({ gallery: true }, '', `${location.pathname}${location.search}`);
+}
+
+function handleCurrentUrl() {
+  const match = location.hash.match(/^#quest\\/(.+)$/);
+  if (!match) {
+    showGallery({ updateUrl: false });
+    return;
+  }
+  const slug = decodeURIComponent(match[1]);
+  const idx = routeIndexBySlug(slug);
+  if (idx === -1) showGallery({ updateUrl: false });
+  else openRoute(idx, { updateUrl: false });
+}
+
 function renderGallery() {
   const gal = document.getElementById('gallery');
   Array.from(gal.querySelectorAll('.quest-card, .gallery-empty')).forEach(el => el.remove());
@@ -1233,12 +1270,14 @@ function renderCompletionPanel(route) {
   `).join('');
 }
 
-async function openRoute(i) {
+async function openRoute(i, options = {}) {
+  const { updateUrl = true } = options;
   activeRouteIdx = i;
   document.getElementById('gallery').style.display = 'none';
   document.getElementById('detail').classList.add('active');
   document.getElementById('backBtn').style.display = 'inline-flex';
   const r = ROUTES[i];
+  if (updateUrl) setQuestUrl(r);
   const typeIcon = r.type === 'Ride'
     ? '<svg class="icon"><use href="#i-bike"/></svg>'
     : '<svg class="icon"><use href="#i-runner"/></svg>';
@@ -1265,11 +1304,13 @@ async function openRoute(i) {
   window.scrollTo(0, 0);
 }
 
-function showGallery() {
+function showGallery(options = {}) {
+  const { updateUrl = true } = options;
   document.getElementById('gallery').style.display = 'grid';
   document.getElementById('detail').classList.remove('active');
   document.getElementById('backBtn').style.display = 'none';
   activeRouteIdx = -1;
+  if (updateUrl) setGalleryUrl();
   renderGallery();
 }
 
@@ -1454,6 +1495,22 @@ function openShareCard() {
 }
 function closeShareCard() { document.getElementById('shareModal').classList.remove('open'); }
 
+async function copyQuestLink() {
+  if (activeRouteIdx === -1) return;
+  const r = ROUTES[activeRouteIdx];
+  const url = questUrl(r);
+  const btn = document.getElementById('copyLinkBtn');
+  const original = btn.innerHTML;
+  try {
+    await navigator.clipboard.writeText(url);
+    btn.innerHTML = '<svg class="icon"><use href="#i-external"/></svg> COPIED';
+  } catch {
+    window.prompt('Copy quest link', url);
+    btn.innerHTML = '<svg class="icon"><use href="#i-external"/></svg> COPY LINK';
+  }
+  setTimeout(() => { btn.innerHTML = original; }, 1400);
+}
+
 // Storage
 function storageKey(slug) { return STORAGE_KEY_PREFIX + slug; }
 function getStoredPhotos(slug) {
@@ -1558,8 +1615,11 @@ function initMap() {
   initRoute();
 }
 
+window.addEventListener('popstate', handleCurrentUrl);
+window.addEventListener('hashchange', handleCurrentUrl);
 initFilterControls();
-renderGallery();
+if (location.hash) handleCurrentUrl();
+else renderGallery();
 </script>
 <!-- Google Maps SDK is loaded lazily by loadMapsIfNeeded() on first quest open. -->
 </body></html>
