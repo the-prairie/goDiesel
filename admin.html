@@ -163,6 +163,32 @@
   }
   .region-input:focus { outline: none; border-color: var(--teal); }
   .region-input::placeholder { color: var(--text-faint); }
+  .curation-fields {
+    display: grid; gap: 7px; padding-top: 2px;
+  }
+  .curation-row {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(92px, 0.45fr);
+    gap: 7px;
+  }
+  .meta-input, .meta-textarea, .visibility-select {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); padding: 6px 10px; border-radius: 5px;
+    font-size: 12px; font-family: inherit;
+  }
+  .meta-textarea {
+    min-height: 58px; resize: vertical; line-height: 1.35;
+  }
+  .visibility-select {
+    appearance: none; cursor: pointer;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237BA1BB' stroke-width='2'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 28px;
+  }
+  .meta-input:focus, .meta-textarea:focus, .visibility-select:focus {
+    outline: none; border-color: var(--teal);
+  }
+  .meta-input::placeholder, .meta-textarea::placeholder { color: var(--text-faint); }
 
   .card-actions {
     display: flex; gap: 6px; padding: 10px 14px; border-top: 1px solid var(--border);
@@ -343,6 +369,11 @@ function effectiveRegion(r) {
   return patch?.region ?? r.region;
 }
 
+function effectiveField(r, key) {
+  const patch = STATE.dirty.get(r.activity_id);
+  return patch?.[key] ?? r[key] ?? '';
+}
+
 function setPatch(id, key, value) {
   const existing = STATE.dirty.get(id) || {};
   existing[key] = value;
@@ -421,6 +452,12 @@ function ensureObserver() {
 function cardHtml(r) {
   const status = effectiveStatus(r);
   const region = effectiveRegion(r);
+  const title = effectiveField(r, 'title');
+  const theme = effectiveField(r, 'theme');
+  const difficulty = effectiveField(r, 'difficulty');
+  const blurb = effectiveField(r, 'blurb');
+  const completionRule = effectiveField(r, 'completion_rule');
+  const visibility = effectiveField(r, 'visibility') || 'public';
   const dirty = STATE.dirty.has(r.activity_id);
   const stravaUrl = `https://www.strava.com/activities/${r.activity_id}`;
   const placeholder = r.auto_region
@@ -452,6 +489,40 @@ function cardHtml(r) {
                placeholder="${escapeHtml(placeholder)}"
                value="${escapeHtml(region)}"
                data-region-for="${r.activity_id}">
+        <div class="curation-fields">
+          <input class="meta-input" type="text"
+                 placeholder="Custom title"
+                 value="${escapeHtml(title)}"
+                 data-meta-field="title"
+                 data-meta-for="${r.activity_id}">
+          <div class="curation-row">
+            <input class="meta-input" type="text"
+                   placeholder="Theme"
+                   value="${escapeHtml(theme)}"
+                   data-meta-field="theme"
+                   data-meta-for="${r.activity_id}">
+            <input class="meta-input" type="text"
+                   placeholder="Difficulty"
+                   value="${escapeHtml(difficulty)}"
+                   data-meta-field="difficulty"
+                   data-meta-for="${r.activity_id}">
+          </div>
+          <textarea class="meta-textarea"
+                    placeholder="Blurb"
+                    data-meta-field="blurb"
+                    data-meta-for="${r.activity_id}">${escapeHtml(blurb)}</textarea>
+          <textarea class="meta-textarea"
+                    placeholder="Completion rule"
+                    data-meta-field="completion_rule"
+                    data-meta-for="${r.activity_id}">${escapeHtml(completionRule)}</textarea>
+          <select class="visibility-select"
+                  data-meta-field="visibility"
+                  data-meta-for="${r.activity_id}"
+                  title="Public is the default; hidden is available for future public rendering rules">
+            <option value="public" ${visibility === 'public' ? 'selected' : ''}>PUBLIC</option>
+            <option value="hidden" ${visibility === 'hidden' ? 'selected' : ''}>HIDDEN</option>
+          </select>
+        </div>
       </div>
       <div class="card-actions">
         <button class="act-btn approve ${status === 'approved' ? 'active' : ''}"
@@ -482,7 +553,10 @@ function filteredRoutes() {
       if (reg !== STATE.region) return false;
     }
     if (s && !((r.name || '').toLowerCase().includes(s) ||
-               (r.description || '').toLowerCase().includes(s))) return false;
+               (r.description || '').toLowerCase().includes(s) ||
+               (effectiveField(r, 'title') || '').toLowerCase().includes(s) ||
+               (effectiveField(r, 'theme') || '').toLowerCase().includes(s) ||
+               (effectiveField(r, 'blurb') || '').toLowerCase().includes(s))) return false;
     return true;
   });
 }
@@ -550,12 +624,23 @@ document.addEventListener('input', e => {
     // Don't re-render — just mark card dirty
     e.target.closest('.card').classList.add('dirty');
   }
+  if (e.target.dataset.metaField && e.target.dataset.metaFor) {
+    const id = e.target.dataset.metaFor;
+    setPatch(id, e.target.dataset.metaField, e.target.value);
+    // Don't re-render while editing text — preserve cursor position.
+    e.target.closest('.card').classList.add('dirty');
+  }
 });
 
 document.addEventListener('change', e => {
   if (e.target.id === 'regionSelect') {
     STATE.region = e.target.value;
     render();
+  }
+  if (e.target.dataset.metaField && e.target.dataset.metaFor) {
+    const id = e.target.dataset.metaFor;
+    setPatch(id, e.target.dataset.metaField, e.target.value);
+    e.target.closest('.card').classList.add('dirty');
   }
 });
 
@@ -580,15 +665,9 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
     });
     const j = await r.json();
     if (j.ok) {
-      // Merge patches into routes (server is now source of truth, but optimistic)
-      STATE.dirty.forEach((patch, id) => {
-        const r = STATE.routes.find(x => x.activity_id === id);
-        if (r) Object.assign(r, patch);
-      });
       STATE.dirty.clear();
-      renderCounts();
       renderSaveBar();
-      render();
+      await refreshRoutes();
       showToast(`SAVED ${j.updated} CHANGE${j.updated === 1 ? '' : 'S'}`);
     } else {
       showToast('SAVE FAILED', 'var(--reject)');

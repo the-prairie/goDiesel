@@ -1,5 +1,5 @@
 {
-  "_comment": "Master routes list. Manage via admin.sh (visual UI) or edit this file directly. status: approved | pending | rejected. Build only renders approved.",
+  "_comment": "Master routes list. Manage via admin.sh (visual UI) or edit this file directly. status: approved | pending | rejected/archived. Optional curation fields per route: title, theme, difficulty, blurb, completion_rule, visibility (public default, hidden optional). Build only renders approved.",
   "routes": [
     {
       "activity_id": "13134774070",

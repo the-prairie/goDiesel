@@ -6,7 +6,7 @@ Endpoints:
   GET  /                    → admin.html
   GET  /api/routes          → all routes with metadata (no polylines, fast)
   GET  /api/polyline/<id>   → SVG polyline preview for one route (lazy, cached)
-  POST /api/save            → persist status/region changes to quests.json
+  POST /api/save            → persist status/region/metadata changes to quests.json
   POST /api/rebuild         → spawn build.py in background
 """
 import gzip
@@ -39,6 +39,8 @@ GEO_CACHE_PATH = QUESTS / '.geo_cache.json'
 GEOCODE_BUCKETS_PATH = QUESTS / '.geocode_buckets.json'
 PORT = 8766
 TEAL = '#00F19F'
+CURATION_TEXT_FIELDS = ('title', 'theme', 'difficulty', 'blurb', 'completion_rule')
+CURATION_VISIBILITIES = ('public', 'hidden')
 
 # Nominatim fair-use: max 1 req/sec, descriptive User-Agent required.
 NOMINATIM_USER_AGENT = 'QuestsAdmin/1.0 (personal use; lauren@purposemed.com)'
@@ -463,7 +465,7 @@ def routes_summary():
         if status == 'rejected':
             status = 'archived'
         auto_region = (geo_cache.get(aid) or {}).get('region') or ''
-        out.append({
+        item = {
             'activity_id': aid,
             'status': status,
             'region': r.get('region') or '',
@@ -473,7 +475,11 @@ def routes_summary():
             'type': typ,
             'distance_km': round(km, 1),
             'description': desc[:240],
-        })
+            'visibility': r.get('visibility') or 'public',
+        }
+        for field in CURATION_TEXT_FIELDS:
+            item[field] = r.get(field) or ''
+        out.append(item)
     # Sort newest first within each status
     out.sort(key=lambda r: r['date'] or '', reverse=True)
     return out
@@ -533,6 +539,24 @@ class Handler(BaseHTTPRequestHandler):
                     by_id[aid]['status'] = u['status']
                 if 'region' in u:
                     by_id[aid]['region'] = u['region'] or None
+                for field in CURATION_TEXT_FIELDS:
+                    if field in u:
+                        value = str(u[field]).strip()
+                        if value:
+                            by_id[aid][field] = value
+                        else:
+                            by_id[aid].pop(field, None)
+                if 'visibility' in u:
+                    value = str(u['visibility']).strip()
+                    if value and value not in CURATION_VISIBILITIES:
+                        self._send(400, {
+                            'error': f'visibility must be one of: {", ".join(CURATION_VISIBILITIES)}'
+                        })
+                        return
+                    if value and value != 'public':
+                        by_id[aid]['visibility'] = value
+                    else:
+                        by_id[aid].pop('visibility', None)
             cfg['routes'] = list(by_id.values())
             (QUESTS / 'quests.json').write_text(json.dumps(cfg, indent=2))
             self._send(200, {'ok': True, 'updated': len(updates)})

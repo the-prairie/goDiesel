@@ -53,9 +53,14 @@ print(f'[1/5] API key loaded from {env_source.name} ({API_KEY[:8]}…{API_KEY[-4
 
 # ── Load quests.json ──
 config = json.loads((QUESTS / 'quests.json').read_text())
-# Schema: {routes: [{activity_id, status, region}]}. Only build approved ones.
+# Schema: {routes: [{activity_id, status, region, optional curation fields}]}.
+# Only build approved public routes.
 all_routes = config.get('routes', config.get('quests', []))
-quest_specs = [r for r in all_routes if r.get('status', 'approved') == 'approved']
+quest_specs = [
+    r for r in all_routes
+    if r.get('status', 'approved') == 'approved'
+    and r.get('visibility', 'public') != 'hidden'
+]
 pending_n = sum(1 for r in all_routes if r.get('status') == 'pending')
 rejected_n = sum(1 for r in all_routes if r.get('status') == 'rejected')
 print(f'[2/5] Curation: {len(quest_specs)} approved · {pending_n} pending · {rejected_n} rejected')
@@ -461,12 +466,24 @@ for spec in quest_specs:
         region_label=region_label,
         activity_name=name,
     )
+    for _field, _target in (
+        ('theme', 'theme'),
+        ('difficulty', 'difficulty'),
+        ('completion_rule', 'completion_rule'),
+        ('blurb', 'quest_blurb'),
+    ):
+        if spec.get(_field):
+            quest_meta[_target] = str(spec[_field]).strip()
+
+    subtitle = str(spec.get('title') or name).strip()
 
     quest = {
         'slug': slug,
         'activity_id': aid,
         'name': region_label,
-        'subtitle': name,
+        'subtitle': subtitle,
+        'activity_name': name,
+        'region': region_label,
         'date': date,
         'distance_km': round(distance_km, 1),
         'type': typ,
@@ -552,6 +569,34 @@ header { position: sticky; top: 0; z-index: 50;
 .atlas-stat span { display: block; margin-top: 3px; font-family: 'JetBrains Mono', monospace;
                    font-size: 9px; color: var(--text-faint); letter-spacing: 1.3px;
                    text-transform: uppercase; }
+.gallery-filters { grid-column: 1 / -1; display: flex; flex-wrap: wrap;
+                   align-items: flex-end; gap: 10px; margin: 0 0 4px; }
+.filter-field { display: flex; flex-direction: column; gap: 5px; min-width: 130px; }
+.filter-field label { font-family: 'JetBrains Mono', monospace; font-size: 9px;
+                      color: var(--text-faint); letter-spacing: 1.4px;
+                      text-transform: uppercase; }
+.filter-field select { appearance: none; background: #10171B; color: var(--text);
+                       border: 1px solid var(--border); border-radius: 6px;
+                       padding: 8px 30px 8px 10px;
+                       font-family: 'JetBrains Mono', monospace; font-size: 10px;
+                       letter-spacing: 1px; text-transform: uppercase; cursor: pointer;
+                       background-image:
+                         linear-gradient(45deg, transparent 50%, var(--text-dim) 50%),
+                         linear-gradient(135deg, var(--text-dim) 50%, transparent 50%);
+                       background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
+                       background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
+.filter-field select:focus { outline: none; border-color: var(--teal);
+                             box-shadow: 0 0 0 2px rgba(0,241,159,0.12); }
+.filter-reset { background: transparent; color: var(--text-dim);
+                border: 1px solid var(--border); border-radius: 6px;
+                padding: 8px 12px; font-family: 'JetBrains Mono', monospace;
+                font-size: 10px; letter-spacing: 1.3px; text-transform: uppercase;
+                cursor: pointer; transition: all 200ms ease; }
+.filter-reset:hover { border-color: var(--teal); color: var(--teal); }
+.gallery-empty { grid-column: 1 / -1; border: 1px dashed var(--border);
+                 border-radius: 10px; padding: 28px; text-align: center;
+                 color: var(--text-dim); font-family: 'JetBrains Mono', monospace;
+                 font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; }
 
 .quest-card { background: var(--bg-card); border: 1px solid var(--border);
               border-radius: 14px; padding: 18px; cursor: pointer;
@@ -608,6 +653,16 @@ header { position: sticky; top: 0; z-index: 50;
                font-style: italic; padding-left: 12px;
                border-left: 2px solid var(--sleep); max-width: 700px; }
 .detail-quest-meta { display: flex; gap: 8px; flex-wrap: wrap; width: 100%; }
+.completion-panel { width: 100%; display: grid;
+                    grid-template-columns: repeat(4, minmax(130px, 1fr));
+                    gap: 8px; max-width: 980px; }
+.completion-item { background: #10171B; border: 1px solid var(--border);
+                   border-radius: 8px; padding: 9px 10px; min-width: 0; }
+.completion-label { font-family: 'JetBrains Mono', monospace; font-size: 8px;
+                    color: var(--teal); letter-spacing: 1.4px;
+                    text-transform: uppercase; }
+.completion-value { margin-top: 5px; color: #DDD; font-size: 12px;
+                    line-height: 1.45; overflow-wrap: anywhere; }
 .share-btn { background: var(--bg-card); border: 1px solid var(--border);
              color: var(--text); padding: 7px 12px; border-radius: 6px;
              font-family: 'JetBrains Mono', monospace; font-size: 10px;
@@ -781,6 +836,9 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
   .atlas-stats { gap: 8px; }
   .atlas-stat { flex: 1 1 30%; min-width: 96px; padding: 9px 10px; }
   .atlas-stat b { font-size: 16px; }
+  .gallery-filters { gap: 8px; }
+  .filter-field { flex: 1 1 calc(50% - 8px); min-width: 0; }
+  .filter-reset { flex: 1 1 100%; padding: 9px 12px; }
 
   .quest-card { padding: 14px; border-radius: 12px; }
   .quest-svg { height: 110px; padding: 8px; }
@@ -801,6 +859,8 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
   .detail-quote { font-size: 12px; max-width: 100%; padding-left: 10px;
                   border-left-width: 2px; }
   .detail-desc { font-size: 12px; padding-left: 10px; max-width: 100%; }
+  .completion-panel { grid-template-columns: 1fr 1fr; gap: 7px; }
+  .completion-value { font-size: 11px; }
   .detail-actions { width: 100%; }
   .detail-actions .share-btn { flex: 1; justify-content: center;
                                padding: 9px 12px; font-size: 10px; }
@@ -901,6 +961,25 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
     <div class="gallery-count" id="galleryCount"></div>
     <div class="atlas-stats" id="atlasStats"></div>
   </div>
+  <div class="gallery-filters" id="galleryFilters" aria-label="Quest filters">
+    <div class="filter-field">
+      <label for="filterType">Type</label>
+      <select id="filterType" data-filter="type"></select>
+    </div>
+    <div class="filter-field">
+      <label for="filterDifficulty">Difficulty</label>
+      <select id="filterDifficulty" data-filter="difficulty"></select>
+    </div>
+    <div class="filter-field">
+      <label for="filterRegion">Region</label>
+      <select id="filterRegion" data-filter="region"></select>
+    </div>
+    <div class="filter-field">
+      <label for="filterTheme">Theme</label>
+      <select id="filterTheme" data-filter="theme"></select>
+    </div>
+    <button class="filter-reset" type="button" onclick="resetFilters()">Clear filters</button>
+  </div>
 </div>
 
 <div class="detail" id="detail">
@@ -912,6 +991,7 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
       </div>
       <div class="detail-quote" id="detailQuote"></div>
       <div class="detail-desc" id="detailDesc" style="display:none"></div>
+      <div class="completion-panel" id="completionPanel"></div>
     </div>
     <div class="detail-actions">
       <a class="share-btn strava-btn" id="stravaBtn" href="#" target="_blank" rel="noopener" title="Open this activity on Strava">
@@ -1012,23 +1092,88 @@ function loadMapsIfNeeded() {
   return mapsReadyPromise;
 }
 
+const galleryFilters = {
+  type: 'All',
+  difficulty: 'All',
+  region: 'All',
+  theme: 'All',
+};
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+}
+
+function uniqueRouteValues(key) {
+  return [...new Set(ROUTES.map(r => r[key]).filter(Boolean))]
+    .sort((a, b) => String(a).localeCompare(String(b)));
+}
+
+function setSelectOptions(id, values) {
+  const select = document.getElementById(id);
+  select.innerHTML = '';
+  values.forEach(value => {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = value;
+    select.appendChild(option);
+  });
+}
+
+function initFilterControls() {
+  setSelectOptions('filterType', ['All', 'Run', 'Ride']);
+  setSelectOptions('filterDifficulty', ['All', 'Easy', 'Moderate', 'Epic']);
+  setSelectOptions('filterRegion', ['All', ...uniqueRouteValues('region')]);
+  setSelectOptions('filterTheme', ['All', ...uniqueRouteValues('theme')]);
+  document.querySelectorAll('[data-filter]').forEach(select => {
+    select.addEventListener('change', e => {
+      galleryFilters[e.target.dataset.filter] = e.target.value;
+      renderGallery();
+    });
+  });
+}
+
+function routeMatchesFilters(route) {
+  return Object.entries(galleryFilters).every(([key, value]) =>
+    value === 'All' || route[key] === value);
+}
+
+function resetFilters() {
+  Object.keys(galleryFilters).forEach(key => { galleryFilters[key] = 'All'; });
+  document.querySelectorAll('[data-filter]').forEach(select => { select.value = 'All'; });
+  renderGallery();
+}
+
 function renderGallery() {
   const gal = document.getElementById('gallery');
-  Array.from(gal.querySelectorAll('.quest-card')).forEach(el => el.remove());
-  const totalUser = ROUTES.reduce((s, r) => s + getStoredPhotos(r.slug).length, 0);
-  const totalPhotos = ROUTES.reduce((s, r) => s + r.baseline_photos.length, 0) + totalUser;
-  const totalKm = ROUTES.reduce((s,r)=>s+r.distance_km,0);
-  const totalXp = ROUTES.reduce((s,r)=>s+(r.xp || 0),0);
-  const totalClimb = ROUTES.reduce((s,r)=>s+(r.elevation_gain_m || 0),0);
+  Array.from(gal.querySelectorAll('.quest-card, .gallery-empty')).forEach(el => el.remove());
+  const filteredRoutes = ROUTES
+    .map((route, index) => ({ route, index }))
+    .filter(({ route }) => routeMatchesFilters(route));
+  const filtered = filteredRoutes.map(({ route }) => route);
+  const totalUser = filtered.reduce((s, r) => s + getStoredPhotos(r.slug).length, 0);
+  const totalPhotos = filtered.reduce((s, r) => s + r.baseline_photos.length, 0) + totalUser;
+  const totalKm = filtered.reduce((s,r)=>s+r.distance_km,0);
+  const totalXp = filtered.reduce((s,r)=>s+(r.xp || 0),0);
+  const totalClimb = filtered.reduce((s,r)=>s+(r.elevation_gain_m || 0),0);
+  const suffix = filtered.length === ROUTES.length ? '' : ` · FILTERED FROM ${ROUTES.length}`;
   document.getElementById('galleryCount').textContent =
-    `${ROUTES.length} QUESTS · ${totalPhotos} PHOTOS · ${totalKm.toFixed(0)} KM TOTAL`;
+    `${filtered.length} QUEST${filtered.length === 1 ? '' : 'S'} · ${totalPhotos} PHOTOS · ${totalKm.toFixed(0)} KM TOTAL${suffix}`;
   document.getElementById('atlasStats').innerHTML = `
-    <div class="atlas-stat"><b>${ROUTES.length}</b><span>quests</span></div>
+    <div class="atlas-stat"><b>${filtered.length}</b><span>quests</span></div>
     <div class="atlas-stat"><b>${totalKm.toFixed(0)}</b><span>km mapped</span></div>
     <div class="atlas-stat"><b>${totalXp.toLocaleString()}</b><span>xp available</span></div>
     <div class="atlas-stat"><b>${Math.round(totalClimb).toLocaleString()}</b><span>m climbing</span></div>
   `;
-  ROUTES.forEach((r, i) => {
+  if (filteredRoutes.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'gallery-empty';
+    empty.textContent = 'No quests match these filters.';
+    gal.appendChild(empty);
+    return;
+  }
+  filteredRoutes.forEach(({ route: r, index: i }) => {
     const card = document.createElement('div');
     card.className = 'quest-card';
     const userPhotos = getStoredPhotos(r.slug).length;
@@ -1069,6 +1214,25 @@ function renderGallery() {
   });
 }
 
+function renderCompletionPanel(route) {
+  const panel = document.getElementById('completionPanel');
+  const baselineCount = route.baseline_photos.length;
+  const totalPhotos = baselineCount + getStoredPhotos(route.slug).length;
+  const climb = Math.round(route.elevation_gain_m || 0).toLocaleString();
+  const items = [
+    ['Objective', route.completion_rule || `Complete ${route.distance_km.toFixed(1)} km.`],
+    ['Reward', `${(route.xp || 0).toLocaleString()} XP · ${route.difficulty || 'Open'} quest`],
+    ['Proof', `${totalPhotos} photo${totalPhotos === 1 ? '' : 's'} available · ${baselineCount} baseline`],
+    ['Travel notes', `${route.region || route.name} · ${route.distance_km.toFixed(1)} km · ${climb} m up`],
+  ];
+  panel.innerHTML = items.map(([label, value]) => `
+    <div class="completion-item">
+      <div class="completion-label">${escapeHtml(label)}</div>
+      <div class="completion-value">${escapeHtml(value)}</div>
+    </div>
+  `).join('');
+}
+
 async function openRoute(i) {
   activeRouteIdx = i;
   document.getElementById('gallery').style.display = 'none';
@@ -1085,12 +1249,12 @@ async function openRoute(i) {
   document.getElementById('stravaBtn').href =
     `https://www.strava.com/activities/${r.activity_id}`;
   const descEl = document.getElementById('detailDesc');
-  const questRule = `${r.completion_rule || ''} Reward: ${(r.xp || 0).toLocaleString()} XP.`;
-  if (questRule || r.description) {
-    descEl.textContent = r.description ? `${questRule} ${r.description}` : questRule;
+  if (r.description) {
+    descEl.textContent = r.description;
     descEl.style.display = 'block';
   }
   else { descEl.style.display = 'none'; }
+  renderCompletionPanel(r);
   document.getElementById('kmTotal').textContent =
     (r.route[r.route.length-1].d / 1000).toFixed(2) + ' km';
   const mapsOk = await loadMapsIfNeeded();
@@ -1394,6 +1558,7 @@ function initMap() {
   initRoute();
 }
 
+initFilterControls();
 renderGallery();
 </script>
 <!-- Google Maps SDK is loaded lazily by loadMapsIfNeeded() on first quest open. -->
