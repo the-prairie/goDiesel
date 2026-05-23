@@ -1,0 +1,687 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Quests · Admin</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root {
+    --bg: #101518;
+    --bg-card: #1A2025;
+    --bg-card-hover: #232A30;
+    --border: #2A3540;
+    --border-strong: #3A4550;
+    --text: #E8ECEF;
+    --text-dim: #7BA1BB;
+    --text-faint: #5A6770;
+    --teal: #00F19F;
+    --teal-dim: #00B377;
+    --strain: #0093E7;
+    --warn: #F5A623;
+    --reject: #E25555;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+         font-size: 14px; }
+  a { color: var(--teal); text-decoration: none; }
+  a:hover { color: #fff; }
+  button { font: inherit; cursor: pointer; }
+
+  header {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    padding: 16px 28px 0;
+  }
+  .head-row {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .brand {
+    font-size: 14px; letter-spacing: 0.18em; font-weight: 600;
+    color: var(--text); display: flex; align-items: center; gap: 12px;
+  }
+  .brand .dot {
+    width: 10px; height: 10px; border-radius: 50%; background: var(--teal);
+    box-shadow: 0 0 14px var(--teal);
+  }
+  .brand small { color: var(--text-dim); font-weight: 400; letter-spacing: 0.1em; }
+
+  .head-actions { display: flex; gap: 10px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 9px 16px; border: 1px solid var(--border-strong);
+    background: transparent; color: var(--text); border-radius: 6px;
+    font-size: 12px; letter-spacing: 0.12em; font-weight: 600;
+    transition: all 0.12s;
+  }
+  .btn:hover { border-color: var(--teal); color: var(--teal); }
+  .btn.primary { background: var(--teal); color: #000; border-color: var(--teal); }
+  .btn.primary:hover { background: #fff; color: #000; border-color: #fff; }
+  .btn.primary[disabled] { opacity: 0.4; cursor: not-allowed; }
+  .btn svg { width: 14px; height: 14px; }
+
+  .tabs { display: flex; gap: 4px; }
+  .tab {
+    padding: 10px 18px; border: none; background: transparent;
+    color: var(--text-dim); font-size: 12px; letter-spacing: 0.16em;
+    font-weight: 600; border-bottom: 2px solid transparent;
+    transition: all 0.12s;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--teal); border-bottom-color: var(--teal); }
+  .tab .count {
+    margin-left: 6px; padding: 2px 7px; background: var(--bg-card);
+    border-radius: 10px; font-size: 11px; letter-spacing: 0.06em;
+  }
+  .tab.active .count { background: rgba(0,241,159,0.15); color: var(--teal); }
+
+  .filters { display: flex; gap: 12px; align-items: center; padding: 12px 0 16px; }
+  .filters input[type="search"] {
+    flex: 1; max-width: 360px;
+    background: var(--bg-card); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 12px; border-radius: 6px;
+    font-size: 13px;
+  }
+  .filters input[type="search"]:focus { outline: none; border-color: var(--teal); }
+  .chip {
+    padding: 6px 12px; border: 1px solid var(--border);
+    background: transparent; color: var(--text-dim);
+    border-radius: 14px; font-size: 11px; letter-spacing: 0.1em; font-weight: 600;
+  }
+  .chip:hover { color: var(--text); border-color: var(--border-strong); }
+  .chip.active { color: var(--teal); border-color: var(--teal); background: rgba(0,241,159,0.08); }
+  .region-select {
+    background: var(--bg-card); border: 1px solid var(--border);
+    color: var(--text); padding: 6px 28px 6px 12px;
+    border-radius: 14px; font-size: 11px; letter-spacing: 0.1em;
+    font-weight: 600; appearance: none; cursor: pointer;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237BA1BB' stroke-width='2'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    max-width: 240px;
+  }
+  .region-select:focus { outline: none; border-color: var(--teal); }
+  .chip.classify { color: var(--text); border-color: var(--border-strong); }
+  .chip.classify:hover:not([disabled]) { color: var(--teal); border-color: var(--teal);
+                                         background: rgba(0,241,159,0.08); }
+  .chip.classify[disabled] { opacity: 0.55; cursor: progress; }
+  .chip.classify svg { width: 12px; height: 12px; vertical-align: -2px; margin-right: 4px; }
+  .classify-status { font-size: 11px; color: var(--text-dim); letter-spacing: 0.08em;
+                     padding: 0 8px; font-family: 'JetBrains Mono', 'SF Mono', monospace; }
+  .classify-status.active { color: var(--teal); }
+
+  main { padding: 20px 28px 120px; }
+  .grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 18px;
+  }
+  .card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 10px; overflow: hidden;
+    display: flex; flex-direction: column;
+    transition: all 0.12s;
+  }
+  .card:hover { background: var(--bg-card-hover); border-color: var(--border-strong); }
+  .card.approved { border-color: rgba(0,241,159,0.4); }
+  .card.archived { border-color: rgba(123,161,187,0.35); background: #161A1E; }
+  .card.dirty { border-color: var(--warn); box-shadow: 0 0 0 1px var(--warn); }
+
+  .preview {
+    background: #0B0F12; height: 130px; position: relative;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .preview svg { width: 100%; height: 100%; }
+  .preview .pending-shimmer {
+    color: var(--text-faint); font-size: 11px; letter-spacing: 0.16em;
+  }
+  .badge-status {
+    position: absolute; top: 8px; right: 8px;
+    padding: 3px 8px; border-radius: 10px;
+    font-size: 10px; letter-spacing: 0.1em; font-weight: 700;
+    background: var(--bg); color: var(--text-dim);
+  }
+  .badge-status.approved { background: rgba(0,241,159,0.15); color: var(--teal); }
+  .badge-status.archived { background: rgba(123,161,187,0.15); color: var(--text-dim); }
+  .badge-status.pending  { background: rgba(245,166,35,0.15); color: var(--warn); }
+
+  .card-body { padding: 14px 14px 12px; flex: 1; display: flex; flex-direction: column; gap: 8px; }
+  .card-name { font-weight: 600; font-size: 14px; color: var(--text);
+               overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card-meta { display: flex; align-items: center; gap: 6px; font-size: 11px;
+               color: var(--text-dim); letter-spacing: 0.08em; }
+  .card-meta svg { width: 12px; height: 12px; }
+  .card-meta .dot { color: var(--text-faint); }
+  .card-meta .type-ride { color: var(--strain); }
+  .card-meta .type-run  { color: var(--teal); }
+
+  .region-input {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); padding: 6px 10px; border-radius: 5px;
+    font-size: 12px; font-family: inherit;
+  }
+  .region-input:focus { outline: none; border-color: var(--teal); }
+  .region-input::placeholder { color: var(--text-faint); }
+
+  .card-actions {
+    display: flex; gap: 6px; padding: 10px 14px; border-top: 1px solid var(--border);
+    background: rgba(0,0,0,0.15);
+  }
+  .act-btn {
+    flex: 1; padding: 7px 8px; background: transparent; color: var(--text-dim);
+    border: 1px solid var(--border); border-radius: 5px;
+    font-size: 11px; letter-spacing: 0.1em; font-weight: 600;
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+    transition: all 0.12s;
+  }
+  .act-btn svg { width: 12px; height: 12px; }
+  .act-btn:hover { color: var(--text); border-color: var(--border-strong); }
+  .act-btn.approve:hover { color: var(--teal); border-color: var(--teal);
+                           background: rgba(0,241,159,0.08); }
+  .act-btn.archive:hover { color: var(--text-dim); border-color: var(--text-dim);
+                           background: rgba(123,161,187,0.08); }
+  .act-btn.strava { flex: 0 0 auto; padding: 7px 10px; }
+  .act-btn.strava:hover { color: #FC4C02; border-color: #FC4C02; }
+  .act-btn.active.approve { color: var(--teal); border-color: var(--teal);
+                            background: rgba(0,241,159,0.12); }
+  .act-btn.active.archive { color: var(--text-dim); border-color: var(--text-dim);
+                            background: rgba(123,161,187,0.12); }
+
+  .save-bar {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--bg-card); border: 1px solid var(--border-strong);
+    padding: 12px 20px; border-radius: 30px;
+    display: flex; gap: 14px; align-items: center;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+    transition: opacity 0.2s, transform 0.2s;
+  }
+  .save-bar.hidden { opacity: 0; transform: translate(-50%, 20px); pointer-events: none; }
+  .save-bar .count { color: var(--warn); font-weight: 700; letter-spacing: 0.1em; font-size: 12px; }
+  .save-bar small { color: var(--text-dim); font-size: 11px; letter-spacing: 0.06em; }
+
+  .empty {
+    grid-column: 1 / -1;
+    padding: 60px 20px; text-align: center;
+    color: var(--text-faint); font-size: 13px; letter-spacing: 0.12em;
+  }
+  .toast {
+    position: fixed; bottom: 80px; right: 20px;
+    background: var(--bg-card); border: 1px solid var(--teal);
+    color: var(--teal); padding: 10px 16px; border-radius: 6px;
+    font-size: 12px; letter-spacing: 0.1em; font-weight: 600;
+    opacity: 0; transform: translateY(8px); transition: all 0.2s;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- SVG icon library — reused throughout -->
+<svg width="0" height="0" style="display:none" aria-hidden="true">
+  <symbol id="i-bike" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="5.5" cy="17.5" r="3.5"/>
+    <circle cx="18.5" cy="17.5" r="3.5"/>
+    <path d="M5.5 17.5L10 8h4l4.5 9.5"/>
+    <path d="M10 8l-1.5-3h-2"/>
+    <path d="M14 8h3"/>
+  </symbol>
+  <symbol id="i-runner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="15" cy="4.5" r="1.8"/>
+    <path d="M9 21l3-6 3 2 3 5"/>
+    <path d="M8 13l3-4 3 1 3-3"/>
+    <path d="M6 17l-2-2"/>
+  </symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12l5 5L20 6"/>
+  </symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 6l12 12M18 6L6 18"/>
+  </symbol>
+  <symbol id="i-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14 4h6v6"/>
+    <path d="M20 4L10 14"/>
+    <path d="M19 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1h5"/>
+  </symbol>
+  <symbol id="i-save" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/>
+    <path d="M17 21v-8H7v8M7 3v5h8"/>
+  </symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 12a9 9 0 0115-6.7L21 8"/>
+    <path d="M21 3v5h-5"/>
+    <path d="M21 12a9 9 0 01-15 6.7L3 16"/>
+    <path d="M3 21v-5h5"/>
+  </symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="5" width="18" height="16" rx="2"/>
+    <path d="M16 3v4M8 3v4M3 10h18"/>
+  </symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/>
+    <path d="M19 14l.7 2.1L22 17l-2.3.9L19 20l-.7-2.1L16 17l2.3-.9L19 14z"/>
+  </symbol>
+</svg>
+
+<header>
+  <div class="head-row">
+    <div class="brand">
+      <span class="dot"></span>
+      QUESTS · ADMIN
+      <small>route curation</small>
+    </div>
+    <div class="head-actions">
+      <button class="btn" id="rebuildBtn" title="Re-build the public site after saving">
+        <svg><use href="#i-refresh"/></svg> REBUILD SITE
+      </button>
+      <button class="btn primary" id="saveBtn" disabled>
+        <svg><use href="#i-save"/></svg> SAVE <span id="saveCount"></span>
+      </button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="pending">PENDING <span class="count" id="cPending">0</span></button>
+    <button class="tab" data-tab="approved">APPROVED <span class="count" id="cApproved">0</span></button>
+    <button class="tab" data-tab="archived">ARCHIVE <span class="count" id="cArchived">0</span></button>
+  </div>
+
+  <div class="filters">
+    <input type="search" id="search" placeholder="Search by name or description…">
+    <select id="regionSelect" class="region-select" title="Filter by auto-detected region">
+      <option value="all">ALL REGIONS</option>
+    </select>
+    <button class="chip active" data-type="all">ALL</button>
+    <button class="chip" data-type="Ride">RIDE</button>
+    <button class="chip" data-type="Run">RUN</button>
+    <button class="chip" data-min="5">≥ 5 KM</button>
+    <button class="chip classify" id="autoClassifyBtn"
+            title="Reverse-geocode any route shown as raw coordinates. Free via OpenStreetMap; ~1 sec per unique location.">
+      <svg><use href="#i-sparkle"/></svg>AUTO-CLASSIFY
+    </button>
+    <span class="classify-status" id="classifyStatus"></span>
+  </div>
+</header>
+
+<main>
+  <div class="grid" id="grid">
+    <div class="empty">LOADING…</div>
+  </div>
+</main>
+
+<div class="save-bar hidden" id="saveBar">
+  <span class="count" id="dirtyCount">0</span>
+  <small>UNSAVED CHANGES</small>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const STATE = {
+  routes: [],         // server data
+  dirty: new Map(),   // activity_id → patch
+  tab: 'pending',
+  type: 'all',
+  region: 'all',
+  minKm: 0,
+  search: '',
+};
+const UNMAPPED = '— UNMAPPED —';
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => (
+    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function effectiveStatus(r) {
+  const patch = STATE.dirty.get(r.activity_id);
+  return patch?.status ?? r.status;
+}
+
+function effectiveRegion(r) {
+  const patch = STATE.dirty.get(r.activity_id);
+  return patch?.region ?? r.region;
+}
+
+function setPatch(id, key, value) {
+  const existing = STATE.dirty.get(id) || {};
+  existing[key] = value;
+  STATE.dirty.set(id, existing);
+  renderCounts();
+  renderSaveBar();
+}
+
+function renderCounts() {
+  const counts = { pending: 0, approved: 0, archived: 0 };
+  STATE.routes.forEach(r => {
+    const s = effectiveStatus(r);
+    if (counts[s] !== undefined) counts[s]++;
+  });
+  document.getElementById('cPending').textContent = counts.pending;
+  document.getElementById('cApproved').textContent = counts.approved;
+  document.getElementById('cArchived').textContent = counts.archived;
+}
+
+function populateRegionDropdown() {
+  // Count per auto_region within the currently-active tab so the dropdown
+  // reflects what the user is actually triaging.
+  const counts = {};
+  STATE.routes.forEach(r => {
+    if (effectiveStatus(r) !== STATE.tab) return;
+    const reg = r.auto_region || UNMAPPED;
+    counts[reg] = (counts[reg] || 0) + 1;
+  });
+  const sel = document.getElementById('regionSelect');
+  const prev = sel.value;
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  sel.innerHTML = `<option value="all">ALL REGIONS (${total})</option>` +
+    sorted.map(([reg, n]) =>
+      `<option value="${escapeHtml(reg)}">${escapeHtml(reg)} (${n})</option>`).join('');
+  // Preserve selection if still present
+  if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
+  else { sel.value = 'all'; STATE.region = 'all'; }
+}
+
+function renderSaveBar() {
+  const n = STATE.dirty.size;
+  const bar = document.getElementById('saveBar');
+  const btn = document.getElementById('saveBtn');
+  document.getElementById('dirtyCount').textContent = n;
+  document.getElementById('saveCount').textContent = n ? `(${n})` : '';
+  if (n === 0) { bar.classList.add('hidden'); btn.disabled = true; }
+  else        { bar.classList.remove('hidden'); btn.disabled = false; }
+}
+
+function typeIconHtml(t) {
+  if (t === 'Ride')  return '<svg class="type-ride"><use href="#i-bike"/></svg>';
+  if (t === 'Run')   return '<svg class="type-run"><use href="#i-runner"/></svg>';
+  return '';
+}
+
+let polylineObserver;
+function ensureObserver() {
+  if (polylineObserver) return polylineObserver;
+  polylineObserver = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (!e.isIntersecting) return;
+      const el = e.target;
+      polylineObserver.unobserve(el);
+      const id = el.dataset.aid;
+      fetch(`/api/polyline/${id}`).then(r => r.text()).then(svg => {
+        el.innerHTML = svg || '<span class="pending-shimmer">NO MAP DATA</span>';
+      }).catch(() => {
+        el.innerHTML = '<span class="pending-shimmer">MAP ERROR</span>';
+      });
+    });
+  }, { rootMargin: '200px' });
+  return polylineObserver;
+}
+
+function cardHtml(r) {
+  const status = effectiveStatus(r);
+  const region = effectiveRegion(r);
+  const dirty = STATE.dirty.has(r.activity_id);
+  const stravaUrl = `https://www.strava.com/activities/${r.activity_id}`;
+  const placeholder = r.auto_region
+    ? `auto: ${r.auto_region}`
+    : 'Region (e.g. Banff, AB)';
+  const archived = status === 'archived';
+  const archiveLabel = archived ? 'RESTORE' : 'ARCHIVE';
+  const archiveTitle = archived
+    ? 'Move back to Pending'
+    : 'Archive (you can restore it any time)';
+  return `
+    <div class="card ${status} ${dirty ? 'dirty' : ''}" data-id="${r.activity_id}">
+      <div class="preview" data-aid="${r.activity_id}">
+        <span class="pending-shimmer">LOADING MAP…</span>
+        <span class="badge-status ${status}">${status.toUpperCase()}</span>
+      </div>
+      <div class="card-body">
+        <div class="card-name" title="${escapeHtml(r.name)}">${escapeHtml(r.name)}</div>
+        <div class="card-meta">
+          ${typeIconHtml(r.type)}
+          <span class="${r.type === 'Ride' ? 'type-ride' : 'type-run'}">${escapeHtml(r.type || '—')}</span>
+          <span class="dot">·</span>
+          <span>${r.distance_km.toFixed(1)} km</span>
+          <span class="dot">·</span>
+          <svg><use href="#i-calendar"/></svg>
+          <span>${escapeHtml(r.date || '—')}</span>
+        </div>
+        <input class="region-input" type="text"
+               placeholder="${escapeHtml(placeholder)}"
+               value="${escapeHtml(region)}"
+               data-region-for="${r.activity_id}">
+      </div>
+      <div class="card-actions">
+        <button class="act-btn approve ${status === 'approved' ? 'active' : ''}"
+                data-action="approve" data-id="${r.activity_id}"
+                title="Approve as a public Quest">
+          <svg><use href="#i-check"/></svg> APPROVE
+        </button>
+        <button class="act-btn archive ${archived ? 'active' : ''}"
+                data-action="archive" data-id="${r.activity_id}"
+                title="${archiveTitle}">
+          <svg><use href="#i-x"/></svg> ${archiveLabel}
+        </button>
+        <a class="act-btn strava" href="${stravaUrl}" target="_blank" rel="noopener" title="Open on Strava">
+          <svg><use href="#i-external"/></svg>
+        </a>
+      </div>
+    </div>`;
+}
+
+function filteredRoutes() {
+  const s = STATE.search.toLowerCase().trim();
+  return STATE.routes.filter(r => {
+    if (effectiveStatus(r) !== STATE.tab) return false;
+    if (STATE.type !== 'all' && r.type !== STATE.type) return false;
+    if (r.distance_km < STATE.minKm) return false;
+    if (STATE.region !== 'all') {
+      const reg = r.auto_region || UNMAPPED;
+      if (reg !== STATE.region) return false;
+    }
+    if (s && !((r.name || '').toLowerCase().includes(s) ||
+               (r.description || '').toLowerCase().includes(s))) return false;
+    return true;
+  });
+}
+
+function render() {
+  const grid = document.getElementById('grid');
+  const items = filteredRoutes();
+  if (items.length === 0) {
+    grid.innerHTML = '<div class="empty">NO ROUTES MATCH THESE FILTERS</div>';
+    return;
+  }
+  grid.innerHTML = items.map(cardHtml).join('');
+  // Lazy-load polyline previews
+  const obs = ensureObserver();
+  grid.querySelectorAll('.preview').forEach(el => obs.observe(el));
+}
+
+// Event delegation
+document.addEventListener('click', e => {
+  const tabBtn = e.target.closest('.tab');
+  if (tabBtn) {
+    STATE.tab = tabBtn.dataset.tab;
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === tabBtn));
+    populateRegionDropdown();
+    render();
+    return;
+  }
+  const chip = e.target.closest('.chip');
+  if (chip) {
+    if (chip.dataset.type) {
+      STATE.type = chip.dataset.type;
+      document.querySelectorAll('.chip[data-type]').forEach(c =>
+        c.classList.toggle('active', c === chip));
+    } else if (chip.dataset.min) {
+      const on = chip.classList.toggle('active');
+      STATE.minKm = on ? parseFloat(chip.dataset.min) : 0;
+    }
+    render();
+    return;
+  }
+  const act = e.target.closest('.act-btn[data-action]');
+  if (act) {
+    const id = act.dataset.id;
+    const action = act.dataset.action;
+    const route = STATE.routes.find(r => r.activity_id === id);
+    const current = effectiveStatus(route);
+    let next;
+    if (action === 'approve') next = current === 'approved' ? 'pending' : 'approved';
+    else                      next = current === 'archived' ? 'pending' : 'archived';
+    setPatch(id, 'status', next);
+    populateRegionDropdown();
+    render();
+  }
+});
+
+document.addEventListener('input', e => {
+  if (e.target.id === 'search') {
+    STATE.search = e.target.value;
+    render();
+    return;
+  }
+  if (e.target.classList.contains('region-input')) {
+    const id = e.target.dataset.regionFor;
+    setPatch(id, 'region', e.target.value);
+    // Don't re-render — just mark card dirty
+    e.target.closest('.card').classList.add('dirty');
+  }
+});
+
+document.addEventListener('change', e => {
+  if (e.target.id === 'regionSelect') {
+    STATE.region = e.target.value;
+    render();
+  }
+});
+
+function showToast(msg, color) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.borderColor = color || 'var(--teal)';
+  t.style.color = color || 'var(--teal)';
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+document.getElementById('saveBtn').addEventListener('click', async () => {
+  const updates = Array.from(STATE.dirty.entries()).map(([aid, patch]) => ({
+    activity_id: aid, ...patch
+  }));
+  try {
+    const r = await fetch('/api/save', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({routes: updates}),
+    });
+    const j = await r.json();
+    if (j.ok) {
+      // Merge patches into routes (server is now source of truth, but optimistic)
+      STATE.dirty.forEach((patch, id) => {
+        const r = STATE.routes.find(x => x.activity_id === id);
+        if (r) Object.assign(r, patch);
+      });
+      STATE.dirty.clear();
+      renderCounts();
+      renderSaveBar();
+      render();
+      showToast(`SAVED ${j.updated} CHANGE${j.updated === 1 ? '' : 'S'}`);
+    } else {
+      showToast('SAVE FAILED', 'var(--reject)');
+    }
+  } catch (err) {
+    showToast('SAVE FAILED', 'var(--reject)');
+  }
+});
+
+document.getElementById('rebuildBtn').addEventListener('click', async () => {
+  if (STATE.dirty.size > 0) {
+    showToast('SAVE FIRST', 'var(--warn)');
+    return;
+  }
+  try {
+    await fetch('/api/rebuild', { method: 'POST' });
+    showToast('REBUILD STARTED — CHECK TERMINAL');
+  } catch (err) {
+    showToast('REBUILD FAILED', 'var(--reject)');
+  }
+});
+
+// === Auto-classify (reverse-geocoding) ===
+let classifyPollTimer = null;
+
+async function refreshRoutes() {
+  const data = await fetch('/api/routes').then(r => r.json());
+  STATE.routes = data;
+  renderCounts();
+  populateRegionDropdown();
+  render();
+}
+
+function setClassifyStatus(text, active) {
+  const el = document.getElementById('classifyStatus');
+  el.textContent = text || '';
+  el.classList.toggle('active', !!active);
+  const btn = document.getElementById('autoClassifyBtn');
+  btn.toggleAttribute('disabled', !!active);
+}
+
+async function pollClassifyStatus() {
+  let lastUpdatedCount = 0;
+  const tick = async () => {
+    let s;
+    try { s = await fetch('/api/classify-status').then(r => r.json()); }
+    catch { setClassifyStatus('CHECK FAILED', false); return; }
+    if (s.running) {
+      setClassifyStatus(`✦ CLASSIFYING ${s.done} / ${s.total}` +
+                        (s.last_label ? ` · ${s.last_label}` : ''), true);
+      // Refresh data periodically so user sees regions populate as it goes.
+      if (s.updated > lastUpdatedCount + 4) {
+        lastUpdatedCount = s.updated;
+        refreshRoutes();
+      }
+      classifyPollTimer = setTimeout(tick, 2000);
+    } else {
+      classifyPollTimer = null;
+      if (s.total > 0) {
+        setClassifyStatus(`✓ CLASSIFIED ${s.updated} / ${s.total}` +
+                          (s.unmapped ? ` · ${s.unmapped} still unmapped` : ''), false);
+        refreshRoutes();
+        // Fade after a bit
+        setTimeout(() => setClassifyStatus('', false), 8000);
+      } else if (s.unmapped > 0) {
+        setClassifyStatus(`${s.unmapped} unmapped — click AUTO-CLASSIFY`, false);
+      } else {
+        setClassifyStatus('', false);
+      }
+    }
+  };
+  if (classifyPollTimer) clearTimeout(classifyPollTimer);
+  tick();
+}
+
+document.getElementById('autoClassifyBtn').addEventListener('click', async () => {
+  try {
+    await fetch('/api/auto-classify', { method: 'POST' });
+    pollClassifyStatus();
+  } catch {
+    showToast('AUTO-CLASSIFY FAILED', 'var(--reject)');
+  }
+});
+
+// Initial load
+fetch('/api/routes').then(r => r.json()).then(data => {
+  STATE.routes = data;
+  renderCounts();
+  populateRegionDropdown();
+  render();
+  // Check if the server is already classifying in the background.
+  pollClassifyStatus();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Quests auto-rebuild — runs the build daily at 06:30 local time.
+  Install:
+    cp com.laurenzary.quests-rebuild.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.laurenzary.quests-rebuild.plist
+  Uninstall:
+    launchctl unload ~/Library/LaunchAgents/com.laurenzary.quests-rebuild.plist
+    rm ~/Library/LaunchAgents/com.laurenzary.quests-rebuild.plist
+  Inspect:
+    tail -f /Users/laurenzary/Desktop/goDiesel/.rebuild.log
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.laurenzary.quests-rebuild</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/laurenzary/Desktop/goDiesel/rebuild.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/laurenzary/Desktop/goDiesel</string>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>6</integer>
+        <key>Minute</key>
+        <integer>30</integer>
+    </dict>
+
+    <!-- Also rebuild if quests.json is edited (FS watcher) -->
+    <key>WatchPaths</key>
+    <array>
+        <string>/Users/laurenzary/Desktop/goDiesel/quests.json</string>
+    </array>
+
+    <key>StandardOutPath</key>
+    <string>/Users/laurenzary/Desktop/goDiesel/.rebuild.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/laurenzary/Desktop/goDiesel/.rebuild.log</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>
