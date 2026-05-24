@@ -505,6 +505,12 @@ for r in routes_data:
     for ph in r.get('baseline_photos', []):
         ph.pop('_full_path', None)
 data_json = json.dumps(routes_data)
+curation_json = json.dumps({
+    'approved': len(quest_specs),
+    'pending': pending_n,
+    'rejected': rejected_n,
+    'total': len(all_routes),
+})
 
 # Build app HTML — same as previous version but with Share-card button
 HTML_TEMPLATE_PATH = Path('/tmp/quests_template.html')
@@ -525,7 +531,7 @@ template_html = '''<!DOCTYPE html>
 }
 html, body { background: var(--bg); color: var(--text);
   font-family: 'Inter', sans-serif;
-  -webkit-font-smoothing: antialiased; min-height: 100vh; }
+  -webkit-font-smoothing: antialiased; min-height: 100vh; overflow-x: hidden; }
 
 header { position: sticky; top: 0; z-index: 50;
   display: flex; align-items: center; justify-content: space-between;
@@ -564,6 +570,27 @@ header { position: sticky; top: 0; z-index: 50;
 .atlas-stat span { display: block; margin-top: 3px; font-family: 'JetBrains Mono', monospace;
                    font-size: 9px; color: var(--text-faint); letter-spacing: 1.3px;
                    text-transform: uppercase; }
+.ops-rail { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(280px, 1.15fr) minmax(280px, 0.85fr);
+            gap: 12px; margin: 2px 0 4px; }
+.ops-panel { border: 1px solid rgba(42,53,64,0.84); background: rgba(11,18,22,0.82);
+             border-radius: 10px; padding: 13px 14px; min-width: 0; }
+.ops-kicker { font-family: 'JetBrains Mono', monospace; color: var(--teal);
+              font-size: 9px; letter-spacing: 1.6px; text-transform: uppercase; }
+.ops-title { margin-top: 7px; color: #EEE; font-size: 13px; font-weight: 700; }
+.ops-copy { margin-top: 5px; color: var(--text-dim); font-size: 12px; line-height: 1.55; max-width: 62ch; }
+.ops-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.ops-step { border-left: 1px solid rgba(0,241,159,0.28); padding-left: 9px; min-width: 0; }
+.ops-step { appearance: none; text-align: left; background: transparent; color: inherit; cursor: pointer; }
+.ops-step:hover b { color: var(--teal); }
+.ops-step b { display: block; color: #FFF; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 1px; }
+.ops-step span { display: block; margin-top: 4px; color: var(--text-dim); font-size: 11px; line-height: 1.35; }
+.curation-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.curation-stat { border: 1px solid rgba(123,161,187,0.16); border-radius: 7px; padding: 8px 9px; }
+.curation-stat b { display: block; color: #FFF; font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+.curation-stat span { display: block; margin-top: 4px; color: var(--text-faint); font-family: 'JetBrains Mono', monospace;
+                      font-size: 8px; letter-spacing: 1.2px; text-transform: uppercase; }
+.admin-link { display: inline-flex; margin-top: 11px; color: var(--teal); text-decoration: none;
+              font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 1.3px; text-transform: uppercase; }
 .gallery-filters { grid-column: 1 / -1; display: flex; flex-wrap: wrap;
                    align-items: flex-end; gap: 10px; margin: 0 0 4px; }
 .filter-field { display: flex; flex-direction: column; gap: 5px; min-width: 130px; }
@@ -592,6 +619,10 @@ header { position: sticky; top: 0; z-index: 50;
                  border-radius: 10px; padding: 28px; text-align: center;
                  color: var(--text-dim); font-family: 'JetBrains Mono', monospace;
                  font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; }
+.gallery-empty button { margin-left: 10px; appearance: none; border: 1px solid rgba(0,241,159,0.5);
+                        background: rgba(0,241,159,0.08); color: var(--teal); border-radius: 6px;
+                        padding: 7px 9px; font-family: 'JetBrains Mono', monospace;
+                        font-size: 9px; letter-spacing: 1.2px; text-transform: uppercase; cursor: pointer; }
 
 .quest-card { background: var(--bg-card); border: 1px solid var(--border);
               border-radius: 14px; padding: 18px; cursor: pointer;
@@ -648,7 +679,7 @@ header { position: sticky; top: 0; z-index: 50;
                 align-items: stretch; gap: 12px; min-width: 0; }
 .detail-quote { color: #C7D0D5; font-style: italic; font-size: 13px;
                 border-left: 2px solid var(--teal); padding-left: 12px;
-                align-self: center; min-width: 0; }
+                align-self: center; min-width: 0; overflow-wrap: anywhere; }
 .detail-desc { width: 100%; color: #999; font-size: 13px; line-height: 1.6;
                font-style: italic; padding-left: 12px;
                border-left: 2px solid var(--sleep); max-width: 700px; }
@@ -682,6 +713,16 @@ header { position: sticky; top: 0; z-index: 50;
 .stage { flex: 1; position: relative; min-height: 0; background: #071014; }
 .panel-map { position: relative; width: 100%; height: 100%; overflow: hidden; }
 #map { width: 100%; height: 100%; }
+.map-fallback { position: absolute; inset: 0; z-index: 1; display: flex; align-items: center; justify-content: center;
+                background: radial-gradient(circle at 50% 42%, rgba(0,241,159,0.11), transparent 34%),
+                            linear-gradient(135deg, rgba(6,13,16,0.96), rgba(7,16,20,0.92));
+                color: rgba(255,255,255,0.72); transition: opacity 220ms ease; }
+.map-fallback.hidden { opacity: 0; pointer-events: none; }
+.map-fallback-inner { width: min(560px, calc(100% - 64px)); text-align: center; }
+.map-fallback-route svg { width: 100%; max-height: 280px; filter: drop-shadow(0 0 18px rgba(0,241,159,0.34)); }
+.map-fallback-kicker { margin-top: 12px; font-family: 'JetBrains Mono', monospace; font-size: 9px;
+                       color: var(--teal); letter-spacing: 1.6px; text-transform: uppercase; }
+.map-fallback-copy { margin-top: 6px; color: var(--text-dim); font-size: 12px; line-height: 1.5; }
 .artifact-panel { position: absolute; top: 16px; right: 16px; width: min(360px, calc(100% - 352px));
                   min-width: 300px; border: 1px solid rgba(42,53,64,0.78);
                   border-radius: 10px; background: linear-gradient(180deg, rgba(9,16,20,0.90), rgba(9,12,14,0.74));
@@ -721,14 +762,16 @@ header { position: sticky; top: 0; z-index: 50;
                  backdrop-filter: blur(8px); z-index: 5; }
 .scrubber-pos { font-family: 'JetBrains Mono', monospace; font-size: 11px;
                 color: var(--teal); min-width: 140px; letter-spacing: 1px; }
-.route-lock { flex: 0 0 auto; min-width: 86px; background: rgba(20,26,31,0.92);
+.route-control { flex: 0 0 auto; min-width: 74px; background: rgba(20,26,31,0.92);
               border: 1px solid rgba(123,161,187,0.28); color: var(--text-dim);
               border-radius: 6px; padding: 7px 9px;
               font-family: 'JetBrains Mono', monospace; font-size: 9px;
               letter-spacing: 1.2px; text-transform: uppercase; cursor: pointer;
               transition: border-color 180ms ease, color 180ms ease, background 180ms ease; }
-.route-lock.active { color: var(--teal); border-color: rgba(0,241,159,0.7);
+.route-control:hover { border-color: rgba(0,241,159,0.55); color: var(--teal); }
+.route-control.active { color: var(--teal); border-color: rgba(0,241,159,0.7);
                      background: rgba(0,241,159,0.08); box-shadow: 0 0 18px rgba(0,241,159,0.12); }
+.route-play.playing { color: #FFF; border-color: rgba(0,241,159,0.85); background: rgba(0,241,159,0.12); }
 input[type=range] { flex: 1; height: 4px; -webkit-appearance: none;
                     background: #1F2A33; border-radius: 2px; outline: none; }
 input[type=range]::-webkit-slider-thumb {
@@ -838,7 +881,9 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
   header { padding: 12px 16px; }
   .brand-sub { display: none; }
   .brand-title { font-size: 13px; letter-spacing: 0.14em; }
-  .back-btn { padding: 7px 12px; font-size: 9px; }
+  .back-btn { width: 38px; height: 34px; padding: 0; justify-content: center;
+              font-size: 0; overflow: hidden; flex: 0 0 38px; }
+  .back-btn::before { content: '←'; font-size: 13px; }
 
   /* Gallery */
   .gallery { padding: 18px 14px 32px; gap: 12px;
@@ -851,6 +896,10 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
   .atlas-stats { gap: 8px; }
   .atlas-stat { flex: 1 1 30%; min-width: 96px; padding: 9px 10px; }
   .atlas-stat b { font-size: 16px; }
+  .ops-rail { grid-template-columns: 1fr; gap: 10px; }
+  .ops-panel { padding: 12px; }
+  .ops-steps { grid-template-columns: 1fr; gap: 9px; }
+  .curation-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .gallery-filters { gap: 8px; }
   .filter-field { flex: 1 1 calc(50% - 8px); min-width: 0; }
   .filter-reset { flex: 1 1 100%; padding: 9px 12px; }
@@ -869,8 +918,9 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
   .detail-brief { grid-template-columns: 1fr; gap: 8px; }
   .detail-name { font-size: 16px; letter-spacing: 0.06em;
                  white-space: normal; word-break: keep-all; }
-  .detail-meta { font-size: 10px; white-space: nowrap;
-                 overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .detail-meta { font-size: 10px; white-space: normal;
+                 overflow: visible; text-overflow: clip; max-width: 100%;
+                 line-height: 1.55; }
   .detail-quote { font-size: 12px; max-width: 100%; padding-left: 10px;
                   border-left-width: 2px; }
   .detail-desc { font-size: 12px; padding-left: 10px; max-width: 100%; }
@@ -881,9 +931,10 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
   .completion-stack .completion-item:nth-child(even) { border-left: 1px solid rgba(123,161,187,0.14); }
   .completion-value { font-size: 11px; }
   .detail-actions { width: 100%; }
-  .detail-actions { flex-wrap: wrap; }
-  .detail-actions .share-btn { flex: 1; justify-content: center;
-                               padding: 9px 12px; font-size: 10px; }
+  .detail-actions { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; }
+  .detail-actions .share-btn { flex: 0 0 46px; width: 46px; height: 36px;
+                               justify-content: center; padding: 0; font-size: 0; gap: 0; }
+  .detail-actions .share-btn .icon { width: 13px; height: 13px; }
 
   .stage { min-height: 72dvh; height: 72dvh; }
   .panel-map { border-right: none; border-bottom: 1px solid var(--border); }
@@ -893,18 +944,23 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
                top: 10px; left: 12px; right: 12px; }
   .info-title { font-size: 12px; }
   .info-stats { font-size: 9px; }
-  .artifact-panel { top: auto; left: 10px; right: 10px; bottom: 62px;
+  .artifact-panel { top: auto; left: 10px; right: 10px; bottom: 92px;
                     width: auto; min-width: 0; }
-  .artifact-canvas { height: 132px; }
+  .artifact-canvas { height: 82px; }
   .artifact-copy { display: none; }
   .artifact-footer { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .artifact-stat { padding: 8px 9px; }
   .artifact-stat b { font-size: 10px; }
 
   .scrubber-wrap { bottom: 10px; left: 10px; right: 10px;
-                   padding: 8px 12px; gap: 10px; }
-  .scrubber-pos { min-width: 100px; font-size: 10px; }
-  .route-lock { padding: 7px 8px; font-size: 8px; }
+                   padding: 8px 10px; gap: 8px; flex-wrap: wrap; }
+  .scrubber-pos { min-width: 0; flex: 1 1 calc(100% - 84px); font-size: 10px; }
+  .scrubber-wrap input[type=range] { flex: 1 1 100%; order: 4; }
+  .route-control { min-width: 0; padding: 7px 8px; font-size: 8px; }
+  .route-play { order: 1; flex: 0 0 62px; }
+  .scrubber-pos { order: 2; }
+  .route-speed { order: 3; flex: 0 0 44px; }
+  .route-lock { order: 5; flex: 1 1 100%; }
 
   /* Photo strip: lose the vertical "YOUR PHOTOS" label on small screens.
      Hide entirely when empty (drag-and-drop is desktop-only anyway). */
@@ -983,6 +1039,24 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
     <div class="gallery-count" id="galleryCount"></div>
     <div class="atlas-stats" id="atlasStats"></div>
   </div>
+  <div class="ops-rail">
+    <div class="ops-panel">
+      <div class="ops-kicker">First run protocol</div>
+      <div class="ops-title">Pick a quest by intent, then preview the route before committing.</div>
+      <div class="ops-copy">Use these quick starts to set the existing filters. The atlas stays low-friction: choose the vibe, inspect the terrain, share the card.</div>
+      <div class="ops-steps">
+        <button class="ops-step" type="button" onclick="applyQuestPreset('easy')"><b>Start easy</b><span>Shorter quests with gentler effort.</span></button>
+        <button class="ops-step" type="button" onclick="applyQuestPreset('ride')"><b>Find a ride</b><span>Switch straight to bike routes.</span></button>
+        <button class="ops-step" type="button" onclick="applyQuestPreset('xp')"><b>Big XP</b><span>Surface the larger objective set.</span></button>
+      </div>
+    </div>
+    <div class="ops-panel">
+      <div class="ops-kicker">Curation cockpit</div>
+      <div class="ops-title">Route backlog ready for triage.</div>
+      <div class="curation-grid" id="curationGrid"></div>
+      <a class="admin-link" href="http://localhost:8766/">Open local admin queue →</a>
+    </div>
+  </div>
   <div class="gallery-filters" id="galleryFilters" aria-label="Quest filters">
     <div class="filter-field">
       <label for="filterType">Type</label>
@@ -1032,6 +1106,13 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
   <div class="stage">
     <div class="panel-map">
       <div id="map"></div>
+      <div class="map-fallback" id="mapFallback">
+        <div class="map-fallback-inner">
+          <div class="map-fallback-route" id="mapFallbackRoute"></div>
+          <div class="map-fallback-kicker">Route visual standby</div>
+          <div class="map-fallback-copy">MapLibre terrain is loading. The quest route remains playable from the local route trace.</div>
+        </div>
+      </div>
       <div class="info-card">
         <div class="info-title" id="poiTitle">Loading…</div>
         <div class="info-stats">
@@ -1050,9 +1131,11 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
         </div>
       </div>
       <div class="scrubber-wrap">
+        <button class="route-control route-play" id="routePlayBtn" type="button" onclick="toggleRoutePlayback()" title="Play the route preview">PLAY</button>
         <div class="scrubber-pos" id="scrubberPos">0.00 / 0.00 km</div>
         <input type="range" id="scrubber" min="0" max="100" value="0">
-        <button class="route-lock active" id="routeLockBtn" type="button" onclick="toggleRouteLock()" title="Keep the camera following the active point">FOLLOWING</button>
+        <button class="route-control route-speed" id="routeSpeedBtn" type="button" onclick="cycleRouteSpeed()" title="Change playback speed">4X</button>
+        <button class="route-control route-lock active" id="routeLockBtn" type="button" onclick="toggleRouteLock()" title="Keep the camera following the active point">FOLLOWING</button>
       </div>
     </div>
   </div>
@@ -1083,10 +1166,15 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
 <script src="https://cdn.jsdelivr.net/npm/exifr/dist/full.umd.js"></script>
 <script>
 const ROUTES = __ROUTES_JSON__;
+const CURATION = __CURATION_JSON__;
 let activeRouteIdx = -1;
 let map, mapSlug = null;
 let routeViewLocked = true;
 let routeLockCameraReady = false;
+let routePlaying = false;
+let routePlayTimer = null;
+let routePlaySpeed = 4;
+const ROUTE_SPEEDS = [1, 4, 12];
 let artifactRenderer = null, artifactScene = null, artifactCamera = null;
 let artifactFullLine = null, artifactProgressLine = null, artifactMarker = null, artifactBlocks = [];
 let artifactPoints = [], artifactSlug = null;
@@ -1146,6 +1234,17 @@ function resetFilters() {
   renderGallery();
 }
 
+function applyQuestPreset(kind) {
+  Object.keys(galleryFilters).forEach(key => { galleryFilters[key] = 'All'; });
+  if (kind === 'ride') galleryFilters.type = 'Ride';
+  if (kind === 'easy') galleryFilters.difficulty = 'Moderate';
+  if (kind === 'xp') galleryFilters.difficulty = 'Epic';
+  document.querySelectorAll('[data-filter]').forEach(select => {
+    select.value = galleryFilters[select.dataset.filter] || 'All';
+  });
+  renderGallery();
+}
+
 function questHash(slug) {
   return `#quest/${encodeURIComponent(slug)}`;
 }
@@ -1201,10 +1300,15 @@ function renderGallery() {
     <div class="atlas-stat"><b>${totalXp.toLocaleString()}</b><span>xp available</span></div>
     <div class="atlas-stat"><b>${Math.round(totalClimb).toLocaleString()}</b><span>m climbing</span></div>
   `;
+  document.getElementById('curationGrid').innerHTML = `
+    <div class="curation-stat"><b>${CURATION.approved.toLocaleString()}</b><span>published</span></div>
+    <div class="curation-stat"><b>${CURATION.pending.toLocaleString()}</b><span>pending</span></div>
+    <div class="curation-stat"><b>${CURATION.total.toLocaleString()}</b><span>strava routes</span></div>
+  `;
   if (filteredRoutes.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'gallery-empty';
-    empty.textContent = 'No quests match these filters.';
+    empty.innerHTML = 'No quests match these filters. <button type="button" onclick="resetFilters()">Reset filters</button>';
     gal.appendChild(empty);
     return;
   }
@@ -1311,6 +1415,7 @@ async function openRoute(i, options = {}) {
 
 function showGallery(options = {}) {
   const { updateUrl = true } = options;
+  stopRoutePlayback();
   document.getElementById('gallery').style.display = 'grid';
   document.getElementById('detail').classList.remove('active');
   document.getElementById('backBtn').style.display = 'none';
@@ -1321,6 +1426,7 @@ function showGallery(options = {}) {
 
 function initRoute() {
   const r = ROUTES[activeRouteIdx];
+  stopRoutePlayback();
   allPhotos = [...r.baseline_photos.map(p => ({ ...p, source: 'auto' })),
                ...getStoredPhotos(r.slug)];
   try {
@@ -1339,6 +1445,7 @@ function initRoute() {
   }
   renderStrip();
   syncRouteLockButton();
+  syncRoutePlayButton();
   const scrubber = document.getElementById('scrubber');
   scrubber.max = r.route.length - 1; scrubber.value = 0;
   setRouteIndex(0);
@@ -1436,8 +1543,52 @@ function addRouteLayers(targetMap, route, { includePhotos = false } = {}) {
   }
 }
 
+function routeSvgMarkup(route) {
+  const pts = route.route || [];
+  if (pts.length < 2) return '';
+  const w = 520, h = 260, pad = 24;
+  const lats = pts.map(p => p.lat);
+  const lngs = pts.map(p => p.lng);
+  const latMin = Math.min(...lats), latMax = Math.max(...lats);
+  const lngMin = Math.min(...lngs), lngMax = Math.max(...lngs);
+  const dLat = latMax - latMin || 1e-6;
+  const dLng = lngMax - lngMin || 1e-6;
+  const lngScale = Math.cos(((latMin + latMax) / 2) * Math.PI / 180);
+  const dLngAdjusted = dLng * lngScale || 1e-6;
+  const scale = Math.min((w - pad * 2) / dLngAdjusted, (h - pad * 2) / dLat);
+  const mapW = dLngAdjusted * scale;
+  const mapH = dLat * scale;
+  const ox = (w - mapW) / 2;
+  const oy = (h - mapH) / 2;
+  const points = pts.map(p => {
+    const x = ox + (p.lng - lngMin) * lngScale * scale;
+    const y = oy + (latMax - p.lat) * scale;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Route trace">
+    <polyline points="${points}" fill="none" stroke="#00F19F" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
+}
+
+function showMapFallback(route, copy = 'MapLibre terrain is loading. The quest route remains playable from the local route trace.') {
+  const fallback = document.getElementById('mapFallback');
+  if (!fallback) return;
+  document.getElementById('mapFallbackRoute').innerHTML = routeSvgMarkup(route);
+  fallback.querySelector('.map-fallback-copy').textContent = copy;
+  fallback.classList.remove('hidden');
+}
+
+function hideMapFallback() {
+  const fallback = document.getElementById('mapFallback');
+  if (fallback) fallback.classList.add('hidden');
+}
+
 function initMainMap(route) {
-  if (typeof maplibregl === 'undefined') return;
+  showMapFallback(route);
+  if (typeof maplibregl === 'undefined') {
+    showMapFallback(route, 'MapLibre is unavailable. Local route trace mode is active.');
+    return;
+  }
   if (map) {
     map.remove();
     map = null;
@@ -1463,6 +1614,12 @@ function initMainMap(route) {
     map.once('moveend', () => { routeLockCameraReady = true; });
     map.on('click', e => snapToRoute(e.lngLat));
     updateMainMapProgress(route, 0);
+    hideMapFallback();
+  });
+  map.on('error', () => {
+    if (!map || !map.loaded()) {
+      showMapFallback(route, 'Terrain tiles are unavailable. Local route trace mode is active.');
+    }
   });
 }
 
@@ -1500,7 +1657,7 @@ function updateLockedRouteCamera(route, idx) {
     zoom: Math.max(map.getZoom(), 13.2),
     pitch: 62,
     bearing: routeBearing(route, idx),
-    duration: 420,
+    duration: routePlaying ? 190 : 420,
     essential: true,
   });
 }
@@ -1523,6 +1680,58 @@ function toggleRouteLock() {
     routeLockCameraReady = true;
     updateLockedRouteCamera(ROUTES[activeRouteIdx], idx);
   }
+}
+
+function syncRoutePlayButton() {
+  const play = document.getElementById('routePlayBtn');
+  const speed = document.getElementById('routeSpeedBtn');
+  if (play) {
+    play.classList.toggle('playing', routePlaying);
+    play.textContent = routePlaying ? 'PAUSE' : 'PLAY';
+  }
+  if (speed) speed.textContent = `${routePlaySpeed}X`;
+}
+
+function stopRoutePlayback() {
+  if (routePlayTimer) clearInterval(routePlayTimer);
+  routePlayTimer = null;
+  routePlaying = false;
+  syncRoutePlayButton();
+}
+
+function startRoutePlayback() {
+  if (activeRouteIdx === -1) return;
+  const r = ROUTES[activeRouteIdx];
+  const scrubber = document.getElementById('scrubber');
+  routePlaying = true;
+  routeViewLocked = true;
+  routeLockCameraReady = true;
+  syncRouteLockButton();
+  syncRoutePlayButton();
+  if (routePlayTimer) clearInterval(routePlayTimer);
+  routePlayTimer = setInterval(() => {
+    let next = Number(scrubber.value || 0) + routePlaySpeed;
+    if (next >= r.route.length - 1) {
+      next = r.route.length - 1;
+      scrubber.value = next;
+      setRouteIndex(next);
+      stopRoutePlayback();
+      return;
+    }
+    scrubber.value = next;
+    setRouteIndex(next);
+  }, 140);
+}
+
+function toggleRoutePlayback() {
+  if (routePlaying) stopRoutePlayback();
+  else startRoutePlayback();
+}
+
+function cycleRouteSpeed() {
+  const idx = ROUTE_SPEEDS.indexOf(routePlaySpeed);
+  routePlaySpeed = ROUTE_SPEEDS[(idx + 1) % ROUTE_SPEEDS.length];
+  syncRoutePlayButton();
 }
 
 function routeArtifactPoints(route) {
@@ -1930,7 +2139,8 @@ else renderGallery();
 '''
 
 html_out = (template_html
-            .replace('__ROUTES_JSON__', data_json))
+            .replace('__ROUTES_JSON__', data_json)
+            .replace('__CURATION_JSON__', curation_json))
 (QUESTS / 'index.html').write_text(html_out)
 
 print(f'\n✓ Built: {QUESTS}/index.html  ({len(routes_data)} quests)')
