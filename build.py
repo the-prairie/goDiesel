@@ -668,6 +668,10 @@ body.ops-mode .curation-panel { display: block; }
 
 .detail { display: none; height: calc(100dvh - 67px); flex-direction: column; overflow: hidden; }
 .detail.active { display: flex; }
+.detail.cinema-playing .detail-header { opacity: 0.38; transform: translateY(-4px);
+  transition: opacity 260ms ease, transform 260ms ease; }
+.detail.cinema-playing .detail-header:hover,
+.detail.cinema-playing:focus-within .detail-header { opacity: 1; transform: translateY(0); }
 .detail-header { display: grid; grid-template-columns: minmax(0, 1fr);
                  row-gap: 10px; padding: 12px 32px 11px;
                  border-bottom: 1px solid var(--border); background: #0A0F12; }
@@ -748,6 +752,16 @@ body.ops-mode .curation-panel { display: block; }
                 color: var(--teal); letter-spacing: 1.6px; text-transform: uppercase;
                 background: rgba(6,10,12,0.62); border: 1px solid rgba(0,241,159,0.22);
                 border-radius: 7px; padding: 8px 10px; }
+.cinema-moment-layer { position: absolute; inset: 0; pointer-events: none; z-index: 6; }
+.cinema-moment { position: absolute; opacity: 0; transform: translate(-50%, -110%) scale(0.94);
+                 transition: opacity 220ms ease, transform 220ms ease;
+                 background: rgba(5,10,12,0.78); border: 1px solid rgba(0,241,159,0.28);
+                 border-radius: 8px; padding: 8px 10px; min-width: 112px;
+                 box-shadow: 0 12px 34px rgba(0,0,0,0.28), 0 0 22px rgba(0,241,159,0.08); }
+.cinema-moment.active { opacity: 1; transform: translate(-50%, -126%) scale(1); }
+.cinema-moment b { display: block; color: #FFF; font-size: 11px; line-height: 1.2; }
+.cinema-moment span { display: block; margin-top: 4px; font-family: 'JetBrains Mono', monospace;
+                      color: var(--teal); font-size: 8px; letter-spacing: 1.2px; text-transform: uppercase; }
 .artifact-panel { position: absolute; top: 16px; right: 16px; width: min(360px, calc(100% - 352px));
                   min-width: 300px; border: 1px solid rgba(42,53,64,0.78);
                   border-radius: 10px; background: linear-gradient(180deg, rgba(9,16,20,0.90), rgba(9,12,14,0.74));
@@ -774,6 +788,11 @@ body.ops-mode .curation-panel { display: block; }
              background: rgba(10,12,14,0.88); border: 1px solid var(--border);
              border-radius: 8px; padding: 10px 12px;
              backdrop-filter: blur(8px); max-width: 320px; z-index: 3; }
+.detail.cinema-playing .info-card { opacity: 0.52; transition: opacity 260ms ease; }
+.detail.cinema-playing .artifact-panel { opacity: 0.24; transform: translateY(4px);
+  transition: opacity 260ms ease, transform 260ms ease; }
+.detail.cinema-playing .info-card:hover,
+.detail.cinema-playing .artifact-panel:hover { opacity: 0.74; transform: translateY(0); }
 .info-title { font-size: 13px; font-weight: 700; letter-spacing: -0.2px; }
 .info-stats { font-family: 'JetBrains Mono', monospace; font-size: 10px;
               color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase;
@@ -1143,6 +1162,7 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
       <div id="map"></div>
       <div class="cinema-layer" id="cinemaLayer" aria-label="3D route cinema">
         <canvas id="cinemaCanvas"></canvas>
+        <div class="cinema-moment-layer" id="cinemaMomentLayer" aria-hidden="true"></div>
         <div class="cinema-label" id="cinemaLabel">Route cinema · real path + elevation</div>
       </div>
       <div class="map-fallback" id="mapFallback">
@@ -1224,7 +1244,7 @@ const ROUTE_CINEMA_MODES = ['artifact', 'flyover', 'quest'];
 let routeCinemaMode = 'artifact';
 let cinemaRenderer = null, cinemaScene = null, cinemaCamera = null;
 let cinemaFullLine = null, cinemaProgressLine = null, cinemaMarker = null, cinemaSurface = null;
-let cinemaPoints = [], cinemaSlug = null, cinemaDecor = [];
+let cinemaPoints = [], cinemaSlug = null, cinemaDecor = [], cinemaMoments = [];
 let cinemaFrame = null, cinemaStartedAt = 0;
 let cinemaCameraTarget = null, cinemaLookTarget = null, cinemaLookCurrent = null;
 let allPhotos = [];
@@ -1754,11 +1774,15 @@ function toggleRouteLock() {
 function syncRoutePlayButton() {
   const play = document.getElementById('routePlayBtn');
   const speed = document.getElementById('routeSpeedBtn');
+  const detail = document.getElementById('detail');
   if (play) {
     play.classList.toggle('playing', routePlaying);
     play.textContent = routePlaying ? 'PAUSE' : 'PLAY';
   }
   if (speed) speed.textContent = `${routePlaySpeed}X`;
+  if (detail) {
+    detail.classList.toggle('cinema-playing', routePlaying && routeCinemaEnabled && routeCinemaMode === 'flyover');
+  }
 }
 
 function stopRoutePlayback() {
@@ -1813,6 +1837,53 @@ function routePlaybackStep(route, idx) {
   if (beatProximity < 0.035) multiplier *= 0.52;
   if (progress < 0.04 || progress > 0.96) multiplier *= 0.62;
   return Math.max(1, Math.round((routePlaySpeed / 4) * multiplier));
+}
+
+function routeMomentSpecs(route) {
+  const pts = route.route || [];
+  if (!pts.length) return [];
+  const total = pts.length - 1;
+  const highIdx = pts.reduce((best, p, i) => (Number(p.elev) || 0) > (Number(pts[best]?.elev) || 0) ? i : best, 0);
+  let climbIdx = Math.floor(total * 0.35);
+  let bestGain = -Infinity;
+  for (let i = 0; i < pts.length - 8; i++) {
+    const gain = (Number(pts[i + 8].elev) || 0) - (Number(pts[i].elev) || 0);
+    if (gain > bestGain) {
+      bestGain = gain;
+      climbIdx = i + 4;
+    }
+  }
+  const specs = [
+    { key: 'start', idx: Math.floor(total * 0.04), title: 'Roll out', meta: 'start' },
+    { key: 'climb', idx: climbIdx, title: 'The lift', meta: 'biggest climb' },
+    { key: 'half', idx: Math.floor(total * 0.5), title: 'Halfway pulse', meta: 'midpoint' },
+    { key: 'high', idx: highIdx, title: 'High point', meta: `${Math.round(Number(pts[highIdx]?.elev) || 0).toLocaleString()} m` },
+    { key: 'finish', idx: total, title: 'Bring it home', meta: 'finish' },
+  ];
+  const seen = new Set();
+  return specs
+    .map(spec => ({ ...spec, idx: Math.max(0, Math.min(total, spec.idx)) }))
+    .filter(spec => {
+      const bucket = Math.round((spec.idx / Math.max(total, 1)) * 20);
+      if (seen.has(bucket) && spec.key !== 'finish') return false;
+      seen.add(bucket);
+      return true;
+    });
+}
+
+function setupCinemaMomentLabels(route) {
+  const layer = document.getElementById('cinemaMomentLayer');
+  cinemaMoments = [];
+  if (!layer) return;
+  layer.innerHTML = '';
+  if (routeCinemaMode !== 'flyover') return;
+  cinemaMoments = routeMomentSpecs(route).map(spec => {
+    const el = document.createElement('div');
+    el.className = 'cinema-moment';
+    el.innerHTML = `<b>${escapeHtml(spec.title)}</b><span>${escapeHtml(spec.meta)}</span>`;
+    layer.appendChild(el);
+    return { ...spec, el };
+  });
 }
 
 function toggleRoutePlayback() {
@@ -2012,6 +2083,7 @@ function initRouteCinema(route) {
   markerHalo.userData.markerHalo = true;
   cinemaMarker.add(markerHalo);
   cinemaDecor = [];
+  setupCinemaMomentLabels(route);
   buildCinemaDecor(route);
   resizeRouteCinema();
   updateRouteCinema(route, 0);
@@ -2064,16 +2136,18 @@ function buildCinemaDecor(route) {
     add(horizon);
     const pts = route.route || [];
     const highIdx = pts.reduce((best, p, i) => (Number(p.elev) || 0) > (Number(pts[best]?.elev) || 0) ? i : best, 0);
-    [Math.floor(total * 0.04), Math.floor(total * 0.5), highIdx, total].forEach((idx, i) => {
+    routeMomentSpecs(route).forEach((moment, i) => {
+      const idx = moment.idx;
       const p = cinemaPoints[Math.max(0, Math.min(idx, total))];
       const ring = new THREE.Mesh(
-        new THREE.TorusGeometry(i === 3 ? 0.34 : 0.22, 0.012, 8, 36),
-        new THREE.MeshBasicMaterial({ color: i === 2 ? 0xffd36a : 0x00f19f, transparent: true, opacity: 0.22 })
+        new THREE.TorusGeometry(moment.key === 'finish' ? 0.34 : 0.22, 0.012, 8, 36),
+        new THREE.MeshBasicMaterial({ color: moment.key === 'high' ? 0xffd36a : 0x00f19f, transparent: true, opacity: 0.22 })
       );
       ring.position.set(p.x, p.y + 0.08, p.z);
       ring.rotation.x = Math.PI / 2;
       ring.userData.flyoverBeat = true;
       ring.userData.routeIdx = idx;
+      ring.userData.momentKey = moment.key;
       add(ring);
     });
     for (let i = 0; i < 52; i++) {
@@ -2152,6 +2226,10 @@ function startCinemaLoop() {
       cinemaCamera.position.lerp(cinemaCameraTarget, ease);
       cinemaLookCurrent.lerp(cinemaLookTarget, ease * 1.25);
       cinemaCamera.lookAt(cinemaLookCurrent);
+      const scrubber = document.getElementById('scrubber');
+      if (routeCinemaMode === 'flyover' && scrubber) {
+        updateCinemaMomentLabels(Number(scrubber.value || 0));
+      }
     }
     cinemaDecor.forEach(obj => {
       if (obj.userData?.flyoverSpin) obj.rotation.z += obj.userData.flyoverSpin;
@@ -2181,6 +2259,30 @@ function stopCinemaLoop() {
   cinemaFrame = null;
 }
 
+function updateCinemaMomentLabels(safeIdx) {
+  if (!cinemaRenderer || !cinemaCamera || routeCinemaMode !== 'flyover') {
+    cinemaMoments.forEach(moment => moment.el?.classList.remove('active'));
+    return;
+  }
+  const canvas = cinemaRenderer.domElement;
+  const rect = canvas.getBoundingClientRect();
+  const total = Math.max(cinemaPoints.length - 1, 1);
+  const proximity = Math.max(8, Math.floor(total * 0.045));
+  cinemaMoments.forEach(moment => {
+    const point = cinemaPoints[moment.idx];
+    if (!point || !moment.el) return;
+    const projected = point.clone().project(cinemaCamera);
+    const visible = Math.abs(safeIdx - moment.idx) <= proximity && projected.z < 1;
+    moment.el.classList.toggle('active', visible);
+    if (visible) {
+      const x = (projected.x * 0.5 + 0.5) * rect.width;
+      const y = (-projected.y * 0.5 + 0.5) * rect.height;
+      moment.el.style.left = `${Math.max(82, Math.min(rect.width - 82, x))}px`;
+      moment.el.style.top = `${Math.max(74, Math.min(rect.height - 118, y))}px`;
+    }
+  });
+}
+
 function updateRouteCinema(route, idx) {
   if (!cinemaRenderer || cinemaSlug !== route.slug || !cinemaPoints.length) return;
   const safeIdx = Math.max(0, Math.min(idx, cinemaPoints.length - 1));
@@ -2198,18 +2300,27 @@ function updateRouteCinema(route, idx) {
     cinemaLookTarget.set(0, 0.05, 0);
     cinemaScene.rotation.y = -0.28 + progress * 0.56;
   } else if (routeCinemaMode === 'flyover') {
-    const prev = cinemaPoints[Math.max(safeIdx - 10, 0)] || p;
-    const direction = forward.clone().sub(prev).normalize();
-    const side = new THREE.Vector3(-direction.z, 0, direction.x).normalize();
+    const prev = cinemaPoints[Math.max(safeIdx - 14, 0)] || p;
+    const far = cinemaPoints[Math.min(safeIdx + 22, cinemaPoints.length - 1)] || forward;
+    let direction = far.clone().sub(prev);
+    if (direction.lengthSq() < 0.0001) direction = new THREE.Vector3(0, 0, -1);
+    direction.normalize();
+    let side = new THREE.Vector3(-direction.z, 0, direction.x);
+    if (side.lengthSq() < 0.0001) side = new THREE.Vector3(1, 0, 0);
+    side.normalize();
     const climb = Math.max(-0.6, Math.min(0.9, forward.y - p.y));
-    const reveal = progress < 0.08 ? 1 - progress / 0.08 : progress > 0.92 ? (progress - 0.92) / 0.08 : 0;
-    const chaseDistance = 2.7 + reveal * 1.8;
-    const height = 1.9 + Math.max(0, climb) * 1.4 + reveal * 1.1;
+    const opening = progress < 0.09 ? 1 - progress / 0.09 : 0;
+    const closing = progress > 0.91 ? (progress - 0.91) / 0.09 : 0;
+    const reveal = Math.max(opening, closing);
+    const bend = Math.min(1, Math.abs((forward.x - p.x) * (p.z - prev.z) - (forward.z - p.z) * (p.x - prev.x)) * 0.85);
+    const chaseDistance = 2.9 + reveal * 2.4 + bend * 0.55;
+    const height = 2.0 + Math.max(0, climb) * 1.5 + reveal * 1.25 + bend * 0.45;
     const camPos = p.clone()
       .add(direction.clone().multiplyScalar(-chaseDistance))
-      .add(side.multiplyScalar(Math.sin(progress * Math.PI * 2) * 0.45))
+      .add(side.multiplyScalar(Math.sin(progress * Math.PI * 2) * (0.38 + bend * 0.22)))
       .add(new THREE.Vector3(0, height, 0));
-    const look = p.clone().lerp(forward, 0.72).add(new THREE.Vector3(0, 0.18 + Math.max(0, climb) * 0.3, 0));
+    const look = p.clone().lerp(far, opening ? 0.5 : 0.72)
+      .add(new THREE.Vector3(0, 0.18 + Math.max(0, climb) * 0.3 + reveal * 0.16, 0));
     cinemaCameraTarget.copy(camPos);
     cinemaLookTarget.copy(look);
     cinemaScene.rotation.y = -0.05 + progress * 0.1;
@@ -2233,6 +2344,7 @@ function updateRouteCinema(route, idx) {
     });
   }
   cinemaMarker.scale.setScalar(routeCinemaMode === 'quest' ? 1 + Math.sin(progress * Math.PI * 10) * 0.12 : 1);
+  updateCinemaMomentLabels(safeIdx);
   cinemaRenderer.render(cinemaScene, cinemaCamera);
 }
 
