@@ -673,29 +673,30 @@ header { position: sticky; top: 0; z-index: 50;
 .share-btn:hover { border-color: var(--teal); color: var(--teal); }
 .detail-actions { display: flex; gap: 8px; flex-wrap: nowrap; flex-shrink: 0; justify-content: flex-end; }
 
-.stage { flex: 1; display: grid; grid-template-columns: minmax(0, 1.06fr) minmax(360px, 0.94fr); min-height: 0; }
-.panel-map { position: relative; border-right: 1px solid var(--border); }
-.panel-sv { position: relative; background: #0A0F12; overflow: hidden; }
-#map, #pano { width: 100%; height: 100%; }
-.route-cinema { position: absolute; inset: 0; }
-.route-cinema .maplibregl-control-container { display: none; }
-.route-cinema-overlay { position: absolute; left: 16px; right: 16px; bottom: 16px;
-                        display: flex; align-items: center; justify-content: space-between;
-                        gap: 12px; padding: 10px 12px; border: 1px solid rgba(42,53,64,0.76);
-                        border-radius: 8px; background: rgba(10,12,14,0.72);
-                        backdrop-filter: blur(10px); z-index: 4; pointer-events: none; }
-.route-cinema-kicker { font-family: 'JetBrains Mono', monospace; font-size: 9px;
-                       color: var(--teal); letter-spacing: 1.6px; text-transform: uppercase; }
-.route-cinema-copy { margin-top: 4px; color: var(--text-dim); font-size: 11px;
-                     line-height: 1.35; max-width: 230px; }
-.route-cinema-stats { display: grid; grid-template-columns: repeat(3, minmax(78px, 1fr));
-                      justify-content: flex-end; gap: 8px; }
-.route-cinema-stat { min-width: 0; border: 1px solid rgba(255,255,255,0.10);
-                     border-radius: 6px; padding: 7px 9px; background: rgba(0,0,0,0.18); }
-.route-cinema-stat b { display: block; color: #FFF; font-family: 'JetBrains Mono', monospace;
-                       font-size: 11px; letter-spacing: 1px; white-space: nowrap; }
-.route-cinema-stat span { display: block; margin-top: 5px; color: var(--text-dim);
-                          font-size: 9px; text-transform: uppercase; letter-spacing: 1.2px; }
+.stage { flex: 1; position: relative; min-height: 0; background: #071014; }
+.panel-map { position: relative; width: 100%; height: 100%; overflow: hidden; }
+#map { width: 100%; height: 100%; }
+.artifact-panel { position: absolute; top: 16px; right: 16px; width: min(360px, calc(100% - 352px));
+                  min-width: 300px; border: 1px solid rgba(42,53,64,0.78);
+                  border-radius: 10px; background: linear-gradient(180deg, rgba(9,16,20,0.90), rgba(9,12,14,0.74));
+                  backdrop-filter: blur(12px); z-index: 4; overflow: hidden;
+                  box-shadow: 0 18px 50px rgba(0,0,0,0.28); pointer-events: none; }
+.artifact-canvas { width: 100%; height: 170px; display: block;
+                   background: radial-gradient(circle at 55% 45%, rgba(0,241,159,0.14), transparent 48%),
+                               linear-gradient(135deg, rgba(0,147,231,0.10), rgba(208,186,119,0.10)); }
+.artifact-footer { display: grid; grid-template-columns: 1.2fr 0.8fr 0.8fr; gap: 1px;
+                   border-top: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04); }
+.artifact-stat { padding: 10px 11px; background: rgba(6,10,12,0.72); min-width: 0; }
+.artifact-stat b { display: block; color: #FFF; font-family: 'JetBrains Mono', monospace;
+                   font-size: 11px; letter-spacing: 1px; white-space: nowrap; }
+.artifact-stat span { display: block; margin-top: 5px; color: var(--text-dim);
+                      font-family: 'JetBrains Mono', monospace; font-size: 8px;
+                      text-transform: uppercase; letter-spacing: 1.2px; }
+.artifact-label { position: absolute; left: 12px; top: 12px;
+                  font-family: 'JetBrains Mono', monospace; font-size: 9px;
+                  color: var(--teal); letter-spacing: 1.6px; text-transform: uppercase; }
+.artifact-copy { position: absolute; left: 12px; top: 30px; max-width: 190px;
+                 color: rgba(255,255,255,0.52); font-size: 11px; line-height: 1.35; }
 .info-card { position: absolute; top: 16px; left: 16px;
              background: rgba(10,12,14,0.88); border: 1px solid var(--border);
              border-radius: 8px; padding: 10px 12px;
@@ -867,9 +868,7 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
   .detail-actions .share-btn { flex: 1; justify-content: center;
                                padding: 9px 12px; font-size: 10px; }
 
-  .stage { grid-template-columns: 1fr;
-           grid-template-rows: 52dvh 44dvh;
-           min-height: 0; }
+  .stage { min-height: 72dvh; height: 72dvh; }
   .panel-map { border-right: none; border-bottom: 1px solid var(--border); }
 
   /* Map overlays scale down */
@@ -877,16 +876,17 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
                top: 10px; left: 12px; right: 12px; }
   .info-title { font-size: 12px; }
   .info-stats { font-size: 9px; }
+  .artifact-panel { top: auto; left: 10px; right: 10px; bottom: 62px;
+                    width: auto; min-width: 0; }
+  .artifact-canvas { height: 132px; }
+  .artifact-copy { display: none; }
+  .artifact-footer { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .artifact-stat { padding: 8px 9px; }
+  .artifact-stat b { font-size: 10px; }
 
   .scrubber-wrap { bottom: 10px; left: 10px; right: 10px;
                    padding: 8px 12px; gap: 10px; }
   .scrubber-pos { min-width: 100px; font-size: 10px; }
-  .route-cinema-overlay { left: 10px; right: 10px; bottom: 10px;
-                          align-items: stretch; flex-direction: column; gap: 10px;
-                          padding: 10px 12px; }
-  .route-cinema-copy { display: none; }
-  .route-cinema-stats { justify-content: flex-start; }
-  .route-cinema-stat { flex: 1 1 30%; min-width: 0; }
 
   /* Photo strip: lose the vertical "YOUR PHOTOS" label on small screens.
      Hide entirely when empty (drag-and-drop is desktop-only anyway). */
@@ -1021,23 +1021,19 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
           &nbsp;·&nbsp; <b id="elevHere">0 m</b> elev
         </div>
       </div>
+      <div class="artifact-panel" aria-label="Route elevation artifact">
+        <canvas class="artifact-canvas" id="artifactCanvas"></canvas>
+        <div class="artifact-label">Three.js elevation</div>
+        <div class="artifact-copy">Route profile rendered as a compact terrain object.</div>
+        <div class="artifact-footer">
+          <div class="artifact-stat"><b id="artifactKm">0.0 / 0.0 km</b><span>along route</span></div>
+          <div class="artifact-stat"><b id="artifactElev">0 m</b><span>current elev</span></div>
+          <div class="artifact-stat"><b id="artifactClimb">0 m</b><span>total climb</span></div>
+        </div>
+      </div>
       <div class="scrubber-wrap">
         <div class="scrubber-pos" id="scrubberPos">0.00 / 0.00 km</div>
         <input type="range" id="scrubber" min="0" max="100" value="0">
-      </div>
-    </div>
-    <div class="panel-sv">
-      <div id="pano" class="route-cinema"></div>
-      <div class="route-cinema-overlay">
-        <div>
-          <div class="route-cinema-kicker" id="routeVisualSource">MapLibre terrain</div>
-          <div class="route-cinema-copy" id="routeVisualCopy">Animated route over real terrain tiles.</div>
-        </div>
-        <div class="route-cinema-stats">
-          <div class="route-cinema-stat"><b id="visualKm">0.0 / 0.0 km</b><span>along route</span></div>
-          <div class="route-cinema-stat"><b id="visualElev">0 m</b><span>current elev</span></div>
-          <div class="route-cinema-stat"><b id="visualClimb">0 m</b><span>total climb</span></div>
-        </div>
       </div>
     </div>
   </div>
@@ -1064,11 +1060,15 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
 </div>
 
 <script src="https://unpkg.com/maplibre-gl@5.18.0/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/three@0.150.1/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/exifr/dist/full.umd.js"></script>
 <script>
 const ROUTES = __ROUTES_JSON__;
 let activeRouteIdx = -1;
-let map, routeCinemaMap, mapSlug = null, routeCinemaSlug = null;
+let map, mapSlug = null;
+let artifactRenderer = null, artifactScene = null, artifactCamera = null;
+let artifactFullLine = null, artifactProgressLine = null, artifactMarker = null, artifactBlocks = [];
+let artifactPoints = [], artifactSlug = null;
 let allPhotos = [];
 const STORAGE_KEY_PREFIX = 'quests:photos:';
 
@@ -1300,8 +1300,20 @@ function initRoute() {
   const r = ROUTES[activeRouteIdx];
   allPhotos = [...r.baseline_photos.map(p => ({ ...p, source: 'auto' })),
                ...getStoredPhotos(r.slug)];
-  initMainMap(r);
-  initRouteCinema(r);
+  try {
+    initMainMap(r);
+  } catch (err) {
+    console.warn('MapLibre route map unavailable', err);
+    map = null;
+    mapSlug = r.slug;
+  }
+  try {
+    initElevationArtifact(r);
+  } catch (err) {
+    console.warn('Elevation artifact unavailable', err);
+    artifactRenderer = null;
+    artifactSlug = r.slug;
+  }
   renderStrip();
   const scrubber = document.getElementById('scrubber');
   scrubber.max = r.route.length - 1; scrubber.value = 0;
@@ -1333,10 +1345,6 @@ function routeMapStyle({ satellite = false } = {}) {
       { id: 'hillshade', type: 'hillshade', source: 'terrain', paint: { 'hillshade-shadow-color': '#061014', 'hillshade-highlight-color': '#E5D2A0', 'hillshade-accent-color': '#00F19F' } },
     ],
   };
-}
-
-function routeCinemaStyle() {
-  return routeMapStyle();
 }
 
 function routeFeature(route, endIdx = route.route.length - 1) {
@@ -1416,46 +1424,19 @@ function initMainMap(route) {
     style: routeMapStyle({ satellite: true }),
     center: [route.center_lng, route.center_lat],
     zoom: 11,
-    pitch: 0,
-    bearing: 0,
+    pitch: 56,
+    bearing: -18,
     interactive: true,
     attributionControl: false,
   });
   map.on('load', () => {
     if (!map || mapSlug !== route.slug) return;
+    map.setTerrain({ source: 'terrain', exaggeration: 1.28 });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
     addRouteLayers(map, route, { includePhotos: true });
-    map.fitBounds(routeBounds(route), { padding: 70, duration: 900 });
+    map.fitBounds(routeBounds(route), { padding: 86, duration: 900, pitch: 56, bearing: -18 });
     map.on('click', e => snapToRoute(e.lngLat));
     updateMainMapProgress(route, 0);
-  });
-}
-
-function initRouteCinema(route) {
-  if (typeof maplibregl === 'undefined') return;
-  if (routeCinemaMap) {
-    routeCinemaMap.remove();
-    routeCinemaMap = null;
-  }
-  routeCinemaSlug = route.slug;
-  document.getElementById('routeVisualSource').textContent = 'MapLibre terrain';
-  document.getElementById('routeVisualCopy').textContent = 'Animated route over real terrain tiles.';
-  routeCinemaMap = new maplibregl.Map({
-    container: 'pano',
-    style: routeCinemaStyle(),
-    center: [route.center_lng, route.center_lat],
-    zoom: 10,
-    pitch: 58,
-    bearing: -20,
-    interactive: false,
-    attributionControl: false,
-  });
-  routeCinemaMap.on('load', () => {
-    if (!routeCinemaMap || routeCinemaSlug !== route.slug) return;
-    routeCinemaMap.setTerrain({ source: 'terrain', exaggeration: 1.35 });
-    addRouteLayers(routeCinemaMap, route);
-    routeCinemaMap.fitBounds(routeBounds(route), { padding: 72, duration: 1200, pitch: 58, bearing: -20 });
-    updateRouteCinemaProgress(route, 0);
   });
 }
 
@@ -1472,14 +1453,199 @@ function updateMainMapProgress(route, idx) {
   updateMapSources(map, route, idx);
 }
 
-function updateRouteCinemaProgress(route, idx) {
+function routeArtifactPoints(route) {
+  const pts = route.route;
+  if (!pts.length) return [];
+  const minElev = Math.min(...pts.map(p => Number(p.elev) || 0));
+  const maxElev = Math.max(...pts.map(p => Number(p.elev) || 0));
+  const elevSpan = Math.max(maxElev - minElev, 1);
+  const total = Math.max(pts[pts.length - 1].d || 1, 1);
+  return pts.map((p, idx) => {
+    const prev = pts[Math.max(0, idx - 1)];
+    const x = ((p.d || 0) / total - 0.5) * 8.8;
+    const y = ((Number(p.elev) || 0) - minElev) / elevSpan * 2.2 - 0.85;
+    const lngDelta = (p.lng - prev.lng) * Math.cos((p.lat * Math.PI) / 180);
+    const latDelta = p.lat - prev.lat;
+    const z = Math.sin(idx * 0.22) * 0.18 + (latDelta + lngDelta) * 180;
+    return new THREE.Vector3(x, y, Math.max(-1.2, Math.min(1.2, z)));
+  });
+}
+
+function disposeArtifactObject(obj) {
+  if (!obj) return;
+  obj.traverse?.(child => {
+    if (child.geometry) child.geometry.dispose();
+    if (child.material) {
+      if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+      else child.material.dispose();
+    }
+  });
+}
+
+function drawArtifactFallback(route, idx = 0) {
+  const canvas = document.getElementById('artifactCanvas');
+  if (!canvas || !route?.route?.length) return;
+  const rect = canvas.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.max(1, Math.floor(rect.width * dpr));
+  const h = Math.max(1, Math.floor(rect.height * dpr));
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w;
+    canvas.height = h;
+  }
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.clearRect(0, 0, w, h);
+  const pts = route.route;
+  const minElev = Math.min(...pts.map(p => Number(p.elev) || 0));
+  const maxElev = Math.max(...pts.map(p => Number(p.elev) || 0));
+  const elevSpan = Math.max(maxElev - minElev, 1);
+  const total = Math.max(pts[pts.length - 1].d || 1, 1);
+  const padX = 28 * dpr, padTop = 34 * dpr, padBottom = 24 * dpr;
+  const plotW = Math.max(1, w - padX * 2);
+  const plotH = Math.max(1, h - padTop - padBottom);
+  const toPoint = p => [
+    padX + ((p.d || 0) / total) * plotW,
+    padTop + (1 - ((Number(p.elev) || 0) - minElev) / elevSpan) * plotH,
+  ];
+  ctx.fillStyle = 'rgba(0,241,159,0.035)';
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = 'rgba(191,239,225,0.24)';
+  ctx.lineWidth = 1 * dpr;
+  for (let g = 0; g < 4; g++) {
+    const y = padTop + (plotH / 3) * g;
+    ctx.beginPath(); ctx.moveTo(padX, y); ctx.lineTo(w - padX, y); ctx.stroke();
+  }
+  const drawLine = (end, color, width, glow = false) => {
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width * dpr;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    if (glow) {
+      ctx.shadowColor = 'rgba(0,241,159,0.65)';
+      ctx.shadowBlur = 12 * dpr;
+    }
+    ctx.beginPath();
+    pts.slice(0, Math.max(1, end + 1)).forEach((p, i) => {
+      const [x, y] = toPoint(p);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.restore();
+  };
+  drawLine(pts.length - 1, 'rgba(191,239,225,0.34)', 2);
+  drawLine(idx, '#00F19F', 2.5, true);
+  const [mx, my] = toPoint(pts[Math.max(0, Math.min(idx, pts.length - 1))]);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.shadowColor = 'rgba(0,241,159,0.9)';
+  ctx.shadowBlur = 10 * dpr;
+  ctx.beginPath();
+  ctx.arc(mx, my, 5 * dpr, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function initElevationArtifact(route) {
+  if (typeof THREE === 'undefined') {
+    drawArtifactFallback(route, 0);
+    return;
+  }
+  const canvas = document.getElementById('artifactCanvas');
+  if (!canvas) return;
+  if (artifactRenderer) {
+    disposeArtifactObject(artifactScene);
+    artifactRenderer.dispose();
+    artifactRenderer = null;
+  }
+  artifactSlug = route.slug;
+  artifactPoints = routeArtifactPoints(route);
+  artifactScene = new THREE.Scene();
+  artifactScene.fog = new THREE.Fog(0x071014, 8, 16);
+  artifactCamera = new THREE.PerspectiveCamera(42, 1, 0.1, 50);
+  artifactCamera.position.set(0, 3.1, 8.4);
+  artifactCamera.lookAt(0, 0.15, 0);
+  artifactRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  artifactRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+  const ambient = new THREE.AmbientLight(0x9fcfc1, 1.1);
+  const key = new THREE.DirectionalLight(0xffffff, 1.4);
+  key.position.set(4, 6, 6);
+  artifactScene.add(ambient, key);
+
+  const base = new THREE.Mesh(
+    new THREE.BoxGeometry(9.5, 0.035, 2.5),
+    new THREE.MeshBasicMaterial({ color: 0x23333a, transparent: true, opacity: 0.28 })
+  );
+  base.position.y = -0.95;
+  artifactScene.add(base);
+
+  artifactBlocks = [];
+  const blockCount = Math.min(18, Math.max(8, Math.floor(artifactPoints.length / 8)));
+  for (let b = 0; b < blockCount; b++) {
+    const p = artifactPoints[Math.floor((b / Math.max(blockCount - 1, 1)) * (artifactPoints.length - 1))] || new THREE.Vector3();
+    const h = Math.max(0.08, p.y + 1.08);
+    const block = new THREE.Mesh(
+      new THREE.BoxGeometry(0.16, h, 0.16),
+      new THREE.MeshStandardMaterial({ color: 0x00f19f, emissive: 0x003a2a, roughness: 0.65, metalness: 0.1, transparent: true, opacity: 0.28 })
+    );
+    block.position.set(p.x, -0.95 + h / 2, p.z - 0.55);
+    artifactBlocks.push(block);
+    artifactScene.add(block);
+  }
+
+  artifactFullLine = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(artifactPoints),
+    new THREE.LineBasicMaterial({ color: 0xc0efe1, transparent: true, opacity: 0.34 })
+  );
+  artifactScene.add(artifactFullLine);
+  artifactProgressLine = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([artifactPoints[0] || new THREE.Vector3()]),
+    new THREE.LineBasicMaterial({ color: 0x00f19f, transparent: true, opacity: 1 })
+  );
+  artifactScene.add(artifactProgressLine);
+  artifactMarker = new THREE.Mesh(
+    new THREE.SphereGeometry(0.13, 24, 16),
+    new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x00f19f, emissiveIntensity: 0.75 })
+  );
+  artifactScene.add(artifactMarker);
+  resizeElevationArtifact();
+  updateElevationArtifact(route, 0);
+}
+
+function resizeElevationArtifact() {
+  if (!artifactRenderer || !artifactCamera) return;
+  const canvas = artifactRenderer.domElement;
+  const rect = canvas.getBoundingClientRect();
+  const w = Math.max(1, Math.floor(rect.width));
+  const h = Math.max(1, Math.floor(rect.height));
+  artifactRenderer.setSize(w, h, false);
+  artifactCamera.aspect = w / h;
+  artifactCamera.updateProjectionMatrix();
+  artifactRenderer.render(artifactScene, artifactCamera);
+}
+
+function updateElevationArtifact(route, idx) {
   const p = route.route[idx];
-  document.getElementById('visualKm').textContent =
+  document.getElementById('artifactKm').textContent =
     `${(p.d / 1000).toFixed(1)} / ${route.distance_km.toFixed(1)} km`;
-  document.getElementById('visualElev').textContent = `${Math.round(p.elev).toLocaleString()} m`;
-  document.getElementById('visualClimb').textContent = `${Math.round(route.elevation_gain_m || 0).toLocaleString()} m`;
-  if (!routeCinemaMap || routeCinemaSlug !== route.slug) return;
-  updateMapSources(routeCinemaMap, route, idx);
+  document.getElementById('artifactElev').textContent = `${Math.round(p.elev).toLocaleString()} m`;
+  document.getElementById('artifactClimb').textContent = `${Math.round(route.elevation_gain_m || 0).toLocaleString()} m`;
+  if (!artifactRenderer || artifactSlug !== route.slug || !artifactPoints.length) {
+    drawArtifactFallback(route, idx);
+    return;
+  }
+  const safeIdx = Math.max(0, Math.min(idx, artifactPoints.length - 1));
+  artifactProgressLine.geometry.dispose();
+  artifactProgressLine.geometry = new THREE.BufferGeometry().setFromPoints(artifactPoints.slice(0, safeIdx + 1));
+  artifactMarker.position.copy(artifactPoints[safeIdx]);
+  artifactBlocks.forEach((block, b) => {
+    const threshold = (b / Math.max(artifactBlocks.length - 1, 1)) * (artifactPoints.length - 1);
+    block.material.opacity = threshold <= safeIdx ? 0.56 : 0.18;
+    block.material.emissiveIntensity = threshold <= safeIdx ? 0.45 : 0.08;
+  });
+  artifactScene.rotation.y = -0.22 + (safeIdx / Math.max(artifactPoints.length - 1, 1)) * 0.44;
+  artifactRenderer.render(artifactScene, artifactCamera);
 }
 
 function renderStrip() {
@@ -1527,7 +1693,7 @@ function setRouteIndex(i) {
   document.getElementById('poiTitle').textContent =
     i < 10 ? 'Route start' : (i > r.route.length - 10 ? 'Route end' : 'Along route');
   updateMainMapProgress(r, i);
-  updateRouteCinemaProgress(r, i);
+  updateElevationArtifact(r, i);
 }
 
 function jumpToPhoto(idx) {
@@ -1677,6 +1843,10 @@ document.getElementById('scrubber').addEventListener('input', e => {
   setRouteIndex(parseInt(e.target.value));
 });
 
+window.addEventListener('resize', () => {
+  resizeElevationArtifact();
+  if (map) map.resize();
+});
 window.addEventListener('popstate', handleCurrentUrl);
 window.addEventListener('hashchange', handleCurrentUrl);
 initFilterControls();
