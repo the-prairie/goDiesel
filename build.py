@@ -654,12 +654,18 @@ header { position: sticky; top: 0; z-index: 50;
                border-left: 2px solid var(--sleep); max-width: 700px; }
 .detail-quest-meta { display: flex; gap: 8px; flex-wrap: wrap; width: 100%; }
 .completion-panel { width: 100%; display: grid;
-                    grid-template-columns: minmax(240px, 1fr) auto;
-                    gap: 9px; min-width: 0; }
-.completion-item { background: transparent; border: 1px solid rgba(123,161,187,0.18);
+                    grid-template-columns: minmax(260px, 1.25fr) minmax(320px, 1fr);
+                    gap: 8px; min-width: 0; }
+.completion-item { background: rgba(9,15,18,0.62); border: 1px solid rgba(123,161,187,0.16);
                    border-radius: 7px; padding: 8px 10px; min-width: 0; }
-.completion-item.objective { background: rgba(0,241,159,0.04); border-color: rgba(0,241,159,0.22); }
-.completion-stack { display: grid; grid-template-columns: repeat(4, minmax(78px, 1fr)); gap: 8px; }
+.completion-item.objective { background: rgba(0,241,159,0.055); border-color: rgba(0,241,159,0.30); }
+.completion-stack { display: grid; grid-template-columns: repeat(4, minmax(70px, 1fr)); gap: 0;
+                    border: 1px solid rgba(123,161,187,0.16); border-radius: 7px;
+                    overflow: hidden; background: rgba(9,15,18,0.46); }
+.completion-stack .completion-item { border: 0; border-radius: 0;
+                                     border-left: 1px solid rgba(123,161,187,0.14);
+                                     background: transparent; }
+.completion-stack .completion-item:first-child { border-left: 0; }
 .completion-label { font-family: 'JetBrains Mono', monospace; font-size: 8px;
                     color: var(--teal); letter-spacing: 1.4px;
                     text-transform: uppercase; }
@@ -696,7 +702,8 @@ header { position: sticky; top: 0; z-index: 50;
                   font-family: 'JetBrains Mono', monospace; font-size: 9px;
                   color: var(--teal); letter-spacing: 1.6px; text-transform: uppercase; }
 .artifact-copy { position: absolute; left: 12px; top: 30px; max-width: 190px;
-                 color: rgba(255,255,255,0.52); font-size: 11px; line-height: 1.35; }
+                 color: rgba(255,255,255,0.56); font-family: 'JetBrains Mono', monospace;
+                 font-size: 9px; letter-spacing: 1px; line-height: 1.45; text-transform: uppercase; }
 .info-card { position: absolute; top: 16px; left: 16px;
              background: rgba(10,12,14,0.88); border: 1px solid var(--border);
              border-radius: 8px; padding: 10px 12px;
@@ -714,7 +721,7 @@ header { position: sticky; top: 0; z-index: 50;
                  backdrop-filter: blur(8px); z-index: 5; }
 .scrubber-pos { font-family: 'JetBrains Mono', monospace; font-size: 11px;
                 color: var(--teal); min-width: 140px; letter-spacing: 1px; }
-.route-lock { flex: 0 0 auto; background: rgba(20,26,31,0.92);
+.route-lock { flex: 0 0 auto; min-width: 86px; background: rgba(20,26,31,0.92);
               border: 1px solid rgba(123,161,187,0.28); color: var(--text-dim);
               border-radius: 6px; padding: 7px 9px;
               font-family: 'JetBrains Mono', monospace; font-size: 9px;
@@ -868,8 +875,10 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
                   border-left-width: 2px; }
   .detail-desc { font-size: 12px; padding-left: 10px; max-width: 100%; }
   .completion-panel { grid-template-columns: 1fr; gap: 7px; }
-  .completion-stack { grid-template-columns: 1fr 1fr; gap: 7px; }
-  .completion-stack .completion-item { flex: 1 1 calc(50% - 7px); }
+  .completion-stack { grid-template-columns: 1fr 1fr; }
+  .completion-stack .completion-item { border-left: 0; border-top: 1px solid rgba(123,161,187,0.14); }
+  .completion-stack .completion-item:nth-child(-n+2) { border-top: 0; }
+  .completion-stack .completion-item:nth-child(even) { border-left: 1px solid rgba(123,161,187,0.14); }
   .completion-value { font-size: 11px; }
   .detail-actions { width: 100%; }
   .detail-actions { flex-wrap: wrap; }
@@ -1032,8 +1041,8 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
       </div>
       <div class="artifact-panel" aria-label="Route elevation artifact">
         <canvas class="artifact-canvas" id="artifactCanvas"></canvas>
-        <div class="artifact-label">Three.js elevation</div>
-        <div class="artifact-copy">Route profile rendered as a compact terrain object.</div>
+        <div class="artifact-label">Elevation trace</div>
+        <div class="artifact-copy" id="artifactContext">Route profile</div>
         <div class="artifact-footer">
           <div class="artifact-stat"><b id="artifactKm">0.0 / 0.0 km</b><span>along route</span></div>
           <div class="artifact-stat"><b id="artifactElev">0 m</b><span>current elev</span></div>
@@ -1043,7 +1052,7 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
       <div class="scrubber-wrap">
         <div class="scrubber-pos" id="scrubberPos">0.00 / 0.00 km</div>
         <input type="range" id="scrubber" min="0" max="100" value="0">
-        <button class="route-lock active" id="routeLockBtn" type="button" onclick="toggleRouteLock()" title="Keep the camera following the active point">LOCK VIEW</button>
+        <button class="route-lock active" id="routeLockBtn" type="button" onclick="toggleRouteLock()" title="Keep the camera following the active point">FOLLOWING</button>
       </div>
     </div>
   </div>
@@ -1291,6 +1300,8 @@ async function openRoute(i, options = {}) {
     descEl.style.display = 'block';
   }
   else { descEl.style.display = 'none'; }
+  document.getElementById('artifactContext').textContent =
+    `${r.type.toUpperCase()} · ${r.difficulty || 'OPEN'} · ${r.date || 'DATE TBD'}`;
   renderCompletionPanel(r);
   document.getElementById('kmTotal').textContent =
     (r.route[r.route.length-1].d / 1000).toFixed(2) + ' km';
@@ -1498,7 +1509,10 @@ function syncRouteLockButton() {
   const btn = document.getElementById('routeLockBtn');
   if (!btn) return;
   btn.classList.toggle('active', routeViewLocked);
-  btn.textContent = routeViewLocked ? 'LOCK VIEW' : 'FREE VIEW';
+  btn.textContent = routeViewLocked ? 'FOLLOWING' : 'FREE VIEW';
+  btn.title = routeViewLocked
+    ? 'Camera follows the active route point'
+    : 'Camera is free to pan, zoom, and rotate';
 }
 
 function toggleRouteLock() {
