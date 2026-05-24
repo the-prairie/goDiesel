@@ -6,7 +6,7 @@ Writes:   /Users/laurenzary/Desktop/goDiesel/index.html
 
 Edit quests.json to add/remove routes. Re-run this script (or rebuild.sh).
 """
-import base64, gzip, io, json, math, re, sys, textwrap
+import base64, gzip, io, json, math, re, textwrap
 from datetime import datetime
 from pathlib import Path
 
@@ -33,23 +33,7 @@ TEAL = '#00F19F'; STRAIN = '#0093E7'; SLEEP = '#7BA1BB'
 BG = (16, 21, 24); BG_HEX = '#101518'
 
 # ── API key ──
-# Prefer the project-local .env (restricted to the deployed domain).
-# Fall back to DieselDiaries/.env for legacy / local-dev use.
-_env_candidates = [QUESTS / '.env', DD / '.env']
-env_text = None
-env_source = None
-for _path in _env_candidates:
-    if _path.exists():
-        env_text = _path.read_text()
-        env_source = _path
-        break
-if env_text is None:
-    sys.exit(f'No .env found. Looked in: {", ".join(str(p) for p in _env_candidates)}')
-m = re.search(r'(?:export\s+)?GOOGLE_MAPS_API_KEY\s*=\s*["\']?([^"\'\s]+)["\']?', env_text)
-API_KEY = m.group(1) if m else None
-if not API_KEY:
-    sys.exit(f'GOOGLE_MAPS_API_KEY missing in {env_source}')
-print(f'[1/5] API key loaded from {env_source.name} ({API_KEY[:8]}…{API_KEY[-4:]})')
+print('[1/5] Map provider: MapLibre GL JS + public terrain tiles')
 
 # ── Load quests.json ──
 config = json.loads((QUESTS / 'quests.json').read_text())
@@ -712,21 +696,6 @@ header { position: sticky; top: 0; z-index: 50;
                        font-size: 11px; letter-spacing: 1px; white-space: nowrap; }
 .route-cinema-stat span { display: block; margin-top: 5px; color: var(--text-dim);
                           font-size: 9px; text-transform: uppercase; letter-spacing: 1.2px; }
-.map-fallback { width: 100%; height: 100%; display: flex; align-items: center;
-                justify-content: center; flex-direction: column; padding: 32px;
-                background: #11171C; color: var(--text-dim); text-align: center; }
-.map-fallback.route { background:
-  radial-gradient(circle at 50% 48%, rgba(0,241,159,0.10), transparent 34%),
-  linear-gradient(180deg, #12181D, #0B1014); }
-.map-fallback svg { width: min(72%, 520px); height: min(52%, 420px);
-                    filter: drop-shadow(0 0 18px rgba(0,241,159,0.18)); }
-.map-fallback-title { margin-top: 18px; color: #FFF; font-weight: 700;
-                      font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; }
-.map-fallback-copy { margin-top: 8px; max-width: 440px; font-size: 12px; line-height: 1.7;
-                     color: var(--text-dim); }
-.map-fallback-code { margin-top: 12px; font-family: 'JetBrains Mono', monospace;
-                     font-size: 10px; letter-spacing: 1px; color: var(--teal); }
-
 .info-card { position: absolute; top: 16px; left: 16px;
              background: rgba(10,12,14,0.88); border: 1px solid var(--border);
              border-radius: 8px; padding: 10px 12px;
@@ -1099,43 +1068,9 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
 <script>
 const ROUTES = __ROUTES_JSON__;
 let activeRouteIdx = -1;
-let map, marker, polyline;
-let routeCinemaMap, routeCinemaSlug = null;
-let photoMarkers = [];
+let map, routeCinemaMap, mapSlug = null, routeCinemaSlug = null;
 let allPhotos = [];
 const STORAGE_KEY_PREFIX = 'quests:photos:';
-
-let mapsReadyResolve;
-const mapsReadyPromise = new Promise(r => { mapsReadyResolve = r; });
-let mapsUnavailable = false;
-let fallbackSliderBound = false;
-window.__mapsReady = () => mapsReadyResolve(true);
-window.gm_authFailure = () => {
-  mapsUnavailable = true;
-  mapsReadyResolve(false);
-  if (activeRouteIdx !== -1) initFallbackRoute();
-};
-
-// Lazy-load the Google Maps SDK on first quest open.
-// Keeps the gallery's first paint fast — no 300 KB JS + handshake on initial load.
-let __mapsLoadStarted = false;
-function loadMapsIfNeeded() {
-  if (!__mapsLoadStarted) {
-    __mapsLoadStarted = true;
-    const s = document.createElement('script');
-    s.src = 'https://maps.googleapis.com/maps/api/js?key=__API_KEY__&callback=__mapsReady';
-    s.async = true;
-    s.defer = true;
-    document.head.appendChild(s);
-    setTimeout(() => {
-      if (typeof google === 'undefined' || !google.maps) {
-        mapsUnavailable = true;
-        mapsReadyResolve(false);
-      }
-    }, 4000);
-  }
-  return mapsReadyPromise;
-}
 
 const galleryFilters = {
   type: 'All',
@@ -1347,11 +1282,7 @@ async function openRoute(i, options = {}) {
   renderCompletionPanel(r);
   document.getElementById('kmTotal').textContent =
     (r.route[r.route.length-1].d / 1000).toFixed(2) + ' km';
-  const mapsOk = await loadMapsIfNeeded();
-  if (!mapsOk || mapsUnavailable || typeof google === 'undefined' || !google.maps) {
-    initFallbackRoute();
-  } else if (!map) initMap();
-  else initRoute();
+  initRoute();
   window.scrollTo(0, 0);
 }
 
@@ -1369,82 +1300,15 @@ function initRoute() {
   const r = ROUTES[activeRouteIdx];
   allPhotos = [...r.baseline_photos.map(p => ({ ...p, source: 'auto' })),
                ...getStoredPhotos(r.slug)];
-  map.setCenter({ lat: r.center_lat, lng: r.center_lng });
-  map.setZoom(13);
-  if (polyline) polyline.setMap(null);
-  photoMarkers.forEach(m => m.setMap(null)); photoMarkers = [];
-  polyline = new google.maps.Polyline({
-    path: r.route.map(p => ({ lat: p.lat, lng: p.lng })),
-    geodesic: true, strokeColor: '#00F19F', strokeOpacity: 0.95,
-    strokeWeight: 4, map: map,
-  });
-  if (marker) {
-    marker.setPosition({ lat: r.route[0].lat, lng: r.route[0].lng });
-  } else {
-    marker = new google.maps.Marker({
-      position: { lat: r.route[0].lat, lng: r.route[0].lng },
-      map: map, draggable: true,
-      icon: { path: google.maps.SymbolPath.CIRCLE, scale: 10,
-              fillColor: '#FFFFFF', fillOpacity: 1,
-              strokeColor: '#00F19F', strokeWeight: 3 },
-    });
-    marker.addListener('drag', e => snapToRoute(e.latLng));
-    marker.addListener('dragend', e => snapToRoute(e.latLng));
-  }
-  allPhotos.forEach((ph, idx) => {
-    const m = new google.maps.Marker({
-      position: { lat: ph.lat, lng: ph.lng }, map: map,
-      icon: { path: google.maps.SymbolPath.CIRCLE, scale: 11,
-              fillColor: '#0093E7', fillOpacity: 1, strokeColor: '#FFFFFF', strokeWeight: 2.5 },
-      title: 'Lauren · ' + (ph.dt || 'no date'), zIndex: 50,
-    });
-    m.addListener('click', () => jumpToPhoto(idx));
-    photoMarkers.push(m);
-  });
-  renderStrip();
+  initMainMap(r);
   initRouteCinema(r);
+  renderStrip();
   const scrubber = document.getElementById('scrubber');
   scrubber.max = r.route.length - 1; scrubber.value = 0;
   setRouteIndex(0);
 }
 
-function initFallbackRoute() {
-  const r = ROUTES[activeRouteIdx];
-  allPhotos = [...r.baseline_photos.map(p => ({ ...p, source: 'auto' })),
-               ...getStoredPhotos(r.slug)];
-  photoMarkers.forEach(m => m.setMap && m.setMap(null)); photoMarkers = [];
-  document.getElementById('map').innerHTML = `
-    <div class="map-fallback route">
-      ${r.svg || ''}
-      <div class="map-fallback-title">Route preview</div>
-      <div class="map-fallback-copy">Google Maps did not authorize this local URL, so this preview is using the generated route silhouette.</div>
-      <div class="map-fallback-code">ALLOW localhost IN GOOGLE MAPS API REFERRERS</div>
-    </div>`;
-  renderStrip();
-  initRouteCinema(r);
-  const scrubber = document.getElementById('scrubber');
-  scrubber.max = r.route.length - 1; scrubber.value = 0;
-  if (!fallbackSliderBound) {
-    fallbackSliderBound = true;
-    scrubber.addEventListener('input', e => {
-      if (mapsUnavailable) setFallbackRouteIndex(parseInt(e.target.value));
-    });
-  }
-  setFallbackRouteIndex(0);
-}
-
-function setFallbackRouteIndex(i) {
-  const r = ROUTES[activeRouteIdx]; const p = r.route[i];
-  document.getElementById('scrubberPos').textContent =
-    (p.d / 1000).toFixed(2) + ' / ' + (r.route[r.route.length-1].d / 1000).toFixed(2) + ' km';
-  document.getElementById('kmDone').textContent = (p.d / 1000).toFixed(1) + ' km';
-  document.getElementById('elevHere').textContent = Math.round(p.elev) + ' m';
-  document.getElementById('poiTitle').textContent =
-    i < 10 ? 'Route start' : (i > r.route.length - 10 ? 'Route end' : 'Along route');
-  updateRouteCinemaProgress(r, i);
-}
-
-function routeCinemaStyle() {
+function routeMapStyle({ satellite = false } = {}) {
   return {
     version: 8,
     sources: {
@@ -1461,10 +1325,18 @@ function routeCinemaStyle() {
       },
     },
     layers: [
-      { id: 'osm', type: 'raster', source: 'osm', paint: { 'raster-saturation': -0.45, 'raster-brightness-min': 0.05, 'raster-brightness-max': 0.68 } },
+      { id: 'osm', type: 'raster', source: 'osm', paint: {
+        'raster-saturation': satellite ? -0.15 : -0.45,
+        'raster-brightness-min': satellite ? 0.0 : 0.05,
+        'raster-brightness-max': satellite ? 0.82 : 0.68,
+      } },
       { id: 'hillshade', type: 'hillshade', source: 'terrain', paint: { 'hillshade-shadow-color': '#061014', 'hillshade-highlight-color': '#E5D2A0', 'hillshade-accent-color': '#00F19F' } },
     ],
   };
+}
+
+function routeCinemaStyle() {
+  return routeMapStyle();
 }
 
 function routeFeature(route, endIdx = route.route.length - 1) {
@@ -1476,10 +1348,87 @@ function pointFeature(point) {
   return { type: 'Feature', geometry: { type: 'Point', coordinates: [point.lng, point.lat] }, properties: {} };
 }
 
+function photoFeatures() {
+  return {
+    type: 'FeatureCollection',
+    features: allPhotos.map((ph, idx) => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [ph.lng, ph.lat] },
+      properties: { idx, label: ph.dt || 'photo' },
+    })),
+  };
+}
+
 function routeBounds(route) {
   const bounds = new maplibregl.LngLatBounds();
   route.route.forEach(p => bounds.extend([p.lng, p.lat]));
   return bounds;
+}
+
+function addRouteLayers(targetMap, route, { includePhotos = false } = {}) {
+  targetMap.addSource('route-full', { type: 'geojson', data: routeFeature(route) });
+  targetMap.addSource('route-progress', { type: 'geojson', data: routeFeature(route, 0) });
+  targetMap.addSource('route-point', { type: 'geojson', data: pointFeature(route.route[0]) });
+  targetMap.addLayer({
+    id: 'route-full-glow', type: 'line', source: 'route-full',
+    paint: { 'line-color': '#00F19F', 'line-opacity': 0.20, 'line-width': 8, 'line-blur': 8 },
+  });
+  targetMap.addLayer({
+    id: 'route-full', type: 'line', source: 'route-full',
+    paint: { 'line-color': '#BFEFE1', 'line-opacity': 0.35, 'line-width': 3 },
+  });
+  targetMap.addLayer({
+    id: 'route-progress', type: 'line', source: 'route-progress',
+    paint: { 'line-color': '#00F19F', 'line-opacity': 0.98, 'line-width': 5 },
+  });
+  targetMap.addLayer({
+    id: 'route-point-halo', type: 'circle', source: 'route-point',
+    paint: { 'circle-radius': 15, 'circle-color': '#00F19F', 'circle-opacity': 0.24, 'circle-blur': 0.45 },
+  });
+  targetMap.addLayer({
+    id: 'route-point', type: 'circle', source: 'route-point',
+    paint: { 'circle-radius': 7, 'circle-color': '#FFFFFF', 'circle-stroke-color': '#00F19F', 'circle-stroke-width': 3 },
+  });
+  if (includePhotos) {
+    targetMap.addSource('route-photos', { type: 'geojson', data: photoFeatures() });
+    targetMap.addLayer({
+      id: 'route-photos', type: 'circle', source: 'route-photos',
+      paint: { 'circle-radius': 6, 'circle-color': '#0093E7', 'circle-stroke-color': '#FFFFFF', 'circle-stroke-width': 2 },
+    });
+    targetMap.on('click', 'route-photos', e => {
+      const idx = e.features?.[0]?.properties?.idx;
+      if (idx !== undefined) jumpToPhoto(Number(idx));
+    });
+    targetMap.on('mouseenter', 'route-photos', () => { targetMap.getCanvas().style.cursor = 'pointer'; });
+    targetMap.on('mouseleave', 'route-photos', () => { targetMap.getCanvas().style.cursor = ''; });
+  }
+}
+
+function initMainMap(route) {
+  if (typeof maplibregl === 'undefined') return;
+  if (map) {
+    map.remove();
+    map = null;
+  }
+  mapSlug = route.slug;
+  map = new maplibregl.Map({
+    container: 'map',
+    style: routeMapStyle({ satellite: true }),
+    center: [route.center_lng, route.center_lat],
+    zoom: 11,
+    pitch: 0,
+    bearing: 0,
+    interactive: true,
+    attributionControl: false,
+  });
+  map.on('load', () => {
+    if (!map || mapSlug !== route.slug) return;
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
+    addRouteLayers(map, route, { includePhotos: true });
+    map.fitBounds(routeBounds(route), { padding: 70, duration: 900 });
+    map.on('click', e => snapToRoute(e.lngLat));
+    updateMainMapProgress(route, 0);
+  });
 }
 
 function initRouteCinema(route) {
@@ -1504,32 +1453,23 @@ function initRouteCinema(route) {
   routeCinemaMap.on('load', () => {
     if (!routeCinemaMap || routeCinemaSlug !== route.slug) return;
     routeCinemaMap.setTerrain({ source: 'terrain', exaggeration: 1.35 });
-    routeCinemaMap.addSource('route-full', { type: 'geojson', data: routeFeature(route) });
-    routeCinemaMap.addSource('route-progress', { type: 'geojson', data: routeFeature(route, 0) });
-    routeCinemaMap.addSource('route-point', { type: 'geojson', data: pointFeature(route.route[0]) });
-    routeCinemaMap.addLayer({
-      id: 'route-full-glow', type: 'line', source: 'route-full',
-      paint: { 'line-color': '#00F19F', 'line-opacity': 0.20, 'line-width': 8, 'line-blur': 8 },
-    });
-    routeCinemaMap.addLayer({
-      id: 'route-full', type: 'line', source: 'route-full',
-      paint: { 'line-color': '#BFEFE1', 'line-opacity': 0.35, 'line-width': 3 },
-    });
-    routeCinemaMap.addLayer({
-      id: 'route-progress', type: 'line', source: 'route-progress',
-      paint: { 'line-color': '#00F19F', 'line-opacity': 0.98, 'line-width': 5 },
-    });
-    routeCinemaMap.addLayer({
-      id: 'route-point-halo', type: 'circle', source: 'route-point',
-      paint: { 'circle-radius': 15, 'circle-color': '#00F19F', 'circle-opacity': 0.24, 'circle-blur': 0.45 },
-    });
-    routeCinemaMap.addLayer({
-      id: 'route-point', type: 'circle', source: 'route-point',
-      paint: { 'circle-radius': 7, 'circle-color': '#FFFFFF', 'circle-stroke-color': '#00F19F', 'circle-stroke-width': 3 },
-    });
+    addRouteLayers(routeCinemaMap, route);
     routeCinemaMap.fitBounds(routeBounds(route), { padding: 72, duration: 1200, pitch: 58, bearing: -20 });
     updateRouteCinemaProgress(route, 0);
   });
+}
+
+function updateMapSources(targetMap, route, idx) {
+  if (!targetMap || !targetMap.isStyleLoaded()) return;
+  const progress = targetMap.getSource('route-progress');
+  const point = targetMap.getSource('route-point');
+  if (progress) progress.setData(routeFeature(route, idx));
+  if (point) point.setData(pointFeature(route.route[idx]));
+}
+
+function updateMainMapProgress(route, idx) {
+  if (!map || mapSlug !== route.slug) return;
+  updateMapSources(map, route, idx);
 }
 
 function updateRouteCinemaProgress(route, idx) {
@@ -1538,11 +1478,8 @@ function updateRouteCinemaProgress(route, idx) {
     `${(p.d / 1000).toFixed(1)} / ${route.distance_km.toFixed(1)} km`;
   document.getElementById('visualElev').textContent = `${Math.round(p.elev).toLocaleString()} m`;
   document.getElementById('visualClimb').textContent = `${Math.round(route.elevation_gain_m || 0).toLocaleString()} m`;
-  if (!routeCinemaMap || !routeCinemaMap.isStyleLoaded() || routeCinemaSlug !== route.slug) return;
-  const progress = routeCinemaMap.getSource('route-progress');
-  const point = routeCinemaMap.getSource('route-point');
-  if (progress) progress.setData(routeFeature(route, idx));
-  if (point) point.setData(pointFeature(p));
+  if (!routeCinemaMap || routeCinemaSlug !== route.slug) return;
+  updateMapSources(routeCinemaMap, route, idx);
 }
 
 function renderStrip() {
@@ -1572,7 +1509,7 @@ function renderStrip() {
 
 function snapToRoute(latLng) {
   const r = ROUTES[activeRouteIdx];
-  const lat = latLng.lat(); const lng = latLng.lng();
+  const lat = latLng.lat; const lng = latLng.lng;
   let best = 0; let bestD = Infinity;
   for (let i = 0; i < r.route.length; i++) {
     const d = (r.route[i].lat - lat) ** 2 + (r.route[i].lng - lng) ** 2;
@@ -1583,13 +1520,13 @@ function snapToRoute(latLng) {
 
 function setRouteIndex(i) {
   const r = ROUTES[activeRouteIdx]; const p = r.route[i];
-  marker.setPosition({ lat: p.lat, lng: p.lng });
   document.getElementById('scrubberPos').textContent =
     (p.d / 1000).toFixed(2) + ' / ' + (r.route[r.route.length-1].d / 1000).toFixed(2) + ' km';
   document.getElementById('kmDone').textContent = (p.d / 1000).toFixed(1) + ' km';
   document.getElementById('elevHere').textContent = Math.round(p.elev) + ' m';
   document.getElementById('poiTitle').textContent =
     i < 10 ? 'Route start' : (i > r.route.length - 10 ? 'Route end' : 'Along route');
+  updateMainMapProgress(r, i);
   updateRouteCinemaProgress(r, i);
 }
 
@@ -1736,16 +1673,9 @@ function canvasResize(img, maxSize, mime, quality) {
   return c.toDataURL(mime, quality);
 }
 
-function initMap() {
-  map = new google.maps.Map(document.getElementById('map'), {
-    center: { lat: 0, lng: 0 }, zoom: 2, mapTypeId: 'hybrid',
-    disableDefaultUI: true, zoomControl: true,
-  });
-  document.getElementById('scrubber').addEventListener('input', e => {
-    setRouteIndex(parseInt(e.target.value));
-  });
-  initRoute();
-}
+document.getElementById('scrubber').addEventListener('input', e => {
+  setRouteIndex(parseInt(e.target.value));
+});
 
 window.addEventListener('popstate', handleCurrentUrl);
 window.addEventListener('hashchange', handleCurrentUrl);
@@ -1753,13 +1683,11 @@ initFilterControls();
 if (location.hash) handleCurrentUrl();
 else renderGallery();
 </script>
-<!-- Google Maps SDK is loaded lazily by loadMapsIfNeeded() on first quest open. -->
 </body></html>
 '''
 
 html_out = (template_html
-            .replace('__ROUTES_JSON__', data_json)
-            .replace('__API_KEY__', API_KEY))
+            .replace('__ROUTES_JSON__', data_json))
 (QUESTS / 'index.html').write_text(html_out)
 
 print(f'\n✓ Built: {QUESTS}/index.html  ({len(routes_data)} quests)')

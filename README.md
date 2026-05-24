@@ -6,7 +6,7 @@ The repo intentionally separates source files from private local data:
 
 - Source/admin: `build.py`, `quest_meta.py`, `admin.py`, `admin.html`, `quests.json`
 - Generated public site: `index.html`, `cards/`, `photos/`, `dist/`
-- Private local inputs: `../DieselDiaries`, `../Travel`, `.env`
+- Private local inputs: `../DieselDiaries`, `../Travel`
 
 `dist/` is the deployable Cloudflare Pages upload folder. It is generated from `index.html`, `cards/`, and `photos/` by `make-dist.sh`.
 
@@ -16,10 +16,9 @@ The repo intentionally separates source files from private local data:
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
 ```
 
-Set `GOOGLE_MAPS_API_KEY` in `.env`. For local preview, the Google Maps browser key must allow `http://localhost:*` or `http://127.0.0.1:*` as HTTP referrers. If it only allows the production domain, the app will render but the map panels will show Google's "Oops! Something went wrong" error locally.
+No map API key is required. The public app uses MapLibre GL JS with OpenStreetMap raster tiles and MapLibre demo terrain DEM tiles.
 
 ## Build
 
