@@ -714,6 +714,14 @@ header { position: sticky; top: 0; z-index: 50;
                  backdrop-filter: blur(8px); z-index: 5; }
 .scrubber-pos { font-family: 'JetBrains Mono', monospace; font-size: 11px;
                 color: var(--teal); min-width: 140px; letter-spacing: 1px; }
+.route-lock { flex: 0 0 auto; background: rgba(20,26,31,0.92);
+              border: 1px solid rgba(123,161,187,0.28); color: var(--text-dim);
+              border-radius: 6px; padding: 7px 9px;
+              font-family: 'JetBrains Mono', monospace; font-size: 9px;
+              letter-spacing: 1.2px; text-transform: uppercase; cursor: pointer;
+              transition: border-color 180ms ease, color 180ms ease, background 180ms ease; }
+.route-lock.active { color: var(--teal); border-color: rgba(0,241,159,0.7);
+                     background: rgba(0,241,159,0.08); box-shadow: 0 0 18px rgba(0,241,159,0.12); }
 input[type=range] { flex: 1; height: 4px; -webkit-appearance: none;
                     background: #1F2A33; border-radius: 2px; outline: none; }
 input[type=range]::-webkit-slider-thumb {
@@ -887,6 +895,7 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
   .scrubber-wrap { bottom: 10px; left: 10px; right: 10px;
                    padding: 8px 12px; gap: 10px; }
   .scrubber-pos { min-width: 100px; font-size: 10px; }
+  .route-lock { padding: 7px 8px; font-size: 8px; }
 
   /* Photo strip: lose the vertical "YOUR PHOTOS" label on small screens.
      Hide entirely when empty (drag-and-drop is desktop-only anyway). */
@@ -1034,6 +1043,7 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
       <div class="scrubber-wrap">
         <div class="scrubber-pos" id="scrubberPos">0.00 / 0.00 km</div>
         <input type="range" id="scrubber" min="0" max="100" value="0">
+        <button class="route-lock active" id="routeLockBtn" type="button" onclick="toggleRouteLock()" title="Keep the camera following the active point">LOCK VIEW</button>
       </div>
     </div>
   </div>
@@ -1066,6 +1076,8 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
 const ROUTES = __ROUTES_JSON__;
 let activeRouteIdx = -1;
 let map, mapSlug = null;
+let routeViewLocked = true;
+let routeLockCameraReady = false;
 let artifactRenderer = null, artifactScene = null, artifactCamera = null;
 let artifactFullLine = null, artifactProgressLine = null, artifactMarker = null, artifactBlocks = [];
 let artifactPoints = [], artifactSlug = null;
@@ -1315,6 +1327,7 @@ function initRoute() {
     artifactSlug = r.slug;
   }
   renderStrip();
+  syncRouteLockButton();
   const scrubber = document.getElementById('scrubber');
   scrubber.max = r.route.length - 1; scrubber.value = 0;
   setRouteIndex(0);
@@ -1419,6 +1432,7 @@ function initMainMap(route) {
     map = null;
   }
   mapSlug = route.slug;
+  routeLockCameraReady = false;
   map = new maplibregl.Map({
     container: 'map',
     style: routeMapStyle({ satellite: true }),
@@ -1435,6 +1449,7 @@ function initMainMap(route) {
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
     addRouteLayers(map, route, { includePhotos: true });
     map.fitBounds(routeBounds(route), { padding: 86, duration: 900, pitch: 56, bearing: -18 });
+    map.once('moveend', () => { routeLockCameraReady = true; });
     map.on('click', e => snapToRoute(e.lngLat));
     updateMainMapProgress(route, 0);
   });
@@ -1451,6 +1466,49 @@ function updateMapSources(targetMap, route, idx) {
 function updateMainMapProgress(route, idx) {
   if (!map || mapSlug !== route.slug) return;
   updateMapSources(map, route, idx);
+}
+
+function routeBearing(route, idx) {
+  const pts = route.route;
+  const a = pts[Math.max(0, Math.min(idx, pts.length - 2))];
+  const b = pts[Math.max(1, Math.min(idx + 1, pts.length - 1))];
+  const lat1 = a.lat * Math.PI / 180;
+  const lat2 = b.lat * Math.PI / 180;
+  const dLng = (b.lng - a.lng) * Math.PI / 180;
+  const y = Math.sin(dLng) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) -
+            Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+  return ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
+}
+
+function updateLockedRouteCamera(route, idx) {
+  if (!routeViewLocked || !routeLockCameraReady || !map || mapSlug !== route.slug) return;
+  const p = route.route[idx];
+  map.easeTo({
+    center: [p.lng, p.lat],
+    zoom: Math.max(map.getZoom(), 13.2),
+    pitch: 62,
+    bearing: routeBearing(route, idx),
+    duration: 420,
+    essential: true,
+  });
+}
+
+function syncRouteLockButton() {
+  const btn = document.getElementById('routeLockBtn');
+  if (!btn) return;
+  btn.classList.toggle('active', routeViewLocked);
+  btn.textContent = routeViewLocked ? 'LOCK VIEW' : 'FREE VIEW';
+}
+
+function toggleRouteLock() {
+  routeViewLocked = !routeViewLocked;
+  syncRouteLockButton();
+  if (routeViewLocked && activeRouteIdx !== -1) {
+    const idx = Number(document.getElementById('scrubber').value || 0);
+    routeLockCameraReady = true;
+    updateLockedRouteCamera(ROUTES[activeRouteIdx], idx);
+  }
 }
 
 function routeArtifactPoints(route) {
@@ -1694,6 +1752,7 @@ function setRouteIndex(i) {
     i < 10 ? 'Route start' : (i > r.route.length - 10 ? 'Route end' : 'Along route');
   updateMainMapProgress(r, i);
   updateElevationArtifact(r, i);
+  updateLockedRouteCamera(r, i);
 }
 
 function jumpToPhoto(idx) {
