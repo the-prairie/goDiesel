@@ -1225,6 +1225,8 @@ let routeCinemaMode = 'artifact';
 let cinemaRenderer = null, cinemaScene = null, cinemaCamera = null;
 let cinemaFullLine = null, cinemaProgressLine = null, cinemaMarker = null, cinemaSurface = null;
 let cinemaPoints = [], cinemaSlug = null, cinemaDecor = [];
+let cinemaFrame = null, cinemaStartedAt = 0;
+let cinemaCameraTarget = null, cinemaLookTarget = null, cinemaLookCurrent = null;
 let allPhotos = [];
 const STORAGE_KEY_PREFIX = 'quests:photos:';
 
@@ -1513,6 +1515,9 @@ function initRoute() {
   const scrubber = document.getElementById('scrubber');
   scrubber.max = r.route.length - 1; scrubber.value = 0;
   setRouteIndex(0);
+  if (routeCinemaEnabled && routeCinemaMode === 'flyover') {
+    startRoutePlayback();
+  }
 }
 
 function routeMapStyle({ satellite = false } = {}) {
@@ -1774,7 +1779,8 @@ function startRoutePlayback() {
   syncRoutePlayButton();
   if (routePlayTimer) clearInterval(routePlayTimer);
   routePlayTimer = setInterval(() => {
-    let next = Number(scrubber.value || 0) + routePlaySpeed;
+    const current = Number(scrubber.value || 0);
+    let next = current + routePlaybackStep(r, current);
     if (next >= r.route.length - 1) {
       next = r.route.length - 1;
       scrubber.value = next;
@@ -1785,6 +1791,28 @@ function startRoutePlayback() {
     scrubber.value = next;
     setRouteIndex(next);
   }, 140);
+}
+
+function routePlaybackStep(route, idx) {
+  if (!(routeCinemaEnabled && routeCinemaMode === 'flyover')) return routePlaySpeed;
+  const pts = route.route || [];
+  const current = pts[Math.max(0, Math.min(idx, pts.length - 1))];
+  const ahead = pts[Math.max(0, Math.min(idx + 8, pts.length - 1))];
+  if (!current || !ahead) return routePlaySpeed;
+  const grade = Math.abs((ahead.elev || 0) - (current.elev || 0)) / Math.max((ahead.d || 1) - (current.d || 0), 1);
+  const progress = idx / Math.max(pts.length - 1, 1);
+  const highIdx = pts.reduce((best, p, i) => (Number(p.elev) || 0) > (Number(pts[best].elev) || 0) ? i : best, 0);
+  const highProximity = Math.abs(idx - highIdx) / Math.max(pts.length, 1);
+  const beatProximity = Math.min(
+    Math.abs(progress - 0),
+    Math.abs(progress - 0.5),
+    Math.abs(progress - 1),
+    highProximity
+  );
+  let multiplier = grade > 0.08 ? 0.58 : grade > 0.035 ? 0.76 : 1.22;
+  if (beatProximity < 0.035) multiplier *= 0.52;
+  if (progress < 0.04 || progress > 0.96) multiplier *= 0.62;
+  return Math.max(1, Math.round((routePlaySpeed / 4) * multiplier));
 }
 
 function toggleRoutePlayback() {
@@ -1815,7 +1843,7 @@ function syncRouteCinemaButton() {
   if (label) {
     label.textContent = {
       artifact: 'Artifact mode · real route sculpture',
-      flyover: 'Flyover mode · camera locked to the route',
+      flyover: 'Flyover mode · cinematic route autopilot',
       quest: 'Quest world · real checkpoints, playful atmosphere',
     }[routeCinemaMode];
   }
@@ -1826,7 +1854,11 @@ function toggleRouteCinema() {
   syncRouteCinemaButton();
   if (routeCinemaEnabled && activeRouteIdx !== -1) {
     const idx = Number(document.getElementById('scrubber').value || 0);
+    startCinemaLoop();
     updateRouteCinema(ROUTES[activeRouteIdx], idx);
+    if (routeCinemaMode === 'flyover') startRoutePlayback();
+  } else {
+    stopCinemaLoop();
   }
 }
 
@@ -1839,6 +1871,7 @@ function cycleRouteCinemaMode() {
     const scrubber = document.getElementById('scrubber');
     initRouteCinema(route);
     updateRouteCinema(route, Number(scrubber?.value || 0));
+    if (routeCinemaMode === 'flyover') startRoutePlayback();
   }
 }
 
@@ -1903,6 +1936,7 @@ function initRouteCinema(route) {
   const canvas = document.getElementById('cinemaCanvas');
   if (!canvas) return;
   if (cinemaRenderer) {
+    stopCinemaLoop();
     disposeArtifactObject(cinemaScene);
     cinemaRenderer.dispose();
     cinemaRenderer = null;
@@ -1918,6 +1952,9 @@ function initRouteCinema(route) {
   cinemaCamera = new THREE.PerspectiveCamera(48, 1, 0.1, 60);
   cinemaCamera.position.set(0, 5.2, 8.8);
   cinemaCamera.lookAt(0, 0, 0);
+  cinemaCameraTarget = cinemaCamera.position.clone();
+  cinemaLookTarget = new THREE.Vector3(0, 0, 0);
+  cinemaLookCurrent = cinemaLookTarget.clone();
   cinemaRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   cinemaRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   cinemaRenderer.setClearColor(0x000000, 0);
@@ -1978,6 +2015,7 @@ function initRouteCinema(route) {
   buildCinemaDecor(route);
   resizeRouteCinema();
   updateRouteCinema(route, 0);
+  startCinemaLoop();
 }
 
 function buildCinemaDecor(route) {
@@ -2022,7 +2060,37 @@ function buildCinemaDecor(route) {
     );
     horizon.rotation.x = -Math.PI / 2;
     horizon.position.y = -0.68;
+    horizon.userData.flyoverSpin = 0.003;
     add(horizon);
+    const pts = route.route || [];
+    const highIdx = pts.reduce((best, p, i) => (Number(p.elev) || 0) > (Number(pts[best]?.elev) || 0) ? i : best, 0);
+    [Math.floor(total * 0.04), Math.floor(total * 0.5), highIdx, total].forEach((idx, i) => {
+      const p = cinemaPoints[Math.max(0, Math.min(idx, total))];
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(i === 3 ? 0.34 : 0.22, 0.012, 8, 36),
+        new THREE.MeshBasicMaterial({ color: i === 2 ? 0xffd36a : 0x00f19f, transparent: true, opacity: 0.22 })
+      );
+      ring.position.set(p.x, p.y + 0.08, p.z);
+      ring.rotation.x = Math.PI / 2;
+      ring.userData.flyoverBeat = true;
+      ring.userData.routeIdx = idx;
+      add(ring);
+    });
+    for (let i = 0; i < 52; i++) {
+      const base = cinemaPoints[Math.floor(((i * 19) % 47) / 46 * total)] || cinemaPoints[0];
+      const mote = new THREE.Mesh(
+        new THREE.SphereGeometry(0.012 + (i % 4) * 0.004, 8, 8),
+        new THREE.MeshBasicMaterial({ color: i % 6 === 0 ? 0x6fc7ff : 0x00f19f, transparent: true, opacity: 0.16 })
+      );
+      mote.position.set(
+        base.x + Math.sin(i * 1.9) * 0.78,
+        base.y + 0.18 + ((i % 9) / 9) * 0.8,
+        base.z + Math.cos(i * 1.4) * 0.78
+      );
+      mote.userData.flyoverMote = true;
+      mote.userData.phase = i * 0.37;
+      add(mote);
+    }
     return;
   }
 
@@ -2073,6 +2141,46 @@ function resizeRouteCinema() {
   cinemaRenderer.render(cinemaScene, cinemaCamera);
 }
 
+function startCinemaLoop() {
+  stopCinemaLoop();
+  cinemaStartedAt = performance.now();
+  const tick = now => {
+    if (!cinemaRenderer || !cinemaScene || !cinemaCamera) return;
+    const elapsed = (now - cinemaStartedAt) / 1000;
+    if (cinemaCameraTarget && cinemaLookTarget && cinemaLookCurrent) {
+      const ease = routeCinemaMode === 'flyover' ? 0.075 : 0.18;
+      cinemaCamera.position.lerp(cinemaCameraTarget, ease);
+      cinemaLookCurrent.lerp(cinemaLookTarget, ease * 1.25);
+      cinemaCamera.lookAt(cinemaLookCurrent);
+    }
+    cinemaDecor.forEach(obj => {
+      if (obj.userData?.flyoverSpin) obj.rotation.z += obj.userData.flyoverSpin;
+      if (obj.userData?.flyoverBeat) {
+        const pulse = 1 + Math.sin(elapsed * 2.8 + obj.userData.routeIdx * 0.03) * 0.045;
+        obj.scale.setScalar(pulse);
+      }
+      if (obj.userData?.flyoverMote) {
+        obj.position.y += Math.sin(elapsed * 1.3 + obj.userData.phase) * 0.0009;
+        obj.material.opacity = 0.1 + Math.max(0, Math.sin(elapsed * 0.9 + obj.userData.phase)) * 0.14;
+      }
+    });
+    if (cinemaMarker) {
+      const markerHalo = cinemaMarker.children?.find(child => child.userData?.markerHalo);
+      if (markerHalo) {
+        markerHalo.scale.setScalar(1 + Math.sin(elapsed * 4.2) * 0.08);
+      }
+    }
+    cinemaRenderer.render(cinemaScene, cinemaCamera);
+    cinemaFrame = requestAnimationFrame(tick);
+  };
+  cinemaFrame = requestAnimationFrame(tick);
+}
+
+function stopCinemaLoop() {
+  if (cinemaFrame) cancelAnimationFrame(cinemaFrame);
+  cinemaFrame = null;
+}
+
 function updateRouteCinema(route, idx) {
   if (!cinemaRenderer || cinemaSlug !== route.slug || !cinemaPoints.length) return;
   const safeIdx = Math.max(0, Math.min(idx, cinemaPoints.length - 1));
@@ -2086,18 +2194,35 @@ function updateRouteCinema(route, idx) {
   const forward = cinemaPoints[Math.min(safeIdx + 8, cinemaPoints.length - 1)] || p;
   const progress = safeIdx / Math.max(cinemaPoints.length - 1, 1);
   if (routeCinemaMode === 'artifact') {
-    cinemaCamera.position.set(0, 5.4, 8.9);
-    cinemaCamera.lookAt(0, 0.05, 0);
+    cinemaCameraTarget.set(0, 5.4, 8.9);
+    cinemaLookTarget.set(0, 0.05, 0);
     cinemaScene.rotation.y = -0.28 + progress * 0.56;
   } else if (routeCinemaMode === 'flyover') {
-    const camTarget = p.clone().lerp(forward, 0.35);
-    cinemaCamera.position.set(p.x - 1.8, p.y + 2.7, p.z + 4.2);
-    cinemaCamera.lookAt(camTarget.x, camTarget.y, camTarget.z);
-    cinemaScene.rotation.y = -0.08 + progress * 0.16;
+    const prev = cinemaPoints[Math.max(safeIdx - 10, 0)] || p;
+    const direction = forward.clone().sub(prev).normalize();
+    const side = new THREE.Vector3(-direction.z, 0, direction.x).normalize();
+    const climb = Math.max(-0.6, Math.min(0.9, forward.y - p.y));
+    const reveal = progress < 0.08 ? 1 - progress / 0.08 : progress > 0.92 ? (progress - 0.92) / 0.08 : 0;
+    const chaseDistance = 2.7 + reveal * 1.8;
+    const height = 1.9 + Math.max(0, climb) * 1.4 + reveal * 1.1;
+    const camPos = p.clone()
+      .add(direction.clone().multiplyScalar(-chaseDistance))
+      .add(side.multiplyScalar(Math.sin(progress * Math.PI * 2) * 0.45))
+      .add(new THREE.Vector3(0, height, 0));
+    const look = p.clone().lerp(forward, 0.72).add(new THREE.Vector3(0, 0.18 + Math.max(0, climb) * 0.3, 0));
+    cinemaCameraTarget.copy(camPos);
+    cinemaLookTarget.copy(look);
+    cinemaScene.rotation.y = -0.05 + progress * 0.1;
+    cinemaDecor.forEach(obj => {
+      if (obj.userData?.flyoverBeat && obj.material) {
+        const lit = obj.userData.routeIdx <= safeIdx;
+        obj.material.opacity = lit ? 0.7 : 0.24;
+      }
+    });
   } else {
     const camTarget = p.clone().lerp(forward, 0.25);
-    cinemaCamera.position.set(p.x - 2.8, p.y + 3.5, p.z + 5.4);
-    cinemaCamera.lookAt(camTarget.x, camTarget.y + 0.08, camTarget.z);
+    cinemaCameraTarget.set(p.x - 2.8, p.y + 3.5, p.z + 5.4);
+    cinemaLookTarget.set(camTarget.x, camTarget.y + 0.08, camTarget.z);
     cinemaScene.rotation.y = -0.16 + progress * 0.28;
     cinemaDecor.forEach(obj => {
       if (obj.userData?.routeIdx !== undefined && obj.material) {
