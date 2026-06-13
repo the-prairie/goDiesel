@@ -1252,7 +1252,9 @@ let routeViewLocked = true;
 let routeLockCameraReady = false;
 let routePlaying = false;
 let routePlayTimer = null;
-let routeLastCameraIdx = -1;
+let routePlaybackCursor = 0;
+let routePlaybackLastAt = 0;
+let routeCameraBearing = null;
 let routePlaySpeed = 4;
 const ROUTE_SPEEDS = [1, 4, 12];
 const queryParams = new URLSearchParams(location.search);
@@ -1557,7 +1559,7 @@ function initRoute() {
   syncRoutePlayButton();
   syncRouteCinemaButton();
   const scrubber = document.getElementById('scrubber');
-  scrubber.max = r.route.length - 1; scrubber.value = 0;
+  scrubber.max = r.route.length - 1; scrubber.step = 'any'; scrubber.value = 0;
   setRouteIndex(0);
   if (routeCinemaEnabled && routeCinemaMode === 'flyover') {
     startRoutePlayback();
@@ -1591,8 +1593,32 @@ function routeMapStyle({ satellite = false } = {}) {
   };
 }
 
+function routePointAt(route, cursor) {
+  const pts = route.route || [];
+  if (!pts.length) return { lat: route.center_lat || 0, lng: route.center_lng || 0, elev: 0, d: 0 };
+  const clamped = Math.max(0, Math.min(cursor, pts.length - 1));
+  const lo = Math.floor(clamped);
+  const hi = Math.min(pts.length - 1, Math.ceil(clamped));
+  const t = clamped - lo;
+  const a = pts[lo];
+  const b = pts[hi] || a;
+  const lerp = (x, y) => (Number(x) || 0) + ((Number(y) || 0) - (Number(x) || 0)) * t;
+  return {
+    lat: lerp(a.lat, b.lat),
+    lng: lerp(a.lng, b.lng),
+    elev: lerp(a.elev, b.elev),
+    d: lerp(a.d, b.d),
+  };
+}
+
 function routeFeature(route, endIdx = route.route.length - 1) {
-  const coords = route.route.slice(0, Math.max(1, endIdx + 1)).map(p => [p.lng, p.lat]);
+  const clamped = Math.max(0, Math.min(endIdx, route.route.length - 1));
+  const wholeIdx = Math.floor(clamped);
+  const coords = route.route.slice(0, Math.max(1, wholeIdx + 1)).map(p => [p.lng, p.lat]);
+  if (clamped > wholeIdx && wholeIdx < route.route.length - 1) {
+    const p = routePointAt(route, clamped);
+    coords.push([p.lng, p.lat]);
+  }
   return { type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: {} };
 }
 
@@ -1746,7 +1772,7 @@ function updateMapSources(targetMap, route, idx) {
   const progress = targetMap.getSource('route-progress');
   const point = targetMap.getSource('route-point');
   if (progress) progress.setData(routeFeature(route, idx));
-  if (point) point.setData(pointFeature(route.route[idx]));
+  if (point) point.setData(pointFeature(routePointAt(route, idx)));
 }
 
 function updateMainMapProgress(route, idx) {
@@ -1756,8 +1782,8 @@ function updateMainMapProgress(route, idx) {
 
 function routeBearing(route, idx, lookahead = 8) {
   const pts = route.route;
-  const a = pts[Math.max(0, Math.min(idx, pts.length - 2))];
-  const b = pts[Math.max(1, Math.min(idx + lookahead, pts.length - 1))];
+  const a = routePointAt(route, Math.max(0, Math.min(idx, pts.length - 2)));
+  const b = routePointAt(route, Math.max(1, Math.min(idx + lookahead, pts.length - 1)));
   const lat1 = a.lat * Math.PI / 180;
   const lat2 = b.lat * Math.PI / 180;
   const dLng = (b.lng - a.lng) * Math.PI / 180;
@@ -1767,20 +1793,33 @@ function routeBearing(route, idx, lookahead = 8) {
   return ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
 }
 
+function smoothBearing(current, target, amount = 0.12) {
+  if (current === null || current === undefined) return target;
+  const delta = ((((target - current) % 360) + 540) % 360) - 180;
+  return (current + delta * amount + 360) % 360;
+}
+
 function updateLockedRouteCamera(route, idx) {
   if (!routeViewLocked || !routeLockCameraReady || !map || mapSlug !== route.slug) return;
-  const p = route.route[idx];
+  const p = routePointAt(route, idx);
+  const targetBearing = routeBearing(route, idx, routePlaying ? 16 : 8);
   if (routePlaying) {
-    if (Math.abs(idx - routeLastCameraIdx) < 2) return;
-    routeLastCameraIdx = idx;
-    map.stop();
+    routeCameraBearing = smoothBearing(routeCameraBearing, targetBearing, 0.16);
+    map.jumpTo({
+      center: [p.lng, p.lat],
+      zoom: Math.max(map.getZoom(), 13.2),
+      pitch: 62,
+      bearing: routeCameraBearing,
+    });
+    return;
   }
+  routeCameraBearing = targetBearing;
   map.easeTo({
     center: [p.lng, p.lat],
     zoom: Math.max(map.getZoom(), 13.2),
     pitch: 62,
-    bearing: routeBearing(route, idx, routePlaying ? 12 : 8),
-    duration: routePlaying ? 120 : 420,
+    bearing: targetBearing,
+    duration: 420,
     easing: t => 1 - Math.pow(1 - t, 3),
     essential: true,
   });
@@ -1821,8 +1860,9 @@ function syncRoutePlayButton() {
 }
 
 function stopRoutePlayback() {
-  if (routePlayTimer) clearInterval(routePlayTimer);
+  if (routePlayTimer) cancelAnimationFrame(routePlayTimer);
   routePlayTimer = null;
+  routePlaybackLastAt = 0;
   routePlaying = false;
   syncRoutePlayButton();
 }
@@ -1834,13 +1874,20 @@ function startRoutePlayback() {
   routePlaying = true;
   routeViewLocked = true;
   routeLockCameraReady = true;
-  routeLastCameraIdx = -1;
+  routePlaybackCursor = Number(scrubber.value || 0);
+  routePlaybackLastAt = 0;
+  routeCameraBearing = null;
   syncRouteLockButton();
   syncRoutePlayButton();
-  if (routePlayTimer) clearInterval(routePlayTimer);
-  routePlayTimer = setInterval(() => {
-    const current = Number(scrubber.value || 0);
-    let next = current + routePlaybackStep(r, current);
+  if (routePlayTimer) cancelAnimationFrame(routePlayTimer);
+  const tick = now => {
+    if (!routePlaying) return;
+    if (!routePlaybackLastAt) routePlaybackLastAt = now;
+    const dt = Math.min(0.05, Math.max(0, (now - routePlaybackLastAt) / 1000));
+    routePlaybackLastAt = now;
+    const current = Math.max(0, Math.min(routePlaybackCursor, r.route.length - 1));
+    const indicesPerSecond = routePlaybackStep(r, Math.floor(current)) / 0.18;
+    let next = current + indicesPerSecond * dt;
     if (next >= r.route.length - 1) {
       next = r.route.length - 1;
       scrubber.value = next;
@@ -1848,9 +1895,12 @@ function startRoutePlayback() {
       stopRoutePlayback();
       return;
     }
+    routePlaybackCursor = next;
     scrubber.value = next;
     setRouteIndex(next);
-  }, 180);
+    routePlayTimer = requestAnimationFrame(tick);
+  };
+  routePlayTimer = requestAnimationFrame(tick);
 }
 
 function routePlaybackStep(route, idx) {
@@ -2620,17 +2670,20 @@ function snapToRoute(latLng) {
 }
 
 function setRouteIndex(i) {
-  const r = ROUTES[activeRouteIdx]; const p = r.route[i];
+  const r = ROUTES[activeRouteIdx];
+  const idx = Math.max(0, Math.min(Number(i) || 0, r.route.length - 1));
+  const p = routePointAt(r, idx);
+  const discreteIdx = Math.max(0, Math.min(Math.round(idx), r.route.length - 1));
   document.getElementById('scrubberPos').textContent =
     (p.d / 1000).toFixed(2) + ' / ' + (r.route[r.route.length-1].d / 1000).toFixed(2) + ' km';
   document.getElementById('kmDone').textContent = (p.d / 1000).toFixed(1) + ' km';
   document.getElementById('elevHere').textContent = Math.round(p.elev) + ' m';
   document.getElementById('poiTitle').textContent =
-    i < 10 ? 'Route start' : (i > r.route.length - 10 ? 'Route end' : 'Along route');
-  updateMainMapProgress(r, i);
-  updateElevationArtifact(r, i);
-  updateRouteCinema(r, i);
-  updateLockedRouteCamera(r, i);
+    idx < 10 ? 'Route start' : (idx > r.route.length - 10 ? 'Route end' : 'Along route');
+  updateMainMapProgress(r, idx);
+  updateElevationArtifact(r, discreteIdx);
+  updateRouteCinema(r, discreteIdx);
+  updateLockedRouteCamera(r, idx);
 }
 
 function jumpToPhoto(idx) {
@@ -2777,7 +2830,8 @@ function canvasResize(img, maxSize, mime, quality) {
 }
 
 document.getElementById('scrubber').addEventListener('input', e => {
-  setRouteIndex(parseInt(e.target.value));
+  routePlaybackCursor = Number(e.target.value || 0);
+  setRouteIndex(routePlaybackCursor);
 });
 
 window.addEventListener('resize', () => {
