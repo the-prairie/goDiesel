@@ -203,7 +203,8 @@ body.ops-mode .curation-panel { display: block; }
 
 .stage { flex: 1; position: relative; min-height: 0; background: #071014; }
 .panel-map { position: absolute; inset: 0; width: auto; height: auto; overflow: hidden; }
-#map { width: 100%; height: 100%; }
+#map { width: 100%; height: 100%; transition: filter 420ms ease; }
+.panel-map.atlas-active #map { filter: saturate(0.78) contrast(1.05) brightness(0.86); }
 .map-fallback { position: absolute; inset: 0; z-index: 1; display: flex; align-items: center; justify-content: center;
                 background: radial-gradient(circle at 50% 42%, rgba(0,241,159,0.11), transparent 34%),
                             linear-gradient(135deg, rgba(6,13,16,0.96), rgba(7,16,20,0.92));
@@ -224,35 +225,37 @@ body.ops-mode .curation-panel { display: block; }
   background: radial-gradient(circle at 50% 50%, rgba(0,241,159,0.2), transparent 38%),
               linear-gradient(180deg, rgba(4,9,11,0.98), rgba(3,7,9,0.99)); }
 .cinema-layer.active[data-mode="flyover"] {
-  background: radial-gradient(circle at 46% 42%, rgba(225,203,150,0.18), transparent 36%),
-              radial-gradient(circle at 60% 62%, rgba(0,241,159,0.11), transparent 42%),
-              linear-gradient(180deg, rgba(12,17,16,0.82), rgba(6,10,10,0.90)); }
+  background: radial-gradient(circle at 50% 38%, rgba(246,222,168,0.10), transparent 34%),
+              linear-gradient(180deg, rgba(5,9,10,0.10), rgba(5,8,8,0.34) 72%, rgba(4,7,7,0.52)); }
 .cinema-layer.active[data-mode="quest"] {
   background: radial-gradient(circle at 52% 46%, rgba(255,211,106,0.16), transparent 28%),
               radial-gradient(circle at 42% 55%, rgba(0,241,159,0.18), transparent 38%),
               linear-gradient(180deg, rgba(5,12,10,0.98), rgba(3,7,9,0.99)); }
 .cinema-layer canvas { width: 100%; height: 100%; display: block; }
+.cinema-layer.active[data-mode="flyover"] canvas { opacity: 0.36; }
 .cinema-label { position: absolute; left: 16px; bottom: 86px;
                 font-family: 'JetBrains Mono', monospace; font-size: 9px;
-                color: var(--teal); letter-spacing: 1.6px; text-transform: uppercase;
-                background: rgba(6,10,12,0.62); border: 1px solid rgba(0,241,159,0.22);
-                border-radius: 7px; padding: 8px 10px; }
+                color: #F0DFAE; letter-spacing: 1.6px; text-transform: uppercase;
+                background: rgba(9,10,9,0.54); border: 1px solid rgba(240,223,174,0.24);
+                border-radius: 7px; padding: 8px 10px; backdrop-filter: blur(10px); }
 .cinema-moment-layer { position: absolute; inset: 0; pointer-events: none; z-index: 6; }
 .cinema-moment { position: absolute; opacity: 0; transform: translate(-50%, -110%) scale(0.94);
                  transition: opacity 220ms ease, transform 220ms ease;
-                 background: rgba(5,10,12,0.78); border: 1px solid rgba(0,241,159,0.28);
+                 background: rgba(11,12,10,0.68); border: 1px solid rgba(240,223,174,0.28);
                  border-radius: 8px; padding: 8px 10px; min-width: 112px;
-                 box-shadow: 0 12px 34px rgba(0,0,0,0.28), 0 0 22px rgba(0,241,159,0.08); }
+                 box-shadow: 0 12px 34px rgba(0,0,0,0.26), 0 0 22px rgba(232,212,154,0.08);
+                 backdrop-filter: blur(12px); }
 .cinema-moment.active { opacity: 1; transform: translate(-50%, -126%) scale(1); }
 .cinema-moment b { display: block; color: #FFF; font-size: 11px; line-height: 1.2; }
 .cinema-moment span { display: block; margin-top: 4px; font-family: 'JetBrains Mono', monospace;
-                      color: var(--teal); font-size: 8px; letter-spacing: 1.2px; text-transform: uppercase; }
-.cinema-memory { position: absolute; opacity: 0; width: 126px;
+                      color: #F0DFAE; font-size: 8px; letter-spacing: 1.2px; text-transform: uppercase; }
+.cinema-memory { position: absolute; opacity: 0; width: 148px;
                  transform: translate(-50%, -112%) scale(0.92) rotate(-1deg);
                  transition: opacity 240ms ease, transform 240ms ease;
-                 background: rgba(245,235,212,0.10); border: 1px solid rgba(232,212,154,0.30);
-                 border-radius: 10px; padding: 6px;
-                 box-shadow: 0 18px 42px rgba(0,0,0,0.34), 0 0 24px rgba(232,212,154,0.08); }
+                 background: rgba(246,238,218,0.16); border: 1px solid rgba(232,212,154,0.34);
+                 border-radius: 10px; padding: 7px;
+                 box-shadow: 0 18px 42px rgba(0,0,0,0.32), 0 0 24px rgba(232,212,154,0.08);
+                 backdrop-filter: blur(14px); }
 .cinema-memory.active { opacity: 1; transform: translate(-50%, -122%) scale(1) rotate(-1deg); }
 .cinema-memory img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover;
                      display: block; border-radius: 7px; filter: saturate(0.92) contrast(1.04); }
@@ -284,8 +287,11 @@ body.ops-mode .curation-panel { display: block; }
              background: rgba(10,12,14,0.88); border: 1px solid var(--border);
              border-radius: 8px; padding: 10px 12px;
              backdrop-filter: blur(8px); max-width: 320px; z-index: 3; }
-.detail.cinema-playing .info-card { opacity: 0.52; transition: opacity 260ms ease; }
-.detail.cinema-playing .artifact-panel { opacity: 0.24; transform: translateY(4px);
+.panel-map.atlas-active .info-card { background: rgba(10,11,10,0.70); border-color: rgba(240,223,174,0.20); }
+.detail.cinema-playing .info-card { opacity: 0.62; transition: opacity 260ms ease; }
+.panel-map.atlas-active .artifact-panel,
+.detail.cinema-playing .artifact-panel { opacity: 0; transform: translateY(4px);
+  pointer-events: none;
   transition: opacity 260ms ease, transform 260ms ease; }
 .detail.cinema-playing .info-card:hover,
 .detail.cinema-playing .artifact-panel:hover { opacity: 0.74; transform: translateY(0); }
@@ -732,12 +738,14 @@ let routePlaying = false;
 let routePlayTimer = null;
 let routePlaySpeed = 4;
 const ROUTE_SPEEDS = [1, 4, 12];
+const queryParams = new URLSearchParams(location.search);
+const SHOW_DEV_CINEMA_MODES = queryParams.get('devModes') === '1';
 let artifactRenderer = null, artifactScene = null, artifactCamera = null;
 let artifactFullLine = null, artifactProgressLine = null, artifactMarker = null, artifactBlocks = [];
 let artifactPoints = [], artifactSlug = null;
 let routeCinemaEnabled = false;
-const ROUTE_CINEMA_MODES = ['artifact', 'flyover', 'quest'];
-let routeCinemaMode = 'artifact';
+const ROUTE_CINEMA_MODES = SHOW_DEV_CINEMA_MODES ? ['artifact', 'flyover', 'quest'] : ['flyover'];
+let routeCinemaMode = 'flyover';
 let cinemaRenderer = null, cinemaScene = null, cinemaCamera = null;
 let cinemaFullLine = null, cinemaProgressLine = null, cinemaMarker = null, cinemaSurface = null;
 let cinemaPoints = [], cinemaSlug = null, cinemaDecor = [], cinemaMoments = [], cinemaMemories = [];
@@ -753,10 +761,10 @@ const galleryFilters = {
   theme: 'All',
 };
 
-if (new URLSearchParams(location.search).get('ops') === '1') {
+if (queryParams.get('ops') === '1') {
   document.body.classList.add('ops-mode');
 }
-const requestedCinemaModeRaw = new URLSearchParams(location.search).get('lab');
+const requestedCinemaModeRaw = queryParams.get('lab');
 const requestedCinemaMode = requestedCinemaModeRaw === 'memory' || requestedCinemaModeRaw === 'atlas'
   ? 'flyover'
   : requestedCinemaModeRaw;
@@ -1098,19 +1106,19 @@ function addRouteLayers(targetMap, route, { includePhotos = false } = {}) {
   targetMap.addSource('route-point', { type: 'geojson', data: pointFeature(route.route[0]) });
   targetMap.addLayer({
     id: 'route-full-glow', type: 'line', source: 'route-full',
-    paint: { 'line-color': '#00F19F', 'line-opacity': 0.20, 'line-width': 8, 'line-blur': 8 },
+    paint: { 'line-color': '#F0DFAE', 'line-opacity': 0.18, 'line-width': 10, 'line-blur': 10 },
   });
   targetMap.addLayer({
     id: 'route-full', type: 'line', source: 'route-full',
-    paint: { 'line-color': '#BFEFE1', 'line-opacity': 0.35, 'line-width': 3 },
+    paint: { 'line-color': '#E9EFE5', 'line-opacity': 0.46, 'line-width': 3 },
   });
   targetMap.addLayer({
     id: 'route-progress', type: 'line', source: 'route-progress',
-    paint: { 'line-color': '#00F19F', 'line-opacity': 0.98, 'line-width': 5 },
+    paint: { 'line-color': '#00F19F', 'line-opacity': 0.92, 'line-width': 4.5 },
   });
   targetMap.addLayer({
     id: 'route-point-halo', type: 'circle', source: 'route-point',
-    paint: { 'circle-radius': 15, 'circle-color': '#00F19F', 'circle-opacity': 0.24, 'circle-blur': 0.45 },
+    paint: { 'circle-radius': 18, 'circle-color': '#F0DFAE', 'circle-opacity': 0.22, 'circle-blur': 0.56 },
   });
   targetMap.addLayer({
     id: 'route-point', type: 'circle', source: 'route-point',
@@ -1120,7 +1128,7 @@ function addRouteLayers(targetMap, route, { includePhotos = false } = {}) {
     targetMap.addSource('route-photos', { type: 'geojson', data: photoFeatures() });
     targetMap.addLayer({
       id: 'route-photos', type: 'circle', source: 'route-photos',
-      paint: { 'circle-radius': 6, 'circle-color': '#0093E7', 'circle-stroke-color': '#FFFFFF', 'circle-stroke-width': 2 },
+      paint: { 'circle-radius': 6, 'circle-color': '#F0DFAE', 'circle-stroke-color': '#11130F', 'circle-stroke-width': 2 },
     });
     targetMap.on('click', 'route-photos', e => {
       const idx = e.features?.[0]?.properties?.idx;
@@ -1201,6 +1209,11 @@ function initMainMap(route) {
     map.fitBounds(routeBounds(route), { padding: 86, duration: 900, pitch: 56, bearing: -18 });
     map.once('moveend', () => { routeLockCameraReady = true; });
     map.on('click', e => snapToRoute(e.lngLat));
+    map.on('move', () => {
+      if (routeCinemaEnabled && routeCinemaMode === 'flyover') {
+        updateCinemaMomentLabels(Number(document.getElementById('scrubber')?.value || 0));
+      }
+    });
     updateMainMapProgress(route, 0);
     hideMapFallback();
   });
@@ -1431,20 +1444,27 @@ function syncRouteCinemaButton() {
   const btn = document.getElementById('routeCinemaBtn');
   const modeBtn = document.getElementById('routeModeBtn');
   const layer = document.getElementById('cinemaLayer');
-  if (btn) btn.classList.toggle('active', routeCinemaEnabled);
+  const panelMap = document.querySelector('.panel-map');
+  if (btn) {
+    btn.classList.toggle('active', routeCinemaEnabled);
+    btn.textContent = routeCinemaEnabled && routeCinemaMode === 'flyover' ? 'EXIT ATLAS' : 'ENTER ROUTE';
+  }
   if (modeBtn) {
-    modeBtn.classList.toggle('visible', routeCinemaEnabled);
+    modeBtn.classList.toggle('visible', routeCinemaEnabled && SHOW_DEV_CINEMA_MODES);
     modeBtn.textContent = routeCinemaMode === 'flyover' ? 'ATLAS' : (routeCinemaMode === 'quest' ? 'QUEST' : routeCinemaMode.toUpperCase());
   }
   if (layer) {
     layer.classList.toggle('active', routeCinemaEnabled);
     layer.dataset.mode = routeCinemaMode;
   }
+  if (panelMap) {
+    panelMap.classList.toggle('atlas-active', routeCinemaEnabled && routeCinemaMode === 'flyover');
+  }
   const label = document.getElementById('cinemaLabel');
   if (label) {
     label.textContent = {
       artifact: 'Artifact mode · real route sculpture',
-      flyover: 'Memory Atlas · real route, remembered places',
+      flyover: 'Memory Atlas · real map, remembered places',
       quest: 'Quest world · real checkpoints, playful atmosphere',
     }[routeCinemaMode];
   }
@@ -1464,6 +1484,7 @@ function toggleRouteCinema() {
 }
 
 function cycleRouteCinemaMode() {
+  if (!SHOW_DEV_CINEMA_MODES) return;
   const idx = ROUTE_CINEMA_MODES.indexOf(routeCinemaMode);
   routeCinemaMode = ROUTE_CINEMA_MODES[(idx + 1) % ROUTE_CINEMA_MODES.length];
   syncRouteCinemaButton();
@@ -1544,10 +1565,11 @@ function initRouteCinema(route) {
   }
   cinemaSlug = route.slug;
   cinemaPoints = routeCinemaPointsFor(route);
+  const isAtlas = routeCinemaMode === 'flyover';
   cinemaScene = new THREE.Scene();
   cinemaScene.fog = new THREE.Fog(
     routeCinemaMode === 'quest' ? 0x061211 : 0x030709,
-    routeCinemaMode === 'flyover' ? 7.5 : 8,
+    isAtlas ? 42 : 8,
     routeCinemaMode === 'artifact' ? 18 : 20
   );
   cinemaCamera = new THREE.PerspectiveCamera(48, 1, 0.1, 60);
@@ -1560,55 +1582,58 @@ function initRouteCinema(route) {
   cinemaRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   cinemaRenderer.setClearColor(0x000000, 0);
 
-  const ambient = new THREE.AmbientLight(routeCinemaMode === 'flyover' ? 0xf1dfb4 : (routeCinemaMode === 'quest' ? 0xb8f0d8 : 0x9fd8c9), 1.18);
-  const key = new THREE.DirectionalLight(routeCinemaMode === 'flyover' ? 0xfff6dc : 0xffffff, routeCinemaMode === 'flyover' ? 1.55 : 1.55);
+  const ambient = new THREE.AmbientLight(isAtlas ? 0xf1dfb4 : (routeCinemaMode === 'quest' ? 0xb8f0d8 : 0x9fd8c9), 1.18);
+  const key = new THREE.DirectionalLight(isAtlas ? 0xfff6dc : 0xffffff, isAtlas ? 1.1 : 1.55);
   key.position.set(3, 7, 5);
-  const rim = new THREE.DirectionalLight(routeCinemaMode === 'flyover' ? 0xe8d49a : 0x00f19f, routeCinemaMode === 'artifact' ? 0.55 : 0.9);
+  const rim = new THREE.DirectionalLight(isAtlas ? 0xe8d49a : 0x00f19f, routeCinemaMode === 'artifact' ? 0.55 : 0.9);
   rim.position.set(-5, 3, -4);
   cinemaScene.add(ambient, key, rim);
 
-  const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(13, 13, routeCinemaMode === 'artifact' ? 18 : 28, routeCinemaMode === 'artifact' ? 18 : 28),
-    new THREE.MeshStandardMaterial({
-      color: routeCinemaMode === 'quest' ? 0x0c211c : 0x071115,
-      roughness: 0.82,
-      metalness: 0.05,
-      transparent: true,
-      opacity: routeCinemaMode === 'flyover' ? 0.24 : 0.76,
-      wireframe: routeCinemaMode !== 'flyover'
-    })
-  );
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.y = -0.74;
-  cinemaSurface = floor;
-  cinemaScene.add(floor);
+  cinemaSurface = null;
+  if (!isAtlas) {
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(13, 13, routeCinemaMode === 'artifact' ? 18 : 28, routeCinemaMode === 'artifact' ? 18 : 28),
+      new THREE.MeshStandardMaterial({
+        color: routeCinemaMode === 'quest' ? 0x0c211c : 0x071115,
+        roughness: 0.82,
+        metalness: 0.05,
+        transparent: true,
+        opacity: 0.76,
+        wireframe: true
+      })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -0.74;
+    cinemaSurface = floor;
+    cinemaScene.add(floor);
+  }
 
-  if (routeCinemaMode !== 'artifact') {
+  if (!isAtlas && routeCinemaMode !== 'artifact') {
     const grid = new THREE.GridHelper(13, routeCinemaMode === 'quest' ? 18 : 13, routeCinemaMode === 'flyover' ? 0xe8d49a : 0x00f19f, 0x2d4d4b);
     grid.position.y = -0.735;
     grid.material.transparent = true;
-    grid.material.opacity = routeCinemaMode === 'flyover' ? 0.055 : (routeCinemaMode === 'quest' ? 0.18 : 0.1);
+    grid.material.opacity = routeCinemaMode === 'quest' ? 0.18 : 0.1;
     cinemaScene.add(grid);
   }
 
   cinemaFullLine = new THREE.Mesh(
-    cinemaRouteGeometry(cinemaPoints, routeCinemaMode === 'quest' ? 0.046 : 0.038),
-    new THREE.MeshBasicMaterial({ color: routeCinemaMode === 'flyover' ? 0xbaf5dc : 0x00f19f, transparent: true, opacity: routeCinemaMode === 'artifact' ? 0.96 : 0.78 })
+    cinemaRouteGeometry(cinemaPoints, isAtlas ? 0.006 : (routeCinemaMode === 'quest' ? 0.046 : 0.038)),
+    new THREE.MeshBasicMaterial({ color: isAtlas ? 0xf0dfae : 0x00f19f, transparent: true, opacity: isAtlas ? 0.0 : (routeCinemaMode === 'artifact' ? 0.96 : 0.78) })
   );
   cinemaScene.add(cinemaFullLine);
   cinemaProgressLine = new THREE.Mesh(
-    cinemaRouteGeometry(cinemaPoints.slice(0, 2), routeCinemaMode === 'quest' ? 0.065 : 0.055),
-    new THREE.MeshBasicMaterial({ color: routeCinemaMode === 'flyover' ? 0xe8d49a : (routeCinemaMode === 'quest' ? 0xffd36a : 0x00f19f), transparent: true, opacity: 0.98 })
+    cinemaRouteGeometry(cinemaPoints.slice(0, 2), isAtlas ? 0.006 : (routeCinemaMode === 'quest' ? 0.065 : 0.055)),
+    new THREE.MeshBasicMaterial({ color: isAtlas ? 0xe8d49a : (routeCinemaMode === 'quest' ? 0xffd36a : 0x00f19f), transparent: true, opacity: isAtlas ? 0.0 : 0.98 })
   );
   cinemaScene.add(cinemaProgressLine);
   cinemaMarker = new THREE.Mesh(
-    new THREE.SphereGeometry(routeCinemaMode === 'flyover' ? 0.15 : (routeCinemaMode === 'quest' ? 0.22 : 0.18), 24, 16),
-    new THREE.MeshStandardMaterial({ color: 0xfff7df, emissive: routeCinemaMode === 'flyover' ? 0xe8d49a : (routeCinemaMode === 'quest' ? 0xffb000 : 0x00f19f), emissiveIntensity: routeCinemaMode === 'flyover' ? 0.42 : 0.9 })
+    new THREE.SphereGeometry(isAtlas ? 0.1 : (routeCinemaMode === 'quest' ? 0.22 : 0.18), 24, 16),
+    new THREE.MeshStandardMaterial({ color: 0xfff7df, emissive: isAtlas ? 0xe8d49a : (routeCinemaMode === 'quest' ? 0xffb000 : 0x00f19f), emissiveIntensity: isAtlas ? 0.1 : 0.9, transparent: true, opacity: isAtlas ? 0.0 : 1 })
   );
   cinemaScene.add(cinemaMarker);
   const markerHalo = new THREE.Mesh(
-    new THREE.SphereGeometry(routeCinemaMode === 'flyover' ? 0.28 : (routeCinemaMode === 'quest' ? 0.42 : 0.32), 24, 16),
-    new THREE.MeshBasicMaterial({ color: routeCinemaMode === 'flyover' ? 0xe8d49a : (routeCinemaMode === 'quest' ? 0xffd36a : 0x00f19f), transparent: true, opacity: 0.14 })
+    new THREE.SphereGeometry(isAtlas ? 0.18 : (routeCinemaMode === 'quest' ? 0.42 : 0.32), 24, 16),
+    new THREE.MeshBasicMaterial({ color: isAtlas ? 0xe8d49a : (routeCinemaMode === 'quest' ? 0xffd36a : 0x00f19f), transparent: true, opacity: isAtlas ? 0.0 : 0.14 })
   );
   markerHalo.userData.markerHalo = true;
   cinemaMarker.add(markerHalo);
@@ -1628,7 +1653,7 @@ function buildCinemaDecor(route) {
     cinemaScene.add(obj);
     return obj;
   };
-  const total = Math.max(cinemaPoints.length - 1, 1);
+  const total = Math.max((activeRoute.route?.length || cinemaPoints.length) - 1, 1);
   if (routeCinemaMode === 'artifact') {
     const count = Math.min(24, Math.max(10, Math.floor(cinemaPoints.length / 6)));
     for (let i = 0; i < count; i++) {
@@ -1652,50 +1677,6 @@ function buildCinemaDecor(route) {
   }
 
   if (routeCinemaMode === 'flyover') {
-    const shadowPoints = cinemaPoints.map(p => new THREE.Vector3(p.x, -0.69, p.z));
-    add(new THREE.Line(
-      new THREE.BufferGeometry().setFromPoints(shadowPoints),
-      new THREE.LineBasicMaterial({ color: 0xbaf5dc, transparent: true, opacity: 0.16 })
-    ));
-    const horizon = new THREE.Mesh(
-      new THREE.RingGeometry(4.8, 5.0, 80),
-      new THREE.MeshBasicMaterial({ color: 0xe8d49a, transparent: true, opacity: 0.07, side: THREE.DoubleSide })
-    );
-    horizon.rotation.x = -Math.PI / 2;
-    horizon.position.y = -0.68;
-    horizon.userData.flyoverSpin = 0.003;
-    add(horizon);
-    const pts = route.route || [];
-    const highIdx = pts.reduce((best, p, i) => (Number(p.elev) || 0) > (Number(pts[best]?.elev) || 0) ? i : best, 0);
-    routeMomentSpecs(route).forEach((moment, i) => {
-      const idx = moment.idx;
-      const p = cinemaPoints[Math.max(0, Math.min(idx, total))];
-      const ring = new THREE.Mesh(
-        new THREE.TorusGeometry(moment.key === 'finish' ? 0.34 : 0.22, 0.012, 8, 36),
-        new THREE.MeshBasicMaterial({ color: moment.key === 'high' ? 0xe8d49a : 0xbaf5dc, transparent: true, opacity: 0.16 })
-      );
-      ring.position.set(p.x, p.y + 0.08, p.z);
-      ring.rotation.x = Math.PI / 2;
-      ring.userData.flyoverBeat = true;
-      ring.userData.routeIdx = idx;
-      ring.userData.momentKey = moment.key;
-      add(ring);
-    });
-    for (let i = 0; i < 52; i++) {
-      const base = cinemaPoints[Math.floor(((i * 19) % 47) / 46 * total)] || cinemaPoints[0];
-      const mote = new THREE.Mesh(
-        new THREE.SphereGeometry(0.012 + (i % 4) * 0.004, 8, 8),
-        new THREE.MeshBasicMaterial({ color: i % 6 === 0 ? 0xe8d49a : 0xbaf5dc, transparent: true, opacity: 0.10 })
-      );
-      mote.position.set(
-        base.x + Math.sin(i * 1.9) * 0.78,
-        base.y + 0.18 + ((i % 9) / 9) * 0.8,
-        base.z + Math.cos(i * 1.4) * 0.78
-      );
-      mote.userData.flyoverMote = true;
-      mote.userData.phase = i * 0.37;
-      add(mote);
-    }
     return;
   }
 
@@ -1791,34 +1772,51 @@ function stopCinemaLoop() {
 }
 
 function updateCinemaMomentLabels(safeIdx) {
-  if (!cinemaRenderer || !cinemaCamera || routeCinemaMode !== 'flyover') {
+  if (routeCinemaMode !== 'flyover') {
     cinemaMoments.forEach(moment => moment.el?.classList.remove('active'));
     cinemaMemories.forEach(memory => memory.el?.classList.remove('active'));
     return;
   }
-  const canvas = cinemaRenderer.domElement;
-  const rect = canvas.getBoundingClientRect();
-  const total = Math.max(cinemaPoints.length - 1, 1);
-  const proximity = Math.max(8, Math.floor(total * 0.045));
-  const placeElement = (item, point, offset = 0, minTop = 84) => {
-    if (!point || !item.el) return false;
-    const projected = point.clone().project(cinemaCamera);
-    const visible = Math.abs(safeIdx - item.idx) <= proximity && projected.z < 1;
+  const activeRoute = ROUTES[activeRouteIdx];
+  const layer = document.getElementById('cinemaMomentLayer');
+  const rect = (layer || cinemaRenderer?.domElement)?.getBoundingClientRect();
+  if (!rect || !activeRoute) return;
+  const total = Math.max((activeRoute.route?.length || cinemaPoints.length) - 1, 1);
+  const momentProximity = Math.max(8, Math.floor(total * 0.045));
+  const memoryProximity = Math.max(18, Math.floor(total * 0.12));
+  const useMapProjection = map && mapSlug === activeRoute.slug && typeof map.project === 'function';
+  const projectedPoint = item => {
+    if (useMapProjection) {
+      const geo = activeRoute.route[Math.max(0, Math.min(item.idx, activeRoute.route.length - 1))];
+      if (!geo) return null;
+      const projected = map.project([geo.lng, geo.lat]);
+      return { x: projected.x, y: projected.y, visible: true };
+    }
+    if (!cinemaRenderer || !cinemaCamera || !cinemaPoints[item.idx]) return null;
+    const projected = cinemaPoints[item.idx].clone().project(cinemaCamera);
+    return {
+      x: (projected.x * 0.5 + 0.5) * rect.width,
+      y: (-projected.y * 0.5 + 0.5) * rect.height,
+      visible: projected.z < 1
+    };
+  };
+  const placeElement = (item, offset = 0, minTop = 84, activationWindow = momentProximity) => {
+    if (!item.el) return false;
+    const projected = projectedPoint(item);
+    const visible = Boolean(projected) && Math.abs(safeIdx - item.idx) <= activationWindow && projected.visible;
     item.el.classList.toggle('active', visible);
     if (visible) {
-      const x = (projected.x * 0.5 + 0.5) * rect.width;
-      const y = (-projected.y * 0.5 + 0.5) * rect.height;
-      item.el.style.left = `${Math.max(86, Math.min(rect.width - 86, x + offset))}px`;
-      item.el.style.top = `${Math.max(minTop, Math.min(rect.height - 132, y))}px`;
+      item.el.style.left = `${Math.max(86, Math.min(rect.width - 86, projected.x + offset))}px`;
+      item.el.style.top = `${Math.max(minTop, Math.min(rect.height - 132, projected.y))}px`;
     }
     return visible;
   };
   cinemaMoments.forEach(moment => {
-    placeElement(moment, cinemaPoints[moment.idx]);
+    placeElement(moment);
   });
   const nearbyMemories = cinemaMemories
     .map((memory, i) => ({ memory, i, distance: Math.abs(safeIdx - memory.idx) }))
-    .filter(item => item.distance <= proximity)
+    .filter(item => item.distance <= memoryProximity)
     .sort((a, b) => a.distance - b.distance);
   const activeMemory = nearbyMemories[0]?.memory;
   cinemaMemories.forEach((memory, i) => {
@@ -1826,7 +1824,7 @@ function updateCinemaMomentLabels(safeIdx) {
       memory.el?.classList.remove('active');
       return;
     }
-    placeElement(memory, cinemaPoints[memory.idx], i % 2 ? 46 : -46, 176);
+    placeElement(memory, i % 2 ? 46 : -46, 176, memoryProximity);
   });
 }
 
