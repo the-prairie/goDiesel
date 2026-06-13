@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ideation: Google Earth Route World</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #05090b;
+      --panel: #0b1216;
+      --panel-2: #111a1f;
+      --ink: #eef4ef;
+      --muted: #99a59e;
+      --dim: #68736f;
+      --line: #26343a;
+      --accent: #19f2aa;
+      --accent-2: #d6c18b;
+      --warn: #ffcf70;
+      --bad: #ff8b7b;
+      --shadow: rgba(0, 0, 0, 0.35);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 18% 0%, rgba(25, 242, 170, 0.08), transparent 32rem),
+        linear-gradient(180deg, #081013 0%, var(--bg) 42rem);
+      color: var(--ink);
+      font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code { color: #c4f6df; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+    .page {
+      width: min(1120px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 44px 0 64px;
+    }
+
+    header {
+      border: 1px solid var(--line);
+      background: rgba(7, 13, 16, 0.88);
+      box-shadow: 0 24px 80px var(--shadow);
+      padding: 28px;
+      border-radius: 8px;
+    }
+
+    .kicker {
+      color: var(--accent);
+      font: 700 11px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    h1, h2, h3 {
+      margin: 0;
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    h1 {
+      margin-top: 14px;
+      max-width: 760px;
+      font-size: clamp(34px, 5vw, 64px);
+      text-transform: uppercase;
+    }
+
+    h2 {
+      margin: 48px 0 16px;
+      font-size: 20px;
+      text-transform: uppercase;
+    }
+
+    h3 {
+      font-size: 20px;
+    }
+
+    p {
+      max-width: 76ch;
+      color: var(--muted);
+      margin: 12px 0 0;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 22px;
+      color: var(--muted);
+      font: 700 12px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .meta span {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 9px 10px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .section {
+      margin-top: 22px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(11, 18, 22, 0.82);
+      overflow: hidden;
+    }
+
+    .section-body {
+      padding: 24px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .fact, .axis, .idea, .cut-row {
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.025);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .fact b, .axis b {
+      display: block;
+      color: var(--ink);
+      margin-bottom: 8px;
+    }
+
+    .fact span, .axis span {
+      color: var(--muted);
+    }
+
+    .jump-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+
+    .jump-list a {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 7px 10px;
+      color: var(--ink);
+      background: rgba(255, 255, 255, 0.025);
+      font-size: 12px;
+    }
+
+    .idea {
+      margin-top: 14px;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .idea-head {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 14px;
+      align-items: center;
+      padding: 18px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(25, 242, 170, 0.035);
+    }
+
+    .rank {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(25, 242, 170, 0.5);
+      border-radius: 999px;
+      color: var(--accent);
+      font: 800 13px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .tag {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 6px 8px;
+      color: var(--muted);
+      font: 700 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      white-space: nowrap;
+    }
+
+    .tag.good { color: var(--accent); border-color: rgba(25, 242, 170, 0.45); }
+    .tag.gold { color: var(--accent-2); border-color: rgba(214, 193, 139, 0.45); }
+
+    .idea-content {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+      gap: 20px;
+      padding: 18px;
+    }
+
+    .field {
+      margin-top: 14px;
+    }
+
+    .field:first-child { margin-top: 0; }
+
+    .field b {
+      display: block;
+      color: var(--accent);
+      font: 800 11px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      margin-bottom: 6px;
+    }
+
+    .field span {
+      color: var(--muted);
+    }
+
+    .diagram {
+      min-height: 220px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01));
+      display: grid;
+      place-items: center;
+      padding: 12px;
+    }
+
+    .diagram svg {
+      width: 100%;
+      height: auto;
+      max-height: 260px;
+    }
+
+    .cuts {
+      display: grid;
+      gap: 10px;
+    }
+
+    .cut-row {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 14px;
+    }
+
+    .cut-row b { color: var(--ink); }
+    .cut-row span { color: var(--muted); }
+
+    .references ul {
+      margin: 12px 0 0;
+      padding-left: 20px;
+      color: var(--muted);
+    }
+
+    .composition-signal {
+      margin-top: 38px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+      color: var(--dim);
+      font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    @media (max-width: 860px) {
+      .grid, .idea-content, .cut-row {
+        grid-template-columns: 1fr;
+      }
+
+      .idea-head {
+        grid-template-columns: auto 1fr;
+      }
+
+      .tag-row {
+        grid-column: 1 / -1;
+        justify-content: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <div class="kicker">ce-ideate artifact</div>
+      <h1>Ideation: Google Earth Route World</h1>
+      <p>This is a ranked ideation pass for making goDiesel feel like realistic map navigation with a game-like route layer, without bouncing the user between Street View, personal photos, satellite panels, and flat map views.</p>
+      <div class="meta">
+        <span>Date: <time datetime="2026-06-13">2026-06-13</time></span>
+        <span>Topic: google-earth-route-world</span>
+        <span>Mode: repo-grounded</span>
+      </div>
+    </header>
+
+    <section class="section" aria-labelledby="grounding">
+      <div class="section-body">
+        <h2 id="grounding">Codebase Context</h2>
+        <p>The current app has already moved away from static personal photos toward a route playback experience: MapLibre powers the main atlas, Google Street View powers the route-cam, and Three.js powers route cinema experiments. The spike at <code>docs/spikes/2026-06-13-google-earth-route-navigation.md</code> shows that the local Google key can fetch the Photorealistic 3D Tiles root tileset, so a real Earth-style prototype is feasible rather than a fake terrain-map approximation.</p>
+        <div class="grid">
+          <div class="fact">
+            <b>Continuity gap</b>
+            <span>Street View is vivid but sparse. It works best as a ground-level moment, not as the primary world.</span>
+          </div>
+          <div class="fact">
+            <b>Trust gap</b>
+            <span>Ungeotagged or mismatched personal photos undermine the promise that the route world is real.</span>
+          </div>
+          <div class="fact">
+            <b>Technical opening</b>
+            <span>Google Photorealistic 3D Tiles plus CesiumJS can give the route one continuous, photorealistic base.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="axes">
+      <div class="section-body">
+        <h2 id="axes">Topic Axes</h2>
+        <div class="grid">
+          <div class="axis"><b>Primary world model</b><span>Which visual source owns the route experience.</span></div>
+          <div class="axis"><b>Camera and motion</b><span>How the app makes movement feel authored, smooth, and legible.</span></div>
+          <div class="axis"><b>Ground-level realism</b><span>How Street View fits without creating jarring source switches.</span></div>
+          <div class="axis"><b>Quest/game layer</b><span>How the route becomes playable while staying truthful to place.</span></div>
+          <div class="axis"><b>Coverage and fallback</b><span>How the app handles sparse imagery, weak devices, cost, and mobile constraints.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="ranked">
+      <div class="section-body">
+        <h2 id="ranked">Ranked Ideas</h2>
+        <nav class="jump-list" aria-label="Ranked idea links">
+          <a href="#idea-1">1. Earth Replay Lab</a>
+          <a href="#idea-2">2. Route Director</a>
+          <a href="#idea-3">3. Windshield Moments</a>
+          <a href="#idea-4">4. Quest Signal Layer</a>
+          <a href="#idea-5">5. Coverage Preflight</a>
+          <a href="#idea-6">6. Memory Trailer Export</a>
+        </nav>
+
+        <article class="idea" id="idea-1">
+          <div class="idea-head">
+            <div class="rank">1</div>
+            <h3>Earth Replay Lab</h3>
+            <div class="tag-row"><span class="tag good">Conf 90%</span><span class="tag gold">High</span><span class="tag">Primary world</span></div>
+          </div>
+          <div class="idea-content">
+            <div>
+              <div class="field"><b>Description</b><span>Build <code>?lab=earth</code> as a desktop-first route viewer using CesiumJS and Google Photorealistic 3D Tiles. The route line, marker, playback progress, and camera all live in one 3D world. MapLibre remains the stable atlas outside the lab.</span></div>
+              <div class="field"><b>Basis</b><span>direct: the spike states the local key returned the Google 3D Tiles root tileset and recommends CesiumJS because the goal is a continuous cinematic 3D route world, not a pitched map.</span></div>
+              <div class="field"><b>Rationale</b><span>This directly addresses the user's core ask: realistic map/navigation with a game-like route layer, one seamless visual source, and no fake terrain cam.</span></div>
+              <div class="field"><b>Downsides</b><span>High runtime weight, GPU cost, billing exposure, and camera tuning risk. Needs isolation until the experience is proven.</span></div>
+              <div class="field"><b>Complexity</b><span>High</span></div>
+            </div>
+            <div class="diagram" aria-label="Earth lab route layer concept">
+              <svg viewBox="0 0 360 240" role="img">
+                <defs>
+                  <linearGradient id="earth-bg" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#17382f"/>
+                    <stop offset="55%" stop-color="#685f45"/>
+                    <stop offset="100%" stop-color="#0a1115"/>
+                  </linearGradient>
+                  <filter id="glow">
+                    <feGaussianBlur stdDeviation="4" result="blur"/>
+                    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                  </filter>
+                </defs>
+                <rect x="0" y="0" width="360" height="240" rx="8" fill="url(#earth-bg)"/>
+                <path d="M16 178 C72 152 88 104 132 124 C176 144 176 54 232 68 C280 80 286 132 344 104" fill="none" stroke="#d6c18b" stroke-width="1" opacity="0.42"/>
+                <path d="M28 180 C84 150 102 114 140 128 C180 142 188 82 228 82 C270 82 288 124 330 108" fill="none" stroke="#19f2aa" stroke-width="6" opacity="0.22" filter="url(#glow)"/>
+                <path d="M28 180 C84 150 102 114 140 128 C180 142 188 82 228 82 C270 82 288 124 330 108" fill="none" stroke="#19f2aa" stroke-width="2.5"/>
+                <circle cx="188" cy="92" r="9" fill="#eef4ef" stroke="#19f2aa" stroke-width="4"/>
+                <path d="M180 50 L206 82 L170 74 Z" fill="#eef4ef" opacity="0.8"/>
+                <text x="20" y="28" fill="#eef4ef" font-family="monospace" font-size="12" font-weight="700">ONE 3D WORLD</text>
+              </svg>
+            </div>
+          </div>
+        </article>
+
+        <article class="idea" id="idea-2">
+          <div class="idea-head">
+            <div class="rank">2</div>
+            <h3>Route Director</h3>
+            <div class="tag-row"><span class="tag good">Conf 84%</span><span class="tag gold">Medium</span><span class="tag">Camera</span></div>
+          </div>
+          <div class="idea-content">
+            <div>
+              <div class="field"><b>Description</b><span>Add a route camera director with named motion states: scout ahead, chase, climb reveal, summit orbit, city glide, and finish pullback. It uses route bearing, slope, curvature, and progress milestones to choose motion language.</span></div>
+              <div class="field"><b>Basis</b><span>direct: the app already smooths bearings and drives route playback; the spike calls out camera height, lookahead, pitch, and route progress sync as core prototype work.</span></div>
+              <div class="field"><b>Rationale</b><span>Photorealistic tiles alone will not make the experience shine. The product feeling comes from controlled motion that understands when to look forward, pull back, slow down, or reveal terrain.</span></div>
+              <div class="field"><b>Downsides</b><span>Bad defaults can cause nausea, clipping, or confusion. Needs a small set of conservative states before more dramatic choreography.</span></div>
+              <div class="field"><b>Complexity</b><span>Medium</span></div>
+            </div>
+            <div class="diagram" aria-label="Route director state concept">
+              <svg viewBox="0 0 360 240" role="img">
+                <rect x="0" y="0" width="360" height="240" rx="8" fill="#0a1115"/>
+                <path d="M34 168 C74 88 118 186 160 116 C196 56 236 144 326 70" fill="none" stroke="#26343a" stroke-width="18" stroke-linecap="round"/>
+                <path d="M34 168 C74 88 118 186 160 116 C196 56 236 144 326 70" fill="none" stroke="#19f2aa" stroke-width="4" stroke-linecap="round"/>
+                <g fill="#eef4ef" font-family="monospace" font-size="10" font-weight="700">
+                  <text x="36" y="194">CHASE</text>
+                  <text x="112" y="74">CLIMB</text>
+                  <text x="208" y="178">ORBIT</text>
+                  <text x="278" y="48">REVEAL</text>
+                </g>
+                <circle cx="34" cy="168" r="6" fill="#d6c18b"/>
+                <circle cx="160" cy="116" r="6" fill="#d6c18b"/>
+                <circle cx="326" cy="70" r="6" fill="#d6c18b"/>
+              </svg>
+            </div>
+          </div>
+        </article>
+
+        <article class="idea" id="idea-3">
+          <div class="idea-head">
+            <div class="rank">3</div>
+            <h3>Windshield Moments</h3>
+            <div class="tag-row"><span class="tag good">Conf 82%</span><span class="tag gold">Medium</span><span class="tag">Ground realism</span></div>
+          </div>
+          <div class="idea-content">
+            <div>
+              <div class="field"><b>Description</b><span>Keep Street View as a deliberate "windshield" moment that appears only at high-confidence route segments or checkpoints. The primary Earth world never splits into a second competing panel by default; instead, Street View appears as a short portal, pause-state, or optional inset with a clear label.</span></div>
+              <div class="field"><b>Basis</b><span>direct: the dogfood report says Street View was materially closer to the requested experience than map cam, but also records sparse and discontinuous coverage.</span></div>
+              <div class="field"><b>Rationale</b><span>This preserves the best part of deployed Street View without letting coverage gaps define the whole UX. It also matches the user's desire for a single coherent source, because the route world remains Earth-first.</span></div>
+              <div class="field"><b>Downsides</b><span>Requires precomputing or caching coverage and being strict about when the portal is allowed to appear.</span></div>
+              <div class="field"><b>Complexity</b><span>Medium</span></div>
+            </div>
+            <div class="diagram" aria-label="Street View portal concept">
+              <svg viewBox="0 0 360 240" role="img">
+                <rect x="0" y="0" width="360" height="240" rx="8" fill="#0b1216"/>
+                <rect x="36" y="32" width="288" height="176" rx="8" fill="#18241f" stroke="#26343a"/>
+                <path d="M58 160 C118 130 116 74 176 110 C216 132 240 90 300 86" fill="none" stroke="#19f2aa" stroke-width="4"/>
+                <circle cx="178" cy="110" r="14" fill="#eef4ef" stroke="#19f2aa" stroke-width="4"/>
+                <rect x="204" y="74" width="86" height="52" rx="6" fill="#d6c18b" opacity="0.18" stroke="#d6c18b"/>
+                <text x="216" y="96" fill="#eef4ef" font-family="monospace" font-size="10" font-weight="700">STREET</text>
+                <text x="216" y="112" fill="#eef4ef" font-family="monospace" font-size="10" font-weight="700">PORTAL</text>
+              </svg>
+            </div>
+          </div>
+        </article>
+
+        <article class="idea" id="idea-4">
+          <div class="idea-head">
+            <div class="rank">4</div>
+            <h3>Quest Signal Layer</h3>
+            <div class="tag-row"><span class="tag good">Conf 78%</span><span class="tag gold">Medium</span><span class="tag">Quest layer</span></div>
+          </div>
+          <div class="idea-content">
+            <div>
+              <div class="field"><b>Description</b><span>Overlay a restrained game layer on the Earth world: glowing route ribbon, objective gates, climb beats, checkpoint labels, finish burst, and a minimal HUD. It should feel like a real route with meaning added, not a fantasy world replacing the place.</span></div>
+              <div class="field"><b>Basis</b><span>reasoned: the product thesis is "real routes, playable days." The route must become game-like through interaction, progression, and feedback while the underlying world stays truthful.</span></div>
+              <div class="field"><b>Rationale</b><span>This is where goDiesel becomes distinct from Google Earth, Strava, or a maps demo. It converts a real run into a quest preview.</span></div>
+              <div class="field"><b>Downsides</b><span>Easy to overdecorate. The layer must stay sparse enough that the photorealistic world remains the hero.</span></div>
+              <div class="field"><b>Complexity</b><span>Medium</span></div>
+            </div>
+            <div class="diagram" aria-label="Quest signal layer concept">
+              <svg viewBox="0 0 360 240" role="img">
+                <rect x="0" y="0" width="360" height="240" rx="8" fill="#111a1f"/>
+                <path d="M22 180 L86 158 L118 104 L164 124 L210 74 L286 92 L338 48" fill="none" stroke="#19f2aa" stroke-width="5" stroke-linecap="round"/>
+                <g stroke="#d6c18b" stroke-width="2" fill="none">
+                  <circle cx="118" cy="104" r="18"/>
+                  <circle cx="210" cy="74" r="18"/>
+                  <circle cx="286" cy="92" r="18"/>
+                </g>
+                <g fill="#eef4ef" font-family="monospace" font-size="10" font-weight="700">
+                  <text x="96" y="78">CLIMB</text>
+                  <text x="188" y="48">GATE</text>
+                  <text x="260" y="126">VIEW</text>
+                </g>
+              </svg>
+            </div>
+          </div>
+        </article>
+
+        <article class="idea" id="idea-5">
+          <div class="idea-head">
+            <div class="rank">5</div>
+            <h3>Coverage Preflight</h3>
+            <div class="tag-row"><span class="tag good">Conf 76%</span><span class="tag gold">Low</span><span class="tag">Fallbacks</span></div>
+          </div>
+          <div class="idea-content">
+            <div>
+              <div class="field"><b>Description</b><span>Before playback, score each route for Earth tile availability, Street View coverage, approximate device capability, route length, and expected load cost. Show a quiet readiness state and pick a deliberate experience: Earth replay, Earth with windshield moments, atlas-only, or desktop-only.</span></div>
+              <div class="field"><b>Basis</b><span>direct: the dogfood report identifies sparse Street View and external resource loading as UX risks; the spike calls out coverage, cost, performance, and mobile as explicit risks.</span></div>
+              <div class="field"><b>Rationale</b><span>The app should never surprise the user with a blank panel, fake cam, or broken photorealistic promise. Preflight lets the product be ambitious and honest.</span></div>
+              <div class="field"><b>Downsides</b><span>Adds precomputation logic and may initially produce conservative results until thresholds are tuned.</span></div>
+              <div class="field"><b>Complexity</b><span>Low</span></div>
+            </div>
+            <div class="diagram" aria-label="Coverage preflight decision concept">
+              <svg viewBox="0 0 360 240" role="img">
+                <rect x="0" y="0" width="360" height="240" rx="8" fill="#0a1115"/>
+                <g font-family="monospace" font-size="11" font-weight="700">
+                  <rect x="24" y="36" width="88" height="46" rx="6" fill="#111a1f" stroke="#26343a"/>
+                  <text x="42" y="64" fill="#eef4ef">ROUTE</text>
+                  <path d="M112 59 L154 59" stroke="#26343a" stroke-width="2"/>
+                  <rect x="154" y="24" width="92" height="70" rx="6" fill="#111a1f" stroke="#19f2aa"/>
+                  <text x="174" y="52" fill="#19f2aa">PREFLIGHT</text>
+                  <text x="180" y="70" fill="#99a59e">SCORE</text>
+                  <path d="M246 59 L294 59" stroke="#26343a" stroke-width="2"/>
+                  <rect x="294" y="36" width="42" height="46" rx="6" fill="#18241f" stroke="#d6c18b"/>
+                  <text x="306" y="64" fill="#d6c18b">GO</text>
+                  <rect x="44" y="136" width="272" height="12" rx="6" fill="#26343a"/>
+                  <rect x="44" y="136" width="206" height="12" rx="6" fill="#19f2aa"/>
+                  <text x="44" y="178" fill="#eef4ef">EARTH 78%  STREET 22%  MOBILE LOW</text>
+                </g>
+              </svg>
+            </div>
+          </div>
+        </article>
+
+        <article class="idea" id="idea-6">
+          <div class="idea-head">
+            <div class="rank">6</div>
+            <h3>Memory Trailer Export</h3>
+            <div class="tag-row"><span class="tag good">Conf 66%</span><span class="tag gold">High</span><span class="tag">Share</span></div>
+          </div>
+          <div class="idea-content">
+            <div>
+              <div class="field"><b>Description</b><span>After Earth replay works interactively, add a short route trailer mode: 12-20 seconds, route intro, climb reveal, one windshield moment when available, finish title card, and shareable output. This replaces static share cards as the premium artifact.</span></div>
+              <div class="field"><b>Basis</b><span>external: cinematic route previews are a familiar product pattern in fitness and travel apps; reasoned: goDiesel's value is emotional route memory, and motion sells that better than a still card.</span></div>
+              <div class="field"><b>Rationale</b><span>This gives the experience a distribution loop without compromising the core route viewer. It should come after the Earth viewer, not before it.</span></div>
+              <div class="field"><b>Downsides</b><span>Exporting video or deterministic captures is a separate technical project and can distract from fixing live playback first.</span></div>
+              <div class="field"><b>Complexity</b><span>High</span></div>
+            </div>
+            <div class="diagram" aria-label="Memory trailer sequence concept">
+              <svg viewBox="0 0 360 240" role="img">
+                <rect x="0" y="0" width="360" height="240" rx="8" fill="#0b1216"/>
+                <g stroke="#26343a" fill="#111a1f">
+                  <rect x="28" y="58" width="72" height="104" rx="6"/>
+                  <rect x="112" y="58" width="72" height="104" rx="6"/>
+                  <rect x="196" y="58" width="72" height="104" rx="6"/>
+                  <rect x="280" y="58" width="52" height="104" rx="6"/>
+                </g>
+                <path d="M42 130 C58 96 78 140 94 94" fill="none" stroke="#19f2aa" stroke-width="3"/>
+                <path d="M126 132 C146 78 166 110 178 82" fill="none" stroke="#d6c18b" stroke-width="3"/>
+                <circle cx="232" cy="110" r="20" fill="none" stroke="#19f2aa" stroke-width="3"/>
+                <text x="294" y="114" fill="#eef4ef" font-family="monospace" font-size="10" font-weight="700">SHARE</text>
+                <text x="38" y="186" fill="#99a59e" font-family="monospace" font-size="10">INTRO</text>
+                <text x="122" y="186" fill="#99a59e" font-family="monospace" font-size="10">CLIMB</text>
+                <text x="204" y="186" fill="#99a59e" font-family="monospace" font-size="10">VIEW</text>
+                <text x="286" y="186" fill="#99a59e" font-family="monospace" font-size="10">CARD</text>
+              </svg>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="cuts">
+      <div class="section-body">
+        <h2 id="cuts">Rejection Summary</h2>
+        <div class="cuts">
+          <div class="cut-row"><b>Full Google Earth clone</b><span>Too broad and not required to validate route playback.</span></div>
+          <div class="cut-row"><b>Replace MapLibre immediately</b><span>Destabilizes the working atlas before the Earth mode proves itself.</span></div>
+          <div class="cut-row"><b>AI-generated route worlds</b><span>Too likely to feel fake, expensive, and disconnected from the user's real route.</span></div>
+          <div class="cut-row"><b>Street View primary renderer</b><span>Ground imagery is too discontinuous for trails, mountains, and sparse coverage areas.</span></div>
+          <div class="cut-row"><b>Default personal-photo layer</b><span>Photos are not reliably geolocated and already conflict with the desired route truth.</span></div>
+          <div class="cut-row"><b>Map-cam fallback as "terrain cam"</b><span>The user has already rejected zoomed-in map views as not photorealistic enough.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section references" aria-labelledby="refs">
+      <div class="section-body">
+        <h2 id="refs">Sources and References</h2>
+        <ul>
+          <li><code>docs/spikes/2026-06-13-google-earth-route-navigation.md</code></li>
+          <li><code>docs/dogfood-reports/2026-06-13-clanker-quest-atlas-dogfood.md</code></li>
+          <li><code>build.py</code> route cam, MapLibre atlas, and route cinema implementation</li>
+          <li><a href="https://developers.google.com/maps/documentation/tile/3d-tiles">Google Maps Platform: Photorealistic 3D Tiles</a></li>
+          <li><a href="https://developers.google.com/maps/documentation/javascript/3d/overview">Google Maps JavaScript API: 3D Maps overview</a></li>
+          <li><a href="https://cesium.com/learn/cesiumjs-learn/cesiumjs-photorealistic-3d-tiles/">CesiumJS: Photorealistic 3D Tiles from Google Maps Platform</a></li>
+        </ul>
+      </div>
+    </section>
+
+    <footer class="composition-signal">Composed 2026-06-13T00:00:00-06:00 by ce-ideate from the current goDiesel route-world context.</footer>
+  </main>
+</body>
+</html>
