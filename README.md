@@ -18,7 +18,13 @@ python3 -m venv .venv
 pip install -r requirements.txt
 ```
 
-No map API key is required. The public app uses MapLibre GL JS with OpenStreetMap raster tiles and MapLibre demo terrain DEM tiles.
+MapLibre works without a key for the main atlas. The Street View route cam needs a browser-restricted Google Maps JavaScript API key in `.env`:
+
+```bash
+GOOGLE_MAPS_API_KEY=your-browser-key
+```
+
+For local dogfooding, allow `http://localhost:8787/*` in Google Cloud. For deploys, also allow the production Cloudflare Pages domain.
 
 ## Build
 
