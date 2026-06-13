@@ -2,6 +2,7 @@ from pathlib import Path
 
 
 BUILD = Path(__file__).with_name("build.py").read_text()
+README = Path(__file__).with_name("README.md").read_text()
 
 
 def test_mobile_route_cam_sits_above_control_stack():
@@ -43,8 +44,8 @@ def test_earth_lab_updates_from_shared_route_index():
 
 def test_earth_camera_uses_route_metrics_not_fixed_constants():
     assert "function earthRouteMetrics(route)" in BUILD
-    assert "function earthCameraProfile(route, playing)" in BUILD
-    assert "const profile = earthCameraProfile(route, routePlaying);" in BUILD
+    assert "function earthCameraProfile(route, playing, scrubbing = false)" in BUILD
+    assert "const profile = earthCameraProfile(route, routePlaying, performance.now() < earthScrubUntil);" in BUILD
     assert "profile.lookahead" in BUILD
     assert "profile.trailing" in BUILD
     assert "profile.pitch" in BUILD
@@ -54,5 +55,28 @@ def test_earth_tile_status_reports_partial_coverage():
     assert "function attachEarthTileStatus(viewer, tileset, token)" in BUILD
     assert "tileFailed.addEventListener" in BUILD
     assert "tileLoadProgressEvent.addEventListener" in BUILD
+    assert "EARTH_PARTIAL_TILE_FAILURE_THRESHOLD" in BUILD
     assert "3D tiles partially unavailable" in BUILD
     assert "Settling 3D tiles" in BUILD
+
+
+def test_earth_replay_has_visible_url_state_toggle():
+    assert 'class="route-control route-earth" id="routeEarthBtn"' in BUILD
+    assert "function toggleEarthReplay()" in BUILD
+    assert "params.set('lab', 'earth');" in BUILD
+    assert "earthBtn.textContent = earthModeEnabled ? 'ATLAS' : 'EARTH';" in BUILD
+
+
+def test_earth_scrub_camera_and_blank_frame_detection():
+    assert "earthScrubUntil = performance.now() + 750;" in BUILD
+    assert "earthViewer.camera.cancelFlight?.();" in BUILD
+    assert "function checkEarthBlankFrame()" in BUILD
+    assert "preserveDrawingBuffer: true" in BUILD
+    assert "3D tiles partially unavailable" in BUILD
+
+
+def test_readme_documents_map_tiles_key_restrictions():
+    assert "Map Tiles API" in README
+    assert "http://localhost:8787/*" in README
+    assert "Cloudflare Pages domain" in README
+    assert "same browser key restriction" in README

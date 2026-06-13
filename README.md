@@ -26,7 +26,7 @@ GOOGLE_MAPS_API_KEY=your-browser-key
 
 Enable the Google Maps JavaScript API for the Street View route cam. Enable the Google Map Tiles API for the experimental Earth Replay Lab at `?lab=earth#quest/13935098460`.
 
-For local dogfooding, allow `http://localhost:8787/*` in Google Cloud. For deploys, also allow the production Cloudflare Pages domain.
+For local dogfooding, allow `http://localhost:8787/*` in Google Cloud. For deploys, also allow the production Cloudflare Pages domain. The same browser key restriction must cover both Maps JavaScript API requests and Map Tiles API 3D tile requests.
 
 ## Build
 
