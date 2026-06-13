@@ -18,11 +18,13 @@ python3 -m venv .venv
 pip install -r requirements.txt
 ```
 
-MapLibre works without a key for the main atlas. The Street View route cam needs a browser-restricted Google Maps JavaScript API key in `.env`:
+MapLibre works without a key for the main atlas. Google-powered previews need a browser-restricted Google API key in `.env`:
 
 ```bash
 GOOGLE_MAPS_API_KEY=your-browser-key
 ```
+
+Enable the Google Maps JavaScript API for the Street View route cam. Enable the Google Map Tiles API for the experimental Earth Replay Lab at `?lab=earth#quest/13935098460`.
 
 For local dogfooding, allow `http://localhost:8787/*` in Google Cloud. For deploys, also allow the production Cloudflare Pages domain.
 

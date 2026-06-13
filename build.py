@@ -504,6 +504,7 @@ template_html = '''<!DOCTYPE html>
 <meta name="theme-color" content="#0B1014">
 <meta name="description" content="Lauren&rsquo;s quest atlas — real runs and rides turned into repeatable adventure challenges.">
 <title>godiesel quest atlas · Lauren Zary</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='10' fill='%2300F19F'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.18.0/dist/maplibre-gl.css">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap');
@@ -705,6 +706,7 @@ body.ops-mode .curation-panel { display: block; }
 .panel-map { position: absolute; inset: 0; width: auto; height: auto; overflow: hidden; }
 #map { width: 100%; height: 100%; transition: filter 420ms ease; }
 .panel-map.atlas-active #map { filter: saturate(0.78) contrast(1.05) brightness(0.86); }
+.panel-map.earth-active #map { opacity: 0; pointer-events: none; }
 .map-fallback { position: absolute; inset: 0; z-index: 1; display: flex; align-items: center; justify-content: center;
                 background: radial-gradient(circle at 50% 42%, rgba(0,241,159,0.11), transparent 34%),
                             linear-gradient(135deg, rgba(6,13,16,0.96), rgba(7,16,20,0.92));
@@ -738,6 +740,44 @@ body.ops-mode .curation-panel { display: block; }
                 color: #F0DFAE; letter-spacing: 1.6px; text-transform: uppercase;
                 background: rgba(9,10,9,0.54); border: 1px solid rgba(240,223,174,0.24);
                 border-radius: 7px; padding: 8px 10px; backdrop-filter: blur(10px); }
+.earth-layer { position: absolute; inset: 0; z-index: 2; display: none;
+               background: radial-gradient(circle at 54% 28%, rgba(240,223,174,0.12), transparent 30%),
+                           linear-gradient(180deg, rgba(4,9,12,0.98), rgba(1,4,6,1)); }
+.earth-layer.active { display: block; }
+.earth-canvas { position: absolute; inset: 0; }
+.earth-layer.loading .earth-canvas,
+.earth-layer.unavailable .earth-canvas { opacity: 0.2; }
+.earth-fallback { position: absolute; inset: 0; z-index: 2; display: none;
+                  align-items: center; justify-content: center;
+                  background: radial-gradient(circle at 50% 42%, rgba(240,223,174,0.12), transparent 34%),
+                              linear-gradient(180deg, rgba(4,8,10,0.82), rgba(4,8,10,0.94));
+                  text-align: center; padding: 28px; box-sizing: border-box; }
+.earth-layer.loading .earth-fallback,
+.earth-layer.unavailable .earth-fallback { display: flex; }
+.earth-fallback-card { width: min(520px, 100%); border: 1px solid rgba(240,223,174,0.30);
+                       border-radius: 10px; padding: 22px;
+                       background: rgba(8,13,15,0.76); backdrop-filter: blur(14px);
+                       box-shadow: 0 24px 70px rgba(0,0,0,0.34); }
+.earth-fallback-kicker { font-family: 'JetBrains Mono', monospace; font-size: 9px;
+                         color: var(--teal); letter-spacing: 1.7px; text-transform: uppercase; }
+.earth-fallback-card b { display: block; margin-top: 9px; color: #FFF; font-size: 17px;
+                         letter-spacing: 0.08em; text-transform: uppercase; }
+.earth-fallback-card span { display: block; margin-top: 10px; color: rgba(255,255,255,0.66);
+                            font-size: 12px; line-height: 1.55; }
+.earth-exit { margin-top: 16px; background: rgba(240,223,174,0.10);
+              border: 1px solid rgba(240,223,174,0.46); color: #F0DFAE;
+              border-radius: 7px; padding: 9px 12px;
+              font-family: 'JetBrains Mono', monospace; font-size: 9px;
+              letter-spacing: 1.3px; text-transform: uppercase; cursor: pointer; }
+.earth-hud { position: absolute; left: 16px; bottom: 86px; z-index: 3;
+             display: none; gap: 12px; align-items: end;
+             background: rgba(8,10,10,0.62); border: 1px solid rgba(240,223,174,0.26);
+             border-radius: 8px; padding: 10px 12px; backdrop-filter: blur(12px);
+             font-family: 'JetBrains Mono', monospace; text-transform: uppercase; }
+.earth-layer.ready .earth-hud { display: flex; }
+.earth-hud b { display: block; color: #F0DFAE; font-size: 9px; letter-spacing: 1.5px; }
+.earth-hud span { display: block; margin-top: 5px; color: rgba(255,255,255,0.66);
+                  font-size: 8px; letter-spacing: 1.1px; }
 .route-cam { position: absolute; right: 18px; bottom: 86px; width: min(360px, 34vw);
              aspect-ratio: 16 / 9; z-index: 4; overflow: hidden;
              border: 1px solid rgba(240,223,174,0.28); border-radius: 8px;
@@ -826,8 +866,10 @@ body.ops-mode .curation-panel { display: block; }
              border-radius: 8px; padding: 10px 12px;
              backdrop-filter: blur(8px); max-width: 320px; z-index: 3; }
 .panel-map.atlas-active .info-card { background: rgba(10,11,10,0.70); border-color: rgba(240,223,174,0.20); }
+.panel-map.earth-active .info-card { background: rgba(8,10,10,0.66); border-color: rgba(240,223,174,0.26); }
 .detail.cinema-playing .info-card { opacity: 0.62; transition: opacity 260ms ease; }
 .panel-map.atlas-active .artifact-panel,
+.panel-map.earth-active .artifact-panel,
 .detail.cinema-playing .artifact-panel { opacity: 0; transform: translateY(4px);
   pointer-events: none;
   transition: opacity 260ms ease, transform 260ms ease; }
@@ -1207,6 +1249,20 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
         <div class="cinema-moment-layer" id="cinemaMomentLayer" aria-hidden="true"></div>
         <div class="cinema-label" id="cinemaLabel">Route cinema · real path + elevation</div>
       </div>
+      <div class="earth-layer" id="earthLayer" aria-label="Earth replay lab">
+        <div class="earth-canvas" id="earthCanvas"></div>
+        <div class="earth-fallback" id="earthFallback">
+          <div class="earth-fallback-card">
+            <div class="earth-fallback-kicker" id="earthFallbackKicker">Earth replay lab</div>
+            <b id="earthFallbackTitle">Earth mode unavailable</b>
+            <span id="earthFallbackCopy">The photorealistic 3D route world could not load in this browser session.</span>
+            <button class="earth-exit" type="button" onclick="exitEarthMode()">Open standard atlas</button>
+          </div>
+        </div>
+        <div class="earth-hud">
+          <div><b>Earth replay</b><span id="earthStatus">Photorealistic 3D tiles</span></div>
+        </div>
+      </div>
       <div class="route-cam" id="routeCam" aria-label="Route dashcam">
         <div class="route-cam-map" id="routeCamMap"></div>
         <div class="route-cam-empty" id="routeCamEmpty">
@@ -1309,6 +1365,10 @@ let artifactPoints = [], artifactSlug = null;
 let routeCinemaEnabled = false;
 const ROUTE_CINEMA_MODES = SHOW_DEV_CINEMA_MODES ? ['artifact', 'flyover', 'quest'] : ['flyover'];
 let routeCinemaMode = 'flyover';
+let earthModeEnabled = false;
+let earthViewer = null, earthTileset = null, earthFullEntity = null, earthProgressEntity = null, earthMarkerEntity = null;
+let earthReady = false, earthSlug = null, earthCameraBearing = null, earthLoadToken = 0;
+let earthCesiumPromise = null;
 let cinemaRenderer = null, cinemaScene = null, cinemaCamera = null;
 let cinemaFullLine = null, cinemaProgressLine = null, cinemaMarker = null, cinemaSurface = null;
 let cinemaPoints = [], cinemaSlug = null, cinemaDecor = [], cinemaMoments = [], cinemaMemories = [];
@@ -1328,9 +1388,14 @@ if (queryParams.get('ops') === '1') {
   document.body.classList.add('ops-mode');
 }
 const requestedCinemaModeRaw = queryParams.get('lab');
+const EARTH_LAB_MODE = requestedCinemaModeRaw === 'earth';
 const requestedCinemaMode = requestedCinemaModeRaw === 'memory' || requestedCinemaModeRaw === 'atlas'
   ? 'flyover'
   : requestedCinemaModeRaw;
+if (EARTH_LAB_MODE) {
+  earthModeEnabled = true;
+  routeCinemaEnabled = false;
+}
 if (ROUTE_CINEMA_MODES.includes(requestedCinemaMode)) {
   routeCinemaMode = requestedCinemaMode;
   routeCinemaEnabled = true;
@@ -1553,6 +1618,7 @@ async function openRoute(i, options = {}) {
 function showGallery(options = {}) {
   const { updateUrl = true } = options;
   stopRoutePlayback();
+  disposeEarthReplay();
   document.getElementById('gallery').style.display = 'grid';
   document.getElementById('detail').classList.remove('active');
   document.getElementById('backBtn').style.display = 'none';
@@ -1565,33 +1631,45 @@ function initRoute() {
   const r = ROUTES[activeRouteIdx];
   stopRoutePlayback();
   allPhotos = [];
-  try {
-    initMainMap(r);
-  } catch (err) {
-    console.warn('MapLibre route map unavailable', err);
-    map = null;
-    mapSlug = r.slug;
+  if (earthModeEnabled) {
+    disposeEarthReplay();
+    if (map) {
+      map.remove();
+      map = null;
+      mapSlug = null;
+    }
+    stopCinemaLoop();
+    setEarthMode('loading', 'Loading Earth mode', 'Building a photorealistic 3D route world from Google Map Tiles.');
+  } else {
+    disposeEarthReplay();
+    try {
+      initMainMap(r);
+    } catch (err) {
+      console.warn('MapLibre route map unavailable', err);
+      map = null;
+      mapSlug = r.slug;
+    }
+    try {
+      initElevationArtifact(r);
+    } catch (err) {
+      console.warn('Elevation artifact unavailable', err);
+      artifactRenderer = null;
+      artifactSlug = r.slug;
+    }
+    try {
+      initRouteCinema(r);
+    } catch (err) {
+      console.warn('Route cinema unavailable', err);
+      cinemaRenderer = null;
+      cinemaSlug = r.slug;
+    }
+    initRouteCam(r).catch(err => {
+      console.warn('Route cam unavailable', err);
+      routeCamSlug = r.slug;
+      setRouteCamStatus('Route cam unavailable');
+      setRouteCamMode('no-imagery', 'Route cam unavailable', 'Street View could not initialize for this route.');
+    });
   }
-  try {
-    initElevationArtifact(r);
-  } catch (err) {
-    console.warn('Elevation artifact unavailable', err);
-    artifactRenderer = null;
-    artifactSlug = r.slug;
-  }
-  try {
-    initRouteCinema(r);
-  } catch (err) {
-    console.warn('Route cinema unavailable', err);
-    cinemaRenderer = null;
-    cinemaSlug = r.slug;
-  }
-  initRouteCam(r).catch(err => {
-    console.warn('Route cam unavailable', err);
-    routeCamSlug = r.slug;
-    setRouteCamStatus('Route cam unavailable');
-    setRouteCamMode('no-imagery', 'Route cam unavailable', 'Street View could not initialize for this route.');
-  });
   renderStrip();
   syncRouteLockButton();
   syncRoutePlayButton();
@@ -1599,6 +1677,9 @@ function initRoute() {
   const scrubber = document.getElementById('scrubber');
   scrubber.max = r.route.length - 1; scrubber.step = 'any'; scrubber.value = 0;
   setRouteIndex(0);
+  if (earthModeEnabled) {
+    initEarthReplay(r);
+  }
   if (routeCinemaEnabled && routeCinemaMode === 'flyover') {
     startRoutePlayback();
   }
@@ -1816,6 +1897,253 @@ function updateMapSources(targetMap, route, idx) {
 function updateMainMapProgress(route, idx) {
   if (!map || mapSlug !== route.slug) return;
   updateMapSources(map, route, idx);
+}
+
+function setEarthStatus(copy) {
+  const el = document.getElementById('earthStatus');
+  if (el) el.textContent = copy;
+}
+
+function setEarthMode(mode, title = '', copy = '') {
+  const layer = document.getElementById('earthLayer');
+  const titleEl = document.getElementById('earthFallbackTitle');
+  const copyEl = document.getElementById('earthFallbackCopy');
+  if (!layer) return;
+  layer.classList.toggle('active', earthModeEnabled);
+  layer.classList.toggle('loading', mode === 'loading');
+  layer.classList.toggle('ready', mode === 'ready');
+  layer.classList.toggle('unavailable', mode === 'unavailable');
+  if (titleEl && title) titleEl.textContent = title;
+  if (copyEl && copy) copyEl.textContent = copy;
+}
+
+function exitEarthMode() {
+  if (!earthModeEnabled) return;
+  const params = new URLSearchParams(location.search);
+  params.delete('lab');
+  const search = params.toString();
+  const nextUrl = `${location.pathname}${search ? '?' + search : ''}${location.hash || ''}`;
+  location.href = nextUrl;
+}
+
+function webglAvailable() {
+  try {
+    const canvas = document.createElement('canvas');
+    return Boolean(canvas.getContext('webgl2') || canvas.getContext('webgl'));
+  } catch {
+    return false;
+  }
+}
+
+function shouldBlockEarthForViewport() {
+  return window.matchMedia?.('(max-width: 700px)').matches;
+}
+
+function loadCesiumApi() {
+  if (window.Cesium?.Viewer) return Promise.resolve(true);
+  if (earthCesiumPromise) return earthCesiumPromise;
+  earthCesiumPromise = new Promise(resolve => {
+    const cssId = 'goDieselCesiumCss';
+    if (!document.getElementById(cssId)) {
+      const link = document.createElement('link');
+      link.id = cssId;
+      link.rel = 'stylesheet';
+      link.href = 'https://cesium.com/downloads/cesiumjs/releases/1.120/Build/Cesium/Widgets/widgets.css';
+      document.head.appendChild(link);
+    }
+    const script = document.createElement('script');
+    script.src = 'https://cesium.com/downloads/cesiumjs/releases/1.120/Build/Cesium/Cesium.js';
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve(Boolean(window.Cesium?.Viewer));
+    script.onerror = () => resolve(false);
+    document.head.appendChild(script);
+    setTimeout(() => resolve(Boolean(window.Cesium?.Viewer)), 15000);
+  });
+  return earthCesiumPromise;
+}
+
+function disposeEarthReplay() {
+  earthReady = false;
+  earthSlug = null;
+  earthCameraBearing = null;
+  earthFullEntity = null;
+  earthProgressEntity = null;
+  earthMarkerEntity = null;
+  earthTileset = null;
+  earthLoadToken++;
+  if (earthViewer && !earthViewer.isDestroyed?.()) {
+    earthViewer.destroy();
+  }
+  earthViewer = null;
+  const canvas = document.getElementById('earthCanvas');
+  if (canvas) canvas.innerHTML = '';
+}
+
+function earthPositions(route, endIdx = route.route.length - 1, heightOffset = 125) {
+  if (!window.Cesium || !route?.route?.length) return [];
+  const clamped = Math.max(0, Math.min(endIdx, route.route.length - 1));
+  const wholeIdx = Math.floor(clamped);
+  const pts = route.route.slice(0, Math.max(1, wholeIdx + 1));
+  const positions = pts.map(p => Cesium.Cartesian3.fromDegrees(p.lng, p.lat, (Number(p.elev) || 0) + heightOffset));
+  if (clamped > wholeIdx && wholeIdx < route.route.length - 1) {
+    const p = routePointAt(route, clamped);
+    positions.push(Cesium.Cartesian3.fromDegrees(p.lng, p.lat, (Number(p.elev) || 0) + heightOffset));
+  }
+  return positions;
+}
+
+function createEarthViewer() {
+  const Cesium = window.Cesium;
+  Cesium.Ion.defaultAccessToken = '';
+  const viewer = new Cesium.Viewer('earthCanvas', {
+    animation: false,
+    baseLayerPicker: false,
+    fullscreenButton: false,
+    geocoder: false,
+    homeButton: false,
+    infoBox: false,
+    navigationHelpButton: false,
+    sceneModePicker: false,
+    selectionIndicator: false,
+    timeline: false,
+    shouldAnimate: true,
+    requestRenderMode: false,
+  });
+  viewer.scene.globe.show = false;
+  viewer.scene.skyAtmosphere.show = true;
+  viewer.scene.screenSpaceCameraController.enableCollisionDetection = true;
+  return viewer;
+}
+
+async function createGoogleEarthTileset() {
+  const Cesium = window.Cesium;
+  const url = `https://tile.googleapis.com/v1/3dtiles/root.json?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}`;
+  if (Cesium.Cesium3DTileset.fromUrl) return Cesium.Cesium3DTileset.fromUrl(url, { showCreditsOnScreen: true });
+  return new Cesium.Cesium3DTileset({ url, showCreditsOnScreen: true });
+}
+
+async function initEarthReplay(route) {
+  if (!earthModeEnabled) return;
+  const token = ++earthLoadToken;
+  earthReady = false;
+  earthSlug = route.slug;
+  earthCameraBearing = null;
+  setEarthMode('loading', 'Loading Earth mode', 'Building a photorealistic 3D route world from Google Map Tiles.');
+  setEarthStatus('Loading 3D world');
+  if (shouldBlockEarthForViewport()) {
+    setEarthMode('unavailable', 'Desktop prototype', 'Earth mode is desktop-first while we tune photorealistic 3D playback.');
+    setEarthStatus('Desktop prototype');
+    return;
+  }
+  if (!GOOGLE_MAPS_API_KEY) {
+    setEarthMode('unavailable', 'Earth mode unavailable', 'Add GOOGLE_MAPS_API_KEY with Map Tiles API access to enable photorealistic 3D tiles.');
+    setEarthStatus('Missing API key');
+    return;
+  }
+  if (!webglAvailable()) {
+    setEarthMode('unavailable', 'WebGL unavailable', 'This browser cannot start the 3D route world.');
+    setEarthStatus('WebGL unavailable');
+    return;
+  }
+  const loaded = await loadCesiumApi();
+  if (token !== earthLoadToken || earthSlug !== route.slug) return;
+  if (!loaded || !window.Cesium?.Viewer) {
+    setEarthMode('unavailable', 'Cesium unavailable', 'The 3D engine could not load in this browser session.');
+    setEarthStatus('Cesium unavailable');
+    return;
+  }
+  try {
+    if (!earthViewer || earthViewer.isDestroyed?.()) earthViewer = createEarthViewer();
+    earthTileset = await createGoogleEarthTileset();
+    if (token !== earthLoadToken || earthSlug !== route.slug) return;
+    earthViewer.scene.primitives.add(earthTileset);
+    earthFullEntity = earthViewer.entities.add({
+      name: 'Full route',
+      polyline: {
+        positions: earthPositions(route),
+        width: 3,
+        material: Cesium.Color.fromCssColorString('#f0dfae').withAlpha(0.64),
+        depthFailMaterial: Cesium.Color.fromCssColorString('#f0dfae').withAlpha(0.32),
+      },
+    });
+    earthProgressEntity = earthViewer.entities.add({
+      name: 'Route progress',
+      polyline: {
+        positions: earthPositions(route, 0),
+        width: 7,
+        material: new Cesium.PolylineGlowMaterialProperty({
+          color: Cesium.Color.fromCssColorString('#00f19f').withAlpha(0.98),
+          glowPower: 0.18,
+        }),
+        depthFailMaterial: Cesium.Color.fromCssColorString('#00f19f').withAlpha(0.82),
+      },
+    });
+    const p = routePointAt(route, 0);
+    earthMarkerEntity = earthViewer.entities.add({
+      name: 'Current route position',
+      position: Cesium.Cartesian3.fromDegrees(p.lng, p.lat, (Number(p.elev) || 0) + 150),
+      point: {
+        pixelSize: 14,
+        color: Cesium.Color.WHITE,
+        outlineColor: Cesium.Color.fromCssColorString('#00f19f'),
+        outlineWidth: 4,
+      },
+    });
+    earthReady = true;
+    setEarthMode('ready');
+    setEarthStatus('Photorealistic 3D tiles');
+    updateEarthReplay(route, Number(document.getElementById('scrubber')?.value || 0));
+  } catch (err) {
+    console.warn('Earth replay unavailable', err);
+    setEarthMode('unavailable', 'Earth mode unavailable', 'Google Photorealistic 3D Tiles could not load for this route.');
+    setEarthStatus('Tiles unavailable');
+  }
+}
+
+function updateEarthReplay(route, idx) {
+  if (!earthModeEnabled || !earthReady || earthSlug !== route.slug || !earthViewer || !window.Cesium) return;
+  const p = routePointAt(route, idx);
+  earthProgressEntity.polyline.positions = earthPositions(route, idx);
+  earthMarkerEntity.position = Cesium.Cartesian3.fromDegrees(p.lng, p.lat, (Number(p.elev) || 0) + 150);
+  updateEarthCamera(route, idx);
+}
+
+function updateEarthCamera(route, idx) {
+  if (!earthModeEnabled || !earthReady || !earthViewer || !window.Cesium) return;
+  const Cesium = window.Cesium;
+  const p = routePointAt(route, idx);
+  const lookaheadIdx = Math.min(idx + (routePlaying ? 22 : 12), route.route.length - 1);
+  const look = routePointAt(route, lookaheadIdx);
+  const targetBearing = routeBearing(route, idx, routePlaying ? 22 : 12);
+  earthCameraBearing = smoothBearing(earthCameraBearing, targetBearing, routePlaying ? 0.1 : 0.22);
+  const heading = Cesium.Math.toRadians(earthCameraBearing);
+  const cameraHeight = routePlaying ? 720 : 980;
+  const trailingMeters = routePlaying ? 760 : 1120;
+  const cameraLat = p.lat - Math.cos(heading) * trailingMeters / 111320;
+  const cameraLng = p.lng - Math.sin(heading) * trailingMeters / (111320 * Math.max(0.2, Math.cos(p.lat * Math.PI / 180)));
+  const destination = Cesium.Cartesian3.fromDegrees(cameraLng, cameraLat, (Number(p.elev) || 0) + cameraHeight);
+  if (routePlaying) {
+    earthViewer.camera.setView({
+      destination,
+      orientation: {
+        heading,
+        pitch: Cesium.Math.toRadians(-28),
+        roll: 0,
+      },
+    });
+    return;
+  }
+  earthViewer.camera.flyTo({
+    destination,
+    orientation: {
+      heading,
+      pitch: Cesium.Math.toRadians(-32),
+      roll: 0,
+    },
+    duration: 0.42,
+  });
+  earthViewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
 }
 
 function loadGoogleMapsApi() {
@@ -2202,12 +2530,14 @@ function syncRouteCinemaButton() {
     modeBtn.textContent = routeCinemaMode === 'flyover' ? 'ATLAS' : (routeCinemaMode === 'quest' ? 'QUEST' : routeCinemaMode.toUpperCase());
   }
   if (layer) {
-    layer.classList.toggle('active', routeCinemaEnabled);
+    layer.classList.toggle('active', routeCinemaEnabled && !earthModeEnabled);
     layer.dataset.mode = routeCinemaMode;
   }
   if (panelMap) {
-    panelMap.classList.toggle('atlas-active', routeCinemaEnabled && routeCinemaMode === 'flyover');
+    panelMap.classList.toggle('atlas-active', !earthModeEnabled && routeCinemaEnabled && routeCinemaMode === 'flyover');
+    panelMap.classList.toggle('earth-active', earthModeEnabled);
   }
+  setEarthMode(earthReady ? 'ready' : (earthModeEnabled ? 'loading' : 'inactive'));
   const label = document.getElementById('cinemaLabel');
   if (label) {
     label.textContent = {
@@ -2858,6 +3188,7 @@ function setRouteIndex(i) {
   updateRouteCam(r, idx);
   updateElevationArtifact(r, discreteIdx);
   updateRouteCinema(r, discreteIdx);
+  updateEarthReplay(r, idx);
   updateLockedRouteCamera(r, idx);
 }
 
@@ -3006,6 +3337,7 @@ document.getElementById('scrubber').addEventListener('input', e => {
 window.addEventListener('resize', () => {
   resizeElevationArtifact();
   resizeRouteCinema();
+  if (earthViewer && !earthViewer.isDestroyed?.()) earthViewer.resize();
   if (map) map.resize();
   if (routeCamPanorama) google.maps.event.trigger(routeCamPanorama, 'resize');
 });

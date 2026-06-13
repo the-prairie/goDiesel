@@ -13,3 +13,29 @@ def test_route_cam_uses_street_view_not_maplibre_inset():
     assert "new google.maps.StreetViewPanorama" in BUILD
     assert "route-cam-label\" id=\"routeCamLabel\">Street View" in BUILD
     assert "routeCamMap = new maplibregl.Map" not in BUILD
+
+
+def test_earth_lab_mode_is_query_addressable_without_dev_modes():
+    assert "const EARTH_LAB_MODE = requestedCinemaModeRaw === 'earth';" in BUILD
+    assert "if (EARTH_LAB_MODE) {" in BUILD
+    assert "routeCinemaEnabled = false;" in BUILD
+
+
+def test_earth_lab_has_dedicated_stage_and_fallback():
+    assert 'class="earth-layer" id="earthLayer"' in BUILD
+    assert 'class="earth-canvas" id="earthCanvas"' in BUILD
+    assert 'id="earthFallbackTitle">Earth mode unavailable' in BUILD
+    assert "function setEarthMode(" in BUILD
+
+
+def test_earth_lab_lazy_loads_cesium_and_google_tiles():
+    assert "function loadCesiumApi()" in BUILD
+    assert "https://cesium.com/downloads/cesiumjs/releases/" in BUILD
+    assert "https://tile.googleapis.com/v1/3dtiles/root.json?key=" in BUILD
+    assert "function initEarthReplay(route)" in BUILD
+
+
+def test_earth_lab_updates_from_shared_route_index():
+    assert "updateEarthReplay(r, idx);" in BUILD
+    assert "function updateEarthReplay(route, idx)" in BUILD
+    assert "function updateEarthCamera(route, idx)" in BUILD
