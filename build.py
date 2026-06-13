@@ -1252,6 +1252,7 @@ let routeViewLocked = true;
 let routeLockCameraReady = false;
 let routePlaying = false;
 let routePlayTimer = null;
+let routeLastCameraIdx = -1;
 let routePlaySpeed = 4;
 const ROUTE_SPEEDS = [1, 4, 12];
 const queryParams = new URLSearchParams(location.search);
@@ -1753,10 +1754,10 @@ function updateMainMapProgress(route, idx) {
   updateMapSources(map, route, idx);
 }
 
-function routeBearing(route, idx) {
+function routeBearing(route, idx, lookahead = 8) {
   const pts = route.route;
   const a = pts[Math.max(0, Math.min(idx, pts.length - 2))];
-  const b = pts[Math.max(1, Math.min(idx + 1, pts.length - 1))];
+  const b = pts[Math.max(1, Math.min(idx + lookahead, pts.length - 1))];
   const lat1 = a.lat * Math.PI / 180;
   const lat2 = b.lat * Math.PI / 180;
   const dLng = (b.lng - a.lng) * Math.PI / 180;
@@ -1769,12 +1770,18 @@ function routeBearing(route, idx) {
 function updateLockedRouteCamera(route, idx) {
   if (!routeViewLocked || !routeLockCameraReady || !map || mapSlug !== route.slug) return;
   const p = route.route[idx];
+  if (routePlaying) {
+    if (Math.abs(idx - routeLastCameraIdx) < 2) return;
+    routeLastCameraIdx = idx;
+    map.stop();
+  }
   map.easeTo({
     center: [p.lng, p.lat],
     zoom: Math.max(map.getZoom(), 13.2),
     pitch: 62,
-    bearing: routeBearing(route, idx),
-    duration: routePlaying ? 190 : 420,
+    bearing: routeBearing(route, idx, routePlaying ? 12 : 8),
+    duration: routePlaying ? 120 : 420,
+    easing: t => 1 - Math.pow(1 - t, 3),
     essential: true,
   });
 }
@@ -1827,6 +1834,7 @@ function startRoutePlayback() {
   routePlaying = true;
   routeViewLocked = true;
   routeLockCameraReady = true;
+  routeLastCameraIdx = -1;
   syncRouteLockButton();
   syncRoutePlayButton();
   if (routePlayTimer) clearInterval(routePlayTimer);
@@ -1842,7 +1850,7 @@ function startRoutePlayback() {
     }
     scrubber.value = next;
     setRouteIndex(next);
-  }, 140);
+  }, 180);
 }
 
 function routePlaybackStep(route, idx) {
@@ -2169,7 +2177,7 @@ function buildCinemaDecor(route) {
     cinemaScene.add(obj);
     return obj;
   };
-  const total = Math.max((activeRoute.route?.length || cinemaPoints.length) - 1, 1);
+  const total = Math.max((route.route?.length || cinemaPoints.length) - 1, 1);
   if (routeCinemaMode === 'artifact') {
     const count = Math.min(24, Math.max(10, Math.floor(cinemaPoints.length / 6)));
     for (let i = 0; i < count; i++) {
