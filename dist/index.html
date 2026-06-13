@@ -238,6 +238,31 @@ body.ops-mode .curation-panel { display: block; }
                 color: #F0DFAE; letter-spacing: 1.6px; text-transform: uppercase;
                 background: rgba(9,10,9,0.54); border: 1px solid rgba(240,223,174,0.24);
                 border-radius: 7px; padding: 8px 10px; backdrop-filter: blur(10px); }
+.route-cam { position: absolute; right: 18px; bottom: 86px; width: min(360px, 34vw);
+             aspect-ratio: 16 / 9; z-index: 4; overflow: hidden;
+             border: 1px solid rgba(240,223,174,0.28); border-radius: 8px;
+             background: #111716; box-shadow: 0 24px 60px rgba(0,0,0,0.38);
+             opacity: 0; transform: translateY(10px) scale(0.98);
+             pointer-events: none; transition: opacity 260ms ease, transform 260ms ease; }
+.panel-map.atlas-active .route-cam { opacity: 1; transform: translateY(0) scale(1); }
+.route-cam-map { position: absolute; inset: 0; }
+.route-cam::before { content: ''; position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  background: linear-gradient(180deg, rgba(5,8,8,0.06), rgba(5,8,8,0.34)),
+              radial-gradient(circle at 50% 80%, transparent 45%, rgba(0,0,0,0.28)); }
+.route-cam-hud { position: absolute; left: 10px; right: 10px; bottom: 9px; z-index: 3;
+                 display: flex; justify-content: space-between; align-items: end; gap: 10px;
+                 font-family: 'JetBrains Mono', monospace; text-transform: uppercase;
+                 letter-spacing: 1.3px; pointer-events: none; }
+.route-cam-label { color: #F0DFAE; font-size: 9px; font-weight: 700; }
+.route-cam-status { color: rgba(255,255,255,0.68); font-size: 8px; text-align: right; line-height: 1.35; }
+.route-cam-reticle { position: absolute; left: 50%; top: 50%; z-index: 3;
+                     width: 24px; height: 24px; transform: translate(-50%, -50%);
+                     border: 1px solid rgba(240,223,174,0.48); border-radius: 50%;
+                     box-shadow: 0 0 0 8px rgba(240,223,174,0.035); pointer-events: none; }
+.route-cam-reticle::before,
+.route-cam-reticle::after { content: ''; position: absolute; background: rgba(240,223,174,0.42); }
+.route-cam-reticle::before { left: 50%; top: -8px; bottom: -8px; width: 1px; transform: translateX(-50%); }
+.route-cam-reticle::after { top: 50%; left: -8px; right: -8px; height: 1px; transform: translateY(-50%); }
 .cinema-moment-layer { position: absolute; inset: 0; pointer-events: none; z-index: 6; }
 .cinema-moment { position: absolute; opacity: 0; transform: translate(-50%, -110%) scale(0.94);
                  transition: opacity 220ms ease, transform 220ms ease;
@@ -517,6 +542,8 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
   .route-mode { order: 6; flex: 1 1 calc(50% - 4px); }
   .route-lock { order: 7; flex: 1 1 100%; }
   .cinema-label { left: 10px; bottom: 124px; font-size: 8px; }
+  .route-cam { right: 10px; bottom: 148px; width: min(280px, calc(100% - 20px)); }
+  .route-cam-hud { left: 8px; right: 8px; bottom: 8px; }
 
   /* Photo strip: lose the vertical "YOUR PHOTOS" label on small screens.
      Hide entirely when empty (drag-and-drop is desktop-only anyway). */
@@ -667,6 +694,14 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
         <div class="cinema-moment-layer" id="cinemaMomentLayer" aria-hidden="true"></div>
         <div class="cinema-label" id="cinemaLabel">Route cinema · real path + elevation</div>
       </div>
+      <div class="route-cam" id="routeCam" aria-label="Route dashcam">
+        <div class="route-cam-map" id="routeCamMap"></div>
+        <div class="route-cam-reticle" aria-hidden="true"></div>
+        <div class="route-cam-hud">
+          <div class="route-cam-label">Terrain Cam</div>
+          <div class="route-cam-status" id="routeCamStatus">Route-facing map</div>
+        </div>
+      </div>
       <div class="map-fallback" id="mapFallback">
         <div class="map-fallback-inner">
           <div class="map-fallback-route" id="mapFallbackRoute"></div>
@@ -732,6 +767,8 @@ const ROUTES = [{"slug": "17665674778", "activity_id": "17665674778", "name": "T
 const CURATION = {"approved": 21, "pending": 2215, "rejected": 0, "total": 2236};
 let activeRouteIdx = -1;
 let map, mapSlug = null;
+let routeCamMap = null, routeCamSlug = null, routeCamReady = false;
+let routeCamBearing = null;
 let routeViewLocked = true;
 let routeLockCameraReady = false;
 let routePlaying = false;
@@ -1026,6 +1063,14 @@ function initRoute() {
     cinemaRenderer = null;
     cinemaSlug = r.slug;
   }
+  try {
+    initRouteCam(r);
+  } catch (err) {
+    console.warn('Route cam unavailable', err);
+    routeCamMap = null;
+    routeCamSlug = r.slug;
+    setRouteCamStatus('Route cam unavailable');
+  }
   renderStrip();
   syncRouteLockButton();
   syncRoutePlayButton();
@@ -1250,6 +1295,63 @@ function updateMapSources(targetMap, route, idx) {
 function updateMainMapProgress(route, idx) {
   if (!map || mapSlug !== route.slug) return;
   updateMapSources(map, route, idx);
+}
+
+function setRouteCamStatus(copy) {
+  const el = document.getElementById('routeCamStatus');
+  if (el) el.textContent = copy;
+}
+
+function initRouteCam(route) {
+  routeCamReady = false;
+  routeCamBearing = null;
+  setRouteCamStatus('Loading terrain');
+  if (routeCamMap) {
+    routeCamMap.remove();
+    routeCamMap = null;
+  }
+  routeCamSlug = route.slug;
+  if (typeof maplibregl === 'undefined') {
+    setRouteCamStatus('Map unavailable');
+    return;
+  }
+  routeCamMap = new maplibregl.Map({
+    container: 'routeCamMap',
+    style: routeMapStyle({ satellite: true }),
+    center: [route.center_lng, route.center_lat],
+    zoom: 15,
+    pitch: 74,
+    bearing: routeBearing(route, 0, 18),
+    interactive: false,
+    attributionControl: false,
+  });
+  routeCamMap.on('load', () => {
+    if (!routeCamMap || routeCamSlug !== route.slug) return;
+    routeCamMap.setTerrain({ source: 'terrain', exaggeration: 1.34 });
+    addRouteLayers(routeCamMap, route, { includePhotos: false });
+    routeCamReady = true;
+    routeCamMap.resize();
+    updateRouteCam(route, Number(document.getElementById('scrubber')?.value || 0));
+  });
+  routeCamMap.on('error', () => {
+    if (!routeCamReady) setRouteCamStatus('Terrain fallback');
+  });
+}
+
+function updateRouteCam(route, idx) {
+  if (!routeCamMap || routeCamSlug !== route.slug || !routeCamReady) return;
+  updateMapSources(routeCamMap, route, idx);
+  const p = routePointAt(route, idx);
+  const targetBearing = routeBearing(route, idx, 22);
+  routeCamBearing = smoothBearing(routeCamBearing, targetBearing, routePlaying ? 0.2 : 0.34);
+  routeCamMap.jumpTo({
+    center: [p.lng, p.lat],
+    zoom: 15.35,
+    pitch: 76,
+    bearing: routeCamBearing,
+    padding: { top: 26, bottom: 78, left: 20, right: 20 },
+  });
+  setRouteCamStatus(`${(p.d / 1000).toFixed(1)} km · route view`);
 }
 
 function routeBearing(route, idx, lookahead = 8) {
@@ -2140,6 +2242,7 @@ function setRouteIndex(i) {
   document.getElementById('poiTitle').textContent =
     idx < 10 ? 'Route start' : (idx > r.route.length - 10 ? 'Route end' : 'Along route');
   updateMainMapProgress(r, idx);
+  updateRouteCam(r, idx);
   updateElevationArtifact(r, discreteIdx);
   updateRouteCinema(r, discreteIdx);
   updateLockedRouteCamera(r, idx);
@@ -2291,6 +2394,7 @@ window.addEventListener('resize', () => {
   resizeElevationArtifact();
   resizeRouteCinema();
   if (map) map.resize();
+  if (routeCamMap) routeCamMap.resize();
 });
 window.addEventListener('popstate', handleCurrentUrl);
 window.addEventListener('hashchange', handleCurrentUrl);
