@@ -33,7 +33,17 @@ TEAL = '#00F19F'; STRAIN = '#0093E7'; SLEEP = '#7BA1BB'
 BG = (16, 21, 24); BG_HEX = '#101518'
 
 # ── API key ──
-print('[1/5] Map provider: MapLibre GL JS + public terrain tiles')
+def env_value(name):
+    env_path = QUESTS / '.env'
+    if not env_path.exists():
+        return ''
+    for line in env_path.read_text().splitlines():
+        if line.startswith(name + '='):
+            return line.split('=', 1)[1].strip()
+    return ''
+
+GOOGLE_MAPS_API_KEY = env_value('GOOGLE_MAPS_API_KEY')
+print('[1/5] Map provider: MapLibre GL JS + Google Street View route cam')
 
 # ── Load quests.json ──
 config = json.loads((QUESTS / 'quests.json').read_text())
@@ -736,6 +746,19 @@ body.ops-mode .curation-panel { display: block; }
              pointer-events: none; transition: opacity 260ms ease, transform 260ms ease; }
 .panel-map.atlas-active .route-cam { opacity: 1; transform: translateY(0) scale(1); }
 .route-cam-map { position: absolute; inset: 0; }
+.route-cam-empty { position: absolute; inset: 0; display: none; place-items: center; z-index: 1;
+                   background: radial-gradient(circle at 50% 44%, rgba(240,223,174,0.10), transparent 36%),
+                               linear-gradient(180deg, rgba(8,13,14,0.96), rgba(4,8,9,0.98));
+                   text-align: center; padding: 22px; box-sizing: border-box; }
+.route-cam-empty-inner b { display: block; color: #F0DFAE; font-size: 11px;
+                           font-family: 'JetBrains Mono', monospace; letter-spacing: 1.5px;
+                           text-transform: uppercase; }
+.route-cam-empty-inner span { display: block; margin-top: 8px; color: rgba(255,255,255,0.62);
+                              font-size: 11px; line-height: 1.45; }
+.route-cam.no-imagery .route-cam-empty,
+.route-cam.loading .route-cam-empty { display: grid; }
+.route-cam.no-imagery .route-cam-map,
+.route-cam.loading .route-cam-map { opacity: 0.24; }
 .route-cam::before { content: ''; position: absolute; inset: 0; z-index: 2; pointer-events: none;
   background: linear-gradient(180deg, rgba(5,8,8,0.06), rgba(5,8,8,0.34)),
               radial-gradient(circle at 50% 80%, transparent 45%, rgba(0,0,0,0.28)); }
@@ -1186,10 +1209,16 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
       </div>
       <div class="route-cam" id="routeCam" aria-label="Route dashcam">
         <div class="route-cam-map" id="routeCamMap"></div>
+        <div class="route-cam-empty" id="routeCamEmpty">
+          <div class="route-cam-empty-inner">
+            <b id="routeCamEmptyTitle">Finding ground imagery</b>
+            <span id="routeCamEmptyCopy">Checking Street View near this point on the route.</span>
+          </div>
+        </div>
         <div class="route-cam-reticle" aria-hidden="true"></div>
         <div class="route-cam-hud">
-          <div class="route-cam-label">Terrain Cam</div>
-          <div class="route-cam-status" id="routeCamStatus">Route-facing map</div>
+          <div class="route-cam-label" id="routeCamLabel">Street View</div>
+          <div class="route-cam-status" id="routeCamStatus">Ground imagery</div>
         </div>
       </div>
       <div class="map-fallback" id="mapFallback">
@@ -1255,10 +1284,14 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
 <script>
 const ROUTES = __ROUTES_JSON__;
 const CURATION = __CURATION_JSON__;
+const GOOGLE_MAPS_API_KEY = '__GOOGLE_MAPS_API_KEY__';
 let activeRouteIdx = -1;
 let map, mapSlug = null;
-let routeCamMap = null, routeCamSlug = null, routeCamReady = false;
+let routeCamPanorama = null, routeCamService = null, routeCamSlug = null, routeCamReady = false;
 let routeCamBearing = null;
+let routeCamLookupToken = 0;
+const routeCamCache = new Map();
+const routeCamRequested = new Map();
 let routeViewLocked = true;
 let routeLockCameraReady = false;
 let routePlaying = false;
@@ -1553,14 +1586,12 @@ function initRoute() {
     cinemaRenderer = null;
     cinemaSlug = r.slug;
   }
-  try {
-    initRouteCam(r);
-  } catch (err) {
+  initRouteCam(r).catch(err => {
     console.warn('Route cam unavailable', err);
-    routeCamMap = null;
     routeCamSlug = r.slug;
     setRouteCamStatus('Route cam unavailable');
-  }
+    setRouteCamMode('no-imagery', 'Route cam unavailable', 'Street View could not initialize for this route.');
+  });
   renderStrip();
   syncRouteLockButton();
   syncRoutePlayButton();
@@ -1787,61 +1818,153 @@ function updateMainMapProgress(route, idx) {
   updateMapSources(map, route, idx);
 }
 
+function loadGoogleMapsApi() {
+  if (window.google?.maps?.StreetViewPanorama) return Promise.resolve(true);
+  if (!GOOGLE_MAPS_API_KEY) return Promise.resolve(false);
+  if (window.__googleMapsPromise) return window.__googleMapsPromise;
+  window.__googleMapsPromise = new Promise(resolve => {
+    const callbackName = '__goDieselGoogleMapsReady';
+    window[callbackName] = () => resolve(true);
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}&v=weekly&callback=${callbackName}`;
+    script.async = true;
+    script.defer = true;
+    script.onerror = () => resolve(false);
+    document.head.appendChild(script);
+    setTimeout(() => resolve(Boolean(window.google?.maps?.StreetViewPanorama)), 12000);
+  });
+  return window.__googleMapsPromise;
+}
+
 function setRouteCamStatus(copy) {
   const el = document.getElementById('routeCamStatus');
   if (el) el.textContent = copy;
 }
 
-function initRouteCam(route) {
-  routeCamReady = false;
-  routeCamBearing = null;
-  setRouteCamStatus('Loading terrain');
-  if (routeCamMap) {
-    routeCamMap.remove();
-    routeCamMap = null;
-  }
-  routeCamSlug = route.slug;
-  if (typeof maplibregl === 'undefined') {
-    setRouteCamStatus('Map unavailable');
-    return;
-  }
-  routeCamMap = new maplibregl.Map({
-    container: 'routeCamMap',
-    style: routeMapStyle({ satellite: true }),
-    center: [route.center_lng, route.center_lat],
-    zoom: 15,
-    pitch: 74,
-    bearing: routeBearing(route, 0, 18),
-    interactive: false,
-    attributionControl: false,
-  });
-  routeCamMap.on('load', () => {
-    if (!routeCamMap || routeCamSlug !== route.slug) return;
-    routeCamMap.setTerrain({ source: 'terrain', exaggeration: 1.34 });
-    addRouteLayers(routeCamMap, route, { includePhotos: false });
-    routeCamReady = true;
-    routeCamMap.resize();
-    updateRouteCam(route, Number(document.getElementById('scrubber')?.value || 0));
-  });
-  routeCamMap.on('error', () => {
-    if (!routeCamReady) setRouteCamStatus('Terrain fallback');
-  });
+function setRouteCamMode(mode, title = '', copy = '') {
+  const cam = document.getElementById('routeCam');
+  const titleEl = document.getElementById('routeCamEmptyTitle');
+  const copyEl = document.getElementById('routeCamEmptyCopy');
+  if (!cam) return;
+  cam.classList.toggle('loading', mode === 'loading');
+  cam.classList.toggle('no-imagery', mode === 'no-imagery');
+  if (titleEl && title) titleEl.textContent = title;
+  if (copyEl && copy) copyEl.textContent = copy;
 }
 
-function updateRouteCam(route, idx) {
-  if (!routeCamMap || routeCamSlug !== route.slug || !routeCamReady) return;
-  updateMapSources(routeCamMap, route, idx);
+function routeCamBucket(idx) {
+  return Math.max(0, Math.floor(Number(idx) / 12) * 12);
+}
+
+function routeCamCacheKey(route, idx) {
+  return `${route.slug}:${routeCamBucket(idx)}`;
+}
+
+async function initRouteCam(route) {
+  routeCamReady = false;
+  routeCamBearing = null;
+  routeCamLookupToken++;
+  routeCamCache.clear();
+  routeCamRequested.clear();
+  routeCamSlug = route.slug;
+  setRouteCamStatus('Loading Street View');
+  setRouteCamMode('loading', 'Finding ground imagery', 'Checking Street View near this point on the route.');
+  const loaded = await loadGoogleMapsApi();
+  if (!loaded || !window.google?.maps?.StreetViewPanorama) {
+    setRouteCamStatus('Street View unavailable');
+    setRouteCamMode('no-imagery', 'Street View unavailable', 'Google Maps did not load for this browser session.');
+    return;
+  }
+  routeCamService = new google.maps.StreetViewService();
+  if (!routeCamPanorama) {
+    routeCamPanorama = new google.maps.StreetViewPanorama(document.getElementById('routeCamMap'), {
+      addressControl: false,
+      clickToGo: false,
+      disableDefaultUI: true,
+      enableCloseButton: false,
+      fullscreenControl: false,
+      imageDateControl: false,
+      linksControl: false,
+      motionTracking: false,
+      motionTrackingControl: false,
+      panControl: false,
+      scrollwheel: false,
+      showRoadLabels: false,
+      visible: true,
+      zoomControl: false,
+      pov: { heading: routeBearing(route, 0, 18), pitch: 1, zoom: 1 },
+    });
+  }
+  routeCamReady = true;
+  updateRouteCam(route, Number(document.getElementById('scrubber')?.value || 0), { force: true });
+}
+
+function requestRouteCamPanorama(route, idx, key, token) {
+  if (!routeCamService || routeCamRequested.has(key)) return;
+  routeCamRequested.set(key, true);
+  const point = routePointAt(route, routeCamBucket(idx));
+  routeCamService.getPanorama(
+    {
+      location: { lat: point.lat, lng: point.lng },
+      radius: 90,
+      preference: google.maps.StreetViewPreference.NEAREST,
+      source: google.maps.StreetViewSource.OUTDOOR,
+    },
+    (data, status) => {
+      if (token !== routeCamLookupToken || routeCamSlug !== route.slug) return;
+      if (status === google.maps.StreetViewStatus.OK && data?.location?.pano) {
+        routeCamCache.set(key, { status: 'ok', pano: data.location.pano });
+      } else {
+        routeCamCache.set(key, { status: 'missing' });
+      }
+      updateRouteCam(route, Number(document.getElementById('scrubber')?.value || 0), { force: true });
+    }
+  );
+}
+
+function nearestCachedPanorama(route, idx) {
+  const bucket = routeCamBucket(idx);
+  const offsets = [0, -12, 12, -24, 24, -36, 36];
+  for (const offset of offsets) {
+    const key = `${route.slug}:${Math.max(0, bucket + offset)}`;
+    const cached = routeCamCache.get(key);
+    if (cached?.status === 'ok') return cached;
+  }
+  return null;
+}
+
+function updateRouteCam(route, idx, options = {}) {
+  if (routeCamSlug !== route.slug || !routeCamReady || !routeCamPanorama) return;
   const p = routePointAt(route, idx);
+  const key = routeCamCacheKey(route, idx);
+  const cached = routeCamCache.get(key);
+  if (!cached) {
+    requestRouteCamPanorama(route, idx, key, routeCamLookupToken);
+    const nearby = nearestCachedPanorama(route, idx);
+    if (!nearby) {
+      setRouteCamMode('loading', 'Finding ground imagery', 'Checking Street View near this point on the route.');
+      setRouteCamStatus(`${(p.d / 1000).toFixed(1)} km · scanning`);
+      return;
+    }
+  }
+  const pano = cached?.status === 'ok' ? cached : nearestCachedPanorama(route, idx);
+  if (!pano) {
+    setRouteCamMode('no-imagery', 'No ground imagery here', 'Street View coverage is not available near this segment.');
+    setRouteCamStatus(`${(p.d / 1000).toFixed(1)} km · no imagery`);
+    return;
+  }
+  setRouteCamMode('ready');
   const targetBearing = routeBearing(route, idx, 22);
   routeCamBearing = smoothBearing(routeCamBearing, targetBearing, routePlaying ? 0.2 : 0.34);
-  routeCamMap.jumpTo({
-    center: [p.lng, p.lat],
-    zoom: 15.35,
-    pitch: 76,
-    bearing: routeCamBearing,
-    padding: { top: 26, bottom: 78, left: 20, right: 20 },
+  if (options.force || routeCamPanorama.getPano() !== pano.pano) {
+    routeCamPanorama.setPano(pano.pano);
+  }
+  routeCamPanorama.setPov({
+    heading: routeCamBearing,
+    pitch: routePlaying ? 1.5 : 0,
+    zoom: 1.05,
   });
-  setRouteCamStatus(`${(p.d / 1000).toFixed(1)} km · route view`);
+  setRouteCamStatus(`${(p.d / 1000).toFixed(1)} km · Street View`);
 }
 
 function routeBearing(route, idx, lookahead = 8) {
@@ -2884,7 +3007,7 @@ window.addEventListener('resize', () => {
   resizeElevationArtifact();
   resizeRouteCinema();
   if (map) map.resize();
-  if (routeCamMap) routeCamMap.resize();
+  if (routeCamPanorama) google.maps.event.trigger(routeCamPanorama, 'resize');
 });
 window.addEventListener('popstate', handleCurrentUrl);
 window.addEventListener('hashchange', handleCurrentUrl);
@@ -2897,7 +3020,8 @@ else renderGallery();
 
 html_out = (template_html
             .replace('__ROUTES_JSON__', data_json)
-            .replace('__CURATION_JSON__', curation_json))
+            .replace('__CURATION_JSON__', curation_json)
+            .replace('__GOOGLE_MAPS_API_KEY__', GOOGLE_MAPS_API_KEY))
 (QUESTS / 'index.html').write_text(html_out)
 
 print(f'\n✓ Built: {QUESTS}/index.html  ({len(routes_data)} quests)')
