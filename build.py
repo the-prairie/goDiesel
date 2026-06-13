@@ -414,41 +414,15 @@ for spec in quest_specs:
     # Slug from activity_id
     slug = aid
 
-    # Match photos by proximity (500km)
     lats = [p[0] for p in route]; lngs = [p[1] for p in route]
     cx = (min(lats) + max(lats)) / 2; cy = (min(lngs) + max(lngs)) / 2
-    # Photos: write resized JPEGs to photos/<slug>/ and reference by URL.
-    # Each entry also carries an internal _full_path for the share-card renderer;
-    # we strip that before serializing to JSON.
-    quest_photo_dir = PHOTOS_ROOT / slug
-    matched = [p for p in kept if hav_m(cx, cy, p['lat'], p['lng']) / 1000 <= 500]
+    # Personal archive photos are intentionally not attached to quests. The
+    # match radius was too broad and made the atlas feel untrustworthy.
     baseline_photos = []
-    for idx, p in enumerate(matched):
-        try:
-            thumb_path = quest_photo_dir / f'{idx:02d}-thumb.jpg'
-            full_path = quest_photo_dir / f'{idx:02d}.jpg'
-            write_resized_jpeg(p['path'], thumb_path, 240)
-            write_resized_jpeg(p['path'], full_path, 900)
-            baseline_photos.append({
-                'thumb_url': f'photos/{slug}/{idx:02d}-thumb.jpg',
-                'full_url':  f'photos/{slug}/{idx:02d}.jpg',
-                '_full_path': str(full_path),  # stripped before JSON
-                'lat': p['lat'], 'lng': p['lng'],
-                'dt': p['dt'].strftime('%b %d, %Y') if p['dt'] else '',
-                'dt_full': p['dt'].strftime('%b %d %H:%M') if p['dt'] else '',
-                'source': 'auto',
-            })
-        except Exception:
-            pass
-    baseline_photos.sort(key=lambda x: x['dt_full'])
     visual_source = {
-        'kind': 'route_photos' if baseline_photos else 'generated_route',
-        'label': 'Route photos' if baseline_photos else 'Generated route preview',
-        'description': (
-            'Matched photos from Lauren’s route archive.'
-            if baseline_photos
-            else 'Stable route art shown when no photo source is available.'
-        ),
+        'kind': 'generated_route',
+        'label': 'Generated route preview',
+        'description': 'Stable route art shown without personal photo matching.',
     }
 
     route_js = [{'lat': pt[0], 'lng': pt[1], 'elev': pt[2], 'd': pt[3]} for pt in route]
@@ -1106,8 +1080,8 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
     <div class="atlas-kicker">Prototype quest atlas</div>
     <h2>Pick a quest. Go diesel.</h2>
     <p>Lauren&rsquo;s real runs and rides have been turned into repeatable adventure
-       challenges. Each quest has a route, a rule, a reward, and the photos
-       that made the day worth remembering.</p>
+       challenges. Each quest has a route, a rule, a reward, and a playable
+       map preview built from the route itself.</p>
     <div class="gallery-count" id="galleryCount"></div>
     <div class="atlas-stats" id="atlasStats"></div>
   </div>
@@ -1390,14 +1364,12 @@ function renderGallery() {
     .map((route, index) => ({ route, index }))
     .filter(({ route }) => routeMatchesFilters(route));
   const filtered = filteredRoutes.map(({ route }) => route);
-  const totalUser = filtered.reduce((s, r) => s + getStoredPhotos(r.slug).length, 0);
-  const totalPhotos = filtered.reduce((s, r) => s + r.baseline_photos.length, 0) + totalUser;
   const totalKm = filtered.reduce((s,r)=>s+r.distance_km,0);
   const totalXp = filtered.reduce((s,r)=>s+(r.xp || 0),0);
   const totalClimb = filtered.reduce((s,r)=>s+(r.elevation_gain_m || 0),0);
   const suffix = filtered.length === ROUTES.length ? '' : ` · FILTERED FROM ${ROUTES.length}`;
   document.getElementById('galleryCount').textContent =
-    `${filtered.length} QUEST${filtered.length === 1 ? '' : 'S'} · ${totalPhotos} PHOTOS · ${totalKm.toFixed(0)} KM TOTAL${suffix}`;
+    `${filtered.length} QUEST${filtered.length === 1 ? '' : 'S'} · ${totalKm.toFixed(0)} KM TOTAL${suffix}`;
   document.getElementById('atlasStats').innerHTML = `
     <div class="atlas-stat"><b>${filtered.length}</b><span>quests</span></div>
     <div class="atlas-stat"><b>${totalKm.toFixed(0)}</b><span>km mapped</span></div>
@@ -1419,19 +1391,12 @@ function renderGallery() {
   filteredRoutes.forEach(({ route: r, index: i }) => {
     const card = document.createElement('div');
     card.className = 'quest-card';
-    const userPhotos = getStoredPhotos(r.slug).length;
-    const totalPhotos = r.baseline_photos.length + userPhotos;
     const typeClass = r.type === 'Ride' ? 'ride' : 'run';
     const typeIcon  = r.type === 'Ride'
       ? '<svg class="icon"><use href="#i-bike"/></svg>'
       : '<svg class="icon"><use href="#i-runner"/></svg>';
     const yearMonth = r.date ? r.date.substring(0,7) : '';
     card.innerHTML = `
-      <div class="quest-photo-badge ${totalPhotos > 0 ? '' : 'empty'}">
-        ${totalPhotos > 0
-          ? '<svg class="icon"><use href="#i-camera"/></svg> ' + totalPhotos
-          : 'no photos yet'}
-      </div>
       <div class="quest-svg">${r.svg}</div>
       <div class="quest-row">
         <div class="quest-name">${r.name}</div>
@@ -1459,14 +1424,12 @@ function renderGallery() {
 
 function renderCompletionPanel(route) {
   const panel = document.getElementById('completionPanel');
-  const baselineCount = route.baseline_photos.length;
-  const totalPhotos = baselineCount + getStoredPhotos(route.slug).length;
   const climb = Math.round(route.elevation_gain_m || 0).toLocaleString();
   const objective = route.completion_rule || `Complete ${route.distance_km.toFixed(1)} km.`;
   const facts = [
     ['Reward', `${(route.xp || 0).toLocaleString()} XP`],
     ['Difficulty', route.difficulty || 'Open'],
-    ['Proof', `${totalPhotos} photo${totalPhotos === 1 ? '' : 's'}`],
+    ['Proof', 'GPS route'],
     ['Climb', `${climb} m`],
   ];
   panel.innerHTML = `
@@ -1531,8 +1494,7 @@ function showGallery(options = {}) {
 function initRoute() {
   const r = ROUTES[activeRouteIdx];
   stopRoutePlayback();
-  allPhotos = [...r.baseline_photos.map(p => ({ ...p, source: 'auto' })),
-               ...getStoredPhotos(r.slug)];
+  allPhotos = [];
   try {
     initMainMap(r);
   } catch (err) {
@@ -1748,7 +1710,7 @@ function initMainMap(route) {
     if (!map || mapSlug !== route.slug) return;
     map.setTerrain({ source: 'terrain', exaggeration: 1.28 });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
-    addRouteLayers(map, route, { includePhotos: true });
+    addRouteLayers(map, route, { includePhotos: false });
     map.fitBounds(routeBounds(route), { padding: 86, duration: 900, pitch: 56, bearing: -18 });
     map.once('moveend', () => { routeLockCameraReady = true; });
     map.on('click', e => snapToRoute(e.lngLat));
@@ -1987,20 +1949,7 @@ function photoRouteIndex(route, photo) {
 }
 
 function setupCinemaMemoryStations(route) {
-  const layer = document.getElementById('cinemaMomentLayer');
   cinemaMemories = [];
-  if (!layer || routeCinemaMode !== 'flyover') return;
-  const photos = allPhotos
-    .filter(ph => ph.lat !== undefined && ph.lng !== undefined && (ph.thumb_url || ph.thumb))
-    .slice(0, 6);
-  cinemaMemories = photos.map((ph, i) => {
-    const el = document.createElement('div');
-    el.className = 'cinema-memory';
-    const thumbSrc = ph.thumb_url || ('data:image/jpeg;base64,' + ph.thumb);
-    el.innerHTML = `<img src="${escapeHtml(thumbSrc)}" alt=""><span>${escapeHtml(ph.dt || `memory ${i + 1}`)}</span>`;
-    layer.appendChild(el);
-    return { idx: photoRouteIndex(route, ph), el };
-  });
 }
 
 function toggleRoutePlayback() {
@@ -2764,22 +2713,16 @@ function removeUserPhoto(event, idx) {
 // Drag-drop
 let dragCounter = 0;
 window.addEventListener('dragenter', e => {
-  e.preventDefault(); if (activeRouteIdx === -1) return;
-  dragCounter++; document.getElementById('dropOverlay').classList.add('active');
+  e.preventDefault();
 });
 window.addEventListener('dragleave', e => {
-  e.preventDefault(); dragCounter--;
-  if (dragCounter <= 0) document.getElementById('dropOverlay').classList.remove('active');
+  e.preventDefault();
 });
 window.addEventListener('dragover', e => { e.preventDefault(); });
 window.addEventListener('drop', async e => {
-  e.preventDefault(); dragCounter = 0;
+  e.preventDefault();
+  dragCounter = 0;
   document.getElementById('dropOverlay').classList.remove('active');
-  if (activeRouteIdx === -1) return;
-  const files = Array.from(e.dataTransfer.files).filter(f =>
-    /^image\\//.test(f.type) || /\\.heic$/i.test(f.name));
-  for (const f of files) await addUserPhoto(f);
-  initRoute();
 });
 
 async function addUserPhoto(file) {
