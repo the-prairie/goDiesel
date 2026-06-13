@@ -1369,6 +1369,7 @@ let earthModeEnabled = false;
 let earthViewer = null, earthTileset = null, earthFullEntity = null, earthProgressEntity = null, earthMarkerEntity = null;
 let earthReady = false, earthSlug = null, earthCameraBearing = null, earthLoadToken = 0;
 let earthCesiumPromise = null;
+let earthTileFailures = 0, earthTilesLoading = 0;
 let cinemaRenderer = null, cinemaScene = null, cinemaCamera = null;
 let cinemaFullLine = null, cinemaProgressLine = null, cinemaMarker = null, cinemaSurface = null;
 let cinemaPoints = [], cinemaSlug = null, cinemaDecor = [], cinemaMoments = [], cinemaMemories = [];
@@ -1904,6 +1905,10 @@ function setEarthStatus(copy) {
   if (el) el.textContent = copy;
 }
 
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
+}
+
 function setEarthMode(mode, title = '', copy = '') {
   const layer = document.getElementById('earthLayer');
   const titleEl = document.getElementById('earthFallbackTitle');
@@ -1967,6 +1972,8 @@ function disposeEarthReplay() {
   earthReady = false;
   earthSlug = null;
   earthCameraBearing = null;
+  earthTileFailures = 0;
+  earthTilesLoading = 0;
   earthFullEntity = null;
   earthProgressEntity = null;
   earthMarkerEntity = null;
@@ -2019,8 +2026,73 @@ function createEarthViewer() {
 async function createGoogleEarthTileset() {
   const Cesium = window.Cesium;
   const url = `https://tile.googleapis.com/v1/3dtiles/root.json?key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}`;
-  if (Cesium.Cesium3DTileset.fromUrl) return Cesium.Cesium3DTileset.fromUrl(url, { showCreditsOnScreen: true });
-  return new Cesium.Cesium3DTileset({ url, showCreditsOnScreen: true });
+  const options = {
+    showCreditsOnScreen: true,
+    maximumScreenSpaceError: 24,
+    dynamicScreenSpaceError: true,
+    skipLevelOfDetail: true,
+  };
+  if (Cesium.Cesium3DTileset.fromUrl) return Cesium.Cesium3DTileset.fromUrl(url, options);
+  return new Cesium.Cesium3DTileset({ url, ...options });
+}
+
+function earthRouteMetrics(route) {
+  const pts = route.route || [];
+  const elevs = pts.map(p => Number(p.elev) || 0);
+  const totalKm = Number(route.distance_km) || ((pts[pts.length - 1]?.d || 0) / 1000) || 1;
+  const elevMin = elevs.length ? Math.min(...elevs) : 0;
+  const elevMax = elevs.length ? Math.max(...elevs) : 0;
+  return {
+    totalKm,
+    climb: Number(route.elevation_gain_m) || 0,
+    elevSpan: Math.max(0, elevMax - elevMin),
+  };
+}
+
+function earthCameraProfile(route, playing) {
+  const metrics = earthRouteMetrics(route);
+  const lengthFactor = clamp((metrics.totalKm - 18) / 92, 0, 1);
+  const climbFactor = clamp((metrics.climb + metrics.elevSpan) / Math.max(metrics.totalKm * 55, 1), 0, 1);
+  const baseHeight = playing ? 760 : 1080;
+  const baseTrail = playing ? 780 : 1120;
+  return {
+    lookahead: Math.round((playing ? 18 : 10) + lengthFactor * 18),
+    height: baseHeight + lengthFactor * 720 + climbFactor * 320,
+    trailing: baseTrail + lengthFactor * 820 + climbFactor * 260,
+    pitch: Cesium.Math.toRadians(playing ? -34 - lengthFactor * 4 : -38 - lengthFactor * 4),
+    smooth: playing ? 0.085 : 0.2,
+    flyDuration: playing ? 0 : 0.28,
+  };
+}
+
+function syncEarthTileStatus() {
+  if (!earthModeEnabled || !earthReady) return;
+  if (earthTileFailures >= 4) {
+    setEarthStatus('3D tiles partially unavailable');
+  } else if (earthTilesLoading > 0) {
+    setEarthStatus('Settling 3D tiles');
+  } else {
+    setEarthStatus('Photorealistic 3D tiles');
+  }
+}
+
+function attachEarthTileStatus(viewer, tileset, token) {
+  earthTileFailures = 0;
+  earthTilesLoading = 0;
+  if (tileset.tileFailed?.addEventListener) {
+    tileset.tileFailed.addEventListener(() => {
+      if (token !== earthLoadToken) return;
+      earthTileFailures += 1;
+      syncEarthTileStatus();
+    });
+  }
+  if (viewer.scene.tileLoadProgressEvent?.addEventListener) {
+    viewer.scene.tileLoadProgressEvent.addEventListener(count => {
+      if (token !== earthLoadToken) return;
+      earthTilesLoading = Number(count) || 0;
+      syncEarthTileStatus();
+    });
+  }
 }
 
 async function initEarthReplay(route) {
@@ -2058,6 +2130,7 @@ async function initEarthReplay(route) {
     earthTileset = await createGoogleEarthTileset();
     if (token !== earthLoadToken || earthSlug !== route.slug) return;
     earthViewer.scene.primitives.add(earthTileset);
+    attachEarthTileStatus(earthViewer, earthTileset, token);
     earthFullEntity = earthViewer.entities.add({
       name: 'Full route',
       polyline: {
@@ -2113,22 +2186,19 @@ function updateEarthCamera(route, idx) {
   if (!earthModeEnabled || !earthReady || !earthViewer || !window.Cesium) return;
   const Cesium = window.Cesium;
   const p = routePointAt(route, idx);
-  const lookaheadIdx = Math.min(idx + (routePlaying ? 22 : 12), route.route.length - 1);
-  const look = routePointAt(route, lookaheadIdx);
-  const targetBearing = routeBearing(route, idx, routePlaying ? 22 : 12);
-  earthCameraBearing = smoothBearing(earthCameraBearing, targetBearing, routePlaying ? 0.1 : 0.22);
+  const profile = earthCameraProfile(route, routePlaying);
+  const targetBearing = routeBearing(route, idx, profile.lookahead);
+  earthCameraBearing = smoothBearing(earthCameraBearing, targetBearing, profile.smooth);
   const heading = Cesium.Math.toRadians(earthCameraBearing);
-  const cameraHeight = routePlaying ? 720 : 980;
-  const trailingMeters = routePlaying ? 760 : 1120;
-  const cameraLat = p.lat - Math.cos(heading) * trailingMeters / 111320;
-  const cameraLng = p.lng - Math.sin(heading) * trailingMeters / (111320 * Math.max(0.2, Math.cos(p.lat * Math.PI / 180)));
-  const destination = Cesium.Cartesian3.fromDegrees(cameraLng, cameraLat, (Number(p.elev) || 0) + cameraHeight);
+  const cameraLat = p.lat - Math.cos(heading) * profile.trailing / 111320;
+  const cameraLng = p.lng - Math.sin(heading) * profile.trailing / (111320 * Math.max(0.2, Math.cos(p.lat * Math.PI / 180)));
+  const destination = Cesium.Cartesian3.fromDegrees(cameraLng, cameraLat, (Number(p.elev) || 0) + profile.height);
   if (routePlaying) {
     earthViewer.camera.setView({
       destination,
       orientation: {
         heading,
-        pitch: Cesium.Math.toRadians(-28),
+        pitch: profile.pitch,
         roll: 0,
       },
     });
@@ -2138,10 +2208,10 @@ function updateEarthCamera(route, idx) {
     destination,
     orientation: {
       heading,
-      pitch: Cesium.Math.toRadians(-32),
+      pitch: profile.pitch,
       roll: 0,
     },
-    duration: 0.42,
+    duration: profile.flyDuration,
   });
   earthViewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
 }

@@ -39,3 +39,20 @@ def test_earth_lab_updates_from_shared_route_index():
     assert "updateEarthReplay(r, idx);" in BUILD
     assert "function updateEarthReplay(route, idx)" in BUILD
     assert "function updateEarthCamera(route, idx)" in BUILD
+
+
+def test_earth_camera_uses_route_metrics_not_fixed_constants():
+    assert "function earthRouteMetrics(route)" in BUILD
+    assert "function earthCameraProfile(route, playing)" in BUILD
+    assert "const profile = earthCameraProfile(route, routePlaying);" in BUILD
+    assert "profile.lookahead" in BUILD
+    assert "profile.trailing" in BUILD
+    assert "profile.pitch" in BUILD
+
+
+def test_earth_tile_status_reports_partial_coverage():
+    assert "function attachEarthTileStatus(viewer, tileset, token)" in BUILD
+    assert "tileFailed.addEventListener" in BUILD
+    assert "tileLoadProgressEvent.addEventListener" in BUILD
+    assert "3D tiles partially unavailable" in BUILD
+    assert "Settling 3D tiles" in BUILD
