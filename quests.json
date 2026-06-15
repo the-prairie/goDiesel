@@ -968,27 +968,27 @@
     },
     {
       "activity_id": "17654151284",
-      "status": "pending",
+      "status": "approved",
       "region": null
     },
     {
       "activity_id": "17616195995",
-      "status": "pending",
-      "region": null
+      "status": "approved",
+      "region": "Okayama, Japan"
     },
     {
       "activity_id": "17606492777",
-      "status": "pending",
-      "region": null
+      "status": "approved",
+      "region": "Hiroshima, Japan"
     },
     {
       "activity_id": "17597564971",
-      "status": "pending",
-      "region": null
+      "status": "approved",
+      "region": "Hiroshima, Japan"
     },
     {
       "activity_id": "17586941421",
-      "status": "pending",
+      "status": "approved",
       "region": null
     },
     {
@@ -1623,8 +1623,8 @@
     },
     {
       "activity_id": "16366737881",
-      "status": "pending",
-      "region": null
+      "status": "approved",
+      "region": "Bragg Creek, AB"
     },
     {
       "activity_id": "16366732835",
@@ -2108,12 +2108,12 @@
     },
     {
       "activity_id": "15573295095",
-      "status": "pending",
+      "status": "approved",
       "region": null
     },
     {
       "activity_id": "15562324390",
-      "status": "pending",
+      "status": "approved",
       "region": null
     },
     {
@@ -2279,7 +2279,7 @@
     {
       "activity_id": "15182597704",
       "status": "approved",
-      "region": null
+      "region": "Calgary, AB"
     },
     {
       "activity_id": "15182597694",
@@ -2343,7 +2343,7 @@
     },
     {
       "activity_id": "14736711660",
-      "status": "pending",
+      "status": "approved",
       "region": null
     },
     {
@@ -2463,8 +2463,8 @@
     },
     {
       "activity_id": "14486170630",
-      "status": "pending",
-      "region": null
+      "status": "approved",
+      "region": "London, UK"
     },
     {
       "activity_id": "14478559092",
@@ -2493,7 +2493,7 @@
     },
     {
       "activity_id": "14422331296",
-      "status": "pending",
+      "status": "approved",
       "region": null
     },
     {
@@ -2503,7 +2503,7 @@
     },
     {
       "activity_id": "14394581660",
-      "status": "pending",
+      "status": "approved",
       "region": null
     },
     {
@@ -2578,7 +2578,7 @@
     },
     {
       "activity_id": "14262327221",
-      "status": "pending",
+      "status": "approved",
       "region": null
     },
     {
@@ -2653,7 +2653,7 @@
     },
     {
       "activity_id": "14160295943",
-      "status": "pending",
+      "status": "approved",
       "region": null
     },
     {
@@ -2673,17 +2673,17 @@
     },
     {
       "activity_id": "14130782031",
-      "status": "pending",
+      "status": "approved",
       "region": null
     },
     {
       "activity_id": "14130772463",
-      "status": "pending",
+      "status": "approved",
       "region": null
     },
     {
       "activity_id": "14130768855",
-      "status": "pending",
+      "status": "approved",
       "region": null
     },
     {
@@ -2728,7 +2728,7 @@
     },
     {
       "activity_id": "14064880083",
-      "status": "pending",
+      "status": "approved",
       "region": null
     },
     {
@@ -2768,12 +2768,12 @@
     },
     {
       "activity_id": "14030669837",
-      "status": "pending",
+      "status": "approved",
       "region": null
     },
     {
       "activity_id": "14023448720",
-      "status": "pending",
+      "status": "approved",
       "region": null
     },
     {
@@ -2833,7 +2833,7 @@
     },
     {
       "activity_id": "13971753429",
-      "status": "pending",
+      "status": "approved",
       "region": null
     },
     {
@@ -2863,7 +2863,7 @@
     },
     {
       "activity_id": "13941094274",
-      "status": "pending",
+      "status": "approved",
       "region": null
     },
     {
@@ -2978,7 +2978,7 @@
     },
     {
       "activity_id": "13835672113",
-      "status": "pending",
+      "status": "approved",
       "region": null
     },
     {
@@ -3023,7 +3023,7 @@
     },
     {
       "activity_id": "13807396994",
-      "status": "pending",
+      "status": "approved",
       "region": null
     },
     {
@@ -3198,7 +3198,7 @@
     },
     {
       "activity_id": "13534813116",
-      "status": "pending",
+      "status": "approved",
       "region": null
     },
     {
@@ -3323,7 +3323,7 @@
     },
     {
       "activity_id": "13358070690",
-      "status": "pending",
+      "status": "approved",
       "region": null
     },
     {
@@ -5948,8 +5948,8 @@
     },
     {
       "activity_id": "9915035779",
-      "status": "pending",
-      "region": null
+      "status": "approved",
+      "region": "Los Angeles, CA"
     },
     {
       "activity_id": "9899367059",
@@ -6048,8 +6048,8 @@
     },
     {
       "activity_id": "9844581410",
-      "status": "pending",
-      "region": null
+      "status": "approved",
+      "region": "New York, NY"
     },
     {
       "activity_id": "9844578592",
@@ -7068,8 +7068,8 @@
     },
     {
       "activity_id": "8836227189",
-      "status": "pending",
-      "region": null
+      "status": "approved",
+      "region": "Rome, Italy"
     },
     {
       "activity_id": "8836227089",
@@ -7078,18 +7078,18 @@
     },
     {
       "activity_id": "8836227016",
-      "status": "pending",
-      "region": null
+      "status": "approved",
+      "region": "Bologna, Italy"
     },
     {
       "activity_id": "8836226791",
-      "status": "pending",
-      "region": null
+      "status": "approved",
+      "region": "Bologna, Italy"
     },
     {
       "activity_id": "8836226736",
-      "status": "pending",
-      "region": null
+      "status": "approved",
+      "region": "Bologna, Italy"
     },
     {
       "activity_id": "8836226639",
@@ -7098,18 +7098,18 @@
     },
     {
       "activity_id": "8790922344",
-      "status": "pending",
-      "region": null
+      "status": "approved",
+      "region": "Veneto, Italy"
     },
     {
       "activity_id": "8788969453",
-      "status": "pending",
-      "region": null
+      "status": "approved",
+      "region": "Verona, Italy"
     },
     {
       "activity_id": "8788967538",
-      "status": "pending",
-      "region": null
+      "status": "approved",
+      "region": "Treviso, Italy"
     },
     {
       "activity_id": "8788966192",
@@ -7128,7 +7128,7 @@
     },
     {
       "activity_id": "8761568343",
-      "status": "pending",
+      "status": "approved",
       "region": null
     },
     {
@@ -10523,8 +10523,8 @@
     },
     {
       "activity_id": "6496900063",
-      "status": "pending",
-      "region": null
+      "status": "approved",
+      "region": "Ucluelet, BC"
     },
     {
       "activity_id": "6492590772",
@@ -10543,8 +10543,8 @@
     },
     {
       "activity_id": "6477420224",
-      "status": "pending",
-      "region": null
+      "status": "approved",
+      "region": "Nanaimo, BC"
     },
     {
       "activity_id": "6471841737",
@@ -10658,8 +10658,8 @@
     },
     {
       "activity_id": "5981399261",
-      "status": "pending",
-      "region": null
+      "status": "approved",
+      "region": "Nanaimo, BC"
     },
     {
       "activity_id": "5980270707",
@@ -10688,7 +10688,7 @@
     },
     {
       "activity_id": "5944474545",
-      "status": "pending",
+      "status": "approved",
       "region": null
     },
     {
@@ -10723,8 +10723,8 @@
     },
     {
       "activity_id": "5868096334",
-      "status": "pending",
-      "region": null
+      "status": "approved",
+      "region": "Nanaimo, BC"
     },
     {
       "activity_id": "5864419368",
@@ -10743,8 +10743,8 @@
     },
     {
       "activity_id": "5837509151",
-      "status": "pending",
-      "region": null
+      "status": "approved",
+      "region": "Nanaimo, BC"
     },
     {
       "activity_id": "5826181303",
@@ -10768,7 +10768,7 @@
     },
     {
       "activity_id": "5786313644",
-      "status": "pending",
+      "status": "approved",
       "region": null
     },
     {
@@ -10943,7 +10943,7 @@
     },
     {
       "activity_id": "5460495850",
-      "status": "pending",
+      "status": "approved",
       "region": null
     },
     {
@@ -10963,7 +10963,7 @@
     },
     {
       "activity_id": "5420668682",
-      "status": "pending",
+      "status": "approved",
       "region": null
     },
     {
