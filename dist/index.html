@@ -1365,21 +1365,6 @@ function makeGlobeCircle(latitude = null, longitude = null, radius = 2.425) {
   return points;
 }
 
-const GLOBE_LAND_OUTLINES = [
-  [[72,-168],[69,-142],[61,-124],[49,-125],[32,-117],[18,-100],[8,-82],[16,-61],[45,-52],[60,-70],[70,-96],[72,-168]],
-  [[12,-82],[-5,-79],[-18,-70],[-35,-73],[-54,-68],[-39,-55],[-22,-44],[-5,-35],[8,-52],[12,-82]],
-  [[36,-10],[52,-5],[64,24],[57,54],[43,70],[26,50],[12,44],[-33,18],[-34,-17],[6,-12],[36,-10]],
-  [[70,28],[62,58],[55,92],[44,128],[22,120],[8,102],[20,74],[40,45],[56,30],[70,28]],
-  [[32,130],[45,142],[42,146],[31,141],[32,130]],
-  [[-11,113],[-25,114],[-39,146],[-25,154],[-11,142],[-11,113]],
-  [[72,-52],[77,-20],[66,-18],[59,-44],[72,-52]],
-  [[36,25],[35,36],[30,34],[32,24],[36,25]],
-];
-
-function makeGlobeLandOutline(coords, radius = 2.432) {
-  return makeGlobeLine(coords.map(([lat, lng]) => latLngToVector3(lat, lng, radius)), 0x4aa7b4, 0.30);
-}
-
 function buildGlobeScene() {
   const canvas = document.getElementById('globeCanvas');
   if (!canvas || typeof THREE === 'undefined') return false;
@@ -1393,17 +1378,29 @@ function buildGlobeScene() {
 
   const globe = new THREE.Mesh(
     new THREE.SphereGeometry(2.38, 96, 64),
-    new THREE.MeshBasicMaterial({ color: 0x05090d })
+    new THREE.MeshBasicMaterial({ color: 0x10242c })
   );
   globeRoot.add(globe);
+  new THREE.TextureLoader().load(
+    'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_atmos_2048.jpg',
+    texture => {
+      if ('colorSpace' in texture && THREE.SRGBColorSpace) texture.colorSpace = THREE.SRGBColorSpace;
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.offset.x = 0.25;
+      globe.material.map = texture;
+      globe.material.color.set(0x9fb7ac);
+      globe.material.needsUpdate = true;
+    },
+    undefined,
+    () => globe.material.color.set(0x10242c)
+  );
   const glow = new THREE.Mesh(
     new THREE.SphereGeometry(2.52, 96, 64),
     new THREE.MeshBasicMaterial({ color: 0x0b4e83, transparent: true, opacity: 0.12, side: THREE.BackSide })
   );
   globeRoot.add(glow);
-  GLOBE_LAND_OUTLINES.forEach(outline => globeRoot.add(makeGlobeLandOutline(outline)));
-  [-60, -30, 0, 30, 60].forEach(lat => globeRoot.add(makeGlobeLine(makeGlobeCircle(lat, null), 0x244663, 0.34)));
-  [-150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150].forEach(lng => globeRoot.add(makeGlobeLine(makeGlobeCircle(null, lng), 0x244663, 0.24)));
+  [-60, -30, 0, 30, 60].forEach(lat => globeRoot.add(makeGlobeLine(makeGlobeCircle(lat, null), 0x244663, 0.22)));
+  [-150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150].forEach(lng => globeRoot.add(makeGlobeLine(makeGlobeCircle(null, lng), 0x244663, 0.16)));
 
   globeRegions = globeRouteRegions();
   globeHotspots = [];

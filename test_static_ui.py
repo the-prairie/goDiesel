@@ -143,12 +143,15 @@ def test_globe_hotspots_use_intensity_not_large_orbs():
     assert "dot.scale.setScalar(selected ? 1.7 : 1);" not in BUILD
 
 
-def test_globe_projection_has_land_context_and_label_occlusion():
+def test_globe_projection_has_texture_context_and_label_occlusion():
     assert "radius * Math.cos(latRad) * Math.sin(lngRad)" in BUILD
     assert "radius * Math.sin(latRad)" in BUILD
     assert "radius * Math.cos(latRad) * Math.cos(lngRad)" in BUILD
-    assert "const GLOBE_LAND_OUTLINES = [" in BUILD
-    assert "GLOBE_LAND_OUTLINES.forEach(outline => globeRoot.add(makeGlobeLandOutline(outline)));" in BUILD
+    assert "new THREE.TextureLoader().load(" in BUILD
+    assert "raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_atmos_2048.jpg" in BUILD
+    assert "texture.offset.x = 0.25;" in BUILD
+    assert "globe.material.color.set(0x9fb7ac);" in BUILD
+    assert "() => globe.material.color.set(0x10242c)" in BUILD
     assert "facing > 0.16" in BUILD
     assert "const collides = placed.some" in BUILD
     assert "item.selected || !collides" in BUILD
