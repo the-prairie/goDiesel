@@ -612,6 +612,68 @@ body.ops-mode .curation-panel { display: block; }
                         padding: 7px 9px; font-family: 'JetBrains Mono', monospace;
                         font-size: 9px; letter-spacing: 1.2px; text-transform: uppercase; cursor: pointer; }
 
+.globe-lab { display: none; position: relative; min-height: calc(100dvh - 68px);
+             background: radial-gradient(circle at 42% 48%, rgba(0,147,231,0.14), transparent 34%),
+                         linear-gradient(180deg, #05090D 0%, #071014 58%, #050708 100%);
+             overflow: hidden; border-top: 1px solid rgba(123,161,187,0.10); }
+.globe-lab.active { display: block; }
+.globe-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.globe-label-layer { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.globe-label { position: absolute; transform: translate(-50%, -50%);
+               display: flex; align-items: center; gap: 7px;
+               font-family: 'JetBrains Mono', monospace; font-size: 9px;
+               letter-spacing: 1.2px; text-transform: uppercase; color: #DCE8EF;
+               background: rgba(8,12,16,0.70); border: 1px solid rgba(123,161,187,0.30);
+               border-radius: 999px; padding: 6px 8px; backdrop-filter: blur(8px);
+               white-space: nowrap; opacity: 0.78; transition: opacity 160ms ease, border-color 160ms ease, transform 160ms ease; }
+.globe-label::before { content: ''; width: 8px; height: 8px; border-radius: 50%;
+                       background: var(--teal); box-shadow: 0 0 16px rgba(0,241,159,0.65); }
+.globe-label.active { opacity: 1; border-color: rgba(0,241,159,0.72);
+                      transform: translate(-50%, -50%) scale(1.05); color: #FFF; }
+.globe-panel { position: absolute; z-index: 3; top: 28px; left: 28px; width: min(390px, calc(100% - 56px));
+               background: rgba(7,11,15,0.80); border: 1px solid rgba(123,161,187,0.22);
+               border-radius: 10px; padding: 18px; backdrop-filter: blur(14px);
+               box-shadow: 0 22px 70px rgba(0,0,0,0.34); }
+.globe-kicker { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--teal);
+                letter-spacing: 1.8px; text-transform: uppercase; }
+.globe-title { margin-top: 8px; font-size: 28px; font-weight: 800; letter-spacing: 0.04em;
+               text-transform: uppercase; line-height: 1.05; }
+.globe-copy { margin-top: 10px; color: var(--text-dim); font-size: 13px; line-height: 1.6; max-width: 34rem; }
+.globe-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+.globe-stat { border: 1px solid rgba(123,161,187,0.16); border-radius: 7px;
+              background: rgba(12,20,24,0.55); padding: 10px; min-width: 0; }
+.globe-stat b { display: block; color: #FFF; font-family: 'JetBrains Mono', monospace;
+                font-size: 15px; letter-spacing: 0.6px; }
+.globe-stat span { display: block; margin-top: 4px; color: var(--text-dim);
+                   font-family: 'JetBrains Mono', monospace; font-size: 8px;
+                   letter-spacing: 1.2px; text-transform: uppercase; }
+.globe-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.globe-action { appearance: none; border: 1px solid rgba(123,161,187,0.30);
+                background: rgba(20,26,31,0.82); color: #DCE8EF; border-radius: 7px;
+                padding: 9px 11px; font-family: 'JetBrains Mono', monospace;
+                font-size: 9px; letter-spacing: 1.3px; text-transform: uppercase; cursor: pointer; }
+.globe-action.primary { border-color: rgba(0,241,159,0.58); color: var(--teal);
+                       background: rgba(0,241,159,0.08); }
+.globe-route-panel { position: absolute; z-index: 3; right: 28px; bottom: 28px;
+                     width: min(380px, calc(100% - 56px)); max-height: min(470px, calc(100dvh - 160px));
+                     display: flex; flex-direction: column;
+                     background: rgba(7,11,15,0.82); border: 1px solid rgba(123,161,187,0.22);
+                     border-radius: 10px; backdrop-filter: blur(14px); overflow: hidden;
+                     box-shadow: 0 22px 70px rgba(0,0,0,0.34); }
+.globe-route-head { padding: 14px 15px; border-bottom: 1px solid rgba(123,161,187,0.15); }
+.globe-route-head b { display: block; color: #FFF; text-transform: uppercase; letter-spacing: 0.08em; }
+.globe-route-head span { display: block; margin-top: 5px; color: var(--text-dim);
+                         font-family: 'JetBrains Mono', monospace; font-size: 9px;
+                         letter-spacing: 1.1px; text-transform: uppercase; }
+.globe-route-list { padding: 8px; overflow: auto; }
+.globe-route-item { width: 100%; text-align: left; appearance: none; border: 1px solid transparent;
+                    border-radius: 8px; background: transparent; color: #DCE8EF; cursor: pointer;
+                    padding: 10px; display: grid; gap: 5px; }
+.globe-route-item:hover { border-color: rgba(0,241,159,0.34); background: rgba(0,241,159,0.06); }
+.globe-route-item b { color: #FFF; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+.globe-route-item span { color: var(--text-dim); font-family: 'JetBrains Mono', monospace;
+                         font-size: 9px; letter-spacing: 1px; text-transform: uppercase; }
+
 .quest-card { background: var(--bg-card); border: 1px solid var(--border);
               border-radius: 14px; padding: 18px; cursor: pointer;
               transition: all 220ms ease;
@@ -1048,6 +1110,13 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
   /* Gallery */
   .gallery { padding: 18px 14px 32px; gap: 12px;
              grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+  .globe-lab { min-height: calc(100dvh - 61px); }
+  .globe-panel { top: 12px; left: 12px; width: calc(100% - 24px); padding: 14px; }
+  .globe-title { font-size: 22px; }
+  .globe-copy { display: none; }
+  .globe-route-panel { left: 12px; right: 12px; bottom: 12px; width: auto;
+                       max-height: 38dvh; }
+  .globe-label { font-size: 8px; padding: 5px 7px; }
   .gallery-intro { margin-bottom: 4px; }
   .atlas-kicker { font-size: 9px; }
   .gallery-intro h2 { font-size: 26px; line-height: 1.15; }
@@ -1203,6 +1272,28 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
   </div>
   <button class="back-btn" id="backBtn" onclick="showGallery()">← ALL QUESTS</button>
 </header>
+
+<div class="globe-lab" id="globeLab">
+  <canvas class="globe-canvas" id="globeCanvas" aria-label="Quest globe"></canvas>
+  <div class="globe-label-layer" id="globeLabelLayer"></div>
+  <section class="globe-panel">
+    <div class="globe-kicker">Quest globe lab</div>
+    <div class="globe-title">Real places, playable days.</div>
+    <div class="globe-copy">Explore Lauren&rsquo;s routes as regional hotspots. Pick a place, then open the route in the existing replay experience.</div>
+    <div class="globe-stats" id="globeStats"></div>
+    <div class="globe-actions">
+      <button class="globe-action primary" type="button" onclick="selectBestGlobeRegion()">Best in Earth</button>
+      <button class="globe-action" type="button" onclick="showGallery()">All quests</button>
+    </div>
+  </section>
+  <aside class="globe-route-panel">
+    <div class="globe-route-head">
+      <b id="globeRegionName">Route regions</b>
+      <span id="globeRegionMeta">Pick a hotspot</span>
+    </div>
+    <div class="globe-route-list" id="globeRouteList"></div>
+  </aside>
+</div>
 
 <div class="gallery" id="gallery">
   <div class="gallery-intro">
@@ -1400,6 +1491,7 @@ let routePlaySpeed = 4;
 const ROUTE_SPEEDS = [1, 4, 12];
 const queryParams = new URLSearchParams(location.search);
 const SHOW_DEV_CINEMA_MODES = queryParams.get('devModes') === '1';
+const GLOBE_LAB_MODE = queryParams.get('lab') === 'globe';
 let artifactRenderer = null, artifactScene = null, artifactCamera = null;
 let artifactFullLine = null, artifactProgressLine = null, artifactMarker = null, artifactBlocks = [];
 let artifactPoints = [], artifactSlug = null;
@@ -1418,6 +1510,9 @@ let cinemaFullLine = null, cinemaProgressLine = null, cinemaMarker = null, cinem
 let cinemaPoints = [], cinemaSlug = null, cinemaDecor = [], cinemaMoments = [], cinemaMemories = [];
 let cinemaFrame = null, cinemaStartedAt = 0;
 let cinemaCameraTarget = null, cinemaLookTarget = null, cinemaLookCurrent = null;
+let globeRenderer = null, globeScene = null, globeCamera = null, globeRoot = null, globeRaycaster = null;
+let globeHotspots = [], globeLabels = [], globeRegions = [], selectedGlobeRegion = null;
+let globeAnimationFrame = null, globePointer = null, globeTargetRotation = null;
 let allPhotos = [];
 const STORAGE_KEY_PREFIX = 'quests:photos:';
 const REPLAY_MODE_STORAGE_KEY = 'quests:replay-mode';
@@ -1684,6 +1779,259 @@ function setSelectOptions(id, values) {
   });
 }
 
+function globeRouteRegions() {
+  const byRegion = new Map();
+  ROUTES.forEach((route, index) => {
+    const key = route.region || route.name || 'Routes';
+    if (!byRegion.has(key)) {
+      byRegion.set(key, { name: key, routes: [], indexes: [], lat: 0, lng: 0, km: 0, climb: 0, xp: 0 });
+    }
+    const group = byRegion.get(key);
+    group.routes.push(route);
+    group.indexes.push(index);
+    group.lat += Number(route.center_lat) || 0;
+    group.lng += Number(route.center_lng) || 0;
+    group.km += Number(route.distance_km) || 0;
+    group.climb += Number(route.elevation_gain_m) || 0;
+    group.xp += Number(route.xp) || 0;
+  });
+  return [...byRegion.values()].map(group => {
+    group.lat /= Math.max(group.routes.length, 1);
+    group.lng /= Math.max(group.routes.length, 1);
+    group.bestEarth = group.routes.some(route => isBestInEarth(route));
+    group.bestRouteIndex = group.indexes[group.routes.reduce((bestIdx, route, i, routes) =>
+      (Number(route.xp) || 0) > (Number(routes[bestIdx].xp) || 0) ? i : bestIdx, 0)];
+    return group;
+  }).sort((a, b) => b.routes.length - a.routes.length || b.km - a.km);
+}
+
+function latLngToVector3(lat, lng, radius = 2.42) {
+  const phi = (90 - lat) * Math.PI / 180;
+  const theta = (lng + 180) * Math.PI / 180;
+  return new THREE.Vector3(
+    -radius * Math.sin(phi) * Math.cos(theta),
+    radius * Math.cos(phi),
+    radius * Math.sin(phi) * Math.sin(theta)
+  );
+}
+
+function makeGlobeLine(points, color, opacity = 0.42) {
+  const geometry = new THREE.BufferGeometry().setFromPoints(points);
+  const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity });
+  return new THREE.Line(geometry, material);
+}
+
+function makeGlobeCircle(latitude = null, longitude = null, radius = 2.425) {
+  const points = [];
+  const steps = 128;
+  for (let i = 0; i <= steps; i += 1) {
+    if (latitude !== null) {
+      const lng = -180 + (360 * i / steps);
+      points.push(latLngToVector3(latitude, lng, radius));
+    } else {
+      const lat = -85 + (170 * i / steps);
+      points.push(latLngToVector3(lat, longitude, radius));
+    }
+  }
+  return points;
+}
+
+function buildGlobeScene() {
+  const canvas = document.getElementById('globeCanvas');
+  if (!canvas || typeof THREE === 'undefined') return false;
+  globeScene = new THREE.Scene();
+  globeCamera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+  globeCamera.position.set(0, 0.35, 7.2);
+  globeRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  globeRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  globeRoot = new THREE.Group();
+  globeScene.add(globeRoot);
+
+  const globe = new THREE.Mesh(
+    new THREE.SphereGeometry(2.38, 96, 64),
+    new THREE.MeshBasicMaterial({ color: 0x05090d })
+  );
+  globeRoot.add(globe);
+  const glow = new THREE.Mesh(
+    new THREE.SphereGeometry(2.52, 96, 64),
+    new THREE.MeshBasicMaterial({ color: 0x0b4e83, transparent: true, opacity: 0.12, side: THREE.BackSide })
+  );
+  globeRoot.add(glow);
+  [-60, -30, 0, 30, 60].forEach(lat => globeRoot.add(makeGlobeLine(makeGlobeCircle(lat, null), 0x244663, 0.34)));
+  [-150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150].forEach(lng => globeRoot.add(makeGlobeLine(makeGlobeCircle(null, lng), 0x244663, 0.24)));
+
+  globeRegions = globeRouteRegions();
+  globeHotspots = [];
+  globeRegions.forEach((region, i) => {
+    const position = latLngToVector3(region.lat, region.lng, 2.47);
+    const size = 0.055 + Math.min(region.routes.length, 9) * 0.008;
+    const dot = new THREE.Mesh(
+      new THREE.SphereGeometry(size, 24, 16),
+      new THREE.MeshBasicMaterial({ color: region.bestEarth ? 0xe8d49a : 0x00f19f, transparent: true, opacity: 0.94 })
+    );
+    dot.position.copy(position);
+    dot.userData.regionIndex = i;
+    globeRoot.add(dot);
+    globeHotspots.push(dot);
+  });
+
+  const sorted = [...globeRegions].sort((a, b) => b.km - a.km).slice(0, 8);
+  sorted.forEach((region, i) => {
+    const next = sorted[(i + 1) % sorted.length];
+    const a = latLngToVector3(region.lat, region.lng, 2.44);
+    const b = latLngToVector3(next.lat, next.lng, 2.44);
+    const mid = a.clone().add(b).normalize().multiplyScalar(2.72);
+    const curve = new THREE.QuadraticBezierCurve3(a, mid, b);
+    globeRoot.add(makeGlobeLine(curve.getPoints(42), 0x00f19f, 0.14));
+  });
+
+  globeRaycaster = new THREE.Raycaster();
+  globePointer = new THREE.Vector2();
+  globeTargetRotation = new THREE.Vector2(-0.18, -0.48);
+  globeRoot.rotation.set(globeTargetRotation.x, globeTargetRotation.y, 0);
+  canvas.addEventListener('click', handleGlobeClick);
+  canvas.addEventListener('pointermove', handleGlobePointerMove);
+  renderGlobeLabels();
+  resizeGlobe();
+  return true;
+}
+
+function renderGlobeLabels() {
+  const layer = document.getElementById('globeLabelLayer');
+  if (!layer) return;
+  layer.innerHTML = '';
+  globeLabels = globeRegions.map((region, i) => {
+    const el = document.createElement('div');
+    el.className = 'globe-label';
+    el.textContent = `${region.name} · ${region.routes.length}`;
+    el.dataset.regionIndex = i;
+    layer.appendChild(el);
+    return el;
+  });
+}
+
+function resizeGlobe() {
+  if (!globeRenderer || !globeCamera) return;
+  const canvas = document.getElementById('globeCanvas');
+  const rect = canvas.getBoundingClientRect();
+  const width = Math.max(1, rect.width);
+  const height = Math.max(1, rect.height);
+  globeRenderer.setSize(width, height, false);
+  globeCamera.aspect = width / height;
+  globeCamera.updateProjectionMatrix();
+}
+
+function updateGlobeLabels() {
+  if (!globeCamera || !globeRoot || !globeLabels.length) return;
+  const canvas = document.getElementById('globeCanvas');
+  const rect = canvas.getBoundingClientRect();
+  const cameraDir = new THREE.Vector3();
+  globeCamera.getWorldDirection(cameraDir);
+  globeHotspots.forEach((dot, i) => {
+    const label = globeLabels[i];
+    if (!label) return;
+    const world = dot.getWorldPosition(new THREE.Vector3());
+    const projected = world.clone().project(globeCamera);
+    const visible = projected.z < 1 && world.clone().normalize().dot(cameraDir.clone().negate()) > -0.1;
+    label.style.left = `${(projected.x * 0.5 + 0.5) * rect.width}px`;
+    label.style.top = `${(-projected.y * 0.5 + 0.5) * rect.height}px`;
+    label.style.display = visible ? 'flex' : 'none';
+    label.classList.toggle('active', selectedGlobeRegion === globeRegions[i]);
+  });
+}
+
+function animateGlobe() {
+  if (!globeRenderer || !globeScene || !globeCamera || !globeRoot) return;
+  globeRoot.rotation.x += (globeTargetRotation.x - globeRoot.rotation.x) * 0.055;
+  globeRoot.rotation.y += (globeTargetRotation.y - globeRoot.rotation.y) * 0.055;
+  globeRoot.rotation.y += 0.0009;
+  globeHotspots.forEach((dot, i) => {
+    const selected = selectedGlobeRegion === globeRegions[i];
+    dot.scale.setScalar(selected ? 1.7 : 1);
+    dot.material.opacity = selected ? 1 : 0.86;
+  });
+  updateGlobeLabels();
+  globeRenderer.render(globeScene, globeCamera);
+  globeAnimationFrame = requestAnimationFrame(animateGlobe);
+}
+
+function initGlobe() {
+  if (!GLOBE_LAB_MODE) return;
+  if (!globeRenderer && !buildGlobeScene()) return;
+  if (!selectedGlobeRegion && globeRegions.length) selectGlobeRegion(globeRegions[0], { rotate: false });
+  if (!globeAnimationFrame) animateGlobe();
+}
+
+function setGlobePointer(event) {
+  const rect = event.currentTarget.getBoundingClientRect();
+  globePointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  globePointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+}
+
+function regionFromGlobeEvent(event) {
+  if (!globeRaycaster || !globeCamera) return null;
+  setGlobePointer(event);
+  globeRaycaster.setFromCamera(globePointer, globeCamera);
+  const hit = globeRaycaster.intersectObjects(globeHotspots, false)[0];
+  return hit ? globeRegions[hit.object.userData.regionIndex] : null;
+}
+
+function handleGlobeClick(event) {
+  const region = regionFromGlobeEvent(event);
+  if (region) selectGlobeRegion(region);
+}
+
+function handleGlobePointerMove(event) {
+  const region = regionFromGlobeEvent(event);
+  event.currentTarget.style.cursor = region ? 'pointer' : 'grab';
+}
+
+function selectGlobeRegion(region, options = {}) {
+  selectedGlobeRegion = region;
+  const name = document.getElementById('globeRegionName');
+  const meta = document.getElementById('globeRegionMeta');
+  const list = document.getElementById('globeRouteList');
+  if (name) name.textContent = region.name;
+  if (meta) {
+    meta.textContent = `${region.routes.length} routes · ${region.km.toFixed(0)} km · ${Math.round(region.climb).toLocaleString()} m up`;
+  }
+  if (list) {
+    list.innerHTML = region.routes.map((route, i) => `
+      <button class="globe-route-item" type="button" onclick="openRoute(${region.indexes[i]})">
+        <b>${escapeHtml(route.name)}</b>
+        <span>${escapeHtml(route.type)} · ${route.distance_km.toFixed(1)} km · ${(route.elevation_gain_m || 0).toLocaleString()} m up</span>
+      </button>
+    `).join('');
+  }
+  if (options.rotate !== false && globeTargetRotation) {
+    globeTargetRotation.x = -region.lat * Math.PI / 360;
+    globeTargetRotation.y = -(region.lng + 12) * Math.PI / 180;
+  }
+}
+
+function selectBestGlobeRegion() {
+  const region = globeRegions.find(item => item.bestEarth) || globeRegions[0];
+  if (region) selectGlobeRegion(region);
+}
+
+function showGlobe(options = {}) {
+  const { updateUrl = true } = options;
+  document.getElementById('detail').classList.remove('active');
+  document.getElementById('gallery').style.display = 'none';
+  document.getElementById('globeLab').classList.add('active');
+  document.getElementById('backBtn').style.display = 'none';
+  if (updateUrl && location.hash) history.pushState({ globe: true }, '', `${location.pathname}${location.search}`);
+  stopRoutePlayback();
+  stopCinemaLoop();
+  disposeEarthReplay();
+  if (map) {
+    map.remove();
+    map = null;
+    mapSlug = null;
+  }
+  initGlobe();
+}
+
 function initFilterControls() {
   setSelectOptions('filterType', ['All', 'Run', 'Ride']);
   setSelectOptions('filterDifficulty', ['All', 'Easy', 'Moderate', 'Epic']);
@@ -1744,7 +2092,8 @@ function setGalleryUrl() {
 function handleCurrentUrl() {
   const match = location.hash.match(/^#quest\\/(.+)$/);
   if (!match) {
-    showGallery({ updateUrl: false });
+    if (GLOBE_LAB_MODE) showGlobe({ updateUrl: false });
+    else showGallery({ updateUrl: false });
     return;
   }
   const slug = decodeURIComponent(match[1]);
@@ -1848,6 +2197,7 @@ function renderCompletionPanel(route) {
 async function openRoute(i, options = {}) {
   const { updateUrl = true } = options;
   activeRouteIdx = i;
+  document.getElementById('globeLab').classList.remove('active');
   document.getElementById('gallery').style.display = 'none';
   document.getElementById('detail').classList.add('active');
   document.getElementById('backBtn').style.display = 'inline-flex';
@@ -1884,6 +2234,7 @@ function showGallery(options = {}) {
   const { updateUrl = true } = options;
   stopRoutePlayback();
   disposeEarthReplay();
+  document.getElementById('globeLab').classList.remove('active');
   document.getElementById('gallery').style.display = 'grid';
   document.getElementById('detail').classList.remove('active');
   document.getElementById('backBtn').style.display = 'none';
@@ -3782,6 +4133,7 @@ document.getElementById('scrubber').addEventListener('input', e => {
 });
 
 window.addEventListener('resize', () => {
+  resizeGlobe();
   resizeElevationArtifact();
   resizeRouteCinema();
   if (earthViewer && !earthViewer.isDestroyed?.()) earthViewer.resize();
@@ -3793,6 +4145,7 @@ window.addEventListener('hashchange', handleCurrentUrl);
 renderAvatarPicker();
 initFilterControls();
 if (location.hash) handleCurrentUrl();
+else if (GLOBE_LAB_MODE) showGlobe({ updateUrl: false });
 else renderGallery();
 </script>
 </body></html>

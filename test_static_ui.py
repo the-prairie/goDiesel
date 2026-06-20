@@ -106,6 +106,23 @@ def test_best_in_earth_routes_are_marked_in_gallery_and_detail():
     assert "Best in Earth" in BUILD
 
 
+def test_globe_lab_is_query_addressable_without_changing_earth_replay():
+    assert 'class="globe-lab" id="globeLab"' in BUILD
+    assert 'id="globeCanvas"' in BUILD
+    assert "const GLOBE_LAB_MODE = queryParams.get('lab') === 'globe';" in BUILD
+    assert "function showGlobe(options = {})" in BUILD
+    assert "else if (GLOBE_LAB_MODE) showGlobe({ updateUrl: false });" in BUILD
+    assert "if (GLOBE_LAB_MODE) showGlobe({ updateUrl: false });" in BUILD
+
+
+def test_globe_lab_routes_to_existing_open_route_flow():
+    assert "function globeRouteRegions()" in BUILD
+    assert "function buildGlobeScene()" in BUILD
+    assert "function selectGlobeRegion(region" in BUILD
+    assert "onclick=\"openRoute(${region.indexes[i]})\"" in BUILD
+    assert "document.getElementById('globeLab').classList.remove('active');" in BUILD
+
+
 def test_earth_scrub_camera_and_blank_frame_detection():
     assert "earthScrubUntil = performance.now() + 750;" in BUILD
     assert "earthViewer.camera.cancelFlight?.();" in BUILD
