@@ -16,10 +16,18 @@ def test_route_cam_uses_street_view_not_maplibre_inset():
     assert "routeCamMap = new maplibregl.Map" not in BUILD
 
 
+def test_replay_mode_defaults_to_earth_on_desktop_and_atlas_on_mobile():
+    assert "const REPLAY_MODE_STORAGE_KEY = 'quests:replay-mode';" in BUILD
+    assert "function defaultReplayMode()" in BUILD
+    assert "window.matchMedia?.('(max-width: 700px)').matches ? 'atlas' : 'earth'" in BUILD
+    assert "const replayModePreference = requestedReplayMode || getReplayModePreference() || defaultReplayMode();" in BUILD
+
+
 def test_earth_lab_mode_is_query_addressable_without_dev_modes():
-    assert "const EARTH_LAB_MODE = requestedCinemaModeRaw === 'earth';" in BUILD
-    assert "if (EARTH_LAB_MODE) {" in BUILD
+    assert "const requestedReplayMode = requestedCinemaModeRaw === 'earth' || requestedCinemaModeRaw === 'atlas'" in BUILD
+    assert "if (replayModePreference === 'earth') {" in BUILD
     assert "routeCinemaEnabled = false;" in BUILD
+    assert "if (!earthModeEnabled && ROUTE_CINEMA_MODES.includes(requestedCinemaMode))" in BUILD
 
 
 def test_earth_lab_has_dedicated_stage_and_fallback():
@@ -63,8 +71,18 @@ def test_earth_tile_status_reports_partial_coverage():
 def test_earth_replay_has_visible_url_state_toggle():
     assert 'class="route-control route-earth" id="routeEarthBtn"' in BUILD
     assert "function toggleEarthReplay()" in BUILD
-    assert "params.set('lab', 'earth');" in BUILD
+    assert "params.set('lab', enabled ? 'earth' : 'atlas');" in BUILD
+    assert "setReplayModePreference(nextMode);" in BUILD
     assert "earthBtn.textContent = earthModeEnabled ? 'ATLAS' : 'EARTH';" in BUILD
+
+
+def test_best_in_earth_routes_are_marked_in_gallery_and_detail():
+    assert "const BEST_IN_EARTH_ROUTES = new Set([" in BUILD
+    assert "'13935098460'" in BUILD
+    assert "function isBestInEarth(route)" in BUILD
+    assert "quest-chip earth" in BUILD
+    assert "detail-earth-badge" in BUILD
+    assert "Best in Earth" in BUILD
 
 
 def test_earth_scrub_camera_and_blank_frame_detection():

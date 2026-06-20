@@ -136,6 +136,8 @@ body.ops-mode .curation-panel { display: block; }
               background: rgba(123,161,187,0.10); color: #AFC4D2; }
 .quest-chip.xp { background: rgba(0,241,159,0.12); color: var(--teal); }
 .quest-chip.theme { background: rgba(0,147,231,0.12); color: #83CFFF; }
+.quest-chip.earth { background: rgba(232,212,154,0.13); color: #E8D49A;
+                    border: 1px solid rgba(232,212,154,0.24); }
 .quest-type { font-family: 'JetBrains Mono', monospace; font-size: 9px;
               font-weight: 600; padding: 3px 8px; border-radius: 12px;
               letter-spacing: 1.2px; text-transform: uppercase; }
@@ -167,6 +169,11 @@ body.ops-mode .curation-panel { display: block; }
                text-transform: uppercase; }
 .detail-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px;
                color: var(--text-dim); letter-spacing: 1.2px; text-transform: uppercase; }
+.detail-earth-badge { display: inline-flex; align-items: center; margin-left: 8px;
+                      padding: 2px 7px; border-radius: 999px;
+                      border: 1px solid rgba(232,212,154,0.28);
+                      background: rgba(232,212,154,0.10); color: #E8D49A;
+                      font-size: 9px; letter-spacing: 1.2px; vertical-align: 1px; }
 .detail-brief { display: grid; grid-template-columns: minmax(260px, 0.9fr) minmax(280px, 1.1fr);
                 align-items: stretch; gap: 12px; min-width: 0; }
 .detail-quote { color: #C7D0D5; font-style: italic; font-size: 13px;
@@ -893,6 +900,20 @@ let cinemaFrame = null, cinemaStartedAt = 0;
 let cinemaCameraTarget = null, cinemaLookTarget = null, cinemaLookCurrent = null;
 let allPhotos = [];
 const STORAGE_KEY_PREFIX = 'quests:photos:';
+const REPLAY_MODE_STORAGE_KEY = 'quests:replay-mode';
+const BEST_IN_EARTH_ROUTES = new Set([
+  '17654151284', '17636880071', '17616195995', '17606492777', '17597564971',
+  '16366737881', '15573295095', '15562324390', '15182597704', '13835672113',
+  '13807396994', '14736711660', '14486170630', '14422331296', '14415835303',
+  '14394581660', '14349820520', '14262327221', '14160295943', '14130782031',
+  '14130772463', '14130768855', '14080158961', '14064880083', '14030669837',
+  '14023448720', '13134774070', '13971753429', '13941094274', '13935098460',
+  '13534813116', '13358070690', '10082410891', '10075093128', '9959792315',
+  '9953403673', '9945324433', '9934715694', '9845102380', '8790922344',
+  '8788969453', '8788967538', '8767788731', '8762819138', '6496900063',
+  '6477420224', '5981399261', '5944474545', '5868096334', '5837509151',
+  '5786313644', '5650407638', '5460495850', '5420668682'
+]);
 
 const galleryFilters = {
   type: 'All',
@@ -905,17 +926,44 @@ if (queryParams.get('ops') === '1') {
   document.body.classList.add('ops-mode');
 }
 const requestedCinemaModeRaw = queryParams.get('lab');
-const EARTH_LAB_MODE = requestedCinemaModeRaw === 'earth';
+const requestedReplayMode = requestedCinemaModeRaw === 'earth' || requestedCinemaModeRaw === 'atlas'
+  ? requestedCinemaModeRaw
+  : null;
 const requestedCinemaMode = requestedCinemaModeRaw === 'memory' || requestedCinemaModeRaw === 'atlas'
   ? 'flyover'
   : requestedCinemaModeRaw;
-if (EARTH_LAB_MODE) {
+const replayModePreference = requestedReplayMode || getReplayModePreference() || defaultReplayMode();
+if (replayModePreference === 'earth') {
   earthModeEnabled = true;
   routeCinemaEnabled = false;
 }
-if (ROUTE_CINEMA_MODES.includes(requestedCinemaMode)) {
+if (!earthModeEnabled && ROUTE_CINEMA_MODES.includes(requestedCinemaMode)) {
   routeCinemaMode = requestedCinemaMode;
   routeCinemaEnabled = true;
+}
+
+function defaultReplayMode() {
+  return window.matchMedia?.('(max-width: 700px)').matches ? 'atlas' : 'earth';
+}
+
+function getReplayModePreference() {
+  try {
+    const value = localStorage.getItem(REPLAY_MODE_STORAGE_KEY);
+    return value === 'earth' || value === 'atlas' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function setReplayModePreference(mode) {
+  if (mode !== 'earth' && mode !== 'atlas') return;
+  try {
+    localStorage.setItem(REPLAY_MODE_STORAGE_KEY, mode);
+  } catch {}
+}
+
+function isBestInEarth(route) {
+  return BEST_IN_EARTH_ROUTES.has(String(route?.activity_id || route?.slug || ''));
 }
 
 function escapeHtml(value) {
@@ -1065,6 +1113,7 @@ function renderGallery() {
         <span class="quest-chip xp">${(r.xp || 0).toLocaleString()} XP</span>
         <span class="quest-chip theme">${r.theme || 'Quest'}</span>
         <span class="quest-chip">${r.difficulty || 'Open'}</span>
+        ${isBestInEarth(r) ? '<span class="quest-chip earth">Best in Earth</span>' : ''}
       </div>
       <div class="quest-title">"${r.subtitle}"</div>
       <div class="quest-goal">${r.completion_rule || ''}</div>
@@ -1081,7 +1130,7 @@ function renderCompletionPanel(route) {
   const facts = [
     ['Reward', `${(route.xp || 0).toLocaleString()} XP`],
     ['Difficulty', route.difficulty || 'Open'],
-    ['Proof', 'GPS route'],
+    [isBestInEarth(route) ? 'Replay' : 'Proof', isBestInEarth(route) ? 'Best in Earth' : 'GPS route'],
     ['Climb', `${climb} m`],
   ];
   panel.innerHTML = `
@@ -1112,8 +1161,11 @@ async function openRoute(i, options = {}) {
     ? '<svg class="icon"><use href="#i-bike"/></svg>'
     : '<svg class="icon"><use href="#i-runner"/></svg>';
   document.getElementById('detailName').textContent = r.name;
+  const earthBadge = isBestInEarth(r)
+    ? ' <span class="detail-earth-badge">BEST IN EARTH</span>'
+    : '';
   document.getElementById('detailMeta').innerHTML =
-    `${typeIcon} ${r.type.toUpperCase()} · ${r.distance_km.toFixed(1)} KM · ${(r.elevation_gain_m || 0).toLocaleString()} M UP · ${(r.xp || 0).toLocaleString()} XP · ${r.date}`;
+    `${typeIcon} ${r.type.toUpperCase()} · ${r.distance_km.toFixed(1)} KM · ${(r.elevation_gain_m || 0).toLocaleString()} M UP · ${(r.xp || 0).toLocaleString()} XP · ${r.date}${earthBadge}`;
   document.getElementById('detailQuote').textContent = r.quest_blurb || `"${r.subtitle}"`;
   document.getElementById('stravaBtn').href =
     `https://www.strava.com/activities/${r.activity_id}`;
@@ -1449,21 +1501,20 @@ function setEarthMode(mode, title = '', copy = '') {
 
 function earthUrlForCurrentRoute(enabled) {
   const params = new URLSearchParams(location.search);
-  if (enabled) {
-    params.set('lab', 'earth');
-  } else {
-    params.delete('lab');
-  }
+  params.set('lab', enabled ? 'earth' : 'atlas');
   const search = params.toString();
   return `${location.pathname}${search ? '?' + search : ''}${location.hash || ''}`;
 }
 
 function toggleEarthReplay() {
-  location.href = earthUrlForCurrentRoute(!earthModeEnabled);
+  const nextMode = earthModeEnabled ? 'atlas' : 'earth';
+  setReplayModePreference(nextMode);
+  location.href = earthUrlForCurrentRoute(nextMode === 'earth');
 }
 
 function exitEarthMode() {
   if (!earthModeEnabled) return;
+  setReplayModePreference('atlas');
   location.href = earthUrlForCurrentRoute(false);
 }
 
