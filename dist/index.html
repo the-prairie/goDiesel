@@ -531,7 +531,7 @@ body.ops-mode .curation-panel { display: block; }
 .route-mode { display: none; }
 .route-mode.visible { display: inline-flex; }
 .avatar-picker { position: absolute; right: 16px; bottom: 76px; z-index: 6;
-                 display: none; grid-template-columns: repeat(4, 38px); gap: 8px;
+                 display: none; grid-template-columns: repeat(5, 38px); gap: 8px;
                  padding: 9px; border: 1px solid rgba(123,161,187,0.30);
                  border-radius: 8px; background: rgba(10,12,14,0.90);
                  backdrop-filter: blur(10px); box-shadow: 0 18px 46px rgba(0,0,0,0.30); }
@@ -748,7 +748,7 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
   .route-cinema { order: 6; flex: 1 1 calc(33.333% - 6px); }
   .route-mode { order: 6; flex: 1 1 calc(33.333% - 6px); }
   .route-lock { order: 7; flex: 1 1 100%; }
-  .avatar-picker { right: 10px; bottom: 118px; grid-template-columns: repeat(4, 34px); }
+  .avatar-picker { right: 10px; bottom: 118px; grid-template-columns: repeat(5, 34px); }
   .avatar-option { width: 34px; height: 34px; }
   .avatar-option dotlottie-player,
   .avatar-option .avatar-lottie { width: 30px; height: 30px; }
@@ -1095,9 +1095,14 @@ const ROUTE_AVATARS = [
     src: 'route-avatars/mario.lottie',
   },
   {
-    id: 'astronaut',
-    label: 'Astronaut',
-    src: 'route-avatars/astronaut.lottie',
+    id: 'walking',
+    label: 'Walking',
+    src: 'route-avatars/walking.lottie',
+  },
+  {
+    id: 'hangout-running',
+    label: 'Hangout Running',
+    src: 'route-avatars/hangout-running.lottie',
   },
 ];
 let currentAvatarId = getAvatarPreference();

@@ -67,7 +67,9 @@ def test_earth_marker_uses_persistent_lottie_avatar():
     assert "route-avatars/run-rex.lottie" in BUILD
     assert "route-avatars/nyan-cat.lottie" in BUILD
     assert "route-avatars/mario.lottie" in BUILD
-    assert "route-avatars/astronaut.lottie" in BUILD
+    assert "route-avatars/walking.lottie" in BUILD
+    assert "route-avatars/hangout-running.lottie" in BUILD
+    assert "route-avatars/astronaut.lottie" not in BUILD
     assert 'class="route-control route-avatar" id="routeAvatarBtn"' in BUILD
     assert 'class="avatar-picker" id="avatarPicker"' in BUILD
     assert 'class="earth-avatar-marker" id="earthAvatarMarker"' in BUILD
