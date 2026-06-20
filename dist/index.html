@@ -117,7 +117,7 @@ body.ops-mode .curation-panel { display: block; }
                          linear-gradient(180deg, #05090D 0%, #071014 58%, #050708 100%);
              overflow: hidden; border-top: 1px solid rgba(123,161,187,0.10); }
 .globe-lab.active { display: block; }
-.globe-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.globe-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
 .globe-label-layer { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
 .globe-label { position: absolute; transform: translate(-50%, -50%);
                display: flex; align-items: center; gap: 7px;
@@ -125,7 +125,9 @@ body.ops-mode .curation-panel { display: block; }
                letter-spacing: 1.2px; text-transform: uppercase; color: #DCE8EF;
                background: rgba(8,12,16,0.70); border: 1px solid rgba(123,161,187,0.30);
                border-radius: 999px; padding: 6px 8px; backdrop-filter: blur(8px);
-               white-space: nowrap; opacity: 0.78; transition: opacity 160ms ease, border-color 160ms ease, transform 160ms ease; }
+               white-space: nowrap; opacity: 0.78; transition: opacity 160ms ease, border-color 160ms ease, transform 160ms ease;
+               pointer-events: auto; cursor: pointer; }
+.globe-label:hover { opacity: 1; border-color: rgba(0,241,159,0.52); }
 .globe-label::before { content: ''; width: 8px; height: 8px; border-radius: 50%;
                        background: var(--teal); box-shadow: 0 0 16px rgba(0,241,159,0.65); }
 .globe-label.active { opacity: 1; border-color: rgba(0,241,159,0.72);
@@ -165,7 +167,7 @@ body.ops-mode .curation-panel { display: block; }
 .globe-route-head span { display: block; margin-top: 5px; color: var(--text-dim);
                          font-family: 'JetBrains Mono', monospace; font-size: 9px;
                          letter-spacing: 1.1px; text-transform: uppercase; }
-.globe-route-list { padding: 8px; overflow: auto; }
+.globe-route-list { padding: 8px; overflow: auto; overscroll-behavior: contain; }
 .globe-route-item { width: 100%; text-align: left; appearance: none; border: 1px solid transparent;
                     border-radius: 8px; background: transparent; color: #DCE8EF; cursor: pointer;
                     padding: 10px; display: grid; gap: 5px; }
@@ -1013,6 +1015,8 @@ let cinemaCameraTarget = null, cinemaLookTarget = null, cinemaLookCurrent = null
 let globeRenderer = null, globeScene = null, globeCamera = null, globeRoot = null, globeRaycaster = null;
 let globeHotspots = [], globeLabels = [], globeRegions = [], selectedGlobeRegion = null;
 let globeAnimationFrame = null, globePointer = null, globeTargetRotation = null;
+let globeCameraDistance = 7.2;
+let globeDrag = { active: false, moved: false, x: 0, y: 0, rotX: 0, rotY: 0 };
 let allPhotos = [];
 const STORAGE_KEY_PREFIX = 'quests:photos:';
 const REPLAY_MODE_STORAGE_KEY = 'quests:replay-mode';
@@ -1341,7 +1345,7 @@ function buildGlobeScene() {
   if (!canvas || typeof THREE === 'undefined') return false;
   globeScene = new THREE.Scene();
   globeCamera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
-  globeCamera.position.set(0, 0.35, 7.2);
+  globeCamera.position.set(0, 0.35, globeCameraDistance);
   globeRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   globeRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   globeRoot = new THREE.Group();
@@ -1390,7 +1394,17 @@ function buildGlobeScene() {
   globeTargetRotation = new THREE.Vector2(-0.18, -0.48);
   globeRoot.rotation.set(globeTargetRotation.x, globeTargetRotation.y, 0);
   canvas.addEventListener('click', handleGlobeClick);
+  canvas.addEventListener('pointerdown', handleGlobePointerDown);
   canvas.addEventListener('pointermove', handleGlobePointerMove);
+  canvas.addEventListener('pointerup', handleGlobePointerUp);
+  canvas.addEventListener('pointercancel', handleGlobePointerUp);
+  canvas.addEventListener('mousedown', handleGlobeMouseDown);
+  canvas.addEventListener('touchstart', handleGlobeTouchStart, { passive: false });
+  canvas.addEventListener('touchmove', handleGlobeTouchMove, { passive: false });
+  canvas.addEventListener('touchend', handleGlobeTouchEnd);
+  document.addEventListener('mousemove', handleGlobeMouseMove);
+  document.addEventListener('mouseup', handleGlobeMouseUp);
+  canvas.addEventListener('wheel', handleGlobeWheel, { passive: false });
   renderGlobeLabels();
   resizeGlobe();
   return true;
@@ -1405,6 +1419,7 @@ function renderGlobeLabels() {
     el.className = 'globe-label';
     el.textContent = `${region.name} · ${region.routes.length}`;
     el.dataset.regionIndex = i;
+    el.addEventListener('click', () => selectGlobeRegion(region));
     layer.appendChild(el);
     return el;
   });
@@ -1442,9 +1457,10 @@ function updateGlobeLabels() {
 
 function animateGlobe() {
   if (!globeRenderer || !globeScene || !globeCamera || !globeRoot) return;
+  globeCamera.position.z += (globeCameraDistance - globeCamera.position.z) * 0.08;
   globeRoot.rotation.x += (globeTargetRotation.x - globeRoot.rotation.x) * 0.055;
   globeRoot.rotation.y += (globeTargetRotation.y - globeRoot.rotation.y) * 0.055;
-  globeRoot.rotation.y += 0.0009;
+  if (!globeDrag.active) globeRoot.rotation.y += 0.0009;
   globeHotspots.forEach((dot, i) => {
     const selected = selectedGlobeRegion === globeRegions[i];
     dot.scale.setScalar(selected ? 1.7 : 1);
@@ -1477,13 +1493,95 @@ function regionFromGlobeEvent(event) {
 }
 
 function handleGlobeClick(event) {
+  if (globeDrag.moved) return;
   const region = regionFromGlobeEvent(event);
   if (region) selectGlobeRegion(region);
 }
 
+function handleGlobePointerDown(event) {
+  if (!globeRoot || !globeTargetRotation) return;
+  event.preventDefault();
+  beginGlobeDrag(event.clientX, event.clientY);
+  event.currentTarget.setPointerCapture?.(event.pointerId);
+  event.currentTarget.style.cursor = 'grabbing';
+}
+
+function beginGlobeDrag(clientX, clientY) {
+  globeDrag = {
+    active: true,
+    moved: false,
+    x: clientX,
+    y: clientY,
+    rotX: globeTargetRotation.x,
+    rotY: globeTargetRotation.y,
+  };
+}
+
+function updateGlobeDrag(clientX, clientY) {
+  if (!globeDrag.active || !globeTargetRotation) return false;
+  const dx = clientX - globeDrag.x;
+  const dy = clientY - globeDrag.y;
+  if (Math.abs(dx) + Math.abs(dy) > 4) globeDrag.moved = true;
+  globeTargetRotation.y = globeDrag.rotY + dx * 0.006;
+  globeTargetRotation.x = clamp(globeDrag.rotX + dy * 0.004, -1.1, 1.1);
+  return true;
+}
+
 function handleGlobePointerMove(event) {
+  if (updateGlobeDrag(event.clientX, event.clientY)) {
+    event.preventDefault();
+    event.currentTarget.style.cursor = 'grabbing';
+    return;
+  }
   const region = regionFromGlobeEvent(event);
   event.currentTarget.style.cursor = region ? 'pointer' : 'grab';
+}
+
+function handleGlobePointerUp(event) {
+  event.currentTarget.releasePointerCapture?.(event.pointerId);
+  event.currentTarget.style.cursor = 'grab';
+  endGlobeDrag();
+}
+
+function endGlobeDrag() {
+  window.setTimeout(() => { globeDrag.moved = false; }, 0);
+  globeDrag.active = false;
+}
+
+function handleGlobeMouseDown(event) {
+  if (event.button !== 0 || !globeRoot || !globeTargetRotation) return;
+  event.preventDefault();
+  beginGlobeDrag(event.clientX, event.clientY);
+  event.currentTarget.style.cursor = 'grabbing';
+}
+
+function handleGlobeMouseMove(event) {
+  if (updateGlobeDrag(event.clientX, event.clientY)) event.preventDefault();
+}
+
+function handleGlobeMouseUp() {
+  if (globeDrag.active) endGlobeDrag();
+}
+
+function handleGlobeTouchStart(event) {
+  const touch = event.touches?.[0];
+  if (!touch || !globeRoot || !globeTargetRotation) return;
+  event.preventDefault();
+  beginGlobeDrag(touch.clientX, touch.clientY);
+}
+
+function handleGlobeTouchMove(event) {
+  const touch = event.touches?.[0];
+  if (touch && updateGlobeDrag(touch.clientX, touch.clientY)) event.preventDefault();
+}
+
+function handleGlobeTouchEnd() {
+  if (globeDrag.active) endGlobeDrag();
+}
+
+function handleGlobeWheel(event) {
+  event.preventDefault();
+  globeCameraDistance = clamp(globeCameraDistance + event.deltaY * 0.004, 4.8, 9.2);
 }
 
 function selectGlobeRegion(region, options = {}) {

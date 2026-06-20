@@ -123,6 +123,17 @@ def test_globe_lab_routes_to_existing_open_route_flow():
     assert "document.getElementById('globeLab').classList.remove('active');" in BUILD
 
 
+def test_globe_lab_supports_direct_navigation_controls():
+    assert "touch-action: none" in BUILD
+    assert "canvas.addEventListener('pointerdown', handleGlobePointerDown);" in BUILD
+    assert "canvas.addEventListener('mousedown', handleGlobeMouseDown);" in BUILD
+    assert "canvas.addEventListener('touchstart', handleGlobeTouchStart, { passive: false });" in BUILD
+    assert "canvas.addEventListener('wheel', handleGlobeWheel, { passive: false });" in BUILD
+    assert "globeTargetRotation.y = globeDrag.rotY + dx * 0.006;" in BUILD
+    assert "globeCameraDistance = clamp(globeCameraDistance + event.deltaY * 0.004, 4.8, 9.2);" in BUILD
+    assert "el.addEventListener('click', () => selectGlobeRegion(region));" in BUILD
+
+
 def test_earth_scrub_camera_and_blank_frame_detection():
     assert "earthScrubUntil = performance.now() + 750;" in BUILD
     assert "earthViewer.camera.cancelFlight?.();" in BUILD
