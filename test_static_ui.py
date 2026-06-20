@@ -159,10 +159,16 @@ def test_globe_projection_has_texture_context_and_label_occlusion():
 
 def test_globe_lab_region_header_expands_all_regions():
     assert 'onclick="toggleGlobeRegionMenu()"' in BUILD
+    assert 'onkeydown="handleGlobeRegionHeadKey(event)"' in BUILD
     assert 'class="globe-region-menu" id="globeRegionMenu"' in BUILD
+    assert 'id="globeRegionReset"' in BUILD
     assert "function toggleGlobeRegionMenu()" in BUILD
+    assert "function handleGlobeRegionHeadKey(event)" in BUILD
+    assert "function resetGlobeRegion(event)" in BUILD
+    assert "event?.stopPropagation();" in BUILD
     assert "function renderGlobeRegionMenu()" in BUILD
     assert "function renderGlobeRegionOverview()" in BUILD
+    assert "panel?.classList.toggle('region-selected', Boolean(selectedGlobeRegion));" in BUILD
     assert "if (name) name.textContent = 'Route regions';" in BUILD
     assert "if (!selectedGlobeRegion && globeRegions.length) renderGlobeRegionOverview();" in BUILD
     assert "globe-route-panel.menu-open .globe-region-menu" in BUILD

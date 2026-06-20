@@ -164,13 +164,19 @@ body.ops-mode .curation-panel { display: block; }
                      box-shadow: 0 22px 70px rgba(0,0,0,0.34); }
 .globe-route-head { width: 100%; appearance: none; border: 0; border-bottom: 1px solid rgba(123,161,187,0.15);
                     background: transparent; color: inherit; padding: 14px 15px; text-align: left;
-                    cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+                    cursor: pointer; display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; }
 .globe-route-head:hover { background: rgba(0,241,159,0.05); }
 .globe-route-summary { display: block; min-width: 0; }
 .globe-route-head b { display: block; color: #FFF; text-transform: uppercase; letter-spacing: 0.08em; }
 .globe-route-meta { display: block; margin-top: 5px; color: var(--text-dim);
                     font-family: 'JetBrains Mono', monospace; font-size: 9px;
                     letter-spacing: 1.1px; text-transform: uppercase; }
+.globe-region-reset { display: none; appearance: none; border: 1px solid rgba(123,161,187,0.28);
+                      border-radius: 6px; background: rgba(20,26,31,0.72); color: #AFC4D2;
+                      width: 25px; height: 25px; align-items: center; justify-content: center;
+                      cursor: pointer; font-size: 15px; line-height: 1; }
+.globe-route-panel.region-selected .globe-region-reset { display: inline-flex; }
+.globe-region-reset:hover { border-color: rgba(0,241,159,0.48); color: var(--teal); }
 .globe-route-caret { color: var(--teal); font-family: 'JetBrains Mono', monospace;
                      font-size: 14px; line-height: 1; transition: transform 160ms ease; }
 .globe-route-panel.menu-open .globe-route-caret { transform: rotate(180deg); }
@@ -809,13 +815,14 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
     </div>
   </section>
   <aside class="globe-route-panel" id="globeRoutePanel">
-    <button class="globe-route-head" type="button" onclick="toggleGlobeRegionMenu()" aria-expanded="false" aria-controls="globeRegionMenu">
+    <div class="globe-route-head" role="button" tabindex="0" onclick="toggleGlobeRegionMenu()" onkeydown="handleGlobeRegionHeadKey(event)" aria-expanded="false" aria-controls="globeRegionMenu">
       <span class="globe-route-summary">
         <b id="globeRegionName">Route regions</b>
         <span class="globe-route-meta" id="globeRegionMeta">Pick a hotspot</span>
       </span>
+      <button class="globe-region-reset" id="globeRegionReset" type="button" onclick="resetGlobeRegion(event)" title="Back to all regions" aria-label="Back to all regions">‹</button>
       <span class="globe-route-caret" aria-hidden="true">⌄</span>
-    </button>
+    </div>
     <div class="globe-region-menu" id="globeRegionMenu"></div>
     <div class="globe-route-list" id="globeRouteList"></div>
   </aside>
@@ -1473,12 +1480,19 @@ function setGlobeRegionMenuOpen(open) {
   const panel = document.getElementById('globeRoutePanel');
   const head = document.querySelector('.globe-route-head');
   panel?.classList.toggle('menu-open', open);
+  panel?.classList.toggle('region-selected', Boolean(selectedGlobeRegion));
   head?.setAttribute('aria-expanded', open ? 'true' : 'false');
 }
 
 function toggleGlobeRegionMenu() {
   setGlobeRegionMenuOpen(!globeRegionMenuOpen);
   renderGlobeRegionMenu();
+}
+
+function handleGlobeRegionHeadKey(event) {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  event.preventDefault();
+  toggleGlobeRegionMenu();
 }
 
 function renderGlobeRegionMenu() {
@@ -1503,6 +1517,11 @@ function renderGlobeRegionOverview() {
   if (list) list.innerHTML = '';
   setGlobeRegionMenuOpen(true);
   renderGlobeRegionMenu();
+}
+
+function resetGlobeRegion(event) {
+  event?.stopPropagation();
+  renderGlobeRegionOverview();
 }
 
 function resizeGlobe() {
