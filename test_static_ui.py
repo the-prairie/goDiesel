@@ -53,9 +53,12 @@ def test_earth_lab_updates_from_shared_route_index():
 def test_earth_route_overlay_is_local_and_depth_safe():
     assert "function earthLocalRoutePositions(route, idx)" in BUILD
     assert "function earthTrailPositions(route, idx)" in BUILD
+    assert "return earthPositionsBetween(route, idx - 60, idx + 120, 145);" in BUILD
+    assert "return earthPositionsBetween(route, idx - 60, idx, 175);" in BUILD
     assert "earthFullEntity.polyline.positions = earthLocalRoutePositions(route, idx);" in BUILD
     assert "earthProgressEntity.polyline.positions = earthTrailPositions(route, idx);" in BUILD
-    assert "depthFailMaterial" not in BUILD
+    assert "arcType: Cesium.ArcType.NONE" in BUILD
+    assert "depthFailMaterial: Cesium.Color.fromCssColorString('#00f19f').withAlpha(0.94)" in BUILD
 
 
 def test_earth_marker_uses_persistent_avatar_billboard():

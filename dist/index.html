@@ -2369,11 +2369,11 @@ function earthPositionsBetween(route, startIdx = 0, endIdx = route.route.length 
 }
 
 function earthLocalRoutePositions(route, idx) {
-  return earthPositionsBetween(route, idx - 22, idx + 62, 58);
+  return earthPositionsBetween(route, idx - 60, idx + 120, 145);
 }
 
 function earthTrailPositions(route, idx) {
-  return earthPositionsBetween(route, idx - 22, idx, 64);
+  return earthPositionsBetween(route, idx - 60, idx, 175);
 }
 
 function createEarthViewer() {
@@ -2568,19 +2568,25 @@ async function initEarthReplay(route) {
       name: 'Local route preview',
       polyline: {
         positions: earthLocalRoutePositions(route, 0),
-        width: 2,
-        material: Cesium.Color.fromCssColorString('#f0dfae').withAlpha(0.46),
+        width: 8,
+        arcType: Cesium.ArcType.NONE,
+        clampToGround: false,
+        material: Cesium.Color.fromCssColorString('#f0dfae').withAlpha(0.42),
+        depthFailMaterial: Cesium.Color.fromCssColorString('#f0dfae').withAlpha(0.78),
       },
     });
     earthProgressEntity = earthViewer.entities.add({
       name: 'Recent route trail',
       polyline: {
         positions: earthTrailPositions(route, 0),
-        width: 5,
+        width: 10,
+        arcType: Cesium.ArcType.NONE,
+        clampToGround: false,
         material: new Cesium.PolylineGlowMaterialProperty({
           color: Cesium.Color.fromCssColorString('#00f19f').withAlpha(0.98),
-          glowPower: 0.12,
+          glowPower: 0.18,
         }),
+        depthFailMaterial: Cesium.Color.fromCssColorString('#00f19f').withAlpha(0.94),
       },
     });
     const p = routePointAt(route, 0);
