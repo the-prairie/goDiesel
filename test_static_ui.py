@@ -58,6 +58,19 @@ def test_earth_route_overlay_is_local_and_depth_safe():
     assert "depthFailMaterial" not in BUILD
 
 
+def test_earth_marker_uses_persistent_avatar_billboard():
+    assert "const AVATAR_STORAGE_KEY = 'quests:route-avatar';" in BUILD
+    assert "const ROUTE_AVATARS = [" in BUILD
+    assert 'class="route-control route-avatar" id="routeAvatarBtn"' in BUILD
+    assert 'class="avatar-picker" id="avatarPicker"' in BUILD
+    assert "function avatarImageDataUri" in BUILD
+    assert "canvas.toDataURL('image/png')" in BUILD
+    assert "function selectRouteAvatar" in BUILD
+    assert "billboard: {" in BUILD
+    assert "image: avatarImageDataUri()" in BUILD
+    assert "point: {" not in BUILD
+
+
 def test_earth_camera_uses_route_metrics_not_fixed_constants():
     assert "function earthRouteMetrics(route)" in BUILD
     assert "function earthCameraProfile(route, playing, scrubbing = false)" in BUILD

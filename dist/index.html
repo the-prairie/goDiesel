@@ -416,8 +416,22 @@ body.ops-mode .curation-panel { display: block; }
 .route-play.playing { color: #FFF; border-color: rgba(0,241,159,0.85); background: rgba(0,241,159,0.12); }
 .route-cinema.active { color: #FFF; border-color: rgba(232,212,154,0.78); background: rgba(232,212,154,0.10); }
 .route-earth.active { color: #FFF; border-color: rgba(0,241,159,0.78); background: rgba(0,241,159,0.10); }
+.route-avatar.active { color: #FFF; border-color: rgba(232,212,154,0.78); background: rgba(232,212,154,0.10); }
 .route-mode { display: none; }
 .route-mode.visible { display: inline-flex; }
+.avatar-picker { position: absolute; right: 16px; bottom: 76px; z-index: 6;
+                 display: none; grid-template-columns: repeat(5, 38px); gap: 8px;
+                 padding: 9px; border: 1px solid rgba(123,161,187,0.30);
+                 border-radius: 8px; background: rgba(10,12,14,0.90);
+                 backdrop-filter: blur(10px); box-shadow: 0 18px 46px rgba(0,0,0,0.30); }
+.avatar-picker.visible { display: grid; }
+.avatar-option { width: 38px; height: 38px; border-radius: 8px;
+                 border: 1px solid rgba(123,161,187,0.26);
+                 background: rgba(20,26,31,0.86); cursor: pointer;
+                 display: grid; place-items: center; padding: 0; }
+.avatar-option:hover, .avatar-option.active { border-color: rgba(0,241,159,0.72);
+                 box-shadow: 0 0 18px rgba(0,241,159,0.16); }
+.avatar-option img { width: 30px; height: 30px; display: block; }
 input[type=range] { flex: 1; height: 4px; -webkit-appearance: none;
                     background: #1F2A33; border-radius: 2px; outline: none; }
 input[type=range]::-webkit-slider-thumb {
@@ -610,10 +624,14 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
   .route-play { order: 1; flex: 0 0 62px; }
   .scrubber-pos { order: 2; }
   .route-speed { order: 3; flex: 0 0 44px; }
-  .route-earth { order: 5; flex: 1 1 calc(50% - 4px); }
-  .route-cinema { order: 6; flex: 1 1 calc(50% - 4px); }
-  .route-mode { order: 6; flex: 1 1 calc(50% - 4px); }
+  .route-avatar { order: 5; flex: 1 1 calc(33.333% - 6px); }
+  .route-earth { order: 6; flex: 1 1 calc(33.333% - 6px); }
+  .route-cinema { order: 6; flex: 1 1 calc(33.333% - 6px); }
+  .route-mode { order: 6; flex: 1 1 calc(33.333% - 6px); }
   .route-lock { order: 7; flex: 1 1 100%; }
+  .avatar-picker { right: 10px; bottom: 118px; grid-template-columns: repeat(5, 34px); }
+  .avatar-option { width: 34px; height: 34px; }
+  .avatar-option img { width: 27px; height: 27px; }
   .cinema-label { left: 10px; bottom: 124px; font-size: 8px; }
   .earth-settling { left: 10px; right: 10px; bottom: 214px; max-width: none; }
   .route-cam { right: 10px; bottom: 214px; width: min(260px, calc(100% - 20px)); }
@@ -826,11 +844,13 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
         <div class="scrubber-pos" id="scrubberPos">0.00 / 0.00 km</div>
         <input type="range" id="scrubber" min="0" max="100" value="0">
         <button class="route-control route-speed" id="routeSpeedBtn" type="button" onclick="cycleRouteSpeed()" title="Change playback speed">4X</button>
+        <button class="route-control route-avatar" id="routeAvatarBtn" type="button" onclick="toggleAvatarPicker()" title="Choose route avatar">AVATAR</button>
         <button class="route-control route-earth" id="routeEarthBtn" type="button" onclick="toggleEarthReplay()" title="Switch between Atlas and Earth Replay">EARTH</button>
         <button class="route-control route-cinema" id="routeCinemaBtn" type="button" onclick="toggleRouteCinema()" title="Enter the route memory atlas">ENTER ROUTE</button>
         <button class="route-control route-mode" id="routeModeBtn" type="button" onclick="cycleRouteCinemaMode()" title="Cycle route world prototype">ARTIFACT</button>
         <button class="route-control route-lock active" id="routeLockBtn" type="button" onclick="toggleRouteLock()" title="Keep the camera following the active point">FOLLOWING</button>
       </div>
+      <div class="avatar-picker" id="avatarPicker" aria-label="Route avatar picker"></div>
     </div>
   </div>
 </div>
@@ -901,6 +921,40 @@ let cinemaCameraTarget = null, cinemaLookTarget = null, cinemaLookCurrent = null
 let allPhotos = [];
 const STORAGE_KEY_PREFIX = 'quests:photos:';
 const REPLAY_MODE_STORAGE_KEY = 'quests:replay-mode';
+const AVATAR_STORAGE_KEY = 'quests:route-avatar';
+const ROUTE_AVATARS = [
+  {
+    id: 'spark',
+    label: 'Spark',
+    bg: '#00f19f',
+    fg: '#07100d',
+  },
+  {
+    id: 'runner',
+    label: 'Runner',
+    bg: '#83cfff',
+    fg: '#061019',
+  },
+  {
+    id: 'bolt',
+    label: 'Bolt',
+    bg: '#e8d49a',
+    fg: '#151008',
+  },
+  {
+    id: 'flag',
+    label: 'Flag',
+    bg: '#ff8f70',
+    fg: '#170805',
+  },
+  {
+    id: 'peak',
+    label: 'Peak',
+    bg: '#c7f2d3',
+    fg: '#07110b',
+  },
+];
+let currentAvatarId = getAvatarPreference();
 const BEST_IN_EARTH_ROUTES = new Set([
   '17654151284', '17636880071', '17616195995', '17606492777', '17597564971',
   '16366737881', '15573295095', '15562324390', '15182597704', '13835672113',
@@ -960,6 +1014,148 @@ function setReplayModePreference(mode) {
   try {
     localStorage.setItem(REPLAY_MODE_STORAGE_KEY, mode);
   } catch {}
+}
+
+function avatarById(id) {
+  return ROUTE_AVATARS.find(avatar => avatar.id === id) || ROUTE_AVATARS[0];
+}
+
+function getAvatarPreference() {
+  try {
+    const value = localStorage.getItem(AVATAR_STORAGE_KEY);
+    return ROUTE_AVATARS.some(avatar => avatar.id === value) ? value : ROUTE_AVATARS[0].id;
+  } catch {
+    return ROUTE_AVATARS[0].id;
+  }
+}
+
+function setAvatarPreference(id) {
+  currentAvatarId = avatarById(id).id;
+  try {
+    localStorage.setItem(AVATAR_STORAGE_KEY, currentAvatarId);
+  } catch {}
+}
+
+function avatarImageDataUri(id = currentAvatarId) {
+  const avatar = avatarById(id);
+  const canvas = document.createElement('canvas');
+  const size = 96;
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, size, size);
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.48)';
+  ctx.shadowBlur = 10;
+  ctx.shadowOffsetY = 7;
+  ctx.fillStyle = avatar.bg;
+  ctx.beginPath();
+  ctx.arc(48, 48, 34, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = 'rgba(255,255,255,0.18)';
+  ctx.beginPath();
+  ctx.arc(48, 48, 25, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.arc(48, 48, 34, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = avatar.fg;
+  ctx.strokeStyle = avatar.fg;
+  ctx.lineWidth = 7;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  if (avatar.id === 'spark') {
+    const spikes = 5;
+    ctx.beginPath();
+    for (let i = 0; i < spikes * 2; i += 1) {
+      const radius = i % 2 === 0 ? 26 : 11;
+      const angle = -Math.PI / 2 + i * Math.PI / spikes;
+      const x = 48 + Math.cos(angle) * radius;
+      const y = 48 + Math.sin(angle) * radius;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fill();
+  } else if (avatar.id === 'runner') {
+    ctx.beginPath();
+    ctx.arc(48, 27, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(46, 38); ctx.lineTo(35, 53); ctx.lineTo(52, 49); ctx.lineTo(65, 66);
+    ctx.moveTo(47, 39); ctx.lineTo(61, 35);
+    ctx.moveTo(35, 53); ctx.lineTo(25, 71);
+    ctx.moveTo(52, 49); ctx.lineTo(42, 73);
+    ctx.stroke();
+  } else if (avatar.id === 'bolt') {
+    ctx.beginPath();
+    ctx.moveTo(56, 17); ctx.lineTo(30, 53); ctx.lineTo(48, 53);
+    ctx.lineTo(39, 80); ctx.lineTo(68, 41); ctx.lineTo(50, 41);
+    ctx.closePath();
+    ctx.fill();
+  } else if (avatar.id === 'flag') {
+    ctx.beginPath();
+    ctx.moveTo(35, 76); ctx.lineTo(35, 22);
+    ctx.moveTo(38, 23); ctx.lineTo(68, 23); ctx.lineTo(60, 40); ctx.lineTo(68, 56); ctx.lineTo(38, 56);
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(18, 70); ctx.lineTo(39, 33); ctx.lineTo(51, 52); ctx.lineTo(61, 28); ctx.lineTo(79, 70);
+    ctx.stroke();
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(39, 33); ctx.lineTo(45, 48); ctx.lineTo(51, 52); ctx.lineTo(61, 28); ctx.lineTo(65, 43);
+    ctx.stroke();
+  }
+  return canvas.toDataURL('image/png');
+}
+
+function syncAvatarPicker() {
+  const btn = document.getElementById('routeAvatarBtn');
+  const picker = document.getElementById('avatarPicker');
+  const avatar = avatarById(currentAvatarId);
+  if (btn) {
+    btn.textContent = avatar.label.toUpperCase();
+    btn.classList.toggle('active', picker?.classList.contains('visible') || false);
+    btn.title = `Route avatar: ${avatar.label}`;
+  }
+  picker?.querySelectorAll('.avatar-option').forEach(option => {
+    option.classList.toggle('active', option.dataset.avatar === currentAvatarId);
+  });
+}
+
+function renderAvatarPicker() {
+  const picker = document.getElementById('avatarPicker');
+  if (!picker) return;
+  picker.innerHTML = ROUTE_AVATARS.map(avatar => `
+    <button class="avatar-option" type="button" data-avatar="${avatar.id}" title="${avatar.label}" aria-label="${avatar.label}">
+      <img alt="" src="${avatarImageDataUri(avatar.id)}">
+    </button>
+  `).join('');
+  picker.querySelectorAll('.avatar-option').forEach(option => {
+    option.addEventListener('click', () => selectRouteAvatar(option.dataset.avatar));
+  });
+  syncAvatarPicker();
+}
+
+function toggleAvatarPicker() {
+  const picker = document.getElementById('avatarPicker');
+  if (!picker) return;
+  picker.classList.toggle('visible');
+  syncAvatarPicker();
+}
+
+function selectRouteAvatar(id) {
+  setAvatarPreference(id);
+  const picker = document.getElementById('avatarPicker');
+  picker?.classList.remove('visible');
+  if (earthMarkerEntity?.billboard) {
+    earthMarkerEntity.billboard.image = avatarImageDataUri();
+  }
+  syncAvatarPicker();
 }
 
 function isBestInEarth(route) {
@@ -1822,11 +2018,12 @@ async function initEarthReplay(route) {
     earthMarkerEntity = earthViewer.entities.add({
       name: 'Current route position',
       position: Cesium.Cartesian3.fromDegrees(p.lng, p.lat, (Number(p.elev) || 0) + 150),
-      point: {
-        pixelSize: 14,
-        color: Cesium.Color.WHITE,
-        outlineColor: Cesium.Color.fromCssColorString('#00f19f'),
-        outlineWidth: 4,
+      billboard: {
+        image: avatarImageDataUri(),
+        width: 38,
+        height: 38,
+        verticalOrigin: Cesium.VerticalOrigin.CENTER,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
     });
     earthReady = true;
@@ -3093,6 +3290,7 @@ window.addEventListener('resize', () => {
 });
 window.addEventListener('popstate', handleCurrentUrl);
 window.addEventListener('hashchange', handleCurrentUrl);
+renderAvatarPicker();
 initFilterControls();
 if (location.hash) handleCurrentUrl();
 else renderGallery();
