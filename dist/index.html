@@ -162,11 +162,30 @@ body.ops-mode .curation-panel { display: block; }
                      background: rgba(7,11,15,0.82); border: 1px solid rgba(123,161,187,0.22);
                      border-radius: 10px; backdrop-filter: blur(14px); overflow: hidden;
                      box-shadow: 0 22px 70px rgba(0,0,0,0.34); }
-.globe-route-head { padding: 14px 15px; border-bottom: 1px solid rgba(123,161,187,0.15); }
+.globe-route-head { width: 100%; appearance: none; border: 0; border-bottom: 1px solid rgba(123,161,187,0.15);
+                    background: transparent; color: inherit; padding: 14px 15px; text-align: left;
+                    cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+.globe-route-head:hover { background: rgba(0,241,159,0.05); }
+.globe-route-summary { display: block; min-width: 0; }
 .globe-route-head b { display: block; color: #FFF; text-transform: uppercase; letter-spacing: 0.08em; }
-.globe-route-head span { display: block; margin-top: 5px; color: var(--text-dim);
-                         font-family: 'JetBrains Mono', monospace; font-size: 9px;
-                         letter-spacing: 1.1px; text-transform: uppercase; }
+.globe-route-meta { display: block; margin-top: 5px; color: var(--text-dim);
+                    font-family: 'JetBrains Mono', monospace; font-size: 9px;
+                    letter-spacing: 1.1px; text-transform: uppercase; }
+.globe-route-caret { color: var(--teal); font-family: 'JetBrains Mono', monospace;
+                     font-size: 14px; line-height: 1; transition: transform 160ms ease; }
+.globe-route-panel.menu-open .globe-route-caret { transform: rotate(180deg); }
+.globe-region-menu { display: none; border-bottom: 1px solid rgba(123,161,187,0.15);
+                     background: rgba(5,9,12,0.64); padding: 7px; max-height: 190px; overflow: auto;
+                     overscroll-behavior: contain; }
+.globe-route-panel.menu-open .globe-region-menu { display: grid; gap: 4px; }
+.globe-region-option { width: 100%; appearance: none; border: 1px solid transparent; border-radius: 7px;
+                       background: transparent; color: #DCE8EF; cursor: pointer; padding: 9px 10px;
+                       display: grid; grid-template-columns: 1fr auto; gap: 8px; text-align: left; }
+.globe-region-option:hover { border-color: rgba(0,241,159,0.32); background: rgba(0,241,159,0.06); }
+.globe-region-option.active { border-color: rgba(0,241,159,0.50); background: rgba(0,241,159,0.09); }
+.globe-region-option b { color: #FFF; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+.globe-region-option span { color: var(--text-dim); font-family: 'JetBrains Mono', monospace;
+                             font-size: 8px; letter-spacing: 1px; text-transform: uppercase; white-space: nowrap; }
 .globe-route-list { padding: 8px; overflow: auto; overscroll-behavior: contain; }
 .globe-route-item { width: 100%; text-align: left; appearance: none; border: 1px solid transparent;
                     border-radius: 8px; background: transparent; color: #DCE8EF; cursor: pointer;
@@ -788,11 +807,15 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
       <button class="globe-action" type="button" onclick="showGallery()">All quests</button>
     </div>
   </section>
-  <aside class="globe-route-panel">
-    <div class="globe-route-head">
-      <b id="globeRegionName">Route regions</b>
-      <span id="globeRegionMeta">Pick a hotspot</span>
-    </div>
+  <aside class="globe-route-panel" id="globeRoutePanel">
+    <button class="globe-route-head" type="button" onclick="toggleGlobeRegionMenu()" aria-expanded="false" aria-controls="globeRegionMenu">
+      <span class="globe-route-summary">
+        <b id="globeRegionName">Route regions</b>
+        <span class="globe-route-meta" id="globeRegionMeta">Pick a hotspot</span>
+      </span>
+      <span class="globe-route-caret" aria-hidden="true">⌄</span>
+    </button>
+    <div class="globe-region-menu" id="globeRegionMenu"></div>
     <div class="globe-route-list" id="globeRouteList"></div>
   </aside>
 </div>
@@ -1017,6 +1040,7 @@ let globeHotspots = [], globeLabels = [], globeRegions = [], selectedGlobeRegion
 let globeAnimationFrame = null, globePointer = null, globeTargetRotation = null;
 let globeCameraDistance = 7.2;
 let globeDrag = { active: false, moved: false, x: 0, y: 0, rotX: 0, rotY: 0 };
+let globeRegionMenuOpen = false;
 let allPhotos = [];
 const STORAGE_KEY_PREFIX = 'quests:photos:';
 const REPLAY_MODE_STORAGE_KEY = 'quests:replay-mode';
@@ -1425,6 +1449,30 @@ function renderGlobeLabels() {
   });
 }
 
+function setGlobeRegionMenuOpen(open) {
+  globeRegionMenuOpen = open;
+  const panel = document.getElementById('globeRoutePanel');
+  const head = document.querySelector('.globe-route-head');
+  panel?.classList.toggle('menu-open', open);
+  head?.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function toggleGlobeRegionMenu() {
+  setGlobeRegionMenuOpen(!globeRegionMenuOpen);
+  renderGlobeRegionMenu();
+}
+
+function renderGlobeRegionMenu() {
+  const menu = document.getElementById('globeRegionMenu');
+  if (!menu) return;
+  menu.innerHTML = globeRegions.map((region, i) => `
+    <button class="globe-region-option ${selectedGlobeRegion === region ? 'active' : ''}" type="button" onclick="selectGlobeRegion(globeRegions[${i}])">
+      <b>${escapeHtml(region.name)}</b>
+      <span>${region.routes.length} · ${region.km.toFixed(0)} km</span>
+    </button>
+  `).join('');
+}
+
 function resizeGlobe() {
   if (!globeRenderer || !globeCamera) return;
   const canvas = document.getElementById('globeCanvas');
@@ -1600,7 +1648,10 @@ function selectGlobeRegion(region, options = {}) {
         <span>${escapeHtml(route.type)} · ${route.distance_km.toFixed(1)} km · ${(route.elevation_gain_m || 0).toLocaleString()} m up</span>
       </button>
     `).join('');
+    list.scrollTop = 0;
   }
+  setGlobeRegionMenuOpen(false);
+  renderGlobeRegionMenu();
   if (options.rotate !== false && globeTargetRotation) {
     globeTargetRotation.x = -region.lat * Math.PI / 360;
     globeTargetRotation.y = -(region.lng + 12) * Math.PI / 180;

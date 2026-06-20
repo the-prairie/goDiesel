@@ -134,6 +134,15 @@ def test_globe_lab_supports_direct_navigation_controls():
     assert "el.addEventListener('click', () => selectGlobeRegion(region));" in BUILD
 
 
+def test_globe_lab_region_header_expands_all_regions():
+    assert 'onclick="toggleGlobeRegionMenu()"' in BUILD
+    assert 'class="globe-region-menu" id="globeRegionMenu"' in BUILD
+    assert "function toggleGlobeRegionMenu()" in BUILD
+    assert "function renderGlobeRegionMenu()" in BUILD
+    assert "globe-route-panel.menu-open .globe-region-menu" in BUILD
+    assert "onclick=\"selectGlobeRegion(globeRegions[${i}])\"" in BUILD
+
+
 def test_earth_scrub_camera_and_blank_frame_detection():
     assert "earthScrubUntil = performance.now() + 750;" in BUILD
     assert "earthViewer.camera.cancelFlight?.();" in BUILD
