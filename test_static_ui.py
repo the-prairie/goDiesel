@@ -134,6 +134,26 @@ def test_globe_lab_supports_direct_navigation_controls():
     assert "el.addEventListener('click', () => selectGlobeRegion(region));" in BUILD
 
 
+def test_globe_hotspots_use_intensity_not_large_orbs():
+    assert "new THREE.SphereGeometry(0.032, 20, 12)" in BUILD
+    assert "const intensity = clamp(region.routes.length / 8, 0.38, 1);" in BUILD
+    assert "dot.userData.intensity = intensity;" in BUILD
+    assert "dot.scale.setScalar(selected ? 1.12 : 1);" in BUILD
+    assert "0.055 + Math.min(region.routes.length" not in BUILD
+    assert "dot.scale.setScalar(selected ? 1.7 : 1);" not in BUILD
+
+
+def test_globe_projection_has_land_context_and_label_occlusion():
+    assert "radius * Math.cos(latRad) * Math.sin(lngRad)" in BUILD
+    assert "radius * Math.sin(latRad)" in BUILD
+    assert "radius * Math.cos(latRad) * Math.cos(lngRad)" in BUILD
+    assert "const GLOBE_LAND_OUTLINES = [" in BUILD
+    assert "GLOBE_LAND_OUTLINES.forEach(outline => globeRoot.add(makeGlobeLandOutline(outline)));" in BUILD
+    assert "facing > 0.16" in BUILD
+    assert "const collides = placed.some" in BUILD
+    assert "item.selected || !collides" in BUILD
+
+
 def test_globe_lab_region_header_expands_all_regions():
     assert 'onclick="toggleGlobeRegionMenu()"' in BUILD
     assert 'class="globe-region-menu" id="globeRegionMenu"' in BUILD

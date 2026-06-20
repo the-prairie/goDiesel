@@ -1835,12 +1835,12 @@ function globeRouteRegions() {
 }
 
 function latLngToVector3(lat, lng, radius = 2.42) {
-  const phi = (90 - lat) * Math.PI / 180;
-  const theta = (lng + 180) * Math.PI / 180;
+  const latRad = lat * Math.PI / 180;
+  const lngRad = lng * Math.PI / 180;
   return new THREE.Vector3(
-    -radius * Math.sin(phi) * Math.cos(theta),
-    radius * Math.cos(phi),
-    radius * Math.sin(phi) * Math.sin(theta)
+    radius * Math.cos(latRad) * Math.sin(lngRad),
+    radius * Math.sin(latRad),
+    radius * Math.cos(latRad) * Math.cos(lngRad)
   );
 }
 
@@ -1865,6 +1865,21 @@ function makeGlobeCircle(latitude = null, longitude = null, radius = 2.425) {
   return points;
 }
 
+const GLOBE_LAND_OUTLINES = [
+  [[72,-168],[69,-142],[61,-124],[49,-125],[32,-117],[18,-100],[8,-82],[16,-61],[45,-52],[60,-70],[70,-96],[72,-168]],
+  [[12,-82],[-5,-79],[-18,-70],[-35,-73],[-54,-68],[-39,-55],[-22,-44],[-5,-35],[8,-52],[12,-82]],
+  [[36,-10],[52,-5],[64,24],[57,54],[43,70],[26,50],[12,44],[-33,18],[-34,-17],[6,-12],[36,-10]],
+  [[70,28],[62,58],[55,92],[44,128],[22,120],[8,102],[20,74],[40,45],[56,30],[70,28]],
+  [[32,130],[45,142],[42,146],[31,141],[32,130]],
+  [[-11,113],[-25,114],[-39,146],[-25,154],[-11,142],[-11,113]],
+  [[72,-52],[77,-20],[66,-18],[59,-44],[72,-52]],
+  [[36,25],[35,36],[30,34],[32,24],[36,25]],
+];
+
+function makeGlobeLandOutline(coords, radius = 2.432) {
+  return makeGlobeLine(coords.map(([lat, lng]) => latLngToVector3(lat, lng, radius)), 0x4aa7b4, 0.30);
+}
+
 function buildGlobeScene() {
   const canvas = document.getElementById('globeCanvas');
   if (!canvas || typeof THREE === 'undefined') return false;
@@ -1886,6 +1901,7 @@ function buildGlobeScene() {
     new THREE.MeshBasicMaterial({ color: 0x0b4e83, transparent: true, opacity: 0.12, side: THREE.BackSide })
   );
   globeRoot.add(glow);
+  GLOBE_LAND_OUTLINES.forEach(outline => globeRoot.add(makeGlobeLandOutline(outline)));
   [-60, -30, 0, 30, 60].forEach(lat => globeRoot.add(makeGlobeLine(makeGlobeCircle(lat, null), 0x244663, 0.34)));
   [-150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150].forEach(lng => globeRoot.add(makeGlobeLine(makeGlobeCircle(null, lng), 0x244663, 0.24)));
 
@@ -1893,13 +1909,18 @@ function buildGlobeScene() {
   globeHotspots = [];
   globeRegions.forEach((region, i) => {
     const position = latLngToVector3(region.lat, region.lng, 2.47);
-    const size = 0.055 + Math.min(region.routes.length, 9) * 0.008;
+    const intensity = clamp(region.routes.length / 8, 0.38, 1);
     const dot = new THREE.Mesh(
-      new THREE.SphereGeometry(size, 24, 16),
-      new THREE.MeshBasicMaterial({ color: region.bestEarth ? 0xe8d49a : 0x00f19f, transparent: true, opacity: 0.94 })
+      new THREE.SphereGeometry(0.032, 20, 12),
+      new THREE.MeshBasicMaterial({
+        color: region.bestEarth ? 0xe8d49a : 0x00f19f,
+        transparent: true,
+        opacity: 0.48 + intensity * 0.44,
+      })
     );
     dot.position.copy(position);
     dot.userData.regionIndex = i;
+    dot.userData.intensity = intensity;
     globeRoot.add(dot);
     globeHotspots.push(dot);
   });
@@ -2002,18 +2023,36 @@ function updateGlobeLabels() {
   if (!globeCamera || !globeRoot || !globeLabels.length) return;
   const canvas = document.getElementById('globeCanvas');
   const rect = canvas.getBoundingClientRect();
-  const cameraDir = new THREE.Vector3();
-  globeCamera.getWorldDirection(cameraDir);
-  globeHotspots.forEach((dot, i) => {
+  const placed = [];
+  const cameraFacing = new THREE.Vector3(0, 0, 1);
+  const labels = globeHotspots.map((dot, i) => {
     const label = globeLabels[i];
-    if (!label) return;
+    if (!label) return null;
     const world = dot.getWorldPosition(new THREE.Vector3());
     const projected = world.clone().project(globeCamera);
-    const visible = projected.z < 1 && world.clone().normalize().dot(cameraDir.clone().negate()) > -0.1;
-    label.style.left = `${(projected.x * 0.5 + 0.5) * rect.width}px`;
-    label.style.top = `${(-projected.y * 0.5 + 0.5) * rect.height}px`;
-    label.style.display = visible ? 'flex' : 'none';
-    label.classList.toggle('active', selectedGlobeRegion === globeRegions[i]);
+    const facing = world.clone().normalize().dot(cameraFacing);
+    const selected = selectedGlobeRegion === globeRegions[i];
+    label.classList.toggle('active', selected);
+    return {
+      label,
+      selected,
+      priority: (selected ? 100 : 0) + globeRegions[i].routes.length,
+      visible: projected.z < 1 && facing > 0.16,
+      x: (projected.x * 0.5 + 0.5) * rect.width,
+      y: (-projected.y * 0.5 + 0.5) * rect.height,
+    };
+  }).filter(Boolean).sort((a, b) => b.priority - a.priority);
+  labels.forEach(item => {
+    const width = item.label.offsetWidth || 130;
+    const height = item.label.offsetHeight || 26;
+    const box = { left: item.x - width / 2, right: item.x + width / 2, top: item.y - height / 2, bottom: item.y + height / 2 };
+    const collides = placed.some(other => !(box.right < other.left || box.left > other.right || box.bottom < other.top || box.top > other.bottom));
+    const inFrame = box.right > 8 && box.left < rect.width - 8 && box.bottom > 8 && box.top < rect.height - 8;
+    const show = item.visible && inFrame && (item.selected || !collides);
+    item.label.style.left = `${item.x}px`;
+    item.label.style.top = `${item.y}px`;
+    item.label.style.display = show ? 'flex' : 'none';
+    if (show) placed.push(box);
   });
 }
 
@@ -2025,8 +2064,8 @@ function animateGlobe() {
   if (!globeDrag.active) globeRoot.rotation.y += 0.0009;
   globeHotspots.forEach((dot, i) => {
     const selected = selectedGlobeRegion === globeRegions[i];
-    dot.scale.setScalar(selected ? 1.7 : 1);
-    dot.material.opacity = selected ? 1 : 0.86;
+    dot.scale.setScalar(selected ? 1.12 : 1);
+    dot.material.opacity = selected ? 1 : 0.48 + (dot.userData.intensity || 0.5) * 0.44;
   });
   updateGlobeLabels();
   globeRenderer.render(globeScene, globeCamera);
