@@ -678,6 +678,7 @@ body.ops-mode .curation-panel { display: block; }
                      background: rgba(5,9,12,0.64); padding: 7px; max-height: 190px; overflow: auto;
                      overscroll-behavior: contain; }
 .globe-route-panel.menu-open .globe-region-menu { display: grid; gap: 4px; }
+.globe-route-panel.menu-open .globe-route-list { display: none; }
 .globe-region-option { width: 100%; appearance: none; border: 1px solid transparent; border-radius: 7px;
                        background: transparent; color: #DCE8EF; cursor: pointer; padding: 9px 10px;
                        display: grid; grid-template-columns: 1fr auto; gap: 8px; text-align: left; }
@@ -1973,6 +1974,19 @@ function renderGlobeRegionMenu() {
   `).join('');
 }
 
+function renderGlobeRegionOverview() {
+  selectedGlobeRegion = null;
+  const name = document.getElementById('globeRegionName');
+  const meta = document.getElementById('globeRegionMeta');
+  const list = document.getElementById('globeRouteList');
+  const totalKm = globeRegions.reduce((sum, region) => sum + region.km, 0);
+  if (name) name.textContent = 'Route regions';
+  if (meta) meta.textContent = `${globeRegions.length} regions · ${ROUTES.length} routes · ${totalKm.toFixed(0)} km`;
+  if (list) list.innerHTML = '';
+  setGlobeRegionMenuOpen(true);
+  renderGlobeRegionMenu();
+}
+
 function resizeGlobe() {
   if (!globeRenderer || !globeCamera) return;
   const canvas = document.getElementById('globeCanvas');
@@ -2022,7 +2036,7 @@ function animateGlobe() {
 function initGlobe() {
   if (!GLOBE_LAB_MODE) return;
   if (!globeRenderer && !buildGlobeScene()) return;
-  if (!selectedGlobeRegion && globeRegions.length) selectGlobeRegion(globeRegions[0], { rotate: false });
+  if (!selectedGlobeRegion && globeRegions.length) renderGlobeRegionOverview();
   if (!globeAnimationFrame) animateGlobe();
 }
 
