@@ -61,16 +61,25 @@ def test_earth_route_overlay_is_local_and_depth_safe():
     assert "depthFailMaterial: Cesium.Color.fromCssColorString('#00f19f').withAlpha(0.94)" in BUILD
 
 
-def test_earth_marker_uses_persistent_avatar_billboard():
+def test_earth_marker_uses_persistent_lottie_avatar():
     assert "const AVATAR_STORAGE_KEY = 'quests:route-avatar';" in BUILD
     assert "const ROUTE_AVATARS = [" in BUILD
+    assert "route-avatars/run-rex.lottie" in BUILD
+    assert "route-avatars/nyan-cat.lottie" in BUILD
+    assert "route-avatars/mario.lottie" in BUILD
+    assert "route-avatars/astronaut.lottie" in BUILD
     assert 'class="route-control route-avatar" id="routeAvatarBtn"' in BUILD
     assert 'class="avatar-picker" id="avatarPicker"' in BUILD
-    assert "function avatarImageDataUri" in BUILD
-    assert "canvas.toDataURL('image/png')" in BUILD
+    assert 'class="earth-avatar-marker" id="earthAvatarMarker"' in BUILD
+    assert "function loadLottiePlayer()" in BUILD
+    assert "function avatarPlayerMarkup" in BUILD
+    assert "function positionEarthAvatarMarker()" in BUILD
     assert "function selectRouteAvatar" in BUILD
-    assert "billboard: {" in BUILD
-    assert "image: avatarImageDataUri()" in BUILD
+    assert "viewer.scene.postRender.addEventListener(positionEarthAvatarMarker);" in BUILD
+    assert "earthMarkerPosition = earthAvatarPositionAt(route, idx);" in BUILD
+    assert "dotlottie-player" in BUILD
+    assert "billboard: {" not in BUILD
+    assert "avatarImageDataUri" not in BUILD
     assert "point: {" not in BUILD
 
 

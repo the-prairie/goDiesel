@@ -842,6 +842,27 @@ body.ops-mode .curation-panel { display: block; }
                            linear-gradient(180deg, rgba(4,9,12,0.98), rgba(1,4,6,1)); }
 .earth-layer.active { display: block; }
 .earth-canvas { position: absolute; inset: 0; }
+.earth-avatar-marker { position: absolute; left: 0; top: 0; z-index: 5;
+                       width: 84px; height: 84px;
+                       transform: translate3d(-9999px, -9999px, 0) translate(-50%, -72%);
+                       pointer-events: none; opacity: 0;
+                       filter: drop-shadow(0 10px 18px rgba(0,0,0,0.55))
+                               drop-shadow(0 0 14px rgba(0,241,159,0.26));
+                       transition: opacity 140ms ease; }
+.earth-avatar-marker.visible { opacity: 1; }
+.earth-avatar-marker dotlottie-player,
+.earth-avatar-marker .avatar-lottie { position: relative; z-index: 1; width: 84px; height: 84px; display: block;
+                                      filter: drop-shadow(0 2px 0 rgba(255,255,255,0.50)); }
+.earth-avatar-marker::before { content: ''; position: absolute; left: 50%; top: 54%;
+                               width: 42px; height: 42px; transform: translate(-50%, -50%);
+                               border-radius: 50%;
+                               background: radial-gradient(circle, rgba(0,241,159,0.28), rgba(0,241,159,0.08) 56%, transparent 70%);
+                               border: 1px solid rgba(0,241,159,0.28);
+                               box-shadow: 0 0 26px rgba(0,241,159,0.22); }
+.earth-avatar-marker::after { content: ''; position: absolute; left: 50%; bottom: 7px;
+                              width: 22px; height: 7px; transform: translateX(-50%);
+                              border-radius: 50%; background: rgba(0,0,0,0.34);
+                              filter: blur(3px); }
 .earth-layer.loading .earth-canvas,
 .earth-layer.unavailable .earth-canvas { opacity: 0.2; }
 .earth-fallback { position: absolute; inset: 0; z-index: 2; display: none;
@@ -1010,7 +1031,7 @@ body.ops-mode .curation-panel { display: block; }
 .route-mode { display: none; }
 .route-mode.visible { display: inline-flex; }
 .avatar-picker { position: absolute; right: 16px; bottom: 76px; z-index: 6;
-                 display: none; grid-template-columns: repeat(5, 38px); gap: 8px;
+                 display: none; grid-template-columns: repeat(4, 38px); gap: 8px;
                  padding: 9px; border: 1px solid rgba(123,161,187,0.30);
                  border-radius: 8px; background: rgba(10,12,14,0.90);
                  backdrop-filter: blur(10px); box-shadow: 0 18px 46px rgba(0,0,0,0.30); }
@@ -1021,7 +1042,8 @@ body.ops-mode .curation-panel { display: block; }
                  display: grid; place-items: center; padding: 0; }
 .avatar-option:hover, .avatar-option.active { border-color: rgba(0,241,159,0.72);
                  box-shadow: 0 0 18px rgba(0,241,159,0.16); }
-.avatar-option img { width: 30px; height: 30px; display: block; }
+.avatar-option dotlottie-player,
+.avatar-option .avatar-lottie { width: 34px; height: 34px; display: block; pointer-events: none; }
 input[type=range] { flex: 1; height: 4px; -webkit-appearance: none;
                     background: #1F2A33; border-radius: 2px; outline: none; }
 input[type=range]::-webkit-slider-thumb {
@@ -1226,9 +1248,10 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
   .route-cinema { order: 6; flex: 1 1 calc(33.333% - 6px); }
   .route-mode { order: 6; flex: 1 1 calc(33.333% - 6px); }
   .route-lock { order: 7; flex: 1 1 100%; }
-  .avatar-picker { right: 10px; bottom: 118px; grid-template-columns: repeat(5, 34px); }
+  .avatar-picker { right: 10px; bottom: 118px; grid-template-columns: repeat(4, 34px); }
   .avatar-option { width: 34px; height: 34px; }
-  .avatar-option img { width: 27px; height: 27px; }
+  .avatar-option dotlottie-player,
+  .avatar-option .avatar-lottie { width: 30px; height: 30px; }
   .cinema-label { left: 10px; bottom: 124px; font-size: 8px; }
   .earth-settling { left: 10px; right: 10px; bottom: 214px; max-width: none; }
   .route-cam { right: 10px; bottom: 214px; width: min(260px, calc(100% - 20px)); }
@@ -1412,6 +1435,7 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
       </div>
       <div class="earth-layer" id="earthLayer" aria-label="Earth replay lab">
         <div class="earth-canvas" id="earthCanvas"></div>
+        <div class="earth-avatar-marker" id="earthAvatarMarker" aria-hidden="true"></div>
         <div class="earth-fallback" id="earthFallback">
           <div class="earth-fallback-card">
             <div class="earth-fallback-kicker" id="earthFallbackKicker">Earth replay lab</div>
@@ -1532,12 +1556,13 @@ let routeCinemaEnabled = false;
 const ROUTE_CINEMA_MODES = SHOW_DEV_CINEMA_MODES ? ['artifact', 'flyover', 'quest'] : ['flyover'];
 let routeCinemaMode = 'flyover';
 let earthModeEnabled = false;
-let earthViewer = null, earthTileset = null, earthFullEntity = null, earthProgressEntity = null, earthMarkerEntity = null;
+let earthViewer = null, earthTileset = null, earthFullEntity = null, earthProgressEntity = null, earthMarkerPosition = null;
 let earthReady = false, earthState = 'inactive', earthSlug = null, earthCameraBearing = null, earthLoadToken = 0;
 let earthCesiumPromise = null;
 let earthTileFailures = 0, earthTilesLoading = 0;
 let earthBlankWarnings = 0, earthBlankCheckTimer = null, earthScrubUntil = 0;
 const EARTH_PARTIAL_TILE_FAILURE_THRESHOLD = 16;
+let lottiePlayerPromise = null;
 let cinemaRenderer = null, cinemaScene = null, cinemaCamera = null;
 let cinemaFullLine = null, cinemaProgressLine = null, cinemaMarker = null, cinemaSurface = null;
 let cinemaPoints = [], cinemaSlug = null, cinemaDecor = [], cinemaMoments = [], cinemaMemories = [];
@@ -1555,34 +1580,24 @@ const REPLAY_MODE_STORAGE_KEY = 'quests:replay-mode';
 const AVATAR_STORAGE_KEY = 'quests:route-avatar';
 const ROUTE_AVATARS = [
   {
-    id: 'spark',
-    label: 'Spark',
-    bg: '#00f19f',
-    fg: '#07100d',
+    id: 'run-rex',
+    label: 'Run Rex',
+    src: 'route-avatars/run-rex.lottie',
   },
   {
-    id: 'runner',
-    label: 'Runner',
-    bg: '#83cfff',
-    fg: '#061019',
+    id: 'nyan-cat',
+    label: 'Nyan Cat',
+    src: 'route-avatars/nyan-cat.lottie',
   },
   {
-    id: 'bolt',
-    label: 'Bolt',
-    bg: '#e8d49a',
-    fg: '#151008',
+    id: 'mario',
+    label: 'Mario',
+    src: 'route-avatars/mario.lottie',
   },
   {
-    id: 'flag',
-    label: 'Flag',
-    bg: '#ff8f70',
-    fg: '#170805',
-  },
-  {
-    id: 'peak',
-    label: 'Peak',
-    bg: '#c7f2d3',
-    fg: '#07110b',
+    id: 'astronaut',
+    label: 'Astronaut',
+    src: 'route-avatars/astronaut.lottie',
   },
 ];
 let currentAvatarId = getAvatarPreference();
@@ -1667,81 +1682,31 @@ function setAvatarPreference(id) {
   } catch {}
 }
 
-function avatarImageDataUri(id = currentAvatarId) {
-  const avatar = avatarById(id);
-  const canvas = document.createElement('canvas');
-  const size = 96;
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, size, size);
-  ctx.save();
-  ctx.shadowColor = 'rgba(0,0,0,0.48)';
-  ctx.shadowBlur = 10;
-  ctx.shadowOffsetY = 7;
-  ctx.fillStyle = avatar.bg;
-  ctx.beginPath();
-  ctx.arc(48, 48, 34, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-  ctx.fillStyle = 'rgba(255,255,255,0.18)';
-  ctx.beginPath();
-  ctx.arc(48, 48, 25, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.92)';
-  ctx.lineWidth = 6;
-  ctx.beginPath();
-  ctx.arc(48, 48, 34, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.fillStyle = avatar.fg;
-  ctx.strokeStyle = avatar.fg;
-  ctx.lineWidth = 7;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  if (avatar.id === 'spark') {
-    const spikes = 5;
-    ctx.beginPath();
-    for (let i = 0; i < spikes * 2; i += 1) {
-      const radius = i % 2 === 0 ? 26 : 11;
-      const angle = -Math.PI / 2 + i * Math.PI / spikes;
-      const x = 48 + Math.cos(angle) * radius;
-      const y = 48 + Math.sin(angle) * radius;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+function loadLottiePlayer() {
+  if (customElements.get('dotlottie-player')) return Promise.resolve(true);
+  if (lottiePlayerPromise) return lottiePlayerPromise;
+  lottiePlayerPromise = new Promise(resolve => {
+    const scriptId = 'goDieselDotLottiePlayer';
+    const existing = document.getElementById(scriptId);
+    if (existing) {
+      existing.addEventListener('load', () => resolve(Boolean(customElements.get('dotlottie-player'))), { once: true });
+      existing.addEventListener('error', () => resolve(false), { once: true });
+      return;
     }
-    ctx.closePath();
-    ctx.fill();
-  } else if (avatar.id === 'runner') {
-    ctx.beginPath();
-    ctx.arc(48, 27, 7, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(46, 38); ctx.lineTo(35, 53); ctx.lineTo(52, 49); ctx.lineTo(65, 66);
-    ctx.moveTo(47, 39); ctx.lineTo(61, 35);
-    ctx.moveTo(35, 53); ctx.lineTo(25, 71);
-    ctx.moveTo(52, 49); ctx.lineTo(42, 73);
-    ctx.stroke();
-  } else if (avatar.id === 'bolt') {
-    ctx.beginPath();
-    ctx.moveTo(56, 17); ctx.lineTo(30, 53); ctx.lineTo(48, 53);
-    ctx.lineTo(39, 80); ctx.lineTo(68, 41); ctx.lineTo(50, 41);
-    ctx.closePath();
-    ctx.fill();
-  } else if (avatar.id === 'flag') {
-    ctx.beginPath();
-    ctx.moveTo(35, 76); ctx.lineTo(35, 22);
-    ctx.moveTo(38, 23); ctx.lineTo(68, 23); ctx.lineTo(60, 40); ctx.lineTo(68, 56); ctx.lineTo(38, 56);
-    ctx.stroke();
-  } else {
-    ctx.beginPath();
-    ctx.moveTo(18, 70); ctx.lineTo(39, 33); ctx.lineTo(51, 52); ctx.lineTo(61, 28); ctx.lineTo(79, 70);
-    ctx.stroke();
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(39, 33); ctx.lineTo(45, 48); ctx.lineTo(51, 52); ctx.lineTo(61, 28); ctx.lineTo(65, 43);
-    ctx.stroke();
-  }
-  return canvas.toDataURL('image/png');
+    const script = document.createElement('script');
+    script.id = scriptId;
+    script.type = 'module';
+    script.src = 'https://unpkg.com/@dotlottie/player-component@2.7.12/dist/dotlottie-player.mjs';
+    script.onload = () => resolve(Boolean(customElements.get('dotlottie-player')));
+    script.onerror = () => resolve(false);
+    document.head.appendChild(script);
+    setTimeout(() => resolve(Boolean(customElements.get('dotlottie-player'))), 10000);
+  });
+  return lottiePlayerPromise;
+}
+
+function avatarPlayerMarkup(avatar, className = 'avatar-lottie') {
+  return `<dotlottie-player class="${className}" src="${avatar.src}" background="transparent" speed="1" loop autoplay></dotlottie-player>`;
 }
 
 function syncAvatarPicker() {
@@ -1756,14 +1721,16 @@ function syncAvatarPicker() {
   picker?.querySelectorAll('.avatar-option').forEach(option => {
     option.classList.toggle('active', option.dataset.avatar === currentAvatarId);
   });
+  syncEarthAvatarMarker();
 }
 
 function renderAvatarPicker() {
   const picker = document.getElementById('avatarPicker');
   if (!picker) return;
+  loadLottiePlayer();
   picker.innerHTML = ROUTE_AVATARS.map(avatar => `
     <button class="avatar-option" type="button" data-avatar="${avatar.id}" title="${avatar.label}" aria-label="${avatar.label}">
-      <img alt="" src="${avatarImageDataUri(avatar.id)}">
+      ${avatarPlayerMarkup(avatar)}
     </button>
   `).join('');
   picker.querySelectorAll('.avatar-option').forEach(option => {
@@ -1783,10 +1750,17 @@ function selectRouteAvatar(id) {
   setAvatarPreference(id);
   const picker = document.getElementById('avatarPicker');
   picker?.classList.remove('visible');
-  if (earthMarkerEntity?.billboard) {
-    earthMarkerEntity.billboard.image = avatarImageDataUri();
-  }
   syncAvatarPicker();
+}
+
+function syncEarthAvatarMarker() {
+  const marker = document.getElementById('earthAvatarMarker');
+  if (!marker) return;
+  const avatar = avatarById(currentAvatarId);
+  if (marker.dataset.avatar === avatar.id) return;
+  loadLottiePlayer();
+  marker.dataset.avatar = avatar.id;
+  marker.innerHTML = avatarPlayerMarkup(avatar);
 }
 
 function isBestInEarth(route) {
@@ -2833,7 +2807,9 @@ function disposeEarthReplay() {
   earthBlankCheckTimer = null;
   earthFullEntity = null;
   earthProgressEntity = null;
-  earthMarkerEntity = null;
+  earthMarkerPosition = null;
+  const marker = document.getElementById('earthAvatarMarker');
+  if (marker) marker.classList.remove('visible');
   earthTileset = null;
   earthLoadToken++;
   if (earthViewer && !earthViewer.isDestroyed?.()) {
@@ -2848,6 +2824,28 @@ function earthPositionAt(route, idx, heightOffset = 58) {
   if (!window.Cesium || !route?.route?.length) return null;
   const p = routePointAt(route, clamp(idx, 0, route.route.length - 1));
   return Cesium.Cartesian3.fromDegrees(p.lng, p.lat, (Number(p.elev) || 0) + heightOffset);
+}
+
+function earthAvatarPositionAt(route, idx) {
+  if (!window.Cesium || !route?.route?.length) return null;
+  const p = routePointAt(route, idx);
+  return Cesium.Cartesian3.fromDegrees(p.lng, p.lat, (Number(p.elev) || 0) + 190);
+}
+
+function positionEarthAvatarMarker() {
+  const marker = document.getElementById('earthAvatarMarker');
+  if (!marker || !earthModeEnabled || !earthReady || !earthViewer || !earthMarkerPosition || !window.Cesium) {
+    marker?.classList.remove('visible');
+    return;
+  }
+  const coords = Cesium.SceneTransforms.wgs84ToWindowCoordinates(earthViewer.scene, earthMarkerPosition);
+  const canvas = earthViewer.scene.canvas;
+  if (!coords || !Number.isFinite(coords.x) || !Number.isFinite(coords.y) || coords.x < -80 || coords.y < -80 || coords.x > canvas.clientWidth + 80 || coords.y > canvas.clientHeight + 80) {
+    marker.classList.remove('visible');
+    return;
+  }
+  marker.style.transform = `translate3d(${coords.x}px, ${coords.y}px, 0) translate(-50%, -72%)`;
+  marker.classList.add('visible');
 }
 
 function earthPositionsBetween(route, startIdx = 0, endIdx = route.route.length - 1, heightOffset = 58) {
@@ -2901,6 +2899,7 @@ function createEarthViewer() {
   viewer.scene.globe.show = false;
   viewer.scene.skyAtmosphere.show = true;
   viewer.scene.screenSpaceCameraController.enableCollisionDetection = true;
+  viewer.scene.postRender.addEventListener(positionEarthAvatarMarker);
   return viewer;
 }
 
@@ -3090,17 +3089,8 @@ async function initEarthReplay(route) {
       },
     });
     const p = routePointAt(route, 0);
-    earthMarkerEntity = earthViewer.entities.add({
-      name: 'Current route position',
-      position: Cesium.Cartesian3.fromDegrees(p.lng, p.lat, (Number(p.elev) || 0) + 150),
-      billboard: {
-        image: avatarImageDataUri(),
-        width: 38,
-        height: 38,
-        verticalOrigin: Cesium.VerticalOrigin.CENTER,
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
-      },
-    });
+    earthMarkerPosition = Cesium.Cartesian3.fromDegrees(p.lng, p.lat, (Number(p.elev) || 0) + 190);
+    syncEarthAvatarMarker();
     earthReady = true;
     setEarthMode('ready');
     setEarthStatus('Photorealistic 3D tiles');
@@ -3116,11 +3106,11 @@ async function initEarthReplay(route) {
 
 function updateEarthReplay(route, idx) {
   if (!earthModeEnabled || !earthReady || earthSlug !== route.slug || !earthViewer || !window.Cesium) return;
-  const p = routePointAt(route, idx);
   earthFullEntity.polyline.positions = earthLocalRoutePositions(route, idx);
   earthProgressEntity.polyline.positions = earthTrailPositions(route, idx);
-  earthMarkerEntity.position = Cesium.Cartesian3.fromDegrees(p.lng, p.lat, (Number(p.elev) || 0) + 150);
+  earthMarkerPosition = earthAvatarPositionAt(route, idx);
   updateEarthCamera(route, idx);
+  positionEarthAvatarMarker();
 }
 
 function updateEarthCamera(route, idx) {

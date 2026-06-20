@@ -2,7 +2,7 @@
 # Build the deployable subset of the Quests folder into dist/.
 # Run this after ./rebuild.sh to package the public files for Cloudflare Pages.
 #
-# What ships:    index.html, cards/
+# What ships:    index.html, cards/, route-avatars/
 # What's PRIVATE: build.py, admin.py, admin.html, admin.sh, quests.json,
 #                 .geo_cache.json, .geocode_buckets.json, rebuild.sh, make-dist.sh
 set -e
@@ -15,6 +15,7 @@ mkdir -p "$DIST"
 echo "▶ Copying public files into $DIST/…"
 cp index.html "$DIST/"
 cp -R cards   "$DIST/"
+cp -R route-avatars "$DIST/"
 
 # Optional: a tiny robots.txt and a Cloudflare _headers file for ideal caching.
 cat > "$DIST/robots.txt" <<'EOF'
@@ -27,6 +28,9 @@ EOF
 # so site updates roll out within a minute.
 cat > "$DIST/_headers" <<'EOF'
 /cards/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/route-avatars/*
   Cache-Control: public, max-age=31536000, immutable
 
 /*.html
