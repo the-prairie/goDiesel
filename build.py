@@ -2079,17 +2079,36 @@ function disposeEarthReplay() {
   if (canvas) canvas.innerHTML = '';
 }
 
-function earthPositions(route, endIdx = route.route.length - 1, heightOffset = 125) {
+function earthPositionAt(route, idx, heightOffset = 58) {
+  if (!window.Cesium || !route?.route?.length) return null;
+  const p = routePointAt(route, clamp(idx, 0, route.route.length - 1));
+  return Cesium.Cartesian3.fromDegrees(p.lng, p.lat, (Number(p.elev) || 0) + heightOffset);
+}
+
+function earthPositionsBetween(route, startIdx = 0, endIdx = route.route.length - 1, heightOffset = 58) {
   if (!window.Cesium || !route?.route?.length) return [];
-  const clamped = Math.max(0, Math.min(endIdx, route.route.length - 1));
-  const wholeIdx = Math.floor(clamped);
-  const pts = route.route.slice(0, Math.max(1, wholeIdx + 1));
-  const positions = pts.map(p => Cesium.Cartesian3.fromDegrees(p.lng, p.lat, (Number(p.elev) || 0) + heightOffset));
-  if (clamped > wholeIdx && wholeIdx < route.route.length - 1) {
-    const p = routePointAt(route, clamped);
-    positions.push(Cesium.Cartesian3.fromDegrees(p.lng, p.lat, (Number(p.elev) || 0) + heightOffset));
+  const maxIdx = route.route.length - 1;
+  const start = clamp(startIdx, 0, maxIdx);
+  const end = clamp(endIdx, 0, maxIdx);
+  const from = Math.min(start, end);
+  const to = Math.max(start, end);
+  const positions = [];
+  positions.push(earthPositionAt(route, from, heightOffset));
+  for (let i = Math.ceil(from); i <= Math.floor(to); i += 1) {
+    positions.push(earthPositionAt(route, i, heightOffset));
   }
-  return positions;
+  if (to > Math.floor(to)) {
+    positions.push(earthPositionAt(route, to, heightOffset));
+  }
+  return positions.filter(Boolean);
+}
+
+function earthLocalRoutePositions(route, idx) {
+  return earthPositionsBetween(route, idx - 22, idx + 62, 58);
+}
+
+function earthTrailPositions(route, idx) {
+  return earthPositionsBetween(route, idx - 22, idx, 64);
 }
 
 function createEarthViewer() {
@@ -2281,24 +2300,22 @@ async function initEarthReplay(route) {
     earthViewer.scene.primitives.add(earthTileset);
     attachEarthTileStatus(earthViewer, earthTileset, token);
     earthFullEntity = earthViewer.entities.add({
-      name: 'Full route',
+      name: 'Local route preview',
       polyline: {
-        positions: earthPositions(route),
-        width: 3,
-        material: Cesium.Color.fromCssColorString('#f0dfae').withAlpha(0.64),
-        depthFailMaterial: Cesium.Color.fromCssColorString('#f0dfae').withAlpha(0.32),
+        positions: earthLocalRoutePositions(route, 0),
+        width: 2,
+        material: Cesium.Color.fromCssColorString('#f0dfae').withAlpha(0.46),
       },
     });
     earthProgressEntity = earthViewer.entities.add({
-      name: 'Route progress',
+      name: 'Recent route trail',
       polyline: {
-        positions: earthPositions(route, 0),
-        width: 7,
+        positions: earthTrailPositions(route, 0),
+        width: 5,
         material: new Cesium.PolylineGlowMaterialProperty({
           color: Cesium.Color.fromCssColorString('#00f19f').withAlpha(0.98),
-          glowPower: 0.18,
+          glowPower: 0.12,
         }),
-        depthFailMaterial: Cesium.Color.fromCssColorString('#00f19f').withAlpha(0.82),
       },
     });
     const p = routePointAt(route, 0);
@@ -2328,7 +2345,8 @@ async function initEarthReplay(route) {
 function updateEarthReplay(route, idx) {
   if (!earthModeEnabled || !earthReady || earthSlug !== route.slug || !earthViewer || !window.Cesium) return;
   const p = routePointAt(route, idx);
-  earthProgressEntity.polyline.positions = earthPositions(route, idx);
+  earthFullEntity.polyline.positions = earthLocalRoutePositions(route, idx);
+  earthProgressEntity.polyline.positions = earthTrailPositions(route, idx);
   earthMarkerEntity.position = Cesium.Cartesian3.fromDegrees(p.lng, p.lat, (Number(p.elev) || 0) + 150);
   updateEarthCamera(route, idx);
 }

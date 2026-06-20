@@ -50,6 +50,14 @@ def test_earth_lab_updates_from_shared_route_index():
     assert "function updateEarthCamera(route, idx)" in BUILD
 
 
+def test_earth_route_overlay_is_local_and_depth_safe():
+    assert "function earthLocalRoutePositions(route, idx)" in BUILD
+    assert "function earthTrailPositions(route, idx)" in BUILD
+    assert "earthFullEntity.polyline.positions = earthLocalRoutePositions(route, idx);" in BUILD
+    assert "earthProgressEntity.polyline.positions = earthTrailPositions(route, idx);" in BUILD
+    assert "depthFailMaterial" not in BUILD
+
+
 def test_earth_camera_uses_route_metrics_not_fixed_constants():
     assert "function earthRouteMetrics(route)" in BUILD
     assert "function earthCameraProfile(route, playing, scrubbing = false)" in BUILD
