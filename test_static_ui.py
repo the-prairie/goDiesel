@@ -146,6 +146,10 @@ def test_globe_lab_routes_to_existing_open_route_flow():
 
 def test_globe_lab_supports_direct_navigation_controls():
     assert "touch-action: none" in BUILD
+    assert 'class="globe-sidebar" aria-label="Globe navigation"' in BUILD
+    assert 'class="globe-nav" aria-label="Globe views"' in BUILD
+    assert "function openSelectedGlobeRoute()" in BUILD
+    assert 'onclick="openSelectedGlobeRoute()"' in BUILD
     assert "canvas.addEventListener('pointerdown', handleGlobePointerDown);" in BUILD
     assert "canvas.addEventListener('mousedown', handleGlobeMouseDown);" in BUILD
     assert "canvas.addEventListener('touchstart', handleGlobeTouchStart, { passive: false });" in BUILD
@@ -155,13 +159,21 @@ def test_globe_lab_supports_direct_navigation_controls():
     assert "el.addEventListener('click', () => selectGlobeRegion(region));" in BUILD
 
 
-def test_globe_hotspots_use_intensity_not_large_orbs():
-    assert "new THREE.SphereGeometry(0.032, 20, 12)" in BUILD
-    assert "const intensity = clamp(region.routes.length / 8, 0.38, 1);" in BUILD
-    assert "dot.userData.intensity = intensity;" in BUILD
-    assert "dot.scale.setScalar(selected ? 1.12 : 1);" in BUILD
+def test_globe_uses_route_heat_traces_not_visible_orbs():
+    assert "let globeHotspots = [], globeHeatLines = []" in BUILD
+    assert "function routeToGlobeHeatPoints(route, radius = 2.505)" in BUILD
+    assert "function makeGlobeHeatLine(route, regionIndex)" in BUILD
+    assert "new THREE.CatmullRomCurve3(points)" in BUILD
+    assert "new THREE.TubeGeometry(curve" in BUILD
+    assert "blending: THREE.AdditiveBlending" in BUILD
+    assert "region.routes.forEach(route => {" in BUILD
+    assert "globeHeatLines.push(line);" in BUILD
+    assert "new THREE.SphereGeometry(0.085, 12, 8)" in BUILD
+    assert "opacity: 0," in BUILD
+    assert "globeHeatLines.forEach(line => {" in BUILD
     assert "0.055 + Math.min(region.routes.length" not in BUILD
     assert "dot.scale.setScalar(selected ? 1.7 : 1);" not in BUILD
+    assert "new THREE.QuadraticBezierCurve3" not in BUILD
 
 
 def test_globe_projection_has_texture_context_and_label_occlusion():

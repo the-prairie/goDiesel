@@ -632,7 +632,34 @@ body.ops-mode .curation-panel { display: block; }
                        background: var(--teal); box-shadow: 0 0 16px rgba(0,241,159,0.65); }
 .globe-label.active { opacity: 1; border-color: rgba(0,241,159,0.72);
                       transform: translate(-50%, -50%) scale(1.05); color: #FFF; }
-.globe-panel { position: absolute; z-index: 3; top: 28px; left: 28px; width: min(390px, calc(100% - 56px));
+.globe-sidebar { position: absolute; z-index: 4; top: 18px; left: 18px; bottom: 18px; width: 218px;
+                 display: flex; flex-direction: column; gap: 14px;
+                 background: rgba(5,9,12,0.78); border: 1px solid rgba(123,161,187,0.22);
+                 border-radius: 10px; padding: 14px; backdrop-filter: blur(15px);
+                 box-shadow: 0 22px 70px rgba(0,0,0,0.32); }
+.globe-sidebar-brand { border-bottom: 1px solid rgba(123,161,187,0.14); padding-bottom: 13px; }
+.globe-sidebar-kicker { font-family: 'JetBrains Mono', monospace; font-size: 8px; color: var(--teal);
+                        letter-spacing: 1.6px; text-transform: uppercase; }
+.globe-sidebar-title { margin-top: 7px; color: #FFF; font-size: 18px; line-height: 1.04;
+                       letter-spacing: 0.04em; text-transform: uppercase; font-weight: 800; }
+.globe-nav { display: grid; gap: 7px; }
+.globe-nav-item { appearance: none; width: 100%; border: 1px solid rgba(123,161,187,0.18);
+                  border-radius: 7px; background: rgba(12,18,22,0.70); color: #DCE8EF;
+                  padding: 10px; cursor: pointer; text-align: left;
+                  display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center;
+                  transition: border-color 160ms ease, background 160ms ease, color 160ms ease; }
+.globe-nav-item:hover, .globe-nav-item:focus-visible { border-color: rgba(0,241,159,0.48);
+                                                        background: rgba(0,241,159,0.08); outline: none; }
+.globe-nav-item[aria-current="page"] { border-color: rgba(0,241,159,0.56); color: var(--teal);
+                                       background: rgba(0,241,159,0.10); }
+.globe-nav-label { font-family: 'JetBrains Mono', monospace; font-size: 9px;
+                   letter-spacing: 1.2px; text-transform: uppercase; }
+.globe-nav-meta { color: var(--text-dim); font-family: 'JetBrains Mono', monospace;
+                  font-size: 8px; letter-spacing: 1px; text-transform: uppercase; }
+.globe-sidebar-status { margin-top: auto; color: var(--text-dim);
+                        font-family: 'JetBrains Mono', monospace; font-size: 8px;
+                        letter-spacing: 1.1px; line-height: 1.55; text-transform: uppercase; }
+.globe-panel { display: none; position: absolute; z-index: 3; top: 28px; left: 258px; width: min(360px, calc(100% - 314px));
                background: rgba(7,11,15,0.80); border: 1px solid rgba(123,161,187,0.22);
                border-radius: 10px; padding: 18px; backdrop-filter: blur(14px);
                box-shadow: 0 22px 70px rgba(0,0,0,0.34); }
@@ -1171,7 +1198,13 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
   .gallery { padding: 18px 14px 32px; gap: 12px;
              grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
   .globe-lab { min-height: calc(100dvh - 61px); }
-  .globe-panel { top: 12px; left: 12px; width: calc(100% - 24px); padding: 14px; }
+  .globe-sidebar { top: 10px; left: 10px; right: 10px; bottom: auto; width: auto;
+                   min-height: 0; padding: 12px; gap: 10px; }
+  .globe-sidebar-title { font-size: 15px; }
+  .globe-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .globe-nav-item { padding: 8px; }
+  .globe-sidebar-status { display: none; }
+  .globe-panel { display: none; }
   .globe-title { font-size: 22px; }
   .globe-copy { display: none; }
   .globe-route-panel { left: 12px; right: 12px; bottom: 12px; width: auto;
@@ -1337,10 +1370,35 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
 <div class="globe-lab" id="globeLab">
   <canvas class="globe-canvas" id="globeCanvas" aria-label="Quest globe"></canvas>
   <div class="globe-label-layer" id="globeLabelLayer"></div>
+  <aside class="globe-sidebar" aria-label="Globe navigation">
+    <div class="globe-sidebar-brand">
+      <div class="globe-sidebar-kicker">Quest globe</div>
+      <div class="globe-sidebar-title">Route heatmap</div>
+    </div>
+    <nav class="globe-nav" aria-label="Globe views">
+      <button class="globe-nav-item" type="button" aria-current="page" onclick="showGlobe({ updateUrl: true })">
+        <span class="globe-nav-label">Heatmap</span>
+        <span class="globe-nav-meta">Globe</span>
+      </button>
+      <button class="globe-nav-item" type="button" onclick="selectBestGlobeRegion()">
+        <span class="globe-nav-label">Best</span>
+        <span class="globe-nav-meta">Earth</span>
+      </button>
+      <button class="globe-nav-item" type="button" onclick="openSelectedGlobeRoute()">
+        <span class="globe-nav-label">Replay</span>
+        <span class="globe-nav-meta">Open</span>
+      </button>
+      <button class="globe-nav-item" type="button" onclick="showGallery()">
+        <span class="globe-nav-label">Quests</span>
+        <span class="globe-nav-meta">All</span>
+      </button>
+    </nav>
+    <div class="globe-sidebar-status" id="globeSidebarStatus">Routes drawn as live traces</div>
+  </aside>
   <section class="globe-panel">
     <div class="globe-kicker">Quest globe lab</div>
     <div class="globe-title">Real places, playable days.</div>
-    <div class="globe-copy">Explore Lauren&rsquo;s routes as regional hotspots. Pick a place, then open the route in the existing replay experience.</div>
+    <div class="globe-copy">Explore Lauren&rsquo;s routes as regional traces. Pick a place, then open the route in the existing replay experience.</div>
     <div class="globe-stats" id="globeStats"></div>
     <div class="globe-actions">
       <button class="globe-action primary" type="button" onclick="selectBestGlobeRegion()">Best in Earth</button>
@@ -1351,7 +1409,7 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
     <div class="globe-route-head" role="button" tabindex="0" onclick="toggleGlobeRegionMenu()" onkeydown="handleGlobeRegionHeadKey(event)" aria-expanded="false" aria-controls="globeRegionMenu">
       <span class="globe-route-summary">
         <b id="globeRegionName">Route regions</b>
-        <span class="globe-route-meta" id="globeRegionMeta">Pick a hotspot</span>
+        <span class="globe-route-meta" id="globeRegionMeta">Pick a route region</span>
       </span>
       <button class="globe-region-reset" id="globeRegionReset" type="button" onclick="resetGlobeRegion(event)" title="Back to all regions" aria-label="Back to all regions">‹</button>
       <span class="globe-route-caret" aria-hidden="true">⌄</span>
@@ -1584,9 +1642,9 @@ let cinemaPoints = [], cinemaSlug = null, cinemaDecor = [], cinemaMoments = [], 
 let cinemaFrame = null, cinemaStartedAt = 0;
 let cinemaCameraTarget = null, cinemaLookTarget = null, cinemaLookCurrent = null;
 let globeRenderer = null, globeScene = null, globeCamera = null, globeRoot = null, globeRaycaster = null;
-let globeHotspots = [], globeLabels = [], globeRegions = [], selectedGlobeRegion = null;
+let globeHotspots = [], globeHeatLines = [], globeLabels = [], globeRegions = [], selectedGlobeRegion = null;
 let globeAnimationFrame = null, globePointer = null, globeTargetRotation = null;
-let globeCameraDistance = 7.2;
+let globeCameraDistance = 6.7;
 let globeDrag = { active: false, moved: false, x: 0, y: 0, rotX: 0, rotY: 0 };
 let globeRegionMenuOpen = false;
 let allPhotos = [];
@@ -1851,6 +1909,37 @@ function makeGlobeLine(points, color, opacity = 0.42) {
   return new THREE.Line(geometry, material);
 }
 
+function routeToGlobeHeatPoints(route, radius = 2.505) {
+  const points = route?.route || [];
+  if (points.length < 2) return [];
+  const sampleEvery = Math.max(1, Math.ceil(points.length / 140));
+  return points
+    .filter((_, i) => i % sampleEvery === 0 || i === points.length - 1)
+    .map(point => latLngToVector3(point.lat, point.lng, radius));
+}
+
+function makeGlobeHeatLine(route, regionIndex) {
+  const points = routeToGlobeHeatPoints(route);
+  if (points.length < 2) return null;
+  const ride = route.type === 'Ride';
+  const best = isBestInEarth(route);
+  const curve = new THREE.CatmullRomCurve3(points);
+  const material = new THREE.MeshBasicMaterial({
+    color: best ? 0xe8d49a : (ride ? 0xff6a3d : 0x00d7ff),
+    transparent: true,
+    opacity: best ? 0.82 : 0.62,
+    blending: THREE.AdditiveBlending,
+    depthTest: true,
+  });
+  const line = new THREE.Mesh(
+    new THREE.TubeGeometry(curve, Math.min(260, Math.max(16, points.length * 2)), best ? 0.0075 : 0.0055, 5, false),
+    material
+  );
+  line.userData.regionIndex = regionIndex;
+  line.userData.baseOpacity = best ? 0.82 : 0.62;
+  return line;
+}
+
 function makeGlobeCircle(latitude = null, longitude = null, radius = 2.425) {
   const points = [];
   const steps = 128;
@@ -1905,37 +1994,33 @@ function buildGlobeScene() {
 
   globeRegions = globeRouteRegions();
   globeHotspots = [];
+  globeHeatLines = [];
   globeRegions.forEach((region, i) => {
+    region.routes.forEach(route => {
+      const line = makeGlobeHeatLine(route, i);
+      if (!line) return;
+      globeRoot.add(line);
+      globeHeatLines.push(line);
+    });
     const position = latLngToVector3(region.lat, region.lng, 2.47);
-    const intensity = clamp(region.routes.length / 8, 0.38, 1);
-    const dot = new THREE.Mesh(
-      new THREE.SphereGeometry(0.032, 20, 12),
+    const anchor = new THREE.Mesh(
+      new THREE.SphereGeometry(0.085, 12, 8),
       new THREE.MeshBasicMaterial({
-        color: region.bestEarth ? 0xe8d49a : 0x00f19f,
+        color: 0x00f19f,
         transparent: true,
-        opacity: 0.48 + intensity * 0.44,
+        opacity: 0,
+        depthTest: false,
       })
     );
-    dot.position.copy(position);
-    dot.userData.regionIndex = i;
-    dot.userData.intensity = intensity;
-    globeRoot.add(dot);
-    globeHotspots.push(dot);
-  });
-
-  const sorted = [...globeRegions].sort((a, b) => b.km - a.km).slice(0, 8);
-  sorted.forEach((region, i) => {
-    const next = sorted[(i + 1) % sorted.length];
-    const a = latLngToVector3(region.lat, region.lng, 2.44);
-    const b = latLngToVector3(next.lat, next.lng, 2.44);
-    const mid = a.clone().add(b).normalize().multiplyScalar(2.72);
-    const curve = new THREE.QuadraticBezierCurve3(a, mid, b);
-    globeRoot.add(makeGlobeLine(curve.getPoints(42), 0x00f19f, 0.14));
+    anchor.position.copy(position);
+    anchor.userData.regionIndex = i;
+    globeRoot.add(anchor);
+    globeHotspots.push(anchor);
   });
 
   globeRaycaster = new THREE.Raycaster();
   globePointer = new THREE.Vector2();
-  globeTargetRotation = new THREE.Vector2(-0.18, -0.48);
+  globeTargetRotation = new THREE.Vector2(-0.22, -0.72);
   globeRoot.rotation.set(globeTargetRotation.x, globeTargetRotation.y, 0);
   canvas.addEventListener('click', handleGlobeClick);
   canvas.addEventListener('pointerdown', handleGlobePointerDown);
@@ -2005,11 +2090,13 @@ function renderGlobeRegionOverview() {
   const name = document.getElementById('globeRegionName');
   const meta = document.getElementById('globeRegionMeta');
   const list = document.getElementById('globeRouteList');
+  const status = document.getElementById('globeSidebarStatus');
   const totalKm = globeRegions.reduce((sum, region) => sum + region.km, 0);
   if (name) name.textContent = 'Route regions';
   if (meta) meta.textContent = `${globeRegions.length} regions · ${ROUTES.length} routes · ${totalKm.toFixed(0)} km`;
+  if (status) status.textContent = `${ROUTES.length} routes · ${totalKm.toFixed(0)} km of route traces`;
   if (list) list.innerHTML = '';
-  setGlobeRegionMenuOpen(true);
+  setGlobeRegionMenuOpen(false);
   renderGlobeRegionMenu();
 }
 
@@ -2072,10 +2159,14 @@ function animateGlobe() {
   globeRoot.rotation.x += (globeTargetRotation.x - globeRoot.rotation.x) * 0.055;
   globeRoot.rotation.y += (globeTargetRotation.y - globeRoot.rotation.y) * 0.055;
   if (!globeDrag.active) globeRoot.rotation.y += 0.0009;
-  globeHotspots.forEach((dot, i) => {
+  globeHeatLines.forEach(line => {
+    const selected = selectedGlobeRegion && globeRegions[line.userData.regionIndex] === selectedGlobeRegion;
+    const target = selected ? 0.92 : line.userData.baseOpacity;
+    line.material.opacity += (target - line.material.opacity) * 0.08;
+  });
+  globeHotspots.forEach((anchor, i) => {
     const selected = selectedGlobeRegion === globeRegions[i];
-    dot.scale.setScalar(selected ? 1.12 : 1);
-    dot.material.opacity = selected ? 1 : 0.48 + (dot.userData.intensity || 0.5) * 0.44;
+    anchor.scale.setScalar(selected ? 1.42 : 1);
   });
   updateGlobeLabels();
   globeRenderer.render(globeScene, globeCamera);
@@ -2204,6 +2295,10 @@ function selectGlobeRegion(region, options = {}) {
   if (meta) {
     meta.textContent = `${region.routes.length} routes · ${region.km.toFixed(0)} km · ${Math.round(region.climb).toLocaleString()} m up`;
   }
+  const status = document.getElementById('globeSidebarStatus');
+  if (status) {
+    status.textContent = `${region.name} · ${region.routes.length} routes · ${region.km.toFixed(0)} km`;
+  }
   if (list) {
     list.innerHTML = region.routes.map((route, i) => `
       <button class="globe-route-item" type="button" onclick="openRoute(${region.indexes[i]})">
@@ -2224,6 +2319,12 @@ function selectGlobeRegion(region, options = {}) {
 function selectBestGlobeRegion() {
   const region = globeRegions.find(item => item.bestEarth) || globeRegions[0];
   if (region) selectGlobeRegion(region);
+}
+
+function openSelectedGlobeRoute() {
+  const region = selectedGlobeRegion || globeRegions.find(item => item.bestEarth) || globeRegions[0];
+  if (!region) return;
+  openRoute(region.bestRouteIndex ?? region.indexes[0]);
 }
 
 function showGlobe(options = {}) {
