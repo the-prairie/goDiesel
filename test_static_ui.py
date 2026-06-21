@@ -51,12 +51,19 @@ def test_earth_lab_updates_from_shared_route_index():
 
 
 def test_earth_route_overlay_is_local_and_depth_safe():
+    assert 'class="earth-route-thread" id="earthRouteThread"' in BUILD
+    assert 'class="earth-thread-preview" id="earthThreadPreview"' in BUILD
+    assert 'class="earth-thread-progress" id="earthThreadProgress"' in BUILD
     assert "function earthLocalRoutePositions(route, idx)" in BUILD
     assert "function earthTrailPositions(route, idx)" in BUILD
+    assert "function earthScreenPath(route, startIdx, endIdx, heightOffset = 230)" in BUILD
+    assert "function positionEarthRouteThread()" in BUILD
     assert "return earthPositionsBetween(route, idx - 60, idx + 120, 145);" in BUILD
     assert "return earthPositionsBetween(route, idx - 60, idx, 175);" in BUILD
     assert "earthFullEntity.polyline.positions = earthLocalRoutePositions(route, idx);" in BUILD
     assert "earthProgressEntity.polyline.positions = earthTrailPositions(route, idx);" in BUILD
+    assert "viewer.scene.postRender.addEventListener(positionEarthRouteThread);" in BUILD
+    assert "earthOverlayIdx = idx;" in BUILD
     assert "arcType: Cesium.ArcType.NONE" in BUILD
     assert "depthFailMaterial: Cesium.Color.fromCssColorString('#00f19f').withAlpha(0.94)" in BUILD
 

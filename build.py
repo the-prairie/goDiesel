@@ -842,6 +842,16 @@ body.ops-mode .curation-panel { display: block; }
                            linear-gradient(180deg, rgba(4,9,12,0.98), rgba(1,4,6,1)); }
 .earth-layer.active { display: block; }
 .earth-canvas { position: absolute; inset: 0; }
+.earth-route-thread { position: absolute; inset: 0; z-index: 4; width: 100%; height: 100%;
+                      pointer-events: none; overflow: visible; opacity: 0; transition: opacity 160ms ease; }
+.earth-route-thread.visible { opacity: 1; }
+.earth-route-thread polyline { fill: none; stroke-linecap: round; stroke-linejoin: round;
+                               vector-effect: non-scaling-stroke; }
+.earth-route-thread .earth-thread-preview { stroke: rgba(240,223,174,0.58); stroke-width: 5;
+                                            filter: drop-shadow(0 1px 4px rgba(0,0,0,0.72)); }
+.earth-route-thread .earth-thread-progress { stroke: rgba(0,241,159,0.98); stroke-width: 7;
+                                             filter: drop-shadow(0 0 9px rgba(0,241,159,0.42))
+                                                     drop-shadow(0 2px 4px rgba(0,0,0,0.70)); }
 .earth-avatar-marker { position: absolute; left: 0; top: 0; z-index: 5;
                        width: 84px; height: 84px;
                        transform: translate3d(-9999px, -9999px, 0) translate(-50%, -72%);
@@ -1435,6 +1445,10 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
       </div>
       <div class="earth-layer" id="earthLayer" aria-label="Earth replay lab">
         <div class="earth-canvas" id="earthCanvas"></div>
+        <svg class="earth-route-thread" id="earthRouteThread" aria-hidden="true">
+          <polyline class="earth-thread-preview" id="earthThreadPreview"></polyline>
+          <polyline class="earth-thread-progress" id="earthThreadProgress"></polyline>
+        </svg>
         <div class="earth-avatar-marker" id="earthAvatarMarker" aria-hidden="true"></div>
         <div class="earth-fallback" id="earthFallback">
           <div class="earth-fallback-card">
@@ -1558,6 +1572,7 @@ let routeCinemaMode = 'flyover';
 let earthModeEnabled = false;
 let earthViewer = null, earthTileset = null, earthFullEntity = null, earthProgressEntity = null, earthMarkerPosition = null;
 let earthReady = false, earthState = 'inactive', earthSlug = null, earthCameraBearing = null, earthLoadToken = 0;
+let earthOverlayRoute = null, earthOverlayIdx = 0;
 let earthCesiumPromise = null;
 let earthTileFailures = 0, earthTilesLoading = 0;
 let earthBlankWarnings = 0, earthBlankCheckTimer = null, earthScrubUntil = 0;
@@ -2803,6 +2818,8 @@ function disposeEarthReplay() {
   earthReady = false;
   earthState = 'inactive';
   earthSlug = null;
+  earthOverlayRoute = null;
+  earthOverlayIdx = 0;
   earthCameraBearing = null;
   earthTileFailures = 0;
   earthTilesLoading = 0;
@@ -2813,6 +2830,8 @@ function disposeEarthReplay() {
   earthFullEntity = null;
   earthProgressEntity = null;
   earthMarkerPosition = null;
+  const thread = document.getElementById('earthRouteThread');
+  if (thread) thread.classList.remove('visible');
   const marker = document.getElementById('earthAvatarMarker');
   if (marker) marker.classList.remove('visible');
   earthTileset = null;
@@ -2851,6 +2870,43 @@ function positionEarthAvatarMarker() {
   }
   marker.style.transform = `translate3d(${coords.x}px, ${coords.y}px, 0) translate(-50%, -72%)`;
   marker.classList.add('visible');
+}
+
+function earthScreenPath(route, startIdx, endIdx, heightOffset = 230) {
+  if (!window.Cesium || !earthViewer || !route?.route?.length) return '';
+  const canvas = earthViewer.scene.canvas;
+  const maxIdx = route.route.length - 1;
+  const from = clamp(Math.min(startIdx, endIdx), 0, maxIdx);
+  const to = clamp(Math.max(startIdx, endIdx), 0, maxIdx);
+  const span = Math.max(1, to - from);
+  const step = Math.max(1, Math.ceil(span / 72));
+  const points = [];
+  for (let i = Math.floor(from); i <= Math.ceil(to); i += step) {
+    const routeIdx = clamp(i, 0, maxIdx);
+    const p = routePointAt(route, routeIdx);
+    const world = Cesium.Cartesian3.fromDegrees(p.lng, p.lat, (Number(p.elev) || 0) + heightOffset);
+    const coords = Cesium.SceneTransforms.wgs84ToWindowCoordinates(earthViewer.scene, world);
+    if (!coords || !Number.isFinite(coords.x) || !Number.isFinite(coords.y)) continue;
+    if (coords.x < -160 || coords.y < -160 || coords.x > canvas.clientWidth + 160 || coords.y > canvas.clientHeight + 160) continue;
+    points.push(`${coords.x.toFixed(1)},${coords.y.toFixed(1)}`);
+  }
+  return points.join(' ');
+}
+
+function positionEarthRouteThread() {
+  const svg = document.getElementById('earthRouteThread');
+  const preview = document.getElementById('earthThreadPreview');
+  const progress = document.getElementById('earthThreadProgress');
+  if (!svg || !preview || !progress || !earthModeEnabled || !earthReady || !earthOverlayRoute || !earthViewer || !window.Cesium) {
+    svg?.classList.remove('visible');
+    return;
+  }
+  const idx = earthOverlayIdx;
+  const previewPath = earthScreenPath(earthOverlayRoute, idx - 70, idx + 150, 235);
+  const progressPath = earthScreenPath(earthOverlayRoute, idx - 70, idx, 260);
+  preview.setAttribute('points', previewPath);
+  progress.setAttribute('points', progressPath);
+  svg.classList.toggle('visible', previewPath.split(' ').filter(Boolean).length > 1);
 }
 
 function earthPositionsBetween(route, startIdx = 0, endIdx = route.route.length - 1, heightOffset = 58) {
@@ -2905,6 +2961,7 @@ function createEarthViewer() {
   viewer.scene.skyAtmosphere.show = true;
   viewer.scene.screenSpaceCameraController.enableCollisionDetection = true;
   viewer.scene.postRender.addEventListener(positionEarthAvatarMarker);
+  viewer.scene.postRender.addEventListener(positionEarthRouteThread);
   return viewer;
 }
 
@@ -3094,6 +3151,8 @@ async function initEarthReplay(route) {
       },
     });
     const p = routePointAt(route, 0);
+    earthOverlayRoute = route;
+    earthOverlayIdx = 0;
     earthMarkerPosition = Cesium.Cartesian3.fromDegrees(p.lng, p.lat, (Number(p.elev) || 0) + 190);
     syncEarthAvatarMarker();
     earthReady = true;
@@ -3113,8 +3172,11 @@ function updateEarthReplay(route, idx) {
   if (!earthModeEnabled || !earthReady || earthSlug !== route.slug || !earthViewer || !window.Cesium) return;
   earthFullEntity.polyline.positions = earthLocalRoutePositions(route, idx);
   earthProgressEntity.polyline.positions = earthTrailPositions(route, idx);
+  earthOverlayRoute = route;
+  earthOverlayIdx = idx;
   earthMarkerPosition = earthAvatarPositionAt(route, idx);
   updateEarthCamera(route, idx);
+  positionEarthRouteThread();
   positionEarthAvatarMarker();
 }
 
