@@ -168,6 +168,15 @@ function ReplayHome({
   selectedRoute?: QuestRoute;
   onOpenRoute: (route: QuestRoute) => void;
 }) {
+  const pickerRoutes = selectedRoute
+    ? [
+        selectedRoute,
+        ...completedRoutes
+          .filter((route) => route.slug !== selectedRoute.slug)
+          .slice(0, 11),
+      ]
+    : completedRoutes.slice(0, 12);
+
   return (
     <section className="grid gap-6">
       <SectionTitle
@@ -198,8 +207,8 @@ function ReplayHome({
             <Compass className="size-4 text-primary" aria-hidden="true" />
             Completed route picker
           </div>
-          <div className="grid max-h-80 gap-2 overflow-y-auto pr-2">
-            {completedRoutes.slice(0, 12).map((route) => (
+          <div className="grid gap-2 pr-2 md:max-h-80 md:overflow-y-auto">
+            {pickerRoutes.map((route) => (
               <button
                 key={route.slug}
                 type="button"

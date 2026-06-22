@@ -77,3 +77,12 @@ def test_atlas_search_models_memory_search_states():
 
     assert "Planning queries belong in Finder" in search
     assert "Best in Earth" in search
+
+
+def test_replay_picker_pins_selected_route_and_avoids_mobile_nav_overlap():
+    shell = (APP / "src/components/app-shell.tsx").read_text()
+
+    assert "const pickerRoutes = selectedRoute" in shell
+    assert ".filter((route) => route.slug !== selectedRoute.slug)" in shell
+    assert "md:max-h-80 md:overflow-y-auto" in shell
+    assert "grid max-h-80 gap-2 overflow-y-auto" not in shell
