@@ -1,5 +1,5 @@
 import { ArrowRight, Compass, ExternalLink } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { AppSidebar, MobileNav } from "@/components/app-sidebar";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,27 @@ export function AppShell() {
   const [selectedRoute, setSelectedRoute] = useState<QuestRoute | undefined>(() =>
     initial.routeSlug ? findRouteBySlug(initial.routeSlug) : completedRoutes[0],
   );
+
+  useEffect(() => {
+    function syncHashRoute() {
+      const next = parseInitialHash();
+      if (next.view === "replay") {
+        setView("replay");
+        setSelectedRoute(next.routeSlug ? findRouteBySlug(next.routeSlug) : undefined);
+        return;
+      }
+
+      setView("atlas");
+    }
+
+    window.addEventListener("hashchange", syncHashRoute);
+    window.addEventListener("popstate", syncHashRoute);
+
+    return () => {
+      window.removeEventListener("hashchange", syncHashRoute);
+      window.removeEventListener("popstate", syncHashRoute);
+    };
+  }, []);
 
   function navigate(nextView: AppView) {
     setView(nextView);

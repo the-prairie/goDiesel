@@ -22,6 +22,8 @@ def test_app_shell_defines_expected_navigation_and_hash_route_support():
       assert label in sidebar
 
     assert "window.location.hash.match(/^#quest" in shell
+    assert 'window.addEventListener("hashchange", syncHashRoute)' in shell
+    assert 'window.addEventListener("popstate", syncHashRoute)' in shell
     assert "routeHash(route)" in shell
     assert "Select a route before entering replay" in shell
     assert "Existing admin runs separately from the React app" in shell
