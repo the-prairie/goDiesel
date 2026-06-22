@@ -7,7 +7,7 @@ Writes:   /Users/laurenzary/Desktop/goDiesel/index.html
 Edit quests.json to add/remove routes. Re-run this script (or rebuild.sh).
 """
 import base64, gzip, io, json, math, re, textwrap
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
@@ -28,6 +28,11 @@ TRAVEL = Path('/Users/laurenzary/Desktop/Travel')
 QUESTS = Path('/Users/laurenzary/Desktop/goDiesel')
 CARDS = QUESTS / 'cards'
 CARDS.mkdir(exist_ok=True)
+REACT_DATA = QUESTS / 'app' / 'src' / 'data'
+BEST_IN_EARTH_IDS = {
+    '13935098460', '14349820520', '17636880071', '17654151284',
+    '13358070690', '9959792315', '9934715694',
+}
 
 TEAL = '#00F19F'; STRAIN = '#0093E7'; SLEEP = '#7BA1BB'
 BG = (16, 21, 24); BG_HEX = '#101518'
@@ -495,6 +500,37 @@ curation_json = json.dumps({
     'rejected': rejected_n,
     'total': len(all_routes),
 })
+
+def react_route_record(route):
+    aid = str(route.get('activity_id') or route.get('slug') or '')
+    return {
+        **route,
+        'lifecycle': 'completed',
+        'replay': {
+            'mode': 'earth' if aid in BEST_IN_EARTH_IDS else 'atlas',
+            'replay_eligible': True,
+            'best_in_earth': aid in BEST_IN_EARTH_IDS,
+            'geometry_status': 'ready' if len(route.get('route', [])) > 1 else 'missing',
+            'point_count': len(route.get('route', [])),
+        },
+    }
+
+react_route_payload = {
+    'schema_version': 1,
+    'generated_at': datetime.now(UTC).isoformat(timespec='seconds').replace('+00:00', 'Z'),
+    'stats': {
+        'approved': len(quest_specs),
+        'pending': pending_n,
+        'rejected': rejected_n,
+        'total': len(all_routes),
+    },
+    'routes': [react_route_record(route) for route in routes_data],
+}
+REACT_DATA.mkdir(parents=True, exist_ok=True)
+(REACT_DATA / 'quests.generated.json').write_text(
+    json.dumps(react_route_payload, ensure_ascii=False),
+    encoding='utf-8',
+)
 
 # Build app HTML — same as previous version but with Share-card button
 HTML_TEMPLATE_PATH = Path('/tmp/quests_template.html')
