@@ -1,8 +1,7 @@
-import { ArrowRight, Compass, ExternalLink } from "lucide-react";
+import { ArrowRight, Compass } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { AppSidebar, MobileNav } from "@/components/app-sidebar";
-import { Button } from "@/components/ui/button";
 import { AtlasPage } from "@/pages/atlas-page";
 import { completedRoutes, findRouteBySlug, routeHash } from "@/data/routes";
 import { hasRouteGeometry, type QuestRoute } from "@/domain/routes";
@@ -106,12 +105,9 @@ function Header() {
         <div className="hidden text-sm text-muted-foreground md:block">
           Real routes, playable days
         </div>
-        <Button variant="secondary" size="sm" asChild>
-          <a href="../index.html">
-            Static app
-            <ExternalLink className="size-4" aria-hidden="true" />
-          </a>
-        </Button>
+        <div className="rounded-md border border-border bg-card px-3 py-2 text-xs font-medium text-muted-foreground">
+          React migration preview
+        </div>
       </div>
     </header>
   );

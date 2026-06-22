@@ -28,6 +28,9 @@ def test_app_shell_defines_expected_navigation_and_hash_route_support():
     assert "Select a route before entering replay" in shell
     assert "Existing admin runs separately from the React app" in shell
     assert "../admin.html" not in shell
+    assert "Static app" not in shell
+    assert "../index.html" not in shell
+    assert "React migration preview" in shell
 
 
 def test_route_domain_models_completed_planned_and_discovered_states():

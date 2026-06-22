@@ -149,13 +149,14 @@ None.
 ## Paper Cuts
 
 - **Runner owner / fixed:** Replay picker did not include or pin the currently opened route when that route was outside the first 12 completed routes. Fixed in `41cd048`.
-- **Route curator / low severity:** The top-level `Static app` link still exists in the React header but is not a full static-app launch mechanism under Vite. It is not part of the current migration unit, but the label may overpromise until cutover/docs are finished.
+- **Route curator / fixed:** The top-level `Static app` link overpromised a static launch target that Vite does not serve. Replaced it with an explicit React migration preview status.
 
 ## Learnings
 
 - Atlas search behavior is clear when it refuses planning intent instead of pretending to find future routes.
 - Hash-based route parity needs both initial-load parsing and mounted-app hash synchronization; testing only fresh page loads misses SPA navigation regressions.
 - Relative links from the React Vite app cannot reach repo-root static files; unavailable states are safer than dead fallback links until a real local/deployed target is wired.
+- Header actions should only advertise destinations the current dev server can actually open.
 
 ## Final Status
 
