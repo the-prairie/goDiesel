@@ -1,10 +1,10 @@
-import { ArrowRight, Compass, ExternalLink, Globe2, Route, Search } from "lucide-react";
+import { ArrowRight, Compass, ExternalLink } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { AppSidebar, MobileNav } from "@/components/app-sidebar";
 import { Button } from "@/components/ui/button";
+import { AtlasPage } from "@/pages/atlas-page";
 import { completedRoutes, findRouteBySlug, routeHash } from "@/data/routes";
-import { routeRegions } from "@/data/route-regions";
 import { hasRouteGeometry, type QuestRoute } from "@/domain/routes";
 import { cn } from "@/lib/utils";
 
@@ -56,7 +56,7 @@ export function AppShell() {
         <main className="min-w-0 flex-1 pb-24 md:pb-0">
           <Header />
           <div className="mx-auto grid w-full max-w-7xl gap-6 p-4 sm:p-6">
-            {view === "atlas" && <AtlasHome onOpenRoute={openRoute} />}
+            {view === "atlas" && <AtlasPage onOpenRoute={openRoute} />}
             {view === "finder" && <FinderHome />}
             {view === "routes" && <RoutesHome onOpenRoute={openRoute} />}
             {view === "replay" && (
@@ -111,49 +111,6 @@ function SectionTitle({
       <h1 className="text-3xl font-bold sm:text-5xl">{title}</h1>
       <p className="mt-4 text-base leading-7 text-muted-foreground">{copy}</p>
     </div>
-  );
-}
-
-function AtlasHome({ onOpenRoute }: { onOpenRoute: (route: QuestRoute) => void }) {
-  const topRegions = routeRegions.slice(0, 6);
-
-  return (
-    <section className="grid gap-6">
-      <SectionTitle
-        eyebrow="Atlas"
-        title="Completed routes become a living map."
-        copy="This is the default home for route memories. The next unit ports the interactive globe; this shell already uses the generated route data and lifecycle model."
-      />
-      <div className="grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">
-        <div className="min-h-[420px] rounded-md border border-border bg-[radial-gradient(circle_at_50%_40%,hsl(var(--primary)/0.18),transparent_36%),linear-gradient(145deg,hsl(var(--card)),hsl(var(--background)))] p-5">
-          <div className="flex h-full flex-col justify-between">
-            <Globe2 className="size-12 text-primary" aria-hidden="true" />
-            <div>
-              <div className="text-2xl font-bold">{completedRoutes.length} completed routes</div>
-              <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-                Completed traces are ready for the React globe port. Planned and discovered routes are typed separately so they do not count as completed heat.
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="grid gap-3">
-          {topRegions.map((region) => (
-            <button
-              key={region.name}
-              type="button"
-              onClick={() => onOpenRoute(region.routes[0])}
-              className="rounded-md border border-border bg-card p-4 text-left outline-none transition-colors hover:border-primary/60 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <div className="font-semibold">{region.name}</div>
-              <div className="mt-1 text-sm text-muted-foreground">
-                {region.routes.length} routes · {region.totalKm.toFixed(0)} km ·{" "}
-                {region.totalClimbM.toLocaleString()} m up
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-    </section>
   );
 }
 

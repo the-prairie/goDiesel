@@ -44,3 +44,36 @@ def test_build_pipeline_emits_react_route_artifact():
     assert "'lifecycle': 'completed'" in build
     assert "'replay': {" in build
     assert "react_route_payload" in build
+
+
+def test_atlas_globe_ports_route_heat_traces_and_interaction():
+    globe = (APP / "src/components/globe/atlas-globe.tsx").read_text()
+    atlas = (APP / "src/pages/atlas-page.tsx").read_text()
+
+    assert "import * as THREE from \"three\"" in globe
+    assert "function routeToGlobeHeatPoints" in globe
+    assert "function makeGlobeHeatLine" in globe
+    assert "new THREE.TubeGeometry" in globe
+    assert "THREE.AdditiveBlending" in globe
+    assert "new THREE.TextureLoader().load" in globe
+    assert "intersectObjects(state.anchors" in globe
+    assert "cameraDistance + event.deltaY * 0.004" in globe
+    assert "<AtlasGlobe" in atlas
+
+
+def test_atlas_search_models_memory_search_states():
+    search = (APP / "src/components/search/atlas-search.tsx").read_text()
+
+    for state in (
+        "initial",
+        "typing",
+        "loading",
+        "grouped-results",
+        "no-results",
+        "selected-result",
+        "unsupported-query",
+    ):
+        assert state in search
+
+    assert "Planning queries belong in Finder" in search
+    assert "Best in Earth" in search
