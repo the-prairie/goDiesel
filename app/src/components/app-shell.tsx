@@ -239,12 +239,9 @@ function AdminHome() {
         title="Admin remains explicit during migration."
         copy="The existing local admin surface is not ported in U1-U3. This route exists so navigation has a clear first-milestone behavior."
       />
-      <Button asChild className="w-fit">
-        <a href="../admin.html">
-          Open existing admin
-          <ExternalLink className="size-4" aria-hidden="true" />
-        </a>
-      </Button>
+      <div className="w-fit rounded-md border border-dashed border-border bg-card px-4 py-3 text-sm text-muted-foreground">
+        Existing admin runs separately from the React app.
+      </div>
     </section>
   );
 }

@@ -24,7 +24,8 @@ def test_app_shell_defines_expected_navigation_and_hash_route_support():
     assert "window.location.hash.match(/^#quest" in shell
     assert "routeHash(route)" in shell
     assert "Select a route before entering replay" in shell
-    assert "Open existing admin" in shell
+    assert "Existing admin runs separately from the React app" in shell
+    assert "../admin.html" not in shell
 
 
 def test_route_domain_models_completed_planned_and_discovered_states():
