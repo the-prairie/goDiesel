@@ -25,6 +25,7 @@ def test_app_shell_defines_expected_navigation_and_hash_route_support():
     assert 'window.addEventListener("hashchange", syncHashRoute)' in shell
     assert 'window.addEventListener("popstate", syncHashRoute)' in shell
     assert "routeHash(route)" in shell
+    assert 'history.replaceState(null, "", "#")' in shell
     assert "Select a route before entering replay" in shell
     assert "Existing admin runs separately from the React app" in shell
     assert "../admin.html" not in shell
@@ -59,6 +60,9 @@ def test_atlas_globe_ports_route_heat_traces_and_interaction():
     assert "import * as THREE from \"three\"" in globe
     assert "function routeToGlobeHeatPoints" in globe
     assert "function makeGlobeHeatLine" in globe
+    assert "function syncLabelBounds" in globe
+    assert "state.labelBounds" in globe
+    assert "label.offsetWidth" not in globe[globe.find("function updateLabels"):]
     assert "new THREE.TubeGeometry" in globe
     assert "THREE.AdditiveBlending" in globe
     assert "new THREE.TextureLoader().load" in globe
@@ -83,6 +87,9 @@ def test_atlas_search_models_memory_search_states():
 
     assert "Planning queries belong in Finder" in search
     assert "Best in Earth" in search
+    assert "function searchState" in search
+    assert "selectedLabel" not in search
+    assert "route:${route.slug}" in search
 
 
 def test_replay_picker_pins_selected_route_and_avoids_mobile_nav_overlap():

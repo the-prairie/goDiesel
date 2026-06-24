@@ -4,6 +4,11 @@ import { useDeferredValue, useMemo, useState } from "react";
 import type { RouteRegion } from "@/data/route-regions";
 import type { QuestRoute } from "@/domain/routes";
 
+interface SelectedSearchResult {
+  key: string;
+  query: string;
+}
+
 type AtlasSearchState =
   | "initial"
   | "typing"
@@ -28,6 +33,28 @@ function isUnsupportedQuery(query: string) {
   return /^(plan|find|near|suggest)\b/i.test(query.trim());
 }
 
+function searchState({
+  query,
+  deferredQuery,
+  hasResults,
+  selectedResult,
+  unsupported,
+}: {
+  query: string;
+  deferredQuery: string;
+  hasResults: boolean;
+  selectedResult: SelectedSearchResult | null;
+  unsupported: boolean;
+}): AtlasSearchState {
+  if (selectedResult?.key && selectedResult.query === query) return "selected-result";
+  if (query === "") return "initial";
+  if (unsupported) return "unsupported-query";
+  if (query !== deferredQuery) return "loading";
+  if (hasResults) return "grouped-results";
+  if (query.trim().length < 2) return "typing";
+  return "no-results";
+}
+
 export function AtlasSearch({
   routes,
   regions,
@@ -35,7 +62,7 @@ export function AtlasSearch({
   onOpenRoute,
 }: AtlasSearchProps) {
   const [query, setQuery] = useState("");
-  const [selectedLabel, setSelectedLabel] = useState("");
+  const [selectedResult, setSelectedResult] = useState<SelectedSearchResult | null>(null);
   const deferredQuery = useDeferredValue(query);
   const normalizedQuery = normalize(deferredQuery);
   const unsupported = query.length > 0 && isUnsupportedQuery(query);
@@ -76,29 +103,22 @@ export function AtlasSearch({
 
   const hasResults =
     results.regions.length > 0 || results.routes.length > 0 || results.replay.length > 0;
-  const state: AtlasSearchState =
-    selectedLabel && query === selectedLabel
-      ? "selected-result"
-      : query === ""
-        ? "initial"
-        : unsupported
-          ? "unsupported-query"
-          : query !== deferredQuery
-            ? "loading"
-            : hasResults
-              ? "grouped-results"
-              : query.trim().length < 2
-                ? "typing"
-                : "no-results";
+  const state = searchState({
+    query,
+    deferredQuery,
+    hasResults,
+    selectedResult,
+    unsupported,
+  });
 
   function selectRegion(region: RouteRegion) {
-    setSelectedLabel(region.name);
+    setSelectedResult({ key: `region:${region.name}`, query: region.name });
     setQuery(region.name);
     onSelectRegion(region);
   }
 
   function selectRoute(route: QuestRoute) {
-    setSelectedLabel(route.name);
+    setSelectedResult({ key: `route:${route.slug}`, query: route.name });
     setQuery(route.name);
     onOpenRoute(route);
   }
@@ -118,7 +138,7 @@ export function AtlasSearch({
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);
-            setSelectedLabel("");
+            setSelectedResult(null);
           }}
           placeholder="Search regions, routes, replay-worthy days"
           className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"

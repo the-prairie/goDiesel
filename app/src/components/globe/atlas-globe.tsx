@@ -19,8 +19,13 @@ interface GlobeRefs {
   root?: THREE.Group;
   raycaster: THREE.Raycaster;
   pointer: THREE.Vector2;
+  worldPoint: THREE.Vector3;
+  projectedPoint: THREE.Vector3;
+  normal: THREE.Vector3;
   anchors: THREE.Mesh[];
   heatLines: THREE.Mesh[];
+  labelBounds: Array<{ width: number; height: number }>;
+  viewport: { width: number; height: number };
   frame?: number;
   cameraDistance: number;
   targetRotation: THREE.Vector2;
@@ -146,8 +151,13 @@ export function AtlasGlobe({
   const refs = useRef<GlobeRefs>({
     raycaster: new THREE.Raycaster(),
     pointer: new THREE.Vector2(),
+    worldPoint: new THREE.Vector3(),
+    projectedPoint: new THREE.Vector3(),
+    normal: new THREE.Vector3(),
     anchors: [],
     heatLines: [],
+    labelBounds: [],
+    viewport: { width: 1, height: 1 },
     cameraDistance: 6.4,
     targetRotation: new THREE.Vector2(-0.22, -0.72),
     drag: {
@@ -265,41 +275,48 @@ export function AtlasGlobe({
       const rect = canvasEl.getBoundingClientRect();
       const width = Math.max(1, rect.width);
       const height = Math.max(1, rect.height);
+      state.viewport = { width, height };
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
     }
 
+    function syncLabelBounds() {
+      state.labelBounds = labelRefs.current.map((label) => ({
+        width: label?.offsetWidth || 130,
+        height: label?.offsetHeight || 26,
+      }));
+    }
+
     function updateLabels() {
-      const rect = canvasEl.getBoundingClientRect();
       const placed: Array<{ left: number; right: number; top: number; bottom: number }> = [];
       const cameraFacing = new THREE.Vector3(0, 0, 1);
       const labels = state.anchors
         .map((anchor, index) => {
           const label = labelRefs.current[index];
           if (!label) return null;
-          const world = anchor.getWorldPosition(new THREE.Vector3());
-          const projected = world.clone().project(camera);
-          const facing = world.clone().normalize().dot(cameraFacing);
+          const world = anchor.getWorldPosition(state.worldPoint);
+          const projected = state.projectedPoint.copy(world).project(camera);
+          const facing = state.normal.copy(world).normalize().dot(cameraFacing);
           const region = regions[index];
           const selected = selectedRegionRef.current?.name === region.name;
           label.dataset.active = selected ? "true" : "false";
 
           return {
             label,
+            bounds: state.labelBounds[index] ?? { width: 130, height: 26 },
             selected,
             priority: (selected ? 100 : 0) + region.routes.length,
             visible: projected.z < 1 && facing > 0.16,
-            x: (projected.x * 0.5 + 0.5) * rect.width,
-            y: (-projected.y * 0.5 + 0.5) * rect.height,
+            x: (projected.x * 0.5 + 0.5) * state.viewport.width,
+            y: (-projected.y * 0.5 + 0.5) * state.viewport.height,
           };
         })
         .filter((item): item is NonNullable<typeof item> => Boolean(item))
         .sort((a, b) => b.priority - a.priority);
 
       labels.forEach((item) => {
-        const width = item.label.offsetWidth || 130;
-        const height = item.label.offsetHeight || 26;
+        const { width, height } = item.bounds;
         const box = {
           left: item.x - width / 2,
           right: item.x + width / 2,
@@ -317,9 +334,9 @@ export function AtlasGlobe({
         );
         const inFrame =
           box.right > 8 &&
-          box.left < rect.width - 8 &&
+          box.left < state.viewport.width - 8 &&
           box.bottom > 8 &&
-          box.top < rect.height - 8;
+          box.top < state.viewport.height - 8;
         const show = item.visible && inFrame && (item.selected || !collides);
         item.label.style.left = `${item.x}px`;
         item.label.style.top = `${item.y}px`;
@@ -428,6 +445,7 @@ export function AtlasGlobe({
     }
 
     resize();
+    syncLabelBounds();
     animate();
     canvasEl.addEventListener("pointerdown", handlePointerDown);
     canvasEl.addEventListener("pointermove", handlePointerMove);
@@ -454,6 +472,7 @@ export function AtlasGlobe({
       state.root = undefined;
       state.anchors = [];
       state.heatLines = [];
+      state.labelBounds = [];
     };
   }, [regions]);
 

@@ -60,7 +60,12 @@ export function AppShell() {
 
   function navigate(nextView: AppView) {
     setView(nextView);
-    if (nextView === "atlas") history.replaceState(null, "", "#");
+    if (nextView === "replay" && selectedRoute) {
+      history.replaceState(null, "", routeHash(selectedRoute));
+      return;
+    }
+
+    history.replaceState(null, "", "#");
   }
 
   function openRoute(route: QuestRoute) {
