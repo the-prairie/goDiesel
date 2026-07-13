@@ -44,6 +44,7 @@ export function AtlasPage() {
 
   function setQuery(value: string) {
     updateSearchParams((next) => {
+      if (value !== query) next.delete("region");
       if (value) next.set("q", value);
       else next.delete("q");
     }, true);

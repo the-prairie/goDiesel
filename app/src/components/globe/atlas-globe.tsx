@@ -242,10 +242,12 @@ export function AtlasGlobe({
         material.map = texture;
         material.color.set(0x9fb7ac);
         material.needsUpdate = true;
+        canvasEl.dataset.textureStatus = "loaded";
       },
       undefined,
       () => {
         (globe.material as MeshBasicMaterial).color.set(0x10242c);
+        canvasEl.dataset.textureStatus = "fallback";
       },
     );
 
@@ -299,6 +301,14 @@ export function AtlasGlobe({
     state.camera = camera;
     state.renderer = renderer;
     state.root = root;
+    canvasEl.dataset.heatLines = String(state.heatLines.length);
+
+    function syncInteractionState() {
+      canvasEl.dataset.targetRotationX = state.targetRotation.x.toFixed(4);
+      canvasEl.dataset.targetRotationY = state.targetRotation.y.toFixed(4);
+      canvasEl.dataset.cameraTarget = state.cameraDistance.toFixed(3);
+    }
+    syncInteractionState();
 
     function resize() {
       const rect = canvasEl.getBoundingClientRect();
@@ -404,13 +414,6 @@ export function AtlasGlobe({
       root.rotation.x += (state.targetRotation.x - root.rotation.x) * 0.055;
       root.rotation.y += (state.targetRotation.y - root.rotation.y) * 0.055;
       if (!state.drag.active) root.rotation.y += 0.0009;
-      canvasEl.dataset.rotationX = root.rotation.x.toFixed(4);
-      canvasEl.dataset.rotationY = root.rotation.y.toFixed(4);
-      canvasEl.dataset.cameraDistance = camera.position.z.toFixed(3);
-      canvasEl.dataset.targetRotationX = state.targetRotation.x.toFixed(4);
-      canvasEl.dataset.targetRotationY = state.targetRotation.y.toFixed(4);
-      canvasEl.dataset.cameraTarget = state.cameraDistance.toFixed(3);
-      canvasEl.dataset.heatLines = String(state.heatLines.length);
       state.heatLines.forEach((line) => {
         const material = line.material as MeshBasicMaterial;
         const region = regions[line.userData.regionIndex];
@@ -462,6 +465,7 @@ export function AtlasGlobe({
         -1.1,
         1.1,
       );
+      syncInteractionState();
       return true;
     }
 
@@ -513,6 +517,7 @@ export function AtlasGlobe({
         3.2,
         9.2,
       );
+      syncInteractionState();
     }
 
     function handleKeyDown(event: KeyboardEvent) {
@@ -536,6 +541,7 @@ export function AtlasGlobe({
       } else if (event.key === "-" || event.key === "_") {
         state.cameraDistance = MathUtils.clamp(state.cameraDistance + 0.5, 3.2, 9.2);
       } else return;
+      syncInteractionState();
       event.preventDefault();
     }
 
@@ -582,11 +588,23 @@ export function AtlasGlobe({
     if (!selectedRegion) {
       state.targetRotation.set(DEFAULT_ROTATION.x, DEFAULT_ROTATION.y);
       state.cameraDistance = DEFAULT_CAMERA_DISTANCE;
+      const canvas = canvasRef.current;
+      if (canvas) {
+        canvas.dataset.targetRotationX = state.targetRotation.x.toFixed(4);
+        canvas.dataset.targetRotationY = state.targetRotation.y.toFixed(4);
+        canvas.dataset.cameraTarget = state.cameraDistance.toFixed(3);
+      }
       return;
     }
     state.targetRotation.x = (selectedRegion.centerLat * Math.PI) / 180;
     state.targetRotation.y = -(selectedRegion.centerLng * Math.PI) / 180;
     state.cameraDistance = 4.35;
+    const canvas = canvasRef.current;
+    if (canvas) {
+      canvas.dataset.targetRotationX = state.targetRotation.x.toFixed(4);
+      canvas.dataset.targetRotationY = state.targetRotation.y.toFixed(4);
+      canvas.dataset.cameraTarget = state.cameraDistance.toFixed(3);
+    }
   }, [selectedRegionName, selectedRegion]);
 
   return (

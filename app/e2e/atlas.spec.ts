@@ -4,15 +4,19 @@ import { PNG } from "pngjs";
 async function canvasStats(page: Page) {
   const screenshot = await page.getByLabel("Interactive route globe").screenshot();
   const pixels = PNG.sync.read(screenshot).data;
-  let nonblank = 0;
+  let nonBackground = 0;
   let checksum = 0;
   const stride = Math.max(4, Math.floor(pixels.length / 50_000 / 4) * 4);
   for (let index = 0; index < pixels.length; index += stride) {
     const value = pixels[index] + pixels[index + 1] + pixels[index + 2];
-    if (value > 12) nonblank += 1;
+    const backgroundDistance =
+      Math.abs(pixels[index] - 2) +
+      Math.abs(pixels[index + 1] - 7) +
+      Math.abs(pixels[index + 2] - 10);
+    if (backgroundDistance > 24) nonBackground += 1;
     checksum = (checksum + value * (index + 1)) % 2_147_483_647;
   }
-  return { nonblank, checksum };
+  return { nonBackground, checksum };
 }
 
 for (const viewport of [
@@ -29,7 +33,7 @@ for (const viewport of [
     await expect(canvas).toBeVisible({ timeout: 15_000 });
     await expect(canvas).toHaveAttribute("data-heat-lines", "66", { timeout: 15_000 });
     const initialPixels = await canvasStats(page);
-    expect(initialPixels.nonblank).toBeGreaterThan(500);
+    expect(initialPixels.nonBackground).toBeGreaterThan(500);
     if (viewport.name === "desktop") {
       await page.waitForTimeout(180);
       const movingPixels = await canvasStats(page);
@@ -63,7 +67,7 @@ for (const viewport of [
 }
 
 test("region controls, search, inspector, and URL stay synchronized", async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(90_000);
   await page.goto("/#/atlas");
 
   await page.getByRole("combobox", { name: "Browse route regions" }).selectOption({
@@ -115,18 +119,42 @@ test("region controls, search, inspector, and URL stay synchronized", async ({ p
     "selected-result",
   );
 
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  const mobileLayout = await page.evaluate(() => {
+    const search = document
+      .querySelector<HTMLElement>('[aria-label="Atlas search"]')!
+      .getBoundingClientRect();
+    const inspector = document.querySelector<HTMLElement>("aside")!.getBoundingClientRect();
+    const controls = document
+      .querySelector<HTMLSelectElement>('[aria-label="Browse route regions"]')!
+      .parentElement!.getBoundingClientRect();
+    return {
+      searchBottom: search.bottom,
+      inspectorTop: inspector.top,
+      inspectorBottom: inspector.bottom,
+      controlsTop: controls.top,
+    };
+  });
+  expect(mobileLayout.searchBottom).toBeLessThanOrEqual(mobileLayout.inspectorTop);
+  expect(mobileLayout.inspectorBottom).toBeLessThanOrEqual(mobileLayout.controlsTop);
+
   await page.getByRole("button", { name: "Clear selected region" }).click();
   await expect(page.getByRole("region", { name: "Atlas search" })).toHaveAttribute(
     "data-state",
     "grouped-results",
   );
+
+  await search.fill("tokyo");
+  await expect(page).not.toHaveURL(/region=/);
+  await expect(page.getByRole("button", { name: /Tokyo, Japan3 routes/i })).toBeVisible();
 });
 
 test("globe supports pointer, wheel, touch, and keyboard exploration", async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto("/#/atlas");
   const canvas = page.getByLabel("Interactive route globe");
-  await expect(canvas).toHaveAttribute("data-heat-lines", "66");
+  await expect(canvas).toHaveAttribute("data-heat-lines", "66", { timeout: 15_000 });
   const bounds = await canvas.boundingBox();
   expect(bounds).not.toBeNull();
   if (!bounds) return;
@@ -200,6 +228,11 @@ test("Atlas uses the bundled landmass texture and canonicalizes invalid regions"
 
   await page.goto("/#/atlas?region=Not+A+Place");
   await expect(page.getByLabel("Interactive route globe")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByLabel("Interactive route globe")).toHaveAttribute(
+    "data-texture-status",
+    "loaded",
+    { timeout: 15_000 },
+  );
   await expect(page).not.toHaveURL(/region=/);
   await expect.poll(() => textureResponses.length).toBeGreaterThan(0);
   expect(textureResponses[0].url).toContain("/assets/earth-atmos-2048.jpg");
