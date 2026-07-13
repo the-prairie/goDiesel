@@ -1,9 +1,72 @@
 import unittest
 
-from quest_meta import build_quest_meta, elevation_gain_m
+from quest_meta import (
+    build_quest_meta,
+    build_replay_metadata,
+    build_route_curation,
+    elevation_gain_m,
+)
 
 
 class QuestMetaTests(unittest.TestCase):
+    def test_build_route_curation_accepts_complete_reviewed_editorial_data(self):
+        curation = build_route_curation({
+            "vibe": "Quiet temple lanes opening into a sustained climb.",
+            "ideal_use": "A long, unhurried exploration day.",
+            "terrain": ["Paved lanes", "Steep hillside roads"],
+            "difficulty": "Demanding",
+            "highlights": ["Temple district", "Eastern hills"],
+            "caveats": ["Expect frequent road crossings"],
+            "seasonality": "Best in cool, dry weather.",
+            "editorial_note": "A city route preserved for its contrast and scale.",
+            "review_status": "reviewed",
+        })
+
+        self.assertEqual(curation["review_status"], "reviewed")
+        self.assertEqual(curation["terrain"], ["Paved lanes", "Steep hillside roads"])
+
+    def test_build_route_curation_omits_missing_draft_fields(self):
+        self.assertEqual(
+            build_route_curation({
+                "vibe": "Riverside miles through the city.",
+                "review_status": "draft",
+            }),
+            {
+                "vibe": "Riverside miles through the city.",
+                "review_status": "draft",
+            },
+        )
+
+    def test_build_route_curation_rejects_incomplete_reviewed_data(self):
+        with self.assertRaisesRegex(ValueError, "reviewed curation is missing ideal_use"):
+            build_route_curation({
+                "vibe": "Riverside miles through the city.",
+                "review_status": "reviewed",
+            })
+
+    def test_build_route_curation_rejects_unknown_fields(self):
+        with self.assertRaisesRegex(ValueError, "curation has unknown fields: vbie"):
+            build_route_curation({
+                "vbie": "Typo that must not disappear silently.",
+                "review_status": "draft",
+            })
+
+    def test_replay_metadata_requires_two_route_points(self):
+        best_ids = {"route-1"}
+
+        for point_count in (0, 1):
+            replay = build_replay_metadata("route-1", point_count, best_ids)
+            self.assertFalse(replay["replay_eligible"])
+            self.assertFalse(replay["best_in_earth"])
+            self.assertEqual(replay["mode"], "atlas")
+            self.assertEqual(replay["geometry_status"], "missing")
+
+        ready = build_replay_metadata("route-1", 2, best_ids)
+        self.assertTrue(ready["replay_eligible"])
+        self.assertTrue(ready["best_in_earth"])
+        self.assertEqual(ready["mode"], "earth")
+        self.assertEqual(ready["geometry_status"], "ready")
+
     def test_elevation_gain_only_counts_climbs(self):
         route = [
             {"elev": 100},

@@ -969,7 +969,27 @@
     {
       "activity_id": "17654151284",
       "status": "approved",
-      "region": null
+      "region": null,
+      "curation": {
+        "vibe": "A long, exploratory Kyoto run that moves from the city into sustained climbing before returning.",
+        "ideal_use": "A cool-weather long-run day when you want city distance and a serious climb in one outing.",
+        "terrain": [
+          "Urban streets",
+          "Hilly route profile"
+        ],
+        "difficulty": "Demanding",
+        "highlights": [
+          "Kyoto city-to-hills contrast",
+          "680 m of climbing across 21.3 km"
+        ],
+        "caveats": [
+          "This is a long 21.3 km outing",
+          "Review the recorded route before setting out; current navigation conditions are not validated"
+        ],
+        "seasonality": "Seasonal access has not been validated; check current weather and local conditions.",
+        "editorial_note": "Selected as the first guide because the recorded route combines urban Kyoto with 680 m of climbing.",
+        "review_status": "reviewed"
+      }
     },
     {
       "activity_id": "17616195995",

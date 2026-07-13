@@ -20,6 +20,68 @@ test("Atlas does not fetch full route records before selection", async ({ page }
   expect(detailRequests[0]).toMatch(new RegExp(`/data/routes/${routeSlug}\\.json$`));
 });
 
+test("reviewed route guide loads directly and survives refresh", async ({ page }) => {
+  await page.goto(`/#/routes/${routeSlug}`);
+
+  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "What it feels like" })).toBeVisible();
+  await expect(page.getByText(/long, exploratory Kyoto run/i)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Best for" })).toBeVisible();
+  await expect(page.getByText(/cool-weather long-run day/i)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Watch for" })).toBeVisible();
+  await expect(page.getByText(/current navigation conditions are not validated/i)).toBeVisible();
+
+  await page.reload();
+  await expect(page).toHaveURL(new RegExp(`#\/routes\/${routeSlug}$`));
+  await expect(page.getByRole("heading", { name: "What it feels like" })).toBeVisible();
+});
+
+test("route detail announces loading and retries a transient request failure", async ({
+  page,
+}) => {
+  let requestCount = 0;
+  await page.route(`**/data/routes/${routeSlug}.json`, async (route) => {
+    requestCount += 1;
+    if (requestCount === 1) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      await route.fulfill({ status: 500, body: "temporary failure" });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.goto(`/#/routes/${routeSlug}`);
+  await expect(page.getByRole("status")).toHaveText("Loading route details.");
+  await expect(page.getByRole("alert")).toContainText("status 500");
+  await page.getByRole("button", { name: "Retry" }).click();
+  await expect(page.getByRole("heading", { name: "What it feels like" })).toBeVisible();
+  expect(requestCount).toBe(2);
+});
+
+test("draft guide omits missing editorial fields and honors replay eligibility", async ({
+  page,
+}) => {
+  await page.route(`**/data/routes/${routeSlug}.json`, async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.curation = {
+      vibe: "A recorded city-to-hills run.",
+      review_status: "draft",
+    };
+    body.replay.replay_eligible = false;
+    await route.fulfill({ response, json: body });
+  });
+
+  await page.goto(`/#/routes/${routeSlug}`);
+
+  await expect(page.getByText("Draft guide", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "What it feels like" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Best for" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Watch for" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Open replay" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Replay unavailable" })).toBeDisabled();
+});
+
 test("missing geometry disables one route without crashing detail", async ({ page }) => {
   await page.route(`**/data/routes/${routeSlug}.json`, async (route) => {
     await route.fulfill({

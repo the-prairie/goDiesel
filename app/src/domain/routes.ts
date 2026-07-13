@@ -20,6 +20,20 @@ export interface ReplayMetadata {
   geometryStatus: RouteGeometryStatus;
 }
 
+export type CurationReviewStatus = "draft" | "reviewed" | "published";
+
+export interface RouteCuration {
+  vibe?: string;
+  idealUse?: string;
+  terrain?: string[];
+  difficulty?: string;
+  highlights?: string[];
+  caveats?: string[];
+  seasonality?: string;
+  editorialNote?: string;
+  reviewStatus: CurationReviewStatus;
+}
+
 export interface RouteSummary {
   slug: string;
   activityId: string;
@@ -46,6 +60,7 @@ export interface RouteSummary {
 export interface QuestRoute extends Omit<RouteSummary, "trace"> {
   route: RoutePoint[];
   midIdx: number;
+  curation: RouteCuration;
 }
 
 export interface GeneratedQuestRoute {
@@ -72,6 +87,86 @@ export interface GeneratedQuestRoute {
   center_lng?: unknown;
   mid_idx?: unknown;
   replay?: unknown;
+  curation?: unknown;
+}
+
+const curationFields = [
+  "vibe",
+  "ideal_use",
+  "terrain",
+  "difficulty",
+  "highlights",
+  "caveats",
+  "seasonality",
+  "editorial_note",
+] as const;
+const curationFieldSet = new Set<string>([...curationFields, "review_status"]);
+
+function optionalCurationText(source: Record<string, unknown>, field: string) {
+  const value = source[field];
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`curation.${field} must be a non-empty string`);
+  }
+  return value.trim();
+}
+
+function optionalCurationList(source: Record<string, unknown>, field: string) {
+  const value = source[field];
+  if (value === undefined) return undefined;
+  if (
+    !Array.isArray(value) ||
+    value.length === 0 ||
+    value.some((item) => typeof item !== "string" || !item.trim())
+  ) {
+    throw new Error(`curation.${field} must be a list of non-empty strings`);
+  }
+  return value.map((item) => (item as string).trim());
+}
+
+function validatedCuration(value: unknown): RouteCuration {
+  if (value === undefined) return { reviewStatus: "draft" };
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("curation must be an object");
+  }
+
+  const source = value as Record<string, unknown>;
+  const unknownFields = Object.keys(source).filter((field) => !curationFieldSet.has(field));
+  if (unknownFields.length > 0) {
+    throw new Error(`curation has unknown fields: ${unknownFields.sort().join(", ")}`);
+  }
+  const reviewStatus = source.review_status ?? "draft";
+  if (
+    reviewStatus !== "draft" &&
+    reviewStatus !== "reviewed" &&
+    reviewStatus !== "published"
+  ) {
+    throw new Error("curation.review_status must be draft, reviewed, or published");
+  }
+
+  const curation: RouteCuration = {
+    vibe: optionalCurationText(source, "vibe"),
+    idealUse: optionalCurationText(source, "ideal_use"),
+    terrain: optionalCurationList(source, "terrain"),
+    difficulty: optionalCurationText(source, "difficulty"),
+    highlights: optionalCurationList(source, "highlights"),
+    caveats: optionalCurationList(source, "caveats"),
+    seasonality: optionalCurationText(source, "seasonality"),
+    editorialNote: optionalCurationText(source, "editorial_note"),
+    reviewStatus,
+  };
+
+  if (reviewStatus !== "draft") {
+    for (const field of curationFields) {
+      if (source[field] === undefined) {
+        throw new Error(`${reviewStatus} curation is missing ${field}`);
+      }
+    }
+  }
+
+  return Object.fromEntries(
+    Object.entries(curation).filter(([, fieldValue]) => fieldValue !== undefined),
+  ) as unknown as RouteCuration;
 }
 
 function numberValue(value: unknown, fallback = 0) {
@@ -286,6 +381,7 @@ function validatedDetailFields(
     centerLat: requiredNumberField(input, "center_lat", { min: -90, max: 90 }),
     centerLng: requiredNumberField(input, "center_lng", { min: -180, max: 180 }),
     replay: validatedReplayMetadata(input.replay, lifecycle, geometryStatus),
+    curation: validatedCuration(input.curation),
   };
 }
 

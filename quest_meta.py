@@ -1,6 +1,77 @@
 """Quest metadata helpers for the static goDiesel build."""
 
 
+CURATION_TEXT_FIELDS = (
+    "vibe",
+    "ideal_use",
+    "difficulty",
+    "seasonality",
+    "editorial_note",
+)
+CURATION_LIST_FIELDS = ("terrain", "highlights", "caveats")
+CURATION_REVIEW_STATUSES = ("draft", "reviewed", "published")
+CURATION_FIELDS = frozenset((*CURATION_TEXT_FIELDS, *CURATION_LIST_FIELDS, "review_status"))
+
+
+def build_route_curation(value):
+    """Validate owner-authored route curation for generated route details."""
+    if not isinstance(value, dict):
+        raise ValueError("curation must be an object")
+
+    unknown_fields = sorted(set(value) - CURATION_FIELDS)
+    if unknown_fields:
+        raise ValueError(f"curation has unknown fields: {', '.join(unknown_fields)}")
+
+    status = value.get("review_status", "draft")
+    if status not in CURATION_REVIEW_STATUSES:
+        raise ValueError("curation review_status must be draft, reviewed, or published")
+
+    curation = {}
+    for field in CURATION_TEXT_FIELDS:
+        field_value = value.get(field)
+        if field_value is None or field_value == "":
+            continue
+        if not isinstance(field_value, str) or not field_value.strip():
+            raise ValueError(f"curation {field} must be a non-empty string")
+        curation[field] = field_value.strip()
+
+    for field in CURATION_LIST_FIELDS:
+        field_value = value.get(field)
+        if field_value is None or field_value == []:
+            continue
+        if (
+            not isinstance(field_value, list)
+            or not field_value
+            or any(not isinstance(item, str) or not item.strip() for item in field_value)
+        ):
+            raise ValueError(f"curation {field} must be a list of non-empty strings")
+        curation[field] = [item.strip() for item in field_value]
+
+    if status != "draft":
+        for field in (*CURATION_TEXT_FIELDS, *CURATION_LIST_FIELDS):
+            if field not in curation:
+                raise ValueError(f"{status} curation is missing {field}")
+
+    curation["review_status"] = status
+    return curation
+
+
+def build_replay_metadata(activity_id, point_count, best_in_earth_ids):
+    """Build replay metadata without contradicting validated route geometry."""
+    if not isinstance(point_count, int) or point_count < 0:
+        raise ValueError("replay point_count must be a non-negative integer")
+
+    geometry_ready = point_count > 1
+    best_in_earth = geometry_ready and str(activity_id) in best_in_earth_ids
+    return {
+        "mode": "earth" if best_in_earth else "atlas",
+        "replay_eligible": geometry_ready,
+        "best_in_earth": best_in_earth,
+        "geometry_status": "ready" if geometry_ready else "missing",
+        "point_count": point_count,
+    }
+
+
 def elevation_gain_m(route):
     """Return positive elevation gain in meters for a route."""
     gain = 0
