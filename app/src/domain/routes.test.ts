@@ -103,6 +103,34 @@ describe("parseRouteDetail", () => {
       "replay.mode must be atlas or earth",
     );
   });
+
+  it("validates geometry and replay cross-field invariants", () => {
+    expect(() => parseRouteDetail(validRouteDetail({ mid_idx: 99 }))).toThrow(
+      "mid_idx must reference a route point",
+    );
+    expect(() => parseRouteDetail(validRouteDetail({
+      route: [
+        { lat: 51.05, lng: -114.07, elev: 1050, d: 500 },
+        { lat: 51.06, lng: -114.08, elev: 1060, d: 100 },
+      ],
+    }))).not.toThrow();
+    const decreasingDistance = parseRouteDetail(validRouteDetail({
+      route: [
+        { lat: 51.05, lng: -114.07, elev: 1050, d: 500 },
+        { lat: 51.06, lng: -114.08, elev: 1060, d: 100 },
+      ],
+    }));
+    expect(decreasingDistance.replay.geometryStatus).toBe("invalid");
+    expect(decreasingDistance.replay.replayEligible).toBe(false);
+    expect(() => parseRouteDetail(validRouteDetail({
+      replay: {
+        mode: "atlas",
+        replay_eligible: true,
+        best_in_earth: true,
+        geometry_status: "ready",
+      },
+    }))).toThrow("best_in_earth replay must use earth mode");
+  });
 });
 
 describe("parseRouteSummary", () => {

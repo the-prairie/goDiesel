@@ -94,6 +94,7 @@ function parsedRoutePoints(value: unknown) {
   }
 
   const points: RoutePoint[] = [];
+  let previousDistance = -1;
   for (const point of value) {
     const source = Array.isArray(point)
       ? { lat: point[0], lng: point[1], elev: point[2], d: point[3] }
@@ -114,11 +115,13 @@ function parsedRoutePoints(value: unknown) {
       lat > 90 ||
       lng < -180 ||
       lng > 180 ||
-      d < 0
+      d < 0 ||
+      d < previousDistance
     ) {
       return { points: [] as RoutePoint[], status: "invalid" as const };
     }
     points.push({ lat, lng, elev, d });
+    previousDistance = d;
   }
 
   return { points, status: "ready" as const };
@@ -235,6 +238,9 @@ function validatedReplayMetadata(
   if (source.geometry_status !== "ready" && source.geometry_status !== "missing") {
     throw new Error("replay.geometry_status must be ready or missing");
   }
+  if (source.best_in_earth && source.mode !== "earth") {
+    throw new Error("best_in_earth replay must use earth mode");
+  }
 
   return {
     replayMode: source.mode,
@@ -309,11 +315,15 @@ export function parseRouteDetail(value: unknown): QuestRoute {
   const parsedRoute = parsedRoutePoints(input.route);
   const route = parsedRoute.points;
   const geometryStatus = parsedRoute.status;
+  const midIdx = requiredNumberField(input, "mid_idx", { min: 0, integer: true });
+  if (geometryStatus === "ready" && midIdx >= route.length) {
+    throw new Error("mid_idx must reference a route point");
+  }
 
   return {
     ...validatedDetailFields(input, slug, geometryStatus),
     route,
-    midIdx: requiredNumberField(input, "mid_idx", { min: 0, integer: true }),
+    midIdx,
   };
 }
 
