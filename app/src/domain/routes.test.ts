@@ -34,6 +34,17 @@ function validRouteDetail(overrides: Record<string, unknown> = {}) {
       best_in_earth: false,
       geometry_status: "ready",
     },
+    curation: {
+      vibe: "Quiet lanes opening into a sustained climb.",
+      ideal_use: "A long, unhurried exploration day.",
+      terrain: ["Paved lanes", "Steep hillside roads"],
+      difficulty: "Demanding",
+      highlights: ["Temple district", "Eastern hills"],
+      caveats: ["Expect frequent road crossings"],
+      seasonality: "Best in cool, dry weather.",
+      editorial_note: "Preserved for its contrast and scale.",
+      review_status: "reviewed",
+    },
     ...overrides,
   };
 }
@@ -50,6 +61,24 @@ describe("parseRouteDetail", () => {
       );
       expect(route.slug).toBe(file.replace(/\.json$/, ""));
     }
+  });
+
+  it("loads the representative reviewed guide from generated curation", () => {
+    const detail = JSON.parse(
+      readFileSync(
+        new URL("../../public/data/routes/17654151284.json", import.meta.url),
+        "utf8",
+      ),
+    );
+
+    expect(parseRouteDetail(detail).curation).toMatchObject({
+      vibe: expect.stringContaining("exploratory Kyoto run"),
+      idealUse: expect.stringContaining("long-run day"),
+      caveats: expect.arrayContaining([
+        expect.stringContaining("navigation conditions are not validated"),
+      ]),
+      reviewStatus: "reviewed",
+    });
   });
 
   it("derives missing geometry from the validated route points", () => {
@@ -102,6 +131,45 @@ describe("parseRouteDetail", () => {
     expect(() => parseRouteDetail(validRouteDetail({ replay: { mode: "cinema" } }))).toThrow(
       "replay.mode must be atlas or earth",
     );
+  });
+
+  it("parses complete reviewed curation from generated data", () => {
+    const route = parseRouteDetail(validRouteDetail());
+
+    expect(route.curation).toEqual({
+      vibe: "Quiet lanes opening into a sustained climb.",
+      idealUse: "A long, unhurried exploration day.",
+      terrain: ["Paved lanes", "Steep hillside roads"],
+      difficulty: "Demanding",
+      highlights: ["Temple district", "Eastern hills"],
+      caveats: ["Expect frequent road crossings"],
+      seasonality: "Best in cool, dry weather.",
+      editorialNote: "Preserved for its contrast and scale.",
+      reviewStatus: "reviewed",
+    });
+  });
+
+  it("keeps incomplete curation as a sparse draft", () => {
+    const route = parseRouteDetail(validRouteDetail({
+      curation: {
+        vibe: "Riverside miles through the city.",
+        review_status: "draft",
+      },
+    }));
+
+    expect(route.curation).toEqual({
+      vibe: "Riverside miles through the city.",
+      reviewStatus: "draft",
+    });
+  });
+
+  it("rejects incomplete reviewed curation", () => {
+    expect(() => parseRouteDetail(validRouteDetail({
+      curation: {
+        vibe: "Riverside miles through the city.",
+        review_status: "reviewed",
+      },
+    }))).toThrow("reviewed curation is missing ideal_use");
   });
 
   it("validates geometry and replay cross-field invariants", () => {

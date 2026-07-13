@@ -1,8 +1,8 @@
 """Build the standalone Quests app from curated routes.
 
-Reads:    /Users/laurenzary/Desktop/goDiesel/quests.json
-Writes:   /Users/laurenzary/Desktop/goDiesel/index.html
-          /Users/laurenzary/Desktop/goDiesel/cards/<slug>.png   (one share card per quest)
+Reads:    <checkout>/quests.json
+Writes:   <checkout>/index.html
+          <checkout>/cards/<slug>.png   (one share card per quest)
 
 Edit quests.json to add/remove routes. Re-run this script (or rebuild.sh).
 """
@@ -15,7 +15,7 @@ import pillow_heif; pillow_heif.register_heif_opener()
 import gpxpy
 import pandas as pd
 
-from quest_meta import build_quest_meta, elevation_gain_m
+from quest_meta import build_quest_meta, build_route_curation, elevation_gain_m
 
 try: import fitparse
 except ImportError: fitparse = None
@@ -25,7 +25,7 @@ except ImportError: imagehash = None
 # ── Paths ──
 DD = Path('/Users/laurenzary/Desktop/DieselDiaries')
 TRAVEL = Path('/Users/laurenzary/Desktop/Travel')
-QUESTS = Path('/Users/laurenzary/Desktop/goDiesel')
+QUESTS = Path(__file__).resolve().parent
 CARDS = QUESTS / 'cards'
 CARDS.mkdir(exist_ok=True)
 REACT_DATA = QUESTS / 'app' / 'src' / 'data'
@@ -90,7 +90,7 @@ print('[1/5] Map provider: MapLibre GL JS + Google Street View route cam')
 
 # ── Load quests.json ──
 config = json.loads((QUESTS / 'quests.json').read_text())
-# Schema: {routes: [{activity_id, status, region, optional curation fields}]}.
+# Schema: {routes: [{activity_id, status, region, optional curation object}]}.
 # Only build approved public routes.
 all_routes = config.get('routes', config.get('quests', []))
 quest_specs = [
@@ -516,6 +516,8 @@ for spec in quest_specs:
         'svg': route_svg(route_js),
         **quest_meta,
     }
+    if spec.get('curation') is not None:
+        quest['curation'] = build_route_curation(spec['curation'])
     routes_data.append(quest)
     # Generate share card
     render_share_card(quest, baseline_photos, CARDS / f'{slug}.png')

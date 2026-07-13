@@ -54,6 +54,7 @@ def test_route_domain_models_completed_planned_and_discovered_states():
 def test_build_pipeline_emits_react_route_artifact():
     build = (ROOT / "build.py").read_text()
 
+    assert "QUESTS = Path(__file__).resolve().parent" in build
     assert "quests.generated.json" in build
     assert "routes.manifest.json" in build
     assert "REACT_ROUTE_DETAILS" in build
@@ -61,6 +62,29 @@ def test_build_pipeline_emits_react_route_artifact():
     assert "'lifecycle': 'completed'" in build
     assert "'replay': {" in build
     assert "react_route_payload" in build
+
+
+def test_representative_route_has_generated_reviewed_curation():
+    detail = json.loads((ROUTE_DETAILS / "17654151284.json").read_text())
+    curation = detail["curation"]
+
+    assert curation["review_status"] == "reviewed"
+    assert set(curation) == {
+        "vibe",
+        "ideal_use",
+        "terrain",
+        "difficulty",
+        "highlights",
+        "caveats",
+        "seasonality",
+        "editorial_note",
+        "review_status",
+    }
+    assert "curation" not in next(
+        route
+        for route in json.loads(MANIFEST.read_text())["routes"]
+        if route["slug"] == "17654151284"
+    )
 
 
 def test_generated_manifest_and_lazy_route_records_preserve_source_data():
