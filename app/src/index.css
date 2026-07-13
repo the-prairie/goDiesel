@@ -112,6 +112,16 @@ a {
     left: auto;
     top: 1.25rem;
     width: 22.5rem;
+    padding: 0.5rem;
+  }
+
+  .atlas-search-panel > label,
+  .atlas-search-panel > div:not(:first-of-type) {
+    display: none;
+  }
+
+  .atlas-search-panel > div:first-of-type {
+    margin-top: 0;
   }
 
   .atlas-region-inspector {
@@ -166,15 +176,5 @@ a {
     right: 1rem;
     left: 1rem;
     width: auto;
-    padding: 0.5rem;
-  }
-
-  .atlas-search-panel > label,
-  .atlas-search-panel > div:not(:first-of-type) {
-    display: none;
-  }
-
-  .atlas-search-panel > div:first-of-type {
-    margin-top: 0;
   }
 }
