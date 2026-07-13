@@ -177,7 +177,8 @@ def test_atlas_search_models_memory_search_states():
     assert "Best in Earth" in search
     assert "function searchState" in search
     assert "selectedLabel" not in search
-    assert "route:${route.slug}" in search
+    assert "selectionActive: Boolean(selectedRegion)" in search
+    assert "SelectedSearchResult" not in search
 
 
 def test_replay_picker_pins_selected_route_and_avoids_mobile_nav_overlap():

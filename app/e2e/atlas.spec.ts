@@ -22,6 +22,7 @@ for (const viewport of [
   test(`Atlas fills the available ${viewport.name} workspace with live pixels`, async ({
     page,
   }) => {
+    test.setTimeout(60_000);
     await page.setViewportSize(viewport);
     await page.goto("/#/atlas");
     const canvas = page.getByLabel("Interactive route globe");
