@@ -275,6 +275,7 @@ test("Atlas overlays stay separate across constrained viewports", async ({ page 
     { width: 640, height: 600 },
     { width: 768, height: 900 },
     { width: 768, height: 640 },
+    { width: 768, height: 390 },
     { width: 1024, height: 900 },
     { width: 844, height: 390 },
   ]) {
