@@ -252,6 +252,7 @@ test("region controls, search, inspector, and URL stay synchronized", async ({ p
 });
 
 test("Atlas heading and search stay separate at tablet widths", async ({ page }) => {
+  test.setTimeout(90_000);
   for (const viewport of [
     { width: 640, height: 844 },
     { width: 768, height: 900 },
@@ -266,6 +267,27 @@ test("Atlas heading and search stay separate at tablet widths", async ({ page })
     expect(headingBox).not.toBeNull();
     expect(searchBox).not.toBeNull();
     expect(headingBox!.y + headingBox!.height).toBeLessThanOrEqual(searchBox!.y);
+
+    await page.getByRole("combobox", { name: "Browse route regions" }).selectOption({
+      label: "Canary Islands",
+    });
+    const inspector = page.locator("aside").filter({
+      has: page.getByRole("heading", { name: "Canary Islands" }),
+    });
+    await expect(inspector).toBeVisible();
+    const selectedSearchBox = await search.boundingBox();
+    const inspectorBox = await inspector.boundingBox();
+    const controlsBox = await page
+      .getByRole("combobox", { name: "Browse route regions" })
+      .locator("..")
+      .boundingBox();
+    expect(selectedSearchBox).not.toBeNull();
+    expect(inspectorBox).not.toBeNull();
+    expect(controlsBox).not.toBeNull();
+    expect(selectedSearchBox!.y + selectedSearchBox!.height).toBeLessThanOrEqual(
+      inspectorBox!.y,
+    );
+    expect(inspectorBox!.y + inspectorBox!.height).toBeLessThanOrEqual(controlsBox!.y);
   }
 });
 
