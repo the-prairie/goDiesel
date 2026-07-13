@@ -67,11 +67,20 @@ export function replayPath(slug: string) {
   return `${APP_PATHS.replay}/${encodedSlug(slug)}`;
 }
 
+export function decodedRouteSlug(value: string | undefined) {
+  if (!value) return undefined;
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return undefined;
+  }
+}
+
 export function canonicalizeLegacyQuestHash() {
   const match = window.location.hash.match(/^#quest\/(.+)$/);
   if (!match?.[1]) return false;
 
-  const path = routeDetailPath(decodeURIComponent(match[1]));
+  const path = routeDetailPath(decodedRouteSlug(match[1]) ?? match[1]);
   window.location.replace(
     `${window.location.pathname}${window.location.search}#${path}`,
   );

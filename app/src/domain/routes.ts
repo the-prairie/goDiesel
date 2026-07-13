@@ -34,6 +34,11 @@ export interface RouteCuration {
   reviewStatus: CurationReviewStatus;
 }
 
+export interface RouteGuidePreview {
+  vibe?: string;
+  reviewStatus: CurationReviewStatus;
+}
+
 export interface RouteSummary {
   slug: string;
   activityId: string;
@@ -55,9 +60,10 @@ export interface RouteSummary {
   centerLat: number;
   centerLng: number;
   replay: ReplayMetadata;
+  guide: RouteGuidePreview;
 }
 
-export interface QuestRoute extends Omit<RouteSummary, "trace"> {
+export interface QuestRoute extends Omit<RouteSummary, "trace" | "guide"> {
   route: RoutePoint[];
   midIdx: number;
   curation: RouteCuration;
@@ -88,6 +94,7 @@ export interface GeneratedQuestRoute {
   mid_idx?: unknown;
   replay?: unknown;
   curation?: unknown;
+  guide_preview?: unknown;
 }
 
 const curationFields = [
@@ -167,6 +174,46 @@ function validatedCuration(value: unknown): RouteCuration {
   return Object.fromEntries(
     Object.entries(curation).filter(([, fieldValue]) => fieldValue !== undefined),
   ) as unknown as RouteCuration;
+}
+
+function validatedGuidePreview(value: unknown): RouteGuidePreview {
+  if (value === undefined) return { reviewStatus: "draft" };
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("guide_preview must be an object");
+  }
+
+  const source = value as Record<string, unknown>;
+  const unknownFields = Object.keys(source).filter(
+    (field) => field !== "vibe" && field !== "review_status",
+  );
+  if (unknownFields.length > 0) {
+    throw new Error(
+      `guide_preview has unknown fields: ${unknownFields.sort().join(", ")}`,
+    );
+  }
+
+  const reviewStatus = source.review_status ?? "draft";
+  if (
+    reviewStatus !== "draft" &&
+    reviewStatus !== "reviewed" &&
+    reviewStatus !== "published"
+  ) {
+    throw new Error(
+      "guide_preview.review_status must be draft, reviewed, or published",
+    );
+  }
+  const vibe = source.vibe;
+  if (vibe !== undefined && (typeof vibe !== "string" || !vibe.trim())) {
+    throw new Error("guide_preview.vibe must be a non-empty string");
+  }
+  if (reviewStatus !== "draft" && vibe === undefined) {
+    throw new Error(`${reviewStatus} guide_preview is missing vibe`);
+  }
+
+  return {
+    ...(typeof vibe === "string" ? { vibe: vibe.trim() } : {}),
+    reviewStatus,
+  };
 }
 
 function numberValue(value: unknown, fallback = 0) {
@@ -400,6 +447,7 @@ export function parseRouteSummary(value: unknown): RouteSummary {
   return {
     ...commonRouteFields(input, slug, geometryStatus),
     trace,
+    guide: validatedGuidePreview(input.guide_preview),
     centerLat: numberValue(input.center_lat, trace[0]?.lat ?? 0),
     centerLng: numberValue(input.center_lng, trace[0]?.lng ?? 0),
   };

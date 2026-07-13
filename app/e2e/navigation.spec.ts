@@ -87,6 +87,17 @@ test("legacy quest links are canonicalized after the app has started", async ({
   ).toHaveAttribute("aria-current", "page");
 });
 
+test("malformed legacy quest links canonicalize to the unavailable route state", async ({
+  page,
+}) => {
+  await page.goto("/#quest/%");
+
+  await expect(page).toHaveURL(/#\/routes\/%25$/);
+  await expect(
+    page.getByRole("heading", { name: "This route could not be found." }),
+  ).toBeVisible();
+});
+
 test("browser history restores the selected Replay route", async ({ page }) => {
   await page.goto(`/#/replay/${routeSlug}`);
   await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();

@@ -46,7 +46,11 @@ export function AppShell() {
         >
           <Suspense
             fallback={
-              <div className="rounded-md border border-border bg-card p-5 text-sm text-muted-foreground">
+              <div
+                role="status"
+                aria-live="polite"
+                className="rounded-md border border-border bg-card p-5 text-sm text-muted-foreground"
+              >
                 Loading view.
               </div>
             }

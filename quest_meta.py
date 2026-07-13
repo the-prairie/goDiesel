@@ -56,16 +56,24 @@ def build_route_curation(value):
     return curation
 
 
-def build_replay_metadata(activity_id, point_count, best_in_earth_ids):
+def build_replay_metadata(
+    activity_id,
+    point_count,
+    best_in_earth_ids,
+    lifecycle="completed",
+):
     """Build replay metadata without contradicting validated route geometry."""
     if not isinstance(point_count, int) or point_count < 0:
         raise ValueError("replay point_count must be a non-negative integer")
+    if lifecycle not in ("completed", "planned", "discovered"):
+        raise ValueError("replay lifecycle must be completed, planned, or discovered")
 
     geometry_ready = point_count > 1
-    best_in_earth = geometry_ready and str(activity_id) in best_in_earth_ids
+    replay_eligible = geometry_ready and lifecycle == "completed"
+    best_in_earth = replay_eligible and str(activity_id) in best_in_earth_ids
     return {
         "mode": "earth" if best_in_earth else "atlas",
-        "replay_eligible": geometry_ready,
+        "replay_eligible": replay_eligible,
         "best_in_earth": best_in_earth,
         "geometry_status": "ready" if geometry_ready else "missing",
         "point_count": point_count,

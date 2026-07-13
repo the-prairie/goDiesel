@@ -8,12 +8,15 @@ import { completedRoutes, findRouteBySlug } from "@/data/routes";
 import { useRouteDetail, type RouteDetailState } from "@/data/use-route-detail";
 import { hasRouteGeometry } from "@/domain/routes";
 import { cn } from "@/lib/utils";
-import { replayPath } from "@/navigation";
+import { decodedRouteSlug, replayPath } from "@/navigation";
 
 export function ReplayPage() {
   const { routeSlug } = useParams();
+  const decodedSlug = decodedRouteSlug(routeSlug);
   const selectedSummary = routeSlug
-    ? findRouteBySlug(decodeURIComponent(routeSlug))
+    ? decodedSlug
+      ? findRouteBySlug(decodedSlug)
+      : undefined
     : completedRoutes[0];
   const detail = useRouteDetail(selectedSummary?.slug);
 

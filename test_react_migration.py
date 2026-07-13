@@ -34,7 +34,8 @@ def test_app_shell_defines_expected_navigation_and_hash_route_support():
     assert 'canonicalizeLegacyQuestHash()' in router
     assert 'window.addEventListener("hashchange", canonicalizeLegacyQuestHash)' in router
     assert 'window.location.hash.match(/^#quest' in navigation
-    assert 'routeDetailPath(decodeURIComponent(match[1]))' in navigation
+    assert 'routeDetailPath(decodedRouteSlug(match[1]) ?? match[1])' in navigation
+    assert 'catch {' in navigation
     assert 'path: "routes/:routeSlug"' in router
     assert 'path: "replay/:routeSlug"' in router
     assert '<NavLink' in sidebar
@@ -61,8 +62,11 @@ def test_build_pipeline_emits_react_route_artifact():
     assert "routes.manifest.json" in build
     assert "REACT_ROUTE_DETAILS" in build
     assert "simplify_route_for_manifest" in build
-    assert "'lifecycle': 'completed'" in build
-    assert "'replay': build_replay_metadata" in build
+    assert "lifecycle = spec.get('lifecycle', 'completed')" in build
+    assert "quest['lifecycle'] = lifecycle" in build
+    assert "'lifecycle': lifecycle" in build
+    assert "'replay': build_replay_metadata(" in build
+    assert "if route.get('lifecycle', 'completed') == 'completed'" in build
     assert "react_route_payload" in build
 
 
@@ -119,9 +123,11 @@ def test_generated_manifest_and_lazy_route_records_preserve_source_data():
 
     stats = json.loads((APP / "src/data/generated/route-stats.json").read_text())
     assert stats["route_count"] == len(legacy["routes"])
-    assert stats["completed_km"] == round(
-        sum(route["distance_km"] for route in legacy["routes"]), 1
-    )
+    assert stats["completed_km"] == round(sum(
+        route["distance_km"]
+        for route in legacy["routes"]
+        if route.get("lifecycle", "completed") == "completed"
+    ), 1)
 
 
 def test_generated_route_publication_is_staged_and_rollback_safe():
