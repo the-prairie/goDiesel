@@ -17,21 +17,23 @@ def test_shadcn_project_config_exists():
 def test_app_shell_defines_expected_navigation_and_hash_route_support():
     shell = (APP / "src/components/app-shell.tsx").read_text()
     sidebar = (APP / "src/components/app-sidebar.tsx").read_text()
+    router = (APP / "src/router.tsx").read_text()
+    navigation = (APP / "src/navigation.ts").read_text()
 
     for label in ("Atlas", "Finder", "Routes", "Replay", "Admin"):
-      assert label in sidebar
+      assert label in navigation
 
-    assert "window.location.hash.match(/^#quest" in shell
-    assert 'window.addEventListener("hashchange", syncHashRoute)' in shell
-    assert 'window.addEventListener("popstate", syncHashRoute)' in shell
-    assert "routeHash(route)" in shell
-    assert 'history.replaceState(null, "", "#")' in shell
-    assert "Select a route before entering replay" in shell
-    assert "Existing admin runs separately from the React app" in shell
-    assert "../admin.html" not in shell
-    assert "Static app" not in shell
-    assert "../index.html" not in shell
-    assert "React migration preview" in shell
+    assert 'createHashRouter' in router
+    assert 'Navigate to={APP_PATHS.atlas} replace' in router
+    assert 'canonicalizeLegacyQuestHash()' in router
+    assert 'window.addEventListener("hashchange", canonicalizeLegacyQuestHash)' in router
+    assert 'window.location.hash.match(/^#quest' in navigation
+    assert 'routeDetailPath(decodeURIComponent(match[1]))' in navigation
+    assert 'path: "routes/:routeSlug"' in router
+    assert 'path: "replay/:routeSlug"' in router
+    assert '<NavLink' in sidebar
+    assert '<Outlet />' in shell
+    assert "React migration preview" not in shell
 
 
 def test_route_domain_models_completed_planned_and_discovered_states():
@@ -93,9 +95,9 @@ def test_atlas_search_models_memory_search_states():
 
 
 def test_replay_picker_pins_selected_route_and_avoids_mobile_nav_overlap():
-    shell = (APP / "src/components/app-shell.tsx").read_text()
+    replay = (APP / "src/pages/replay-page.tsx").read_text()
 
-    assert "const pickerRoutes = selectedRoute" in shell
-    assert ".filter((route) => route.slug !== selectedRoute.slug)" in shell
-    assert "md:max-h-80 md:overflow-y-auto" in shell
-    assert "grid max-h-80 gap-2 overflow-y-auto" not in shell
+    assert "const pickerRoutes = selectedRoute" in replay
+    assert ".filter((route) => route.slug !== selectedRoute.slug)" in replay
+    assert "md:max-h-80 md:overflow-y-auto" in replay
+    assert "grid max-h-80 gap-2 overflow-y-auto" not in replay

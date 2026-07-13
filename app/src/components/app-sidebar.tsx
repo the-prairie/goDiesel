@@ -1,71 +1,103 @@
-import {
-  Compass,
-  Database,
-  Globe2,
-  Map,
-  Route,
-  Search,
-  Settings,
-} from "lucide-react";
+import { Database, Map, X } from "lucide-react";
+import { Link, NavLink, useLocation } from "react-router-dom";
 
 import {
   Sidebar,
-  SidebarButton,
   SidebarContent,
   SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar";
-import type { AppView } from "@/components/app-shell";
+import { Button } from "@/components/ui/button";
 import { completedRoutes, routes } from "@/data/routes";
+import { APP_PATHS, APP_SECTIONS } from "@/navigation";
 
-const navItems: Array<{
-  id: AppView;
-  label: string;
-  icon: typeof Globe2;
-}> = [
-  { id: "atlas", label: "Atlas", icon: Globe2 },
-  { id: "finder", label: "Finder", icon: Search },
-  { id: "routes", label: "Routes", icon: Route },
-  { id: "replay", label: "Replay", icon: Compass },
-  { id: "admin", label: "Admin", icon: Settings },
-];
-
-interface AppSidebarProps {
-  activeView: AppView;
-  onNavigate: (view: AppView) => void;
-}
-
-export function AppSidebar({ activeView, onNavigate }: AppSidebarProps) {
+export function AppSidebar() {
   const totalKm = completedRoutes.reduce((sum, route) => sum + route.distanceKm, 0);
+  const { isMobile, setOpenMobile } = useSidebar();
+  const location = useLocation();
 
   return (
-    <Sidebar className="hidden md:flex">
-      <SidebarHeader>
-        <div className="flex items-center gap-3">
-          <div className="size-3 rounded-full bg-primary shadow-[0_0_22px_hsl(var(--primary))]" />
-          <div>
-            <div className="text-lg font-bold text-foreground">godiesel</div>
-            <div className="text-xs text-muted-foreground">Quest atlas</div>
-          </div>
+    <Sidebar collapsible="icon">
+      <SidebarHeader className="border-b border-sidebar-border p-3">
+        <div className="flex items-center gap-2">
+          <SidebarMenu className="min-w-0 flex-1">
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild size="lg" tooltip="goDiesel Atlas">
+                <Link to={APP_PATHS.atlas} onClick={() => setOpenMobile(false)}>
+                  <span className="size-3 shrink-0 rounded-full bg-primary shadow-[0_0_18px_hsl(var(--primary))]" />
+                  <span className="grid min-w-0 flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden">
+                    <span className="truncate text-base font-bold">godiesel</span>
+                    <span className="truncate text-xs text-muted-foreground">
+                      Quest atlas
+                    </span>
+                  </span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+          {isMobile ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Close navigation"
+              onClick={() => setOpenMobile(false)}
+            >
+              <X aria-hidden="true" />
+            </Button>
+          ) : null}
         </div>
       </SidebarHeader>
+
       <SidebarContent>
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          return (
-            <SidebarButton
-              key={item.id}
-              active={item.id === activeView}
-              onClick={() => onNavigate(item.id)}
-            >
-              <Icon className="size-4" aria-hidden="true" />
-              <span>{item.label}</span>
-            </SidebarButton>
-          );
-        })}
+        <SidebarGroup>
+          <SidebarGroupLabel>Explore</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <nav aria-label="Primary">
+              <SidebarMenu>
+                {APP_SECTIONS.map((section) => {
+                  const Icon = section.icon;
+
+                  return (
+                    <SidebarMenuItem key={section.path}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={
+                          location.pathname === section.path ||
+                          (section.includesChildren &&
+                            location.pathname.startsWith(`${section.path}/`))
+                        }
+                        tooltip={section.label}
+                        className="min-h-10"
+                      >
+                        <NavLink
+                          to={section.path}
+                          end={!section.includesChildren}
+                          onClick={() => setOpenMobile(false)}
+                        >
+                          <Icon aria-hidden="true" />
+                          <span>{section.label}</span>
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </nav>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter>
-        <div className="grid gap-3 rounded-md border border-border bg-card p-3 text-xs text-muted-foreground">
+
+      <SidebarFooter className="border-t border-sidebar-border p-3">
+        <div className="grid gap-2 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
           <div className="flex items-center gap-2 text-foreground">
             <Database className="size-4" aria-hidden="true" />
             <span>{routes.length} route records</span>
@@ -76,34 +108,7 @@ export function AppSidebar({ activeView, onNavigate }: AppSidebarProps) {
           </div>
         </div>
       </SidebarFooter>
+      <SidebarRail />
     </Sidebar>
-  );
-}
-
-export function MobileNav({
-  activeView,
-  onNavigate,
-}: AppSidebarProps) {
-  return (
-    <nav
-      className="fixed inset-x-3 bottom-3 z-20 grid grid-cols-5 rounded-md border border-border bg-sidebar/95 p-1 shadow-2xl backdrop-blur md:hidden"
-      aria-label="Primary"
-    >
-      {navItems.map((item) => {
-        const Icon = item.icon;
-        return (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => onNavigate(item.id)}
-            className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-sm text-[11px] font-medium text-muted-foreground outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground"
-            data-active={item.id === activeView ? "true" : "false"}
-          >
-            <Icon className="size-4" aria-hidden="true" />
-            <span>{item.label}</span>
-          </button>
-        );
-      })}
-    </nav>
   );
 }

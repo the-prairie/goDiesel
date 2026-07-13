@@ -1,5 +1,5 @@
-import { AppShell } from "@/components/app-shell";
+import { AppRouter } from "@/router";
 
 export default function App() {
-  return <AppShell />;
+  return <AppRouter />;
 }
