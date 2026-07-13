@@ -1,34 +1,58 @@
 import { useEffect, useMemo, useRef } from "react";
-import * as THREE from "three";
+import {
+  AdditiveBlending,
+  BackSide,
+  BufferGeometry,
+  CatmullRomCurve3,
+  Group,
+  Line,
+  LineBasicMaterial,
+  MathUtils,
+  Mesh,
+  MeshBasicMaterial,
+  PerspectiveCamera,
+  Raycaster,
+  RepeatWrapping,
+  Scene,
+  SphereGeometry,
+  SRGBColorSpace,
+  Texture,
+  TextureLoader,
+  TubeGeometry,
+  Vector2,
+  Vector3,
+  WebGLRenderer,
+  type Object3D,
+} from "three";
 
 import type { RouteRegion } from "@/data/route-regions";
-import type { QuestRoute, RoutePoint } from "@/domain/routes";
+import type { RoutePoint, RouteSummary } from "@/domain/routes";
 import { cn } from "@/lib/utils";
 
 interface AtlasGlobeProps {
   regions: RouteRegion[];
   selectedRegion?: RouteRegion;
   onSelectRegion: (region: RouteRegion) => void;
-  onOpenRoute: (route: QuestRoute) => void;
+  onOpenRoute: (route: RouteSummary) => void;
 }
 
 interface GlobeRefs {
-  renderer?: THREE.WebGLRenderer;
-  scene?: THREE.Scene;
-  camera?: THREE.PerspectiveCamera;
-  root?: THREE.Group;
-  raycaster: THREE.Raycaster;
-  pointer: THREE.Vector2;
-  worldPoint: THREE.Vector3;
-  projectedPoint: THREE.Vector3;
-  normal: THREE.Vector3;
-  anchors: THREE.Mesh[];
-  heatLines: THREE.Mesh[];
+  renderer?: WebGLRenderer;
+  scene?: Scene;
+  camera?: PerspectiveCamera;
+  root?: Group;
+  raycaster: Raycaster;
+  pointer: Vector2;
+  worldPoint: Vector3;
+  projectedPoint: Vector3;
+  normal: Vector3;
+  anchors: Mesh[];
+  heatLines: Mesh[];
   labelBounds: Array<{ width: number; height: number }>;
   viewport: { width: number; height: number };
   frame?: number;
   cameraDistance: number;
-  targetRotation: THREE.Vector2;
+  targetRotation: Vector2;
   drag: {
     active: boolean;
     moved: boolean;
@@ -46,26 +70,26 @@ function latLngToVector3(lat: number, lng: number, radius = 2.42) {
   const latRad = (lat * Math.PI) / 180;
   const lngRad = (lng * Math.PI) / 180;
 
-  return new THREE.Vector3(
+  return new Vector3(
     radius * Math.cos(latRad) * Math.sin(lngRad),
     radius * Math.sin(latRad),
     radius * Math.cos(latRad) * Math.cos(lngRad),
   );
 }
 
-function makeGlobeLine(points: THREE.Vector3[], color: number, opacity: number) {
-  const geometry = new THREE.BufferGeometry().setFromPoints(points);
-  const material = new THREE.LineBasicMaterial({
+function makeGlobeLine(points: Vector3[], color: number, opacity: number) {
+  const geometry = new BufferGeometry().setFromPoints(points);
+  const material = new LineBasicMaterial({
     color,
     transparent: true,
     opacity,
   });
 
-  return new THREE.Line(geometry, material);
+  return new Line(geometry, material);
 }
 
 function makeGlobeCircle(latitude: number | null, longitude: number | null) {
-  const points: THREE.Vector3[] = [];
+  const points: Vector3[] = [];
   const steps = 128;
 
   for (let index = 0; index <= steps; index += 1) {
@@ -81,8 +105,8 @@ function makeGlobeCircle(latitude: number | null, longitude: number | null) {
   return points;
 }
 
-function routeToGlobeHeatPoints(route: QuestRoute, radius = 2.505) {
-  const points = route.route;
+function routeToGlobeHeatPoints(route: RouteSummary, radius = 2.505) {
+  const points = route.trace;
   if (points.length < 2) return [];
   const sampleEvery = Math.max(1, Math.ceil(points.length / 140));
 
@@ -91,22 +115,22 @@ function routeToGlobeHeatPoints(route: QuestRoute, radius = 2.505) {
     .map((point: RoutePoint) => latLngToVector3(point.lat, point.lng, radius));
 }
 
-function makeGlobeHeatLine(route: QuestRoute, regionIndex: number) {
+function makeGlobeHeatLine(route: RouteSummary, regionIndex: number) {
   const points = routeToGlobeHeatPoints(route);
   if (points.length < 2) return null;
 
   const ride = route.type === "Ride";
   const best = route.replay.bestInEarth;
-  const curve = new THREE.CatmullRomCurve3(points);
-  const material = new THREE.MeshBasicMaterial({
+  const curve = new CatmullRomCurve3(points);
+  const material = new MeshBasicMaterial({
     color: best ? 0xe8d49a : ride ? 0xff6a3d : 0x00d7ff,
     transparent: true,
     opacity: best ? 0.82 : 0.62,
-    blending: THREE.AdditiveBlending,
+    blending: AdditiveBlending,
     depthTest: true,
   });
-  const line = new THREE.Mesh(
-    new THREE.TubeGeometry(
+  const line = new Mesh(
+    new TubeGeometry(
       curve,
       Math.min(260, Math.max(16, points.length * 2)),
       best ? 0.0075 : 0.0055,
@@ -122,13 +146,13 @@ function makeGlobeHeatLine(route: QuestRoute, regionIndex: number) {
   return line;
 }
 
-function disposeObject(object: THREE.Object3D) {
+function disposeObject(object: Object3D) {
   object.traverse((child) => {
-    if (child instanceof THREE.Mesh || child instanceof THREE.Line) {
+    if (child instanceof Mesh || child instanceof Line) {
       child.geometry.dispose();
       const materials = Array.isArray(child.material) ? child.material : [child.material];
       materials.forEach((material) => {
-        if ("map" in material && material.map instanceof THREE.Texture) {
+        if ("map" in material && material.map instanceof Texture) {
           material.map.dispose();
         }
         material.dispose();
@@ -149,17 +173,17 @@ export function AtlasGlobe({
   const selectedRegionName = selectedRegion?.name;
   const onSelectRegionRef = useRef(onSelectRegion);
   const refs = useRef<GlobeRefs>({
-    raycaster: new THREE.Raycaster(),
-    pointer: new THREE.Vector2(),
-    worldPoint: new THREE.Vector3(),
-    projectedPoint: new THREE.Vector3(),
-    normal: new THREE.Vector3(),
+    raycaster: new Raycaster(),
+    pointer: new Vector2(),
+    worldPoint: new Vector3(),
+    projectedPoint: new Vector3(),
+    normal: new Vector3(),
     anchors: [],
     heatLines: [],
     labelBounds: [],
     viewport: { width: 1, height: 1 },
     cameraDistance: 6.4,
-    targetRotation: new THREE.Vector2(-0.22, -0.72),
+    targetRotation: new Vector2(-0.22, -0.72),
     drag: {
       active: false,
       moved: false,
@@ -189,47 +213,47 @@ export function AtlasGlobe({
     if (!canvas) return;
     const canvasEl = canvas;
 
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+    const scene = new Scene();
+    const camera = new PerspectiveCamera(42, 1, 0.1, 100);
     camera.position.set(0, 0.35, state.cameraDistance);
-    const renderer = new THREE.WebGLRenderer({ canvas: canvasEl, antialias: true, alpha: true });
+    const renderer = new WebGLRenderer({ canvas: canvasEl, antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 
-    const root = new THREE.Group();
+    const root = new Group();
     root.rotation.set(state.targetRotation.x, state.targetRotation.y, 0);
     scene.add(root);
 
-    const globe = new THREE.Mesh(
-      new THREE.SphereGeometry(2.38, 96, 64),
-      new THREE.MeshBasicMaterial({ color: 0x10242c }),
+    const globe = new Mesh(
+      new SphereGeometry(2.38, 96, 64),
+      new MeshBasicMaterial({ color: 0x10242c }),
     );
     root.add(globe);
 
-    new THREE.TextureLoader().load(
+    new TextureLoader().load(
       EARTH_TEXTURE,
       (texture) => {
-        texture.colorSpace = THREE.SRGBColorSpace;
-        texture.wrapS = THREE.RepeatWrapping;
+        texture.colorSpace = SRGBColorSpace;
+        texture.wrapS = RepeatWrapping;
         texture.offset.x = 0.25;
-        const material = globe.material as THREE.MeshBasicMaterial;
+        const material = globe.material as MeshBasicMaterial;
         material.map = texture;
         material.color.set(0x9fb7ac);
         material.needsUpdate = true;
       },
       undefined,
       () => {
-        (globe.material as THREE.MeshBasicMaterial).color.set(0x10242c);
+        (globe.material as MeshBasicMaterial).color.set(0x10242c);
       },
     );
 
     root.add(
-      new THREE.Mesh(
-        new THREE.SphereGeometry(2.52, 96, 64),
-        new THREE.MeshBasicMaterial({
+      new Mesh(
+        new SphereGeometry(2.52, 96, 64),
+        new MeshBasicMaterial({
           color: 0x0b4e83,
           transparent: true,
           opacity: 0.12,
-          side: THREE.BackSide,
+          side: BackSide,
         }),
       ),
     );
@@ -251,9 +275,9 @@ export function AtlasGlobe({
         state.heatLines.push(line);
       });
 
-      const anchor = new THREE.Mesh(
-        new THREE.SphereGeometry(0.085, 12, 8),
-        new THREE.MeshBasicMaterial({
+      const anchor = new Mesh(
+        new SphereGeometry(0.085, 12, 8),
+        new MeshBasicMaterial({
           color: 0x00f19f,
           transparent: true,
           opacity: 0,
@@ -290,7 +314,7 @@ export function AtlasGlobe({
 
     function updateLabels() {
       const placed: Array<{ left: number; right: number; top: number; bottom: number }> = [];
-      const cameraFacing = new THREE.Vector3(0, 0, 1);
+      const cameraFacing = new Vector3(0, 0, 1);
       const labels = state.anchors
         .map((anchor, index) => {
           const label = labelRefs.current[index];
@@ -351,7 +375,7 @@ export function AtlasGlobe({
       root.rotation.y += (state.targetRotation.y - root.rotation.y) * 0.055;
       if (!state.drag.active) root.rotation.y += 0.0009;
       state.heatLines.forEach((line) => {
-        const material = line.material as THREE.MeshBasicMaterial;
+        const material = line.material as MeshBasicMaterial;
         const region = regions[line.userData.regionIndex];
         const selected = selectedRegionRef.current?.name === region?.name;
         const target = selected ? 0.92 : line.userData.baseOpacity;
@@ -392,7 +416,7 @@ export function AtlasGlobe({
       const dy = clientY - state.drag.y;
       if (Math.abs(dx) + Math.abs(dy) > 4) state.drag.moved = true;
       state.targetRotation.y = state.drag.rotY + dx * 0.006;
-      state.targetRotation.x = THREE.MathUtils.clamp(
+      state.targetRotation.x = MathUtils.clamp(
         state.drag.rotX + dy * 0.004,
         -1.1,
         1.1,
@@ -437,7 +461,7 @@ export function AtlasGlobe({
 
     function handleWheel(event: WheelEvent) {
       event.preventDefault();
-      state.cameraDistance = THREE.MathUtils.clamp(
+      state.cameraDistance = MathUtils.clamp(
         state.cameraDistance + event.deltaY * 0.004,
         4.8,
         9.2,

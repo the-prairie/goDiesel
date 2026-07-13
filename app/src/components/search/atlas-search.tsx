@@ -2,7 +2,7 @@ import { Search } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
 
 import type { RouteRegion } from "@/data/route-regions";
-import type { QuestRoute } from "@/domain/routes";
+import type { RouteSummary } from "@/domain/routes";
 
 interface SelectedSearchResult {
   key: string;
@@ -19,10 +19,10 @@ type AtlasSearchState =
   | "unsupported-query";
 
 interface AtlasSearchProps {
-  routes: QuestRoute[];
+  routes: RouteSummary[];
   regions: RouteRegion[];
   onSelectRegion: (region: RouteRegion) => void;
-  onOpenRoute: (route: QuestRoute) => void;
+  onOpenRoute: (route: RouteSummary) => void;
 }
 
 function normalize(value: string) {
@@ -117,7 +117,7 @@ export function AtlasSearch({
     onSelectRegion(region);
   }
 
-  function selectRoute(route: QuestRoute) {
+  function selectRoute(route: RouteSummary) {
     setSelectedResult({ key: `route:${route.slug}`, query: route.name });
     setQuery(route.name);
     onOpenRoute(route);

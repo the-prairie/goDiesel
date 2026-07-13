@@ -6,7 +6,7 @@ Writes:   /Users/laurenzary/Desktop/goDiesel/index.html
 
 Edit quests.json to add/remove routes. Re-run this script (or rebuild.sh).
 """
-import base64, gzip, io, json, math, re, textwrap
+import base64, gzip, io, json, math, re, shutil, tempfile, textwrap
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -29,6 +29,14 @@ QUESTS = Path('/Users/laurenzary/Desktop/goDiesel')
 CARDS = QUESTS / 'cards'
 CARDS.mkdir(exist_ok=True)
 REACT_DATA = QUESTS / 'app' / 'src' / 'data'
+REACT_GENERATED_DATA = REACT_DATA / 'generated'
+REACT_ROUTE_DETAILS = QUESTS / 'app' / 'public' / 'data' / 'routes'
+REACT_GENERATED_FILES = (
+    REACT_DATA / 'quests.generated.json',
+    REACT_GENERATED_DATA / 'routes.manifest.json',
+    REACT_GENERATED_DATA / 'route-stats.json',
+)
+ROUTE_GENERATION_BACKUP = REACT_ROUTE_DETAILS.parent / '.route-generation-backup'
 BEST_IN_EARTH_IDS = {
     '13935098460', '14349820520', '17636880071', '17654151284',
     '13358070690', '9959792315', '9934715694',
@@ -36,6 +44,36 @@ BEST_IN_EARTH_IDS = {
 
 TEAL = '#00F19F'; STRAIN = '#0093E7'; SLEEP = '#7BA1BB'
 BG = (16, 21, 24); BG_HEX = '#101518'
+
+
+def recover_interrupted_route_publication():
+    if not ROUTE_GENERATION_BACKUP.exists():
+        return
+    ready_marker = ROUTE_GENERATION_BACKUP / 'ready'
+    if not ready_marker.exists():
+        shutil.rmtree(ROUTE_GENERATION_BACKUP)
+        return
+
+    backup_details = ROUTE_GENERATION_BACKUP / 'routes'
+    if REACT_ROUTE_DETAILS.exists():
+        shutil.rmtree(REACT_ROUTE_DETAILS)
+    if backup_details.exists():
+        shutil.copytree(backup_details, REACT_ROUTE_DETAILS)
+
+    metadata_backup = ROUTE_GENERATION_BACKUP / 'metadata'
+    for index, path in enumerate(REACT_GENERATED_FILES):
+        backup_file = metadata_backup / f'{index}.bin'
+        missing_marker = metadata_backup / f'{index}.missing'
+        if backup_file.exists():
+            temp_path = path.with_name(f'.{path.name}.recovery')
+            shutil.copyfile(backup_file, temp_path)
+            temp_path.replace(path)
+        elif missing_marker.exists():
+            path.unlink(missing_ok=True)
+    shutil.rmtree(ROUTE_GENERATION_BACKUP)
+
+
+recover_interrupted_route_publication()
 
 # ── API key ──
 def env_value(name):
@@ -515,9 +553,47 @@ def react_route_record(route):
         },
     }
 
+def simplify_route_for_manifest(points, max_points=96):
+    if len(points) <= max_points:
+        simplified = points
+    else:
+        last = len(points) - 1
+        indices = [round(index * last / (max_points - 1)) for index in range(max_points)]
+        simplified = [points[index] for index in indices]
+    return [
+        [point['lat'], point['lng'], point.get('elev', 0), point.get('d', 0)]
+        for point in simplified
+    ]
+
+def react_route_manifest_record(route):
+    record = react_route_record(route)
+    return {
+        'slug': record['slug'],
+        'activity_id': record['activity_id'],
+        'lifecycle': record['lifecycle'],
+        'name': record['name'],
+        'subtitle': record['subtitle'],
+        'activity_name': record['activity_name'],
+        'region': record['region'],
+        'date': record['date'],
+        'distance_km': record['distance_km'],
+        'elevation_gain_m': record['elevation_gain_m'],
+        'type': record['type'],
+        'description': record['description'],
+        'completion_rule': record['completion_rule'],
+        'difficulty': record['difficulty'],
+        'theme': record['theme'],
+        'xp': record['xp'],
+        'center_lat': record['center_lat'],
+        'center_lng': record['center_lng'],
+        'trace': simplify_route_for_manifest(record.get('route', [])),
+        'replay': record['replay'],
+    }
+
+generated_at = datetime.now(UTC).isoformat(timespec='seconds').replace('+00:00', 'Z')
 react_route_payload = {
     'schema_version': 1,
-    'generated_at': datetime.now(UTC).isoformat(timespec='seconds').replace('+00:00', 'Z'),
+    'generated_at': generated_at,
     'stats': {
         'approved': len(quest_specs),
         'pending': pending_n,
@@ -526,11 +602,76 @@ react_route_payload = {
     },
     'routes': [react_route_record(route) for route in routes_data],
 }
+react_manifest_payload = {
+    'schema_version': 1,
+    'generated_at': react_route_payload['generated_at'],
+    'stats': react_route_payload['stats'],
+    'routes': [react_route_manifest_record(route) for route in routes_data],
+}
+route_stats_payload = {
+    'route_count': len(routes_data),
+    'completed_km': round(sum(route.get('distance_km', 0) for route in routes_data), 1),
+}
+
+detail_payloads = {}
+for route in routes_data:
+    record = react_route_record(route)
+    slug = str(record['slug'])
+    if not re.fullmatch(r'[A-Za-z0-9._-]+', slug):
+        raise ValueError(f'Unsafe route slug for generated detail file: {slug!r}')
+    detail_payloads[f'{slug}.json'] = json.dumps(record, ensure_ascii=False)
+
 REACT_DATA.mkdir(parents=True, exist_ok=True)
-(REACT_DATA / 'quests.generated.json').write_text(
-    json.dumps(react_route_payload, ensure_ascii=False),
-    encoding='utf-8',
-)
+REACT_GENERATED_DATA.mkdir(parents=True, exist_ok=True)
+REACT_ROUTE_DETAILS.parent.mkdir(parents=True, exist_ok=True)
+generated_files = {
+    REACT_DATA / 'quests.generated.json': json.dumps(react_route_payload, ensure_ascii=False),
+    REACT_GENERATED_DATA / 'routes.manifest.json': json.dumps(
+        react_manifest_payload, ensure_ascii=False
+    ),
+    REACT_GENERATED_DATA / 'route-stats.json': json.dumps(route_stats_payload),
+}
+
+
+def write_text_atomic(path, content):
+    temp_path = path.with_name(f'.{path.name}.tmp')
+    temp_path.write_text(content, encoding='utf-8')
+    temp_path.replace(path)
+
+
+with tempfile.TemporaryDirectory(
+    dir=REACT_ROUTE_DETAILS.parent, prefix='.routes-staging-'
+) as staging_directory:
+    staging_path = Path(staging_directory)
+    for filename, content in detail_payloads.items():
+        (staging_path / filename).write_text(content, encoding='utf-8')
+
+    if ROUTE_GENERATION_BACKUP.exists():
+        raise RuntimeError('Route generation backup already exists after recovery')
+    ROUTE_GENERATION_BACKUP.mkdir()
+    backup_details = ROUTE_GENERATION_BACKUP / 'routes'
+    if REACT_ROUTE_DETAILS.exists():
+        shutil.copytree(REACT_ROUTE_DETAILS, backup_details)
+    metadata_backup = ROUTE_GENERATION_BACKUP / 'metadata'
+    metadata_backup.mkdir()
+    for index, path in enumerate(REACT_GENERATED_FILES):
+        if path.exists():
+            shutil.copyfile(path, metadata_backup / f'{index}.bin')
+        else:
+            (metadata_backup / f'{index}.missing').touch()
+    (ROUTE_GENERATION_BACKUP / 'ready').touch()
+
+    try:
+        if REACT_ROUTE_DETAILS.exists():
+            shutil.rmtree(REACT_ROUTE_DETAILS)
+        staging_path.replace(REACT_ROUTE_DETAILS)
+        for path, content in generated_files.items():
+            write_text_atomic(path, content)
+    except Exception:
+        recover_interrupted_route_publication()
+        raise
+    else:
+        shutil.rmtree(ROUTE_GENERATION_BACKUP)
 
 # Build app HTML — same as previous version but with Share-card button
 HTML_TEMPLATE_PATH = Path('/tmp/quests_template.html')

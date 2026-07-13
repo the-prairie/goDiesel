@@ -2,14 +2,14 @@ import { ArrowRight, RotateCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { RouteRegion } from "@/data/route-regions";
-import type { QuestRoute } from "@/domain/routes";
+import type { RouteSummary } from "@/domain/routes";
 import { cn } from "@/lib/utils";
 
 interface RegionPanelProps {
   regions: RouteRegion[];
   selectedRegion?: RouteRegion;
   onSelectRegion: (region: RouteRegion | undefined) => void;
-  onOpenRoute: (route: QuestRoute) => void;
+  onOpenRoute: (route: RouteSummary) => void;
 }
 
 export function RegionPanel({

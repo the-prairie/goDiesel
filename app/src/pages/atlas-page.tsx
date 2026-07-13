@@ -1,20 +1,20 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { AtlasGlobe } from "@/components/globe/atlas-globe";
 import { RegionPanel } from "@/components/globe/region-panel";
 import { AtlasSearch } from "@/components/search/atlas-search";
 import { completedRoutes } from "@/data/routes";
 import { routeRegions, type RouteRegion } from "@/data/route-regions";
-import type { QuestRoute } from "@/domain/routes";
+import type { RouteSummary } from "@/domain/routes";
+import { routeDetailPath } from "@/navigation";
 
-interface AtlasPageProps {
-  onOpenRoute: (route: QuestRoute) => void;
-}
-
-export function AtlasPage({ onOpenRoute }: AtlasPageProps) {
+export function AtlasPage() {
+  const navigate = useNavigate();
   const [selectedRegion, setSelectedRegion] = useState<RouteRegion | undefined>(
     routeRegions[0],
   );
+  const openRoute = (route: RouteSummary) => navigate(routeDetailPath(route.slug));
 
   return (
     <section className="grid gap-5">
@@ -36,7 +36,7 @@ export function AtlasPage({ onOpenRoute }: AtlasPageProps) {
           routes={completedRoutes}
           regions={routeRegions}
           onSelectRegion={setSelectedRegion}
-          onOpenRoute={onOpenRoute}
+          onOpenRoute={openRoute}
         />
       </div>
 
@@ -45,13 +45,13 @@ export function AtlasPage({ onOpenRoute }: AtlasPageProps) {
           regions={routeRegions}
           selectedRegion={selectedRegion}
           onSelectRegion={setSelectedRegion}
-          onOpenRoute={onOpenRoute}
+          onOpenRoute={openRoute}
         />
         <RegionPanel
           regions={routeRegions}
           selectedRegion={selectedRegion}
           onSelectRegion={setSelectedRegion}
-          onOpenRoute={onOpenRoute}
+          onOpenRoute={openRoute}
         />
       </div>
     </section>

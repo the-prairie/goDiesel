@@ -1,9 +1,9 @@
 import { completedRoutes } from "@/data/routes";
-import type { QuestRoute } from "@/domain/routes";
+import type { RouteSummary } from "@/domain/routes";
 
 export interface RouteRegion {
   name: string;
-  routes: QuestRoute[];
+  routes: RouteSummary[];
   totalKm: number;
   totalClimbM: number;
   centerLat: number;
