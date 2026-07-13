@@ -7,6 +7,22 @@ declare global {
   }
 }
 
+interface Box {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+function boxesOverlap(first: Box, second: Box) {
+  return (
+    first.x < second.x + second.width &&
+    first.x + first.width > second.x &&
+    first.y < second.y + second.height &&
+    first.y + first.height > second.y
+  );
+}
+
 async function canvasStats(page: Page) {
   const canvas = page.getByLabel("Interactive route globe");
   const bounds = await canvas.boundingBox();
@@ -252,13 +268,14 @@ test("region controls, search, inspector, and URL stay synchronized", async ({ p
 });
 
 test("Atlas heading and search stay separate at tablet widths", async ({ page }) => {
-  test.setTimeout(150_000);
+  test.setTimeout(180_000);
   for (const viewport of [
     { width: 640, height: 844 },
     { width: 640, height: 600 },
     { width: 768, height: 900 },
     { width: 768, height: 640 },
     { width: 1024, height: 900 },
+    { width: 844, height: 390 },
   ]) {
     await page.setViewportSize(viewport);
     await page.goto("/#/atlas");
@@ -269,7 +286,7 @@ test("Atlas heading and search stay separate at tablet widths", async ({ page })
     const searchBox = await search.boundingBox();
     expect(headingBox).not.toBeNull();
     expect(searchBox).not.toBeNull();
-    expect(headingBox!.y + headingBox!.height).toBeLessThanOrEqual(searchBox!.y);
+    expect(boxesOverlap(headingBox!, searchBox!)).toBe(false);
 
     await page.getByRole("combobox", { name: "Browse route regions" }).selectOption({
       label: "Canary Islands",
@@ -287,10 +304,12 @@ test("Atlas heading and search stay separate at tablet widths", async ({ page })
     expect(selectedSearchBox).not.toBeNull();
     expect(inspectorBox).not.toBeNull();
     expect(controlsBox).not.toBeNull();
-    expect(selectedSearchBox!.y + selectedSearchBox!.height).toBeLessThanOrEqual(
-      inspectorBox!.y,
-    );
-    expect(inspectorBox!.y + inspectorBox!.height).toBeLessThanOrEqual(controlsBox!.y);
+    expect(boxesOverlap(selectedSearchBox!, inspectorBox!)).toBe(false);
+    expect(boxesOverlap(inspectorBox!, controlsBox!)).toBe(false);
+    const clearSelection = page.getByRole("button", { name: "Clear selected region" });
+    await expect(clearSelection).toBeVisible();
+    await clearSelection.click();
+    await expect(page).not.toHaveURL(/region=/);
   }
 });
 

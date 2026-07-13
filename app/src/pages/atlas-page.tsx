@@ -60,7 +60,7 @@ export function AtlasPage() {
         className="absolute inset-0 min-h-0 rounded-none border-0"
       />
 
-      <div className="pointer-events-none absolute left-3 top-3 z-20 max-w-[min(30rem,calc(100%-1.5rem))] sm:left-5 sm:top-5">
+      <div className="atlas-intro pointer-events-none absolute left-3 top-3 z-20 max-w-[min(30rem,calc(100%-1.5rem))] sm:left-5 sm:top-5">
         <div className="text-xs font-semibold uppercase text-primary">Atlas</div>
         <h1 className="mt-1 text-2xl font-bold text-foreground drop-shadow-lg sm:text-4xl">
           Real places, playable days.
@@ -78,7 +78,7 @@ export function AtlasPage() {
         selectedRegion={selectedRegion}
         onSelectRegion={selectRegion}
         onOpenRoute={openRoute}
-        className="absolute inset-x-3 top-20 z-30 max-h-[56dvh] overflow-y-auto sm:inset-x-5 sm:top-36 xl:left-auto xl:right-5 xl:top-5 xl:w-[360px]"
+        className="atlas-search-panel absolute inset-x-3 top-20 z-30 max-h-[56dvh] overflow-y-auto sm:inset-x-5 sm:top-36 xl:left-auto xl:right-5 xl:top-5 xl:w-[360px]"
       />
       <AtlasControls
         regions={routeRegions}

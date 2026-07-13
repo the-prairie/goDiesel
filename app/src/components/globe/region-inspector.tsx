@@ -18,7 +18,7 @@ export function RegionInspector({
   if (!selectedRegion) return null;
 
   return (
-    <aside className="absolute inset-x-3 bottom-20 z-30 flex max-h-[44dvh] flex-col overflow-hidden rounded-md border border-border bg-background/94 shadow-2xl backdrop-blur sm:inset-x-auto sm:right-5 sm:top-[18.5rem] sm:w-[360px] sm:max-h-none xl:bottom-auto xl:right-4 xl:top-48 xl:max-h-[calc(100dvh-16rem)]">
+    <aside className="atlas-region-inspector absolute inset-x-3 bottom-20 z-30 flex max-h-[44dvh] flex-col overflow-hidden rounded-md border border-border bg-background/94 shadow-2xl backdrop-blur sm:inset-x-auto sm:right-5 sm:top-[18.5rem] sm:w-[360px] sm:max-h-none xl:bottom-auto xl:right-4 xl:top-48 xl:max-h-[calc(100dvh-16rem)]">
       <div className="flex items-start justify-between gap-3 border-b border-border p-4">
         <div className="min-w-0">
           <div className="text-xs font-semibold uppercase text-primary">
