@@ -256,6 +256,7 @@ test("Atlas heading and search stay separate at tablet widths", async ({ page })
   for (const viewport of [
     { width: 640, height: 844 },
     { width: 768, height: 900 },
+    { width: 1024, height: 900 },
   ]) {
     await page.setViewportSize(viewport);
     await page.goto("/#/atlas");
