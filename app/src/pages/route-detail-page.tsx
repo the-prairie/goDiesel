@@ -1,4 +1,5 @@
 import { ArrowLeft, Compass } from "lucide-react";
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { Metric } from "@/components/metric";
@@ -13,7 +14,8 @@ import { APP_PATHS, replayPath } from "@/navigation";
 export function RouteDetailPage() {
   const { routeSlug } = useParams();
   const summary = routeSlug ? findRouteBySlug(decodeURIComponent(routeSlug)) : undefined;
-  const detail = useRouteDetail(summary?.slug);
+  const [requestKey, setRequestKey] = useState(0);
+  const detail = useRouteDetail(summary?.slug, requestKey);
 
   if (!summary) return <RouteNotFound />;
 
@@ -30,15 +32,25 @@ export function RouteDetailPage() {
         title={summary.name}
         copy={summary.description}
       />
-      <RouteDetailContent state={detail} />
+      <RouteDetailContent state={detail} onRetry={() => setRequestKey((key) => key + 1)} />
     </section>
   );
 }
 
-function RouteDetailContent({ state }: { state: RouteDetailState }) {
+function RouteDetailContent({
+  state,
+  onRetry,
+}: {
+  state: RouteDetailState;
+  onRetry: () => void;
+}) {
   if (state.status === "idle" || state.status === "loading") {
     return (
-      <div className="rounded-md border border-border bg-card p-5 text-sm text-muted-foreground">
+      <div
+        role="status"
+        aria-live="polite"
+        className="rounded-md border border-border bg-card p-5 text-sm text-muted-foreground"
+      >
         Loading route details.
       </div>
     );
@@ -51,6 +63,11 @@ function RouteDetailContent({ state }: { state: RouteDetailState }) {
       <div role="alert" className="rounded-md border border-border bg-card p-5">
         <div className="font-semibold">Route data unavailable</div>
         <p className="mt-2 text-sm text-muted-foreground">{message}</p>
+        {state.status === "error" ? (
+          <Button type="button" variant="outline" className="mt-4" onClick={onRetry}>
+            Retry
+          </Button>
+        ) : null}
       </div>
     );
   }

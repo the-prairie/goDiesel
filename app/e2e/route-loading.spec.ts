@@ -36,6 +36,28 @@ test("reviewed route guide loads directly and survives refresh", async ({ page }
   await expect(page.getByRole("heading", { name: "What it feels like" })).toBeVisible();
 });
 
+test("route detail announces loading and retries a transient request failure", async ({
+  page,
+}) => {
+  let requestCount = 0;
+  await page.route(`**/data/routes/${routeSlug}.json`, async (route) => {
+    requestCount += 1;
+    if (requestCount === 1) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      await route.fulfill({ status: 500, body: "temporary failure" });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.goto(`/#/routes/${routeSlug}`);
+  await expect(page.getByRole("status")).toHaveText("Loading route details.");
+  await expect(page.getByRole("alert")).toContainText("status 500");
+  await page.getByRole("button", { name: "Retry" }).click();
+  await expect(page.getByRole("heading", { name: "What it feels like" })).toBeVisible();
+  expect(requestCount).toBe(2);
+});
+
 test("draft guide omits missing editorial fields and honors replay eligibility", async ({
   page,
 }) => {
