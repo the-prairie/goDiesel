@@ -501,6 +501,9 @@ for spec in quest_specs:
             quest_meta[_target] = str(spec[_field]).strip()
 
     subtitle = str(spec.get('title') or name).strip()
+    lifecycle = spec.get('lifecycle', 'completed')
+    if lifecycle not in ('completed', 'planned', 'discovered'):
+        raise ValueError(f'Invalid lifecycle for {aid}: {lifecycle!r}')
 
     quest = {
         'slug': slug,
@@ -523,6 +526,7 @@ for spec in quest_specs:
     }
     if spec.get('curation') is not None:
         quest['curation'] = build_route_curation(spec['curation'])
+    quest['lifecycle'] = lifecycle
     routes_data.append(quest)
     # Generate share card
     render_share_card(quest, baseline_photos, CARDS / f'{slug}.png')
@@ -549,10 +553,16 @@ curation_json = json.dumps({
 def react_route_record(route):
     aid = str(route.get('activity_id') or route.get('slug') or '')
     point_count = len(route.get('route', []))
+    lifecycle = route.get('lifecycle', 'completed')
     return {
         **route,
-        'lifecycle': 'completed',
-        'replay': build_replay_metadata(aid, point_count, BEST_IN_EARTH_IDS),
+        'lifecycle': lifecycle,
+        'replay': build_replay_metadata(
+            aid,
+            point_count,
+            BEST_IN_EARTH_IDS,
+            lifecycle,
+        ),
     }
 
 def simplify_route_for_manifest(points, max_points=96):
@@ -569,6 +579,12 @@ def simplify_route_for_manifest(points, max_points=96):
 
 def react_route_manifest_record(route):
     record = react_route_record(route)
+    curation = record.get('curation') or {}
+    guide_preview = {
+        'review_status': curation.get('review_status', 'draft'),
+    }
+    if curation.get('vibe'):
+        guide_preview['vibe'] = curation['vibe']
     return {
         'slug': record['slug'],
         'activity_id': record['activity_id'],
@@ -590,6 +606,7 @@ def react_route_manifest_record(route):
         'center_lng': record['center_lng'],
         'trace': simplify_route_for_manifest(record.get('route', [])),
         'replay': record['replay'],
+        'guide_preview': guide_preview,
     }
 
 generated_at = datetime.now(UTC).isoformat(timespec='seconds').replace('+00:00', 'Z')
@@ -612,7 +629,11 @@ react_manifest_payload = {
 }
 route_stats_payload = {
     'route_count': len(routes_data),
-    'completed_km': round(sum(route.get('distance_km', 0) for route in routes_data), 1),
+    'completed_km': round(sum(
+        route.get('distance_km', 0)
+        for route in routes_data
+        if route.get('lifecycle', 'completed') == 'completed'
+    ), 1),
 }
 
 detail_payloads = {}

@@ -67,6 +67,15 @@ class QuestMetaTests(unittest.TestCase):
         self.assertEqual(ready["mode"], "earth")
         self.assertEqual(ready["geometry_status"], "ready")
 
+        planned = build_replay_metadata("route-1", 2, best_ids, "planned")
+        self.assertFalse(planned["replay_eligible"])
+        self.assertFalse(planned["best_in_earth"])
+        self.assertEqual(planned["mode"], "atlas")
+        self.assertEqual(planned["geometry_status"], "ready")
+
+        with self.assertRaisesRegex(ValueError, "replay lifecycle"):
+            build_replay_metadata("route-1", 2, best_ids, "unknown")
+
     def test_elevation_gain_only_counts_climbs(self):
         route = [
             {"elev": 100},

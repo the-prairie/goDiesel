@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
 
+import manifest from "@/data/generated/routes.manifest.json";
 import { parseRouteDetail, parseRouteSummary } from "@/domain/routes";
 
 function validRouteDetail(overrides: Record<string, unknown> = {}) {
@@ -211,6 +212,101 @@ describe("parseRouteDetail", () => {
 });
 
 describe("parseRouteSummary", () => {
+  it("validates every generated summary without embedding full curation", () => {
+    const generatedRoutes = (manifest as { routes: unknown[] }).routes;
+
+    expect(generatedRoutes).toHaveLength(66);
+    for (const generatedRoute of generatedRoutes) {
+      expect(generatedRoute).not.toHaveProperty("curation");
+      expect(parseRouteSummary(generatedRoute).guide.reviewStatus).toMatch(
+        /^(draft|reviewed|published)$/,
+      );
+    }
+  });
+
+  it("keeps the reviewed guide preview equal to its lazy full guide", () => {
+    const generatedRoutes = (manifest as { routes: unknown[] }).routes;
+    const summary = parseRouteSummary(
+      generatedRoutes.find(
+        (route) =>
+          (route as { slug?: string }).slug === "17654151284",
+      ),
+    );
+    const detail = parseRouteDetail(
+      JSON.parse(
+        readFileSync(
+          new URL("../../public/data/routes/17654151284.json", import.meta.url),
+          "utf8",
+        ),
+      ),
+    );
+
+    expect(summary.guide).toEqual({
+      vibe: detail.curation.vibe,
+      reviewStatus: detail.curation.reviewStatus,
+    });
+  });
+
+  it("parses the lightweight reviewed guide preview", () => {
+    const route = parseRouteSummary({
+      slug: "reviewed-route",
+      lifecycle: "completed",
+      trace: [
+        [51.1, -114.1, 1234, 0],
+        [51.2, -114.2, 1240, 500],
+      ],
+      replay: { geometry_status: "ready" },
+      guide_preview: {
+        vibe: "Quiet lanes opening into a sustained climb.",
+        review_status: "reviewed",
+      },
+    });
+
+    expect(route.guide).toEqual({
+      vibe: "Quiet lanes opening into a sustained climb.",
+      reviewStatus: "reviewed",
+    });
+  });
+
+  it("defaults an absent guide preview to an honest draft", () => {
+    const route = parseRouteSummary({
+      slug: "draft-route",
+      lifecycle: "completed",
+      trace: [
+        [51.1, -114.1, 1234, 0],
+        [51.2, -114.2, 1240, 500],
+      ],
+      replay: { geometry_status: "ready" },
+    });
+
+    expect(route.guide).toEqual({ reviewStatus: "draft" });
+  });
+
+  it("rejects invalid or dishonest guide previews", () => {
+    const summary = {
+      slug: "invalid-preview",
+      lifecycle: "completed",
+      trace: [
+        [51.1, -114.1, 1234, 0],
+        [51.2, -114.2, 1240, 500],
+      ],
+      replay: { geometry_status: "ready" },
+    };
+
+    expect(() =>
+      parseRouteSummary({
+        ...summary,
+        guide_preview: { review_status: "reviewed" },
+      }),
+    ).toThrow("reviewed guide_preview is missing vibe");
+    expect(() =>
+      parseRouteSummary({
+        ...summary,
+        guide_preview: { review_status: "draft", vbie: "typo" },
+      }),
+    ).toThrow("guide_preview has unknown fields: vbie");
+  });
+
   it("expands compact generated trace tuples", () => {
     const route = parseRouteSummary({
       slug: "compact-route",

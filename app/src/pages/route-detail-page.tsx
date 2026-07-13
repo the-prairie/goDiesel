@@ -9,11 +9,13 @@ import { RouteNotFound } from "@/components/routes/route-not-found";
 import { Button } from "@/components/ui/button";
 import { findRouteBySlug } from "@/data/routes";
 import { useRouteDetail, type RouteDetailState } from "@/data/use-route-detail";
-import { APP_PATHS, replayPath } from "@/navigation";
+import type { QuestRoute } from "@/domain/routes";
+import { APP_PATHS, decodedRouteSlug, replayPath } from "@/navigation";
 
 export function RouteDetailPage() {
   const { routeSlug } = useParams();
-  const summary = routeSlug ? findRouteBySlug(decodeURIComponent(routeSlug)) : undefined;
+  const decodedSlug = decodedRouteSlug(routeSlug);
+  const summary = decodedSlug ? findRouteBySlug(decodedSlug) : undefined;
   const [requestKey, setRequestKey] = useState(0);
   const detail = useRouteDetail(summary?.slug, requestKey);
 
@@ -80,7 +82,7 @@ function RouteDetailContent({
           <Metric label="Distance" value={`${route.distanceKm.toFixed(1)} km`} />
           <Metric label="Climb" value={`${route.elevationGainM.toLocaleString()} m`} />
           <Metric label="Activity" value={route.type} />
-          <Metric label="Completed" value={route.date || "Not recorded"} />
+          <Metric label={routeDateLabel(route.lifecycle)} value={route.date || "Not recorded"} />
         </dl>
         {route.replay.replayEligible ? (
           <Button asChild>
@@ -99,4 +101,10 @@ function RouteDetailContent({
       <RouteGuide curation={route.curation} />
     </div>
   );
+}
+
+function routeDateLabel(lifecycle: QuestRoute["lifecycle"]) {
+  if (lifecycle === "planned") return "Planned for";
+  if (lifecycle === "discovered") return "Discovered";
+  return "Completed";
 }
