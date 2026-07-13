@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 const routeSlug = "17654151284";
+const historyRouteSlug = "17665674778";
 
 test("root opens Atlas and primary navigation follows browser history", async ({
   page,
@@ -84,6 +85,23 @@ test("legacy quest links are canonicalized after the app has started", async ({
   await expect(
     page.getByRole("link", { name: "Routes", exact: true }),
   ).toHaveAttribute("aria-current", "page");
+});
+
+test("browser history restores the selected Replay route", async ({ page }) => {
+  await page.goto(`/#/replay/${routeSlug}`);
+  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+
+  await page.locator(`a[href="#/replay/${historyRouteSlug}"]`).click();
+  await expect(page).toHaveURL(new RegExp(`#\/replay\/${historyRouteSlug}$`));
+  await expect(page.getByRole("heading", { name: "Tokyo, Japan" })).toBeVisible();
+
+  await page.goBack();
+  await expect(page).toHaveURL(new RegExp(`#\/replay\/${routeSlug}$`));
+  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+
+  await page.goForward();
+  await expect(page).toHaveURL(new RegExp(`#\/replay\/${historyRouteSlug}$`));
+  await expect(page.getByRole("heading", { name: "Tokyo, Japan" })).toBeVisible();
 });
 
 test("mobile navigation opens without covering the current page", async ({
