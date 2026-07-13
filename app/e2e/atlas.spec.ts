@@ -269,6 +269,8 @@ test("region controls, search, inspector, and URL stay synchronized", async ({ p
 
 for (const viewport of [
   { width: 390, height: 320 },
+  { width: 390, height: 576 },
+  { width: 390, height: 577 },
   { width: 390, height: 640 },
   { width: 568, height: 320 },
   { width: 640, height: 320 },
@@ -277,6 +279,8 @@ for (const viewport of [
   { width: 667, height: 375 },
   { width: 768, height: 900 },
   { width: 768, height: 640 },
+  { width: 768, height: 576 },
+  { width: 768, height: 577 },
   { width: 768, height: 390 },
   { width: 1024, height: 900 },
   { width: 844, height: 390 },
@@ -317,7 +321,12 @@ for (const viewport of [
     expect(boxesOverlap(inspectorBox!, controlsBox!)).toBe(false);
     const clearSelection = page.getByRole("button", { name: "Clear selected region" });
     await expect(clearSelection).toBeVisible();
-    if (viewport.height === 320 || (viewport.width === 844 && viewport.height === 390)) {
+    if (
+      viewport.height === 320 ||
+      viewport.height === 576 ||
+      viewport.height === 577 ||
+      (viewport.width === 844 && viewport.height === 390)
+    ) {
       const firstRoute = inspector.getByRole("button").nth(1);
       await expect(firstRoute).toBeVisible();
       await firstRoute.click();
