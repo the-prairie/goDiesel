@@ -49,7 +49,12 @@ export function loadRouteDetail(slug: string) {
   const existing = routeDetailRequests.get(slug);
   if (existing) return existing;
 
-  const request = fetchRouteDetail(slug);
+  const request = fetchRouteDetail(slug).then((result) => {
+    if (result.status === "error" && routeDetailRequests.get(slug) === request) {
+      routeDetailRequests.delete(slug);
+    }
+    return result;
+  });
   routeDetailRequests.set(slug, request);
   return request;
 }

@@ -33,9 +33,22 @@ test("missing geometry disables one route without crashing detail", async ({ pag
         distance_km: 21.3,
         elevation_gain_m: 680,
         type: "Run",
+        subtitle: "",
+        activity_name: "Kyoto run",
+        date: "2025-11-24",
+        description: "A route without geometry.",
+        completion_rule: "Complete the route.",
+        difficulty: "Epic",
+        theme: "Explore",
+        xp: 390,
+        center_lat: 35.01,
+        center_lng: 135.77,
+        mid_idx: 0,
         route: [],
         replay: {
+          mode: "earth",
           replay_eligible: true,
+          best_in_earth: true,
           geometry_status: "ready",
         },
       }),
@@ -46,4 +59,22 @@ test("missing geometry disables one route without crashing detail", async ({ pag
 
   await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Replay unavailable" })).toBeDisabled();
+});
+
+test("changing routes never flashes the previous route detail", async ({ page }) => {
+  const nextSlug = "17665674778";
+  await page.goto(`/#/replay/${routeSlug}`);
+  await expect(page.getByText("21.3 km", { exact: true })).toBeVisible();
+
+  await page.route(`**/data/routes/${nextSlug}.json`, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await route.continue();
+  });
+  await page.evaluate((slug) => {
+    window.location.hash = `#/replay/${slug}`;
+  }, nextSlug);
+
+  await expect(page.getByText("Loading replay data.")).toBeVisible();
+  await expect(page.getByText("21.3 km", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("21.8 km", { exact: true })).toBeVisible();
 });

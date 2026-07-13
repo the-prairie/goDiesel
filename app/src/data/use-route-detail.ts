@@ -11,20 +11,19 @@ export type RouteDetailState =
   | RouteDetailResult;
 
 export function useRouteDetail(slug?: string) {
-  const [state, setState] = useState<RouteDetailState>(
-    slug ? { status: "loading" } : { status: "idle" },
-  );
+  const [loaded, setLoaded] = useState<{
+    slug: string;
+    result: RouteDetailResult;
+  }>();
 
   useEffect(() => {
     if (!slug) {
-      setState({ status: "idle" });
       return;
     }
 
     let active = true;
-    setState({ status: "loading" });
     void loadRouteDetail(slug).then((result) => {
-      if (active) setState(result);
+      if (active) setLoaded({ slug, result });
     });
 
     return () => {
@@ -32,5 +31,7 @@ export function useRouteDetail(slug?: string) {
     };
   }, [slug]);
 
-  return state;
+  if (!slug) return { status: "idle" } satisfies RouteDetailState;
+  if (loaded?.slug !== slug) return { status: "loading" } satisfies RouteDetailState;
+  return loaded.result;
 }

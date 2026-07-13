@@ -45,7 +45,8 @@ def test_route_domain_models_completed_planned_and_discovered_states():
     assert '"completed" | "planned" | "discovered"' in lifecycle
     assert 'RouteGeometryStatus = "ready" | "missing"' in routes
     assert "normalizeRouteLifecycle(input.lifecycle ?? input.status)" in routes
-    assert "route.length > 1 ? \"ready\" : \"missing\"" in routes
+    assert 'RouteGeometryStatus = "ready" | "missing" | "invalid"' in routes
+    assert "const geometryStatus = parsedRoute.status" in routes
 
 
 def test_build_pipeline_emits_react_route_artifact():
@@ -83,6 +84,16 @@ def test_generated_manifest_and_lazy_route_records_preserve_source_data():
     assert stats["completed_km"] == round(
         sum(route["distance_km"] for route in legacy["routes"]), 1
     )
+
+
+def test_generated_route_publication_is_staged_and_rollback_safe():
+    build_source = (ROOT / "build.py").read_text()
+
+    assert "detail_payloads = {}" in build_source
+    assert "TemporaryDirectory" in build_source
+    assert "previous_generated_files" in build_source
+    assert "details_backup" in build_source
+    assert "stale_route_file.unlink()" not in build_source
 
 
 def test_atlas_globe_ports_route_heat_traces_and_interaction():

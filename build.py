@@ -6,7 +6,7 @@ Writes:   /Users/laurenzary/Desktop/goDiesel/index.html
 
 Edit quests.json to add/remove routes. Re-run this script (or rebuild.sh).
 """
-import base64, gzip, io, json, math, re, textwrap
+import base64, gzip, io, json, math, re, shutil, tempfile, textwrap
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -554,9 +554,10 @@ def react_route_manifest_record(route):
         'replay': record['replay'],
     }
 
+generated_at = datetime.now(UTC).isoformat(timespec='seconds').replace('+00:00', 'Z')
 react_route_payload = {
     'schema_version': 1,
-    'generated_at': datetime.now(UTC).isoformat(timespec='seconds').replace('+00:00', 'Z'),
+    'generated_at': generated_at,
     'stats': {
         'approved': len(quest_specs),
         'pending': pending_n,
@@ -565,43 +566,82 @@ react_route_payload = {
     },
     'routes': [react_route_record(route) for route in routes_data],
 }
-REACT_DATA.mkdir(parents=True, exist_ok=True)
-(REACT_DATA / 'quests.generated.json').write_text(
-    json.dumps(react_route_payload, ensure_ascii=False),
-    encoding='utf-8',
-)
-
 react_manifest_payload = {
     'schema_version': 1,
     'generated_at': react_route_payload['generated_at'],
     'stats': react_route_payload['stats'],
     'routes': [react_route_manifest_record(route) for route in routes_data],
 }
-REACT_GENERATED_DATA.mkdir(parents=True, exist_ok=True)
-(REACT_GENERATED_DATA / 'routes.manifest.json').write_text(
-    json.dumps(react_manifest_payload, ensure_ascii=False),
-    encoding='utf-8',
-)
-(REACT_GENERATED_DATA / 'route-stats.json').write_text(
-    json.dumps({
-        'route_count': len(routes_data),
-        'completed_km': round(sum(route.get('distance_km', 0) for route in routes_data), 1),
-    }),
-    encoding='utf-8',
-)
+route_stats_payload = {
+    'route_count': len(routes_data),
+    'completed_km': round(sum(route.get('distance_km', 0) for route in routes_data), 1),
+}
 
-REACT_ROUTE_DETAILS.mkdir(parents=True, exist_ok=True)
-for stale_route_file in REACT_ROUTE_DETAILS.glob('*.json'):
-    stale_route_file.unlink()
+detail_payloads = {}
 for route in routes_data:
     record = react_route_record(route)
     slug = str(record['slug'])
     if not re.fullmatch(r'[A-Za-z0-9._-]+', slug):
         raise ValueError(f'Unsafe route slug for generated detail file: {slug!r}')
-    (REACT_ROUTE_DETAILS / f'{slug}.json').write_text(
-        json.dumps(record, ensure_ascii=False),
-        encoding='utf-8',
-    )
+    detail_payloads[f'{slug}.json'] = json.dumps(record, ensure_ascii=False)
+
+REACT_DATA.mkdir(parents=True, exist_ok=True)
+REACT_GENERATED_DATA.mkdir(parents=True, exist_ok=True)
+REACT_ROUTE_DETAILS.parent.mkdir(parents=True, exist_ok=True)
+generated_files = {
+    REACT_DATA / 'quests.generated.json': json.dumps(react_route_payload, ensure_ascii=False),
+    REACT_GENERATED_DATA / 'routes.manifest.json': json.dumps(
+        react_manifest_payload, ensure_ascii=False
+    ),
+    REACT_GENERATED_DATA / 'route-stats.json': json.dumps(route_stats_payload),
+}
+
+
+def write_text_atomic(path, content):
+    temp_path = path.with_name(f'.{path.name}.tmp')
+    temp_path.write_text(content, encoding='utf-8')
+    temp_path.replace(path)
+
+
+previous_generated_files = {
+    path: path.read_bytes() if path.exists() else None for path in generated_files
+}
+details_backup = REACT_ROUTE_DETAILS.with_name(f'{REACT_ROUTE_DETAILS.name}.backup')
+if details_backup.exists():
+    if REACT_ROUTE_DETAILS.exists():
+        shutil.rmtree(details_backup)
+    else:
+        details_backup.replace(REACT_ROUTE_DETAILS)
+
+with tempfile.TemporaryDirectory(
+    dir=REACT_ROUTE_DETAILS.parent, prefix='.routes-staging-'
+) as staging_directory:
+    staging_path = Path(staging_directory)
+    for filename, content in detail_payloads.items():
+        (staging_path / filename).write_text(content, encoding='utf-8')
+
+    try:
+        if REACT_ROUTE_DETAILS.exists():
+            REACT_ROUTE_DETAILS.replace(details_backup)
+        staging_path.replace(REACT_ROUTE_DETAILS)
+        for path, content in generated_files.items():
+            write_text_atomic(path, content)
+    except Exception:
+        if REACT_ROUTE_DETAILS.exists():
+            shutil.rmtree(REACT_ROUTE_DETAILS)
+        if details_backup.exists():
+            details_backup.replace(REACT_ROUTE_DETAILS)
+        for path, previous_content in previous_generated_files.items():
+            if previous_content is None:
+                path.unlink(missing_ok=True)
+            else:
+                temp_path = path.with_name(f'.{path.name}.rollback')
+                temp_path.write_bytes(previous_content)
+                temp_path.replace(path)
+        raise
+    else:
+        if details_backup.exists():
+            shutil.rmtree(details_backup)
 
 # Build app HTML — same as previous version but with Share-card button
 HTML_TEMPLATE_PATH = Path('/tmp/quests_template.html')

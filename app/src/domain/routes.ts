@@ -4,7 +4,7 @@ import {
 } from "@/domain/route-lifecycle";
 
 export type RouteActivityType = "Run" | "Ride" | string;
-export type RouteGeometryStatus = "ready" | "missing";
+export type RouteGeometryStatus = "ready" | "missing" | "invalid";
 
 export interface RoutePoint {
   lat: number;
@@ -88,36 +88,40 @@ function requiredSlug(input: GeneratedQuestRoute, context: string) {
   return slug;
 }
 
-function routePoints(value: unknown): RoutePoint[] {
-  if (!Array.isArray(value)) return [];
+function parsedRoutePoints(value: unknown) {
+  if (!Array.isArray(value) || value.length < 2) {
+    return { points: [] as RoutePoint[], status: "missing" as const };
+  }
 
-  return value
-    .map((point) => {
-      if (Array.isArray(point)) {
-        const lat = numberValue(point[0], Number.NaN);
-        const lng = numberValue(point[1], Number.NaN);
-        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-        return {
-          lat,
-          lng,
-          elev: numberValue(point[2]),
-          d: numberValue(point[3]),
-        };
-      }
-      if (!point || typeof point !== "object") return null;
-      const source = point as Record<string, unknown>;
-      const lat = numberValue(source.lat, Number.NaN);
-      const lng = numberValue(source.lng, Number.NaN);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const points: RoutePoint[] = [];
+  for (const point of value) {
+    const source = Array.isArray(point)
+      ? { lat: point[0], lng: point[1], elev: point[2], d: point[3] }
+      : point && typeof point === "object"
+        ? (point as Record<string, unknown>)
+        : null;
+    const lat = source ? numberValue(source.lat, Number.NaN) : Number.NaN;
+    const lng = source ? numberValue(source.lng, Number.NaN) : Number.NaN;
+    const elev = source ? numberValue(source.elev, Number.NaN) : Number.NaN;
+    const d = source ? numberValue(source.d, Number.NaN) : Number.NaN;
 
-      return {
-        lat,
-        lng,
-        elev: numberValue(source.elev),
-        d: numberValue(source.d),
-      };
-    })
-    .filter((point): point is RoutePoint => Boolean(point));
+    if (
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lng) ||
+      !Number.isFinite(elev) ||
+      !Number.isFinite(d) ||
+      lat < -90 ||
+      lat > 90 ||
+      lng < -180 ||
+      lng > 180 ||
+      d < 0
+    ) {
+      return { points: [] as RoutePoint[], status: "invalid" as const };
+    }
+    points.push({ lat, lng, elev, d });
+  }
+
+  return { points, status: "ready" as const };
 }
 
 function replayMetadata(
@@ -177,16 +181,119 @@ function generatedRoute(value: unknown, context: string): GeneratedQuestRoute {
   return value as GeneratedQuestRoute;
 }
 
+function requiredStringField(
+  input: GeneratedQuestRoute,
+  field: keyof GeneratedQuestRoute,
+  allowEmpty = true,
+) {
+  const value = input[field];
+  if (typeof value !== "string" || (!allowEmpty && !value.trim())) {
+    throw new Error(`${String(field)} must be a string${allowEmpty ? "" : " with content"}`);
+  }
+  return value;
+}
+
+function requiredNumberField(
+  input: GeneratedQuestRoute,
+  field: keyof GeneratedQuestRoute,
+  options: { min?: number; max?: number; integer?: boolean } = {},
+) {
+  const value = input[field];
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${String(field)} must be a finite number`);
+  }
+  if (options.min !== undefined && value < options.min) {
+    throw new Error(`${String(field)} must be at least ${options.min}`);
+  }
+  if (options.max !== undefined && value > options.max) {
+    throw new Error(`${String(field)} must be at most ${options.max}`);
+  }
+  if (options.integer && !Number.isInteger(value)) {
+    throw new Error(`${String(field)} must be an integer`);
+  }
+  return value;
+}
+
+function validatedReplayMetadata(
+  value: unknown,
+  lifecycle: RouteLifecycle,
+  geometryStatus: RouteGeometryStatus,
+): ReplayMetadata {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("replay must be an object");
+  }
+  const source = value as Record<string, unknown>;
+  if (source.mode !== "atlas" && source.mode !== "earth") {
+    throw new Error("replay.mode must be atlas or earth");
+  }
+  if (typeof source.replay_eligible !== "boolean") {
+    throw new Error("replay.replay_eligible must be a boolean");
+  }
+  if (typeof source.best_in_earth !== "boolean") {
+    throw new Error("replay.best_in_earth must be a boolean");
+  }
+  if (source.geometry_status !== "ready" && source.geometry_status !== "missing") {
+    throw new Error("replay.geometry_status must be ready or missing");
+  }
+
+  return {
+    replayMode: source.mode,
+    replayEligible:
+      lifecycle === "completed" && geometryStatus === "ready" && source.replay_eligible,
+    bestInEarth: source.best_in_earth,
+    geometryStatus,
+  };
+}
+
+function validatedDetailFields(
+  input: GeneratedQuestRoute,
+  slug: string,
+  geometryStatus: RouteGeometryStatus,
+) {
+  const lifecycleValue = input.lifecycle;
+  if (
+    lifecycleValue !== "completed" &&
+    lifecycleValue !== "planned" &&
+    lifecycleValue !== "discovered"
+  ) {
+    throw new Error("lifecycle must be completed, planned, or discovered");
+  }
+  const lifecycle = lifecycleValue as RouteLifecycle;
+
+  return {
+    slug,
+    activityId: requiredStringField(input, "activity_id", false),
+    lifecycle,
+    name: requiredStringField(input, "name", false),
+    subtitle: requiredStringField(input, "subtitle"),
+    activityName: requiredStringField(input, "activity_name"),
+    region: requiredStringField(input, "region", false),
+    date: requiredStringField(input, "date"),
+    distanceKm: requiredNumberField(input, "distance_km", { min: 0 }),
+    elevationGainM: requiredNumberField(input, "elevation_gain_m", { min: 0 }),
+    type: requiredStringField(input, "type", false),
+    description: requiredStringField(input, "description"),
+    completionRule: requiredStringField(input, "completion_rule"),
+    difficulty: requiredStringField(input, "difficulty", false),
+    theme: requiredStringField(input, "theme", false),
+    xp: requiredNumberField(input, "xp", { min: 0 }),
+    centerLat: requiredNumberField(input, "center_lat", { min: -90, max: 90 }),
+    centerLng: requiredNumberField(input, "center_lng", { min: -180, max: 180 }),
+    replay: validatedReplayMetadata(input.replay, lifecycle, geometryStatus),
+  };
+}
+
 export function parseRouteSummary(value: unknown): RouteSummary {
   const input = generatedRoute(value, "Route summary");
   const slug = requiredSlug(input, "Route summary");
-  const trace = routePoints(input.trace);
+  const parsedTrace = parsedRoutePoints(input.trace);
+  const trace = parsedTrace.points;
   const geometryStatus =
     input.replay &&
     typeof input.replay === "object" &&
     (input.replay as Record<string, unknown>).geometry_status === "missing"
       ? "missing"
-      : "ready";
+      : parsedTrace.status;
 
   return {
     ...commonRouteFields(input, slug, geometryStatus),
@@ -199,15 +306,14 @@ export function parseRouteSummary(value: unknown): RouteSummary {
 export function parseRouteDetail(value: unknown): QuestRoute {
   const input = generatedRoute(value, "Route detail");
   const slug = requiredSlug(input, "Route detail");
-  const route = routePoints(input.route);
-  const geometryStatus = route.length > 1 ? "ready" : "missing";
+  const parsedRoute = parsedRoutePoints(input.route);
+  const route = parsedRoute.points;
+  const geometryStatus = parsedRoute.status;
 
   return {
-    ...commonRouteFields(input, slug, geometryStatus),
+    ...validatedDetailFields(input, slug, geometryStatus),
     route,
-    centerLat: numberValue(input.center_lat, route[0]?.lat ?? 0),
-    centerLng: numberValue(input.center_lng, route[0]?.lng ?? 0),
-    midIdx: numberValue(input.mid_idx, Math.floor(route.length / 2)),
+    midIdx: requiredNumberField(input, "mid_idx", { min: 0, integer: true }),
   };
 }
 
