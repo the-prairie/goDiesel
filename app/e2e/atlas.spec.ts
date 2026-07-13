@@ -2,7 +2,21 @@ import { expect, test, type Page } from "@playwright/test";
 import { PNG } from "pngjs";
 
 async function canvasStats(page: Page) {
-  const screenshot = await page.getByLabel("Interactive route globe").screenshot();
+  const canvas = page.getByLabel("Interactive route globe");
+  const bounds = await canvas.boundingBox();
+  if (!bounds) return { nonBackground: 0, checksum: 0 };
+  const width = Math.min(320, bounds.width);
+  const height = Math.min(240, bounds.height);
+  const screenshot = await page.screenshot({
+    animations: "disabled",
+    clip: {
+      x: bounds.x + (bounds.width - width) / 2,
+      y: bounds.y + (bounds.height - height) / 2,
+      width,
+      height,
+    },
+    scale: "css",
+  });
   const pixels = PNG.sync.read(screenshot).data;
   let nonBackground = 0;
   let checksum = 0;
@@ -101,19 +115,16 @@ test("region controls, search, inspector, and URL stay synchronized", async ({ p
   );
 
   await page.reload();
-  const overlayLayout = await page.evaluate(() => {
-    const search = document
-      .querySelector<HTMLElement>('[aria-label="Atlas search"]')!
-      .getBoundingClientRect();
-    const inspector = document
-      .querySelector<HTMLElement>('aside')!
-      .getBoundingClientRect();
-    return {
-      searchBottom: search.bottom,
-      inspectorTop: inspector.top,
-    };
+  const atlasSearch = page.getByRole("region", { name: "Atlas search" });
+  const baliInspector = page.locator("aside").filter({
+    has: page.getByRole("heading", { name: "Bali, Indonesia" }),
   });
-  expect(overlayLayout.searchBottom).toBeLessThanOrEqual(overlayLayout.inspectorTop);
+  await expect(baliInspector).toBeVisible({ timeout: 15_000 });
+  const searchBox = await atlasSearch.boundingBox();
+  const inspectorBox = await baliInspector.boundingBox();
+  expect(searchBox).not.toBeNull();
+  expect(inspectorBox).not.toBeNull();
+  expect(searchBox!.y + searchBox!.height).toBeLessThanOrEqual(inspectorBox!.y);
   await expect(page.getByRole("region", { name: "Atlas search" })).toHaveAttribute(
     "data-state",
     "selected-result",
@@ -121,23 +132,27 @@ test("region controls, search, inspector, and URL stay synchronized", async ({ p
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
-  const mobileLayout = await page.evaluate(() => {
-    const search = document
-      .querySelector<HTMLElement>('[aria-label="Atlas search"]')!
-      .getBoundingClientRect();
-    const inspector = document.querySelector<HTMLElement>("aside")!.getBoundingClientRect();
-    const controls = document
-      .querySelector<HTMLSelectElement>('[aria-label="Browse route regions"]')!
-      .parentElement!.getBoundingClientRect();
-    return {
-      searchBottom: search.bottom,
-      inspectorTop: inspector.top,
-      inspectorBottom: inspector.bottom,
-      controlsTop: controls.top,
-    };
+  await expect(page.getByRole("heading", { name: "Bali, Indonesia" })).toBeVisible({
+    timeout: 15_000,
   });
-  expect(mobileLayout.searchBottom).toBeLessThanOrEqual(mobileLayout.inspectorTop);
-  expect(mobileLayout.inspectorBottom).toBeLessThanOrEqual(mobileLayout.controlsTop);
+  await expect(page.getByRole("combobox", { name: "Browse route regions" })).toHaveValue(
+    "Bali, Indonesia",
+  );
+  const mobileSearchBox = await atlasSearch.boundingBox();
+  const mobileInspectorBox = await baliInspector.boundingBox();
+  const controlsBox = await page
+    .getByRole("combobox", { name: "Browse route regions" })
+    .locator("..")
+    .boundingBox();
+  expect(mobileSearchBox).not.toBeNull();
+  expect(mobileInspectorBox).not.toBeNull();
+  expect(controlsBox).not.toBeNull();
+  expect(mobileSearchBox!.y + mobileSearchBox!.height).toBeLessThanOrEqual(
+    mobileInspectorBox!.y,
+  );
+  expect(mobileInspectorBox!.y + mobileInspectorBox!.height).toBeLessThanOrEqual(
+    controlsBox!.y,
+  );
 
   await page.getByRole("button", { name: "Clear selected region" }).click();
   await expect(page.getByRole("region", { name: "Atlas search" })).toHaveAttribute(
