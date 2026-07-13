@@ -3,6 +3,7 @@ import { useDeferredValue, useMemo, useState } from "react";
 
 import type { RouteRegion } from "@/data/route-regions";
 import type { RouteSummary } from "@/domain/routes";
+import { cn } from "@/lib/utils";
 
 interface SelectedSearchResult {
   key: string;
@@ -23,6 +24,9 @@ interface AtlasSearchProps {
   regions: RouteRegion[];
   onSelectRegion: (region: RouteRegion) => void;
   onOpenRoute: (route: RouteSummary) => void;
+  query: string;
+  onQueryChange: (query: string) => void;
+  className?: string;
 }
 
 function normalize(value: string) {
@@ -60,8 +64,10 @@ export function AtlasSearch({
   regions,
   onSelectRegion,
   onOpenRoute,
+  query,
+  onQueryChange,
+  className,
 }: AtlasSearchProps) {
-  const [query, setQuery] = useState("");
   const [selectedResult, setSelectedResult] = useState<SelectedSearchResult | null>(null);
   const deferredQuery = useDeferredValue(query);
   const normalizedQuery = normalize(deferredQuery);
@@ -112,20 +118,21 @@ export function AtlasSearch({
   });
 
   function selectRegion(region: RouteRegion) {
-    setSelectedResult({ key: `region:${region.name}`, query: region.name });
-    setQuery(region.name);
+    setSelectedResult({ key: `region:${region.name}`, query });
     onSelectRegion(region);
   }
 
   function selectRoute(route: RouteSummary) {
-    setSelectedResult({ key: `route:${route.slug}`, query: route.name });
-    setQuery(route.name);
+    setSelectedResult({ key: `route:${route.slug}`, query });
     onOpenRoute(route);
   }
 
   return (
     <section
-      className="rounded-md border border-border bg-card p-4"
+      className={cn(
+        "rounded-md border border-border bg-card/92 p-4 shadow-2xl backdrop-blur",
+        className,
+      )}
       aria-label="Atlas search"
       data-state={state}
     >
@@ -137,7 +144,7 @@ export function AtlasSearch({
         <input
           value={query}
           onChange={(event) => {
-            setQuery(event.target.value);
+            onQueryChange(event.target.value);
             setSelectedResult(null);
           }}
           placeholder="Search regions, routes, replay-worthy days"

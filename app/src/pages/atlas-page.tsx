@@ -1,8 +1,8 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
+import { AtlasControls } from "@/components/globe/atlas-controls";
 import { AtlasGlobe } from "@/components/globe/atlas-globe";
-import { RegionPanel } from "@/components/globe/region-panel";
+import { RegionInspector } from "@/components/globe/region-inspector";
 import { AtlasSearch } from "@/components/search/atlas-search";
 import { completedRoutes } from "@/data/routes";
 import { routeRegions, type RouteRegion } from "@/data/route-regions";
@@ -11,49 +11,76 @@ import { routeDetailPath } from "@/navigation";
 
 export function AtlasPage() {
   const navigate = useNavigate();
-  const [selectedRegion, setSelectedRegion] = useState<RouteRegion | undefined>(
-    routeRegions[0],
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedRegion = routeRegions.find(
+    (region) => region.name === searchParams.get("region"),
   );
+  const query = searchParams.get("q") ?? "";
   const openRoute = (route: RouteSummary) => navigate(routeDetailPath(route.slug));
 
+  function updateSearchParams(
+    update: (next: URLSearchParams) => void,
+    replace = false,
+  ) {
+    const next = new URLSearchParams(searchParams);
+    update(next);
+    setSearchParams(next, { replace });
+  }
+
+  function selectRegion(region: RouteRegion) {
+    updateSearchParams((next) => next.set("region", region.name));
+  }
+
+  function clearRegion() {
+    updateSearchParams((next) => next.delete("region"));
+  }
+
+  function setQuery(value: string) {
+    updateSearchParams((next) => {
+      if (value) next.set("q", value);
+      else next.delete("q");
+    }, true);
+  }
+
   return (
-    <section className="grid gap-5">
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
-        <div>
-          <div className="text-xs font-semibold uppercase text-primary">
-            Atlas
-          </div>
-          <h1 className="mt-3 max-w-3xl text-3xl font-bold sm:text-5xl">
-            Real places, playable days.
-          </h1>
-          <p className="mt-4 max-w-3xl text-base leading-7 text-muted-foreground">
-            Explore completed runs and rides as route heat over a living globe.
-            Search past memories, choose a region, then open the route in the
-            existing replay flow.
-          </p>
-        </div>
-        <AtlasSearch
-          routes={completedRoutes}
-          regions={routeRegions}
-          onSelectRegion={setSelectedRegion}
-          onOpenRoute={openRoute}
-        />
+    <section className="relative isolate min-h-[calc(100dvh-3.5rem)] overflow-hidden bg-background">
+      <AtlasGlobe
+        regions={routeRegions}
+        selectedRegion={selectedRegion}
+        onSelectRegion={selectRegion}
+        onOpenRoute={openRoute}
+        className="absolute inset-0 min-h-0 rounded-none border-0"
+      />
+
+      <div className="pointer-events-none absolute left-3 top-3 z-20 max-w-[min(30rem,calc(100%-1.5rem))] sm:left-5 sm:top-5">
+        <div className="text-xs font-semibold uppercase text-primary">Atlas</div>
+        <h1 className="mt-1 text-2xl font-bold text-foreground drop-shadow-lg sm:text-4xl">
+          Real places, playable days.
+        </h1>
+        <p className="mt-2 hidden max-w-md text-sm leading-6 text-foreground/70 drop-shadow sm:block">
+          Completed runs and rides, mapped as memories you can enter again.
+        </p>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <AtlasGlobe
-          regions={routeRegions}
-          selectedRegion={selectedRegion}
-          onSelectRegion={setSelectedRegion}
-          onOpenRoute={openRoute}
-        />
-        <RegionPanel
-          regions={routeRegions}
-          selectedRegion={selectedRegion}
-          onSelectRegion={setSelectedRegion}
-          onOpenRoute={openRoute}
-        />
-      </div>
+      <AtlasSearch
+        routes={completedRoutes}
+        regions={routeRegions}
+        query={query}
+        onQueryChange={setQuery}
+        onSelectRegion={selectRegion}
+        onOpenRoute={openRoute}
+        className="absolute inset-x-3 top-20 z-30 max-h-[56dvh] overflow-y-auto sm:inset-x-auto sm:right-5 sm:top-5 sm:w-[360px]"
+      />
+      <AtlasControls
+        regions={routeRegions}
+        selectedRegion={selectedRegion}
+        onSelectRegion={selectRegion}
+      />
+      <RegionInspector
+        selectedRegion={selectedRegion}
+        onClear={clearRegion}
+        onOpenRoute={openRoute}
+      />
     </section>
   );
 }

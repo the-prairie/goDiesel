@@ -9,10 +9,12 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { appSectionForPath } from "@/navigation";
+import { cn } from "@/lib/utils";
 
 export function AppShell() {
   const location = useLocation();
   const section = appSectionForPath(location.pathname);
+  const isAtlas = section.id === "atlas";
 
   return (
     <SidebarProvider>
@@ -34,7 +36,14 @@ export function AppShell() {
             </div>
           </div>
         </header>
-        <div className="mx-auto grid w-full max-w-7xl flex-1 gap-6 p-4 sm:p-6">
+        <div
+          className={cn(
+            "grid w-full flex-1",
+            isAtlas
+              ? "min-h-[calc(100dvh-3.5rem)] overflow-hidden"
+              : "mx-auto max-w-7xl gap-6 p-4 sm:p-6",
+          )}
+        >
           <Suspense
             fallback={
               <div className="rounded-md border border-border bg-card p-5 text-sm text-muted-foreground">
