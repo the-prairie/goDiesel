@@ -78,7 +78,7 @@ export function AtlasPage() {
         selectedRegion={selectedRegion}
         onSelectRegion={selectRegion}
         onOpenRoute={openRoute}
-        className="absolute inset-x-3 top-20 z-30 max-h-[56dvh] overflow-y-auto sm:inset-x-auto sm:right-5 sm:top-5 sm:w-[360px]"
+        className="absolute inset-x-3 top-20 z-30 max-h-[56dvh] overflow-y-auto sm:inset-x-5 sm:top-36 lg:left-auto lg:right-5 lg:top-5 lg:w-[360px]"
       />
       <AtlasControls
         regions={routeRegions}

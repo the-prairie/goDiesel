@@ -1,22 +1,64 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PNG } from "pngjs";
 
+declare global {
+  interface Window {
+    __atlasCaptureHiddenElements?: Array<[HTMLElement, string, string]>;
+  }
+}
+
 async function canvasStats(page: Page) {
   const canvas = page.getByLabel("Interactive route globe");
   const bounds = await canvas.boundingBox();
   if (!bounds) return { nonBackground: 0, checksum: 0 };
+  await page.evaluate(() => {
+    const canvasElement = document.querySelector<HTMLCanvasElement>(
+      '[aria-label="Interactive route globe"]',
+    );
+    if (!canvasElement) return;
+
+    const visibleAncestors = new Set<Element>();
+    for (let element: Element | null = canvasElement; element; element = element.parentElement) {
+      visibleAncestors.add(element);
+    }
+
+    const hiddenElements: Array<[HTMLElement, string, string]> = [];
+    document.body.querySelectorAll<HTMLElement>("*").forEach((element) => {
+      if (visibleAncestors.has(element)) return;
+      hiddenElements.push([
+        element,
+        element.style.getPropertyValue("visibility"),
+        element.style.getPropertyPriority("visibility"),
+      ]);
+      element.style.setProperty("visibility", "hidden", "important");
+    });
+    window.__atlasCaptureHiddenElements = hiddenElements;
+  });
   const width = Math.min(320, bounds.width);
   const height = Math.min(240, bounds.height);
-  const screenshot = await page.screenshot({
-    animations: "disabled",
-    clip: {
-      x: bounds.x + (bounds.width - width) / 2,
-      y: bounds.y + (bounds.height - height) / 2,
-      width,
-      height,
-    },
-    scale: "css",
-  });
+  let screenshot: Buffer;
+  try {
+    screenshot = await page.screenshot({
+      animations: "disabled",
+      clip: {
+        x: bounds.x + (bounds.width - width) / 2,
+        y: bounds.y + (bounds.height - height) / 2,
+        width,
+        height,
+      },
+      scale: "css",
+    });
+  } finally {
+    await page.evaluate(() => {
+      window.__atlasCaptureHiddenElements?.forEach(
+        ([element, visibility, priority]) => {
+          if (visibility) element.style.setProperty("visibility", visibility, priority);
+          else element.style.removeProperty("visibility");
+        },
+      );
+      delete window.__atlasCaptureHiddenElements;
+    });
+  }
   const pixels = PNG.sync.read(screenshot).data;
   let nonBackground = 0;
   let checksum = 0;
@@ -52,6 +94,15 @@ for (const viewport of [
       await page.waitForTimeout(180);
       const movingPixels = await canvasStats(page);
       expect(movingPixels.checksum).not.toBe(initialPixels.checksum);
+
+      await canvas.evaluate((element) => {
+        element.style.visibility = "hidden";
+      });
+      const hiddenCanvasPixels = await canvasStats(page);
+      expect(hiddenCanvasPixels.nonBackground).toBeLessThan(50);
+      await canvas.evaluate((element) => {
+        element.style.removeProperty("visibility");
+      });
     }
 
     const layout = await page.evaluate(() => {
@@ -79,6 +130,41 @@ for (const viewport of [
     expect(layout.canvas.height).toBeGreaterThanOrEqual(viewport.height - 60);
   });
 }
+
+test("canvas selection synchronizes the region URL and inspector", async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.goto("/#/atlas");
+
+  const visibleGlobeLabel = page.locator("button[data-globe-region]:visible").first();
+  await expect(visibleGlobeLabel).toBeVisible({ timeout: 15_000 });
+  const globeRegion = await visibleGlobeLabel.getAttribute("data-globe-region");
+  const globeLabelBox = await visibleGlobeLabel.boundingBox();
+  expect(globeRegion).not.toBeNull();
+  expect(globeLabelBox).not.toBeNull();
+  await page.locator("button[data-globe-region]").evaluateAll((labels) => {
+    labels.forEach((label) => {
+      (label as HTMLElement).style.visibility = "hidden";
+    });
+  });
+  await page.mouse.click(
+    globeLabelBox!.x + globeLabelBox!.width / 2,
+    globeLabelBox!.y + globeLabelBox!.height / 2,
+  );
+  await page.locator("button[data-globe-region]").evaluateAll((labels) => {
+    labels.forEach((label) => {
+      (label as HTMLElement).style.removeProperty("visibility");
+    });
+  });
+  await expect
+    .poll(() => {
+      const query = page.url().split("?")[1] ?? "";
+      return new URLSearchParams(query).get("region");
+    })
+    .toBe(globeRegion);
+  await expect(page.getByRole("heading", { name: globeRegion! })).toBeVisible();
+  await page.getByRole("button", { name: "Clear selected region" }).click();
+  await expect(page).not.toHaveURL(/region=/);
+});
 
 test("region controls, search, inspector, and URL stay synchronized", async ({ page }) => {
   test.setTimeout(90_000);
@@ -154,15 +240,33 @@ test("region controls, search, inspector, and URL stay synchronized", async ({ p
     controlsBox!.y,
   );
 
-  await page.getByRole("button", { name: "Clear selected region" }).click();
+  await search.fill("tokyo");
+  await expect(page).not.toHaveURL(/region=/);
+  await expect(page.getByRole("heading", { name: "Bali, Indonesia" })).toHaveCount(0);
+  await expect(page.getByRole("combobox", { name: "Browse route regions" })).toHaveValue("");
   await expect(page.getByRole("region", { name: "Atlas search" })).toHaveAttribute(
     "data-state",
     "grouped-results",
   );
-
-  await search.fill("tokyo");
-  await expect(page).not.toHaveURL(/region=/);
   await expect(page.getByRole("button", { name: /Tokyo, Japan3 routes/i })).toBeVisible();
+});
+
+test("Atlas heading and search stay separate at tablet widths", async ({ page }) => {
+  for (const viewport of [
+    { width: 640, height: 844 },
+    { width: 768, height: 900 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/#/atlas");
+    const heading = page.getByRole("heading", { name: "Real places, playable days." });
+    const search = page.getByRole("region", { name: "Atlas search" });
+    await expect(search).toBeVisible({ timeout: 15_000 });
+    const headingBox = await heading.boundingBox();
+    const searchBox = await search.boundingBox();
+    expect(headingBox).not.toBeNull();
+    expect(searchBox).not.toBeNull();
+    expect(headingBox!.y + headingBox!.height).toBeLessThanOrEqual(searchBox!.y);
+  }
 });
 
 test("globe supports pointer, wheel, touch, and keyboard exploration", async ({ page }) => {

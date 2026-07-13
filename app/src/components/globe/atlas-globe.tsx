@@ -629,6 +629,8 @@ export function AtlasGlobe({
               labelRefs.current[index] = node;
             }}
             type="button"
+            data-globe-region={region.name}
+            aria-label={`Select ${region.name} on globe`}
             onClick={() => onSelectRegion(region)}
             className={cn(
               "pointer-events-auto absolute hidden -translate-x-1/2 -translate-y-1/2 items-center gap-2 whitespace-nowrap rounded-md border border-border bg-card/80 px-3 py-1.5 text-[11px] font-semibold uppercase text-muted-foreground shadow-xl backdrop-blur transition-colors hover:border-primary hover:text-foreground data-[active=true]:border-primary data-[active=true]:text-primary",
