@@ -267,9 +267,10 @@ test("region controls, search, inspector, and URL stay synchronized", async ({ p
   await expect(page.getByRole("button", { name: /Tokyo, Japan3 routes/i })).toBeVisible();
 });
 
-test("Atlas heading and search stay separate at tablet widths", async ({ page }) => {
+test("Atlas overlays stay separate across constrained viewports", async ({ page }) => {
   test.setTimeout(180_000);
   for (const viewport of [
+    { width: 390, height: 640 },
     { width: 640, height: 844 },
     { width: 640, height: 600 },
     { width: 768, height: 900 },
