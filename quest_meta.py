@@ -10,12 +10,17 @@ CURATION_TEXT_FIELDS = (
 )
 CURATION_LIST_FIELDS = ("terrain", "highlights", "caveats")
 CURATION_REVIEW_STATUSES = ("draft", "reviewed", "published")
+CURATION_FIELDS = frozenset((*CURATION_TEXT_FIELDS, *CURATION_LIST_FIELDS, "review_status"))
 
 
 def build_route_curation(value):
     """Validate owner-authored route curation for generated route details."""
     if not isinstance(value, dict):
         raise ValueError("curation must be an object")
+
+    unknown_fields = sorted(set(value) - CURATION_FIELDS)
+    if unknown_fields:
+        raise ValueError(f"curation has unknown fields: {', '.join(unknown_fields)}")
 
     status = value.get("review_status", "draft")
     if status not in CURATION_REVIEW_STATUSES:
@@ -49,6 +54,22 @@ def build_route_curation(value):
 
     curation["review_status"] = status
     return curation
+
+
+def build_replay_metadata(activity_id, point_count, best_in_earth_ids):
+    """Build replay metadata without contradicting validated route geometry."""
+    if not isinstance(point_count, int) or point_count < 0:
+        raise ValueError("replay point_count must be a non-negative integer")
+
+    geometry_ready = point_count > 1
+    best_in_earth = geometry_ready and str(activity_id) in best_in_earth_ids
+    return {
+        "mode": "earth" if best_in_earth else "atlas",
+        "replay_eligible": geometry_ready,
+        "best_in_earth": best_in_earth,
+        "geometry_status": "ready" if geometry_ready else "missing",
+        "point_count": point_count,
+    }
 
 
 def elevation_gain_m(route):

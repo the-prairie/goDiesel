@@ -15,7 +15,12 @@ import pillow_heif; pillow_heif.register_heif_opener()
 import gpxpy
 import pandas as pd
 
-from quest_meta import build_quest_meta, build_route_curation, elevation_gain_m
+from quest_meta import (
+    build_quest_meta,
+    build_replay_metadata,
+    build_route_curation,
+    elevation_gain_m,
+)
 
 try: import fitparse
 except ImportError: fitparse = None
@@ -543,16 +548,11 @@ curation_json = json.dumps({
 
 def react_route_record(route):
     aid = str(route.get('activity_id') or route.get('slug') or '')
+    point_count = len(route.get('route', []))
     return {
         **route,
         'lifecycle': 'completed',
-        'replay': {
-            'mode': 'earth' if aid in BEST_IN_EARTH_IDS else 'atlas',
-            'replay_eligible': True,
-            'best_in_earth': aid in BEST_IN_EARTH_IDS,
-            'geometry_status': 'ready' if len(route.get('route', [])) > 1 else 'missing',
-            'point_count': len(route.get('route', [])),
-        },
+        'replay': build_replay_metadata(aid, point_count, BEST_IN_EARTH_IDS),
     }
 
 def simplify_route_for_manifest(points, max_points=96):

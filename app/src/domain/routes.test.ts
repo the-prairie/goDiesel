@@ -172,6 +172,15 @@ describe("parseRouteDetail", () => {
     }))).toThrow("reviewed curation is missing ideal_use");
   });
 
+  it("rejects unknown curation fields", () => {
+    expect(() => parseRouteDetail(validRouteDetail({
+      curation: {
+        vbie: "Typo that must not disappear silently.",
+        review_status: "draft",
+      },
+    }))).toThrow("curation has unknown fields: vbie");
+  });
+
   it("validates geometry and replay cross-field invariants", () => {
     expect(() => parseRouteDetail(validRouteDetail({ mid_idx: 99 }))).toThrow(
       "mid_idx must reference a route point",

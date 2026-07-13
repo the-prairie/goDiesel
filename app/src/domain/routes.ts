@@ -100,6 +100,7 @@ const curationFields = [
   "seasonality",
   "editorial_note",
 ] as const;
+const curationFieldSet = new Set<string>([...curationFields, "review_status"]);
 
 function optionalCurationText(source: Record<string, unknown>, field: string) {
   const value = source[field];
@@ -130,6 +131,10 @@ function validatedCuration(value: unknown): RouteCuration {
   }
 
   const source = value as Record<string, unknown>;
+  const unknownFields = Object.keys(source).filter((field) => !curationFieldSet.has(field));
+  if (unknownFields.length > 0) {
+    throw new Error(`curation has unknown fields: ${unknownFields.sort().join(", ")}`);
+  }
   const reviewStatus = source.review_status ?? "draft";
   if (
     reviewStatus !== "draft" &&

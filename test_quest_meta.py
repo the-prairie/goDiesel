@@ -1,6 +1,11 @@
 import unittest
 
-from quest_meta import build_quest_meta, build_route_curation, elevation_gain_m
+from quest_meta import (
+    build_quest_meta,
+    build_replay_metadata,
+    build_route_curation,
+    elevation_gain_m,
+)
 
 
 class QuestMetaTests(unittest.TestCase):
@@ -38,6 +43,29 @@ class QuestMetaTests(unittest.TestCase):
                 "vibe": "Riverside miles through the city.",
                 "review_status": "reviewed",
             })
+
+    def test_build_route_curation_rejects_unknown_fields(self):
+        with self.assertRaisesRegex(ValueError, "curation has unknown fields: vbie"):
+            build_route_curation({
+                "vbie": "Typo that must not disappear silently.",
+                "review_status": "draft",
+            })
+
+    def test_replay_metadata_requires_two_route_points(self):
+        best_ids = {"route-1"}
+
+        for point_count in (0, 1):
+            replay = build_replay_metadata("route-1", point_count, best_ids)
+            self.assertFalse(replay["replay_eligible"])
+            self.assertFalse(replay["best_in_earth"])
+            self.assertEqual(replay["mode"], "atlas")
+            self.assertEqual(replay["geometry_status"], "missing")
+
+        ready = build_replay_metadata("route-1", 2, best_ids)
+        self.assertTrue(ready["replay_eligible"])
+        self.assertTrue(ready["best_in_earth"])
+        self.assertEqual(ready["mode"], "earth")
+        self.assertEqual(ready["geometry_status"], "ready")
 
     def test_elevation_gain_only_counts_climbs(self):
         route = [

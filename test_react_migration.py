@@ -3,6 +3,8 @@ import json
 import shutil
 from pathlib import Path
 
+from quest_meta import build_route_curation
+
 
 ROOT = Path(__file__).parent
 APP = ROOT / "app"
@@ -60,13 +62,23 @@ def test_build_pipeline_emits_react_route_artifact():
     assert "REACT_ROUTE_DETAILS" in build
     assert "simplify_route_for_manifest" in build
     assert "'lifecycle': 'completed'" in build
-    assert "'replay': {" in build
+    assert "'replay': build_replay_metadata" in build
     assert "react_route_payload" in build
 
 
 def test_representative_route_has_generated_reviewed_curation():
+    source_routes = json.loads((ROOT / "quests.json").read_text())["routes"]
+    source = next(
+        route for route in source_routes if str(route["activity_id"]) == "17654151284"
+    )
     detail = json.loads((ROUTE_DETAILS / "17654151284.json").read_text())
+    legacy = json.loads((APP / "src/data/quests.generated.json").read_text())["routes"]
+    legacy_route = next(route for route in legacy if route["slug"] == "17654151284")
     curation = detail["curation"]
+
+    expected_curation = build_route_curation(source["curation"])
+    assert curation == expected_curation
+    assert legacy_route["curation"] == expected_curation
 
     assert curation["review_status"] == "reviewed"
     assert set(curation) == {
