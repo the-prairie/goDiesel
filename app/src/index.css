@@ -113,10 +113,11 @@ a {
     top: 1.25rem;
     width: 22.5rem;
     padding: 0.5rem;
+    max-height: calc(100dvh - 13.75rem);
   }
 
   .atlas-search-panel > label,
-  .atlas-search-panel > div:not(:first-of-type) {
+  .atlas-search-status {
     display: none;
   }
 

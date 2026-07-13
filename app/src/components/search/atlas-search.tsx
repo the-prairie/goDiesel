@@ -145,7 +145,7 @@ export function AtlasSearch({
         />
       </div>
 
-      <div className="mt-3 text-sm text-muted-foreground">
+      <div className="atlas-search-status mt-3 text-sm text-muted-foreground">
         {state === "initial" && "Start with a place, route name, ride, run, or replay quality."}
         {state === "typing" && "Keep typing to search completed route memories."}
         {state === "loading" && "Searching completed memories."}
@@ -157,7 +157,7 @@ export function AtlasSearch({
       </div>
 
       {state === "grouped-results" ? (
-        <div className="mt-4 grid gap-4">
+        <div className="atlas-search-results mt-4 grid gap-4">
           <ResultGroup title="Regions">
             {results.regions.map((region) => (
               <button

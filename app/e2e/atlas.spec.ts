@@ -331,6 +331,26 @@ for (const viewport of [
   });
 }
 
+test("short-landscape search results remain actionable", async ({ page }) => {
+  await page.setViewportSize({ width: 667, height: 375 });
+  await page.goto("/#/atlas");
+  const search = page.getByRole("textbox", {
+    name: "Search regions, routes, replay-worthy days",
+  });
+  await search.fill("bali");
+  await expect(page).toHaveURL(/q=bali/);
+  const baliResult = page
+    .getByRole("region", { name: "Atlas search" })
+    .getByRole("button", { name: /^Bali, Indonesia5 routes/i });
+  await baliResult.scrollIntoViewIfNeeded();
+  await expect(baliResult).toBeVisible();
+  await baliResult.click();
+  await expect(page).toHaveURL(/region=Bali%2C\+Indonesia/);
+  await expect(page.getByRole("heading", { name: "Bali, Indonesia" })).toBeVisible();
+  await page.getByRole("button", { name: "Clear selected region" }).click();
+  await expect(page).not.toHaveURL(/region=/);
+});
+
 test("globe supports pointer, wheel, touch, and keyboard exploration", async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto("/#/atlas");
