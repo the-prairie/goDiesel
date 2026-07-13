@@ -29,6 +29,8 @@ QUESTS = Path('/Users/laurenzary/Desktop/goDiesel')
 CARDS = QUESTS / 'cards'
 CARDS.mkdir(exist_ok=True)
 REACT_DATA = QUESTS / 'app' / 'src' / 'data'
+REACT_GENERATED_DATA = REACT_DATA / 'generated'
+REACT_ROUTE_DETAILS = QUESTS / 'app' / 'public' / 'data' / 'routes'
 BEST_IN_EARTH_IDS = {
     '13935098460', '14349820520', '17636880071', '17654151284',
     '13358070690', '9959792315', '9934715694',
@@ -515,6 +517,43 @@ def react_route_record(route):
         },
     }
 
+def simplify_route_for_manifest(points, max_points=96):
+    if len(points) <= max_points:
+        simplified = points
+    else:
+        last = len(points) - 1
+        indices = [round(index * last / (max_points - 1)) for index in range(max_points)]
+        simplified = [points[index] for index in indices]
+    return [
+        [point['lat'], point['lng'], point.get('elev', 0), point.get('d', 0)]
+        for point in simplified
+    ]
+
+def react_route_manifest_record(route):
+    record = react_route_record(route)
+    return {
+        'slug': record['slug'],
+        'activity_id': record['activity_id'],
+        'lifecycle': record['lifecycle'],
+        'name': record['name'],
+        'subtitle': record['subtitle'],
+        'activity_name': record['activity_name'],
+        'region': record['region'],
+        'date': record['date'],
+        'distance_km': record['distance_km'],
+        'elevation_gain_m': record['elevation_gain_m'],
+        'type': record['type'],
+        'description': record['description'],
+        'completion_rule': record['completion_rule'],
+        'difficulty': record['difficulty'],
+        'theme': record['theme'],
+        'xp': record['xp'],
+        'center_lat': record['center_lat'],
+        'center_lng': record['center_lng'],
+        'trace': simplify_route_for_manifest(record.get('route', [])),
+        'replay': record['replay'],
+    }
+
 react_route_payload = {
     'schema_version': 1,
     'generated_at': datetime.now(UTC).isoformat(timespec='seconds').replace('+00:00', 'Z'),
@@ -531,6 +570,38 @@ REACT_DATA.mkdir(parents=True, exist_ok=True)
     json.dumps(react_route_payload, ensure_ascii=False),
     encoding='utf-8',
 )
+
+react_manifest_payload = {
+    'schema_version': 1,
+    'generated_at': react_route_payload['generated_at'],
+    'stats': react_route_payload['stats'],
+    'routes': [react_route_manifest_record(route) for route in routes_data],
+}
+REACT_GENERATED_DATA.mkdir(parents=True, exist_ok=True)
+(REACT_GENERATED_DATA / 'routes.manifest.json').write_text(
+    json.dumps(react_manifest_payload, ensure_ascii=False),
+    encoding='utf-8',
+)
+(REACT_GENERATED_DATA / 'route-stats.json').write_text(
+    json.dumps({
+        'route_count': len(routes_data),
+        'completed_km': round(sum(route.get('distance_km', 0) for route in routes_data), 1),
+    }),
+    encoding='utf-8',
+)
+
+REACT_ROUTE_DETAILS.mkdir(parents=True, exist_ok=True)
+for stale_route_file in REACT_ROUTE_DETAILS.glob('*.json'):
+    stale_route_file.unlink()
+for route in routes_data:
+    record = react_route_record(route)
+    slug = str(record['slug'])
+    if not re.fullmatch(r'[A-Za-z0-9._-]+', slug):
+        raise ValueError(f'Unsafe route slug for generated detail file: {slug!r}')
+    (REACT_ROUTE_DETAILS / f'{slug}.json').write_text(
+        json.dumps(record, ensure_ascii=False),
+        encoding='utf-8',
+    )
 
 # Build app HTML — same as previous version but with Share-card button
 HTML_TEMPLATE_PATH = Path('/tmp/quests_template.html')

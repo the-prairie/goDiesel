@@ -20,7 +20,7 @@ export interface ReplayMetadata {
   geometryStatus: RouteGeometryStatus;
 }
 
-export interface QuestRoute {
+export interface RouteSummary {
   slug: string;
   activityId: string;
   lifecycle: RouteLifecycle;
@@ -37,12 +37,15 @@ export interface QuestRoute {
   difficulty: string;
   theme: string;
   xp: number;
-  route: RoutePoint[];
+  trace: RoutePoint[];
   centerLat: number;
   centerLng: number;
-  midIdx: number;
   replay: ReplayMetadata;
-  raw: GeneratedQuestRoute;
+}
+
+export interface QuestRoute extends Omit<RouteSummary, "trace"> {
+  route: RoutePoint[];
+  midIdx: number;
 }
 
 export interface GeneratedQuestRoute {
@@ -63,6 +66,7 @@ export interface GeneratedQuestRoute {
   difficulty?: unknown;
   theme?: unknown;
   xp?: unknown;
+  trace?: unknown;
   route?: unknown;
   center_lat?: unknown;
   center_lng?: unknown;
@@ -78,11 +82,28 @@ function stringValue(value: unknown, fallback = "") {
   return typeof value === "string" ? value : fallback;
 }
 
+function requiredSlug(input: GeneratedQuestRoute, context: string) {
+  const slug = stringValue(input.slug, stringValue(input.activity_id)).trim();
+  if (!slug) throw new Error(`${context} is missing slug`);
+  return slug;
+}
+
 function routePoints(value: unknown): RoutePoint[] {
   if (!Array.isArray(value)) return [];
 
   return value
     .map((point) => {
+      if (Array.isArray(point)) {
+        const lat = numberValue(point[0], Number.NaN);
+        const lng = numberValue(point[1], Number.NaN);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+        return {
+          lat,
+          lng,
+          elev: numberValue(point[2]),
+          d: numberValue(point[3]),
+        };
+      }
       if (!point || typeof point !== "object") return null;
       const source = point as Record<string, unknown>;
       const lat = numberValue(source.lat, Number.NaN);
@@ -99,20 +120,32 @@ function routePoints(value: unknown): RoutePoint[] {
     .filter((point): point is RoutePoint => Boolean(point));
 }
 
-export function hasRouteGeometry(route: QuestRoute) {
-  return route.replay.geometryStatus === "ready" && route.route.length > 1;
+function replayMetadata(
+  value: unknown,
+  lifecycle: RouteLifecycle,
+  geometryStatus: RouteGeometryStatus,
+): ReplayMetadata {
+  const source =
+    value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const bestInEarth = source.best_in_earth === true;
+  const replayMode = source.mode === "earth" || bestInEarth ? "earth" : "atlas";
+  const replayRequested = source.replay_eligible !== false;
+
+  return {
+    replayMode,
+    replayEligible:
+      lifecycle === "completed" && geometryStatus === "ready" && replayRequested,
+    bestInEarth,
+    geometryStatus,
+  };
 }
 
-export function toQuestRoute(input: GeneratedQuestRoute): QuestRoute {
-  const route = routePoints(input.route);
-  const slug = stringValue(input.slug, stringValue(input.activity_id));
+function commonRouteFields(
+  input: GeneratedQuestRoute,
+  slug: string,
+  geometryStatus: RouteGeometryStatus,
+) {
   const lifecycle = normalizeRouteLifecycle(input.lifecycle ?? input.status);
-  const bestInEarth = Boolean(
-    input.replay &&
-      typeof input.replay === "object" &&
-      "best_in_earth" in input.replay &&
-      (input.replay as Record<string, unknown>).best_in_earth,
-  );
 
   return {
     slug,
@@ -131,16 +164,53 @@ export function toQuestRoute(input: GeneratedQuestRoute): QuestRoute {
     difficulty: stringValue(input.difficulty, "Open"),
     theme: stringValue(input.theme, "Quest"),
     xp: numberValue(input.xp),
+    centerLat: numberValue(input.center_lat),
+    centerLng: numberValue(input.center_lng),
+    replay: replayMetadata(input.replay, lifecycle, geometryStatus),
+  };
+}
+
+function generatedRoute(value: unknown, context: string): GeneratedQuestRoute {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${context} must be an object`);
+  }
+  return value as GeneratedQuestRoute;
+}
+
+export function parseRouteSummary(value: unknown): RouteSummary {
+  const input = generatedRoute(value, "Route summary");
+  const slug = requiredSlug(input, "Route summary");
+  const trace = routePoints(input.trace);
+  const geometryStatus =
+    input.replay &&
+    typeof input.replay === "object" &&
+    (input.replay as Record<string, unknown>).geometry_status === "missing"
+      ? "missing"
+      : "ready";
+
+  return {
+    ...commonRouteFields(input, slug, geometryStatus),
+    trace,
+    centerLat: numberValue(input.center_lat, trace[0]?.lat ?? 0),
+    centerLng: numberValue(input.center_lng, trace[0]?.lng ?? 0),
+  };
+}
+
+export function parseRouteDetail(value: unknown): QuestRoute {
+  const input = generatedRoute(value, "Route detail");
+  const slug = requiredSlug(input, "Route detail");
+  const route = routePoints(input.route);
+  const geometryStatus = route.length > 1 ? "ready" : "missing";
+
+  return {
+    ...commonRouteFields(input, slug, geometryStatus),
     route,
     centerLat: numberValue(input.center_lat, route[0]?.lat ?? 0),
     centerLng: numberValue(input.center_lng, route[0]?.lng ?? 0),
     midIdx: numberValue(input.mid_idx, Math.floor(route.length / 2)),
-    replay: {
-      replayMode: bestInEarth ? "earth" : "atlas",
-      replayEligible: lifecycle === "completed" && route.length > 1,
-      bestInEarth,
-      geometryStatus: route.length > 1 ? "ready" : "missing",
-    },
-    raw: input,
   };
+}
+
+export function hasRouteGeometry(route: QuestRoute) {
+  return route.replay.geometryStatus === "ready" && route.route.length > 1;
 }

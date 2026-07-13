@@ -1,4 +1,5 @@
 import { Menu } from "lucide-react";
+import { Suspense } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 
 import { AppSidebar } from "@/components/app-sidebar";
@@ -34,7 +35,15 @@ export function AppShell() {
           </div>
         </header>
         <div className="mx-auto grid w-full max-w-7xl flex-1 gap-6 p-4 sm:p-6">
-          <Outlet />
+          <Suspense
+            fallback={
+              <div className="rounded-md border border-border bg-card p-5 text-sm text-muted-foreground">
+                Loading view.
+              </div>
+            }
+          >
+            <Outlet />
+          </Suspense>
         </div>
       </SidebarInset>
     </SidebarProvider>

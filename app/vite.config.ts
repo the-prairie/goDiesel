@@ -10,6 +10,9 @@ export default defineConfig({
   },
   build: {
     target: "esnext",
+    // Atlas is lazy-loaded and carries the Three.js runtime. Keep its
+    // minified budget explicit while the initial shell stays below 500 kB.
+    chunkSizeWarningLimit: 600,
   },
   resolve: {
     alias: {

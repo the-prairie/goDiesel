@@ -1,13 +1,29 @@
-import { createHashRouter, Navigate, RouterProvider, useNavigate } from "react-router-dom";
+import { lazy } from "react";
+import { createHashRouter, Navigate, RouterProvider } from "react-router-dom";
 
 import { AppShell } from "@/components/app-shell";
-import { APP_PATHS, canonicalizeLegacyQuestHash, routeDetailPath } from "@/navigation";
-import { AdminPage } from "@/pages/admin-page";
-import { AtlasPage } from "@/pages/atlas-page";
-import { FinderPage } from "@/pages/finder-page";
-import { ReplayPage } from "@/pages/replay-page";
-import { RouteDetailPage } from "@/pages/route-detail-page";
-import { RoutesPage } from "@/pages/routes-page";
+import { APP_PATHS, canonicalizeLegacyQuestHash } from "@/navigation";
+
+const AdminPage = lazy(() =>
+  import("@/pages/admin-page").then((module) => ({ default: module.AdminPage })),
+);
+const AtlasPage = lazy(() =>
+  import("@/pages/atlas-page").then((module) => ({ default: module.AtlasPage })),
+);
+const FinderPage = lazy(() =>
+  import("@/pages/finder-page").then((module) => ({ default: module.FinderPage })),
+);
+const ReplayPage = lazy(() =>
+  import("@/pages/replay-page").then((module) => ({ default: module.ReplayPage })),
+);
+const RouteDetailPage = lazy(() =>
+  import("@/pages/route-detail-page").then((module) => ({
+    default: module.RouteDetailPage,
+  })),
+);
+const RoutesPage = lazy(() =>
+  import("@/pages/routes-page").then((module) => ({ default: module.RoutesPage })),
+);
 
 canonicalizeLegacyQuestHash();
 window.addEventListener("hashchange", canonicalizeLegacyQuestHash);
@@ -17,7 +33,7 @@ const router = createHashRouter([
     element: <AppShell />,
     children: [
       { index: true, element: <Navigate to={APP_PATHS.atlas} replace /> },
-      { path: APP_PATHS.atlas.slice(1), element: <AtlasRoute /> },
+      { path: APP_PATHS.atlas.slice(1), element: <AtlasPage /> },
       { path: APP_PATHS.finder.slice(1), element: <FinderPage /> },
       { path: APP_PATHS.routes.slice(1), element: <RoutesPage /> },
       { path: "routes/:routeSlug", element: <RouteDetailPage /> },
@@ -31,12 +47,4 @@ const router = createHashRouter([
 
 export function AppRouter() {
   return <RouterProvider router={router} />;
-}
-
-function AtlasRoute() {
-  const navigate = useNavigate();
-
-  return (
-    <AtlasPage onOpenRoute={(route) => navigate(routeDetailPath(route.slug))} />
-  );
 }

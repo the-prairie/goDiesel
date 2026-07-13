@@ -16,11 +16,10 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { completedRoutes, routes } from "@/data/routes";
+import routeStats from "@/data/generated/route-stats.json";
 import { APP_PATHS, APP_SECTIONS } from "@/navigation";
 
 export function AppSidebar() {
-  const totalKm = completedRoutes.reduce((sum, route) => sum + route.distanceKm, 0);
   const { isMobile, setOpenMobile } = useSidebar();
   const location = useLocation();
 
@@ -100,11 +99,11 @@ export function AppSidebar() {
         <div className="grid gap-2 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
           <div className="flex items-center gap-2 text-foreground">
             <Database className="size-4" aria-hidden="true" />
-            <span>{routes.length} route records</span>
+            <span>{routeStats.route_count} route records</span>
           </div>
           <div className="flex items-center gap-2">
             <Map className="size-4" aria-hidden="true" />
-            <span>{totalKm.toFixed(0)} completed km</span>
+            <span>{routeStats.completed_km.toFixed(0)} completed km</span>
           </div>
         </div>
       </SidebarFooter>
