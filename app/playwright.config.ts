@@ -3,6 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
+  workers: 1,
   retries: 0,
   reporter: "list",
   use: {
@@ -11,9 +12,10 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   webServer: {
-    command: "npm run dev -- --port 8791",
+    command: "npm run build && npm run preview -- --port 8791",
     url: "http://127.0.0.1:8791",
-    reuseExistingServer: true,
+    reuseExistingServer: false,
+    timeout: 120_000,
   },
   projects: [
     {

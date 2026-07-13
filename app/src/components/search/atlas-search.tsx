@@ -1,13 +1,9 @@
 import { Search } from "lucide-react";
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useMemo } from "react";
 
 import type { RouteRegion } from "@/data/route-regions";
 import type { RouteSummary } from "@/domain/routes";
-
-interface SelectedSearchResult {
-  key: string;
-  query: string;
-}
+import { cn } from "@/lib/utils";
 
 type AtlasSearchState =
   | "initial"
@@ -23,6 +19,10 @@ interface AtlasSearchProps {
   regions: RouteRegion[];
   onSelectRegion: (region: RouteRegion) => void;
   onOpenRoute: (route: RouteSummary) => void;
+  query: string;
+  onQueryChange: (query: string) => void;
+  selectedRegion?: RouteRegion;
+  className?: string;
 }
 
 function normalize(value: string) {
@@ -37,16 +37,16 @@ function searchState({
   query,
   deferredQuery,
   hasResults,
-  selectedResult,
+  selectionActive,
   unsupported,
 }: {
   query: string;
   deferredQuery: string;
   hasResults: boolean;
-  selectedResult: SelectedSearchResult | null;
+  selectionActive: boolean;
   unsupported: boolean;
 }): AtlasSearchState {
-  if (selectedResult?.key && selectedResult.query === query) return "selected-result";
+  if (selectionActive && query !== "") return "selected-result";
   if (query === "") return "initial";
   if (unsupported) return "unsupported-query";
   if (query !== deferredQuery) return "loading";
@@ -60,9 +60,11 @@ export function AtlasSearch({
   regions,
   onSelectRegion,
   onOpenRoute,
+  query,
+  onQueryChange,
+  selectedRegion,
+  className,
 }: AtlasSearchProps) {
-  const [query, setQuery] = useState("");
-  const [selectedResult, setSelectedResult] = useState<SelectedSearchResult | null>(null);
   const deferredQuery = useDeferredValue(query);
   const normalizedQuery = normalize(deferredQuery);
   const unsupported = query.length > 0 && isUnsupportedQuery(query);
@@ -107,25 +109,24 @@ export function AtlasSearch({
     query,
     deferredQuery,
     hasResults,
-    selectedResult,
+    selectionActive: Boolean(selectedRegion),
     unsupported,
   });
 
   function selectRegion(region: RouteRegion) {
-    setSelectedResult({ key: `region:${region.name}`, query: region.name });
-    setQuery(region.name);
     onSelectRegion(region);
   }
 
   function selectRoute(route: RouteSummary) {
-    setSelectedResult({ key: `route:${route.slug}`, query: route.name });
-    setQuery(route.name);
     onOpenRoute(route);
   }
 
   return (
     <section
-      className="rounded-md border border-border bg-card p-4"
+      className={cn(
+        "rounded-md border border-border bg-card/92 p-4 shadow-2xl backdrop-blur",
+        className,
+      )}
       aria-label="Atlas search"
       data-state={state}
     >
@@ -137,15 +138,14 @@ export function AtlasSearch({
         <input
           value={query}
           onChange={(event) => {
-            setQuery(event.target.value);
-            setSelectedResult(null);
+            onQueryChange(event.target.value);
           }}
           placeholder="Search regions, routes, replay-worthy days"
           className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
         />
       </div>
 
-      <div className="mt-3 text-sm text-muted-foreground">
+      <div className="atlas-search-status mt-3 text-sm text-muted-foreground">
         {state === "initial" && "Start with a place, route name, ride, run, or replay quality."}
         {state === "typing" && "Keep typing to search completed route memories."}
         {state === "loading" && "Searching completed memories."}
@@ -157,7 +157,7 @@ export function AtlasSearch({
       </div>
 
       {state === "grouped-results" ? (
-        <div className="mt-4 grid gap-4">
+        <div className="atlas-search-results mt-4 grid gap-4">
           <ResultGroup title="Regions">
             {results.regions.map((region) => (
               <button

@@ -86,3 +86,96 @@ a {
   --sidebar-border: hsl(240 3.7% 15.9%);
   --sidebar-ring: hsl(217.2 91.2% 59.8%);
 }
+
+@media (max-width: 639px) {
+  .atlas-region-inspector {
+    max-height: clamp(6rem, calc(100dvh - 24rem), 44dvh);
+  }
+}
+
+@media (max-height: 576px) {
+  .atlas-intro {
+    max-width: calc(100% - 26rem);
+  }
+
+  .atlas-intro h1 {
+    font-size: 1.5rem;
+    line-height: 1.75rem;
+  }
+
+  .atlas-intro p {
+    display: none;
+  }
+
+  .atlas-search-panel {
+    right: 1.25rem;
+    left: auto;
+    top: 1.25rem;
+    width: 22.5rem;
+    padding: 0.5rem;
+    max-height: calc(100dvh - 13.75rem);
+  }
+
+  .atlas-search-panel > label,
+  .atlas-search-status {
+    display: none;
+  }
+
+  .atlas-search-panel > div:first-of-type {
+    margin-top: 0;
+  }
+
+  .atlas-region-inspector {
+    right: 1.25rem;
+    bottom: 5rem;
+    top: auto;
+    max-height: 4rem;
+    flex-direction: row;
+  }
+
+  .atlas-region-inspector > div:first-child {
+    width: 9rem;
+    flex: 0 0 9rem;
+    padding: 0.5rem;
+    border-right: 1px solid hsl(var(--border));
+    border-bottom: 0;
+  }
+
+  .atlas-region-inspector p {
+    display: none;
+  }
+
+  .atlas-region-inspector > div:first-child > div > div:first-child {
+    display: none;
+  }
+
+  .atlas-region-inspector h2 {
+    margin-top: 0;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+
+  .atlas-region-inspector > div:last-child {
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .atlas-region-inspector > div:last-child > button {
+    min-height: 0;
+    flex: 0 0 12rem;
+    padding: 0.5rem 0.75rem;
+  }
+}
+
+@media (max-width: 639px) and (max-height: 576px) {
+  .atlas-intro {
+    display: none;
+  }
+
+  .atlas-search-panel {
+    right: 1rem;
+    left: 1rem;
+    width: auto;
+  }
+}

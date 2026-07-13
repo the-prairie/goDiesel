@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import {
   AdditiveBlending,
   BackSide,
@@ -34,6 +34,7 @@ interface AtlasGlobeProps {
   selectedRegion?: RouteRegion;
   onSelectRegion: (region: RouteRegion) => void;
   onOpenRoute: (route: RouteSummary) => void;
+  className?: string;
 }
 
 interface GlobeRefs {
@@ -63,8 +64,9 @@ interface GlobeRefs {
   };
 }
 
-const EARTH_TEXTURE =
-  "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_atmos_2048.jpg";
+const EARTH_TEXTURE = `${import.meta.env.BASE_URL}assets/earth-atmos-2048.jpg`;
+const DEFAULT_ROTATION = { x: 0.48, y: -0.18 };
+const DEFAULT_CAMERA_DISTANCE = 6.4;
 
 function latLngToVector3(lat: number, lng: number, radius = 2.42) {
   const latRad = (lat * Math.PI) / 180;
@@ -115,17 +117,18 @@ function routeToGlobeHeatPoints(route: RouteSummary, radius = 2.505) {
     .map((point: RoutePoint) => latLngToVector3(point.lat, point.lng, radius));
 }
 
-function makeGlobeHeatLine(route: RouteSummary, regionIndex: number) {
+function makeGlobeHeatLine(route: RouteSummary, regionIndex: number, density: number) {
   const points = routeToGlobeHeatPoints(route);
   if (points.length < 2) return null;
 
   const ride = route.type === "Ride";
   const best = route.replay.bestInEarth;
+  const baseOpacity = Math.min(0.86, 0.34 + density * 0.42 + (best ? 0.08 : 0));
   const curve = new CatmullRomCurve3(points);
   const material = new MeshBasicMaterial({
     color: best ? 0xe8d49a : ride ? 0xff6a3d : 0x00d7ff,
     transparent: true,
-    opacity: best ? 0.82 : 0.62,
+    opacity: baseOpacity,
     blending: AdditiveBlending,
     depthTest: true,
   });
@@ -141,7 +144,7 @@ function makeGlobeHeatLine(route: RouteSummary, regionIndex: number) {
   );
 
   line.userData.regionIndex = regionIndex;
-  line.userData.baseOpacity = best ? 0.82 : 0.62;
+  line.userData.baseOpacity = baseOpacity;
 
   return line;
 }
@@ -166,6 +169,7 @@ export function AtlasGlobe({
   selectedRegion,
   onSelectRegion,
   onOpenRoute,
+  className,
 }: AtlasGlobeProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const labelRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -182,8 +186,8 @@ export function AtlasGlobe({
     heatLines: [],
     labelBounds: [],
     viewport: { width: 1, height: 1 },
-    cameraDistance: 6.4,
-    targetRotation: new Vector2(-0.22, -0.72),
+    cameraDistance: DEFAULT_CAMERA_DISTANCE,
+    targetRotation: new Vector2(DEFAULT_ROTATION.x, DEFAULT_ROTATION.y),
     drag: {
       active: false,
       moved: false,
@@ -193,11 +197,6 @@ export function AtlasGlobe({
       rotY: 0,
     },
   });
-
-  const totalKm = useMemo(
-    () => regions.reduce((sum, region) => sum + region.totalKm, 0),
-    [regions],
-  );
 
   useEffect(() => {
     selectedRegionRef.current = selectedRegion;
@@ -216,7 +215,11 @@ export function AtlasGlobe({
     const scene = new Scene();
     const camera = new PerspectiveCamera(42, 1, 0.1, 100);
     camera.position.set(0, 0.35, state.cameraDistance);
-    const renderer = new WebGLRenderer({ canvas: canvasEl, antialias: true, alpha: true });
+    const renderer = new WebGLRenderer({
+      canvas: canvasEl,
+      antialias: true,
+      alpha: true,
+    });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 
     const root = new Group();
@@ -239,10 +242,12 @@ export function AtlasGlobe({
         material.map = texture;
         material.color.set(0x9fb7ac);
         material.needsUpdate = true;
+        canvasEl.dataset.textureStatus = "loaded";
       },
       undefined,
       () => {
         (globe.material as MeshBasicMaterial).color.set(0x10242c);
+        canvasEl.dataset.textureStatus = "fallback";
       },
     );
 
@@ -267,9 +272,11 @@ export function AtlasGlobe({
 
     state.anchors = [];
     state.heatLines = [];
+    const maxRegionRoutes = Math.max(...regions.map((region) => region.routes.length), 1);
     regions.forEach((region, regionIndex) => {
+      const density = Math.sqrt(region.routes.length / maxRegionRoutes);
       region.routes.forEach((route) => {
-        const line = makeGlobeHeatLine(route, regionIndex);
+        const line = makeGlobeHeatLine(route, regionIndex, density);
         if (!line) return;
         root.add(line);
         state.heatLines.push(line);
@@ -294,6 +301,14 @@ export function AtlasGlobe({
     state.camera = camera;
     state.renderer = renderer;
     state.root = root;
+    canvasEl.dataset.heatLines = String(state.heatLines.length);
+
+    function syncInteractionState() {
+      canvasEl.dataset.targetRotationX = state.targetRotation.x.toFixed(4);
+      canvasEl.dataset.targetRotationY = state.targetRotation.y.toFixed(4);
+      canvasEl.dataset.cameraTarget = state.cameraDistance.toFixed(3);
+    }
+    syncInteractionState();
 
     function resize() {
       const rect = canvasEl.getBoundingClientRect();
@@ -306,10 +321,18 @@ export function AtlasGlobe({
     }
 
     function syncLabelBounds() {
-      state.labelBounds = labelRefs.current.map((label) => ({
-        width: label?.offsetWidth || 130,
-        height: label?.offsetHeight || 26,
-      }));
+      state.labelBounds = labelRefs.current.map((label) => {
+        if (!label) return { width: 150, height: 30 };
+        label.style.visibility = "hidden";
+        label.style.display = "flex";
+        const bounds = {
+          width: label.offsetWidth || 150,
+          height: label.offsetHeight || 30,
+        };
+        label.style.display = "none";
+        label.style.visibility = "";
+        return bounds;
+      });
     }
 
     function updateLabels() {
@@ -357,11 +380,28 @@ export function AtlasGlobe({
             ),
         );
         const inFrame =
-          box.right > 8 &&
-          box.left < state.viewport.width - 8 &&
-          box.bottom > 8 &&
-          box.top < state.viewport.height - 8;
-        const show = item.visible && inFrame && (item.selected || !collides);
+          box.left > 8 &&
+          box.right < state.viewport.width - 8 &&
+          box.top > 8 &&
+          box.bottom < state.viewport.height - 8;
+        const compact = state.viewport.width < 640;
+        const blockedByOverlay = compact
+          ? box.top < 250
+          : box.top < 190 &&
+            (box.left < Math.min(520, state.viewport.width * 0.5) ||
+              box.right > state.viewport.width - 380);
+        const blockedByInspector = selectedRegionRef.current
+          ? compact
+            ? box.bottom > state.viewport.height * 0.52
+            : box.right > state.viewport.width - 390 && box.bottom > 190
+          : false;
+        const show =
+          item.visible &&
+          inFrame &&
+          !blockedByOverlay &&
+          !blockedByInspector &&
+          (!compact || placed.length < 5 || item.selected) &&
+          (item.selected || !collides);
         item.label.style.left = `${item.x}px`;
         item.label.style.top = `${item.y}px`;
         item.label.style.display = show ? "flex" : "none";
@@ -378,7 +418,11 @@ export function AtlasGlobe({
         const material = line.material as MeshBasicMaterial;
         const region = regions[line.userData.regionIndex];
         const selected = selectedRegionRef.current?.name === region?.name;
-        const target = selected ? 0.92 : line.userData.baseOpacity;
+        const target = selected
+          ? 0.94
+          : selectedRegionRef.current
+            ? line.userData.baseOpacity * 0.3
+            : line.userData.baseOpacity;
         material.opacity += (target - material.opacity) * 0.08;
       });
       updateLabels();
@@ -421,6 +465,7 @@ export function AtlasGlobe({
         -1.1,
         1.1,
       );
+      syncInteractionState();
       return true;
     }
 
@@ -434,7 +479,11 @@ export function AtlasGlobe({
     function handlePointerDown(event: PointerEvent) {
       event.preventDefault();
       beginDrag(event.clientX, event.clientY);
-      canvasEl.setPointerCapture?.(event.pointerId);
+      try {
+        canvasEl.setPointerCapture?.(event.pointerId);
+      } catch {
+        // Synthetic and assistive pointer events may not own an active pointer.
+      }
       canvasEl.style.cursor = "grabbing";
     }
 
@@ -448,7 +497,9 @@ export function AtlasGlobe({
     }
 
     function handlePointerUp(event: PointerEvent) {
-      canvasEl.releasePointerCapture?.(event.pointerId);
+      if (canvasEl.hasPointerCapture?.(event.pointerId)) {
+        canvasEl.releasePointerCapture(event.pointerId);
+      }
       canvasEl.style.cursor = "grab";
       endDrag();
     }
@@ -463,20 +514,49 @@ export function AtlasGlobe({
       event.preventDefault();
       state.cameraDistance = MathUtils.clamp(
         state.cameraDistance + event.deltaY * 0.004,
-        4.8,
+        3.2,
         9.2,
       );
+      syncInteractionState();
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      const rotationStep = 0.12;
+      if (event.key === "ArrowLeft") state.targetRotation.y -= rotationStep;
+      else if (event.key === "ArrowRight") state.targetRotation.y += rotationStep;
+      else if (event.key === "ArrowUp") {
+        state.targetRotation.x = MathUtils.clamp(
+          state.targetRotation.x - rotationStep,
+          -1.1,
+          1.1,
+        );
+      } else if (event.key === "ArrowDown") {
+        state.targetRotation.x = MathUtils.clamp(
+          state.targetRotation.x + rotationStep,
+          -1.1,
+          1.1,
+        );
+      } else if (event.key === "+" || event.key === "=") {
+        state.cameraDistance = MathUtils.clamp(state.cameraDistance - 0.5, 3.2, 9.2);
+      } else if (event.key === "-" || event.key === "_") {
+        state.cameraDistance = MathUtils.clamp(state.cameraDistance + 0.5, 3.2, 9.2);
+      } else return;
+      syncInteractionState();
+      event.preventDefault();
     }
 
     resize();
     syncLabelBounds();
     animate();
+    const resizeObserver = new ResizeObserver(resize);
+    resizeObserver.observe(canvasEl);
     canvasEl.addEventListener("pointerdown", handlePointerDown);
     canvasEl.addEventListener("pointermove", handlePointerMove);
     canvasEl.addEventListener("pointerup", handlePointerUp);
     canvasEl.addEventListener("pointercancel", handlePointerUp);
     canvasEl.addEventListener("click", handleClick);
     canvasEl.addEventListener("wheel", handleWheel, { passive: false });
+    canvasEl.addEventListener("keydown", handleKeyDown);
     window.addEventListener("resize", resize);
 
     return () => {
@@ -487,6 +567,8 @@ export function AtlasGlobe({
       canvasEl.removeEventListener("pointercancel", handlePointerUp);
       canvasEl.removeEventListener("click", handleClick);
       canvasEl.removeEventListener("wheel", handleWheel);
+      canvasEl.removeEventListener("keydown", handleKeyDown);
+      resizeObserver.disconnect();
       window.removeEventListener("resize", resize);
       disposeObject(root);
       renderer.dispose();
@@ -502,17 +584,42 @@ export function AtlasGlobe({
 
   useEffect(() => {
     const state = refs.current;
-    if (!selectedRegion || !state.targetRotation) return;
-    state.targetRotation.x = -(selectedRegion.centerLat * Math.PI) / 360;
-    state.targetRotation.y = -((selectedRegion.centerLng + 12) * Math.PI) / 180;
+    if (!state.targetRotation) return;
+    if (!selectedRegion) {
+      state.targetRotation.set(DEFAULT_ROTATION.x, DEFAULT_ROTATION.y);
+      state.cameraDistance = DEFAULT_CAMERA_DISTANCE;
+      const canvas = canvasRef.current;
+      if (canvas) {
+        canvas.dataset.targetRotationX = state.targetRotation.x.toFixed(4);
+        canvas.dataset.targetRotationY = state.targetRotation.y.toFixed(4);
+        canvas.dataset.cameraTarget = state.cameraDistance.toFixed(3);
+      }
+      return;
+    }
+    state.targetRotation.x = (selectedRegion.centerLat * Math.PI) / 180;
+    state.targetRotation.y = -(selectedRegion.centerLng * Math.PI) / 180;
+    state.cameraDistance = 4.35;
+    const canvas = canvasRef.current;
+    if (canvas) {
+      canvas.dataset.targetRotationX = state.targetRotation.x.toFixed(4);
+      canvas.dataset.targetRotationY = state.targetRotation.y.toFixed(4);
+      canvas.dataset.cameraTarget = state.cameraDistance.toFixed(3);
+    }
   }, [selectedRegionName, selectedRegion]);
 
   return (
-    <div className="relative min-h-[520px] overflow-hidden rounded-md border border-border bg-[radial-gradient(circle_at_50%_45%,hsl(var(--primary)/0.1),transparent_42%),linear-gradient(145deg,#02070a,#07131a)]">
+    <div
+      className={cn(
+        "relative min-h-[520px] overflow-hidden rounded-md border border-border bg-[#02070a]",
+        className,
+      )}
+    >
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 size-full cursor-grab touch-none"
+        className="absolute inset-0 size-full cursor-grab touch-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
         aria-label="Interactive route globe"
+        aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown + -"
+        tabIndex={0}
       />
       <div className="pointer-events-none absolute inset-0">
         {regions.map((region, index) => (
@@ -522,29 +629,17 @@ export function AtlasGlobe({
               labelRefs.current[index] = node;
             }}
             type="button"
+            data-globe-region={region.name}
+            aria-label={`Select ${region.name} on globe`}
             onClick={() => onSelectRegion(region)}
             className={cn(
-              "pointer-events-auto absolute hidden -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-md border border-border bg-card/80 px-3 py-1.5 text-[11px] font-semibold uppercase text-muted-foreground shadow-xl backdrop-blur transition-colors hover:border-primary hover:text-foreground data-[active=true]:border-primary data-[active=true]:text-primary",
+              "pointer-events-auto absolute hidden -translate-x-1/2 -translate-y-1/2 items-center gap-2 whitespace-nowrap rounded-md border border-border bg-card/80 px-3 py-1.5 text-[11px] font-semibold uppercase text-muted-foreground shadow-xl backdrop-blur transition-colors hover:border-primary hover:text-foreground data-[active=true]:border-primary data-[active=true]:text-primary",
             )}
           >
             <span className="size-2 rounded-full bg-primary shadow-[0_0_18px_hsl(var(--primary))]" />
             {region.name} · {region.routes.length}
           </button>
         ))}
-      </div>
-      <div className="pointer-events-none absolute left-4 top-4 rounded-md border border-border bg-background/80 px-4 py-3 backdrop-blur">
-        <div className="text-xs font-semibold uppercase text-primary">
-          Quest globe
-        </div>
-        <div className="mt-1 text-sm text-muted-foreground">
-          {regions.length} regions · {totalKm.toFixed(0)} km of completed traces
-        </div>
-      </div>
-      <div className="pointer-events-none absolute bottom-4 left-4 max-w-xs rounded-md border border-border bg-background/80 px-4 py-3 text-xs leading-5 text-muted-foreground backdrop-blur">
-        Drag to rotate. Scroll to zoom. Pick a route region to open its memories.
-      </div>
-      <div className="absolute bottom-4 right-4 hidden rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold uppercase text-primary sm:block">
-        Heat traces, not pins
       </div>
     </div>
   );
