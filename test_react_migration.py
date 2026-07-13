@@ -1,4 +1,6 @@
+import ast
 import json
+import shutil
 from pathlib import Path
 
 
@@ -91,9 +93,52 @@ def test_generated_route_publication_is_staged_and_rollback_safe():
 
     assert "detail_payloads = {}" in build_source
     assert "TemporaryDirectory" in build_source
-    assert "previous_generated_files" in build_source
-    assert "details_backup" in build_source
+    assert "recover_interrupted_route_publication()" in build_source
+    assert "ROUTE_GENERATION_BACKUP / 'ready'" in build_source
+    assert "metadata_backup" in build_source
+    assert "shutil.copytree(REACT_ROUTE_DETAILS, backup_details)" in build_source
     assert "stale_route_file.unlink()" not in build_source
+
+
+def test_interrupted_route_publication_restores_last_complete_generation(tmp_path):
+    build_tree = ast.parse((ROOT / "build.py").read_text())
+    recovery_function = next(
+        node
+        for node in build_tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "recover_interrupted_route_publication"
+    )
+
+    route_details = tmp_path / "public/data/routes"
+    route_details.mkdir(parents=True)
+    (route_details / "route.json").write_text("old route")
+    generated_files = tuple(tmp_path / f"generated-{index}.json" for index in range(3))
+    for path in generated_files:
+        path.write_text("old metadata")
+
+    backup = route_details.parent / ".route-generation-backup"
+    shutil.copytree(route_details, backup / "routes")
+    (backup / "metadata").mkdir()
+    for index, path in enumerate(generated_files):
+        shutil.copyfile(path, backup / "metadata" / f"{index}.bin")
+    (backup / "ready").touch()
+
+    (route_details / "route.json").write_text("new route")
+    for path in generated_files:
+        path.write_text("new metadata")
+
+    namespace = {
+        "shutil": shutil,
+        "ROUTE_GENERATION_BACKUP": backup,
+        "REACT_ROUTE_DETAILS": route_details,
+        "REACT_GENERATED_FILES": generated_files,
+    }
+    exec(compile(ast.Module(body=[recovery_function], type_ignores=[]), "build.py", "exec"), namespace)
+    namespace["recover_interrupted_route_publication"]()
+
+    assert (route_details / "route.json").read_text() == "old route"
+    assert all(path.read_text() == "old metadata" for path in generated_files)
+    assert not backup.exists()
 
 
 def test_atlas_globe_ports_route_heat_traces_and_interaction():

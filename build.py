@@ -31,6 +31,12 @@ CARDS.mkdir(exist_ok=True)
 REACT_DATA = QUESTS / 'app' / 'src' / 'data'
 REACT_GENERATED_DATA = REACT_DATA / 'generated'
 REACT_ROUTE_DETAILS = QUESTS / 'app' / 'public' / 'data' / 'routes'
+REACT_GENERATED_FILES = (
+    REACT_DATA / 'quests.generated.json',
+    REACT_GENERATED_DATA / 'routes.manifest.json',
+    REACT_GENERATED_DATA / 'route-stats.json',
+)
+ROUTE_GENERATION_BACKUP = REACT_ROUTE_DETAILS.parent / '.route-generation-backup'
 BEST_IN_EARTH_IDS = {
     '13935098460', '14349820520', '17636880071', '17654151284',
     '13358070690', '9959792315', '9934715694',
@@ -38,6 +44,36 @@ BEST_IN_EARTH_IDS = {
 
 TEAL = '#00F19F'; STRAIN = '#0093E7'; SLEEP = '#7BA1BB'
 BG = (16, 21, 24); BG_HEX = '#101518'
+
+
+def recover_interrupted_route_publication():
+    if not ROUTE_GENERATION_BACKUP.exists():
+        return
+    ready_marker = ROUTE_GENERATION_BACKUP / 'ready'
+    if not ready_marker.exists():
+        shutil.rmtree(ROUTE_GENERATION_BACKUP)
+        return
+
+    backup_details = ROUTE_GENERATION_BACKUP / 'routes'
+    if REACT_ROUTE_DETAILS.exists():
+        shutil.rmtree(REACT_ROUTE_DETAILS)
+    if backup_details.exists():
+        shutil.copytree(backup_details, REACT_ROUTE_DETAILS)
+
+    metadata_backup = ROUTE_GENERATION_BACKUP / 'metadata'
+    for index, path in enumerate(REACT_GENERATED_FILES):
+        backup_file = metadata_backup / f'{index}.bin'
+        missing_marker = metadata_backup / f'{index}.missing'
+        if backup_file.exists():
+            temp_path = path.with_name(f'.{path.name}.recovery')
+            shutil.copyfile(backup_file, temp_path)
+            temp_path.replace(path)
+        elif missing_marker.exists():
+            path.unlink(missing_ok=True)
+    shutil.rmtree(ROUTE_GENERATION_BACKUP)
+
+
+recover_interrupted_route_publication()
 
 # ── API key ──
 def env_value(name):
@@ -603,16 +639,6 @@ def write_text_atomic(path, content):
     temp_path.replace(path)
 
 
-previous_generated_files = {
-    path: path.read_bytes() if path.exists() else None for path in generated_files
-}
-details_backup = REACT_ROUTE_DETAILS.with_name(f'{REACT_ROUTE_DETAILS.name}.backup')
-if details_backup.exists():
-    if REACT_ROUTE_DETAILS.exists():
-        shutil.rmtree(details_backup)
-    else:
-        details_backup.replace(REACT_ROUTE_DETAILS)
-
 with tempfile.TemporaryDirectory(
     dir=REACT_ROUTE_DETAILS.parent, prefix='.routes-staging-'
 ) as staging_directory:
@@ -620,28 +646,32 @@ with tempfile.TemporaryDirectory(
     for filename, content in detail_payloads.items():
         (staging_path / filename).write_text(content, encoding='utf-8')
 
+    if ROUTE_GENERATION_BACKUP.exists():
+        raise RuntimeError('Route generation backup already exists after recovery')
+    ROUTE_GENERATION_BACKUP.mkdir()
+    backup_details = ROUTE_GENERATION_BACKUP / 'routes'
+    if REACT_ROUTE_DETAILS.exists():
+        shutil.copytree(REACT_ROUTE_DETAILS, backup_details)
+    metadata_backup = ROUTE_GENERATION_BACKUP / 'metadata'
+    metadata_backup.mkdir()
+    for index, path in enumerate(REACT_GENERATED_FILES):
+        if path.exists():
+            shutil.copyfile(path, metadata_backup / f'{index}.bin')
+        else:
+            (metadata_backup / f'{index}.missing').touch()
+    (ROUTE_GENERATION_BACKUP / 'ready').touch()
+
     try:
         if REACT_ROUTE_DETAILS.exists():
-            REACT_ROUTE_DETAILS.replace(details_backup)
+            shutil.rmtree(REACT_ROUTE_DETAILS)
         staging_path.replace(REACT_ROUTE_DETAILS)
         for path, content in generated_files.items():
             write_text_atomic(path, content)
     except Exception:
-        if REACT_ROUTE_DETAILS.exists():
-            shutil.rmtree(REACT_ROUTE_DETAILS)
-        if details_backup.exists():
-            details_backup.replace(REACT_ROUTE_DETAILS)
-        for path, previous_content in previous_generated_files.items():
-            if previous_content is None:
-                path.unlink(missing_ok=True)
-            else:
-                temp_path = path.with_name(f'.{path.name}.rollback')
-                temp_path.write_bytes(previous_content)
-                temp_path.replace(path)
+        recover_interrupted_route_publication()
         raise
     else:
-        if details_backup.exists():
-            shutil.rmtree(details_backup)
+        shutil.rmtree(ROUTE_GENERATION_BACKUP)
 
 # Build app HTML — same as previous version but with Share-card button
 HTML_TEMPLATE_PATH = Path('/tmp/quests_template.html')
