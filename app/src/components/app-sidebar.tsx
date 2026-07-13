@@ -1,13 +1,4 @@
-import {
-  Compass,
-  Database,
-  Globe2,
-  Map,
-  Route,
-  Search,
-  Settings,
-  X,
-} from "lucide-react";
+import { Database, Map, X } from "lucide-react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 
 import {
@@ -26,14 +17,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { completedRoutes, routes } from "@/data/routes";
-
-const navItems = [
-  { path: "/atlas", label: "Atlas", icon: Globe2 },
-  { path: "/finder", label: "Finder", icon: Search },
-  { path: "/routes", label: "Routes", icon: Route },
-  { path: "/replay", label: "Replay", icon: Compass },
-  { path: "/admin", label: "Admin", icon: Settings },
-];
+import { APP_PATHS, APP_SECTIONS } from "@/navigation";
 
 export function AppSidebar() {
   const totalKm = completedRoutes.reduce((sum, route) => sum + route.distanceKm, 0);
@@ -47,7 +31,7 @@ export function AppSidebar() {
           <SidebarMenu className="min-w-0 flex-1">
             <SidebarMenuItem>
               <SidebarMenuButton asChild size="lg" tooltip="goDiesel Atlas">
-                <Link to="/atlas" onClick={() => setOpenMobile(false)}>
+                <Link to={APP_PATHS.atlas} onClick={() => setOpenMobile(false)}>
                   <span className="size-3 shrink-0 rounded-full bg-primary shadow-[0_0_18px_hsl(var(--primary))]" />
                   <span className="grid min-w-0 flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden">
                     <span className="truncate text-base font-bold">godiesel</span>
@@ -79,28 +63,28 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <nav aria-label="Primary">
               <SidebarMenu>
-                {navItems.map((item) => {
-                  const Icon = item.icon;
+                {APP_SECTIONS.map((section) => {
+                  const Icon = section.icon;
 
                   return (
-                    <SidebarMenuItem key={item.path}>
+                    <SidebarMenuItem key={section.path}>
                       <SidebarMenuButton
                         asChild
                         isActive={
-                          location.pathname === item.path ||
-                          ((item.path === "/routes" || item.path === "/replay") &&
-                            location.pathname.startsWith(`${item.path}/`))
+                          location.pathname === section.path ||
+                          (section.includesChildren &&
+                            location.pathname.startsWith(`${section.path}/`))
                         }
-                        tooltip={item.label}
+                        tooltip={section.label}
                         className="min-h-10"
                       >
                         <NavLink
-                          to={item.path}
-                          end={item.path !== "/routes" && item.path !== "/replay"}
+                          to={section.path}
+                          end={!section.includesChildren}
                           onClick={() => setOpenMobile(false)}
                         >
                           <Icon aria-hidden="true" />
-                          <span>{item.label}</span>
+                          <span>{section.label}</span>
                         </NavLink>
                       </SidebarMenuButton>
                     </SidebarMenuItem>

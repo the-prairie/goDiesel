@@ -7,18 +7,11 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
-
-const sectionLabels: Record<string, string> = {
-  atlas: "Atlas",
-  finder: "Finder",
-  routes: "Routes",
-  replay: "Replay",
-  admin: "Admin",
-};
+import { appSectionForPath } from "@/navigation";
 
 export function AppShell() {
   const location = useLocation();
-  const section = location.pathname.split("/").filter(Boolean)[0] ?? "atlas";
+  const section = appSectionForPath(location.pathname);
 
   return (
     <SidebarProvider>
@@ -33,7 +26,7 @@ export function AppShell() {
           </SidebarTrigger>
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold">
-              {sectionLabels[section] ?? "Atlas"}
+              {section.label}
             </div>
             <div className="truncate text-xs text-muted-foreground">
               Relive where you have been. Discover where to go next.

@@ -18,14 +18,17 @@ def test_app_shell_defines_expected_navigation_and_hash_route_support():
     shell = (APP / "src/components/app-shell.tsx").read_text()
     sidebar = (APP / "src/components/app-sidebar.tsx").read_text()
     router = (APP / "src/router.tsx").read_text()
+    navigation = (APP / "src/navigation.ts").read_text()
 
     for label in ("Atlas", "Finder", "Routes", "Replay", "Admin"):
-      assert label in sidebar
+      assert label in navigation
 
     assert 'createHashRouter' in router
-    assert 'Navigate to="/atlas" replace' in router
-    assert 'window.location.hash.match(/^#quest' in router
-    assert '#/routes/${slug}' in router
+    assert 'Navigate to={APP_PATHS.atlas} replace' in router
+    assert 'canonicalizeLegacyQuestHash()' in router
+    assert 'window.addEventListener("hashchange", canonicalizeLegacyQuestHash)' in router
+    assert 'window.location.hash.match(/^#quest' in navigation
+    assert 'routeDetailPath(decodeURIComponent(match[1]))' in navigation
     assert 'path: "routes/:routeSlug"' in router
     assert 'path: "replay/:routeSlug"' in router
     assert '<NavLink' in sidebar
@@ -92,9 +95,9 @@ def test_atlas_search_models_memory_search_states():
 
 
 def test_replay_picker_pins_selected_route_and_avoids_mobile_nav_overlap():
-    router = (APP / "src/router.tsx").read_text()
+    replay = (APP / "src/pages/replay-page.tsx").read_text()
 
-    assert "const pickerRoutes = selectedRoute" in router
-    assert ".filter((route) => route.slug !== selectedRoute.slug)" in router
-    assert "md:max-h-80 md:overflow-y-auto" in router
-    assert "grid max-h-80 gap-2 overflow-y-auto" not in router
+    assert "const pickerRoutes = selectedRoute" in replay
+    assert ".filter((route) => route.slug !== selectedRoute.slug)" in replay
+    assert "md:max-h-80 md:overflow-y-auto" in replay
+    assert "grid max-h-80 gap-2 overflow-y-auto" not in replay

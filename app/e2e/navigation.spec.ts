@@ -41,6 +41,24 @@ test("every product surface has a canonical URL", async ({ page }) => {
   }
 });
 
+test("canonical product and selected-route URLs load directly", async ({ page }) => {
+  for (const [path, activeNavigation] of [
+    ["atlas", "Atlas"],
+    ["finder", "Finder"],
+    ["routes", "Routes"],
+    ["replay", "Replay"],
+    ["admin", "Admin"],
+    [`routes/${routeSlug}`, "Routes"],
+    [`replay/${routeSlug}`, "Replay"],
+  ] as const) {
+    await page.goto(`/#/${path}`);
+    await expect(page).toHaveURL(new RegExp(`#/${path}$`));
+    await expect(
+      page.getByRole("link", { name: activeNavigation, exact: true }),
+    ).toHaveAttribute("aria-current", "page");
+  }
+});
+
 test("legacy quest links preserve the route in canonical detail", async ({
   page,
 }) => {
@@ -52,6 +70,20 @@ test("legacy quest links preserve the route in canonical detail", async ({
     "href",
     `#/replay/${routeSlug}`,
   );
+});
+
+test("legacy quest links are canonicalized after the app has started", async ({
+  page,
+}) => {
+  await page.goto("/#/finder");
+  await page.evaluate((slug) => {
+    window.location.hash = `quest/${slug}`;
+  }, routeSlug);
+
+  await expect(page).toHaveURL(new RegExp(`#\/routes\/${routeSlug}$`));
+  await expect(
+    page.getByRole("link", { name: "Routes", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
 });
 
 test("mobile navigation opens without covering the current page", async ({
@@ -73,4 +105,54 @@ test("mobile navigation opens without covering the current page", async ({
   await mobileNavigation.getByRole("link", { name: "Routes" }).click();
   await expect(page).toHaveURL(/#\/routes$/);
   await expect(main).toBeVisible();
+});
+
+test("navigation does not persistently overlap Replay across breakpoints", async ({
+  page,
+}) => {
+  for (const viewport of [
+    { width: 1280, height: 900 },
+    { width: 820, height: 900 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto(`/#/replay/${routeSlug}`);
+
+    const layout = await page.evaluate(() => {
+      const main = document.querySelector("main");
+      const sidebar = document.querySelector<HTMLElement>(
+        '[data-slot="sidebar-container"]',
+      );
+      const mainRect = main?.getBoundingClientRect();
+      const sidebarRect = sidebar?.getBoundingClientRect();
+
+      return {
+        viewportWidth: window.innerWidth,
+        documentWidth: document.documentElement.scrollWidth,
+        mainLeft: mainRect?.left ?? 0,
+        mainRight: mainRect?.right ?? 0,
+        sidebarRight:
+          sidebar && getComputedStyle(sidebar).display !== "none"
+            ? (sidebarRect?.right ?? 0)
+            : null,
+      };
+    });
+
+    expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth + 1);
+    expect(layout.mainRight).toBeLessThanOrEqual(layout.viewportWidth + 1);
+    if (layout.sidebarRight !== null) {
+      expect(layout.mainLeft).toBeGreaterThanOrEqual(layout.sidebarRight - 1);
+    }
+
+    if (viewport.width < 768) {
+      const navigationButton = page.getByRole("button", {
+        name: "Open navigation",
+      });
+      await navigationButton.click();
+      const closeButton = page.getByRole("button", { name: "Close navigation" });
+      await expect(closeButton).toBeVisible();
+      await closeButton.click();
+      await expect(closeButton).toBeHidden();
+    }
+  }
 });
