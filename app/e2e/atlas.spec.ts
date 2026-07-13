@@ -280,6 +280,8 @@ for (const viewport of [
   { width: 768, height: 390 },
   { width: 1024, height: 900 },
   { width: 844, height: 390 },
+  { width: 1280, height: 320 },
+  { width: 1440, height: 320 },
 ]) {
   test(`Atlas overlays stay separate at ${viewport.width}x${viewport.height}`, async ({
     page,
@@ -315,10 +317,7 @@ for (const viewport of [
     expect(boxesOverlap(inspectorBox!, controlsBox!)).toBe(false);
     const clearSelection = page.getByRole("button", { name: "Clear selected region" });
     await expect(clearSelection).toBeVisible();
-    if (
-      (viewport.width === 844 && viewport.height === 390) ||
-      (viewport.width === 568 && viewport.height === 320)
-    ) {
+    if (viewport.height === 320 || (viewport.width === 844 && viewport.height === 390)) {
       const firstRoute = inspector.getByRole("button").nth(1);
       await expect(firstRoute).toBeVisible();
       await firstRoute.click();
