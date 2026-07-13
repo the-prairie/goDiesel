@@ -64,8 +64,7 @@ interface GlobeRefs {
   };
 }
 
-const EARTH_TEXTURE =
-  "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_atmos_2048.jpg";
+const EARTH_TEXTURE = `${import.meta.env.BASE_URL}assets/earth-atmos-2048.jpg`;
 const DEFAULT_ROTATION = { x: 0.48, y: -0.18 };
 const DEFAULT_CAMERA_DISTANCE = 6.4;
 
@@ -220,7 +219,6 @@ export function AtlasGlobe({
       canvas: canvasEl,
       antialias: true,
       alpha: true,
-      preserveDrawingBuffer: true,
     });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 
@@ -409,6 +407,10 @@ export function AtlasGlobe({
       canvasEl.dataset.rotationX = root.rotation.x.toFixed(4);
       canvasEl.dataset.rotationY = root.rotation.y.toFixed(4);
       canvasEl.dataset.cameraDistance = camera.position.z.toFixed(3);
+      canvasEl.dataset.targetRotationX = state.targetRotation.x.toFixed(4);
+      canvasEl.dataset.targetRotationY = state.targetRotation.y.toFixed(4);
+      canvasEl.dataset.cameraTarget = state.cameraDistance.toFixed(3);
+      canvasEl.dataset.heatLines = String(state.heatLines.length);
       state.heatLines.forEach((line) => {
         const material = line.material as MeshBasicMaterial;
         const region = regions[line.userData.regionIndex];
@@ -532,7 +534,7 @@ export function AtlasGlobe({
       } else if (event.key === "+" || event.key === "=") {
         state.cameraDistance = MathUtils.clamp(state.cameraDistance - 0.5, 3.2, 9.2);
       } else if (event.key === "-" || event.key === "_") {
-        state.cameraDistance = MathUtils.clamp(state.cameraDistance + 0.5, 4.8, 9.2);
+        state.cameraDistance = MathUtils.clamp(state.cameraDistance + 0.5, 3.2, 9.2);
       } else return;
       event.preventDefault();
     }
@@ -596,7 +598,7 @@ export function AtlasGlobe({
     >
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 size-full cursor-grab touch-none"
+        className="absolute inset-0 size-full cursor-grab touch-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
         aria-label="Interactive route globe"
         aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown + -"
         tabIndex={0}

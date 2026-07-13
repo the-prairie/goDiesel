@@ -1,14 +1,9 @@
 import { Search } from "lucide-react";
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useMemo } from "react";
 
 import type { RouteRegion } from "@/data/route-regions";
 import type { RouteSummary } from "@/domain/routes";
 import { cn } from "@/lib/utils";
-
-interface SelectedSearchResult {
-  key: string;
-  query: string;
-}
 
 type AtlasSearchState =
   | "initial"
@@ -26,6 +21,7 @@ interface AtlasSearchProps {
   onOpenRoute: (route: RouteSummary) => void;
   query: string;
   onQueryChange: (query: string) => void;
+  selectedRegion?: RouteRegion;
   className?: string;
 }
 
@@ -41,16 +37,16 @@ function searchState({
   query,
   deferredQuery,
   hasResults,
-  selectedResult,
+  selectionActive,
   unsupported,
 }: {
   query: string;
   deferredQuery: string;
   hasResults: boolean;
-  selectedResult: SelectedSearchResult | null;
+  selectionActive: boolean;
   unsupported: boolean;
 }): AtlasSearchState {
-  if (selectedResult?.key && selectedResult.query === query) return "selected-result";
+  if (selectionActive && query !== "") return "selected-result";
   if (query === "") return "initial";
   if (unsupported) return "unsupported-query";
   if (query !== deferredQuery) return "loading";
@@ -66,9 +62,9 @@ export function AtlasSearch({
   onOpenRoute,
   query,
   onQueryChange,
+  selectedRegion,
   className,
 }: AtlasSearchProps) {
-  const [selectedResult, setSelectedResult] = useState<SelectedSearchResult | null>(null);
   const deferredQuery = useDeferredValue(query);
   const normalizedQuery = normalize(deferredQuery);
   const unsupported = query.length > 0 && isUnsupportedQuery(query);
@@ -113,17 +109,15 @@ export function AtlasSearch({
     query,
     deferredQuery,
     hasResults,
-    selectedResult,
+    selectionActive: Boolean(selectedRegion),
     unsupported,
   });
 
   function selectRegion(region: RouteRegion) {
-    setSelectedResult({ key: `region:${region.name}`, query });
     onSelectRegion(region);
   }
 
   function selectRoute(route: RouteSummary) {
-    setSelectedResult({ key: `route:${route.slug}`, query });
     onOpenRoute(route);
   }
 
@@ -145,7 +139,6 @@ export function AtlasSearch({
           value={query}
           onChange={(event) => {
             onQueryChange(event.target.value);
-            setSelectedResult(null);
           }}
           placeholder="Search regions, routes, replay-worthy days"
           className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { AtlasControls } from "@/components/globe/atlas-controls";
@@ -12,11 +13,17 @@ import { routeDetailPath } from "@/navigation";
 export function AtlasPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const selectedRegion = routeRegions.find(
-    (region) => region.name === searchParams.get("region"),
-  );
+  const regionParam = searchParams.get("region");
+  const selectedRegion = routeRegions.find((region) => region.name === regionParam);
   const query = searchParams.get("q") ?? "";
   const openRoute = (route: RouteSummary) => navigate(routeDetailPath(route.slug));
+
+  useEffect(() => {
+    if (!regionParam || selectedRegion) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("region");
+    setSearchParams(next, { replace: true });
+  }, [regionParam, searchParams, selectedRegion, setSearchParams]);
 
   function updateSearchParams(
     update: (next: URLSearchParams) => void,
@@ -67,6 +74,7 @@ export function AtlasPage() {
         regions={routeRegions}
         query={query}
         onQueryChange={setQuery}
+        selectedRegion={selectedRegion}
         onSelectRegion={selectRegion}
         onOpenRoute={openRoute}
         className="absolute inset-x-3 top-20 z-30 max-h-[56dvh] overflow-y-auto sm:inset-x-auto sm:right-5 sm:top-5 sm:w-[360px]"
