@@ -252,10 +252,12 @@ test("region controls, search, inspector, and URL stay synchronized", async ({ p
 });
 
 test("Atlas heading and search stay separate at tablet widths", async ({ page }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(150_000);
   for (const viewport of [
     { width: 640, height: 844 },
+    { width: 640, height: 600 },
     { width: 768, height: 900 },
+    { width: 768, height: 640 },
     { width: 1024, height: 900 },
   ]) {
     await page.setViewportSize(viewport);
