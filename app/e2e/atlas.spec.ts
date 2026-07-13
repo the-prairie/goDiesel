@@ -310,6 +310,14 @@ test("Atlas overlays stay separate across constrained viewports", async ({ page 
     expect(boxesOverlap(inspectorBox!, controlsBox!)).toBe(false);
     const clearSelection = page.getByRole("button", { name: "Clear selected region" });
     await expect(clearSelection).toBeVisible();
+    if (viewport.width === 844 && viewport.height === 390) {
+      const firstRoute = inspector.getByRole("button").nth(1);
+      await expect(firstRoute).toBeVisible();
+      await firstRoute.click();
+      await expect(page).toHaveURL(/#\/routes\//);
+      await page.goBack();
+      await expect(clearSelection).toBeVisible();
+    }
     await clearSelection.click();
     await expect(page).not.toHaveURL(/region=/);
   }

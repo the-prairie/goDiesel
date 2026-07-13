@@ -119,13 +119,40 @@ a {
     bottom: 5rem;
     top: auto;
     max-height: 4rem;
+    flex-direction: row;
   }
 
   .atlas-region-inspector > div:first-child {
-    padding: 0.75rem;
+    width: 9rem;
+    flex: 0 0 9rem;
+    padding: 0.5rem;
+    border-right: 1px solid hsl(var(--border));
+    border-bottom: 0;
   }
 
   .atlas-region-inspector p {
     display: none;
+  }
+
+  .atlas-region-inspector > div:first-child > div > div:first-child {
+    display: none;
+  }
+
+  .atlas-region-inspector h2 {
+    margin-top: 0;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+
+  .atlas-region-inspector > div:last-child {
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .atlas-region-inspector > div:last-child > button {
+    min-height: 0;
+    flex: 0 0 12rem;
+    padding: 0.5rem 0.75rem;
   }
 }
