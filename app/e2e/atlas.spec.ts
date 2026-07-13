@@ -267,28 +267,31 @@ test("region controls, search, inspector, and URL stay synchronized", async ({ p
   await expect(page.getByRole("button", { name: /Tokyo, Japan3 routes/i })).toBeVisible();
 });
 
-test("Atlas overlays stay separate across constrained viewports", async ({ page }) => {
-  test.setTimeout(180_000);
-  for (const viewport of [
-    { width: 390, height: 640 },
-    { width: 640, height: 844 },
-    { width: 640, height: 600 },
-    { width: 768, height: 900 },
-    { width: 768, height: 640 },
-    { width: 768, height: 390 },
-    { width: 1024, height: 900 },
-    { width: 844, height: 390 },
-  ]) {
+for (const viewport of [
+  { width: 390, height: 320 },
+  { width: 390, height: 640 },
+  { width: 568, height: 320 },
+  { width: 640, height: 844 },
+  { width: 640, height: 600 },
+  { width: 768, height: 900 },
+  { width: 768, height: 640 },
+  { width: 768, height: 390 },
+  { width: 1024, height: 900 },
+  { width: 844, height: 390 },
+]) {
+  test(`Atlas overlays stay separate at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
     await page.setViewportSize(viewport);
     await page.goto("/#/atlas");
     const heading = page.getByRole("heading", { name: "Real places, playable days." });
     const search = page.getByRole("region", { name: "Atlas search" });
     await expect(search).toBeVisible({ timeout: 15_000 });
-    const headingBox = await heading.boundingBox();
+    const headingBox = (await heading.isVisible()) ? await heading.boundingBox() : null;
     const searchBox = await search.boundingBox();
-    expect(headingBox).not.toBeNull();
     expect(searchBox).not.toBeNull();
-    expect(boxesOverlap(headingBox!, searchBox!)).toBe(false);
+    if (headingBox) expect(boxesOverlap(headingBox, searchBox!)).toBe(false);
 
     await page.getByRole("combobox", { name: "Browse route regions" }).selectOption({
       label: "Canary Islands",
@@ -310,7 +313,10 @@ test("Atlas overlays stay separate across constrained viewports", async ({ page 
     expect(boxesOverlap(inspectorBox!, controlsBox!)).toBe(false);
     const clearSelection = page.getByRole("button", { name: "Clear selected region" });
     await expect(clearSelection).toBeVisible();
-    if (viewport.width === 844 && viewport.height === 390) {
+    if (
+      (viewport.width === 844 && viewport.height === 390) ||
+      (viewport.width === 568 && viewport.height === 320)
+    ) {
       const firstRoute = inspector.getByRole("button").nth(1);
       await expect(firstRoute).toBeVisible();
       await firstRoute.click();
@@ -320,8 +326,8 @@ test("Atlas overlays stay separate across constrained viewports", async ({ page 
     }
     await clearSelection.click();
     await expect(page).not.toHaveURL(/region=/);
-  }
-});
+  });
+}
 
 test("globe supports pointer, wheel, touch, and keyboard exploration", async ({ page }) => {
   test.setTimeout(90_000);

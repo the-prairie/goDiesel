@@ -93,7 +93,7 @@ a {
   }
 }
 
-@media (min-width: 640px) and (max-width: 1279px) and (max-height: 512px) {
+@media (max-width: 1279px) and (max-height: 512px) {
   .atlas-intro {
     max-width: calc(100% - 26rem);
   }
@@ -154,5 +154,27 @@ a {
     min-height: 0;
     flex: 0 0 12rem;
     padding: 0.5rem 0.75rem;
+  }
+}
+
+@media (max-width: 639px) and (max-height: 512px) {
+  .atlas-intro {
+    display: none;
+  }
+
+  .atlas-search-panel {
+    right: 1rem;
+    left: 1rem;
+    width: auto;
+    padding: 0.5rem;
+  }
+
+  .atlas-search-panel > label,
+  .atlas-search-panel > div:not(:first-of-type) {
+    display: none;
+  }
+
+  .atlas-search-panel > div:first-of-type {
+    margin-top: 0;
   }
 }
