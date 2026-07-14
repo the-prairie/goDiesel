@@ -6,6 +6,7 @@ import { PageTitle } from "@/components/page-title";
 import { RouteCard } from "@/components/routes/route-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { usePlannedRoutes } from "@/data/planned-route-store";
 import { routes } from "@/data/routes";
 import {
   DEFAULT_ROUTE_FILTERS,
@@ -38,15 +39,26 @@ const lifecycleOptions = [
 export function RoutesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [showMobileFilters, setShowMobileFilters] = useState(false);
-  const activityOptions = useMemo(() => uniqueValues(routes.map((route) => route.type)), []);
-  const regionOptions = useMemo(() => uniqueValues(routes.map((route) => route.region)), []);
-  const vibeOptions = useMemo(() => uniqueValues(routes.map((route) => route.theme)), []);
+  const localPlans = usePlannedRoutes();
+  const libraryRoutes = useMemo(() => [...routes, ...localPlans], [localPlans]);
+  const activityOptions = useMemo(
+    () => uniqueValues(libraryRoutes.map((route) => route.type)),
+    [libraryRoutes],
+  );
+  const regionOptions = useMemo(
+    () => uniqueValues(libraryRoutes.map((route) => route.region)),
+    [libraryRoutes],
+  );
+  const vibeOptions = useMemo(
+    () => uniqueValues(libraryRoutes.map((route) => route.theme)),
+    [libraryRoutes],
+  );
   const filters = filtersFromParams(searchParams, {
     activities: activityOptions,
     regions: regionOptions,
     vibes: vibeOptions,
   });
-  const visibleRoutes = filterRoutes(routes, filters);
+  const visibleRoutes = filterRoutes(libraryRoutes, filters);
   const hasFilters = Object.entries(filters).some(
     ([key, value]) => value !== DEFAULT_ROUTE_FILTERS[key as keyof RouteFilters],
   );
@@ -75,7 +87,7 @@ export function RoutesPage() {
         copy="Find a remembered day by place, effort, or feeling, then open its canonical guide."
       />
 
-      {routes.length === 0 ? (
+      {libraryRoutes.length === 0 ? (
         <LibraryState
           title="No routes yet"
           copy="Imported and planned routes will appear here when the library has data."
