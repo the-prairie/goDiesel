@@ -15,6 +15,8 @@ export function AppShell() {
   const location = useLocation();
   const section = appSectionForPath(location.pathname);
   const isAtlas = section.id === "atlas";
+  const isPlayableEarthLab = location.pathname.startsWith("/lab/playable-earth/");
+  const isImmersive = isAtlas || isPlayableEarthLab;
 
   return (
     <SidebarProvider>
@@ -39,7 +41,7 @@ export function AppShell() {
         <div
           className={cn(
             "grid w-full flex-1",
-            isAtlas
+            isImmersive
               ? "min-h-[calc(100dvh-3.5rem)] overflow-hidden"
               : "mx-auto max-w-7xl gap-6 p-4 sm:p-6",
           )}
