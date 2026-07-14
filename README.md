@@ -44,7 +44,7 @@ npm --prefix app run dev
 Open [http://localhost:8787/](http://localhost:8787/).
 The root redirects to `#/atlas`, and the sidebar links to Finder, Routes, Replay, and Admin.
 
-The preserved Playable Earth route experience remains available at `#/lab/playable-earth/<route-id>` while its proven behavior moves into production Replay.
+The Playable Earth route experience is available at `#/lab/playable-earth/<route-id>` as the immersive reference for production Replay.
 
 ## Generate Route Data
 

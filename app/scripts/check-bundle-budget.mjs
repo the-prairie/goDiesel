@@ -29,15 +29,16 @@ for (const forbidden of ["CesiumWidget", "createGooglePhotorealistic3DTileset"])
 }
 
 const assets = await readdir(path.join(dist, "assets"));
-const replayChunks = assets.filter((name) => /^replay-page-.*\.js$/.test(name));
-const routeDetailChunks = assets.filter((name) => /^route-detail-page-.*\.js$/.test(name));
 
-if (replayChunks.length !== 1) {
-  throw new Error(`Expected one lazy Replay chunk, found ${replayChunks.length}.`);
+function requireSingleLazyChunk(label, pattern) {
+  const chunks = assets.filter((name) => pattern.test(name));
+  if (chunks.length !== 1) {
+    throw new Error(`Expected one lazy ${label} chunk, found ${chunks.length}.`);
+  }
 }
-if (routeDetailChunks.length !== 1) {
-  throw new Error(`Expected one lazy route-detail chunk, found ${routeDetailChunks.length}.`);
-}
+
+requireSingleLazyChunk("Replay", /^replay-page-.*\.js$/);
+requireSingleLazyChunk("route-detail", /^route-detail-page-.*\.js$/);
 
 console.log(
   `Bundle budget passed: initial shell ${(entryBytes / 1024).toFixed(1)} KiB; Replay and route detail remain lazy.`,
