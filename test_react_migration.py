@@ -38,7 +38,9 @@ def test_app_shell_defines_expected_navigation_and_hash_route_support():
     assert 'catch {' in navigation
     assert 'path: "routes/:routeSlug"' in router
     assert 'path: "replay/:routeSlug"' in router
-    assert '<NavLink' in sidebar
+    assert '<Link' in sidebar
+    assert 'appSectionForPath(location.pathname)' in sidebar
+    assert 'aria-current={activeSection.id === section.id ? "page" : undefined}' in sidebar
     assert '<Outlet />' in shell
     assert "React migration preview" not in shell
 

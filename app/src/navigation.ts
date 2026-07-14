@@ -15,6 +15,8 @@ export const APP_PATHS = {
   admin: "/admin",
 } as const;
 
+export const PLAYABLE_EARTH_LAB_PATH = "/lab/playable-earth";
+
 export type AppSectionId = keyof typeof APP_PATHS;
 
 export interface AppSection {
@@ -46,6 +48,9 @@ export const APP_SECTIONS: AppSection[] = [
 ];
 
 export function appSectionForPath(pathname: string) {
+  if (pathname.startsWith(`${PLAYABLE_EARTH_LAB_PATH}/`)) {
+    return APP_SECTIONS.find((section) => section.id === "replay") ?? APP_SECTIONS[0];
+  }
   return (
     APP_SECTIONS.find(
       (section) =>
@@ -65,6 +70,10 @@ export function routeDetailPath(slug: string) {
 
 export function replayPath(slug: string) {
   return `${APP_PATHS.replay}/${encodedSlug(slug)}`;
+}
+
+export function playableEarthLabPath(slug: string) {
+  return `${PLAYABLE_EARTH_LAB_PATH}/${encodedSlug(slug)}`;
 }
 
 export function decodedRouteSlug(value: string | undefined) {

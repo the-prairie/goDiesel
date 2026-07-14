@@ -1,5 +1,5 @@
 import { Database, Map, X } from "lucide-react";
-import { Link, NavLink, useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 import {
   Sidebar,
@@ -17,11 +17,12 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import routeStats from "@/data/generated/route-stats.json";
-import { APP_PATHS, APP_SECTIONS } from "@/navigation";
+import { APP_PATHS, APP_SECTIONS, appSectionForPath } from "@/navigation";
 
 export function AppSidebar() {
   const { isMobile, setOpenMobile } = useSidebar();
   const location = useLocation();
+  const activeSection = appSectionForPath(location.pathname);
 
   return (
     <Sidebar collapsible="icon">
@@ -69,22 +70,18 @@ export function AppSidebar() {
                     <SidebarMenuItem key={section.path}>
                       <SidebarMenuButton
                         asChild
-                        isActive={
-                          location.pathname === section.path ||
-                          (section.includesChildren &&
-                            location.pathname.startsWith(`${section.path}/`))
-                        }
+                        isActive={activeSection.id === section.id}
                         tooltip={section.label}
                         className="min-h-10"
                       >
-                        <NavLink
+                        <Link
                           to={section.path}
-                          end={!section.includesChildren}
+                          aria-current={activeSection.id === section.id ? "page" : undefined}
                           onClick={() => setOpenMobile(false)}
                         >
                           <Icon aria-hidden="true" />
                           <span>{section.label}</span>
-                        </NavLink>
+                        </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   );

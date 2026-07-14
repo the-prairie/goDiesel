@@ -16,6 +16,11 @@ const FinderPage = lazy(() =>
 const ReplayPage = lazy(() =>
   import("@/pages/replay-page").then((module) => ({ default: module.ReplayPage })),
 );
+const PlayableEarthLabPage = lazy(() =>
+  import("@/pages/playable-earth-lab-page").then((module) => ({
+    default: module.PlayableEarthLabPage,
+  })),
+);
 const RouteDetailPage = lazy(() =>
   import("@/pages/route-detail-page").then((module) => ({
     default: module.RouteDetailPage,
@@ -39,6 +44,7 @@ const router = createHashRouter([
       { path: "routes/:routeSlug", element: <RouteDetailPage /> },
       { path: APP_PATHS.replay.slice(1), element: <ReplayPage /> },
       { path: "replay/:routeSlug", element: <ReplayPage /> },
+      { path: "lab/playable-earth/:routeSlug", element: <PlayableEarthLabPage /> },
       { path: APP_PATHS.admin.slice(1), element: <AdminPage /> },
       { path: "*", element: <Navigate to={APP_PATHS.atlas} replace /> },
     ],
