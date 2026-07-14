@@ -126,7 +126,8 @@ test("missing geometry disables one route without crashing detail", async ({ pag
 test("changing routes never flashes the previous route detail", async ({ page }) => {
   const nextSlug = "17665674778";
   await page.goto(`/#/replay/${routeSlug}`);
-  await expect(page.getByText("21.3 km", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+  await expect(page.getByText(/^21\.3 km · 680 m up$/)).toBeVisible();
 
   await page.route(`**/data/routes/${nextSlug}.json`, async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 500));
@@ -136,7 +137,8 @@ test("changing routes never flashes the previous route detail", async ({ page })
     window.location.hash = `#/replay/${slug}`;
   }, nextSlug);
 
-  await expect(page.getByText("Loading replay data.")).toBeVisible();
-  await expect(page.getByText("21.3 km", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("21.8 km", { exact: true })).toBeVisible();
+  await expect(page.getByRole("status")).toHaveText("Loading Earth Replay.");
+  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Tokyo, Japan" })).toBeVisible();
+  await expect(page.getByText(/^21\.8 km · 286 m up$/)).toBeVisible();
 });

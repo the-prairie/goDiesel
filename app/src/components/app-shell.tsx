@@ -16,7 +16,7 @@ export function AppShell() {
   const section = appSectionForPath(location.pathname);
   const isAtlas = section.id === "atlas";
   const isPlayableEarthLab = location.pathname.startsWith("/lab/playable-earth/");
-  const isImmersive = isAtlas || isPlayableEarthLab;
+  const isImmersive = isAtlas || isPlayableEarthLab || section.id === "replay";
 
   return (
     <SidebarProvider>

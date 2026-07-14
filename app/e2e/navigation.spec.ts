@@ -102,6 +102,7 @@ test("browser history restores the selected Replay route", async ({ page }) => {
   await page.goto(`/#/replay/${routeSlug}`);
   await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
 
+  await page.getByText("Change route", { exact: true }).click();
   await page.locator(`a[href="#/replay/${historyRouteSlug}"]`).click();
   await expect(page).toHaveURL(new RegExp(`#\/replay\/${historyRouteSlug}$`));
   await expect(page.getByRole("heading", { name: "Tokyo, Japan" })).toBeVisible();
