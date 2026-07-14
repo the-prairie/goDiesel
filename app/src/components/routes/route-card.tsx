@@ -1,10 +1,76 @@
-import { ArrowUpRight, Bike, CalendarDays, MapPin, Route as RouteIcon } from "lucide-react";
+import {
+  ArrowUpRight,
+  Bike,
+  CalendarClock,
+  CalendarDays,
+  MapPin,
+  Route as RouteIcon,
+} from "lucide-react";
 import { Link } from "react-router-dom";
 
 import type { RouteSummary } from "@/domain/routes";
-import { routeDetailPath } from "@/navigation";
+import { isPlannedRoute } from "@/domain/planning";
+import { APP_PATHS, routeDetailPath } from "@/navigation";
+import { cn } from "@/lib/utils";
 
 export function RouteCard({ route }: { route: RouteSummary }) {
+  if (isPlannedRoute(route)) {
+    return (
+      <article
+        aria-label={`Planned route ${route.region}`}
+        className="grid min-h-[22rem] min-w-0 overflow-hidden rounded-md border border-dashed border-primary/60 bg-card"
+      >
+        <RouteThread route={route} />
+        <div className="grid content-start gap-4 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 text-xs text-primary">
+                <CalendarClock className="size-3.5" aria-hidden="true" />
+                <span>Planned</span>
+              </div>
+              <h2 className="mt-1 truncate text-base font-semibold text-foreground">
+                {route.name}
+              </h2>
+              <p className="mt-1 truncate text-xs text-muted-foreground">{route.region}</p>
+            </div>
+          </div>
+
+          <p className="line-clamp-3 min-h-[3.75rem] text-sm leading-5 text-muted-foreground">
+            {route.planning.sourceLabel}. Saved for a future {route.type.toLowerCase()}.
+          </p>
+
+          <div className="mt-auto flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5">
+              {route.type === "Ride" ? (
+                <Bike className="size-3.5" aria-hidden="true" />
+              ) : (
+                <RouteIcon className="size-3.5" aria-hidden="true" />
+              )}
+              {route.type}
+            </span>
+            <span>{route.distanceKm.toFixed(1)} km</span>
+            <span>{route.elevationGainM.toLocaleString()} m up</span>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 border-t border-border pt-3 text-xs">
+            <span className="text-primary">Future route</span>
+            <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+              <CalendarDays className="size-3.5" aria-hidden="true" />
+              Saved {route.date}
+            </span>
+          </div>
+
+          <Link
+            to={APP_PATHS.finder}
+            className="text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            Edit in Finder
+          </Link>
+        </div>
+      </article>
+    );
+  }
+
   const status = route.guide.reviewStatus;
   const reviewed = status === "reviewed" || status === "published";
 
@@ -76,11 +142,22 @@ export function RouteCard({ route }: { route: RouteSummary }) {
   );
 }
 
-function RouteThread({ route }: { route: RouteSummary }) {
+export function RouteThread({
+  route,
+  className,
+}: {
+  route: RouteSummary;
+  className?: string;
+}) {
   const points = normalizedTrace(route);
 
   return (
-    <div className="relative h-32 overflow-hidden border-b border-border bg-[radial-gradient(circle_at_50%_50%,hsl(var(--accent)),hsl(var(--background))_72%)]">
+    <div
+      className={cn(
+        "relative h-32 overflow-hidden border-b border-border bg-[radial-gradient(circle_at_50%_50%,hsl(var(--accent)),hsl(var(--background))_72%)]",
+        className,
+      )}
+    >
       <div className="absolute inset-0 opacity-30 [background-image:linear-gradient(hsl(var(--border))_1px,transparent_1px),linear-gradient(90deg,hsl(var(--border))_1px,transparent_1px)] [background-size:28px_28px]" />
       {points ? (
         <svg

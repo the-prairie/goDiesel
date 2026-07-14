@@ -1,0 +1,108 @@
+import { expect, test, type Page } from "@playwright/test";
+
+const plannedRouteStorageKey = "godiesel.planned-routes.v1";
+
+async function searchKyoto(page: Page) {
+  const form = page.getByRole("form", { name: "Find a route" });
+  await form.getByLabel("Place").fill("Kyoto");
+  await form.getByLabel("Activity").selectOption("Run");
+  await form.getByLabel("Distance").fill("21");
+  await form.getByLabel("Terrain").selectOption("mixed");
+  await form.getByLabel("Vibe").fill("exploratory climbing");
+  await form.getByRole("button", { name: "Find curated routes" }).click();
+}
+
+test.beforeEach(async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate((key) => localStorage.removeItem(key), plannedRouteStorageKey);
+});
+
+test("Finder searches explicit route-backed candidates and saves a durable plan", async ({
+  page,
+}) => {
+  await page.goto("/#/finder");
+
+  await expect(page.getByRole("heading", { name: "Plan the next day." })).toBeVisible();
+  await expect(page.getByText("Finder does not generate routes.")).toBeVisible();
+  await searchKyoto(page);
+
+  const candidate = page.getByRole("article", { name: "Kyoto, Japan candidate" });
+  await expect(candidate).toContainText("Owner-curated from recorded GPX");
+  await expect(candidate).toContainText("21.3 km");
+  await page.getByLabel("Place").fill("Patagonia");
+  await candidate.getByRole("button", { name: "Save planned route" }).click();
+  await expect(candidate.getByRole("status")).toContainText("Saved to Planned routes");
+
+  const stored = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "null"), plannedRouteStorageKey);
+  expect(stored).toMatchObject({
+    version: 1,
+    routes: [
+      {
+        lifecycle: "planned",
+        planning: {
+          sourceRouteSlug: "17654151284",
+          storeVersion: 1,
+          intent: { place: "Kyoto" },
+        },
+      },
+    ],
+  });
+
+  await page.reload();
+  await searchKyoto(page);
+  await expect(candidate.getByRole("button", { name: "Already planned" })).toBeDisabled();
+
+  await page.goto("/#/routes?lifecycle=planned");
+  const plannedCard = page.getByRole("article", { name: "Planned route Kyoto, Japan" });
+  await expect(plannedCard).toBeVisible();
+  await expect(plannedCard).toContainText("Planned");
+  await expect(plannedCard).toContainText("Owner-curated from recorded GPX");
+  await expect(plannedCard.getByRole("link", { name: "Open route guide" })).toHaveCount(0);
+});
+
+test("Finder explains source limits instead of fabricating an unsupported result", async ({
+  page,
+}) => {
+  await page.goto("/#/finder");
+  const form = page.getByRole("form", { name: "Find a route" });
+  await form.getByLabel("Place").fill("Patagonia");
+  await form.getByLabel("Activity").selectOption("Run");
+  await form.getByLabel("Distance").fill("42");
+  await form.getByLabel("Terrain").selectOption("trail");
+  await form.getByLabel("Vibe").fill("remote");
+  await form.getByRole("button", { name: "Find curated routes" }).click();
+
+  const status = page.getByRole("status");
+  await expect(status).toContainText("No owner-curated route matches this search yet");
+  await expect(page.getByRole("article")).toHaveCount(0);
+  expect(await page.evaluate((key) => localStorage.getItem(key), plannedRouteStorageKey)).toBeNull();
+});
+
+test("a planned route never changes completed Atlas totals", async ({ page }) => {
+  await page.goto("/#/finder");
+  await searchKyoto(page);
+  await page.getByRole("button", { name: "Save planned route" }).click();
+
+  await page.goto("/#/atlas");
+  await expect(page.getByText("66 route records")).toBeVisible();
+  await expect(page.getByText("1908 completed km")).toBeVisible();
+  await expect(page.getByText("planned-owner-route-17654151284")).toHaveCount(0);
+});
+
+for (const viewport of [
+  { name: "desktop", width: 1280, height: 900 },
+  { name: "mobile", width: 390, height: 844 },
+]) {
+  test(`Finder planning workspace fits ${viewport.name}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await page.goto("/#/finder");
+    await searchKyoto(page);
+    await expect(page.getByRole("article", { name: "Kyoto, Japan candidate" })).toBeVisible();
+
+    const layout = await page.evaluate(() => ({
+      documentWidth: document.documentElement.scrollWidth,
+      viewportWidth: window.innerWidth,
+    }));
+    expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth + 1);
+  });
+}
