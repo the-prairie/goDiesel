@@ -25,9 +25,19 @@ import type {
 } from "@/replay/replay-engine";
 import type { ReplayPose } from "@/replay/replay-controller";
 import { recordTileFailure, rgbaPixelsLookBlank } from "@/replay/replay-health";
+import { bearingDegrees, routePathPose } from "@/replay/route-path";
+import type { QuestRoute } from "@/domain/routes";
+import {
+  advanceReplayCameraClearance,
+  initialReplayCameraClearance,
+  REPLAY_CAMERA_MIN_CLEARANCE_M,
+  replayCameraClearanceM,
+  type ReplayCameraClearanceState,
+  type ReplayCameraSurfaceObservation,
+} from "@/replay/cesium/replay-camera-clearance";
 
 const SURFACE_VISUAL_OFFSET_M = 3;
-const SURFACE_SAMPLE_INTERVAL_MS = 1_200;
+const SURFACE_SAMPLE_INTERVAL_MS = 600;
 const MAX_STALE_SAMPLE_DISTANCE_M = 500;
 const TILE_FAILURE_THRESHOLD = 8;
 
@@ -85,6 +95,7 @@ function webglAvailable() {
 
 export class CesiumReplayEngine implements ReplayEngine {
   private viewer?: Viewer;
+  private route?: QuestRoute;
   private marker?: Entity;
   private routeEntity?: Entity;
   private avatarElement?: HTMLElement;
@@ -93,6 +104,8 @@ export class CesiumReplayEngine implements ReplayEngine {
   private cameraHeadingDeg?: number;
   private cameraDestination = new Cartesian3();
   private cameraInitialized = false;
+  private cameraClearance?: ReplayCameraClearanceState;
+  private pendingCameraSurfaceObservation?: ReplayCameraSurfaceObservation;
   private lastCameraUpdateMs?: number;
   private grounding?: PlayableEarthGroundingState;
   private pendingGroundingObservation?: PlayableEarthGroundingObservation;
@@ -107,10 +120,17 @@ export class CesiumReplayEngine implements ReplayEngine {
   private blankFrameCount = 0;
   private partial = false;
   private onStatus?: ReplayEngineMountOptions["onStatus"];
+  private container?: HTMLElement;
   private generation = 0;
+
+  constructor(
+    private readonly minimumCameraClearanceM = REPLAY_CAMERA_MIN_CLEARANCE_M,
+  ) {}
 
   async mount({ container, avatarElement, route, onStatus }: ReplayEngineMountOptions) {
     const generation = ++this.generation;
+    this.container = container;
+    this.route = route;
     this.onStatus = onStatus;
     onStatus({
       state: "loading",
@@ -342,34 +362,67 @@ export class CesiumReplayEngine implements ReplayEngine {
     );
     this.marker.position = new ConstantPositionProperty(this.markerPosition);
 
-    if (this.cameraHeadingDeg === undefined) {
-      this.cameraHeadingDeg = pose.bearingDeg;
-    } else {
-      const delta = ((pose.bearingDeg - this.cameraHeadingDeg + 540) % 360) - 180;
-      this.cameraHeadingDeg = (this.cameraHeadingDeg + delta * 0.08 + 360) % 360;
-    }
-    this.requestSurfaceSample(pose, now);
     if (!pose.following) {
       this.lastCameraUpdateMs = now;
       return;
     }
-    const heading = (this.cameraHeadingDeg * Math.PI) / 180;
     const cameraRangeM = pose.cameraRangeM;
     const cameraHeightM = cameraHeightAboveAvatarM(cameraRangeM);
+    const routeCameraPose =
+      this.route && pose.progressM >= cameraRangeM
+        ? routePathPose(this.route, pose.progressM - cameraRangeM)
+        : undefined;
+    const fallbackHeading = (pose.bearingDeg * Math.PI) / 180;
     const cameraLat =
-      pose.lat - (Math.cos(heading) * cameraRangeM) / 111_320;
+      routeCameraPose?.lat ??
+      pose.lat - (Math.cos(fallbackHeading) * cameraRangeM) / 111_320;
     const cameraLng =
+      routeCameraPose?.lng ??
       pose.lng -
-      (Math.sin(heading) * cameraRangeM) /
-        (111_320 * Math.max(0.2, Math.cos((pose.lat * Math.PI) / 180)));
-    const desiredDestination = Cartesian3.fromDegrees(
-      cameraLng,
-      cameraLat,
-      groundedHeightM + SURFACE_VISUAL_OFFSET_M + cameraHeightM,
-    );
+        (Math.sin(fallbackHeading) * cameraRangeM) /
+          (111_320 * Math.max(0.2, Math.cos((pose.lat * Math.PI) / 180)));
+    const desiredHeadingDeg = routeCameraPose
+      ? bearingDegrees(
+          { ...routeCameraPose, d: routeCameraPose.progressM },
+          { ...pose, d: pose.progressM },
+        )
+      : pose.bearingDeg;
+    if (this.cameraHeadingDeg === undefined) {
+      this.cameraHeadingDeg = desiredHeadingDeg;
+    } else {
+      const delta =
+        ((desiredHeadingDeg - this.cameraHeadingDeg + 540) % 360) - 180;
+      this.cameraHeadingDeg = (this.cameraHeadingDeg + delta * 0.08 + 360) % 360;
+    }
+    const heading = (this.cameraHeadingDeg * Math.PI) / 180;
+    this.requestSurfaceSample(pose, cameraLat, cameraLng, now);
     const cameraElapsedSeconds =
       this.lastCameraUpdateMs === undefined ? 0 : (now - this.lastCameraUpdateMs) / 1_000;
     this.lastCameraUpdateMs = now;
+    const baseCameraAltitudeM =
+      Math.max(groundedHeightM, routeCameraPose?.elev ?? groundedHeightM) +
+      SURFACE_VISUAL_OFFSET_M +
+      cameraHeightM;
+    if (!this.cameraClearance) {
+      this.cameraClearance = initialReplayCameraClearance(
+        Math.max(viewer.camera.positionCartographic.height, baseCameraAltitudeM),
+      );
+    }
+    const cameraObservation = this.pendingCameraSurfaceObservation;
+    this.pendingCameraSurfaceObservation = undefined;
+    this.cameraClearance = advanceReplayCameraClearance(
+      this.cameraClearance,
+      baseCameraAltitudeM,
+      cameraElapsedSeconds,
+      cameraObservation,
+      this.minimumCameraClearanceM,
+    );
+    const cameraAltitudeM = this.cameraClearance.altitudeM;
+    const desiredDestination = Cartesian3.fromDegrees(
+      cameraLng,
+      cameraLat,
+      cameraAltitudeM,
+    );
     const easing = this.cameraInitialized
       ? Math.min(1, Math.max(0.04, 1 - Math.exp(-5 * cameraElapsedSeconds)))
       : 1;
@@ -382,7 +435,10 @@ export class CesiumReplayEngine implements ReplayEngine {
     const headingDelta =
       ((heading - viewer.camera.heading + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
     const easedHeading = viewer.camera.heading + headingDelta * easing;
-    const desiredPitch = -Math.atan2(cameraHeightM, cameraRangeM);
+    const desiredPitch = -Math.atan2(
+      cameraAltitudeM - groundedHeightM - SURFACE_VISUAL_OFFSET_M,
+      cameraRangeM,
+    );
     const easedPitch = viewer.camera.pitch + (desiredPitch - viewer.camera.pitch) * easing;
     viewer.camera.setView({
       destination,
@@ -392,10 +448,25 @@ export class CesiumReplayEngine implements ReplayEngine {
         roll: 0,
       },
     });
+    if (this.container) {
+      const clearanceM = replayCameraClearanceM(this.cameraClearance);
+      this.container.dataset.cameraAltitudeM = cameraAltitudeM.toFixed(2);
+      this.container.dataset.cameraSurfaceHeightM =
+        this.cameraClearance.lastValidSurfaceHeightM?.toFixed(2) ?? "unknown";
+      this.container.dataset.cameraClearanceM =
+        clearanceM?.toFixed(2) ?? "unknown";
+      this.container.dataset.minimumCameraClearanceM =
+        this.minimumCameraClearanceM.toFixed(2);
+    }
     this.cameraInitialized = true;
   }
 
-  private requestSurfaceSample(pose: ReplayPose, now: number) {
+  private requestSurfaceSample(
+    pose: ReplayPose,
+    cameraLat: number,
+    cameraLng: number,
+    now: number,
+  ) {
     const scene = this.viewer?.scene;
     if (
       !scene ||
@@ -407,15 +478,20 @@ export class CesiumReplayEngine implements ReplayEngine {
     this.lastSurfaceSampleMs = now;
     if (!scene.sampleHeightSupported) {
       this.pendingGroundingObservation = { kind: "missing" };
+      this.pendingCameraSurfaceObservation = { kind: "missing" };
       return;
     }
 
     const requestGeneration = this.generation;
     const requestProgressM = pose.progressM;
+    let retryLatestPose = false;
     this.surfaceSampleInFlight = true;
     void scene
       .sampleHeightMostDetailed(
-        [Cartographic.fromDegrees(pose.lng, pose.lat)],
+        [
+          Cartographic.fromDegrees(pose.lng, pose.lat),
+          Cartographic.fromDegrees(cameraLng, cameraLat),
+        ],
         [this.routeEntity, this.marker].filter((entity): entity is Entity => Boolean(entity)),
         2,
       )
@@ -425,22 +501,32 @@ export class CesiumReplayEngine implements ReplayEngine {
           Math.abs((this.latestPose?.progressM ?? requestProgressM) - requestProgressM) >
           MAX_STALE_SAMPLE_DISTANCE_M
         ) {
+          retryLatestPose = true;
           return;
         }
         const sampledHeightM = positions[0]?.height;
+        const sampledCameraHeightM = positions[1]?.height;
         this.pendingGroundingObservation =
           typeof sampledHeightM === "number" && Number.isFinite(sampledHeightM)
-          ? { kind: "sample", heightM: sampledHeightM }
-          : { kind: "missing" };
+            ? { kind: "sample", heightM: sampledHeightM }
+            : { kind: "missing" };
+        this.pendingCameraSurfaceObservation =
+          typeof sampledCameraHeightM === "number" &&
+          Number.isFinite(sampledCameraHeightM)
+            ? { kind: "sample", heightM: sampledCameraHeightM }
+            : { kind: "missing" };
+        if (this.latestPose) this.setPose(this.latestPose);
       })
       .catch(() => {
         if (requestGeneration === this.generation) {
           this.pendingGroundingObservation = { kind: "missing" };
+          this.pendingCameraSurfaceObservation = { kind: "missing" };
         }
       })
       .finally(() => {
         if (requestGeneration === this.generation) {
           this.surfaceSampleInFlight = false;
+          if (retryLatestPose && this.latestPose) this.setPose(this.latestPose);
         }
       });
   }
@@ -456,6 +542,7 @@ export class CesiumReplayEngine implements ReplayEngine {
     if (this.avatarElement) this.avatarElement.style.display = "none";
     if (this.viewer && !this.viewer.isDestroyed()) this.viewer.destroy();
     this.viewer = undefined;
+    this.route = undefined;
     this.marker = undefined;
     this.routeEntity = undefined;
     this.avatarElement = undefined;
@@ -463,6 +550,8 @@ export class CesiumReplayEngine implements ReplayEngine {
     this.markerPosition = undefined;
     this.cameraHeadingDeg = undefined;
     this.cameraInitialized = false;
+    this.cameraClearance = undefined;
+    this.pendingCameraSurfaceObservation = undefined;
     this.lastCameraUpdateMs = undefined;
     this.grounding = undefined;
     this.pendingGroundingObservation = undefined;
@@ -477,5 +566,6 @@ export class CesiumReplayEngine implements ReplayEngine {
     this.blankFrameCount = 0;
     this.partial = false;
     this.onStatus = undefined;
+    this.container = undefined;
   }
 }
