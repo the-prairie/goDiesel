@@ -28,10 +28,13 @@ test.describe("live Earth Replay terrain clearance", () => {
       await progress.fill(String(progressM));
       await expect
         .poll(
-          () => world.getAttribute("data-camera-clearance-m"),
+          async () =>
+            Number.isFinite(
+              Number(await world.getAttribute("data-camera-clearance-m")),
+            ),
           { timeout: 15_000 },
         )
-        .not.toBe("unknown");
+        .toBe(true);
       const [clearanceM, minimumClearanceM] = await Promise.all([
         world.getAttribute("data-camera-clearance-m"),
         world.getAttribute("data-minimum-camera-clearance-m"),
@@ -45,6 +48,18 @@ test.describe("live Earth Replay terrain clearance", () => {
         });
       }
     }
+
+    await page.getByRole("button", { name: "Zoom out from route" }).click();
+    await expect(stage).toHaveAttribute("data-camera-range", "720");
+    await expect
+      .poll(
+        async () =>
+          Number.isFinite(
+            Number(await world.getAttribute("data-camera-clearance-m")),
+          ),
+        { timeout: 15_000 },
+      )
+      .toBe(true);
 
     for (const [index, speed] of [1, 2, 4, 0.5].entries()) {
       if (index > 0) {
@@ -62,7 +77,7 @@ test.describe("live Earth Replay terrain clearance", () => {
       );
     }
 
-    const screenshot = await page.screenshot();
+    const screenshot = await world.screenshot();
     const png = PNG.sync.read(screenshot);
     let visiblePixelCount = 0;
     for (let pixel = 0; pixel < png.width * png.height; pixel += 144) {
@@ -88,13 +103,17 @@ test.describe("live Earth Replay terrain clearance", () => {
     await page.getByLabel("Route progress").fill("8500");
     await expect
       .poll(
-        () =>
-          page
-            .getByLabel("Earth Replay world")
-            .getAttribute("data-camera-clearance-m"),
+        async () =>
+          Number.isFinite(
+            Number(
+              await page
+                .getByLabel("Earth Replay world")
+                .getAttribute("data-camera-clearance-m"),
+            ),
+          ),
         { timeout: 15_000 },
       )
-      .not.toBe("unknown");
+      .toBe(true);
 
     await testInfo.attach("kyoto-mobile", {
       body: await page.screenshot(),
