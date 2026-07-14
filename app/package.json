@@ -12,6 +12,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@lottiefiles/dotlottie-react": "^0.19.9",
     "@radix-ui/react-slot": "^1.2.4",
     "cesium": "^1.143.0",
     "class-variance-authority": "^0.7.1",

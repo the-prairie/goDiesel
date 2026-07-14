@@ -9,6 +9,7 @@ export type ReplayStatus =
 
 export interface ReplayEngineMountOptions {
   container: HTMLElement;
+  avatarElement: HTMLElement;
   route: QuestRoute;
   onStatus: (status: ReplayStatus) => void;
 }
