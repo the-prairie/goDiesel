@@ -3,12 +3,14 @@ import { describe, expect, it } from "vitest";
 import type { QuestRoute } from "@/domain/routes";
 import {
   PLAYABLE_EARTH_CORRIDOR_M,
+  PLAYABLE_EARTH_CAMERA_RANGES_M,
   advancePlayableEarth,
   cyclePlayableEarthSpeed,
   initialPlayableEarthState,
   playableEarthPose,
   seekPlayableEarth,
   setPlayableEarthMode,
+  zoomPlayableEarth,
 } from "@/replay/playable-earth-controller";
 
 const route = {
@@ -81,5 +83,34 @@ describe("Playable Earth controller", () => {
     expect(state.speed).toBe(1);
     expect(seekPlayableEarth(state, 2_000, 1_000).progressM).toBe(1_000);
     expect(seekPlayableEarth(state, -100, 1_000).progressM).toBe(0);
+  });
+
+  it("zooms through bounded route-follow ranges without changing route state", () => {
+    const initial = {
+      ...setPlayableEarthMode(initialPlayableEarthState(), "guided"),
+      playing: true,
+      progressM: 320,
+      lateralOffsetM: 8,
+      cameraYawDeg: 24,
+    };
+    const closer = zoomPlayableEarth(initial, "in");
+    expect(closer.cameraRangeM).toBe(240);
+    expect(closer).toMatchObject({
+      mode: "guided",
+      playing: true,
+      progressM: 320,
+      lateralOffsetM: 8,
+      cameraYawDeg: 24,
+    });
+    expect(zoomPlayableEarth(closer, "in").cameraRangeM).toBe(120);
+    expect(zoomPlayableEarth(zoomPlayableEarth(closer, "in"), "in").cameraRangeM).toBe(
+      120,
+    );
+
+    let wider = initial;
+    for (let index = 0; index < 5; index += 1) {
+      wider = zoomPlayableEarth(wider, "out");
+    }
+    expect(wider.cameraRangeM).toBe(PLAYABLE_EARTH_CAMERA_RANGES_M.at(-1));
   });
 });

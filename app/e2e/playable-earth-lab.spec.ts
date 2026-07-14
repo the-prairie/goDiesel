@@ -15,6 +15,7 @@ async function installDeterministicEarthRenderer(
         progressM: number;
         lateralOffsetM: number;
         cameraHeadingDeg: number;
+        cameraRangeM: number;
       }>;
       __GODIESEL_PLAYABLE_EARTH_FACTORY__?: () => {
         mount(options: {
@@ -34,6 +35,7 @@ async function installDeterministicEarthRenderer(
           progressM: number;
           lateralOffsetM: number;
           cameraHeadingDeg: number;
+          cameraRangeM: number;
         }): void;
         destroy(): void;
       };
@@ -92,6 +94,7 @@ async function installDeterministicEarthRenderer(
             progressM: pose.progressM,
             lateralOffsetM: pose.lateralOffsetM,
             cameraHeadingDeg: pose.cameraHeadingDeg,
+            cameraRangeM: pose.cameraRangeM,
           });
           const canvas = container?.querySelector("canvas");
           if (canvas) canvas.dataset.progressM = pose.progressM.toFixed(2);
@@ -259,4 +262,49 @@ test("keyboard controls change mode, playback, pace, steering, and look", async 
 
   await page.keyboard.press("Space");
   await expect(page.getByRole("button", { name: "Play route" })).toBeVisible();
+});
+
+test("route-locked zoom changes framing without remounting or losing state", async ({
+  page,
+}) => {
+  await installDeterministicEarthRenderer(page);
+  await page.goto(`/#/lab/playable-earth/${routeSlug}`);
+  const lab = page.getByRole("region", { name: "Playable Earth Lab" });
+  const progress = page.getByRole("slider", { name: "Route progress" });
+
+  await expect(lab).toHaveAttribute("data-state", "ready");
+  await expect(lab).toHaveAttribute("data-camera-range", "720");
+  await page.getByRole("button", { name: "Take control" }).click();
+  await progress.fill("5000");
+  await page.getByRole("button", { name: "Zoom in to route" }).click();
+  await expect(lab).toHaveAttribute("data-camera-range", "240");
+  await expect(lab).toHaveAttribute("data-control-mode", "guided");
+  expect(Number(await progress.inputValue())).toBeCloseTo(5_000, 0);
+
+  await page.keyboard.press("+");
+  await expect(lab).toHaveAttribute("data-camera-range", "120");
+  await expect(page.getByRole("button", { name: "Zoom in to route" })).toBeDisabled();
+  await page.keyboard.press("-");
+  await expect(lab).toHaveAttribute("data-camera-range", "240");
+  await page.getByRole("button", { name: "Zoom out from route" }).click();
+  await page.getByRole("button", { name: "Zoom out from route" }).click();
+  await expect(lab).toHaveAttribute("data-camera-range", "1400");
+  await expect(page.getByRole("button", { name: "Zoom out from route" })).toBeDisabled();
+
+  await expect(
+    page.locator('canvas[aria-label="Deterministic photorealistic world"]'),
+  ).toHaveCount(1);
+  expect(
+    await page.evaluate(
+      () =>
+        (window as typeof window & { __earthLabDestroyCount?: number })
+          .__earthLabDestroyCount,
+    ),
+  ).toBe(0);
+  const latestPose = await page.evaluate(() =>
+    (window as typeof window & {
+      __earthLabPoses?: Array<{ cameraRangeM: number }>;
+    }).__earthLabPoses?.at(-1),
+  );
+  expect(latestPose?.cameraRangeM).toBe(1_400);
 });
