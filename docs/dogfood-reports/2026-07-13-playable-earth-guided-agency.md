@@ -30,6 +30,14 @@ The replay-to-guided transition was also measured near the route end in a separa
 
 The displayed frame rate is a browser requestAnimationFrame estimate, not a GPU frame-time trace.
 
+## Regression Verification
+
+- Production build and TypeScript compilation passed.
+- All 39 Vitest unit tests passed.
+- All 40 Python tests passed.
+- All 57 Playwright tests passed, including Playable Earth guided controls, keyboard input, route changes, failure states, mobile navigation, and overlap checks.
+- `git diff --check` passed.
+
 ## Objective Results
 
 | Dimension | Result | Evidence |
