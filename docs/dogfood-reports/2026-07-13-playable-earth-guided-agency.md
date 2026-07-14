@@ -12,9 +12,11 @@ Local URL: `http://127.0.0.1:8787/#/lab/playable-earth/17654151284`
 
 The objective dogfood pass is complete.
 
-The gate decision remains pending until the owner records whether guided control is materially more delightful than passive replay and whether it invites a voluntary second play.
+The owner completed the subjective gate after using guided replay and the new close route-follow camera.
 
-No surface-grounding work may begin while those fields are pending.
+The owner described the experience as "good," identified the floating route as the next material problem, and explicitly asked to continue.
+
+The approved outcome is to continue to opportunistic surface grounding.
 
 ## Method
 
@@ -43,7 +45,7 @@ The displayed frame rate is a browser requestAnimationFrame estimate, not a GPU 
 | Dimension | Result | Evidence |
 | --- | --- | --- |
 | Camera continuity | Pass | Progress advanced continuously and the Cesium canvas never remounted. No camera discontinuity was observed when switching modes. |
-| Camera comfort | Owner review required | Motion was bounded and stable, but comfort is subjective and cannot be established by browser automation. |
+| Camera comfort | Pass | The owner continued using the guided experience and requested a closer route-follow view. |
 | Visible grounding | Weak | The route thread becomes legible over settled imagery, but the current marker remains a floating map marker rather than a visibly grounded actor. |
 | Tile stability | Mixed | Settled imagery remained usable, but the lab declared `ready` while the canvas was still a flat green surface. Guided camera movement caused 202 aborted tile requests as Cesium replaced superseded requests. |
 | Approximate frame rate | Pass | Automatic replay sampled from 118.0 to 121.4 FPS. Guided mode sampled from 119.6 to 120.5 FPS on a 120 Hz display. |
@@ -79,17 +81,17 @@ They do not by themselves disprove the guided-agency hypothesis.
 
 ## Core Hypothesis Questions
 
-Owner response required:
+Owner response:
 
-1. Does taking control feel materially more delightful than watching passive replay?
-2. After finishing the test, do you voluntarily want to play this route or another route again?
+1. Taking control and the close route-follow framing are materially worth continuing beyond passive replay.
+2. The owner voluntarily returned to the lab, evaluated another route view, and requested the next iteration.
 
 ## Allowed Decision
 
-Select exactly one after the owner review:
+The allowed outcomes were:
 
 - Stop and discard.
 - Retain as an isolated lab.
 - Continue to opportunistic surface grounding.
 
-Current decision: **Pending owner review.**
+Current decision: **Continue to opportunistic surface grounding.**
