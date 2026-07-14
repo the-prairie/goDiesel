@@ -227,8 +227,10 @@ def test_atlas_search_models_memory_search_states():
 
 def test_replay_picker_pins_selected_route_and_avoids_mobile_nav_overlap():
     replay = (APP / "src/pages/replay-page.tsx").read_text()
+    stage = (APP / "src/components/replay/earth-replay-stage.tsx").read_text()
 
     assert "const pickerRoutes = selectedSummary" in replay
     assert ".filter((route) => route.slug !== selectedSummary.slug)" in replay
-    assert "md:max-h-80 md:overflow-y-auto" in replay
-    assert "grid max-h-80 gap-2 overflow-y-auto" not in replay
+    assert "Change route" in stage
+    assert "max-h-64" in stage
+    assert "overflow-y-auto" in stage

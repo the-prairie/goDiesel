@@ -1,4 +1,5 @@
-import type { QuestRoute, RoutePoint } from "@/domain/routes";
+import type { QuestRoute } from "@/domain/routes";
+import { routeDistanceM, routePathPose } from "@/replay/route-path";
 
 export type PlayableEarthMode = "replay" | "guided";
 
@@ -56,13 +57,7 @@ const MAX_INITIAL_SURFACE_OFFSET_M = 300;
 const MAX_SURFACE_OFFSET_CHANGE_M = 15;
 const MAX_GROUNDING_SPEED_M_PER_SECOND = 24;
 
-export function routeDistanceM(route: QuestRoute) {
-  return Math.max(
-    route.distanceKm * 1000,
-    route.route.at(-1)?.d ?? 0,
-    1,
-  );
-}
+export { routeDistanceM } from "@/replay/route-path";
 
 export function initialPlayableEarthState(): PlayableEarthControlState {
   return {
@@ -235,61 +230,30 @@ export function seekPlayableEarth(
   };
 }
 
-function pointAtDistance(points: RoutePoint[], progressM: number) {
-  if (points.length === 1) return { point: points[0], next: points[0] };
-  let upper = points.findIndex((point) => point.d >= progressM);
-  if (upper <= 0) upper = 1;
-  if (upper < 0) upper = points.length - 1;
-  const start = points[upper - 1];
-  const end = points[upper];
-  const span = Math.max(1, end.d - start.d);
-  const ratio = clamp((progressM - start.d) / span, 0, 1);
-  return {
-    point: {
-      lat: start.lat + (end.lat - start.lat) * ratio,
-      lng: start.lng + (end.lng - start.lng) * ratio,
-      elev: start.elev + (end.elev - start.elev) * ratio,
-      d: progressM,
-    },
-    next: end,
-  };
-}
-
-function bearingDegrees(from: RoutePoint, to: RoutePoint) {
-  const lat1 = (from.lat * Math.PI) / 180;
-  const lat2 = (to.lat * Math.PI) / 180;
-  const deltaLng = ((to.lng - from.lng) * Math.PI) / 180;
-  const y = Math.sin(deltaLng) * Math.cos(lat2);
-  const x =
-    Math.cos(lat1) * Math.sin(lat2) -
-    Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLng);
-  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
-}
-
 export function playableEarthPose(
   route: QuestRoute,
   state: PlayableEarthControlState,
 ): PlayableEarthPose {
   const totalDistanceM = routeDistanceM(route);
-  const { point, next } = pointAtDistance(route.route, state.progressM);
-  const bearingDeg = bearingDegrees(point, next);
+  const routePose = routePathPose(route, state.progressM);
+  const bearingDeg = routePose.bearingDeg;
   const rightBearing = ((bearingDeg + 90) * Math.PI) / 180;
   const northM = Math.cos(rightBearing) * state.lateralOffsetM;
   const eastM = Math.sin(rightBearing) * state.lateralOffsetM;
-  const lat = point.lat + northM / 111_320;
+  const lat = routePose.lat + northM / 111_320;
   const lng =
-    point.lng +
+    routePose.lng +
     eastM /
-      (111_320 * Math.max(0.2, Math.cos((point.lat * Math.PI) / 180)));
+      (111_320 * Math.max(0.2, Math.cos((routePose.lat * Math.PI) / 180)));
 
   return {
     lat,
     lng,
-    elev: point.elev,
+    elev: routePose.elev,
     bearingDeg,
     cameraHeadingDeg: bearingDeg + state.cameraYawDeg,
-    progressM: state.progressM,
-    progressRatio: state.progressM / totalDistanceM,
+    progressM: routePose.progressM,
+    progressRatio: routePose.progressM / totalDistanceM,
     lateralOffsetM: state.lateralOffsetM,
     cameraRangeM: state.cameraRangeM,
   };

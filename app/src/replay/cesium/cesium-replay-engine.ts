@@ -1,0 +1,301 @@
+import {
+  Cartesian3,
+  Cartographic,
+  Cesium3DTileset,
+  ClassificationType,
+  Color,
+  ConstantPositionProperty,
+  Entity,
+  HeadingPitchRange,
+  PolylineGlowMaterialProperty,
+  Viewer,
+} from "cesium";
+import "cesium/Build/Cesium/Widgets/widgets.css";
+
+import {
+  advancePlayableEarthGrounding,
+  initialPlayableEarthGrounding,
+  type PlayableEarthGroundingObservation,
+  type PlayableEarthGroundingState,
+} from "@/replay/playable-earth-controller";
+import type {
+  ReplayEngine,
+  ReplayEngineMountOptions,
+} from "@/replay/replay-engine";
+import type { ReplayPose } from "@/replay/replay-controller";
+
+const CAMERA_RANGE_M = 240;
+const CAMERA_HEIGHT_M = 110;
+const SURFACE_VISUAL_OFFSET_M = 3;
+const SURFACE_SAMPLE_INTERVAL_MS = 1_200;
+const MAX_STALE_SAMPLE_DISTANCE_M = 500;
+
+function webglAvailable() {
+  try {
+    const canvas = document.createElement("canvas");
+    return Boolean(canvas.getContext("webgl2") || canvas.getContext("webgl"));
+  } catch {
+    return false;
+  }
+}
+
+export class CesiumReplayEngine implements ReplayEngine {
+  private viewer?: Viewer;
+  private marker?: Entity;
+  private routeEntity?: Entity;
+  private cameraHeadingDeg?: number;
+  private grounding?: PlayableEarthGroundingState;
+  private pendingGroundingObservation?: PlayableEarthGroundingObservation;
+  private latestPose?: ReplayPose;
+  private lastGroundingUpdateMs?: number;
+  private lastSurfaceSampleMs = Number.NEGATIVE_INFINITY;
+  private surfaceSampleInFlight = false;
+  private generation = 0;
+
+  async mount({ container, route, onStatus }: ReplayEngineMountOptions) {
+    const generation = ++this.generation;
+    onStatus({
+      state: "loading",
+      title: "Building your route world",
+      message: "Loading the bundled Earth engine and photorealistic tiles.",
+    });
+
+    if (route.route.length < 2) {
+      onStatus({
+        state: "unavailable",
+        title: "Route geometry unavailable",
+        message: "This completed route does not contain enough points to replay.",
+      });
+      return;
+    }
+    if (!webglAvailable()) {
+      onStatus({
+        state: "unavailable",
+        title: "WebGL unavailable",
+        message: "This browser cannot start the photorealistic replay.",
+      });
+      return;
+    }
+
+    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
+    if (!apiKey) {
+      onStatus({
+        state: "unavailable",
+        title: "Map tiles unavailable",
+        message: "A Google Map Tiles browser key is required for Earth Replay.",
+      });
+      return;
+    }
+
+    try {
+      const viewer = new Viewer(container, {
+        animation: false,
+        baseLayer: false,
+        baseLayerPicker: false,
+        fullscreenButton: false,
+        geocoder: false,
+        homeButton: false,
+        infoBox: false,
+        navigationHelpButton: false,
+        sceneModePicker: false,
+        selectionIndicator: false,
+        timeline: false,
+        shouldAnimate: true,
+        requestRenderMode: false,
+        contextOptions: { webgl: { preserveDrawingBuffer: true } },
+      });
+      this.viewer = viewer;
+      viewer.scene.globe.show = false;
+      if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = true;
+      viewer.scene.screenSpaceCameraController.enableCollisionDetection = true;
+
+      const tilesetUrl = `https://tile.googleapis.com/v1/3dtiles/root.json?key=${encodeURIComponent(apiKey)}`;
+      const tileset = await Cesium3DTileset.fromUrl(tilesetUrl, {
+        showCreditsOnScreen: true,
+        maximumScreenSpaceError: 24,
+        dynamicScreenSpaceError: true,
+        skipLevelOfDetail: true,
+        enableCollision: true,
+      });
+      if (generation !== this.generation) {
+        viewer.destroy();
+        return;
+      }
+      viewer.scene.primitives.add(tileset);
+
+      const routeEntity = viewer.entities.add({
+        name: `${route.name} route thread`,
+        polyline: {
+          positions: route.route.map((point) =>
+            Cartesian3.fromDegrees(point.lng, point.lat),
+          ),
+          width: 9,
+          clampToGround: true,
+          classificationType: ClassificationType.CESIUM_3D_TILE,
+          material: new PolylineGlowMaterialProperty({
+            color: Color.fromCssColorString("#00f19f").withAlpha(0.98),
+            glowPower: 0.18,
+          }),
+          depthFailMaterial: Color.fromCssColorString("#00f19f").withAlpha(0.94),
+        },
+      });
+      this.routeEntity = routeEntity;
+      const start = route.route[0];
+      this.marker = viewer.entities.add({
+        name: "Selected replay avatar",
+        position: Cartesian3.fromDegrees(
+          start.lng,
+          start.lat,
+          start.elev + SURFACE_VISUAL_OFFSET_M,
+        ),
+        point: {
+          pixelSize: 16,
+          color: Color.fromCssColorString("#00f19f"),
+          outlineColor: Color.WHITE,
+          outlineWidth: 4,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+      });
+
+      await viewer.zoomTo(routeEntity, new HeadingPitchRange(0, -0.72, 0));
+      if (generation !== this.generation) return;
+      onStatus({
+        state: "ready",
+        title: "Earth Replay ready",
+        message: "The route thread and avatar are ready to move.",
+      });
+    } catch (error) {
+      console.warn("Earth Replay unavailable", error);
+      if (generation !== this.generation) return;
+      this.destroy();
+      onStatus({
+        state: "unavailable",
+        title: "Photorealistic world unavailable",
+        message: "Google 3D tiles could not load for this route.",
+      });
+    }
+  }
+
+  setPose(pose: ReplayPose) {
+    const viewer = this.viewer;
+    if (!viewer || !this.marker || viewer.isDestroyed()) return;
+    const now = performance.now();
+    this.latestPose = pose;
+    if (!this.grounding) {
+      this.grounding = initialPlayableEarthGrounding(pose.elev);
+    }
+    const elapsedSeconds =
+      this.lastGroundingUpdateMs === undefined
+        ? 0
+        : (now - this.lastGroundingUpdateMs) / 1_000;
+    this.lastGroundingUpdateMs = now;
+    const observation = this.pendingGroundingObservation;
+    this.pendingGroundingObservation = undefined;
+    this.grounding = advancePlayableEarthGrounding(
+      this.grounding,
+      pose.elev,
+      elapsedSeconds,
+      observation,
+    );
+    const groundedHeightM = this.grounding.displayedHeightM;
+    this.marker.position = new ConstantPositionProperty(
+      Cartesian3.fromDegrees(
+        pose.lng,
+        pose.lat,
+        groundedHeightM + SURFACE_VISUAL_OFFSET_M,
+      ),
+    );
+
+    if (this.cameraHeadingDeg === undefined) {
+      this.cameraHeadingDeg = pose.bearingDeg;
+    } else {
+      const delta = ((pose.bearingDeg - this.cameraHeadingDeg + 540) % 360) - 180;
+      this.cameraHeadingDeg = (this.cameraHeadingDeg + delta * 0.08 + 360) % 360;
+    }
+    const heading = (this.cameraHeadingDeg * Math.PI) / 180;
+    const cameraLat =
+      pose.lat - (Math.cos(heading) * CAMERA_RANGE_M) / 111_320;
+    const cameraLng =
+      pose.lng -
+      (Math.sin(heading) * CAMERA_RANGE_M) /
+        (111_320 * Math.max(0.2, Math.cos((pose.lat * Math.PI) / 180)));
+    viewer.camera.setView({
+      destination: Cartesian3.fromDegrees(
+        cameraLng,
+        cameraLat,
+        groundedHeightM + SURFACE_VISUAL_OFFSET_M + CAMERA_HEIGHT_M,
+      ),
+      orientation: {
+        heading,
+        pitch: -Math.atan2(CAMERA_HEIGHT_M, CAMERA_RANGE_M),
+        roll: 0,
+      },
+    });
+    this.requestSurfaceSample(pose, now);
+  }
+
+  private requestSurfaceSample(pose: ReplayPose, now: number) {
+    const scene = this.viewer?.scene;
+    if (
+      !scene ||
+      this.surfaceSampleInFlight ||
+      now - this.lastSurfaceSampleMs < SURFACE_SAMPLE_INTERVAL_MS
+    ) {
+      return;
+    }
+    this.lastSurfaceSampleMs = now;
+    if (!scene.sampleHeightSupported) {
+      this.pendingGroundingObservation = { kind: "missing" };
+      return;
+    }
+
+    const requestGeneration = this.generation;
+    const requestProgressM = pose.progressM;
+    this.surfaceSampleInFlight = true;
+    void scene
+      .sampleHeightMostDetailed(
+        [Cartographic.fromDegrees(pose.lng, pose.lat)],
+        [this.routeEntity, this.marker].filter((entity): entity is Entity => Boolean(entity)),
+        2,
+      )
+      .then((positions) => {
+        if (requestGeneration !== this.generation) return;
+        if (
+          Math.abs((this.latestPose?.progressM ?? requestProgressM) - requestProgressM) >
+          MAX_STALE_SAMPLE_DISTANCE_M
+        ) {
+          return;
+        }
+        const sampledHeightM = positions[0]?.height;
+        this.pendingGroundingObservation =
+          typeof sampledHeightM === "number" && Number.isFinite(sampledHeightM)
+          ? { kind: "sample", heightM: sampledHeightM }
+          : { kind: "missing" };
+      })
+      .catch(() => {
+        if (requestGeneration === this.generation) {
+          this.pendingGroundingObservation = { kind: "missing" };
+        }
+      })
+      .finally(() => {
+        if (requestGeneration === this.generation) {
+          this.surfaceSampleInFlight = false;
+        }
+      });
+  }
+
+  destroy() {
+    this.generation += 1;
+    if (this.viewer && !this.viewer.isDestroyed()) this.viewer.destroy();
+    this.viewer = undefined;
+    this.marker = undefined;
+    this.routeEntity = undefined;
+    this.cameraHeadingDeg = undefined;
+    this.grounding = undefined;
+    this.pendingGroundingObservation = undefined;
+    this.latestPose = undefined;
+    this.lastGroundingUpdateMs = undefined;
+    this.lastSurfaceSampleMs = Number.NEGATIVE_INFINITY;
+    this.surfaceSampleInFlight = false;
+  }
+}
