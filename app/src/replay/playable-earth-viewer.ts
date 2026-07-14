@@ -1,4 +1,5 @@
 import type { QuestRoute } from "@/domain/routes";
+import type { PlayableEarthPose } from "@/replay/playable-earth-controller";
 
 export type PlayableEarthStatus =
   | { state: "loading"; title: string; message: string }
@@ -13,6 +14,7 @@ export interface PlayableEarthMountOptions {
 
 export interface PlayableEarthViewer {
   mount(options: PlayableEarthMountOptions): Promise<void>;
+  setPose(pose: PlayableEarthPose): void;
   destroy(): void;
 }
 
@@ -26,6 +28,9 @@ declare global {
 }
 
 const CESIUM_VERSION = "1.120";
+const AVATAR_VISUAL_OFFSET_M = 120;
+const CAMERA_HEIGHT_M = 720;
+const CAMERA_TRAILING_M = 720;
 let cesiumPromise: Promise<CesiumGlobal | undefined> | undefined;
 
 function loadCesium() {
@@ -78,6 +83,8 @@ function webglAvailable() {
 
 class CesiumPlayableEarthViewer implements PlayableEarthViewer {
   private viewer?: any;
+  private marker?: any;
+  private cameraHeadingDeg?: number;
   private generation = 0;
 
   async mount({ container, route, onStatus }: PlayableEarthMountOptions) {
@@ -169,7 +176,7 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
         Cesium.Cartesian3.fromDegrees(
           point.lng,
           point.lat,
-          (Number(point.elev) || 0) + 120,
+          (Number(point.elev) || 0) + AVATAR_VISUAL_OFFSET_M,
         ),
       );
       const routeEntity = viewer.entities.add({
@@ -188,7 +195,7 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
           ),
         },
       });
-      viewer.entities.add({
+      this.marker = viewer.entities.add({
         name: "Current route position",
         position: positions[0],
         point: {
@@ -219,10 +226,50 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
     }
   }
 
+  setPose(pose: PlayableEarthPose) {
+    const Cesium = window.Cesium;
+    if (!Cesium || !this.viewer || !this.marker || this.viewer.isDestroyed?.()) return;
+    const markerPosition = Cesium.Cartesian3.fromDegrees(
+      pose.lng,
+      pose.lat,
+      pose.elev + AVATAR_VISUAL_OFFSET_M,
+    );
+    this.marker.position = markerPosition;
+
+    if (this.cameraHeadingDeg === undefined) {
+      this.cameraHeadingDeg = pose.cameraHeadingDeg;
+    } else {
+      const delta =
+        ((pose.cameraHeadingDeg - this.cameraHeadingDeg + 540) % 360) - 180;
+      this.cameraHeadingDeg = (this.cameraHeadingDeg + delta * 0.08 + 360) % 360;
+    }
+    const heading = (this.cameraHeadingDeg * Math.PI) / 180;
+    const cameraLat =
+      pose.lat - (Math.cos(heading) * CAMERA_TRAILING_M) / 111_320;
+    const cameraLng =
+      pose.lng -
+      (Math.sin(heading) * CAMERA_TRAILING_M) /
+        (111_320 * Math.max(0.2, Math.cos((pose.lat * Math.PI) / 180)));
+    this.viewer.camera.setView({
+      destination: Cesium.Cartesian3.fromDegrees(
+        cameraLng,
+        cameraLat,
+        pose.elev + CAMERA_HEIGHT_M,
+      ),
+      orientation: {
+        heading,
+        pitch: -0.66,
+        roll: 0,
+      },
+    });
+  }
+
   destroy() {
     this.generation += 1;
     if (this.viewer && !this.viewer.isDestroyed?.()) this.viewer.destroy();
     this.viewer = undefined;
+    this.marker = undefined;
+    this.cameraHeadingDeg = undefined;
   }
 }
 
