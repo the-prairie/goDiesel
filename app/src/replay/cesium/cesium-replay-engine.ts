@@ -24,10 +24,48 @@ import type {
   ReplayEngineMountOptions,
 } from "@/replay/replay-engine";
 import type { ReplayPose } from "@/replay/replay-controller";
+import { recordTileFailure, rgbaPixelsLookBlank } from "@/replay/replay-health";
 
 const SURFACE_VISUAL_OFFSET_M = 3;
 const SURFACE_SAMPLE_INTERVAL_MS = 1_200;
 const MAX_STALE_SAMPLE_DISTANCE_M = 500;
+const TILE_FAILURE_THRESHOLD = 8;
+
+function canvasLooksBlank(canvas: HTMLCanvasElement) {
+  const gl =
+    canvas.getContext("webgl2") ??
+    (canvas.getContext("webgl") as WebGLRenderingContext | null);
+  if (!gl || canvas.width < 16 || canvas.height < 16) return false;
+  const blockSize = 8;
+  const samples = [
+    [0.2, 0.2],
+    [0.5, 0.2],
+    [0.8, 0.2],
+    [0.2, 0.65],
+    [0.5, 0.65],
+    [0.8, 0.65],
+  ];
+  const sampleSize = blockSize * blockSize * 4;
+  const pixels = new Uint8Array(sampleSize * samples.length);
+  try {
+    samples.forEach(([xRatio, yRatio], sampleIndex) => {
+      const x = Math.floor((canvas.width - blockSize) * xRatio);
+      const y = Math.floor((canvas.height - blockSize) * yRatio);
+      gl.readPixels(
+        x,
+        y,
+        blockSize,
+        blockSize,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        pixels.subarray(sampleIndex * sampleSize, (sampleIndex + 1) * sampleSize),
+      );
+    });
+  } catch {
+    return false;
+  }
+  return rgbaPixelsLookBlank(pixels);
+}
 
 function cameraHeightAboveAvatarM(cameraRangeM: number) {
   if (cameraRangeM <= 240) {
@@ -62,10 +100,18 @@ export class CesiumReplayEngine implements ReplayEngine {
   private lastGroundingUpdateMs?: number;
   private lastSurfaceSampleMs = Number.NEGATIVE_INFINITY;
   private surfaceSampleInFlight = false;
+  private removeTileFailureListener?: () => void;
+  private cancelInitialTileWait?: () => void;
+  private diagnosticsTimer?: number;
+  private tileFailureTimes: number[] = [];
+  private blankFrameCount = 0;
+  private partial = false;
+  private onStatus?: ReplayEngineMountOptions["onStatus"];
   private generation = 0;
 
   async mount({ container, avatarElement, route, onStatus }: ReplayEngineMountOptions) {
     const generation = ++this.generation;
+    this.onStatus = onStatus;
     onStatus({
       state: "loading",
       title: "Building your route world",
@@ -135,6 +181,17 @@ export class CesiumReplayEngine implements ReplayEngine {
         return;
       }
       viewer.scene.primitives.add(tileset);
+      this.removeTileFailureListener = tileset.tileFailed.addEventListener(() => {
+        this.tileFailureTimes = recordTileFailure(
+          this.tileFailureTimes,
+          performance.now(),
+        );
+        if (this.tileFailureTimes.length >= TILE_FAILURE_THRESHOLD) {
+          this.reportPartial(
+            "Several photorealistic tiles failed to load. Replay can continue with gaps.",
+          );
+        }
+      });
 
       const routeEntity = viewer.entities.add({
         name: `${route.name} route thread`,
@@ -184,11 +241,19 @@ export class CesiumReplayEngine implements ReplayEngine {
 
       await viewer.zoomTo(routeEntity, new HeadingPitchRange(0, -0.72, 0));
       if (generation !== this.generation) return;
-      onStatus({
-        state: "ready",
-        title: "Earth Replay ready",
-        message: "The route thread and avatar are ready to move.",
-      });
+      const initialTiles = await this.waitForInitialTiles(tileset);
+      if (generation !== this.generation) return;
+      if (!this.partial) {
+        onStatus({
+          state: "ready",
+          title: "Earth Replay ready",
+          message:
+            initialTiles === "loaded"
+              ? "The route thread and avatar are ready to move."
+              : "The route is ready while finer tile detail continues loading.",
+        });
+      }
+      this.startRenderDiagnostics(generation);
     } catch (error) {
       if (generation !== this.generation) return;
       console.warn("Earth Replay unavailable", error);
@@ -199,6 +264,53 @@ export class CesiumReplayEngine implements ReplayEngine {
         message: "Google 3D tiles could not load for this route.",
       });
     }
+  }
+
+  private waitForInitialTiles(tileset: Cesium3DTileset) {
+    if (tileset.tilesLoaded) return Promise.resolve<"loaded">("loaded");
+    return new Promise<"loaded" | "timeout" | "cancelled">((resolve) => {
+      let settled = false;
+      let removeLoaded: (() => void) | undefined;
+      let timeout: number | undefined;
+      const finish = (result: "loaded" | "timeout" | "cancelled") => {
+        if (settled) return;
+        settled = true;
+        removeLoaded?.();
+        if (timeout !== undefined) window.clearTimeout(timeout);
+        if (this.cancelInitialTileWait === cancel) {
+          this.cancelInitialTileWait = undefined;
+        }
+        resolve(result);
+      };
+      const cancel = () => finish("cancelled");
+      removeLoaded = tileset.allTilesLoaded.addEventListener(() => finish("loaded"));
+      timeout = window.setTimeout(() => finish("timeout"), 8_000);
+      this.cancelInitialTileWait = cancel;
+    });
+  }
+
+  private startRenderDiagnostics(generation: number) {
+    this.diagnosticsTimer = window.setInterval(() => {
+      if (generation !== this.generation || this.partial) return;
+      const canvas = this.viewer?.canvas;
+      if (!canvas || canvas.width < 2 || canvas.height < 2) return;
+      this.blankFrameCount = canvasLooksBlank(canvas) ? this.blankFrameCount + 1 : 0;
+      if (this.blankFrameCount >= 2) {
+        this.reportPartial(
+          "The 3D scene is not rendering fully. Replay can continue in Atlas instead.",
+        );
+      }
+    }, 8_000);
+  }
+
+  private reportPartial(message: string) {
+    if (this.partial) return;
+    this.partial = true;
+    this.onStatus?.({
+      state: "partial",
+      title: "3D tiles partially unavailable",
+      message,
+    });
   }
 
   setPose(pose: ReplayPose) {
@@ -335,6 +447,11 @@ export class CesiumReplayEngine implements ReplayEngine {
 
   destroy() {
     this.generation += 1;
+    this.cancelInitialTileWait?.();
+    this.removeTileFailureListener?.();
+    if (this.diagnosticsTimer !== undefined) {
+      window.clearInterval(this.diagnosticsTimer);
+    }
     this.removeAvatarTracking?.();
     if (this.avatarElement) this.avatarElement.style.display = "none";
     if (this.viewer && !this.viewer.isDestroyed()) this.viewer.destroy();
@@ -353,5 +470,12 @@ export class CesiumReplayEngine implements ReplayEngine {
     this.lastGroundingUpdateMs = undefined;
     this.lastSurfaceSampleMs = Number.NEGATIVE_INFINITY;
     this.surfaceSampleInFlight = false;
+    this.removeTileFailureListener = undefined;
+    this.cancelInitialTileWait = undefined;
+    this.diagnosticsTimer = undefined;
+    this.tileFailureTimes = [];
+    this.blankFrameCount = 0;
+    this.partial = false;
+    this.onStatus = undefined;
   }
 }

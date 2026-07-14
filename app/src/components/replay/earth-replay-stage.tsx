@@ -4,6 +4,7 @@ import {
   ChevronDown,
   Gauge,
   LocateFixed,
+  Map,
   MousePointer2,
   Pause,
   Play,
@@ -39,14 +40,23 @@ import {
 import {
   createReplayEngine,
   type ReplayEngine,
+  type ReplayEngineMode,
   type ReplayStatus,
 } from "@/replay/replay-engine";
 
-const INITIAL_STATUS: ReplayStatus = {
-  state: "loading",
-  title: "Building your route world",
-  message: "Preparing the bundled Earth engine.",
-};
+function initialReplayStatus(mode: ReplayEngineMode): ReplayStatus {
+  return mode === "earth"
+    ? {
+        state: "loading",
+        title: "Building your route world",
+        message: "Preparing the bundled Earth engine.",
+      }
+    : {
+        state: "loading",
+        title: "Opening Atlas replay",
+        message: "Preparing the fallback route map.",
+      };
+}
 
 export function EarthReplayStage({
   route,
@@ -58,12 +68,17 @@ export function EarthReplayStage({
   const containerRef = useRef<HTMLDivElement>(null);
   const avatarElementRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<ReplayEngine | undefined>(undefined);
+  const mountedRouteRef = useRef<string | undefined>(undefined);
   const controlRef = useRef(initialReplayState());
-  const [status, setStatus] = useState<ReplayStatus>(INITIAL_STATUS);
+  const [status, setStatus] = useState<ReplayStatus>(() =>
+    initialReplayStatus("earth"),
+  );
+  const [engineMode, setEngineMode] = useState<ReplayEngineMode>("earth");
   const [control, setControl] = useState(controlRef.current);
   const [avatar, setAvatar] = useState(storedReplayAvatar);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const totalDistanceM = routeDistanceM(route);
+  const operational = status.state === "ready" || status.state === "partial";
 
   const commitControl = useCallback(
     (update: (current: ReplayControlState) => ReplayControlState) => {
@@ -79,19 +94,26 @@ export function EarthReplayStage({
     const container = containerRef.current;
     const avatarElement = avatarElementRef.current;
     if (!container || !avatarElement) return;
-    const engine = createReplayEngine();
+    const routeChanged = mountedRouteRef.current !== route.slug;
+    if (routeChanged && engineMode !== "earth") {
+      setEngineMode("earth");
+      return;
+    }
+    const engine = createReplayEngine(engineMode);
     engineRef.current = engine;
-    const initialControl = initialReplayState();
+    const initialControl = routeChanged ? initialReplayState() : controlRef.current;
+    mountedRouteRef.current = route.slug;
     controlRef.current = initialControl;
     setControl(initialControl);
-    setStatus(INITIAL_STATUS);
+    setStatus(initialReplayStatus(engineMode));
     void engine.mount({
       container,
       avatarElement,
       route,
       onStatus: (nextStatus) => {
+        if (engineRef.current !== engine) return;
         setStatus(nextStatus);
-        if (nextStatus.state === "ready") {
+        if (nextStatus.state === "ready" || nextStatus.state === "partial") {
           engine.setPose(replayPose(route, controlRef.current));
         }
       },
@@ -100,10 +122,10 @@ export function EarthReplayStage({
       engine.destroy();
       if (engineRef.current === engine) engineRef.current = undefined;
     };
-  }, [route]);
+  }, [engineMode, route]);
 
   useEffect(() => {
-    if (status.state !== "ready") return;
+    if (!operational || !control.playing) return;
     let frame = 0;
     let previous = performance.now();
     let lastUiUpdate = previous;
@@ -124,7 +146,7 @@ export function EarthReplayStage({
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [route, status.state, totalDistanceM]);
+  }, [control.playing, operational, route, totalDistanceM]);
 
   const selectAvatar = (id: ReplayAvatarId) => {
     const nextAvatar = REPLAY_AVATARS.find((option) => option.id === id);
@@ -136,8 +158,9 @@ export function EarthReplayStage({
 
   return (
     <section
-      aria-label="Earth Replay"
-      data-engine="cesium-bundled"
+      aria-label={engineMode === "earth" ? "Earth Replay" : "Atlas Replay"}
+      data-testid="replay-stage"
+      data-engine={engineMode === "earth" ? "cesium-bundled" : "maplibre-atlas"}
       data-state={status.state}
       data-route-slug={route.slug}
       data-progress={control.progressM.toFixed(2)}
@@ -145,11 +168,11 @@ export function EarthReplayStage({
       data-following={control.following}
       data-camera-range={control.cameraRangeM}
       data-avatar={avatar.id}
-      className="relative min-h-[calc(100dvh-3.5rem)] overflow-hidden bg-[#02070a]"
+      className="relative h-[calc(100dvh-3.5rem)] min-h-[36rem] overflow-hidden bg-[#02070a]"
     >
       <div
         ref={containerRef}
-        aria-label="Earth Replay world"
+        aria-label={engineMode === "earth" ? "Earth Replay world" : "Atlas Replay map"}
         className="absolute inset-0"
       />
       <div
@@ -175,7 +198,7 @@ export function EarthReplayStage({
         >
           <div className="flex items-center gap-2 text-xs font-semibold uppercase text-primary">
             <Route className="size-4" aria-hidden="true" />
-            Earth Replay
+            {engineMode === "earth" ? "Earth Replay" : "Atlas Replay"}
           </div>
           <h1 className="mt-2 text-xl font-semibold sm:text-2xl">{route.name}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -185,6 +208,34 @@ export function EarthReplayStage({
             <p className="mt-3 max-w-sm text-sm text-muted-foreground">
               {route.curation.vibe}
             </p>
+          ) : null}
+          {status.state === "partial" ? (
+            <div role="status" className="mt-3 border-l-2 border-amber-300 pl-3">
+              <div className="text-sm font-semibold">{status.title}</div>
+              <p className="mt-1 text-xs text-muted-foreground">{status.message}</p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={() => setEngineMode("atlas")}
+              >
+                <Map aria-hidden="true" />
+                Use Atlas replay
+              </Button>
+            </div>
+          ) : null}
+          {engineMode === "atlas" ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-3"
+              onClick={() => setEngineMode("earth")}
+            >
+              <Route aria-hidden="true" />
+              Try Earth replay
+            </Button>
           ) : null}
           <details className="relative mt-3">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 border-t border-border pt-3 text-sm font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
@@ -220,7 +271,7 @@ export function EarthReplayStage({
         </div>
       </div>
 
-      {status.state !== "ready" ? (
+      {!operational ? (
         <div className="absolute inset-0 z-10 grid place-items-center bg-background/72 p-6">
           <div
             role={status.state === "unavailable" ? "alert" : "status"}
@@ -230,9 +281,17 @@ export function EarthReplayStage({
             <div className="font-semibold">{status.title}</div>
             <p className="mt-2 text-sm text-muted-foreground">{status.message}</p>
             {status.state === "unavailable" ? (
-              <Button asChild className="mt-5">
-                <Link to={routeDetailPath(route.slug)}>Return to route guide</Link>
-              </Button>
+              <div className="mt-5 flex flex-wrap justify-center gap-2">
+                {engineMode === "earth" ? (
+                  <Button type="button" onClick={() => setEngineMode("atlas")}>
+                    <Map aria-hidden="true" />
+                    Use Atlas replay
+                  </Button>
+                ) : null}
+                <Button asChild variant={engineMode === "earth" ? "outline" : "default"}>
+                  <Link to={routeDetailPath(route.slug)}>Return to route guide</Link>
+                </Button>
+              </div>
             ) : null}
           </div>
         </div>
@@ -246,7 +305,7 @@ export function EarthReplayStage({
           <Route className="size-4 shrink-0 text-primary" aria-hidden="true" />
           <div className="min-w-28 flex-1">
             <div className="text-xs font-semibold uppercase text-primary">
-              {status.state === "ready" ? "Route thread ready" : "Route world loading"}
+              {operational ? "Route thread ready" : "Route world loading"}
             </div>
             <div aria-live="off" className="truncate text-sm text-muted-foreground">
               {(control.progressM / 1_000).toFixed(2)} / {route.distanceKm.toFixed(1)} km
@@ -259,7 +318,7 @@ export function EarthReplayStage({
             max={totalDistanceM}
             step={1}
             value={control.progressM}
-            disabled={status.state !== "ready"}
+            disabled={!operational}
             onChange={(event) =>
               commitControl((current) =>
                 seekReplay(current, Number(event.target.value), totalDistanceM),
@@ -271,7 +330,7 @@ export function EarthReplayStage({
             type="button"
             size="icon"
             variant="outline"
-            disabled={status.state !== "ready"}
+            disabled={!operational}
             aria-label={control.playing ? "Pause route" : "Play route"}
             title={control.playing ? "Pause route" : "Play route"}
             onClick={() => commitControl(toggleReplay)}
@@ -281,7 +340,7 @@ export function EarthReplayStage({
           <Button
             type="button"
             variant={control.following ? "default" : "outline"}
-            disabled={status.state !== "ready"}
+            disabled={!operational}
             aria-label={control.following ? "Release camera" : "Follow route"}
             title={control.following ? "Release camera" : "Follow route"}
             onClick={() => commitControl(toggleReplayFollowing)}
@@ -300,7 +359,7 @@ export function EarthReplayStage({
             size="icon"
             variant="outline"
             disabled={
-              status.state !== "ready" ||
+              !operational ||
               control.cameraRangeM === REPLAY_CAMERA_RANGES_M[0]
             }
             aria-label="Zoom in to route"
@@ -314,7 +373,7 @@ export function EarthReplayStage({
             size="icon"
             variant="outline"
             disabled={
-              status.state !== "ready" ||
+              !operational ||
               control.cameraRangeM === REPLAY_CAMERA_RANGES_M.at(-1)
             }
             aria-label="Zoom out from route"
@@ -326,7 +385,7 @@ export function EarthReplayStage({
           <Button
             type="button"
             variant="outline"
-            disabled={status.state !== "ready"}
+            disabled={!operational}
             aria-label={`Playback speed ${control.speed}x`}
             title="Change playback speed"
             onClick={() => commitControl(cycleReplaySpeed)}
