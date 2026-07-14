@@ -20,7 +20,10 @@ const adminRoute = {
   generation_status: "ready",
 };
 
-async function mockEditableAdmin(page: Page, onSave: (request: Request) => void) {
+async function mockEditableAdmin(
+  page: Page,
+  onSave: (request: Request) => void,
+) {
   await page.route(`${adminApi}/api/admin/status`, async (route) => {
     await route.fulfill({
       json: {
@@ -65,24 +68,30 @@ test("local owner workflow validates every field and regenerates route data", as
   await expect(editor.getByRole("status")).toContainText(
     "Reviewed guides require every curation field",
   );
-  await expect(editor.getByRole("button", { name: "Save and regenerate" })).toBeDisabled();
+  await expect(
+    editor.getByRole("button", { name: "Save and regenerate" }),
+  ).toBeDisabled();
 
-  await editor.getByLabel("Vibe").fill("Quiet temple lanes opening into a sustained climb.");
+  await editor
+    .getByLabel("Vibe")
+    .fill("Quiet temple lanes opening into a sustained climb.");
   await editor.getByLabel("Ideal use").fill("A cool day with time to explore.");
   await editor.getByLabel("Difficulty").fill("Demanding");
   await editor.getByLabel("Terrain").fill("Paved lanes\nHills");
   await editor.getByLabel("Highlights").fill("Temple district\nEastern hills");
   await editor.getByLabel("Caveats").fill("Frequent road crossings");
   await editor.getByLabel("Seasonality").fill("Best in cool, dry weather.");
-  await editor.getByLabel("Editorial note").fill("Preserved for its city-to-hills contrast.");
+  await editor
+    .getByLabel("Editorial note")
+    .fill("Preserved for its city-to-hills contrast.");
   await expect(editor.getByRole("status")).toContainText(
     "Reviewed guide is complete and ready to generate",
   );
 
   await editor.getByRole("button", { name: "Save and regenerate" }).click();
-  await expect(editor.getByText(
-    "Manifest and route detail regenerated",
-  )).toBeVisible();
+  await expect(
+    editor.getByText("Manifest and route detail regenerated"),
+  ).toBeVisible();
   expect(saveRequest).not.toBeNull();
   expect(saveRequest!.postDataJSON()).toEqual({
     activity_id: "17654151284",
@@ -100,7 +109,9 @@ test("local owner workflow validates every field and regenerates route data", as
   });
 });
 
-test("Admin is explicitly read-only without the local writer", async ({ page }) => {
+test("Admin is explicitly read-only without the local writer", async ({
+  page,
+}) => {
   await page.goto("/#/admin");
 
   await expect(page.getByText("Read-only mode.")).toBeVisible();
@@ -108,8 +119,12 @@ test("Admin is explicitly read-only without the local writer", async ({ page }) 
   await expect(editor).toBeVisible();
   await expect(editor.getByLabel("Vibe")).toBeDisabled();
   await expect(editor.getByLabel("Review status")).toBeDisabled();
-  await expect(editor.getByRole("button", { name: "Save and regenerate" })).toHaveCount(0);
-  await expect(editor.getByText("ready", { exact: true }).first()).toBeVisible();
+  await expect(
+    editor.getByRole("button", { name: "Save and regenerate" }),
+  ).toHaveCount(0);
+  await expect(
+    editor.getByText("ready", { exact: true }).first(),
+  ).toBeVisible();
 });
 
 test("large owner libraries stay bounded while every route remains searchable", async ({
@@ -122,18 +137,76 @@ test("large owner libraries stay bounded while every route remains searchable", 
     region: index === 204 ? "Hidden Valley" : "Kyoto, Japan",
   }));
   await page.route(`${adminApi}/api/admin/status`, (route) =>
-    route.fulfill({ json: { writer_available: true, generation_status: "ready" } }),
+    route.fulfill({
+      json: { writer_available: true, generation_status: "ready" },
+    }),
   );
-  await page.route(`${adminApi}/api/routes`, (route) => route.fulfill({ json: records }));
+  await page.route(`${adminApi}/api/routes`, (route) =>
+    route.fulfill({ json: records }),
+  );
   await page.goto("/#/admin");
 
-  const routeList = page.getByRole("complementary", { name: "Owner route list" });
+  const routeList = page.getByRole("complementary", {
+    name: "Owner route list",
+  });
   await expect(routeList.getByRole("button")).toHaveCount(200);
   await expect(routeList).toContainText("Showing 200 of 205 routes");
-  await routeList.getByRole("searchbox", { name: "Search owner routes" }).fill("Hidden Valley");
+  await routeList
+    .getByRole("searchbox", { name: "Search owner routes" })
+    .fill("Hidden Valley");
   await expect(routeList.getByRole("button")).toHaveCount(1);
   await expect(routeList.getByRole("button")).toContainText("Route 204");
 });
+
+for (const viewport of [
+  { name: "desktop", width: 1280, height: 900 },
+  { name: "mobile", width: 390, height: 844 },
+]) {
+  test(`Admin search keeps the editor selection consistent on ${viewport.name}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    const records = [
+      {
+        ...adminRoute,
+        activity_id: "calgary-route",
+        name: "Calgary River Path",
+        region: "Calgary, Canada",
+      },
+      {
+        ...adminRoute,
+        activity_id: "kyoto-route",
+        name: "Kyoto Temple Climb",
+        region: "Kyoto, Japan",
+      },
+    ];
+    await page.route(`${adminApi}/api/admin/status`, (route) =>
+      route.fulfill({
+        json: { writer_available: true, generation_status: "ready" },
+      }),
+    );
+    await page.route(`${adminApi}/api/routes`, (route) =>
+      route.fulfill({ json: records }),
+    );
+    await page.goto("/#/admin");
+
+    const search = page.getByRole("searchbox", { name: "Search owner routes" });
+    const editor = page.getByRole("region", { name: "Route curation editor" });
+    await expect(editor).toContainText("Calgary River Path");
+
+    await search.fill("Kyoto");
+    await expect(editor).toContainText("Kyoto Temple Climb");
+    await expect(editor).not.toContainText("Calgary River Path");
+
+    await search.fill("No such route");
+    await expect(page.getByText("No routes match this search.")).toBeVisible();
+    await expect(editor).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Clear search" }).click();
+    await expect(search).toHaveValue("");
+    await expect(editor).toContainText("Calgary River Path");
+  });
+}
 
 for (const viewport of [
   { name: "desktop", width: 1280, height: 900 },
@@ -143,7 +216,9 @@ for (const viewport of [
     await page.setViewportSize(viewport);
     await mockEditableAdmin(page, () => undefined);
     await page.goto("/#/admin");
-    await expect(page.getByRole("region", { name: "Route curation editor" })).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "Route curation editor" }),
+    ).toBeVisible();
 
     const layout = await page.evaluate(() => ({
       documentWidth: document.documentElement.scrollWidth,
