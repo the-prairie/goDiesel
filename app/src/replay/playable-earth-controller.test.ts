@@ -4,9 +4,11 @@ import type { QuestRoute } from "@/domain/routes";
 import {
   PLAYABLE_EARTH_CORRIDOR_M,
   PLAYABLE_EARTH_CAMERA_RANGES_M,
+  advancePlayableEarthGrounding,
   advancePlayableEarth,
   cyclePlayableEarthSpeed,
   initialPlayableEarthState,
+  initialPlayableEarthGrounding,
   playableEarthPose,
   seekPlayableEarth,
   setPlayableEarthMode,
@@ -112,5 +114,78 @@ describe("Playable Earth controller", () => {
       wider = zoomPlayableEarth(wider, "out");
     }
     expect(wider.cameraRangeM).toBe(PLAYABLE_EARTH_CAMERA_RANGES_M.at(-1));
+  });
+
+  it("accepts plausible surface samples and smooths height changes", () => {
+    const initial = initialPlayableEarthGrounding(100);
+    const sampled = advancePlayableEarthGrounding(initial, 100, 0.1, {
+      kind: "sample",
+      heightM: 112,
+    });
+
+    expect(sampled).toMatchObject({
+      source: "sampled",
+      reason: "sampled",
+      stableOffsetM: 12,
+    });
+    expect(sampled.displayedHeightM).toBeCloseTo(102.4);
+    expect(sampled.displayedHeightM).toBeLessThan(112);
+  });
+
+  it("uses recorded elevation when samples are missing", () => {
+    const sampled = {
+      ...initialPlayableEarthGrounding(100),
+      displayedHeightM: 112,
+      stableOffsetM: 12,
+      source: "sampled" as const,
+      reason: "sampled" as const,
+    };
+    const fallback = advancePlayableEarthGrounding(sampled, 101, 0.1, {
+      kind: "missing",
+    });
+
+    expect(fallback).toMatchObject({ source: "fallback", reason: "missing" });
+    expect(fallback.displayedHeightM).toBeCloseTo(109.6);
+    expect(fallback.displayedHeightM).toBeGreaterThan(101);
+  });
+
+  it("rejects implausible and rapidly changing tile samples", () => {
+    const initial = initialPlayableEarthGrounding(100);
+    const impossible = advancePlayableEarthGrounding(initial, 100, 0.1, {
+      kind: "sample",
+      heightM: 500,
+    });
+    expect(impossible).toMatchObject({ source: "fallback", reason: "outlier" });
+
+    const stable = advancePlayableEarthGrounding(initial, 100, 0.1, {
+      kind: "sample",
+      heightM: 112,
+    });
+    const lodJump = advancePlayableEarthGrounding(stable, 101, 0.1, {
+      kind: "sample",
+      heightM: 150,
+    });
+    expect(lodJump).toMatchObject({
+      source: "fallback",
+      reason: "outlier",
+      stableOffsetM: 12,
+    });
+  });
+
+  it("tracks route elevation without teleporting when tile detail changes", () => {
+    let grounding = initialPlayableEarthGrounding(100);
+    grounding = advancePlayableEarthGrounding(grounding, 100, 0.1, {
+      kind: "sample",
+      heightM: 110,
+    });
+    const before = grounding.displayedHeightM;
+    grounding = advancePlayableEarthGrounding(grounding, 104, 0.1, {
+      kind: "sample",
+      heightM: 116,
+    });
+
+    expect(grounding.source).toBe("sampled");
+    expect(grounding.stableOffsetM).toBeCloseTo(10.5);
+    expect(grounding.displayedHeightM - before).toBeCloseTo(2.4, 8);
   });
 });
