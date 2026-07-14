@@ -11,6 +11,8 @@ import {
   RotateCcw,
   RotateCw,
   Route,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -20,6 +22,7 @@ import type { QuestRoute } from "@/domain/routes";
 import { routeDetailPath } from "@/navigation";
 import {
   advancePlayableEarth,
+  PLAYABLE_EARTH_CAMERA_RANGES_M,
   cyclePlayableEarthSpeed,
   initialPlayableEarthState,
   playableEarthPose,
@@ -27,6 +30,7 @@ import {
   seekPlayableEarth,
   setPlayableEarthMode,
   togglePlayableEarthPlayback,
+  zoomPlayableEarth,
   type PlayableEarthControlState,
   type PlayableEarthInput,
 } from "@/replay/playable-earth-controller";
@@ -144,6 +148,14 @@ export function PlayableEarthStage({ route }: { route: QuestRoute }) {
       if (key === "s" || key === "arrowdown") {
         commitControl((current) => cyclePlayableEarthSpeed(current, -1));
       }
+      if (key === "+" || key === "=") {
+        event.preventDefault();
+        commitControl((current) => zoomPlayableEarth(current, "in"));
+      }
+      if (key === "-" || key === "_") {
+        event.preventDefault();
+        commitControl((current) => zoomPlayableEarth(current, "out"));
+      }
     };
     const keyUp = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
@@ -178,6 +190,7 @@ export function PlayableEarthStage({ route }: { route: QuestRoute }) {
       data-control-mode={control.mode}
       data-lateral-offset={control.lateralOffsetM.toFixed(2)}
       data-camera-yaw={control.cameraYawDeg.toFixed(2)}
+      data-camera-range={control.cameraRangeM}
       className="relative min-h-[calc(100dvh-3.5rem)] overflow-hidden bg-[#02070a]"
     >
       <div
@@ -224,7 +237,7 @@ export function PlayableEarthStage({ route }: { route: QuestRoute }) {
       ) : null}
 
       <div className="pointer-events-none absolute inset-x-4 bottom-4 z-20 flex justify-center sm:inset-x-6 sm:bottom-6">
-        <div className="pointer-events-auto flex w-full max-w-4xl flex-wrap items-center gap-2 rounded-md border border-border bg-background/92 px-3 py-3 shadow-2xl backdrop-blur">
+        <div className="pointer-events-auto flex w-full max-w-5xl flex-wrap items-center gap-2 rounded-md border border-border bg-background/92 px-3 py-3 shadow-2xl backdrop-blur">
           <Route className="size-4 shrink-0 text-primary" aria-hidden="true" />
           <div className="min-w-28 flex-1">
             <div className="text-xs font-semibold uppercase text-primary">
@@ -330,6 +343,38 @@ export function PlayableEarthStage({ route }: { route: QuestRoute }) {
           >
             <RotateCw aria-hidden="true" />
           </ControlIcon>
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            disabled={
+              status.state !== "ready" ||
+              control.cameraRangeM === PLAYABLE_EARTH_CAMERA_RANGES_M[0]
+            }
+            aria-label="Zoom in to route"
+            title="Zoom in to route"
+            onClick={() =>
+              commitControl((current) => zoomPlayableEarth(current, "in"))
+            }
+          >
+            <ZoomIn aria-hidden="true" />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            disabled={
+              status.state !== "ready" ||
+              control.cameraRangeM === PLAYABLE_EARTH_CAMERA_RANGES_M.at(-1)
+            }
+            aria-label="Zoom out from route"
+            title="Zoom out from route"
+            onClick={() =>
+              commitControl((current) => zoomPlayableEarth(current, "out"))
+            }
+          >
+            <ZoomOut aria-hidden="true" />
+          </Button>
           <Button
             type="button"
             variant="outline"

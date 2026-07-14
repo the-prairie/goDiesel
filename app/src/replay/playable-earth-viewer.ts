@@ -29,9 +29,14 @@ declare global {
 
 const CESIUM_VERSION = "1.120";
 const AVATAR_VISUAL_OFFSET_M = 120;
-const CAMERA_HEIGHT_M = 720;
-const CAMERA_TRAILING_M = 720;
 let cesiumPromise: Promise<CesiumGlobal | undefined> | undefined;
+
+function cameraHeightAboveAvatarM(cameraRangeM: number) {
+  if (cameraRangeM <= 240) {
+    return 35 + ((cameraRangeM - 120) / 120) * 75;
+  }
+  return 110 + ((cameraRangeM - 240) / 1_160) * 1_190;
+}
 
 function loadCesium() {
   if (window.Cesium?.Viewer) return Promise.resolve(window.Cesium);
@@ -244,21 +249,23 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
       this.cameraHeadingDeg = (this.cameraHeadingDeg + delta * 0.08 + 360) % 360;
     }
     const heading = (this.cameraHeadingDeg * Math.PI) / 180;
+    const cameraRangeM = pose.cameraRangeM;
+    const cameraHeightM = cameraHeightAboveAvatarM(cameraRangeM);
     const cameraLat =
-      pose.lat - (Math.cos(heading) * CAMERA_TRAILING_M) / 111_320;
+      pose.lat - (Math.cos(heading) * cameraRangeM) / 111_320;
     const cameraLng =
       pose.lng -
-      (Math.sin(heading) * CAMERA_TRAILING_M) /
+      (Math.sin(heading) * cameraRangeM) /
         (111_320 * Math.max(0.2, Math.cos((pose.lat * Math.PI) / 180)));
     this.viewer.camera.setView({
       destination: Cesium.Cartesian3.fromDegrees(
         cameraLng,
         cameraLat,
-        pose.elev + CAMERA_HEIGHT_M,
+        pose.elev + AVATAR_VISUAL_OFFSET_M + cameraHeightM,
       ),
       orientation: {
         heading,
-        pitch: -0.66,
+        pitch: -Math.atan2(cameraHeightM, cameraRangeM),
         roll: 0,
       },
     });

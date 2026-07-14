@@ -9,6 +9,7 @@ export interface PlayableEarthControlState {
   speed: number;
   lateralOffsetM: number;
   cameraYawDeg: number;
+  cameraRangeM: number;
 }
 
 export interface PlayableEarthInput {
@@ -25,10 +26,13 @@ export interface PlayableEarthPose {
   progressM: number;
   progressRatio: number;
   lateralOffsetM: number;
+  cameraRangeM: number;
 }
 
 export const PLAYABLE_EARTH_SPEEDS = [0.5, 1, 2, 4] as const;
 export const PLAYABLE_EARTH_CORRIDOR_M = 15;
+export const PLAYABLE_EARTH_CAMERA_RANGES_M = [120, 240, 720, 1_400] as const;
+export const PLAYABLE_EARTH_DEFAULT_CAMERA_RANGE_M = 720;
 const REPLAY_DURATION_SECONDS = 180;
 
 export function routeDistanceM(route: QuestRoute) {
@@ -47,6 +51,7 @@ export function initialPlayableEarthState(): PlayableEarthControlState {
     speed: 1,
     lateralOffsetM: 0,
     cameraYawDeg: 0,
+    cameraRangeM: PLAYABLE_EARTH_DEFAULT_CAMERA_RANGE_M,
   };
 }
 
@@ -112,6 +117,25 @@ export function cyclePlayableEarthSpeed(
     (Math.max(0, index) + direction + PLAYABLE_EARTH_SPEEDS.length) %
     PLAYABLE_EARTH_SPEEDS.length;
   return { ...state, speed: PLAYABLE_EARTH_SPEEDS[nextIndex] };
+}
+
+export function zoomPlayableEarth(
+  state: PlayableEarthControlState,
+  direction: "in" | "out",
+) {
+  const currentIndex = PLAYABLE_EARTH_CAMERA_RANGES_M.indexOf(
+    state.cameraRangeM as (typeof PLAYABLE_EARTH_CAMERA_RANGES_M)[number],
+  );
+  const normalizedIndex = currentIndex < 0 ? 2 : currentIndex;
+  const nextIndex = clamp(
+    normalizedIndex + (direction === "in" ? -1 : 1),
+    0,
+    PLAYABLE_EARTH_CAMERA_RANGES_M.length - 1,
+  );
+  return {
+    ...state,
+    cameraRangeM: PLAYABLE_EARTH_CAMERA_RANGES_M[nextIndex],
+  };
 }
 
 export function seekPlayableEarth(
@@ -182,5 +206,6 @@ export function playableEarthPose(
     progressM: state.progressM,
     progressRatio: state.progressM / totalDistanceM,
     lateralOffsetM: state.lateralOffsetM,
+    cameraRangeM: state.cameraRangeM,
   };
 }
