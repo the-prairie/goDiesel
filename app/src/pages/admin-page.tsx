@@ -16,7 +16,10 @@ import type { CurationDraft } from "@/domain/admin-curation";
 export function AdminPage() {
   const [workspace, setWorkspace] = useState<AdminWorkspace | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<CurationDraft | null>(null);
+  const [draftState, setDraftState] = useState<{
+    routeId: string;
+    draft: CurationDraft;
+  } | null>(null);
   const [query, setQuery] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -33,9 +36,6 @@ export function AdminPage() {
     };
   }, []);
 
-  const selectedRoute = workspace?.routes.find(
-    (route) => route.activityId === selectedId,
-  );
   const matchingRoutes = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (!workspace || !normalized) return workspace?.routes ?? [];
@@ -46,30 +46,39 @@ export function AdminPage() {
     );
   }, [query, workspace]);
   const visibleRoutes = matchingRoutes.slice(0, 200);
-
-  useEffect(() => {
-    if (
-      !workspace ||
-      matchingRoutes.some((route) => route.activityId === selectedId)
-    ) {
-      return;
-    }
-    setSaveMessage(null);
-    setSelectedId(matchingRoutes[0]?.activityId ?? null);
-  }, [matchingRoutes, selectedId, workspace]);
+  const effectiveSelectedId = matchingRoutes.some(
+    (route) => route.activityId === selectedId,
+  )
+    ? selectedId
+    : (matchingRoutes[0]?.activityId ?? null);
+  const selectedRoute = workspace?.routes.find(
+    (route) => route.activityId === effectiveSelectedId,
+  );
+  const draft =
+    draftState && draftState.routeId === selectedRoute?.activityId
+      ? draftState.draft
+      : null;
 
   useEffect(() => {
     if (!selectedRoute || !workspace) {
-      setDraft(null);
+      setDraftState(null);
       return;
     }
     let active = true;
     if (workspace.mode === "editable") {
-      setDraft(selectedRoute.curation);
+      setDraftState({
+        routeId: selectedRoute.activityId,
+        draft: selectedRoute.curation,
+      });
     } else {
-      setDraft(selectedRoute.curation);
+      setDraftState({
+        routeId: selectedRoute.activityId,
+        draft: selectedRoute.curation,
+      });
       void loadBundledCuration(selectedRoute).then((curation) => {
-        if (active) setDraft(curation);
+        if (active) {
+          setDraftState({ routeId: selectedRoute.activityId, draft: curation });
+        }
       });
     }
     return () => {
@@ -78,7 +87,14 @@ export function AdminPage() {
   }, [selectedRoute, workspace]);
 
   async function save() {
-    if (!selectedRoute || !draft || workspace?.mode !== "editable") return;
+    if (
+      !selectedRoute ||
+      !draft ||
+      draftState?.routeId !== selectedRoute.activityId ||
+      workspace?.mode !== "editable"
+    ) {
+      return;
+    }
     setSaving(true);
     setSaveMessage(null);
     try {
@@ -163,7 +179,10 @@ export function AdminPage() {
                   value={query}
                   placeholder="Search route library"
                   className="pl-9"
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={(event) => {
+                    setSaveMessage(null);
+                    setQuery(event.target.value);
+                  }}
                 />
               </div>
               <p className="text-xs text-muted-foreground">
@@ -176,7 +195,7 @@ export function AdminPage() {
                   <button
                     key={route.activityId}
                     type="button"
-                    aria-pressed={route.activityId === selectedId}
+                    aria-pressed={route.activityId === effectiveSelectedId}
                     className="grid min-w-0 gap-1 border-b border-border px-3 py-3 text-left last:border-b-0 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-pressed:bg-muted"
                     onClick={() => {
                       setSaveMessage(null);
@@ -204,7 +223,12 @@ export function AdminPage() {
                 readOnly={workspace.mode === "read-only"}
                 saving={saving}
                 saveMessage={saveMessage}
-                onChange={setDraft}
+                onChange={(nextDraft) =>
+                  setDraftState({
+                    routeId: selectedRoute.activityId,
+                    draft: nextDraft,
+                  })
+                }
                 onSave={save}
               />
             ) : query ? (
