@@ -27,6 +27,8 @@ from urllib.parse import urlparse
 import gpxpy
 import pandas as pd
 
+from admin_curation import curation_readiness, save_curation_and_rebuild
+
 try:
     import fitparse
 except ImportError:
@@ -443,6 +445,14 @@ def polyline_svg(aid):
 
 def routes_summary():
     cfg = json.loads((QUESTS / 'quests.json').read_text())
+    manifest_path = QUESTS / 'app' / 'src' / 'data' / 'generated' / 'routes.manifest.json'
+    try:
+        generated_routes = {
+            str(route['slug']): route
+            for route in json.loads(manifest_path.read_text()).get('routes', [])
+        }
+    except (FileNotFoundError, KeyError, TypeError, json.JSONDecodeError):
+        generated_routes = {}
     out = []
     for r in cfg.get('routes', []):
         aid = r['activity_id']
@@ -476,7 +486,14 @@ def routes_summary():
             'distance_km': round(km, 1),
             'description': desc[:240],
             'visibility': r.get('visibility') or 'public',
+            'curation': r.get('curation') or {'review_status': 'draft'},
+            'curation_readiness': curation_readiness(r.get('curation') or {}),
         }
+        generated = generated_routes.get(str(aid))
+        replay = generated.get('replay', {}) if generated else {}
+        item['geometry_status'] = replay.get('geometry_status', 'missing')
+        item['replay_eligible'] = replay.get('replay_eligible', False)
+        item['generation_status'] = 'ready' if generated else 'missing'
         for field in CURATION_TEXT_FIELDS:
             item[field] = r.get(field) or ''
         out.append(item)
@@ -498,8 +515,22 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', ctype)
         self.send_header('Content-Length', str(len(body)))
         self.send_header('Cache-Control', 'no-store')
+        origin = self.headers.get('Origin')
+        if origin in ('http://localhost:8787', 'http://127.0.0.1:8787'):
+            self.send_header('Access-Control-Allow-Origin', origin)
+            self.send_header('Vary', 'Origin')
         self.end_headers()
         self.wfile.write(body)
+
+    def do_OPTIONS(self):
+        origin = self.headers.get('Origin')
+        self.send_response(204)
+        if origin in ('http://localhost:8787', 'http://127.0.0.1:8787'):
+            self.send_header('Access-Control-Allow-Origin', origin)
+            self.send_header('Vary', 'Origin')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.end_headers()
 
     def do_GET(self):
         path = urlparse(self.path).path
@@ -509,6 +540,18 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == '/api/routes':
             self._send(200, routes_summary())
+            return
+        if path == '/api/admin/status':
+            manifest_path = QUESTS / 'app' / 'src' / 'data' / 'generated' / 'routes.manifest.json'
+            self._send(200, {
+                'writer_available': True,
+                'mode': 'local-owner',
+                'generation_status': 'ready' if manifest_path.exists() else 'missing',
+                'generated_at': (
+                    datetime.fromtimestamp(manifest_path.stat().st_mtime).isoformat()
+                    if manifest_path.exists() else None
+                ),
+            })
             return
         if path.startswith('/api/polyline/'):
             aid = path.rsplit('/', 1)[1]
@@ -560,6 +603,40 @@ class Handler(BaseHTTPRequestHandler):
             cfg['routes'] = list(by_id.values())
             (QUESTS / 'quests.json').write_text(json.dumps(cfg, indent=2))
             self._send(200, {'ok': True, 'updated': len(updates)})
+            return
+        if path == '/api/curation/save':
+            try:
+                data = json.loads(body)
+                activity_id = str(data['activity_id'])
+                curation = data['curation']
+
+                def rebuild():
+                    subprocess.run(
+                        [sys.executable, str(QUESTS / 'build.py')],
+                        cwd=str(QUESTS),
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    )
+
+                route = save_curation_and_rebuild(
+                    QUESTS / 'quests.json', activity_id, curation, rebuild
+                )
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send(400, {'error': str(error)})
+                return
+            except subprocess.CalledProcessError as error:
+                self._send(500, {
+                    'error': 'Route generation failed; the curation source was rolled back.',
+                    'detail': error.stderr[-1000:] if error.stderr else '',
+                })
+                return
+            self._send(200, {
+                'ok': True,
+                'activity_id': activity_id,
+                'curation': route['curation'],
+                'generation_status': 'ready',
+            })
             return
         if path == '/api/rebuild':
             subprocess.Popen([sys.executable, str(QUESTS / 'build.py')],
