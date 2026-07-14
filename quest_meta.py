@@ -1,4 +1,4 @@
-"""Quest metadata helpers for the static goDiesel build."""
+"""Route metadata helpers for generated goDiesel application data."""
 
 
 CURATION_TEXT_FIELDS = (

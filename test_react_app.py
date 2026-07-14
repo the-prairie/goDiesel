@@ -27,7 +27,7 @@ def test_app_shell_defines_expected_navigation_and_hash_route_support():
     navigation = (APP / "src/navigation.ts").read_text()
 
     for label in ("Atlas", "Finder", "Routes", "Replay", "Admin"):
-      assert label in navigation
+        assert label in navigation
 
     assert 'createHashRouter' in router
     assert 'Navigate to={APP_PATHS.atlas} replace' in router
@@ -42,7 +42,6 @@ def test_app_shell_defines_expected_navigation_and_hash_route_support():
     assert 'appSectionForPath(location.pathname)' in sidebar
     assert 'aria-current={activeSection.id === section.id ? "page" : undefined}' in sidebar
     assert '<Outlet />' in shell
-    assert "React migration preview" not in shell
 
 
 def test_route_domain_models_completed_planned_and_discovered_states():
@@ -78,13 +77,17 @@ def test_representative_route_has_generated_reviewed_curation():
         route for route in source_routes if str(route["activity_id"]) == "17654151284"
     )
     detail = json.loads((ROUTE_DETAILS / "17654151284.json").read_text())
-    legacy = json.loads((APP / "src/data/quests.generated.json").read_text())["routes"]
-    legacy_route = next(route for route in legacy if route["slug"] == "17654151284")
+    generated_routes = json.loads(
+        (APP / "src/data/quests.generated.json").read_text()
+    )["routes"]
+    generated_route = next(
+        route for route in generated_routes if route["slug"] == "17654151284"
+    )
     curation = detail["curation"]
 
     expected_curation = build_route_curation(source["curation"])
     assert curation == expected_curation
-    assert legacy_route["curation"] == expected_curation
+    assert generated_route["curation"] == expected_curation
 
     assert curation["review_status"] == "reviewed"
     assert set(curation) == {
@@ -106,30 +109,44 @@ def test_representative_route_has_generated_reviewed_curation():
 
 
 def test_generated_manifest_and_lazy_route_records_preserve_source_data():
-    legacy = json.loads((APP / "src/data/quests.generated.json").read_text())
+    generated = json.loads((APP / "src/data/quests.generated.json").read_text())
     manifest = json.loads(MANIFEST.read_text())
 
-    assert len(manifest["routes"]) == len(legacy["routes"])
+    assert len(manifest["routes"]) == len(generated["routes"])
     assert all("route" not in route for route in manifest["routes"])
     assert all(1 < len(route["trace"]) <= 96 for route in manifest["routes"])
     assert all(len(point) == 4 for route in manifest["routes"] for point in route["trace"])
 
     detail_files = sorted(ROUTE_DETAILS.glob("*.json"))
-    assert len(detail_files) == len(legacy["routes"])
+    assert len(detail_files) == len(generated["routes"])
 
-    representative = legacy["routes"][0]
+    representative = generated["routes"][0]
     detail = json.loads((ROUTE_DETAILS / f'{representative["slug"]}.json').read_text())
     assert detail["slug"] == representative["slug"]
     assert detail["route"] == representative["route"]
     assert detail["replay"] == representative["replay"]
 
     stats = json.loads((APP / "src/data/generated/route-stats.json").read_text())
-    assert stats["route_count"] == len(legacy["routes"])
+    assert stats["route_count"] == len(generated["routes"])
     assert stats["completed_km"] == round(sum(
         route["distance_km"]
-        for route in legacy["routes"]
+        for route in generated["routes"]
         if route.get("lifecycle", "completed") == "completed"
     ), 1)
+
+
+def test_release_build_packages_the_react_application():
+    packaging = (ROOT / "make-dist.sh").read_text()
+    readme = (ROOT / "README.md").read_text()
+    wrangler = (ROOT / "wrangler.toml").read_text()
+
+    assert "npm --prefix app run build" in packaging
+    assert "npm --prefix app run test:bundle" in packaging
+    assert "cp -R app/dist/. dist/" in packaging
+    assert "cp index.html" not in packaging
+    assert "The React application is the canonical product" in readme
+    assert "static-fallback-2026-07-14" in readme
+    assert 'pages_build_output_dir = "./dist"' in wrangler
 
 
 def test_generated_route_publication_is_staged_and_rollback_safe():

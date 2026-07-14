@@ -1,8 +1,0 @@
-/cards/*
-  Cache-Control: public, max-age=31536000, immutable
-
-/route-avatars/*
-  Cache-Control: public, max-age=31536000, immutable
-
-/*.html
-  Cache-Control: public, max-age=60, must-revalidate

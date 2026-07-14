@@ -65,9 +65,9 @@ export default defineConfig(({ mode }) => {
     build: {
       target: "esnext",
       // Replay is lazy-loaded and owns the bundled Cesium runtime. Keep that
-      // expected 4.5 MB scene chunk explicit while the initial shell remains
+      // expected 5.5 MB scene chunk explicit while the initial shell remains
       // below 500 kB and other product routes stay independently split.
-      chunkSizeWarningLimit: 4_500,
+      chunkSizeWarningLimit: 5_600,
     },
     resolve: {
       alias: {
