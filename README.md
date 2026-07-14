@@ -1,14 +1,17 @@
 # goDiesel Quest Atlas
 
-Static quest atlas built from Lauren's Strava export, curated route IDs, and geotagged travel photos.
+goDiesel turns recorded runs and rides into an explorable atlas, honest route guides, and immersive route replays.
+The React application is the canonical product and opens directly into the Atlas.
 
-The repo intentionally separates source files from private local data:
+Route source data comes from Lauren's Strava export and the owner-curated records in `quests.json`.
+Generated route summaries live in `app/src/data/generated`, while full route records are loaded lazily from `app/public/data/routes`.
+Private Strava and travel inputs remain outside this repository under `../DieselDiaries` and `../Travel`.
 
-- Source/admin: `build.py`, `quest_meta.py`, `admin.py`, `admin.html`, `quests.json`
-- Generated public site: `index.html`, `cards/`, `photos/`, `dist/`
-- Private local inputs: `../DieselDiaries`, `../Travel`
+## Prerequisites
 
-`dist/` is the deployable Cloudflare Pages upload folder. It is generated from `index.html`, `cards/`, and `photos/` by `make-dist.sh`.
+- Node.js 22 or newer.
+- Python 3.12 or newer.
+- A Google Maps browser key with Map Tiles API access for photorealistic Replay.
 
 ## Setup
 
@@ -16,57 +19,99 @@ The repo intentionally separates source files from private local data:
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
+npm --prefix app install
 ```
 
-MapLibre works without a key for the main atlas. Google-powered previews need a browser-restricted Google API key in `.env`:
+Create `.env` at the repository root:
 
 ```bash
 GOOGLE_MAPS_API_KEY=your-browser-key
 ```
 
-Enable the Google Maps JavaScript API for the Street View route cam. Enable the Google Map Tiles API for the experimental Earth Replay Lab at `?lab=earth#quest/13935098460`.
+Restrict the browser key to the origins that run the app.
+For local work, allow both `http://localhost:8787/*` and `http://127.0.0.1:8787/*`.
+For production, also allow the Cloudflare Pages domain.
+Enable Google Maps JavaScript API and Map Tiles API on the same project.
 
-For local dogfooding, allow `http://localhost:8787/*` in Google Cloud. For deploys, also allow the production Cloudflare Pages domain. The same browser key restriction must cover both Maps JavaScript API requests and Map Tiles API 3D tile requests.
+## Run
 
-## Build
+Start the React app:
+
+```bash
+npm --prefix app run dev
+```
+
+Open [http://localhost:8787/](http://localhost:8787/).
+The root redirects to `#/atlas`, and the sidebar links to Finder, Routes, Replay, and Admin.
+
+The Playable Earth route experience is available at `#/lab/playable-earth/<route-id>` as the immersive reference for production Replay.
+
+## Generate Route Data
+
+Regenerate route summaries and full route records after changing `quests.json` or refreshing the Strava export:
 
 ```bash
 ./rebuild.sh
-./make-dist.sh
 ```
 
-Open the local build:
-
-```bash
-python3 -m http.server 8787 --directory dist
-```
-
-Then visit `http://localhost:8787/`.
+The generator stages React route artifacts and publishes them atomically.
+Completed routes feed Atlas and Replay, while planned routes remain separate.
 
 ## Curate Routes
+
+Launch the React app and local owner writer together:
 
 ```bash
 ./admin.sh
 ```
 
-The admin reads Strava export activity files from `../DieselDiaries`, lets you approve or reject routes, and writes the curated IDs to `quests.json`.
+Admin edits the complete experiential guide contract, validates draft and reviewed states, and regenerates application route data on save.
+The deployed Admin is read-only because the loopback writer is not available there.
 
 ## Test
 
+Run the complete release gate:
+
 ```bash
-python3 -m unittest test_quest_meta.py
+npm --prefix app run verify
+.venv/bin/python -m pytest -q
 ```
 
-## Deploy
+The JavaScript gate includes type checking, unit tests, production build, bundle budgets, and Playwright journeys.
+The Python gate covers generation, curation validation, atomic publication, and rollback behavior.
 
-After rebuilding:
+## Build
+
+Build the React application and prepare the root Cloudflare output directory:
 
 ```bash
 ./make-dist.sh
 ```
 
-Upload `dist/` to Cloudflare Pages, or use Wrangler:
+The deployable output is `dist/` and is generated from `app/dist/`.
+Generated deploy files are not committed.
+
+## Deploy
+
+Deploy the generated React output with Wrangler:
 
 ```bash
 npx wrangler pages deploy dist --project-name=godiesel
 ```
+
+Cloudflare Pages should use `./make-dist.sh` as the build command and `dist` as the output directory.
+Hash routing keeps direct Atlas, route, and Replay links compatible with static hosting.
+
+## Static Fallback
+
+The previous static application is retained for one release at the annotated Git tag `static-fallback-2026-07-14`.
+To rebuild that exact fallback without changing the current branch:
+
+```bash
+git worktree add /tmp/godiesel-static-fallback static-fallback-2026-07-14
+cd /tmp/godiesel-static-fallback
+./rebuild.sh
+./make-dist.sh
+```
+
+The fallback tag includes its original packaging instructions and static UI tests.

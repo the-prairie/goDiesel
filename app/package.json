@@ -9,7 +9,9 @@
     "preview": "vite preview --host 0.0.0.0 --port 8788",
     "typecheck": "tsc -b",
     "test:unit": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:bundle": "node scripts/check-bundle-budget.mjs",
+    "verify": "npm run typecheck && npm run test:unit && npm run build && npm run test:bundle && npm run test:e2e"
   },
   "dependencies": {
     "@lottiefiles/dotlottie-react": "^0.19.9",

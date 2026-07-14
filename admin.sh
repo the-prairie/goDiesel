@@ -1,33 +1,46 @@
 #!/bin/bash
-# Launch the Quests admin server and open it in the browser.
-# Approve/reject routes visually, then click REBUILD SITE to regenerate index.html.
-set -e
+# Launch the React Admin with its loopback-only owner writer.
+set -euo pipefail
 cd "$(dirname "$0")"
+
 PYTHON="python3"
 if [ -x ".venv/bin/python" ]; then
   PYTHON=".venv/bin/python"
 fi
-PORT=8766
-URL="http://localhost:${PORT}"
+ADMIN_PORT=8766
+APP_PORT=8787
 
-# If something is already on the port (likely a previous admin.py), reuse it.
-if curl -fs "${URL}/api/routes" >/dev/null 2>&1; then
-  echo "▶ Admin already running at ${URL}"
-else
-  echo "▶ Starting Quests admin at ${URL}"
-  "${PYTHON}" admin.py &
-  SERVER_PID=$!
-  # Wait until it's responsive (up to 10s)
-  for i in {1..20}; do
-    sleep 0.5
-    if curl -fs "${URL}/api/routes" >/dev/null 2>&1; then break; fi
+PIDS=()
+cleanup() {
+  for pid in "${PIDS[@]}"; do
+    kill "$pid" 2>/dev/null || true
   done
-  trap "echo; echo '▶ Stopping admin server.'; kill ${SERVER_PID} 2>/dev/null; exit" INT TERM
+}
+trap cleanup EXIT INT TERM
+
+if ! curl -fs "http://127.0.0.1:${ADMIN_PORT}/api/admin/status" >/dev/null 2>&1; then
+  echo "Starting local owner writer on port ${ADMIN_PORT}..."
+  "${PYTHON}" admin.py &
+  PIDS+=("$!")
 fi
 
-open "${URL}"
+if ! curl -fs "http://127.0.0.1:${APP_PORT}/" >/dev/null 2>&1; then
+  echo "Starting React app on port ${APP_PORT}..."
+  npm --prefix app run dev &
+  PIDS+=("$!")
+fi
 
-# Keep script alive while server runs (so Ctrl+C kills it)
-if [ -n "${SERVER_PID:-}" ]; then
-  wait ${SERVER_PID}
+for _ in {1..40}; do
+  if curl -fs "http://127.0.0.1:${ADMIN_PORT}/api/admin/status" >/dev/null 2>&1 \
+    && curl -fs "http://127.0.0.1:${APP_PORT}/" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.25
+done
+
+open "http://127.0.0.1:${APP_PORT}/#/admin"
+
+if [ "${#PIDS[@]}" -gt 0 ]; then
+  echo "Admin is ready. Press Ctrl+C to stop processes started by this script."
+  wait
 fi

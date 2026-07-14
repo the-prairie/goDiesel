@@ -19,10 +19,12 @@ venv/
 .geocode_buckets.json
 .rebuild.log
 
-# Root build output. The deployable public copy in dist/ is tracked instead.
+# Generated build output.
 /index.html
 /cards/
 /photos/
+/dist/
+/app/dist/
 
 # Cloudflare/Wrangler local account cache
 .wrangler/
