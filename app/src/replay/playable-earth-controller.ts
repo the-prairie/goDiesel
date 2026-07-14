@@ -29,11 +29,32 @@ export interface PlayableEarthPose {
   cameraRangeM: number;
 }
 
+export type PlayableEarthGroundingSource = "fallback" | "sampled";
+export type PlayableEarthGroundingReason =
+  | "recorded"
+  | "sampled"
+  | "missing"
+  | "outlier";
+
+export type PlayableEarthGroundingObservation =
+  | { kind: "sample"; heightM: number }
+  | { kind: "missing" };
+
+export interface PlayableEarthGroundingState {
+  displayedHeightM: number;
+  stableOffsetM?: number;
+  source: PlayableEarthGroundingSource;
+  reason: PlayableEarthGroundingReason;
+}
+
 export const PLAYABLE_EARTH_SPEEDS = [0.5, 1, 2, 4] as const;
 export const PLAYABLE_EARTH_CORRIDOR_M = 15;
 export const PLAYABLE_EARTH_CAMERA_RANGES_M = [120, 240, 720, 1_400] as const;
 export const PLAYABLE_EARTH_DEFAULT_CAMERA_RANGE_M = 720;
 const REPLAY_DURATION_SECONDS = 180;
+const MAX_INITIAL_SURFACE_OFFSET_M = 300;
+const MAX_SURFACE_OFFSET_CHANGE_M = 15;
+const MAX_GROUNDING_SPEED_M_PER_SECOND = 24;
 
 export function routeDistanceM(route: QuestRoute) {
   return Math.max(
@@ -62,6 +83,70 @@ function clamp(value: number, minimum: number, maximum: number) {
 function approach(value: number, target: number, amount: number) {
   if (value < target) return Math.min(target, value + amount);
   return Math.max(target, value - amount);
+}
+
+export function initialPlayableEarthGrounding(
+  recordedHeightM: number,
+): PlayableEarthGroundingState {
+  return {
+    displayedHeightM: recordedHeightM,
+    source: "fallback",
+    reason: "recorded",
+  };
+}
+
+export function advancePlayableEarthGrounding(
+  state: PlayableEarthGroundingState,
+  recordedHeightM: number,
+  elapsedSeconds: number,
+  observation?: PlayableEarthGroundingObservation,
+): PlayableEarthGroundingState {
+  let source = state.source;
+  let reason = state.reason;
+  let stableOffsetM = state.stableOffsetM;
+
+  if (observation?.kind === "missing") {
+    source = "fallback";
+    reason = "missing";
+  } else if (observation?.kind === "sample") {
+    const sampledOffsetM = observation.heightM - recordedHeightM;
+    const plausibleInitialOffset =
+      Number.isFinite(sampledOffsetM) &&
+      Math.abs(sampledOffsetM) <= MAX_INITIAL_SURFACE_OFFSET_M;
+    const plausibleOffsetChange =
+      stableOffsetM === undefined ||
+      Math.abs(sampledOffsetM - stableOffsetM) <= MAX_SURFACE_OFFSET_CHANGE_M;
+
+    if (plausibleInitialOffset && plausibleOffsetChange) {
+      stableOffsetM =
+        stableOffsetM === undefined
+          ? sampledOffsetM
+          : stableOffsetM + (sampledOffsetM - stableOffsetM) * 0.25;
+      source = "sampled";
+      reason = "sampled";
+    } else {
+      source = "fallback";
+      reason = "outlier";
+    }
+  }
+
+  const targetHeightM =
+    source === "sampled" && stableOffsetM !== undefined
+      ? recordedHeightM + stableOffsetM
+      : recordedHeightM;
+  const elapsed = clamp(elapsedSeconds, 0, 0.25);
+  const displayedHeightM = approach(
+    state.displayedHeightM,
+    targetHeightM,
+    MAX_GROUNDING_SPEED_M_PER_SECOND * elapsed,
+  );
+
+  return {
+    displayedHeightM,
+    stableOffsetM,
+    source,
+    reason,
+  };
 }
 
 export function advancePlayableEarth(

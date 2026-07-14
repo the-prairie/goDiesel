@@ -6,8 +6,9 @@ const secondRouteSlug = "17665674778";
 async function installDeterministicEarthRenderer(
   page: Page,
   state: "ready" | "unavailable" = "ready",
+  grounding: "fallback" | "sampled" = "fallback",
 ) {
-  await page.addInitScript((rendererState) => {
+  await page.addInitScript(({ rendererState, groundingState }) => {
     const labWindow = window as typeof window & {
       __earthLabMounts?: string[];
       __earthLabDestroyCount?: number;
@@ -29,6 +30,11 @@ async function installDeterministicEarthRenderer(
             state: "ready" | "unavailable";
             title: string;
             message: string;
+          }): void;
+          onGroundingChange?(debug: {
+            source: "fallback" | "sampled";
+            reason: "recorded" | "sampled";
+            offsetM?: number;
           }): void;
         }): Promise<void>;
         setPose(pose: {
@@ -88,6 +94,11 @@ async function installDeterministicEarthRenderer(
             title: "Playable Earth ready",
             message: "Route thread and starting position are visible.",
           });
+          options.onGroundingChange?.(
+            groundingState === "sampled"
+              ? { source: "sampled", reason: "sampled", offsetM: 8.5 }
+              : { source: "fallback", reason: "recorded" },
+          );
         },
         setPose(pose) {
           labWindow.__earthLabPoses?.push({
@@ -106,7 +117,7 @@ async function installDeterministicEarthRenderer(
         },
       };
     };
-  }, state);
+  }, { rendererState: state, groundingState: grounding });
 }
 
 test("canonical completed route opens the isolated lab and exits cleanly", async ({
@@ -307,4 +318,17 @@ test("route-locked zoom changes framing without remounting or losing state", asy
     }).__earthLabPoses?.at(-1),
   );
   expect(latestPose?.cameraRangeM).toBe(1_400);
+});
+
+test("grounding source is inspectable without permanent visual clutter", async ({
+  page,
+}) => {
+  await installDeterministicEarthRenderer(page, "ready", "sampled");
+  await page.goto(`/?debugGrounding=1#/lab/playable-earth/${routeSlug}`);
+  const lab = page.getByRole("region", { name: "Playable Earth Lab" });
+
+  await expect(lab).toHaveAttribute("data-grounding-source", "sampled");
+  await expect(lab).toHaveAttribute("data-grounding-reason", "sampled");
+  await expect(lab).toHaveAttribute("data-grounding-offset", "8.50");
+  await expect(page.getByText("Grounding: sampled · +8.5 m")).toBeVisible();
 });

@@ -36,6 +36,7 @@ import {
 } from "@/replay/playable-earth-controller";
 import {
   createPlayableEarthViewer,
+  type PlayableEarthGroundingDebug,
   type PlayableEarthStatus,
   type PlayableEarthViewer,
 } from "@/replay/playable-earth-viewer";
@@ -46,12 +47,19 @@ const INITIAL_STATUS: PlayableEarthStatus = {
   message: "Preparing the experimental Earth viewer.",
 };
 
+const INITIAL_GROUNDING: PlayableEarthGroundingDebug = {
+  source: "fallback",
+  reason: "recorded",
+};
+
 export function PlayableEarthStage({ route }: { route: QuestRoute }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<PlayableEarthViewer | undefined>(undefined);
   const controlRef = useRef(initialPlayableEarthState());
   const inputRef = useRef<PlayableEarthInput>({ steer: 0, look: 0 });
   const [status, setStatus] = useState<PlayableEarthStatus>(INITIAL_STATUS);
+  const [grounding, setGrounding] =
+    useState<PlayableEarthGroundingDebug>(INITIAL_GROUNDING);
   const [control, setControl] = useState(controlRef.current);
   const totalDistanceM = routeDistanceM(route);
 
@@ -76,9 +84,11 @@ export function PlayableEarthStage({ route }: { route: QuestRoute }) {
     controlRef.current = initialControl;
     setControl(initialControl);
     setStatus(INITIAL_STATUS);
+    setGrounding(INITIAL_GROUNDING);
     void viewer.mount({
       container,
       route,
+      onGroundingChange: setGrounding,
       onStatus: (nextStatus) => {
         setStatus(nextStatus);
         if (nextStatus.state === "ready") {
@@ -191,6 +201,9 @@ export function PlayableEarthStage({ route }: { route: QuestRoute }) {
       data-lateral-offset={control.lateralOffsetM.toFixed(2)}
       data-camera-yaw={control.cameraYawDeg.toFixed(2)}
       data-camera-range={control.cameraRangeM}
+      data-grounding-source={grounding.source}
+      data-grounding-reason={grounding.reason}
+      data-grounding-offset={grounding.offsetM?.toFixed(2) ?? ""}
       className="relative min-h-[calc(100dvh-3.5rem)] overflow-hidden bg-[#02070a]"
     >
       <div
@@ -209,6 +222,14 @@ export function PlayableEarthStage({ route }: { route: QuestRoute }) {
           <p className="mt-1 text-sm text-muted-foreground">
             {route.distanceKm.toFixed(1)} km · {route.elevationGainM.toLocaleString()} m up
           </p>
+          {new URLSearchParams(window.location.search).get("debugGrounding") === "1" ? (
+            <div className="mt-3 text-xs font-semibold uppercase text-primary">
+              Grounding: {grounding.source}
+              {grounding.offsetM === undefined
+                ? ""
+                : ` · ${grounding.offsetM >= 0 ? "+" : ""}${grounding.offsetM.toFixed(1)} m`}
+            </div>
+          ) : null}
         </div>
         <Button asChild variant="secondary" className="pointer-events-auto shrink-0">
           <Link to={routeDetailPath(route.slug)}>
