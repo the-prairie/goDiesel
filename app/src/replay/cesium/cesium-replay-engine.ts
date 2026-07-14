@@ -8,6 +8,7 @@ import {
   Entity,
   HeadingPitchRange,
   PolylineGlowMaterialProperty,
+  SceneTransforms,
   Viewer,
 } from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
@@ -24,11 +25,16 @@ import type {
 } from "@/replay/replay-engine";
 import type { ReplayPose } from "@/replay/replay-controller";
 
-const CAMERA_RANGE_M = 240;
-const CAMERA_HEIGHT_M = 110;
 const SURFACE_VISUAL_OFFSET_M = 3;
 const SURFACE_SAMPLE_INTERVAL_MS = 1_200;
 const MAX_STALE_SAMPLE_DISTANCE_M = 500;
+
+function cameraHeightAboveAvatarM(cameraRangeM: number) {
+  if (cameraRangeM <= 240) {
+    return 35 + ((cameraRangeM - 120) / 120) * 75;
+  }
+  return 110 + ((cameraRangeM - 240) / 1_160) * 1_190;
+}
 
 function webglAvailable() {
   try {
@@ -43,7 +49,13 @@ export class CesiumReplayEngine implements ReplayEngine {
   private viewer?: Viewer;
   private marker?: Entity;
   private routeEntity?: Entity;
+  private avatarElement?: HTMLElement;
+  private removeAvatarTracking?: () => void;
+  private markerPosition?: Cartesian3;
   private cameraHeadingDeg?: number;
+  private cameraDestination = new Cartesian3();
+  private cameraInitialized = false;
+  private lastCameraUpdateMs?: number;
   private grounding?: PlayableEarthGroundingState;
   private pendingGroundingObservation?: PlayableEarthGroundingObservation;
   private latestPose?: ReplayPose;
@@ -52,7 +64,7 @@ export class CesiumReplayEngine implements ReplayEngine {
   private surfaceSampleInFlight = false;
   private generation = 0;
 
-  async mount({ container, route, onStatus }: ReplayEngineMountOptions) {
+  async mount({ container, avatarElement, route, onStatus }: ReplayEngineMountOptions) {
     const generation = ++this.generation;
     onStatus({
       state: "loading",
@@ -105,6 +117,7 @@ export class CesiumReplayEngine implements ReplayEngine {
         contextOptions: { webgl: { preserveDrawingBuffer: true } },
       });
       this.viewer = viewer;
+      this.avatarElement = avatarElement;
       viewer.scene.globe.show = false;
       if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = true;
       viewer.scene.screenSpaceCameraController.enableCollisionDetection = true;
@@ -129,7 +142,7 @@ export class CesiumReplayEngine implements ReplayEngine {
           positions: route.route.map((point) =>
             Cartesian3.fromDegrees(point.lng, point.lat),
           ),
-          width: 9,
+          width: 12,
           clampToGround: true,
           classificationType: ClassificationType.CESIUM_3D_TILE,
           material: new PolylineGlowMaterialProperty({
@@ -141,20 +154,32 @@ export class CesiumReplayEngine implements ReplayEngine {
       });
       this.routeEntity = routeEntity;
       const start = route.route[0];
+      this.markerPosition = Cartesian3.fromDegrees(
+        start.lng,
+        start.lat,
+        start.elev + SURFACE_VISUAL_OFFSET_M,
+      );
       this.marker = viewer.entities.add({
         name: "Selected replay avatar",
-        position: Cartesian3.fromDegrees(
-          start.lng,
-          start.lat,
-          start.elev + SURFACE_VISUAL_OFFSET_M,
-        ),
+        position: this.markerPosition,
         point: {
-          pixelSize: 16,
-          color: Color.fromCssColorString("#00f19f"),
-          outlineColor: Color.WHITE,
-          outlineWidth: 4,
+          pixelSize: 1,
+          color: Color.TRANSPARENT,
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
+      });
+      this.removeAvatarTracking = viewer.scene.preRender.addEventListener(() => {
+        if (!this.avatarElement || !this.markerPosition) return;
+        const screen = SceneTransforms.worldToWindowCoordinates(
+          viewer.scene,
+          this.markerPosition,
+        );
+        if (!screen || !Number.isFinite(screen.x) || !Number.isFinite(screen.y)) {
+          this.avatarElement.style.display = "none";
+          return;
+        }
+        this.avatarElement.style.display = "block";
+        this.avatarElement.style.transform = `translate3d(${screen.x}px, ${screen.y}px, 0) translate(-50%, -74%)`;
       });
 
       await viewer.zoomTo(routeEntity, new HeadingPitchRange(0, -0.72, 0));
@@ -165,8 +190,8 @@ export class CesiumReplayEngine implements ReplayEngine {
         message: "The route thread and avatar are ready to move.",
       });
     } catch (error) {
-      console.warn("Earth Replay unavailable", error);
       if (generation !== this.generation) return;
+      console.warn("Earth Replay unavailable", error);
       this.destroy();
       onStatus({
         state: "unavailable",
@@ -198,13 +223,12 @@ export class CesiumReplayEngine implements ReplayEngine {
       observation,
     );
     const groundedHeightM = this.grounding.displayedHeightM;
-    this.marker.position = new ConstantPositionProperty(
-      Cartesian3.fromDegrees(
-        pose.lng,
-        pose.lat,
-        groundedHeightM + SURFACE_VISUAL_OFFSET_M,
-      ),
+    this.markerPosition = Cartesian3.fromDegrees(
+      pose.lng,
+      pose.lat,
+      groundedHeightM + SURFACE_VISUAL_OFFSET_M,
     );
+    this.marker.position = new ConstantPositionProperty(this.markerPosition);
 
     if (this.cameraHeadingDeg === undefined) {
       this.cameraHeadingDeg = pose.bearingDeg;
@@ -212,26 +236,51 @@ export class CesiumReplayEngine implements ReplayEngine {
       const delta = ((pose.bearingDeg - this.cameraHeadingDeg + 540) % 360) - 180;
       this.cameraHeadingDeg = (this.cameraHeadingDeg + delta * 0.08 + 360) % 360;
     }
+    this.requestSurfaceSample(pose, now);
+    if (!pose.following) {
+      this.lastCameraUpdateMs = now;
+      return;
+    }
     const heading = (this.cameraHeadingDeg * Math.PI) / 180;
+    const cameraRangeM = pose.cameraRangeM;
+    const cameraHeightM = cameraHeightAboveAvatarM(cameraRangeM);
     const cameraLat =
-      pose.lat - (Math.cos(heading) * CAMERA_RANGE_M) / 111_320;
+      pose.lat - (Math.cos(heading) * cameraRangeM) / 111_320;
     const cameraLng =
       pose.lng -
-      (Math.sin(heading) * CAMERA_RANGE_M) /
+      (Math.sin(heading) * cameraRangeM) /
         (111_320 * Math.max(0.2, Math.cos((pose.lat * Math.PI) / 180)));
+    const desiredDestination = Cartesian3.fromDegrees(
+      cameraLng,
+      cameraLat,
+      groundedHeightM + SURFACE_VISUAL_OFFSET_M + cameraHeightM,
+    );
+    const cameraElapsedSeconds =
+      this.lastCameraUpdateMs === undefined ? 0 : (now - this.lastCameraUpdateMs) / 1_000;
+    this.lastCameraUpdateMs = now;
+    const easing = this.cameraInitialized
+      ? Math.min(1, Math.max(0.04, 1 - Math.exp(-5 * cameraElapsedSeconds)))
+      : 1;
+    const destination = Cartesian3.lerp(
+      viewer.camera.positionWC,
+      desiredDestination,
+      easing,
+      this.cameraDestination,
+    );
+    const headingDelta =
+      ((heading - viewer.camera.heading + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+    const easedHeading = viewer.camera.heading + headingDelta * easing;
+    const desiredPitch = -Math.atan2(cameraHeightM, cameraRangeM);
+    const easedPitch = viewer.camera.pitch + (desiredPitch - viewer.camera.pitch) * easing;
     viewer.camera.setView({
-      destination: Cartesian3.fromDegrees(
-        cameraLng,
-        cameraLat,
-        groundedHeightM + SURFACE_VISUAL_OFFSET_M + CAMERA_HEIGHT_M,
-      ),
+      destination,
       orientation: {
-        heading,
-        pitch: -Math.atan2(CAMERA_HEIGHT_M, CAMERA_RANGE_M),
+        heading: easedHeading,
+        pitch: easedPitch,
         roll: 0,
       },
     });
-    this.requestSurfaceSample(pose, now);
+    this.cameraInitialized = true;
   }
 
   private requestSurfaceSample(pose: ReplayPose, now: number) {
@@ -286,11 +335,18 @@ export class CesiumReplayEngine implements ReplayEngine {
 
   destroy() {
     this.generation += 1;
+    this.removeAvatarTracking?.();
+    if (this.avatarElement) this.avatarElement.style.display = "none";
     if (this.viewer && !this.viewer.isDestroyed()) this.viewer.destroy();
     this.viewer = undefined;
     this.marker = undefined;
     this.routeEntity = undefined;
+    this.avatarElement = undefined;
+    this.removeAvatarTracking = undefined;
+    this.markerPosition = undefined;
     this.cameraHeadingDeg = undefined;
+    this.cameraInitialized = false;
+    this.lastCameraUpdateMs = undefined;
     this.grounding = undefined;
     this.pendingGroundingObservation = undefined;
     this.latestPose = undefined;

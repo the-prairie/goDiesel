@@ -3,10 +3,14 @@ import { describe, expect, it } from "vitest";
 import type { QuestRoute } from "@/domain/routes";
 import {
   advanceReplay,
+  cycleReplaySpeed,
   initialReplayState,
   replayPose,
   routeDistanceM,
+  seekReplay,
   toggleReplay,
+  toggleReplayFollowing,
+  zoomReplay,
 } from "@/replay/replay-controller";
 
 const route = {
@@ -30,16 +34,33 @@ describe("Replay controller", () => {
     expect(advanced.playing).toBe(true);
 
     expect(
-      advanceReplay({ playing: true, progressM: 999.9 }, 10, totalDistanceM),
-    ).toEqual({ playing: false, progressM: totalDistanceM });
+      advanceReplay(
+        { ...initialReplayState(), playing: true, progressM: 999.9 },
+        10,
+        totalDistanceM,
+      ),
+    ).toMatchObject({ playing: false, progressM: totalDistanceM });
   });
 
   it("interpolates a synchronized position and bearing", () => {
-    const pose = replayPose(route, { playing: false, progressM: 250 });
+    const pose = replayPose(route, {
+      ...initialReplayState(),
+      progressM: 250,
+    });
     expect(pose.lat).toBeCloseTo(51.0025);
     expect(pose.lng).toBeCloseTo(-114);
     expect(pose.elev).toBeCloseTo(110);
     expect(pose.progressRatio).toBeCloseTo(0.25);
     expect(pose.bearingDeg).toBeCloseTo(0);
+  });
+
+  it("seeks, changes pace, releases follow, and changes route framing", () => {
+    const initial = initialReplayState();
+    const seeked = seekReplay(initial, 750, 1_000);
+    expect(seeked.progressM).toBe(750);
+    expect(cycleReplaySpeed(seeked).speed).toBe(2);
+    expect(toggleReplayFollowing(seeked).following).toBe(false);
+    expect(zoomReplay(seeked, "out").cameraRangeM).toBe(720);
+    expect(zoomReplay(seeked, "in").cameraRangeM).toBe(120);
   });
 });
