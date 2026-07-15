@@ -24,6 +24,12 @@ test("reviewed route guide loads directly and survives refresh", async ({ page }
   await page.goto(`/#/routes/${routeSlug}`);
 
   await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+  const briefing = page.getByRole("region", { name: "Route briefing" });
+  await expect(briefing).toBeVisible();
+  await expect(briefing.getByRole("img", { name: /recorded path/i })).toBeVisible();
+  await expect(briefing.getByRole("img", { name: /elevation profile/i })).toBeVisible();
+  await expect(briefing.getByText(/680 m total climb/i)).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open replay" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "What it feels like" })).toBeVisible();
   await expect(page.getByText(/long, exploratory Kyoto run/i)).toBeVisible();
   await expect(page.getByRole("heading", { name: "Best for" })).toBeVisible();
@@ -121,6 +127,30 @@ test("missing geometry disables one route without crashing detail", async ({ pag
 
   await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Replay unavailable" })).toBeDisabled();
+  const briefing = page.getByRole("region", { name: "Route briefing" });
+  await expect(briefing.getByText("Recorded path unavailable")).toBeVisible();
+  await expect(briefing.getByText("Elevation profile unavailable")).toBeVisible();
+});
+
+test("route briefing fits mobile and keeps Replay prominent", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/#/routes/${routeSlug}`);
+
+  const briefing = page.getByRole("region", { name: "Route briefing" });
+  await expect(briefing).toBeVisible();
+  await expect(briefing.getByText("Start", { exact: true })).toBeVisible();
+  await expect(briefing.getByText("Finish", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open replay" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+    391,
+  );
+  const briefingBox = await briefing.boundingBox();
+  expect(briefingBox).not.toBeNull();
+  expect(briefingBox!.x).toBeGreaterThanOrEqual(-1);
+  expect(briefingBox!.x + briefingBox!.width).toBeLessThanOrEqual(391);
+
+  await page.getByRole("link", { name: "Open replay" }).click();
+  await expect(page).toHaveURL(new RegExp(`#\/replay\/${routeSlug}$`));
 });
 
 test("changing routes never flashes the previous route detail", async ({ page }) => {

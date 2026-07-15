@@ -13,7 +13,13 @@ import { isPlannedRoute } from "@/domain/planning";
 import { APP_PATHS, routeDetailPath } from "@/navigation";
 import { cn } from "@/lib/utils";
 
-export function RouteCard({ route }: { route: RouteSummary }) {
+export function RouteCard({
+  route,
+  onOpen,
+}: {
+  route: RouteSummary;
+  onOpen?: () => void;
+}) {
   if (isPlannedRoute(route)) {
     return (
       <article
@@ -78,6 +84,7 @@ export function RouteCard({ route }: { route: RouteSummary }) {
     <article className="min-w-0">
       <Link
         to={routeDetailPath(route.slug)}
+        onClick={onOpen}
         aria-label={`Open ${route.name} route from ${route.date || "an unknown date"}, ${route.distanceKm.toFixed(1)} km`}
         className="group grid min-h-[22rem] overflow-hidden rounded-md border border-border bg-card text-left outline-none transition-colors hover:border-primary/60 focus-visible:ring-2 focus-visible:ring-ring"
       >

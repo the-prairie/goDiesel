@@ -4,10 +4,12 @@ import { Link, useParams } from "react-router-dom";
 
 import { Metric } from "@/components/metric";
 import { PageTitle } from "@/components/page-title";
+import { RouteBriefing } from "@/components/routes/route-briefing";
 import { RouteGuide } from "@/components/routes/route-guide";
 import { RouteNotFound } from "@/components/routes/route-not-found";
 import { Button } from "@/components/ui/button";
 import { findRouteBySlug } from "@/data/routes";
+import { routeLibraryReturnPath } from "@/data/route-library-return";
 import { useRouteDetail, type RouteDetailState } from "@/data/use-route-detail";
 import type { QuestRoute } from "@/domain/routes";
 import { APP_PATHS, decodedRouteSlug, replayPath } from "@/navigation";
@@ -18,13 +20,16 @@ export function RouteDetailPage() {
   const summary = decodedSlug ? findRouteBySlug(decodedSlug) : undefined;
   const [requestKey, setRequestKey] = useState(0);
   const detail = useRouteDetail(summary?.slug, requestKey);
+  const routesPath = summary
+    ? (routeLibraryReturnPath(summary.slug) ?? APP_PATHS.routes)
+    : APP_PATHS.routes;
 
   if (!summary) return <RouteNotFound />;
 
   return (
     <section className="grid content-start gap-6">
       <Button asChild variant="ghost" className="w-fit">
-        <Link to={APP_PATHS.routes}>
+        <Link to={routesPath}>
           <ArrowLeft aria-hidden="true" />
           All routes
         </Link>
@@ -98,6 +103,7 @@ function RouteDetailContent({
           </Button>
         )}
       </div>
+      <RouteBriefing route={route} />
       <RouteGuide curation={route.curation} />
     </div>
   );

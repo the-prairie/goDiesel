@@ -1,12 +1,16 @@
 import { ChevronDown, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useLocation, useSearchParams } from "react-router-dom";
 
 import { PageTitle } from "@/components/page-title";
 import { RouteCard } from "@/components/routes/route-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePlannedRoutes } from "@/data/planned-route-store";
+import {
+  rememberRouteLibraryReturn,
+  takeRouteLibraryScroll,
+} from "@/data/route-library-return";
 import { routes } from "@/data/routes";
 import {
   DEFAULT_ROUTE_FILTERS,
@@ -36,8 +40,11 @@ const lifecycleOptions = [
   ["discovered", "Discovered"],
 ] as const;
 
+const routesPerPage = 24;
+
 export function RoutesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const localPlans = usePlannedRoutes();
   const libraryRoutes = useMemo(() => [...routes, ...localPlans], [localPlans]);
@@ -58,17 +65,27 @@ export function RoutesPage() {
     regions: regionOptions,
     vibes: vibeOptions,
   });
-  const visibleRoutes = filterRoutes(libraryRoutes, filters);
+  const matchingRoutes = filterRoutes(libraryRoutes, filters);
+  const maximumPage = Math.max(1, Math.ceil(matchingRoutes.length / routesPerPage));
+  const page = Math.min(pageFromParams(searchParams), maximumPage);
+  const visibleRoutes = matchingRoutes.slice(0, page * routesPerPage);
+  const returnPath = `${location.pathname}${location.search}`;
   const hasFilters = Object.entries(filters).some(
     ([key, value]) => value !== DEFAULT_ROUTE_FILTERS[key as keyof RouteFilters],
   );
 
   useEffect(() => {
-    const canonical = paramsFromFilters(filters);
+    const canonical = paramsFromFilters(filters, page);
     if (canonical.toString() !== searchParams.toString()) {
       setSearchParams(canonical, { replace: true });
     }
-  }, [filters, searchParams, setSearchParams]);
+  }, [filters, page, searchParams, setSearchParams]);
+
+  useLayoutEffect(() => {
+    const scrollY = takeRouteLibraryScroll(returnPath);
+    if (scrollY === undefined) return;
+    window.scrollTo(0, scrollY);
+  }, [returnPath, visibleRoutes.length]);
 
   function updateFilter<K extends keyof RouteFilters>(key: K, value: RouteFilters[K]) {
     const next = paramsFromFilters(filters);
@@ -181,9 +198,18 @@ export function RoutesPage() {
           </form>
 
           <div className="flex min-h-9 flex-wrap items-center justify-between gap-3">
-            <p aria-live="polite" className="text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">{visibleRoutes.length}</span>{" "}
-              {visibleRoutes.length === 1 ? "route" : "routes"}
+            <p
+              aria-live="polite"
+              data-testid="route-result-count"
+              data-total={matchingRoutes.length}
+              className="text-sm text-muted-foreground"
+            >
+              <span className="font-medium text-foreground">
+                {visibleRoutes.length === matchingRoutes.length
+                  ? matchingRoutes.length
+                  : `Showing ${visibleRoutes.length} of ${matchingRoutes.length}`}
+              </span>{" "}
+              {matchingRoutes.length === 1 ? "route" : "routes"}
             </p>
             {hasFilters ? (
               <Button
@@ -199,7 +225,7 @@ export function RoutesPage() {
           </div>
 
           <section aria-label="Route results">
-            {visibleRoutes.length === 0 ? (
+            {matchingRoutes.length === 0 ? (
               <LibraryState
                 title="No routes found"
                 copy="Try a broader place, effort, or vibe."
@@ -216,10 +242,37 @@ export function RoutesPage() {
                 }
               />
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {visibleRoutes.map((route) => (
-                  <RouteCard key={route.slug} route={route} />
-                ))}
+              <div className="grid gap-5">
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {visibleRoutes.map((route) => (
+                    <RouteCard
+                      key={route.slug}
+                      route={route}
+                      onOpen={() =>
+                        rememberRouteLibraryReturn(
+                          returnPath,
+                          route.slug,
+                          window.scrollY,
+                        )
+                      }
+                    />
+                  ))}
+                </div>
+                {visibleRoutes.length < matchingRoutes.length ? (
+                  <div className="flex justify-center border-t border-border pt-5">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        setSearchParams(paramsFromFilters(filters, page + 1), {
+                          replace: true,
+                        })
+                      }
+                    >
+                      Load more routes
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             )}
           </section>
@@ -325,7 +378,12 @@ function valueIn(value: string | null, allowed: readonly string[]): value is str
   return value !== null && allowed.includes(value);
 }
 
-function paramsFromFilters(filters: RouteFilters) {
+function pageFromParams(params: URLSearchParams) {
+  const value = Number(params.get("page"));
+  return Number.isInteger(value) && value > 1 ? value : 1;
+}
+
+function paramsFromFilters(filters: RouteFilters, page = 1) {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(filters) as [
     keyof RouteFilters,
@@ -334,5 +392,6 @@ function paramsFromFilters(filters: RouteFilters) {
     if (value === DEFAULT_ROUTE_FILTERS[key]) continue;
     params.set(key === "query" ? "q" : key, value);
   }
+  if (page > 1) params.set("page", String(page));
   return params;
 }
