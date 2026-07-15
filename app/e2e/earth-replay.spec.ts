@@ -392,6 +392,9 @@ test("Change route searches every replay-ready route and updates the world", asy
   await expect(chooser.getByRole("link")).toHaveCount(routeTotal);
 
   await chooser.getByRole("searchbox", { name: "Search replay routes" }).fill("Victoria");
+  await expect(chooser.getByRole("status")).toHaveText(
+    /\d+ replay routes match your search\./,
+  );
   await expect(chooser.getByRole("region", { name: /\d+ matches/ })).toBeVisible();
   await expect(chooser.getByRole("region", { name: "Featured shortlist" })).toHaveCount(0);
   const destination = chooser.locator("a[href$='/replay/5650407638']");
@@ -427,7 +430,10 @@ test("Replay route chooser has intentional empty and mobile states", async ({ pa
   expect(chooserBox?.x ?? -1).toBeGreaterThanOrEqual(0);
   expect((chooserBox?.x ?? 0) + (chooserBox?.width ?? 0)).toBeLessThanOrEqual(390);
   await chooser.getByRole("searchbox", { name: "Search replay routes" }).fill("Atlantis");
-  await expect(chooser.getByRole("status")).toContainText("No replay routes found");
+  await expect(chooser.getByRole("status")).toHaveText(
+    "0 replay routes match your search.",
+  );
+  await expect(chooser.getByText("No replay routes found")).toBeVisible();
   await expect(chooser.getByText("Try another place or activity.")).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
     390,

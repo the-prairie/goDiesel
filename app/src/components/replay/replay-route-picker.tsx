@@ -86,6 +86,11 @@ export function ReplayRoutePicker({
               autoFocus
             />
           </div>
+          <p role="status" aria-live="polite" className="sr-only">
+            {normalizedQuery
+              ? `${results.length} replay routes match your search.`
+              : `${routes.length} replay routes available.`}
+          </p>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
           {!normalizedQuery && featured.length > 0 ? (
@@ -105,7 +110,7 @@ export function ReplayRoutePicker({
               onSelect={closePicker}
             />
           ) : (
-            <div role="status" className="grid min-h-48 place-items-center text-center">
+            <div className="grid min-h-48 place-items-center text-center">
               <div>
                 <div className="font-medium">No replay routes found</div>
                 <p className="mt-1 text-sm text-muted-foreground">
