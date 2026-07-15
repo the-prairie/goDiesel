@@ -19,7 +19,6 @@ import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import type { QuestRoute } from "@/domain/routes";
-import { routeDetailPath } from "@/navigation";
 import {
   advancePlayableEarth,
   PLAYABLE_EARTH_CAMERA_RANGES_M,
@@ -52,7 +51,13 @@ const INITIAL_GROUNDING: PlayableEarthGroundingDebug = {
   reason: "recorded",
 };
 
-export function PlayableEarthStage({ route }: { route: QuestRoute }) {
+export function PlayableEarthStage({
+  route,
+  exitPath,
+}: {
+  route: QuestRoute;
+  exitPath: string;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<PlayableEarthViewer | undefined>(undefined);
   const controlRef = useRef(initialPlayableEarthState());
@@ -232,7 +237,7 @@ export function PlayableEarthStage({ route }: { route: QuestRoute }) {
           ) : null}
         </div>
         <Button asChild variant="secondary" className="pointer-events-auto shrink-0">
-          <Link to={routeDetailPath(route.slug)}>
+          <Link to={exitPath}>
             <ArrowLeft aria-hidden="true" />
             Exit lab
           </Link>
@@ -250,7 +255,7 @@ export function PlayableEarthStage({ route }: { route: QuestRoute }) {
             <p className="mt-2 text-sm text-muted-foreground">{status.message}</p>
             {status.state === "unavailable" ? (
               <Button asChild className="mt-5">
-                <Link to={routeDetailPath(route.slug)}>Return to route</Link>
+                <Link to={exitPath}>Return to route</Link>
               </Button>
             ) : null}
           </div>

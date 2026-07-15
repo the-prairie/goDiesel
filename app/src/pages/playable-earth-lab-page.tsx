@@ -1,13 +1,14 @@
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 
 import { PlayableEarthStage } from "@/components/replay/playable-earth-stage";
 import { RouteNotFound } from "@/components/routes/route-not-found";
 import { findRouteBySlug } from "@/data/routes";
 import { useRouteDetail } from "@/data/use-route-detail";
-import { decodedRouteSlug } from "@/navigation";
+import { decodedRouteSlug, replayPath, routeDetailPath } from "@/navigation";
 
 export function PlayableEarthLabPage() {
   const { routeSlug } = useParams();
+  const [searchParams] = useSearchParams();
   const decodedSlug = decodedRouteSlug(routeSlug);
   const summary = decodedSlug ? findRouteBySlug(decodedSlug) : undefined;
   const detail = useRouteDetail(summary?.slug);
@@ -22,5 +23,10 @@ export function PlayableEarthLabPage() {
   }
   if (detail.status !== "ready") return <RouteNotFound />;
 
-  return <PlayableEarthStage route={detail.route} />;
+  const exitPath =
+    searchParams.get("from") === "replay"
+      ? replayPath(detail.route.slug)
+      : routeDetailPath(detail.route.slug);
+
+  return <PlayableEarthStage route={detail.route} exitPath={exitPath} />;
 }

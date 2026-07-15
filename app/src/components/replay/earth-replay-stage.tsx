@@ -1,8 +1,8 @@
 import { DotLottieReact } from "@lottiefiles/dotlottie-react";
 import {
   ArrowLeft,
-  ChevronDown,
   Gauge,
+  Gamepad2,
   LocateFixed,
   Map,
   MousePointer2,
@@ -16,8 +16,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
+import { ReplayRoutePicker } from "@/components/replay/replay-route-picker";
 import type { QuestRoute, RouteSummary } from "@/domain/routes";
-import { APP_PATHS, replayPath, routeDetailPath } from "@/navigation";
+import {
+  APP_PATHS,
+  playableEarthLabPath,
+  routeDetailPath,
+} from "@/navigation";
 import {
   advanceReplay,
   cycleReplaySpeed,
@@ -237,27 +242,21 @@ export function EarthReplayStage({
               Try Earth replay
             </Button>
           ) : null}
-          <details className="relative mt-3">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 border-t border-border pt-3 text-sm font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
-              Change route
-              <ChevronDown className="size-4 text-muted-foreground" aria-hidden="true" />
-            </summary>
-            <div className="absolute left-0 top-full z-30 mt-3 grid max-h-64 w-[min(22rem,calc(100vw-2rem))] gap-1 overflow-y-auto rounded-md border border-border bg-background p-2 shadow-2xl">
-              {pickerRoutes.map((pickerRoute) => (
-                <Link
-                  key={pickerRoute.slug}
-                  to={replayPath(pickerRoute.slug)}
-                  aria-current={pickerRoute.slug === route.slug ? "page" : undefined}
-                  className="rounded-sm border border-transparent px-3 py-2 text-sm outline-none hover:border-border hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:border-primary aria-[current=page]:bg-primary/10"
-                >
-                  <span className="block font-medium">{pickerRoute.name}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {pickerRoute.distanceKm.toFixed(1)} km · {pickerRoute.difficulty}
-                  </span>
+          <div className="mt-3 border-t border-border pt-3">
+            {route.replay.replayEligible ? (
+              <Button asChild size="sm" className="w-full">
+                <Link to={playableEarthLabPath(route.slug, "replay")}>
+                  <Gamepad2 aria-hidden="true" />
+                  Enter route
                 </Link>
-              ))}
-            </div>
-          </details>
+              </Button>
+            ) : (
+              <div role="status" className="text-xs text-muted-foreground">
+                Playable Earth unavailable. This route needs complete recorded geometry.
+              </div>
+            )}
+            <ReplayRoutePicker currentSlug={route.slug} routes={pickerRoutes} />
+          </div>
         </div>
         <div className="pointer-events-auto flex shrink-0 gap-2">
           <Button asChild variant="secondary" size="icon">

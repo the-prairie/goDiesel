@@ -72,8 +72,9 @@ export function replayPath(slug: string) {
   return `${APP_PATHS.replay}/${encodedSlug(slug)}`;
 }
 
-export function playableEarthLabPath(slug: string) {
-  return `${PLAYABLE_EARTH_LAB_PATH}/${encodedSlug(slug)}`;
+export function playableEarthLabPath(slug: string, origin?: "replay") {
+  const path = `${PLAYABLE_EARTH_LAB_PATH}/${encodedSlug(slug)}`;
+  return origin ? `${path}?from=${origin}` : path;
 }
 
 export function decodedRouteSlug(value: string | undefined) {
