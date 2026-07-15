@@ -207,8 +207,10 @@ test("save status stays with the route that initiated the request", async ({ pag
   await saveStarted;
   await search.fill("Kyoto");
   await expect(editor).toContainText("Kyoto Temple Climb");
+  await editor.getByLabel("Vibe").fill("Unsaved Kyoto ridge notes.");
   releaseSave?.();
   await expect(editor.getByText("Manifest and route detail regenerated")).toHaveCount(0);
+  await expect(editor.getByLabel("Vibe")).toHaveValue("Unsaved Kyoto ridge notes.");
 
   await search.fill("Calgary");
   await expect(editor).toContainText("Calgary River Path");

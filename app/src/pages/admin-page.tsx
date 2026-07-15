@@ -21,10 +21,7 @@ interface RouteSaveState {
 export function AdminPage() {
   const [workspace, setWorkspace] = useState<AdminWorkspace | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [draftState, setDraftState] = useState<{
-    routeId: string;
-    draft: CurationDraft;
-  } | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, CurationDraft>>({});
   const [query, setQuery] = useState("");
   const [saveStates, setSaveStates] = useState<Record<string, RouteSaveState>>(
     {},
@@ -60,46 +57,38 @@ export function AdminPage() {
   const selectedRoute = workspace?.routes.find(
     (route) => route.activityId === effectiveSelectedId,
   );
-  const draft =
-    draftState && draftState.routeId === selectedRoute?.activityId
-      ? draftState.draft
-      : null;
+  const draft = selectedRoute ? (drafts[selectedRoute.activityId] ?? null) : null;
   const selectedSaveState = selectedRoute
     ? saveStates[selectedRoute.activityId]
     : undefined;
 
   useEffect(() => {
     if (!selectedRoute || !workspace) {
-      setDraftState(null);
       return;
     }
     let active = true;
-    if (workspace.mode === "editable") {
-      setDraftState({
-        routeId: selectedRoute.activityId,
-        draft: selectedRoute.curation,
-      });
-    } else {
-      setDraftState({
-        routeId: selectedRoute.activityId,
-        draft: selectedRoute.curation,
-      });
+    const routeId = selectedRoute.activityId;
+    setDrafts((current) =>
+      current[routeId]
+        ? current
+        : { ...current, [routeId]: selectedRoute.curation },
+    );
+    if (workspace.mode === "read-only") {
       void loadBundledCuration(selectedRoute).then((curation) => {
         if (active) {
-          setDraftState({ routeId: selectedRoute.activityId, draft: curation });
+          setDrafts((current) => ({ ...current, [routeId]: curation }));
         }
       });
     }
     return () => {
       active = false;
     };
-  }, [selectedRoute, workspace]);
+  }, [selectedRoute?.activityId, workspace?.mode]);
 
   async function save() {
     if (
       !selectedRoute ||
       !draft ||
-      draftState?.routeId !== selectedRoute.activityId ||
       workspace?.mode !== "editable"
     ) {
       return;
@@ -242,10 +231,10 @@ export function AdminPage() {
                 saving={selectedSaveState?.saving ?? false}
                 saveMessage={selectedSaveState?.message ?? null}
                 onChange={(nextDraft) => {
-                  setDraftState({
-                    routeId: selectedRoute.activityId,
-                    draft: nextDraft,
-                  });
+                  setDrafts((current) => ({
+                    ...current,
+                    [selectedRoute.activityId]: nextDraft,
+                  }));
                   setSaveStates((current) => ({
                     ...current,
                     [selectedRoute.activityId]: {
