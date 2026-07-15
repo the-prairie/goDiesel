@@ -369,6 +369,137 @@ test("city, mountain, short, and long routes switch without stale Replay state",
     .toEqual(representativeRoutes);
 });
 
+test("Change route searches every replay-ready route and updates the world", async ({
+  page,
+}) => {
+  await installDeterministicReplayEngine(page);
+  await page.goto(`/#/replay/${routeSlug}`);
+  await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-state", "ready");
+
+  await page.getByRole("button", { name: "Change route" }).click();
+  const chooser = page.getByRole("dialog", { name: "Choose a replay route" });
+  await expect(chooser).toBeVisible();
+  await expect(chooser.getByRole("region", { name: "Featured shortlist" })).toBeVisible();
+  await expect(
+    chooser.getByText("Routes selected for their strongest Earth Replay experience."),
+  ).toBeVisible();
+  const routeTotal = Number(
+    (await chooser.getByText(/Search all \d+ routes ready for Replay\./).textContent())?.match(
+      /\d+/,
+    )?.[0],
+  );
+  expect(routeTotal).toBeGreaterThan(12);
+  await expect(chooser.getByRole("link")).toHaveCount(routeTotal);
+
+  await chooser.getByRole("searchbox", { name: "Search replay routes" }).fill("Victoria");
+  await expect(chooser.getByRole("status")).toHaveText(
+    /\d+ replay routes match your search\./,
+  );
+  await expect(chooser.getByRole("region", { name: /\d+ matches/ })).toBeVisible();
+  await expect(chooser.getByRole("region", { name: "Featured shortlist" })).toHaveCount(0);
+  const destination = chooser.locator("a[href$='/replay/5650407638']");
+  await expect(destination).toContainText("Victoria, BC");
+  await expect(destination).toContainText("Ride · 84.6 km");
+  await expect(destination).toContainText("Replay ready");
+  await destination.click();
+
+  await expect(page).toHaveURL(/#\/replay\/5650407638$/);
+  await expect(page.getByTestId("replay-stage")).toHaveAttribute(
+    "data-route-slug",
+    "5650407638",
+  );
+  await expect(page.getByRole("heading", { name: "Victoria, BC" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Change route" }).click();
+  await expect(chooser.getByRole("searchbox", { name: "Search replay routes" })).toHaveValue(
+    "",
+  );
+  await expect(chooser.getByRole("region", { name: "Featured shortlist" })).toBeVisible();
+  await expect(chooser.getByRole("link")).toHaveCount(routeTotal);
+});
+
+test("Replay route chooser has intentional empty and mobile states", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installDeterministicReplayEngine(page);
+  await page.goto(`/#/replay/${routeSlug}`);
+  await page.getByRole("button", { name: "Change route" }).click();
+
+  const chooser = page.getByRole("dialog", { name: "Choose a replay route" });
+  const chooserBox = await chooser.boundingBox();
+  expect(chooserBox).not.toBeNull();
+  expect(chooserBox?.x ?? -1).toBeGreaterThanOrEqual(0);
+  expect((chooserBox?.x ?? 0) + (chooserBox?.width ?? 0)).toBeLessThanOrEqual(390);
+  await chooser.getByRole("searchbox", { name: "Search replay routes" }).fill("Atlantis");
+  await expect(chooser.getByRole("status")).toHaveText(
+    "0 replay routes match your search.",
+  );
+  await expect(chooser.getByText("No replay routes found")).toBeVisible();
+  await expect(chooser.getByText("Try another place or activity.")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+    390,
+  );
+});
+
+for (const [device, viewport] of [
+  ["desktop", { width: 1440, height: 1000 }],
+  ["mobile", { width: 390, height: 844 }],
+] as const) {
+  test(`Replay route changes expose loading on ${device}`, async ({ page }) => {
+    await installDeterministicReplayEngine(page);
+    await page.route("**/data/routes/5650407638.json", async (request) => {
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      await request.continue();
+    });
+    await page.setViewportSize(viewport);
+    await page.goto(`/#/replay/${routeSlug}`);
+    await page.getByRole("button", { name: "Change route" }).click();
+    const chooser = page.getByRole("dialog", { name: "Choose a replay route" });
+    await chooser.getByRole("searchbox", { name: "Search replay routes" }).fill("Victoria");
+    await chooser.locator("a[href$='/replay/5650407638']").click();
+    await expect(page.getByRole("status")).toHaveText("Loading Earth Replay.");
+    await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-state", "ready");
+  });
+}
+
+test("Earth Replay enters Playable Earth and returns to the same route", async ({ page }) => {
+  await installDeterministicReplayEngine(page);
+  for (const viewport of [
+    { width: 1440, height: 1000 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto(`/#/replay/${routeSlug}`);
+    await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-state", "ready");
+    await page.getByRole("link", { name: "Enter route" }).click();
+    await expect(page).toHaveURL(
+      new RegExp(`#\\/lab\\/playable-earth\\/${routeSlug}\\?from=replay$`),
+    );
+    await expect(page.getByRole("region", { name: "Playable Earth Lab" })).toBeVisible();
+    await page.getByRole("link", { name: "Exit lab" }).click();
+    await expect(page).toHaveURL(new RegExp(`#\\/replay\\/${routeSlug}$`));
+    await expect(page.getByTestId("replay-stage")).toHaveAttribute(
+      "data-route-slug",
+      routeSlug,
+    );
+  }
+});
+
+test("Replay explains when Playable Earth is unavailable", async ({ page }) => {
+  await installDeterministicReplayEngine(page);
+  await page.route(`**/data/routes/${routeSlug}.json`, async (request) => {
+    const response = await request.fetch();
+    const body = await response.json();
+    body.replay.replay_eligible = false;
+    await request.fulfill({ response, json: body });
+  });
+  await page.goto(`/#/replay/${routeSlug}`);
+
+  await expect(page.getByRole("link", { name: "Enter route" })).toHaveCount(0);
+  await expect(page.getByRole("status")).toContainText(
+    "Playable Earth unavailable. This route needs complete recorded geometry.",
+  );
+});
+
 for (const earthState of ["partial", "unavailable"] as const) {
   test(`Earth ${earthState} state switches cleanly to Atlas replay`, async ({ page }) => {
     await installReplayStatusEngines(page, earthState);

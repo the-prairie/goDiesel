@@ -194,6 +194,34 @@ test("tile failure is legible and preserves an escape path", async ({ page }) =>
   await expect(page).toHaveURL(new RegExp(`#\/routes\/${routeSlug}$`));
 });
 
+test("direct navigation cannot bypass Playable Earth eligibility", async ({ page }) => {
+  await page.route(`**/data/routes/${routeSlug}.json`, async (request) => {
+    const response = await request.fetch();
+    const body = await response.json();
+    body.replay.replay_eligible = false;
+    await request.fulfill({ response, json: body });
+  });
+  await page.goto(`/#/lab/playable-earth/${routeSlug}?from=replay`);
+
+  await expect(page.getByRole("alert")).toContainText("Playable Earth unavailable");
+  await expect(page.getByRole("region", { name: "Playable Earth Lab" })).toHaveCount(0);
+  const returnLink = page.getByRole("link", { name: "Return to Replay" });
+  await expect(returnLink).toHaveAttribute("href", `#/replay/${routeSlug}`);
+  await returnLink.click();
+  await expect(page).toHaveURL(new RegExp(`#\\/replay\\/${routeSlug}$`));
+});
+
+test("Playable Earth load failure preserves its Replay origin", async ({ page }) => {
+  await page.route(`**/data/routes/${routeSlug}.json`, async (request) => {
+    await request.fulfill({ status: 500, body: "route unavailable" });
+  });
+  await page.goto(`/#/lab/playable-earth/${routeSlug}?from=replay`);
+
+  await expect(page.getByRole("alert")).toContainText("Playable route could not load");
+  const returnLink = page.getByRole("link", { name: "Return to Replay" });
+  await expect(returnLink).toHaveAttribute("href", `#/replay/${routeSlug}`);
+});
+
 test("unknown and malformed lab routes show the canonical unavailable state", async ({
   page,
 }) => {
