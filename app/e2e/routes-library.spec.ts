@@ -63,7 +63,9 @@ test("Atlas remains the default home while Routes stays secondary", async ({ pag
   );
 });
 
-test("Routes lists all 66 summaries without fetching route detail JSON", async ({ page }) => {
+test("Routes progressively reveals all summaries without fetching route detail JSON", async ({
+  page,
+}) => {
   const detailRequests = detailRequestUrls(page);
 
   await page.goto("/#/routes");
@@ -72,8 +74,14 @@ test("Routes lists all 66 summaries without fetching route detail JSON", async (
     "aria-current",
     "page",
   );
+  await expect(routeCards(page)).toHaveCount(24);
+  await expect(page.getByText(/showing 24 of 66 routes/i)).toBeVisible();
+  await page.getByRole("button", { name: "Load more routes" }).click();
+  await expect(routeCards(page)).toHaveCount(48);
+  await expect.poll(() => routeSearchParam(page, "page")).toBe("2");
+  await page.getByRole("button", { name: "Load more routes" }).click();
   await expect(routeCards(page)).toHaveCount(66);
-  await expect(page.getByText(/66 routes/i)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Load more routes" })).toHaveCount(0);
   const cardNames = await routeCards(page)
     .getByRole("link")
     .evaluateAll((links) => links.map((link) => link.getAttribute("aria-label")));
@@ -150,8 +158,43 @@ test("no matching routes are announced and all filters can be reset", async ({ p
   await noResults.getByRole("button", { name: "Reset filters" }).click();
 
   await expect(page).toHaveURL(/#\/routes$/);
-  await expect(routeCards(page)).toHaveCount(66);
+  await expect(routeCards(page)).toHaveCount(24);
   await expect(page.getByRole("searchbox", { name: "Search routes" })).toHaveValue("");
+});
+
+test("filters remain correct while loading every matching route", async ({ page }) => {
+  await page.goto("/#/routes?activity=Run");
+
+  await expect(routeCards(page)).toHaveCount(24);
+  const resultCount = Number(
+    (await page.getByTestId("route-result-count").getAttribute("data-total")) ?? 0,
+  );
+  while ((await routeCards(page).count()) < resultCount) {
+    const previousCount = await routeCards(page).count();
+    await page.getByRole("button", { name: "Load more routes" }).click();
+    await expect.poll(() => routeCards(page).count()).toBeGreaterThan(previousCount);
+  }
+  await expect(routeCards(page)).toHaveCount(resultCount);
+  for (const card of await routeCards(page).all()) {
+    await expect(card).toContainText("Run");
+  }
+});
+
+test("returning from a guide restores filters, loaded depth, and scroll", async ({ page }) => {
+  await page.goto("/#/routes?activity=Run&page=2");
+  await expect(routeCards(page)).toHaveCount(48);
+  const target = routeCards(page).nth(36).getByRole("link");
+  await target.scrollIntoViewIfNeeded();
+  const priorScrollY = await page.evaluate(() => window.scrollY);
+  expect(priorScrollY).toBeGreaterThan(0);
+  await target.click();
+
+  await page.getByRole("link", { name: "All routes" }).click();
+  await expect(page).toHaveURL(/#\/routes\?activity=Run&page=2$/);
+  await expect(routeCards(page)).toHaveCount(48);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(
+    priorScrollY - 100,
+  );
 });
 
 test("reviewed Kyoto card opens its canonical guide and fetches only that detail", async ({
@@ -201,10 +244,43 @@ test("invalid and unknown filter parameters are removed from the shared URL", as
   await page.goto("/#/routes?activity=NotReal&distance=nearby&junk=x");
 
   await expect(page).toHaveURL(/#\/routes$/);
-  await expect(routeCards(page)).toHaveCount(66);
+  await expect(routeCards(page)).toHaveCount(24);
   await expect(page.getByRole("combobox", { name: "Activity" })).toHaveValue("all");
   await expect(page.getByRole("button", { name: "Reset filters" })).toHaveCount(0);
 });
+
+for (const viewport of [
+  { name: "desktop", width: 1280, height: 900 },
+  { name: "mobile", width: 390, height: 844 },
+]) {
+  test(`planned and empty library states remain usable on ${viewport.name}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await page.goto("/#/finder");
+    const finder = page.getByRole("form", { name: "Find a route" });
+    await finder.getByLabel("Place").fill("Kyoto");
+    await finder.getByLabel("Activity").selectOption("Run");
+    await finder.getByLabel("Distance").fill("21");
+    await finder.getByLabel("Terrain").selectOption("mixed");
+    await finder.getByLabel("Vibe").fill("exploratory climbing");
+    await finder.getByRole("button", { name: "Find curated routes" }).click();
+    await page.getByRole("button", { name: "Save planned route" }).click();
+
+    await page.goto("/#/routes?lifecycle=planned");
+    await expect(
+      page.getByRole("article", { name: "Planned route Kyoto, Japan" }),
+    ).toBeVisible();
+    await expect(page.getByText("1 route", { exact: true })).toBeVisible();
+
+    await page.goto("/#/routes?q=no-route-could-possibly-match");
+    await expect(page.getByRole("status")).toContainText("No routes found");
+    await expect(page.getByRole("button", { name: "Load more routes" })).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      viewport.width + 1,
+    );
+  });
+}
 
 for (const viewport of [
   { name: "desktop", width: 1280, height: 900 },
@@ -215,7 +291,7 @@ for (const viewport of [
   }) => {
     await page.setViewportSize(viewport);
     await page.goto("/#/routes");
-    await expect(routeCards(page)).toHaveCount(66);
+    await expect(routeCards(page)).toHaveCount(24);
 
     const filters = page.getByRole("form", { name: "Route filters" });
     const results = page.getByRole("region", { name: "Route results" });
