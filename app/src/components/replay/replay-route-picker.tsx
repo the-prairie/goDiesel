@@ -38,6 +38,10 @@ export function ReplayRoutePicker({
   const generalResults = normalizedQuery
     ? results
     : results.filter((route) => !route.replay.bestInEarth);
+  const closePicker = () => {
+    setOpen(false);
+    setQuery("");
+  };
 
   return (
     <Sheet
@@ -90,7 +94,7 @@ export function ReplayRoutePicker({
               description="Routes selected for their strongest Earth Replay experience."
               routes={featured}
               currentSlug={currentSlug}
-              onSelect={() => setOpen(false)}
+              onSelect={closePicker}
             />
           ) : null}
           {generalResults.length > 0 ? (
@@ -98,7 +102,7 @@ export function ReplayRoutePicker({
               label={normalizedQuery ? `${results.length} matches` : "More replay-ready routes"}
               routes={generalResults}
               currentSlug={currentSlug}
-              onSelect={() => setOpen(false)}
+              onSelect={closePicker}
             />
           ) : (
             <div role="status" className="grid min-h-48 place-items-center text-center">

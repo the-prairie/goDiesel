@@ -406,6 +406,13 @@ test("Change route searches every replay-ready route and updates the world", asy
     "5650407638",
   );
   await expect(page.getByRole("heading", { name: "Victoria, BC" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Change route" }).click();
+  await expect(chooser.getByRole("searchbox", { name: "Search replay routes" })).toHaveValue(
+    "",
+  );
+  await expect(chooser.getByRole("region", { name: "Featured shortlist" })).toBeVisible();
+  await expect(chooser.getByRole("link")).toHaveCount(routeTotal);
 });
 
 test("Replay route chooser has intentional empty and mobile states", async ({ page }) => {
