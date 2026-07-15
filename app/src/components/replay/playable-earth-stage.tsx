@@ -1,7 +1,9 @@
 import {
   ArrowLeft,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Clapperboard,
   FlaskConical,
   Gamepad2,
@@ -11,6 +13,7 @@ import {
   RotateCcw,
   RotateCw,
   Route,
+  Settings2,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
@@ -19,6 +22,8 @@ import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import type { QuestRoute } from "@/domain/routes";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { cn } from "@/lib/utils";
 import {
   advancePlayableEarth,
   PLAYABLE_EARTH_CAMERA_RANGES_M,
@@ -66,6 +71,9 @@ export function PlayableEarthStage({
   const [grounding, setGrounding] =
     useState<PlayableEarthGroundingDebug>(INITIAL_GROUNDING);
   const [control, setControl] = useState(controlRef.current);
+  const [mobileContextExpanded, setMobileContextExpanded] = useState(true);
+  const [mobileControlsExpanded, setMobileControlsExpanded] = useState(false);
+  const isMobile = useIsMobile();
   const totalDistanceM = routeDistanceM(route);
 
   const commitControl = useCallback(
@@ -131,6 +139,15 @@ export function PlayableEarthStage({
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
   }, [route, status.state, totalDistanceM]);
+
+  useEffect(() => {
+    setMobileContextExpanded(true);
+    setMobileControlsExpanded(false);
+  }, [route.slug]);
+
+  useEffect(() => {
+    if (control.playing) setMobileContextExpanded(false);
+  }, [control.playing]);
 
   useEffect(() => {
     const editableTarget = (target: EventTarget | null) =>
@@ -217,26 +234,67 @@ export function PlayableEarthStage({
         className="absolute inset-0"
       />
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-4 p-4 sm:p-6">
-        <div className="pointer-events-auto max-w-md rounded-md border border-border bg-background/90 p-4 shadow-2xl backdrop-blur">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase text-primary">
-            <FlaskConical className="size-4" aria-hidden="true" />
-            Playable Earth Lab
-          </div>
-          <h1 className="mt-2 text-xl font-semibold sm:text-2xl">{route.name}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {route.distanceKm.toFixed(1)} km · {route.elevationGainM.toLocaleString()} m up
-          </p>
-          {new URLSearchParams(window.location.search).get("debugGrounding") === "1" ? (
-            <div className="mt-3 text-xs font-semibold uppercase text-primary">
-              Grounding: {grounding.source}
-              {grounding.offsetM === undefined
-                ? ""
-                : ` · ${grounding.offsetM >= 0 ? "+" : ""}${grounding.offsetM.toFixed(1)} m`}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-4 p-3 sm:p-6">
+        <div
+          data-testid="playable-context"
+          data-mobile-expanded={mobileContextExpanded}
+          className="pointer-events-auto w-full max-w-md rounded-md border border-border bg-background/90 p-3 shadow-2xl backdrop-blur sm:p-4"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase text-primary">
+              <FlaskConical className="size-4" aria-hidden="true" />
+              Playable Earth Lab
             </div>
-          ) : null}
+            <div className="flex items-center gap-1 sm:hidden">
+              <Button asChild variant="ghost" size="icon" className="size-9">
+                <Link to={exitPath} aria-label="Exit lab" title="Exit lab">
+                  <ArrowLeft aria-hidden="true" />
+                </Link>
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-9"
+                aria-label={
+                  mobileContextExpanded ? "Hide route details" : "Show route details"
+                }
+                aria-expanded={mobileContextExpanded}
+                onClick={() => setMobileContextExpanded((expanded) => !expanded)}
+              >
+                {mobileContextExpanded ? (
+                  <ChevronUp aria-hidden="true" />
+                ) : (
+                  <ChevronDown aria-hidden="true" />
+                )}
+              </Button>
+            </div>
+          </div>
+          <h1 className="mt-1 truncate text-lg font-semibold sm:mt-2 sm:text-2xl">
+            {route.name}
+          </h1>
+          <div
+            data-testid="playable-context-details"
+            className={cn(!mobileContextExpanded && "hidden sm:block")}
+          >
+            <p className="mt-1 text-sm text-muted-foreground">
+              {route.distanceKm.toFixed(1)} km · {route.elevationGainM.toLocaleString()} m up
+            </p>
+            {new URLSearchParams(window.location.search).get("debugGrounding") === "1" ? (
+              <div className="mt-3 text-xs font-semibold uppercase text-primary">
+                Grounding: {grounding.source}
+                {grounding.offsetM === undefined
+                  ? ""
+                  : ` · ${grounding.offsetM >= 0 ? "+" : ""}${grounding.offsetM.toFixed(1)} m`}
+              </div>
+            ) : null}
+          </div>
         </div>
-        <Button asChild variant="secondary" className="pointer-events-auto shrink-0">
+        <Button
+          asChild
+          variant="secondary"
+          className="pointer-events-auto hidden shrink-0 sm:inline-flex"
+        >
           <Link to={exitPath}>
             <ArrowLeft aria-hidden="true" />
             Exit lab
@@ -262,8 +320,194 @@ export function PlayableEarthStage({
         </div>
       ) : null}
 
-      <div className="pointer-events-none absolute inset-x-4 bottom-4 z-20 flex justify-center sm:inset-x-6 sm:bottom-6">
-        <div className="pointer-events-auto flex w-full max-w-5xl flex-wrap items-center gap-2 rounded-md border border-border bg-background/92 px-3 py-3 shadow-2xl backdrop-blur">
+      <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex justify-center sm:inset-x-6 sm:bottom-6">
+        <div
+          data-testid="playable-controls"
+          className="pointer-events-auto w-full max-w-5xl rounded-md border border-border bg-background/92 p-2 shadow-2xl backdrop-blur sm:flex sm:flex-wrap sm:items-center sm:gap-2 sm:px-3 sm:py-3"
+        >
+          {isMobile ? (
+            <div className="grid gap-2">
+              <div className="flex items-center gap-2">
+                <Route className="size-4 shrink-0 text-primary" aria-hidden="true" />
+                <div className="min-w-0 flex-1 text-sm text-muted-foreground">
+                  {(control.progressM / 1_000).toFixed(2)} / {route.distanceKm.toFixed(1)} km
+                </div>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="size-11"
+                  aria-label={
+                    mobileControlsExpanded ? "Hide more controls" : "Show more controls"
+                  }
+                  aria-expanded={mobileControlsExpanded}
+                  onClick={() => setMobileControlsExpanded((expanded) => !expanded)}
+                >
+                  <Settings2 aria-hidden="true" />
+                </Button>
+              </div>
+              <input
+                aria-label="Route progress"
+                type="range"
+                min={0}
+                max={totalDistanceM}
+                step={1}
+                value={control.progressM}
+                disabled={status.state !== "ready"}
+                onChange={(event) =>
+                  commitControl((current) =>
+                    seekPlayableEarth(current, Number(event.target.value), totalDistanceM),
+                  )
+                }
+                className="h-11 w-full accent-primary"
+              />
+              {mobileControlsExpanded ? (
+                <div
+                  data-testid="playable-secondary-controls"
+                  className="flex flex-wrap items-center gap-2 border-t border-border pt-2"
+                >
+                  <ControlIcon
+                    label="Steer left"
+                    className="size-11"
+                    disabled={status.state !== "ready" || control.mode !== "guided"}
+                    onPress={() => {
+                      inputRef.current.steer = -1;
+                    }}
+                    onRelease={() => {
+                      inputRef.current.steer = 0;
+                    }}
+                  >
+                    <ChevronLeft aria-hidden="true" />
+                  </ControlIcon>
+                  <ControlIcon
+                    label="Steer right"
+                    className="size-11"
+                    disabled={status.state !== "ready" || control.mode !== "guided"}
+                    onPress={() => {
+                      inputRef.current.steer = 1;
+                    }}
+                    onRelease={() => {
+                      inputRef.current.steer = 0;
+                    }}
+                  >
+                    <ChevronRight aria-hidden="true" />
+                  </ControlIcon>
+                  <ControlIcon
+                    label="Look left"
+                    className="size-11"
+                    disabled={status.state !== "ready" || control.mode !== "guided"}
+                    onPress={() => {
+                      inputRef.current.look = -1;
+                    }}
+                    onRelease={() => {
+                      inputRef.current.look = 0;
+                    }}
+                  >
+                    <RotateCcw aria-hidden="true" />
+                  </ControlIcon>
+                  <ControlIcon
+                    label="Look right"
+                    className="size-11"
+                    disabled={status.state !== "ready" || control.mode !== "guided"}
+                    onPress={() => {
+                      inputRef.current.look = 1;
+                    }}
+                    onRelease={() => {
+                      inputRef.current.look = 0;
+                    }}
+                  >
+                    <RotateCw aria-hidden="true" />
+                  </ControlIcon>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    className="size-11"
+                    disabled={
+                      status.state !== "ready" ||
+                      control.cameraRangeM === PLAYABLE_EARTH_CAMERA_RANGES_M[0]
+                    }
+                    aria-label="Zoom in to route"
+                    onClick={() =>
+                      commitControl((current) => zoomPlayableEarth(current, "in"))
+                    }
+                  >
+                    <ZoomIn aria-hidden="true" />
+                  </Button>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    className="size-11"
+                    disabled={
+                      status.state !== "ready" ||
+                      control.cameraRangeM === PLAYABLE_EARTH_CAMERA_RANGES_M.at(-1)
+                    }
+                    aria-label="Zoom out from route"
+                    onClick={() =>
+                      commitControl((current) => zoomPlayableEarth(current, "out"))
+                    }
+                  >
+                    <ZoomOut aria-hidden="true" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-11"
+                    disabled={status.state !== "ready"}
+                    aria-label={`Playback speed ${control.speed}x`}
+                    onClick={() =>
+                      commitControl((current) => cyclePlayableEarthSpeed(current, 1))
+                    }
+                  >
+                    <Gauge aria-hidden="true" />
+                    {control.speed}x
+                  </Button>
+                </div>
+              ) : null}
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  size="icon"
+                  className="size-11"
+                  disabled={status.state !== "ready"}
+                  aria-label={control.playing ? "Pause route" : "Play route"}
+                  onClick={() => commitControl(togglePlayableEarthPlayback)}
+                >
+                  {control.playing ? (
+                    <Pause aria-hidden="true" />
+                  ) : (
+                    <Play aria-hidden="true" />
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant={control.mode === "guided" ? "default" : "outline"}
+                  className="h-11 flex-1"
+                  disabled={status.state !== "ready"}
+                  aria-label={
+                    control.mode === "guided" ? "Resume automatic replay" : "Take control"
+                  }
+                  onClick={() =>
+                    commitControl((current) =>
+                      setPlayableEarthMode(
+                        current,
+                        current.mode === "replay" ? "guided" : "replay",
+                      ),
+                    )
+                  }
+                >
+                  {control.mode === "guided" ? (
+                    <Clapperboard aria-hidden="true" />
+                  ) : (
+                    <Gamepad2 aria-hidden="true" />
+                  )}
+                  {control.mode === "guided" ? "Resume replay" : "Take control"}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <>
           <Route className="size-4 shrink-0 text-primary" aria-hidden="true" />
           <div className="min-w-28 flex-1">
             <div className="text-xs font-semibold uppercase text-primary">
@@ -412,6 +656,8 @@ export function PlayableEarthStage({
             <Gauge aria-hidden="true" />
             {control.speed}x
           </Button>
+            </>
+          )}
         </div>
       </div>
     </section>
@@ -420,12 +666,14 @@ export function PlayableEarthStage({
 
 function ControlIcon({
   label,
+  className,
   disabled,
   onPress,
   onRelease,
   children,
 }: {
   label: string;
+  className?: string;
   disabled: boolean;
   onPress: () => void;
   onRelease: () => void;
@@ -436,6 +684,7 @@ function ControlIcon({
       type="button"
       size="icon"
       variant="outline"
+      className={className}
       disabled={disabled}
       aria-label={label}
       title={label}

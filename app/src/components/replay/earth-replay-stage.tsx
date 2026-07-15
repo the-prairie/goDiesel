@@ -1,6 +1,8 @@
 import { DotLottieReact } from "@lottiefiles/dotlottie-react";
 import {
   ArrowLeft,
+  ChevronDown,
+  ChevronUp,
   Gauge,
   Gamepad2,
   LocateFixed,
@@ -9,6 +11,7 @@ import {
   Pause,
   Play,
   Route,
+  Settings2,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
@@ -18,6 +21,8 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ReplayRoutePicker } from "@/components/replay/replay-route-picker";
 import type { QuestRoute, RouteSummary } from "@/domain/routes";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { cn } from "@/lib/utils";
 import {
   APP_PATHS,
   playableEarthLabPath,
@@ -82,6 +87,9 @@ export function EarthReplayStage({
   const [control, setControl] = useState(controlRef.current);
   const [avatar, setAvatar] = useState(storedReplayAvatar);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  const [mobileContextExpanded, setMobileContextExpanded] = useState(true);
+  const [mobileControlsExpanded, setMobileControlsExpanded] = useState(false);
+  const isMobile = useIsMobile();
   const totalDistanceM = routeDistanceM(route);
   const operational = status.state === "ready" || status.state === "partial";
 
@@ -153,6 +161,16 @@ export function EarthReplayStage({
     return () => cancelAnimationFrame(frame);
   }, [control.playing, operational, route, totalDistanceM]);
 
+  useEffect(() => {
+    setMobileContextExpanded(true);
+    setMobileControlsExpanded(false);
+    setAvatarPickerOpen(false);
+  }, [route.slug]);
+
+  useEffect(() => {
+    if (control.playing) setMobileContextExpanded(false);
+  }, [control.playing]);
+
   const selectAvatar = (id: ReplayAvatarId) => {
     const nextAvatar = REPLAY_AVATARS.find((option) => option.id === id);
     if (!nextAvatar) return;
@@ -196,69 +214,112 @@ export function EarthReplayStage({
         />
       </div>
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-4 p-4 sm:p-6">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-4 p-3 sm:p-6">
         <div
           data-testid="replay-context"
-          className="pointer-events-auto max-w-md rounded-md border border-border bg-background/90 p-4 shadow-2xl backdrop-blur"
+          data-mobile-expanded={mobileContextExpanded}
+          className="pointer-events-auto w-full max-w-md rounded-md border border-border bg-background/90 p-3 shadow-2xl backdrop-blur sm:p-4"
         >
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase text-primary">
-            <Route className="size-4" aria-hidden="true" />
-            {engineMode === "earth" ? "Earth Replay" : "Atlas Replay"}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase text-primary">
+              <Route className="size-4" aria-hidden="true" />
+              {engineMode === "earth" ? "Earth Replay" : "Atlas Replay"}
+            </div>
+            <div className="flex items-center gap-1 sm:hidden">
+              <Button asChild variant="ghost" size="icon" className="size-9">
+                <Link to={APP_PATHS.routes} aria-label="All routes" title="All routes">
+                  <ArrowLeft aria-hidden="true" />
+                </Link>
+              </Button>
+              <Button asChild variant="ghost" size="icon" className="size-9">
+                <Link
+                  to={routeDetailPath(route.slug)}
+                  aria-label="Route guide"
+                  title="Route guide"
+                >
+                  <Map aria-hidden="true" />
+                </Link>
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-9"
+                aria-label={
+                  mobileContextExpanded ? "Hide route details" : "Show route details"
+                }
+                aria-expanded={mobileContextExpanded}
+                onClick={() => setMobileContextExpanded((expanded) => !expanded)}
+              >
+                {mobileContextExpanded ? (
+                  <ChevronUp aria-hidden="true" />
+                ) : (
+                  <ChevronDown aria-hidden="true" />
+                )}
+              </Button>
+            </div>
           </div>
-          <h1 className="mt-2 text-xl font-semibold sm:text-2xl">{route.name}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {route.distanceKm.toFixed(1)} km · {route.elevationGainM.toLocaleString()} m up
-          </p>
-          {route.curation.vibe ? (
-            <p className="mt-3 max-w-sm text-sm text-muted-foreground">
-              {route.curation.vibe}
+          <h1 className="mt-1 truncate text-lg font-semibold sm:mt-2 sm:text-2xl">
+            {route.name}
+          </h1>
+          <div
+            data-testid="replay-context-details"
+            className={cn(!mobileContextExpanded && "hidden sm:block")}
+          >
+            <p className="mt-1 text-sm text-muted-foreground">
+              {route.distanceKm.toFixed(1)} km · {route.elevationGainM.toLocaleString()} m up
             </p>
-          ) : null}
-          {status.state === "partial" ? (
-            <div role="status" className="mt-3 border-l-2 border-amber-300 pl-3">
-              <div className="text-sm font-semibold">{status.title}</div>
-              <p className="mt-1 text-xs text-muted-foreground">{status.message}</p>
+            {route.curation.vibe ? (
+              <p className="mt-3 max-w-sm text-sm text-muted-foreground">
+                {route.curation.vibe}
+              </p>
+            ) : null}
+            {status.state === "partial" ? (
+              <div role="status" className="mt-3 border-l-2 border-amber-300 pl-3">
+                <div className="text-sm font-semibold">{status.title}</div>
+                <p className="mt-1 text-xs text-muted-foreground">{status.message}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={() => setEngineMode("atlas")}
+                >
+                  <Map aria-hidden="true" />
+                  Use Atlas replay
+                </Button>
+              </div>
+            ) : null}
+            {engineMode === "atlas" ? (
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 className="mt-3"
-                onClick={() => setEngineMode("atlas")}
+                onClick={() => setEngineMode("earth")}
               >
-                <Map aria-hidden="true" />
-                Use Atlas replay
+                <Route aria-hidden="true" />
+                Try Earth replay
               </Button>
+            ) : null}
+            <div className="mt-3 border-t border-border pt-3">
+              {route.replay.replayEligible ? (
+                <Button asChild size="sm" className="w-full">
+                  <Link to={playableEarthLabPath(route.slug, "replay")}>
+                    <Gamepad2 aria-hidden="true" />
+                    Enter route
+                  </Link>
+                </Button>
+              ) : (
+                <div role="status" className="text-xs text-muted-foreground">
+                  Playable Earth unavailable. This route needs complete recorded geometry.
+                </div>
+              )}
+              <ReplayRoutePicker currentSlug={route.slug} routes={pickerRoutes} />
             </div>
-          ) : null}
-          {engineMode === "atlas" ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="mt-3"
-              onClick={() => setEngineMode("earth")}
-            >
-              <Route aria-hidden="true" />
-              Try Earth replay
-            </Button>
-          ) : null}
-          <div className="mt-3 border-t border-border pt-3">
-            {route.replay.replayEligible ? (
-              <Button asChild size="sm" className="w-full">
-                <Link to={playableEarthLabPath(route.slug, "replay")}>
-                  <Gamepad2 aria-hidden="true" />
-                  Enter route
-                </Link>
-              </Button>
-            ) : (
-              <div role="status" className="text-xs text-muted-foreground">
-                Playable Earth unavailable. This route needs complete recorded geometry.
-              </div>
-            )}
-            <ReplayRoutePicker currentSlug={route.slug} routes={pickerRoutes} />
           </div>
         </div>
-        <div className="pointer-events-auto flex shrink-0 gap-2">
+        <div className="pointer-events-auto hidden shrink-0 gap-2 sm:flex">
           <Button asChild variant="secondary" size="icon">
             <Link to={APP_PATHS.routes} aria-label="All routes" title="All routes">
               <ArrowLeft aria-hidden="true" />
@@ -296,11 +357,132 @@ export function EarthReplayStage({
         </div>
       ) : null}
 
-      <div className="pointer-events-none absolute inset-x-4 bottom-4 z-20 flex justify-center sm:inset-x-6 sm:bottom-6">
+      <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex justify-center sm:inset-x-6 sm:bottom-6">
         <div
           data-testid="replay-controls"
-          className="pointer-events-auto flex w-full max-w-5xl flex-wrap items-center gap-2 rounded-md border border-border bg-background/92 px-3 py-3 shadow-2xl backdrop-blur"
+          className="pointer-events-auto w-full max-w-5xl rounded-md border border-border bg-background/92 p-2 shadow-2xl backdrop-blur sm:flex sm:flex-wrap sm:items-center sm:gap-2 sm:px-3 sm:py-3"
         >
+          {isMobile ? (
+          <div className="grid gap-2">
+            <div className="flex items-center gap-2">
+              <Route className="size-4 shrink-0 text-primary" aria-hidden="true" />
+              <div className="min-w-0 flex-1 text-sm text-muted-foreground">
+                {(control.progressM / 1_000).toFixed(2)} / {route.distanceKm.toFixed(1)} km
+              </div>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="size-11"
+                aria-label={
+                  mobileControlsExpanded ? "Hide more controls" : "Show more controls"
+                }
+                aria-expanded={mobileControlsExpanded}
+                onClick={() => {
+                  setMobileControlsExpanded((expanded) => !expanded);
+                  setAvatarPickerOpen(false);
+                }}
+              >
+                <Settings2 aria-hidden="true" />
+              </Button>
+            </div>
+            <input
+              aria-label="Route progress"
+              type="range"
+              min={0}
+              max={totalDistanceM}
+              step={1}
+              value={control.progressM}
+              disabled={!operational}
+              onChange={(event) =>
+                commitControl((current) =>
+                  seekReplay(current, Number(event.target.value), totalDistanceM),
+                )
+              }
+              className="h-11 w-full accent-primary"
+            />
+            {mobileControlsExpanded ? (
+              <div
+                data-testid="replay-secondary-controls"
+                className="flex flex-wrap items-center gap-2 border-t border-border pt-2"
+              >
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  className="size-11"
+                  disabled={
+                    !operational || control.cameraRangeM === REPLAY_CAMERA_RANGES_M[0]
+                  }
+                  aria-label="Zoom in to route"
+                  onClick={() => commitControl((current) => zoomReplay(current, "in"))}
+                >
+                  <ZoomIn aria-hidden="true" />
+                </Button>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  className="size-11"
+                  disabled={
+                    !operational ||
+                    control.cameraRangeM === REPLAY_CAMERA_RANGES_M.at(-1)
+                  }
+                  aria-label="Zoom out from route"
+                  onClick={() => commitControl((current) => zoomReplay(current, "out"))}
+                >
+                  <ZoomOut aria-hidden="true" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11"
+                  disabled={!operational}
+                  aria-label={`Playback speed ${control.speed}x`}
+                  onClick={() => commitControl(cycleReplaySpeed)}
+                >
+                  <Gauge aria-hidden="true" />
+                  {control.speed}x
+                </Button>
+                <ReplayAvatarPicker
+                  avatar={avatar}
+                  open={avatarPickerOpen}
+                  mobile
+                  onToggle={() => setAvatarPickerOpen((open) => !open)}
+                  onSelect={selectAvatar}
+                />
+              </div>
+            ) : null}
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                size="icon"
+                className="size-11"
+                disabled={!operational}
+                aria-label={control.playing ? "Pause route" : "Play route"}
+                onClick={() => commitControl(toggleReplay)}
+              >
+                {control.playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+              </Button>
+              <Button
+                type="button"
+                variant={control.following ? "default" : "outline"}
+                className="h-11 flex-1"
+                disabled={!operational}
+                aria-label={control.following ? "Release camera" : "Follow route"}
+                onClick={() => commitControl(toggleReplayFollowing)}
+              >
+                {control.following ? (
+                  <LocateFixed aria-hidden="true" />
+                ) : (
+                  <MousePointer2 aria-hidden="true" />
+                )}
+                {control.following ? "Following" : "Follow route"}
+              </Button>
+            </div>
+          </div>
+          ) : (
+          <>
           <Route className="size-4 shrink-0 text-primary" aria-hidden="true" />
           <div className="min-w-28 flex-1">
             <div className="text-xs font-semibold uppercase text-primary">
@@ -392,53 +574,69 @@ export function EarthReplayStage({
             <Gauge aria-hidden="true" />
             {control.speed}x
           </Button>
-          <div className="relative">
-            <Button
-              type="button"
-              size="icon"
-              variant="outline"
-              aria-label={`Choose replay avatar. Current: ${avatar.label}`}
-              title={`Replay avatar: ${avatar.label}`}
-              aria-expanded={avatarPickerOpen}
-              onClick={() => setAvatarPickerOpen((open) => !open)}
-            >
-              <DotLottieReact
-                src={avatar.src}
-                loop
-                autoplay
-                className="size-7"
-              />
-            </Button>
-            {avatarPickerOpen ? (
-              <div
-                role="menu"
-                aria-label="Replay avatars"
-                data-testid="avatar-menu"
-                className="fixed bottom-44 left-4 right-4 grid gap-1 rounded-md border border-border bg-background p-2 shadow-2xl sm:absolute sm:bottom-full sm:left-auto sm:right-0 sm:mb-3 sm:w-52"
-              >
-                {REPLAY_AVATARS.map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={option.id === avatar.id}
-                    onClick={() => selectAvatar(option.id)}
-                    className="flex h-11 items-center gap-3 rounded-sm border border-transparent px-2 text-left text-sm outline-none hover:border-border hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-checked:border-primary aria-checked:bg-primary/10"
-                  >
-                    <DotLottieReact
-                      src={option.src}
-                      loop
-                      autoplay
-                      className="size-9 shrink-0"
-                    />
-                    <span>{option.label}</span>
-                  </button>
-                ))}
-              </div>
-            ) : null}
+          <ReplayAvatarPicker
+            avatar={avatar}
+            open={avatarPickerOpen}
+            onToggle={() => setAvatarPickerOpen((open) => !open)}
+            onSelect={selectAvatar}
+          />
+          </>
+          )}
           </div>
         </div>
-      </div>
     </section>
+  );
+}
+
+function ReplayAvatarPicker({
+  avatar,
+  open,
+  mobile = false,
+  onToggle,
+  onSelect,
+}: {
+  avatar: (typeof REPLAY_AVATARS)[number];
+  open: boolean;
+  mobile?: boolean;
+  onToggle: () => void;
+  onSelect: (id: ReplayAvatarId) => void;
+}) {
+  return (
+    <div className="relative">
+      <Button
+        type="button"
+        size="icon"
+        variant="outline"
+        className={cn(mobile && "size-11")}
+        aria-label={`Choose replay avatar. Current: ${avatar.label}`}
+        title={`Replay avatar: ${avatar.label}`}
+        aria-expanded={open}
+        onClick={onToggle}
+      >
+        <DotLottieReact src={avatar.src} loop autoplay className="size-7" />
+      </Button>
+      {open ? (
+        <div
+          role="menu"
+          aria-label="Replay avatars"
+          data-testid="avatar-menu"
+          className="fixed bottom-44 left-4 right-4 grid gap-1 rounded-md border border-border bg-background p-2 shadow-2xl sm:absolute sm:bottom-full sm:left-auto sm:right-0 sm:mb-3 sm:w-52"
+        >
+          {REPLAY_AVATARS.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              role="menuitemradio"
+              aria-checked={option.id === avatar.id}
+              onClick={() => onSelect(option.id)}
+              className="flex h-11 items-center gap-3 rounded-sm border border-transparent px-2 text-left text-sm outline-none hover:border-border hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-checked:border-primary aria-checked:bg-primary/10"
+            >
+              <DotLottieReact src={option.src} loop autoplay className="size-9 shrink-0" />
+              <span>{option.label}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
