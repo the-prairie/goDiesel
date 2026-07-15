@@ -158,6 +158,63 @@ test("large owner libraries stay bounded while every route remains searchable", 
   await expect(routeList.getByRole("button")).toContainText("Route 204");
 });
 
+test("save status stays with the route that initiated the request", async ({ page }) => {
+  const records = [
+    {
+      ...adminRoute,
+      activity_id: "calgary-route",
+      name: "Calgary River Path",
+      region: "Calgary, Canada",
+    },
+    {
+      ...adminRoute,
+      activity_id: "kyoto-route",
+      name: "Kyoto Temple Climb",
+      region: "Kyoto, Japan",
+    },
+  ];
+  let releaseSave: (() => void) | undefined;
+  let signalSaveStarted: (() => void) | undefined;
+  const saveStarted = new Promise<void>((resolve) => {
+    signalSaveStarted = resolve;
+  });
+  await page.route(`${adminApi}/api/admin/status`, (route) =>
+    route.fulfill({
+      json: { writer_available: true, generation_status: "ready" },
+    }),
+  );
+  await page.route(`${adminApi}/api/routes`, (route) =>
+    route.fulfill({ json: records }),
+  );
+  await page.route(`${adminApi}/api/curation/save`, async (route) => {
+    signalSaveStarted?.();
+    await new Promise<void>((resolve) => {
+      releaseSave = resolve;
+    });
+    await route.fulfill({
+      json: {
+        ok: true,
+        activity_id: "calgary-route",
+        generation_status: "ready",
+      },
+    });
+  });
+  await page.goto("/#/admin");
+
+  const search = page.getByRole("searchbox", { name: "Search owner routes" });
+  const editor = page.getByRole("region", { name: "Route curation editor" });
+  await editor.getByRole("button", { name: "Save and regenerate" }).click();
+  await saveStarted;
+  await search.fill("Kyoto");
+  await expect(editor).toContainText("Kyoto Temple Climb");
+  releaseSave?.();
+  await expect(editor.getByText("Manifest and route detail regenerated")).toHaveCount(0);
+
+  await search.fill("Calgary");
+  await expect(editor).toContainText("Calgary River Path");
+  await expect(editor.getByText("Manifest and route detail regenerated")).toBeVisible();
+});
+
 for (const viewport of [
   { name: "desktop", width: 1280, height: 900 },
   { name: "mobile", width: 390, height: 844 },

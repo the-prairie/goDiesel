@@ -13,6 +13,11 @@ import {
 } from "@/data/admin-repository";
 import type { CurationDraft } from "@/domain/admin-curation";
 
+interface RouteSaveState {
+  saving: boolean;
+  message: string | null;
+}
+
 export function AdminPage() {
   const [workspace, setWorkspace] = useState<AdminWorkspace | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -21,8 +26,9 @@ export function AdminPage() {
     draft: CurationDraft;
   } | null>(null);
   const [query, setQuery] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [saveStates, setSaveStates] = useState<Record<string, RouteSaveState>>(
+    {},
+  );
 
   useEffect(() => {
     let active = true;
@@ -58,6 +64,9 @@ export function AdminPage() {
     draftState && draftState.routeId === selectedRoute?.activityId
       ? draftState.draft
       : null;
+  const selectedSaveState = selectedRoute
+    ? saveStates[selectedRoute.activityId]
+    : undefined;
 
   useEffect(() => {
     if (!selectedRoute || !workspace) {
@@ -95,28 +104,41 @@ export function AdminPage() {
     ) {
       return;
     }
-    setSaving(true);
-    setSaveMessage(null);
+    const routeId = selectedRoute.activityId;
+    setSaveStates((current) => ({
+      ...current,
+      [routeId]: { saving: true, message: null },
+    }));
     try {
-      await saveAdminCuration(selectedRoute.activityId, draft);
+      await saveAdminCuration(routeId, draft);
       setWorkspace((current) =>
         current?.mode === "editable"
           ? {
               ...current,
               generationStatus: "ready",
               routes: current.routes.map((route) =>
-                route.activityId === selectedRoute.activityId
+                route.activityId === routeId
                   ? { ...route, curation: draft, generationStatus: "ready" }
                   : route,
               ),
             }
           : current,
       );
-      setSaveMessage("Saved. Manifest and route detail regenerated.");
+      setSaveStates((current) => ({
+        ...current,
+        [routeId]: {
+          saving: false,
+          message: "Saved. Manifest and route detail regenerated.",
+        },
+      }));
     } catch (error) {
-      setSaveMessage(error instanceof Error ? error.message : "Save failed.");
-    } finally {
-      setSaving(false);
+      setSaveStates((current) => ({
+        ...current,
+        [routeId]: {
+          saving: false,
+          message: error instanceof Error ? error.message : "Save failed.",
+        },
+      }));
     }
   }
 
@@ -179,10 +201,7 @@ export function AdminPage() {
                   value={query}
                   placeholder="Search route library"
                   className="pl-9"
-                  onChange={(event) => {
-                    setSaveMessage(null);
-                    setQuery(event.target.value);
-                  }}
+                  onChange={(event) => setQuery(event.target.value)}
                 />
               </div>
               <p className="text-xs text-muted-foreground">
@@ -198,7 +217,6 @@ export function AdminPage() {
                     aria-pressed={route.activityId === effectiveSelectedId}
                     className="grid min-w-0 gap-1 border-b border-border px-3 py-3 text-left last:border-b-0 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-pressed:bg-muted"
                     onClick={() => {
-                      setSaveMessage(null);
                       setSelectedId(route.activityId);
                     }}
                   >
@@ -221,14 +239,21 @@ export function AdminPage() {
                 route={selectedRoute}
                 draft={draft}
                 readOnly={workspace.mode === "read-only"}
-                saving={saving}
-                saveMessage={saveMessage}
-                onChange={(nextDraft) =>
+                saving={selectedSaveState?.saving ?? false}
+                saveMessage={selectedSaveState?.message ?? null}
+                onChange={(nextDraft) => {
                   setDraftState({
                     routeId: selectedRoute.activityId,
                     draft: nextDraft,
-                  })
-                }
+                  });
+                  setSaveStates((current) => ({
+                    ...current,
+                    [selectedRoute.activityId]: {
+                      saving: current[selectedRoute.activityId]?.saving ?? false,
+                      message: null,
+                    },
+                  }));
+                }}
                 onSave={save}
               />
             ) : query ? (
