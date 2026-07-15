@@ -25,11 +25,35 @@ import type {
 } from "@/replay/replay-engine";
 import type { ReplayPose } from "@/replay/replay-controller";
 import { recordTileFailure, rgbaPixelsLookBlank } from "@/replay/replay-health";
+import { bearingDegrees, routePathPose } from "@/replay/route-path";
+import type { QuestRoute } from "@/domain/routes";
+import {
+  advanceReplayCameraClearance,
+  initialReplayCameraClearance,
+  REPLAY_CAMERA_MIN_CLEARANCE_M,
+  type ReplayCameraClearanceState,
+  type ReplayCameraSurfaceObservation,
+} from "@/replay/cesium/replay-camera-clearance";
 
 const SURFACE_VISUAL_OFFSET_M = 3;
-const SURFACE_SAMPLE_INTERVAL_MS = 1_200;
+const SURFACE_SAMPLE_INTERVAL_MS = 250;
 const MAX_STALE_SAMPLE_DISTANCE_M = 500;
+const MAX_STALE_CAMERA_SAMPLE_DISTANCE_M = 150;
+const MAX_CAMERA_EASING_DISTANCE_M = 500;
 const TILE_FAILURE_THRESHOLD = 8;
+
+interface CameraTarget {
+  lat: number;
+  lng: number;
+}
+
+function distanceBetweenTargetsM(from: CameraTarget, to: CameraTarget) {
+  const meanLatRadians = (((from.lat + to.lat) / 2) * Math.PI) / 180;
+  const northM = (to.lat - from.lat) * 111_320;
+  const eastM =
+    (to.lng - from.lng) * 111_320 * Math.max(0.2, Math.cos(meanLatRadians));
+  return Math.hypot(northM, eastM);
+}
 
 function canvasLooksBlank(canvas: HTMLCanvasElement) {
   const gl =
@@ -85,6 +109,7 @@ function webglAvailable() {
 
 export class CesiumReplayEngine implements ReplayEngine {
   private viewer?: Viewer;
+  private route?: QuestRoute;
   private marker?: Entity;
   private routeEntity?: Entity;
   private avatarElement?: HTMLElement;
@@ -93,6 +118,11 @@ export class CesiumReplayEngine implements ReplayEngine {
   private cameraHeadingDeg?: number;
   private cameraDestination = new Cartesian3();
   private cameraInitialized = false;
+  private cameraClearance?: ReplayCameraClearanceState;
+  private pendingCameraSurfaceObservation?: ReplayCameraSurfaceObservation;
+  private pendingCameraSurfaceTarget?: CameraTarget;
+  private latestCameraTarget?: CameraTarget;
+  private cameraSamplePosition?: CameraTarget;
   private lastCameraUpdateMs?: number;
   private grounding?: PlayableEarthGroundingState;
   private pendingGroundingObservation?: PlayableEarthGroundingObservation;
@@ -100,6 +130,7 @@ export class CesiumReplayEngine implements ReplayEngine {
   private lastGroundingUpdateMs?: number;
   private lastSurfaceSampleMs = Number.NEGATIVE_INFINITY;
   private surfaceSampleInFlight = false;
+  private surfaceSampleRetryTimer?: number;
   private removeTileFailureListener?: () => void;
   private cancelInitialTileWait?: () => void;
   private diagnosticsTimer?: number;
@@ -107,10 +138,17 @@ export class CesiumReplayEngine implements ReplayEngine {
   private blankFrameCount = 0;
   private partial = false;
   private onStatus?: ReplayEngineMountOptions["onStatus"];
+  private container?: HTMLElement;
   private generation = 0;
+
+  constructor(
+    private readonly minimumCameraClearanceM = REPLAY_CAMERA_MIN_CLEARANCE_M,
+  ) {}
 
   async mount({ container, avatarElement, route, onStatus }: ReplayEngineMountOptions) {
     const generation = ++this.generation;
+    this.container = container;
+    this.route = route;
     this.onStatus = onStatus;
     onStatus({
       state: "loading",
@@ -342,47 +380,155 @@ export class CesiumReplayEngine implements ReplayEngine {
     );
     this.marker.position = new ConstantPositionProperty(this.markerPosition);
 
+    const cameraRangeM = pose.cameraRangeM;
+    const cameraHeightM = cameraHeightAboveAvatarM(cameraRangeM);
+    const routeCameraPose =
+      this.route && pose.progressM >= cameraRangeM
+        ? routePathPose(this.route, pose.progressM - cameraRangeM)
+        : undefined;
+    const fallbackHeading = (pose.bearingDeg * Math.PI) / 180;
+    const cameraLat =
+      routeCameraPose?.lat ??
+      pose.lat - (Math.cos(fallbackHeading) * cameraRangeM) / 111_320;
+    const cameraLng =
+      routeCameraPose?.lng ??
+      pose.lng -
+        (Math.sin(fallbackHeading) * cameraRangeM) /
+          (111_320 * Math.max(0.2, Math.cos((pose.lat * Math.PI) / 180)));
+    const desiredHeadingDeg = routeCameraPose
+      ? bearingDegrees(
+          { ...routeCameraPose, d: routeCameraPose.progressM },
+          { ...pose, d: pose.progressM },
+        )
+      : pose.bearingDeg;
     if (this.cameraHeadingDeg === undefined) {
-      this.cameraHeadingDeg = pose.bearingDeg;
+      this.cameraHeadingDeg = desiredHeadingDeg;
     } else {
-      const delta = ((pose.bearingDeg - this.cameraHeadingDeg + 540) % 360) - 180;
+      const delta =
+        ((desiredHeadingDeg - this.cameraHeadingDeg + 540) % 360) - 180;
       this.cameraHeadingDeg = (this.cameraHeadingDeg + delta * 0.08 + 360) % 360;
     }
-    this.requestSurfaceSample(pose, now);
+    const heading = (this.cameraHeadingDeg * Math.PI) / 180;
+    this.latestCameraTarget = { lat: cameraLat, lng: cameraLng };
+    this.requestSurfaceSample(pose, cameraLat, cameraLng, now);
     if (!pose.following) {
       this.lastCameraUpdateMs = now;
       return;
     }
-    const heading = (this.cameraHeadingDeg * Math.PI) / 180;
-    const cameraRangeM = pose.cameraRangeM;
-    const cameraHeightM = cameraHeightAboveAvatarM(cameraRangeM);
-    const cameraLat =
-      pose.lat - (Math.cos(heading) * cameraRangeM) / 111_320;
-    const cameraLng =
-      pose.lng -
-      (Math.sin(heading) * cameraRangeM) /
-        (111_320 * Math.max(0.2, Math.cos((pose.lat * Math.PI) / 180)));
-    const desiredDestination = Cartesian3.fromDegrees(
-      cameraLng,
-      cameraLat,
-      groundedHeightM + SURFACE_VISUAL_OFFSET_M + cameraHeightM,
-    );
     const cameraElapsedSeconds =
       this.lastCameraUpdateMs === undefined ? 0 : (now - this.lastCameraUpdateMs) / 1_000;
     this.lastCameraUpdateMs = now;
+    const baseCameraAltitudeM =
+      Math.max(groundedHeightM, routeCameraPose?.elev ?? groundedHeightM) +
+      SURFACE_VISUAL_OFFSET_M +
+      cameraHeightM;
+    let cameraObservation = this.pendingCameraSurfaceObservation;
+    let cameraObservationTarget = this.pendingCameraSurfaceTarget;
+    this.pendingCameraSurfaceObservation = undefined;
+    this.pendingCameraSurfaceTarget = undefined;
+    const desiredCameraCartographic = Cartographic.fromDegrees(cameraLng, cameraLat);
+    const synchronousCameraSurfaceM = viewer.scene.sampleHeightSupported
+      ? viewer.scene.sampleHeight(
+          desiredCameraCartographic,
+          [this.routeEntity, this.marker].filter(
+            (entity): entity is Entity => Boolean(entity),
+          ),
+          2,
+        )
+      : undefined;
+    if (
+      typeof synchronousCameraSurfaceM === "number" &&
+      Number.isFinite(synchronousCameraSurfaceM)
+    ) {
+      cameraObservation = { kind: "sample", heightM: synchronousCameraSurfaceM };
+      cameraObservationTarget = { lat: cameraLat, lng: cameraLng };
+    }
+    if (cameraObservation?.kind === "sample" && cameraObservationTarget) {
+      this.cameraSamplePosition = cameraObservationTarget;
+    }
+    const sampleIsLocal =
+      this.cameraSamplePosition !== undefined &&
+      distanceBetweenTargetsM(this.cameraSamplePosition, {
+        lat: cameraLat,
+        lng: cameraLng,
+      }) <= MAX_STALE_CAMERA_SAMPLE_DISTANCE_M;
+    if (!this.cameraSamplePosition) {
+      if (this.container) {
+        this.container.dataset.cameraClearanceM = "pending";
+        this.container.dataset.cameraSurfaceHeightM = "pending";
+      }
+      return;
+    }
+    const renderedCameraTarget = sampleIsLocal
+      ? { lat: cameraLat, lng: cameraLng }
+      : this.cameraSamplePosition;
+    if (!this.cameraClearance) {
+      this.cameraClearance = initialReplayCameraClearance(
+        Math.max(viewer.camera.positionCartographic.height, baseCameraAltitudeM),
+      );
+    }
+    this.cameraClearance = advanceReplayCameraClearance(
+      this.cameraClearance,
+      baseCameraAltitudeM,
+      cameraElapsedSeconds,
+      cameraObservation,
+      this.minimumCameraClearanceM,
+    );
+    const cameraAltitudeM = this.cameraClearance.altitudeM;
+    const desiredDestination = Cartesian3.fromDegrees(
+      renderedCameraTarget.lng,
+      renderedCameraTarget.lat,
+      cameraAltitudeM,
+    );
     const easing = this.cameraInitialized
       ? Math.min(1, Math.max(0.04, 1 - Math.exp(-5 * cameraElapsedSeconds)))
       : 1;
-    const destination = Cartesian3.lerp(
-      viewer.camera.positionWC,
-      desiredDestination,
-      easing,
-      this.cameraDestination,
+    const currentCameraTarget = {
+      lat: (viewer.camera.positionCartographic.latitude * 180) / Math.PI,
+      lng: (viewer.camera.positionCartographic.longitude * 180) / Math.PI,
+    };
+    const cameraJumpDistanceM = distanceBetweenTargetsM(
+      currentCameraTarget,
+      renderedCameraTarget,
     );
+    let destination =
+      !this.cameraInitialized || cameraJumpDistanceM > MAX_CAMERA_EASING_DISTANCE_M
+        ? desiredDestination
+        : Cartesian3.lerp(
+            viewer.camera.positionWC,
+            desiredDestination,
+            easing,
+            this.cameraDestination,
+          );
+    const destinationCartographic = Cartographic.fromCartesian(destination);
+    const destinationSurfaceHeightM = viewer.scene.sampleHeightSupported
+      ? viewer.scene.sampleHeight(
+          destinationCartographic,
+          [this.routeEntity, this.marker].filter(
+            (entity): entity is Entity => Boolean(entity),
+          ),
+          2,
+        )
+      : undefined;
+    const minimumDestinationAltitudeM =
+      typeof destinationSurfaceHeightM === "number" &&
+      Number.isFinite(destinationSurfaceHeightM)
+        ? destinationSurfaceHeightM + this.minimumCameraClearanceM
+        : cameraAltitudeM;
+    if (destinationCartographic.height < minimumDestinationAltitudeM) {
+      destination = Cartesian3.fromRadians(
+        destinationCartographic.longitude,
+        destinationCartographic.latitude,
+        minimumDestinationAltitudeM,
+      );
+    }
     const headingDelta =
       ((heading - viewer.camera.heading + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
     const easedHeading = viewer.camera.heading + headingDelta * easing;
-    const desiredPitch = -Math.atan2(cameraHeightM, cameraRangeM);
+    const desiredPitch = -Math.atan2(
+      cameraAltitudeM - groundedHeightM - SURFACE_VISUAL_OFFSET_M,
+      cameraRangeM,
+    );
     const easedPitch = viewer.camera.pitch + (desiredPitch - viewer.camera.pitch) * easing;
     viewer.camera.setView({
       destination,
@@ -392,10 +538,40 @@ export class CesiumReplayEngine implements ReplayEngine {
         roll: 0,
       },
     });
+    if (this.container) {
+      const actualAltitudeM = viewer.camera.positionCartographic.height;
+      const actualLatitudeDeg =
+        (viewer.camera.positionCartographic.latitude * 180) / Math.PI;
+      const actualLongitudeDeg =
+        (viewer.camera.positionCartographic.longitude * 180) / Math.PI;
+      const actualSurfaceHeightM =
+        typeof destinationSurfaceHeightM === "number" &&
+        Number.isFinite(destinationSurfaceHeightM)
+          ? destinationSurfaceHeightM
+          : undefined;
+      const clearanceM =
+        actualSurfaceHeightM === undefined
+          ? undefined
+          : actualAltitudeM - actualSurfaceHeightM;
+      this.container.dataset.cameraAltitudeM = actualAltitudeM.toFixed(2);
+      this.container.dataset.cameraLatitude = actualLatitudeDeg.toFixed(7);
+      this.container.dataset.cameraLongitude = actualLongitudeDeg.toFixed(7);
+      this.container.dataset.cameraSurfaceHeightM =
+        actualSurfaceHeightM?.toFixed(2) ?? "unknown";
+      this.container.dataset.cameraClearanceM =
+        clearanceM?.toFixed(2) ?? "unknown";
+      this.container.dataset.minimumCameraClearanceM =
+        this.minimumCameraClearanceM.toFixed(2);
+    }
     this.cameraInitialized = true;
   }
 
-  private requestSurfaceSample(pose: ReplayPose, now: number) {
+  private requestSurfaceSample(
+    pose: ReplayPose,
+    cameraLat: number,
+    cameraLng: number,
+    now: number,
+  ) {
     const scene = this.viewer?.scene;
     if (
       !scene ||
@@ -405,42 +581,84 @@ export class CesiumReplayEngine implements ReplayEngine {
       return;
     }
     this.lastSurfaceSampleMs = now;
+    if (this.surfaceSampleRetryTimer !== undefined) {
+      window.clearTimeout(this.surfaceSampleRetryTimer);
+      this.surfaceSampleRetryTimer = undefined;
+    }
     if (!scene.sampleHeightSupported) {
       this.pendingGroundingObservation = { kind: "missing" };
+      this.pendingCameraSurfaceObservation = { kind: "missing" };
       return;
     }
 
     const requestGeneration = this.generation;
     const requestProgressM = pose.progressM;
+    const requestCameraTarget = { lat: cameraLat, lng: cameraLng };
+    let retryLatestPose = false;
     this.surfaceSampleInFlight = true;
     void scene
       .sampleHeightMostDetailed(
-        [Cartographic.fromDegrees(pose.lng, pose.lat)],
+        [
+          Cartographic.fromDegrees(pose.lng, pose.lat),
+          Cartographic.fromDegrees(cameraLng, cameraLat),
+        ],
         [this.routeEntity, this.marker].filter((entity): entity is Entity => Boolean(entity)),
         2,
       )
       .then((positions) => {
         if (requestGeneration !== this.generation) return;
-        if (
-          Math.abs((this.latestPose?.progressM ?? requestProgressM) - requestProgressM) >
-          MAX_STALE_SAMPLE_DISTANCE_M
-        ) {
-          return;
-        }
+        const progressSampleIsStale =
+          Math.abs(
+            (this.latestPose?.progressM ?? requestProgressM) - requestProgressM,
+          ) > MAX_STALE_SAMPLE_DISTANCE_M;
+        const cameraSampleIsStale =
+          !this.latestCameraTarget ||
+          distanceBetweenTargetsM(
+            requestCameraTarget,
+            this.latestCameraTarget,
+          ) > MAX_STALE_CAMERA_SAMPLE_DISTANCE_M;
         const sampledHeightM = positions[0]?.height;
-        this.pendingGroundingObservation =
-          typeof sampledHeightM === "number" && Number.isFinite(sampledHeightM)
-          ? { kind: "sample", heightM: sampledHeightM }
-          : { kind: "missing" };
+        const sampledCameraHeightM = positions[1]?.height;
+        if (!progressSampleIsStale) {
+          this.pendingGroundingObservation =
+            typeof sampledHeightM === "number" && Number.isFinite(sampledHeightM)
+              ? { kind: "sample", heightM: sampledHeightM }
+              : { kind: "missing" };
+        }
+        this.pendingCameraSurfaceObservation =
+          typeof sampledCameraHeightM === "number" &&
+          Number.isFinite(sampledCameraHeightM)
+            ? { kind: "sample", heightM: sampledCameraHeightM }
+            : { kind: "missing" };
+        this.pendingCameraSurfaceTarget = requestCameraTarget;
+        retryLatestPose = progressSampleIsStale || cameraSampleIsStale;
+        if (this.latestPose) this.setPose(this.latestPose);
       })
       .catch(() => {
         if (requestGeneration === this.generation) {
           this.pendingGroundingObservation = { kind: "missing" };
+          this.pendingCameraSurfaceObservation = { kind: "missing" };
+          this.pendingCameraSurfaceTarget = requestCameraTarget;
+          retryLatestPose = true;
         }
       })
       .finally(() => {
         if (requestGeneration === this.generation) {
           this.surfaceSampleInFlight = false;
+          if (retryLatestPose && this.latestPose) {
+            this.setPose(this.latestPose);
+            const retryDelayMs = Math.max(
+              0,
+              SURFACE_SAMPLE_INTERVAL_MS -
+                (performance.now() - this.lastSurfaceSampleMs),
+            );
+            this.surfaceSampleRetryTimer = window.setTimeout(() => {
+              this.surfaceSampleRetryTimer = undefined;
+              if (requestGeneration === this.generation && this.latestPose) {
+                this.setPose(this.latestPose);
+              }
+            }, retryDelayMs);
+          }
         }
       });
   }
@@ -452,10 +670,14 @@ export class CesiumReplayEngine implements ReplayEngine {
     if (this.diagnosticsTimer !== undefined) {
       window.clearInterval(this.diagnosticsTimer);
     }
+    if (this.surfaceSampleRetryTimer !== undefined) {
+      window.clearTimeout(this.surfaceSampleRetryTimer);
+    }
     this.removeAvatarTracking?.();
     if (this.avatarElement) this.avatarElement.style.display = "none";
     if (this.viewer && !this.viewer.isDestroyed()) this.viewer.destroy();
     this.viewer = undefined;
+    this.route = undefined;
     this.marker = undefined;
     this.routeEntity = undefined;
     this.avatarElement = undefined;
@@ -463,6 +685,11 @@ export class CesiumReplayEngine implements ReplayEngine {
     this.markerPosition = undefined;
     this.cameraHeadingDeg = undefined;
     this.cameraInitialized = false;
+    this.cameraClearance = undefined;
+    this.pendingCameraSurfaceObservation = undefined;
+    this.pendingCameraSurfaceTarget = undefined;
+    this.latestCameraTarget = undefined;
+    this.cameraSamplePosition = undefined;
     this.lastCameraUpdateMs = undefined;
     this.grounding = undefined;
     this.pendingGroundingObservation = undefined;
@@ -470,6 +697,7 @@ export class CesiumReplayEngine implements ReplayEngine {
     this.lastGroundingUpdateMs = undefined;
     this.lastSurfaceSampleMs = Number.NEGATIVE_INFINITY;
     this.surfaceSampleInFlight = false;
+    this.surfaceSampleRetryTimer = undefined;
     this.removeTileFailureListener = undefined;
     this.cancelInitialTileWait = undefined;
     this.diagnosticsTimer = undefined;
@@ -477,5 +705,6 @@ export class CesiumReplayEngine implements ReplayEngine {
     this.blankFrameCount = 0;
     this.partial = false;
     this.onStatus = undefined;
+    this.container = undefined;
   }
 }

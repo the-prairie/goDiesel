@@ -37,7 +37,7 @@ function pointAtDistance(points: RoutePoint[], progressM: number) {
   };
 }
 
-function bearingDegrees(from: RoutePoint, to: RoutePoint) {
+export function bearingDegrees(from: RoutePoint, to: RoutePoint) {
   const lat1 = (from.lat * Math.PI) / 180;
   const lat2 = (to.lat * Math.PI) / 180;
   const deltaLng = ((to.lng - from.lng) * Math.PI) / 180;
