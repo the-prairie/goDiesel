@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom";
 
 import { Metric } from "@/components/metric";
 import { PageTitle } from "@/components/page-title";
+import { RouteBriefing } from "@/components/routes/route-briefing";
 import { RouteGuide } from "@/components/routes/route-guide";
 import { RouteNotFound } from "@/components/routes/route-not-found";
 import { Button } from "@/components/ui/button";
@@ -102,6 +103,7 @@ function RouteDetailContent({
           </Button>
         )}
       </div>
+      <RouteBriefing route={route} />
       <RouteGuide curation={route.curation} />
     </div>
   );

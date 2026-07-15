@@ -13,7 +13,7 @@ export function RouteGuide({ curation }: { curation: RouteCuration }) {
   const isDraft = curation.reviewStatus === "draft";
 
   return (
-    <article aria-label="Route guide" className="grid gap-8 border-t border-border pt-7">
+    <article aria-label="Route guide" className="grid gap-8">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase text-primary">Route guide</p>
