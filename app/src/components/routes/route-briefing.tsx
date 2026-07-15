@@ -1,6 +1,12 @@
 import { Flag, Mountain, Route as RouteIcon } from "lucide-react";
 
-import type { QuestRoute, RoutePoint } from "@/domain/routes";
+import type { QuestRoute } from "@/domain/routes";
+import {
+  elevationRange,
+  projectRouteGeometry,
+  sampleElevationProfile,
+  sampleRoutePoints,
+} from "@/domain/route-visualization";
 
 const traceWidth = 640;
 const traceHeight = 280;
@@ -75,7 +81,7 @@ export function RouteBriefing({ route }: { route: QuestRoute }) {
 }
 
 function RouteTrace({ route }: { route: QuestRoute }) {
-  const points = normalizeTrace(samplePoints(route.route));
+  const points = normalizeTrace(sampleRoutePoints(route.route));
   const first = points[0];
   const last = points.at(-1)!;
 
@@ -113,10 +119,8 @@ function RouteTrace({ route }: { route: QuestRoute }) {
 }
 
 function ElevationProfile({ route }: { route: QuestRoute }) {
-  const points = samplePoints(route.route);
-  const elevations = points.map((point) => point.elev);
-  const minimum = Math.min(...elevations);
-  const maximum = Math.max(...elevations);
+  const points = sampleElevationProfile(route.route);
+  const { minimum, maximum } = elevationRange(route.route);
   const range = Math.max(1, maximum - minimum);
   const totalDistance = Math.max(1, points.at(-1)?.d ?? route.distanceKm * 1_000);
   const left = 22;
@@ -177,23 +181,16 @@ function BriefingUnavailable({ title, copy }: { title: string; copy: string }) {
   );
 }
 
-function samplePoints(points: RoutePoint[], maximum = 240) {
-  if (points.length <= maximum) return points;
-  const step = (points.length - 1) / (maximum - 1);
-  return Array.from({ length: maximum }, (_, index) =>
-    points[Math.min(points.length - 1, Math.round(index * step))],
-  );
-}
-
-function normalizeTrace(points: RoutePoint[]) {
-  const lngs = points.map((point) => point.lng);
-  const lats = points.map((point) => point.lat);
-  const minLng = Math.min(...lngs);
-  const maxLng = Math.max(...lngs);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const width = Math.max(maxLng - minLng, 0.00001);
-  const height = Math.max(maxLat - minLat, 0.00001);
+function normalizeTrace(points: QuestRoute["route"]) {
+  const projected = projectRouteGeometry(points);
+  const xs = projected.map((point) => point.x);
+  const ys = projected.map((point) => point.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const width = Math.max(maxX - minX, 0.00001);
+  const height = Math.max(maxY - minY, 0.00001);
   const paddingX = 46;
   const paddingY = 34;
   const scale = Math.min(
@@ -205,8 +202,8 @@ function normalizeTrace(points: RoutePoint[]) {
   const offsetX = (traceWidth - renderedWidth) / 2;
   const offsetY = (traceHeight - renderedHeight) / 2;
 
-  return points.map((point) => ({
-    x: offsetX + (point.lng - minLng) * scale,
-    y: offsetY + (maxLat - point.lat) * scale,
+  return projected.map((point) => ({
+    x: offsetX + (point.x - minX) * scale,
+    y: offsetY + (maxY - point.y) * scale,
   }));
 }
