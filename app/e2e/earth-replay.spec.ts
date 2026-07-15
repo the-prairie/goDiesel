@@ -307,6 +307,10 @@ test("city and mountain Replay controls remain usable on desktop and mobile", as
         controlsBox?.y ?? 0,
       );
 
+      if (viewport.width < 768) {
+        await page.getByRole("button", { name: "Show more controls" }).click();
+        await expect(page.getByTestId("replay-secondary-controls")).toBeVisible();
+      }
       await page
         .getByRole("button", { name: /Choose replay avatar\. Current:/ })
         .click();
@@ -499,6 +503,58 @@ test("Replay explains when Playable Earth is unavailable", async ({ page }) => {
     "Playable Earth unavailable. This route needs complete recorded geometry.",
   );
 });
+
+for (const width of [320, 430]) {
+  test(`mobile Replay HUD prioritizes the world at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await installDeterministicReplayEngine(page);
+    await page.goto(`/#/replay/${routeSlug}`);
+
+    const replay = page.getByTestId("replay-stage");
+    const context = page.getByTestId("replay-context");
+    const controls = page.getByTestId("replay-controls");
+    await expect(replay).toHaveAttribute("data-state", "ready");
+    await expect(context).toHaveAttribute("data-mobile-expanded", "true");
+    await expect(page.getByTestId("replay-context-details")).toBeVisible();
+    await expect(page.getByTestId("replay-secondary-controls")).toHaveCount(0);
+
+    for (const label of ["Play route", "Release camera", "Show more controls"]) {
+      const box = await page.getByRole("button", { name: label }).boundingBox();
+      expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
+      expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+    }
+
+    await page.getByRole("button", { name: "Play route" }).click();
+    await expect(context).toHaveAttribute("data-mobile-expanded", "false");
+    await expect(page.getByTestId("replay-context-details")).toBeHidden();
+    await expect(page.getByRole("button", { name: "Pause route" })).toBeVisible();
+
+    const contextBox = await context.boundingBox();
+    const controlsBox = await controls.boundingBox();
+    expect((controlsBox?.y ?? 0) - ((contextBox?.y ?? 0) + (contextBox?.height ?? 0)))
+      .toBeGreaterThan(300);
+
+    await page.getByRole("button", { name: "Show more controls" }).click();
+    const secondary = page.getByTestId("replay-secondary-controls");
+    await expect(secondary).toBeVisible();
+    for (const label of [
+      "Zoom in to route",
+      "Zoom out from route",
+      "Playback speed 1x",
+      "Choose replay avatar. Current: Run Rex",
+    ]) {
+      const box = await page.getByRole("button", { name: label }).boundingBox();
+      expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+    }
+
+    await page.getByRole("button", { name: "Show route details" }).click();
+    await page.getByRole("button", { name: "Change route" }).click();
+    await expect(page.getByRole("dialog", { name: "Choose a replay route" })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      width,
+    );
+  });
+}
 
 for (const earthState of ["partial", "unavailable"] as const) {
   test(`Earth ${earthState} state switches cleanly to Atlas replay`, async ({ page }) => {

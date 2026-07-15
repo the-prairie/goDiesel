@@ -22,18 +22,24 @@ export function AppShell() {
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset className="min-w-0 bg-background text-foreground">
-        <header className="sticky top-0 z-30 flex min-h-14 items-center gap-3 border-b border-border bg-background/92 px-4 backdrop-blur md:px-5">
+        <header
+          data-testid="app-header"
+          className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/92 px-3 backdrop-blur sm:px-4 md:px-5"
+        >
           <SidebarTrigger
             aria-label="Open navigation"
             className="size-9 border border-border"
           >
             <Menu className="size-4" aria-hidden="true" />
           </SidebarTrigger>
-          <div className="min-w-0">
-            <div className="truncate text-sm font-semibold">
+          <div className="min-w-0 flex-1">
+            <div data-testid="app-page-title" className="truncate text-sm font-semibold">
               {section.label}
             </div>
-            <div className="truncate text-xs text-muted-foreground">
+            <div
+              data-testid="global-product-subtitle"
+              className="hidden truncate text-xs text-muted-foreground sm:block"
+            >
               Relive where you have been. Discover where to go next.
             </div>
           </div>

@@ -360,3 +360,58 @@ test("grounding source is inspectable without permanent visual clutter", async (
   await expect(lab).toHaveAttribute("data-grounding-offset", "8.50");
   await expect(page.getByText("Grounding: sampled · +8.5 m")).toBeVisible();
 });
+
+for (const width of [320, 430]) {
+  test(`mobile Playable Earth HUD prioritizes the world at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await installDeterministicEarthRenderer(page);
+    await page.goto(`/#/lab/playable-earth/${routeSlug}`);
+
+    const lab = page.getByRole("region", { name: "Playable Earth Lab" });
+    const context = page.getByTestId("playable-context");
+    const controls = page.getByTestId("playable-controls");
+    await expect(lab).toHaveAttribute("data-state", "ready");
+    await expect(context).toHaveAttribute("data-mobile-expanded", "true");
+    await expect(page.getByTestId("playable-context-details")).toBeVisible();
+    await expect(page.getByTestId("playable-secondary-controls")).toHaveCount(0);
+
+    for (const label of ["Play route", "Take control", "Show more controls"]) {
+      const box = await page.getByRole("button", { name: label }).boundingBox();
+      expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
+      expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+    }
+
+    await page.getByRole("button", { name: "Play route" }).click();
+    await expect(context).toHaveAttribute("data-mobile-expanded", "false");
+    await expect(page.getByTestId("playable-context-details")).toBeHidden();
+
+    const contextBox = await context.boundingBox();
+    const controlsBox = await controls.boundingBox();
+    expect((controlsBox?.y ?? 0) - ((contextBox?.y ?? 0) + (contextBox?.height ?? 0)))
+      .toBeGreaterThan(300);
+
+    await page.getByRole("button", { name: "Take control" }).click();
+    await page.getByRole("button", { name: "Show more controls" }).click();
+    await expect(page.getByTestId("playable-secondary-controls")).toBeVisible();
+    for (const label of [
+      "Steer left",
+      "Steer right",
+      "Look left",
+      "Look right",
+      "Zoom in to route",
+      "Zoom out from route",
+      "Playback speed 1x",
+    ]) {
+      const button = page.getByRole("button", { name: label });
+      await expect(button).toBeEnabled();
+      const box = await button.boundingBox();
+      expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+    }
+    await expect(page.getByRole("link", { name: "Exit lab" })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      width,
+    );
+  });
+}

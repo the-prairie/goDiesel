@@ -186,3 +186,56 @@ test("navigation does not persistently overlap Replay across breakpoints", async
     }
   }
 });
+
+test("mobile app header keeps every primary destination legible", async ({ page }) => {
+  for (const width of [320, 360, 390, 430]) {
+    await page.setViewportSize({ width, height: 844 });
+    for (const [path, title] of [
+      ["atlas", "Atlas"],
+      ["finder", "Finder"],
+      ["routes", "Routes"],
+      ["replay", "Replay"],
+      ["admin", "Admin"],
+    ] as const) {
+      await page.goto(`/#/${path}`);
+      const header = page.getByTestId("app-header");
+      const trigger = page.getByRole("button", { name: "Open navigation" });
+      const pageTitle = page.getByTestId("app-page-title");
+      await expect(header).toBeVisible();
+      await expect(trigger).toBeVisible();
+      await expect(pageTitle).toHaveText(title);
+      await expect(page.getByTestId("global-product-subtitle")).toBeHidden();
+
+      const boxes = await Promise.all([
+        header.boundingBox(),
+        trigger.boundingBox(),
+        pageTitle.boundingBox(),
+      ]);
+      const [headerBox, triggerBox, titleBox] = boxes;
+      expect(headerBox).not.toBeNull();
+      expect(triggerBox).not.toBeNull();
+      expect(titleBox).not.toBeNull();
+      expect((triggerBox?.x ?? 0) + (triggerBox?.width ?? 0)).toBeLessThanOrEqual(
+        titleBox?.x ?? 0,
+      );
+      expect((titleBox?.x ?? 0) + (titleBox?.width ?? 0)).toBeLessThanOrEqual(width);
+      expect((titleBox?.y ?? 0) + (titleBox?.height ?? 0)).toBeLessThanOrEqual(
+        (headerBox?.y ?? 0) + (headerBox?.height ?? 0),
+      );
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+        width,
+      );
+    }
+  }
+});
+
+test("desktop app header retains the product subtitle", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/#/atlas");
+
+  await expect(page.getByTestId("app-page-title")).toHaveText("Atlas");
+  await expect(page.getByTestId("global-product-subtitle")).toHaveText(
+    "Relive where you have been. Discover where to go next.",
+  );
+  await expect(page.getByTestId("global-product-subtitle")).toBeVisible();
+});
