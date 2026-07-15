@@ -197,6 +197,19 @@ test("returning from a guide restores filters, loaded depth, and scroll", async 
   );
 });
 
+test("blocked session storage never prevents opening a route guide", async ({ page }) => {
+  await page.addInitScript(() => {
+    Storage.prototype.setItem = () => {
+      throw new DOMException("Storage blocked", "SecurityError");
+    };
+  });
+  await page.goto("/#/routes?q=exploratory");
+
+  await routeCards(page).first().getByRole("link").click();
+  await expect(page).toHaveURL(/#\/routes\/17654151284$/);
+  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+});
+
 test("reviewed Kyoto card opens its canonical guide and fetches only that detail", async ({
   page,
 }) => {

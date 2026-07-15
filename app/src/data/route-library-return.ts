@@ -12,10 +12,14 @@ export function rememberRouteLibraryReturn(
   scrollY: number,
 ) {
   if (!path.startsWith("/routes")) return;
-  sessionStorage.setItem(
-    storageKey,
-    JSON.stringify({ path, routeSlug, scrollY } satisfies RouteLibraryReturnRecord),
-  );
+  try {
+    sessionStorage.setItem(
+      storageKey,
+      JSON.stringify({ path, routeSlug, scrollY } satisfies RouteLibraryReturnRecord),
+    );
+  } catch {
+    // Route navigation must remain usable when browser storage is unavailable.
+  }
 }
 
 export function routeLibraryReturnPath(routeSlug: string) {
@@ -26,7 +30,11 @@ export function routeLibraryReturnPath(routeSlug: string) {
 export function takeRouteLibraryScroll(path: string) {
   const record = readReturnRecord();
   if (!record || record.path !== path) return undefined;
-  sessionStorage.removeItem(storageKey);
+  try {
+    sessionStorage.removeItem(storageKey);
+  } catch {
+    // Restoration is best-effort in restricted browser contexts.
+  }
   return record.scrollY;
 }
 

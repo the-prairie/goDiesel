@@ -84,8 +84,7 @@ export function RoutesPage() {
   useLayoutEffect(() => {
     const scrollY = takeRouteLibraryScroll(returnPath);
     if (scrollY === undefined) return;
-    const frame = window.requestAnimationFrame(() => window.scrollTo(0, scrollY));
-    return () => window.cancelAnimationFrame(frame);
+    window.scrollTo(0, scrollY);
   }, [returnPath, visibleRoutes.length]);
 
   function updateFilter<K extends keyof RouteFilters>(key: K, value: RouteFilters[K]) {
