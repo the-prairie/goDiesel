@@ -16,6 +16,7 @@ export const APP_PATHS = {
 } as const;
 
 export const PLAYABLE_EARTH_LAB_PATH = "/lab/playable-earth";
+export const AVATAR_EVALUATION_LAB_PATH = "/lab/avatar-evaluation";
 
 export type AppSectionId = keyof typeof APP_PATHS;
 
@@ -48,7 +49,10 @@ export const APP_SECTIONS: AppSection[] = [
 ];
 
 export function appSectionForPath(pathname: string) {
-  if (pathname.startsWith(`${PLAYABLE_EARTH_LAB_PATH}/`)) {
+  if (
+    pathname.startsWith(`${PLAYABLE_EARTH_LAB_PATH}/`) ||
+    pathname.startsWith(`${AVATAR_EVALUATION_LAB_PATH}/`)
+  ) {
     return APP_SECTIONS.find((section) => section.id === "replay") ?? APP_SECTIONS[0];
   }
   return (
@@ -75,6 +79,10 @@ export function replayPath(slug: string) {
 export function playableEarthLabPath(slug: string, origin?: "replay") {
   const path = `${PLAYABLE_EARTH_LAB_PATH}/${encodedSlug(slug)}`;
   return origin ? `${path}?from=${origin}` : path;
+}
+
+export function avatarEvaluationLabPath(slug: string) {
+  return `${AVATAR_EVALUATION_LAB_PATH}/${encodedSlug(slug)}`;
 }
 
 export function decodedRouteSlug(value: string | undefined) {

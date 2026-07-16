@@ -11,12 +11,15 @@
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
     "test:e2e:earth": "GODIESEL_LIVE_EARTH_E2E=1 playwright test --config playwright.live.config.ts earth-replay-live.spec.ts",
+    "test:e2e:avatar-live": "GODIESEL_LIVE_AVATAR_E2E=1 playwright test --config playwright.live.config.ts avatar-evaluation-live.spec.ts",
+    "test:e2e:avatar-benchmark": "GODIESEL_AVATAR_BENCHMARK=1 playwright test --config playwright.live.config.ts avatar-evaluation-live.spec.ts --grep five-minute",
     "test:bundle": "node scripts/check-bundle-budget.mjs",
     "verify": "npm run typecheck && npm run test:unit && npm run build && npm run test:bundle && npm run test:e2e"
   },
   "dependencies": {
     "@lottiefiles/dotlottie-react": "^0.19.9",
     "@radix-ui/react-slot": "^1.2.4",
+    "@rive-app/canvas-lite": "^2.38.5",
     "cesium": "^1.143.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
