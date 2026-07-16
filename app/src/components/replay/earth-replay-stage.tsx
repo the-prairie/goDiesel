@@ -1,4 +1,3 @@
-import { DotLottieReact } from "@lottiefiles/dotlottie-react";
 import {
   ArrowLeft,
   ChevronDown,
@@ -20,9 +19,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
+import {
+  ReplayAvatarAnimation,
+  type ReplayAvatarAnimationHandle,
+} from "@/components/replay/replay-avatar-animation";
 import { ReplayRoutePicker } from "@/components/replay/replay-route-picker";
 import type { QuestRoute, RouteSummary } from "@/domain/routes";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { cn } from "@/lib/utils";
 import {
   APP_PATHS,
@@ -49,6 +53,7 @@ import {
   storedReplayAvatar,
   type ReplayAvatarId,
 } from "@/replay/replay-avatars";
+import { preloadReplayAvatars } from "@/replay/replay-avatar-assets";
 import {
   createReplayEngine,
   type ReplayEngine,
@@ -79,6 +84,9 @@ export function EarthReplayStage({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const avatarElementRef = useRef<HTMLDivElement>(null);
+  const avatarAnimationRef = useRef<ReplayAvatarAnimationHandle | undefined>(
+    undefined,
+  );
   const engineRef = useRef<ReplayEngine | undefined>(undefined);
   const mountedRouteRef = useRef<string | undefined>(undefined);
   const controlRef = useRef(initialReplayState());
@@ -89,9 +97,13 @@ export function EarthReplayStage({
   const [control, setControl] = useState(controlRef.current);
   const [avatar, setAvatar] = useState(storedReplayAvatar);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  const [avatarAssetsState, setAvatarAssetsState] = useState<
+    "loading" | "ready" | "error"
+  >("loading");
   const [mobileContextExpanded, setMobileContextExpanded] = useState(true);
   const [mobileControlsExpanded, setMobileControlsExpanded] = useState(false);
   const isMobile = useIsMobile();
+  const reducedMotion = useReducedMotion();
   const totalDistanceM = routeDistanceM(route);
   const operational = status.state === "ready" || status.state === "partial";
 
@@ -101,9 +113,40 @@ export function EarthReplayStage({
       controlRef.current = next;
       setControl(next);
       engineRef.current?.setPose(replayPose(route, next));
+      avatarAnimationRef.current?.sync(next.progressM, reducedMotion);
     },
-    [route],
+    [reducedMotion, route],
   );
+
+  const setAvatarAnimationHandle = useCallback(
+    (handle: ReplayAvatarAnimationHandle | undefined) => {
+      avatarAnimationRef.current = handle;
+      handle?.sync(controlRef.current.progressM, reducedMotion);
+    },
+    [reducedMotion],
+  );
+
+  useEffect(() => {
+    let active = true;
+    setAvatarAssetsState("loading");
+    void preloadReplayAvatars()
+      .then(() => {
+        if (active) setAvatarAssetsState("ready");
+      })
+      .catch(() => {
+        if (active) setAvatarAssetsState("error");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    avatarAnimationRef.current?.sync(
+      controlRef.current.progressM,
+      reducedMotion,
+    );
+  }, [reducedMotion]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -153,6 +196,7 @@ export function EarthReplayStage({
       previous = now;
       controlRef.current = next;
       engineRef.current?.setPose(replayPose(route, next));
+      avatarAnimationRef.current?.sync(next.progressM, reducedMotion);
       if (now - lastUiUpdate >= 80) {
         setControl(next);
         lastUiUpdate = now;
@@ -161,7 +205,7 @@ export function EarthReplayStage({
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [control.playing, operational, route, totalDistanceM]);
+  }, [control.playing, operational, reducedMotion, route, totalDistanceM]);
 
   useEffect(() => {
     setMobileContextExpanded(true);
@@ -193,6 +237,8 @@ export function EarthReplayStage({
       data-following={control.following}
       data-camera-range={control.cameraRangeM}
       data-avatar={avatar.id}
+      data-avatar-assets={avatarAssetsState}
+      data-reduced-motion={reducedMotion}
       className="relative h-[calc(100dvh-3.5rem)] min-h-[36rem] overflow-hidden bg-[#02070a]"
     >
       <div
@@ -207,11 +253,11 @@ export function EarthReplayStage({
         className="pointer-events-none absolute left-0 top-0 z-10 hidden size-20 drop-shadow-[0_8px_5px_rgba(0,0,0,0.55)]"
       >
         <div className="absolute bottom-1 left-1/2 h-3 w-12 -translate-x-1/2 rounded-[50%] bg-black/45 blur-sm" />
-        <DotLottieReact
+        <ReplayAvatarAnimation
           key={avatar.id}
           src={avatar.src}
-          loop
-          autoplay
+          label={avatar.label}
+          onHandle={setAvatarAnimationHandle}
           className="relative size-full"
         />
       </div>
@@ -619,7 +665,12 @@ function ReplayAvatarPicker({
         aria-expanded={open}
         onClick={onToggle}
       >
-        <DotLottieReact src={avatar.src} loop autoplay className="size-7" />
+        <ReplayAvatarAnimation
+          src={avatar.src}
+          label={`${avatar.label} preview`}
+          preview
+          className="size-7"
+        />
       </Button>
       {open ? (
         <div
@@ -637,7 +688,12 @@ function ReplayAvatarPicker({
               onClick={() => onSelect(option.id)}
               className="flex h-11 items-center gap-3 rounded-sm border border-transparent px-2 text-left text-sm outline-none hover:border-border hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-checked:border-primary aria-checked:bg-primary/10"
             >
-              <DotLottieReact src={option.src} loop autoplay className="size-9 shrink-0" />
+              <ReplayAvatarAnimation
+                src={option.src}
+                label={`${option.label} preview`}
+                preview
+                className="size-9 shrink-0"
+              />
               <span>{option.label}</span>
             </button>
           ))}

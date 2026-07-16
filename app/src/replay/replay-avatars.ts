@@ -1,14 +1,25 @@
 export const REPLAY_AVATAR_STORAGE_KEY = "godiesel:replay-avatar";
 
 export const REPLAY_AVATARS = [
-  { id: "run-rex", label: "Run Rex", src: "/route-avatars/run-rex.lottie" },
-  { id: "nyan-cat", label: "Nyan Cat", src: "/route-avatars/nyan-cat.lottie" },
-  { id: "mario", label: "Mario", src: "/route-avatars/mario.lottie" },
-  { id: "walking", label: "Walking", src: "/route-avatars/walking.lottie" },
   {
-    id: "hangout-running",
-    label: "Hangout Running",
-    src: "/route-avatars/hangout-running.lottie",
+    id: "tempo-runner",
+    label: "Tempo Runner",
+    src: "/route-avatars/tempo-runner.lottie",
+  },
+  {
+    id: "summit-runner",
+    label: "Summit Runner",
+    src: "/route-avatars/summit-runner.lottie",
+  },
+  {
+    id: "road-rider",
+    label: "Road Rider",
+    src: "/route-avatars/road-rider.lottie",
+  },
+  {
+    id: "gravel-rider",
+    label: "Gravel Rider",
+    src: "/route-avatars/gravel-rider.lottie",
   },
 ] as const;
 

@@ -20,7 +20,7 @@ This directory contains assets used only by the avatar-system evaluation lab.
 
 ## hangout-running.lottie
 
-- Source file: `route-avatars/hangout-running.lottie`.
+- Source file: `app/public/avatar-lab/hangout-running.lottie`.
 - Embedded manifest author: `LottieFiles`.
 - Embedded manifest generator: `dotLottie-js`.
 - Original source URL: Unknown.
