@@ -545,7 +545,7 @@ function DotLottieEvaluationAvatar({
 
   return (
     <DotLottieReact
-      src="/route-avatars/hangout-running.lottie"
+      src="/avatar-lab/hangout-running.lottie"
       autoplay={false}
       loop
       dotLottieRefCallback={setInstance}

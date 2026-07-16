@@ -208,7 +208,7 @@ test("avatar lab keeps avatar runtime requests local and cleans up on exit", asy
     .toBe(true);
   await expect
     .poll(() =>
-      avatarRequests.some((url) => url.includes("/route-avatars/hangout-running.lottie")),
+      avatarRequests.some((url) => url.includes("/avatar-lab/hangout-running.lottie")),
     )
     .toBe(true);
 

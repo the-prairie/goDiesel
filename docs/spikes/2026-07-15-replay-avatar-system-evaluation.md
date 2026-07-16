@@ -45,7 +45,7 @@ Issue #47 must replace the unlicensed evaluation sample with original goDiesel a
 
 ## What Was Built
 
-The lab renders the existing local dotLottie runner as a screen-space route avatar with exact frame control.
+The lab renders the archived evaluation-only dotLottie runner as a screen-space route avatar with exact frame control.
 
 It renders the locally bundled `CesiumMan.glb` as a native Cesium primitive with a world model matrix, real scene occlusion, and distance-driven animation.
 

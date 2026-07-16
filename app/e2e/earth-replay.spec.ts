@@ -187,7 +187,7 @@ test("bundled React Replay mounts, plays, pauses, and cleans up", async ({ page 
   expect(stageBox?.height).toBeGreaterThan(600);
   expect(worldBox?.height).toBe(stageBox?.height);
   await expect(
-    page.getByRole("img", { name: "Selected replay avatar: Run Rex" }),
+    page.getByRole("img", { name: "Selected replay avatar: Tempo Runner" }),
   ).toBeVisible();
   await expect
     .poll(() =>
@@ -250,6 +250,7 @@ test("Replay controls stay synchronized and avatar choice persists", async ({ pa
 
   const replay = page.getByTestId("replay-stage");
   await expect(replay).toHaveAttribute("data-state", "ready");
+  await expect(replay).toHaveAttribute("data-avatar-assets", "ready");
 
   await page.getByLabel("Route progress").fill("10000");
   await expect(replay).toHaveAttribute("data-progress", "10000.00");
@@ -267,20 +268,102 @@ test("Replay controls stay synchronized and avatar choice persists", async ({ pa
   await expect(replay).toHaveAttribute("data-camera-range", "720");
 
   await page
-    .getByRole("button", { name: "Choose replay avatar. Current: Run Rex" })
+    .getByRole("button", { name: "Choose replay avatar. Current: Tempo Runner" })
     .click();
   await expect(
     page.getByRole("menuitem", { name: "Evaluate avatar systems" }),
   ).toHaveAttribute("href", `#/lab/avatar-evaluation/${routeSlug}`);
-  await page.getByRole("menuitemradio", { name: "Nyan Cat" }).click();
-  await expect(replay).toHaveAttribute("data-avatar", "nyan-cat");
+  await page.getByRole("menuitemradio", { name: "Gravel Rider" }).click();
+  await expect(replay).toHaveAttribute("data-avatar", "gravel-rider");
   await expect(
-    page.getByRole("img", { name: "Selected replay avatar: Nyan Cat" }),
+    page.getByRole("img", { name: "Selected replay avatar: Gravel Rider" }),
+  ).toBeVisible();
+
+  await page.evaluate(() => {
+    window.location.hash = "#/replay/13358070690";
+  });
+  await expect(replay).toHaveAttribute("data-route-slug", "13358070690");
+  await expect(replay).toHaveAttribute("data-state", "ready");
+  await expect(replay).toHaveAttribute("data-avatar", "gravel-rider");
+  await expect(
+    page.getByRole("img", { name: "Selected replay avatar: Gravel Rider" }),
   ).toBeVisible();
 
   await page.reload();
   await expect(replay).toHaveAttribute("data-state", "ready");
-  await expect(replay).toHaveAttribute("data-avatar", "nyan-cat");
+  await expect(replay).toHaveAttribute("data-avatar", "gravel-rider");
+});
+
+test("Replay preloads every professional avatar before switching", async ({ page }) => {
+  const avatarRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/route-avatars/")) {
+      avatarRequests.push(new URL(request.url()).pathname);
+    }
+  });
+  await installDeterministicReplayEngine(page);
+  await page.goto(`/#/replay/${routeSlug}`);
+
+  const replay = page.getByTestId("replay-stage");
+  await expect(replay).toHaveAttribute("data-avatar-assets", "ready");
+  expect(new Set(avatarRequests)).toEqual(
+    new Set([
+      "/route-avatars/tempo-runner.lottie",
+      "/route-avatars/summit-runner.lottie",
+      "/route-avatars/road-rider.lottie",
+      "/route-avatars/gravel-rider.lottie",
+    ]),
+  );
+  avatarRequests.length = 0;
+
+  for (const [label, id] of [
+    ["Summit Runner", "summit-runner"],
+    ["Road Rider", "road-rider"],
+    ["Gravel Rider", "gravel-rider"],
+    ["Tempo Runner", "tempo-runner"],
+  ] as const) {
+    await page
+      .getByRole("button", { name: /Choose replay avatar\. Current:/ })
+      .click();
+    await page.getByRole("menuitemradio", { name: label }).click();
+    await expect(replay).toHaveAttribute("data-avatar", id);
+    await expect(
+      page.getByRole("img", { name: `Selected replay avatar: ${label}` }),
+    ).toBeVisible();
+  }
+
+  expect(avatarRequests).toEqual([]);
+});
+
+test("reduced motion pins the avatar pose while Replay progresses", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await installDeterministicReplayEngine(page);
+  await page.goto(`/#/replay/${routeSlug}`);
+
+  const replay = page.getByTestId("replay-stage");
+  await expect(replay).toHaveAttribute("data-state", "ready");
+  await expect(replay).toHaveAttribute("data-reduced-motion", "true");
+  const avatarCanvas = page
+    .getByRole("img", { name: "Selected replay avatar: Tempo Runner" })
+    .locator("[data-avatar-frame]");
+  await expect(avatarCanvas).toHaveAttribute("data-avatar-frame", /\d+/);
+  const representativeFrame = await avatarCanvas.getAttribute("data-avatar-frame");
+
+  const initialProgress = Number(await replay.getAttribute("data-progress"));
+  await page.getByRole("button", { name: "Play route" }).click();
+  await expect
+    .poll(async () => Number(await replay.getAttribute("data-progress")))
+    .toBeGreaterThan(initialProgress);
+  await expect(avatarCanvas).toHaveAttribute(
+    "data-avatar-frame",
+    representativeFrame ?? "",
+  );
+
+  await page.getByLabel("Route progress").fill("10000");
+  await expect(avatarCanvas).toHaveAttribute(
+    "data-avatar-frame",
+    representativeFrame ?? "",
+  );
 });
 
 test("city and mountain Replay controls remain usable on desktop and mobile", async ({
@@ -327,7 +410,7 @@ test("city and mountain Replay controls remain usable on desktop and mobile", as
       expect((menuBox?.y ?? 0) + (menuBox?.height ?? 0)).toBeLessThanOrEqual(
         viewport.height,
       );
-      await page.getByRole("menuitemradio", { name: "Run Rex" }).click();
+      await page.getByRole("menuitemradio", { name: "Tempo Runner" }).click();
     }
   }
 });
@@ -544,7 +627,7 @@ for (const width of [320, 430]) {
       "Zoom in to route",
       "Zoom out from route",
       "Playback speed 1x",
-      "Choose replay avatar. Current: Run Rex",
+      "Choose replay avatar. Current: Tempo Runner",
     ]) {
       const box = await page.getByRole("button", { name: label }).boundingBox();
       expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
