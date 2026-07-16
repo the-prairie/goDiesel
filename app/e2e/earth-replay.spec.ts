@@ -269,6 +269,9 @@ test("Replay controls stay synchronized and avatar choice persists", async ({ pa
   await page
     .getByRole("button", { name: "Choose replay avatar. Current: Run Rex" })
     .click();
+  await expect(
+    page.getByRole("menuitem", { name: "Evaluate avatar systems" }),
+  ).toHaveAttribute("href", `#/lab/avatar-evaluation/${routeSlug}`);
   await page.getByRole("menuitemradio", { name: "Nyan Cat" }).click();
   await expect(replay).toHaveAttribute("data-avatar", "nyan-cat");
   await expect(

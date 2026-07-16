@@ -6,9 +6,14 @@ import {
   Color,
   ConstantPositionProperty,
   Entity,
+  HeadingPitchRoll,
   HeadingPitchRange,
+  Matrix4,
+  Model,
+  ModelAnimationLoop,
   PolylineGlowMaterialProperty,
   SceneTransforms,
+  Transforms,
   Viewer,
 } from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
@@ -41,6 +46,24 @@ const MAX_STALE_SAMPLE_DISTANCE_M = 500;
 const MAX_STALE_CAMERA_SAMPLE_DISTANCE_M = 150;
 const MAX_CAMERA_EASING_DISTANCE_M = 500;
 const TILE_FAILURE_THRESHOLD = 8;
+
+export type CesiumReplayAvatarRendering =
+  | { kind: "overlay" }
+  | {
+      kind: "native-glb";
+      uri: string;
+      reducedMotion?: boolean;
+    };
+
+export interface CesiumReplayEngineOptions {
+  avatarRendering?: CesiumReplayAvatarRendering;
+}
+
+export type CesiumReplayAvatarStatus =
+  | "ready"
+  | "static"
+  | "error"
+  | "pending";
 
 interface CameraTarget {
   lat: number;
@@ -115,6 +138,14 @@ export class CesiumReplayEngine implements ReplayEngine {
   private avatarElement?: HTMLElement;
   private removeAvatarTracking?: () => void;
   private markerPosition?: Cartesian3;
+  private nativeAvatarModel?: Model;
+  private removeNativeAvatarReadyListener?: () => void;
+  private removeNativeAvatarErrorListener?: () => void;
+  private cancelNativeAvatarReady?: () => void;
+  private nativeAvatarLoadGeneration = 0;
+  private avatarRendering: CesiumReplayAvatarRendering;
+  private readonly nativeAvatarMatrix = new Matrix4();
+  private readonly nativeAvatarHeadingPitchRoll = new HeadingPitchRoll();
   private cameraHeadingDeg?: number;
   private cameraDestination = new Cartesian3();
   private cameraInitialized = false;
@@ -143,7 +174,10 @@ export class CesiumReplayEngine implements ReplayEngine {
 
   constructor(
     private readonly minimumCameraClearanceM = REPLAY_CAMERA_MIN_CLEARANCE_M,
-  ) {}
+    private readonly options: CesiumReplayEngineOptions = {},
+  ) {
+    this.avatarRendering = options.avatarRendering ?? { kind: "overlay" };
+  }
 
   async mount({ container, avatarElement, route, onStatus }: ReplayEngineMountOptions) {
     const generation = ++this.generation;
@@ -265,6 +299,10 @@ export class CesiumReplayEngine implements ReplayEngine {
       });
       this.removeAvatarTracking = viewer.scene.preRender.addEventListener(() => {
         if (!this.avatarElement || !this.markerPosition) return;
+        if (this.avatarRendering.kind === "native-glb") {
+          this.avatarElement.style.display = "none";
+          return;
+        }
         const screen = SceneTransforms.worldToWindowCoordinates(
           viewer.scene,
           this.markerPosition,
@@ -276,6 +314,8 @@ export class CesiumReplayEngine implements ReplayEngine {
         this.avatarElement.style.display = "block";
         this.avatarElement.style.transform = `translate3d(${screen.x}px, ${screen.y}px, 0) translate(-50%, -74%)`;
       });
+      await this.setAvatarRendering(this.avatarRendering);
+      if (generation !== this.generation) return;
 
       await viewer.zoomTo(routeEntity, new HeadingPitchRange(0, -0.72, 0));
       if (generation !== this.generation) return;
@@ -301,6 +341,104 @@ export class CesiumReplayEngine implements ReplayEngine {
         title: "Photorealistic world unavailable",
         message: "Google 3D tiles could not load for this route.",
       });
+    }
+  }
+
+  async setAvatarRendering(
+    avatarRendering: CesiumReplayAvatarRendering,
+  ): Promise<CesiumReplayAvatarStatus> {
+    this.avatarRendering = avatarRendering;
+    const loadGeneration = ++this.nativeAvatarLoadGeneration;
+    this.clearNativeAvatarModel();
+
+    const { container, viewer, markerPosition } = this;
+    if (!container || !viewer || !markerPosition || viewer.isDestroyed()) {
+      return "pending";
+    }
+    container.dataset.avatarRenderer = avatarRendering.kind;
+    if (avatarRendering.kind === "overlay") {
+      delete container.dataset.avatarAnimation;
+      viewer.scene.requestRender();
+      return "ready";
+    }
+
+    if (this.avatarElement) this.avatarElement.style.display = "none";
+    container.dataset.avatarAnimation = "loading";
+    try {
+      const model = await Model.fromGltfAsync({
+        url: avatarRendering.uri,
+        modelMatrix: this.nativeAvatarModelMatrix(markerPosition, 0),
+        scale: 1.4,
+        minimumPixelSize: 48,
+        maximumScale: 16,
+        silhouetteColor: Color.fromCssColorString("#00f19f"),
+        silhouetteSize: 1.5,
+        allowPicking: false,
+      });
+      if (
+        loadGeneration !== this.nativeAvatarLoadGeneration ||
+        viewer.isDestroyed()
+      ) {
+        model.destroy();
+        return "pending";
+      }
+      this.nativeAvatarModel = model;
+      viewer.scene.primitives.add(model);
+      if (!model.ready) {
+        const ready = await new Promise<boolean>((resolve) => {
+          let settled = false;
+          const finish = (value: boolean) => {
+            if (settled) return;
+            settled = true;
+            this.removeNativeAvatarReadyListener?.();
+            this.removeNativeAvatarReadyListener = undefined;
+            this.removeNativeAvatarErrorListener?.();
+            this.removeNativeAvatarErrorListener = undefined;
+            this.cancelNativeAvatarReady = undefined;
+            resolve(value);
+          };
+          this.removeNativeAvatarReadyListener =
+            model.readyEvent.addEventListener(() => finish(true));
+          this.removeNativeAvatarErrorListener =
+            model.errorEvent.addEventListener(() => finish(false));
+          this.cancelNativeAvatarReady = () => finish(false);
+        });
+        if (!ready) {
+          if (loadGeneration !== this.nativeAvatarLoadGeneration) return "pending";
+          container.dataset.avatarAnimation = "error";
+          this.clearNativeAvatarModel();
+          return "error";
+        }
+      }
+      if (
+        loadGeneration !== this.nativeAvatarLoadGeneration ||
+        model.isDestroyed()
+      ) {
+        return "pending";
+      }
+      const animations = model.activeAnimations.addAll({
+        loop: ModelAnimationLoop.REPEAT,
+        animationTime: (duration) => {
+          if (
+            this.avatarRendering.kind === "native-glb" &&
+            this.avatarRendering.reducedMotion
+          ) {
+            return 0.18;
+          }
+          const strideSeconds = (this.latestPose?.progressM ?? 0) / 2.8;
+          return duration > 0 ? (strideSeconds % duration) / duration : 0;
+        },
+      });
+      const status = animations.length > 0 ? "ready" : "static";
+      container.dataset.avatarAnimation = status;
+      viewer.scene.requestRender();
+      return status;
+    } catch (error) {
+      if (loadGeneration !== this.nativeAvatarLoadGeneration) return "pending";
+      console.warn("Replay avatar model unavailable", error);
+      container.dataset.avatarAnimation = "error";
+      this.clearNativeAvatarModel();
+      return "error";
     }
   }
 
@@ -379,6 +517,12 @@ export class CesiumReplayEngine implements ReplayEngine {
       groundedHeightM + SURFACE_VISUAL_OFFSET_M,
     );
     this.marker.position = new ConstantPositionProperty(this.markerPosition);
+    if (this.nativeAvatarModel) {
+      this.nativeAvatarModel.modelMatrix = this.nativeAvatarModelMatrix(
+        this.markerPosition,
+        (pose.bearingDeg * Math.PI) / 180,
+      );
+    }
 
     const cameraRangeM = pose.cameraRangeM;
     const cameraHeightM = cameraHeightAboveAvatarM(cameraRangeM);
@@ -566,6 +710,36 @@ export class CesiumReplayEngine implements ReplayEngine {
     this.cameraInitialized = true;
   }
 
+  private nativeAvatarModelMatrix(position: Cartesian3, heading: number) {
+    this.nativeAvatarHeadingPitchRoll.heading = heading;
+    this.nativeAvatarHeadingPitchRoll.pitch = 0;
+    this.nativeAvatarHeadingPitchRoll.roll = 0;
+    return Transforms.headingPitchRollToFixedFrame(
+      position,
+      this.nativeAvatarHeadingPitchRoll,
+      undefined,
+      undefined,
+      this.nativeAvatarMatrix,
+    );
+  }
+
+  private clearNativeAvatarModel() {
+    this.cancelNativeAvatarReady?.();
+    this.cancelNativeAvatarReady = undefined;
+    this.removeNativeAvatarReadyListener?.();
+    this.removeNativeAvatarReadyListener = undefined;
+    this.removeNativeAvatarErrorListener?.();
+    this.removeNativeAvatarErrorListener = undefined;
+    if (
+      this.viewer &&
+      this.nativeAvatarModel &&
+      !this.viewer.isDestroyed()
+    ) {
+      this.viewer.scene.primitives.remove(this.nativeAvatarModel);
+    }
+    this.nativeAvatarModel = undefined;
+  }
+
   private requestSurfaceSample(
     pose: ReplayPose,
     cameraLat: number,
@@ -675,6 +849,8 @@ export class CesiumReplayEngine implements ReplayEngine {
     }
     this.removeAvatarTracking?.();
     if (this.avatarElement) this.avatarElement.style.display = "none";
+    this.nativeAvatarLoadGeneration += 1;
+    this.clearNativeAvatarModel();
     if (this.viewer && !this.viewer.isDestroyed()) this.viewer.destroy();
     this.viewer = undefined;
     this.route = undefined;

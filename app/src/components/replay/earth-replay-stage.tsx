@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   ChevronDown,
   ChevronUp,
+  FlaskConical,
   Gauge,
   Gamepad2,
   LocateFixed,
@@ -25,6 +26,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import {
   APP_PATHS,
+  avatarEvaluationLabPath,
   playableEarthLabPath,
   routeDetailPath,
 } from "@/navigation";
@@ -448,6 +450,7 @@ export function EarthReplayStage({
                   avatar={avatar}
                   open={avatarPickerOpen}
                   mobile
+                  routeSlug={route.slug}
                   onToggle={() => setAvatarPickerOpen((open) => !open)}
                   onSelect={selectAvatar}
                 />
@@ -577,6 +580,7 @@ export function EarthReplayStage({
           <ReplayAvatarPicker
             avatar={avatar}
             open={avatarPickerOpen}
+            routeSlug={route.slug}
             onToggle={() => setAvatarPickerOpen((open) => !open)}
             onSelect={selectAvatar}
           />
@@ -592,12 +596,14 @@ function ReplayAvatarPicker({
   avatar,
   open,
   mobile = false,
+  routeSlug,
   onToggle,
   onSelect,
 }: {
   avatar: (typeof REPLAY_AVATARS)[number];
   open: boolean;
   mobile?: boolean;
+  routeSlug: string;
   onToggle: () => void;
   onSelect: (id: ReplayAvatarId) => void;
 }) {
@@ -635,6 +641,16 @@ function ReplayAvatarPicker({
               <span>{option.label}</span>
             </button>
           ))}
+          <div className="mt-1 border-t border-border pt-1">
+            <Link
+              to={avatarEvaluationLabPath(routeSlug)}
+              role="menuitem"
+              className="flex h-11 items-center gap-3 rounded-sm px-2 text-sm text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <FlaskConical className="size-4 shrink-0" aria-hidden="true" />
+              Evaluate avatar systems
+            </Link>
+          </div>
         </div>
       ) : null}
     </div>

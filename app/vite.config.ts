@@ -51,6 +51,17 @@ export default defineConfig(({ mode }) => {
           {
             src: "../route-avatars/*.lottie",
             dest: "route-avatars",
+            rename: { stripBase: 1 },
+          },
+          {
+            src: "node_modules/@rive-app/canvas-lite/rive.wasm",
+            dest: "riveStatic",
+            rename: { stripBase: 3 },
+          },
+          {
+            src: "node_modules/@lottiefiles/dotlottie-web/dist/dotlottie-player.wasm",
+            dest: "dotlottieStatic",
+            rename: { stripBase: 4 },
           },
         ],
       }),

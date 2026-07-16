@@ -21,6 +21,11 @@ const PlayableEarthLabPage = lazy(() =>
     default: module.PlayableEarthLabPage,
   })),
 );
+const AvatarEvaluationLabPage = lazy(() =>
+  import("@/pages/avatar-evaluation-lab-page").then((module) => ({
+    default: module.AvatarEvaluationLabPage,
+  })),
+);
 const RouteDetailPage = lazy(() =>
   import("@/pages/route-detail-page").then((module) => ({
     default: module.RouteDetailPage,
@@ -45,6 +50,10 @@ const router = createHashRouter([
       { path: APP_PATHS.replay.slice(1), element: <ReplayPage /> },
       { path: "replay/:routeSlug", element: <ReplayPage /> },
       { path: "lab/playable-earth/:routeSlug", element: <PlayableEarthLabPage /> },
+      {
+        path: "lab/avatar-evaluation/:routeSlug",
+        element: <AvatarEvaluationLabPage />,
+      },
       { path: APP_PATHS.admin.slice(1), element: <AdminPage /> },
       { path: "*", element: <Navigate to={APP_PATHS.atlas} replace /> },
     ],
