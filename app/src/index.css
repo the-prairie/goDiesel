@@ -96,7 +96,10 @@
   --radius-sheet: 1.375rem;
   --space-map-edge: 1.125rem;
   --mobile-edge: 1rem;
-  --mobile-navigation-height: 5.125rem;
+  --mobile-navigation-content-height: 5.125rem;
+  --mobile-navigation-height: calc(
+    var(--mobile-navigation-content-height) + var(--safe-area-bottom)
+  );
   --safe-area-top: env(safe-area-inset-top, 0px);
   --safe-area-right: env(safe-area-inset-right, 0px);
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);

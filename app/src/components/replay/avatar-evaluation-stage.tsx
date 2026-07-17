@@ -316,7 +316,7 @@ export function AvatarEvaluationStage({
       data-renderer-timeline={rendererCapability.timeline}
       data-renderer-animation-count={rendererCapability.animationCount ?? ""}
       data-renderer-state-machine-count={rendererCapability.stateMachineCount ?? ""}
-      className="relative h-[calc(100dvh-3.5rem)] min-h-[36rem] overflow-hidden bg-[#02070a]"
+      className="relative h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 overflow-hidden bg-[#02070a] md:h-dvh md:min-h-[36rem]"
     >
       <div
         ref={containerRef}

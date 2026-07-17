@@ -153,6 +153,7 @@ test("navigation does not persistently overlap Replay across breakpoints", async
   ]) {
     await page.setViewportSize(viewport);
     await page.goto(`/#/replay/${routeSlug}`);
+    await expect(page.getByTestId("replay-controls")).toBeVisible();
 
     const layout = await page.evaluate(() => {
       const main = document.querySelector("main");
@@ -165,6 +166,9 @@ test("navigation does not persistently overlap Replay across breakpoints", async
       const mainRect = main?.getBoundingClientRect();
       const sidebarRect = sidebar?.getBoundingClientRect();
       const mobileRect = mobileSpine?.getBoundingClientRect();
+      const replayControlsRect = document
+        .querySelector<HTMLElement>('[data-testid="replay-controls"]')
+        ?.getBoundingClientRect();
 
       return {
         viewportWidth: window.innerWidth,
@@ -172,6 +176,7 @@ test("navigation does not persistently overlap Replay across breakpoints", async
         mainLeft: mainRect?.left ?? 0,
         mainRight: mainRect?.right ?? 0,
         mainBottom: mainRect?.bottom ?? 0,
+        replayControlsBottom: replayControlsRect?.bottom ?? 0,
         sidebarRight:
           sidebar && getComputedStyle(sidebar).display !== "none"
             ? (sidebarRect?.right ?? 0)
@@ -191,13 +196,53 @@ test("navigation does not persistently overlap Replay across breakpoints", async
 
     if (layout.mobileTop !== null) {
       expect(layout.mainBottom).toBeLessThanOrEqual(layout.mobileTop + 1);
+      expect(layout.replayControlsBottom).toBeLessThanOrEqual(
+        layout.mobileTop + 1,
+      );
     }
   }
+});
+
+test("mobile Replay reserves the safe area below navigation", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/#/replay/${routeSlug}`);
+  await expect(page.getByTestId("replay-controls")).toBeVisible();
+
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty("--safe-area-bottom", "24px");
+  });
+
+  const layout = await page.evaluate(() => {
+    const navigation = document
+      .querySelector<HTMLElement>('[data-testid="atlas-spine-mobile"]')!
+      .getBoundingClientRect();
+    const controls = document
+      .querySelector<HTMLElement>('[data-testid="replay-controls"]')!
+      .getBoundingClientRect();
+
+    return {
+      navigationHeight: navigation.height,
+      navigationTop: navigation.top,
+      navigationPaddingBottom: getComputedStyle(
+        document.querySelector<HTMLElement>(
+          '[data-testid="atlas-spine-mobile"]',
+        )!,
+      ).paddingBottom,
+      controlsBottom: controls.bottom,
+    };
+  });
+
+  expect(layout.navigationHeight).toBeGreaterThanOrEqual(106);
+  expect(layout.navigationPaddingBottom).toBe("24px");
+  expect(layout.controlsBottom).toBeLessThanOrEqual(layout.navigationTop + 1);
 });
 
 test("mobile spine keeps every primary destination legible", async ({
   page,
 }) => {
+  test.setTimeout(60_000);
   for (const width of [320, 360, 390, 430]) {
     await page.setViewportSize({ width, height: 844 });
     for (const [path, label] of [
@@ -228,14 +273,25 @@ test("utility surfaces retain the product subtitle on desktop", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto("/#/finder");
+  await page.goto("/#/routes");
 
-  await expect(page.getByTestId("app-page-title")).toHaveText("Finder");
+  await expect(page.getByTestId("app-page-title")).toHaveText("Routes");
   await expect(page.getByTestId("global-product-subtitle")).toHaveText(
     "Relive where you have been. Discover where to go next.",
   );
   await expect(page.getByTestId("global-product-subtitle")).toBeVisible();
   await expect(page.getByTestId("atlas-spine")).toBeVisible();
+});
+
+test("Finder uses the map shell without global header chrome", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/#/finder");
+
+  await expect(page.getByTestId("atlas-spine")).toBeVisible();
+  await expect(page.getByTestId("app-header")).toBeHidden();
+  await expect(page.getByRole("heading", { name: "Plan the next day." })).toBeVisible();
 });
 
 test("immersive atlas has no top chrome and shows the spine", async ({

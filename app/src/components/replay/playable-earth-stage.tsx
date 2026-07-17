@@ -226,7 +226,7 @@ export function PlayableEarthStage({
       data-grounding-source={grounding.source}
       data-grounding-reason={grounding.reason}
       data-grounding-offset={grounding.offsetM?.toFixed(2) ?? ""}
-      className="relative min-h-[calc(100dvh-3.5rem)] overflow-hidden bg-[#02070a]"
+      className="relative h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 overflow-hidden bg-[#02070a] md:h-dvh md:min-h-[36rem]"
     >
       <div
         ref={containerRef}

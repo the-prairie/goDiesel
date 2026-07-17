@@ -64,7 +64,7 @@ function PlayableEarthUnavailable({
   returnToReplay: boolean;
 }) {
   return (
-    <div className="grid min-h-[calc(100dvh-3.5rem)] place-items-center bg-[#02070a] p-4">
+    <div className="grid min-h-[calc(100dvh-var(--mobile-navigation-height))] place-items-center bg-[#02070a] p-4 md:min-h-dvh">
       <div role="alert" className="max-w-md rounded-md border border-border bg-card p-6 text-center">
         <h1 className="text-lg font-semibold">{title}</h1>
         <p className="mt-2 text-sm text-muted-foreground">{message}</p>
