@@ -82,6 +82,99 @@ describe("parseRouteDetail", () => {
     });
   });
 
+  it("parses recorded route provenance and per-point elapsed time", () => {
+    const route = parseRouteDetail(validRouteDetail({
+      route: [
+        { lat: 51.05, lng: -114.07, elev: 1050, d: 0, elapsed_s: 5 },
+        { lat: 51.06, lng: -114.08, elev: 1060, d: 1000, elapsed_s: 185 },
+      ],
+      provenance: {
+        temporal: {
+          status: "recorded",
+          start_time_utc: "2026-07-12T12:00:00Z",
+          elapsed_time_s: 185,
+        },
+        track: { segment_count: 2 },
+        discontinuities: [
+          {
+            kind: "segment_boundary",
+            source: "recorded_track_segment",
+            start_d: 400,
+            end_d: 500,
+            elapsed_time_s: 20,
+          },
+        ],
+      },
+    }));
+
+    expect(route.route.map((point) => point.elapsedS)).toEqual([5, 185]);
+    expect(route.provenance).toEqual({
+      temporal: {
+        status: "recorded",
+        startTimeUtc: "2026-07-12T12:00:00Z",
+        elapsedTimeS: 185,
+      },
+      track: { segmentCount: 2 },
+      discontinuities: [
+        {
+          kind: "segment_boundary",
+          source: "recorded_track_segment",
+          startD: 400,
+          endD: 500,
+          elapsedTimeS: 20,
+        },
+      ],
+    });
+  });
+
+  it("keeps legacy route records valid with unavailable provenance", () => {
+    expect(parseRouteDetail(validRouteDetail()).provenance).toEqual({
+      temporal: { status: "unavailable" },
+      track: { segmentCount: 1 },
+      discontinuities: [],
+    });
+  });
+
+  it("rejects discontinuities outside recorded route distance", () => {
+    expect(() => parseRouteDetail(validRouteDetail({
+      provenance: {
+        temporal: { status: "unavailable" },
+        track: { segment_count: 1 },
+        discontinuities: [
+          {
+            kind: "recording_gap",
+            source: "recorded_timestamps",
+            start_d: 900,
+            end_d: 1200,
+            elapsed_time_s: 180,
+          },
+        ],
+      },
+    }))).toThrow("provenance discontinuity exceeds route distance");
+  });
+
+  it("preserves provenance when geometry is intentionally unavailable", () => {
+    const route = parseRouteDetail(validRouteDetail({
+      route: [],
+      provenance: {
+        temporal: { status: "unavailable" },
+        track: { segment_count: 1 },
+        discontinuities: [
+          {
+            kind: "recording_gap",
+            source: "recorded_timestamps",
+            start_d: 900,
+            end_d: 1200,
+            elapsed_time_s: 180,
+          },
+        ],
+      },
+    }));
+
+    expect(route.replay.geometryStatus).toBe("missing");
+    expect(route.provenance.discontinuities).toHaveLength(1);
+  });
+
   it("derives missing geometry from the validated route points", () => {
     const route = parseRouteDetail(validRouteDetail({
       slug: "route-without-geometry",
