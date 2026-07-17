@@ -6,13 +6,12 @@ Writes:   <checkout>/index.html
 
 Edit quests.json to add/remove routes. Re-run this script (or rebuild.sh).
 """
-import base64, gzip, io, json, math, re, shutil, tempfile, textwrap
+import base64, io, json, math, re, shutil, tempfile, textwrap
 from datetime import UTC, datetime
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 import pillow_heif; pillow_heif.register_heif_opener()
-import gpxpy
 import pandas as pd
 
 from quest_meta import (
@@ -21,9 +20,8 @@ from quest_meta import (
     build_route_curation,
     elevation_gain_m,
 )
+from route_provenance import build_route_provenance, load_source_route_points
 
-try: import fitparse
-except ImportError: fitparse = None
 try: import imagehash
 except ImportError: imagehash = None
 
@@ -125,45 +123,6 @@ df['km'] = pd.to_numeric(df['Distance'], errors='coerce').fillna(0)
 df['act_id'] = df['Filename'].fillna('').astype(str).apply(
     lambda s: re.match(r'.*?/(\d+)', s).group(1) if re.match(r'.*?/(\d+)', s) else None)
 acts_by_id = {r['act_id']: r for _, r in df.iterrows() if r['act_id']}
-
-def hav_m(lat1, lng1, lat2, lng2):
-    R = 6371000
-    dLat = math.radians(lat2-lat1); dLng = math.radians(lng2-lng1)
-    a = math.sin(dLat/2)**2 + math.cos(math.radians(lat1))*math.cos(math.radians(lat2))*math.sin(dLng/2)**2
-    return 2*R*math.asin(math.sqrt(a))
-
-def load_polyline(fp):
-    pts = []
-    if str(fp).endswith('.gpx'):
-        with open(fp) as f:
-            g = gpxpy.parse(f)
-        for t in g.tracks:
-            for s in t.segments:
-                for p in s.points:
-                    pts.append((p.latitude, p.longitude,
-                                p.elevation if p.elevation else 0))
-    elif str(fp).endswith('.fit.gz') and fitparse:
-        with gzip.open(fp, 'rb') as f:
-            ff = fitparse.FitFile(f)
-            for msg in ff.get_messages('record'):
-                fields = {x.name: x.value for x in msg}
-                lat = fields.get('position_lat'); lng = fields.get('position_long')
-                alt = fields.get('enhanced_altitude') or fields.get('altitude')
-                if lat is not None and lng is not None:
-                    if isinstance(lat, int):
-                        lat = lat * (180 / 2**31); lng = lng * (180 / 2**31)
-                    pts.append((lat, lng, float(alt) if alt else 0))
-    if not pts: return []
-    route = [(pts[0][0], pts[0][1], pts[0][2], 0.0)]
-    cum = 0
-    for i in range(1, len(pts)):
-        d = hav_m(pts[i-1][0], pts[i-1][1], pts[i][0], pts[i][1])
-        cum += d
-        if cum - route[-1][3] >= 50:
-            route.append((pts[i][0], pts[i][1], pts[i][2], cum))
-    last = pts[-1]
-    route.append((last[0], last[1], last[2], cum))
-    return route
 
 def find_activity_file(activity_id):
     base = DD / 'strava_export/activities'
@@ -454,10 +413,11 @@ for spec in quest_specs:
     fp = find_activity_file(aid)
     if fp is None:
         print(f'    ✗ {aid}: no .gpx/.fit file'); continue
-    route = load_polyline(fp)
-    if not route:
+    route_provenance = build_route_provenance(load_source_route_points(fp))
+    route_js = route_provenance.route
+    if not route_js:
         print(f'    ✗ {aid}: empty polyline'); continue
-    distance_km = route[-1][3] / 1000
+    distance_km = route_js[-1]['d'] / 1000
 
     # Auto-fill metadata from CSV
     name = (act['Activity Name'] if isinstance(act['Activity Name'], str) else '(unnamed)')
@@ -467,12 +427,12 @@ for spec in quest_specs:
     desc = str(desc) if desc and str(desc) != 'nan' else ''
 
     # Auto-detect region if not specified
-    region_label = spec.get('region') or region(route[0][0], route[0][1])
+    region_label = spec.get('region') or region(route_js[0]['lat'], route_js[0]['lng'])
 
     # Slug from activity_id
     slug = aid
 
-    lats = [p[0] for p in route]; lngs = [p[1] for p in route]
+    lats = [p['lat'] for p in route_js]; lngs = [p['lng'] for p in route_js]
     cx = (min(lats) + max(lats)) / 2; cy = (min(lngs) + max(lngs)) / 2
     # Personal archive photos are intentionally not attached to quests. The
     # match radius was too broad and made the atlas feel untrustworthy.
@@ -483,7 +443,6 @@ for spec in quest_specs:
         'description': 'Stable route art shown without personal photo matching.',
     }
 
-    route_js = [{'lat': pt[0], 'lng': pt[1], 'elev': pt[2], 'd': pt[3]} for pt in route]
     quest_meta = build_quest_meta(
         activity_type=typ,
         distance_km=round(distance_km, 1),
@@ -517,6 +476,11 @@ for spec in quest_specs:
         'type': typ,
         'description': desc,
         'route': route_js,
+        'provenance': {
+            'temporal': route_provenance.temporal,
+            'track': route_provenance.track,
+            'discontinuities': route_provenance.discontinuities,
+        },
         'center_lat': cx, 'center_lng': cy,
         'mid_idx': len(route_js) // 2,
         'baseline_photos': baseline_photos,

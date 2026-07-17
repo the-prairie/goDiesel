@@ -23,9 +23,15 @@ export function ReplayPage() {
 
   if (routeSlug && !selectedSummary) return <RouteNotFound />;
 
-  const pickerRoutes = completedRoutes.filter(
+  const eligibleRoutes = completedRoutes.filter(
     (route) => route.replay.replayEligible,
   );
+  const pickerRoutes = selectedSummary
+    ? [
+        selectedSummary,
+        ...eligibleRoutes.filter((route) => route.slug !== selectedSummary.slug),
+      ]
+    : eligibleRoutes;
 
   if (detail.status === "idle" || detail.status === "loading") {
     return (

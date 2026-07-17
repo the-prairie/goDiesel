@@ -125,6 +125,10 @@ def test_generated_manifest_and_lazy_route_records_preserve_source_data():
     assert detail["slug"] == representative["slug"]
     assert detail["route"] == representative["route"]
     assert detail["replay"] == representative["replay"]
+    assert detail["provenance"] == representative["provenance"]
+    assert detail["provenance"]["temporal"]["status"] in {"recorded", "unavailable"}
+    assert detail["provenance"]["track"]["segment_count"] >= 1
+    assert isinstance(detail["provenance"]["discontinuities"], list)
 
     stats = json.loads((APP / "src/data/generated/route-stats.json").read_text())
     assert stats["route_count"] == len(generated["routes"])
@@ -244,10 +248,10 @@ def test_atlas_search_models_memory_search_states():
 
 def test_replay_picker_pins_selected_route_and_avoids_mobile_nav_overlap():
     replay = (APP / "src/pages/replay-page.tsx").read_text()
-    stage = (APP / "src/components/replay/earth-replay-stage.tsx").read_text()
+    picker = (APP / "src/components/replay/replay-route-picker.tsx").read_text()
 
     assert "const pickerRoutes = selectedSummary" in replay
     assert ".filter((route) => route.slug !== selectedSummary.slug)" in replay
-    assert "Change route" in stage
-    assert "max-h-64" in stage
-    assert "overflow-y-auto" in stage
+    assert "Change route" in picker
+    assert "min-h-0 flex-1" in picker
+    assert "overflow-y-auto" in picker
