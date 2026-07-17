@@ -1,18 +1,38 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
-import { AtlasControls } from "@/components/globe/atlas-controls";
-import { AtlasGlobe } from "@/components/globe/atlas-globe";
+import {
+  AtlasControls,
+  type AtlasActivityMode,
+} from "@/components/globe/atlas-controls";
+import {
+  AtlasGlobe,
+  type AtlasGlobeHandle,
+} from "@/components/globe/atlas-globe";
 import { RegionInspector } from "@/components/globe/region-inspector";
 import { AtlasSearch } from "@/components/search/atlas-search";
 import { completedRoutes } from "@/data/routes";
-import { routeRegions, type RouteRegion } from "@/data/route-regions";
+import { buildRouteRegions, type RouteRegion } from "@/data/route-regions";
 import type { RouteSummary } from "@/domain/routes";
 import { routeDetailPath } from "@/navigation";
 
 export function AtlasPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const globeRef = useRef<AtlasGlobeHandle>(null);
+  const activityParam = searchParams.get("activity");
+  const mode: AtlasActivityMode =
+    activityParam === "runs" || activityParam === "rides" ? activityParam : "all";
+  const visibleRoutes = useMemo(
+    () =>
+      completedRoutes.filter((route) => {
+        if (mode === "runs") return route.type === "Run";
+        if (mode === "rides") return route.type === "Ride";
+        return true;
+      }),
+    [mode],
+  );
+  const routeRegions = useMemo(() => buildRouteRegions(visibleRoutes), [visibleRoutes]);
   const regionParam = searchParams.get("region");
   const selectedRegion = routeRegions.find((region) => region.name === regionParam);
   const query = searchParams.get("q") ?? "";
@@ -50,9 +70,18 @@ export function AtlasPage() {
     }, true);
   }
 
+  function setMode(nextMode: AtlasActivityMode) {
+    updateSearchParams((next) => {
+      next.delete("region");
+      if (nextMode === "all") next.delete("activity");
+      else next.set("activity", nextMode);
+    });
+  }
+
   return (
     <section className="relative isolate h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 overflow-hidden bg-background md:h-dvh">
       <AtlasGlobe
+        ref={globeRef}
         regions={routeRegions}
         selectedRegion={selectedRegion}
         onSelectRegion={selectRegion}
@@ -60,30 +89,25 @@ export function AtlasPage() {
         className="absolute inset-0 min-h-0 rounded-none border-0"
       />
 
-      <div className="atlas-intro pointer-events-none absolute left-3 top-3 z-20 max-w-[min(30rem,calc(100%-1.5rem))] sm:left-5 sm:top-5">
-        <div className="text-xs font-semibold uppercase text-primary">Atlas</div>
-        <h1 className="mt-1 text-2xl font-bold text-foreground drop-shadow-lg sm:text-4xl">
-          Real places, playable days.
-        </h1>
-        <p className="mt-2 hidden max-w-md text-sm leading-6 text-foreground/70 drop-shadow sm:block">
-          Completed runs and rides, mapped as memories you can enter again.
-        </p>
-      </div>
-
       <AtlasSearch
-        routes={completedRoutes}
+        routes={visibleRoutes}
         regions={routeRegions}
         query={query}
         onQueryChange={setQuery}
         selectedRegion={selectedRegion}
         onSelectRegion={selectRegion}
         onOpenRoute={openRoute}
-        className="atlas-search-panel absolute inset-x-3 top-20 z-30 max-h-[56dvh] overflow-y-auto sm:inset-x-5 sm:top-36 xl:left-auto xl:right-5 xl:top-5 xl:w-[360px]"
+        className={`atlas-search-panel absolute left-4 right-4 top-20 z-30 max-h-[56dvh] overflow-y-auto xl:left-[17rem] xl:right-auto xl:top-5 xl:w-[340px] ${selectedRegion ? "atlas-search-panel--selected" : ""}`}
       />
       <AtlasControls
         regions={routeRegions}
         selectedRegion={selectedRegion}
         onSelectRegion={selectRegion}
+        mode={mode}
+        onModeChange={setMode}
+        onZoomIn={() => globeRef.current?.zoomIn()}
+        onZoomOut={() => globeRef.current?.zoomOut()}
+        onResetView={() => globeRef.current?.resetView()}
       />
       <RegionInspector
         selectedRegion={selectedRegion}

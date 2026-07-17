@@ -233,7 +233,7 @@ test("region controls, search, inspector, and URL stay synchronized", async ({ p
   const inspectorBox = await baliInspector.boundingBox();
   expect(searchBox).not.toBeNull();
   expect(inspectorBox).not.toBeNull();
-  expect(searchBox!.y + searchBox!.height).toBeLessThanOrEqual(inspectorBox!.y);
+  expect(boxesOverlap(searchBox!, inspectorBox!)).toBe(false);
   await expect(page.getByRole("region", { name: "Atlas search" })).toHaveAttribute(
     "data-state",
     "selected-result",
@@ -256,12 +256,8 @@ test("region controls, search, inspector, and URL stay synchronized", async ({ p
   expect(mobileSearchBox).not.toBeNull();
   expect(mobileInspectorBox).not.toBeNull();
   expect(controlsBox).not.toBeNull();
-  expect(mobileSearchBox!.y + mobileSearchBox!.height).toBeLessThanOrEqual(
-    mobileInspectorBox!.y,
-  );
-  expect(mobileInspectorBox!.y + mobileInspectorBox!.height).toBeLessThanOrEqual(
-    controlsBox!.y,
-  );
+  expect(boxesOverlap(mobileSearchBox!, mobileInspectorBox!)).toBe(false);
+  expect(boxesOverlap(mobileInspectorBox!, controlsBox!)).toBe(false);
 
   await search.fill("tokyo");
   await expect(page).not.toHaveURL(/region=/);
@@ -272,6 +268,56 @@ test("region controls, search, inspector, and URL stay synchronized", async ({ p
     "grouped-results",
   );
   await expect(page.getByRole("button", { name: /Tokyo, Japan3 routes/i })).toBeVisible();
+});
+
+test("desktop Atlas exposes activity modes and working globe utilities", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/#/atlas");
+
+  const canvas = page.getByLabel("Interactive route globe");
+  await expect(canvas).toHaveAttribute("data-route-palette", "cobalt");
+  const allHeatLines = Number(await canvas.getAttribute("data-heat-lines"));
+  expect(allHeatLines).toBeGreaterThan(0);
+
+  await page.getByRole("button", { name: "Show rides" }).click();
+  await expect(page).toHaveURL(/activity=rides/);
+  await expect(page.getByRole("button", { name: "Show rides" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect
+    .poll(async () => Number(await canvas.getAttribute("data-heat-lines")))
+    .toBeLessThan(allHeatLines);
+
+  const cameraBefore = Number(await canvas.getAttribute("data-camera-target"));
+  await page.getByRole("button", { name: "Zoom in" }).click();
+  await expect
+    .poll(async () => Number(await canvas.getAttribute("data-camera-target")))
+    .toBeLessThan(cameraBefore);
+  await page.getByRole("button", { name: "Reset globe view" }).click();
+  await expect(canvas).toHaveAttribute("data-camera-target", "6.400");
+
+  await page.getByRole("button", { name: "Show all activities" }).click();
+  await expect(page).not.toHaveURL(/activity=/);
+});
+
+test("selected region opens a collapsible editorial route margin", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/#/atlas?region=Kyoto%2C+Japan");
+
+  const inspector = page.getByRole("complementary", {
+    name: "Kyoto, Japan region guide",
+  });
+  await expect(inspector).toBeVisible();
+  await expect(inspector).toContainText(/Run|Ride/);
+  await expect(inspector).toContainText(/km/);
+  await expect(inspector.getByText("Reviewed field note").first()).toBeVisible();
+
+  await page.getByRole("button", { name: "Collapse region guide" }).click();
+  await expect(inspector).toHaveAttribute("data-collapsed", "true");
+  await expect(inspector.getByRole("list")).toBeHidden();
+  await page.getByRole("button", { name: "Expand region guide" }).click();
+  await expect(inspector.getByRole("list")).toBeVisible();
 });
 
 for (const viewport of [
@@ -334,7 +380,7 @@ for (const viewport of [
       viewport.height === 577 ||
       (viewport.width === 844 && viewport.height === 390)
     ) {
-      const firstRoute = inspector.getByRole("button").nth(1);
+      const firstRoute = inspector.getByRole("list").getByRole("button").first();
       await expect(firstRoute).toBeVisible();
       await firstRoute.click();
       await expect(page).toHaveURL(/#\/routes\//);

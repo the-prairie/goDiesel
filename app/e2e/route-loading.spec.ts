@@ -11,7 +11,7 @@ test("Atlas does not fetch full route records before selection", async ({ page }
   });
 
   await page.goto("/#/atlas");
-  await expect(page.getByRole("heading", { name: "Real places, playable days." })).toBeVisible();
+  await expect(page.getByLabel("Interactive route globe")).toBeVisible();
   expect(detailRequests).toEqual([]);
 
   await page.goto(`/#/routes/${routeSlug}`);

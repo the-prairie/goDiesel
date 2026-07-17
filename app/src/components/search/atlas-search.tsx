@@ -124,28 +124,27 @@ export function AtlasSearch({
   return (
     <section
       className={cn(
-        "rounded-md border border-border bg-card/92 p-4 shadow-2xl backdrop-blur",
+        "rounded-sm border border-white/35 bg-[#f6f2e8]/94 p-3 text-[#24322d] shadow-lg backdrop-blur",
         className,
       )}
       aria-label="Atlas search"
       data-state={state}
     >
-      <label className="text-xs font-semibold uppercase text-primary">
-        Search memories
-      </label>
-      <div className="mt-3 flex min-h-11 items-center gap-3 rounded-md border border-border bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
-        <Search className="size-4 text-muted-foreground" aria-hidden="true" />
+      <label className="sr-only">Search memories</label>
+      <div className="flex min-h-11 items-center gap-3 rounded-sm border border-[#c7c1b5] bg-[#fffdf8] px-3 focus-within:ring-2 focus-within:ring-[#315fb4]">
+        <Search className="size-4 text-[#5d685f]" aria-hidden="true" />
         <input
           value={query}
           onChange={(event) => {
             onQueryChange(event.target.value);
           }}
-          placeholder="Search regions, routes, replay-worthy days"
-          className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          aria-label="Search regions, routes, replay-worthy days"
+          placeholder="Search places and routes"
+          className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[#6e756e]"
         />
       </div>
 
-      <div className="atlas-search-status mt-3 text-sm text-muted-foreground">
+      <div className={cn("atlas-search-status text-sm text-[#626a64]", state === "initial" ? "sr-only" : "mt-3")}>
         {state === "initial" && "Start with a place, route name, ride, run, or replay quality."}
         {state === "typing" && "Keep typing to search completed route memories."}
         {state === "loading" && "Searching completed memories."}
