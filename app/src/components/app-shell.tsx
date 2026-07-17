@@ -12,7 +12,11 @@ export function AppShell() {
   const isReplayLab = location.pathname.startsWith("/lab/");
   const isRouteDetail = /^\/routes\/[^/]+$/.test(location.pathname);
   const isImmersive =
-    isAtlas || isReplayLab || isRouteDetail || section.id === "replay";
+    isAtlas ||
+    isReplayLab ||
+    isRouteDetail ||
+    section.id === "finder" ||
+    section.id === "replay";
   const isUtility =
     (section.id === "routes" && !isRouteDetail) || section.id === "admin";
 

@@ -1,18 +1,27 @@
-import { Check, MapPin, Plus, Route as RouteIcon } from "lucide-react";
+import { Check, Eye, MapPin, Plus, Route as RouteIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { RouteThread } from "@/components/routes/route-card";
 import { Button } from "@/components/ui/button";
 import type { DiscoveryCandidate, PlannedRoute } from "@/domain/planning";
+import { cn } from "@/lib/utils";
 import { APP_PATHS } from "@/navigation";
 
 export function CandidateRoute({
   candidate,
   plannedRoute,
+  compact = false,
+  selected = false,
+  matchReason,
+  onSelect,
   onSave,
 }: {
   candidate: DiscoveryCandidate;
   plannedRoute?: PlannedRoute;
+  compact?: boolean;
+  selected?: boolean;
+  matchReason?: string;
+  onSelect?: () => void;
   onSave: () => PlannedRoute;
 }) {
   const route = candidate.route;
@@ -20,32 +29,53 @@ export function CandidateRoute({
   return (
     <article
       aria-label={`${route.region} candidate`}
-      className="grid min-w-0 overflow-hidden rounded-md border border-border bg-card sm:grid-cols-[minmax(13rem,0.8fr)_minmax(0,1.2fr)]"
+      data-selected={selected}
+      className={cn(
+        "grid min-w-0 overflow-hidden border border-line bg-surface",
+        selected && "border-route ring-1 ring-route",
+        compact
+          ? "grid-cols-1"
+          : "sm:grid-cols-[minmax(13rem,0.8fr)_minmax(0,1.2fr)]",
+      )}
     >
-      <RouteThread route={route} className="h-48 border-b sm:h-full sm:min-h-72 sm:border-b-0 sm:border-r" />
-      <div className="grid content-start gap-5 p-5">
+      <RouteThread
+        route={route}
+        className={cn(
+          "border-line",
+          compact
+            ? "h-32 border-b"
+            : "h-48 border-b sm:h-full sm:min-h-72 sm:border-b-0 sm:border-r",
+        )}
+      />
+      <div className={cn("grid content-start", compact ? "gap-3 p-4" : "gap-5 p-5")}>
         <div className="grid gap-2">
           <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
             <MapPin className="size-3.5" aria-hidden="true" />
             {candidate.sourceLabel}
           </div>
           <div>
-            <h2 className="text-lg font-semibold">{route.region}</h2>
+            <h2 className="font-editorial text-xl font-semibold">{route.region}</h2>
             <p className="mt-1 text-sm text-muted-foreground">{route.activityName}</p>
           </div>
         </div>
 
-        <dl className="grid grid-cols-3 gap-px overflow-hidden rounded-md border border-border bg-border text-sm">
+        <dl className={cn("grid grid-cols-3 gap-px overflow-hidden border border-line bg-line text-sm", compact && "hidden sm:grid")}>
           <Metric label="Distance" value={`${route.distanceKm.toFixed(1)} km`} />
           <Metric label="Climb" value={`${route.elevationGainM.toLocaleString()} m`} />
           <Metric label="Activity" value={route.type} />
         </dl>
 
-        <div className="grid gap-2 text-sm">
+        <div className={cn("grid gap-2 text-sm", compact && "text-control")}>
           <p className="leading-6 text-muted-foreground">
             {route.guide.vibe ?? route.subtitle ?? route.description}
           </p>
-          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+          {matchReason ? (
+            <p className="border-l-2 border-l-route pl-3 text-control leading-5 text-ink-secondary">
+              <strong className="font-semibold text-ink">Why it matches:</strong>{" "}
+              {matchReason}
+            </p>
+          ) : null}
+          <div className={cn("flex flex-wrap gap-2 text-xs text-muted-foreground", compact && "hidden sm:flex")}>
             {candidate.terrain.map((terrain) => (
               <span key={terrain} className="rounded-sm border border-border px-2 py-1">
                 {terrain}
@@ -59,9 +89,22 @@ export function CandidateRoute({
           </div>
         </div>
 
-        <div className="mt-auto flex flex-wrap items-center gap-3 border-t border-border pt-4">
+        <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-line pt-3">
+          {onSelect ? (
+            <Button
+              type="button"
+              variant={selected ? "secondary" : "outline"}
+              size="sm"
+              aria-label={`Preview ${route.region} on map`}
+              onClick={onSelect}
+            >
+              <Eye aria-hidden="true" />
+              {selected ? "On map" : "Preview"}
+            </Button>
+          ) : null}
           <Button
             type="button"
+            size={compact ? "sm" : "default"}
             disabled={Boolean(plannedRoute)}
             aria-label={plannedRoute ? "Already planned" : "Save planned route"}
             onClick={onSave}
@@ -90,7 +133,7 @@ export function CandidateRoute({
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid gap-1 bg-card p-3">
+    <div className="grid gap-1 bg-surface p-3">
       <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd className="font-medium text-foreground">{value}</dd>
     </div>
