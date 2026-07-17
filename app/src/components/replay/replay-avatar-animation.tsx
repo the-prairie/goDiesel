@@ -54,7 +54,11 @@ export function ReplayAvatarAnimation({
   useEffect(() => {
     if (!instance) return;
     const sync = (progressM: number, reducedMotion: boolean) => {
-      const totalFrames = Math.max(1, instance.totalFrames);
+      const totalFrames = instance.totalFrames;
+      if (totalFrames <= 1) {
+        instance.pause();
+        return;
+      }
       const phase = reducedMotion
         ? representativeFrameRatio
         : (progressM / strideDistanceM) % 1;
