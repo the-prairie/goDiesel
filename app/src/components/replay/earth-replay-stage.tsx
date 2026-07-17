@@ -23,6 +23,10 @@ import {
   ReplayAvatarAnimation,
   type ReplayAvatarAnimationHandle,
 } from "@/components/replay/replay-avatar-animation";
+import {
+  ReplayElevationScrubber,
+  type ReplayElevationScrubberHandle,
+} from "@/components/replay/replay-elevation-scrubber";
 import { ReplayRoutePicker } from "@/components/replay/replay-route-picker";
 import type { QuestRoute, RouteSummary } from "@/domain/routes";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -87,6 +91,9 @@ export function EarthReplayStage({
   const avatarAnimationRef = useRef<ReplayAvatarAnimationHandle | undefined>(
     undefined,
   );
+  const elevationScrubberRef = useRef<
+    ReplayElevationScrubberHandle | null
+  >(null);
   const engineRef = useRef<ReplayEngine | undefined>(undefined);
   const mountedRouteRef = useRef<string | undefined>(undefined);
   const controlRef = useRef(initialReplayState());
@@ -102,6 +109,7 @@ export function EarthReplayStage({
   >("loading");
   const [mobileContextExpanded, setMobileContextExpanded] = useState(true);
   const [mobileControlsExpanded, setMobileControlsExpanded] = useState(false);
+  const [chromeVisible, setChromeVisible] = useState(true);
   const isMobile = useIsMobile();
   const reducedMotion = useReducedMotion();
   const totalDistanceM = routeDistanceM(route);
@@ -114,6 +122,7 @@ export function EarthReplayStage({
       setControl(next);
       engineRef.current?.setPose(replayPose(route, next));
       avatarAnimationRef.current?.sync(next.progressM, reducedMotion);
+      elevationScrubberRef.current?.sync(next.progressM);
     },
     [reducedMotion, route],
   );
@@ -197,6 +206,7 @@ export function EarthReplayStage({
       controlRef.current = next;
       engineRef.current?.setPose(replayPose(route, next));
       avatarAnimationRef.current?.sync(next.progressM, reducedMotion);
+      elevationScrubberRef.current?.sync(next.progressM);
       if (now - lastUiUpdate >= 80) {
         setControl(next);
         lastUiUpdate = now;
@@ -208,14 +218,27 @@ export function EarthReplayStage({
   }, [control.playing, operational, reducedMotion, route, totalDistanceM]);
 
   useEffect(() => {
-    setMobileContextExpanded(true);
+    setMobileContextExpanded(!isMobile);
     setMobileControlsExpanded(false);
     setAvatarPickerOpen(false);
-  }, [route.slug]);
+  }, [isMobile, route.slug]);
 
   useEffect(() => {
     if (control.playing) setMobileContextExpanded(false);
   }, [control.playing]);
+
+  useEffect(() => {
+    if (!control.playing || reducedMotion) {
+      setChromeVisible(true);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      const focused = document.activeElement;
+      const stage = containerRef.current?.closest("[data-testid='replay-stage']");
+      if (!focused || !stage?.contains(focused)) setChromeVisible(false);
+    }, 3_200);
+    return () => window.clearTimeout(timer);
+  }, [control.playing, reducedMotion]);
 
   const selectAvatar = (id: ReplayAvatarId) => {
     const nextAvatar = REPLAY_AVATARS.find((option) => option.id === id);
@@ -239,6 +262,11 @@ export function EarthReplayStage({
       data-avatar={avatar.id}
       data-avatar-assets={avatarAssetsState}
       data-reduced-motion={reducedMotion}
+      data-hud-version="retrace"
+      data-playback-owner="single-dock"
+      data-chrome-visible={chromeVisible}
+      onPointerMove={() => setChromeVisible(true)}
+      onFocusCapture={() => setChromeVisible(true)}
       className="relative h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 overflow-hidden bg-[#02070a] md:h-dvh md:min-h-[36rem]"
     >
       <div
@@ -262,18 +290,22 @@ export function EarthReplayStage({
         />
       </div>
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-4 p-3 sm:p-6">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-4 p-3 sm:p-5">
         <div
           data-testid="replay-context"
           data-mobile-expanded={mobileContextExpanded}
-          className="pointer-events-auto w-full max-w-md rounded-md border border-border bg-background/90 p-3 shadow-2xl backdrop-blur sm:p-4"
+          className={cn(
+            "pointer-events-auto w-full max-w-sm border border-line border-l-2 border-l-route bg-surface/94 p-3 text-ink shadow-panel backdrop-blur sm:p-4",
+            !reducedMotion && "transition-opacity duration-[var(--duration-slow)]",
+            !chromeVisible && "pointer-events-none opacity-0",
+          )}
         >
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase text-primary">
+            <div className="flex items-center gap-2 text-caption font-semibold uppercase text-route">
               <Route className="size-4" aria-hidden="true" />
               {engineMode === "earth" ? "Earth Replay" : "Atlas Replay"}
             </div>
-            <div className="flex items-center gap-1 sm:hidden">
+            <div className="flex items-center gap-1">
               <Button asChild variant="ghost" size="icon" className="size-9">
                 <Link to={APP_PATHS.routes} aria-label="All routes" title="All routes">
                   <ArrowLeft aria-hidden="true" />
@@ -307,18 +339,18 @@ export function EarthReplayStage({
               </Button>
             </div>
           </div>
-          <h1 className="mt-1 truncate text-lg font-semibold sm:mt-2 sm:text-2xl">
+          <h1 className="mt-1 truncate font-editorial text-2xl font-semibold sm:text-3xl">
             {route.name}
           </h1>
           <div
             data-testid="replay-context-details"
             className={cn(!mobileContextExpanded && "hidden sm:block")}
           >
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-1 text-control text-ink-secondary">
               {route.distanceKm.toFixed(1)} km · {route.elevationGainM.toLocaleString()} m up
             </p>
             {route.curation.vibe ? (
-              <p className="mt-3 max-w-sm text-sm text-muted-foreground">
+              <p className="mt-3 max-w-sm font-editorial text-base italic leading-5 text-ink-secondary">
                 {route.curation.vibe}
               </p>
             ) : null}
@@ -350,9 +382,9 @@ export function EarthReplayStage({
                 Try Earth replay
               </Button>
             ) : null}
-            <div className="mt-3 border-t border-border pt-3">
+            <div className="mt-3 grid grid-cols-2 gap-2 border-t border-line pt-3">
               {route.replay.replayEligible ? (
-                <Button asChild size="sm" className="w-full">
+                <Button asChild size="sm" className="w-full bg-forest text-white hover:bg-forest/90">
                   <Link to={playableEarthLabPath(route.slug, "replay")}>
                     <Gamepad2 aria-hidden="true" />
                     Enter route
@@ -405,16 +437,16 @@ export function EarthReplayStage({
         </div>
       ) : null}
 
-      <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex justify-center sm:inset-x-6 sm:bottom-6">
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center">
         <div
           data-testid="replay-controls"
-          className="pointer-events-auto w-full max-w-5xl rounded-md border border-border bg-background/92 p-2 shadow-2xl backdrop-blur sm:flex sm:flex-wrap sm:items-center sm:gap-2 sm:px-3 sm:py-3"
+          className="pointer-events-auto w-full border-t border-line bg-surface/96 p-2 text-ink shadow-sheet backdrop-blur sm:flex sm:items-center sm:gap-2 sm:px-3 sm:py-2"
         >
           {isMobile ? (
           <div className="grid gap-2">
             <div className="flex items-center gap-2">
-              <Route className="size-4 shrink-0 text-primary" aria-hidden="true" />
-              <div className="min-w-0 flex-1 text-sm text-muted-foreground">
+              <Route className="size-4 shrink-0 text-route" aria-hidden="true" />
+              <div className="min-w-0 flex-1 text-control text-ink-secondary">
                 {(control.progressM / 1_000).toFixed(2)} / {route.distanceKm.toFixed(1)} km
               </div>
               <Button
@@ -434,25 +466,23 @@ export function EarthReplayStage({
                 <Settings2 aria-hidden="true" />
               </Button>
             </div>
-            <input
-              aria-label="Route progress"
-              type="range"
-              min={0}
-              max={totalDistanceM}
-              step={1}
-              value={control.progressM}
+            <ReplayElevationScrubber
+              ref={elevationScrubberRef}
+              route={route}
+              progressM={control.progressM}
+              totalDistanceM={totalDistanceM}
               disabled={!operational}
-              onChange={(event) =>
+              compact
+              onSeek={(progressM) =>
                 commitControl((current) =>
-                  seekReplay(current, Number(event.target.value), totalDistanceM),
+                  seekReplay(current, progressM, totalDistanceM),
                 )
               }
-              className="h-11 w-full accent-primary"
             />
             {mobileControlsExpanded ? (
               <div
                 data-testid="replay-secondary-controls"
-                className="flex flex-wrap items-center gap-2 border-t border-border pt-2"
+                className="flex flex-wrap items-center gap-2 border-t border-line pt-2"
               >
                 <Button
                   type="button"
@@ -532,29 +562,27 @@ export function EarthReplayStage({
           </div>
           ) : (
           <>
-          <Route className="size-4 shrink-0 text-primary" aria-hidden="true" />
+          <Route className="size-4 shrink-0 text-route" aria-hidden="true" />
           <div className="min-w-28 flex-1">
-            <div className="text-xs font-semibold uppercase text-primary">
+            <div className="text-caption font-semibold uppercase text-route">
               {operational ? "Route thread ready" : "Route world loading"}
             </div>
-            <div aria-live="off" className="truncate text-sm text-muted-foreground">
+            <div aria-live="off" className="truncate text-control text-ink-secondary">
               {(control.progressM / 1_000).toFixed(2)} / {route.distanceKm.toFixed(1)} km
             </div>
           </div>
-          <input
-            aria-label="Route progress"
-            type="range"
-            min={0}
-            max={totalDistanceM}
-            step={1}
-            value={control.progressM}
+          <ReplayElevationScrubber
+            ref={elevationScrubberRef}
+            route={route}
+            progressM={control.progressM}
+            totalDistanceM={totalDistanceM}
             disabled={!operational}
-            onChange={(event) =>
+            className="min-w-48 flex-[2]"
+            onSeek={(progressM) =>
               commitControl((current) =>
-                seekReplay(current, Number(event.target.value), totalDistanceM),
+                seekReplay(current, progressM, totalDistanceM),
               )
             }
-            className="h-8 min-w-40 flex-[2] basis-48 accent-primary"
           />
           <Button
             type="button"
