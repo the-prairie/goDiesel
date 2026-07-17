@@ -18,6 +18,7 @@ export interface RouteTemporalProvenance {
   status: "recorded" | "unavailable";
   startTimeUtc?: string;
   elapsedTimeS?: number;
+  timeZone?: string;
 }
 
 export type RouteDiscontinuityKind =
@@ -336,6 +337,7 @@ function validatedProvenance(
   } else if (temporalRecord.status === "recorded") {
     const startTimeUtc = temporalRecord.start_time_utc;
     const elapsedTimeS = temporalRecord.elapsed_time_s;
+    const timeZone = temporalRecord.time_zone;
     if (
       typeof startTimeUtc !== "string" ||
       !startTimeUtc.endsWith("Z") ||
@@ -350,7 +352,17 @@ function validatedProvenance(
     ) {
       throw new Error("recorded provenance requires non-negative elapsed time");
     }
-    temporal = { status: "recorded", startTimeUtc, elapsedTimeS };
+    if (timeZone !== undefined) {
+      if (typeof timeZone !== "string" || !validTimeZone(timeZone)) {
+        throw new Error("recorded provenance timezone must be a valid IANA timezone");
+      }
+    }
+    temporal = {
+      status: "recorded",
+      startTimeUtc,
+      elapsedTimeS,
+      ...(typeof timeZone === "string" ? { timeZone } : {}),
+    };
   } else {
     throw new Error("provenance.temporal.status must be recorded or unavailable");
   }
@@ -433,6 +445,15 @@ function validatedProvenance(
     track: { segmentCount },
     discontinuities,
   };
+}
+
+function validTimeZone(timeZone: string) {
+  try {
+    new Intl.DateTimeFormat("en", { timeZone }).format(0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function replayMetadata(

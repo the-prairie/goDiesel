@@ -6,6 +6,7 @@ from route_provenance import (
     load_source_route_points,
     source_point_from_fit_fields,
 )
+from route_timezones import route_time_zone
 
 
 def point(
@@ -216,3 +217,10 @@ def test_short_single_missing_position_record_is_not_a_discontinuity():
     )
 
     assert result.discontinuities == []
+
+
+def test_curated_regions_map_to_explicit_iana_timezones():
+    assert route_time_zone("Kyoto, Japan") == "Asia/Tokyo"
+    assert route_time_zone("Banff/Kananaskis") == "America/Edmonton"
+    assert route_time_zone("Canary Islands") == "Atlantic/Canary"
+    assert route_time_zone("Unknown trail") is None

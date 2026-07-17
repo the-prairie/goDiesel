@@ -21,6 +21,7 @@ from quest_meta import (
     elevation_gain_m,
 )
 from route_provenance import build_route_provenance, load_source_route_points
+from route_timezones import route_time_zone
 
 try: import imagehash
 except ImportError: imagehash = None
@@ -428,6 +429,10 @@ for spec in quest_specs:
 
     # Auto-detect region if not specified
     region_label = spec.get('region') or region(route_js[0]['lat'], route_js[0]['lng'])
+    temporal_provenance = dict(route_provenance.temporal)
+    time_zone = route_time_zone(region_label)
+    if temporal_provenance.get('status') == 'recorded' and time_zone:
+        temporal_provenance['time_zone'] = time_zone
 
     # Slug from activity_id
     slug = aid
@@ -477,7 +482,7 @@ for spec in quest_specs:
         'description': desc,
         'route': route_js,
         'provenance': {
-            'temporal': route_provenance.temporal,
+            'temporal': temporal_provenance,
             'track': route_provenance.track,
             'discontinuities': route_provenance.discontinuities,
         },

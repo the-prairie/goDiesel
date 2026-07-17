@@ -93,6 +93,7 @@ describe("parseRouteDetail", () => {
           status: "recorded",
           start_time_utc: "2026-07-12T12:00:00Z",
           elapsed_time_s: 185,
+          time_zone: "America/Edmonton",
         },
         track: { segment_count: 2 },
         discontinuities: [
@@ -113,6 +114,7 @@ describe("parseRouteDetail", () => {
         status: "recorded",
         startTimeUtc: "2026-07-12T12:00:00Z",
         elapsedTimeS: 185,
+        timeZone: "America/Edmonton",
       },
       track: { segmentCount: 2 },
       discontinuities: [

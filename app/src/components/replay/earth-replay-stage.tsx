@@ -28,6 +28,11 @@ import {
   type ReplayElevationScrubberHandle,
 } from "@/components/replay/replay-elevation-scrubber";
 import { ReplayRoutePicker } from "@/components/replay/replay-route-picker";
+import {
+  RecordedLightLabel,
+  RecordedLightLayer,
+} from "@/components/replay/recorded-light-layer";
+import { recordedLightAt } from "@/domain/recorded-light";
 import type { QuestRoute, RouteSummary } from "@/domain/routes";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
@@ -114,6 +119,11 @@ export function EarthReplayStage({
   const reducedMotion = useReducedMotion();
   const totalDistanceM = routeDistanceM(route);
   const operational = status.state === "ready" || status.state === "partial";
+  const recordedLight = recordedLightAt(
+    route.route,
+    route.provenance.temporal,
+    control.progressM,
+  );
 
   const commitControl = useCallback(
     (update: (current: ReplayControlState) => ReplayControlState) => {
@@ -265,6 +275,7 @@ export function EarthReplayStage({
       data-hud-version="retrace"
       data-playback-owner="single-dock"
       data-chrome-visible={chromeVisible}
+      data-light-phase={recordedLight.phase}
       onPointerMove={() => setChromeVisible(true)}
       onFocusCapture={() => setChromeVisible(true)}
       className="relative h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 overflow-hidden bg-[#02070a] md:h-dvh md:min-h-[36rem]"
@@ -274,6 +285,7 @@ export function EarthReplayStage({
         aria-label={engineMode === "earth" ? "Earth Replay world" : "Atlas Replay map"}
         className="absolute inset-0"
       />
+      <RecordedLightLayer light={recordedLight} reducedMotion={reducedMotion} />
       <div
         ref={avatarElementRef}
         role="img"
@@ -349,6 +361,9 @@ export function EarthReplayStage({
             <p className="mt-1 text-control text-ink-secondary">
               {route.distanceKm.toFixed(1)} km · {route.elevationGainM.toLocaleString()} m up
             </p>
+            <div className="mt-1.5">
+              <RecordedLightLabel light={recordedLight} />
+            </div>
             {route.curation.vibe ? (
               <p className="mt-3 max-w-sm font-editorial text-base italic leading-5 text-ink-secondary">
                 {route.curation.vibe}
