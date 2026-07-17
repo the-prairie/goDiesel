@@ -10,8 +10,11 @@ export function AppShell() {
   const section = appSectionForPath(location.pathname);
   const isAtlas = section.id === "atlas";
   const isReplayLab = location.pathname.startsWith("/lab/");
-  const isImmersive = isAtlas || isReplayLab || section.id === "replay";
-  const isUtility = section.id === "routes" || section.id === "admin";
+  const isRouteDetail = /^\/routes\/[^/]+$/.test(location.pathname);
+  const isImmersive =
+    isAtlas || isReplayLab || isRouteDetail || section.id === "replay";
+  const isUtility =
+    (section.id === "routes" && !isRouteDetail) || section.id === "admin";
 
   return (
     <div className="weathered-atlas field-guide-theme relative flex min-h-dvh bg-background text-foreground">

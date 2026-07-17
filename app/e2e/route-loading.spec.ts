@@ -26,9 +26,9 @@ test("reviewed route guide loads directly and survives refresh", async ({ page }
   await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
   const briefing = page.getByRole("region", { name: "Route briefing" });
   await expect(briefing).toBeVisible();
-  await expect(briefing.getByRole("img", { name: /recorded path/i })).toBeVisible();
+  await expect(briefing.getByRole("region", { name: "Route geography" })).toBeVisible();
   await expect(briefing.getByRole("img", { name: /elevation profile/i })).toBeVisible();
-  await expect(briefing.getByText(/680 m total climb/i)).toBeVisible();
+  await expect(briefing.getByText("680 m", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Open replay" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "What it feels like" })).toBeVisible();
   await expect(page.getByText(/long, exploratory Kyoto run/i)).toBeVisible();
@@ -40,6 +40,64 @@ test("reviewed route guide loads directly and survives refresh", async ({ page }
   await page.reload();
   await expect(page).toHaveURL(new RegExp(`#\/routes\/${routeSlug}$`));
   await expect(page.getByRole("heading", { name: "What it feels like" })).toBeVisible();
+});
+
+test("route detail is a geography-first Leaf with a bounded editorial margin", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`/#/routes/${routeSlug}`);
+
+  const geography = page.getByRole("region", { name: "Route geography" });
+  const margin = page.getByRole("complementary", { name: "Route margin" });
+  await expect(geography).toBeVisible();
+  await expect(geography).toHaveAttribute("data-map-status", "ready", {
+    timeout: 15_000,
+  });
+  await expect(geography).toHaveAttribute("data-geometry-points", /[1-9][0-9]+/);
+  await expect(geography).toHaveAttribute("data-route-color", "#315fb4");
+  await expect(geography).toHaveAttribute("data-route-halo", "#f6f2e8");
+  await expect(margin).toBeVisible();
+
+  const geographyBox = (await geography.boundingBox())!;
+  const marginBox = (await margin.boundingBox())!;
+  expect(geographyBox.width).toBeGreaterThan(marginBox.width * 1.45);
+  expect(marginBox.width / (geographyBox.width + marginBox.width)).toBeGreaterThan(0.28);
+  expect(marginBox.width / (geographyBox.width + marginBox.width)).toBeLessThan(0.4);
+  expect(Math.abs(geographyBox.y - marginBox.y)).toBeLessThanOrEqual(1);
+  expect(Math.abs(geographyBox.height - marginBox.height)).toBeLessThanOrEqual(1);
+
+  await expect(margin.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+  await expect(margin.getByText(/Complete a 21.3 km run/i)).toBeVisible();
+  await expect(margin.getByText("21.3 km", { exact: true })).toBeVisible();
+  await expect(margin.getByText("680 m", { exact: true })).toBeVisible();
+  await expect(margin.getByRole("link", { name: "Open replay" })).toBeVisible();
+});
+
+test("mobile route Leaf preserves geography and Replay across sheet positions", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/#/routes/${routeSlug}`);
+
+  const geography = page.getByRole("region", { name: "Route geography" });
+  const margin = page.getByRole("complementary", { name: "Route margin" });
+  await expect(geography).toBeVisible();
+  await expect(margin).toHaveAttribute("data-snap", "peek");
+  await expect(margin.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+  await expect(margin.getByRole("link", { name: "Open replay" })).toBeVisible();
+  expect((await geography.boundingBox())!.height).toBeGreaterThan(500);
+
+  await margin.getByRole("button", { name: "Expand route margin" }).click();
+  await expect(margin).toHaveAttribute("data-snap", "expanded");
+  await expect(margin.getByRole("heading", { name: "What it feels like" })).toBeVisible();
+  await expect(margin.getByRole("img", { name: /elevation profile/i })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+    391,
+  );
+
+  await margin.getByRole("button", { name: "Collapse route margin" }).click();
+  await expect(margin).toHaveAttribute("data-snap", "peek");
 });
 
 test("route detail announces loading and retries a transient request failure", async ({
@@ -130,6 +188,21 @@ test("missing geometry disables one route without crashing detail", async ({ pag
   const briefing = page.getByRole("region", { name: "Route briefing" });
   await expect(briefing.getByText("Recorded path unavailable")).toBeVisible();
   await expect(briefing.getByText("Elevation profile unavailable")).toBeVisible();
+});
+
+test("source map failure preserves the route and explains the unavailable tiles", async ({
+  page,
+}) => {
+  await page.route("https://tiles.openfreemap.org/**", (route) => route.abort());
+  await page.goto(`/#/routes/${routeSlug}`);
+
+  const geography = page.getByRole("region", { name: "Route geography" });
+  await expect(geography).toHaveAttribute("data-map-status", "unavailable", {
+    timeout: 10_000,
+  });
+  await expect(geography.getByText("Map tiles unavailable")).toBeVisible();
+  await expect(geography).toContainText("recorded route is intact");
+  await expect(page.getByRole("link", { name: "Open replay" })).toBeVisible();
 });
 
 test("route briefing fits mobile and keeps Replay prominent", async ({ page }) => {

@@ -118,7 +118,7 @@ function RouteTrace({ route }: { route: QuestRoute }) {
   );
 }
 
-function ElevationProfile({ route }: { route: QuestRoute }) {
+export function ElevationProfile({ route }: { route: QuestRoute }) {
   const points = sampleElevationProfile(route.route);
   const { minimum, maximum } = elevationRange(route.route);
   const range = Math.max(1, maximum - minimum);

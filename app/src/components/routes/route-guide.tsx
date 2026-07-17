@@ -8,12 +8,22 @@ import {
 } from "lucide-react";
 
 import type { RouteCuration } from "@/domain/routes";
+import { cn } from "@/lib/utils";
 
-export function RouteGuide({ curation }: { curation: RouteCuration }) {
+export function RouteGuide({
+  curation,
+  compact = false,
+}: {
+  curation: RouteCuration;
+  compact?: boolean;
+}) {
   const isDraft = curation.reviewStatus === "draft";
 
   return (
-    <article aria-label="Route guide" className="grid gap-8">
+    <article
+      aria-label="Route guide"
+      className={cn("grid", compact ? "gap-5" : "gap-8")}
+    >
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase text-primary">Route guide</p>
@@ -30,7 +40,7 @@ export function RouteGuide({ curation }: { curation: RouteCuration }) {
         </p>
       ) : null}
 
-      <div className="grid gap-7 lg:grid-cols-3">
+      <div className={cn("grid gap-7", !compact && "lg:grid-cols-3")}>
         {curation.vibe ? (
           <GuideSection icon={Sparkles} title="What it feels like">
             <p>{curation.vibe}</p>
@@ -51,7 +61,12 @@ export function RouteGuide({ curation }: { curation: RouteCuration }) {
         ) : null}
       </div>
 
-      <div className="grid gap-7 border-t border-border pt-7 md:grid-cols-2">
+      <div
+        className={cn(
+          "grid gap-7 border-t border-border pt-7",
+          !compact && "md:grid-cols-2",
+        )}
+      >
         {curation.highlights ? (
           <GuideSection icon={Sparkles} title="Highlights">
             <BulletList items={curation.highlights} />
