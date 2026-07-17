@@ -1,4 +1,5 @@
 import type { QuestRoute } from "@/domain/routes";
+import { ROUTE_THREAD_STYLE } from "@/domain/route-thread-style";
 import {
   advancePlayableEarthGrounding,
   initialPlayableEarthGrounding,
@@ -220,10 +221,10 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
           clampToGround: true,
           classificationType: Cesium.ClassificationType.CESIUM_3D_TILE,
           material: new Cesium.PolylineGlowMaterialProperty({
-            color: Cesium.Color.fromCssColorString("#00f19f").withAlpha(0.98),
+            color: Cesium.Color.fromCssColorString(ROUTE_THREAD_STYLE.color).withAlpha(0.98),
             glowPower: 0.18,
           }),
-          depthFailMaterial: Cesium.Color.fromCssColorString("#00f19f").withAlpha(
+          depthFailMaterial: Cesium.Color.fromCssColorString(ROUTE_THREAD_STYLE.color).withAlpha(
             0.94,
           ),
         },
@@ -239,8 +240,8 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
         ),
         point: {
           pixelSize: 16,
-          color: Cesium.Color.fromCssColorString("#00f19f"),
-          outlineColor: Cesium.Color.WHITE,
+          color: Cesium.Color.fromCssColorString(ROUTE_THREAD_STYLE.marker),
+          outlineColor: Cesium.Color.fromCssColorString(ROUTE_THREAD_STYLE.halo),
           outlineWidth: 4,
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },

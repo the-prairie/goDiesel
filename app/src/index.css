@@ -3,8 +3,6 @@
 @import "@fontsource/cormorant-garamond/latin-600.css";
 @import "tailwindcss";
 
-@custom-variant dark (&:is(.dark *));
-
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -49,7 +47,7 @@
 }
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   font-family: var(--font-interface);
   --canvas: #f5f4ef;
   --surface: #fbfaf7;
@@ -115,31 +113,31 @@
   --duration-standard: 200ms;
   --duration-slow: 320ms;
   --ease-interface: cubic-bezier(0.2, 0, 0, 1);
-  --background: hsl(205 33% 4%);
-  --foreground: hsl(210 24% 94%);
-  --card: hsl(198 31% 7%);
-  --card-foreground: hsl(210 24% 94%);
-  --primary: hsl(160 100% 47%);
-  --primary-foreground: hsl(170 44% 6%);
-  --secondary: hsl(208 25% 10%);
-  --secondary-foreground: hsl(210 24% 94%);
-  --muted: hsl(204 18% 14%);
-  --muted-foreground: hsl(210 8% 64%);
-  --accent: hsl(199 28% 13%);
-  --accent-foreground: hsl(210 24% 94%);
-  --border: hsl(204 21% 18%);
-  --input: hsl(204 21% 24%);
-  --ring: hsl(160 100% 47%);
-  --destructive: hsl(0 72% 51%);
-  --destructive-foreground: hsl(0 0% 100%);
-  --sidebar: hsl(203 34% 6%);
-  --sidebar-foreground: hsl(210 24% 94%);
-  --sidebar-primary: hsl(160 100% 12%);
-  --sidebar-primary-foreground: hsl(160 100% 72%);
-  --sidebar-accent: hsl(200 27% 12%);
-  --sidebar-accent-foreground: hsl(210 24% 94%);
-  --sidebar-border: hsl(204 21% 18%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+  --background: var(--canvas);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --primary: var(--forest);
+  --primary-foreground: var(--surface-raised);
+  --secondary: var(--surface-muted);
+  --secondary-foreground: var(--ink);
+  --muted: var(--surface-muted);
+  --muted-foreground: var(--ink-secondary);
+  --accent: var(--forest-soft);
+  --accent-foreground: var(--forest);
+  --border: var(--line);
+  --input: var(--line-strong);
+  --ring: var(--route);
+  --destructive: var(--coral);
+  --destructive-foreground: var(--surface-raised);
+  --sidebar: var(--surface);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--forest);
+  --sidebar-primary-foreground: var(--surface-raised);
+  --sidebar-accent: var(--forest-soft);
+  --sidebar-accent-foreground: var(--forest);
+  --sidebar-border: var(--line);
+  --sidebar-ring: var(--route);
 }
 
 .field-guide-theme {
@@ -370,17 +368,6 @@ body {
 button,
 a {
   font: inherit;
-}
-
-.dark {
-  --sidebar: hsl(240 5.9% 10%);
-  --sidebar-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-primary: hsl(224.3 76.3% 48%);
-  --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(240 3.7% 15.9%);
-  --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-border: hsl(240 3.7% 15.9%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
 }
 
 @media (max-width: 639px) {

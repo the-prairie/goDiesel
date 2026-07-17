@@ -4,6 +4,7 @@ import maplibregl, {
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
+import { ROUTE_THREAD_STYLE } from "@/domain/route-thread-style";
 import type {
   ReplayEngine,
   ReplayEngineMountOptions,
@@ -114,9 +115,9 @@ export class MapLibreAtlasReplayEngine implements ReplayEngine {
         type: "line",
         source: "replay-route",
         paint: {
-          "line-color": "#001d18",
+          "line-color": ROUTE_THREAD_STYLE.halo,
           "line-width": 11,
-          "line-opacity": 0.82,
+          "line-opacity": 0.9,
         },
         layout: { "line-cap": "round", "line-join": "round" },
       });
@@ -125,7 +126,7 @@ export class MapLibreAtlasReplayEngine implements ReplayEngine {
         type: "line",
         source: "replay-route",
         paint: {
-          "line-color": "#00f19f",
+          "line-color": ROUTE_THREAD_STYLE.color,
           "line-width": 5,
           "line-opacity": 1,
         },
