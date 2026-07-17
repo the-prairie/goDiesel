@@ -68,6 +68,8 @@ interface GlobeRefs {
     rotX: number;
     rotY: number;
   };
+  touches: Map<number, { x: number; y: number }>;
+  pinch?: { distance: number; cameraDistance: number };
 }
 
 const EARTH_TEXTURE = `${import.meta.env.BASE_URL}assets/earth-atmos-2048.jpg`;
@@ -198,6 +200,7 @@ export const AtlasGlobe = forwardRef<AtlasGlobeHandle, AtlasGlobeProps>(
       rotX: 0,
       rotY: 0,
     },
+    touches: new Map(),
   });
 
   function syncCameraDataset() {
@@ -521,7 +524,21 @@ export const AtlasGlobe = forwardRef<AtlasGlobeHandle, AtlasGlobeProps>(
 
     function handlePointerDown(event: PointerEvent) {
       event.preventDefault();
-      beginDrag(event.clientX, event.clientY);
+      if (event.pointerType === "touch") {
+        state.touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        if (state.touches.size === 2) {
+          const [first, second] = [...state.touches.values()];
+          state.pinch = {
+            distance: Math.hypot(second.x - first.x, second.y - first.y),
+            cameraDistance: state.cameraDistance,
+          };
+          state.drag.active = false;
+        } else {
+          beginDrag(event.clientX, event.clientY);
+        }
+      } else {
+        beginDrag(event.clientX, event.clientY);
+      }
       try {
         canvasEl.setPointerCapture?.(event.pointerId);
       } catch {
@@ -531,6 +548,21 @@ export const AtlasGlobe = forwardRef<AtlasGlobeHandle, AtlasGlobeProps>(
     }
 
     function handlePointerMove(event: PointerEvent) {
+      if (event.pointerType === "touch" && state.touches.has(event.pointerId)) {
+        state.touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        if (state.touches.size >= 2 && state.pinch) {
+          const [first, second] = [...state.touches.values()];
+          const distance = Math.hypot(second.x - first.x, second.y - first.y);
+          state.cameraDistance = MathUtils.clamp(
+            state.pinch.cameraDistance - (distance - state.pinch.distance) * 0.012,
+            3.2,
+            9.2,
+          );
+          syncInteractionState();
+          event.preventDefault();
+          return;
+        }
+      }
       if (updateDrag(event.clientX, event.clientY)) {
         event.preventDefault();
         canvasEl.style.cursor = "grabbing";
@@ -544,7 +576,15 @@ export const AtlasGlobe = forwardRef<AtlasGlobeHandle, AtlasGlobeProps>(
         canvasEl.releasePointerCapture(event.pointerId);
       }
       canvasEl.style.cursor = "grab";
-      endDrag();
+      if (event.pointerType === "touch") {
+        state.touches.delete(event.pointerId);
+        state.pinch = undefined;
+        const remaining = [...state.touches.values()][0];
+        if (remaining) beginDrag(remaining.x, remaining.y);
+        else endDrag();
+      } else {
+        endDrag();
+      }
     }
 
     function handleClick(event: MouseEvent) {

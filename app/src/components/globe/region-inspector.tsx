@@ -1,22 +1,31 @@
-import { ArrowRight, ChevronDown, ChevronUp, X } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronUp, Minus, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import type { RouteRegion } from "@/data/route-regions";
 import type { RouteSummary } from "@/domain/routes";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { cn } from "@/lib/utils";
+
+export type MobileSheetPosition = "peek" | "half" | "expanded";
 
 interface RegionInspectorProps {
   selectedRegion?: RouteRegion;
   onClear: () => void;
   onOpenRoute: (route: RouteSummary) => void;
+  mobilePosition: MobileSheetPosition;
+  onMobilePositionChange: (position: MobileSheetPosition) => void;
 }
 
 export function RegionInspector({
   selectedRegion,
   onClear,
   onOpenRoute,
+  mobilePosition,
+  onMobilePositionChange,
 }: RegionInspectorProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const isMobile = useIsMobile();
 
   useEffect(() => setCollapsed(false), [selectedRegion?.name]);
 
@@ -26,25 +35,49 @@ export function RegionInspector({
     <aside
       aria-label={`${selectedRegion.name} region guide`}
       data-collapsed={collapsed}
-      className="atlas-region-inspector absolute inset-x-3 bottom-20 z-30 flex max-h-[44dvh] flex-col overflow-hidden rounded-sm border border-[#c7c1b5] bg-[#f6f2e8]/96 text-[#24322d] shadow-xl backdrop-blur xl:inset-x-auto xl:right-5 xl:top-20 xl:w-[360px] xl:max-h-[calc(100dvh-7rem)]"
+      data-snap={isMobile ? mobilePosition : undefined}
+      className={cn(
+        "atlas-region-inspector absolute z-30 flex flex-col overflow-hidden rounded-t-sm border border-[#c7c1b5] bg-[#f6f2e8]/96 text-[#24322d] shadow-xl backdrop-blur transition-[height] duration-300",
+        isMobile && mobilePosition === "peek" &&
+          "inset-x-3 bottom-0 h-[8.5rem] max-h-none",
+        isMobile && mobilePosition === "half" &&
+          "inset-x-3 bottom-0 h-[46dvh] max-h-none",
+        isMobile && mobilePosition === "expanded" &&
+          "inset-x-3 bottom-0 h-[calc(100dvh-0.75rem)] max-h-none",
+        !isMobile &&
+          "inset-x-3 bottom-20 max-h-[44dvh] rounded-sm xl:inset-x-auto xl:right-5 xl:top-20 xl:w-[360px] xl:max-h-[calc(100dvh-7rem)]",
+      )}
     >
-      <div className="flex items-start justify-between gap-3 border-b border-[#d4cec2] p-4">
+      {isMobile ? (
+        <div className={cn("flex items-center justify-center border-b border-[#d4cec2]", mobilePosition === "peek" ? "min-h-6" : "min-h-8")}>
+          <span className="h-1 w-10 rounded-full bg-[#9f9a90]" aria-hidden="true" />
+        </div>
+      ) : null}
+      <div className={cn("flex items-start justify-between gap-3 border-b border-[#d4cec2]", isMobile ? "p-3" : "p-4")}>
         <div className="min-w-0">
-          <div className="text-xs font-semibold uppercase text-[#315fb4]">Field atlas</div>
-          <h2 className="mt-1 font-editorial text-3xl font-semibold uppercase">{selectedRegion.name}</h2>
-          <p className="mt-2 text-xs text-[#626a64]">
+          <div className={cn("text-xs font-semibold uppercase text-[#315fb4]", isMobile && mobilePosition === "peek" && "hidden")}>Field atlas</div>
+          <h2 className={cn("font-editorial font-semibold uppercase", isMobile ? "text-xl leading-6" : "mt-1 text-3xl")}>{selectedRegion.name}</h2>
+          <p className={cn("text-xs text-[#626a64]", isMobile ? "mt-1" : "mt-2", isMobile && mobilePosition === "peek" && "hidden")}>
             {selectedRegion.routes.length} routes · {selectedRegion.totalKm.toFixed(0)} km ·{" "}
             {Math.round(selectedRegion.totalClimbM).toLocaleString()} m up
           </p>
         </div>
         <div className="flex gap-1">
-          <Button type="button" variant="ghost" size="icon" aria-label={collapsed ? "Expand region guide" : "Collapse region guide"} onClick={() => setCollapsed((value) => !value)} className="text-[#24322d]">
-            {collapsed ? <ChevronDown aria-hidden="true" /> : <ChevronUp aria-hidden="true" />}
-          </Button>
+          {isMobile ? (
+            <>
+              <Button type="button" variant="ghost" size="icon" aria-label="Set route sheet to peek" title="Peek" onClick={() => onMobilePositionChange("peek")} className="size-11 text-[#24322d]"><ChevronDown aria-hidden="true" /></Button>
+              <Button type="button" variant="ghost" size="icon" aria-label="Set route sheet to half" title="Half" onClick={() => onMobilePositionChange("half")} className="size-11 text-[#24322d]"><Minus aria-hidden="true" /></Button>
+              <Button type="button" variant="ghost" size="icon" aria-label="Set route sheet to expanded" title="Expanded" onClick={() => onMobilePositionChange("expanded")} className="size-11 text-[#24322d]"><ChevronUp aria-hidden="true" /></Button>
+            </>
+          ) : (
+            <Button type="button" variant="ghost" size="icon" aria-label={collapsed ? "Expand region guide" : "Collapse region guide"} onClick={() => setCollapsed((value) => !value)} className="text-[#24322d]">
+              {collapsed ? <ChevronDown aria-hidden="true" /> : <ChevronUp aria-hidden="true" />}
+            </Button>
+          )}
           <Button type="button" variant="ghost" size="icon" aria-label="Clear selected region" onClick={onClear} className="text-[#24322d]"><X aria-hidden="true" /></Button>
         </div>
       </div>
-      <ul hidden={collapsed} className="grid min-h-0 flex-1 divide-y divide-[#d4cec2] overflow-y-auto">
+      <ul hidden={collapsed || (isMobile && mobilePosition === "peek")} className="grid min-h-0 flex-1 divide-y divide-[#d4cec2] overflow-y-auto">
         {selectedRegion.routes.map((route) => (
           <li key={route.slug}>
             <button type="button" onClick={() => onOpenRoute(route)} className="flex min-h-16 w-full items-center justify-between gap-3 bg-transparent px-4 py-3 text-left outline-none transition-colors hover:bg-[#e9e5dc] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#315fb4]">

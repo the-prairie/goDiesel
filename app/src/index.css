@@ -275,7 +275,7 @@
     display: none;
   }
 
-  .atlas-region-inspector {
+  .atlas-region-inspector:not([data-snap]) {
     inset: 5rem 0.75rem 0.75rem 5rem;
     width: auto;
     max-height: none;
@@ -382,8 +382,12 @@ a {
 }
 
 @media (max-width: 639px) {
-  .atlas-region-inspector {
+  .atlas-region-inspector:not([data-snap]) {
     max-height: clamp(6rem, calc(100dvh - 24rem), 44dvh);
+  }
+
+  .atlas-region-inspector[data-snap] {
+    max-height: none;
   }
 }
 
@@ -419,7 +423,7 @@ a {
     margin-top: 0;
   }
 
-  .atlas-region-inspector {
+  .atlas-region-inspector:not([data-snap]) {
     right: 1.25rem;
     bottom: 5rem;
     top: auto;
@@ -427,7 +431,7 @@ a {
     flex-direction: row;
   }
 
-  .atlas-region-inspector > div:first-child {
+  .atlas-region-inspector:not([data-snap]) > div:first-child {
     width: 9rem;
     flex: 0 0 9rem;
     padding: 0.5rem;
@@ -435,27 +439,27 @@ a {
     border-bottom: 0;
   }
 
-  .atlas-region-inspector p {
+  .atlas-region-inspector:not([data-snap]) p {
     display: none;
   }
 
-  .atlas-region-inspector > div:first-child > div > div:first-child {
+  .atlas-region-inspector:not([data-snap]) > div:first-child > div > div:first-child {
     display: none;
   }
 
-  .atlas-region-inspector h2 {
+  .atlas-region-inspector:not([data-snap]) h2 {
     margin-top: 0;
     font-size: 0.875rem;
     line-height: 1.25rem;
   }
 
-  .atlas-region-inspector > div:last-child {
+  .atlas-region-inspector:not([data-snap]) > div:last-child {
     display: flex;
     overflow-x: auto;
     overflow-y: hidden;
   }
 
-  .atlas-region-inspector > div:last-child > button {
+  .atlas-region-inspector:not([data-snap]) > div:last-child > button {
     min-height: 0;
     flex: 0 0 12rem;
     padding: 0.5rem 0.75rem;
@@ -467,9 +471,58 @@ a {
     display: none;
   }
 
+  .atlas-mobile-map-tools {
+    top: 5rem;
+  }
+
+  .atlas-region-inspector[data-snap="peek"] {
+    height: 6rem;
+  }
+
   .atlas-search-panel {
     right: 1rem;
     left: 1rem;
     width: auto;
+  }
+
+  .atlas-search-panel--selected {
+    display: none;
+  }
+
+  section:has(.atlas-search-panel:not(.atlas-search-panel--selected))
+    .atlas-mobile-activity {
+    display: none;
+  }
+
+  section:has(.atlas-search-panel:not(.atlas-search-panel--selected))
+    .atlas-region-select {
+    top: 5rem;
+  }
+}
+
+@media (max-width: 767px) and (max-height: 658px) {
+  .atlas-search-panel--selected {
+    display: none;
+  }
+
+  .atlas-mobile-map-tools {
+    top: 5rem;
+  }
+
+  section:has(.atlas-search-panel:not(.atlas-search-panel--selected))
+    .atlas-mobile-activity,
+  section:has(.atlas-search-panel:not(.atlas-search-panel--selected))
+    .atlas-mobile-map-tools {
+    display: none;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1279px) and (min-height: 577px) and (max-height: 658px) {
+  .atlas-search-panel--selected {
+    display: none;
+  }
+
+  .atlas-region-inspector:not([data-snap]) {
+    top: 5.5rem;
   }
 }

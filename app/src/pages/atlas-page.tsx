@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import {
@@ -9,7 +9,10 @@ import {
   AtlasGlobe,
   type AtlasGlobeHandle,
 } from "@/components/globe/atlas-globe";
-import { RegionInspector } from "@/components/globe/region-inspector";
+import {
+  RegionInspector,
+  type MobileSheetPosition,
+} from "@/components/globe/region-inspector";
 import { AtlasSearch } from "@/components/search/atlas-search";
 import { completedRoutes } from "@/data/routes";
 import { buildRouteRegions, type RouteRegion } from "@/data/route-regions";
@@ -20,6 +23,10 @@ export function AtlasPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const globeRef = useRef<AtlasGlobeHandle>(null);
+  const [mobileSheetPosition, setMobileSheetPosition] =
+    useState<MobileSheetPosition>(() =>
+      window.innerHeight <= 600 ? "peek" : "half",
+    );
   const activityParam = searchParams.get("activity");
   const mode: AtlasActivityMode =
     activityParam === "runs" || activityParam === "rides" ? activityParam : "all";
@@ -113,6 +120,8 @@ export function AtlasPage() {
         selectedRegion={selectedRegion}
         onClear={clearRegion}
         onOpenRoute={openRoute}
+        mobilePosition={mobileSheetPosition}
+        onMobilePositionChange={setMobileSheetPosition}
       />
     </section>
   );
