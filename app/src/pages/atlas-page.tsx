@@ -51,7 +51,7 @@ export function AtlasPage() {
   }
 
   return (
-    <section className="relative isolate min-h-[calc(100dvh-3.5rem)] overflow-hidden bg-background">
+    <section className="relative isolate h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 overflow-hidden bg-background md:h-dvh">
       <AtlasGlobe
         regions={routeRegions}
         selectedRegion={selectedRegion}

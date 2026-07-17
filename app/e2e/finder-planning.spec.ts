@@ -84,8 +84,9 @@ test("a planned route never changes completed Atlas totals", async ({ page }) =>
   await page.getByRole("button", { name: "Save planned route" }).click();
 
   await page.goto("/#/atlas");
-  await expect(page.getByText("66 route records")).toBeVisible();
-  await expect(page.getByText("1908 completed km")).toBeVisible();
+  const spine = page.getByTestId("atlas-spine");
+  await expect(spine.getByText("66 routes")).toBeVisible();
+  await expect(spine.getByText("1908 km inked")).toBeVisible();
   await expect(page.getByText("planned-owner-route-17654151284")).toHaveCount(0);
 });
 

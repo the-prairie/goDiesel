@@ -9,10 +9,9 @@ test("root opens Atlas and primary navigation follows browser history", async ({
   await page.goto("/");
 
   await expect(page).toHaveURL(/#\/atlas$/);
-  await expect(page.getByRole("link", { name: "Atlas", exact: true })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
+  await expect(
+    page.getByRole("link", { name: "Atlas", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
 
   await page.getByRole("link", { name: "Finder" }).click();
   await expect(page).toHaveURL(/#\/finder$/);
@@ -42,7 +41,9 @@ test("every product surface has a canonical URL", async ({ page }) => {
   }
 });
 
-test("canonical product and selected-route URLs load directly", async ({ page }) => {
+test("canonical product and selected-route URLs load directly", async ({
+  page,
+}) => {
   for (const [path, activeNavigation] of [
     ["atlas", "Atlas"],
     ["finder", "Finder"],
@@ -67,10 +68,9 @@ test("legacy quest links preserve the route in canonical detail", async ({
 
   await expect(page).toHaveURL(new RegExp(`#\/routes\/${routeSlug}$`));
   await expect(page.getByRole("main")).toContainText(/km/i);
-  await expect(page.getByRole("link", { name: /open replay/i })).toHaveAttribute(
-    "href",
-    `#/replay/${routeSlug}`,
-  );
+  await expect(
+    page.getByRole("link", { name: /open replay/i }),
+  ).toHaveAttribute("href", `#/replay/${routeSlug}`);
 });
 
 test("legacy quest links are canonicalized after the app has started", async ({
@@ -100,41 +100,47 @@ test("malformed legacy quest links canonicalize to the unavailable route state",
 
 test("browser history restores the selected Replay route", async ({ page }) => {
   await page.goto(`/#/replay/${routeSlug}`);
-  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Kyoto, Japan" }),
+  ).toBeVisible();
 
   await page.getByText("Change route", { exact: true }).click();
   await page.locator(`a[href="#/replay/${historyRouteSlug}"]`).click();
   await expect(page).toHaveURL(new RegExp(`#\/replay\/${historyRouteSlug}$`));
-  await expect(page.getByRole("heading", { name: "Tokyo, Japan" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Tokyo, Japan" }),
+  ).toBeVisible();
 
   await page.goBack();
   await expect(page).toHaveURL(new RegExp(`#\/replay\/${routeSlug}$`));
-  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Kyoto, Japan" }),
+  ).toBeVisible();
 
   await page.goForward();
   await expect(page).toHaveURL(new RegExp(`#\/replay\/${historyRouteSlug}$`));
-  await expect(page.getByRole("heading", { name: "Tokyo, Japan" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Tokyo, Japan" }),
+  ).toBeVisible();
 });
 
-test("mobile navigation opens without covering the current page", async ({
+test("mobile bottom spine navigates without covering the current page", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/#/atlas");
 
   const main = page.getByRole("main");
-  const navigationButton = page.getByRole("button", { name: /open navigation/i });
+  const mobileSpine = page.getByTestId("atlas-spine-mobile");
 
   await expect(main).toBeVisible();
-  await expect(navigationButton).toBeVisible();
-  await navigationButton.click();
-
-  const mobileNavigation = page.getByRole("navigation", { name: "Primary" });
-  await expect(mobileNavigation).toBeVisible();
-  await expect(page.getByRole("button", { name: "Close navigation" })).toBeVisible();
-  await mobileNavigation.getByRole("link", { name: "Routes" }).click();
+  await expect(mobileSpine).toBeVisible();
+  await mobileSpine.getByRole("link", { name: "Routes" }).click();
   await expect(page).toHaveURL(/#\/routes$/);
   await expect(main).toBeVisible();
+  await expect(
+    mobileSpine.getByRole("link", { name: "Routes" }),
+  ).toHaveAttribute("aria-current", "page");
 });
 
 test("navigation does not persistently overlap Replay across breakpoints", async ({
@@ -153,17 +159,26 @@ test("navigation does not persistently overlap Replay across breakpoints", async
       const sidebar = document.querySelector<HTMLElement>(
         '[data-slot="sidebar-container"]',
       );
+      const mobileSpine = document.querySelector<HTMLElement>(
+        '[data-testid="atlas-spine-mobile"]',
+      );
       const mainRect = main?.getBoundingClientRect();
       const sidebarRect = sidebar?.getBoundingClientRect();
+      const mobileRect = mobileSpine?.getBoundingClientRect();
 
       return {
         viewportWidth: window.innerWidth,
         documentWidth: document.documentElement.scrollWidth,
         mainLeft: mainRect?.left ?? 0,
         mainRight: mainRect?.right ?? 0,
+        mainBottom: mainRect?.bottom ?? 0,
         sidebarRight:
           sidebar && getComputedStyle(sidebar).display !== "none"
             ? (sidebarRect?.right ?? 0)
+            : null,
+        mobileTop:
+          mobileSpine && getComputedStyle(mobileSpine).display !== "none"
+            ? (mobileRect?.top ?? null)
             : null,
       };
     });
@@ -174,23 +189,18 @@ test("navigation does not persistently overlap Replay across breakpoints", async
       expect(layout.mainLeft).toBeGreaterThanOrEqual(layout.sidebarRight - 1);
     }
 
-    if (viewport.width < 768) {
-      const navigationButton = page.getByRole("button", {
-        name: "Open navigation",
-      });
-      await navigationButton.click();
-      const closeButton = page.getByRole("button", { name: "Close navigation" });
-      await expect(closeButton).toBeVisible();
-      await closeButton.click();
-      await expect(closeButton).toBeHidden();
+    if (layout.mobileTop !== null) {
+      expect(layout.mainBottom).toBeLessThanOrEqual(layout.mobileTop + 1);
     }
   }
 });
 
-test("mobile app header keeps every primary destination legible", async ({ page }) => {
+test("mobile spine keeps every primary destination legible", async ({
+  page,
+}) => {
   for (const width of [320, 360, 390, 430]) {
     await page.setViewportSize({ width, height: 844 });
-    for (const [path, title] of [
+    for (const [path, label] of [
       ["atlas", "Atlas"],
       ["finder", "Finder"],
       ["routes", "Routes"],
@@ -198,44 +208,66 @@ test("mobile app header keeps every primary destination legible", async ({ page 
       ["admin", "Admin"],
     ] as const) {
       await page.goto(`/#/${path}`);
-      const header = page.getByTestId("app-header");
-      const trigger = page.getByRole("button", { name: "Open navigation" });
-      const pageTitle = page.getByTestId("app-page-title");
-      await expect(header).toBeVisible();
-      await expect(trigger).toBeVisible();
-      await expect(pageTitle).toHaveText(title);
-      await expect(page.getByTestId("global-product-subtitle")).toBeHidden();
+      const spine = page.getByTestId("atlas-spine-mobile");
+      const link = spine.getByRole("link", { name: label, exact: true });
+      await expect(spine).toBeVisible();
+      await expect(link).toBeVisible();
+      await expect(link).toHaveAttribute("aria-current", "page");
 
-      const boxes = await Promise.all([
-        header.boundingBox(),
-        trigger.boundingBox(),
-        pageTitle.boundingBox(),
-      ]);
-      const [headerBox, triggerBox, titleBox] = boxes;
-      expect(headerBox).not.toBeNull();
-      expect(triggerBox).not.toBeNull();
-      expect(titleBox).not.toBeNull();
-      expect((triggerBox?.x ?? 0) + (triggerBox?.width ?? 0)).toBeLessThanOrEqual(
-        titleBox?.x ?? 0,
-      );
-      expect((titleBox?.x ?? 0) + (titleBox?.width ?? 0)).toBeLessThanOrEqual(width);
-      expect((titleBox?.y ?? 0) + (titleBox?.height ?? 0)).toBeLessThanOrEqual(
-        (headerBox?.y ?? 0) + (headerBox?.height ?? 0),
-      );
-      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
-        width,
-      );
+      const box = await link.boundingBox();
+      expect(box).not.toBeNull();
+      expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(width + 1);
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth),
+      ).toBeLessThanOrEqual(width);
     }
   }
 });
 
-test("desktop app header retains the product subtitle", async ({ page }) => {
+test("utility surfaces retain the product subtitle on desktop", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto("/#/atlas");
+  await page.goto("/#/finder");
 
-  await expect(page.getByTestId("app-page-title")).toHaveText("Atlas");
+  await expect(page.getByTestId("app-page-title")).toHaveText("Finder");
   await expect(page.getByTestId("global-product-subtitle")).toHaveText(
     "Relive where you have been. Discover where to go next.",
   );
   await expect(page.getByTestId("global-product-subtitle")).toBeVisible();
+  await expect(page.getByTestId("atlas-spine")).toBeVisible();
+});
+
+test("immersive atlas has no top chrome and shows the spine", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/#/atlas");
+
+  await expect(page.getByTestId("atlas-spine")).toBeVisible();
+  await expect(page.getByTestId("app-header")).toBeHidden();
+});
+
+test("field-guide shell has stable desktop and mobile compositions", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/#/routes");
+  await expect(page.getByTestId("atlas-spine")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Your route library." }),
+  ).toBeVisible();
+  await expect(page).toHaveScreenshot("field-guide-shell-desktop.png", {
+    animations: "disabled",
+  });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#/routes");
+  await expect(page.getByTestId("atlas-spine-mobile")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Your route library." }),
+  ).toBeVisible();
+  await expect(page).toHaveScreenshot("field-guide-shell-mobile.png", {
+    animations: "disabled",
+  });
 });

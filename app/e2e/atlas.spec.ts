@@ -126,9 +126,14 @@ for (const viewport of [
       const canvas = document
         .querySelector<HTMLCanvasElement>('[aria-label="Interactive route globe"]')!
         .getBoundingClientRect();
+      const mobileNavigation = document
+        .querySelector<HTMLElement>('[data-testid="atlas-spine-mobile"]')
+        ?.getBoundingClientRect();
       return {
         documentWidth: document.documentElement.scrollWidth,
         viewportWidth: window.innerWidth,
+        mobileNavigationHeight:
+          mobileNavigation && mobileNavigation.height > 0 ? mobileNavigation.height : 0,
         main: { left: main.left, right: main.right, bottom: main.bottom },
         canvas: {
           left: canvas.left,
@@ -143,7 +148,9 @@ for (const viewport of [
     expect(Math.abs(layout.canvas.left - layout.main.left)).toBeLessThanOrEqual(1);
     expect(Math.abs(layout.canvas.right - layout.main.right)).toBeLessThanOrEqual(1);
     expect(Math.abs(layout.canvas.bottom - layout.main.bottom)).toBeLessThanOrEqual(1);
-    expect(layout.canvas.height).toBeGreaterThanOrEqual(viewport.height - 60);
+    expect(layout.canvas.height).toBeGreaterThanOrEqual(
+      viewport.height - layout.mobileNavigationHeight - 1,
+    );
   });
 }
 
