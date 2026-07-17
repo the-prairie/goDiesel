@@ -12,6 +12,7 @@ export function AppShell() {
   const isReplayLab = location.pathname.startsWith("/lab/");
   const isRouteDetail = /^\/routes\/[^/]+$/.test(location.pathname);
   const isRoutesLibrary = section.id === "routes" && !isRouteDetail;
+  const isWideUtility = isRoutesLibrary || section.id === "admin";
   const isImmersive =
     isAtlas ||
     isReplayLab ||
@@ -51,7 +52,7 @@ export function AppShell() {
             "w-full flex-1",
             isImmersive
               ? "min-h-0 overflow-hidden"
-              : isRoutesLibrary
+              : isWideUtility
                 ? "grid gap-6 p-4 sm:p-6"
                 : "mx-auto grid max-w-7xl gap-6 p-4 sm:p-6",
           )}
