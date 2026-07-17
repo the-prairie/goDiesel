@@ -22,7 +22,7 @@ def test_shadcn_project_config_exists():
 
 def test_app_shell_defines_expected_navigation_and_hash_route_support():
     shell = (APP / "src/components/app-shell.tsx").read_text()
-    sidebar = (APP / "src/components/app-sidebar.tsx").read_text()
+    spine = (APP / "src/components/atlas-spine.tsx").read_text()
     router = (APP / "src/router.tsx").read_text()
     navigation = (APP / "src/navigation.ts").read_text()
 
@@ -38,9 +38,11 @@ def test_app_shell_defines_expected_navigation_and_hash_route_support():
     assert 'catch {' in navigation
     assert 'path: "routes/:routeSlug"' in router
     assert 'path: "replay/:routeSlug"' in router
-    assert '<Link' in sidebar
-    assert 'appSectionForPath(location.pathname)' in sidebar
-    assert 'aria-current={activeSection.id === section.id ? "page" : undefined}' in sidebar
+    assert '<Link' in spine
+    assert 'aria-label="Primary"' in spine
+    assert 'appSectionForPath(location.pathname)' in spine
+    assert 'aria-current={isActive ? "page" : undefined}' in spine
+    assert '<AtlasSpine />' in shell
     assert '<Outlet />' in shell
 
 
