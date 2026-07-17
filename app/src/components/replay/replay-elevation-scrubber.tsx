@@ -5,8 +5,15 @@ import {
   useImperativeHandle,
   useMemo,
   useRef,
+  useState,
 } from "react";
 
+import { RepairEvidence } from "@/components/routes/repair-evidence";
+import {
+  routeRepairAriaLabel,
+  routeRepairs,
+  type RouteRepair,
+} from "@/domain/route-repairs";
 import type { QuestRoute } from "@/domain/routes";
 import {
   elevationRange,
@@ -53,6 +60,26 @@ export const ReplayElevationScrubber = forwardRef<
     () => buildProfile(route, totalDistanceM),
     [route, totalDistanceM],
   );
+  const repairs = useMemo(
+    () => routeRepairs(route, totalDistanceM),
+    [route, totalDistanceM],
+  );
+  const [activeRepairs, setActiveRepairs] = useState<RouteRepair[]>([]);
+  const repairGroups = useMemo(() => {
+    const groups: RouteRepair[][] = [];
+    for (const repair of repairs) {
+      const previous = groups.at(-1);
+      if (
+        previous &&
+        repair.distanceRatio - previous.at(-1)!.distanceRatio < 0.04
+      ) {
+        previous.push(repair);
+      } else {
+        groups.push([repair]);
+      }
+    }
+    return groups;
+  }, [repairs]);
 
   const sync = (nextProgressM: number) => {
     const ratio = Math.min(1, Math.max(0, nextProgressM / totalDistanceM));
@@ -70,7 +97,7 @@ export const ReplayElevationScrubber = forwardRef<
       data-traveled-color={TRAVELED_COLOR}
       data-playhead-color={PLAYHEAD_COLOR}
       className={cn(
-        "group relative min-w-0 overflow-hidden border-x border-line bg-surface focus-within:ring-2 focus-within:ring-route focus-within:ring-inset",
+        "group relative min-w-0 overflow-visible border-x border-line bg-surface focus-within:ring-2 focus-within:ring-route focus-within:ring-inset",
         compact ? "h-[4.5rem]" : "h-[6.25rem]",
         className,
       )}
@@ -126,6 +153,50 @@ export const ReplayElevationScrubber = forwardRef<
       >
         <span className="absolute left-1/2 top-2 size-3 -translate-x-1/2 rounded-full border-2 border-surface bg-coral shadow-sm" />
       </span>
+
+      {repairs.map((repair, index) => (
+        <span
+          key={repair.id}
+          data-testid="replay-repair-mark"
+          data-repair-distance-m={repair.distanceM.toFixed(2)}
+          aria-hidden="true"
+          className={cn(
+            "pointer-events-none absolute top-1 z-30 h-8 w-0.5 -translate-x-1/2 bg-repair shadow-sm",
+            index % 2 === 1 && "translate-y-2",
+          )}
+          style={{ left: `${repair.distanceRatio * 100}%` }}
+        />
+      ))}
+
+      {repairGroups.map((group) => {
+        const distanceRatio =
+          group.reduce((sum, repair) => sum + repair.distanceRatio, 0) / group.length;
+        return (
+        <button
+          key={group.map(({ id }) => id).join("-")}
+          type="button"
+          aria-label={
+            group.length === 1
+              ? routeRepairAriaLabel(group[0])
+              : `${group.length} recorded repairs near ${(
+                  group.reduce((sum, repair) => sum + repair.distanceM, 0) /
+                  group.length /
+                  1_000
+                ).toFixed(2)} km`
+          }
+          className="absolute top-0 z-30 h-11 w-10 -translate-x-1/2 outline-none focus-visible:ring-2 focus-visible:ring-repair focus-visible:ring-inset"
+          style={{ left: `${distanceRatio * 100}%` }}
+          onClick={() => setActiveRepairs(group)}
+        />
+        );
+      })}
+
+      {activeRepairs.length > 0 ? (
+        <RepairEvidence
+          repairs={activeRepairs}
+          className="absolute bottom-full left-3 z-40 mb-2 max-w-[min(22rem,calc(100%-1.5rem))]"
+        />
+      ) : null}
 
       <input
         aria-label="Route progress"

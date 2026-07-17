@@ -42,6 +42,7 @@
   --color-line-strong: var(--line-strong);
   --color-forest: var(--forest);
   --color-route: var(--route);
+  --color-repair: var(--repair);
   --color-coral: var(--coral);
   --color-success: var(--success);
   --color-warning: var(--warning);
@@ -65,6 +66,7 @@
   --forest-active: #082f2a;
   --forest-soft: #dce8e3;
   --route: #3379df;
+  --repair: #b58a3a;
   --route-history: #4588de;
   --route-muted: rgb(51 121 223 / 42%);
   --route-halo: rgb(255 255 255 / 82%);
