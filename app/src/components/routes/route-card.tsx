@@ -161,11 +161,11 @@ export function RouteThread({
   return (
     <div
       className={cn(
-        "relative h-32 overflow-hidden border-b border-border bg-[radial-gradient(circle_at_50%_50%,hsl(var(--accent)),hsl(var(--background))_72%)]",
+        "relative h-32 overflow-hidden border-b border-border bg-[radial-gradient(circle_at_50%_50%,var(--accent),var(--background)_72%)]",
         className,
       )}
     >
-      <div className="absolute inset-0 opacity-30 [background-image:linear-gradient(hsl(var(--border))_1px,transparent_1px),linear-gradient(90deg,hsl(var(--border))_1px,transparent_1px)] [background-size:28px_28px]" />
+      <div className="absolute inset-0 opacity-30 [background-image:linear-gradient(var(--border)_1px,transparent_1px),linear-gradient(90deg,var(--border)_1px,transparent_1px)] [background-size:28px_28px]" />
       {points ? (
         <svg
           viewBox="0 0 320 128"
@@ -177,7 +177,7 @@ export function RouteThread({
           <polyline
             points={points}
             fill="none"
-            stroke="hsl(var(--primary))"
+            stroke="var(--primary)"
             strokeWidth="3"
             strokeLinecap="round"
             strokeLinejoin="round"

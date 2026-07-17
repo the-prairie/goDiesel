@@ -32,7 +32,7 @@ export function AppSidebar() {
             <SidebarMenuItem>
               <SidebarMenuButton asChild size="lg" tooltip="goDiesel Atlas">
                 <Link to={APP_PATHS.atlas} onClick={() => setOpenMobile(false)}>
-                  <span className="size-3 shrink-0 rounded-full bg-primary shadow-[0_0_18px_hsl(var(--primary))]" />
+                  <span className="size-3 shrink-0 rounded-full bg-primary shadow-[0_0_18px_var(--primary)]" />
                   <span className="grid min-w-0 flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden">
                     <span className="truncate text-base font-bold">godiesel</span>
                     <span className="truncate text-xs text-muted-foreground">

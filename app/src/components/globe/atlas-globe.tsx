@@ -636,7 +636,7 @@ export function AtlasGlobe({
               "pointer-events-auto absolute hidden -translate-x-1/2 -translate-y-1/2 items-center gap-2 whitespace-nowrap rounded-md border border-border bg-card/80 px-3 py-1.5 text-[11px] font-semibold uppercase text-muted-foreground shadow-xl backdrop-blur transition-colors hover:border-primary hover:text-foreground data-[active=true]:border-primary data-[active=true]:text-primary",
             )}
           >
-            <span className="size-2 rounded-full bg-primary shadow-[0_0_18px_hsl(var(--primary))]" />
+            <span className="size-2 rounded-full bg-primary shadow-[0_0_18px_var(--primary)]" />
             {region.name} · {region.routes.length}
           </button>
         ))}
