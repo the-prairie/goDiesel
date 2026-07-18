@@ -412,6 +412,12 @@ for (const viewport of [
       const navigation = document.querySelector<HTMLElement>(
         '[data-testid="atlas-spine-mobile"]',
       )!;
+      const region = document.querySelector<HTMLElement>(".atlas-region-select")!;
+      const activity = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          '.atlas-mobile-activity[aria-label="Activity filter"]',
+        ),
+      ).find((element) => getComputedStyle(element).display !== "none")!;
       const buttons = Array.from(
         document.querySelectorAll<HTMLElement>(
           '.atlas-mobile-activity [data-slot="button"], .atlas-mobile-map-tools [data-slot="button"]',
@@ -422,6 +428,12 @@ for (const viewport of [
         viewportWidth: window.innerWidth,
         sheetBottom: sheet.getBoundingClientRect().bottom,
         navigationTop: navigation.getBoundingClientRect().top,
+        toolbarTopDelta: Math.abs(
+          region.getBoundingClientRect().top - activity.getBoundingClientRect().top,
+        ),
+        toolbarHeightDelta: Math.abs(
+          region.getBoundingClientRect().height - activity.getBoundingClientRect().height,
+        ),
         minimumTarget: Math.min(
           ...buttons
             .map((button) => button.getBoundingClientRect().height)
@@ -432,6 +444,8 @@ for (const viewport of [
 
     expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth + 1);
     expect(layout.sheetBottom).toBeLessThanOrEqual(layout.navigationTop + 1);
+    expect(layout.toolbarTopDelta).toBeLessThanOrEqual(1);
+    expect(layout.toolbarHeightDelta).toBeLessThanOrEqual(1);
     expect(layout.minimumTarget).toBeGreaterThanOrEqual(44);
     await expect(mobileNavigation).toBeVisible();
   });
@@ -517,6 +531,31 @@ for (const viewport of [
     await expect(page).not.toHaveURL(/region=/);
   });
 }
+
+test("desktop Atlas toolbar controls share one alignment rhythm", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto("/#/atlas");
+
+  const region = page.locator(".atlas-region-select");
+  const search = page.getByRole("region", { name: "Atlas search" });
+  const activity = page.locator('.atlas-desktop-activity[aria-label="Activity filter"]');
+  await expect(region).toBeVisible();
+  await expect(search).toBeVisible();
+  await expect(activity).toBeVisible();
+
+  const boxes = await Promise.all([
+    region.boundingBox(),
+    search.boundingBox(),
+    activity.boundingBox(),
+  ]);
+  expect(boxes.every(Boolean)).toBe(true);
+  const [regionBox, searchBox, activityBox] = boxes as Box[];
+
+  expect(Math.max(regionBox.y, searchBox.y, activityBox.y) - Math.min(regionBox.y, searchBox.y, activityBox.y)).toBeLessThanOrEqual(1);
+  expect(Math.max(regionBox.height, searchBox.height, activityBox.height) - Math.min(regionBox.height, searchBox.height, activityBox.height)).toBeLessThanOrEqual(1);
+  expect(searchBox.x - (regionBox.x + regionBox.width)).toBeCloseTo(8, 0);
+  expect(activityBox.x - (searchBox.x + searchBox.width)).toBeCloseTo(8, 0);
+});
 
 test("short-landscape search results remain actionable", async ({ page }) => {
   await page.setViewportSize({ width: 667, height: 375 });

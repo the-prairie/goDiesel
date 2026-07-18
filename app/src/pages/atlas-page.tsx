@@ -104,7 +104,7 @@ export function AtlasPage() {
         selectedRegion={selectedRegion}
         onSelectRegion={selectRegion}
         onOpenRoute={openRoute}
-        className={`atlas-search-panel absolute left-4 right-4 top-20 z-30 max-h-[56dvh] overflow-y-auto xl:left-[17rem] xl:right-auto xl:top-5 xl:w-[340px] ${selectedRegion ? "atlas-search-panel--selected" : ""}`}
+        className={`atlas-search-panel absolute left-4 right-4 top-20 z-30 max-h-[56dvh] overflow-y-auto xl:left-[15.5rem] xl:right-auto xl:top-5 xl:h-[54px] xl:w-[340px] xl:p-1 ${selectedRegion ? "atlas-search-panel--selected" : ""}`}
       />
       <AtlasControls
         regions={routeRegions}
