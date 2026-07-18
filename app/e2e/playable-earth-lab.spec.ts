@@ -83,16 +83,12 @@ async function installDeterministicEarthRenderer(
               else context.lineTo(x, y);
             });
             context.stroke();
-            context.fillStyle = "#ffffff";
-            context.beginPath();
-            context.arc(60, 250, 12, 0, Math.PI * 2);
-            context.fill();
           }
           options.container.appendChild(canvas);
           options.onStatus({
             state: "ready",
             title: "Playable Earth ready",
-            message: "Route thread and starting position are visible.",
+            message: "The route thread is ready to explore.",
           });
           options.onGroundingChange?.(
             groundingState === "sampled"

@@ -144,7 +144,7 @@ export class MapLibreAtlasReplayEngine implements ReplayEngine {
       onStatus({
         state: "ready",
         title: "Atlas replay ready",
-        message: "The fallback route thread and avatar are ready to move.",
+        message: "The fallback route thread is ready to move.",
       });
     });
   }

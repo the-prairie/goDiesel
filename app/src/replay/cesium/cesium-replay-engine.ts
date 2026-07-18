@@ -329,7 +329,7 @@ export class CesiumReplayEngine implements ReplayEngine {
           title: "Earth Replay ready",
           message:
             initialTiles === "loaded"
-              ? "The route thread and avatar are ready to move."
+              ? "The route thread is ready to move."
               : "The route is ready while finer tile detail continues loading.",
         });
       }

@@ -53,7 +53,7 @@ const SURFACE_SAMPLE_INTERVAL_MS = 1_200;
 const MAX_STALE_SAMPLE_DISTANCE_M = 500;
 let cesiumPromise: Promise<CesiumGlobal | undefined> | undefined;
 
-function cameraHeightAboveAvatarM(cameraRangeM: number) {
+function cameraHeightAboveRouteM(cameraRangeM: number) {
   if (cameraRangeM <= 240) {
     return 35 + ((cameraRangeM - 120) / 120) * 75;
   }
@@ -238,10 +238,8 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
           start.elev + SURFACE_VISUAL_OFFSET_M,
         ),
         point: {
-          pixelSize: 16,
-          color: Cesium.Color.fromCssColorString(ROUTE_THREAD_STYLE.marker),
-          outlineColor: Cesium.Color.fromCssColorString(ROUTE_THREAD_STYLE.halo),
-          outlineWidth: 4,
+          pixelSize: 1,
+          color: Cesium.Color.TRANSPARENT,
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
       });
@@ -251,7 +249,7 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
       onStatus({
         state: "ready",
         title: "Playable Earth ready",
-        message: "Route thread and starting position are visible.",
+        message: "The route thread is ready to explore.",
       });
     } catch (error) {
       console.warn("Playable Earth Lab unavailable", error);
@@ -305,7 +303,7 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
     }
     const heading = (this.cameraHeadingDeg * Math.PI) / 180;
     const cameraRangeM = pose.cameraRangeM;
-    const cameraHeightM = cameraHeightAboveAvatarM(cameraRangeM);
+    const cameraHeightM = cameraHeightAboveRouteM(cameraRangeM);
     const cameraLat =
       pose.lat - (Math.cos(heading) * cameraRangeM) / 111_320;
     const cameraLng =
