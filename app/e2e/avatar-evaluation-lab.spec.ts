@@ -172,6 +172,32 @@ test("avatar lab compares all renderers through one replay control surface", asy
     .toBe(1);
 });
 
+test("avatar lab switches and persists custom dotLottie avatars", async ({ page }) => {
+  await installEvaluationEngine(page);
+  await page.goto(`/#/lab/avatar-evaluation/${routeSlug}`);
+
+  const stage = page.getByTestId("avatar-evaluation-stage");
+  await expect(stage).toHaveAttribute("data-system", "dotlottie");
+  await expect(stage).toHaveAttribute("data-avatar", "tempo-runner");
+
+  const avatarSelect = page.getByLabel("Custom dotLottie avatar");
+  await expect(avatarSelect).toHaveValue("tempo-runner");
+  await expect(avatarSelect.locator("option")).toHaveCount(5);
+
+  await avatarSelect.selectOption("summit-runner");
+  await expect(stage).toHaveAttribute("data-avatar", "summit-runner");
+  await expect(page.getByRole("img", { name: "Summit Runner route avatar" })).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.localStorage.getItem("godiesel:replay-avatar")),
+    )
+    .toBe("summit-runner");
+
+  await page.reload();
+  await expect(stage).toHaveAttribute("data-avatar", "summit-runner");
+  await expect(avatarSelect).toHaveValue("summit-runner");
+});
+
 test("avatar lab keeps avatar runtime requests local and cleans up on exit", async ({
   page,
 }) => {
@@ -208,7 +234,7 @@ test("avatar lab keeps avatar runtime requests local and cleans up on exit", asy
     .toBe(true);
   await expect
     .poll(() =>
-      avatarRequests.some((url) => url.includes("/avatar-lab/hangout-running.lottie")),
+      avatarRequests.some((url) => url.includes("/route-avatars/tempo-runner.lottie")),
     )
     .toBe(true);
 

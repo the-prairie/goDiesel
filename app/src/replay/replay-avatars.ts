@@ -21,6 +21,11 @@ export const REPLAY_AVATARS = [
     label: "Gravel Rider",
     src: "/route-avatars/gravel-rider.lottie",
   },
+  {
+    id: "hangout-runner",
+    label: "Hangout Runner",
+    src: "/avatar-lab/hangout-running.lottie",
+  },
 ] as const;
 
 export type ReplayAvatarId = (typeof REPLAY_AVATARS)[number]["id"];

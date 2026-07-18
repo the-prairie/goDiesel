@@ -45,6 +45,12 @@ import {
   type CesiumReplayAvatarStatus,
 } from "@/replay/cesium/cesium-replay-engine";
 import type { ReplayEngine, ReplayStatus } from "@/replay/replay-engine";
+import {
+  persistReplayAvatar,
+  REPLAY_AVATARS,
+  storedReplayAvatar,
+  type ReplayAvatarId,
+} from "@/replay/replay-avatars";
 
 export type AvatarEvaluationSystem = "dotlottie" | "cesium-glb" | "rive";
 
@@ -161,6 +167,7 @@ export function AvatarEvaluationStage({
   const [control, setControl] = useState(controlRef.current);
   const [status, setStatus] = useState<ReplayStatus>(initialStatus);
   const [system, setSystem] = useState<AvatarEvaluationSystem>("dotlottie");
+  const [avatar, setAvatar] = useState(storedReplayAvatar);
   const systemRef = useRef<AvatarEvaluationSystem>(system);
   const [rendererState, setRendererState] = useState<"loading" | "ready" | "error">(
     "loading",
@@ -302,11 +309,20 @@ export function AvatarEvaluationStage({
     [syncRenderer],
   );
 
+  const selectAvatar = (id: ReplayAvatarId) => {
+    const nextAvatar = REPLAY_AVATARS.find((candidate) => candidate.id === id);
+    if (!nextAvatar) return;
+    setRendererState("loading");
+    setAvatar(nextAvatar);
+    persistReplayAvatar(id);
+  };
+
   return (
     <section
       aria-label="Avatar evaluation lab"
       data-testid="avatar-evaluation-stage"
       data-system={system}
+      data-avatar={avatar.id}
       data-state={status.state}
       data-renderer-state={rendererState}
       data-progress={control.progressM.toFixed(2)}
@@ -326,12 +342,20 @@ export function AvatarEvaluationStage({
       <div
         ref={avatarElementRef}
         role="img"
-        aria-label={`${selectedSystem.label} route avatar`}
+        aria-label={
+          system === "dotlottie"
+            ? `${avatar.label} route avatar`
+            : `${selectedSystem.label} route avatar`
+        }
         className="pointer-events-none absolute left-0 top-0 z-10 hidden size-20 drop-shadow-[0_8px_5px_rgba(0,0,0,0.55)]"
       >
         <div className="absolute bottom-1 left-1/2 h-3 w-12 -translate-x-1/2 rounded-[50%] bg-black/45 blur-sm" />
         {system === "dotlottie" ? (
-          <DotLottieEvaluationAvatar onRenderer={setRendererHandle} />
+          <DotLottieEvaluationAvatar
+            key={avatar.id}
+            avatar={avatar}
+            onRenderer={setRendererHandle}
+          />
         ) : null}
         {system === "rive" ? (
           <RiveEvaluationAvatar onRenderer={setRendererHandle} />
@@ -395,6 +419,31 @@ export function AvatarEvaluationStage({
               </button>
             ))}
           </div>
+          {system === "dotlottie" ? (
+            <div className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-3">
+              <label
+                htmlFor="avatar-evaluation-dotlottie"
+                className="text-xs font-semibold uppercase text-muted-foreground"
+              >
+                Custom avatar
+              </label>
+              <select
+                id="avatar-evaluation-dotlottie"
+                aria-label="Custom dotLottie avatar"
+                value={avatar.id}
+                onChange={(event) =>
+                  selectAvatar(event.currentTarget.value as ReplayAvatarId)
+                }
+                className="h-9 min-w-44 rounded-sm border border-border bg-background px-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
+              >
+                {REPLAY_AVATARS.map((candidate) => (
+                  <option key={candidate.id} value={candidate.id}>
+                    {candidate.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -418,7 +467,10 @@ export function AvatarEvaluationStage({
             label="Renderer"
             value={rendererState === "ready" ? "Ready" : rendererState}
           />
-          <Metric label="Asset" value="Bundled locally" />
+          <Metric
+            label="Asset"
+            value={system === "dotlottie" ? avatar.label : "Bundled locally"}
+          />
         </dl>
       </aside>
 
@@ -512,8 +564,10 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 function DotLottieEvaluationAvatar({
+  avatar,
   onRenderer,
 }: {
+  avatar: (typeof REPLAY_AVATARS)[number];
   onRenderer: (
     handle: AvatarRendererHandle | undefined,
     state: "ready" | "error",
@@ -545,10 +599,11 @@ function DotLottieEvaluationAvatar({
 
   return (
     <DotLottieReact
-      src="/avatar-lab/hangout-running.lottie"
+      src={avatar.src}
       autoplay={false}
       loop
       dotLottieRefCallback={setInstance}
+      aria-label={`${avatar.label} animation`}
       className="relative size-full"
     />
   );
