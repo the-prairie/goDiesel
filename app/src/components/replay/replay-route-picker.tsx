@@ -52,7 +52,7 @@ export function ReplayRoutePicker({
       }}
     >
       <SheetTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="mt-3 w-full">
+        <Button type="button" variant="outline" size="sm" className="w-full">
           <Search aria-hidden="true" />
           Change route
         </Button>

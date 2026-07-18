@@ -40,6 +40,10 @@ import {
   type ReplayCameraClearanceState,
   type ReplayCameraSurfaceObservation,
 } from "@/replay/cesium/replay-camera-clearance";
+import {
+  CESIUM_GROUND_ROUTE_OPTIONS,
+  GOOGLE_3D_TILES_RENDER_OPTIONS,
+} from "@/replay/cesium/cesium-render-quality";
 
 const SURFACE_VISUAL_OFFSET_M = 3;
 const SURFACE_SAMPLE_INTERVAL_MS = 250;
@@ -244,9 +248,7 @@ export class CesiumReplayEngine implements ReplayEngine {
       const tilesetUrl = `https://tile.googleapis.com/v1/3dtiles/root.json?key=${encodeURIComponent(apiKey)}`;
       const tileset = await Cesium3DTileset.fromUrl(tilesetUrl, {
         showCreditsOnScreen: true,
-        maximumScreenSpaceError: 24,
-        dynamicScreenSpaceError: true,
-        skipLevelOfDetail: true,
+        ...GOOGLE_3D_TILES_RENDER_OPTIONS,
         enableCollision: true,
       });
       if (generation !== this.generation) {
@@ -273,13 +275,12 @@ export class CesiumReplayEngine implements ReplayEngine {
             Cartesian3.fromDegrees(point.lng, point.lat),
           ),
           width: 12,
-          clampToGround: true,
+          ...CESIUM_GROUND_ROUTE_OPTIONS,
           classificationType: ClassificationType.CESIUM_3D_TILE,
           material: new PolylineGlowMaterialProperty({
             color: Color.fromCssColorString(ROUTE_THREAD_STYLE.color).withAlpha(0.98),
             glowPower: 0.18,
           }),
-          depthFailMaterial: Color.fromCssColorString(ROUTE_THREAD_STYLE.color).withAlpha(0.94),
         },
       });
       this.routeEntity = routeEntity;

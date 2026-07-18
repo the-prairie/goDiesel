@@ -80,6 +80,8 @@ export const ReplayElevationScrubber = forwardRef<
     }
     return groups;
   }, [repairs]);
+  const repairYRatio = (distanceRatio: number) =>
+    profileYAtRatio(profile.points, distanceRatio) / PROFILE_HEIGHT;
 
   const sync = (nextProgressM: number) => {
     const ratio = Math.min(1, Math.max(0, nextProgressM / totalDistanceM));
@@ -154,40 +156,46 @@ export const ReplayElevationScrubber = forwardRef<
         <span className="absolute left-1/2 top-2 size-3 -translate-x-1/2 rounded-full border-2 border-surface bg-coral shadow-sm" />
       </span>
 
-      {repairs.map((repair, index) => (
+      {repairs.map((repair) => (
         <span
           key={repair.id}
           data-testid="replay-repair-mark"
           data-repair-distance-m={repair.distanceM.toFixed(2)}
           aria-hidden="true"
-          className={cn(
-            "pointer-events-none absolute top-1 z-30 h-8 w-0.5 -translate-x-1/2 bg-repair shadow-sm",
-            index % 2 === 1 && "translate-y-2",
-          )}
-          style={{ left: `${repair.distanceRatio * 100}%` }}
+          className="pointer-events-none absolute z-30 size-2 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-surface bg-repair shadow-sm"
+          style={{
+            left: `${repair.distanceRatio * 100}%`,
+            top: `${repairYRatio(repair.distanceRatio) * 100}%`,
+          }}
         />
       ))}
 
       {repairGroups.map((group) => {
         const distanceRatio =
           group.reduce((sum, repair) => sum + repair.distanceRatio, 0) / group.length;
+        const yRatio =
+          group.reduce((sum, repair) => sum + repairYRatio(repair.distanceRatio), 0) /
+          group.length;
         return (
-        <button
-          key={group.map(({ id }) => id).join("-")}
-          type="button"
-          aria-label={
-            group.length === 1
-              ? routeRepairAriaLabel(group[0])
-              : `${group.length} recorded repairs near ${(
-                  group.reduce((sum, repair) => sum + repair.distanceM, 0) /
-                  group.length /
-                  1_000
-                ).toFixed(2)} km`
-          }
-          className="absolute top-0 z-30 h-11 w-10 -translate-x-1/2 outline-none focus-visible:ring-2 focus-visible:ring-repair focus-visible:ring-inset"
-          style={{ left: `${distanceRatio * 100}%` }}
-          onClick={() => setActiveRepairs(group)}
-        />
+          <button
+            key={group.map(({ id }) => id).join("-")}
+            type="button"
+            aria-label={
+              group.length === 1
+                ? routeRepairAriaLabel(group[0])
+                : `${group.length} recorded repairs near ${(
+                    group.reduce((sum, repair) => sum + repair.distanceM, 0) /
+                    group.length /
+                    1_000
+                  ).toFixed(2)} km`
+            }
+            className="absolute z-30 size-11 -translate-x-1/2 -translate-y-1/2 outline-none focus-visible:ring-2 focus-visible:ring-repair focus-visible:ring-inset"
+            style={{
+              left: `${distanceRatio * 100}%`,
+              top: `${yRatio * 100}%`,
+            }}
+            onClick={() => setActiveRepairs(group)}
+          />
         );
       })}
 
@@ -226,6 +234,10 @@ function buildProfile(route: QuestRoute, totalDistanceM: number) {
     return {
       line: `0,${y} ${PROFILE_WIDTH},${y}`,
       area: `M 0 ${PROFILE_HEIGHT - 10} L 0 ${y} L ${PROFILE_WIDTH} ${y} L ${PROFILE_WIDTH} ${PROFILE_HEIGHT - 10} Z`,
+      points: [
+        { x: 0, y },
+        { x: PROFILE_WIDTH, y },
+      ],
     };
   }
 
@@ -244,5 +256,22 @@ function buildProfile(route: QuestRoute, totalDistanceM: number) {
   return {
     line,
     area: `M 0 ${bottom} L ${line.replaceAll(",", " ")} L ${PROFILE_WIDTH} ${bottom} Z`,
+    points: rendered,
   };
+}
+
+function profileYAtRatio(
+  points: Array<{ x: number; y: number }>,
+  distanceRatio: number,
+) {
+  const targetX = Math.min(1, Math.max(0, distanceRatio)) * PROFILE_WIDTH;
+  for (let index = 1; index < points.length; index += 1) {
+    const current = points[index];
+    if (current.x < targetX) continue;
+    const previous = points[index - 1];
+    const span = current.x - previous.x;
+    const ratio = span > 0 ? (targetX - previous.x) / span : 0;
+    return previous.y + (current.y - previous.y) * ratio;
+  }
+  return points.at(-1)?.y ?? PROFILE_HEIGHT / 2;
 }

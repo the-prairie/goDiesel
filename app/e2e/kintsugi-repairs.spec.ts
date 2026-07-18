@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 const repairedRouteSlug = "13935098460";
 const cleanRouteSlug = "10082410891";
+const repairedCreteRouteSlug = "14023448720";
 
 async function installDeterministicReplayEngine(page: Page) {
   await page.addInitScript(() => {
@@ -97,4 +98,35 @@ test("Replay uses the same source-backed repair distances in both engines", asyn
   await page.getByRole("button", { name: "Use Atlas replay" }).click();
   await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-engine", "maplibre-atlas");
   await expect(scrubber.getByTestId("replay-repair-mark")).toHaveCount(3);
+});
+
+test("Replay actions and repair affordances share their visual baselines", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await installDeterministicReplayEngine(page);
+  await page.goto(`/#/replay/${repairedCreteRouteSlug}`);
+  await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-state", "partial");
+
+  const enterRoute = await page.getByRole("link", { name: "Enter route" }).boundingBox();
+  const changeRoute = await page.getByRole("button", { name: "Change route" }).boundingBox();
+  expect(enterRoute).not.toBeNull();
+  expect(changeRoute).not.toBeNull();
+  expect(Math.abs(enterRoute!.y - changeRoute!.y)).toBeLessThanOrEqual(1);
+  expect(Math.abs(enterRoute!.height - changeRoute!.height)).toBeLessThanOrEqual(1);
+
+  const scrubber = page.getByTestId("replay-elevation-scrubber");
+  const repairMarks = scrubber.getByTestId("replay-repair-mark");
+  const repairTargets = scrubber.getByRole("button", { name: /recorded repair/i });
+  await expect(repairMarks).toHaveCount(3);
+  await expect(repairTargets).toHaveCount(3);
+  for (let index = 0; index < 3; index += 1) {
+    const mark = await repairMarks.nth(index).boundingBox();
+    const target = await repairTargets.nth(index).boundingBox();
+    expect(mark).not.toBeNull();
+    expect(target).not.toBeNull();
+    const markCenterY = mark!.y + mark!.height / 2;
+    const targetCenterY = target!.y + target!.height / 2;
+    expect(Math.abs(markCenterY - targetCenterY)).toBeLessThanOrEqual(1);
+  }
 });

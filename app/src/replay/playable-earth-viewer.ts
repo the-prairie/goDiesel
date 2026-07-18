@@ -9,6 +9,10 @@ import {
   type PlayableEarthGroundingState,
   type PlayableEarthPose,
 } from "@/replay/playable-earth-controller";
+import {
+  CESIUM_GROUND_ROUTE_OPTIONS,
+  GOOGLE_3D_TILES_RENDER_OPTIONS,
+} from "@/replay/cesium/cesium-render-quality";
 
 export type PlayableEarthStatus =
   | { state: "loading"; title: string; message: string }
@@ -196,9 +200,7 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
       const tilesetUrl = `https://tile.googleapis.com/v1/3dtiles/root.json?key=${encodeURIComponent(apiKey)}`;
       const tilesetOptions = {
         showCreditsOnScreen: true,
-        maximumScreenSpaceError: 24,
-        dynamicScreenSpaceError: true,
-        skipLevelOfDetail: true,
+        ...GOOGLE_3D_TILES_RENDER_OPTIONS,
       };
       const tileset = Cesium.Cesium3DTileset.fromUrl
         ? await Cesium.Cesium3DTileset.fromUrl(tilesetUrl, tilesetOptions)
@@ -218,15 +220,12 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
         polyline: {
           positions,
           width: 9,
-          clampToGround: true,
+          ...CESIUM_GROUND_ROUTE_OPTIONS,
           classificationType: Cesium.ClassificationType.CESIUM_3D_TILE,
           material: new Cesium.PolylineGlowMaterialProperty({
             color: Cesium.Color.fromCssColorString(ROUTE_THREAD_STYLE.color).withAlpha(0.98),
             glowPower: 0.18,
           }),
-          depthFailMaterial: Cesium.Color.fromCssColorString(ROUTE_THREAD_STYLE.color).withAlpha(
-            0.94,
-          ),
         },
       });
       this.routeEntity = routeEntity;
