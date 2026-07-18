@@ -637,6 +637,13 @@ test("Earth Replay enters Playable Earth and returns to the same route", async (
     await page.setViewportSize(viewport);
     await page.goto(`/#/replay/${routeSlug}`);
     await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-state", "ready");
+    const replayContext = page.getByTestId("replay-context");
+    await expect(replayContext).toHaveAttribute("data-ui", "route-context-hud");
+    await expect(replayContext).toHaveAttribute(
+      "data-context-state",
+      viewport.width < 768 ? "compact" : "preview",
+    );
+    await expect(page.getByRole("link", { name: "Route guide" })).toBeVisible();
     if (viewport.width < 768) {
       await page.getByRole("button", { name: "Show route details" }).click();
     }
@@ -645,6 +652,13 @@ test("Earth Replay enters Playable Earth and returns to the same route", async (
       new RegExp(`#\\/lab\\/playable-earth\\/${routeSlug}\\?from=replay$`),
     );
     await expect(page.getByRole("region", { name: "Playable Earth Lab" })).toBeVisible();
+    const playableContext = page.getByTestId("playable-context");
+    await expect(playableContext).toHaveAttribute("data-ui", "route-context-hud");
+    await expect(playableContext).toHaveAttribute(
+      "data-context-state",
+      viewport.width < 768 ? "compact" : "preview",
+    );
+    await expect(page.getByRole("link", { name: "Route guide" })).toBeVisible();
     await page.getByRole("link", { name: "Exit lab" }).click();
     await expect(page).toHaveURL(new RegExp(`#\\/replay\\/${routeSlug}$`));
     await expect(page.getByTestId("replay-stage")).toHaveAttribute(

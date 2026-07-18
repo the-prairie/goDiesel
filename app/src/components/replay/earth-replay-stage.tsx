@@ -1,7 +1,4 @@
 import {
-  ArrowLeft,
-  ChevronDown,
-  ChevronUp,
   FlaskConical,
   Gauge,
   Gamepad2,
@@ -28,6 +25,10 @@ import {
   type ReplayElevationScrubberHandle,
 } from "@/components/replay/replay-elevation-scrubber";
 import { ReplayRoutePicker } from "@/components/replay/replay-route-picker";
+import {
+  RouteContextHud,
+  type RouteContextHudState,
+} from "@/components/replay/route-context-hud";
 import {
   RecordedLightLabel,
   RecordedLightLayer,
@@ -112,7 +113,8 @@ export function EarthReplayStage({
   const [avatarAssetsState, setAvatarAssetsState] = useState<
     "loading" | "ready" | "error"
   >("loading");
-  const [mobileContextExpanded, setMobileContextExpanded] = useState(true);
+  const [contextState, setContextState] =
+    useState<RouteContextHudState>("preview");
   const [mobileControlsExpanded, setMobileControlsExpanded] = useState(false);
   const [chromeVisible, setChromeVisible] = useState(true);
   const isMobile = useIsMobile();
@@ -228,13 +230,13 @@ export function EarthReplayStage({
   }, [control.playing, operational, reducedMotion, route, totalDistanceM]);
 
   useEffect(() => {
-    setMobileContextExpanded(!isMobile);
+    setContextState(isMobile ? "compact" : "preview");
     setMobileControlsExpanded(false);
     setAvatarPickerOpen(false);
   }, [isMobile, route.slug]);
 
   useEffect(() => {
-    if (control.playing) setMobileContextExpanded(false);
+    if (control.playing) setContextState("compact");
   }, [control.playing]);
 
   useEffect(() => {
@@ -303,64 +305,18 @@ export function EarthReplayStage({
       </div>
 
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-4 p-3 sm:p-5">
-        <div
-          data-testid="replay-context"
-          data-mobile-expanded={mobileContextExpanded}
-          className={cn(
-            "pointer-events-auto w-full max-w-sm border border-line border-l-2 border-l-route bg-surface/94 p-3 text-ink shadow-panel backdrop-blur sm:p-4",
-            !reducedMotion && "transition-opacity duration-[var(--duration-slow)]",
-            !chromeVisible && "pointer-events-none opacity-0",
-          )}
-        >
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-caption font-semibold uppercase text-route">
-              <Route className="size-4" aria-hidden="true" />
-              {engineMode === "earth" ? "Earth Replay" : "Atlas Replay"}
-            </div>
-            <div className="flex items-center gap-1">
-              <Button asChild variant="ghost" size="icon" className="size-9">
-                <Link to={APP_PATHS.routes} aria-label="All routes" title="All routes">
-                  <ArrowLeft aria-hidden="true" />
-                </Link>
-              </Button>
-              <Button asChild variant="ghost" size="icon" className="size-9">
-                <Link
-                  to={routeDetailPath(route.slug)}
-                  aria-label="Route guide"
-                  title="Route guide"
-                >
-                  <Map aria-hidden="true" />
-                </Link>
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-9"
-                aria-label={
-                  mobileContextExpanded ? "Hide route details" : "Show route details"
-                }
-                aria-expanded={mobileContextExpanded}
-                onClick={() => setMobileContextExpanded((expanded) => !expanded)}
-              >
-                {mobileContextExpanded ? (
-                  <ChevronUp aria-hidden="true" />
-                ) : (
-                  <ChevronDown aria-hidden="true" />
-                )}
-              </Button>
-            </div>
-          </div>
-          <h1 className="mt-1 truncate font-editorial text-2xl font-semibold sm:text-3xl">
-            {route.name}
-          </h1>
-          <div
-            data-testid="replay-context-details"
-            className={cn(!mobileContextExpanded && "hidden sm:block")}
-          >
-            <p className="mt-1 text-control text-ink-secondary">
-              {route.distanceKm.toFixed(1)} km · {route.elevationGainM.toLocaleString()} m up
-            </p>
+        <RouteContextHud
+          route={route}
+          label={engineMode === "earth" ? "Earth Replay" : "Atlas Replay"}
+          testId="replay-context"
+          detailsTestId="replay-context-details"
+          state={contextState}
+          backPath={APP_PATHS.routes}
+          backLabel="All routes"
+          visible={chromeVisible}
+          onStateChange={setContextState}
+          summary={
+            <>
             <div className="mt-1.5">
               <RecordedLightLabel light={recordedLight} />
             </div>
@@ -397,7 +353,10 @@ export function EarthReplayStage({
                 Try Earth replay
               </Button>
             ) : null}
-            <div className="mt-3 grid grid-cols-2 gap-2 border-t border-line pt-3">
+            </>
+          }
+          actions={
+            <div className="grid grid-cols-2 gap-2">
               {route.replay.replayEligible ? (
                 <Button asChild size="sm" className="w-full bg-forest text-white hover:bg-forest/90">
                   <Link to={playableEarthLabPath(route.slug, "replay")}>
@@ -412,18 +371,8 @@ export function EarthReplayStage({
               )}
               <ReplayRoutePicker currentSlug={route.slug} routes={pickerRoutes} />
             </div>
-          </div>
-        </div>
-        <div className="pointer-events-auto hidden shrink-0 gap-2 sm:flex">
-          <Button asChild variant="secondary" size="icon">
-            <Link to={APP_PATHS.routes} aria-label="All routes" title="All routes">
-              <ArrowLeft aria-hidden="true" />
-            </Link>
-          </Button>
-          <Button asChild variant="secondary">
-            <Link to={routeDetailPath(route.slug)}>Route guide</Link>
-          </Button>
-        </div>
+          }
+        />
       </div>
 
       {!operational ? (

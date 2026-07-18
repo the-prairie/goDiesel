@@ -1,11 +1,7 @@
 import {
-  ArrowLeft,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ChevronUp,
   Clapperboard,
-  FlaskConical,
   Gamepad2,
   Gauge,
   Pause,
@@ -21,9 +17,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
+import {
+  RouteContextHud,
+  type RouteContextHudState,
+} from "@/components/replay/route-context-hud";
 import type { QuestRoute } from "@/domain/routes";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { cn } from "@/lib/utils";
 import {
   advancePlayableEarth,
   PLAYABLE_EARTH_CAMERA_RANGES_M,
@@ -71,7 +70,8 @@ export function PlayableEarthStage({
   const [grounding, setGrounding] =
     useState<PlayableEarthGroundingDebug>(INITIAL_GROUNDING);
   const [control, setControl] = useState(controlRef.current);
-  const [mobileContextExpanded, setMobileContextExpanded] = useState(true);
+  const [contextState, setContextState] =
+    useState<RouteContextHudState>("preview");
   const [mobileControlsExpanded, setMobileControlsExpanded] = useState(false);
   const isMobile = useIsMobile();
   const totalDistanceM = routeDistanceM(route);
@@ -141,12 +141,12 @@ export function PlayableEarthStage({
   }, [route, status.state, totalDistanceM]);
 
   useEffect(() => {
-    setMobileContextExpanded(true);
+    setContextState(isMobile ? "compact" : "preview");
     setMobileControlsExpanded(false);
-  }, [route.slug]);
+  }, [isMobile, route.slug]);
 
   useEffect(() => {
-    if (control.playing) setMobileContextExpanded(false);
+    if (control.playing) setContextState("compact");
   }, [control.playing]);
 
   useEffect(() => {
@@ -234,72 +234,28 @@ export function PlayableEarthStage({
         className="absolute inset-0"
       />
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-4 p-3 sm:p-6">
-        <div
-          data-testid="playable-context"
-          data-mobile-expanded={mobileContextExpanded}
-          className="pointer-events-auto w-full max-w-md rounded-md border border-border bg-background/90 p-3 shadow-2xl backdrop-blur sm:p-4"
-        >
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase text-primary">
-              <FlaskConical className="size-4" aria-hidden="true" />
-              Playable Earth Lab
-            </div>
-            <div className="flex items-center gap-1 sm:hidden">
-              <Button asChild variant="ghost" size="icon" className="size-9">
-                <Link to={exitPath} aria-label="Exit lab" title="Exit lab">
-                  <ArrowLeft aria-hidden="true" />
-                </Link>
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-9"
-                aria-label={
-                  mobileContextExpanded ? "Hide route details" : "Show route details"
-                }
-                aria-expanded={mobileContextExpanded}
-                onClick={() => setMobileContextExpanded((expanded) => !expanded)}
-              >
-                {mobileContextExpanded ? (
-                  <ChevronUp aria-hidden="true" />
-                ) : (
-                  <ChevronDown aria-hidden="true" />
-                )}
-              </Button>
-            </div>
-          </div>
-          <h1 className="mt-1 truncate text-lg font-semibold sm:mt-2 sm:text-2xl">
-            {route.name}
-          </h1>
-          <div
-            data-testid="playable-context-details"
-            className={cn(!mobileContextExpanded && "hidden sm:block")}
-          >
-            <p className="mt-1 text-sm text-muted-foreground">
-              {route.distanceKm.toFixed(1)} km · {route.elevationGainM.toLocaleString()} m up
-            </p>
-            {new URLSearchParams(window.location.search).get("debugGrounding") === "1" ? (
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start p-3 sm:p-5">
+        <RouteContextHud
+          route={route}
+          label="Playable Earth"
+          testId="playable-context"
+          detailsTestId="playable-context-details"
+          state={contextState}
+          backPath={exitPath}
+          backLabel="Exit lab"
+          icon={<Gamepad2 className="size-4 shrink-0" aria-hidden="true" />}
+          onStateChange={setContextState}
+          summary={
+            new URLSearchParams(window.location.search).get("debugGrounding") === "1" ? (
               <div className="mt-3 text-xs font-semibold uppercase text-primary">
                 Grounding: {grounding.source}
                 {grounding.offsetM === undefined
                   ? ""
                   : ` · ${grounding.offsetM >= 0 ? "+" : ""}${grounding.offsetM.toFixed(1)} m`}
               </div>
-            ) : null}
-          </div>
-        </div>
-        <Button
-          asChild
-          variant="secondary"
-          className="pointer-events-auto hidden shrink-0 sm:inline-flex"
-        >
-          <Link to={exitPath}>
-            <ArrowLeft aria-hidden="true" />
-            Exit lab
-          </Link>
-        </Button>
+            ) : null
+          }
+        />
       </div>
 
       {status.state !== "ready" ? (
