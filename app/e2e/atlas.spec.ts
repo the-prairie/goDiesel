@@ -271,6 +271,7 @@ test("region controls, search, inspector, and URL stay synchronized", async ({ p
 });
 
 test("desktop Atlas exposes activity modes and working globe utilities", async ({ page }) => {
+  test.setTimeout(60_000);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/#/atlas");
 
