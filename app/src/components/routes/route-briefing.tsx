@@ -87,7 +87,7 @@ function RouteTrace({ route }: { route: QuestRoute }) {
 
   return (
     <div className="relative h-48 overflow-hidden bg-accent/25 sm:aspect-[16/7] sm:h-auto">
-      <div className="absolute inset-0 opacity-40 [background-image:linear-gradient(hsl(var(--border))_1px,transparent_1px),linear-gradient(90deg,hsl(var(--border))_1px,transparent_1px)] [background-size:32px_32px]" />
+      <div className="absolute inset-0 opacity-40 [background-image:linear-gradient(var(--border)_1px,transparent_1px),linear-gradient(90deg,var(--border)_1px,transparent_1px)] [background-size:32px_32px]" />
       <svg
         viewBox={`0 0 ${traceWidth} ${traceHeight}`}
         role="img"
@@ -98,13 +98,13 @@ function RouteTrace({ route }: { route: QuestRoute }) {
         <polyline
           points={points.map(({ x, y }) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ")}
           fill="none"
-          stroke="hsl(var(--primary))"
+          stroke="var(--primary)"
           strokeWidth="4"
           strokeLinecap="round"
           strokeLinejoin="round"
           vectorEffect="non-scaling-stroke"
         />
-        <circle cx={first.x} cy={first.y} r="7" fill="hsl(var(--primary))" />
+        <circle cx={first.x} cy={first.y} r="7" fill="var(--primary)" />
         <circle cx={last.x} cy={last.y} r="7" fill="#f5c451" />
       </svg>
       <div className="absolute inset-x-4 bottom-3 flex items-center justify-between text-xs font-medium">
@@ -118,7 +118,7 @@ function RouteTrace({ route }: { route: QuestRoute }) {
   );
 }
 
-function ElevationProfile({ route }: { route: QuestRoute }) {
+export function ElevationProfile({ route }: { route: QuestRoute }) {
   const points = sampleElevationProfile(route.route);
   const { minimum, maximum } = elevationRange(route.route);
   const range = Math.max(1, maximum - minimum);
@@ -148,14 +148,17 @@ function ElevationProfile({ route }: { route: QuestRoute }) {
           x2={right}
           y1={bottom}
           y2={bottom}
-          stroke="hsl(var(--border))"
+          stroke="var(--border)"
           strokeWidth="1"
         />
-        <path d={area} fill="hsl(var(--primary) / 0.16)" />
+        <path
+          d={area}
+          fill="color-mix(in srgb, var(--primary) 16%, transparent)"
+        />
         <polyline
           points={line}
           fill="none"
-          stroke="hsl(var(--primary))"
+          stroke="var(--primary)"
           strokeWidth="3"
           strokeLinecap="round"
           strokeLinejoin="round"

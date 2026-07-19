@@ -21,11 +21,6 @@ const PlayableEarthLabPage = lazy(() =>
     default: module.PlayableEarthLabPage,
   })),
 );
-const AvatarEvaluationLabPage = lazy(() =>
-  import("@/pages/avatar-evaluation-lab-page").then((module) => ({
-    default: module.AvatarEvaluationLabPage,
-  })),
-);
 const RouteDetailPage = lazy(() =>
   import("@/pages/route-detail-page").then((module) => ({
     default: module.RouteDetailPage,
@@ -33,6 +28,11 @@ const RouteDetailPage = lazy(() =>
 );
 const RoutesPage = lazy(() =>
   import("@/pages/routes-page").then((module) => ({ default: module.RoutesPage })),
+);
+const DesignSystemFoundationPage = lazy(() =>
+  import("@/pages/design-system-foundation-page").then((module) => ({
+    default: module.DesignSystemFoundationPage,
+  })),
 );
 
 canonicalizeLegacyQuestHash();
@@ -50,10 +50,7 @@ const router = createHashRouter([
       { path: APP_PATHS.replay.slice(1), element: <ReplayPage /> },
       { path: "replay/:routeSlug", element: <ReplayPage /> },
       { path: "lab/playable-earth/:routeSlug", element: <PlayableEarthLabPage /> },
-      {
-        path: "lab/avatar-evaluation/:routeSlug",
-        element: <AvatarEvaluationLabPage />,
-      },
+      { path: "lab/design-system", element: <DesignSystemFoundationPage /> },
       { path: APP_PATHS.admin.slice(1), element: <AdminPage /> },
       { path: "*", element: <Navigate to={APP_PATHS.atlas} replace /> },
     ],

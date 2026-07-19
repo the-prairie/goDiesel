@@ -13,7 +13,6 @@ export type ReplayEngineMode = "earth" | "atlas";
 
 export interface ReplayEngineMountOptions {
   container: HTMLElement;
-  avatarElement: HTMLElement;
   route: QuestRoute;
   onStatus: (status: ReplayStatus) => void;
 }

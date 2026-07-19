@@ -20,8 +20,12 @@ export function FinderForm({
   }
 
   return (
-    <form aria-label="Find a route" className="grid gap-5" onSubmit={submit}>
-      <Field label="Place">
+    <form
+      aria-label="Find a route"
+      className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(12rem,1.35fr)_minmax(8rem,0.7fr)_minmax(7rem,0.65fr)_minmax(8rem,0.7fr)_minmax(12rem,1.2fr)_auto] lg:items-end"
+      onSubmit={submit}
+    >
+      <Field label="Place" className="sm:col-span-2 lg:col-span-1">
         <Input
           required
           value={intent.place}
@@ -30,32 +34,30 @@ export function FinderForm({
         />
       </Field>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <SelectField
-          label="Activity"
-          value={intent.activity}
-          options={[
-            ["Run", "Run"],
-            ["Ride", "Ride"],
-          ]}
-          onChange={(value) =>
-            onChange({ ...intent, activity: value as FinderIntent["activity"] })
+      <SelectField
+        label="Activity"
+        value={intent.activity}
+        options={[
+          ["Run", "Run"],
+          ["Ride", "Ride"],
+        ]}
+        onChange={(value) =>
+          onChange({ ...intent, activity: value as FinderIntent["activity"] })
+        }
+      />
+      <Field label="Distance" suffix="km">
+        <Input
+          required
+          type="number"
+          min="1"
+          max="500"
+          step="0.5"
+          value={intent.distanceKm || ""}
+          onChange={(event) =>
+            onChange({ ...intent, distanceKm: Number(event.target.value) })
           }
         />
-        <Field label="Distance" suffix="km">
-          <Input
-            required
-            type="number"
-            min="1"
-            max="500"
-            step="0.5"
-            value={intent.distanceKm || ""}
-            onChange={(event) =>
-              onChange({ ...intent, distanceKm: Number(event.target.value) })
-            }
-          />
-        </Field>
-      </div>
+      </Field>
 
       <SelectField
         label="Terrain"
@@ -72,7 +74,7 @@ export function FinderForm({
         }
       />
 
-      <Field label="Vibe">
+      <Field label="Vibe" className="sm:col-span-2 lg:col-span-1">
         <Input
           value={intent.vibe}
           placeholder="Exploratory climbing, coastal, touring..."
@@ -80,7 +82,7 @@ export function FinderForm({
         />
       </Field>
 
-      <Button type="submit" className="w-full sm:w-fit">
+      <Button type="submit" className="w-full sm:col-span-2 lg:col-span-1 lg:w-fit">
         <Search aria-hidden="true" />
         Find curated routes
       </Button>
@@ -91,14 +93,16 @@ export function FinderForm({
 function Field({
   label,
   suffix,
+  className,
   children,
 }: {
   label: string;
   suffix?: string;
+  className?: string;
   children: React.ReactElement;
 }) {
   return (
-    <label className="grid min-w-0 gap-1.5 text-sm font-medium">
+    <label className={`grid min-w-0 gap-1.5 text-control font-medium ${className ?? ""}`}>
       <span className="flex items-center justify-between gap-2">
         {label}
         {suffix ? <span className="text-xs text-muted-foreground">{suffix}</span> : null}
@@ -120,11 +124,11 @@ function SelectField({
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="grid min-w-0 gap-1.5 text-sm font-medium">
+    <label className="grid min-w-0 gap-1.5 text-control font-medium">
       {label}
       <select
         value={value}
-        className="h-10 min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors hover:border-primary/50 focus-visible:ring-2 focus-visible:ring-ring"
+        className="h-11 min-w-0 rounded-sm border border-input bg-surface-raised px-3 text-control text-ink outline-none transition-colors hover:border-forest/50 focus-visible:ring-2 focus-visible:ring-ring"
         onChange={(event) => onChange(event.target.value)}
       >
         {options.map(([optionValue, optionLabel]) => (

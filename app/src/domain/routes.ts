@@ -11,6 +11,39 @@ export interface RoutePoint {
   lng: number;
   elev: number;
   d: number;
+  elapsedS?: number;
+}
+
+export interface RouteTemporalProvenance {
+  status: "recorded" | "unavailable";
+  startTimeUtc?: string;
+  elapsedTimeS?: number;
+  timeZone?: string;
+}
+
+export type RouteDiscontinuityKind =
+  | "segment_boundary"
+  | "recording_gap"
+  | "missing_position_records";
+
+export type RouteDiscontinuitySource =
+  | "recorded_track_segment"
+  | "recorded_timestamps"
+  | "recorded_position_absence";
+
+export interface RouteDiscontinuityEvidence {
+  kind: RouteDiscontinuityKind;
+  source: RouteDiscontinuitySource;
+  startD: number;
+  endD: number;
+  elapsedTimeS?: number;
+  missingRecordCount?: number;
+}
+
+export interface RouteProvenance {
+  temporal: RouteTemporalProvenance;
+  track: { segmentCount: number };
+  discontinuities: RouteDiscontinuityEvidence[];
 }
 
 export interface ReplayMetadata {
@@ -67,6 +100,7 @@ export interface QuestRoute extends Omit<RouteSummary, "trace" | "guide"> {
   route: RoutePoint[];
   midIdx: number;
   curation: RouteCuration;
+  provenance: RouteProvenance;
 }
 
 export interface GeneratedQuestRoute {
@@ -95,6 +129,7 @@ export interface GeneratedQuestRoute {
   replay?: unknown;
   curation?: unknown;
   guide_preview?: unknown;
+  provenance?: unknown;
 }
 
 const curationFields = [
@@ -237,16 +272,20 @@ function parsedRoutePoints(value: unknown) {
 
   const points: RoutePoint[] = [];
   let previousDistance = -1;
+  let previousElapsed = -1;
   for (const point of value) {
-    const source = Array.isArray(point)
+    const source: Record<string, unknown> | undefined = Array.isArray(point)
       ? { lat: point[0], lng: point[1], elev: point[2], d: point[3] }
-      : point && typeof point === "object"
+      : point !== null && typeof point === "object"
         ? (point as Record<string, unknown>)
-        : null;
+        : undefined;
     const lat = source ? numberValue(source.lat, Number.NaN) : Number.NaN;
     const lng = source ? numberValue(source.lng, Number.NaN) : Number.NaN;
     const elev = source ? numberValue(source.elev, Number.NaN) : Number.NaN;
     const d = source ? numberValue(source.d, Number.NaN) : Number.NaN;
+    const rawElapsed = source?.elapsed_s;
+    const elapsedS =
+      rawElapsed === undefined ? undefined : numberValue(rawElapsed, Number.NaN);
 
     if (
       !Number.isFinite(lat) ||
@@ -258,15 +297,163 @@ function parsedRoutePoints(value: unknown) {
       lng < -180 ||
       lng > 180 ||
       d < 0 ||
-      d < previousDistance
+      d < previousDistance ||
+      (elapsedS !== undefined &&
+        (!Number.isFinite(elapsedS) || elapsedS < 0 || elapsedS < previousElapsed))
     ) {
       return { points: [] as RoutePoint[], status: "invalid" as const };
     }
-    points.push({ lat, lng, elev, d });
+    points.push({ lat, lng, elev, d, ...(elapsedS !== undefined ? { elapsedS } : {}) });
     previousDistance = d;
+    if (elapsedS !== undefined) previousElapsed = elapsedS;
   }
 
   return { points, status: "ready" as const };
+}
+
+function validatedProvenance(
+  value: unknown,
+  route: RoutePoint[],
+): RouteProvenance {
+  if (value === undefined) {
+    return {
+      temporal: { status: "unavailable" },
+      track: { segmentCount: route.length > 0 ? 1 : 0 },
+      discontinuities: [],
+    };
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("provenance must be an object");
+  }
+  const source = value as Record<string, unknown>;
+  const temporalSource = source.temporal;
+  if (!temporalSource || typeof temporalSource !== "object" || Array.isArray(temporalSource)) {
+    throw new Error("provenance.temporal must be an object");
+  }
+  const temporalRecord = temporalSource as Record<string, unknown>;
+  let temporal: RouteTemporalProvenance;
+  if (temporalRecord.status === "unavailable") {
+    temporal = { status: "unavailable" };
+  } else if (temporalRecord.status === "recorded") {
+    const startTimeUtc = temporalRecord.start_time_utc;
+    const elapsedTimeS = temporalRecord.elapsed_time_s;
+    const timeZone = temporalRecord.time_zone;
+    if (
+      typeof startTimeUtc !== "string" ||
+      !startTimeUtc.endsWith("Z") ||
+      !Number.isFinite(Date.parse(startTimeUtc))
+    ) {
+      throw new Error("recorded provenance requires a UTC start timestamp");
+    }
+    if (
+      typeof elapsedTimeS !== "number" ||
+      !Number.isFinite(elapsedTimeS) ||
+      elapsedTimeS < 0
+    ) {
+      throw new Error("recorded provenance requires non-negative elapsed time");
+    }
+    if (timeZone !== undefined) {
+      if (typeof timeZone !== "string" || !validTimeZone(timeZone)) {
+        throw new Error("recorded provenance timezone must be a valid IANA timezone");
+      }
+    }
+    temporal = {
+      status: "recorded",
+      startTimeUtc,
+      elapsedTimeS,
+      ...(typeof timeZone === "string" ? { timeZone } : {}),
+    };
+  } else {
+    throw new Error("provenance.temporal.status must be recorded or unavailable");
+  }
+
+  const trackSource = source.track;
+  if (!trackSource || typeof trackSource !== "object" || Array.isArray(trackSource)) {
+    throw new Error("provenance.track must be an object");
+  }
+  const segmentCount = (trackSource as Record<string, unknown>).segment_count;
+  if (
+    typeof segmentCount !== "number" ||
+    !Number.isInteger(segmentCount) ||
+    segmentCount < 0
+  ) {
+    throw new Error("provenance.track.segment_count must be a non-negative integer");
+  }
+
+  if (!Array.isArray(source.discontinuities)) {
+    throw new Error("provenance.discontinuities must be an array");
+  }
+  const totalDistance = route.at(-1)?.d ?? 0;
+  const expectedSources: Record<RouteDiscontinuityKind, RouteDiscontinuitySource> = {
+    segment_boundary: "recorded_track_segment",
+    recording_gap: "recorded_timestamps",
+    missing_position_records: "recorded_position_absence",
+  };
+  const discontinuities = source.discontinuities.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error("provenance discontinuity must be an object");
+    }
+    const record = item as Record<string, unknown>;
+    const kind = record.kind as RouteDiscontinuityKind;
+    const evidenceSource = record.source as RouteDiscontinuitySource;
+    if (!(kind in expectedSources) || expectedSources[kind] !== evidenceSource) {
+      throw new Error("provenance discontinuity kind and source do not agree");
+    }
+    const startD = record.start_d;
+    const endD = record.end_d;
+    if (
+      typeof startD !== "number" ||
+      !Number.isFinite(startD) ||
+      typeof endD !== "number" ||
+      !Number.isFinite(endD) ||
+      startD < 0 ||
+      endD < startD
+    ) {
+      throw new Error("provenance discontinuity distance is invalid");
+    }
+    if (route.length > 0 && endD > totalDistance) {
+      throw new Error("provenance discontinuity exceeds route distance");
+    }
+    const elapsedTimeS = record.elapsed_time_s;
+    if (
+      elapsedTimeS !== undefined &&
+      (typeof elapsedTimeS !== "number" || !Number.isFinite(elapsedTimeS) || elapsedTimeS < 0)
+    ) {
+      throw new Error("provenance discontinuity elapsed time is invalid");
+    }
+    const missingRecordCount = record.missing_record_count;
+    if (
+      missingRecordCount !== undefined &&
+      (typeof missingRecordCount !== "number" ||
+        !Number.isInteger(missingRecordCount) ||
+        missingRecordCount < 1)
+    ) {
+      throw new Error("provenance missing record count is invalid");
+    }
+    return {
+      kind,
+      source: evidenceSource,
+      startD,
+      endD,
+      ...(elapsedTimeS !== undefined ? { elapsedTimeS } : {}),
+      ...(missingRecordCount !== undefined ? { missingRecordCount } : {}),
+    };
+  });
+
+  return {
+    temporal,
+    track: { segmentCount },
+    discontinuities,
+  };
+}
+
+function validTimeZone(timeZone: string) {
+  try {
+    new Intl.DateTimeFormat("en", { timeZone }).format(0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function replayMetadata(
@@ -468,6 +655,7 @@ export function parseRouteDetail(value: unknown): QuestRoute {
     ...validatedDetailFields(input, slug, geometryStatus),
     route,
     midIdx,
+    provenance: validatedProvenance(input.provenance, route),
   };
 }
 

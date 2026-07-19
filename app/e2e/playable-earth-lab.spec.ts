@@ -83,16 +83,12 @@ async function installDeterministicEarthRenderer(
               else context.lineTo(x, y);
             });
             context.stroke();
-            context.fillStyle = "#ffffff";
-            context.beginPath();
-            context.arc(60, 250, 12, 0, Math.PI * 2);
-            context.fill();
           }
           options.container.appendChild(canvas);
           options.onStatus({
             state: "ready",
             title: "Playable Earth ready",
-            message: "Route thread and starting position are visible.",
+            message: "The route thread is ready to explore.",
           });
           options.onGroundingChange?.(
             groundingState === "sampled"
@@ -373,9 +369,12 @@ for (const width of [320, 430]) {
     const context = page.getByTestId("playable-context");
     const controls = page.getByTestId("playable-controls");
     await expect(lab).toHaveAttribute("data-state", "ready");
-    await expect(context).toHaveAttribute("data-mobile-expanded", "true");
-    await expect(page.getByTestId("playable-context-details")).toBeVisible();
+    await expect(context).toHaveAttribute("data-ui", "route-context-hud");
+    await expect(context).toHaveAttribute("data-context-state", "compact");
+    await expect(context).toHaveAttribute("data-mobile-expanded", "false");
+    await expect(page.getByTestId("playable-context-details")).toBeHidden();
     await expect(page.getByTestId("playable-secondary-controls")).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Route guide" })).toBeVisible();
 
     for (const label of ["Play route", "Take control", "Show more controls"]) {
       const box = await page.getByRole("button", { name: label }).boundingBox();
@@ -383,7 +382,12 @@ for (const width of [320, 430]) {
       expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
     }
 
+    await page.getByRole("button", { name: "Show route details" }).click();
+    await expect(context).toHaveAttribute("data-context-state", "expanded");
+    await expect(page.getByTestId("playable-context-details")).toBeVisible();
+
     await page.getByRole("button", { name: "Play route" }).click();
+    await expect(context).toHaveAttribute("data-context-state", "compact");
     await expect(context).toHaveAttribute("data-mobile-expanded", "false");
     await expect(page.getByTestId("playable-context-details")).toBeHidden();
 

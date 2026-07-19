@@ -1,13 +1,7 @@
-import { Menu } from "lucide-react";
 import { Suspense } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 
-import { AppSidebar } from "@/components/app-sidebar";
-import {
-  SidebarInset,
-  SidebarProvider,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
+import { AtlasSpine } from "@/components/atlas-spine";
 import { appSectionForPath } from "@/navigation";
 import { cn } from "@/lib/utils";
 
@@ -16,40 +10,51 @@ export function AppShell() {
   const section = appSectionForPath(location.pathname);
   const isAtlas = section.id === "atlas";
   const isReplayLab = location.pathname.startsWith("/lab/");
-  const isImmersive = isAtlas || isReplayLab || section.id === "replay";
+  const isRouteDetail = /^\/routes\/[^/]+$/.test(location.pathname);
+  const isRoutesLibrary = section.id === "routes" && !isRouteDetail;
+  const isWideUtility = isRoutesLibrary || section.id === "admin";
+  const isImmersive =
+    isAtlas ||
+    isReplayLab ||
+    isRouteDetail ||
+    section.id === "finder" ||
+    section.id === "replay";
+  const isUtility =
+    isRoutesLibrary || section.id === "admin";
 
   return (
-    <SidebarProvider>
-      <AppSidebar />
-      <SidebarInset className="min-w-0 bg-background text-foreground">
-        <header
-          data-testid="app-header"
-          className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/92 px-3 backdrop-blur sm:px-4 md:px-5"
-        >
-          <SidebarTrigger
-            aria-label="Open navigation"
-            className="size-9 border border-border"
+    <div className="weathered-atlas field-guide-theme relative flex min-h-dvh bg-background text-foreground">
+      <AtlasSpine />
+      <div className="flex min-h-dvh min-w-0 flex-1 flex-col pb-[var(--mobile-navigation-height)] md:pb-0 md:pl-[var(--spine-rail-width)] lg:pl-[var(--spine-width)]">
+        {isUtility ? (
+          <header
+            data-testid="app-header"
+            className="sticky top-0 z-[var(--z-map-controls)] flex h-14 items-center gap-3 border-b border-line bg-surface/94 px-4 backdrop-blur sm:px-6"
           >
-            <Menu className="size-4" aria-hidden="true" />
-          </SidebarTrigger>
-          <div className="min-w-0 flex-1">
-            <div data-testid="app-page-title" className="truncate text-sm font-semibold">
-              {section.label}
+            <div className="min-w-0 flex-1">
+              <div
+                data-testid="app-page-title"
+                className="truncate text-control font-semibold text-ink"
+              >
+                {section.label}
+              </div>
+              <div
+                data-testid="global-product-subtitle"
+                className="hidden truncate text-caption text-ink-muted sm:block"
+              >
+                Relive where you have been. Discover where to go next.
+              </div>
             </div>
-            <div
-              data-testid="global-product-subtitle"
-              className="hidden truncate text-xs text-muted-foreground sm:block"
-            >
-              Relive where you have been. Discover where to go next.
-            </div>
-          </div>
-        </header>
-        <div
+          </header>
+        ) : null}
+        <main
           className={cn(
-            "grid w-full flex-1",
+            "w-full flex-1",
             isImmersive
-              ? "min-h-[calc(100dvh-3.5rem)] overflow-hidden"
-              : "mx-auto max-w-7xl gap-6 p-4 sm:p-6",
+              ? "min-h-0 overflow-hidden"
+              : isWideUtility
+                ? "grid gap-6 p-4 sm:p-6"
+                : "mx-auto grid max-w-7xl gap-6 p-4 sm:p-6",
           )}
         >
           <Suspense
@@ -65,8 +70,8 @@ export function AppShell() {
           >
             <Outlet />
           </Suspense>
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
+        </main>
+      </div>
+    </div>
   );
 }

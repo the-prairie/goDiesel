@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import {
   AdditiveBlending,
   BackSide,
@@ -37,6 +37,12 @@ interface AtlasGlobeProps {
   className?: string;
 }
 
+export interface AtlasGlobeHandle {
+  zoomIn: () => void;
+  zoomOut: () => void;
+  resetView: () => void;
+}
+
 interface GlobeRefs {
   renderer?: WebGLRenderer;
   scene?: Scene;
@@ -62,6 +68,8 @@ interface GlobeRefs {
     rotX: number;
     rotY: number;
   };
+  touches: Map<number, { x: number; y: number }>;
+  pinch?: { distance: number; cameraDistance: number };
 }
 
 const EARTH_TEXTURE = `${import.meta.env.BASE_URL}assets/earth-atmos-2048.jpg`;
@@ -121,12 +129,10 @@ function makeGlobeHeatLine(route: RouteSummary, regionIndex: number, density: nu
   const points = routeToGlobeHeatPoints(route);
   if (points.length < 2) return null;
 
-  const ride = route.type === "Ride";
-  const best = route.replay.bestInEarth;
-  const baseOpacity = Math.min(0.86, 0.34 + density * 0.42 + (best ? 0.08 : 0));
+  const baseOpacity = Math.min(0.88, 0.3 + density * 0.5);
   const curve = new CatmullRomCurve3(points);
   const material = new MeshBasicMaterial({
-    color: best ? 0xe8d49a : ride ? 0xff6a3d : 0x00d7ff,
+    color: 0x315fb4,
     transparent: true,
     opacity: baseOpacity,
     blending: AdditiveBlending,
@@ -136,7 +142,7 @@ function makeGlobeHeatLine(route: RouteSummary, regionIndex: number, density: nu
     new TubeGeometry(
       curve,
       Math.min(260, Math.max(16, points.length * 2)),
-      best ? 0.0075 : 0.0055,
+      0.0065 + density * 0.0035,
       5,
       false,
     ),
@@ -164,13 +170,11 @@ function disposeObject(object: Object3D) {
   });
 }
 
-export function AtlasGlobe({
-  regions,
-  selectedRegion,
-  onSelectRegion,
-  onOpenRoute,
-  className,
-}: AtlasGlobeProps) {
+export const AtlasGlobe = forwardRef<AtlasGlobeHandle, AtlasGlobeProps>(
+  function AtlasGlobe(
+    { regions, selectedRegion, onSelectRegion, onOpenRoute, className },
+    forwardedRef,
+  ) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const labelRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const selectedRegionRef = useRef<RouteRegion | undefined>(selectedRegion);
@@ -196,7 +200,42 @@ export function AtlasGlobe({
       rotX: 0,
       rotY: 0,
     },
+    touches: new Map(),
   });
+
+  function syncCameraDataset() {
+    const canvas = canvasRef.current;
+    if (canvas) canvas.dataset.cameraTarget = refs.current.cameraDistance.toFixed(3);
+  }
+
+  useImperativeHandle(forwardedRef, () => ({
+    zoomIn() {
+      refs.current.cameraDistance = MathUtils.clamp(
+        refs.current.cameraDistance - 0.65,
+        3.2,
+        9.2,
+      );
+      syncCameraDataset();
+    },
+    zoomOut() {
+      refs.current.cameraDistance = MathUtils.clamp(
+        refs.current.cameraDistance + 0.65,
+        3.2,
+        9.2,
+      );
+      syncCameraDataset();
+    },
+    resetView() {
+      refs.current.targetRotation.set(DEFAULT_ROTATION.x, DEFAULT_ROTATION.y);
+      refs.current.cameraDistance = DEFAULT_CAMERA_DISTANCE;
+      const canvas = canvasRef.current;
+      if (canvas) {
+        canvas.dataset.targetRotationX = DEFAULT_ROTATION.x.toFixed(4);
+        canvas.dataset.targetRotationY = DEFAULT_ROTATION.y.toFixed(4);
+      }
+      syncCameraDataset();
+    },
+  }));
 
   useEffect(() => {
     selectedRegionRef.current = selectedRegion;
@@ -240,7 +279,7 @@ export function AtlasGlobe({
         texture.offset.x = 0.25;
         const material = globe.material as MeshBasicMaterial;
         material.map = texture;
-        material.color.set(0x9fb7ac);
+        material.color.set(0xdce4dc);
         material.needsUpdate = true;
         canvasEl.dataset.textureStatus = "loaded";
       },
@@ -255,7 +294,7 @@ export function AtlasGlobe({
       new Mesh(
         new SphereGeometry(2.52, 96, 64),
         new MeshBasicMaterial({
-          color: 0x0b4e83,
+          color: 0x87a8ba,
           transparent: true,
           opacity: 0.12,
           side: BackSide,
@@ -283,9 +322,9 @@ export function AtlasGlobe({
       });
 
       const anchor = new Mesh(
-        new SphereGeometry(0.085, 12, 8),
+        new SphereGeometry(0.026, 12, 8),
         new MeshBasicMaterial({
-          color: 0x00f19f,
+          color: 0xdf674b,
           transparent: true,
           opacity: 0,
           depthTest: false,
@@ -302,6 +341,7 @@ export function AtlasGlobe({
     state.renderer = renderer;
     state.root = root;
     canvasEl.dataset.heatLines = String(state.heatLines.length);
+    canvasEl.dataset.routePalette = "cobalt";
 
     function syncInteractionState() {
       canvasEl.dataset.targetRotationX = state.targetRotation.x.toFixed(4);
@@ -425,6 +465,12 @@ export function AtlasGlobe({
             : line.userData.baseOpacity;
         material.opacity += (target - material.opacity) * 0.08;
       });
+      state.anchors.forEach((anchor, index) => {
+        const material = anchor.material as MeshBasicMaterial;
+        const selected = selectedRegionRef.current?.name === regions[index]?.name;
+        const target = selected ? 1 : 0;
+        material.opacity += (target - material.opacity) * 0.12;
+      });
       updateLabels();
       renderer.render(scene, camera);
       state.frame = requestAnimationFrame(animate);
@@ -478,7 +524,21 @@ export function AtlasGlobe({
 
     function handlePointerDown(event: PointerEvent) {
       event.preventDefault();
-      beginDrag(event.clientX, event.clientY);
+      if (event.pointerType === "touch") {
+        state.touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        if (state.touches.size === 2) {
+          const [first, second] = [...state.touches.values()];
+          state.pinch = {
+            distance: Math.hypot(second.x - first.x, second.y - first.y),
+            cameraDistance: state.cameraDistance,
+          };
+          state.drag.active = false;
+        } else {
+          beginDrag(event.clientX, event.clientY);
+        }
+      } else {
+        beginDrag(event.clientX, event.clientY);
+      }
       try {
         canvasEl.setPointerCapture?.(event.pointerId);
       } catch {
@@ -488,6 +548,21 @@ export function AtlasGlobe({
     }
 
     function handlePointerMove(event: PointerEvent) {
+      if (event.pointerType === "touch" && state.touches.has(event.pointerId)) {
+        state.touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        if (state.touches.size >= 2 && state.pinch) {
+          const [first, second] = [...state.touches.values()];
+          const distance = Math.hypot(second.x - first.x, second.y - first.y);
+          state.cameraDistance = MathUtils.clamp(
+            state.pinch.cameraDistance - (distance - state.pinch.distance) * 0.012,
+            3.2,
+            9.2,
+          );
+          syncInteractionState();
+          event.preventDefault();
+          return;
+        }
+      }
       if (updateDrag(event.clientX, event.clientY)) {
         event.preventDefault();
         canvasEl.style.cursor = "grabbing";
@@ -501,7 +576,15 @@ export function AtlasGlobe({
         canvasEl.releasePointerCapture(event.pointerId);
       }
       canvasEl.style.cursor = "grab";
-      endDrag();
+      if (event.pointerType === "touch") {
+        state.touches.delete(event.pointerId);
+        state.pinch = undefined;
+        const remaining = [...state.touches.values()][0];
+        if (remaining) beginDrag(remaining.x, remaining.y);
+        else endDrag();
+      } else {
+        endDrag();
+      }
     }
 
     function handleClick(event: MouseEvent) {
@@ -610,7 +693,7 @@ export function AtlasGlobe({
   return (
     <div
       className={cn(
-        "relative min-h-[520px] overflow-hidden rounded-md border border-border bg-[#02070a]",
+        "relative min-h-[520px] overflow-hidden rounded-none border-0 bg-[#02070a]",
         className,
       )}
     >
@@ -633,14 +716,15 @@ export function AtlasGlobe({
             aria-label={`Select ${region.name} on globe`}
             onClick={() => onSelectRegion(region)}
             className={cn(
-              "pointer-events-auto absolute hidden -translate-x-1/2 -translate-y-1/2 items-center gap-2 whitespace-nowrap rounded-md border border-border bg-card/80 px-3 py-1.5 text-[11px] font-semibold uppercase text-muted-foreground shadow-xl backdrop-blur transition-colors hover:border-primary hover:text-foreground data-[active=true]:border-primary data-[active=true]:text-primary",
+              "pointer-events-auto absolute hidden -translate-x-1/2 -translate-y-1/2 items-center gap-2 whitespace-nowrap rounded-sm border border-white/30 bg-[#f6f2e8]/90 px-3 py-1.5 text-[11px] font-semibold uppercase text-[#24322d] shadow-lg backdrop-blur transition-colors hover:border-[#315fb4] hover:text-[#183a76] data-[active=true]:border-[#df674b] data-[active=true]:text-[#9b321f]",
             )}
           >
-            <span className="size-2 rounded-full bg-primary shadow-[0_0_18px_hsl(var(--primary))]" />
+            <span className="size-1.5 rounded-full bg-[#df674b]" />
             {region.name} · {region.routes.length}
           </button>
         ))}
       </div>
     </div>
   );
-}
+  },
+);

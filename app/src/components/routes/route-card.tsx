@@ -1,10 +1,8 @@
 import {
-  ArrowUpRight,
+  ArrowRight,
   Bike,
   CalendarClock,
-  CalendarDays,
-  MapPin,
-  Route as RouteIcon,
+  Footprints,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -20,132 +18,156 @@ export function RouteCard({
   route: RouteSummary;
   onOpen?: () => void;
 }) {
-  if (isPlannedRoute(route)) {
-    return (
-      <article
-        aria-label={`Planned route ${route.region}`}
-        className="grid min-h-[22rem] min-w-0 overflow-hidden rounded-md border border-dashed border-primary/60 bg-card"
-      >
-        <RouteThread route={route} />
-        <div className="grid content-start gap-4 p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 text-xs text-primary">
-                <CalendarClock className="size-3.5" aria-hidden="true" />
-                <span>Planned</span>
-              </div>
-              <h2 className="mt-1 truncate text-base font-semibold text-foreground">
-                {route.name}
-              </h2>
-              <p className="mt-1 truncate text-xs text-muted-foreground">{route.region}</p>
-            </div>
-          </div>
-
-          <p className="line-clamp-3 min-h-[3.75rem] text-sm leading-5 text-muted-foreground">
-            {route.planning.sourceLabel}. Saved for a future {route.type.toLowerCase()}.
-          </p>
-
-          <div className="mt-auto flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
-            <span className="inline-flex items-center gap-1.5">
-              {route.type === "Ride" ? (
-                <Bike className="size-3.5" aria-hidden="true" />
-              ) : (
-                <RouteIcon className="size-3.5" aria-hidden="true" />
-              )}
-              {route.type}
-            </span>
-            <span>{route.distanceKm.toFixed(1)} km</span>
-            <span>{route.elevationGainM.toLocaleString()} m up</span>
-          </div>
-
-          <div className="flex items-center justify-between gap-3 border-t border-border pt-3 text-xs">
-            <span className="text-primary">Future route</span>
-            <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-              <CalendarDays className="size-3.5" aria-hidden="true" />
-              Saved {route.date}
-            </span>
-          </div>
-
-          <Link
-            to={APP_PATHS.finder}
-            className="text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            Edit in Finder
-          </Link>
-        </div>
-      </article>
-    );
-  }
-
-  const status = route.guide.reviewStatus;
-  const reviewed = status === "reviewed" || status === "published";
+  const planned = isPlannedRoute(route);
+  const reviewed =
+    route.guide.reviewStatus === "reviewed" || route.guide.reviewStatus === "published";
+  const destination = planned ? APP_PATHS.finder : routeDetailPath(route.slug);
+  const accessibleLabel = planned
+    ? `Edit planned ${route.name} route in Finder`
+    : `Open ${route.name} route from ${route.date || "an unknown date"}, ${route.distanceKm.toFixed(1)} km`;
 
   return (
-    <article className="min-w-0">
+    <article
+      aria-label={planned ? `Planned route ${route.region}` : undefined}
+      className="min-w-0 border-b border-line bg-surface transition-colors hover:bg-surface-raised"
+    >
       <Link
-        to={routeDetailPath(route.slug)}
-        onClick={onOpen}
-        aria-label={`Open ${route.name} route from ${route.date || "an unknown date"}, ${route.distanceKm.toFixed(1)} km`}
-        className="group grid min-h-[22rem] overflow-hidden rounded-md border border-border bg-card text-left outline-none transition-colors hover:border-primary/60 focus-visible:ring-2 focus-visible:ring-ring"
+        to={destination}
+        onClick={planned ? undefined : onOpen}
+        aria-label={accessibleLabel}
+        className="group grid min-w-0 gap-0 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:grid-cols-[minmax(20rem,2.2fr)_7rem_5.5rem_6rem_6.5rem_minmax(9rem,1fr)_7.5rem_4.5rem]"
       >
-        <RouteThread route={route} />
-        <div className="grid content-start gap-4 p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <MapPin className="size-3.5" aria-hidden="true" />
-                <span className="truncate">{route.region}</span>
-              </div>
-              <h2 className="mt-1 truncate text-base font-semibold text-foreground">
-                {route.name}
-              </h2>
-              {route.subtitle ? (
-                <p className="mt-1 truncate text-xs text-muted-foreground">
-                  {route.subtitle}
-                </p>
-              ) : null}
-            </div>
-            <ArrowUpRight
-              className="mt-0.5 size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary"
-              aria-hidden="true"
-            />
+        <div className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] border-line md:grid-cols-[9.5rem_minmax(0,1fr)] md:border-r">
+          <RouteThread
+            route={route}
+            className="h-full min-h-28 border-b-0 border-r md:min-h-32"
+          />
+          <div className="grid min-w-0 content-center gap-1.5 px-3 py-3 md:px-4">
+            <p className="truncate text-micro font-semibold uppercase text-ink-muted">
+              {route.region}
+            </p>
+            <h2 className="truncate font-editorial text-xl font-semibold leading-tight text-ink md:text-2xl">
+              {route.name}
+            </h2>
+            {route.subtitle ? (
+              <p className="line-clamp-2 text-caption italic text-ink-secondary">
+                {route.subtitle}
+              </p>
+            ) : null}
+            <span className="mt-1 w-fit border border-line bg-surface-muted px-1.5 py-0.5 text-micro uppercase text-ink-secondary">
+              {route.theme}
+            </span>
+            {planned ? (
+              <span className="line-clamp-1 text-micro text-ink-muted">
+                {route.planning.sourceLabel}
+              </span>
+            ) : null}
           </div>
+        </div>
 
-          <p className="line-clamp-3 min-h-[3.75rem] text-sm leading-5 text-muted-foreground">
+        <LedgerCell label="Date" className="hidden md:flex">
+          {route.date || "Unknown"}
+        </LedgerCell>
+        <LedgerCell label="Activity" className="hidden md:flex">
+          <span className="inline-flex items-center gap-2">
+            {route.type === "Ride" ? (
+              <Bike className="size-4 text-route" aria-hidden="true" />
+            ) : (
+              <Footprints className="size-4 text-route" aria-hidden="true" />
+            )}
+            {route.type}
+          </span>
+        </LedgerCell>
+        <LedgerCell label="Distance" className="hidden md:flex">
+          {route.distanceKm.toFixed(1)} km
+        </LedgerCell>
+        <LedgerCell label="Climb" className="hidden md:flex">
+          {route.elevationGainM.toLocaleString()} m up
+        </LedgerCell>
+        <LedgerCell label="Vibe" className="hidden md:flex">
+          <span className="line-clamp-3 italic">
             {reviewed && route.guide.vibe
               ? route.guide.vibe
-              : "Editorial vibe has not been reviewed for this route."}
-          </p>
+              : "Editorial vibe awaiting review"}
+          </span>
+        </LedgerCell>
+        <LedgerCell label="Lifecycle" className="hidden md:flex">
+          <span className="grid gap-1">
+            <span className="inline-flex items-center gap-2">
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "size-1.5 rounded-full",
+                  planned ? "bg-warning" : "bg-route",
+                )}
+              />
+              {capitalize(route.lifecycle)}
+            </span>
+            <span className="text-micro text-ink-muted">
+              {planned ? "Future route" : reviewed ? "Reviewed guide" : "Draft guide"}
+            </span>
+          </span>
+        </LedgerCell>
+        <div className="hidden items-center justify-center text-sm font-medium text-forest md:flex">
+          <span className="sr-only">Action</span>
+          <ArrowRight
+            className="size-4 transition-transform group-hover:translate-x-1"
+            aria-hidden="true"
+          />
+        </div>
 
-          <div className="mt-auto flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
-            <span className="inline-flex items-center gap-1.5">
-              {route.type === "Ride" ? (
-                <Bike className="size-3.5" aria-hidden="true" />
-              ) : (
-                <RouteIcon className="size-3.5" aria-hidden="true" />
-              )}
-              {route.type}
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2 border-t border-line px-3 py-3 text-caption md:hidden">
+          <MobileFact label="Activity" value={route.type} />
+          <MobileFact label="Distance" value={`${route.distanceKm.toFixed(1)} km`} />
+          <MobileFact label="Climb" value={`${route.elevationGainM.toLocaleString()} m up`} />
+          <MobileFact
+            label="Lifecycle"
+            value={`${capitalize(route.lifecycle)} · ${planned ? "Future route" : reviewed ? "Reviewed guide" : "Draft guide"}`}
+          />
+          <div className="col-span-2 flex items-start justify-between gap-4 border-t border-line pt-2">
+            <span className="line-clamp-2 italic text-ink-secondary">
+              {reviewed && route.guide.vibe
+                ? route.guide.vibe
+                : planned
+                  ? "Saved for a future day"
+                  : "Editorial vibe awaiting review"}
             </span>
-            <span>{route.distanceKm.toFixed(1)} km</span>
-            <span>{route.elevationGainM.toLocaleString()} m up</span>
-          </div>
-
-          <div className="flex items-center justify-between gap-3 border-t border-border pt-3 text-xs">
-            <span className="flex flex-wrap items-center gap-1.5">
-              <span className="text-foreground">{capitalize(route.lifecycle)}</span>
-              <span aria-hidden="true" className="text-muted-foreground">·</span>
-              <span className={reviewed ? "font-medium text-primary" : "text-muted-foreground"}>
-                {reviewed ? `${capitalize(status)} guide` : "Draft guide"}
-              </span>
-            </span>
-            <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-              <CalendarDays className="size-3.5" aria-hidden="true" />
-              {route.date || "Date unknown"}
-            </span>
+            <ArrowRight className="mt-0.5 size-4 shrink-0 text-forest" aria-hidden="true" />
           </div>
         </div>
       </Link>
     </article>
+  );
+}
+
+function LedgerCell({
+  label,
+  className,
+  children,
+}: {
+  label: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "min-w-0 items-center border-r border-line px-3 py-4 text-caption text-ink-secondary",
+        className,
+      )}
+    >
+      <span className="sr-only">{label}: </span>
+      {children}
+    </div>
+  );
+}
+
+function MobileFact({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="min-w-0">
+      <span className="text-micro uppercase text-ink-muted">{label}</span>
+      <span className="mt-0.5 block truncate font-medium text-ink">{value}</span>
+    </span>
   );
 }
 
@@ -161,11 +183,11 @@ export function RouteThread({
   return (
     <div
       className={cn(
-        "relative h-32 overflow-hidden border-b border-border bg-[radial-gradient(circle_at_50%_50%,hsl(var(--accent)),hsl(var(--background))_72%)]",
+        "relative h-32 overflow-hidden border-b border-line bg-surface-muted",
         className,
       )}
     >
-      <div className="absolute inset-0 opacity-30 [background-image:linear-gradient(hsl(var(--border))_1px,transparent_1px),linear-gradient(90deg,hsl(var(--border))_1px,transparent_1px)] [background-size:28px_28px]" />
+      <div className="absolute inset-0 opacity-45 [background-image:linear-gradient(var(--line)_1px,transparent_1px),linear-gradient(90deg,var(--line)_1px,transparent_1px)] [background-size:24px_24px]" />
       {points ? (
         <svg
           viewBox="0 0 320 128"
@@ -177,21 +199,33 @@ export function RouteThread({
           <polyline
             points={points}
             fill="none"
-            stroke="hsl(var(--primary))"
-            strokeWidth="3"
+            stroke="var(--route-halo)"
+            strokeWidth="6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+          <polyline
+            points={points}
+            fill="none"
+            stroke="var(--route)"
+            strokeWidth="2.5"
             strokeLinecap="round"
             strokeLinejoin="round"
             vectorEffect="non-scaling-stroke"
           />
         </svg>
       ) : (
-        <div className="absolute inset-0 grid place-items-center text-xs text-muted-foreground">
+        <div className="absolute inset-0 grid place-items-center px-2 text-center text-micro text-ink-muted">
           Route trace unavailable
         </div>
       )}
-      <span className="absolute bottom-3 left-3 text-xs font-medium text-primary">
-        {route.theme}
-      </span>
+      {isPlannedRoute(route) ? (
+        <CalendarClock
+          className="absolute bottom-2 right-2 size-4 text-warning"
+          aria-label="Planned"
+        />
+      ) : null}
     </div>
   );
 }

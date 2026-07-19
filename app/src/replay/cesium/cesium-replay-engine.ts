@@ -6,18 +6,13 @@ import {
   Color,
   ConstantPositionProperty,
   Entity,
-  HeadingPitchRoll,
   HeadingPitchRange,
-  Matrix4,
-  Model,
-  ModelAnimationLoop,
   PolylineGlowMaterialProperty,
-  SceneTransforms,
-  Transforms,
   Viewer,
 } from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 
+import { ROUTE_THREAD_STYLE } from "@/domain/route-thread-style";
 import {
   advancePlayableEarthGrounding,
   initialPlayableEarthGrounding,
@@ -39,6 +34,10 @@ import {
   type ReplayCameraClearanceState,
   type ReplayCameraSurfaceObservation,
 } from "@/replay/cesium/replay-camera-clearance";
+import {
+  CESIUM_GROUND_ROUTE_OPTIONS,
+  GOOGLE_3D_TILES_RENDER_OPTIONS,
+} from "@/replay/cesium/cesium-render-quality";
 
 const SURFACE_VISUAL_OFFSET_M = 3;
 const SURFACE_SAMPLE_INTERVAL_MS = 250;
@@ -46,24 +45,6 @@ const MAX_STALE_SAMPLE_DISTANCE_M = 500;
 const MAX_STALE_CAMERA_SAMPLE_DISTANCE_M = 150;
 const MAX_CAMERA_EASING_DISTANCE_M = 500;
 const TILE_FAILURE_THRESHOLD = 8;
-
-export type CesiumReplayAvatarRendering =
-  | { kind: "overlay" }
-  | {
-      kind: "native-glb";
-      uri: string;
-      reducedMotion?: boolean;
-    };
-
-export interface CesiumReplayEngineOptions {
-  avatarRendering?: CesiumReplayAvatarRendering;
-}
-
-export type CesiumReplayAvatarStatus =
-  | "ready"
-  | "static"
-  | "error"
-  | "pending";
 
 interface CameraTarget {
   lat: number;
@@ -114,7 +95,7 @@ function canvasLooksBlank(canvas: HTMLCanvasElement) {
   return rgbaPixelsLookBlank(pixels);
 }
 
-function cameraHeightAboveAvatarM(cameraRangeM: number) {
+function cameraHeightAboveRouteM(cameraRangeM: number) {
   if (cameraRangeM <= 240) {
     return 35 + ((cameraRangeM - 120) / 120) * 75;
   }
@@ -135,17 +116,7 @@ export class CesiumReplayEngine implements ReplayEngine {
   private route?: QuestRoute;
   private marker?: Entity;
   private routeEntity?: Entity;
-  private avatarElement?: HTMLElement;
-  private removeAvatarTracking?: () => void;
   private markerPosition?: Cartesian3;
-  private nativeAvatarModel?: Model;
-  private removeNativeAvatarReadyListener?: () => void;
-  private removeNativeAvatarErrorListener?: () => void;
-  private cancelNativeAvatarReady?: () => void;
-  private nativeAvatarLoadGeneration = 0;
-  private avatarRendering: CesiumReplayAvatarRendering;
-  private readonly nativeAvatarMatrix = new Matrix4();
-  private readonly nativeAvatarHeadingPitchRoll = new HeadingPitchRoll();
   private cameraHeadingDeg?: number;
   private cameraDestination = new Cartesian3();
   private cameraInitialized = false;
@@ -174,12 +145,9 @@ export class CesiumReplayEngine implements ReplayEngine {
 
   constructor(
     private readonly minimumCameraClearanceM = REPLAY_CAMERA_MIN_CLEARANCE_M,
-    private readonly options: CesiumReplayEngineOptions = {},
-  ) {
-    this.avatarRendering = options.avatarRendering ?? { kind: "overlay" };
-  }
+  ) {}
 
-  async mount({ container, avatarElement, route, onStatus }: ReplayEngineMountOptions) {
+  async mount({ container, route, onStatus }: ReplayEngineMountOptions) {
     const generation = ++this.generation;
     this.container = container;
     this.route = route;
@@ -235,7 +203,6 @@ export class CesiumReplayEngine implements ReplayEngine {
         contextOptions: { webgl: { preserveDrawingBuffer: true } },
       });
       this.viewer = viewer;
-      this.avatarElement = avatarElement;
       viewer.scene.globe.show = false;
       if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = true;
       viewer.scene.screenSpaceCameraController.enableCollisionDetection = true;
@@ -243,9 +210,7 @@ export class CesiumReplayEngine implements ReplayEngine {
       const tilesetUrl = `https://tile.googleapis.com/v1/3dtiles/root.json?key=${encodeURIComponent(apiKey)}`;
       const tileset = await Cesium3DTileset.fromUrl(tilesetUrl, {
         showCreditsOnScreen: true,
-        maximumScreenSpaceError: 24,
-        dynamicScreenSpaceError: true,
-        skipLevelOfDetail: true,
+        ...GOOGLE_3D_TILES_RENDER_OPTIONS,
         enableCollision: true,
       });
       if (generation !== this.generation) {
@@ -272,13 +237,12 @@ export class CesiumReplayEngine implements ReplayEngine {
             Cartesian3.fromDegrees(point.lng, point.lat),
           ),
           width: 12,
-          clampToGround: true,
+          ...CESIUM_GROUND_ROUTE_OPTIONS,
           classificationType: ClassificationType.CESIUM_3D_TILE,
           material: new PolylineGlowMaterialProperty({
-            color: Color.fromCssColorString("#00f19f").withAlpha(0.98),
+            color: Color.fromCssColorString(ROUTE_THREAD_STYLE.color).withAlpha(0.98),
             glowPower: 0.18,
           }),
-          depthFailMaterial: Color.fromCssColorString("#00f19f").withAlpha(0.94),
         },
       });
       this.routeEntity = routeEntity;
@@ -289,7 +253,7 @@ export class CesiumReplayEngine implements ReplayEngine {
         start.elev + SURFACE_VISUAL_OFFSET_M,
       );
       this.marker = viewer.entities.add({
-        name: "Selected replay avatar",
+        name: "Current route position",
         position: this.markerPosition,
         point: {
           pixelSize: 1,
@@ -297,26 +261,6 @@ export class CesiumReplayEngine implements ReplayEngine {
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
       });
-      this.removeAvatarTracking = viewer.scene.preRender.addEventListener(() => {
-        if (!this.avatarElement || !this.markerPosition) return;
-        if (this.avatarRendering.kind === "native-glb") {
-          this.avatarElement.style.display = "none";
-          return;
-        }
-        const screen = SceneTransforms.worldToWindowCoordinates(
-          viewer.scene,
-          this.markerPosition,
-        );
-        if (!screen || !Number.isFinite(screen.x) || !Number.isFinite(screen.y)) {
-          this.avatarElement.style.display = "none";
-          return;
-        }
-        this.avatarElement.style.display = "block";
-        this.avatarElement.style.transform = `translate3d(${screen.x}px, ${screen.y}px, 0) translate(-50%, -74%)`;
-      });
-      await this.setAvatarRendering(this.avatarRendering);
-      if (generation !== this.generation) return;
-
       await viewer.zoomTo(routeEntity, new HeadingPitchRange(0, -0.72, 0));
       if (generation !== this.generation) return;
       const initialTiles = await this.waitForInitialTiles(tileset);
@@ -327,7 +271,7 @@ export class CesiumReplayEngine implements ReplayEngine {
           title: "Earth Replay ready",
           message:
             initialTiles === "loaded"
-              ? "The route thread and avatar are ready to move."
+              ? "The route thread is ready to move."
               : "The route is ready while finer tile detail continues loading.",
         });
       }
@@ -341,104 +285,6 @@ export class CesiumReplayEngine implements ReplayEngine {
         title: "Photorealistic world unavailable",
         message: "Google 3D tiles could not load for this route.",
       });
-    }
-  }
-
-  async setAvatarRendering(
-    avatarRendering: CesiumReplayAvatarRendering,
-  ): Promise<CesiumReplayAvatarStatus> {
-    this.avatarRendering = avatarRendering;
-    const loadGeneration = ++this.nativeAvatarLoadGeneration;
-    this.clearNativeAvatarModel();
-
-    const { container, viewer, markerPosition } = this;
-    if (!container || !viewer || !markerPosition || viewer.isDestroyed()) {
-      return "pending";
-    }
-    container.dataset.avatarRenderer = avatarRendering.kind;
-    if (avatarRendering.kind === "overlay") {
-      delete container.dataset.avatarAnimation;
-      viewer.scene.requestRender();
-      return "ready";
-    }
-
-    if (this.avatarElement) this.avatarElement.style.display = "none";
-    container.dataset.avatarAnimation = "loading";
-    try {
-      const model = await Model.fromGltfAsync({
-        url: avatarRendering.uri,
-        modelMatrix: this.nativeAvatarModelMatrix(markerPosition, 0),
-        scale: 1.4,
-        minimumPixelSize: 48,
-        maximumScale: 16,
-        silhouetteColor: Color.fromCssColorString("#00f19f"),
-        silhouetteSize: 1.5,
-        allowPicking: false,
-      });
-      if (
-        loadGeneration !== this.nativeAvatarLoadGeneration ||
-        viewer.isDestroyed()
-      ) {
-        model.destroy();
-        return "pending";
-      }
-      this.nativeAvatarModel = model;
-      viewer.scene.primitives.add(model);
-      if (!model.ready) {
-        const ready = await new Promise<boolean>((resolve) => {
-          let settled = false;
-          const finish = (value: boolean) => {
-            if (settled) return;
-            settled = true;
-            this.removeNativeAvatarReadyListener?.();
-            this.removeNativeAvatarReadyListener = undefined;
-            this.removeNativeAvatarErrorListener?.();
-            this.removeNativeAvatarErrorListener = undefined;
-            this.cancelNativeAvatarReady = undefined;
-            resolve(value);
-          };
-          this.removeNativeAvatarReadyListener =
-            model.readyEvent.addEventListener(() => finish(true));
-          this.removeNativeAvatarErrorListener =
-            model.errorEvent.addEventListener(() => finish(false));
-          this.cancelNativeAvatarReady = () => finish(false);
-        });
-        if (!ready) {
-          if (loadGeneration !== this.nativeAvatarLoadGeneration) return "pending";
-          container.dataset.avatarAnimation = "error";
-          this.clearNativeAvatarModel();
-          return "error";
-        }
-      }
-      if (
-        loadGeneration !== this.nativeAvatarLoadGeneration ||
-        model.isDestroyed()
-      ) {
-        return "pending";
-      }
-      const animations = model.activeAnimations.addAll({
-        loop: ModelAnimationLoop.REPEAT,
-        animationTime: (duration) => {
-          if (
-            this.avatarRendering.kind === "native-glb" &&
-            this.avatarRendering.reducedMotion
-          ) {
-            return 0.18;
-          }
-          const strideSeconds = (this.latestPose?.progressM ?? 0) / 2.8;
-          return duration > 0 ? (strideSeconds % duration) / duration : 0;
-        },
-      });
-      const status = animations.length > 0 ? "ready" : "static";
-      container.dataset.avatarAnimation = status;
-      viewer.scene.requestRender();
-      return status;
-    } catch (error) {
-      if (loadGeneration !== this.nativeAvatarLoadGeneration) return "pending";
-      console.warn("Replay avatar model unavailable", error);
-      container.dataset.avatarAnimation = "error";
-      this.clearNativeAvatarModel();
-      return "error";
     }
   }
 
@@ -517,15 +363,8 @@ export class CesiumReplayEngine implements ReplayEngine {
       groundedHeightM + SURFACE_VISUAL_OFFSET_M,
     );
     this.marker.position = new ConstantPositionProperty(this.markerPosition);
-    if (this.nativeAvatarModel) {
-      this.nativeAvatarModel.modelMatrix = this.nativeAvatarModelMatrix(
-        this.markerPosition,
-        (pose.bearingDeg * Math.PI) / 180,
-      );
-    }
-
     const cameraRangeM = pose.cameraRangeM;
-    const cameraHeightM = cameraHeightAboveAvatarM(cameraRangeM);
+    const cameraHeightM = cameraHeightAboveRouteM(cameraRangeM);
     const routeCameraPose =
       this.route && pose.progressM >= cameraRangeM
         ? routePathPose(this.route, pose.progressM - cameraRangeM)
@@ -710,36 +549,6 @@ export class CesiumReplayEngine implements ReplayEngine {
     this.cameraInitialized = true;
   }
 
-  private nativeAvatarModelMatrix(position: Cartesian3, heading: number) {
-    this.nativeAvatarHeadingPitchRoll.heading = heading;
-    this.nativeAvatarHeadingPitchRoll.pitch = 0;
-    this.nativeAvatarHeadingPitchRoll.roll = 0;
-    return Transforms.headingPitchRollToFixedFrame(
-      position,
-      this.nativeAvatarHeadingPitchRoll,
-      undefined,
-      undefined,
-      this.nativeAvatarMatrix,
-    );
-  }
-
-  private clearNativeAvatarModel() {
-    this.cancelNativeAvatarReady?.();
-    this.cancelNativeAvatarReady = undefined;
-    this.removeNativeAvatarReadyListener?.();
-    this.removeNativeAvatarReadyListener = undefined;
-    this.removeNativeAvatarErrorListener?.();
-    this.removeNativeAvatarErrorListener = undefined;
-    if (
-      this.viewer &&
-      this.nativeAvatarModel &&
-      !this.viewer.isDestroyed()
-    ) {
-      this.viewer.scene.primitives.remove(this.nativeAvatarModel);
-    }
-    this.nativeAvatarModel = undefined;
-  }
-
   private requestSurfaceSample(
     pose: ReplayPose,
     cameraLat: number,
@@ -847,17 +656,11 @@ export class CesiumReplayEngine implements ReplayEngine {
     if (this.surfaceSampleRetryTimer !== undefined) {
       window.clearTimeout(this.surfaceSampleRetryTimer);
     }
-    this.removeAvatarTracking?.();
-    if (this.avatarElement) this.avatarElement.style.display = "none";
-    this.nativeAvatarLoadGeneration += 1;
-    this.clearNativeAvatarModel();
     if (this.viewer && !this.viewer.isDestroyed()) this.viewer.destroy();
     this.viewer = undefined;
     this.route = undefined;
     this.marker = undefined;
     this.routeEntity = undefined;
-    this.avatarElement = undefined;
-    this.removeAvatarTracking = undefined;
     this.markerPosition = undefined;
     this.cameraHeadingDeg = undefined;
     this.cameraInitialized = false;

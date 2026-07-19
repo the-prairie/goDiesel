@@ -1,8 +1,7 @@
-import { Database, LockKeyhole, Search, SearchX } from "lucide-react";
+import { Circle, Database, LockKeyhole, Search, SearchX } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { RouteEditor } from "@/components/admin/route-editor";
-import { PageTitle } from "@/components/page-title";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -61,6 +60,11 @@ export function AdminPage() {
   const selectedSaveState = selectedRoute
     ? saveStates[selectedRoute.activityId]
     : undefined;
+  const dirty = Boolean(
+    selectedRoute &&
+      draft &&
+      JSON.stringify(draft) !== JSON.stringify(selectedRoute.curation),
+  );
 
   useEffect(() => {
     if (!selectedRoute || !workspace) {
@@ -132,12 +136,16 @@ export function AdminPage() {
   }
 
   return (
-    <section className="grid content-start gap-7">
-      <PageTitle
-        eyebrow="Admin"
-        title="Route curation."
-        copy="Review route readiness, shape the experience, and publish generated route data from one owner workspace."
-      />
+    <section className="grid content-start gap-4" data-testid="admin-workspace">
+      <header className="flex flex-wrap items-end justify-between gap-3 border-b border-line pb-4">
+        <div>
+          <p className="text-micro font-semibold uppercase text-forest">Owner workspace</p>
+          <h1 className="mt-1 text-2xl font-semibold text-ink">Curation ledger</h1>
+        </div>
+        <p className="max-w-xl text-caption text-ink-secondary">
+          Review route readiness, shape the experience, and regenerate source-backed guide data.
+        </p>
+      </header>
 
       {workspace === null ? (
         <div
@@ -152,8 +160,8 @@ export function AdminPage() {
             role="status"
             className={
               workspace.mode === "editable"
-                ? "flex gap-3 border-y border-primary/30 bg-primary/5 px-4 py-3 text-sm"
-                : "flex gap-3 border-y border-border bg-muted/30 px-4 py-3 text-sm"
+                ? "flex gap-3 border border-forest/25 bg-forest-soft px-4 py-3 text-caption text-ink-secondary"
+                : "flex gap-3 border border-line bg-surface-muted px-4 py-3 text-caption text-ink-secondary"
             }
           >
             {workspace.mode === "editable" ? (
@@ -174,48 +182,56 @@ export function AdminPage() {
             </p>
           </div>
 
-          <div className="grid min-w-0 gap-8 lg:grid-cols-[minmax(15rem,0.42fr)_minmax(0,1fr)] lg:gap-10">
+          <div className="grid min-w-0 items-start border border-line bg-surface lg:grid-cols-[22rem_minmax(0,1fr)]">
             <aside
               aria-label="Owner route list"
-              className="grid min-w-0 content-start gap-4 lg:border-r lg:border-border lg:pr-6"
+              className="grid min-w-0 content-start border-b border-line lg:sticky lg:top-[4.75rem] lg:max-h-[calc(100dvh-6rem)] lg:border-b-0 lg:border-r"
             >
-              <div className="relative">
-                <Search
-                  className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                <Input
-                  type="search"
-                  aria-label="Search owner routes"
-                  value={query}
-                  placeholder="Search route library"
-                  className="pl-9"
-                  onChange={(event) => setQuery(event.target.value)}
-                />
+              <div className="grid gap-2 border-b border-line p-3">
+                <div className="relative">
+                  <Search
+                    className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted"
+                    aria-hidden="true"
+                  />
+                  <Input
+                    type="search"
+                    aria-label="Search owner routes"
+                    value={query}
+                    placeholder="Search route library"
+                    className="pl-9"
+                    onChange={(event) => setQuery(event.target.value)}
+                  />
+                </div>
+                <p className="text-micro text-ink-muted">
+                  {matchingRoutes.length > visibleRoutes.length
+                    ? `Showing ${visibleRoutes.length} of ${matchingRoutes.length} routes. Search to narrow the list.`
+                    : `${matchingRoutes.length} ${matchingRoutes.length === 1 ? "route" : "routes"}`}
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground">
-                {matchingRoutes.length > visibleRoutes.length
-                  ? `Showing ${visibleRoutes.length} of ${matchingRoutes.length} routes. Search to narrow the list.`
-                  : `${matchingRoutes.length} ${matchingRoutes.length === 1 ? "route" : "routes"}`}
-              </p>
-              <div className="grid max-h-[42rem] overflow-y-auto border-y border-border">
+              <div className="grid max-h-64 overflow-y-auto lg:max-h-[calc(100dvh-11rem)]">
                 {visibleRoutes.map((route) => (
                   <button
                     key={route.activityId}
                     type="button"
                     aria-pressed={route.activityId === effectiveSelectedId}
-                    className="grid min-w-0 gap-1 border-b border-border px-3 py-3 text-left last:border-b-0 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-pressed:bg-muted"
+                    className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-3 border-b border-line px-3 py-3 text-left last:border-b-0 hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-pressed:bg-forest-soft"
                     onClick={() => {
                       setSelectedId(route.activityId);
                     }}
                   >
-                    <span className="truncate text-sm font-medium">
-                      {route.name}
-                    </span>
-                    <span className="flex min-w-0 items-center justify-between gap-3 text-xs text-muted-foreground">
-                      <span className="truncate">{route.region}</span>
-                      <span className="shrink-0 capitalize">
-                        {route.curation.reviewStatus}
+                    <Circle
+                      className="mt-1 size-3 text-line-strong aria-pressed:fill-forest"
+                      aria-hidden="true"
+                    />
+                    <span className="grid min-w-0 gap-1">
+                      <span className="truncate text-control font-medium text-ink">
+                        {route.name}
+                      </span>
+                      <span className="flex min-w-0 items-center justify-between gap-3 text-micro text-ink-muted">
+                        <span className="truncate">{route.region}</span>
+                        <span className="shrink-0 capitalize">
+                          {route.curation.reviewStatus}
+                        </span>
                       </span>
                     </span>
                   </button>
@@ -228,6 +244,7 @@ export function AdminPage() {
                 route={selectedRoute}
                 draft={draft}
                 readOnly={workspace.mode === "read-only"}
+                dirty={dirty}
                 saving={selectedSaveState?.saving ?? false}
                 saveMessage={selectedSaveState?.message ?? null}
                 onChange={(nextDraft) => {

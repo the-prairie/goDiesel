@@ -1,4 +1,5 @@
 import type { QuestRoute } from "@/domain/routes";
+import { ROUTE_THREAD_STYLE } from "@/domain/route-thread-style";
 import {
   advancePlayableEarthGrounding,
   initialPlayableEarthGrounding,
@@ -8,6 +9,10 @@ import {
   type PlayableEarthGroundingState,
   type PlayableEarthPose,
 } from "@/replay/playable-earth-controller";
+import {
+  CESIUM_GROUND_ROUTE_OPTIONS,
+  GOOGLE_3D_TILES_RENDER_OPTIONS,
+} from "@/replay/cesium/cesium-render-quality";
 
 export type PlayableEarthStatus =
   | { state: "loading"; title: string; message: string }
@@ -48,7 +53,7 @@ const SURFACE_SAMPLE_INTERVAL_MS = 1_200;
 const MAX_STALE_SAMPLE_DISTANCE_M = 500;
 let cesiumPromise: Promise<CesiumGlobal | undefined> | undefined;
 
-function cameraHeightAboveAvatarM(cameraRangeM: number) {
+function cameraHeightAboveRouteM(cameraRangeM: number) {
   if (cameraRangeM <= 240) {
     return 35 + ((cameraRangeM - 120) / 120) * 75;
   }
@@ -195,9 +200,7 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
       const tilesetUrl = `https://tile.googleapis.com/v1/3dtiles/root.json?key=${encodeURIComponent(apiKey)}`;
       const tilesetOptions = {
         showCreditsOnScreen: true,
-        maximumScreenSpaceError: 24,
-        dynamicScreenSpaceError: true,
-        skipLevelOfDetail: true,
+        ...GOOGLE_3D_TILES_RENDER_OPTIONS,
       };
       const tileset = Cesium.Cesium3DTileset.fromUrl
         ? await Cesium.Cesium3DTileset.fromUrl(tilesetUrl, tilesetOptions)
@@ -217,15 +220,12 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
         polyline: {
           positions,
           width: 9,
-          clampToGround: true,
+          ...CESIUM_GROUND_ROUTE_OPTIONS,
           classificationType: Cesium.ClassificationType.CESIUM_3D_TILE,
           material: new Cesium.PolylineGlowMaterialProperty({
-            color: Cesium.Color.fromCssColorString("#00f19f").withAlpha(0.98),
+            color: Cesium.Color.fromCssColorString(ROUTE_THREAD_STYLE.color).withAlpha(0.98),
             glowPower: 0.18,
           }),
-          depthFailMaterial: Cesium.Color.fromCssColorString("#00f19f").withAlpha(
-            0.94,
-          ),
         },
       });
       this.routeEntity = routeEntity;
@@ -238,10 +238,8 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
           start.elev + SURFACE_VISUAL_OFFSET_M,
         ),
         point: {
-          pixelSize: 16,
-          color: Cesium.Color.fromCssColorString("#00f19f"),
-          outlineColor: Cesium.Color.WHITE,
-          outlineWidth: 4,
+          pixelSize: 1,
+          color: Cesium.Color.TRANSPARENT,
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
       });
@@ -251,7 +249,7 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
       onStatus({
         state: "ready",
         title: "Playable Earth ready",
-        message: "Route thread and starting position are visible.",
+        message: "The route thread is ready to explore.",
       });
     } catch (error) {
       console.warn("Playable Earth Lab unavailable", error);
@@ -305,7 +303,7 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
     }
     const heading = (this.cameraHeadingDeg * Math.PI) / 180;
     const cameraRangeM = pose.cameraRangeM;
-    const cameraHeightM = cameraHeightAboveAvatarM(cameraRangeM);
+    const cameraHeightM = cameraHeightAboveRouteM(cameraRangeM);
     const cameraLat =
       pose.lat - (Math.cos(heading) * cameraRangeM) / 111_320;
     const cameraLng =

@@ -13,6 +13,7 @@ export function RouteEditor({
   route,
   draft,
   readOnly,
+  dirty,
   saving,
   saveMessage,
   onChange,
@@ -21,6 +22,7 @@ export function RouteEditor({
   route: AdminRouteRecord;
   draft: CurationDraft;
   readOnly: boolean;
+  dirty: boolean;
   saving: boolean;
   saveMessage: string | null;
   onChange: (draft: CurationDraft) => void;
@@ -29,20 +31,20 @@ export function RouteEditor({
   const validation = validateCuration(draft);
 
   return (
-    <section aria-label="Route curation editor" className="grid min-w-0 content-start gap-6">
-      <header className="grid gap-2">
+    <section aria-label="Route curation editor" className="grid min-w-0 content-start gap-5 p-4 pb-0 sm:p-5 sm:pb-0">
+      <header className="grid gap-2 border-b border-line pb-4">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
           <span>{route.region}</span>
           <span>{route.type}</span>
           <span>{route.distanceKm.toFixed(1)} km</span>
           <span>{route.date || "Date unknown"}</span>
         </div>
-        <h2 className="text-xl font-semibold">{route.name}</h2>
+        <h2 className="text-xl font-semibold text-ink">{route.name}</h2>
       </header>
 
       <CurationStatus route={route} validation={validation} />
 
-      <fieldset disabled={readOnly || saving} className="grid gap-5 disabled:opacity-70">
+      <fieldset disabled={readOnly || saving} className="grid gap-5 pb-28 disabled:opacity-70 md:pb-24">
         <legend className="sr-only">Experiential route metadata</legend>
         <TextAreaField
           label="Vibe"
@@ -119,7 +121,23 @@ export function RouteEditor({
         />
       </fieldset>
 
-      <div className="flex flex-wrap items-center gap-3 border-t border-border pt-5">
+      <div
+        data-testid="curation-action-bar"
+        data-dirty={dirty ? "true" : "false"}
+        className="sticky bottom-[calc(var(--mobile-navigation-height)+0.75rem)] z-10 -mx-4 mt-1 flex min-h-16 flex-wrap items-center justify-between gap-3 border-t border-line bg-surface-raised/96 px-4 py-3 shadow-[0_-8px_20px_rgb(21_31_29_/_0.08)] backdrop-blur sm:-mx-5 sm:px-5 md:bottom-0"
+      >
+        <div className="grid gap-0.5">
+          <p className={dirty ? "text-caption font-medium text-warning" : "text-caption font-medium text-ink-secondary"}>
+            {readOnly ? "Read-only route" : dirty ? "Unsaved changes" : "No unsaved changes"}
+          </p>
+          {saveMessage ? (
+            <p role="status" className="text-micro text-ink-muted">{saveMessage}</p>
+          ) : (
+            <p className="text-micro text-ink-muted">
+              {readOnly ? "Connect the local owner writer to edit." : "Changes remain local until regenerated."}
+            </p>
+          )}
+        </div>
         {!readOnly ? (
           <Button
             type="button"
@@ -130,7 +148,6 @@ export function RouteEditor({
             {saving ? "Saving and rebuilding..." : "Save and regenerate"}
           </Button>
         ) : null}
-        {saveMessage ? <p role="status" className="text-sm text-muted-foreground">{saveMessage}</p> : null}
       </div>
     </section>
   );

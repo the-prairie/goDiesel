@@ -126,9 +126,14 @@ for (const viewport of [
       const canvas = document
         .querySelector<HTMLCanvasElement>('[aria-label="Interactive route globe"]')!
         .getBoundingClientRect();
+      const mobileNavigation = document
+        .querySelector<HTMLElement>('[data-testid="atlas-spine-mobile"]')
+        ?.getBoundingClientRect();
       return {
         documentWidth: document.documentElement.scrollWidth,
         viewportWidth: window.innerWidth,
+        mobileNavigationHeight:
+          mobileNavigation && mobileNavigation.height > 0 ? mobileNavigation.height : 0,
         main: { left: main.left, right: main.right, bottom: main.bottom },
         canvas: {
           left: canvas.left,
@@ -143,7 +148,9 @@ for (const viewport of [
     expect(Math.abs(layout.canvas.left - layout.main.left)).toBeLessThanOrEqual(1);
     expect(Math.abs(layout.canvas.right - layout.main.right)).toBeLessThanOrEqual(1);
     expect(Math.abs(layout.canvas.bottom - layout.main.bottom)).toBeLessThanOrEqual(1);
-    expect(layout.canvas.height).toBeGreaterThanOrEqual(viewport.height - 60);
+    expect(layout.canvas.height).toBeGreaterThanOrEqual(
+      viewport.height - layout.mobileNavigationHeight - 1,
+    );
   });
 }
 
@@ -226,7 +233,7 @@ test("region controls, search, inspector, and URL stay synchronized", async ({ p
   const inspectorBox = await baliInspector.boundingBox();
   expect(searchBox).not.toBeNull();
   expect(inspectorBox).not.toBeNull();
-  expect(searchBox!.y + searchBox!.height).toBeLessThanOrEqual(inspectorBox!.y);
+  expect(boxesOverlap(searchBox!, inspectorBox!)).toBe(false);
   await expect(page.getByRole("region", { name: "Atlas search" })).toHaveAttribute(
     "data-state",
     "selected-result",
@@ -249,12 +256,8 @@ test("region controls, search, inspector, and URL stay synchronized", async ({ p
   expect(mobileSearchBox).not.toBeNull();
   expect(mobileInspectorBox).not.toBeNull();
   expect(controlsBox).not.toBeNull();
-  expect(mobileSearchBox!.y + mobileSearchBox!.height).toBeLessThanOrEqual(
-    mobileInspectorBox!.y,
-  );
-  expect(mobileInspectorBox!.y + mobileInspectorBox!.height).toBeLessThanOrEqual(
-    controlsBox!.y,
-  );
+  expect(boxesOverlap(mobileSearchBox!, mobileInspectorBox!)).toBe(false);
+  expect(boxesOverlap(mobileInspectorBox!, controlsBox!)).toBe(false);
 
   await search.fill("tokyo");
   await expect(page).not.toHaveURL(/region=/);
@@ -266,6 +269,187 @@ test("region controls, search, inspector, and URL stay synchronized", async ({ p
   );
   await expect(page.getByRole("button", { name: /Tokyo, Japan3 routes/i })).toBeVisible();
 });
+
+test("desktop Atlas exposes activity modes and working globe utilities", async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/#/atlas");
+
+  const canvas = page.getByLabel("Interactive route globe");
+  await expect(canvas).toHaveAttribute("data-route-palette", "cobalt");
+  const allHeatLines = Number(await canvas.getAttribute("data-heat-lines"));
+  expect(allHeatLines).toBeGreaterThan(0);
+
+  await page.getByRole("button", { name: "Show rides" }).click();
+  await expect(page).toHaveURL(/activity=rides/);
+  await expect(page.getByRole("button", { name: "Show rides" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect
+    .poll(async () => Number(await canvas.getAttribute("data-heat-lines")))
+    .toBeLessThan(allHeatLines);
+
+  const cameraBefore = Number(await canvas.getAttribute("data-camera-target"));
+  await page.getByRole("button", { name: "Zoom in" }).click();
+  await expect
+    .poll(async () => Number(await canvas.getAttribute("data-camera-target")))
+    .toBeLessThan(cameraBefore);
+  await page.getByRole("button", { name: "Reset globe view" }).click();
+  await expect(canvas).toHaveAttribute("data-camera-target", "6.400");
+
+  await page.getByRole("button", { name: "Show all activities" }).click();
+  await expect(page).not.toHaveURL(/activity=/);
+});
+
+test("selected region opens a collapsible editorial route margin", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/#/atlas?region=Kyoto%2C+Japan");
+
+  const inspector = page.getByRole("complementary", {
+    name: "Kyoto, Japan region guide",
+  });
+  await expect(inspector).toBeVisible();
+  await expect(inspector).toContainText(/Run|Ride/);
+  await expect(inspector).toContainText(/km/);
+  await expect(inspector.getByText("Reviewed field note").first()).toBeVisible();
+
+  await page.getByRole("button", { name: "Collapse region guide" }).click();
+  await expect(inspector).toHaveAttribute("data-collapsed", "true");
+  await expect(inspector.getByRole("list")).toBeHidden();
+  await page.getByRole("button", { name: "Expand region guide" }).click();
+  await expect(inspector.getByRole("list")).toBeVisible();
+});
+
+test("mobile Atlas sheet preserves map context across three stable positions", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#/atlas?region=Kyoto%2C+Japan");
+
+  const sheet = page.getByRole("complementary", {
+    name: "Kyoto, Japan region guide",
+  });
+  const canvas = page.getByLabel("Interactive route globe");
+  await expect(sheet).toHaveAttribute("data-snap", "half");
+  const halfHeight = (await sheet.boundingBox())!.height;
+
+  await page.getByRole("button", { name: "Set route sheet to peek" }).click();
+  await expect(sheet).toHaveAttribute("data-snap", "peek");
+  const peekHeight = (await sheet.boundingBox())!.height;
+  expect(peekHeight).toBeLessThan(halfHeight);
+  await expect(sheet.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+  await expect(canvas).toBeVisible();
+
+  await page.getByRole("button", { name: "Set route sheet to expanded" }).click();
+  await expect(sheet).toHaveAttribute("data-snap", "expanded");
+  await expect
+    .poll(async () => (await sheet.boundingBox())!.height)
+    .toBeGreaterThan(halfHeight);
+
+  await page.getByRole("button", { name: "Set route sheet to half" }).click();
+  await expect(sheet).toHaveAttribute("data-snap", "half");
+  await expect(page).toHaveURL(/region=Kyoto%2C\+Japan/);
+});
+
+test("mobile globe supports two-finger pinch without losing region state", async ({ page }) => {
+  await page.setViewportSize({ width: 430, height: 844 });
+  await page.goto("/#/atlas?region=Kyoto%2C+Japan");
+  const canvas = page.getByLabel("Interactive route globe");
+  const before = Number(await canvas.getAttribute("data-camera-target"));
+  const box = (await canvas.boundingBox())!;
+
+  await canvas.dispatchEvent("pointerdown", {
+    pointerId: 11,
+    pointerType: "touch",
+    clientX: box.x + 150,
+    clientY: box.y + 220,
+  });
+  await canvas.dispatchEvent("pointerdown", {
+    pointerId: 12,
+    pointerType: "touch",
+    clientX: box.x + 250,
+    clientY: box.y + 220,
+  });
+  await canvas.dispatchEvent("pointermove", {
+    pointerId: 11,
+    pointerType: "touch",
+    clientX: box.x + 110,
+    clientY: box.y + 220,
+  });
+  await canvas.dispatchEvent("pointermove", {
+    pointerId: 12,
+    pointerType: "touch",
+    clientX: box.x + 290,
+    clientY: box.y + 220,
+  });
+  await canvas.dispatchEvent("pointerup", { pointerId: 11, pointerType: "touch" });
+  await canvas.dispatchEvent("pointerup", { pointerId: 12, pointerType: "touch" });
+
+  await expect
+    .poll(async () => Number(await canvas.getAttribute("data-camera-target")))
+    .toBeLessThan(before);
+  await expect(page).toHaveURL(/region=Kyoto%2C\+Japan/);
+});
+
+for (const viewport of [
+  { width: 430, height: 844 },
+  { width: 390, height: 844 },
+  { width: 320, height: 568 },
+  { width: 667, height: 375 },
+]) {
+  test(`mobile Atlas controls and sheet fit ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await page.goto("/#/atlas?region=Kyoto%2C+Japan");
+
+    const sheet = page.getByRole("complementary", {
+      name: "Kyoto, Japan region guide",
+    });
+    const mobileNavigation = page.getByTestId("atlas-spine-mobile");
+    await expect(sheet).toBeVisible();
+    await expect(page.getByRole("button", { name: "Show all activities" })).toBeVisible();
+
+    const layout = await page.evaluate(() => {
+      const sheet = document.querySelector<HTMLElement>(".atlas-region-inspector")!;
+      const navigation = document.querySelector<HTMLElement>(
+        '[data-testid="atlas-spine-mobile"]',
+      )!;
+      const region = document.querySelector<HTMLElement>(".atlas-region-select")!;
+      const activity = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          '.atlas-mobile-activity[aria-label="Activity filter"]',
+        ),
+      ).find((element) => getComputedStyle(element).display !== "none")!;
+      const buttons = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          '.atlas-mobile-activity [data-slot="button"], .atlas-mobile-map-tools [data-slot="button"]',
+        ),
+      );
+      return {
+        documentWidth: document.documentElement.scrollWidth,
+        viewportWidth: window.innerWidth,
+        sheetBottom: sheet.getBoundingClientRect().bottom,
+        navigationTop: navigation.getBoundingClientRect().top,
+        toolbarTopDelta: Math.abs(
+          region.getBoundingClientRect().top - activity.getBoundingClientRect().top,
+        ),
+        toolbarHeightDelta: Math.abs(
+          region.getBoundingClientRect().height - activity.getBoundingClientRect().height,
+        ),
+        minimumTarget: Math.min(
+          ...buttons
+            .map((button) => button.getBoundingClientRect().height)
+            .filter((height) => height > 0),
+        ),
+      };
+    });
+
+    expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth + 1);
+    expect(layout.sheetBottom).toBeLessThanOrEqual(layout.navigationTop + 1);
+    expect(layout.toolbarTopDelta).toBeLessThanOrEqual(1);
+    expect(layout.toolbarHeightDelta).toBeLessThanOrEqual(1);
+    expect(layout.minimumTarget).toBeGreaterThanOrEqual(44);
+    await expect(mobileNavigation).toBeVisible();
+  });
+}
 
 for (const viewport of [
   { width: 390, height: 320 },
@@ -308,16 +492,19 @@ for (const viewport of [
       has: page.getByRole("heading", { name: "Canary Islands" }),
     });
     await expect(inspector).toBeVisible();
-    const selectedSearchBox = await search.boundingBox();
+    const selectedSearchBox = (await search.isVisible())
+      ? await search.boundingBox()
+      : null;
     const inspectorBox = await inspector.boundingBox();
     const controlsBox = await page
       .getByRole("combobox", { name: "Browse route regions" })
       .locator("..")
       .boundingBox();
-    expect(selectedSearchBox).not.toBeNull();
     expect(inspectorBox).not.toBeNull();
     expect(controlsBox).not.toBeNull();
-    expect(boxesOverlap(selectedSearchBox!, inspectorBox!)).toBe(false);
+    if (selectedSearchBox) {
+      expect(boxesOverlap(selectedSearchBox, inspectorBox!)).toBe(false);
+    }
     expect(boxesOverlap(inspectorBox!, controlsBox!)).toBe(false);
     const clearSelection = page.getByRole("button", { name: "Clear selected region" });
     await expect(clearSelection).toBeVisible();
@@ -327,7 +514,13 @@ for (const viewport of [
       viewport.height === 577 ||
       (viewport.width === 844 && viewport.height === 390)
     ) {
-      const firstRoute = inspector.getByRole("button").nth(1);
+      if ((await inspector.getAttribute("data-snap")) === "peek") {
+        await inspector
+          .getByRole("button", { name: "Set route sheet to expanded" })
+          .click();
+        await expect(inspector).toHaveAttribute("data-snap", "expanded");
+      }
+      const firstRoute = inspector.getByRole("list").getByRole("button").first();
       await expect(firstRoute).toBeVisible();
       await firstRoute.click();
       await expect(page).toHaveURL(/#\/routes\//);
@@ -338,6 +531,31 @@ for (const viewport of [
     await expect(page).not.toHaveURL(/region=/);
   });
 }
+
+test("desktop Atlas toolbar controls share one alignment rhythm", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto("/#/atlas");
+
+  const region = page.locator(".atlas-region-select");
+  const search = page.getByRole("region", { name: "Atlas search" });
+  const activity = page.locator('.atlas-desktop-activity[aria-label="Activity filter"]');
+  await expect(region).toBeVisible();
+  await expect(search).toBeVisible();
+  await expect(activity).toBeVisible();
+
+  const boxes = await Promise.all([
+    region.boundingBox(),
+    search.boundingBox(),
+    activity.boundingBox(),
+  ]);
+  expect(boxes.every(Boolean)).toBe(true);
+  const [regionBox, searchBox, activityBox] = boxes as Box[];
+
+  expect(Math.max(regionBox.y, searchBox.y, activityBox.y) - Math.min(regionBox.y, searchBox.y, activityBox.y)).toBeLessThanOrEqual(1);
+  expect(Math.max(regionBox.height, searchBox.height, activityBox.height) - Math.min(regionBox.height, searchBox.height, activityBox.height)).toBeLessThanOrEqual(1);
+  expect(searchBox.x - (regionBox.x + regionBox.width)).toBeCloseTo(8, 0);
+  expect(activityBox.x - (searchBox.x + searchBox.width)).toBeCloseTo(8, 0);
+});
 
 test("short-landscape search results remain actionable", async ({ page }) => {
   await page.setViewportSize({ width: 667, height: 375 });

@@ -97,7 +97,7 @@ export function RoutesPage() {
   }
 
   return (
-    <section className="grid content-start gap-7">
+    <section className="grid content-start gap-6">
       <PageTitle
         eyebrow="Routes"
         title="Your route library."
@@ -224,7 +224,7 @@ export function RoutesPage() {
             ) : null}
           </div>
 
-          <section aria-label="Route results">
+          <section aria-label="Route results" data-testid="route-ledger">
             {matchingRoutes.length === 0 ? (
               <LibraryState
                 title="No routes found"
@@ -243,7 +243,20 @@ export function RoutesPage() {
               />
             ) : (
               <div className="grid gap-5">
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="overflow-hidden border-x border-t border-line bg-surface">
+                  <div
+                    data-testid="route-ledger-head"
+                    className="hidden grid-cols-[minmax(20rem,2.2fr)_7rem_5.5rem_6rem_6.5rem_minmax(9rem,1fr)_7.5rem_4.5rem] border-b border-line bg-surface-muted text-micro font-semibold uppercase text-ink-muted md:grid"
+                  >
+                    <span className="px-4 py-2">Route</span>
+                    <span className="border-l border-line px-3 py-2">Date</span>
+                    <span className="border-l border-line px-3 py-2">Activity</span>
+                    <span className="border-l border-line px-3 py-2">Distance</span>
+                    <span className="border-l border-line px-3 py-2">Climb</span>
+                    <span className="border-l border-line px-3 py-2">Vibe</span>
+                    <span className="border-l border-line px-3 py-2">Lifecycle</span>
+                    <span className="border-l border-line px-3 py-2 text-center">Action</span>
+                  </div>
                   {visibleRoutes.map((route) => (
                     <RouteCard
                       key={route.slug}

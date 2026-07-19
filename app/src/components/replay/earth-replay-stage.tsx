@@ -1,8 +1,4 @@
 import {
-  ArrowLeft,
-  ChevronDown,
-  ChevronUp,
-  FlaskConical,
   Gauge,
   Gamepad2,
   LocateFixed,
@@ -20,17 +16,24 @@ import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import {
-  ReplayAvatarAnimation,
-  type ReplayAvatarAnimationHandle,
-} from "@/components/replay/replay-avatar-animation";
+  ReplayElevationScrubber,
+  type ReplayElevationScrubberHandle,
+} from "@/components/replay/replay-elevation-scrubber";
 import { ReplayRoutePicker } from "@/components/replay/replay-route-picker";
+import {
+  RouteContextHud,
+  type RouteContextHudState,
+} from "@/components/replay/route-context-hud";
+import {
+  RecordedLightLabel,
+  RecordedLightLayer,
+} from "@/components/replay/recorded-light-layer";
+import { recordedLightAt } from "@/domain/recorded-light";
 import type { QuestRoute, RouteSummary } from "@/domain/routes";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
-import { cn } from "@/lib/utils";
 import {
   APP_PATHS,
-  avatarEvaluationLabPath,
   playableEarthLabPath,
   routeDetailPath,
 } from "@/navigation";
@@ -47,13 +50,6 @@ import {
   zoomReplay,
   type ReplayControlState,
 } from "@/replay/replay-controller";
-import {
-  persistReplayAvatar,
-  REPLAY_AVATARS,
-  storedReplayAvatar,
-  type ReplayAvatarId,
-} from "@/replay/replay-avatars";
-import { preloadReplayAvatars } from "@/replay/replay-avatar-assets";
 import {
   createReplayEngine,
   type ReplayEngine,
@@ -83,10 +79,9 @@ export function EarthReplayStage({
   pickerRoutes: RouteSummary[];
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const avatarElementRef = useRef<HTMLDivElement>(null);
-  const avatarAnimationRef = useRef<ReplayAvatarAnimationHandle | undefined>(
-    undefined,
-  );
+  const elevationScrubberRef = useRef<
+    ReplayElevationScrubberHandle | null
+  >(null);
   const engineRef = useRef<ReplayEngine | undefined>(undefined);
   const mountedRouteRef = useRef<string | undefined>(undefined);
   const controlRef = useRef(initialReplayState());
@@ -95,17 +90,19 @@ export function EarthReplayStage({
   );
   const [engineMode, setEngineMode] = useState<ReplayEngineMode>("earth");
   const [control, setControl] = useState(controlRef.current);
-  const [avatar, setAvatar] = useState(storedReplayAvatar);
-  const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
-  const [avatarAssetsState, setAvatarAssetsState] = useState<
-    "loading" | "ready" | "error"
-  >("loading");
-  const [mobileContextExpanded, setMobileContextExpanded] = useState(true);
+  const [contextState, setContextState] =
+    useState<RouteContextHudState>("preview");
   const [mobileControlsExpanded, setMobileControlsExpanded] = useState(false);
+  const [chromeVisible, setChromeVisible] = useState(true);
   const isMobile = useIsMobile();
   const reducedMotion = useReducedMotion();
   const totalDistanceM = routeDistanceM(route);
   const operational = status.state === "ready" || status.state === "partial";
+  const recordedLight = recordedLightAt(
+    route.route,
+    route.provenance.temporal,
+    control.progressM,
+  );
 
   const commitControl = useCallback(
     (update: (current: ReplayControlState) => ReplayControlState) => {
@@ -113,45 +110,14 @@ export function EarthReplayStage({
       controlRef.current = next;
       setControl(next);
       engineRef.current?.setPose(replayPose(route, next));
-      avatarAnimationRef.current?.sync(next.progressM, reducedMotion);
+      elevationScrubberRef.current?.sync(next.progressM);
     },
-    [reducedMotion, route],
+    [route],
   );
-
-  const setAvatarAnimationHandle = useCallback(
-    (handle: ReplayAvatarAnimationHandle | undefined) => {
-      avatarAnimationRef.current = handle;
-      handle?.sync(controlRef.current.progressM, reducedMotion);
-    },
-    [reducedMotion],
-  );
-
-  useEffect(() => {
-    let active = true;
-    setAvatarAssetsState("loading");
-    void preloadReplayAvatars()
-      .then(() => {
-        if (active) setAvatarAssetsState("ready");
-      })
-      .catch(() => {
-        if (active) setAvatarAssetsState("error");
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    avatarAnimationRef.current?.sync(
-      controlRef.current.progressM,
-      reducedMotion,
-    );
-  }, [reducedMotion]);
 
   useEffect(() => {
     const container = containerRef.current;
-    const avatarElement = avatarElementRef.current;
-    if (!container || !avatarElement) return;
+    if (!container) return;
     const routeChanged = mountedRouteRef.current !== route.slug;
     if (routeChanged && engineMode !== "earth") {
       setEngineMode("earth");
@@ -166,7 +132,6 @@ export function EarthReplayStage({
     setStatus(initialReplayStatus(engineMode));
     void engine.mount({
       container,
-      avatarElement,
       route,
       onStatus: (nextStatus) => {
         if (engineRef.current !== engine) return;
@@ -196,7 +161,7 @@ export function EarthReplayStage({
       previous = now;
       controlRef.current = next;
       engineRef.current?.setPose(replayPose(route, next));
-      avatarAnimationRef.current?.sync(next.progressM, reducedMotion);
+      elevationScrubberRef.current?.sync(next.progressM);
       if (now - lastUiUpdate >= 80) {
         setControl(next);
         lastUiUpdate = now;
@@ -205,25 +170,29 @@ export function EarthReplayStage({
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [control.playing, operational, reducedMotion, route, totalDistanceM]);
+  }, [control.playing, operational, route, totalDistanceM]);
 
   useEffect(() => {
-    setMobileContextExpanded(true);
+    setContextState(isMobile ? "compact" : "preview");
     setMobileControlsExpanded(false);
-    setAvatarPickerOpen(false);
-  }, [route.slug]);
+  }, [isMobile, route.slug]);
 
   useEffect(() => {
-    if (control.playing) setMobileContextExpanded(false);
+    if (control.playing) setContextState("compact");
   }, [control.playing]);
 
-  const selectAvatar = (id: ReplayAvatarId) => {
-    const nextAvatar = REPLAY_AVATARS.find((option) => option.id === id);
-    if (!nextAvatar) return;
-    setAvatar(nextAvatar);
-    persistReplayAvatar(id);
-    setAvatarPickerOpen(false);
-  };
+  useEffect(() => {
+    if (!control.playing || reducedMotion) {
+      setChromeVisible(true);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      const focused = document.activeElement;
+      const stage = containerRef.current?.closest("[data-testid='replay-stage']");
+      if (!focused || !stage?.contains(focused)) setChromeVisible(false);
+    }, 3_200);
+    return () => window.clearTimeout(timer);
+  }, [control.playing, reducedMotion]);
 
   return (
     <section
@@ -236,89 +205,40 @@ export function EarthReplayStage({
       data-speed={control.speed}
       data-following={control.following}
       data-camera-range={control.cameraRangeM}
-      data-avatar={avatar.id}
-      data-avatar-assets={avatarAssetsState}
       data-reduced-motion={reducedMotion}
-      className="relative h-[calc(100dvh-3.5rem)] min-h-[36rem] overflow-hidden bg-[#02070a]"
+      data-hud-version="retrace"
+      data-playback-owner="single-dock"
+      data-chrome-visible={chromeVisible}
+      data-light-phase={recordedLight.phase}
+      onPointerMove={() => setChromeVisible(true)}
+      onFocusCapture={() => setChromeVisible(true)}
+      className="relative h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 overflow-hidden bg-[#02070a] md:h-dvh md:min-h-[36rem]"
     >
       <div
         ref={containerRef}
         aria-label={engineMode === "earth" ? "Earth Replay world" : "Atlas Replay map"}
         className="absolute inset-0"
       />
-      <div
-        ref={avatarElementRef}
-        role="img"
-        aria-label={`Selected replay avatar: ${avatar.label}`}
-        className="pointer-events-none absolute left-0 top-0 z-10 hidden size-20 drop-shadow-[0_8px_5px_rgba(0,0,0,0.55)]"
-      >
-        <div className="absolute bottom-1 left-1/2 h-3 w-12 -translate-x-1/2 rounded-[50%] bg-black/45 blur-sm" />
-        <ReplayAvatarAnimation
-          key={avatar.id}
-          src={avatar.src}
-          label={avatar.label}
-          onHandle={setAvatarAnimationHandle}
-          className="relative size-full"
-        />
-      </div>
+      <RecordedLightLayer light={recordedLight} reducedMotion={reducedMotion} />
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-4 p-3 sm:p-6">
-        <div
-          data-testid="replay-context"
-          data-mobile-expanded={mobileContextExpanded}
-          className="pointer-events-auto w-full max-w-md rounded-md border border-border bg-background/90 p-3 shadow-2xl backdrop-blur sm:p-4"
-        >
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase text-primary">
-              <Route className="size-4" aria-hidden="true" />
-              {engineMode === "earth" ? "Earth Replay" : "Atlas Replay"}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-4 p-3 sm:p-5">
+        <RouteContextHud
+          route={route}
+          label={engineMode === "earth" ? "Earth Replay" : "Atlas Replay"}
+          testId="replay-context"
+          detailsTestId="replay-context-details"
+          state={contextState}
+          backPath={APP_PATHS.routes}
+          backLabel="All routes"
+          visible={chromeVisible}
+          onStateChange={setContextState}
+          summary={
+            <>
+            <div className="mt-1.5">
+              <RecordedLightLabel light={recordedLight} />
             </div>
-            <div className="flex items-center gap-1 sm:hidden">
-              <Button asChild variant="ghost" size="icon" className="size-9">
-                <Link to={APP_PATHS.routes} aria-label="All routes" title="All routes">
-                  <ArrowLeft aria-hidden="true" />
-                </Link>
-              </Button>
-              <Button asChild variant="ghost" size="icon" className="size-9">
-                <Link
-                  to={routeDetailPath(route.slug)}
-                  aria-label="Route guide"
-                  title="Route guide"
-                >
-                  <Map aria-hidden="true" />
-                </Link>
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-9"
-                aria-label={
-                  mobileContextExpanded ? "Hide route details" : "Show route details"
-                }
-                aria-expanded={mobileContextExpanded}
-                onClick={() => setMobileContextExpanded((expanded) => !expanded)}
-              >
-                {mobileContextExpanded ? (
-                  <ChevronUp aria-hidden="true" />
-                ) : (
-                  <ChevronDown aria-hidden="true" />
-                )}
-              </Button>
-            </div>
-          </div>
-          <h1 className="mt-1 truncate text-lg font-semibold sm:mt-2 sm:text-2xl">
-            {route.name}
-          </h1>
-          <div
-            data-testid="replay-context-details"
-            className={cn(!mobileContextExpanded && "hidden sm:block")}
-          >
-            <p className="mt-1 text-sm text-muted-foreground">
-              {route.distanceKm.toFixed(1)} km · {route.elevationGainM.toLocaleString()} m up
-            </p>
             {route.curation.vibe ? (
-              <p className="mt-3 max-w-sm text-sm text-muted-foreground">
+              <p className="mt-3 max-w-sm font-editorial text-base italic leading-5 text-ink-secondary">
                 {route.curation.vibe}
               </p>
             ) : null}
@@ -350,9 +270,12 @@ export function EarthReplayStage({
                 Try Earth replay
               </Button>
             ) : null}
-            <div className="mt-3 border-t border-border pt-3">
+            </>
+          }
+          actions={
+            <div className="grid grid-cols-2 gap-2">
               {route.replay.replayEligible ? (
-                <Button asChild size="sm" className="w-full">
+                <Button asChild size="sm" className="w-full bg-forest text-white hover:bg-forest/90">
                   <Link to={playableEarthLabPath(route.slug, "replay")}>
                     <Gamepad2 aria-hidden="true" />
                     Enter route
@@ -365,18 +288,8 @@ export function EarthReplayStage({
               )}
               <ReplayRoutePicker currentSlug={route.slug} routes={pickerRoutes} />
             </div>
-          </div>
-        </div>
-        <div className="pointer-events-auto hidden shrink-0 gap-2 sm:flex">
-          <Button asChild variant="secondary" size="icon">
-            <Link to={APP_PATHS.routes} aria-label="All routes" title="All routes">
-              <ArrowLeft aria-hidden="true" />
-            </Link>
-          </Button>
-          <Button asChild variant="secondary">
-            <Link to={routeDetailPath(route.slug)}>Route guide</Link>
-          </Button>
-        </div>
+          }
+        />
       </div>
 
       {!operational ? (
@@ -405,16 +318,16 @@ export function EarthReplayStage({
         </div>
       ) : null}
 
-      <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex justify-center sm:inset-x-6 sm:bottom-6">
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center">
         <div
           data-testid="replay-controls"
-          className="pointer-events-auto w-full max-w-5xl rounded-md border border-border bg-background/92 p-2 shadow-2xl backdrop-blur sm:flex sm:flex-wrap sm:items-center sm:gap-2 sm:px-3 sm:py-3"
+          className="pointer-events-auto w-full border-t border-line bg-surface/96 p-2 text-ink shadow-sheet backdrop-blur sm:flex sm:items-center sm:gap-2 sm:px-3 sm:py-2"
         >
           {isMobile ? (
           <div className="grid gap-2">
             <div className="flex items-center gap-2">
-              <Route className="size-4 shrink-0 text-primary" aria-hidden="true" />
-              <div className="min-w-0 flex-1 text-sm text-muted-foreground">
+              <Route className="size-4 shrink-0 text-route" aria-hidden="true" />
+              <div className="min-w-0 flex-1 text-control text-ink-secondary">
                 {(control.progressM / 1_000).toFixed(2)} / {route.distanceKm.toFixed(1)} km
               </div>
               <Button
@@ -426,33 +339,30 @@ export function EarthReplayStage({
                   mobileControlsExpanded ? "Hide more controls" : "Show more controls"
                 }
                 aria-expanded={mobileControlsExpanded}
-                onClick={() => {
-                  setMobileControlsExpanded((expanded) => !expanded);
-                  setAvatarPickerOpen(false);
-                }}
+                onClick={() =>
+                  setMobileControlsExpanded((expanded) => !expanded)
+                }
               >
                 <Settings2 aria-hidden="true" />
               </Button>
             </div>
-            <input
-              aria-label="Route progress"
-              type="range"
-              min={0}
-              max={totalDistanceM}
-              step={1}
-              value={control.progressM}
+            <ReplayElevationScrubber
+              ref={elevationScrubberRef}
+              route={route}
+              progressM={control.progressM}
+              totalDistanceM={totalDistanceM}
               disabled={!operational}
-              onChange={(event) =>
+              compact
+              onSeek={(progressM) =>
                 commitControl((current) =>
-                  seekReplay(current, Number(event.target.value), totalDistanceM),
+                  seekReplay(current, progressM, totalDistanceM),
                 )
               }
-              className="h-11 w-full accent-primary"
             />
             {mobileControlsExpanded ? (
               <div
                 data-testid="replay-secondary-controls"
-                className="flex flex-wrap items-center gap-2 border-t border-border pt-2"
+                className="flex flex-wrap items-center gap-2 border-t border-line pt-2"
               >
                 <Button
                   type="button"
@@ -492,14 +402,6 @@ export function EarthReplayStage({
                   <Gauge aria-hidden="true" />
                   {control.speed}x
                 </Button>
-                <ReplayAvatarPicker
-                  avatar={avatar}
-                  open={avatarPickerOpen}
-                  mobile
-                  routeSlug={route.slug}
-                  onToggle={() => setAvatarPickerOpen((open) => !open)}
-                  onSelect={selectAvatar}
-                />
               </div>
             ) : null}
             <div className="flex gap-2">
@@ -532,29 +434,27 @@ export function EarthReplayStage({
           </div>
           ) : (
           <>
-          <Route className="size-4 shrink-0 text-primary" aria-hidden="true" />
+          <Route className="size-4 shrink-0 text-route" aria-hidden="true" />
           <div className="min-w-28 flex-1">
-            <div className="text-xs font-semibold uppercase text-primary">
+            <div className="text-caption font-semibold uppercase text-route">
               {operational ? "Route thread ready" : "Route world loading"}
             </div>
-            <div aria-live="off" className="truncate text-sm text-muted-foreground">
+            <div aria-live="off" className="truncate text-control text-ink-secondary">
               {(control.progressM / 1_000).toFixed(2)} / {route.distanceKm.toFixed(1)} km
             </div>
           </div>
-          <input
-            aria-label="Route progress"
-            type="range"
-            min={0}
-            max={totalDistanceM}
-            step={1}
-            value={control.progressM}
+          <ReplayElevationScrubber
+            ref={elevationScrubberRef}
+            route={route}
+            progressM={control.progressM}
+            totalDistanceM={totalDistanceM}
             disabled={!operational}
-            onChange={(event) =>
+            className="min-w-48 flex-[2]"
+            onSeek={(progressM) =>
               commitControl((current) =>
-                seekReplay(current, Number(event.target.value), totalDistanceM),
+                seekReplay(current, progressM, totalDistanceM),
               )
             }
-            className="h-8 min-w-40 flex-[2] basis-48 accent-primary"
           />
           <Button
             type="button"
@@ -623,92 +523,10 @@ export function EarthReplayStage({
             <Gauge aria-hidden="true" />
             {control.speed}x
           </Button>
-          <ReplayAvatarPicker
-            avatar={avatar}
-            open={avatarPickerOpen}
-            routeSlug={route.slug}
-            onToggle={() => setAvatarPickerOpen((open) => !open)}
-            onSelect={selectAvatar}
-          />
           </>
           )}
           </div>
         </div>
     </section>
-  );
-}
-
-function ReplayAvatarPicker({
-  avatar,
-  open,
-  mobile = false,
-  routeSlug,
-  onToggle,
-  onSelect,
-}: {
-  avatar: (typeof REPLAY_AVATARS)[number];
-  open: boolean;
-  mobile?: boolean;
-  routeSlug: string;
-  onToggle: () => void;
-  onSelect: (id: ReplayAvatarId) => void;
-}) {
-  return (
-    <div className="relative">
-      <Button
-        type="button"
-        size="icon"
-        variant="outline"
-        className={cn(mobile && "size-11")}
-        aria-label={`Choose replay avatar. Current: ${avatar.label}`}
-        title={`Replay avatar: ${avatar.label}`}
-        aria-expanded={open}
-        onClick={onToggle}
-      >
-        <ReplayAvatarAnimation
-          src={avatar.src}
-          label={`${avatar.label} preview`}
-          preview
-          className="size-7"
-        />
-      </Button>
-      {open ? (
-        <div
-          role="menu"
-          aria-label="Replay avatars"
-          data-testid="avatar-menu"
-          className="fixed bottom-44 left-4 right-4 grid gap-1 rounded-md border border-border bg-background p-2 shadow-2xl sm:absolute sm:bottom-full sm:left-auto sm:right-0 sm:mb-3 sm:w-52"
-        >
-          {REPLAY_AVATARS.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              role="menuitemradio"
-              aria-checked={option.id === avatar.id}
-              onClick={() => onSelect(option.id)}
-              className="flex h-11 items-center gap-3 rounded-sm border border-transparent px-2 text-left text-sm outline-none hover:border-border hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-checked:border-primary aria-checked:bg-primary/10"
-            >
-              <ReplayAvatarAnimation
-                src={option.src}
-                label={`${option.label} preview`}
-                preview
-                className="size-9 shrink-0"
-              />
-              <span>{option.label}</span>
-            </button>
-          ))}
-          <div className="mt-1 border-t border-border pt-1">
-            <Link
-              to={avatarEvaluationLabPath(routeSlug)}
-              role="menuitem"
-              className="flex h-11 items-center gap-3 rounded-sm px-2 text-sm text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <FlaskConical className="size-4 shrink-0" aria-hidden="true" />
-              Evaluate avatar systems
-            </Link>
-          </div>
-        </div>
-      ) : null}
-    </div>
   );
 }

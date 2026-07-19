@@ -12,7 +12,6 @@ async function installReplayStatusEngines(
       __replayDestroyCount?: number;
       __GODIESEL_REPLAY_ENGINE_FACTORY__?: (mode: "earth" | "atlas") => {
         mount(options: {
-          avatarElement: HTMLElement;
           onStatus(status: {
             state: "loading" | "ready" | "partial" | "unavailable";
             title: string;
@@ -28,7 +27,6 @@ async function installReplayStatusEngines(
     replayWindow.__GODIESEL_REPLAY_ENGINE_FACTORY__ = (mode) => ({
       async mount(options) {
         replayWindow.__replayModes?.push(mode);
-        options.avatarElement.style.display = "block";
         if (mode === "atlas") {
           options.onStatus({
             state: "ready",
@@ -107,7 +105,6 @@ async function installDeterministicReplayEngine(page: Page) {
       __GODIESEL_REPLAY_ENGINE_FACTORY__?: () => {
         mount(options: {
           container: HTMLElement;
-          avatarElement: HTMLElement;
           route: { slug: string };
           onStatus(status: {
             state: "loading" | "ready" | "partial" | "unavailable";
@@ -146,13 +143,10 @@ async function installDeterministicReplayEngine(page: Page) {
           routeThread.dataset.testid = "route-thread";
           routeThread.textContent = "Visible route thread";
           options.container.append(routeThread);
-          options.avatarElement.style.display = "block";
-          options.avatarElement.style.transform =
-            "translate3d(400px, 300px, 0) translate(-50%, -74%)";
           options.onStatus({
             state: "ready",
             title: "Earth Replay ready",
-            message: "The route thread and avatar are ready to move.",
+            message: "The route thread is ready to move.",
           });
         },
         setPose(pose) {
@@ -186,9 +180,6 @@ test("bundled React Replay mounts, plays, pauses, and cleans up", async ({ page 
     .boundingBox();
   expect(stageBox?.height).toBeGreaterThan(600);
   expect(worldBox?.height).toBe(stageBox?.height);
-  await expect(
-    page.getByRole("img", { name: "Selected replay avatar: Tempo Runner" }),
-  ).toBeVisible();
   await expect
     .poll(() =>
       page.evaluate(() =>
@@ -244,13 +235,12 @@ test("bundled React Replay mounts, plays, pauses, and cleans up", async ({ page 
   ).toBe(poseCountAfterDestroy);
 });
 
-test("Replay controls stay synchronized and avatar choice persists", async ({ page }) => {
+test("Replay controls stay synchronized across route changes", async ({ page }) => {
   await installDeterministicReplayEngine(page);
   await page.goto(`/#/replay/${routeSlug}`);
 
   const replay = page.getByTestId("replay-stage");
   await expect(replay).toHaveAttribute("data-state", "ready");
-  await expect(replay).toHaveAttribute("data-avatar-assets", "ready");
 
   await page.getByLabel("Route progress").fill("10000");
   await expect(replay).toHaveAttribute("data-progress", "10000.00");
@@ -267,75 +257,98 @@ test("Replay controls stay synchronized and avatar choice persists", async ({ pa
   await page.getByRole("button", { name: "Zoom out from route" }).click();
   await expect(replay).toHaveAttribute("data-camera-range", "720");
 
-  await page
-    .getByRole("button", { name: "Choose replay avatar. Current: Tempo Runner" })
-    .click();
-  await expect(
-    page.getByRole("menuitem", { name: "Evaluate avatar systems" }),
-  ).toHaveAttribute("href", `#/lab/avatar-evaluation/${routeSlug}`);
-  await page.getByRole("menuitemradio", { name: "Gravel Rider" }).click();
-  await expect(replay).toHaveAttribute("data-avatar", "gravel-rider");
-  await expect(
-    page.getByRole("img", { name: "Selected replay avatar: Gravel Rider" }),
-  ).toBeVisible();
-
   await page.evaluate(() => {
     window.location.hash = "#/replay/13358070690";
   });
   await expect(replay).toHaveAttribute("data-route-slug", "13358070690");
   await expect(replay).toHaveAttribute("data-state", "ready");
-  await expect(replay).toHaveAttribute("data-avatar", "gravel-rider");
-  await expect(
-    page.getByRole("img", { name: "Selected replay avatar: Gravel Rider" }),
-  ).toBeVisible();
+  await expect(replay).toHaveAttribute("data-progress", "0.00");
 
   await page.reload();
   await expect(replay).toHaveAttribute("data-state", "ready");
-  await expect(replay).toHaveAttribute("data-avatar", "gravel-rider");
 });
 
-test("Replay preloads every professional avatar before switching", async ({ page }) => {
-  const avatarRequests: string[] = [];
-  page.on("request", (request) => {
-    if (request.url().includes("/route-avatars/")) {
-      avatarRequests.push(new URL(request.url()).pathname);
-    }
-  });
+test("Replay renders only the route thread", async ({ page }) => {
+  await installDeterministicReplayEngine(page);
+  await page.goto(`/#/replay/${routeSlug}`);
+
+  await expect(page.getByTestId("route-thread")).toBeVisible();
+});
+
+test("Replay uses the elevation profile as its single distance-based timeline", async ({
+  page,
+}) => {
+  await installDeterministicReplayEngine(page);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(`/#/replay/${routeSlug}`);
+
+  const replay = page.getByTestId("replay-stage");
+  const dock = page.getByTestId("replay-controls");
+  const scrubber = page.getByTestId("replay-elevation-scrubber");
+  const range = page.getByRole("slider", { name: "Route progress" });
+  await expect(replay).toHaveAttribute("data-state", "ready");
+  await expect(dock).toBeVisible();
+  await expect(scrubber).toBeVisible();
+  await expect(scrubber).toHaveAttribute("data-distance-axis", "route-metres");
+  await expect(scrubber).toHaveAttribute("data-traveled-color", "#315fb4");
+  await expect(scrubber).toHaveAttribute("data-playhead-color", "#d95d45");
+  await expect(range).toHaveAttribute("max", /[1-9][0-9]+/);
+
+  await range.focus();
+  await page.keyboard.press("End");
+  await expect(replay).toHaveAttribute("data-progress", /[1-9][0-9]+\.00/);
+  await page.keyboard.press("Home");
+  await expect(replay).toHaveAttribute("data-progress", "0.00");
+  await page.keyboard.press("ArrowRight");
+  await expect
+    .poll(async () => Number(await replay.getAttribute("data-progress")))
+    .toBeGreaterThan(0);
+});
+
+test("mobile Replay keeps one compact dock and expands tools above it", async ({
+  page,
+}) => {
+  await installDeterministicReplayEngine(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/#/replay/${routeSlug}`);
+
+  const dock = page.getByTestId("replay-controls");
+  const scrubber = page.getByTestId("replay-elevation-scrubber");
+  await expect(dock).toBeVisible();
+  await expect(scrubber).toBeVisible();
+  await expect(page.getByTestId("replay-secondary-controls")).toHaveCount(0);
+  expect((await dock.boundingBox())?.height ?? 0).toBeLessThan(230);
+
+  await page.getByRole("button", { name: "Show more controls" }).click();
+  const tools = page.getByTestId("replay-secondary-controls");
+  await expect(tools).toBeVisible();
+  const toolsBox = await tools.boundingBox();
+  const dockBox = await dock.boundingBox();
+  expect((toolsBox?.y ?? 0) + (toolsBox?.height ?? 0)).toBeLessThanOrEqual(
+    (dockBox?.y ?? 0) + (dockBox?.height ?? 0),
+  );
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+    390,
+  );
+});
+
+test("nonessential Replay chrome yields during playback and returns on intent", async ({
+  page,
+}) => {
   await installDeterministicReplayEngine(page);
   await page.goto(`/#/replay/${routeSlug}`);
 
   const replay = page.getByTestId("replay-stage");
-  await expect(replay).toHaveAttribute("data-avatar-assets", "ready");
-  expect(new Set(avatarRequests)).toEqual(
-    new Set([
-      "/route-avatars/tempo-runner.lottie",
-      "/route-avatars/summit-runner.lottie",
-      "/route-avatars/road-rider.lottie",
-      "/route-avatars/gravel-rider.lottie",
-    ]),
-  );
-  avatarRequests.length = 0;
-
-  for (const [label, id] of [
-    ["Summit Runner", "summit-runner"],
-    ["Road Rider", "road-rider"],
-    ["Gravel Rider", "gravel-rider"],
-    ["Tempo Runner", "tempo-runner"],
-  ] as const) {
-    await page
-      .getByRole("button", { name: /Choose replay avatar\. Current:/ })
-      .click();
-    await page.getByRole("menuitemradio", { name: label }).click();
-    await expect(replay).toHaveAttribute("data-avatar", id);
-    await expect(
-      page.getByRole("img", { name: `Selected replay avatar: ${label}` }),
-    ).toBeVisible();
-  }
-
-  expect(avatarRequests).toEqual([]);
+  await page.getByRole("button", { name: "Play route" }).click();
+  await page.getByLabel("Earth Replay world").click({ position: { x: 700, y: 400 } });
+  await expect(replay).toHaveAttribute("data-chrome-visible", "false", {
+    timeout: 4_500,
+  });
+  await page.mouse.move(600, 300);
+  await expect(replay).toHaveAttribute("data-chrome-visible", "true");
 });
 
-test("reduced motion pins the avatar pose while Replay progresses", async ({ page }) => {
+test("reduced motion keeps Replay chrome visible while playback progresses", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await installDeterministicReplayEngine(page);
   await page.goto(`/#/replay/${routeSlug}`);
@@ -343,27 +356,14 @@ test("reduced motion pins the avatar pose while Replay progresses", async ({ pag
   const replay = page.getByTestId("replay-stage");
   await expect(replay).toHaveAttribute("data-state", "ready");
   await expect(replay).toHaveAttribute("data-reduced-motion", "true");
-  const avatarCanvas = page
-    .getByRole("img", { name: "Selected replay avatar: Tempo Runner" })
-    .locator("[data-avatar-frame]");
-  await expect(avatarCanvas).toHaveAttribute("data-avatar-frame", /\d+/);
-  const representativeFrame = await avatarCanvas.getAttribute("data-avatar-frame");
 
   const initialProgress = Number(await replay.getAttribute("data-progress"));
   await page.getByRole("button", { name: "Play route" }).click();
   await expect
     .poll(async () => Number(await replay.getAttribute("data-progress")))
     .toBeGreaterThan(initialProgress);
-  await expect(avatarCanvas).toHaveAttribute(
-    "data-avatar-frame",
-    representativeFrame ?? "",
-  );
-
-  await page.getByLabel("Route progress").fill("10000");
-  await expect(avatarCanvas).toHaveAttribute(
-    "data-avatar-frame",
-    representativeFrame ?? "",
-  );
+  await page.waitForTimeout(3_400);
+  await expect(replay).toHaveAttribute("data-chrome-visible", "true");
 });
 
 test("city and mountain Replay controls remain usable on desktop and mobile", async ({
@@ -397,20 +397,6 @@ test("city and mountain Replay controls remain usable on desktop and mobile", as
         await page.getByRole("button", { name: "Show more controls" }).click();
         await expect(page.getByTestId("replay-secondary-controls")).toBeVisible();
       }
-      await page
-        .getByRole("button", { name: /Choose replay avatar\. Current:/ })
-        .click();
-      const menuBox = await page.getByTestId("avatar-menu").boundingBox();
-      expect(menuBox).not.toBeNull();
-      expect(menuBox?.x ?? -1).toBeGreaterThanOrEqual(0);
-      expect((menuBox?.x ?? 0) + (menuBox?.width ?? 0)).toBeLessThanOrEqual(
-        viewport.width,
-      );
-      expect(menuBox?.y ?? -1).toBeGreaterThanOrEqual(0);
-      expect((menuBox?.y ?? 0) + (menuBox?.height ?? 0)).toBeLessThanOrEqual(
-        viewport.height,
-      );
-      await page.getByRole("menuitemradio", { name: "Tempo Runner" }).click();
     }
   }
 });
@@ -512,6 +498,7 @@ test("Replay route chooser has intentional empty and mobile states", async ({ pa
   await page.setViewportSize({ width: 390, height: 844 });
   await installDeterministicReplayEngine(page);
   await page.goto(`/#/replay/${routeSlug}`);
+  await page.getByRole("button", { name: "Show route details" }).click();
   await page.getByRole("button", { name: "Change route" }).click();
 
   const chooser = page.getByRole("dialog", { name: "Choose a replay route" });
@@ -542,6 +529,9 @@ for (const [device, viewport] of [
     });
     await page.setViewportSize(viewport);
     await page.goto(`/#/replay/${routeSlug}`);
+    if (device === "mobile") {
+      await page.getByRole("button", { name: "Show route details" }).click();
+    }
     await page.getByRole("button", { name: "Change route" }).click();
     const chooser = page.getByRole("dialog", { name: "Choose a replay route" });
     await chooser.getByRole("searchbox", { name: "Search replay routes" }).fill("Victoria");
@@ -560,11 +550,28 @@ test("Earth Replay enters Playable Earth and returns to the same route", async (
     await page.setViewportSize(viewport);
     await page.goto(`/#/replay/${routeSlug}`);
     await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-state", "ready");
+    const replayContext = page.getByTestId("replay-context");
+    await expect(replayContext).toHaveAttribute("data-ui", "route-context-hud");
+    await expect(replayContext).toHaveAttribute(
+      "data-context-state",
+      viewport.width < 768 ? "compact" : "preview",
+    );
+    await expect(page.getByRole("link", { name: "Route guide" })).toBeVisible();
+    if (viewport.width < 768) {
+      await page.getByRole("button", { name: "Show route details" }).click();
+    }
     await page.getByRole("link", { name: "Enter route" }).click();
     await expect(page).toHaveURL(
       new RegExp(`#\\/lab\\/playable-earth\\/${routeSlug}\\?from=replay$`),
     );
     await expect(page.getByRole("region", { name: "Playable Earth Lab" })).toBeVisible();
+    const playableContext = page.getByTestId("playable-context");
+    await expect(playableContext).toHaveAttribute("data-ui", "route-context-hud");
+    await expect(playableContext).toHaveAttribute(
+      "data-context-state",
+      viewport.width < 768 ? "compact" : "preview",
+    );
+    await expect(page.getByRole("link", { name: "Route guide" })).toBeVisible();
     await page.getByRole("link", { name: "Exit lab" }).click();
     await expect(page).toHaveURL(new RegExp(`#\\/replay\\/${routeSlug}$`));
     await expect(page.getByTestId("replay-stage")).toHaveAttribute(
@@ -600,8 +607,8 @@ for (const width of [320, 430]) {
     const context = page.getByTestId("replay-context");
     const controls = page.getByTestId("replay-controls");
     await expect(replay).toHaveAttribute("data-state", "ready");
-    await expect(context).toHaveAttribute("data-mobile-expanded", "true");
-    await expect(page.getByTestId("replay-context-details")).toBeVisible();
+    await expect(context).toHaveAttribute("data-mobile-expanded", "false");
+    await expect(page.getByTestId("replay-context-details")).toBeHidden();
     await expect(page.getByTestId("replay-secondary-controls")).toHaveCount(0);
 
     for (const label of ["Play route", "Release camera", "Show more controls"]) {
@@ -627,7 +634,6 @@ for (const width of [320, 430]) {
       "Zoom in to route",
       "Zoom out from route",
       "Playback speed 1x",
-      "Choose replay avatar. Current: Tempo Runner",
     ]) {
       const box = await page.getByRole("button", { name: label }).boundingBox();
       expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
@@ -723,9 +729,6 @@ test("real Atlas adapter fills the stage and advances the route", async ({ page 
   await expect
     .poll(async () => Number(await replay.getAttribute("data-progress")))
     .toBeGreaterThan(initialProgress);
-  await expect(
-    page.getByRole("img", { name: /Selected replay avatar:/ }),
-  ).toBeVisible();
 });
 
 test("missing Replay geometry remains intentional and navigable", async ({ page }) => {

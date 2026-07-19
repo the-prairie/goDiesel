@@ -89,6 +89,38 @@ test("Routes progressively reveals all summaries without fetching route detail J
   expect(detailRequests).toEqual([]);
 });
 
+test("Routes presents an editorial comparison ledger on desktop and compact entries on mobile", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/#/routes?q=exploratory");
+
+  const ledger = page.getByTestId("route-ledger");
+  await expect(ledger).toBeVisible();
+  await expect(page.getByTestId("route-ledger-head")).toContainText(
+    "DateActivityDistanceClimbVibeLifecycleAction",
+  );
+  const desktopRow = routeCards(page).first();
+  const desktopBox = await desktopRow.boundingBox();
+  expect(desktopBox).not.toBeNull();
+  expect(desktopBox!.width).toBeGreaterThan(900);
+  expect(desktopBox!.height).toBeLessThan(190);
+  await expect(desktopRow).toContainText("Run");
+  await expect(desktopRow).toContainText("21.3 km");
+  await expect(desktopRow).toContainText("680 m up");
+  await expect(desktopRow).toContainText("Completed");
+  await expect(desktopRow).toContainText(/long, exploratory Kyoto run/i);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  const mobileRow = routeCards(page).first();
+  const mobileBox = await mobileRow.boundingBox();
+  expect(mobileBox).not.toBeNull();
+  expect(mobileBox!.width).toBeLessThanOrEqual(358);
+  expect(mobileBox!.height).toBeLessThan(280);
+  await expect(page.getByTestId("route-ledger-head")).toBeHidden();
+});
+
 test("search and every route filter update the URL", async ({ page }) => {
   await page.goto("/#/routes");
   const filters = page.getByRole("form", { name: "Route filters" });

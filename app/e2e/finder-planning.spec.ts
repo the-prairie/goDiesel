@@ -26,9 +26,21 @@ test("Finder searches explicit route-backed candidates and saves a durable plan"
   await expect(page.getByText("Finder does not generate routes.")).toBeVisible();
   await searchKyoto(page);
 
+  await expect(page).toHaveURL(/#\/finder\?.*place=Kyoto/);
+  await expect(page).toHaveURL(/activity=Run/);
+  await expect(page).toHaveURL(/terrain=mixed/);
+  const map = page.getByRole("region", { name: "Finder route map" });
+  await expect(map).toBeVisible();
+  await expect(map).toHaveAttribute("data-map-status", "ready", {
+    timeout: 15_000,
+  });
+  await expect(map).toHaveAttribute("data-selected-route", "17654151284");
+
   const candidate = page.getByRole("article", { name: "Kyoto, Japan candidate" });
   await expect(candidate).toContainText("Owner-curated from recorded GPX");
   await expect(candidate).toContainText("21.3 km");
+  await expect(candidate).toContainText("Why it matches");
+  await expect(candidate).toContainText(/mixed terrain/i);
   await page.getByLabel("Place").fill("Patagonia");
   await candidate.getByRole("button", { name: "Save planned route" }).click();
   await expect(candidate.getByRole("status")).toContainText("Saved to Planned routes");
@@ -72,7 +84,7 @@ test("Finder explains source limits instead of fabricating an unsupported result
   await form.getByLabel("Vibe").fill("remote");
   await form.getByRole("button", { name: "Find curated routes" }).click();
 
-  const status = page.getByRole("status");
+  const status = page.getByRole("region", { name: "Finder results" }).getByRole("status");
   await expect(status).toContainText("No owner-curated route matches this search yet");
   await expect(page.getByRole("article")).toHaveCount(0);
   expect(await page.evaluate((key) => localStorage.getItem(key), plannedRouteStorageKey)).toBeNull();
@@ -84,8 +96,9 @@ test("a planned route never changes completed Atlas totals", async ({ page }) =>
   await page.getByRole("button", { name: "Save planned route" }).click();
 
   await page.goto("/#/atlas");
-  await expect(page.getByText("66 route records")).toBeVisible();
-  await expect(page.getByText("1908 completed km")).toBeVisible();
+  const spine = page.getByTestId("atlas-spine");
+  await expect(spine.getByText("66 routes")).toBeVisible();
+  await expect(spine.getByText("1908 km inked")).toBeVisible();
   await expect(page.getByText("planned-owner-route-17654151284")).toHaveCount(0);
 });
 
@@ -106,3 +119,27 @@ for (const viewport of [
     expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth + 1);
   });
 }
+
+test("Finder restores submitted intent through history and exposes removable mobile chips", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#/finder");
+  await searchKyoto(page);
+
+  await expect(page.getByRole("button", { name: "Remove terrain filter" })).toBeVisible();
+  await page.goto("/#/routes");
+  await page.goBack();
+  await page.getByRole("button", { name: "Edit filters" }).click();
+  const form = page.getByRole("form", { name: "Find a route" });
+  await expect(form.getByLabel("Place")).toHaveValue("Kyoto");
+  await expect(form.getByLabel("Terrain")).toHaveValue("mixed");
+  await expect(page.getByRole("article", { name: "Kyoto, Japan candidate" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Remove terrain filter" }).click();
+  await expect(form.getByLabel("Terrain")).toHaveValue("any");
+  await expect(page).not.toHaveURL(/terrain=mixed/);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+    390,
+  );
+});

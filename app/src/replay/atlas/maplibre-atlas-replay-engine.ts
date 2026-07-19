@@ -4,6 +4,7 @@ import maplibregl, {
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
+import { ROUTE_THREAD_STYLE } from "@/domain/route-thread-style";
 import type {
   ReplayEngine,
   ReplayEngineMountOptions,
@@ -33,8 +34,6 @@ function zoomForRange(cameraRangeM: number) {
 export class MapLibreAtlasReplayEngine implements ReplayEngine {
   private map?: MapLibreMap;
   private host?: HTMLDivElement;
-  private avatarElement?: HTMLElement;
-  private latestPose?: ReplayPose;
   private ready = false;
   private loadTimer?: number;
   private errorCount = 0;
@@ -42,7 +41,6 @@ export class MapLibreAtlasReplayEngine implements ReplayEngine {
 
   async mount({
     container,
-    avatarElement,
     route,
     onStatus,
   }: ReplayEngineMountOptions) {
@@ -61,7 +59,6 @@ export class MapLibreAtlasReplayEngine implements ReplayEngine {
       return;
     }
 
-    this.avatarElement = avatarElement;
     const host = document.createElement("div");
     host.className = "h-full w-full";
     container.replaceChildren(host);
@@ -78,7 +75,6 @@ export class MapLibreAtlasReplayEngine implements ReplayEngine {
     });
     this.map = map;
     map.addControl(new maplibregl.NavigationControl({ showCompass: true }), "bottom-right");
-    map.on("render", this.syncAvatar);
     const handleError = () => {
       if (generation !== this.generation) return;
       this.errorCount += 1;
@@ -114,9 +110,9 @@ export class MapLibreAtlasReplayEngine implements ReplayEngine {
         type: "line",
         source: "replay-route",
         paint: {
-          "line-color": "#001d18",
+          "line-color": ROUTE_THREAD_STYLE.halo,
           "line-width": 11,
-          "line-opacity": 0.82,
+          "line-opacity": 0.9,
         },
         layout: { "line-cap": "round", "line-join": "round" },
       });
@@ -125,7 +121,7 @@ export class MapLibreAtlasReplayEngine implements ReplayEngine {
         type: "line",
         source: "replay-route",
         paint: {
-          "line-color": "#00f19f",
+          "line-color": ROUTE_THREAD_STYLE.color,
           "line-width": 5,
           "line-opacity": 1,
         },
@@ -139,20 +135,17 @@ export class MapLibreAtlasReplayEngine implements ReplayEngine {
         duration: 0,
       });
       this.ready = true;
-      this.syncAvatar();
       onStatus({
         state: "ready",
         title: "Atlas replay ready",
-        message: "The fallback route thread and avatar are ready to move.",
+        message: "The fallback route thread is ready to move.",
       });
     });
   }
 
   setPose(pose: ReplayPose) {
-    this.latestPose = pose;
     const map = this.map;
     if (!map || !this.ready) return;
-    this.syncAvatar();
     if (!pose.following) return;
     map.jumpTo({
       center: [pose.lng, pose.lat],
@@ -162,27 +155,13 @@ export class MapLibreAtlasReplayEngine implements ReplayEngine {
     });
   }
 
-  private syncAvatar = () => {
-    const map = this.map;
-    const avatarElement = this.avatarElement;
-    const pose = this.latestPose;
-    if (!map || !avatarElement || !pose) return;
-    const point = map.project([pose.lng, pose.lat]);
-    avatarElement.style.display = "block";
-    avatarElement.style.transform = `translate3d(${point.x}px, ${point.y}px, 0) translate(-50%, -74%)`;
-  };
-
   destroy() {
     this.generation += 1;
     if (this.loadTimer !== undefined) window.clearTimeout(this.loadTimer);
-    if (this.avatarElement) this.avatarElement.style.display = "none";
-    this.map?.off("render", this.syncAvatar);
     this.map?.remove();
     this.host?.remove();
     this.map = undefined;
     this.host = undefined;
-    this.avatarElement = undefined;
-    this.latestPose = undefined;
     this.ready = false;
     this.loadTimer = undefined;
     this.errorCount = 0;

@@ -109,6 +109,61 @@ test("local owner workflow validates every field and regenerates route data", as
   });
 });
 
+for (const viewport of [
+  { name: "desktop", width: 1440, height: 900 },
+  { name: "mobile", width: 390, height: 844 },
+]) {
+  test(`Admin exposes a bounded owner workspace and unmistakable dirty actions on ${viewport.name}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await mockEditableAdmin(page, () => undefined);
+    await page.goto("/#/admin");
+
+    const workspace = page.getByTestId("admin-workspace");
+    const routeList = page.getByRole("complementary", { name: "Owner route list" });
+    const editor = page.getByRole("region", { name: "Route curation editor" });
+    const actionBar = page.getByTestId("curation-action-bar");
+    await expect(workspace).toBeVisible();
+    await expect(routeList).toBeVisible();
+    await expect(editor).toBeVisible();
+    await expect(actionBar).toHaveAttribute("data-dirty", "false");
+    await expect(actionBar).toContainText("No unsaved changes");
+    expect(await actionBar.evaluate((element) => getComputedStyle(element).position)).toBe(
+      "sticky",
+    );
+
+    await editor.getByLabel("Vibe").fill("A deliberate owner-authored route note.");
+    await expect(actionBar).toHaveAttribute("data-dirty", "true");
+    await expect(actionBar).toContainText("Unsaved changes");
+
+    if (viewport.name === "desktop") {
+      const listBox = await routeList.boundingBox();
+      const editorBox = await editor.boundingBox();
+      expect(listBox).not.toBeNull();
+      expect(editorBox).not.toBeNull();
+      expect(listBox!.x + listBox!.width).toBeLessThanOrEqual(editorBox!.x + 1);
+      await page.screenshot({
+        path: "e2e/evidence/issue-62-admin-workspace/admin-desktop.png",
+      });
+    } else {
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.screenshot({
+        path: "e2e/evidence/issue-62-admin-workspace/admin-mobile.png",
+      });
+      await actionBar.scrollIntoViewIfNeeded();
+      const actionBox = await actionBar.boundingBox();
+      const navigationBox = await page.getByTestId("atlas-spine-mobile").boundingBox();
+      expect(actionBox).not.toBeNull();
+      expect(navigationBox).not.toBeNull();
+      expect(actionBox!.y + actionBox!.height).toBeLessThanOrEqual(navigationBox!.y + 1);
+      await page.screenshot({
+        path: "e2e/evidence/issue-62-admin-workspace/admin-mobile-actions.png",
+      });
+    }
+  });
+}
+
 test("Admin is explicitly read-only without the local writer", async ({
   page,
 }) => {
