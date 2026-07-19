@@ -9,7 +9,6 @@ async function installDeterministicReplayEngine(page: Page) {
     const replayWindow = window as typeof window & {
       __GODIESEL_REPLAY_ENGINE_FACTORY__?: (mode: "earth" | "atlas") => {
         mount(options: {
-          avatarElement: HTMLElement;
           onStatus(status: {
             state: "ready" | "partial";
             title: string;
@@ -22,7 +21,6 @@ async function installDeterministicReplayEngine(page: Page) {
     };
     replayWindow.__GODIESEL_REPLAY_ENGINE_FACTORY__ = (mode) => ({
       async mount(options) {
-        options.avatarElement.style.display = "block";
         options.onStatus(
           mode === "earth"
             ? {

@@ -268,26 +268,11 @@ test("Replay controls stay synchronized across route changes", async ({ page }) 
   await expect(replay).toHaveAttribute("data-state", "ready");
 });
 
-test("Replay renders only the route thread without loading avatar assets", async ({
-  page,
-}) => {
-  const avatarRequests: string[] = [];
-  page.on("request", (request) => {
-    if (/route-avatars|dotlottie/i.test(request.url())) {
-      avatarRequests.push(request.url());
-    }
-  });
+test("Replay renders only the route thread", async ({ page }) => {
   await installDeterministicReplayEngine(page);
   await page.goto(`/#/replay/${routeSlug}`);
 
   await expect(page.getByTestId("route-thread")).toBeVisible();
-  await expect(
-    page.getByRole("img", { name: /Selected replay avatar:/ }),
-  ).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: /Choose replay avatar/ }),
-  ).toHaveCount(0);
-  expect(avatarRequests).toEqual([]);
 });
 
 test("Replay uses the elevation profile as its single distance-based timeline", async ({
@@ -744,9 +729,6 @@ test("real Atlas adapter fills the stage and advances the route", async ({ page 
   await expect
     .poll(async () => Number(await replay.getAttribute("data-progress")))
     .toBeGreaterThan(initialProgress);
-  await expect(
-    page.getByRole("img", { name: /Selected replay avatar:/ }),
-  ).toHaveCount(0);
 });
 
 test("missing Replay geometry remains intentional and navigable", async ({ page }) => {

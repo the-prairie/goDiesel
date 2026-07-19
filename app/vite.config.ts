@@ -1,36 +1,11 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { createReadStream, existsSync } from "node:fs";
 import path from "node:path";
-import { defineConfig, loadEnv, type Plugin } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import { viteStaticCopy } from "vite-plugin-static-copy";
 
 const cesiumBuild = "node_modules/cesium/Build/Cesium";
 const cesiumBaseUrl = "/cesiumStatic";
-const replayAvatarDirectory = path.resolve(__dirname, "../route-avatars");
-
-function replayAvatarAssets(): Plugin {
-  return {
-    name: "godiesel-replay-avatar-assets",
-    configureServer(server) {
-      server.middlewares.use("/route-avatars/", (request, response, next) => {
-        const filename = path.basename(request.url?.split("?")[0] ?? "");
-        if (!/^[a-z0-9-]+\.lottie$/.test(filename)) {
-          next();
-          return;
-        }
-        const assetPath = path.join(replayAvatarDirectory, filename);
-        if (!existsSync(assetPath)) {
-          next();
-          return;
-        }
-        response.setHeader("Content-Type", "application/zip");
-        createReadStream(assetPath).pipe(response);
-      });
-    },
-  };
-}
-
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, path.resolve(__dirname, ".."), "");
   const googleMapsApiKey =
@@ -40,7 +15,6 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       tailwindcss(),
-      replayAvatarAssets(),
       viteStaticCopy({
         targets: [
           ...["Workers", "Assets", "Widgets", "ThirdParty"].map((directory) => ({
@@ -48,21 +22,6 @@ export default defineConfig(({ mode }) => {
             dest: `cesiumStatic/${directory}`,
             rename: { stripBase: 5 },
           })),
-          {
-            src: "../route-avatars/*.lottie",
-            dest: "route-avatars",
-            rename: { stripBase: 1 },
-          },
-          {
-            src: "node_modules/@rive-app/canvas-lite/rive.wasm",
-            dest: "riveStatic",
-            rename: { stripBase: 3 },
-          },
-          {
-            src: "node_modules/@lottiefiles/dotlottie-web/dist/dotlottie-player.wasm",
-            dest: "dotlottieStatic",
-            rename: { stripBase: 4 },
-          },
         ],
       }),
     ],

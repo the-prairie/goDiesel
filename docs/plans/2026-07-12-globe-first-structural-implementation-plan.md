@@ -43,7 +43,7 @@ The following foundations already exist and should be retained:
 - Generated route data for 66 completed routes.
 - Typed completed, planned, and discovered lifecycle states.
 - Legacy `#quest/:slug` deep-link handling.
-- A proven static Earth Replay implementation in `build.py` with Cesium, Google Photorealistic 3D Tiles, route progress, camera behavior, failure states, and Lottie avatars.
+- A proven static Earth Replay implementation in `build.py` with Cesium, Google Photorealistic 3D Tiles, route progress, camera behavior, and failure states.
 
 The current React app is not yet product-complete because Routes and Replay are placeholders, Finder has no real planning lifecycle, navigation state is hand-written, all route geometry ships in one initial payload, and the static prototype remains the only complete replay implementation.
 
@@ -197,7 +197,7 @@ The generated data pipeline should validate these fields and allow incomplete dr
 
 ## Replay Boundary
 
-React owns route selection, navigation, playback state, selected avatar, error presentation, and cleanup.
+React owns route selection, navigation, playback state, error presentation, and cleanup.
 
 An imperative replay controller owns the Cesium viewer and external rendering APIs.
 
@@ -348,8 +348,7 @@ The Google Maps browser key remains browser-restricted and is supplied through `
 
 - Install and configure Cesium for Vite.
 - Extract camera, route-thread, progress, tile-loading, and blank-frame behavior from `build.py` into the Cesium adapter.
-- Build React replay controls for play, pause, seek, speed, follow, view mode, and avatar selection.
-- Port existing Lottie avatars as app assets.
+- Build React replay controls for play, pause, seek, speed, follow, and view mode.
 - Keep Atlas replay as an explicit fallback when Earth tiles or replay geometry are unavailable.
 - Preserve the route line throughout playback with depth-safe rendering.
 - Add one intentional loading state and one partial-tile failure state.
@@ -361,14 +360,13 @@ The Google Maps browser key remains browser-restricted and is supplied through `
 - `app/src/replay/cesium/cesium-replay-engine.ts`
 - `app/src/replay/atlas/atlas-replay-engine.ts`
 - `app/src/components/replay/replay-controls.tsx`
-- `app/src/components/replay/avatar-picker.tsx`
 - `app/src/components/replay/replay-status.tsx`
 
 **Acceptance:**
 
 - City, mountain, short, and long representative routes load.
 - Play, pause, seek, and speed remain smooth and synchronized.
-- The route thread and avatar remain visible during playback.
+- The route thread remains visible during playback.
 - Camera following can be released and restored.
 - Tile failures degrade to a clear state without breaking navigation.
 - Switching routes does not duplicate viewers, handlers, or animation loops.
@@ -513,7 +511,7 @@ The app has a stable globe home, navigation, route library, and curated route de
 
 U5 passes representative city, mountain, short, and long route checks.
 
-The route thread, camera, avatar, failure states, and cleanup match or improve on the static implementation.
+The route thread, camera, failure states, and cleanup match or improve on the static implementation.
 
 ### Gate C: Personal Product Loop
 

@@ -19,7 +19,7 @@ This is not a visual rewrite of every page at once.
 
 The work begins by establishing a stable token and shell foundation, proves that foundation on Atlas, then migrates route detail, Replay, Finder, Routes, and Admin in descending order of product importance.
 
-The existing route data, Three.js globe, Cesium Replay, Playable Earth lab, avatar system, URL model, and application behavior remain intact unless a ticket explicitly changes them.
+The existing route data, Three.js globe, Cesium Replay, Playable Earth lab, URL model, and application behavior remain intact unless a ticket explicitly changes them.
 
 ## Product Outcome
 
@@ -382,7 +382,7 @@ Components should consume semantic roles rather than `#hex`, arbitrary Tailwind 
 
 **Changes:**
 
-- Keep Cesium, Atlas fallback, avatar synchronization, route selection, and camera behavior unchanged.
+- Keep Cesium, Atlas fallback, route selection, and camera behavior unchanged.
 - Replace current context panel and controls with `ReplayHUD` and one `PlaybackDock`.
 - Add a collapsible desktop chapter/context rail.
 - Implement mobile compact playback card and expandable tool sheet.
@@ -400,10 +400,10 @@ Components should consume semantic roles rather than `#hex`, arbitrary Tailwind 
 **Acceptance:**
 
 - One dock owns playback state.
-- Route context never obscures the avatar or current path.
+- Route context never obscures the current path.
 - All controls remain at least 44px.
 - Fade behavior respects focus and reduced motion.
-- Existing deterministic, live terrain, avatar, mobile, and five-minute Replay tests remain green.
+- Existing deterministic, live terrain, mobile, and five-minute Replay tests remain green.
 
 ## D6. Evolve Finder Into A Planning Workspace
 

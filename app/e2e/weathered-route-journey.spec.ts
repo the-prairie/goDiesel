@@ -12,7 +12,6 @@ async function installJourneyReplayEngine(page: Page) {
       __GODIESEL_REPLAY_ENGINE_FACTORY__?: (mode: "earth" | "atlas") => {
         mount(options: {
           container: HTMLElement;
-          avatarElement: HTMLElement;
           onStatus(status: {
             state: "ready" | "partial";
             title: string;
@@ -39,7 +38,6 @@ async function installJourneyReplayEngine(page: Page) {
         const context = canvas.getContext("2d");
         context?.fillRect(0, 0, 800, 600);
         options.container.append(canvas);
-        options.avatarElement.style.display = "block";
         options.onStatus(
           mode === "earth"
             ? {

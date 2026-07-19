@@ -5,7 +5,6 @@ async function installReplayEngine(page: Page, earthState: "ready" | "partial" =
     const replayWindow = window as typeof window & {
       __GODIESEL_REPLAY_ENGINE_FACTORY__?: (mode: "earth" | "atlas") => {
         mount(options: {
-          avatarElement: HTMLElement;
           onStatus(status: {
             state: "ready" | "partial";
             title: string;
@@ -18,7 +17,6 @@ async function installReplayEngine(page: Page, earthState: "ready" | "partial" =
     };
     replayWindow.__GODIESEL_REPLAY_ENGINE_FACTORY__ = (mode) => ({
       async mount(options) {
-        options.avatarElement.style.display = "block";
         options.onStatus({
           state: mode === "earth" ? state : "ready",
           title: "Replay ready",
