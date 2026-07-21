@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { PNG } from "pngjs";
 
 async function installDeterministicCesiumAtlas(page: import("@playwright/test").Page) {
   await page.addInitScript(() => {
@@ -9,6 +10,12 @@ async function installDeterministicCesiumAtlas(page: import("@playwright/test").
       let regions: Array<{ name: string }> = [];
       let selectedRegion: string | undefined;
       let cameraTarget = 18_500_000;
+      let regionalTimer: number | undefined;
+      let reportStatus: ((status: {
+        state: "ready" | "region-loading" | "region-ready" | "region-fallback";
+        message: string;
+        regionName?: string;
+      }) => void) | undefined;
       const syncCamera = () => {
         if (canvas) canvas.dataset.cameraTarget = String(cameraTarget);
       };
@@ -34,6 +41,11 @@ async function installDeterministicCesiumAtlas(page: import("@playwright/test").
             ),
           );
           canvas.dataset.routePalette = "cobalt";
+          canvas.dataset.atlasState = "global";
+          canvas.dataset.cameraState = "settled";
+          canvas.dataset.terrainState = "global";
+          canvas.dataset.regionRouteCount = "0";
+          reportStatus = options.onStatus;
           syncCamera();
           const context = canvas.getContext("2d")!;
           context.fillStyle = "#07182b";
@@ -64,9 +76,59 @@ async function installDeterministicCesiumAtlas(page: import("@playwright/test").
         },
         setSelectedRegion(region) {
           selectedRegion = region?.name;
-          if (canvas) canvas.dataset.cameraRegion = selectedRegion ?? "";
-          cameraTarget = 18_500_000;
+          if (canvas) {
+            canvas.dataset.cameraRegion = selectedRegion ?? "";
+            canvas.dataset.regionSelectionCount = String(
+              Number(canvas.dataset.regionSelectionCount ?? "0") + 1,
+            );
+          }
+          if (regionalTimer !== undefined) window.clearTimeout(regionalTimer);
+          if (!region) {
+            cameraTarget = 18_500_000;
+            if (canvas) {
+              canvas.dataset.atlasState = "global";
+              canvas.dataset.cameraState = "settled";
+              canvas.dataset.terrainState = "global";
+              canvas.dataset.regionRouteCount = "0";
+            }
+            reportStatus?.({ state: "ready", message: "Atlas world ready." });
+            syncCamera();
+            return;
+          }
+          cameraTarget = region.name.includes("Banff") ? 42_000 : 28_000;
+          const duration = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+            ? 120
+            : 1_150;
+          if (canvas) {
+            canvas.dataset.atlasState = "region-loading";
+            canvas.dataset.cameraState = "transitioning";
+            canvas.dataset.terrainState = "loading";
+            canvas.dataset.cameraDurationMs = String(duration);
+            canvas.dataset.regionRouteCount = String(region.routes.length);
+          }
+          reportStatus?.({
+            state: "region-loading",
+            regionName: region.name,
+            message: `Loading ${region.name} terrain`,
+          });
           syncCamera();
+          regionalTimer = window.setTimeout(() => {
+            const fallback = window.__GODIESEL_ATLAS_REGION_OUTCOME__ === "fallback";
+            if (canvas) {
+              canvas.dataset.atlasState = fallback
+                ? "region-fallback"
+                : "region-ready";
+              canvas.dataset.cameraState = "settled";
+              canvas.dataset.terrainState = fallback ? "fallback" : "ready";
+            }
+            reportStatus?.({
+              state: fallback ? "region-fallback" : "region-ready",
+              regionName: region.name,
+              message: fallback
+                ? "3D terrain partially unavailable"
+                : `${region.name} terrain ready.`,
+            });
+          }, duration);
         },
         projectRegions() {
           return regions.map((region, index) => ({
@@ -89,6 +151,7 @@ async function installDeterministicCesiumAtlas(page: import("@playwright/test").
           syncCamera();
         },
         destroy() {
+          if (regionalTimer !== undefined) window.clearTimeout(regionalTimer);
           window.__GODIESEL_ATLAS_WORLD_DESTROY_COUNT__ += 1;
           canvas?.remove();
         },
@@ -133,11 +196,13 @@ for (const viewport of [
       .toBe(region);
     await expect(page.getByRole("heading", { name: region! })).toBeVisible();
     await expect(canvas).toHaveAttribute("data-camera-region", region!);
-    await expect(canvas).toHaveAttribute("data-camera-target", "18500000");
+    await expect(world).toHaveAttribute("data-atlas-status", "region-ready");
+    await expect(canvas).toHaveAttribute("data-camera-target", "28000");
+    await expect(canvas).toHaveAttribute("data-terrain-state", "ready");
 
     await canvas.focus();
     await page.keyboard.press("ArrowRight");
-    await expect(canvas).toHaveAttribute("data-camera-target", "18500010");
+    await expect(canvas).toHaveAttribute("data-camera-target", "28010");
 
     const beforeZoom = Number(await canvas.getAttribute("data-camera-target"));
     await page.getByRole("button", { name: "Zoom in" }).click();
@@ -182,7 +247,12 @@ test("Cesium enters a region selected by the initial URL", async ({ page }) => {
 
   const canvas = page.getByLabel("Interactive route globe");
   await expect(canvas).toHaveAttribute("data-camera-region", "Kyoto, Japan");
-  await expect(canvas).toHaveAttribute("data-camera-target", "18500000");
+  await expect(canvas).toHaveAttribute("data-region-selection-count", "1");
+  await expect(page.locator('div[data-atlas-engine="cesium"]')).toHaveAttribute(
+    "data-atlas-status",
+    "region-ready",
+  );
+  await expect(canvas).toHaveAttribute("data-camera-target", "28000");
   await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
 });
 
@@ -199,13 +269,79 @@ test("search, keyboard, and wheel input share the Cesium camera target", async (
   await search.fill("kyoto");
   await page.getByRole("button", { name: /Kyoto, Japan2 routes/i }).click();
   await expect(canvas).toHaveAttribute("data-camera-region", "Kyoto, Japan");
-  await expect(canvas).toHaveAttribute("data-camera-target", "18500000");
+  await expect(page.locator('div[data-atlas-engine="cesium"]')).toHaveAttribute(
+    "data-atlas-status",
+    "region-ready",
+  );
+  await expect(canvas).toHaveAttribute("data-camera-target", "28000");
 
   await canvas.focus();
   await page.keyboard.press("ArrowRight");
-  await expect(canvas).toHaveAttribute("data-camera-target", "18500010");
+  await expect(canvas).toHaveAttribute("data-camera-target", "28010");
   await canvas.dispatchEvent("wheel", { deltaY: 500 });
-  await expect(canvas).toHaveAttribute("data-camera-target", "18500510");
+  await expect(canvas).toHaveAttribute("data-camera-target", "28510");
+});
+
+test("reduced motion settles regional terrain within 150 milliseconds", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await installDeterministicCesiumAtlas(page);
+  await page.goto("/#/atlas?region=Kyoto%2C+Japan");
+
+  const canvas = page.getByLabel("Interactive route globe");
+  await expect(canvas).toHaveAttribute("data-camera-duration-ms", "120");
+  await expect(page.locator('div[data-atlas-engine="cesium"]')).toHaveAttribute(
+    "data-atlas-status",
+    "region-ready",
+  );
+});
+
+test("regional terrain failure preserves URL state in a source-backed map", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    window.__GODIESEL_ATLAS_REGION_OUTCOME__ = "fallback";
+  });
+  await page.route("**/styles/liberty", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        version: 8,
+        sources: {},
+        layers: [
+          {
+            id: "background",
+            type: "background",
+            paint: { "background-color": "#d9ddd2" },
+          },
+        ],
+      }),
+    });
+  });
+  await installDeterministicCesiumAtlas(page);
+  await page.goto("/#/atlas?region=Kyoto%2C+Japan");
+
+  const fallback = page.locator(
+    '[data-atlas-engine="maplibre-regional-fallback"]',
+  );
+  await expect(fallback).toHaveAttribute("data-map-status", "ready");
+  await expect(fallback).toHaveAttribute("data-region-route-count", "2");
+  await expect(
+    fallback.locator('[data-regional-route-overlay="true"] path'),
+  ).toHaveCount(4);
+  await expect(page).toHaveURL(/region=Kyoto%2C\+Japan/);
+  await expect(page.getByText("3D terrain partially unavailable.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+
+  const screenshot = PNG.sync.read(await fallback.screenshot());
+  const colors = new Set<string>();
+  for (let index = 0; index < screenshot.data.length; index += 400) {
+    colors.add(
+      `${screenshot.data[index]},${screenshot.data[index + 1]},${screenshot.data[index + 2]}`,
+    );
+  }
+  expect(colors.size).toBeGreaterThan(2);
 });
 
 test("Cesium releases its renderer when Atlas unmounts", async ({ page }) => {
@@ -223,5 +359,6 @@ test("Cesium releases its renderer when Atlas unmounts", async ({ page }) => {
 declare global {
   interface Window {
     __GODIESEL_ATLAS_WORLD_DESTROY_COUNT__: number;
+    __GODIESEL_ATLAS_REGION_OUTCOME__?: "ready" | "fallback";
   }
 }
