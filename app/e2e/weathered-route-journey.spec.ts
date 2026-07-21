@@ -70,21 +70,21 @@ test("Atlas selection becomes a Retrace, then restores its place", async ({
   await installJourneyReplayEngine(page);
   await page.goto("/#/atlas?q=kyoto&region=Kyoto%2C+Japan");
 
-  const regionGuide = page.getByRole("complementary", {
-    name: "Kyoto, Japan region guide",
+  const routeCarousel = page.getByRole("region", {
+    name: "Kyoto, Japan recorded routes",
   });
-  await expect(regionGuide).toBeVisible({ timeout: 15_000 });
-  const reviewedRoute = regionGuide
-    .getByRole("button")
+  await expect(routeCarousel).toBeVisible({ timeout: 15_000 });
+  const reviewedRoute = routeCarousel
+    .getByRole("article")
     .filter({ hasText: "A long, exploratory Kyoto run" });
   await expect(reviewedRoute).toHaveCount(1);
-  await reviewedRoute.click();
+  await reviewedRoute.getByRole("button", { name: /Select / }).click();
 
   await expect(page).toHaveURL(
     /#\/atlas\?q=kyoto&region=Kyoto%2C\+Japan&route=17654151284$/,
   );
   const selectedAtlasUrl = page.url();
-  await page.getByRole("link", { name: "Open replay" }).click();
+  await reviewedRoute.getByRole("link", { name: "Open route" }).click();
 
   const stage = page.getByTestId("replay-stage");
   await expect(stage).toHaveAttribute("data-state", "partial");
@@ -116,9 +116,11 @@ test("Atlas selection becomes a Retrace, then restores its place", async ({
   await expect(page).toHaveURL(selectedAtlasUrl);
   await page.goBack();
   await expect(page).toHaveURL(/#\/atlas\?q=kyoto&region=Kyoto%2C\+Japan$/);
-  await expect(regionGuide).toBeVisible({ timeout: 15_000 });
+  await expect(routeCarousel).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("textbox", {
     name: "Search regions, routes, replay-worthy days",
   })).toHaveValue("kyoto");
-  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Kyoto, Japan", exact: true }),
+  ).toBeVisible();
 });

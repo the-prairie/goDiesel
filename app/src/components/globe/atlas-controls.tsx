@@ -2,6 +2,7 @@ import { LocateFixed, Map, Minus, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { RouteRegion } from "@/data/route-regions";
+import { cn } from "@/lib/utils";
 
 export type AtlasActivityMode = "all" | "runs" | "rides";
 
@@ -28,7 +29,10 @@ export function AtlasControls({
 }: AtlasControlsProps) {
   return (
     <>
-      <div className="atlas-region-select absolute left-3 top-3 z-20 flex h-[54px] items-center gap-2 rounded-sm border border-white/35 bg-[#f6f2e8]/92 p-1 text-[#24322d] shadow-lg backdrop-blur sm:left-4 sm:top-4 md:left-5 md:top-5 xl:w-[220px]">
+      <div className={cn(
+        "atlas-region-select absolute left-3 top-3 z-20 flex h-[54px] items-center gap-2 rounded-sm border border-white/35 bg-[#f6f2e8]/92 p-1 text-[#24322d] shadow-lg backdrop-blur sm:left-4 sm:top-4 md:left-5 md:top-5 xl:w-[220px]",
+        selectedRegion && "[@media(max-height:500px)]:hidden",
+      )}>
         <Map className="ml-1 size-4 shrink-0 text-[#315fb4]" aria-hidden="true" />
         <label className="sr-only" htmlFor="atlas-region-select">
           Browse route regions
@@ -41,7 +45,7 @@ export function AtlasControls({
             const region = regions.find((candidate) => candidate.name === event.target.value);
             if (region) onSelectRegion(region);
           }}
-          className="min-h-11 min-w-0 max-w-24 rounded-sm border border-[#c7c1b5] bg-[#fffdf8] px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[#315fb4] sm:max-w-52 sm:px-3 xl:min-w-0 xl:flex-1"
+          className="min-h-11 min-w-0 max-w-24 rounded-sm border border-[#c7c1b5] bg-[#fffdf8] px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[#315fb4] [@media(min-width:380px)]:max-w-36 sm:max-w-52 sm:px-3 xl:min-w-0 xl:flex-1"
         >
           <option value="" disabled>
             Regions
@@ -54,7 +58,10 @@ export function AtlasControls({
         </select>
       </div>
 
-      <div className="atlas-mobile-activity absolute right-3 top-3 z-20 flex rounded-sm border border-white/35 bg-[#f6f2e8]/92 p-1 shadow-lg backdrop-blur sm:hidden" aria-label="Activity filter">
+      <div className={cn(
+        "atlas-mobile-activity absolute right-3 top-3 z-20 flex rounded-sm border border-white/35 bg-[#f6f2e8]/92 p-1 shadow-lg backdrop-blur sm:hidden",
+        selectedRegion && "[@media(max-height:500px)]:hidden",
+      )} aria-label="Activity filter">
         {(["all", "runs", "rides"] as const).map((value) => (
           <Button
             key={value}
@@ -71,7 +78,10 @@ export function AtlasControls({
         ))}
       </div>
 
-      <div className="atlas-desktop-activity absolute left-[37.25rem] top-5 z-20 hidden h-[54px] rounded-sm border border-white/35 bg-[#f6f2e8]/92 p-1 shadow-lg backdrop-blur xl:flex" aria-label="Activity filter">
+      <div className={cn(
+        "atlas-desktop-activity absolute left-[37.25rem] top-5 z-20 hidden h-[54px] rounded-sm border border-white/35 bg-[#f6f2e8]/92 p-1 shadow-lg backdrop-blur xl:flex",
+        selectedRegion && "[@media(max-height:500px)]:hidden",
+      )} aria-label="Activity filter">
         {(["all", "runs", "rides"] as const).map((value) => (
           <Button
             key={value}
@@ -88,7 +98,10 @@ export function AtlasControls({
         ))}
       </div>
 
-      <div className="atlas-mobile-activity absolute right-4 top-4 z-20 hidden h-[54px] rounded-sm border border-white/35 bg-[#f6f2e8]/92 p-1 shadow-lg backdrop-blur sm:flex md:right-5 md:top-5 xl:hidden" aria-label="Activity filter">
+      <div className={cn(
+        "atlas-mobile-activity absolute right-4 top-4 z-20 hidden h-[54px] rounded-sm border border-white/35 bg-[#f6f2e8]/92 p-1 shadow-lg backdrop-blur sm:flex md:right-5 md:top-5 xl:hidden",
+        selectedRegion && "[@media(max-height:500px)]:hidden",
+      )} aria-label="Activity filter">
         {(["all", "runs", "rides"] as const).map((value) => (
           <Button
             key={value}
@@ -105,7 +118,14 @@ export function AtlasControls({
         ))}
       </div>
 
-      <div className="atlas-mobile-map-tools absolute right-3 top-[9.75rem] z-20 flex gap-1 rounded-sm border border-white/35 bg-[#f6f2e8]/92 p-1 shadow-lg backdrop-blur md:bottom-5 md:left-5 md:right-auto md:top-auto">
+      <div
+        className={cn(
+          "atlas-mobile-map-tools absolute right-3 top-[9.75rem] z-40 flex gap-1 rounded-sm border border-white/35 bg-[#f6f2e8]/92 p-1 shadow-lg backdrop-blur md:left-5 md:right-auto md:top-auto",
+          selectedRegion
+            ? "md:bottom-[23rem] [@media(max-height:500px)]:hidden"
+            : "md:bottom-5",
+        )}
+      >
         <Button type="button" variant="ghost" size="icon" aria-label="Reset globe view" onClick={onResetView} className="text-[#24322d]"><LocateFixed aria-hidden="true" /></Button>
         <Button type="button" variant="ghost" size="icon" aria-label="Zoom out" onClick={onZoomOut} className="text-[#24322d]"><Minus aria-hidden="true" /></Button>
         <Button type="button" variant="ghost" size="icon" aria-label="Zoom in" onClick={onZoomIn} className="text-[#24322d]"><Plus aria-hidden="true" /></Button>

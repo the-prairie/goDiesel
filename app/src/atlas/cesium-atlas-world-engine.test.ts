@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { CesiumAtlasWorldEngine } from "@/atlas/cesium-atlas-world-engine";
+import {
+  CesiumAtlasWorldEngine,
+  routeForPickedEntity,
+} from "@/atlas/cesium-atlas-world-engine";
+import { completedRoutes } from "@/data/routes";
 
 describe("CesiumAtlasWorldEngine", () => {
   afterEach(() => vi.useRealTimers());
@@ -60,5 +64,24 @@ describe("CesiumAtlasWorldEngine", () => {
 
     await expect(result).resolves.toBe(false);
     expect(removeLoadedListener).toHaveBeenCalledOnce();
+  });
+
+  it("resolves a picked terrain thread only within the selected region", () => {
+    const kyoto = completedRoutes.find((route) => route.region === "Kyoto, Japan")!;
+    const crete = completedRoutes.find((route) => route.region === "Crete, Greece")!;
+    const kyotoEntity = {};
+    const creteEntity = {};
+    const entries = [
+      { regionName: kyoto.region, route: kyoto, entity: kyotoEntity },
+      { regionName: crete.region, route: crete, entity: creteEntity },
+    ];
+
+    expect(
+      routeForPickedEntity(entries as never, kyoto.region, kyotoEntity as never),
+    ).toBe(kyoto);
+    expect(
+      routeForPickedEntity(entries as never, kyoto.region, creteEntity as never),
+    ).toBeUndefined();
+    expect(routeForPickedEntity(entries as never, undefined, kyotoEntity as never)).toBeUndefined();
   });
 });

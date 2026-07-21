@@ -5,8 +5,11 @@ import type { RoutePoint, RouteSummary } from "@/domain/routes";
 export interface AtlasGlobeProps {
   regions: RouteRegion[];
   selectedRegion?: RouteRegion;
+  selectedRoute?: RouteSummary;
   onSelectRegion: (region: RouteRegion) => void;
+  onSelectRoute?: (route: RouteSummary) => void;
   onStatusChange?: (status: AtlasWorldStatus) => void;
+  onRegionPresentationReady?: (ready: boolean) => void;
   className?: string;
 }
 
@@ -35,11 +38,13 @@ export interface AtlasWorldEngineMountOptions {
   container: HTMLElement;
   regions: RouteRegion[];
   onStatus: (status: AtlasWorldStatus) => void;
+  onSelectRoute?: (route: RouteSummary) => void;
 }
 
 export interface AtlasWorldEngine {
   mount(options: AtlasWorldEngineMountOptions): Promise<void>;
   setSelectedRegion(region?: RouteRegion): void;
+  setSelectedRoute(route?: RouteSummary): void;
   projectRegions(): AtlasRegionProjection[];
   zoomIn(): void;
   zoomOut(): void;

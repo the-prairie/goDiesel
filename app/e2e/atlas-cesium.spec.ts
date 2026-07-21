@@ -71,6 +71,13 @@ async function installDeterministicCesiumAtlas(page: import("@playwright/test").
               syncCamera();
             }
           });
+          canvas.addEventListener("dblclick", () => {
+            const region = options.regions.find(
+              (candidate) => candidate.name === selectedRegion,
+            );
+            const route = region?.routes.at(-1);
+            if (route) options.onSelectRoute?.(route);
+          });
           options.container.append(canvas);
           options.onStatus({ state: "ready", message: "Atlas world ready." });
         },
@@ -129,6 +136,9 @@ async function installDeterministicCesiumAtlas(page: import("@playwright/test").
                 : `${region.name} terrain ready.`,
             });
           }, duration);
+        },
+        setSelectedRoute(route) {
+          if (canvas) canvas.dataset.selectedRoute = route?.slug ?? "";
         },
         projectRegions() {
           return regions.map((region, index) => ({
@@ -194,7 +204,9 @@ for (const viewport of [
     await expect
       .poll(() => new URLSearchParams(new URL(page.url()).hash.split("?")[1]).get("region"))
       .toBe(region);
-    await expect(page.getByRole("heading", { name: region! })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 2, name: region! }),
+    ).toBeVisible();
     await expect(canvas).toHaveAttribute("data-camera-region", region!);
     await expect(world).toHaveAttribute("data-atlas-status", "region-ready");
     await expect(canvas).toHaveAttribute("data-camera-target", "28000");
@@ -221,6 +233,7 @@ test("Cesium failure preserves Atlas through the Three.js fallback", async ({ pa
         onStatus({ state: "unavailable", message: "Synthetic provider failure." });
       },
       setSelectedRegion() {},
+      setSelectedRoute() {},
       projectRegions: () => [],
       zoomIn() {},
       zoomOut() {},
@@ -234,7 +247,9 @@ test("Cesium failure preserves Atlas through the Three.js fallback", async ({ pa
 
   await expect(page.locator('[data-atlas-engine="three-fallback"]')).toBeAttached();
   await expect(page.getByText("Cesium world unavailable. Showing the classic Atlas.")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Kyoto, Japan" }),
+  ).toBeVisible();
   await expect(page).toHaveURL(/region=Kyoto%2C\+Japan/);
   await expect
     .poll(() => page.evaluate(() => window.__GODIESEL_ATLAS_WORLD_DESTROY_COUNT__))
@@ -253,7 +268,9 @@ test("Cesium enters a region selected by the initial URL", async ({ page }) => {
     "region-ready",
   );
   await expect(canvas).toHaveAttribute("data-camera-target", "28000");
-  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Kyoto, Japan" }),
+  ).toBeVisible();
 });
 
 test("search, keyboard, and wheel input share the Cesium camera target", async ({
@@ -328,11 +345,20 @@ test("regional terrain failure preserves URL state in a source-backed map", asyn
   await expect(fallback).toHaveAttribute("data-map-status", "ready");
   await expect(fallback).toHaveAttribute("data-region-route-count", "2");
   await expect(
-    fallback.locator('[data-regional-route-overlay="true"] path'),
+    fallback.locator('[data-regional-route-overlay="true"] path:not([data-route-hit-target])'),
   ).toHaveCount(4);
   await expect(page).toHaveURL(/region=Kyoto%2C\+Japan/);
   await expect(page.getByText("3D terrain partially unavailable.")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Kyoto, Japan" }),
+  ).toBeVisible();
+  const carousel = page.getByRole("region", {
+    name: "Kyoto, Japan recorded routes",
+  });
+  const cards = carousel.locator("article[data-route-slug]");
+  await expect(cards.first()).toHaveAttribute("data-selected", "true");
+  await fallback.locator("path[data-route-hit-target]").nth(1).dispatchEvent("click");
+  await expect(cards.nth(1)).toHaveAttribute("data-selected", "true");
 
   const screenshot = PNG.sync.read(await fallback.screenshot());
   const colors = new Set<string>();
@@ -355,6 +381,211 @@ test("Cesium releases its renderer when Atlas unmounts", async ({ page }) => {
     .poll(() => page.evaluate(() => window.__GODIESEL_ATLAS_WORLD_DESTROY_COUNT__))
     .toBe(1);
 });
+
+test("regional carousel gates on terrain and keeps route selection synchronized", async ({
+  page,
+}) => {
+  await installDeterministicCesiumAtlas(page);
+  await page.goto("/#/atlas?region=Kyoto%2C+Japan");
+
+  await expect(
+    page
+      .getByRole("region", { name: "Kyoto, Japan routes" })
+      .getByText("Loading Kyoto, Japan terrain"),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Kyoto, Japan recorded routes" }),
+  ).toHaveCount(0);
+  const carousel = page.getByRole("region", {
+    name: "Kyoto, Japan recorded routes",
+  });
+  await expect(carousel).toBeVisible();
+  const cards = carousel.locator("article[data-route-slug]");
+  await expect(cards).toHaveCount(2);
+
+  const first = cards.nth(0);
+  const second = cards.nth(1);
+  const firstSlug = await first.getAttribute("data-route-slug");
+  const secondSlug = await second.getAttribute("data-route-slug");
+  await expect(first).toHaveAttribute("data-selected", "true");
+  await expect(page).not.toHaveURL(/route=/);
+  await expect(page.getByLabel("Interactive route globe")).toHaveAttribute(
+    "data-selected-route",
+    firstSlug!,
+  );
+
+  await page.getByRole("button", { name: "Next route" }).click();
+  await expect(second).toHaveAttribute("data-selected", "true");
+  await expect(page).toHaveURL(new RegExp(`route=${secondSlug}`));
+  await expect(page.getByLabel("Interactive route globe")).toHaveAttribute(
+    "data-selected-route",
+    secondSlug!,
+  );
+
+  await carousel.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(first).toHaveAttribute("data-selected", "true");
+  await page.getByLabel("Interactive route globe").dispatchEvent("dblclick");
+  await expect(second).toHaveAttribute("data-selected", "true");
+  await first.getByRole("button", { name: /Select / }).click();
+  await expect(first).toHaveAttribute("data-selected", "true");
+  await second.getByRole("button", { name: /Select / }).click();
+  await expect(second).toHaveAttribute("data-selected", "true");
+
+  await second.getByRole("link", { name: "Open route" }).click();
+  await expect(page).toHaveURL(new RegExp(`#/replay/${secondSlug}`));
+  await page.goBack();
+  await expect(page).toHaveURL(/#\/atlas\?region=Kyoto%2C\+Japan/);
+  await expect(page).toHaveURL(new RegExp(`route=${secondSlug}`));
+  await expect(second).toHaveAttribute("data-selected", "true");
+});
+
+test("carousel drag selects one route without moving the globe", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installDeterministicCesiumAtlas(page);
+  await page.goto("/#/atlas?region=Crete%2C+Greece");
+
+  const carousel = page.getByRole("region", {
+    name: "Crete, Greece recorded routes",
+  });
+  const cards = carousel.locator("article[data-route-slug]");
+  const first = cards.first();
+  const second = cards.nth(1);
+  await expect(first).toHaveAttribute("data-selected", "true");
+  const canvas = page.getByLabel("Interactive route globe");
+  const cameraTargetBeforeDrag = await canvas.getAttribute("data-camera-target");
+  const carouselBox = (await carousel.boundingBox())!;
+  await page.mouse.move(
+    carouselBox.x + carouselBox.width * 0.78,
+    carouselBox.y + carouselBox.height * 0.55,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    carouselBox.x + carouselBox.width * 0.16,
+    carouselBox.y + carouselBox.height * 0.55,
+    { steps: 16 },
+  );
+  await page.mouse.up();
+
+  await expect(second).toHaveAttribute("data-selected", "true");
+  await expect(canvas).toHaveAttribute("data-camera-target", cameraTargetBeforeDrag!);
+  await expect(page).toHaveURL(/route=/);
+});
+
+test("opening a non-selected card preserves its exact Atlas return selection", async ({
+  page,
+}) => {
+  await installDeterministicCesiumAtlas(page);
+  await page.goto("/#/atlas?region=Crete%2C+Greece");
+
+  const carousel = page.getByRole("region", {
+    name: "Crete, Greece recorded routes",
+  });
+  const target = carousel.locator("article[data-route-slug]").nth(2);
+  const targetSlug = await target.getAttribute("data-route-slug");
+  await expect(target).toHaveAttribute("data-selected", "false");
+  await target.getByRole("link", { name: "Open route" }).click();
+
+  await expect(page).toHaveURL(new RegExp(`#/replay/${targetSlug}`));
+  await page.getByRole("link", { name: "Back to Atlas" }).click();
+  await expect(page).toHaveURL(/#\/atlas\?region=Crete%2C\+Greece/);
+  await expect(page).toHaveURL(new RegExp(`route=${targetSlug}`));
+  await expect(
+    page
+      .getByRole("region", { name: "Crete, Greece recorded routes" })
+      .locator(`article[data-route-slug="${targetSlug}"]`),
+  ).toHaveAttribute("data-selected", "true");
+});
+
+for (const viewport of [
+  { name: "desktop", width: 1440, height: 900, minimumRatio: 0.28, maximumRatio: 0.36, fullCards: 3, hasPeek: false },
+  { name: "tablet", width: 820, height: 900, minimumRatio: 0.4, maximumRatio: 0.5, fullCards: 1, hasPeek: true },
+  { name: "mobile", width: 390, height: 844, minimumRatio: 0.78, maximumRatio: 0.9, fullCards: 1, hasPeek: true },
+]) {
+  test(`regional carousel exposes the intended ${viewport.name} card rhythm`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await installDeterministicCesiumAtlas(page);
+    await page.goto("/#/atlas?region=Crete%2C+Greece");
+
+    const carousel = page.getByRole("region", {
+      name: "Crete, Greece recorded routes",
+    });
+    await expect(carousel).toBeVisible();
+    await page.getByRole("button", { name: "Next route" }).click();
+    await page.getByRole("button", { name: "Next route" }).click();
+    const card = carousel.locator("article[data-route-slug]").first();
+    const [carouselBox, cardBox] = await Promise.all([
+      carousel.boundingBox(),
+      card.boundingBox(),
+    ]);
+    expect(carouselBox).not.toBeNull();
+    expect(cardBox).not.toBeNull();
+    const ratio = cardBox!.width / carouselBox!.width;
+    expect(ratio).toBeGreaterThan(viewport.minimumRatio);
+    expect(ratio).toBeLessThan(viewport.maximumRatio);
+    const visibility = await carousel.locator("article[data-route-slug]").evaluateAll(
+      (cards, viewportBounds) =>
+        cards.map((card) => {
+          const bounds = card.getBoundingClientRect();
+          const visibleWidth = Math.max(
+            0,
+            Math.min(bounds.right, viewportBounds.right) -
+              Math.max(bounds.left, viewportBounds.left),
+          );
+          return visibleWidth / bounds.width;
+        }),
+      {
+        left: carouselBox!.x,
+        right: carouselBox!.x + carouselBox!.width,
+      },
+    );
+    expect(visibility.filter((visible) => visible >= 0.95)).toHaveLength(
+      viewport.fullCards,
+    );
+    expect(
+      visibility.some((visible) => visible > 0.05 && visible < 0.95),
+    ).toBe(viewport.hasPeek);
+    if (viewport.name === "tablet") {
+      expect(visibility.reduce((total, visible) => total + visible, 0)).toBeGreaterThan(2);
+    }
+    const selectedCard = carousel.locator('article[data-selected="true"]');
+    await expect(selectedCard).toBeInViewport();
+    const selectedBox = (await selectedCard.boundingBox())!;
+    expect(
+      Math.abs(
+        selectedBox.x + selectedBox.width / 2 -
+          (carouselBox!.x + carouselBox!.width / 2),
+      ),
+    ).toBeLessThan(3);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(viewport.width);
+  });
+}
+
+for (const viewport of [
+  { name: "desktop", width: 1440, height: 900 },
+  { name: "tablet", width: 820, height: 900 },
+  { name: "mobile", width: 390, height: 844 },
+]) {
+  test(`one-route regions keep carousel dimensions with bounded navigation on ${viewport.name}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await installDeterministicCesiumAtlas(page);
+    await page.goto("/#/atlas?region=London%2C+UK");
+
+    const carousel = page.getByRole("region", {
+      name: "London, UK recorded routes",
+    });
+    await expect(carousel.locator("article[data-route-slug]")).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "Previous route" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Next route" })).toBeDisabled();
+    expect((await carousel.boundingBox())!.height).toBeGreaterThan(250);
+  });
+}
 
 declare global {
   interface Window {
