@@ -53,11 +53,17 @@ test("Atlas remains the default home while Routes stays secondary", async ({ pag
   await page.goto("/");
 
   await expect(page).toHaveURL(/#\/atlas$/);
-  await expect(page.getByRole("link", { name: "Atlas", exact: true })).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "Memories", exact: true })).toHaveAttribute(
     "aria-current",
     "page",
   );
-  await expect(page.getByRole("link", { name: "Routes", exact: true })).not.toHaveAttribute(
+  await page.getByRole("button", { name: "Open application navigation" }).click();
+  const navigation = page.getByRole("dialog", { name: "goDiesel navigation" });
+  await expect(navigation.getByRole("link", { name: "Atlas", exact: true })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await expect(navigation.getByRole("link", { name: "Routes", exact: true })).not.toHaveAttribute(
     "aria-current",
     "page",
   );

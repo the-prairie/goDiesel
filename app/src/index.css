@@ -335,6 +335,27 @@
   backdrop-filter: blur(14px);
 }
 
+.atlas-search-panel--selected {
+  max-height: calc(
+    100dvh - var(--mobile-navigation-height) - 24rem - 5rem
+  );
+}
+
+@media (min-width: 768px) {
+  .atlas-search-panel--selected {
+    max-height: calc(100dvh - 24rem - 5rem);
+  }
+}
+
+@media (max-width: 767px) {
+  section:has(.atlas-search-panel--selected[data-state="grouped-results"])
+    .atlas-mobile-map-tools,
+  section:has(.atlas-search-panel--selected[data-state="no-results"])
+    .atlas-mobile-map-tools {
+    display: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .field-guide-theme *,
   .field-guide-theme *::before,

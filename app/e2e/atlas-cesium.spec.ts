@@ -375,7 +375,11 @@ test("Cesium releases its renderer when Atlas unmounts", async ({ page }) => {
   await page.goto("/#/atlas");
   await expect(page.getByLabel("Interactive route globe")).toBeVisible();
 
-  await page.getByRole("link", { name: "Finder" }).click();
+  await page.getByRole("button", { name: "Open application navigation" }).click();
+  await page
+    .getByRole("dialog", { name: "goDiesel navigation" })
+    .getByRole("link", { name: "Finder" })
+    .click();
   await expect(page).toHaveURL(/#\/finder/);
   await expect
     .poll(() => page.evaluate(() => window.__GODIESEL_ATLAS_WORLD_DESTROY_COUNT__))
@@ -399,6 +403,13 @@ test("regional carousel gates on terrain and keeps route selection synchronized"
   const carousel = page.getByRole("region", {
     name: "Kyoto, Japan recorded routes",
   });
+  await expect(
+    page.locator('[data-atlas-engine="cesium"][data-atlas-status]'),
+  ).toHaveAttribute(
+    "data-atlas-status",
+    "region-ready",
+    { timeout: 15_000 },
+  );
   await expect(carousel).toBeVisible();
   const cards = carousel.locator("article[data-route-slug]");
   await expect(cards).toHaveCount(2);

@@ -6,15 +6,16 @@ import { APP_PATHS, APP_SECTIONS, appSectionForPath } from "@/navigation";
 
 interface AtlasSpineProps {
   className?: string;
+  hideDesktop?: boolean;
 }
 
-export function AtlasSpine({ className }: AtlasSpineProps) {
+export function AtlasSpine({ className, hideDesktop = false }: AtlasSpineProps) {
   const location = useLocation();
   const activeSection = appSectionForPath(location.pathname);
 
   return (
     <>
-      <aside
+      {!hideDesktop ? <aside
         data-testid="atlas-spine"
         data-slot="sidebar-container"
         className={cn(
@@ -92,7 +93,7 @@ export function AtlasSpine({ className }: AtlasSpineProps) {
             {routeStats.completed_km.toFixed(0)} km inked
           </p>
         </div>
-      </aside>
+      </aside> : null}
 
       <nav
         data-testid="atlas-spine-mobile"

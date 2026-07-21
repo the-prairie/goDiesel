@@ -30,7 +30,7 @@ export function AtlasControls({
   return (
     <>
       <div className={cn(
-        "atlas-region-select absolute left-3 top-3 z-20 flex h-[54px] items-center gap-2 rounded-sm border border-white/35 bg-[#f6f2e8]/92 p-1 text-[#24322d] shadow-lg backdrop-blur sm:left-4 sm:top-4 md:left-5 md:top-5 xl:w-[220px]",
+        "atlas-region-select absolute left-3 top-3 z-20 flex h-[54px] items-center gap-2 rounded-sm border border-white/45 bg-[#f6f2e8]/94 p-1 text-[#24322d] shadow-lg backdrop-blur sm:left-4 sm:top-4 md:left-5 md:top-[5.25rem] xl:left-[12.25rem] xl:top-5 xl:w-[220px]",
         selectedRegion && "[@media(max-height:500px)]:hidden",
       )}>
         <Map className="ml-1 size-4 shrink-0 text-[#315fb4]" aria-hidden="true" />
@@ -79,7 +79,7 @@ export function AtlasControls({
       </div>
 
       <div className={cn(
-        "atlas-desktop-activity absolute left-[37.25rem] top-5 z-20 hidden h-[54px] rounded-sm border border-white/35 bg-[#f6f2e8]/92 p-1 shadow-lg backdrop-blur xl:flex",
+        "atlas-desktop-activity absolute left-[48.25rem] top-5 z-20 hidden h-[54px] rounded-sm border border-white/45 bg-[#f6f2e8]/94 p-1 shadow-lg backdrop-blur xl:flex",
         selectedRegion && "[@media(max-height:500px)]:hidden",
       )} aria-label="Activity filter">
         {(["all", "runs", "rides"] as const).map((value) => (
@@ -99,7 +99,7 @@ export function AtlasControls({
       </div>
 
       <div className={cn(
-        "atlas-mobile-activity absolute right-4 top-4 z-20 hidden h-[54px] rounded-sm border border-white/35 bg-[#f6f2e8]/92 p-1 shadow-lg backdrop-blur sm:flex md:right-5 md:top-5 xl:hidden",
+        "atlas-mobile-activity absolute right-4 top-4 z-20 hidden h-[54px] rounded-sm border border-white/45 bg-[#f6f2e8]/94 p-1 shadow-lg backdrop-blur sm:flex md:left-1/2 md:right-auto md:top-5 md:-translate-x-1/2 xl:hidden",
         selectedRegion && "[@media(max-height:500px)]:hidden",
       )} aria-label="Activity filter">
         {(["all", "runs", "rides"] as const).map((value) => (

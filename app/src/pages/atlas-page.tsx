@@ -120,8 +120,8 @@ export function AtlasPage() {
   function setQuery(value: string) {
     updateSearchParams((next) => {
       if (value !== query) {
-        next.delete("region");
         next.delete("route");
+        if (!selectedRegion) next.delete("region");
       }
       if (value) next.set("q", value);
       else next.delete("q");
@@ -159,7 +159,7 @@ export function AtlasPage() {
         onSelectRegion={selectRegion}
         selectedRoute={selectedRoute}
         onSelectRoute={selectRoute}
-        className={`atlas-search-panel absolute left-4 right-4 top-20 z-30 max-h-[56dvh] overflow-y-auto xl:left-[15.5rem] xl:right-auto xl:top-5 xl:h-[54px] xl:w-[340px] xl:p-1 ${selectedRegion ? "atlas-search-panel--selected [@media(max-height:500px)]:hidden" : ""}`}
+        className={`atlas-search-panel absolute left-4 right-4 top-20 z-30 max-h-[56dvh] overflow-y-auto md:left-[15.5rem] md:right-5 md:top-[5.25rem] md:min-h-[54px] md:p-1 xl:left-[26.5rem] xl:right-auto xl:top-5 xl:w-[340px] ${selectedRegion ? "atlas-search-panel--selected [@media(max-height:500px)]:hidden" : ""}`}
       />
       <AtlasControls
         regions={routeRegions}

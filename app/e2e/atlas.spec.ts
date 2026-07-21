@@ -221,7 +221,7 @@ test("region controls, search, carousel, and URL stay synchronized", async ({ pa
   await expect(page.getByRole("heading", { level: 2, name: "Bali, Indonesia" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Atlas search" })).toHaveAttribute(
     "data-state",
-    "selected-result",
+    "grouped-results",
   );
 
   await page.reload();
@@ -235,8 +235,10 @@ test("region controls, search, carousel, and URL stay synchronized", async ({ pa
   expect(boxesOverlap(searchBox!, carouselBox!)).toBe(false);
   await expect(page.getByRole("region", { name: "Atlas search" })).toHaveAttribute(
     "data-state",
-    "selected-result",
+    "grouped-results",
   );
+  const regionalSearch = page.getByRole("textbox", { name: "Search this place" });
+  await expect(regionalSearch).toHaveAttribute("placeholder", "Search this place");
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
@@ -258,15 +260,57 @@ test("region controls, search, carousel, and URL stay synchronized", async ({ pa
   expect(boxesOverlap(mobileSearchBox!, mobileCarouselBox!)).toBe(false);
   expect(boxesOverlap(mobileCarouselBox!, controlsBox!)).toBe(false);
 
-  await search.fill("tokyo");
-  await expect(page).not.toHaveURL(/region=/);
-  await expect(page.getByRole("heading", { level: 2, name: "Bali, Indonesia" })).toHaveCount(0);
-  await expect(page.getByRole("combobox", { name: "Browse route regions" })).toHaveValue("");
+  await regionalSearch.fill("tokyo");
+  await expect(page).toHaveURL(/region=Bali%2C\+Indonesia/);
+  await expect(page.getByRole("heading", { level: 2, name: "Bali, Indonesia" })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Browse route regions" })).toHaveValue("Bali, Indonesia");
   await expect(page.getByRole("region", { name: "Atlas search" })).toHaveAttribute(
     "data-state",
-    "grouped-results",
+    "no-results",
   );
-  await expect(page.getByRole("button", { name: /Tokyo, Japan3 routes/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Tokyo, Japan3 routes/i })).toHaveCount(0);
+});
+
+test("global search focuses a completed route memory", async ({ page }) => {
+  await page.goto("/#/atlas");
+
+  const search = page.getByRole("textbox", {
+    name: "Search regions, routes, replay-worthy days",
+  });
+  await search.fill("crosswalk sprints");
+  const result = page
+    .getByRole("region", { name: "Atlas search" })
+    .getByRole("button", { name: /Tokyo, JapanRun · 21\.8 km/i });
+  await expect(result).toBeVisible();
+  await result.click();
+
+  await expect(page).toHaveURL(/region=Tokyo%2C\+Japan/);
+  await expect(page).toHaveURL(/route=17665674778/);
+  await expect(
+    page
+      .getByRole("region", { name: "Tokyo, Japan recorded routes" })
+      .locator('article[data-selected="true"]'),
+  ).toHaveAttribute("data-route-slug", "17665674778");
+});
+
+test("desktop Atlas gives the world the full viewport width", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/#/atlas");
+
+  const main = page.getByRole("main");
+  const canvas = page.getByLabel("Interactive route globe");
+  await expect(page.getByTestId("atlas-spine")).toHaveCount(0);
+  await expect(page.getByTestId("atlas-compact-navigation")).toBeVisible();
+  await expect(main).toHaveCSS("padding-left", "0px");
+
+  const [mainBox, canvasBox] = await Promise.all([
+    main.boundingBox(),
+    canvas.boundingBox(),
+  ]);
+  expect(mainBox?.x).toBe(0);
+  expect(mainBox?.width).toBe(1440);
+  expect(canvasBox?.x).toBe(0);
+  expect(canvasBox?.width).toBe(1440);
 });
 
 test("desktop Atlas exposes activity modes and working globe utilities", async ({ page }) => {
@@ -358,13 +402,17 @@ test("invalid Atlas selection is repaired and Escape closes one hierarchy level"
 test("Replay back control restores the originating Atlas selection", async ({ page }) => {
   await page.goto("/#/atlas?region=Kyoto%2C+Japan");
   const carousel = page.getByRole("region", { name: "Kyoto, Japan recorded routes" });
-  await expect(carousel.locator('article[data-selected="true"]')).toHaveCount(1);
+  const selectedButton = carousel.getByRole("button", {
+    name: /Select /,
+    pressed: true,
+  });
+  await expect(selectedButton).toHaveCount(1);
+  await selectedButton.click();
+  const atlasUrl = page.url();
   await carousel
     .locator('article[data-selected="true"]')
-    .getByRole("button", { name: /Select / })
+    .getByRole("link", { name: "Open route" })
     .click();
-  const atlasUrl = page.url();
-  await carousel.locator('article[data-selected="true"]').getByRole("link", { name: "Open route" }).click();
   await expect(page).toHaveURL(/#\/replay\//);
   await page.getByRole("link", { name: "Back to Atlas" }).click();
   await expect(page).toHaveURL(atlasUrl);
@@ -588,18 +636,24 @@ test("desktop Atlas toolbar controls share one alignment rhythm", async ({ page 
   await expect(search).toBeVisible();
   await expect(activity).toBeVisible();
 
+  const compactNavigation = page.getByTestId("atlas-compact-navigation");
+  const modeNavigation = page.getByTestId("atlas-mode-navigation");
   const boxes = await Promise.all([
+    compactNavigation.boundingBox(),
     region.boundingBox(),
     search.boundingBox(),
     activity.boundingBox(),
+    modeNavigation.boundingBox(),
   ]);
   expect(boxes.every(Boolean)).toBe(true);
-  const [regionBox, searchBox, activityBox] = boxes as Box[];
+  const [compactBox, regionBox, searchBox, activityBox, modeBox] = boxes as Box[];
 
   expect(Math.max(regionBox.y, searchBox.y, activityBox.y) - Math.min(regionBox.y, searchBox.y, activityBox.y)).toBeLessThanOrEqual(1);
   expect(Math.max(regionBox.height, searchBox.height, activityBox.height) - Math.min(regionBox.height, searchBox.height, activityBox.height)).toBeLessThanOrEqual(1);
   expect(searchBox.x - (regionBox.x + regionBox.width)).toBeCloseTo(8, 0);
   expect(activityBox.x - (searchBox.x + searchBox.width)).toBeCloseTo(8, 0);
+  expect(boxesOverlap(compactBox, regionBox)).toBe(false);
+  expect(boxesOverlap(activityBox, modeBox)).toBe(false);
 });
 
 test("short-landscape search results remain actionable", async ({ page }) => {

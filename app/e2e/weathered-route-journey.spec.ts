@@ -118,7 +118,7 @@ test("Atlas selection becomes a Retrace, then restores its place", async ({
   await expect(page).toHaveURL(/#\/atlas\?q=kyoto&region=Kyoto%2C\+Japan$/);
   await expect(routeCarousel).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("textbox", {
-    name: "Search regions, routes, replay-worthy days",
+    name: "Search this place",
   })).toHaveValue("kyoto");
   await expect(
     page.getByRole("heading", { level: 2, name: "Kyoto, Japan", exact: true }),
