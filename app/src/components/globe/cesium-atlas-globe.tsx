@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 
 import { visibleAtlasLabels } from "@/components/globe/atlas-label-layout";
+import { AtlasRegionalFallback } from "@/components/globe/atlas-regional-fallback";
 import type {
   AtlasGlobeHandle,
   AtlasGlobeProps,
@@ -18,12 +19,20 @@ export const CesiumAtlasGlobe = forwardRef<
   AtlasGlobeHandle,
   CesiumAtlasGlobeProps
 >(function CesiumAtlasGlobe(
-  { regions, selectedRegion, onSelectRegion, className, onUnavailable },
+  {
+    regions,
+    selectedRegion,
+    onSelectRegion,
+    onStatusChange,
+    className,
+    onUnavailable,
+  },
   forwardedRef,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
   const labelRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const engineRef = useRef<AtlasWorldEngine | undefined>(undefined);
+  const readyEngineRef = useRef<AtlasWorldEngine | undefined>(undefined);
   const selectedRegionRef = useRef(selectedRegion);
   const [status, setStatus] = useState<AtlasWorldStatus>({
     state: "loading",
@@ -49,6 +58,7 @@ export const CesiumAtlasGlobe = forwardRef<
         regions,
         onStatus: (nextStatus) => {
           setStatus(nextStatus);
+          onStatusChange?.(nextStatus);
           if (nextStatus.state === "unavailable") {
             onUnavailable(nextStatus.message);
           }
@@ -56,17 +66,19 @@ export const CesiumAtlasGlobe = forwardRef<
       })
       .then(() => {
         if (engineRef.current === engine) {
+          readyEngineRef.current = engine;
           engine.setSelectedRegion(selectedRegionRef.current);
         }
       });
     return () => {
+      if (readyEngineRef.current === engine) readyEngineRef.current = undefined;
       engine.destroy();
       if (engineRef.current === engine) engineRef.current = undefined;
     };
-  }, [onUnavailable, regions]);
+  }, [onStatusChange, onUnavailable, regions]);
 
   useEffect(() => {
-    engineRef.current?.setSelectedRegion(selectedRegion);
+    readyEngineRef.current?.setSelectedRegion(selectedRegion);
   }, [selectedRegion]);
 
   useEffect(() => {
@@ -117,13 +129,37 @@ export const CesiumAtlasGlobe = forwardRef<
     <div
       data-atlas-engine="cesium"
       data-atlas-status={status.state}
+      data-atlas-state={status.state === "ready" ? "global" : status.state}
+      data-terrain-state={
+        status.state === "region-loading"
+          ? "loading"
+          : status.state === "region-ready"
+            ? "ready"
+            : status.state === "region-fallback"
+              ? "fallback"
+              : "global"
+      }
       className={cn(
         "relative min-h-[520px] overflow-hidden rounded-none border-0 bg-[#02070a]",
         className,
       )}
     >
-      <div ref={containerRef} className="absolute inset-0" />
-      <div className="pointer-events-none absolute inset-0">
+      <div
+        ref={containerRef}
+        className={cn(
+          "absolute inset-0",
+          status.state === "region-fallback" && "invisible",
+        )}
+      />
+      {status.state === "region-fallback" && selectedRegion ? (
+        <AtlasRegionalFallback region={selectedRegion} />
+      ) : null}
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-0",
+          status.state !== "ready" && "hidden",
+        )}
+      >
         {regions.map((region, index) => (
           <button
             key={region.name}
@@ -141,10 +177,14 @@ export const CesiumAtlasGlobe = forwardRef<
           </button>
         ))}
       </div>
-      {status.state === "loading" ? (
+      {status.state === "loading" || status.state === "region-loading" ? (
         <div
           role="status"
-          className="pointer-events-none absolute bottom-24 left-4 z-20 border border-white/25 bg-[#071019]/88 px-3 py-2 text-xs text-white shadow-lg xl:left-[15.5rem]"
+          aria-live="polite"
+          data-region-loading={
+            status.state === "region-loading" ? status.regionName : undefined
+          }
+          className="pointer-events-none absolute bottom-24 left-4 z-20 min-h-12 min-w-52 border border-white/25 bg-[#071019]/88 px-3 py-2 text-xs text-white shadow-lg xl:bottom-56 xl:left-[15.5rem]"
         >
           {status.message}
         </div>

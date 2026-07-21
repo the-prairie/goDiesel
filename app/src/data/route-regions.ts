@@ -1,4 +1,8 @@
 import { completedRoutes } from "@/data/routes";
+import {
+  deriveGeographicBounds,
+  type GeographicBounds,
+} from "@/domain/geographic-bounds";
 import type { RouteSummary } from "@/domain/routes";
 
 export interface RouteRegion {
@@ -6,13 +10,19 @@ export interface RouteRegion {
   routes: RouteSummary[];
   totalKm: number;
   totalClimbM: number;
+  bounds: GeographicBounds | null;
   centerLat: number;
   centerLng: number;
 }
 
+type RouteRegionAccumulator = Omit<
+  RouteRegion,
+  "bounds" | "centerLat" | "centerLng"
+>;
+
 export function buildRouteRegions(routes: RouteSummary[]): RouteRegion[] {
   return Object.values(
-    routes.reduce<Record<string, RouteRegion>>((regions, route) => {
+    routes.reduce<Record<string, RouteRegionAccumulator>>((regions, route) => {
       const current =
         regions[route.region] ??
         (regions[route.region] = {
@@ -20,24 +30,25 @@ export function buildRouteRegions(routes: RouteSummary[]): RouteRegion[] {
           routes: [],
           totalKm: 0,
           totalClimbM: 0,
-          centerLat: 0,
-          centerLng: 0,
         });
 
       current.routes.push(route);
       current.totalKm += route.distanceKm;
       current.totalClimbM += route.elevationGainM;
-      current.centerLat += route.centerLat;
-      current.centerLng += route.centerLng;
 
       return regions;
     }, {}),
   )
-    .map((region) => ({
-      ...region,
-      centerLat: region.centerLat / region.routes.length,
-      centerLng: region.centerLng / region.routes.length,
-    }))
+    .map((region) => {
+      const bounds = deriveGeographicBounds(region.routes);
+
+      return {
+        ...region,
+        bounds,
+        centerLat: bounds?.centerLat ?? 0,
+        centerLng: bounds?.centerLng ?? 0,
+      };
+    })
     .sort(
       (a, b) => b.routes.length - a.routes.length || a.name.localeCompare(b.name),
     );
