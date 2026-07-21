@@ -72,6 +72,7 @@ test("Atlas selection becomes a Retrace, then restores its place", async ({
 
   const routeCarousel = page.getByRole("region", {
     name: "Kyoto, Japan recorded routes",
+    exact: true,
   });
   await expect(routeCarousel).toBeVisible({ timeout: 15_000 });
   const reviewedRoute = routeCarousel
