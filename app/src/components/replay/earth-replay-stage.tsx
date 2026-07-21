@@ -74,9 +74,13 @@ function initialReplayStatus(mode: ReplayEngineMode): ReplayStatus {
 export function EarthReplayStage({
   route,
   pickerRoutes,
+  backPath,
+  backLabel,
 }: {
   route: QuestRoute;
   pickerRoutes: RouteSummary[];
+  backPath: string;
+  backLabel: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const elevationScrubberRef = useRef<
@@ -228,8 +232,8 @@ export function EarthReplayStage({
           testId="replay-context"
           detailsTestId="replay-context-details"
           state={contextState}
-          backPath={APP_PATHS.routes}
-          backLabel="All routes"
+          backPath={backPath}
+          backLabel={backLabel}
           visible={chromeVisible}
           onStateChange={setContextState}
           summary={
@@ -286,7 +290,11 @@ export function EarthReplayStage({
                   Playable Earth unavailable. This route needs complete recorded geometry.
                 </div>
               )}
-              <ReplayRoutePicker currentSlug={route.slug} routes={pickerRoutes} />
+              <ReplayRoutePicker
+                currentSlug={route.slug}
+                routes={pickerRoutes}
+                returnPath={backPath.startsWith(APP_PATHS.atlas) ? backPath : undefined}
+              />
             </div>
           }
         />

@@ -70,8 +70,16 @@ export function routeDetailPath(slug: string) {
   return `${APP_PATHS.routes}/${encodedSlug(slug)}`;
 }
 
-export function replayPath(slug: string) {
-  return `${APP_PATHS.replay}/${encodedSlug(slug)}`;
+export function replayPath(slug: string, returnPath?: string) {
+  const path = `${APP_PATHS.replay}/${encodedSlug(slug)}`;
+  return returnPath ? `${path}?from=${encodeURIComponent(returnPath)}` : path;
+}
+
+export function atlasReturnPath(searchParams: URLSearchParams) {
+  const path = searchParams.get("from");
+  return path === APP_PATHS.atlas || path?.startsWith(`${APP_PATHS.atlas}?`)
+    ? path
+    : undefined;
 }
 
 export function playableEarthLabPath(slug: string, origin?: "replay") {

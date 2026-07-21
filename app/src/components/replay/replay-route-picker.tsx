@@ -18,9 +18,11 @@ import { replayPath } from "@/navigation";
 export function ReplayRoutePicker({
   currentSlug,
   routes,
+  returnPath,
 }: {
   currentSlug: string;
   routes: RouteSummary[];
+  returnPath?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -100,6 +102,7 @@ export function ReplayRoutePicker({
               routes={featured}
               currentSlug={currentSlug}
               onSelect={closePicker}
+              returnPath={returnPath}
             />
           ) : null}
           {generalResults.length > 0 ? (
@@ -108,6 +111,7 @@ export function ReplayRoutePicker({
               routes={generalResults}
               currentSlug={currentSlug}
               onSelect={closePicker}
+              returnPath={returnPath}
             />
           ) : (
             <div className="grid min-h-48 place-items-center text-center">
@@ -131,12 +135,14 @@ function RouteGroup({
   routes,
   currentSlug,
   onSelect,
+  returnPath,
 }: {
   label: string;
   description?: string;
   routes: RouteSummary[];
   currentSlug: string;
   onSelect: () => void;
+  returnPath?: string;
 }) {
   return (
     <section aria-label={label} className="mt-5 first:mt-0">
@@ -152,7 +158,7 @@ function RouteGroup({
           return (
             <Link
               key={`${label}-${route.slug}`}
-              to={replayPath(route.slug)}
+              to={replayPath(route.slug, returnPath)}
               aria-current={selected ? "page" : undefined}
               onClick={onSelect}
               className="grid min-h-14 grid-cols-[1fr_auto] items-center gap-3 rounded-sm border border-transparent px-3 py-2 outline-none hover:border-border hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:border-primary aria-[current=page]:bg-primary/10"

@@ -33,7 +33,6 @@ interface AtlasGlobeProps {
   regions: RouteRegion[];
   selectedRegion?: RouteRegion;
   onSelectRegion: (region: RouteRegion) => void;
-  onOpenRoute: (route: RouteSummary) => void;
   className?: string;
 }
 
@@ -172,7 +171,7 @@ function disposeObject(object: Object3D) {
 
 export const AtlasGlobe = forwardRef<AtlasGlobeHandle, AtlasGlobeProps>(
   function AtlasGlobe(
-    { regions, selectedRegion, onSelectRegion, onOpenRoute, className },
+    { regions, selectedRegion, onSelectRegion, className },
     forwardedRef,
   ) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
