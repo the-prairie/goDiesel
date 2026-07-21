@@ -321,6 +321,65 @@ test("selected region opens a collapsible editorial route margin", async ({ page
   await expect(inspector.getByRole("list")).toBeVisible();
 });
 
+test("route selection stays in Atlas and restores through history", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/#/atlas?region=Kyoto%2C+Japan");
+
+  const inspector = page.getByRole("complementary", {
+    name: "Kyoto, Japan region guide",
+  });
+  const firstRoute = inspector.getByRole("button", { name: /^Select / }).first();
+  await firstRoute.click();
+
+  await expect(page).toHaveURL(/#\/atlas\?region=Kyoto%2C\+Japan&route=/);
+  await expect(inspector.getByRole("button", { name: /^Select / }).first()).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(inspector.getByRole("link", { name: "Open replay" })).toBeVisible();
+
+  await page.reload();
+  await expect(inspector.getByRole("link", { name: "Open replay" })).toBeVisible();
+  await page.goBack();
+  await expect(page).not.toHaveURL(/route=/);
+  await expect(page).toHaveURL(/region=Kyoto%2C\+Japan/);
+  await page.goForward();
+  await expect(page).toHaveURL(/route=/);
+});
+
+test("invalid Atlas selection is removed and Escape clears one level", async ({ page }) => {
+  await page.goto("/#/atlas?region=Kyoto%2C+Japan&route=not-a-route");
+  await expect(page).toHaveURL(/region=Kyoto%2C\+Japan/);
+  await expect(page).not.toHaveURL(/route=/);
+
+  const inspector = page.getByRole("complementary", {
+    name: "Kyoto, Japan region guide",
+  });
+  await inspector.getByRole("button", { name: /^Select / }).first().click();
+  await expect(page).toHaveURL(/route=/);
+  await page.keyboard.press("Escape");
+  await expect(page).not.toHaveURL(/route=/);
+  await expect(page).toHaveURL(/region=Kyoto%2C\+Japan/);
+  await page.keyboard.press("Escape");
+  await expect(page).not.toHaveURL(/region=/);
+
+  await page.goto("/#/atlas?region=Nowhere&route=missing");
+  await expect(page).toHaveURL(/#\/atlas$/);
+});
+
+test("Replay back control restores the originating Atlas selection", async ({ page }) => {
+  await page.goto("/#/atlas?region=Kyoto%2C+Japan");
+  const inspector = page.getByRole("complementary", {
+    name: "Kyoto, Japan region guide",
+  });
+  await inspector.getByRole("button", { name: /^Select / }).first().click();
+  const atlasUrl = page.url();
+  await inspector.getByRole("link", { name: "Open replay" }).click();
+  await expect(page).toHaveURL(/#\/replay\//);
+  await page.getByRole("link", { name: "Back to Atlas" }).click();
+  await expect(page).toHaveURL(atlasUrl);
+});
+
 test("mobile Atlas sheet preserves map context across three stable positions", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/#/atlas?region=Kyoto%2C+Japan");
@@ -523,7 +582,9 @@ for (const viewport of [
       const firstRoute = inspector.getByRole("list").getByRole("button").first();
       await expect(firstRoute).toBeVisible();
       await firstRoute.click();
-      await expect(page).toHaveURL(/#\/routes\//);
+      await expect(page).toHaveURL(/#\/atlas\?.*route=/);
+      await expect(firstRoute).toHaveAttribute("aria-pressed", "true");
+      await expect(inspector.getByRole("link", { name: "Open replay" })).toBeVisible();
       await page.goBack();
       await expect(clearSelection).toBeVisible();
     }

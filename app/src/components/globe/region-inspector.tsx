@@ -1,5 +1,6 @@
-import { ArrowRight, ChevronDown, ChevronUp, Minus, X } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, ChevronUp, Minus, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import type { RouteRegion } from "@/data/route-regions";
@@ -11,16 +12,20 @@ export type MobileSheetPosition = "peek" | "half" | "expanded";
 
 interface RegionInspectorProps {
   selectedRegion?: RouteRegion;
+  selectedRoute?: RouteSummary;
   onClear: () => void;
-  onOpenRoute: (route: RouteSummary) => void;
+  onSelectRoute: (route: RouteSummary) => void;
+  replayPathForRoute: (route: RouteSummary) => string;
   mobilePosition: MobileSheetPosition;
   onMobilePositionChange: (position: MobileSheetPosition) => void;
 }
 
 export function RegionInspector({
   selectedRegion,
+  selectedRoute,
   onClear,
-  onOpenRoute,
+  onSelectRoute,
+  replayPathForRoute,
   mobilePosition,
   onMobilePositionChange,
 }: RegionInspectorProps) {
@@ -43,7 +48,7 @@ export function RegionInspector({
         isMobile && mobilePosition === "half" &&
           "inset-x-3 bottom-0 h-[46dvh] max-h-none",
         isMobile && mobilePosition === "expanded" &&
-          "inset-x-3 bottom-0 h-[calc(100dvh-0.75rem)] max-h-none",
+          "inset-x-3 bottom-0 top-3 h-auto max-h-none",
         !isMobile &&
           "inset-x-3 bottom-20 max-h-[44dvh] rounded-sm xl:inset-x-auto xl:right-5 xl:top-20 xl:w-[360px] xl:max-h-[calc(100dvh-7rem)]",
       )}
@@ -77,19 +82,35 @@ export function RegionInspector({
           <Button type="button" variant="ghost" size="icon" aria-label="Clear selected region" onClick={onClear} className="text-[#24322d]"><X aria-hidden="true" /></Button>
         </div>
       </div>
-      <ul hidden={collapsed || (isMobile && mobilePosition === "peek")} className="grid min-h-0 flex-1 divide-y divide-[#d4cec2] overflow-y-auto">
+      <ul hidden={collapsed || (isMobile && mobilePosition === "peek")} className="min-h-0 flex-1 divide-y divide-[#d4cec2] overflow-y-auto">
         {selectedRegion.routes.map((route) => (
-          <li key={route.slug}>
-            <button type="button" onClick={() => onOpenRoute(route)} className="flex min-h-16 w-full items-center justify-between gap-3 bg-transparent px-4 py-3 text-left outline-none transition-colors hover:bg-[#e9e5dc] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#315fb4]">
-              <span className="min-w-0">
-                <span className="block truncate font-editorial text-lg font-semibold">{route.name}</span>
-                <span className="mt-1 block text-xs text-[#626a64]">{route.type} · {route.distanceKm.toFixed(1)} km · {route.elevationGainM.toLocaleString()} m up</span>
-                {route.guide.reviewStatus !== "draft" && route.guide.vibe ? (
-                  <span className="mt-2 block text-xs leading-5 text-[#4e584f]"><b className="font-semibold text-[#315fb4]">Reviewed field note</b> · {route.guide.vibe}</span>
-                ) : null}
-              </span>
-              <ArrowRight className="size-4 shrink-0 text-[#315fb4]" aria-hidden="true" />
-            </button>
+          <li key={route.slug} data-selected={selectedRoute?.slug === route.slug}>
+            <div
+              className="flex min-h-16 items-center gap-2 px-2 py-1 data-[selected=true]:bg-[#e9e5dc]"
+              data-selected={selectedRoute?.slug === route.slug}
+            >
+              <button
+                type="button"
+                aria-label={`Select ${route.name}`}
+                aria-pressed={selectedRoute?.slug === route.slug}
+                onClick={() => onSelectRoute(route)}
+                className="flex min-w-0 flex-1 items-center justify-between gap-3 bg-transparent px-2 py-2 text-left outline-none transition-colors hover:bg-[#e9e5dc] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#315fb4]"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate font-editorial text-lg font-semibold">{route.name}</span>
+                  <span className="mt-1 block text-xs text-[#626a64]">{route.type} · {route.distanceKm.toFixed(1)} km · {route.elevationGainM.toLocaleString()} m up</span>
+                  {route.guide.reviewStatus !== "draft" && route.guide.vibe ? (
+                    <span className="mt-2 block text-xs leading-5 text-[#4e584f]"><b className="font-semibold text-[#315fb4]">Reviewed field note</b> · {route.guide.vibe}</span>
+                  ) : null}
+                </span>
+                {selectedRoute?.slug === route.slug ? <Check className="size-4 shrink-0 text-[#315fb4]" aria-hidden="true" /> : <ArrowRight className="size-4 shrink-0 text-[#315fb4]" aria-hidden="true" />}
+              </button>
+              {selectedRoute?.slug === route.slug ? (
+                <Button asChild size="sm" className="shrink-0 bg-[#183a76] text-white hover:bg-[#315fb4]">
+                  <Link to={replayPathForRoute(route)} aria-label="Open replay">Open replay</Link>
+                </Button>
+              ) : null}
+            </div>
           </li>
         ))}
       </ul>

@@ -1,10 +1,10 @@
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 
 import { EarthReplayStage } from "@/components/replay/earth-replay-stage";
 import { RouteNotFound } from "@/components/routes/route-not-found";
 import { completedRoutes, findRouteBySlug } from "@/data/routes";
 import { useRouteDetail } from "@/data/use-route-detail";
-import { decodedRouteSlug } from "@/navigation";
+import { APP_PATHS, atlasReturnPath, decodedRouteSlug } from "@/navigation";
 
 const representativeRoute =
   completedRoutes.find(
@@ -13,6 +13,7 @@ const representativeRoute =
 
 export function ReplayPage() {
   const { routeSlug } = useParams();
+  const [searchParams] = useSearchParams();
   const decodedSlug = decodedRouteSlug(routeSlug);
   const selectedSummary = routeSlug
     ? decodedSlug
@@ -42,5 +43,13 @@ export function ReplayPage() {
   }
   if (detail.status !== "ready") return <RouteNotFound />;
 
-  return <EarthReplayStage route={detail.route} pickerRoutes={pickerRoutes} />;
+  const returnPath = atlasReturnPath(searchParams);
+  return (
+    <EarthReplayStage
+      route={detail.route}
+      pickerRoutes={pickerRoutes}
+      backPath={returnPath ?? APP_PATHS.routes}
+      backLabel={returnPath ? "Back to Atlas" : "All routes"}
+    />
+  );
 }

@@ -18,10 +18,11 @@ interface AtlasSearchProps {
   routes: RouteSummary[];
   regions: RouteRegion[];
   onSelectRegion: (region: RouteRegion) => void;
-  onOpenRoute: (route: RouteSummary) => void;
+  onSelectRoute: (route: RouteSummary) => void;
   query: string;
   onQueryChange: (query: string) => void;
   selectedRegion?: RouteRegion;
+  selectedRoute?: RouteSummary;
   className?: string;
 }
 
@@ -59,10 +60,11 @@ export function AtlasSearch({
   routes,
   regions,
   onSelectRegion,
-  onOpenRoute,
+  onSelectRoute,
   query,
   onQueryChange,
   selectedRegion,
+  selectedRoute,
   className,
 }: AtlasSearchProps) {
   const deferredQuery = useDeferredValue(query);
@@ -118,7 +120,7 @@ export function AtlasSearch({
   }
 
   function selectRoute(route: RouteSummary) {
-    onOpenRoute(route);
+    onSelectRoute(route);
   }
 
   return (
@@ -179,6 +181,7 @@ export function AtlasSearch({
                 key={route.slug}
                 type="button"
                 onClick={() => selectRoute(route)}
+                aria-pressed={selectedRoute?.slug === route.slug}
                 className="rounded-md border border-border px-3 py-2 text-left text-sm hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <b>{route.name}</b>
@@ -195,6 +198,7 @@ export function AtlasSearch({
                 key={route.slug}
                 type="button"
                 onClick={() => selectRoute(route)}
+                aria-pressed={selectedRoute?.slug === route.slug}
                 className="rounded-md border border-border px-3 py-2 text-left text-sm hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <b>{route.name}</b>
