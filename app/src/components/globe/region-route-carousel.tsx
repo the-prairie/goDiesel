@@ -1,9 +1,10 @@
 import { ArrowRight, Bike, ChevronLeft, ChevronRight, Footprints, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useEmblaCarousel from "embla-carousel-react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
+import { RouteSatelliteThumbnail } from "@/components/globe/route-satellite-thumbnail";
 import type { RouteRegion } from "@/data/route-regions";
 import type { RoutePoint, RouteSummary } from "@/domain/routes";
 import {
@@ -55,6 +56,9 @@ export function RegionRouteCarousel({
     slidesToScroll: 1,
     startIndex: selectedIndex,
   });
+  const [thumbnailIndexes, setThumbnailIndexes] = useState(() =>
+    thumbnailIndexesForSlidesInView([selectedIndex], region.routes.length),
+  );
   const programmaticSelectionRef = useRef<string | undefined>(undefined);
   const commitCenteredRoute = useCallback(() => {
     if (!emblaApi) return;
@@ -73,6 +77,25 @@ export function RegionRouteCarousel({
       emblaApi.off("select", commitCenteredRoute);
     };
   }, [commitCenteredRoute, emblaApi]);
+
+  useEffect(() => {
+    if (!emblaApi) return;
+    const synchronizeThumbnailWindow = () => {
+      setThumbnailIndexes(
+        thumbnailIndexesForSlidesInView(
+          emblaApi.slidesInView(),
+          region.routes.length,
+        ),
+      );
+    };
+    synchronizeThumbnailWindow();
+    emblaApi.on("slidesInView", synchronizeThumbnailWindow);
+    emblaApi.on("reInit", synchronizeThumbnailWindow);
+    return () => {
+      emblaApi.off("slidesInView", synchronizeThumbnailWindow);
+      emblaApi.off("reInit", synchronizeThumbnailWindow);
+    };
+  }, [emblaApi, region.routes.length]);
 
   useEffect(() => {
     if (!emblaApi || !effectiveSelectedRoute) return;
@@ -220,6 +243,7 @@ export function RegionRouteCarousel({
                   position={index + 1}
                   total={region.routes.length}
                   replayPath={replayPathForRoute(route)}
+                  loadThumbnail={thumbnailIndexes.has(index)}
                   onSelect={() => selectRoute(route, index)}
                 />
               </div>
@@ -231,12 +255,26 @@ export function RegionRouteCarousel({
   );
 }
 
+export function thumbnailIndexesForSlidesInView(
+  visibleIndexes: number[],
+  routeCount: number,
+) {
+  const indexes = new Set<number>();
+  for (const visibleIndex of visibleIndexes) {
+    for (const index of [visibleIndex - 1, visibleIndex, visibleIndex + 1]) {
+      if (index >= 0 && index < routeCount) indexes.add(index);
+    }
+  }
+  return indexes;
+}
+
 function RegionalRouteCard({
   route,
   selected,
   position,
   total,
   replayPath,
+  loadThumbnail,
   onSelect,
 }: {
   route: RouteSummary;
@@ -244,6 +282,7 @@ function RegionalRouteCard({
   position: number;
   total: number;
   replayPath: string;
+  loadThumbnail: boolean;
   onSelect: () => void;
 }) {
   const reviewed =
@@ -273,7 +312,12 @@ function RegionalRouteCard({
       >
         <span className="sr-only">Select {route.name}</span>
       </button>
-      <RouteTracePreview route={route} points={trace} selected={selected} />
+      <RouteTracePreview
+        route={route}
+        points={trace}
+        selected={selected}
+        loadThumbnail={loadThumbnail}
+      />
       <div className="min-w-0 px-4 py-3 [@media(max-height:500px)]:py-1">
         <h3 className="truncate font-editorial text-xl font-semibold leading-6 [@media(max-height:500px)]:text-base [@media(max-height:500px)]:leading-5">{route.name}</h3>
         <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-white/72">
@@ -303,7 +347,17 @@ function RegionalRouteCard({
   );
 }
 
-function RouteTracePreview({ route, points, selected }: { route: RouteSummary; points: string | null; selected: boolean }) {
+function RouteTracePreview({
+  route,
+  points,
+  selected,
+  loadThumbnail,
+}: {
+  route: RouteSummary;
+  points: string | null;
+  selected: boolean;
+  loadThumbnail: boolean;
+}) {
   return (
     <div className="relative overflow-hidden bg-[#102b33]">
       <div className="absolute inset-0 opacity-30 [background-image:linear-gradient(rgba(255,255,255,0.14)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.14)_1px,transparent_1px)] [background-size:24px_24px]" />
@@ -315,6 +369,7 @@ function RouteTracePreview({ route, points, selected }: { route: RouteSummary; p
       ) : (
         <div className="absolute inset-0 grid place-items-center text-xs text-white/55">Route trace unavailable</div>
       )}
+      <RouteSatelliteThumbnail route={route} enabled={loadThumbnail} />
     </div>
   );
 }
