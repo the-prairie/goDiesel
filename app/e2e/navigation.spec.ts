@@ -10,10 +10,10 @@ test("root opens Atlas and primary navigation follows browser history", async ({
 
   await expect(page).toHaveURL(/#\/atlas$/);
   await expect(
-    page.getByRole("link", { name: "Atlas", exact: true }),
+    page.getByRole("link", { name: "Memories", exact: true }),
   ).toHaveAttribute("aria-current", "page");
 
-  await page.getByRole("link", { name: "Finder" }).click();
+  await page.getByRole("link", { name: "Plan", exact: true }).click();
   await expect(page).toHaveURL(/#\/finder$/);
   await expect(page.getByRole("heading", { name: /plan/i })).toBeVisible();
 
@@ -24,8 +24,32 @@ test("root opens Atlas and primary navigation follows browser history", async ({
   await expect(page).toHaveURL(/#\/finder$/);
 });
 
+test("compact Atlas navigation supports keyboard entry and restores focus", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/#/atlas");
+
+  const trigger = page.getByRole("button", {
+    name: "Open application navigation",
+  });
+  await trigger.focus();
+  await page.keyboard.press("Enter");
+
+  const navigation = page.getByRole("dialog", { name: "goDiesel navigation" });
+  await expect(navigation).toBeVisible();
+  await expect(navigation.getByRole("link", { name: "Atlas" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(navigation.getByRole("link", { name: "Finder" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(navigation).toBeHidden();
+  await expect(trigger).toBeFocused();
+});
+
 test("every product surface has a canonical URL", async ({ page }) => {
   await page.goto("/#/atlas");
+
+  await page.getByRole("button", { name: "Open application navigation" }).click();
 
   for (const [label, path] of [
     ["Routes", "routes"],
@@ -55,8 +79,15 @@ test("canonical product and selected-route URLs load directly", async ({
   ] as const) {
     await page.goto(`/#/${path}`);
     await expect(page).toHaveURL(new RegExp(`#/${path}$`));
+    if (path === "atlas") {
+      await page.getByRole("button", { name: "Open application navigation" }).click();
+    }
     await expect(
-      page.getByRole("link", { name: activeNavigation, exact: true }),
+      path === "atlas"
+        ? page
+            .getByRole("dialog", { name: "goDiesel navigation" })
+            .getByRole("link", { name: activeNavigation, exact: true })
+        : page.getByRole("link", { name: activeNavigation, exact: true }),
     ).toHaveAttribute("aria-current", "page");
   }
 });
@@ -294,14 +325,36 @@ test("Finder uses the map shell without global header chrome", async ({
   await expect(page.getByRole("heading", { name: "Plan the next day." })).toBeVisible();
 });
 
-test("immersive atlas has no top chrome and shows the spine", async ({
+test("immersive Atlas replaces the content spine with compact navigation", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto("/#/atlas");
+  await page.goto("/#/atlas?region=Kyoto%2C+Japan");
 
-  await expect(page.getByTestId("atlas-spine")).toBeVisible();
+  await expect(page.getByTestId("atlas-spine")).toHaveCount(0);
+  await expect(page.getByTestId("atlas-compact-navigation")).toBeVisible();
   await expect(page.getByTestId("app-header")).toBeHidden();
+
+  await expect(page.getByRole("link", { name: "Memories" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await expect(page.getByRole("link", { name: "Plan" })).toHaveAttribute(
+    "href",
+    "#/finder",
+  );
+
+  await page.getByRole("button", { name: "Open application navigation" }).click();
+  const navigation = page.getByRole("dialog", { name: "goDiesel navigation" });
+  await expect(navigation).toBeVisible();
+  for (const destination of ["Atlas", "Finder", "Routes", "Replay", "Admin"]) {
+    await expect(navigation.getByRole("link", { name: destination })).toBeVisible();
+  }
+  await page.keyboard.press("Escape");
+  await expect(navigation).toBeHidden();
+
+  await page.getByRole("link", { name: "Return to global Atlas" }).click();
+  await expect(page).toHaveURL(/#\/atlas$/);
 });
 
 test("field-guide shell has stable desktop and mobile compositions", async ({

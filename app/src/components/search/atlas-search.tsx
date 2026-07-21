@@ -76,11 +76,12 @@ export function AtlasSearch({
       return { regions: [], routes: [], replay: [] };
     }
 
+    const scopedRoutes = selectedRegion?.routes ?? routes;
     return {
-      regions: regions
+      regions: selectedRegion ? [] : regions
         .filter((region) => region.name.toLowerCase().includes(normalizedQuery))
         .slice(0, 6),
-      routes: routes
+      routes: scopedRoutes
         .filter((route) =>
           [
             route.name,
@@ -96,14 +97,14 @@ export function AtlasSearch({
             .includes(normalizedQuery),
         )
         .slice(0, 8),
-      replay: routes
+      replay: selectedRegion ? [] : routes
         .filter((route) => route.replay.bestInEarth)
         .filter((route) =>
           [route.name, route.subtitle, route.region].join(" ").toLowerCase().includes(normalizedQuery),
         )
         .slice(0, 4),
     };
-  }, [normalizedQuery, regions, routes, unsupported]);
+  }, [normalizedQuery, regions, routes, selectedRegion, unsupported]);
 
   const hasResults =
     results.regions.length > 0 || results.routes.length > 0 || results.replay.length > 0;
@@ -111,7 +112,7 @@ export function AtlasSearch({
     query,
     deferredQuery,
     hasResults,
-    selectionActive: Boolean(selectedRegion),
+    selectionActive: Boolean(selectedRoute),
     unsupported,
   });
 
@@ -132,7 +133,9 @@ export function AtlasSearch({
       aria-label="Atlas search"
       data-state={state}
     >
-      <label className="sr-only">Search memories</label>
+      <label className="sr-only">
+        {selectedRegion ? `Search ${selectedRegion.name}` : "Search memories"}
+      </label>
       <div className="flex min-h-11 items-center gap-3 rounded-sm border border-[#c7c1b5] bg-[#fffdf8] px-3 focus-within:ring-2 focus-within:ring-[#315fb4]">
         <Search className="size-4 text-[#5d685f]" aria-hidden="true" />
         <input
@@ -140,8 +143,8 @@ export function AtlasSearch({
           onChange={(event) => {
             onQueryChange(event.target.value);
           }}
-          aria-label="Search regions, routes, replay-worthy days"
-          placeholder="Search places and routes"
+          aria-label={selectedRegion ? "Search this place" : "Search regions, routes, replay-worthy days"}
+          placeholder={selectedRegion ? "Search this place" : "Search places and routes"}
           className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[#6e756e]"
         />
       </div>
@@ -150,7 +153,10 @@ export function AtlasSearch({
         {state === "initial" && "Start with a place, route name, ride, run, or replay quality."}
         {state === "typing" && "Keep typing to search completed route memories."}
         {state === "loading" && "Searching completed memories."}
-        {state === "no-results" && "No completed memories match that search."}
+        {state === "no-results" &&
+          (selectedRegion
+            ? `No routes in ${selectedRegion.name} match that search.`
+            : "No completed memories match that search.")}
         {state === "selected-result" && "Selected result is focused on the atlas."}
         {state === "unsupported-query" &&
           "Planning queries belong in Finder; Atlas only searches completed memories."}
@@ -175,7 +181,7 @@ export function AtlasSearch({
             ))}
           </ResultGroup>
 
-          <ResultGroup title="Routes">
+          <ResultGroup title={selectedRegion ? `Routes in ${selectedRegion.name}` : "Routes"}>
             {results.routes.map((route) => (
               <button
                 key={route.slug}

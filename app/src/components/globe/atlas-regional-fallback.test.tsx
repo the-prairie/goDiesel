@@ -142,7 +142,7 @@ describe("AtlasRegionalFallback geography", () => {
     expect(regionalMapPadding(1_440, 900)).toEqual({
       top: 96,
       right: 420,
-      bottom: 240,
+      bottom: 220,
       left: 260,
     });
     expect(regionalMapPadding(390, 844)).toEqual({

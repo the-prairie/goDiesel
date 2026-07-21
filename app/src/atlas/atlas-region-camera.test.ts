@@ -11,7 +11,7 @@ describe("atlas regional camera framing", () => {
     const insets = atlasViewportInsets(1440, 900);
     const frame = atlasCameraFrame(25_000, { width: 1440, height: 900 }, Math.PI / 3, insets);
 
-    expect(insets).toEqual({ top: 96, right: 420, bottom: 240, left: 260 });
+    expect(insets).toEqual({ top: 96, right: 420, bottom: 220, left: 260 });
     expect(frame.rangeM).toBeGreaterThan(50_000);
     expect(frame.horizontalOffsetRatio).toBeLessThan(0);
     expect(frame.verticalOffsetRatio).toBeLessThan(0);

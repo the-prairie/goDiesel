@@ -169,13 +169,16 @@ export function RegionRouteCarousel({
       className="min-h-[23rem] overflow-hidden border-t border-white/15 bg-[#07151c]/92 text-white backdrop-blur-sm sm:min-h-[22rem] [@media(max-height:500px)]:min-h-[13rem]"
     >
       <header className="mx-auto flex max-w-[96rem] items-center justify-between gap-3 px-3 py-3 sm:px-5 [@media(max-height:500px)]:py-1">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h2 className="truncate font-editorial text-xl font-semibold uppercase sm:text-2xl">
             {region.name}
           </h2>
-          <p className="truncate text-xs text-white/65 sm:text-sm">
-            {region.routes.length} routes · {region.totalKm.toFixed(0)} km ·{" "}
-            {Math.round(region.totalClimbM).toLocaleString()} m climbed
+          <p className="flex flex-wrap gap-x-1 text-xs leading-4 text-white/65 sm:block sm:truncate sm:text-sm">
+            <span>{region.routes.length} routes · {region.totalKm.toFixed(0)} km</span>
+            <span>
+              <span className="hidden sm:inline">· </span>
+              {Math.round(region.totalClimbM).toLocaleString()} m climbed
+            </span>
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1">

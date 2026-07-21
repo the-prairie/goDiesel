@@ -28,7 +28,7 @@ export function atlasViewportInsets(width: number, height: number) {
   return {
     top: 96,
     right: Math.min(420, width * 0.3),
-    bottom: Math.min(240, height * 0.28),
+    bottom: Math.min(220, height * 0.25),
     left: Math.min(260, width * 0.2),
   } satisfies AtlasViewportInsets;
 }
