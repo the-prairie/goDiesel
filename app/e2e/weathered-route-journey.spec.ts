@@ -63,7 +63,7 @@ async function installJourneyReplayEngine(page: Page) {
   });
 }
 
-test("Atlas selection becomes a Leaf and Retrace, then restores its place", async ({
+test("Atlas selection becomes a Retrace, then restores its place", async ({
   page,
 }) => {
   test.setTimeout(60_000);
@@ -80,13 +80,10 @@ test("Atlas selection becomes a Leaf and Retrace, then restores its place", asyn
   await expect(reviewedRoute).toHaveCount(1);
   await reviewedRoute.click();
 
-  await expect(page).toHaveURL(/#\/routes\/17654151284$/);
-  await expect(page.getByRole("region", { name: "Route geography" })).toHaveAttribute(
-    "data-map-status",
-    "ready",
-    { timeout: 15_000 },
+  await expect(page).toHaveURL(
+    /#\/atlas\?q=kyoto&region=Kyoto%2C\+Japan&route=17654151284$/,
   );
-  await expect(page.getByRole("heading", { name: "What it feels like" })).toBeVisible();
+  const selectedAtlasUrl = page.url();
   await page.getByRole("link", { name: "Open replay" }).click();
 
   const stage = page.getByTestId("replay-stage");
@@ -116,7 +113,7 @@ test("Atlas selection becomes a Leaf and Retrace, then restores its place", asyn
   expect(replayEvidence.lastPose?.following).toBe(false);
 
   await page.goBack();
-  await expect(page).toHaveURL(/#\/routes\/17654151284$/);
+  await expect(page).toHaveURL(selectedAtlasUrl);
   await page.goBack();
   await expect(page).toHaveURL(/#\/atlas\?q=kyoto&region=Kyoto%2C\+Japan$/);
   await expect(regionGuide).toBeVisible({ timeout: 15_000 });
