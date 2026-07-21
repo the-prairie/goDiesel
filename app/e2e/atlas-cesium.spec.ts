@@ -497,6 +497,74 @@ test("opening a non-selected card preserves its exact Atlas return selection", a
   ).toHaveAttribute("data-selected", "true");
 });
 
+test("route thumbnails load only for the centered route and immediate neighbors", async ({
+  page,
+}) => {
+  const requestedPaths: string[] = [];
+  const thumbnail = new PNG({ width: 8, height: 8 });
+  thumbnail.data.fill(96);
+  const thumbnailBody = PNG.sync.write(thumbnail);
+  await page.addInitScript(() => {
+    window.__GODIESEL_STATIC_MAPS_API_KEY__ = "deterministic-test-key";
+  });
+  await page.route("https://maps.googleapis.com/maps/api/staticmap?*", async (route) => {
+    requestedPaths.push(new URL(route.request().url()).searchParams.get("path") ?? "");
+    await route.fulfill({
+      status: 200,
+      contentType: "image/png",
+      body: thumbnailBody,
+    });
+  });
+  await installDeterministicCesiumAtlas(page);
+  await page.goto("/#/atlas?region=Crete%2C+Greece");
+
+  const carousel = page.getByRole("region", {
+    name: "Crete, Greece recorded routes",
+  });
+  const thumbnails = carousel.locator("[data-route-thumbnail]");
+  await expect(thumbnails.nth(0)).toHaveAttribute("data-thumbnail-state", "loaded");
+  await expect(thumbnails.nth(1)).toHaveAttribute("data-thumbnail-state", "loaded");
+  await expect(thumbnails.nth(2)).toHaveAttribute("data-thumbnail-state", "loaded");
+  await expect(thumbnails.nth(3)).toHaveAttribute("data-thumbnail-state", "loaded");
+  await expect(thumbnails.nth(4)).toHaveAttribute("data-thumbnail-state", "deferred");
+  expect(requestedPaths).toHaveLength(4);
+  expect(requestedPaths.every((path) => path.split("|").slice(2).length <= 36)).toBe(
+    true,
+  );
+
+  await page.getByRole("button", { name: "Next route" }).click();
+  await expect(thumbnails.nth(4)).toHaveAttribute("data-thumbnail-state", "loaded");
+  expect(requestedPaths).toHaveLength(5);
+  await expect(carousel.locator("canvas")).toHaveCount(0);
+});
+
+test("failed satellite imagery preserves route traces and honest draft context", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    window.__GODIESEL_STATIC_MAPS_API_KEY__ = "deterministic-test-key";
+  });
+  await page.route("https://maps.googleapis.com/maps/api/staticmap?*", (route) =>
+    route.fulfill({ status: 503, body: "imagery unavailable" }),
+  );
+  await installDeterministicCesiumAtlas(page);
+  await page.goto("/#/atlas?region=Kyoto%2C+Japan");
+
+  const carousel = page.getByRole("region", {
+    name: "Kyoto, Japan recorded routes",
+  });
+  const secondCard = carousel.locator("article[data-route-slug]").nth(1);
+  const heightBefore = (await secondCard.boundingBox())!.height;
+  await expect(
+    secondCard.locator("[data-route-thumbnail]"),
+  ).toHaveAttribute("data-thumbnail-state", "failed");
+  await expect(secondCard.getByText("Guide not yet reviewed")).toBeVisible();
+  await expect(
+    secondCard.getByRole("img", { name: /recorded route trace/ }),
+  ).toBeVisible();
+  expect((await secondCard.boundingBox())!.height).toBe(heightBefore);
+});
+
 for (const viewport of [
   { name: "desktop", width: 1440, height: 900, minimumRatio: 0.28, maximumRatio: 0.36, fullCards: 3, hasPeek: false },
   { name: "tablet", width: 820, height: 900, minimumRatio: 0.4, maximumRatio: 0.5, fullCards: 1, hasPeek: true },

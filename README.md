@@ -11,7 +11,7 @@ Private Strava and travel inputs remain outside this repository under `../Diesel
 
 - Node.js 22 or newer.
 - Python 3.12 or newer.
-- A Google Maps browser key with Map Tiles API access for photorealistic Replay.
+- A Google Maps browser key with Map Tiles API access for photorealistic Replay and Maps Static API access for regional route thumbnails.
 
 ## Setup
 
@@ -31,7 +31,7 @@ GOOGLE_MAPS_API_KEY=your-browser-key
 Restrict the browser key to the origins that run the app.
 For local work, allow both `http://localhost:8787/*` and `http://127.0.0.1:8787/*`.
 For production, also allow the Cloudflare Pages domain.
-Enable Google Maps JavaScript API and Map Tiles API on the same project.
+Enable Google Maps JavaScript API, Map Tiles API, and Maps Static API with billing on the same project.
 
 ## Run
 

@@ -98,4 +98,36 @@ test.describe("live regional Atlas terrain", () => {
       contentType: "image/png",
     });
   });
+
+  test("visible Kyoto cards load real static satellite thumbnails", async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(90_000);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.addInitScript(() => {
+      window.__GODIESEL_ATLAS_WORLD_ENGINE__ = "cesium";
+    });
+    await page.goto(`${previewUrl}/#/atlas?region=Kyoto%2C+Japan`);
+
+    const world = page.locator('div[data-atlas-engine="cesium"]');
+    await expect(world).toHaveAttribute("data-atlas-status", "region-ready", {
+      timeout: 60_000,
+    });
+    const carousel = page.getByRole("region", {
+      name: "Kyoto, Japan recorded routes",
+    });
+    const thumbnail = carousel.locator("[data-route-thumbnail]").first();
+    await expect(thumbnail).toHaveAttribute("data-thumbnail-state", "loaded", {
+      timeout: 30_000,
+    });
+    expect(
+      await thumbnail.locator("img").evaluate((image) =>
+        image instanceof HTMLImageElement ? image.naturalWidth : 0,
+      ),
+    ).toBeGreaterThan(0);
+    await testInfo.attach("kyoto-static-thumbnail", {
+      body: await page.screenshot(),
+      contentType: "image/png",
+    });
+  });
 });

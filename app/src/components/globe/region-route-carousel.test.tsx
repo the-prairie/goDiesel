@@ -4,6 +4,7 @@ import {
   elevationProfileGeometry,
   ROUTE_CAROUSEL_SLIDE_CLASS,
   routeTracePolyline,
+  thumbnailIndexesForSlidesInView,
 } from "@/components/globe/region-route-carousel";
 import type { RoutePoint } from "@/domain/routes";
 
@@ -41,5 +42,13 @@ describe("region route carousel geometry", () => {
     expect(ROUTE_CAROUSEL_SLIDE_CLASS).toContain(
       "xl:basis-[calc((100%-2rem)/3)]",
     );
+  });
+
+  it("loads every visible card plus one neighboring card on each side", () => {
+    expect([...thumbnailIndexesForSlidesInView([2, 3, 4], 8)]).toEqual([
+      1, 2, 3, 4, 5,
+    ]);
+    expect([...thumbnailIndexesForSlidesInView([0, 1], 8)]).toEqual([0, 1, 2]);
+    expect([...thumbnailIndexesForSlidesInView([7], 8)]).toEqual([6, 7]);
   });
 });
