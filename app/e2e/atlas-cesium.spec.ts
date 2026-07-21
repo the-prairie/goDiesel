@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 async function installDeterministicCesiumAtlas(page: import("@playwright/test").Page) {
   await page.addInitScript(() => {
+    window.__GODIESEL_ATLAS_WORLD_DESTROY_COUNT__ = 0;
     window.__GODIESEL_ATLAS_WORLD_ENGINE__ = "cesium";
     window.__GODIESEL_ATLAS_WORLD_FACTORY__ = () => {
       let canvas: HTMLCanvasElement | undefined;
@@ -63,7 +64,8 @@ async function installDeterministicCesiumAtlas(page: import("@playwright/test").
         },
         setSelectedRegion(region) {
           selectedRegion = region?.name;
-          cameraTarget = region ? 6_500_000 : 18_500_000;
+          if (canvas) canvas.dataset.cameraRegion = selectedRegion ?? "";
+          cameraTarget = 18_500_000;
           syncCamera();
         },
         projectRegions() {
@@ -87,6 +89,7 @@ async function installDeterministicCesiumAtlas(page: import("@playwright/test").
           syncCamera();
         },
         destroy() {
+          window.__GODIESEL_ATLAS_WORLD_DESTROY_COUNT__ += 1;
           canvas?.remove();
         },
       };
@@ -129,11 +132,12 @@ for (const viewport of [
       .poll(() => new URLSearchParams(new URL(page.url()).hash.split("?")[1]).get("region"))
       .toBe(region);
     await expect(page.getByRole("heading", { name: region! })).toBeVisible();
-    await expect(canvas).toHaveAttribute("data-camera-target", "6500000");
+    await expect(canvas).toHaveAttribute("data-camera-region", region!);
+    await expect(canvas).toHaveAttribute("data-camera-target", "18500000");
 
     await canvas.focus();
     await page.keyboard.press("ArrowRight");
-    await expect(canvas).toHaveAttribute("data-camera-target", "6500010");
+    await expect(canvas).toHaveAttribute("data-camera-target", "18500010");
 
     const beforeZoom = Number(await canvas.getAttribute("data-camera-target"));
     await page.getByRole("button", { name: "Zoom in" }).click();
@@ -145,6 +149,7 @@ for (const viewport of [
 
 test("Cesium failure preserves Atlas through the Three.js fallback", async ({ page }) => {
   await page.addInitScript(() => {
+    window.__GODIESEL_ATLAS_WORLD_DESTROY_COUNT__ = 0;
     window.__GODIESEL_ATLAS_WORLD_ENGINE__ = "cesium";
     window.__GODIESEL_ATLAS_WORLD_FACTORY__ = () => ({
       async mount({ onStatus }) {
@@ -155,7 +160,9 @@ test("Cesium failure preserves Atlas through the Three.js fallback", async ({ pa
       zoomIn() {},
       zoomOut() {},
       resetView() {},
-      destroy() {},
+      destroy() {
+        window.__GODIESEL_ATLAS_WORLD_DESTROY_COUNT__ += 1;
+      },
     });
   });
   await page.goto("/#/atlas?region=Kyoto%2C+Japan");
@@ -164,6 +171,9 @@ test("Cesium failure preserves Atlas through the Three.js fallback", async ({ pa
   await expect(page.getByText("Cesium world unavailable. Showing the classic Atlas.")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
   await expect(page).toHaveURL(/region=Kyoto%2C\+Japan/);
+  await expect
+    .poll(() => page.evaluate(() => window.__GODIESEL_ATLAS_WORLD_DESTROY_COUNT__))
+    .toBe(1);
 });
 
 test("Cesium enters a region selected by the initial URL", async ({ page }) => {
@@ -171,6 +181,47 @@ test("Cesium enters a region selected by the initial URL", async ({ page }) => {
   await page.goto("/#/atlas?region=Kyoto%2C+Japan");
 
   const canvas = page.getByLabel("Interactive route globe");
-  await expect(canvas).toHaveAttribute("data-camera-target", "6500000");
+  await expect(canvas).toHaveAttribute("data-camera-region", "Kyoto, Japan");
+  await expect(canvas).toHaveAttribute("data-camera-target", "18500000");
   await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
 });
+
+test("search, keyboard, and wheel input share the Cesium camera target", async ({
+  page,
+}) => {
+  await installDeterministicCesiumAtlas(page);
+  await page.goto("/#/atlas");
+
+  const canvas = page.getByLabel("Interactive route globe");
+  const search = page.getByRole("textbox", {
+    name: "Search regions, routes, replay-worthy days",
+  });
+  await search.fill("kyoto");
+  await page.getByRole("button", { name: /Kyoto, Japan2 routes/i }).click();
+  await expect(canvas).toHaveAttribute("data-camera-region", "Kyoto, Japan");
+  await expect(canvas).toHaveAttribute("data-camera-target", "18500000");
+
+  await canvas.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(canvas).toHaveAttribute("data-camera-target", "18500010");
+  await canvas.dispatchEvent("wheel", { deltaY: 500 });
+  await expect(canvas).toHaveAttribute("data-camera-target", "18500510");
+});
+
+test("Cesium releases its renderer when Atlas unmounts", async ({ page }) => {
+  await installDeterministicCesiumAtlas(page);
+  await page.goto("/#/atlas");
+  await expect(page.getByLabel("Interactive route globe")).toBeVisible();
+
+  await page.getByRole("link", { name: "Finder" }).click();
+  await expect(page).toHaveURL(/#\/finder/);
+  await expect
+    .poll(() => page.evaluate(() => window.__GODIESEL_ATLAS_WORLD_DESTROY_COUNT__))
+    .toBe(1);
+});
+
+declare global {
+  interface Window {
+    __GODIESEL_ATLAS_WORLD_DESTROY_COUNT__: number;
+  }
+}

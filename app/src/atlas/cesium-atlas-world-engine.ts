@@ -23,7 +23,7 @@ import {
 import type { RouteRegion } from "@/data/route-regions";
 
 const DEFAULT_VIEW = { lat: 24, lng: 12, heightM: 18_500_000 };
-const SELECTED_VIEW_HEIGHT_M = 6_500_000;
+const GLOBAL_SELECTION_HEIGHT_M = DEFAULT_VIEW.heightM;
 const ROUTE_COLOR = Color.fromCssColorString("#62a7ff");
 const SELECTED_ROUTE_COLOR = Color.fromCssColorString("#df674b");
 
@@ -94,6 +94,12 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
       viewer.canvas.setAttribute(
         "aria-keyshortcuts",
         "ArrowLeft ArrowRight ArrowUp ArrowDown + -",
+      );
+      viewer.canvas.classList.add(
+        "focus-visible:outline-none",
+        "focus-visible:ring-2",
+        "focus-visible:ring-inset",
+        "focus-visible:ring-[#f6f2e8]",
       );
       viewer.canvas.tabIndex = 0;
       viewer.canvas.dataset.atlasEngine = "cesium";
@@ -172,6 +178,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
         : new ColorMaterialProperty(ROUTE_COLOR.withAlpha(region ? 0.32 : 0.92));
     });
     if (!region) {
+      viewer.canvas.dataset.cameraRegion = "";
       this.resetView();
       return;
     }
@@ -179,12 +186,13 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
       destination: Cartesian3.fromDegrees(
         region.centerLng,
         region.centerLat,
-        SELECTED_VIEW_HEIGHT_M,
+        GLOBAL_SELECTION_HEIGHT_M,
       ),
       orientation: new HeadingPitchRoll(0, -CesiumMath.PI_OVER_TWO, 0),
       duration: 0.75,
     });
-    viewer.canvas.dataset.cameraTarget = SELECTED_VIEW_HEIGHT_M.toFixed(0);
+    viewer.canvas.dataset.cameraRegion = region.name;
+    viewer.canvas.dataset.cameraTarget = GLOBAL_SELECTION_HEIGHT_M.toFixed(0);
   }
 
   projectRegions(): AtlasRegionProjection[] {

@@ -70,7 +70,6 @@ export const CesiumAtlasGlobe = forwardRef<
   }, [selectedRegion]);
 
   useEffect(() => {
-    let frame = 0;
     const updateLabels = () => {
       const projections = engineRef.current?.projectRegions() ?? [];
       const projectionByName = new Map(
@@ -108,10 +107,10 @@ export const CesiumAtlasGlobe = forwardRef<
         label.style.display = visible.has(region.name) ? "flex" : "none";
         label.dataset.active = String(selectedRegion?.name === region.name);
       });
-      frame = requestAnimationFrame(updateLabels);
     };
-    frame = requestAnimationFrame(updateLabels);
-    return () => cancelAnimationFrame(frame);
+    updateLabels();
+    const interval = window.setInterval(updateLabels, 80);
+    return () => window.clearInterval(interval);
   }, [regions, selectedRegion]);
 
   return (
@@ -135,7 +134,7 @@ export const CesiumAtlasGlobe = forwardRef<
             data-globe-region={region.name}
             aria-label={`Select ${region.name} on globe`}
             onClick={() => onSelectRegion(region)}
-            className="pointer-events-auto absolute hidden -translate-x-1/2 -translate-y-1/2 items-center gap-2 whitespace-nowrap rounded-sm border border-white/30 bg-[#f6f2e8]/90 px-3 py-1.5 text-[11px] font-semibold uppercase text-[#24322d] shadow-lg backdrop-blur transition-colors hover:border-[#315fb4] hover:text-[#183a76] data-[active=true]:border-[#df674b] data-[active=true]:text-[#9b321f]"
+            className="pointer-events-auto absolute hidden -translate-x-1/2 -translate-y-1/2 items-center gap-2 whitespace-nowrap rounded-sm border border-white/30 bg-[#f6f2e8]/90 px-3 py-1.5 text-[11px] font-semibold uppercase text-[#24322d] shadow-lg backdrop-blur transition-colors hover:border-[#315fb4] hover:text-[#183a76] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#315fb4] focus-visible:ring-offset-2 focus-visible:ring-offset-[#02070a] data-[active=true]:border-[#df674b] data-[active=true]:text-[#9b321f]"
           >
             <span className="size-1.5 rounded-full bg-[#df674b]" />
             {region.name} · {region.routes.length}
