@@ -54,18 +54,8 @@ export interface AtlasWorldEngine {
 
 declare global {
   interface Window {
-    __GODIESEL_ATLAS_WORLD_ENGINE__?: "three" | "cesium";
     __GODIESEL_ATLAS_WORLD_FACTORY__?: () => AtlasWorldEngine;
   }
-}
-
-export function atlasWorldEngineMode() {
-  if (typeof window !== "undefined" && window.__GODIESEL_ATLAS_WORLD_ENGINE__) {
-    return window.__GODIESEL_ATLAS_WORLD_ENGINE__;
-  }
-  return import.meta.env.VITE_ATLAS_WORLD_ENGINE === "cesium"
-    ? "cesium"
-    : "three";
 }
 
 export function sampleGlobalRoutePoints(

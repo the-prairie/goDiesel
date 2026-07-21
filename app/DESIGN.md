@@ -10,7 +10,8 @@ The governing rule is:
 
 | Surface | Routes | Workspace | Primary purpose |
 | --- | --- | --- | --- |
-| Map | Atlas and Finder | Full-height terrain with controls and inspector | Remember or plan |
+| Spatial atlas | Atlas | Full-bleed Cesium world with compact navigation and route carousel | Remember and revisit |
+| Planning map | Finder | Full-height terrain with controls and inspector | Plan |
 | Editorial route | Route detail | Real geography with route inspector | Understand one route |
 | Immersive | Replay and approved replay labs | Full-bleed terrain with one control dock | Relive one route |
 | Utility | Routes and Admin | Dense content workspace | Compare or curate |
@@ -34,8 +35,8 @@ It does not change canonical URLs or route data semantics.
 ### Product meaning
 
 - Forest communicates actions, active navigation, and playback controls.
-- Cobalt communicates routes, route history, route selection, and elevation data.
-- Coral communicates a singular current position, waypoint, or active map point.
+- Cobalt communicates routes, route history, and elevation data.
+- Coral communicates the selected Atlas route, a singular current position, waypoint, or active map point.
 - Success and warning colors communicate status only.
 
 Runs and rides share cobalt.
@@ -78,7 +79,8 @@ Cards must not be nested inside other cards.
 ## Cartography
 
 - Historical routes use a `2px` cobalt line at `42%` opacity without waypoint markers.
-- Selected routes use a `4px` cobalt line with a `2px` pale halo.
+- Selected routes use a `4px` cobalt line with a `2px` pale halo outside Atlas.
+- The selected Atlas route uses a `4px` coral line with a restrained pale halo.
 - Replay routes use a `5px` cobalt line.
 - Waypoints use a `28px` coral circle, `2px` white border, and a white numeric label.
 - Current replay position uses an `18px` coral point with a `3px` white ring.
@@ -89,7 +91,9 @@ Cards must not be nested inside other cards.
 
 ### Desktop
 
-At `1024px` and wider, the desktop sidebar is fixed at the left edge.
+At `1024px` and wider, the desktop sidebar is fixed at the left edge except on Atlas.
+
+Atlas uses compact navigation over a full-width world and does not reserve permanent sidebar space.
 
 Map and immersive surfaces do not use a global top header.
 
@@ -115,7 +119,9 @@ All interactive controls remain at least `44px` square and respect safe-area ins
 
 ## Inspection
 
-Desktop route and region detail uses a collapsible `320px` inspector.
+Desktop route detail and Finder region detail use a collapsible `320px` inspector.
+
+Atlas region selection uses a centered route carousel over the world rather than a permanent inspector.
 
 Mobile route detail uses a three-position sheet with `180px`, `52vh`, and `88vh` stops.
 
@@ -138,7 +144,9 @@ When no source-backed image exists, geography remains the primary visual.
 | `MapModeControl` | Runs, Rides, and All on Atlas surfaces |
 | `RouteTraceLayer` | Historical and selected route annotation |
 | `WaypointLayer` | Intentional coral map points |
-| `RegionInspector` | Region totals and compact route list |
+| `AtlasGlobe` | Sole Cesium owner for the global and regional Atlas world |
+| `AtlasImmersiveNavigation` | Compact Atlas navigation and memory/planning mode switch |
+| `RegionRouteCarousel` | Source-backed routes for the selected Atlas region |
 | `RouteInspector` | Route metrics, narrative, and actions |
 | `MobileRouteSheet` | Mobile map inspection |
 | `RouteEditorialHeader` | Route identity and short premise |
@@ -161,6 +169,22 @@ Body text and controls must meet WCAG AA contrast.
 Loading states must reserve stable dimensions.
 
 Reduced-motion preferences disable decorative motion without hiding state changes.
+
+## Atlas Spatial Treatment
+
+Atlas is the only product surface with a dark, full-bleed spatial treatment.
+
+Its production world is Cesium, with bundled Natural Earth imagery for the global view and source-backed photorealistic regional tiles when available.
+
+Actual recorded route geometry is always the primary annotation.
+
+Global route threads use cobalt, the selected route uses coral, and route density comes from the recorded traces rather than oversized place markers.
+
+Selecting a region moves the same world camera into place and opens the centered route carousel.
+
+If regional 3D imagery is unavailable, Atlas keeps the selection and navigation state and uses the source-backed MapLibre regional fallback.
+
+This exception does not establish a global dark theme and must not be copied to Finder, Routes, Admin, or route detail.
 
 ## Required And Illustrative Decisions
 

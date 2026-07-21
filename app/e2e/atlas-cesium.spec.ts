@@ -4,7 +4,6 @@ import { PNG } from "pngjs";
 async function installDeterministicCesiumAtlas(page: import("@playwright/test").Page) {
   await page.addInitScript(() => {
     window.__GODIESEL_ATLAS_WORLD_DESTROY_COUNT__ = 0;
-    window.__GODIESEL_ATLAS_WORLD_ENGINE__ = "cesium";
     window.__GODIESEL_ATLAS_WORLD_FACTORY__ = () => {
       let canvas: HTMLCanvasElement | undefined;
       let regions: Array<{ name: string }> = [];
@@ -174,7 +173,7 @@ for (const viewport of [
   { name: "desktop", width: 1440, height: 900 },
   { name: "mobile", width: 390, height: 844 },
 ]) {
-  test(`feature-flagged Cesium Atlas renders and selects places on ${viewport.name}`, async ({
+  test(`production Cesium Atlas renders and selects places on ${viewport.name}`, async ({
     page,
   }) => {
     await page.setViewportSize(viewport);
@@ -224,10 +223,9 @@ for (const viewport of [
   });
 }
 
-test("Cesium failure preserves Atlas through the Three.js fallback", async ({ page }) => {
+test("Cesium failure remains legible without restoring the obsolete world", async ({ page }) => {
   await page.addInitScript(() => {
     window.__GODIESEL_ATLAS_WORLD_DESTROY_COUNT__ = 0;
-    window.__GODIESEL_ATLAS_WORLD_ENGINE__ = "cesium";
     window.__GODIESEL_ATLAS_WORLD_FACTORY__ = () => ({
       async mount({ onStatus }) {
         onStatus({ state: "unavailable", message: "Synthetic provider failure." });
@@ -245,12 +243,22 @@ test("Cesium failure preserves Atlas through the Three.js fallback", async ({ pa
   });
   await page.goto("/#/atlas?region=Kyoto%2C+Japan");
 
-  await expect(page.locator('[data-atlas-engine="three-fallback"]')).toBeAttached();
-  await expect(page.getByText("Cesium world unavailable. Showing the classic Atlas.")).toBeVisible();
+  await expect(page.locator('[data-atlas-engine="cesium"]')).toHaveAttribute(
+    "data-atlas-status",
+    "unavailable",
+  );
+  await expect(page.locator('[data-atlas-engine^="three"]')).toHaveCount(0);
+  await expect(
+    page.getByText("Synthetic provider failure. Search and navigation remain available."),
+  ).toBeVisible();
   await expect(
     page.getByRole("heading", { level: 2, name: "Kyoto, Japan" }),
   ).toBeVisible();
   await expect(page).toHaveURL(/region=Kyoto%2C\+Japan/);
+  await expect
+    .poll(() => page.evaluate(() => window.__GODIESEL_ATLAS_WORLD_DESTROY_COUNT__))
+    .toBe(0);
+  await page.goto("/#/routes");
   await expect
     .poll(() => page.evaluate(() => window.__GODIESEL_ATLAS_WORLD_DESTROY_COUNT__))
     .toBe(1);
@@ -398,7 +406,10 @@ test("regional carousel gates on terrain and keeps route selection synchronized"
       .getByText("Loading Kyoto, Japan terrain"),
   ).toBeVisible();
   await expect(
-    page.getByRole("region", { name: "Kyoto, Japan recorded routes" }),
+    page.getByRole("region", {
+      name: "Kyoto, Japan recorded routes",
+      exact: true,
+    }),
   ).toHaveCount(0);
   const carousel = page.getByRole("region", {
     name: "Kyoto, Japan recorded routes",
@@ -503,7 +514,10 @@ test("opening a non-selected card preserves its exact Atlas return selection", a
   await expect(page).toHaveURL(new RegExp(`route=${targetSlug}`));
   await expect(
     page
-      .getByRole("region", { name: "Crete, Greece recorded routes" })
+      .getByRole("region", {
+        name: "Crete, Greece recorded routes",
+        exact: true,
+      })
       .locator(`article[data-route-slug="${targetSlug}"]`),
   ).toHaveAttribute("data-selected", "true");
 });

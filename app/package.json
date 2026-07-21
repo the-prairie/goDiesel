@@ -30,8 +30,7 @@
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-router-dom": "^7.18.1",
-    "tailwind-merge": "^3.4.0",
-    "three": "^0.184.0"
+    "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
@@ -40,7 +39,6 @@
     "@types/pngjs": "^6.0.5",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
-    "@types/three": "^0.184.1",
     "@vitejs/plugin-react": "^6.0.3",
     "pngjs": "^7.0.0",
     "tailwindcss": "^4.1.18",

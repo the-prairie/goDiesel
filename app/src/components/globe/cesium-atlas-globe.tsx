@@ -11,13 +11,9 @@ import type {
 import { createAtlasWorldEngine } from "@/atlas/cesium-atlas-world-engine";
 import { cn } from "@/lib/utils";
 
-interface CesiumAtlasGlobeProps extends AtlasGlobeProps {
-  onUnavailable: (message: string) => void;
-}
-
 export const CesiumAtlasGlobe = forwardRef<
   AtlasGlobeHandle,
-  CesiumAtlasGlobeProps
+  AtlasGlobeProps
 >(function CesiumAtlasGlobe(
   {
     regions,
@@ -28,7 +24,6 @@ export const CesiumAtlasGlobe = forwardRef<
     onStatusChange,
     onRegionPresentationReady,
     className,
-    onUnavailable,
   },
   forwardedRef,
 ) {
@@ -72,13 +67,11 @@ export const CesiumAtlasGlobe = forwardRef<
           } else if (nextStatus.state === "region-ready") {
             onRegionPresentationReady?.(true);
           } else if (
-            nextStatus.state === "ready" ||
-            nextStatus.state === "unavailable"
+            nextStatus.state === "ready"
           ) {
             onRegionPresentationReady?.(false);
-          }
-          if (nextStatus.state === "unavailable") {
-            onUnavailable(nextStatus.message);
+          } else if (nextStatus.state === "unavailable") {
+            onRegionPresentationReady?.(Boolean(selectedRegionRef.current));
           }
         },
       })
@@ -94,7 +87,7 @@ export const CesiumAtlasGlobe = forwardRef<
       engine.destroy();
       if (engineRef.current === engine) engineRef.current = undefined;
     };
-  }, [onRegionPresentationReady, onStatusChange, onUnavailable, regions]);
+  }, [onRegionPresentationReady, onStatusChange, regions]);
 
   useEffect(() => {
     readyEngineRef.current?.setSelectedRegion(selectedRegion);
@@ -215,6 +208,15 @@ export const CesiumAtlasGlobe = forwardRef<
           className="pointer-events-none absolute bottom-24 left-4 z-20 min-h-12 min-w-52 border border-white/25 bg-[#071019]/88 px-3 py-2 text-xs text-white shadow-lg xl:bottom-56 xl:left-[15.5rem]"
         >
           {status.message}
+        </div>
+      ) : null}
+      {status.state === "unavailable" ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="pointer-events-none absolute bottom-24 left-4 z-20 max-w-sm border border-white/25 bg-[#f6f2e8]/96 px-3 py-2 text-xs text-[#24322d] shadow-lg xl:left-5"
+        >
+          {status.message} Search and navigation remain available.
         </div>
       ) : null}
     </div>
