@@ -9,10 +9,7 @@ import {
   AtlasGlobe,
   type AtlasGlobeHandle,
 } from "@/components/globe/atlas-globe";
-import {
-  RegionInspector,
-  type MobileSheetPosition,
-} from "@/components/globe/region-inspector";
+import { RegionRouteCarousel } from "@/components/globe/region-route-carousel";
 import { AtlasSearch } from "@/components/search/atlas-search";
 import { completedRoutes } from "@/data/routes";
 import { buildRouteRegions, type RouteRegion } from "@/data/route-regions";
@@ -23,11 +20,10 @@ import { replayPath } from "@/navigation";
 export function AtlasPage() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
+  const searchParamsRef = useRef(searchParams);
+  searchParamsRef.current = searchParams;
   const globeRef = useRef<AtlasGlobeHandle>(null);
-  const [mobileSheetPosition, setMobileSheetPosition] =
-    useState<MobileSheetPosition>(() =>
-      window.innerHeight <= 600 ? "peek" : "half",
-    );
+  const [regionPresentationReady, setRegionPresentationReady] = useState(false);
   const activityParam = searchParams.get("activity");
   const mode: AtlasActivityMode =
     activityParam === "runs" || activityParam === "rides" ? activityParam : "all";
@@ -43,17 +39,18 @@ export function AtlasPage() {
   const routeRegions = useMemo(() => buildRouteRegions(visibleRoutes), [visibleRoutes]);
   const selection = resolveAtlasSelection(searchParams, routeRegions);
   const { selectedRegion, selectedRoute } = selection;
+  const presentedRoute = selectedRoute ?? selectedRegion?.routes[0];
   const query = searchParams.get("q") ?? "";
-  const atlasPath = `${location.pathname}${location.search}`;
 
   const updateSearchParams = useCallback(function updateSearchParams(
     update: (next: URLSearchParams) => void,
     replace = false,
   ) {
-    const next = new URLSearchParams(searchParams);
+    const next = new URLSearchParams(searchParamsRef.current);
     update(next);
+    searchParamsRef.current = next;
     setSearchParams(next, { replace });
-  }, [searchParams, setSearchParams]);
+  }, [setSearchParams]);
 
   useEffect(() => {
     if (!selection.invalidRegion && !selection.invalidRoute) return;
@@ -62,6 +59,10 @@ export function AtlasPage() {
       if (selection.invalidRegion || selection.invalidRoute) next.delete("route");
     }, true);
   }, [selection.invalidRegion, selection.invalidRoute, updateSearchParams]);
+
+  useEffect(() => {
+    setRegionPresentationReady(false);
+  }, [selectedRegion?.name]);
 
   useEffect(() => {
     function handleEscape(event: KeyboardEvent) {
@@ -74,19 +75,20 @@ export function AtlasPage() {
       ) {
         return;
       }
-      if (!selectedRoute && !selectedRegion) return;
+      if (!selectedRegion) return;
       event.preventDefault();
       updateSearchParams((next) => {
-        if (selectedRoute) next.delete("route");
+        if (next.has("route")) next.delete("route");
         else next.delete("region");
       });
     }
 
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
-  }, [selectedRegion, selectedRoute, updateSearchParams]);
+  }, [selectedRegion, updateSearchParams]);
 
   function selectRegion(region: RouteRegion) {
+    setRegionPresentationReady(false);
     updateSearchParams((next) => {
       next.set("region", region.name);
       next.delete("route");
@@ -100,7 +102,15 @@ export function AtlasPage() {
     });
   }
 
+  function replayPathForRoute(route: RouteSummary) {
+    const returnParams = new URLSearchParams(searchParams);
+    returnParams.set("region", route.region);
+    returnParams.set("route", route.slug);
+    return replayPath(route.slug, `${location.pathname}?${returnParams.toString()}`);
+  }
+
   function clearRegion() {
+    setRegionPresentationReady(false);
     updateSearchParams((next) => {
       next.delete("region");
       next.delete("route");
@@ -133,7 +143,10 @@ export function AtlasPage() {
         ref={globeRef}
         regions={routeRegions}
         selectedRegion={selectedRegion}
+        selectedRoute={presentedRoute}
         onSelectRegion={selectRegion}
+        onSelectRoute={selectRoute}
+        onRegionPresentationReady={setRegionPresentationReady}
         className="absolute inset-0 min-h-0 rounded-none border-0"
       />
 
@@ -146,7 +159,7 @@ export function AtlasPage() {
         onSelectRegion={selectRegion}
         selectedRoute={selectedRoute}
         onSelectRoute={selectRoute}
-        className={`atlas-search-panel absolute left-4 right-4 top-20 z-30 max-h-[56dvh] overflow-y-auto xl:left-[15.5rem] xl:right-auto xl:top-5 xl:h-[54px] xl:w-[340px] xl:p-1 ${selectedRegion ? "atlas-search-panel--selected" : ""}`}
+        className={`atlas-search-panel absolute left-4 right-4 top-20 z-30 max-h-[56dvh] overflow-y-auto xl:left-[15.5rem] xl:right-auto xl:top-5 xl:h-[54px] xl:w-[340px] xl:p-1 ${selectedRegion ? "atlas-search-panel--selected [@media(max-height:500px)]:hidden" : ""}`}
       />
       <AtlasControls
         regions={routeRegions}
@@ -158,15 +171,18 @@ export function AtlasPage() {
         onZoomOut={() => globeRef.current?.zoomOut()}
         onResetView={() => globeRef.current?.resetView()}
       />
-      <RegionInspector
-        selectedRegion={selectedRegion}
-        selectedRoute={selectedRoute}
-        onClear={clearRegion}
-        onSelectRoute={selectRoute}
-        replayPathForRoute={(route) => replayPath(route.slug, atlasPath)}
-        mobilePosition={mobileSheetPosition}
-        onMobilePositionChange={setMobileSheetPosition}
-      />
+      {selectedRegion ? (
+        <div className="absolute inset-x-0 bottom-0 z-30">
+          <RegionRouteCarousel
+            region={selectedRegion}
+            selectedRoute={selectedRoute}
+            onClear={clearRegion}
+            onSelectRoute={selectRoute}
+            replayPathForRoute={replayPathForRoute}
+            presentationReady={regionPresentationReady}
+          />
+        </div>
+      ) : null}
     </section>
   );
 }

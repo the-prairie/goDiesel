@@ -22,8 +22,11 @@ export const CesiumAtlasGlobe = forwardRef<
   {
     regions,
     selectedRegion,
+    selectedRoute,
     onSelectRegion,
+    onSelectRoute,
     onStatusChange,
+    onRegionPresentationReady,
     className,
     onUnavailable,
   },
@@ -34,6 +37,8 @@ export const CesiumAtlasGlobe = forwardRef<
   const engineRef = useRef<AtlasWorldEngine | undefined>(undefined);
   const readyEngineRef = useRef<AtlasWorldEngine | undefined>(undefined);
   const selectedRegionRef = useRef(selectedRegion);
+  const selectedRouteRef = useRef(selectedRoute);
+  const onSelectRouteRef = useRef(onSelectRoute);
   const [status, setStatus] = useState<AtlasWorldStatus>({
     state: "loading",
     message: "Opening the Atlas world.",
@@ -46,6 +51,8 @@ export const CesiumAtlasGlobe = forwardRef<
   }));
 
   selectedRegionRef.current = selectedRegion;
+  selectedRouteRef.current = selectedRoute;
+  onSelectRouteRef.current = onSelectRoute;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -56,9 +63,20 @@ export const CesiumAtlasGlobe = forwardRef<
       .mount({
         container,
         regions,
+        onSelectRoute: (route) => onSelectRouteRef.current?.(route),
         onStatus: (nextStatus) => {
           setStatus(nextStatus);
           onStatusChange?.(nextStatus);
+          if (nextStatus.state === "region-loading") {
+            onRegionPresentationReady?.(false);
+          } else if (nextStatus.state === "region-ready") {
+            onRegionPresentationReady?.(true);
+          } else if (
+            nextStatus.state === "ready" ||
+            nextStatus.state === "unavailable"
+          ) {
+            onRegionPresentationReady?.(false);
+          }
           if (nextStatus.state === "unavailable") {
             onUnavailable(nextStatus.message);
           }
@@ -68,6 +86,7 @@ export const CesiumAtlasGlobe = forwardRef<
         if (engineRef.current === engine) {
           readyEngineRef.current = engine;
           engine.setSelectedRegion(selectedRegionRef.current);
+          engine.setSelectedRoute(selectedRouteRef.current);
         }
       });
     return () => {
@@ -75,11 +94,15 @@ export const CesiumAtlasGlobe = forwardRef<
       engine.destroy();
       if (engineRef.current === engine) engineRef.current = undefined;
     };
-  }, [onStatusChange, onUnavailable, regions]);
+  }, [onRegionPresentationReady, onStatusChange, onUnavailable, regions]);
 
   useEffect(() => {
     readyEngineRef.current?.setSelectedRegion(selectedRegion);
   }, [selectedRegion]);
+
+  useEffect(() => {
+    readyEngineRef.current?.setSelectedRoute(selectedRoute);
+  }, [selectedRoute]);
 
   useEffect(() => {
     const updateLabels = () => {
@@ -152,7 +175,12 @@ export const CesiumAtlasGlobe = forwardRef<
         )}
       />
       {status.state === "region-fallback" && selectedRegion ? (
-        <AtlasRegionalFallback region={selectedRegion} />
+        <AtlasRegionalFallback
+          region={selectedRegion}
+          selectedRoute={selectedRoute}
+          onSelectRoute={(route) => onSelectRouteRef.current?.(route)}
+          onReady={() => onRegionPresentationReady?.(true)}
+        />
       ) : null}
       <div
         className={cn(

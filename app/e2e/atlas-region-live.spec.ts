@@ -49,6 +49,15 @@ test.describe("live regional Atlas terrain", () => {
       expect(Number(await canvas.getAttribute("data-region-route-count"))).toBeGreaterThan(
         0,
       );
+      const carousel = page.getByRole("region", {
+        name: `${scenario.name} recorded routes`,
+      });
+      await expect(carousel).toBeVisible();
+      await expect(carousel.locator('article[data-selected="true"]')).toHaveCount(1);
+      const selectedSlug = await carousel
+        .locator('article[data-selected="true"]')
+        .getAttribute("data-route-slug");
+      await expect(canvas).toHaveAttribute("data-selected-route", selectedSlug!);
       await expectNonblankCanvas(canvas);
       await testInfo.attach(scenario.name.toLowerCase().replaceAll(/[^a-z]+/g, "-"), {
         body: await page.screenshot(),
@@ -71,6 +80,18 @@ test.describe("live regional Atlas terrain", () => {
     });
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       390,
+    );
+    const carousel = page.getByRole("region", {
+      name: "Kyoto, Japan recorded routes",
+    });
+    await expect(carousel).toBeVisible();
+    const carouselBox = (await carousel.boundingBox())!;
+    const firstCardBox = (await carousel.getByRole("article").first().boundingBox())!;
+    expect(firstCardBox.width / carouselBox.width).toBeGreaterThan(0.7);
+    await page.getByRole("button", { name: "Next route" }).click();
+    await expect(carousel.getByRole("article").nth(1)).toHaveAttribute(
+      "data-selected",
+      "true",
     );
     await testInfo.attach("kyoto-mobile", {
       body: await page.screenshot(),

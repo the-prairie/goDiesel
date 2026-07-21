@@ -157,12 +157,53 @@ function fitRegionalRoutes(
   host.dataset.mapZoom = map.getZoom().toFixed(2);
 }
 
-export function AtlasRegionalFallback({ region }: { region: RouteRegion }) {
+interface AtlasRegionalFallbackProps {
+  region: RouteRegion;
+  selectedRoute?: RouteSummary;
+  onSelectRoute?: (route: RouteSummary) => void;
+  onReady?: () => void;
+}
+
+export function AtlasRegionalFallback({
+  region,
+  selectedRoute,
+  onSelectRoute,
+  onReady,
+}: AtlasRegionalFallbackProps) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<MapLibreMap | undefined>(undefined);
+  const onSelectRouteRef = useRef(onSelectRoute);
+  const onReadyRef = useRef(onReady);
   const [status, setStatus] = useState<MapStatus>("loading");
   const [routePaths, setRoutePaths] = useState<string[]>([]);
   const routes = useMemo(() => regionalRouteCollection(region), [region]);
   const bounds = useMemo(() => regionalFitBounds(region), [region]);
+  onSelectRouteRef.current = onSelectRoute;
+  onReadyRef.current = onReady;
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map?.getLayer("regional-route-thread")) return;
+    const selectedSlug = selectedRoute?.slug ?? "";
+    map.setPaintProperty("regional-route-thread", "line-color", [
+      "case",
+      ["==", ["get", "slug"], selectedSlug],
+      ROUTE_THREAD_STYLE.marker,
+      ROUTE_THREAD_STYLE.color,
+    ]);
+    map.setPaintProperty("regional-route-thread", "line-width", [
+      "case",
+      ["==", ["get", "slug"], selectedSlug],
+      7,
+      3,
+    ]);
+    map.setPaintProperty("regional-route-thread", "line-opacity", [
+      "case",
+      ["==", ["get", "slug"], selectedSlug],
+      1,
+      selectedSlug ? 0.52 : 0.9,
+    ]);
+  }, [selectedRoute?.slug]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -190,6 +231,7 @@ export function AtlasRegionalFallback({ region }: { region: RouteRegion }) {
         bearing: 0,
         attributionControl: { compact: true },
       });
+      mapRef.current = map;
     } catch {
       host.replaceChildren();
       setStatus("unavailable");
@@ -239,10 +281,47 @@ export function AtlasRegionalFallback({ region }: { region: RouteRegion }) {
         source: "regional-routes",
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
-          "line-color": ROUTE_THREAD_STYLE.color,
-          "line-width": 4,
-          "line-opacity": 1,
+          "line-color": [
+            "case",
+            ["==", ["get", "slug"], selectedRoute?.slug ?? ""],
+            ROUTE_THREAD_STYLE.marker,
+            ROUTE_THREAD_STYLE.color,
+          ],
+          "line-width": [
+            "case",
+            ["==", ["get", "slug"], selectedRoute?.slug ?? ""],
+            7,
+            3,
+          ],
+          "line-opacity": [
+            "case",
+            ["==", ["get", "slug"], selectedRoute?.slug ?? ""],
+            1,
+            selectedRoute ? 0.52 : 0.9,
+          ],
         },
+      });
+      map.addLayer({
+        id: "regional-route-hit-target",
+        type: "line",
+        source: "regional-routes",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": "#000000",
+          "line-width": 18,
+          "line-opacity": 0.01,
+        },
+      });
+      map.on("click", "regional-route-hit-target", (event) => {
+        const slug = event.features?.[0]?.properties?.slug;
+        const route = region.routes.find((candidate) => candidate.slug === slug);
+        if (route) onSelectRouteRef.current?.(route);
+      });
+      map.on("mouseenter", "regional-route-hit-target", () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", "regional-route-hit-target", () => {
+        map.getCanvas().style.cursor = "";
       });
       map.resize();
       fitRegionalRoutes(map, host, bounds);
@@ -254,6 +333,7 @@ export function AtlasRegionalFallback({ region }: { region: RouteRegion }) {
       ready = true;
       if (loadTimer !== undefined) window.clearTimeout(loadTimer);
       setStatus("ready");
+      onReadyRef.current?.();
     };
 
     map.on("error", handleError);
@@ -278,6 +358,7 @@ export function AtlasRegionalFallback({ region }: { region: RouteRegion }) {
       map.off("load", handleLoad);
       map.off("moveend", updateRouteOverlay);
       map.remove();
+      if (mapRef.current === map) mapRef.current = undefined;
       host.replaceChildren();
     };
   }, [bounds, region, routes]);
@@ -307,8 +388,25 @@ export function AtlasRegionalFallback({ region }: { region: RouteRegion }) {
         data-regional-route-overlay="true"
         className="pointer-events-none absolute inset-0 z-[1] size-full"
       >
-        {routePaths.map((path, index) => (
-          <g key={`${region.name}-${index}`}>
+        {routePaths.map((path, index) => {
+          const slug = routes.features[index]?.properties.slug;
+          const active = slug === selectedRoute?.slug;
+          return (
+          <g key={`${region.name}-${slug ?? index}`}>
+            <path
+              d={path}
+              data-route-hit-target={slug}
+              fill="none"
+              stroke="transparent"
+              strokeWidth="18"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="pointer-events-auto cursor-pointer"
+              onClick={() => {
+                const route = region.routes.find((candidate) => candidate.slug === slug);
+                if (route) onSelectRouteRef.current?.(route);
+              }}
+            />
             <path
               d={path}
               fill="none"
@@ -316,18 +414,19 @@ export function AtlasRegionalFallback({ region }: { region: RouteRegion }) {
               strokeWidth="9"
               strokeLinecap="round"
               strokeLinejoin="round"
-              opacity="0.88"
+              opacity={active ? "1" : selectedRoute ? "0.45" : "0.88"}
             />
             <path
               d={path}
               fill="none"
-              stroke={ROUTE_THREAD_STYLE.color}
-              strokeWidth="4"
+              stroke={active ? ROUTE_THREAD_STYLE.marker : ROUTE_THREAD_STYLE.color}
+              strokeWidth={active ? "7" : "3"}
               strokeLinecap="round"
               strokeLinejoin="round"
             />
           </g>
-        ))}
+          );
+        })}
       </svg>
       <div
         role="status"

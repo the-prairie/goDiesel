@@ -140,6 +140,7 @@ function makeGlobeHeatLine(route: RouteSummary, regionIndex: number, density: nu
   );
 
   line.userData.regionIndex = regionIndex;
+  line.userData.routeSlug = route.slug;
   line.userData.baseOpacity = baseOpacity;
 
   return line;
@@ -162,14 +163,24 @@ function disposeObject(object: Object3D) {
 
 export const ThreeAtlasGlobe = forwardRef<AtlasGlobeHandle, AtlasGlobeProps>(
   function ThreeAtlasGlobe(
-    { regions, selectedRegion, onSelectRegion, className },
+    {
+      regions,
+      selectedRegion,
+      selectedRoute,
+      onSelectRegion,
+      onSelectRoute,
+      onRegionPresentationReady,
+      className,
+    },
     forwardedRef,
   ) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const labelRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const selectedRegionRef = useRef<RouteRegion | undefined>(selectedRegion);
+  const selectedRouteRef = useRef<RouteSummary | undefined>(selectedRoute);
   const selectedRegionName = selectedRegion?.name;
   const onSelectRegionRef = useRef(onSelectRegion);
+  const onSelectRouteRef = useRef(onSelectRoute);
   const refs = useRef<GlobeRefs>({
     raycaster: new Raycaster(),
     pointer: new Vector2(),
@@ -232,8 +243,16 @@ export const ThreeAtlasGlobe = forwardRef<AtlasGlobeHandle, AtlasGlobeProps>(
   }, [selectedRegion]);
 
   useEffect(() => {
+    selectedRouteRef.current = selectedRoute;
+  }, [selectedRoute]);
+
+  useEffect(() => {
     onSelectRegionRef.current = onSelectRegion;
   }, [onSelectRegion]);
+
+  useEffect(() => {
+    onSelectRouteRef.current = onSelectRoute;
+  }, [onSelectRoute]);
 
   useEffect(() => {
     const state = refs.current;
@@ -448,8 +467,15 @@ export const ThreeAtlasGlobe = forwardRef<AtlasGlobeHandle, AtlasGlobeProps>(
         const material = line.material as MeshBasicMaterial;
         const region = regions[line.userData.regionIndex];
         const selected = selectedRegionRef.current?.name === region?.name;
-        const target = selected
-          ? 0.94
+        const active =
+          selected && line.userData.routeSlug === selectedRouteRef.current?.slug;
+        material.color.setHex(active ? 0xdf674b : 0x315fb4);
+        const target = active
+          ? 1
+          : selected
+            ? selectedRouteRef.current
+              ? 0.42
+              : 0.94
           : selectedRegionRef.current
             ? line.userData.baseOpacity * 0.3
             : line.userData.baseOpacity;
@@ -477,6 +503,19 @@ export const ThreeAtlasGlobe = forwardRef<AtlasGlobeHandle, AtlasGlobeProps>(
       state.raycaster.setFromCamera(state.pointer, camera);
       const hit = state.raycaster.intersectObjects(state.anchors, false)[0];
       return hit ? regions[hit.object.userData.regionIndex] : undefined;
+    }
+
+    function routeFromEvent(event: PointerEvent) {
+      const selectedRegion = selectedRegionRef.current;
+      if (!selectedRegion) return undefined;
+      setPointer(event);
+      state.raycaster.setFromCamera(state.pointer, camera);
+      const hit = state.raycaster.intersectObjects(state.heatLines, false).find(
+        ({ object }) =>
+          regions[object.userData.regionIndex]?.name === selectedRegion.name,
+      );
+      const slug = hit?.object.userData.routeSlug;
+      return selectedRegion.routes.find((route) => route.slug === slug);
     }
 
     function beginDrag(clientX: number, clientY: number) {
@@ -558,7 +597,8 @@ export const ThreeAtlasGlobe = forwardRef<AtlasGlobeHandle, AtlasGlobeProps>(
         canvasEl.style.cursor = "grabbing";
         return;
       }
-      canvasEl.style.cursor = regionFromEvent(event) ? "pointer" : "grab";
+      canvasEl.style.cursor =
+        routeFromEvent(event) || regionFromEvent(event) ? "pointer" : "grab";
     }
 
     function handlePointerUp(event: PointerEvent) {
@@ -579,6 +619,11 @@ export const ThreeAtlasGlobe = forwardRef<AtlasGlobeHandle, AtlasGlobeProps>(
 
     function handleClick(event: MouseEvent) {
       if (state.drag.moved) return;
+      const route = routeFromEvent(event as PointerEvent);
+      if (route) {
+        onSelectRouteRef.current?.(route);
+        return;
+      }
       const region = regionFromEvent(event as PointerEvent);
       if (region) onSelectRegionRef.current(region);
     }
@@ -679,6 +724,19 @@ export const ThreeAtlasGlobe = forwardRef<AtlasGlobeHandle, AtlasGlobeProps>(
       canvas.dataset.cameraTarget = state.cameraDistance.toFixed(3);
     }
   }, [selectedRegionName, selectedRegion]);
+
+  useEffect(() => {
+    onRegionPresentationReady?.(false);
+    if (!selectedRegion) return;
+    const reducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const timer = window.setTimeout(
+      () => onRegionPresentationReady?.(true),
+      reducedMotion ? 120 : 1_150,
+    );
+    return () => window.clearTimeout(timer);
+  }, [onRegionPresentationReady, selectedRegion]);
 
   return (
     <div

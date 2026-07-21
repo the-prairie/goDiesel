@@ -14,6 +14,8 @@ import {
   ImageryLayer,
   PerspectiveFrustum,
   PolylineGlowMaterialProperty,
+  ScreenSpaceEventHandler,
+  ScreenSpaceEventType,
   SceneTransforms,
   TileMapServiceImageryProvider,
   Viewer,
@@ -52,6 +54,18 @@ interface RegionRouteEntity {
   regionName: string;
   route: RouteSummary;
   entity: Entity;
+}
+
+export function routeForPickedEntity(
+  routeEntities: ReadonlyArray<RegionRouteEntity>,
+  selectedRegionName: string | undefined,
+  pickedEntity: Entity | undefined,
+) {
+  if (!selectedRegionName || !pickedEntity) return undefined;
+  return routeEntities.find(
+    ({ regionName, entity }) =>
+      regionName === selectedRegionName && entity === pickedEntity,
+  )?.route;
 }
 
 function canvasLooksBlank(canvas: HTMLCanvasElement) {
@@ -107,6 +121,8 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   private removeCameraChangedListener?: () => void;
   private keyDownHandler?: (event: KeyboardEvent) => void;
   private onStatus?: AtlasWorldEngineMountOptions["onStatus"];
+  private onSelectRoute?: AtlasWorldEngineMountOptions["onSelectRoute"];
+  private routeSelectionHandler?: ScreenSpaceEventHandler;
   private tileset?: Cesium3DTileset;
   private baseImageryLayer?: ImageryLayer;
   private removeTerrainFailureListener?: () => void;
@@ -115,15 +131,22 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   private terrainFailureTimes: number[] = [];
   private blankFrameCount = 0;
   private selectedRegionName?: string;
+  private selectedRouteSlug?: string;
   private regionGeneration = 0;
   private generation = 0;
   private surfaceNormal = new Cartesian3();
   private surfaceToCamera = new Cartesian3();
 
-  async mount({ container, regions, onStatus }: AtlasWorldEngineMountOptions) {
+  async mount({
+    container,
+    regions,
+    onStatus,
+    onSelectRoute,
+  }: AtlasWorldEngineMountOptions) {
     const generation = ++this.generation;
     this.regions = regions;
     this.onStatus = onStatus;
+    this.onSelectRoute = onSelectRoute;
     onStatus({ state: "loading", message: "Opening the Atlas world." });
 
     if (!webglAvailable()) {
@@ -216,6 +239,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
       );
 
       this.installKeyboardControls(viewer);
+      this.installRouteSelection(viewer);
       this.removeCameraChangedListener = viewer.camera.changed.addEventListener(() => {
         viewer.canvas.dataset.cameraHeight =
           viewer.camera.positionCartographic.height.toFixed(0);
@@ -249,17 +273,8 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     if (!viewer || viewer.isDestroyed()) return;
     const regionGeneration = ++this.regionGeneration;
     this.selectedRegionName = region?.name;
-    this.routeEntities.forEach(({ regionName, entity }) => {
-      if (!entity.polyline) return;
-      const selected = regionName === region?.name;
-      entity.polyline.width = new ConstantProperty(selected ? 6 : 4);
-      entity.polyline.material = selected
-        ? new PolylineGlowMaterialProperty({
-            color: SELECTED_ROUTE_COLOR.withAlpha(0.98),
-            glowPower: 0.2,
-          })
-        : new ColorMaterialProperty(ROUTE_COLOR.withAlpha(region ? 0.32 : 0.92));
-    });
+    if (!region) this.selectedRouteSlug = undefined;
+    this.styleRouteEntities();
     if (!region) {
       this.leaveRegionalTerrain();
       viewer.canvas.dataset.cameraRegion = "";
@@ -275,6 +290,14 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     }
     viewer.canvas.dataset.cameraRegion = region.name;
     void this.enterRegionalTerrain(region, regionGeneration);
+  }
+
+  setSelectedRoute(route?: RouteSummary) {
+    this.selectedRouteSlug = route?.slug;
+    if (this.viewer && !this.viewer.isDestroyed()) {
+      this.viewer.canvas.dataset.selectedRoute = route?.slug ?? "";
+    }
+    this.styleRouteEntities();
   }
 
   projectRegions(): AtlasRegionProjection[] {
@@ -345,6 +368,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     if (this.viewer && this.keyDownHandler) {
       this.viewer.canvas.removeEventListener("keydown", this.keyDownHandler);
     }
+    this.routeSelectionHandler?.destroy();
     if (this.viewer && !this.viewer.isDestroyed()) this.viewer.destroy();
     this.viewer = undefined;
     this.regions = [];
@@ -352,8 +376,11 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     this.removeRenderErrorListener = undefined;
     this.removeCameraChangedListener = undefined;
     this.keyDownHandler = undefined;
+    this.routeSelectionHandler = undefined;
     this.onStatus = undefined;
+    this.onSelectRoute = undefined;
     this.selectedRegionName = undefined;
+    this.selectedRouteSlug = undefined;
   }
 
   private async enterRegionalTerrain(
@@ -491,6 +518,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
         ),
       );
     });
+    this.styleRouteEntities();
   }
 
   private restoreGlobalRouteGeometry() {
@@ -502,6 +530,27 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
           Cartesian3.fromDegrees(point.lng, point.lat),
         ),
       );
+    });
+    this.styleRouteEntities();
+  }
+
+  private styleRouteEntities() {
+    this.routeEntities.forEach(({ regionName, route, entity }) => {
+      if (!entity.polyline) return;
+      const inSelectedRegion = regionName === this.selectedRegionName;
+      const active =
+        inSelectedRegion && route.slug === this.selectedRouteSlug;
+      entity.polyline.width = new ConstantProperty(active ? 8 : inSelectedRegion ? 5 : 4);
+      entity.polyline.material = active
+        ? new PolylineGlowMaterialProperty({
+            color: SELECTED_ROUTE_COLOR.withAlpha(1),
+            glowPower: 0.24,
+          })
+        : new ColorMaterialProperty(
+            ROUTE_COLOR.withAlpha(
+              this.selectedRegionName ? (inSelectedRegion ? 0.48 : 0.2) : 0.92,
+            ),
+          );
     });
   }
 
@@ -646,6 +695,26 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
       event.preventDefault();
     };
     viewer.canvas.addEventListener("keydown", this.keyDownHandler);
+  }
+
+  private installRouteSelection(viewer: Viewer) {
+    this.routeSelectionHandler?.destroy();
+    this.routeSelectionHandler = new ScreenSpaceEventHandler(viewer.scene.canvas);
+    this.routeSelectionHandler.setInputAction(
+      (event: ScreenSpaceEventHandler.PositionedEvent) => {
+        if (!this.selectedRegionName) return;
+        const picked = viewer.scene.pick(event.position) as { id?: Entity } | undefined;
+        const selectedRoute = routeForPickedEntity(
+          this.routeEntities,
+          this.selectedRegionName,
+          picked?.id,
+        );
+        if (!selectedRoute) return;
+        this.setSelectedRoute(selectedRoute);
+        this.onSelectRoute?.(selectedRoute);
+      },
+      ScreenSpaceEventType.LEFT_CLICK,
+    );
   }
 }
 
