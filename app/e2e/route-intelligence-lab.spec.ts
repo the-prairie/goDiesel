@@ -14,6 +14,17 @@ test("compares the San Francisco and Crete route genomes", async ({ page }) => {
   await expect(page.getByTestId("satellite-ribbon-14736711660")).toBeVisible();
   await expect(page.getByTestId("satellite-ribbon-14023448720")).toBeVisible();
 
+  await expect(page.getByTestId("journey-strip-14736711660")).toBeVisible();
+  await expect(page.getByTestId("journey-frame-list").getByRole("button")).toHaveCount(30);
+  await expect(page.getByTestId("journey-active-image")).toHaveAttribute("src", /km-00\.jpg$/);
+  await page.getByRole("button", { name: "Next kilometer" }).click();
+  await expect(page.getByTestId("journey-active-image")).toHaveAttribute("src", /km-01\.jpg$/);
+  await expect
+    .poll(() => page.getByTestId("journey-active-image").evaluate((image) =>
+      (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0,
+    ))
+    .toBe(true);
+
   const sceneImages = page.locator('[data-testid^="earth-scene-image-"]');
   await expect(sceneImages).toHaveCount(2);
   await expect
@@ -32,6 +43,9 @@ test("compares the San Francisco and Crete route genomes", async ({ page }) => {
     "aria-pressed",
     "true",
   );
+  await expect(page.getByTestId("journey-strip-14023448720")).toBeVisible();
+  await expect(page.getByTestId("journey-frame-list").getByRole("button")).toHaveCount(23);
+  await expect(page.getByTestId("journey-active-image")).toHaveAttribute("src", /km-00\.jpg$/);
 
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,

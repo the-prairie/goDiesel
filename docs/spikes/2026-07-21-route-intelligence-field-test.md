@@ -52,6 +52,19 @@ The product recommendation is therefore a layered experience.
 3. Transition into Cesium for movement through the route.
 4. Keep all Earth Engine outputs precomputed so Replay never depends on a live analysis request.
 
+## Kilometer Journey Prototype
+
+The lab also tests the route as a kilometer-by-kilometer visual sequence.
+Each route is sampled at every whole kilometer plus the finish, producing 30 San Francisco frames and 23 Crete frames.
+Every frame retains its distance, elevation, coordinates, imagery provenance, and exact marker position.
+
+The current prototype crops these windows locally from the already-approved Earth Engine route portraits.
+This avoids sending the route coordinates to an external provider again and is sufficient to evaluate the carousel, route switching, marker alignment, and visual rhythm.
+It is not the final imagery pipeline because local crops inherit the resolution and route-overlay thickness of the overview portrait.
+
+The production-quality version should render each kilometer window directly from its source imagery in an explicitly authorized environment.
+That version can preserve the same frontend manifest while increasing local resolution and rendering a thinner route thread.
+
 ## Run
 
 Create a virtual environment and install `scripts/route_intelligence/requirements.txt`.

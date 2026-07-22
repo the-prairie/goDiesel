@@ -47,6 +47,22 @@ export interface RouteVisualScene {
   dataset: string;
 }
 
+export interface RouteJourneyFrame {
+  index: number;
+  distance_km: number;
+  elevation_m: number;
+  lat: number;
+  lng: number;
+  is_finish: boolean;
+  src: string;
+  dataset: string;
+  window_m?: number;
+  window_radius_m?: number;
+  generation?: string;
+  marker_x_pct?: number;
+  marker_y_pct?: number;
+}
+
 export interface RouteGenome {
   routeId: string;
   distanceKm: number;
@@ -56,6 +72,7 @@ export interface RouteGenome {
   environmental: EnvironmentalSignal[];
   environmentalSamples?: RouteEnvironmentSample[];
   visuals?: RouteVisualScene[];
+  journeyStrip?: RouteJourneyFrame[];
   routePath: string;
   elevationPath: string;
   editorialHypothesis: string;
@@ -68,6 +85,7 @@ export interface RouteGenomeEnrichment {
   signals: Partial<Record<EnvironmentalSignal["key"], number>>;
   samples: RouteEnvironmentSample[];
   visuals?: RouteVisualScene[];
+  journey_strip?: RouteJourneyFrame[];
   datasets: Array<{ id: string; role: string }>;
 }
 
@@ -269,6 +287,7 @@ export function applyRouteGenomeEnrichment(
     ...genome,
     environmentalSamples: enrichment.samples,
     visuals: enrichment.visuals,
+    journeyStrip: enrichment.journey_strip,
     environmental: genome.environmental.map((signal) => ({
       ...signal,
       value: enrichment.signals[signal.key] ?? signal.value,

@@ -3,6 +3,8 @@ import {
   ArrowLeft,
   Building2,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   CircleDashed,
   Layers3,
   Mountain,
@@ -18,6 +20,7 @@ import {
   buildRouteGenome,
   type RouteGenome,
   type RouteGenomeEnrichment,
+  type RouteJourneyFrame,
   type RouteVisualScene,
 } from "@/domain/route-genome";
 import type { QuestRoute } from "@/domain/routes";
@@ -79,6 +82,180 @@ function environmentalSampleStyle(sample: NonNullable<RouteGenome["environmental
   ] as const;
   const dominant = entries.reduce((best, entry) => (entry[1] > best[1] ? entry : best));
   return { background: dominant[2], opacity: 0.28 + (dominant[1] / 100) * 0.72 };
+}
+
+function journeyContext(frame: RouteJourneyFrame, genome: RouteGenome) {
+  const sample = genome.environmentalSamples?.reduce((nearest, candidate) =>
+    Math.abs(candidate.distance_km - frame.distance_km) < Math.abs(nearest.distance_km - frame.distance_km)
+      ? candidate
+      : nearest,
+  );
+  if (!sample) return { label: "Recorded landscape", value: undefined };
+  const contexts = [
+    { key: "built", label: "Built texture", value: sample.built },
+    { key: "green", label: "Living cover", value: sample.green },
+    { key: "water", label: "Water presence", value: sample.water },
+    { key: "exposure", label: "Exposed terrain", value: sample.exposure },
+  ];
+  return contexts.reduce((strongest, context) => context.value > strongest.value ? context : strongest);
+}
+
+function FrameMarker({ frame }: { frame: RouteJourneyFrame }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-white bg-[var(--forest)] shadow-[0_1px_8px_rgb(0_0_0/45%)]"
+      style={{
+        left: `${frame.marker_x_pct ?? 50}%`,
+        top: `${frame.marker_y_pct ?? 50}%`,
+      }}
+    />
+  );
+}
+
+function KilometerJourneyStrip({ entry }: { entry: LabRoute }) {
+  const frames = entry.genome.journeyStrip ?? [];
+  const [activeIndex, setActiveIndex] = useState(0);
+  const activeFrame = frames[activeIndex];
+
+  if (!activeFrame) return null;
+
+  const context = journeyContext(activeFrame, entry.genome);
+  const selectFrame = (index: number) => {
+    const boundedIndex = Math.max(0, Math.min(frames.length - 1, index));
+    setActiveIndex(boundedIndex);
+    requestAnimationFrame(() => {
+      document.getElementById(`journey-frame-${entry.route.activityId}-${boundedIndex}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "center",
+      });
+    });
+  };
+
+  return (
+    <section
+      aria-labelledby="journey-strip-title"
+      className="min-w-0 overflow-hidden border-y border-[var(--line)] bg-[var(--surface)]"
+      data-testid={`journey-strip-${entry.route.activityId}`}
+    >
+      <header className="grid gap-5 border-b border-[var(--line)] px-5 py-5 sm:px-7 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+        <div>
+          <div className="flex items-center gap-2 text-micro font-semibold uppercase text-[var(--forest)]">
+            <Satellite className="size-3.5" aria-hidden="true" />
+            Kilometer journey · {entry.route.activityId === "14736711660" ? "San Francisco" : "Crete"}
+          </div>
+          <h2 id="journey-strip-title" className="mt-2 font-editorial text-place-lg font-semibold leading-tight">
+            The route, one real window at a time.
+          </h2>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            aria-label="Previous kilometer"
+            disabled={activeIndex === 0}
+            onClick={() => selectFrame(activeIndex - 1)}
+            size="icon"
+            variant="outline"
+          >
+            <ChevronLeft aria-hidden="true" />
+          </Button>
+          <span className="min-w-20 text-center text-caption tabular-nums text-[var(--ink-secondary)]">
+            {activeIndex + 1} / {frames.length}
+          </span>
+          <Button
+            aria-label="Next kilometer"
+            disabled={activeIndex === frames.length - 1}
+            onClick={() => selectFrame(activeIndex + 1)}
+            size="icon"
+            variant="outline"
+          >
+            <ChevronRight aria-hidden="true" />
+          </Button>
+        </div>
+      </header>
+
+      <div className="grid min-w-0 lg:grid-cols-[22rem_minmax(0,1fr)]">
+        <figure className="relative aspect-square min-h-0 w-full overflow-hidden bg-[#16221f] lg:border-r lg:border-[var(--line)]">
+          <img
+            alt={`${entry.route.name} near ${activeFrame.distance_km.toFixed(1)} kilometers along the route`}
+            className="size-full object-contain"
+            data-testid="journey-active-image"
+            src={activeFrame.src}
+          />
+          <FrameMarker frame={activeFrame} />
+          <figcaption className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-4 bg-gradient-to-t from-black/75 to-transparent px-5 pb-4 pt-12 text-white sm:px-7">
+            <div>
+              <p className="text-micro font-semibold uppercase text-white/75">
+                {activeFrame.is_finish ? "Finish" : "Along route"}
+              </p>
+              <p className="mt-1 font-editorial text-3xl font-semibold tabular-nums">
+                {activeFrame.distance_km.toFixed(1)} km
+              </p>
+            </div>
+            <p className="text-right text-caption text-white/80">
+              {((activeFrame.window_m ?? 4_000) / 1000).toFixed(0)} km observation window
+            </p>
+          </figcaption>
+        </figure>
+
+        <aside className="grid content-between gap-8 border-t border-[var(--line)] p-5 sm:p-7 lg:border-t-0">
+          <div>
+            <p className="text-micro font-semibold uppercase text-[var(--coral)]">Observed context</p>
+            <h3 className="mt-2 font-editorial text-title font-semibold">{context.label}</h3>
+            <p className="mt-3 text-body leading-relaxed text-[var(--ink-secondary)]">
+              A local satellite view centered on the recorded track, preserving the surrounding landscape instead of reducing it to a score.
+            </p>
+          </div>
+          <dl className="grid grid-cols-2 gap-px border border-[var(--line)] bg-[var(--line)]">
+            <div className="bg-[var(--surface-raised)] p-4">
+              <dt className="text-micro uppercase text-[var(--ink-muted)]">Elevation</dt>
+              <dd className="mt-1 text-control font-semibold tabular-nums">{activeFrame.elevation_m.toLocaleString()} m</dd>
+            </div>
+            <div className="bg-[var(--surface-raised)] p-4">
+              <dt className="text-micro uppercase text-[var(--ink-muted)]">Signal</dt>
+              <dd className="mt-1 text-control font-semibold tabular-nums">{context.value === undefined ? "Observed" : `${context.value}%`}</dd>
+            </div>
+            <div className="col-span-2 bg-[var(--surface-raised)] p-4">
+              <dt className="text-micro uppercase text-[var(--ink-muted)]">Source</dt>
+              <dd className="mt-1 text-caption">Sentinel-2 · Google Earth Engine portrait</dd>
+            </div>
+          </dl>
+        </aside>
+      </div>
+
+      <div className="min-w-0 max-w-full overflow-hidden border-t border-[var(--line)] px-3 py-4 sm:px-5">
+        <div className="flex max-w-full snap-x snap-mandatory gap-2 overflow-x-auto pb-2" data-testid="journey-frame-list">
+          {frames.map((frame, index) => (
+            <button
+              aria-label={`${frame.is_finish ? "Finish" : `${frame.distance_km.toFixed(1)} kilometers`} along route`}
+              aria-pressed={activeIndex === index}
+              className={cn(
+                "group w-36 shrink-0 snap-center border bg-[var(--surface-raised)] text-left transition-colors sm:w-40",
+                activeIndex === index
+                  ? "border-[var(--coral)] shadow-[inset_0_-3px_0_var(--coral)]"
+                  : "border-[var(--line)] hover:border-[var(--ink-muted)]",
+              )}
+              id={`journey-frame-${entry.route.activityId}-${index}`}
+              key={frame.index}
+              onClick={() => selectFrame(index)}
+              type="button"
+            >
+              <span className="relative block aspect-square overflow-hidden bg-[#16221f]">
+                <img alt="" className="size-full object-cover" loading="lazy" src={frame.src} />
+                <FrameMarker frame={frame} />
+              </span>
+              <span className="flex items-baseline justify-between gap-2 px-3 py-2.5">
+                <strong className="text-control font-semibold tabular-nums">
+                  {frame.is_finish ? "Finish" : `${frame.distance_km.toFixed(0)} km`}
+                </strong>
+                <span className="text-micro tabular-nums text-[var(--ink-muted)]">{frame.elevation_m} m</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function EarthObservationScenes({
@@ -476,6 +653,8 @@ export function RouteIntelligenceLabPage() {
               : "Gold environmental bars are hypotheses until Earth Engine replaces them with sourced observations. Recorded and derived track facts are already live."}
           </div>
         </section>
+
+        {activeRoute ? <KilometerJourneyStrip entry={activeRoute} key={activeRoute.route.activityId} /> : null}
 
         <EarthObservationScenes onSceneChange={setSceneKey} routes={routes} sceneKey={sceneKey} />
 
