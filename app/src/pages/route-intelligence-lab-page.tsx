@@ -18,12 +18,32 @@ import {
   buildRouteGenome,
   type RouteGenome,
   type RouteGenomeEnrichment,
+  type RouteVisualScene,
 } from "@/domain/route-genome";
 import type { QuestRoute } from "@/domain/routes";
 import { loadRouteDetail } from "@/data/route-repository";
 import { cn } from "@/lib/utils";
 
 const ROUTE_IDS = ["14736711660", "14023448720"] as const;
+const SCENE_KEYS: RouteVisualScene["key"][] = [
+  "portrait",
+  "recorded-season",
+  "winter",
+  "spring",
+  "summer",
+  "autumn",
+  "terrain",
+];
+
+const SCENE_NAMES: Record<RouteVisualScene["key"], string> = {
+  portrait: "Portrait",
+  "recorded-season": "Recorded",
+  winter: "Winter",
+  spring: "Spring",
+  summer: "Summer",
+  autumn: "Autumn",
+  terrain: "Terrain",
+};
 
 interface LabRoute {
   route: QuestRoute;
@@ -59,6 +79,98 @@ function environmentalSampleStyle(sample: NonNullable<RouteGenome["environmental
   ] as const;
   const dominant = entries.reduce((best, entry) => (entry[1] > best[1] ? entry : best));
   return { background: dominant[2], opacity: 0.28 + (dominant[1] / 100) * 0.72 };
+}
+
+function EarthObservationScenes({
+  routes,
+  sceneKey,
+  onSceneChange,
+}: {
+  routes: LabRoute[];
+  sceneKey: RouteVisualScene["key"];
+  onSceneChange: (key: RouteVisualScene["key"]) => void;
+}) {
+  return (
+    <section aria-labelledby="earth-observation-title" className="border-y border-[var(--line)] bg-[var(--surface)]">
+      <div className="grid gap-5 border-b border-[var(--line)] px-5 py-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:px-7">
+        <div>
+          <div className="flex items-center gap-2 text-micro font-semibold uppercase text-[var(--forest)]">
+            <Satellite className="size-3.5" aria-hidden="true" />
+            Earth observation scenes
+          </div>
+          <h2 id="earth-observation-title" className="mt-2 font-editorial text-place-lg font-semibold leading-tight">
+            See the world around the route.
+          </h2>
+          <p className="mt-2 max-w-2xl text-body leading-relaxed text-[var(--ink-secondary)]">
+            Compare the same route corridor through recent, recorded-season, seasonal, and terrain-shaped satellite composites.
+          </p>
+        </div>
+        <div aria-label="Choose Earth observation scene" className="grid max-w-full grid-cols-4 border border-[var(--line)] bg-[var(--surface-muted)] p-1 sm:flex sm:overflow-x-auto" role="group">
+          {SCENE_KEYS.map((key) => (
+            <button
+              aria-pressed={sceneKey === key}
+              className={cn(
+                "min-h-9 min-w-0 px-2 text-caption font-medium transition-colors sm:shrink-0 sm:px-3",
+                sceneKey === key
+                  ? "bg-[var(--forest)] text-white"
+                  : "text-[var(--ink-secondary)] hover:bg-[var(--surface)]",
+              )}
+              key={key}
+              onClick={() => onSceneChange(key)}
+              type="button"
+            >
+              {SCENE_NAMES[key]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid lg:grid-cols-2">
+        {routes.map(({ route, genome }, index) => {
+          const scene = genome.visuals?.find((candidate) => candidate.key === sceneKey);
+          const place = route.activityId === "14736711660" ? "San Francisco" : "Crete";
+          return (
+            <figure
+              className={cn("min-w-0", index === 0 ? "border-b border-[var(--line)] lg:border-b-0 lg:border-r" : "")}
+              data-testid={`earth-scene-${route.activityId}`}
+              key={route.activityId}
+            >
+              <div className="flex items-center justify-between gap-4 border-b border-[var(--line)] px-5 py-3 sm:px-7">
+                <div>
+                  <h3 className="font-editorial text-xl font-semibold">{place}</h3>
+                  <p className="mt-0.5 text-caption text-[var(--ink-muted)]">
+                    {route.distanceKm.toFixed(1)} km · {route.elevationGainM.toLocaleString()} m up
+                  </p>
+                </div>
+                <span className="text-micro font-semibold uppercase text-[var(--coral)]">
+                  {SCENE_NAMES[sceneKey]}
+                </span>
+              </div>
+              <div className="relative aspect-[16/10] overflow-hidden bg-[#16221f]">
+                {scene ? (
+                  <img
+                    alt={`${place} ${scene.label.toLowerCase()} with the recorded route overlaid`}
+                    className="size-full object-contain"
+                    data-testid={`earth-scene-image-${route.activityId}`}
+                    loading="eager"
+                    src={scene.src}
+                  />
+                ) : (
+                  <div className="grid size-full place-items-center text-caption text-white/70">Scene unavailable</div>
+                )}
+              </div>
+              <figcaption className="flex min-h-14 items-center justify-between gap-4 px-5 py-3 text-caption sm:px-7">
+                <span className="text-[var(--ink-secondary)]">{scene?.label ?? "Scene unavailable"}</span>
+                <span className="max-w-[48%] truncate text-right text-micro text-[var(--ink-muted)]" title={scene?.dataset}>
+                  Sentinel-2 · Google Earth Engine
+                </span>
+              </figcaption>
+            </figure>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
 
 function RoutePortrait({ entry, active }: { entry: LabRoute; active: boolean }) {
@@ -283,6 +395,7 @@ export function RouteIntelligenceLabPage() {
   const [routes, setRoutes] = useState<LabRoute[]>([]);
   const [activeId, setActiveId] = useState<(typeof ROUTE_IDS)[number]>(ROUTE_IDS[0]);
   const [error, setError] = useState<string>();
+  const [sceneKey, setSceneKey] = useState<RouteVisualScene["key"]>("portrait");
 
   useEffect(() => {
     let cancelled = false;
@@ -364,6 +477,15 @@ export function RouteIntelligenceLabPage() {
           </div>
         </section>
 
+        <EarthObservationScenes onSceneChange={setSceneKey} routes={routes} sceneKey={sceneKey} />
+
+        <div className="mt-2 flex items-end justify-between gap-4 border-b border-[var(--line)] pb-3">
+          <div>
+            <p className="text-micro font-semibold uppercase text-[var(--forest)]">Route interpretation</p>
+            <h2 className="mt-1 font-editorial text-title font-semibold">What the landscape asks of the day</h2>
+          </div>
+          <span className="hidden text-caption text-[var(--ink-muted)] sm:block">Recorded facts · derived rhythm · observed context</span>
+        </div>
         <div className="grid gap-5 xl:grid-cols-2">
           {routes.map((entry) => (
             <RoutePortrait active={activeRoute?.route.activityId === entry.route.activityId} entry={entry} key={entry.route.activityId} />

@@ -30,8 +30,27 @@ The first pass uses these datasets.
 - `GOOGLE/DYNAMICWORLD/V1` supplies 10 m class probabilities for built, water, trees, grass, crops, shrub, and bare surfaces.
 - `COPERNICUS/DEM/GLO30_2024_1` supplies 30 m surface elevation and slope.
 - `GOOGLE/SATELLITE_EMBEDDING/V1/ANNUAL` supplies a 10 m annual change signal from the difference between 2023 and 2024 embeddings.
+- `COPERNICUS/S2_SR_HARMONIZED` supplies cloud-masked true-color portraits, recorded-season context, four seasonal composites, and terrain-shaped scenes.
 
-The next ambitious layer should add seasonal Sentinel-2 composites, shade and canopy proxies, heat exposure, weather normals, and automatically discovered visual chapter boundaries.
+The next ambitious layer should add shade and canopy proxies, heat exposure, weather normals, and automatically discovered visual chapter boundaries.
+
+## Visual Finding
+
+Earth Engine does add a meaningful visual layer when the output is framed as an observation scene rather than a diagnostic score.
+The San Francisco portrait makes the relationship between coast, park, street grid, and route immediately legible.
+The Crete portrait makes remoteness, aridity, coastline, and the route's long north-south commitment visible before replay begins.
+Recorded-season and seasonal composites can answer a useful planning question: what version of this place am I likely to encounter?
+
+Earth Engine does not replace Cesium or Google Photorealistic 3D Tiles.
+Its role is to produce durable route intelligence and authored visual artifacts before or around replay.
+Cesium remains the interactive camera and navigable world.
+
+The product recommendation is therefore a layered experience.
+
+1. Use Earth Engine portraits and seasonal scenes in route discovery, route guides, and the opening beat of replay.
+2. Use Earth Engine signals to author chapter boundaries and environmental callouts.
+3. Transition into Cesium for movement through the route.
+4. Keep all Earth Engine outputs precomputed so Replay never depends on a live analysis request.
 
 ## Run
 

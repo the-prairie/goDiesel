@@ -1,6 +1,6 @@
 {
   "route_id": "14023448720",
-  "generated_at": "2026-07-22T01:33:23.094722+00:00",
+  "generated_at": "2026-07-22T07:33:44.512724+00:00",
   "corridor_m": 350,
   "signals": {
     "built": 6.0,
@@ -407,6 +407,54 @@
     {
       "id": "GOOGLE/SATELLITE_EMBEDDING/V1/ANNUAL",
       "role": "annual landscape-change signal"
+    },
+    {
+      "id": "COPERNICUS/S2_SR_HARMONIZED",
+      "role": "cloud-cleared true-color route scenes and seasonal composites"
+    }
+  ],
+  "visuals": [
+    {
+      "key": "portrait",
+      "label": "Recent cloud-cleared portrait",
+      "src": "/data/route-intelligence/14023448720/portrait.png",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED"
+    },
+    {
+      "key": "recorded-season",
+      "label": "Recorded season \u00b7 December 2024",
+      "src": "/data/route-intelligence/14023448720/recorded-season.png",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED"
+    },
+    {
+      "key": "winter",
+      "label": "Typical winter \u00b7 2020-2025 composite",
+      "src": "/data/route-intelligence/14023448720/winter.png",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED"
+    },
+    {
+      "key": "spring",
+      "label": "Typical spring \u00b7 2020-2025 composite",
+      "src": "/data/route-intelligence/14023448720/spring.png",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED"
+    },
+    {
+      "key": "summer",
+      "label": "Typical summer \u00b7 2020-2025 composite",
+      "src": "/data/route-intelligence/14023448720/summer.png",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED"
+    },
+    {
+      "key": "autumn",
+      "label": "Typical autumn \u00b7 2020-2025 composite",
+      "src": "/data/route-intelligence/14023448720/autumn.png",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED"
+    },
+    {
+      "key": "terrain",
+      "label": "Terrain-shaped satellite portrait",
+      "src": "/data/route-intelligence/14023448720/terrain.png",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED + COPERNICUS/DEM/GLO30_2024_1"
     }
   ]
 }
