@@ -8,6 +8,7 @@ import {
   CircleDashed,
   Layers3,
   Mountain,
+  Navigation,
   Satellite,
   Sparkles,
   Waves,
@@ -636,6 +637,12 @@ export function RouteIntelligenceLabPage() {
               </button>
             ))}
           </div>
+          <Button asChild>
+            <Link to={`/lab/google-route-navigator/${activeId}`}>
+              <Navigation aria-hidden="true" />
+              Enter native 3D
+            </Link>
+          </Button>
         </div>
       </header>
 

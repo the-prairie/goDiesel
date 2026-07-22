@@ -15,6 +15,10 @@ test("compares the San Francisco and Crete route genomes", async ({ page }) => {
   await expect(page.getByTestId("satellite-ribbon-14023448720")).toBeVisible();
 
   await expect(page.getByTestId("journey-strip-14736711660")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Enter native 3D" })).toHaveAttribute(
+    "href",
+    "#/lab/google-route-navigator/14736711660",
+  );
   await expect(page.getByTestId("journey-frame-list").getByRole("button")).toHaveCount(30);
   await expect(page.getByTestId("journey-active-image")).toHaveAttribute("src", /km-00\.jpg$/);
   await page.getByRole("button", { name: "Next kilometer" }).click();
@@ -44,6 +48,10 @@ test("compares the San Francisco and Crete route genomes", async ({ page }) => {
     "true",
   );
   await expect(page.getByTestId("journey-strip-14023448720")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Enter native 3D" })).toHaveAttribute(
+    "href",
+    "#/lab/google-route-navigator/14023448720",
+  );
   await expect(page.getByTestId("journey-frame-list").getByRole("button")).toHaveCount(23);
   await expect(page.getByTestId("journey-active-image")).toHaveAttribute("src", /km-00\.jpg$/);
 
