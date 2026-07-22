@@ -3,13 +3,13 @@ import { Outlet, useLocation } from "react-router-dom";
 
 import { AtlasSpine } from "@/components/atlas-spine";
 import { AtlasImmersiveNavigation } from "@/components/atlas-immersive-navigation";
-import { appSectionForPath } from "@/navigation";
+import { APP_PATHS, appSectionForPath } from "@/navigation";
 import { cn } from "@/lib/utils";
 
 export function AppShell() {
   const location = useLocation();
   const section = appSectionForPath(location.pathname);
-  const isAtlas = section.id === "atlas";
+  const isAtlas = location.pathname === APP_PATHS.atlas;
   const isReplayLab = location.pathname.startsWith("/lab/");
   const isRouteDetail = /^\/routes\/[^/]+$/.test(location.pathname);
   const isRoutesLibrary = section.id === "routes" && !isRouteDetail;

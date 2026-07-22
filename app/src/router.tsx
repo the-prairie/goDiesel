@@ -34,6 +34,11 @@ const DesignSystemFoundationPage = lazy(() =>
     default: module.DesignSystemFoundationPage,
   })),
 );
+const RouteIntelligenceLabPage = lazy(() =>
+  import("@/pages/route-intelligence-lab-page").then((module) => ({
+    default: module.RouteIntelligenceLabPage,
+  })),
+);
 
 canonicalizeLegacyQuestHash();
 window.addEventListener("hashchange", canonicalizeLegacyQuestHash);
@@ -51,6 +56,7 @@ const router = createHashRouter([
       { path: "replay/:routeSlug", element: <ReplayPage /> },
       { path: "lab/playable-earth/:routeSlug", element: <PlayableEarthLabPage /> },
       { path: "lab/design-system", element: <DesignSystemFoundationPage /> },
+      { path: "lab/route-intelligence", element: <RouteIntelligenceLabPage /> },
       { path: APP_PATHS.admin.slice(1), element: <AdminPage /> },
       { path: "*", element: <Navigate to={APP_PATHS.atlas} replace /> },
     ],
