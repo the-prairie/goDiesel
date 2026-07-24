@@ -24,12 +24,14 @@ export interface GoogleRouteNavigatorEngine {
   setCamera(pose: GoogleRouteCameraPose): void;
   setFollowing(following: boolean): void;
   setGrounding(mode: GoogleRouteGroundingMode): void;
+  setRouteReveal(progress: number): void;
   destroy(): void;
 }
 
 class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
   private map?: google.maps.maps3d.Map3DElement;
   private routeLine?: google.maps.maps3d.Polyline3DElement;
+  private routePath: Array<{ lat: number; lng: number }> = [];
   private following = true;
   private headingDeg?: number;
   private generation = 0;
@@ -101,8 +103,9 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
         });
       });
 
+      const routePath = densifyGoogleRoutePath(route);
       const routeLine = new Polyline3DElement({
-        path: densifyGoogleRoutePath(route),
+        path: routePath,
         strokeColor: "#1c5bb8",
         outerColor: "#f8f5ed",
         strokeWidth: 8,
@@ -119,6 +122,7 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
       container.replaceChildren(map);
       this.map = map;
       this.routeLine = routeLine;
+      this.routePath = routePath;
       onStatus({ state: "ready", message: "Native Google 3D route world ready." });
     } catch (error) {
       if (generation !== this.generation) return;
@@ -157,11 +161,22 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
         : google.maps.maps3d.AltitudeMode.CLAMP_TO_GROUND;
   }
 
+  setRouteReveal(progress: number) {
+    if (!this.routeLine || this.routePath.length < 2) return;
+    const bounded = Math.min(1, Math.max(0.01, progress));
+    const visibleCount = Math.max(
+      2,
+      Math.ceil((this.routePath.length - 1) * bounded) + 1,
+    );
+    this.routeLine.path = this.routePath.slice(0, visibleCount);
+  }
+
   destroy() {
     this.generation += 1;
     this.map?.remove();
     this.map = undefined;
     this.routeLine = undefined;
+    this.routePath = [];
     this.headingDeg = undefined;
     if (this.authFailure) {
       window.removeEventListener(

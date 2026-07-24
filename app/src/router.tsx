@@ -44,6 +44,11 @@ const GoogleRouteNavigatorLabPage = lazy(() =>
     default: module.GoogleRouteNavigatorLabPage,
   })),
 );
+const CinematicRouteTrailerLabPage = lazy(() =>
+  import("@/pages/cinematic-route-trailer-lab-page").then((module) => ({
+    default: module.CinematicRouteTrailerLabPage,
+  })),
+);
 
 canonicalizeLegacyQuestHash();
 window.addEventListener("hashchange", canonicalizeLegacyQuestHash);
@@ -65,6 +70,10 @@ const router = createHashRouter([
       {
         path: "lab/google-route-navigator/:routeSlug",
         element: <GoogleRouteNavigatorLabPage />,
+      },
+      {
+        path: "lab/route-trailer/:routeSlug",
+        element: <CinematicRouteTrailerLabPage />,
       },
       { path: APP_PATHS.admin.slice(1), element: <AdminPage /> },
       { path: "*", element: <Navigate to={APP_PATHS.atlas} replace /> },

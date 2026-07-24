@@ -9,6 +9,7 @@ import {
   Layers3,
   Mountain,
   Navigation,
+  Play,
   Satellite,
   Sparkles,
   Waves,
@@ -637,12 +638,20 @@ export function RouteIntelligenceLabPage() {
               </button>
             ))}
           </div>
-          <Button asChild>
-            <Link to={`/lab/google-route-navigator/${activeId}`}>
-              <Navigation aria-hidden="true" />
-              Enter native 3D
-            </Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline">
+              <Link to={`/lab/route-trailer/${activeId}`}>
+                <Play aria-hidden="true" />
+                Watch trailer
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link to={`/lab/google-route-navigator/${activeId}`}>
+                <Navigation aria-hidden="true" />
+                Enter native 3D
+              </Link>
+            </Button>
+          </div>
         </div>
       </header>
 
