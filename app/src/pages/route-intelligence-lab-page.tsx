@@ -642,7 +642,13 @@ export function RouteIntelligenceLabPage() {
             <Button asChild variant="outline">
               <Link to={`/lab/route-trailer/${activeId}`}>
                 <Play aria-hidden="true" />
-                Watch trailer
+                Original trailer
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link to={`/lab/cinematic-director/${activeId}`}>
+                <Sparkles aria-hidden="true" />
+                Director cut
               </Link>
             </Button>
             <Button asChild>

@@ -1,0 +1,64 @@
+import { describe, expect, it } from "vitest";
+
+import type { QuestRoute } from "@/domain/routes";
+import {
+  cinematicDuration,
+  cinematicFrame,
+  cinematicMoments,
+  type CinematicCut,
+} from "@/replay/cinematic/route-cinematic-director";
+
+const route = {
+  distanceKm: 10,
+  centerLat: 35,
+  centerLng: 24,
+  route: [
+    { lat: 35, lng: 24, elev: 20, d: 0 },
+    { lat: 35.01, lng: 24, elev: 120, d: 2_000 },
+    { lat: 35.01, lng: 24.02, elev: 260, d: 4_000 },
+    { lat: 35.03, lng: 24.02, elev: 180, d: 6_000 },
+    { lat: 35.03, lng: 24.04, elev: 80, d: 8_000 },
+    { lat: 35.05, lng: 24.04, elev: 40, d: 10_000 },
+  ],
+} as QuestRoute;
+
+describe("route cinematic director", () => {
+  it("finds recorded dramatic moments", () => {
+    const moments = cinematicMoments(route);
+    expect(moments.map((moment) => moment.kind)).toEqual([
+      "origin",
+      "climb",
+      "turn",
+      "summit",
+      "arrival",
+    ]);
+    expect(
+      moments.find((moment) => moment.kind === "summit")?.progressRatio,
+    ).toBeCloseTo(0.4);
+  });
+
+  it.each(["monumental", "kinetic", "intimate"] satisfies CinematicCut[])(
+    "produces a complete %s cut",
+    (cut) => {
+      const duration = cinematicDuration(route, cut);
+      const opening = cinematicFrame(route, cut, 0);
+      const ending = cinematicFrame(route, cut, duration);
+      expect(duration).toBeGreaterThan(15);
+      expect(opening.progress).toBe(0);
+      expect(ending.progress).toBe(1);
+      expect(ending.showDecision).toBe(true);
+      expect(ending.routeProgressM).toBe(10_000);
+      expect(ending.threadStartRatio).toBeLessThanOrEqual(1);
+      expect(ending.threadEndRatio).toBe(1);
+    },
+  );
+
+  it("gives each cut a distinct visual and camera language", () => {
+    const monumental = cinematicFrame(route, "monumental", 10);
+    const kinetic = cinematicFrame(route, "kinetic", 5);
+    const intimate = cinematicFrame(route, "intimate", 8);
+    expect(monumental.look.saturation).toBeLessThan(kinetic.look.saturation);
+    expect(intimate.look.depthOfField).toBeGreaterThan(0);
+    expect(intimate.rangeM).toBeLessThan(monumental.rangeM);
+  });
+});

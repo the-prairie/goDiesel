@@ -13,6 +13,7 @@
     "test:e2e:earth": "GODIESEL_LIVE_EARTH_E2E=1 playwright test --config playwright.live.config.ts earth-replay-live.spec.ts",
     "test:e2e:google-route-live": "GODIESEL_LIVE_GOOGLE_3D_E2E=1 playwright test --config playwright.live.config.ts google-route-navigator-live.spec.ts --headed",
     "test:e2e:route-trailer-live": "GODIESEL_LIVE_GOOGLE_3D_E2E=1 playwright test --config playwright.live.config.ts cinematic-route-trailer-live.spec.ts --headed",
+    "test:e2e:cinematic-director-live": "GODIESEL_LIVE_GOOGLE_3D_E2E=1 playwright test --config playwright.live.config.ts cinematic-director-live.spec.ts --headed",
     "test:e2e:atlas-live": "playwright test --config playwright.live.config.ts atlas-region-live.spec.ts",
     "test:bundle": "node scripts/check-bundle-budget.mjs",
     "verify:ticket": "npm run typecheck && npm run build && npm run test:unit && playwright test e2e/navigation.spec.ts --grep \"root opens Atlas|compact Atlas navigation|every product surface|mobile bottom spine\"",

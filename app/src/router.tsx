@@ -49,6 +49,11 @@ const CinematicRouteTrailerLabPage = lazy(() =>
     default: module.CinematicRouteTrailerLabPage,
   })),
 );
+const CinematicDirectorLabPage = lazy(() =>
+  import("@/pages/cinematic-director-lab-page").then((module) => ({
+    default: module.CinematicDirectorLabPage,
+  })),
+);
 
 canonicalizeLegacyQuestHash();
 window.addEventListener("hashchange", canonicalizeLegacyQuestHash);
@@ -74,6 +79,10 @@ const router = createHashRouter([
       {
         path: "lab/route-trailer/:routeSlug",
         element: <CinematicRouteTrailerLabPage />,
+      },
+      {
+        path: "lab/cinematic-director/:routeSlug",
+        element: <CinematicDirectorLabPage />,
       },
       { path: APP_PATHS.admin.slice(1), element: <AdminPage /> },
       { path: "*", element: <Navigate to={APP_PATHS.atlas} replace /> },

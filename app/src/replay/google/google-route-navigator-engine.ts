@@ -17,6 +17,12 @@ interface MountOptions {
   route: QuestRoute;
   groundingMode: GoogleRouteGroundingMode;
   onStatus: (status: GoogleRouteNavigatorStatus) => void;
+  routeStyle?: {
+    color: string;
+    outerColor: string;
+    outerWidth: number;
+    width: number;
+  };
 }
 
 export interface GoogleRouteNavigatorEngine {
@@ -43,6 +49,7 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
     route,
     groundingMode,
     onStatus,
+    routeStyle,
   }: MountOptions) {
     const generation = ++this.generation;
     onStatus({ state: "loading", message: "Loading Google photorealistic 3D." });
@@ -106,10 +113,10 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
       const routePath = densifyGoogleRoutePath(route);
       const routeLine = new Polyline3DElement({
         path: routePath,
-        strokeColor: "#1c5bb8",
-        outerColor: "#f8f5ed",
-        strokeWidth: 8,
-        outerWidth: 0.34,
+        strokeColor: routeStyle?.color ?? "#1c5bb8",
+        outerColor: routeStyle?.outerColor ?? "#f8f5ed",
+        strokeWidth: routeStyle?.width ?? 8,
+        outerWidth: routeStyle?.outerWidth ?? 0.34,
         altitudeMode:
           groundingMode === "mesh"
             ? AltitudeMode.RELATIVE_TO_MESH
