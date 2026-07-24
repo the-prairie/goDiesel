@@ -27,6 +27,7 @@ import {
 } from "@/replay/cinematic/route-cinematic-director";
 
 const CUT_DESCRIPTIONS: Record<CinematicCut, string> = {
+  feature: "The complete five-act film, directed from the recorded route.",
   monumental: "Scale, silence, and the full weight of the landscape.",
   kinetic: "A faster line built from speed, turns, and release.",
   intimate: "Closer to the ground, with the effort left in the frame.",
@@ -49,9 +50,9 @@ export function CinematicDirectorStage({ route }: { route: QuestRoute }) {
   const soundRef = useRef<CinematicSoundscape | undefined>(undefined);
   const elapsedRef = useRef(0);
   const playingRef = useRef(false);
-  const [cut, setCut] = useState<CinematicCut>("monumental");
+  const [cut, setCut] = useState<CinematicCut>("feature");
   const [frame, setFrame] = useState(() =>
-    cinematicFrame(route, "monumental", 0),
+    cinematicFrame(route, "feature", 0),
   );
   const [playing, setPlaying] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -165,6 +166,9 @@ export function CinematicDirectorStage({ route }: { route: QuestRoute }) {
         className="absolute inset-0"
         data-route-points={route.route.length}
         ref={containerRef}
+        style={{
+          filter: `brightness(${frame.look.exposure}) contrast(${frame.look.contrast}) saturate(${frame.look.saturation})`,
+        }}
       />
       <div
         aria-hidden="true"
@@ -184,8 +188,19 @@ export function CinematicDirectorStage({ route }: { route: QuestRoute }) {
               : "bg-[#2c4251]/11"
         }`}
       />
-      <div aria-hidden="true" className="absolute inset-x-0 top-0 h-2 bg-black" />
-      <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-2 bg-black" />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-10 bg-black transition-opacity duration-75"
+        style={{ opacity: frame.showDecision ? 0 : frame.cutPulse * 0.88 }}
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 z-20 h-[7dvh] bg-black"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-[7dvh] bg-black"
+      />
 
       <div className="absolute inset-x-0 top-0 z-30 flex items-center justify-between px-5 pt-6 sm:px-8 sm:pt-8">
         <Link
@@ -198,7 +213,7 @@ export function CinematicDirectorStage({ route }: { route: QuestRoute }) {
         <div className="text-right text-[0.64rem] font-semibold uppercase tracking-[0.18em] text-white/62">
           <span className="text-[#ff896d]">goDiesel</span>
           <span className="mx-2 text-white/28">/</span>
-          Cinematic director
+          Route film
         </div>
       </div>
 
@@ -211,7 +226,7 @@ export function CinematicDirectorStage({ route }: { route: QuestRoute }) {
             <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-end">
               <div>
                 <p className="text-[0.67rem] font-semibold uppercase tracking-[0.24em] text-[#ff896d]">
-                  Route picture no. {route.activityId.slice(-4)}
+                  A goDiesel route film · no. {route.activityId.slice(-4)}
                 </p>
                 <h1 className="mt-4 max-w-4xl font-editorial text-6xl font-semibold leading-[0.86] sm:text-8xl">
                   {route.name}
@@ -260,7 +275,7 @@ export function CinematicDirectorStage({ route }: { route: QuestRoute }) {
                   onClick={() => void play()}
                 >
                   <Play aria-hidden="true" />
-                  Play {CINEMATIC_CUT_LABELS[cut]} cut
+                  Play {CINEMATIC_CUT_LABELS[cut]}
                 </Button>
                 <p className="mt-3 flex items-center justify-center gap-2 text-[0.65rem] uppercase tracking-[0.14em] text-white/42">
                   <Headphones aria-hidden="true" className="size-3" />
@@ -272,15 +287,15 @@ export function CinematicDirectorStage({ route }: { route: QuestRoute }) {
         </div>
       ) : null}
 
-      {ready && !preRoll && !frame.showDecision ? (
+      {ready && !preRoll && !frame.showDecision && frame.showChapterTitle ? (
         <div
           aria-live="polite"
-          className="pointer-events-none absolute inset-x-5 bottom-24 z-20 sm:inset-x-8 sm:bottom-28"
+          className="pointer-events-none absolute inset-x-5 bottom-[14dvh] z-20 sm:inset-x-8"
           data-testid="cinematic-chapter"
         >
           <div className="h-px w-14 bg-[#f16c4b]" />
           <p className="mt-3 text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-white/52">
-            {CINEMATIC_CUT_LABELS[cut]} cut
+            Act {frame.shotIndex + 1} of {frame.shotCount}
           </p>
           <h2 className="mt-1 max-w-4xl font-editorial text-4xl font-semibold leading-none sm:text-6xl">
             {frame.chapter}
@@ -347,7 +362,7 @@ export function CinematicDirectorStage({ route }: { route: QuestRoute }) {
       ) : null}
 
       {ready && !preRoll ? (
-        <div className="absolute inset-x-5 bottom-5 z-30 flex items-center gap-3 sm:inset-x-8">
+        <div className="absolute inset-x-5 bottom-[1.5dvh] z-30 flex items-center gap-3 sm:inset-x-8">
           <button
             aria-label={playing ? "Pause cinematic" : "Play cinematic"}
             className="grid size-9 shrink-0 place-items-center border border-white/28 bg-black/45 backdrop-blur-md hover:bg-black/72"
@@ -371,6 +386,9 @@ export function CinematicDirectorStage({ route }: { route: QuestRoute }) {
             type="range"
             value={frame.progress}
           />
+          <span className="hidden min-w-16 text-right text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-white/44 md:block">
+            {Math.round(frame.lensMm)} mm
+          </span>
           <button
             aria-label={soundEnabled ? "Mute soundscape" : "Enable soundscape"}
             className="grid size-9 shrink-0 place-items-center border border-white/28 bg-black/45 backdrop-blur-md hover:bg-black/72"

@@ -64,10 +64,12 @@ for (const route of ROUTES) {
     await expect(page.locator("gmp-map-3d")).toBeVisible();
     await expect(page.locator("gmp-polyline-3d")).toHaveCount(1);
     await expect(page.getByTestId("cinematic-preroll")).toBeVisible();
+    await expect(director).toHaveAttribute("data-cut", "feature");
+    await expect(
+      page.getByRole("button", { name: "Play Route Film" }),
+    ).toBeVisible();
 
-    await page.getByRole("button", { name: /^Kinetic/ }).click();
-    await expect(director).toHaveAttribute("data-cut", "kinetic");
-    await page.getByRole("button", { name: "Play Kinetic cut" }).click();
+    await page.getByRole("button", { name: "Play Route Film" }).click();
     await expect(page.getByTestId("cinematic-chapter")).toBeVisible();
     const cameraMotion = await measureOpeningCameraMotion(page);
     expect(cameraMotion.maxHeadingDelta).toBeLessThan(6);
@@ -104,7 +106,7 @@ test("keeps the Crete director decision usable on a phone", async ({ page }) => 
   await expect(director).toHaveAttribute("data-state", "ready", {
     timeout: 30_000,
   });
-  await page.getByRole("button", { name: "Play Monumental cut" }).click();
+  await page.getByRole("button", { name: "Play Route Film" }).click();
   const progress = page.getByTestId("cinematic-progress");
   await progress.focus();
   await page.keyboard.press("End");

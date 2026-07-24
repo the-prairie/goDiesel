@@ -48,8 +48,7 @@ export class NativeCinematicRenderer {
   setFrame(frame: CinematicFrame) {
     const desired: GoogleRouteCameraPose = {
       center: { lat: frame.target.lat, lng: frame.target.lng },
-      fovDeg:
-        frame.cut === "intimate" ? 54 : frame.cut === "kinetic" ? 48 : 44,
+      fovDeg: focalLengthToFieldOfView(frame.lensMm),
       headingDeg: frame.headingDeg,
       progressM: frame.routeProgressM,
       rangeM: frame.rangeM,
@@ -90,6 +89,16 @@ export class NativeCinematicRenderer {
     this.lastChapter = undefined;
     this.lastCut = undefined;
   }
+}
+
+function focalLengthToFieldOfView(focalLengthMm: number) {
+  const fullFrameSensorWidthMm = 36;
+  const fieldOfView =
+    (2 *
+      Math.atan(fullFrameSensorWidthMm / (2 * Math.max(18, focalLengthMm))) *
+      180) /
+    Math.PI;
+  return Math.min(68, Math.max(24, fieldOfView));
 }
 
 function interpolate(start: number, end: number, amount: number) {

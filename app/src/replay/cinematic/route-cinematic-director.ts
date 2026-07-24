@@ -1,7 +1,7 @@
 import type { QuestRoute } from "@/domain/routes";
 import { bearingDegrees, routeDistanceM, routePathPose } from "@/replay/route-path";
 
-export type CinematicCut = "monumental" | "kinetic" | "intimate";
+export type CinematicCut = "feature" | "monumental" | "kinetic" | "intimate";
 
 export interface CinematicMoment {
   kind: "origin" | "summit" | "turn" | "climb" | "arrival";
@@ -22,15 +22,21 @@ export interface CinematicLook {
 
 export interface CinematicFrame {
   chapter: string;
+  chapterProgress: number;
   cut: CinematicCut;
+  cutPulse: number;
   elapsedSeconds: number;
   durationSeconds: number;
   headingDeg: number;
+  lensMm: number;
   pitchDeg: number;
   progress: number;
   rangeM: number;
   routeProgressM: number;
   showDecision: boolean;
+  showChapterTitle: boolean;
+  shotCount: number;
+  shotIndex: number;
   target: { lat: number; lng: number; elev: number };
   threadEndRatio: number;
   threadStartRatio: number;
@@ -48,12 +54,15 @@ interface Shot {
   toPitchDeg: number;
   headingOffsetFrom: number;
   headingOffsetTo: number;
+  lensFromMm: number;
+  lensToMm: number;
   threadBehind: number;
   threadAhead: number;
   look: CinematicLook;
 }
 
 export const CINEMATIC_CUT_LABELS: Record<CinematicCut, string> = {
+  feature: "Route Film",
   monumental: "Monumental",
   kinetic: "Kinetic",
   intimate: "Intimate",
@@ -192,6 +201,15 @@ export function cinematicMoments(route: QuestRoute): CinematicMoment[] {
 }
 
 function looks(cut: CinematicCut): Record<string, CinematicLook> {
+  const feature = {
+    bloom: 0.1,
+    contrast: 1.1,
+    depthOfField: 0.08,
+    exposure: 0.94,
+    fog: 0.14,
+    saturation: 0.9,
+    vignette: 0.31,
+  };
   const monumental = {
     bloom: 0.12,
     contrast: 1.08,
@@ -219,7 +237,13 @@ function looks(cut: CinematicCut): Record<string, CinematicLook> {
     saturation: 0.84,
     vignette: 0.34,
   };
-  return { monumental, kinetic, intimate, active: { monumental, kinetic, intimate }[cut] };
+  return {
+    feature,
+    monumental,
+    kinetic,
+    intimate,
+    active: { feature, monumental, kinetic, intimate }[cut],
+  };
 }
 
 function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
@@ -230,6 +254,96 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
   const turn = moments.find((moment) => moment.kind === "turn")?.progressRatio ?? 0.38;
   const climb = moments.find((moment) => moment.kind === "climb")?.progressRatio ?? 0.3;
   const activeLook = looks(cut).active;
+
+  if (cut === "feature") {
+    return [
+      {
+        chapter: "Somewhere on Earth",
+        duration: 6.4,
+        fromProgress: 0.5,
+        toProgress: 0.48,
+        fromRangeM: 21_000 * scale,
+        toRangeM: 7_200 * scale,
+        fromPitchDeg: -72,
+        toPitchDeg: -52,
+        headingOffsetFrom: -48,
+        headingOffsetTo: -24,
+        lensFromMm: 32,
+        lensToMm: 40,
+        threadBehind: 0,
+        threadAhead: 0,
+        look: activeLook,
+      },
+      {
+        chapter: "A line reveals itself",
+        duration: 6.2,
+        fromProgress: 0.015,
+        toProgress: 0.12,
+        fromRangeM: 5_400 * scale,
+        toRangeM: 2_600,
+        fromPitchDeg: -48,
+        toPitchDeg: -34,
+        headingOffsetFrom: -21,
+        headingOffsetTo: -8,
+        lensFromMm: 38,
+        lensToMm: 50,
+        threadBehind: 0.012,
+        threadAhead: 0.11,
+        look: activeLook,
+      },
+      {
+        chapter: "The day begins to ask",
+        duration: 7.2,
+        fromProgress: clamp(climb - 0.025),
+        toProgress: clamp(climb + 0.025),
+        fromRangeM: 1_750,
+        toRangeM: 840,
+        fromPitchDeg: -29,
+        toPitchDeg: -18,
+        headingOffsetFrom: -7,
+        headingOffsetTo: 5,
+        lensFromMm: 55,
+        lensToMm: 72,
+        threadBehind: 0.022,
+        threadAhead: 0.065,
+        look: activeLook,
+      },
+      {
+        chapter: "At the high point",
+        duration: 7.6,
+        fromProgress: clamp(summit - 0.02),
+        toProgress: clamp(summit + 0.02),
+        fromRangeM: 1_150,
+        toRangeM: 1_650,
+        fromPitchDeg: -19,
+        toPitchDeg: -29,
+        headingOffsetFrom: 8,
+        headingOffsetTo: -12,
+        lensFromMm: 85,
+        lensToMm: 60,
+        threadBehind: 0.035,
+        threadAhead: 0.055,
+        look: activeLook,
+      },
+      {
+        chapter: "The route remains",
+        duration: 7,
+        fromProgress: 0.94,
+        toProgress: 1,
+        fromRangeM: 1_300,
+        toRangeM: 11_000 * scale,
+        fromPitchDeg: -25,
+        toPitchDeg: -62,
+        headingOffsetFrom: -8,
+        headingOffsetTo: 28,
+        lensFromMm: 50,
+        lensToMm: 28,
+        threadBehind: 0.12,
+        threadAhead: 0.01,
+        look: activeLook,
+      },
+    ];
+  }
 
   if (cut === "kinetic") {
     return [
@@ -244,6 +358,8 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         toPitchDeg: -30,
         headingOffsetFrom: -28,
         headingOffsetTo: -8,
+        lensFromMm: 35,
+        lensToMm: 45,
         threadBehind: 0.015,
         threadAhead: 0.09,
         look: activeLook,
@@ -259,6 +375,8 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         toPitchDeg: -19,
         headingOffsetFrom: -7,
         headingOffsetTo: 10,
+        lensFromMm: 48,
+        lensToMm: 58,
         threadBehind: 0.018,
         threadAhead: 0.055,
         look: activeLook,
@@ -274,6 +392,8 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         toPitchDeg: -31,
         headingOffsetFrom: 12,
         headingOffsetTo: -16,
+        lensFromMm: 54,
+        lensToMm: 42,
         threadBehind: 0.022,
         threadAhead: 0.07,
         look: activeLook,
@@ -289,6 +409,8 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         toPitchDeg: -58,
         headingOffsetFrom: -10,
         headingOffsetTo: 25,
+        lensFromMm: 42,
+        lensToMm: 30,
         threadBehind: 0.06,
         threadAhead: 0.03,
         look: activeLook,
@@ -309,6 +431,8 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         toPitchDeg: -18,
         headingOffsetFrom: -18,
         headingOffsetTo: -4,
+        lensFromMm: 42,
+        lensToMm: 68,
         threadBehind: 0.005,
         threadAhead: 0.04,
         look: activeLook,
@@ -324,6 +448,8 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         toPitchDeg: -12,
         headingOffsetFrom: -4,
         headingOffsetTo: 6,
+        lensFromMm: 72,
+        lensToMm: 86,
         threadBehind: 0.012,
         threadAhead: 0.032,
         look: activeLook,
@@ -339,6 +465,8 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         toPitchDeg: -24,
         headingOffsetFrom: 7,
         headingOffsetTo: -8,
+        lensFromMm: 82,
+        lensToMm: 62,
         threadBehind: 0.014,
         threadAhead: 0.04,
         look: activeLook,
@@ -354,6 +482,8 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         toPitchDeg: -50,
         headingOffsetFrom: -6,
         headingOffsetTo: 18,
+        lensFromMm: 55,
+        lensToMm: 34,
         threadBehind: 0.04,
         threadAhead: 0.02,
         look: activeLook,
@@ -373,6 +503,8 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
       toPitchDeg: -48,
       headingOffsetFrom: -42,
       headingOffsetTo: -18,
+      lensFromMm: 28,
+      lensToMm: 40,
       threadBehind: 0,
       threadAhead: 0,
       look: activeLook,
@@ -388,6 +520,8 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
       toPitchDeg: -31,
       headingOffsetFrom: -16,
       headingOffsetTo: -4,
+      lensFromMm: 42,
+      lensToMm: 55,
       threadBehind: 0.04,
       threadAhead: 0.12,
       look: activeLook,
@@ -403,6 +537,8 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
       toPitchDeg: -22,
       headingOffsetFrom: -3,
       headingOffsetTo: 9,
+      lensFromMm: 58,
+      lensToMm: 76,
       threadBehind: 0.025,
       threadAhead: 0.065,
       look: activeLook,
@@ -418,6 +554,8 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
       toPitchDeg: -58,
       headingOffsetFrom: 8,
       headingOffsetTo: 30,
+      lensFromMm: 50,
+      lensToMm: 30,
       threadBehind: 0.08,
       threadAhead: 0.01,
       look: activeLook,
@@ -439,9 +577,11 @@ export function cinematicFrame(
   const elapsed = clamp(elapsedSeconds, 0, durationSeconds);
   let shotStart = 0;
   let shot = shots[shots.length - 1];
-  for (const candidate of shots) {
+  let shotIndex = shots.length - 1;
+  for (const [index, candidate] of shots.entries()) {
     if (elapsed <= shotStart + candidate.duration) {
       shot = candidate;
+      shotIndex = index;
       break;
     }
     shotStart += candidate.duration;
@@ -478,15 +618,27 @@ export function cinematicFrame(
 
   return {
     chapter: shot.chapter,
+    chapterProgress: local,
     cut,
+    cutPulse:
+      elapsed === 0
+        ? 1
+        : Math.max(
+            clamp(1 - (elapsed - shotStart) / 0.26),
+            clamp(1 - (shotStart + shot.duration - elapsed) / 0.16),
+          ),
     elapsedSeconds: elapsed,
     durationSeconds,
     headingDeg: (routeHeading + headingOffset + 360) % 360,
+    lensMm: interpolate(shot.lensFromMm, shot.lensToMm, eased),
     pitchDeg: interpolate(shot.fromPitchDeg, shot.toPitchDeg, eased),
     progress: elapsed / durationSeconds,
     rangeM,
     routeProgressM: pose.progressM,
     showDecision: elapsed >= durationSeconds - 1.1,
+    showChapterTitle: local >= 0.08 && local <= 0.36,
+    shotCount: shots.length,
+    shotIndex,
     target,
     threadStartRatio: clamp(routeProgressRatio - shot.threadBehind),
     threadEndRatio: clamp(routeProgressRatio + shot.threadAhead),

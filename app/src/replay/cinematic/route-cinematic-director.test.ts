@@ -37,7 +37,12 @@ describe("route cinematic director", () => {
     ).toBeCloseTo(0.4);
   });
 
-  it.each(["monumental", "kinetic", "intimate"] satisfies CinematicCut[])(
+  it.each([
+    "feature",
+    "monumental",
+    "kinetic",
+    "intimate",
+  ] satisfies CinematicCut[])(
     "produces a complete %s cut",
     (cut) => {
       const duration = cinematicDuration(route, cut);
@@ -54,12 +59,28 @@ describe("route cinematic director", () => {
   );
 
   it("gives each cut a distinct visual and camera language", () => {
+    const feature = cinematicFrame(route, "feature", 14);
     const monumental = cinematicFrame(route, "monumental", 10);
     const kinetic = cinematicFrame(route, "kinetic", 5);
     const intimate = cinematicFrame(route, "intimate", 8);
     expect(monumental.look.saturation).toBeLessThan(kinetic.look.saturation);
     expect(intimate.look.depthOfField).toBeGreaterThan(0);
     expect(intimate.rangeM).toBeLessThan(monumental.rangeM);
+    expect(feature.shotCount).toBe(5);
+    expect(feature.lensMm).toBeGreaterThan(50);
+  });
+
+  it("directs the route film as five editorial acts with real cuts", () => {
+    const duration = cinematicDuration(route, "feature");
+    const frames = Array.from({ length: 300 }, (_, index) =>
+      cinematicFrame(route, "feature", (duration * index) / 299),
+    );
+    expect(new Set(frames.map((frame) => frame.chapter)).size).toBe(5);
+    expect(Math.min(...frames.map((frame) => frame.lensMm))).toBeLessThan(35);
+    expect(Math.max(...frames.map((frame) => frame.lensMm))).toBeGreaterThan(80);
+    expect(frames.filter((frame) => frame.cutPulse > 0.7).length).toBeGreaterThan(
+      4,
+    );
   });
 
   it("keeps adjacent camera targets on a stable spatial rail", () => {
