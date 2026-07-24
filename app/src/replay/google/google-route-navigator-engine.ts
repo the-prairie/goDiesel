@@ -23,6 +23,7 @@ interface MountOptions {
     outerWidth: number;
     width: number;
   };
+  headingSmoothing?: number;
 }
 
 export interface GoogleRouteNavigatorEngine {
@@ -40,6 +41,7 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
   private routePath: Array<{ lat: number; lng: number }> = [];
   private following = true;
   private headingDeg?: number;
+  private headingSmoothing = 0.14;
   private generation = 0;
   private authFailure?: () => void;
 
@@ -50,9 +52,11 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
     groundingMode,
     onStatus,
     routeStyle,
+    headingSmoothing,
   }: MountOptions) {
     const generation = ++this.generation;
     onStatus({ state: "loading", message: "Loading Google photorealistic 3D." });
+    this.headingSmoothing = headingSmoothing ?? 0.14;
     if (!apiKey) {
       onStatus({
         state: "unavailable",
@@ -148,7 +152,11 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
     this.headingDeg =
       this.headingDeg === undefined
         ? pose.headingDeg
-        : smoothMapHeading(this.headingDeg, pose.headingDeg);
+        : smoothMapHeading(
+            this.headingDeg,
+            pose.headingDeg,
+            this.headingSmoothing,
+          );
     this.map.center = pose.center;
     this.map.heading = this.headingDeg;
     this.map.range = pose.rangeM;
@@ -195,9 +203,9 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
   }
 }
 
-function smoothMapHeading(current: number, target: number) {
+function smoothMapHeading(current: number, target: number, amount: number) {
   const delta = ((target - current + 540) % 360) - 180;
-  return (current + delta * 0.14 + 360) % 360;
+  return (current + delta * amount + 360) % 360;
 }
 
 export function createGoogleRouteNavigatorEngine(): GoogleRouteNavigatorEngine {

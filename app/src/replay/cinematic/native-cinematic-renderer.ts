@@ -5,6 +5,7 @@ import {
   createGoogleRouteNavigatorEngine,
   type GoogleRouteNavigatorEngine,
 } from "@/replay/google/google-route-navigator-engine";
+import type { GoogleRouteCameraPose } from "@/replay/google-route-navigator-controller";
 
 interface MountOptions {
   container: HTMLElement;
@@ -15,6 +16,10 @@ interface MountOptions {
 
 export class NativeCinematicRenderer {
   private engine?: GoogleRouteNavigatorEngine;
+  private renderedCamera?: GoogleRouteCameraPose;
+  private lastElapsedSeconds?: number;
+  private lastChapter?: string;
+  private lastCut?: CinematicFrame["cut"];
 
   async mount({ container, route, frame, onStatus }: MountOptions) {
     container.dataset.cinematicState = "loading";
@@ -25,6 +30,7 @@ export class NativeCinematicRenderer {
       container,
       route,
       groundingMode: "mesh",
+      headingSmoothing: 1,
       onStatus: (status) => {
         container.dataset.cinematicState = status.state;
         onStatus(status);
@@ -40,7 +46,7 @@ export class NativeCinematicRenderer {
   }
 
   setFrame(frame: CinematicFrame) {
-    this.engine?.setCamera({
+    const desired: GoogleRouteCameraPose = {
       center: { lat: frame.target.lat, lng: frame.target.lng },
       fovDeg:
         frame.cut === "intimate" ? 54 : frame.cut === "kinetic" ? 48 : 44,
@@ -48,7 +54,27 @@ export class NativeCinematicRenderer {
       progressM: frame.routeProgressM,
       rangeM: frame.rangeM,
       tiltDeg: Math.min(82, Math.max(18, 90 + frame.pitchDeg)),
-    });
+    };
+    const elapsedDelta =
+      this.lastElapsedSeconds === undefined
+        ? Number.POSITIVE_INFINITY
+        : frame.elapsedSeconds - this.lastElapsedSeconds;
+    const isChapterCut =
+      frame.chapter !== this.lastChapter || frame.cut !== this.lastCut;
+    const isSeek =
+      elapsedDelta < 0 || elapsedDelta > 0.75 || !Number.isFinite(elapsedDelta);
+
+    if (!isChapterCut && !isSeek && elapsedDelta < 1 / 15) return;
+
+    const camera =
+      !this.renderedCamera || isChapterCut || isSeek
+        ? desired
+        : stabilizeCamera(this.renderedCamera, desired, elapsedDelta);
+    this.renderedCamera = camera;
+    this.lastElapsedSeconds = frame.elapsedSeconds;
+    this.lastChapter = frame.chapter;
+    this.lastCut = frame.cut;
+    this.engine?.setCamera(camera);
     this.engine?.setRouteReveal(frame.threadEndRatio);
   }
 
@@ -59,5 +85,41 @@ export class NativeCinematicRenderer {
   destroy() {
     this.engine?.destroy();
     this.engine = undefined;
+    this.renderedCamera = undefined;
+    this.lastElapsedSeconds = undefined;
+    this.lastChapter = undefined;
+    this.lastCut = undefined;
   }
+}
+
+function interpolate(start: number, end: number, amount: number) {
+  return start + (end - start) * amount;
+}
+
+function interpolateHeading(start: number, end: number, amount: number) {
+  const delta = ((end - start + 540) % 360) - 180;
+  return (start + delta * amount + 360) % 360;
+}
+
+export function stabilizeCamera(
+  current: GoogleRouteCameraPose,
+  desired: GoogleRouteCameraPose,
+  elapsedSeconds: number,
+): GoogleRouteCameraPose {
+  const amount = 1 - Math.exp(-Math.max(0, elapsedSeconds) / 0.2);
+  return {
+    center: {
+      lat: interpolate(current.center.lat, desired.center.lat, amount),
+      lng: interpolate(current.center.lng, desired.center.lng, amount),
+    },
+    fovDeg: interpolate(current.fovDeg, desired.fovDeg, amount),
+    headingDeg: interpolateHeading(
+      current.headingDeg,
+      desired.headingDeg,
+      amount,
+    ),
+    progressM: interpolate(current.progressM, desired.progressM, amount),
+    rangeM: interpolate(current.rangeM, desired.rangeM, amount),
+    tiltDeg: interpolate(current.tiltDeg, desired.tiltDeg, amount),
+  };
 }

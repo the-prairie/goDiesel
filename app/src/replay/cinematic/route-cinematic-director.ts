@@ -83,14 +83,57 @@ function interpolateHeading(start: number, end: number, amount: number) {
   return (start + delta * amount + 360) % 360;
 }
 
-function sampleBearing(route: QuestRoute, progressRatio: number) {
+function smoothRouteTarget(
+  route: QuestRoute,
+  progressRatio: number,
+  radiusM: number,
+) {
   const totalDistanceM = routeDistanceM(route);
   const progressM = totalDistanceM * clamp(progressRatio);
-  const from = routePathPose(route, Math.max(0, progressM - 120));
-  const to = routePathPose(route, Math.min(totalDistanceM, progressM + 120));
+  let lat = 0;
+  let lng = 0;
+  let elev = 0;
+  let totalWeight = 0;
+  for (let index = -4; index <= 4; index += 1) {
+    const offsetRatio = index / 4;
+    const pose = routePathPose(
+      route,
+      clamp(progressM + radiusM * offsetRatio, 0, totalDistanceM),
+    );
+    const weight = Math.cos((Math.abs(offsetRatio) * Math.PI) / 2) ** 2 + 0.05;
+    lat += pose.lat * weight;
+    lng += pose.lng * weight;
+    elev += pose.elev * weight;
+    totalWeight += weight;
+  }
+  return {
+    lat: lat / totalWeight,
+    lng: lng / totalWeight,
+    elev: elev / totalWeight,
+  };
+}
+
+function sampleBearing(
+  route: QuestRoute,
+  progressRatio: number,
+  sampleDistanceM: number,
+) {
+  const totalDistanceM = routeDistanceM(route);
+  const progressM = totalDistanceM * clamp(progressRatio);
+  const smoothingRadiusM = Math.max(120, sampleDistanceM * 0.42);
+  const from = smoothRouteTarget(
+    route,
+    Math.max(0, progressM - sampleDistanceM) / totalDistanceM,
+    smoothingRadiusM,
+  );
+  const to = smoothRouteTarget(
+    route,
+    Math.min(totalDistanceM, progressM + sampleDistanceM) / totalDistanceM,
+    smoothingRadiusM,
+  );
   return bearingDegrees(
-    { ...from, d: from.progressM },
-    { ...to, d: to.progressM },
+    { ...from, d: Math.max(0, progressM - sampleDistanceM) },
+    { ...to, d: Math.min(totalDistanceM, progressM + sampleDistanceM) },
   );
 }
 
@@ -194,7 +237,7 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         chapter: "Ignition",
         duration: 3.2,
         fromProgress: 0.02,
-        toProgress: Math.max(0.12, climb - 0.04),
+        toProgress: 0.055,
         fromRangeM: 3_200 * scale,
         toRangeM: 1_250,
         fromPitchDeg: -46,
@@ -208,8 +251,8 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
       {
         chapter: "Acceleration",
         duration: 4.2,
-        fromProgress: Math.max(0.1, climb - 0.04),
-        toProgress: turn,
+        fromProgress: clamp(climb - 0.025),
+        toProgress: clamp(climb + 0.025),
         fromRangeM: 1_050,
         toRangeM: 620,
         fromPitchDeg: -27,
@@ -223,8 +266,8 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
       {
         chapter: "The break",
         duration: 4.1,
-        fromProgress: turn,
-        toProgress: Math.max(turn + 0.12, summit),
+        fromProgress: clamp(turn - 0.02),
+        toProgress: clamp(turn + 0.02),
         fromRangeM: 720,
         toRangeM: 980,
         fromPitchDeg: -18,
@@ -238,7 +281,7 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
       {
         chapter: "Release",
         duration: 4.8,
-        fromProgress: Math.max(turn + 0.12, summit),
+        fromProgress: 0.94,
         toProgress: 1,
         fromRangeM: 1_100,
         toRangeM: 5_600 * scale,
@@ -258,8 +301,8 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
       {
         chapter: "Before the first step",
         duration: 5.2,
-        fromProgress: 0,
-        toProgress: 0.08,
+        fromProgress: 0.005,
+        toProgress: 0.035,
         fromRangeM: 1_400,
         toRangeM: 520,
         fromPitchDeg: -38,
@@ -273,8 +316,8 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
       {
         chapter: "Inside the terrain",
         duration: 7.4,
-        fromProgress: 0.08,
-        toProgress: Math.max(0.46, climb),
+        fromProgress: clamp(climb - 0.018),
+        toProgress: clamp(climb + 0.018),
         fromRangeM: 480,
         toRangeM: 340,
         fromPitchDeg: -17,
@@ -288,8 +331,8 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
       {
         chapter: "What the day asks",
         duration: 7.2,
-        fromProgress: Math.max(0.46, climb),
-        toProgress: Math.max(0.72, summit),
+        fromProgress: clamp(summit - 0.018),
+        toProgress: clamp(summit + 0.018),
         fromRangeM: 360,
         toRangeM: 610,
         fromPitchDeg: -13,
@@ -303,7 +346,7 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
       {
         chapter: "Remember the line",
         duration: 5.6,
-        fromProgress: Math.max(0.72, summit),
+        fromProgress: 0.95,
         toProgress: 1,
         fromRangeM: 720,
         toRangeM: 3_400 * scale,
@@ -323,7 +366,7 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
       chapter: "A place before a route",
       duration: 7,
       fromProgress: 0.48,
-      toProgress: 0.2,
+      toProgress: 0.46,
       fromRangeM: 15_000 * scale,
       toRangeM: 5_200 * scale,
       fromPitchDeg: -68,
@@ -337,8 +380,8 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
     {
       chapter: "The line appears",
       duration: 6.4,
-      fromProgress: 0.2,
-      toProgress: Math.max(0.36, climb),
+      fromProgress: clamp(climb - 0.035),
+      toProgress: clamp(climb + 0.035),
       fromRangeM: 4_800 * scale,
       toRangeM: 2_100,
       fromPitchDeg: -46,
@@ -352,8 +395,8 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
     {
       chapter: "The world becomes effort",
       duration: 8.2,
-      fromProgress: Math.max(0.36, climb),
-      toProgress: Math.max(0.7, summit),
+      fromProgress: clamp(summit - 0.025),
+      toProgress: clamp(summit + 0.025),
       fromRangeM: 1_900,
       toRangeM: 1_050,
       fromPitchDeg: -30,
@@ -367,7 +410,7 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
     {
       chapter: "Would you take this line?",
       duration: 7.4,
-      fromProgress: Math.max(0.7, summit),
+      fromProgress: 0.93,
       toProgress: 1,
       fromRangeM: 1_200,
       toRangeM: 9_000 * scale,
@@ -410,11 +453,23 @@ export function cinematicFrame(
     shot.toProgress,
     eased,
   );
+  const rangeM = interpolate(shot.fromRangeM, shot.toRangeM, eased);
   const pose = routePathPose(
     route,
     routeDistanceM(route) * clamp(routeProgressRatio),
   );
-  const routeHeading = sampleBearing(route, routeProgressRatio);
+  const spatialRadiusM =
+    cut === "monumental"
+      ? clamp(rangeM * 0.16, 420, 2_400)
+      : cut === "kinetic"
+        ? clamp(rangeM * 0.22, 240, 900)
+        : clamp(rangeM * 0.28, 180, 720);
+  const target = smoothRouteTarget(route, routeProgressRatio, spatialRadiusM);
+  const routeHeading = sampleBearing(
+    route,
+    routeProgressRatio,
+    clamp(rangeM * 0.38, 320, 2_800),
+  );
   const headingOffset = interpolateHeading(
     shot.headingOffsetFrom,
     shot.headingOffsetTo,
@@ -429,10 +484,10 @@ export function cinematicFrame(
     headingDeg: (routeHeading + headingOffset + 360) % 360,
     pitchDeg: interpolate(shot.fromPitchDeg, shot.toPitchDeg, eased),
     progress: elapsed / durationSeconds,
-    rangeM: interpolate(shot.fromRangeM, shot.toRangeM, eased),
+    rangeM,
     routeProgressM: pose.progressM,
     showDecision: elapsed >= durationSeconds - 1.1,
-    target: { lat: pose.lat, lng: pose.lng, elev: pose.elev },
+    target,
     threadStartRatio: clamp(routeProgressRatio - shot.threadBehind),
     threadEndRatio: clamp(routeProgressRatio + shot.threadAhead),
     look: shot.look,

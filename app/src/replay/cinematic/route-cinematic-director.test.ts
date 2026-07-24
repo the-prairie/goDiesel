@@ -61,4 +61,20 @@ describe("route cinematic director", () => {
     expect(intimate.look.depthOfField).toBeGreaterThan(0);
     expect(intimate.rangeM).toBeLessThan(monumental.rangeM);
   });
+
+  it("keeps adjacent camera targets on a stable spatial rail", () => {
+    const frames = Array.from({ length: 70 }, (_, index) =>
+      cinematicFrame(route, "kinetic", 0.15 + index / 30),
+    );
+    const targetStepsM = frames.slice(1).map((frame, index) => {
+      const previous = frames[index];
+      const northM = (frame.target.lat - previous.target.lat) * 111_320;
+      const eastM =
+        (frame.target.lng - previous.target.lng) *
+        111_320 *
+        Math.cos((frame.target.lat * Math.PI) / 180);
+      return Math.hypot(northM, eastM);
+    });
+    expect(Math.max(...targetStepsM)).toBeLessThan(95);
+  });
 });

@@ -5,6 +5,48 @@ const ROUTES = [
   { slug: "14023448720", label: "Crete" },
 ] as const;
 
+async function measureOpeningCameraMotion(page: import("@playwright/test").Page) {
+  return page.locator("gmp-map-3d").evaluate(async (element) => {
+    const samples: Array<{
+      heading: number;
+      lat: number;
+      lng: number;
+    }> = [];
+    for (let index = 0; index < 24; index += 1) {
+      const [lat, lng] = (element.getAttribute("center") ?? "0,0")
+        .split(",")
+        .map(Number);
+      samples.push({
+        heading: Number(element.getAttribute("heading") ?? 0),
+        lat,
+        lng,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 65));
+    }
+    return samples.slice(1).reduce(
+      (motion, sample, index) => {
+        const previous = samples[index];
+        const headingDelta = Math.abs(
+          ((sample.heading - previous.heading + 540) % 360) - 180,
+        );
+        const northM = (sample.lat - previous.lat) * 111_320;
+        const eastM =
+          (sample.lng - previous.lng) *
+          111_320 *
+          Math.cos((sample.lat * Math.PI) / 180);
+        return {
+          maxHeadingDelta: Math.max(motion.maxHeadingDelta, headingDelta),
+          maxTargetStepM: Math.max(
+            motion.maxTargetStepM,
+            Math.hypot(northM, eastM),
+          ),
+        };
+      },
+      { maxHeadingDelta: 0, maxTargetStepM: 0 },
+    );
+  });
+}
+
 for (const route of ROUTES) {
   test(`directs ${route.label} through the live photorealistic world`, async ({
     page,
@@ -27,6 +69,9 @@ for (const route of ROUTES) {
     await expect(director).toHaveAttribute("data-cut", "kinetic");
     await page.getByRole("button", { name: "Play Kinetic cut" }).click();
     await expect(page.getByTestId("cinematic-chapter")).toBeVisible();
+    const cameraMotion = await measureOpeningCameraMotion(page);
+    expect(cameraMotion.maxHeadingDelta).toBeLessThan(6);
+    expect(cameraMotion.maxTargetStepM).toBeLessThan(100);
 
     const progress = page.getByTestId("cinematic-progress");
     await expect
