@@ -11,7 +11,9 @@ export type CinematicShotKind =
 
 export interface CinematicProfile {
   character: "mountain" | "rolling" | "open";
+  maximumElevationM: number;
   maximumGradePct: number;
+  minimumElevationM: number;
   positiveGainM: number;
   reliefM: number;
   turningIntensityDeg: number;
@@ -22,6 +24,16 @@ export interface CinematicMoment {
   label: string;
   progressRatio: number;
   score: number;
+}
+
+export interface CinematicVisualMoment {
+  gradePct: number;
+  kind: "terrain" | "turn" | "vista";
+  localReliefM: number;
+  openness: number;
+  progressRatio: number;
+  score: number;
+  turnDeg: number;
 }
 
 export interface CinematicLook {
@@ -56,8 +68,10 @@ export interface CinematicFrame {
   shotIndex: number;
   shotKind: CinematicShotKind;
   target: { lat: number; lng: number; elev: number };
+  terrainReliefM: number;
   threadEndRatio: number;
   threadStartRatio: number;
+  visualMomentScore: number;
   look: CinematicLook;
 }
 
@@ -121,6 +135,7 @@ function chapterSubtitle(
 }
 
 const profileCache = new WeakMap<QuestRoute, CinematicProfile>();
+const visualMomentCache = new WeakMap<QuestRoute, CinematicVisualMoment[]>();
 const shotPlanCache = new WeakMap<
   QuestRoute,
   Map<CinematicCut, readonly Shot[]>
@@ -211,6 +226,117 @@ function sampleBearing(
   );
 }
 
+function distanceBetweenM(
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number },
+) {
+  const northM = (to.lat - from.lat) * 111_320;
+  const eastM =
+    (to.lng - from.lng) *
+    111_320 *
+    Math.cos((((from.lat + to.lat) / 2) * Math.PI) / 180);
+  return Math.hypot(northM, eastM);
+}
+
+function visualSignalAt(route: QuestRoute, progressRatio: number) {
+  const totalDistanceM = routeDistanceM(route);
+  const windowM = clamp(totalDistanceM * 0.035, 320, 1_250);
+  const progressM = totalDistanceM * clamp(progressRatio);
+  const before = routePathPose(route, Math.max(0, progressM - windowM));
+  const center = routePathPose(route, progressM);
+  const after = routePathPose(
+    route,
+    Math.min(totalDistanceM, progressM + windowM),
+  );
+  const quarterBefore = routePathPose(
+    route,
+    Math.max(0, progressM - windowM * 0.5),
+  );
+  const quarterAfter = routePathPose(
+    route,
+    Math.min(totalDistanceM, progressM + windowM * 0.5),
+  );
+  const elevations = [
+    before.elev,
+    quarterBefore.elev,
+    center.elev,
+    quarterAfter.elev,
+    after.elev,
+  ];
+  const localReliefM = Math.max(...elevations) - Math.min(...elevations);
+  const sampleSpanM = Math.max(1, after.progressM - before.progressM);
+  const gradePct = Math.abs(((after.elev - before.elev) / sampleSpanM) * 100);
+  const incoming = bearingDegrees(
+    { ...before, d: before.progressM },
+    { ...center, d: center.progressM },
+  );
+  const outgoing = bearingDegrees(
+    { ...center, d: center.progressM },
+    { ...after, d: after.progressM },
+  );
+  const turnDeg = Math.abs(((outgoing - incoming + 540) % 360) - 180);
+  const openness = clamp(
+    distanceBetweenM(before, after) / Math.max(1, sampleSpanM),
+  );
+  const profile = cinematicProfile(route);
+  const prominence = clamp(
+    (center.elev - profile.minimumElevationM) / Math.max(1, profile.reliefM),
+  );
+  const edgeWeight = Math.sin(clamp(progressRatio, 0.04, 0.96) * Math.PI) ** 0.4;
+  const reliefScore = clamp(localReliefM / Math.max(90, profile.reliefM * 0.42));
+  const turnScore = clamp(turnDeg / 82);
+  const gradeScore = clamp(gradePct / 11);
+  const score =
+    (reliefScore * 0.32 +
+      prominence * 0.24 +
+      turnScore * 0.22 +
+      gradeScore * 0.12 +
+      openness * 0.1) *
+    edgeWeight;
+  const kind =
+    prominence >= 0.72 && openness >= 0.45
+      ? "vista"
+      : turnScore >= reliefScore
+        ? "turn"
+        : "terrain";
+  return {
+    gradePct,
+    kind,
+    localReliefM,
+    openness,
+    progressRatio,
+    score,
+    turnDeg,
+  } satisfies CinematicVisualMoment;
+}
+
+export function cinematicVisualMoments(
+  route: QuestRoute,
+): CinematicVisualMoment[] {
+  const cached = visualMomentCache.get(route);
+  if (cached) return cached;
+  const candidates = Array.from({ length: 31 }, (_, index) =>
+    visualSignalAt(route, 0.06 + (index / 30) * 0.88),
+  ).sort((left, right) => right.score - left.score);
+  const selected: CinematicVisualMoment[] = [];
+  for (const candidate of candidates) {
+    if (
+      selected.every(
+        (moment) =>
+          Math.abs(moment.progressRatio - candidate.progressRatio) >= 0.12,
+      )
+    ) {
+      selected.push(candidate);
+    }
+    if (selected.length === 4) break;
+  }
+  const moments = selected.sort(
+    (left, right) => left.progressRatio - right.progressRatio,
+  );
+  visualMomentCache.set(route, moments);
+  return moments;
+}
+
 export function cinematicMoments(route: QuestRoute): CinematicMoment[] {
   const points = route.route;
   const totalDistanceM = routeDistanceM(route);
@@ -273,7 +399,9 @@ export function cinematicProfile(route: QuestRoute): CinematicProfile {
   if (points.length < 2) {
     const empty: CinematicProfile = {
       character: "open",
+      maximumElevationM: points[0]?.elev ?? 0,
       maximumGradePct: 0,
+      minimumElevationM: points[0]?.elev ?? 0,
       positiveGainM: 0,
       reliefM: 0,
       turningIntensityDeg: 0,
@@ -322,7 +450,9 @@ export function cinematicProfile(route: QuestRoute): CinematicProfile {
         : "open";
   const profile: CinematicProfile = {
     character,
+    maximumElevationM,
     maximumGradePct,
+    minimumElevationM,
     positiveGainM,
     reliefM,
     turningIntensityDeg,
@@ -392,6 +522,12 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
   const summit = moments.find((moment) => moment.kind === "summit")?.progressRatio ?? 0.55;
   const turn = moments.find((moment) => moment.kind === "turn")?.progressRatio ?? 0.38;
   const climb = moments.find((moment) => moment.kind === "climb")?.progressRatio ?? 0.3;
+  const visualSequence = cinematicVisualMoments(route);
+  const firstHero = visualSequence[0]?.progressRatio ?? climb;
+  const middleHero =
+    visualSequence[Math.floor((visualSequence.length - 1) / 2)]
+      ?.progressRatio ?? turn;
+  const finalHero = visualSequence.at(-1)?.progressRatio ?? summit;
   const activeLook = looks(cut).active;
 
   if (cut === "feature") {
@@ -435,8 +571,8 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
       {
         chapter: "Gravity enters the story",
         duration: 7.2,
-        fromProgress: clamp(climb - 0.025),
-        toProgress: clamp(climb + 0.025),
+        fromProgress: clamp(firstHero - 0.025),
+        toProgress: clamp(firstHero + 0.025),
         fromRangeM: 1_750,
         toRangeM: 840,
         fromPitchDeg: -29,
@@ -453,8 +589,8 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
       {
         chapter: "Where the world opens",
         duration: 7.6,
-        fromProgress: clamp(summit - 0.02),
-        toProgress: clamp(summit + 0.02),
+        fromProgress: clamp(finalHero - 0.02),
+        toProgress: clamp(finalHero + 0.02),
         fromRangeM: 1_150,
         toRangeM: 1_650,
         fromPitchDeg: -19,
@@ -491,8 +627,8 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
       featureShots.splice(3, 0, {
         chapter: "The road refuses a straight answer",
         duration: 5.2,
-        fromProgress: clamp(turn - 0.03),
-        toProgress: clamp(turn + 0.03),
+        fromProgress: clamp(middleHero - 0.03),
+        toProgress: clamp(middleHero + 0.03),
         fromRangeM: 980,
         toRangeM: 720,
         fromPitchDeg: -24,
@@ -553,8 +689,8 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
       {
         chapter: "Find the rhythm",
         duration: 4.2,
-        fromProgress: clamp(climb - 0.025),
-        toProgress: clamp(climb + 0.025),
+        fromProgress: clamp(firstHero - 0.025),
+        toProgress: clamp(firstHero + 0.025),
         fromRangeM: 1_050,
         toRangeM: 620,
         fromPitchDeg: -27,
@@ -571,8 +707,8 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
       {
         chapter: "Commit to the turn",
         duration: 4.1,
-        fromProgress: clamp(turn - 0.02),
-        toProgress: clamp(turn + 0.02),
+        fromProgress: clamp(middleHero - 0.02),
+        toProgress: clamp(middleHero + 0.02),
         fromRangeM: 720,
         toRangeM: 980,
         fromPitchDeg: -18,
@@ -630,8 +766,8 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
       {
         chapter: "Close enough to feel it",
         duration: 7.4,
-        fromProgress: clamp(climb - 0.018),
-        toProgress: clamp(climb + 0.018),
+        fromProgress: clamp(firstHero - 0.018),
+        toProgress: clamp(firstHero + 0.018),
         fromRangeM: 480,
         toRangeM: 340,
         fromPitchDeg: -17,
@@ -648,8 +784,8 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
       {
         chapter: "The honest part",
         duration: 7.2,
-        fromProgress: clamp(summit - 0.018),
-        toProgress: clamp(summit + 0.018),
+        fromProgress: clamp(finalHero - 0.018),
+        toProgress: clamp(finalHero + 0.018),
         fromRangeM: 360,
         toRangeM: 610,
         fromPitchDeg: -13,
@@ -706,8 +842,8 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
     {
       chapter: "Then, a way through",
       duration: 6.4,
-      fromProgress: clamp(climb - 0.035),
-      toProgress: clamp(climb + 0.035),
+      fromProgress: clamp(firstHero - 0.035),
+      toProgress: clamp(firstHero + 0.035),
       fromRangeM: 4_800 * scale,
       toRangeM: 2_100,
       fromPitchDeg: -46,
@@ -724,8 +860,8 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
     {
       chapter: "Distance becomes effort",
       duration: 8.2,
-      fromProgress: clamp(summit - 0.025),
-      toProgress: clamp(summit + 0.025),
+      fromProgress: clamp(finalHero - 0.025),
+      toProgress: clamp(finalHero + 0.025),
       fromRangeM: 1_900,
       toRangeM: 1_050,
       fromPitchDeg: -30,
@@ -858,6 +994,74 @@ function frameLook(
   };
 }
 
+export function cinematicCameraRig(
+  route: QuestRoute,
+  kind: CinematicShotKind,
+  progressRatio: number,
+  requestedRangeM: number,
+  requestedPitchDeg: number,
+) {
+  const signal = visualSignalAt(route, progressRatio);
+  const profile = cinematicProfile(route);
+  const reliefIntensity = clamp(
+    signal.localReliefM / Math.max(80, profile.reliefM * 0.34),
+  );
+  const gradeIntensity = clamp(signal.gradePct / 14);
+  const minimumRangeM =
+    {
+      establishing: 1_400,
+      reveal: 620,
+      tracking: 300,
+      summit: 460,
+      release: 900,
+    }[kind] +
+    signal.localReliefM *
+      {
+        establishing: 1.8,
+        reveal: 1.45,
+        tracking: 1.55,
+        summit: 2.1,
+        release: 1.3,
+      }[kind];
+  const rangeM = Math.max(requestedRangeM, minimumRangeM);
+  const lookAheadFactor = {
+    establishing: 0,
+    reveal: 0.11,
+    tracking: 0.16,
+    summit: 0.055,
+    release: 0.025,
+  }[kind];
+  const lookAheadM = clamp(
+    rangeM * lookAheadFactor,
+    kind === "establishing" ? 0 : 45,
+    kind === "tracking" ? 460 : 780,
+  );
+  const totalDistanceM = routeDistanceM(route);
+  const targetProgressRatio = clamp(
+    (progressRatio * totalDistanceM + lookAheadM) / totalDistanceM,
+  );
+  const horizonFloorDeg = {
+    establishing: -70,
+    reveal: -42,
+    tracking: -25,
+    summit: -30,
+    release: -60,
+  }[kind];
+  const pitchDeg = clamp(
+    requestedPitchDeg - reliefIntensity * 5.5 - gradeIntensity * 2.5,
+    horizonFloorDeg,
+    -12,
+  );
+  return {
+    lookAheadM,
+    pitchDeg,
+    rangeM,
+    targetProgressRatio,
+    terrainReliefM: signal.localReliefM,
+    visualMomentScore: signal.score,
+  };
+}
+
 export function cinematicDuration(route: QuestRoute, cut: CinematicCut) {
   return shotPlan(route, cut).reduce((total, shot) => total + shot.duration, 0);
 }
@@ -908,7 +1112,20 @@ export function cinematicFrame(
     shot.toProgress,
     eased,
   );
-  const rangeM = interpolate(shot.fromRangeM, shot.toRangeM, eased);
+  const requestedRangeM = interpolate(shot.fromRangeM, shot.toRangeM, eased);
+  const requestedPitchDeg = interpolate(
+    shot.fromPitchDeg,
+    shot.toPitchDeg,
+    eased,
+  );
+  const rig = cinematicCameraRig(
+    route,
+    shot.kind,
+    routeProgressRatio,
+    requestedRangeM,
+    requestedPitchDeg,
+  );
+  const rangeM = rig.rangeM;
   const pose = routePathPose(
     route,
     routeDistanceM(route) * clamp(routeProgressRatio),
@@ -919,10 +1136,14 @@ export function cinematicFrame(
       : cut === "kinetic"
         ? clamp(rangeM * 0.22, 240, 900)
         : clamp(rangeM * 0.28, 180, 720);
-  const target = smoothRouteTarget(route, routeProgressRatio, spatialRadiusM);
+  const target = smoothRouteTarget(
+    route,
+    rig.targetProgressRatio,
+    spatialRadiusM,
+  );
   const routeHeading = sampleBearing(
     route,
-    routeProgressRatio,
+    rig.targetProgressRatio,
     clamp(rangeM * 0.38, 320, 2_800),
   );
   const headingOffset = interpolateHeading(
@@ -952,7 +1173,7 @@ export function cinematicFrame(
     headingDeg: (routeHeading + headingOffset + 360) % 360,
     lensMm: interpolate(shot.lensFromMm, shot.lensToMm, eased),
     motionIntensity: motionIntensity(shotKind, cut),
-    pitchDeg: interpolate(shot.fromPitchDeg, shot.toPitchDeg, eased),
+    pitchDeg: rig.pitchDeg,
     progress: elapsed / durationSeconds,
     rangeM,
     routeProgressM: pose.progressM,
@@ -962,12 +1183,14 @@ export function cinematicFrame(
     shotIndex,
     shotKind,
     target,
+    terrainReliefM: rig.terrainReliefM,
     threadStartRatio: threadHidden
       ? 0
       : clamp(routeProgressRatio - shot.threadBehind),
     threadEndRatio: threadHidden
       ? 0
       : clamp(routeProgressRatio + shot.threadAhead),
+    visualMomentScore: rig.visualMomentScore,
     look: frameLook(shot.look, profile, shotKind, local),
   };
 }

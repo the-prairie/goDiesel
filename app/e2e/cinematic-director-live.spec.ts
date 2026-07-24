@@ -104,6 +104,15 @@ for (const route of ROUTES) {
       "data-light-phase",
       /neutral|dawn|midday|dusk|night/,
     );
+    const terrainRelief = Number(
+      await director.getAttribute("data-terrain-relief"),
+    );
+    const visualMomentScore = Number(
+      await director.getAttribute("data-visual-moment-score"),
+    );
+    expect(terrainRelief).toBeGreaterThanOrEqual(0);
+    expect(visualMomentScore).toBeGreaterThan(0);
+    expect(visualMomentScore).toBeLessThanOrEqual(1);
     const visual = await director.screenshot();
     const detail = visualDetail(visual);
     expect(detail.colorBins).toBeGreaterThan(40);

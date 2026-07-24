@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest";
 import type { QuestRoute } from "@/domain/routes";
 import {
   cinematicDuration,
+  cinematicCameraRig,
   cinematicFrame,
   cinematicMoments,
   cinematicProfile,
   cinematicShotTimeline,
+  cinematicVisualMoments,
   type CinematicCut,
 } from "@/replay/cinematic/route-cinematic-director";
 
@@ -42,10 +44,52 @@ describe("route cinematic director", () => {
   it("derives a terrain profile from recorded geometry", () => {
     const profile = cinematicProfile(route);
     expect(profile.reliefM).toBe(240);
+    expect(profile.minimumElevationM).toBe(20);
+    expect(profile.maximumElevationM).toBe(260);
     expect(profile.positiveGainM).toBe(240);
     expect(profile.maximumGradePct).toBeGreaterThan(6);
     expect(profile.turningIntensityDeg).toBeGreaterThan(80);
     expect(profile.character).toBe("rolling");
+  });
+
+  it("selects separated visual hero moments in route order", () => {
+    const moments = cinematicVisualMoments(route);
+    expect(moments.length).toBeGreaterThanOrEqual(3);
+    expect(moments.every((moment) => moment.score > 0)).toBe(true);
+    for (let index = 1; index < moments.length; index += 1) {
+      expect(moments[index].progressRatio).toBeGreaterThan(
+        moments[index - 1].progressRatio,
+      );
+      expect(
+        moments[index].progressRatio - moments[index - 1].progressRatio,
+      ).toBeGreaterThanOrEqual(0.12);
+    }
+  });
+
+  it("raises and aims the camera ahead through difficult terrain", () => {
+    const mountainRoute = {
+      ...route,
+      route: route.route.map((point, index) => ({
+        ...point,
+        elev: [20, 300, 740, 1_020, 640, 120][index],
+      })),
+    } as QuestRoute;
+    const openRoute = {
+      ...route,
+      route: route.route.map((point) => ({ ...point, elev: 20 })),
+    } as QuestRoute;
+    const mountain = cinematicCameraRig(
+      mountainRoute,
+      "tracking",
+      0.42,
+      320,
+      -18,
+    );
+    const open = cinematicCameraRig(openRoute, "tracking", 0.42, 320, -18);
+    expect(mountain.rangeM).toBeGreaterThan(open.rangeM);
+    expect(mountain.pitchDeg).toBeLessThan(open.pitchDeg);
+    expect(mountain.targetProgressRatio).toBeGreaterThan(0.42);
+    expect(mountain.terrainReliefM).toBeGreaterThan(open.terrainReliefM);
   });
 
   it("publishes exact shot boundaries for deterministic preflight", () => {
@@ -66,7 +110,7 @@ describe("route cinematic director", () => {
     }
   });
 
-  it("adds clearance and pitch when recorded terrain is steep", () => {
+  it("adds clearance without sacrificing the tracking horizon", () => {
     const openRoute = {
       ...route,
       route: route.route.map((point) => ({ ...point, elev: 20 })),
@@ -83,7 +127,10 @@ describe("route cinematic director", () => {
     expect(cinematicProfile(openRoute).character).toBe("open");
     expect(cinematicProfile(mountainRoute).character).toBe("mountain");
     expect(mountainTracking.rangeM).toBeGreaterThan(openTracking.rangeM);
-    expect(mountainTracking.pitchDeg).toBeLessThan(openTracking.pitchDeg);
+    expect(mountainTracking.pitchDeg).toBeLessThanOrEqual(
+      openTracking.pitchDeg,
+    );
+    expect(mountainTracking.pitchDeg).toBeGreaterThanOrEqual(-25);
   });
 
   it.each([

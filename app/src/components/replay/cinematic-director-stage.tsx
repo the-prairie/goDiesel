@@ -234,7 +234,9 @@ export function CinematicDirectorStage({
       data-shot-timeline={JSON.stringify(cinematicShotTimeline(route, cut))}
       data-state={status.state}
       data-terrain-character={profile.character}
+      data-terrain-relief={frame.terrainReliefM.toFixed(1)}
       data-testid="cinematic-director"
+      data-visual-moment-score={frame.visualMomentScore.toFixed(3)}
     >
       <div
         aria-label={`Photorealistic cinematic view of ${route.name}`}
