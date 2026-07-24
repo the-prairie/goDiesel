@@ -5,6 +5,14 @@ import { RouteNotFound } from "@/components/routes/route-not-found";
 import { findRouteBySlug } from "@/data/routes";
 import { useRouteDetail } from "@/data/use-route-detail";
 import { decodedRouteSlug } from "@/navigation";
+import type { CinematicCut } from "@/replay/cinematic/route-cinematic-director";
+
+const CINEMATIC_CUTS = new Set<CinematicCut>([
+  "feature",
+  "monumental",
+  "kinetic",
+  "intimate",
+]);
 
 export function CinematicDirectorLabPage() {
   const { routeSlug } = useParams();
@@ -12,6 +20,11 @@ export function CinematicDirectorLabPage() {
   const decodedSlug = decodedRouteSlug(routeSlug);
   const summary = decodedSlug ? findRouteBySlug(decodedSlug) : undefined;
   const detail = useRouteDetail(summary?.slug);
+  const requestedCut = searchParams.get("cut");
+  const initialCut =
+    requestedCut && CINEMATIC_CUTS.has(requestedCut as CinematicCut)
+      ? (requestedCut as CinematicCut)
+      : "feature";
 
   if (!summary) return <RouteNotFound />;
   if (detail.status === "idle" || detail.status === "loading") {
@@ -29,6 +42,7 @@ export function CinematicDirectorLabPage() {
 
   return (
     <CinematicDirectorStage
+      initialCut={initialCut}
       renderMode={searchParams.get("render") === "1"}
       route={detail.route}
     />

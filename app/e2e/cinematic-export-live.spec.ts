@@ -14,6 +14,7 @@ test("exports a playable photorealistic route-film master", async () => {
 
   const directory = await mkdtemp(join(tmpdir(), "godiesel-route-film-"));
   const output = join(directory, "proof.mp4");
+  const report = `${output}.report.json`;
   const baseUrl =
     process.env.GODIESEL_ATLAS_PREVIEW_URL ?? "http://127.0.0.1:8787";
 
@@ -34,6 +35,22 @@ test("exports a playable photorealistic route-film master", async () => {
     expect((await stat(output)).size).toBeGreaterThan(20_000);
     const header = await readFile(output);
     expect(header.subarray(4, 8).toString("ascii")).toBe("ftyp");
+    const evidence = JSON.parse(await readFile(report, "utf8"));
+    expect(evidence.status).toBe("complete");
+    expect(evidence.configuration).toMatchObject({
+      captureHeight: 1080,
+      captureWidth: 1920,
+      fps: 1,
+      route: "14023448720",
+    });
+    expect(evidence.completedFrames).toHaveLength(1);
+    expect(evidence.completedFrames[0]).toMatchObject({
+      settled: true,
+      seconds: 0,
+    });
+    expect(evidence.completedFrames[0].bestColorBins).toBeGreaterThanOrEqual(
+      44,
+    );
   } finally {
     await rm(directory, { force: true, recursive: true });
   }

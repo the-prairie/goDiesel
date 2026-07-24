@@ -84,9 +84,11 @@ function recordedGrade(phase: ReturnType<typeof recordedLightAt>["phase"]) {
 }
 
 export function CinematicDirectorStage({
+  initialCut = "feature",
   renderMode = false,
   route,
 }: {
+  initialCut?: CinematicCut;
   renderMode?: boolean;
   route: QuestRoute;
 }) {
@@ -95,9 +97,9 @@ export function CinematicDirectorStage({
   const soundRef = useRef<CinematicSoundscape | undefined>(undefined);
   const elapsedRef = useRef(0);
   const playingRef = useRef(false);
-  const [cut, setCut] = useState<CinematicCut>("feature");
+  const [cut, setCut] = useState<CinematicCut>(initialCut);
   const [frame, setFrame] = useState(() =>
-    cinematicFrame(route, "feature", 0),
+    cinematicFrame(route, initialCut, 0),
   );
   const [playing, setPlaying] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
