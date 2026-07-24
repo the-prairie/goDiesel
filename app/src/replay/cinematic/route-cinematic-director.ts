@@ -36,6 +36,7 @@ export interface CinematicLook {
 
 export interface CinematicFrame {
   chapter: string;
+  chapterSubtitle: string;
   chapterProgress: number;
   cameraResponseSeconds: number;
   cut: CinematicCut;
@@ -77,6 +78,46 @@ interface Shot {
   threadAhead: number;
   look: CinematicLook;
   kind: CinematicShotKind;
+}
+
+function routeNoun(route: QuestRoute) {
+  return route.type?.toLowerCase().includes("ride") ? "ride" : "run";
+}
+
+function chapterSubtitle(
+  route: QuestRoute,
+  profile: CinematicProfile,
+  shot: Shot,
+) {
+  const distance = route.distanceKm.toFixed(1);
+  const gain = Math.round(
+    route.elevationGainM ?? profile.positiveGainM,
+  ).toLocaleString();
+  const relief = Math.round(profile.reliefM).toLocaleString();
+  const noun = routeNoun(route);
+  const place = route.region || "This place";
+
+  if (shot.chapter === "The road refuses a straight answer") {
+    return `The line turns hard. The ${noun} finds another way through.`;
+  }
+  if (shot.chapter === "The landscape sets the terms") {
+    return `${relief} metres from low point to high. Scale is part of the bargain.`;
+  }
+
+  switch (shot.kind) {
+    case "establishing":
+      return `${place}. ${distance} kilometres waiting beyond the horizon.`;
+    case "reveal":
+      return `One recorded ${noun}. A line through the world that exists nowhere else.`;
+    case "tracking":
+      return `${gain} metres of climbing turns distance into consequence.`;
+    case "summit":
+      return profile.character === "mountain"
+        ? `The route reaches high country. There is no hiding from the terrain now.`
+        : `The effort crests. For a moment, the whole route comes into view.`;
+    case "release":
+      return `The finish arrives. The line stays with you.`;
+  }
 }
 
 const profileCache = new WeakMap<QuestRoute, CinematicProfile>();
@@ -356,7 +397,7 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
   if (cut === "feature") {
     const featureShots: Shot[] = [
       {
-        chapter: "Somewhere on Earth",
+        chapter: "A day waits out there",
         duration: 6.4,
         fromProgress: 0.5,
         toProgress: 0.48,
@@ -374,7 +415,7 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         kind: "establishing",
       },
       {
-        chapter: "A line reveals itself",
+        chapter: "The line finds its shape",
         duration: 6.2,
         fromProgress: 0.015,
         toProgress: 0.12,
@@ -392,7 +433,7 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         kind: "reveal",
       },
       {
-        chapter: "The day begins to ask",
+        chapter: "Gravity enters the story",
         duration: 7.2,
         fromProgress: clamp(climb - 0.025),
         toProgress: clamp(climb + 0.025),
@@ -410,7 +451,7 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         kind: "tracking",
       },
       {
-        chapter: "At the high point",
+        chapter: "Where the world opens",
         duration: 7.6,
         fromProgress: clamp(summit - 0.02),
         toProgress: clamp(summit + 0.02),
@@ -428,7 +469,7 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         kind: "summit",
       },
       {
-        chapter: "The route remains",
+        chapter: "Carry the line home",
         duration: 7,
         fromProgress: 0.94,
         toProgress: 1,
@@ -448,7 +489,7 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
     ];
     if (profile.turningIntensityDeg >= 70) {
       featureShots.splice(3, 0, {
-        chapter: "The line changes direction",
+        chapter: "The road refuses a straight answer",
         duration: 5.2,
         fromProgress: clamp(turn - 0.03),
         toProgress: clamp(turn + 0.03),
@@ -468,7 +509,7 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
     }
     if (profile.character === "mountain" && profile.reliefM >= 700) {
       featureShots.splice(featureShots.length - 1, 0, {
-        chapter: "Scale enters the frame",
+        chapter: "The landscape sets the terms",
         duration: 6.6,
         fromProgress: clamp(summit - 0.055),
         toProgress: clamp(summit + 0.012),
@@ -492,7 +533,7 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
   if (cut === "kinetic") {
     return directShotPlan([
       {
-        chapter: "Ignition",
+        chapter: "No more waiting",
         duration: 3.2,
         fromProgress: 0.02,
         toProgress: 0.055,
@@ -510,7 +551,7 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         kind: "establishing",
       },
       {
-        chapter: "Acceleration",
+        chapter: "Find the rhythm",
         duration: 4.2,
         fromProgress: clamp(climb - 0.025),
         toProgress: clamp(climb + 0.025),
@@ -528,7 +569,7 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         kind: "tracking",
       },
       {
-        chapter: "The break",
+        chapter: "Commit to the turn",
         duration: 4.1,
         fromProgress: clamp(turn - 0.02),
         toProgress: clamp(turn + 0.02),
@@ -546,7 +587,7 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         kind: "summit",
       },
       {
-        chapter: "Release",
+        chapter: "Let it run",
         duration: 4.8,
         fromProgress: 0.94,
         toProgress: 1,
@@ -569,7 +610,7 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
   if (cut === "intimate") {
     return directShotPlan([
       {
-        chapter: "Before the first step",
+        chapter: "The quiet before movement",
         duration: 5.2,
         fromProgress: 0.005,
         toProgress: 0.035,
@@ -587,7 +628,7 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         kind: "establishing",
       },
       {
-        chapter: "Inside the terrain",
+        chapter: "Close enough to feel it",
         duration: 7.4,
         fromProgress: clamp(climb - 0.018),
         toProgress: clamp(climb + 0.018),
@@ -605,7 +646,7 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         kind: "tracking",
       },
       {
-        chapter: "What the day asks",
+        chapter: "The honest part",
         duration: 7.2,
         fromProgress: clamp(summit - 0.018),
         toProgress: clamp(summit + 0.018),
@@ -623,7 +664,7 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         kind: "summit",
       },
       {
-        chapter: "Remember the line",
+        chapter: "Take the feeling with you",
         duration: 5.6,
         fromProgress: 0.95,
         toProgress: 1,
@@ -645,7 +686,7 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
 
   return directShotPlan([
     {
-      chapter: "A place before a route",
+      chapter: "First, the world",
       duration: 7,
       fromProgress: 0.48,
       toProgress: 0.46,
@@ -663,7 +704,7 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
       kind: "establishing",
     },
     {
-      chapter: "The line appears",
+      chapter: "Then, a way through",
       duration: 6.4,
       fromProgress: clamp(climb - 0.035),
       toProgress: clamp(climb + 0.035),
@@ -681,7 +722,7 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
       kind: "reveal",
     },
     {
-      chapter: "The world becomes effort",
+      chapter: "Distance becomes effort",
       duration: 8.2,
       fromProgress: clamp(summit - 0.025),
       toProgress: clamp(summit + 0.025),
@@ -699,7 +740,7 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
       kind: "summit",
     },
     {
-      chapter: "Would you take this line?",
+      chapter: "The rest is your decision",
       duration: 7.4,
       fromProgress: 0.93,
       toProgress: 1,
@@ -895,6 +936,7 @@ export function cinematicFrame(
 
   return {
     chapter: shot.chapter,
+    chapterSubtitle: chapterSubtitle(route, profile, shot),
     chapterProgress: local,
     cameraResponseSeconds: cameraResponseSeconds(shotKind),
     cut,

@@ -43,9 +43,34 @@ const INITIAL_STATUS: CinematicRendererStatus = {
 };
 
 function routeLogline(route: QuestRoute) {
-  const curated = route.curation.vibe || route.curation.editorialNote;
+  const profile = cinematicProfile(route);
+  const curated =
+    route.curation.reviewStatus === "reviewed" ||
+    route.curation.reviewStatus === "published"
+      ? route.curation.vibe || route.curation.editorialNote
+      : undefined;
   if (curated) return curated;
-  return `${route.distanceKm.toFixed(1)} kilometres through ${route.region}, with ${route.elevationGainM.toLocaleString()} metres of climbing.`;
+  if (profile.character === "mountain") {
+    return `${route.region} does not give this one away: ${route.distanceKm.toFixed(1)} kilometres, ${route.elevationGainM.toLocaleString()} metres of ascent, and a line that keeps climbing into the horizon.`;
+  }
+  if (profile.character === "rolling") {
+    return `A restless line through ${route.region}, where ${route.distanceKm.toFixed(1)} kilometres of bends and rises never quite settle into a rhythm.`;
+  }
+  return `${route.distanceKm.toFixed(1)} open kilometres through ${route.region}. The invitation is simple: find the line, then let it run.`;
+}
+
+function routeInvitation(route: QuestRoute) {
+  return route.type.toLowerCase().includes("ride")
+    ? {
+        eyebrow: "The road is still out there",
+        title: "Would you ride it?",
+        action: "Ride the route",
+      }
+    : {
+        eyebrow: "The road is still out there",
+        title: "Would you run it?",
+        action: "Run the route",
+      };
 }
 
 function recordedGrade(phase: ReturnType<typeof recordedLightAt>["phase"]) {
@@ -186,6 +211,7 @@ export function CinematicDirectorStage({
   const preRoll =
     !renderMode && ready && frame.elapsedSeconds === 0 && !playing;
   const profile = cinematicProfile(route);
+  const invitation = routeInvitation(route);
   const recordedLight = recordedLightAt(
     route.route,
     route.provenance.temporal,
@@ -307,7 +333,7 @@ export function CinematicDirectorStage({
             <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-end">
               <div>
                 <p className="text-[0.67rem] font-semibold uppercase tracking-[0.24em] text-[#ff896d]">
-                  A goDiesel route film · no. {route.activityId.slice(-4)}
+                  One real day · Reframed as cinema
                 </p>
                 <h1 className="mt-4 max-w-4xl font-editorial text-6xl font-semibold leading-[0.86] sm:text-8xl">
                   {route.name}
@@ -376,11 +402,15 @@ export function CinematicDirectorStage({
         >
           <div className="h-px w-14 bg-[#f16c4b]" />
           <p className="mt-3 text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-white/52">
-            Act {frame.shotIndex + 1} of {frame.shotCount}
+            Chapter {String(frame.shotIndex + 1).padStart(2, "0")} ·{" "}
+            {frame.shotKind}
           </p>
           <h2 className="mt-1 max-w-4xl font-editorial text-4xl font-semibold leading-none sm:text-6xl">
             {frame.chapter}
           </h2>
+          <p className="mt-3 max-w-xl text-sm leading-relaxed text-white/66 sm:text-base">
+            {frame.chapterSubtitle}
+          </p>
         </div>
       ) : null}
 
@@ -392,14 +422,15 @@ export function CinematicDirectorStage({
           <div className="mx-auto grid max-w-7xl gap-6 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
             <div>
               <p className="text-[0.67rem] font-semibold uppercase tracking-[0.22em] text-[#ff896d]">
-                The route is waiting
+                {invitation.eyebrow}
               </p>
               <h1 className="mt-2 font-editorial text-5xl font-semibold leading-none sm:text-7xl">
-                Would you take this line?
+                {invitation.title}
               </h1>
-              <p className="mt-4 max-w-2xl text-sm text-white/62">
-                {route.name} · {route.distanceKm.toFixed(1)} km ·{" "}
-                {route.elevationGainM.toLocaleString()} m up
+              <p className="mt-4 max-w-2xl text-sm leading-relaxed text-white/62">
+                You have seen the shape of {route.name}. Now meet the real
+                terrain: {route.distanceKm.toFixed(1)} km and{" "}
+                {route.elevationGainM.toLocaleString()} m up.
               </p>
             </div>
             {!renderMode ? (
@@ -414,7 +445,7 @@ export function CinematicDirectorStage({
               </Button>
               <Button asChild className="bg-[#f16c4b] text-white hover:bg-[#d95639]">
                 <Link to={`/lab/google-route-navigator/${route.slug}`}>
-                  Enter the route
+                  {invitation.action}
                   <ChevronRight aria-hidden="true" />
                 </Link>
               </Button>

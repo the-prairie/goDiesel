@@ -140,6 +140,11 @@ describe("route cinematic director", () => {
     expect(
       new Set(frames.map((frame) => frame.cameraResponseSeconds)).size,
     ).toBeGreaterThan(2);
+    expect(opening.chapter).toBe("A day waits out there");
+    expect(opening.chapterSubtitle).toContain("10.0 kilometres");
+    expect(
+      frames.every((frame) => frame.chapterSubtitle.length > 24),
+    ).toBe(true);
   });
 
   it("keeps adjacent camera targets on a stable spatial rail", () => {
