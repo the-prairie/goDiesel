@@ -44,7 +44,13 @@ function routeLogline(route: QuestRoute) {
   return `${route.distanceKm.toFixed(1)} kilometres through ${route.region}, with ${route.elevationGainM.toLocaleString()} metres of climbing.`;
 }
 
-export function CinematicDirectorStage({ route }: { route: QuestRoute }) {
+export function CinematicDirectorStage({
+  renderMode = false,
+  route,
+}: {
+  renderMode?: boolean;
+  route: QuestRoute;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<NativeCinematicRenderer | undefined>(undefined);
   const soundRef = useRef<CinematicSoundscape | undefined>(undefined);
@@ -61,7 +67,7 @@ export function CinematicDirectorStage({ route }: { route: QuestRoute }) {
 
   const commitFrame = (nextFrame: typeof frame) => {
     elapsedRef.current = nextFrame.elapsedSeconds;
-    rendererRef.current?.setFrame(nextFrame);
+    rendererRef.current?.setFrame(nextFrame, renderMode);
     soundRef.current?.update(nextFrame, soundEnabled);
     setFrame(nextFrame);
   };
@@ -98,6 +104,19 @@ export function CinematicDirectorStage({ route }: { route: QuestRoute }) {
       if (soundRef.current === sound) soundRef.current = undefined;
     };
   }, [route]);
+
+  useEffect(() => {
+    if (!renderMode) return;
+    const seek = (event: Event) => {
+      const seconds = (event as CustomEvent<{ seconds?: number }>).detail
+        ?.seconds;
+      if (typeof seconds !== "number" || !Number.isFinite(seconds)) return;
+      setPlayback(false);
+      commitFrame(cinematicFrame(route, cut, seconds));
+    };
+    window.addEventListener("godiesel:route-film-seek", seek);
+    return () => window.removeEventListener("godiesel:route-film-seek", seek);
+  }, [cut, renderMode, route, soundEnabled]);
 
   useEffect(() => {
     if (status.state !== "ready" && status.state !== "partial") return;
@@ -150,7 +169,8 @@ export function CinematicDirectorStage({ route }: { route: QuestRoute }) {
   };
 
   const ready = status.state === "ready" || status.state === "partial";
-  const preRoll = ready && frame.elapsedSeconds === 0 && !playing;
+  const preRoll =
+    !renderMode && ready && frame.elapsedSeconds === 0 && !playing;
 
   return (
     <section
@@ -158,6 +178,9 @@ export function CinematicDirectorStage({ route }: { route: QuestRoute }) {
       className="fixed inset-0 z-[110] overflow-hidden bg-[#050707] text-white"
       data-chapter={frame.chapter}
       data-cut={cut}
+      data-duration={frame.durationSeconds}
+      data-frame-seconds={frame.elapsedSeconds.toFixed(3)}
+      data-render-mode={renderMode ? "true" : "false"}
       data-state={status.state}
       data-testid="cinematic-director"
     >
@@ -202,7 +225,8 @@ export function CinematicDirectorStage({ route }: { route: QuestRoute }) {
         className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-[7dvh] bg-black"
       />
 
-      <div className="absolute inset-x-0 top-0 z-30 flex items-center justify-between px-5 pt-6 sm:px-8 sm:pt-8">
+      {!renderMode ? (
+        <div className="absolute inset-x-0 top-0 z-30 flex items-center justify-between px-5 pt-6 sm:px-8 sm:pt-8">
         <Link
           aria-label="Back to route intelligence"
           className="grid size-10 place-items-center border border-white/28 bg-black/38 backdrop-blur-md transition-colors hover:bg-black/68"
@@ -215,7 +239,8 @@ export function CinematicDirectorStage({ route }: { route: QuestRoute }) {
           <span className="mx-2 text-white/28">/</span>
           Route film
         </div>
-      </div>
+        </div>
+      ) : null}
 
       {preRoll ? (
         <div
@@ -321,7 +346,8 @@ export function CinematicDirectorStage({ route }: { route: QuestRoute }) {
                 {route.elevationGainM.toLocaleString()} m up
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            {!renderMode ? (
+              <div className="flex flex-wrap gap-2">
               <Button
                 className="border-white/34 bg-transparent text-white hover:bg-white/12"
                 onClick={() => void restart()}
@@ -336,7 +362,8 @@ export function CinematicDirectorStage({ route }: { route: QuestRoute }) {
                   <ChevronRight aria-hidden="true" />
                 </Link>
               </Button>
-            </div>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -361,7 +388,7 @@ export function CinematicDirectorStage({ route }: { route: QuestRoute }) {
         </div>
       ) : null}
 
-      {ready && !preRoll ? (
+      {ready && !preRoll && !renderMode ? (
         <div className="absolute inset-x-5 bottom-[1.5dvh] z-30 flex items-center gap-3 sm:inset-x-8">
           <button
             aria-label={playing ? "Pause cinematic" : "Play cinematic"}

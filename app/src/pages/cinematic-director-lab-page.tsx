@@ -1,4 +1,4 @@
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 
 import { CinematicDirectorStage } from "@/components/replay/cinematic-director-stage";
 import { RouteNotFound } from "@/components/routes/route-not-found";
@@ -8,6 +8,7 @@ import { decodedRouteSlug } from "@/navigation";
 
 export function CinematicDirectorLabPage() {
   const { routeSlug } = useParams();
+  const [searchParams] = useSearchParams();
   const decodedSlug = decodedRouteSlug(routeSlug);
   const summary = decodedSlug ? findRouteBySlug(decodedSlug) : undefined;
   const detail = useRouteDetail(summary?.slug);
@@ -26,5 +27,10 @@ export function CinematicDirectorLabPage() {
   }
   if (detail.status !== "ready") return <RouteNotFound />;
 
-  return <CinematicDirectorStage route={detail.route} />;
+  return (
+    <CinematicDirectorStage
+      renderMode={searchParams.get("render") === "1"}
+      route={detail.route}
+    />
+  );
 }

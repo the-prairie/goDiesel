@@ -71,6 +71,10 @@ for (const route of ROUTES) {
 
     await page.getByRole("button", { name: "Play Route Film" }).click();
     await expect(page.getByTestId("cinematic-chapter")).toBeVisible();
+    await expect(page.locator("gmp-polyline-3d")).toHaveAttribute(
+      "data-route-visible",
+      "false",
+    );
     const cameraMotion = await measureOpeningCameraMotion(page);
     expect(cameraMotion.maxHeadingDelta).toBeLessThan(6);
     expect(cameraMotion.maxTargetStepM).toBeLessThan(100);
@@ -83,6 +87,10 @@ for (const route of ROUTES) {
     await progress.focus();
     await page.keyboard.press("End");
     await expect(page.getByTestId("cinematic-decision")).toBeVisible();
+    await expect(page.locator("gmp-polyline-3d")).toHaveAttribute(
+      "data-route-visible",
+      "true",
+    );
     await expect(
       page.getByRole("link", { name: "Enter the route" }),
     ).toHaveAttribute("href", `#/lab/google-route-navigator/${route.slug}`);

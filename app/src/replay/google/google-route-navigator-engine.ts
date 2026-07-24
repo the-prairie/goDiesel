@@ -39,6 +39,7 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
   private map?: google.maps.maps3d.Map3DElement;
   private routeLine?: google.maps.maps3d.Polyline3DElement;
   private routePath: Array<{ lat: number; lng: number }> = [];
+  private routeWidth = 8;
   private following = true;
   private headingDeg?: number;
   private headingSmoothing = 0.14;
@@ -134,6 +135,7 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
       this.map = map;
       this.routeLine = routeLine;
       this.routePath = routePath;
+      this.routeWidth = routeStyle?.width ?? 8;
       onStatus({ state: "ready", message: "Native Google 3D route world ready." });
     } catch (error) {
       if (generation !== this.generation) return;
@@ -178,6 +180,15 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
 
   setRouteReveal(progress: number) {
     if (!this.routeLine || this.routePath.length < 2) return;
+    if (progress <= 0) {
+      this.routeLine.dataset.routeVisible = "false";
+      this.routeLine.style.display = "none";
+      this.routeLine.path = this.routePath.slice(0, 2);
+      return;
+    }
+    this.routeLine.dataset.routeVisible = "true";
+    this.routeLine.style.display = "";
+    this.routeLine.strokeWidth = this.routeWidth;
     const bounded = Math.min(1, Math.max(0.01, progress));
     const visibleCount = Math.max(
       2,

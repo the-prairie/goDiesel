@@ -615,6 +615,7 @@ export function cinematicFrame(
     shot.headingOffsetTo,
     eased,
   );
+  const threadHidden = shot.threadBehind === 0 && shot.threadAhead === 0;
 
   return {
     chapter: shot.chapter,
@@ -640,8 +641,12 @@ export function cinematicFrame(
     shotCount: shots.length,
     shotIndex,
     target,
-    threadStartRatio: clamp(routeProgressRatio - shot.threadBehind),
-    threadEndRatio: clamp(routeProgressRatio + shot.threadAhead),
+    threadStartRatio: threadHidden
+      ? 0
+      : clamp(routeProgressRatio - shot.threadBehind),
+    threadEndRatio: threadHidden
+      ? 0
+      : clamp(routeProgressRatio + shot.threadAhead),
     look: shot.look,
   };
 }

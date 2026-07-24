@@ -45,7 +45,7 @@ export class NativeCinematicRenderer {
     this.setFrame(frame);
   }
 
-  setFrame(frame: CinematicFrame) {
+  setFrame(frame: CinematicFrame, force = false) {
     const desired: GoogleRouteCameraPose = {
       center: { lat: frame.target.lat, lng: frame.target.lng },
       fovDeg: focalLengthToFieldOfView(frame.lensMm),
@@ -63,7 +63,7 @@ export class NativeCinematicRenderer {
     const isSeek =
       elapsedDelta < 0 || elapsedDelta > 0.75 || !Number.isFinite(elapsedDelta);
 
-    if (!isChapterCut && !isSeek && elapsedDelta < 1 / 15) return;
+    if (!force && !isChapterCut && !isSeek && elapsedDelta < 1 / 15) return;
 
     const camera =
       !this.renderedCamera || isChapterCut || isSeek

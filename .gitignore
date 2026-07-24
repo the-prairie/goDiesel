@@ -25,6 +25,7 @@ venv/
 /photos/
 /dist/
 /app/dist/
+/app/artifacts/
 
 # Cloudflare/Wrangler local account cache
 .wrangler/

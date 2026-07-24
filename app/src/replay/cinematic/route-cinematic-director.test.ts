@@ -72,10 +72,12 @@ describe("route cinematic director", () => {
 
   it("directs the route film as five editorial acts with real cuts", () => {
     const duration = cinematicDuration(route, "feature");
+    const opening = cinematicFrame(route, "feature", 2);
     const frames = Array.from({ length: 300 }, (_, index) =>
       cinematicFrame(route, "feature", (duration * index) / 299),
     );
     expect(new Set(frames.map((frame) => frame.chapter)).size).toBe(5);
+    expect(opening.threadEndRatio).toBe(0);
     expect(Math.min(...frames.map((frame) => frame.lensMm))).toBeLessThan(35);
     expect(Math.max(...frames.map((frame) => frame.lensMm))).toBeGreaterThan(80);
     expect(frames.filter((frame) => frame.cutPulse > 0.7).length).toBeGreaterThan(
