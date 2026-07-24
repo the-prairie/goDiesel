@@ -2,6 +2,20 @@ import type { QuestRoute } from "@/domain/routes";
 import { bearingDegrees, routeDistanceM, routePathPose } from "@/replay/route-path";
 
 export type CinematicCut = "feature" | "monumental" | "kinetic" | "intimate";
+export type CinematicShotKind =
+  | "establishing"
+  | "reveal"
+  | "tracking"
+  | "summit"
+  | "release";
+
+export interface CinematicProfile {
+  character: "mountain" | "rolling" | "open";
+  maximumGradePct: number;
+  positiveGainM: number;
+  reliefM: number;
+  turningIntensityDeg: number;
+}
 
 export interface CinematicMoment {
   kind: "origin" | "summit" | "turn" | "climb" | "arrival";
@@ -23,12 +37,14 @@ export interface CinematicLook {
 export interface CinematicFrame {
   chapter: string;
   chapterProgress: number;
+  cameraResponseSeconds: number;
   cut: CinematicCut;
   cutPulse: number;
   elapsedSeconds: number;
   durationSeconds: number;
   headingDeg: number;
   lensMm: number;
+  motionIntensity: number;
   pitchDeg: number;
   progress: number;
   rangeM: number;
@@ -37,6 +53,7 @@ export interface CinematicFrame {
   showChapterTitle: boolean;
   shotCount: number;
   shotIndex: number;
+  shotKind: CinematicShotKind;
   target: { lat: number; lng: number; elev: number };
   threadEndRatio: number;
   threadStartRatio: number;
@@ -59,7 +76,14 @@ interface Shot {
   threadBehind: number;
   threadAhead: number;
   look: CinematicLook;
+  kind: CinematicShotKind;
 }
+
+const profileCache = new WeakMap<QuestRoute, CinematicProfile>();
+const shotPlanCache = new WeakMap<
+  QuestRoute,
+  Map<CinematicCut, readonly Shot[]>
+>();
 
 export const CINEMATIC_CUT_LABELS: Record<CinematicCut, string> = {
   feature: "Route Film",
@@ -200,6 +224,72 @@ export function cinematicMoments(route: QuestRoute): CinematicMoment[] {
   ];
 }
 
+export function cinematicProfile(route: QuestRoute): CinematicProfile {
+  const cached = profileCache.get(route);
+  if (cached) return cached;
+
+  const points = route.route;
+  if (points.length < 2) {
+    const empty: CinematicProfile = {
+      character: "open",
+      maximumGradePct: 0,
+      positiveGainM: 0,
+      reliefM: 0,
+      turningIntensityDeg: 0,
+    };
+    profileCache.set(route, empty);
+    return empty;
+  }
+
+  let minimumElevationM = points[0].elev;
+  let maximumElevationM = points[0].elev;
+  let maximumGradePct = 0;
+  let positiveGainM = 0;
+  let turningIntensityDeg = 0;
+
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1];
+    const point = points[index];
+    minimumElevationM = Math.min(minimumElevationM, point.elev);
+    maximumElevationM = Math.max(maximumElevationM, point.elev);
+    const distanceM = Math.max(1, point.d - previous.d);
+    const elevationDeltaM = point.elev - previous.elev;
+    if (elevationDeltaM > 0) positiveGainM += elevationDeltaM;
+    maximumGradePct = Math.max(
+      maximumGradePct,
+      Math.abs((elevationDeltaM / distanceM) * 100),
+    );
+
+    if (index < points.length - 1) {
+      const incoming = bearingDegrees(previous, point);
+      const outgoing = bearingDegrees(point, points[index + 1]);
+      turningIntensityDeg = Math.max(
+        turningIntensityDeg,
+        Math.abs(((outgoing - incoming + 540) % 360) - 180),
+      );
+    }
+  }
+
+  const reliefM = maximumElevationM - minimumElevationM;
+  const distanceKm = Math.max(0.1, routeDistanceM(route) / 1_000);
+  const gainDensity = positiveGainM / distanceKm;
+  const character =
+    reliefM >= 500 || gainDensity >= 45
+      ? "mountain"
+      : reliefM >= 80 || gainDensity >= 12
+        ? "rolling"
+        : "open";
+  const profile: CinematicProfile = {
+    character,
+    maximumGradePct,
+    positiveGainM,
+    reliefM,
+    turningIntensityDeg,
+  };
+  profileCache.set(route, profile);
+  return profile;
+}
+
 function looks(cut: CinematicCut): Record<string, CinematicLook> {
   const feature = {
     bloom: 0.1,
@@ -246,9 +336,17 @@ function looks(cut: CinematicCut): Record<string, CinematicLook> {
   };
 }
 
-function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
+function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
   const totalDistanceM = routeDistanceM(route);
-  const scale = clamp(totalDistanceM / 25_000, 0.72, 1.45);
+  const profile = cinematicProfile(route);
+  const terrainScale =
+    profile.character === "mountain"
+      ? 1.16
+      : profile.character === "open"
+        ? 0.9
+        : 1;
+  const scale =
+    clamp(totalDistanceM / 25_000, 0.72, 1.45) * terrainScale;
   const moments = cinematicMoments(route);
   const summit = moments.find((moment) => moment.kind === "summit")?.progressRatio ?? 0.55;
   const turn = moments.find((moment) => moment.kind === "turn")?.progressRatio ?? 0.38;
@@ -256,7 +354,7 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
   const activeLook = looks(cut).active;
 
   if (cut === "feature") {
-    return [
+    const featureShots: Shot[] = [
       {
         chapter: "Somewhere on Earth",
         duration: 6.4,
@@ -273,6 +371,7 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         threadBehind: 0,
         threadAhead: 0,
         look: activeLook,
+        kind: "establishing",
       },
       {
         chapter: "A line reveals itself",
@@ -290,6 +389,7 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         threadBehind: 0.012,
         threadAhead: 0.11,
         look: activeLook,
+        kind: "reveal",
       },
       {
         chapter: "The day begins to ask",
@@ -307,6 +407,7 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         threadBehind: 0.022,
         threadAhead: 0.065,
         look: activeLook,
+        kind: "tracking",
       },
       {
         chapter: "At the high point",
@@ -324,6 +425,7 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         threadBehind: 0.035,
         threadAhead: 0.055,
         look: activeLook,
+        kind: "summit",
       },
       {
         chapter: "The route remains",
@@ -341,12 +443,54 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         threadBehind: 0.12,
         threadAhead: 0.01,
         look: activeLook,
+        kind: "release",
       },
     ];
+    if (profile.turningIntensityDeg >= 70) {
+      featureShots.splice(3, 0, {
+        chapter: "The line changes direction",
+        duration: 5.2,
+        fromProgress: clamp(turn - 0.03),
+        toProgress: clamp(turn + 0.03),
+        fromRangeM: 980,
+        toRangeM: 720,
+        fromPitchDeg: -24,
+        toPitchDeg: -16,
+        headingOffsetFrom: -18,
+        headingOffsetTo: 22,
+        lensFromMm: 48,
+        lensToMm: 64,
+        threadBehind: 0.03,
+        threadAhead: 0.075,
+        look: activeLook,
+        kind: "tracking",
+      });
+    }
+    if (profile.character === "mountain" && profile.reliefM >= 700) {
+      featureShots.splice(featureShots.length - 1, 0, {
+        chapter: "Scale enters the frame",
+        duration: 6.6,
+        fromProgress: clamp(summit - 0.055),
+        toProgress: clamp(summit + 0.012),
+        fromRangeM: 2_600,
+        toRangeM: 1_300,
+        fromPitchDeg: -38,
+        toPitchDeg: -22,
+        headingOffsetFrom: -24,
+        headingOffsetTo: 14,
+        lensFromMm: 45,
+        lensToMm: 74,
+        threadBehind: 0.045,
+        threadAhead: 0.06,
+        look: activeLook,
+        kind: "summit",
+      });
+    }
+    return directShotPlan(featureShots, profile);
   }
 
   if (cut === "kinetic") {
-    return [
+    return directShotPlan([
       {
         chapter: "Ignition",
         duration: 3.2,
@@ -363,6 +507,7 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         threadBehind: 0.015,
         threadAhead: 0.09,
         look: activeLook,
+        kind: "establishing",
       },
       {
         chapter: "Acceleration",
@@ -380,6 +525,7 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         threadBehind: 0.018,
         threadAhead: 0.055,
         look: activeLook,
+        kind: "tracking",
       },
       {
         chapter: "The break",
@@ -397,6 +543,7 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         threadBehind: 0.022,
         threadAhead: 0.07,
         look: activeLook,
+        kind: "summit",
       },
       {
         chapter: "Release",
@@ -414,12 +561,13 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         threadBehind: 0.06,
         threadAhead: 0.03,
         look: activeLook,
+        kind: "release",
       },
-    ];
+    ], profile);
   }
 
   if (cut === "intimate") {
-    return [
+    return directShotPlan([
       {
         chapter: "Before the first step",
         duration: 5.2,
@@ -436,6 +584,7 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         threadBehind: 0.005,
         threadAhead: 0.04,
         look: activeLook,
+        kind: "establishing",
       },
       {
         chapter: "Inside the terrain",
@@ -453,6 +602,7 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         threadBehind: 0.012,
         threadAhead: 0.032,
         look: activeLook,
+        kind: "tracking",
       },
       {
         chapter: "What the day asks",
@@ -470,6 +620,7 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         threadBehind: 0.014,
         threadAhead: 0.04,
         look: activeLook,
+        kind: "summit",
       },
       {
         chapter: "Remember the line",
@@ -487,11 +638,12 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         threadBehind: 0.04,
         threadAhead: 0.02,
         look: activeLook,
+        kind: "release",
       },
-    ];
+    ], profile);
   }
 
-  return [
+  return directShotPlan([
     {
       chapter: "A place before a route",
       duration: 7,
@@ -508,6 +660,7 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
       threadBehind: 0,
       threadAhead: 0,
       look: activeLook,
+      kind: "establishing",
     },
     {
       chapter: "The line appears",
@@ -525,6 +678,7 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
       threadBehind: 0.04,
       threadAhead: 0.12,
       look: activeLook,
+      kind: "reveal",
     },
     {
       chapter: "The world becomes effort",
@@ -542,6 +696,7 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
       threadBehind: 0.025,
       threadAhead: 0.065,
       look: activeLook,
+      kind: "summit",
     },
     {
       chapter: "Would you take this line?",
@@ -559,12 +714,131 @@ function shotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
       threadBehind: 0.08,
       threadAhead: 0.01,
       look: activeLook,
+      kind: "release",
     },
-  ];
+  ], profile);
+}
+
+function directShotPlan(
+  shots: Shot[],
+  profile: CinematicProfile,
+): Shot[] {
+  const gradeIntensity = clamp(profile.maximumGradePct / 18);
+  const reliefIntensity = clamp(profile.reliefM / 800);
+  const turnIntensity = clamp(profile.turningIntensityDeg / 120);
+
+  return shots.map((shot) => {
+    const closeTerrain =
+      shot.kind === "tracking" || shot.kind === "summit";
+    const clearance = closeTerrain
+      ? 1 + gradeIntensity * 0.24 + reliefIntensity * 0.12
+      : 1 + reliefIntensity * 0.08;
+    const orbit =
+      shot.kind === "reveal" || shot.kind === "tracking"
+        ? turnIntensity * 13
+        : turnIntensity * 5;
+    const pitch =
+      closeTerrain ? gradeIntensity * -4.5 : reliefIntensity * -2;
+
+    return {
+      ...shot,
+      duration:
+        shot.duration *
+        (shot.kind === "tracking" ? 1 + turnIntensity * 0.08 : 1),
+      fromRangeM: shot.fromRangeM * clearance,
+      toRangeM: shot.toRangeM * clearance,
+      fromPitchDeg: shot.fromPitchDeg + pitch,
+      toPitchDeg: shot.toPitchDeg + pitch,
+      headingOffsetFrom: shot.headingOffsetFrom - orbit * 0.45,
+      headingOffsetTo: shot.headingOffsetTo + orbit * 0.55,
+    };
+  });
+}
+
+function shotPlan(route: QuestRoute, cut: CinematicCut): readonly Shot[] {
+  const routePlans = shotPlanCache.get(route);
+  const cached = routePlans?.get(cut);
+  if (cached) return cached;
+  const plan = buildShotPlan(route, cut);
+  if (routePlans) {
+    routePlans.set(cut, plan);
+  } else {
+    shotPlanCache.set(route, new Map([[cut, plan]]));
+  }
+  return plan;
+}
+
+function cameraResponseSeconds(kind: CinematicShotKind) {
+  return {
+    establishing: 0.72,
+    reveal: 0.48,
+    tracking: 0.2,
+    summit: 0.38,
+    release: 0.82,
+  }[kind];
+}
+
+function motionIntensity(kind: CinematicShotKind, cut: CinematicCut) {
+  const base = {
+    establishing: 0.24,
+    reveal: 0.48,
+    tracking: 0.72,
+    summit: 0.34,
+    release: 0.28,
+  }[kind];
+  return clamp(base * (cut === "kinetic" ? 1.28 : cut === "intimate" ? 0.72 : 1));
+}
+
+function frameLook(
+  look: CinematicLook,
+  profile: CinematicProfile,
+  kind: CinematicShotKind,
+  localProgress: number,
+): CinematicLook {
+  const mountain = profile.character === "mountain";
+  const reveal = kind === "reveal";
+  const summit = kind === "summit";
+  return {
+    bloom: clamp(look.bloom + (reveal ? 0.05 : 0), 0, 0.3),
+    contrast: clamp(look.contrast + (mountain ? 0.035 : 0), 0.85, 1.25),
+    depthOfField: clamp(
+      look.depthOfField + (kind === "tracking" ? 0.04 : 0),
+      0,
+      0.28,
+    ),
+    exposure: clamp(
+      look.exposure + (summit ? 0.035 : 0) - localProgress * 0.012,
+      0.82,
+      1.08,
+    ),
+    fog: clamp(look.fog + (mountain && kind === "establishing" ? 0.06 : 0), 0, 0.3),
+    saturation: clamp(look.saturation + (reveal ? 0.035 : 0), 0.75, 1.08),
+    vignette: clamp(look.vignette + (kind === "tracking" ? 0.04 : 0), 0.12, 0.42),
+  };
 }
 
 export function cinematicDuration(route: QuestRoute, cut: CinematicCut) {
   return shotPlan(route, cut).reduce((total, shot) => total + shot.duration, 0);
+}
+
+export function cinematicShotTimeline(
+  route: QuestRoute,
+  cut: CinematicCut,
+): Array<{
+  endSeconds: number;
+  kind: CinematicShotKind;
+  startSeconds: number;
+}> {
+  let startSeconds = 0;
+  return shotPlan(route, cut).map((shot) => {
+    const timing = {
+      endSeconds: startSeconds + shot.duration,
+      kind: shot.kind,
+      startSeconds,
+    };
+    startSeconds = timing.endSeconds;
+    return timing;
+  });
 }
 
 export function cinematicFrame(
@@ -616,10 +890,13 @@ export function cinematicFrame(
     eased,
   );
   const threadHidden = shot.threadBehind === 0 && shot.threadAhead === 0;
+  const shotKind = shot.kind;
+  const profile = cinematicProfile(route);
 
   return {
     chapter: shot.chapter,
     chapterProgress: local,
+    cameraResponseSeconds: cameraResponseSeconds(shotKind),
     cut,
     cutPulse:
       elapsed === 0
@@ -632,6 +909,7 @@ export function cinematicFrame(
     durationSeconds,
     headingDeg: (routeHeading + headingOffset + 360) % 360,
     lensMm: interpolate(shot.lensFromMm, shot.lensToMm, eased),
+    motionIntensity: motionIntensity(shotKind, cut),
     pitchDeg: interpolate(shot.fromPitchDeg, shot.toPitchDeg, eased),
     progress: elapsed / durationSeconds,
     rangeM,
@@ -640,6 +918,7 @@ export function cinematicFrame(
     showChapterTitle: local >= 0.08 && local <= 0.36,
     shotCount: shots.length,
     shotIndex,
+    shotKind,
     target,
     threadStartRatio: threadHidden
       ? 0
@@ -647,6 +926,6 @@ export function cinematicFrame(
     threadEndRatio: threadHidden
       ? 0
       : clamp(routeProgressRatio + shot.threadAhead),
-    look: shot.look,
+    look: frameLook(shot.look, profile, shotKind, local),
   };
 }

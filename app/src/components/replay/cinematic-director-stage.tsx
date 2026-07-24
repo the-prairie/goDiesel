@@ -14,6 +14,8 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
+import { RecordedLightLayer } from "@/components/replay/recorded-light-layer";
+import { recordedLightAt } from "@/domain/recorded-light";
 import type { QuestRoute } from "@/domain/routes";
 import { CinematicSoundscape } from "@/replay/cinematic/cinematic-soundscape";
 import {
@@ -23,11 +25,13 @@ import { NativeCinematicRenderer } from "@/replay/cinematic/native-cinematic-ren
 import {
   CINEMATIC_CUT_LABELS,
   cinematicFrame,
+  cinematicProfile,
+  cinematicShotTimeline,
   type CinematicCut,
 } from "@/replay/cinematic/route-cinematic-director";
 
 const CUT_DESCRIPTIONS: Record<CinematicCut, string> = {
-  feature: "The complete five-act film, directed from the recorded route.",
+  feature: "A route-directed film shaped by the recorded terrain and line.",
   monumental: "Scale, silence, and the full weight of the landscape.",
   kinetic: "A faster line built from speed, turns, and release.",
   intimate: "Closer to the ground, with the effort left in the frame.",
@@ -42,6 +46,16 @@ function routeLogline(route: QuestRoute) {
   const curated = route.curation.vibe || route.curation.editorialNote;
   if (curated) return curated;
   return `${route.distanceKm.toFixed(1)} kilometres through ${route.region}, with ${route.elevationGainM.toLocaleString()} metres of climbing.`;
+}
+
+function recordedGrade(phase: ReturnType<typeof recordedLightAt>["phase"]) {
+  return {
+    neutral: { hue: 0, sepia: 0 },
+    dawn: { hue: -4, sepia: 0.08 },
+    midday: { hue: 0, sepia: 0.015 },
+    dusk: { hue: -8, sepia: 0.12 },
+    night: { hue: 8, sepia: 0.04 },
+  }[phase];
 }
 
 export function CinematicDirectorStage({
@@ -171,6 +185,13 @@ export function CinematicDirectorStage({
   const ready = status.state === "ready" || status.state === "partial";
   const preRoll =
     !renderMode && ready && frame.elapsedSeconds === 0 && !playing;
+  const profile = cinematicProfile(route);
+  const recordedLight = recordedLightAt(
+    route.route,
+    route.provenance.temporal,
+    frame.routeProgressM,
+  );
+  const grade = recordedGrade(recordedLight.phase);
 
   return (
     <section
@@ -180,36 +201,71 @@ export function CinematicDirectorStage({
       data-cut={cut}
       data-duration={frame.durationSeconds}
       data-frame-seconds={frame.elapsedSeconds.toFixed(3)}
+      data-light-phase={recordedLight.phase}
       data-render-mode={renderMode ? "true" : "false"}
+      data-shot-count={frame.shotCount}
+      data-shot-kind={frame.shotKind}
+      data-shot-timeline={JSON.stringify(cinematicShotTimeline(route, cut))}
       data-state={status.state}
+      data-terrain-character={profile.character}
       data-testid="cinematic-director"
     >
       <div
         aria-label={`Photorealistic cinematic view of ${route.name}`}
         className="absolute inset-0"
         data-route-points={route.route.length}
+        data-testid="cinematic-world"
         ref={containerRef}
         style={{
-          filter: `brightness(${frame.look.exposure}) contrast(${frame.look.contrast}) saturate(${frame.look.saturation})`,
+          filter: [
+            `brightness(${frame.look.exposure})`,
+            `contrast(${frame.look.contrast})`,
+            `saturate(${frame.look.saturation})`,
+            `sepia(${grade.sepia})`,
+            `hue-rotate(${grade.hue}deg)`,
+            `blur(${(frame.cutPulse * 0.7).toFixed(2)}px)`,
+          ].join(" "),
+        }}
+      />
+      <RecordedLightLayer light={recordedLight} reducedMotion={renderMode} />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-[2] bg-[linear-gradient(180deg,rgba(3,5,5,0.62)_0%,transparent_24%,transparent_64%,rgba(3,5,5,0.92)_100%)]"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-[3]"
+        style={{
+          boxShadow: `inset 0 0 ${8 + frame.look.vignette * 18}rem rgba(0,0,0,${0.28 + frame.look.vignette * 0.82})`,
         }}
       />
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(3,5,5,0.62)_0%,transparent_24%,transparent_64%,rgba(3,5,5,0.92)_100%)]"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 shadow-[inset_0_0_12rem_rgba(0,0,0,0.58)]"
-      />
-      <div
-        aria-hidden="true"
-        className={`pointer-events-none absolute inset-0 mix-blend-color ${
+        className={`pointer-events-none absolute inset-0 z-[4] mix-blend-color ${
           cut === "kinetic"
             ? "bg-[#2f6f77]/7"
             : cut === "intimate"
               ? "bg-[#8b704e]/12"
               : "bg-[#2c4251]/11"
         }`}
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-[5] mix-blend-screen"
+        style={{
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.04) 18%, transparent 48%)",
+          opacity: frame.look.bloom,
+        }}
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-[6] mix-blend-soft-light"
+        style={{
+          background:
+            "repeating-conic-gradient(from 12deg at 50% 50%, rgba(255,255,255,0.025) 0deg 0.08deg, rgba(0,0,0,0.022) 0.08deg 0.16deg)",
+          opacity: 0.14,
+        }}
       />
       <div
         aria-hidden="true"

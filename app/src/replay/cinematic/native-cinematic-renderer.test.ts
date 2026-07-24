@@ -37,4 +37,21 @@ describe("native cinematic camera stabilizer", () => {
     expect(twoSteps.headingDeg).toBeCloseTo(oneStep.headingDeg, 8);
     expect(twoSteps.rangeM).toBeCloseTo(oneStep.rangeM, 8);
   });
+
+  it("uses the directed response time for fast and restrained shots", () => {
+    const fast = stabilizeCamera(start, target, 0.1, 0.12);
+    const restrained = stabilizeCamera(start, target, 0.1, 0.82);
+    expect(Math.abs(fast.rangeM - target.rangeM)).toBeLessThan(
+      Math.abs(restrained.rangeM - target.rangeM),
+    );
+    expect(Math.abs(fast.center.lng - target.center.lng)).toBeLessThan(
+      Math.abs(restrained.center.lng - target.center.lng),
+    );
+  });
+
+  it("clamps extremely short response times to a stable floor", () => {
+    const clamped = stabilizeCamera(start, target, 0.1, 0.01);
+    const floor = stabilizeCamera(start, target, 0.1, 0.08);
+    expect(clamped).toEqual(floor);
+  });
 });

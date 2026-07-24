@@ -68,7 +68,12 @@ export class NativeCinematicRenderer {
     const camera =
       !this.renderedCamera || isChapterCut || isSeek
         ? desired
-        : stabilizeCamera(this.renderedCamera, desired, elapsedDelta);
+        : stabilizeCamera(
+            this.renderedCamera,
+            desired,
+            elapsedDelta,
+            frame.cameraResponseSeconds,
+          );
     this.renderedCamera = camera;
     this.lastElapsedSeconds = frame.elapsedSeconds;
     this.lastChapter = frame.chapter;
@@ -114,8 +119,13 @@ export function stabilizeCamera(
   current: GoogleRouteCameraPose,
   desired: GoogleRouteCameraPose,
   elapsedSeconds: number,
+  responseSeconds = 0.2,
 ): GoogleRouteCameraPose {
-  const amount = 1 - Math.exp(-Math.max(0, elapsedSeconds) / 0.2);
+  const amount =
+    1 -
+    Math.exp(
+      -Math.max(0, elapsedSeconds) / Math.max(0.08, responseSeconds),
+    );
   return {
     center: {
       lat: interpolate(current.center.lat, desired.center.lat, amount),
