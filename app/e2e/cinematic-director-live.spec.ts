@@ -86,7 +86,7 @@ for (const route of ROUTES) {
       timeout: 30_000,
     });
     await expect(page.locator("gmp-map-3d")).toBeVisible();
-    await expect(page.locator("gmp-polyline-3d")).toHaveCount(1);
+    await expect(page.locator("gmp-polyline-3d")).toHaveCount(3);
     await expect(page.getByTestId("cinematic-preroll")).toBeVisible();
     await expect(director).toHaveAttribute("data-cut", "feature");
     await expect(
@@ -112,7 +112,7 @@ for (const route of ROUTES) {
       body: visual,
       contentType: "image/png",
     });
-    await expect(page.locator("gmp-polyline-3d")).toHaveAttribute(
+    await expect(page.locator('[data-thread-layer="thread"]')).toHaveAttribute(
       "data-route-visible",
       "false",
     );
@@ -129,18 +129,20 @@ for (const route of ROUTES) {
     await page.keyboard.press("End");
     await expect(page.getByTestId("cinematic-decision")).toBeVisible();
     await expect(director).toHaveAttribute("data-shot-kind", "release");
-    await expect(page.locator("gmp-polyline-3d")).toHaveAttribute(
+    await expect(page.locator('[data-thread-layer="thread"]')).toHaveAttribute(
       "data-route-visible",
       "true",
     );
     await expect(
-      page.getByRole("link", { name: "Enter the route" }),
+      page.getByRole("link", { name: "Run the route" }),
     ).toHaveAttribute("href", `#/lab/google-route-navigator/${route.slug}`);
 
-    const routeColor = await page.locator("gmp-polyline-3d").evaluate((element) => {
-      return (element as HTMLElement & { strokeColor?: string }).strokeColor;
-    });
-    expect(routeColor?.toLowerCase()).toBe("#f16c4b");
+    const routeColor = await page
+      .locator('[data-thread-layer="glint"]')
+      .evaluate((element) => {
+        return (element as HTMLElement & { strokeColor?: string }).strokeColor;
+      });
+    expect(routeColor?.toLowerCase()).toBe("#fffdf1");
   });
 }
 
@@ -164,7 +166,7 @@ test("keeps the Crete director decision usable on a phone", async ({ page }) => 
   const decision = page.getByTestId("cinematic-decision");
   await expect(decision).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Enter the route" }),
+    page.getByRole("link", { name: "Run the route" }),
   ).toBeVisible();
   const box = await decision.boundingBox();
   expect(box).not.toBeNull();

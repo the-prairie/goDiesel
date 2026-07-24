@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import type { GoogleRouteCameraPose } from "@/replay/google-route-navigator-controller";
 import { stabilizeCamera } from "@/replay/cinematic/native-cinematic-renderer";
+import {
+  buildCinematicThreadStyles,
+  slicePathByRatio,
+} from "@/replay/cinematic/cinematic-route-filament";
 
 const start: GoogleRouteCameraPose = {
   center: { lat: 37.76, lng: -122.45 },
@@ -53,5 +57,72 @@ describe("native cinematic camera stabilizer", () => {
     const clamped = stabilizeCamera(start, target, 0.1, 0.01);
     const floor = stabilizeCamera(start, target, 0.1, 0.08);
     expect(clamped).toEqual(floor);
+  });
+});
+
+describe("cinematic route filament", () => {
+  it("builds a restrained guide, warm thread, and luminous focus", () => {
+    const styles = buildCinematicThreadStyles(
+      {
+        endRatio: 0.68,
+        focusRatio: 0.61,
+        motionIntensity: 0.8,
+        rangeM: 1_200,
+        shotKind: "tracking",
+        startRatio: 0.31,
+      },
+      21_500,
+    );
+    expect(styles).toHaveLength(3);
+    const thread = styles.find(({ role }) => role === "thread");
+    const future = styles.find(({ role }) => role === "future");
+    const glint = styles.find(({ role }) => role === "glint");
+    expect(thread?.endRatio).toBe(0.61);
+    expect(thread?.startRatio).toBe(0.31);
+    expect(future?.opacity ?? 1).toBeLessThan(thread?.opacity ?? 0);
+    expect(glint?.color).toBe("#fffdf1");
+  });
+
+  it("makes the complete route quieter for the release shot", () => {
+    const tracking = buildCinematicThreadStyles(
+      {
+        endRatio: 0.9,
+        focusRatio: 0.82,
+        motionIntensity: 0.7,
+        rangeM: 2_000,
+        shotKind: "tracking",
+        startRatio: 0.4,
+      },
+      21_500,
+    );
+    const release = buildCinematicThreadStyles(
+      {
+        endRatio: 1,
+        focusRatio: 1,
+        motionIntensity: 0.2,
+        rangeM: 4_500,
+        shotKind: "release",
+        startRatio: 0,
+      },
+      21_500,
+    );
+    const opacity = (styles: typeof tracking, role: string) =>
+      styles.find((style) => style.role === role)?.opacity ?? 0;
+    expect(opacity(release, "thread")).toBeLessThan(
+      opacity(tracking, "thread"),
+    );
+  });
+
+  it("interpolates both ends of a route segment", () => {
+    const path = [
+      { lat: 0, lng: 0 },
+      { lat: 10, lng: 10 },
+      { lat: 20, lng: 20 },
+    ];
+    expect(slicePathByRatio(path, 0.25, 0.75)).toEqual([
+      { lat: 5, lng: 5 },
+      { lat: 10, lng: 10 },
+      { lat: 15, lng: 15 },
+    ]);
   });
 });

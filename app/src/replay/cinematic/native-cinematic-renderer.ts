@@ -6,6 +6,7 @@ import {
   type GoogleRouteNavigatorEngine,
 } from "@/replay/google/google-route-navigator-engine";
 import type { GoogleRouteCameraPose } from "@/replay/google-route-navigator-controller";
+import { routeDistanceM } from "@/replay/route-path";
 
 interface MountOptions {
   container: HTMLElement;
@@ -20,11 +21,13 @@ export class NativeCinematicRenderer {
   private lastElapsedSeconds?: number;
   private lastChapter?: string;
   private lastCut?: CinematicFrame["cut"];
+  private totalDistanceM = 1;
 
   async mount({ container, route, frame, onStatus }: MountOptions) {
     container.dataset.cinematicState = "loading";
     const engine = createGoogleRouteNavigatorEngine();
     this.engine = engine;
+    this.totalDistanceM = Math.max(1, routeDistanceM(route));
     await engine.mount({
       apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
       container,
@@ -36,10 +39,11 @@ export class NativeCinematicRenderer {
         onStatus(status);
       },
       routeStyle: {
-        color: "#f16c4b",
-        outerColor: "#f8f4ea",
-        outerWidth: 0.42,
-        width: 7,
+        color: "#f49a70",
+        mode: "filament",
+        outerColor: "transparent",
+        outerWidth: 0,
+        width: 2,
       },
     });
     this.setFrame(frame);
@@ -79,7 +83,14 @@ export class NativeCinematicRenderer {
     this.lastChapter = frame.chapter;
     this.lastCut = frame.cut;
     this.engine?.setCamera(camera);
-    this.engine?.setRouteReveal(frame.threadEndRatio);
+    this.engine?.setCinematicRoute({
+      endRatio: frame.threadEndRatio,
+      focusRatio: frame.routeProgressM / this.totalDistanceM,
+      motionIntensity: frame.motionIntensity,
+      rangeM: frame.rangeM,
+      shotKind: frame.shotKind,
+      startRatio: frame.threadStartRatio,
+    });
   }
 
   setInteractive(enabled: boolean) {
@@ -93,6 +104,7 @@ export class NativeCinematicRenderer {
     this.lastElapsedSeconds = undefined;
     this.lastChapter = undefined;
     this.lastCut = undefined;
+    this.totalDistanceM = 1;
   }
 }
 

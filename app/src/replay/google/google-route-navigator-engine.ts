@@ -1,10 +1,17 @@
 import type { QuestRoute } from "@/domain/routes";
 import {
+  buildCinematicThreadStyles,
+  slicePathByRatio,
+  type CinematicFilamentRole,
+  type CinematicRouteTreatment,
+} from "@/replay/cinematic/cinematic-route-filament";
+import {
   densifyGoogleRoutePath,
   type GoogleRouteCameraPose,
   type GoogleRouteGroundingMode,
 } from "@/replay/google-route-navigator-controller";
 import { loadGoogleMaps } from "@/replay/google/google-maps-loader";
+import { routeDistanceM } from "@/replay/route-path";
 
 export type GoogleRouteNavigatorStatus =
   | { state: "loading"; message: string }
@@ -19,6 +26,7 @@ interface MountOptions {
   onStatus: (status: GoogleRouteNavigatorStatus) => void;
   routeStyle?: {
     color: string;
+    mode?: "filament" | "solid";
     outerColor: string;
     outerWidth: number;
     width: number;
@@ -31,14 +39,22 @@ export interface GoogleRouteNavigatorEngine {
   setCamera(pose: GoogleRouteCameraPose): void;
   setFollowing(following: boolean): void;
   setGrounding(mode: GoogleRouteGroundingMode): void;
+  setCinematicRoute(treatment: CinematicRouteTreatment): void;
   setRouteReveal(progress: number): void;
   destroy(): void;
+}
+
+interface FilamentLayer {
+  element: google.maps.maps3d.Polyline3DElement;
+  role: CinematicFilamentRole;
 }
 
 class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
   private map?: google.maps.maps3d.Map3DElement;
   private routeLine?: google.maps.maps3d.Polyline3DElement;
+  private filamentLayers: FilamentLayer[] = [];
   private routePath: Array<{ lat: number; lng: number }> = [];
+  private routeDistanceM = 1;
   private routeWidth = 8;
   private following = true;
   private headingDeg?: number;
@@ -116,25 +132,37 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
       });
 
       const routePath = densifyGoogleRoutePath(route);
-      const routeLine = new Polyline3DElement({
-        path: routePath,
-        strokeColor: routeStyle?.color ?? "#1c5bb8",
-        outerColor: routeStyle?.outerColor ?? "#f8f5ed",
-        strokeWidth: routeStyle?.width ?? 8,
-        outerWidth: routeStyle?.outerWidth ?? 0.34,
-        altitudeMode:
-          groundingMode === "mesh"
-            ? AltitudeMode.RELATIVE_TO_MESH
-            : AltitudeMode.CLAMP_TO_GROUND,
-        drawsOccludedSegments: false,
-        geodesic: false,
-        zIndex: 10,
-      });
-      map.append(routeLine);
+      const altitudeMode =
+        groundingMode === "mesh"
+          ? AltitudeMode.RELATIVE_TO_MESH
+          : AltitudeMode.CLAMP_TO_GROUND;
+      let routeLine: google.maps.maps3d.Polyline3DElement | undefined;
+      if (routeStyle?.mode === "filament") {
+        this.filamentLayers = createFilamentLayers({
+          Polyline3DElement,
+          altitudeMode,
+          map,
+          routePath,
+        });
+      } else {
+        routeLine = new Polyline3DElement({
+          path: routePath,
+          strokeColor: routeStyle?.color ?? "#1c5bb8",
+          outerColor: routeStyle?.outerColor ?? "#f8f5ed",
+          strokeWidth: routeStyle?.width ?? 8,
+          outerWidth: routeStyle?.outerWidth ?? 0.34,
+          altitudeMode,
+          drawsOccludedSegments: false,
+          geodesic: false,
+          zIndex: 10,
+        });
+        map.append(routeLine);
+      }
       container.replaceChildren(map);
       this.map = map;
       this.routeLine = routeLine;
       this.routePath = routePath;
+      this.routeDistanceM = Math.max(1, routeDistanceM(route));
       this.routeWidth = routeStyle?.width ?? 8;
       onStatus({ state: "ready", message: "Native Google 3D route world ready." });
     } catch (error) {
@@ -171,11 +199,39 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
   }
 
   setGrounding(mode: GoogleRouteGroundingMode) {
-    if (!this.routeLine || !window.google?.maps?.maps3d?.AltitudeMode) return;
-    this.routeLine.altitudeMode =
+    if (!window.google?.maps?.maps3d?.AltitudeMode) return;
+    const altitudeMode =
       mode === "mesh"
         ? google.maps.maps3d.AltitudeMode.RELATIVE_TO_MESH
         : google.maps.maps3d.AltitudeMode.CLAMP_TO_GROUND;
+    if (this.routeLine) this.routeLine.altitudeMode = altitudeMode;
+    this.filamentLayers.forEach(({ element }) => {
+      element.altitudeMode = altitudeMode;
+    });
+  }
+
+  setCinematicRoute(treatment: CinematicRouteTreatment) {
+    if (this.filamentLayers.length === 0 || this.routePath.length < 2) return;
+    const styles = buildCinematicThreadStyles(
+      treatment,
+      this.routeDistanceM,
+    );
+    for (const layer of this.filamentLayers) {
+      const style = styles.find(({ role }) => role === layer.role);
+      if (!style || style.endRatio <= style.startRatio) {
+        setLineVisibility(layer.element, false);
+        continue;
+      }
+      layer.element.path = slicePathByRatio(
+        this.routePath,
+        style.startRatio,
+        style.endRatio,
+      );
+      layer.element.strokeColor = style.color;
+      layer.element.strokeWidth = style.width;
+      setLineVisibility(layer.element, style.opacity > 0.01);
+      layer.element.style.opacity = String(style.opacity);
+    }
   }
 
   setRouteReveal(progress: number) {
@@ -202,7 +258,9 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
     this.map?.remove();
     this.map = undefined;
     this.routeLine = undefined;
+    this.filamentLayers = [];
     this.routePath = [];
+    this.routeDistanceM = 1;
     this.headingDeg = undefined;
     if (this.authFailure) {
       window.removeEventListener(
@@ -212,6 +270,45 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
       this.authFailure = undefined;
     }
   }
+}
+
+function createFilamentLayers({
+  Polyline3DElement,
+  altitudeMode,
+  map,
+  routePath,
+}: {
+  Polyline3DElement: typeof google.maps.maps3d.Polyline3DElement;
+  altitudeMode: google.maps.maps3d.AltitudeMode;
+  map: google.maps.maps3d.Map3DElement;
+  routePath: Array<{ lat: number; lng: number }>;
+}) {
+  const roles: FilamentLayer["role"][] = ["future", "thread", "glint"];
+  return roles.map((role, index) => {
+    const element = new Polyline3DElement({
+      path: routePath.slice(0, 2),
+      strokeColor: "rgba(255, 255, 255, 0)",
+      strokeWidth: 1,
+      outerWidth: 0,
+      altitudeMode,
+      drawsOccludedSegments: false,
+      geodesic: false,
+      zIndex: 10 + index,
+    });
+    element.dataset.threadLayer = role;
+    element.dataset.routeVisible = "false";
+    element.style.display = "none";
+    map.append(element);
+    return { element, role };
+  });
+}
+
+function setLineVisibility(
+  element: google.maps.maps3d.Polyline3DElement,
+  visible: boolean,
+) {
+  element.dataset.routeVisible = String(visible);
+  element.style.display = visible ? "" : "none";
 }
 
 function smoothMapHeading(current: number, target: number, amount: number) {
