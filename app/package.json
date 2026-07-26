@@ -13,6 +13,7 @@
     "test:e2e:earth": "GODIESEL_LIVE_EARTH_E2E=1 playwright test --config playwright.live.config.ts earth-replay-live.spec.ts",
     "test:e2e:atlas-live": "playwright test --config playwright.live.config.ts atlas-region-live.spec.ts",
     "test:bundle": "node scripts/check-bundle-budget.mjs",
+    "verify:ticket": "npm run typecheck && npm run build && npm run test:unit && playwright test e2e/navigation.spec.ts --grep \"root opens Atlas|compact Atlas navigation|every product surface|mobile bottom spine\"",
     "verify": "npm run typecheck && npm run test:unit && npm run build && npm run test:bundle && npm run test:e2e"
   },
   "dependencies": {
@@ -29,8 +30,7 @@
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-router-dom": "^7.18.1",
-    "tailwind-merge": "^3.4.0",
-    "three": "^0.184.0"
+    "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
@@ -39,7 +39,6 @@
     "@types/pngjs": "^6.0.5",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
-    "@types/three": "^0.184.1",
     "@vitejs/plugin-react": "^6.0.3",
     "pngjs": "^7.0.0",
     "tailwindcss": "^4.1.18",

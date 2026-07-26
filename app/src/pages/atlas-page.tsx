@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 
 import {
@@ -60,7 +67,7 @@ export function AtlasPage() {
     }, true);
   }, [selection.invalidRegion, selection.invalidRoute, updateSearchParams]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setRegionPresentationReady(false);
   }, [selectedRegion?.name]);
 

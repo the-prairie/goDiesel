@@ -245,6 +245,8 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
           viewer.camera.positionCartographic.height.toFixed(0);
         viewer.canvas.dataset.cameraTarget =
           viewer.camera.positionCartographic.height.toFixed(0);
+        viewer.canvas.dataset.cameraHeading = viewer.camera.heading.toFixed(6);
+        viewer.canvas.dataset.cameraPitch = viewer.camera.pitch.toFixed(6);
       });
       this.removeRenderErrorListener = viewer.scene.renderError.addEventListener(() => {
         onStatus({
@@ -357,6 +359,8 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     this.resetFrustumOffsets();
     viewer.canvas.dataset.cameraDurationMs = String(Math.round(duration * 1_000));
     viewer.canvas.dataset.cameraTarget = DEFAULT_VIEW.heightM.toFixed(0);
+    viewer.canvas.dataset.cameraHeading = "0.000000";
+    viewer.canvas.dataset.cameraPitch = (-CesiumMath.PI_OVER_TWO).toFixed(6);
   }
 
   destroy() {

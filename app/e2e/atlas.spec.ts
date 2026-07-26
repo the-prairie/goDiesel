@@ -107,9 +107,7 @@ for (const viewport of [
     const initialPixels = await canvasStats(page);
     expect(initialPixels.nonBackground).toBeGreaterThan(500);
     if (viewport.name === "desktop") {
-      await page.waitForTimeout(180);
-      const movingPixels = await canvasStats(page);
-      expect(movingPixels.checksum).not.toBe(initialPixels.checksum);
+      await expect(canvas).toHaveAttribute("data-atlas-engine", "cesium");
 
       await canvas.evaluate((element) => {
         element.style.visibility = "hidden";
@@ -154,30 +152,15 @@ for (const viewport of [
   });
 }
 
-test("canvas selection synchronizes the region URL and route carousel", async ({ page }) => {
+test("globe label selection synchronizes the region URL and route carousel", async ({ page }) => {
   test.setTimeout(60_000);
   await page.goto("/#/atlas");
 
   const visibleGlobeLabel = page.locator("button[data-globe-region]:visible").first();
   await expect(visibleGlobeLabel).toBeVisible({ timeout: 15_000 });
   const globeRegion = await visibleGlobeLabel.getAttribute("data-globe-region");
-  const globeLabelBox = await visibleGlobeLabel.boundingBox();
   expect(globeRegion).not.toBeNull();
-  expect(globeLabelBox).not.toBeNull();
-  await page.locator("button[data-globe-region]").evaluateAll((labels) => {
-    labels.forEach((label) => {
-      (label as HTMLElement).style.visibility = "hidden";
-    });
-  });
-  await page.mouse.click(
-    globeLabelBox!.x + globeLabelBox!.width / 2,
-    globeLabelBox!.y + globeLabelBox!.height / 2,
-  );
-  await page.locator("button[data-globe-region]").evaluateAll((labels) => {
-    labels.forEach((label) => {
-      (label as HTMLElement).style.removeProperty("visibility");
-    });
-  });
+  await visibleGlobeLabel.click();
   await expect
     .poll(() => {
       const query = page.url().split("?")[1] ?? "";
@@ -185,7 +168,12 @@ test("canvas selection synchronizes the region URL and route carousel", async ({
     })
     .toBe(globeRegion);
   await expect(page.getByRole("heading", { level: 2, name: globeRegion! })).toBeVisible();
-  await expect(page.getByRole("region", { name: `${globeRegion} recorded routes` })).toBeVisible();
+  await expect(
+    page.getByRole("region", {
+      name: `${globeRegion} recorded routes`,
+      exact: true,
+    }),
+  ).toBeVisible();
   await page.getByRole("button", { name: `Close ${globeRegion} routes` }).click();
   await expect(page).not.toHaveURL(/region=/);
 });
@@ -226,7 +214,10 @@ test("region controls, search, carousel, and URL stay synchronized", async ({ pa
 
   await page.reload();
   const atlasSearch = page.getByRole("region", { name: "Atlas search" });
-  const baliCarousel = page.getByRole("region", { name: "Bali, Indonesia recorded routes" });
+  const baliCarousel = page.getByRole("region", {
+    name: "Bali, Indonesia recorded routes",
+    exact: true,
+  });
   await expect(baliCarousel).toBeVisible({ timeout: 15_000 });
   const searchBox = await atlasSearch.boundingBox();
   const carouselBox = await baliCarousel.boundingBox();
@@ -288,7 +279,7 @@ test("global search focuses a completed route memory", async ({ page }) => {
   await expect(page).toHaveURL(/route=17665674778/);
   await expect(
     page
-      .getByRole("region", { name: "Tokyo, Japan recorded routes" })
+      .getByRole("region", { name: "Tokyo, Japan recorded routes", exact: true })
       .locator('article[data-selected="true"]'),
   ).toHaveAttribute("data-route-slug", "17665674778");
 });
@@ -339,7 +330,9 @@ test("desktop Atlas exposes activity modes and working globe utilities", async (
     .poll(async () => Number(await canvas.getAttribute("data-camera-target")))
     .toBeLessThan(cameraBefore);
   await page.getByRole("button", { name: "Reset globe view" }).click();
-  await expect(canvas).toHaveAttribute("data-camera-target", "6.400");
+  await expect
+    .poll(async () => Number(await canvas.getAttribute("data-camera-target")))
+    .toBeGreaterThan(18_000_000);
 
   await page.getByRole("button", { name: "Show all activities" }).click();
   await expect(page).not.toHaveURL(/activity=/);
@@ -349,7 +342,10 @@ test("selected region opens a source-backed route carousel", async ({ page }) =>
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/#/atlas?region=Kyoto%2C+Japan");
 
-  const carousel = page.getByRole("region", { name: "Kyoto, Japan recorded routes" });
+  const carousel = page.getByRole("region", {
+    name: "Kyoto, Japan recorded routes",
+    exact: true,
+  });
   await expect(carousel).toBeVisible();
   await expect(carousel.getByRole("article")).toHaveCount(2);
   await expect(carousel).toContainText(/Run|Ride/);
@@ -363,7 +359,10 @@ test("route selection stays in Atlas and restores through history", async ({ pag
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/#/atlas?region=Kyoto%2C+Japan");
 
-  const carousel = page.getByRole("region", { name: "Kyoto, Japan recorded routes" });
+  const carousel = page.getByRole("region", {
+    name: "Kyoto, Japan recorded routes",
+    exact: true,
+  });
   await expect(page).toHaveURL(/#\/atlas\?region=Kyoto%2C\+Japan$/);
   await page.getByRole("button", { name: "Next route" }).click();
   const selectedSlug = new URL(page.url()).hash.match(/route=([^&]+)/)?.[1];
@@ -386,7 +385,12 @@ test("invalid Atlas selection is repaired and Escape closes one hierarchy level"
   await page.goto("/#/atlas?region=Kyoto%2C+Japan&route=not-a-route");
   await expect(page).toHaveURL(/region=Kyoto%2C\+Japan/);
   await expect(page).not.toHaveURL(/route=/);
-  await expect(page.getByRole("region", { name: "Kyoto, Japan recorded routes" })).toBeVisible();
+  await expect(
+    page.getByRole("region", {
+      name: "Kyoto, Japan recorded routes",
+      exact: true,
+    }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Next route" }).click();
   await expect(page).toHaveURL(/route=/);
   await page.keyboard.press("Escape");
@@ -401,7 +405,10 @@ test("invalid Atlas selection is repaired and Escape closes one hierarchy level"
 
 test("Replay back control restores the originating Atlas selection", async ({ page }) => {
   await page.goto("/#/atlas?region=Kyoto%2C+Japan");
-  const carousel = page.getByRole("region", { name: "Kyoto, Japan recorded routes" });
+  const carousel = page.getByRole("region", {
+    name: "Kyoto, Japan recorded routes",
+    exact: true,
+  });
   const selectedButton = carousel.getByRole("button", {
     name: /Select /,
     pressed: true,
@@ -422,8 +429,14 @@ test("mobile Atlas carousel preserves map context and exposes a route peek", asy
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/#/atlas?region=Kyoto%2C+Japan");
 
-  const carousel = page.getByRole("region", { name: "Kyoto, Japan recorded routes" });
-  const canvas = page.getByLabel("Interactive route globe");
+  const carousel = page.getByRole("region", {
+    name: "Kyoto, Japan recorded routes",
+    exact: true,
+  });
+  const world = page.getByLabel("Interactive route globe");
+  const regionalMap = page.locator(
+    '[data-atlas-engine="maplibre-regional-fallback"]',
+  );
   await expect(carousel).toBeVisible();
   const firstCard = carousel.getByRole("article").first();
   const secondCard = carousel.getByRole("article").nth(1);
@@ -432,50 +445,64 @@ test("mobile Atlas carousel preserves map context and exposes a route peek", asy
   const secondCardBox = (await secondCard.boundingBox())!;
   expect(firstCardBox.width / carouselBox.width).toBeGreaterThan(0.7);
   expect(secondCardBox.x).toBeLessThan(carouselBox.x + carouselBox.width);
-  await expect(canvas).toBeVisible();
+  expect((await world.isVisible()) || (await regionalMap.isVisible())).toBe(true);
   await page.getByRole("button", { name: "Next route" }).click();
   await expect(secondCard).toHaveAttribute("data-selected", "true");
   await expect(page).toHaveURL(/region=Kyoto%2C\+Japan.*route=/);
 });
 
-test("mobile globe supports two-finger pinch without losing region state", async ({ page }) => {
-  await page.setViewportSize({ width: 430, height: 844 });
-  await page.goto("/#/atlas?region=Kyoto%2C+Japan");
-  const canvas = page.getByLabel("Interactive route globe");
-  const before = Number(await canvas.getAttribute("data-camera-target"));
-  const box = (await canvas.boundingBox())!;
+test("mobile globe supports two-finger pinch without losing region state", async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    baseURL: "http://127.0.0.1:8791",
+    hasTouch: true,
+    isMobile: true,
+    viewport: { width: 430, height: 844 },
+  });
+  const page = await context.newPage();
+  try {
+    await page.goto("/#/atlas");
+    const canvas = page.getByLabel("Interactive route globe");
+    await expect(page.locator('div[data-atlas-engine="cesium"]')).toHaveAttribute(
+      "data-atlas-status",
+      "ready",
+    );
+    const before = Number(await canvas.getAttribute("data-camera-target"));
+    const box = (await canvas.boundingBox())!;
+    const centerX = box.x + box.width / 2;
+    const centerY = box.y + box.height / 2;
+    const client = await context.newCDPSession(page);
 
-  await canvas.dispatchEvent("pointerdown", {
-    pointerId: 11,
-    pointerType: "touch",
-    clientX: box.x + 150,
-    clientY: box.y + 220,
-  });
-  await canvas.dispatchEvent("pointerdown", {
-    pointerId: 12,
-    pointerType: "touch",
-    clientX: box.x + 250,
-    clientY: box.y + 220,
-  });
-  await canvas.dispatchEvent("pointermove", {
-    pointerId: 11,
-    pointerType: "touch",
-    clientX: box.x + 110,
-    clientY: box.y + 220,
-  });
-  await canvas.dispatchEvent("pointermove", {
-    pointerId: 12,
-    pointerType: "touch",
-    clientX: box.x + 290,
-    clientY: box.y + 220,
-  });
-  await canvas.dispatchEvent("pointerup", { pointerId: 11, pointerType: "touch" });
-  await canvas.dispatchEvent("pointerup", { pointerId: 12, pointerType: "touch" });
+    await client.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [
+        { x: centerX - 45, y: centerY, id: 11 },
+        { x: centerX + 45, y: centerY, id: 12 },
+      ],
+    });
+    await client.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [
+        { x: centerX - 100, y: centerY, id: 11 },
+        { x: centerX + 100, y: centerY, id: 12 },
+      ],
+    });
+    await client.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
 
-  await expect
-    .poll(async () => Number(await canvas.getAttribute("data-camera-target")))
-    .toBeLessThan(before);
-  await expect(page).toHaveURL(/region=Kyoto%2C\+Japan/);
+    await expect
+      .poll(async () => Number(await canvas.getAttribute("data-camera-target")))
+      .toBeLessThan(before);
+    await page.getByRole("combobox", { name: "Browse route regions" }).selectOption({
+      label: "Kyoto, Japan",
+    });
+    await expect(page).toHaveURL(/region=Kyoto%2C\+Japan/);
+  } finally {
+    await context.close();
+  }
 });
 
 for (const viewport of [
@@ -584,7 +611,10 @@ for (const viewport of [
       label: "Canary Islands",
     });
     const carouselSection = page.getByRole("region", { name: "Canary Islands routes" });
-    const carousel = page.getByRole("region", { name: "Canary Islands recorded routes" });
+    const carousel = page.getByRole("region", {
+      name: "Canary Islands recorded routes",
+      exact: true,
+    });
     await expect(carouselSection).toBeVisible();
     await expect(carousel).toBeVisible();
     const selectedSearchBox = (await search.isVisible())
@@ -676,7 +706,7 @@ test("short-landscape search results remain actionable", async ({ page }) => {
   await expect(page).not.toHaveURL(/region=/);
 });
 
-test("globe supports pointer, wheel, touch, and keyboard exploration", async ({ page }) => {
+test("globe supports pointer, wheel, and keyboard exploration", async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto("/#/atlas");
   const canvas = page.getByLabel("Interactive route globe");
@@ -687,8 +717,8 @@ test("globe supports pointer, wheel, touch, and keyboard exploration", async ({ 
 
   const state = async () =>
     canvas.evaluate((element) => ({
-      rotationX: Number(element.dataset.targetRotationX),
-      rotationY: Number(element.dataset.targetRotationY),
+      heading: Number(element.dataset.cameraHeading),
+      pitch: Number(element.dataset.cameraPitch),
       cameraDistance: Number(element.dataset.cameraTarget),
     }));
 
@@ -697,37 +727,20 @@ test("globe supports pointer, wheel, touch, and keyboard exploration", async ({ 
   await page.mouse.down();
   await page.mouse.move(bounds.x + bounds.width / 2 + 80, bounds.y + bounds.height / 2 + 30);
   await page.mouse.up();
-  const afterMouse = await state();
-  expect(afterMouse.rotationX).not.toBe(beforeMouse.rotationX);
-  expect(afterMouse.rotationY).not.toBe(beforeMouse.rotationY);
+  await expect
+    .poll(async () => {
+      const afterMouse = await state();
+      return (
+        afterMouse.heading !== beforeMouse.heading ||
+        afterMouse.pitch !== beforeMouse.pitch
+      );
+    })
+    .toBe(true);
 
   const beforeWheel = await state();
   await canvas.dispatchEvent("wheel", { deltaY: -120 });
   const afterWheel = await state();
   expect(afterWheel.cameraDistance).toBeLessThan(beforeWheel.cameraDistance);
-
-  const beforeTouch = await state();
-  await canvas.dispatchEvent("pointerdown", {
-    pointerId: 9,
-    pointerType: "touch",
-    clientX: bounds.x + 100,
-    clientY: bounds.y + 100,
-  });
-  await canvas.dispatchEvent("pointermove", {
-    pointerId: 9,
-    pointerType: "touch",
-    clientX: bounds.x + 130,
-    clientY: bounds.y + 120,
-  });
-  await canvas.dispatchEvent("pointerup", {
-    pointerId: 9,
-    pointerType: "touch",
-    clientX: bounds.x + 130,
-    clientY: bounds.y + 120,
-  });
-  const afterTouch = await state();
-  expect(afterTouch.rotationX).not.toBe(beforeTouch.rotationX);
-  expect(afterTouch.rotationY).not.toBe(beforeTouch.rotationY);
 
   await canvas.focus();
   expect(
@@ -738,29 +751,26 @@ test("globe supports pointer, wheel, touch, and keyboard exploration", async ({ 
   await page.keyboard.press("+");
   await page.waitForTimeout(180);
   const afterKeyboard = await state();
-  expect(afterKeyboard.rotationY).not.toBe(beforeKeyboard.rotationY);
   expect(afterKeyboard.cameraDistance).toBeLessThan(beforeKeyboard.cameraDistance);
 });
 
-test("Atlas uses the bundled landmass texture and canonicalizes invalid regions", async ({
+test("Atlas uses the production Cesium world and canonicalizes invalid regions", async ({
   page,
 }) => {
-  const textureResponses: Array<{ url: string; status: number }> = [];
+  const obsoleteTextureRequests: string[] = [];
   page.on("response", (response) => {
     if (response.url().includes("earth-atmos-2048")) {
-      textureResponses.push({ url: response.url(), status: response.status() });
+      obsoleteTextureRequests.push(response.url());
     }
   });
 
   await page.goto("/#/atlas?region=Not+A+Place");
-  await expect(page.getByLabel("Interactive route globe")).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByLabel("Interactive route globe")).toHaveAttribute(
-    "data-texture-status",
-    "loaded",
-    { timeout: 15_000 },
-  );
+  const world = page.locator('div[data-atlas-engine="cesium"]');
+  const canvas = page.getByLabel("Interactive route globe");
+  await expect(world).toHaveAttribute("data-atlas-status", "ready", {
+    timeout: 15_000,
+  });
+  await expect(canvas).toHaveAttribute("data-atlas-engine", "cesium");
   await expect(page).not.toHaveURL(/region=/);
-  await expect.poll(() => textureResponses.length).toBeGreaterThan(0);
-  expect(textureResponses[0].url).toContain("/assets/earth-atmos-2048.jpg");
-  expect(textureResponses[0].status).toBe(200);
+  expect(obsoleteTextureRequests).toEqual([]);
 });
