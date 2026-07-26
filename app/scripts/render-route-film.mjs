@@ -11,14 +11,17 @@ import {
 import { dirname, extname, join, resolve } from "node:path";
 
 import { chromium } from "playwright";
+import { PNG } from "pngjs";
 
 import {
   createExportManifest,
   createFramePlan,
   DEFAULT_STABILITY_POLICY,
+  evaluateVisualQuality,
   evaluateVisualStability,
   exportFingerprint,
   resumeFrameIndex,
+  sampleVisualGrid,
   timelineVolumeExpression,
   visualSample,
 } from "./route-film-export.mjs";
@@ -162,6 +165,7 @@ try {
     fps,
     height,
     motionSamples,
+    qualityPolicyVersion: 1,
     route: slug,
     settleAttempts,
     settleDelayMs,
@@ -371,22 +375,41 @@ async function settleFrame(
   } = {},
 ) {
   const samples = [];
+  let finalImage;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     await page.waitForTimeout(delayMs);
     const image = await captureUngradedWorld(page);
+    finalImage = image;
     samples.push(visualSample(image));
     const result = evaluateVisualStability(samples, policy);
     if (result.stable) {
+      const visualQuality = evaluateVisualQuality(
+        sampleVisualGrid(PNG.sync.read(image)),
+      );
+      if (!visualQuality.accepted) {
+        throw new Error(
+          `Stable imagery failed visual quality with score ${visualQuality.score}: ${visualQuality.findings.join(", ") || "unspecified artifact"}.`,
+        );
+      }
       return {
         ...result,
         attempts: attempt + 1,
         settled: true,
+        visualQuality,
       };
     }
   }
 
   const result = evaluateVisualStability(samples, policy);
   if (allowUnsettled) {
+    const visualQuality = evaluateVisualQuality(
+      sampleVisualGrid(PNG.sync.read(finalImage)),
+    );
+    if (!visualQuality.accepted) {
+      throw new Error(
+        `Unsettled imagery failed visual quality with score ${visualQuality.score}: ${visualQuality.findings.join(", ") || "unspecified artifact"}.`,
+      );
+    }
     console.warn(
       `Capturing unsettled imagery after ${attempts} checks (change ${result.finalMeanPixelChange.toFixed(2)})`,
     );
@@ -394,6 +417,7 @@ async function settleFrame(
       ...result,
       attempts,
       settled: false,
+      visualQuality,
     };
   }
   throw new Error(

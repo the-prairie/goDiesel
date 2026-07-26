@@ -26,6 +26,40 @@ const route = {
   ],
 } as QuestRoute;
 
+const urbanCoastalRoute = {
+  ...route,
+  distanceKm: 14,
+  region: "San Francisco, California",
+  centerLat: 37.79,
+  centerLng: -122.43,
+  route: [
+    { lat: 37.807, lng: -122.474, elev: 8, d: 0 },
+    { lat: 37.808, lng: -122.447, elev: 14, d: 2_400 },
+    { lat: 37.801, lng: -122.43, elev: 24, d: 4_600 },
+    { lat: 37.789, lng: -122.421, elev: 31, d: 6_800 },
+    { lat: 37.776, lng: -122.423, elev: 18, d: 9_100 },
+    { lat: 37.765, lng: -122.438, elev: 11, d: 11_600 },
+    { lat: 37.754, lng: -122.451, elev: 6, d: 14_000 },
+  ],
+} as QuestRoute;
+
+const mountainRoute = {
+  ...route,
+  distanceKm: 14,
+  region: "Kananaskis, Alberta",
+  centerLat: 50.82,
+  centerLng: -115.12,
+  route: [
+    { lat: 50.79, lng: -115.18, elev: 1_280, d: 0 },
+    { lat: 50.8, lng: -115.16, elev: 1_560, d: 2_200 },
+    { lat: 50.815, lng: -115.145, elev: 1_940, d: 4_500 },
+    { lat: 50.83, lng: -115.13, elev: 2_360, d: 7_000 },
+    { lat: 50.842, lng: -115.105, elev: 2_080, d: 9_400 },
+    { lat: 50.855, lng: -115.08, elev: 1_720, d: 11_800 },
+    { lat: 50.87, lng: -115.06, elev: 1_410, d: 14_000 },
+  ],
+} as QuestRoute;
+
 describe("route cinematic director", () => {
   it("finds recorded dramatic moments", () => {
     const moments = cinematicMoments(route);
@@ -131,6 +165,56 @@ describe("route cinematic director", () => {
       openTracking.pitchDeg,
     );
     expect(mountainTracking.pitchDeg).toBeGreaterThanOrEqual(-25);
+  });
+
+  it("keeps low-relief urban coastal coverage inside a tile-friendly envelope", () => {
+    const opening = cinematicFrame(urbanCoastalRoute, "feature", 0);
+    const duration = cinematicDuration(urbanCoastalRoute, "feature");
+    const release = cinematicFrame(
+      urbanCoastalRoute,
+      "feature",
+      duration - 0.1,
+    );
+
+    expect(cinematicProfile(urbanCoastalRoute).character).toBe("open");
+    expect(opening.shotKind).toBe("establishing");
+    expect(opening.rangeM).toBeLessThanOrEqual(5_500);
+    expect(opening.lensMm).toBeGreaterThanOrEqual(36);
+    expect(opening.pitchDeg).toBeGreaterThanOrEqual(-58);
+    expect(release.shotKind).toBe("release");
+    expect(release.rangeM).toBeLessThanOrEqual(5_500);
+    expect(release.lensMm).toBeGreaterThanOrEqual(36);
+    expect(release.pitchDeg).toBeGreaterThanOrEqual(-58);
+  });
+
+  it("preserves mountain scale while adapting lens, range, and pitch", () => {
+    const coastalOpening = cinematicFrame(urbanCoastalRoute, "feature", 0);
+    const mountainOpening = cinematicFrame(mountainRoute, "feature", 0);
+    const coastalTracking = cinematicCameraRig(
+      urbanCoastalRoute,
+      "tracking",
+      0.42,
+      320,
+      -18,
+    );
+    const mountainTracking = cinematicCameraRig(
+      mountainRoute,
+      "tracking",
+      0.42,
+      320,
+      -18,
+    );
+
+    expect(cinematicProfile(mountainRoute).character).toBe("mountain");
+    expect(mountainOpening.rangeM).toBeGreaterThan(coastalOpening.rangeM);
+    expect(mountainOpening.lensMm).toBeLessThan(coastalOpening.lensMm);
+    expect(mountainOpening.pitchDeg).toBeLessThan(coastalOpening.pitchDeg);
+    expect(mountainOpening.rangeM).toBeLessThanOrEqual(7_000);
+    expect(mountainTracking.rangeM).toBeGreaterThan(coastalTracking.rangeM);
+    expect(mountainTracking.pitchDeg).toBeLessThan(-18);
+    expect(mountainTracking.terrainReliefM).toBeGreaterThan(
+      coastalTracking.terrainReliefM,
+    );
   });
 
   it.each([

@@ -94,6 +94,12 @@ interface Shot {
   kind: CinematicShotKind;
 }
 
+interface CoverageFraming {
+  maximumWideRangeM: number;
+  wideLensFloorMm: number;
+  widePitchFloorDeg: number;
+}
+
 function routeNoun(route: QuestRoute) {
   return route.type?.toLowerCase().includes("ride") ? "ride" : "run";
 }
@@ -236,6 +242,59 @@ function distanceBetweenM(
     111_320 *
     Math.cos((((from.lat + to.lat) / 2) * Math.PI) / 180);
   return Math.hypot(northM, eastM);
+}
+
+function coverageFraming(route: QuestRoute): CoverageFraming {
+  const profile = cinematicProfile(route);
+  const totalDistanceM = Math.max(1, routeDistanceM(route));
+  const points = route.route;
+  const latitudes = points.map((point) => point.lat);
+  const longitudes = points.map((point) => point.lng);
+  const routeSpanM =
+    points.length < 2
+      ? 0
+      : distanceBetweenM(
+          {
+            lat: Math.min(...latitudes),
+            lng: Math.min(...longitudes),
+          },
+          {
+            lat: Math.max(...latitudes),
+            lng: Math.max(...longitudes),
+          },
+        );
+  const gainDensity =
+    profile.positiveGainM / Math.max(0.1, totalDistanceM / 1_000);
+  const terrainIntensity = clamp(
+    profile.reliefM / 700 * 0.5 +
+      gainDensity / 55 * 0.3 +
+      profile.maximumGradePct / 18 * 0.2,
+  );
+  const directness = clamp(routeSpanM / totalDistanceM);
+  const sampleOpenness =
+    points.length < 2
+      ? 1
+      : Array.from({ length: 7 }, (_, index) =>
+          visualSignalAt(route, 0.08 + (index / 6) * 0.84),
+        ).reduce((total, signal) => total + signal.openness, 0) / 7;
+  const coverageRisk = clamp(
+    (1 - terrainIntensity) * (0.55 + directness * 0.2 + sampleOpenness * 0.25),
+  );
+  const openRangeM = clamp(totalDistanceM * 0.4, 3_600, 5_500);
+  const terrainRangeM = clamp(totalDistanceM * 0.46, 6_000, 7_000);
+  const geographicRangeM = interpolate(
+    openRangeM,
+    terrainRangeM,
+    terrainIntensity,
+  );
+
+  return {
+    maximumWideRangeM: geographicRangeM * (1 - coverageRisk * 0.045),
+    wideLensFloorMm:
+      interpolate(34, 29, terrainIntensity) + coverageRisk * 3,
+    widePitchFloorDeg:
+      interpolate(-60, -72, terrainIntensity) + coverageRisk * 3,
+  };
 }
 
 function visualSignalAt(route: QuestRoute, progressRatio: number) {
@@ -663,11 +722,11 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         kind: "summit",
       });
     }
-    return directShotPlan(featureShots, profile);
+    return directShotPlan(route, featureShots, profile);
   }
 
   if (cut === "kinetic") {
-    return directShotPlan([
+    return directShotPlan(route, [
       {
         chapter: "No more waiting",
         duration: 3.2,
@@ -744,7 +803,7 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
   }
 
   if (cut === "intimate") {
-    return directShotPlan([
+    return directShotPlan(route, [
       {
         chapter: "The quiet before movement",
         duration: 5.2,
@@ -820,7 +879,7 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
     ], profile);
   }
 
-  return directShotPlan([
+  return directShotPlan(route, [
     {
       chapter: "First, the world",
       duration: 7,
@@ -897,16 +956,20 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
 }
 
 function directShotPlan(
+  route: QuestRoute,
   shots: Shot[],
   profile: CinematicProfile,
 ): Shot[] {
   const gradeIntensity = clamp(profile.maximumGradePct / 18);
   const reliefIntensity = clamp(profile.reliefM / 800);
   const turnIntensity = clamp(profile.turningIntensityDeg / 120);
+  const framing = coverageFraming(route);
 
   return shots.map((shot) => {
     const closeTerrain =
       shot.kind === "tracking" || shot.kind === "summit";
+    const wideCoverage =
+      shot.kind === "establishing" || shot.kind === "release";
     const clearance = closeTerrain
       ? 1 + gradeIntensity * 0.24 + reliefIntensity * 0.12
       : 1 + reliefIntensity * 0.08;
@@ -916,18 +979,34 @@ function directShotPlan(
         : turnIntensity * 5;
     const pitch =
       closeTerrain ? gradeIntensity * -4.5 : reliefIntensity * -2;
+    const directRange = (rangeM: number) => {
+      const clearedRangeM = rangeM * clearance;
+      return wideCoverage
+        ? Math.min(clearedRangeM, framing.maximumWideRangeM)
+        : clearedRangeM;
+    };
+    const directPitch = (pitchDeg: number) =>
+      wideCoverage
+        ? Math.max(pitchDeg + pitch, framing.widePitchFloorDeg)
+        : pitchDeg + pitch;
+    const directLens = (lensMm: number) =>
+      wideCoverage
+        ? Math.max(lensMm, framing.wideLensFloorMm)
+        : lensMm;
 
     return {
       ...shot,
       duration:
         shot.duration *
         (shot.kind === "tracking" ? 1 + turnIntensity * 0.08 : 1),
-      fromRangeM: shot.fromRangeM * clearance,
-      toRangeM: shot.toRangeM * clearance,
-      fromPitchDeg: shot.fromPitchDeg + pitch,
-      toPitchDeg: shot.toPitchDeg + pitch,
+      fromRangeM: directRange(shot.fromRangeM),
+      toRangeM: directRange(shot.toRangeM),
+      fromPitchDeg: directPitch(shot.fromPitchDeg),
+      toPitchDeg: directPitch(shot.toPitchDeg),
       headingOffsetFrom: shot.headingOffsetFrom - orbit * 0.45,
       headingOffsetTo: shot.headingOffsetTo + orbit * 0.55,
+      lensFromMm: directLens(shot.lensFromMm),
+      lensToMm: directLens(shot.lensToMm),
     };
   });
 }
@@ -1003,6 +1082,7 @@ export function cinematicCameraRig(
 ) {
   const signal = visualSignalAt(route, progressRatio);
   const profile = cinematicProfile(route);
+  const framing = coverageFraming(route);
   const reliefIntensity = clamp(
     signal.localReliefM / Math.max(80, profile.reliefM * 0.34),
   );
@@ -1023,7 +1103,14 @@ export function cinematicCameraRig(
         summit: 2.1,
         release: 1.3,
       }[kind];
-  const rangeM = Math.max(requestedRangeM, minimumRangeM);
+  const wideCoverage = kind === "establishing" || kind === "release";
+  const maximumRangeM = wideCoverage
+    ? framing.maximumWideRangeM
+    : Number.POSITIVE_INFINITY;
+  const rangeM = Math.min(
+    Math.max(requestedRangeM, minimumRangeM),
+    maximumRangeM,
+  );
   const lookAheadFactor = {
     establishing: 0,
     reveal: 0.11,
@@ -1040,13 +1127,16 @@ export function cinematicCameraRig(
   const targetProgressRatio = clamp(
     (progressRatio * totalDistanceM + lookAheadM) / totalDistanceM,
   );
-  const horizonFloorDeg = {
+  const requestedHorizonFloorDeg = {
     establishing: -70,
     reveal: -42,
     tracking: -25,
     summit: -30,
     release: -60,
   }[kind];
+  const horizonFloorDeg = wideCoverage
+    ? Math.max(requestedHorizonFloorDeg, framing.widePitchFloorDeg)
+    : requestedHorizonFloorDeg;
   const pitchDeg = clamp(
     requestedPitchDeg - reliefIntensity * 5.5 - gradeIntensity * 2.5,
     horizonFloorDeg,

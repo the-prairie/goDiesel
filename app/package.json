@@ -17,6 +17,7 @@
     "test:e2e:cinematic-export-live": "GODIESEL_LIVE_GOOGLE_3D_E2E=1 playwright test --config playwright.live.config.ts cinematic-export-live.spec.ts --headed",
     "render:route-film": "node scripts/render-route-film.mjs",
     "render:route-film:4k": "node scripts/render-route-film.mjs --width=3840 --height=2160 --fps=24",
+    "render:route-film:review": "node scripts/render-route-film-review.mjs",
     "test:e2e:atlas-live": "playwright test --config playwright.live.config.ts atlas-region-live.spec.ts",
     "test:bundle": "node scripts/check-bundle-budget.mjs",
     "verify:ticket": "npm run typecheck && npm run build && npm run test:unit && playwright test e2e/navigation.spec.ts --grep \"root opens Atlas|compact Atlas navigation|every product surface|mobile bottom spine\"",
