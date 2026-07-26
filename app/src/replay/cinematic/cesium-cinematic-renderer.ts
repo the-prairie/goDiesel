@@ -93,7 +93,19 @@ export class CesiumCinematicRenderer {
   private depthOfField?: ReturnType<
     typeof PostProcessStageLibrary.createDepthOfFieldStage
   >;
+  private finishTileWait?: () => void;
+  private removeTilesLoadedListener?: () => void;
+  private tileWaitTimeout?: number;
   private generation = 0;
+
+  private clearTileWait() {
+    this.removeTilesLoadedListener?.();
+    this.removeTilesLoadedListener = undefined;
+    if (this.tileWaitTimeout !== undefined) {
+      window.clearTimeout(this.tileWaitTimeout);
+      this.tileWaitTimeout = undefined;
+    }
+  }
 
   async mount({ container, route, frame, onStatus }: MountOptions) {
     const generation = ++this.generation;
@@ -214,16 +226,21 @@ export class CesiumCinematicRenderer {
       }
 
       this.setFrame(frame);
-      await Promise.race([
-        new Promise<void>((resolve) => {
-          if (tileset.tilesLoaded) resolve();
-          const remove = tileset.allTilesLoaded.addEventListener(() => {
-            remove();
-            resolve();
-          });
-        }),
-        new Promise<void>((resolve) => window.setTimeout(resolve, 8_000)),
-      ]);
+      await new Promise<void>((resolve) => {
+        if (tileset.tilesLoaded) {
+          resolve();
+          return;
+        }
+        const finish = () => {
+          this.clearTileWait();
+          this.finishTileWait = undefined;
+          resolve();
+        };
+        this.finishTileWait = finish;
+        this.removeTilesLoadedListener =
+          tileset.allTilesLoaded.addEventListener(finish);
+        this.tileWaitTimeout = window.setTimeout(finish, 8_000);
+      });
       if (generation !== this.generation) return;
       container.dataset.cinematicState = "ready";
       onStatus({
@@ -288,6 +305,9 @@ export class CesiumCinematicRenderer {
 
   destroy() {
     this.generation += 1;
+    this.finishTileWait?.();
+    this.finishTileWait = undefined;
+    this.clearTileWait();
     const viewer = this.viewer;
     this.viewer = undefined;
     this.route = undefined;
