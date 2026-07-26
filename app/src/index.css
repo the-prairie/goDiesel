@@ -218,6 +218,28 @@
   font-family: var(--font-editorial);
 }
 
+@keyframes route-genome-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.route-genome-draw {
+  animation: route-genome-draw 1800ms var(--ease-interface) both;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-genome-draw {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
+
 .text-place-lg {
   font-size: var(--text-place-lg);
   line-height: 1.08;

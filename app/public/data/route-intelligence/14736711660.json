@@ -1,0 +1,882 @@
+{
+  "route_id": "14736711660",
+  "generated_at": "2026-07-22T07:12:41.546456+00:00",
+  "corridor_m": 350,
+  "signals": {
+    "built": 51.3,
+    "green": 32.0,
+    "water": 16.3,
+    "exposure": 14.1,
+    "change": 1.4
+  },
+  "samples": [
+    {
+      "distance_km": 0.0,
+      "built": 71.8,
+      "green": 15.5,
+      "water": 5.5,
+      "exposure": 11.0,
+      "change": 0.4
+    },
+    {
+      "distance_km": 0.63,
+      "built": 72.2,
+      "green": 14.1,
+      "water": 3.7,
+      "exposure": 10.7,
+      "change": 0.3
+    },
+    {
+      "distance_km": 1.2,
+      "built": 71.3,
+      "green": 16.5,
+      "water": 5.6,
+      "exposure": 24.8,
+      "change": 0.6
+    },
+    {
+      "distance_km": 1.85,
+      "built": 68.6,
+      "green": 14.9,
+      "water": 6.2,
+      "exposure": 17.7,
+      "change": 1.3
+    },
+    {
+      "distance_km": 2.46,
+      "built": 68.2,
+      "green": 19.0,
+      "water": 5.4,
+      "exposure": 13.3,
+      "change": 2.2
+    },
+    {
+      "distance_km": 3.03,
+      "built": 72.5,
+      "green": 15.7,
+      "water": 5.1,
+      "exposure": 9.0,
+      "change": 0.4
+    },
+    {
+      "distance_km": 3.65,
+      "built": 9.2,
+      "green": 79.6,
+      "water": 4.7,
+      "exposure": 24.1,
+      "change": 1.3
+    },
+    {
+      "distance_km": 4.24,
+      "built": 66.7,
+      "green": 21.5,
+      "water": 5.8,
+      "exposure": 20.7,
+      "change": 0.6
+    },
+    {
+      "distance_km": 4.86,
+      "built": 71.1,
+      "green": 17.8,
+      "water": 5.1,
+      "exposure": 10.0,
+      "change": 1.4
+    },
+    {
+      "distance_km": 5.46,
+      "built": 5.8,
+      "green": 83.5,
+      "water": 3.7,
+      "exposure": 18.7,
+      "change": 2.7
+    },
+    {
+      "distance_km": 6.02,
+      "built": 69.5,
+      "green": 18.6,
+      "water": 4.1,
+      "exposure": 5.7,
+      "change": 0.8
+    },
+    {
+      "distance_km": 6.63,
+      "built": 74.1,
+      "green": 14.8,
+      "water": 3.8,
+      "exposure": 7.7,
+      "change": 1.4
+    },
+    {
+      "distance_km": 7.27,
+      "built": 71.5,
+      "green": 14.9,
+      "water": 4.0,
+      "exposure": 9.0,
+      "change": 0.7
+    },
+    {
+      "distance_km": 7.82,
+      "built": 72.8,
+      "green": 15.4,
+      "water": 4.6,
+      "exposure": 6.1,
+      "change": 1.1
+    },
+    {
+      "distance_km": 8.46,
+      "built": 72.9,
+      "green": 15.2,
+      "water": 4.2,
+      "exposure": 4.3,
+      "change": 0.3
+    },
+    {
+      "distance_km": 9.09,
+      "built": 72.5,
+      "green": 15.5,
+      "water": 4.1,
+      "exposure": 4.9,
+      "change": 0.7
+    },
+    {
+      "distance_km": 9.66,
+      "built": 69.6,
+      "green": 17.8,
+      "water": 4.6,
+      "exposure": 3.9,
+      "change": 0.8
+    },
+    {
+      "distance_km": 10.29,
+      "built": 70.6,
+      "green": 16.3,
+      "water": 5.1,
+      "exposure": 16.0,
+      "change": 1.0
+    },
+    {
+      "distance_km": 10.83,
+      "built": 71.2,
+      "green": 18.1,
+      "water": 4.6,
+      "exposure": 11.3,
+      "change": 2.2
+    },
+    {
+      "distance_km": 11.44,
+      "built": 74.2,
+      "green": 15.1,
+      "water": 4.3,
+      "exposure": 16.4,
+      "change": 2.4
+    },
+    {
+      "distance_km": 12.06,
+      "built": 53.5,
+      "green": 26.5,
+      "water": 4.6,
+      "exposure": 17.5,
+      "change": 1.5
+    },
+    {
+      "distance_km": 12.63,
+      "built": 11.0,
+      "green": 29.3,
+      "water": 9.7,
+      "exposure": 66.7,
+      "change": 1.3
+    },
+    {
+      "distance_km": 13.26,
+      "built": 51.2,
+      "green": 19.5,
+      "water": 6.3,
+      "exposure": 17.2,
+      "change": 1.3
+    },
+    {
+      "distance_km": 13.86,
+      "built": 25.2,
+      "green": 60.8,
+      "water": 6.5,
+      "exposure": 12.1,
+      "change": 4.2
+    },
+    {
+      "distance_km": 14.43,
+      "built": 11.4,
+      "green": 73.4,
+      "water": 5.2,
+      "exposure": 19.3,
+      "change": 3.1
+    },
+    {
+      "distance_km": 15.09,
+      "built": 34.0,
+      "green": 49.3,
+      "water": 3.7,
+      "exposure": 13.6,
+      "change": 2.6
+    },
+    {
+      "distance_km": 15.74,
+      "built": 9.8,
+      "green": 77.8,
+      "water": 4.2,
+      "exposure": 14.4,
+      "change": 2.4
+    },
+    {
+      "distance_km": 16.34,
+      "built": 22.2,
+      "green": 55.8,
+      "water": 9.4,
+      "exposure": 13.0,
+      "change": 2.5
+    },
+    {
+      "distance_km": 16.98,
+      "built": 36.9,
+      "green": 44.9,
+      "water": 6.4,
+      "exposure": 10.9,
+      "change": 2.8
+    },
+    {
+      "distance_km": 17.65,
+      "built": 7.8,
+      "green": 74.3,
+      "water": 10.7,
+      "exposure": 11.4,
+      "change": 1.3
+    },
+    {
+      "distance_km": 18.24,
+      "built": 9.0,
+      "green": 79.6,
+      "water": 3.6,
+      "exposure": 33.5,
+      "change": 3.1
+    },
+    {
+      "distance_km": 18.85,
+      "built": 7.8,
+      "green": 64.4,
+      "water": 18.4,
+      "exposure": 5.3,
+      "change": 1.4
+    },
+    {
+      "distance_km": 19.42,
+      "built": 66.9,
+      "green": 19.3,
+      "water": 3.3,
+      "exposure": 12.4,
+      "change": 0.9
+    },
+    {
+      "distance_km": 20.04,
+      "built": 15.0,
+      "green": 68.5,
+      "water": 5.2,
+      "exposure": 14.0,
+      "change": 1.2
+    },
+    {
+      "distance_km": 20.69,
+      "built": 33.6,
+      "green": 49.9,
+      "water": 5.2,
+      "exposure": 8.6,
+      "change": 1.3
+    },
+    {
+      "distance_km": 21.24,
+      "built": 74.0,
+      "green": 14.2,
+      "water": 4.3,
+      "exposure": 2.3,
+      "change": 0.3
+    },
+    {
+      "distance_km": 21.86,
+      "built": 73.9,
+      "green": 14.3,
+      "water": 4.6,
+      "exposure": 5.6,
+      "change": 0.4
+    },
+    {
+      "distance_km": 22.46,
+      "built": 72.6,
+      "green": 16.2,
+      "water": 5.1,
+      "exposure": 17.6,
+      "change": 0.5
+    },
+    {
+      "distance_km": 23.02,
+      "built": 70.4,
+      "green": 16.9,
+      "water": 5.7,
+      "exposure": 19.9,
+      "change": 0.8
+    },
+    {
+      "distance_km": 23.66,
+      "built": 66.0,
+      "green": 20.8,
+      "water": 4.9,
+      "exposure": 2.2,
+      "change": 1.5
+    },
+    {
+      "distance_km": 24.28,
+      "built": 69.0,
+      "green": 16.8,
+      "water": 4.4,
+      "exposure": 10.2,
+      "change": 0.9
+    },
+    {
+      "distance_km": 24.85,
+      "built": 71.0,
+      "green": 16.4,
+      "water": 5.1,
+      "exposure": 14.2,
+      "change": 0.3
+    },
+    {
+      "distance_km": 25.47,
+      "built": 70.1,
+      "green": 16.0,
+      "water": 5.2,
+      "exposure": 17.7,
+      "change": 0.6
+    },
+    {
+      "distance_km": 26.06,
+      "built": 72.7,
+      "green": 13.7,
+      "water": 4.9,
+      "exposure": 6.1,
+      "change": 0.5
+    },
+    {
+      "distance_km": 26.73,
+      "built": 71.5,
+      "green": 14.5,
+      "water": 4.3,
+      "exposure": 8.6,
+      "change": 0.0
+    },
+    {
+      "distance_km": 27.32,
+      "built": 67.6,
+      "green": 15.5,
+      "water": 5.8,
+      "exposure": 24.9,
+      "change": 0.6
+    },
+    {
+      "distance_km": 27.89,
+      "built": 72.6,
+      "green": 13.3,
+      "water": 5.4,
+      "exposure": 19.8,
+      "change": 0.6
+    },
+    {
+      "distance_km": 28.47,
+      "built": 32.0,
+      "green": 21.3,
+      "water": 9.2,
+      "exposure": 20.4,
+      "change": 0.5
+    }
+  ],
+  "datasets": [
+    {
+      "id": "GOOGLE/DYNAMICWORLD/V1",
+      "role": "land-cover probabilities and recent environmental context"
+    },
+    {
+      "id": "COPERNICUS/DEM/GLO30_2024_1",
+      "role": "terrain slope and satellite elevation comparison"
+    },
+    {
+      "id": "GOOGLE/SATELLITE_EMBEDDING/V1/ANNUAL",
+      "role": "annual landscape-change signal"
+    },
+    {
+      "id": "COPERNICUS/S2_SR_HARMONIZED",
+      "role": "cloud-cleared true-color route scenes and seasonal composites"
+    }
+  ],
+  "visuals": [
+    {
+      "key": "portrait",
+      "label": "Recent cloud-cleared portrait",
+      "src": "/data/route-intelligence/14736711660/portrait.png",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED"
+    },
+    {
+      "key": "recorded-season",
+      "label": "Recorded season \u00b7 March 2025",
+      "src": "/data/route-intelligence/14736711660/recorded-season.png",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED"
+    },
+    {
+      "key": "winter",
+      "label": "Typical winter \u00b7 2020-2025 composite",
+      "src": "/data/route-intelligence/14736711660/winter.png",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED"
+    },
+    {
+      "key": "spring",
+      "label": "Typical spring \u00b7 2020-2025 composite",
+      "src": "/data/route-intelligence/14736711660/spring.png",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED"
+    },
+    {
+      "key": "summer",
+      "label": "Typical summer \u00b7 2020-2025 composite",
+      "src": "/data/route-intelligence/14736711660/summer.png",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED"
+    },
+    {
+      "key": "autumn",
+      "label": "Typical autumn \u00b7 2020-2025 composite",
+      "src": "/data/route-intelligence/14736711660/autumn.png",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED"
+    },
+    {
+      "key": "terrain",
+      "label": "Terrain-shaped satellite portrait",
+      "src": "/data/route-intelligence/14736711660/terrain.png",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED + COPERNICUS/DEM/GLO30_2024_1"
+    }
+  ],
+  "journey_strip": [
+    {
+      "distance_km": 0.0,
+      "lat": 37.78907284140587,
+      "lng": -122.41927597671747,
+      "elevation_m": 27,
+      "index": 0,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-00.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 1.02,
+      "lat": 37.79493447393179,
+      "lng": -122.42211408913136,
+      "elevation_m": 45,
+      "index": 1,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-01.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 2.01,
+      "lat": 37.793553890660405,
+      "lng": -122.43296907283366,
+      "elevation_m": 78,
+      "index": 2,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-02.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 2.98,
+      "lat": 37.791449781507254,
+      "lng": -122.44253315962851,
+      "elevation_m": 83,
+      "index": 3,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-03.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 4.02,
+      "lat": 37.791232857853174,
+      "lng": -122.4517931509763,
+      "elevation_m": 52,
+      "index": 4,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-04.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 5.02,
+      "lat": 37.78904467821121,
+      "lng": -122.46274259872735,
+      "elevation_m": 75,
+      "index": 5,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-05.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 6.02,
+      "lat": 37.786428183317184,
+      "lng": -122.47319885529578,
+      "elevation_m": 34,
+      "index": 6,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-06.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 6.97,
+      "lat": 37.78467569500208,
+      "lng": -122.47653719969094,
+      "elevation_m": 26,
+      "index": 7,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-07.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 7.98,
+      "lat": 37.78432675637305,
+      "lng": -122.47966079972684,
+      "elevation_m": 20,
+      "index": 8,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-08.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 8.97,
+      "lat": 37.7853980474174,
+      "lng": -122.48400505632162,
+      "elevation_m": 21,
+      "index": 9,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-09.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 10.0,
+      "lat": 37.78377732262015,
+      "lng": -122.48978085815907,
+      "elevation_m": 28,
+      "index": 10,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-10.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 11.0,
+      "lat": 37.78128705918789,
+      "lng": -122.49915811233222,
+      "elevation_m": 82,
+      "index": 11,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-11.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 12.01,
+      "lat": 37.780094146728516,
+      "lng": -122.50983414240181,
+      "elevation_m": 40,
+      "index": 12,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-12.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 13.01,
+      "lat": 37.774638617411256,
+      "lng": -122.51108941622078,
+      "elevation_m": -22,
+      "index": 13,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-13.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 13.97,
+      "lat": 37.76744769886136,
+      "lng": -122.50672973692417,
+      "elevation_m": -10,
+      "index": 14,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-14.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 15.03,
+      "lat": 37.769645350053906,
+      "lng": -122.49574751593173,
+      "elevation_m": 4,
+      "index": 15,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-15.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 15.98,
+      "lat": 37.77044397778809,
+      "lng": -122.4857033137232,
+      "elevation_m": 18,
+      "index": 16,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-16.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 16.98,
+      "lat": 37.77075679041445,
+      "lng": -122.477219235152,
+      "elevation_m": 60,
+      "index": 17,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-17.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 18.01,
+      "lat": 37.76877581141889,
+      "lng": -122.47381836175919,
+      "elevation_m": 79,
+      "index": 18,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-18.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 19.01,
+      "lat": 37.76981617324054,
+      "lng": -122.47115685604513,
+      "elevation_m": 75,
+      "index": 19,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-19.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 19.99,
+      "lat": 37.77233837172389,
+      "lng": -122.46366058476269,
+      "elevation_m": 61,
+      "index": 20,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-20.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 21.02,
+      "lat": 37.77287187986076,
+      "lng": -122.45415617711842,
+      "elevation_m": 67,
+      "index": 21,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-21.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 22.03,
+      "lat": 37.776032192632556,
+      "lng": -122.44579195976257,
+      "elevation_m": 60,
+      "index": 22,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-22.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 23.02,
+      "lat": 37.78137146495283,
+      "lng": -122.44138810783625,
+      "elevation_m": 63,
+      "index": 23,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-23.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 24.01,
+      "lat": 37.785054137930274,
+      "lng": -122.43412510491908,
+      "elevation_m": 29,
+      "index": 24,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-24.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 24.98,
+      "lat": 37.78722555376589,
+      "lng": -122.42485840804875,
+      "elevation_m": 63,
+      "index": 25,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-25.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 26.0,
+      "lat": 37.792915776371956,
+      "lng": -122.42127841338515,
+      "elevation_m": 52,
+      "index": 26,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-26.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 26.99,
+      "lat": 37.80143799260259,
+      "lng": -122.42307499051094,
+      "elevation_m": 42,
+      "index": 27,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-27.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 28.0,
+      "lat": 37.80624048784375,
+      "lng": -122.41746841929853,
+      "elevation_m": -1,
+      "index": 28,
+      "is_finish": false,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-28.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    },
+    {
+      "distance_km": 28.47,
+      "lat": 37.808878272771835,
+      "lng": -122.41585758514702,
+      "elevation_m": -3,
+      "index": 29,
+      "is_finish": true,
+      "src": "/data/route-intelligence/14736711660/journey-strip/km-29.jpg",
+      "dataset": "COPERNICUS/S2_SR_HARMONIZED",
+      "window_m": 4000,
+      "generation": "local-crop-from-approved-route-portrait",
+      "marker_x_pct": 50.0,
+      "marker_y_pct": 50.0
+    }
+  ]
+}

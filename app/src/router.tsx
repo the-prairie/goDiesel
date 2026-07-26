@@ -34,6 +34,26 @@ const DesignSystemFoundationPage = lazy(() =>
     default: module.DesignSystemFoundationPage,
   })),
 );
+const RouteIntelligenceLabPage = lazy(() =>
+  import("@/pages/route-intelligence-lab-page").then((module) => ({
+    default: module.RouteIntelligenceLabPage,
+  })),
+);
+const GoogleRouteNavigatorLabPage = lazy(() =>
+  import("@/pages/google-route-navigator-lab-page").then((module) => ({
+    default: module.GoogleRouteNavigatorLabPage,
+  })),
+);
+const CinematicRouteTrailerLabPage = lazy(() =>
+  import("@/pages/cinematic-route-trailer-lab-page").then((module) => ({
+    default: module.CinematicRouteTrailerLabPage,
+  })),
+);
+const CinematicDirectorLabPage = lazy(() =>
+  import("@/pages/cinematic-director-lab-page").then((module) => ({
+    default: module.CinematicDirectorLabPage,
+  })),
+);
 
 canonicalizeLegacyQuestHash();
 window.addEventListener("hashchange", canonicalizeLegacyQuestHash);
@@ -51,6 +71,19 @@ const router = createHashRouter([
       { path: "replay/:routeSlug", element: <ReplayPage /> },
       { path: "lab/playable-earth/:routeSlug", element: <PlayableEarthLabPage /> },
       { path: "lab/design-system", element: <DesignSystemFoundationPage /> },
+      { path: "lab/route-intelligence", element: <RouteIntelligenceLabPage /> },
+      {
+        path: "lab/google-route-navigator/:routeSlug",
+        element: <GoogleRouteNavigatorLabPage />,
+      },
+      {
+        path: "lab/route-trailer/:routeSlug",
+        element: <CinematicRouteTrailerLabPage />,
+      },
+      {
+        path: "lab/cinematic-director/:routeSlug",
+        element: <CinematicDirectorLabPage />,
+      },
       { path: APP_PATHS.admin.slice(1), element: <AdminPage /> },
       { path: "*", element: <Navigate to={APP_PATHS.atlas} replace /> },
     ],

@@ -1,0 +1,77 @@
+import { expect, test } from "@playwright/test";
+
+test("compares the San Francisco and Crete route genomes", async ({ page }) => {
+  await page.goto("/#/lab/route-intelligence");
+
+  await expect(page.getByTestId("route-intelligence-lab")).toBeVisible();
+  await expect(page.getByTestId("route-genome-14736711660")).toContainText(
+    "San Francisco",
+  );
+  await expect(page.getByTestId("route-genome-14023448720")).toContainText(
+    "Crete, Greece",
+  );
+  await expect(page.getByText("Satellite observed")).toHaveCount(2);
+  await expect(
+    page
+      .getByTestId("route-genome-14736711660")
+      .getByText("Climb density")
+      .locator(".."),
+  ).toContainText("derived");
+  await expect(
+    page
+      .getByTestId("route-genome-14736711660")
+      .getByText("Vertical range")
+      .locator(".."),
+  ).toContainText("derived");
+  await expect(
+    page.getByText(/water presence uses the surrounding context window/i),
+  ).toBeVisible();
+  await expect(page.getByTestId("satellite-ribbon-14736711660")).toBeVisible();
+  await expect(page.getByTestId("satellite-ribbon-14023448720")).toBeVisible();
+
+  await expect(page.getByTestId("journey-strip-14736711660")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Enter native 3D" })).toHaveAttribute(
+    "href",
+    "#/lab/google-route-navigator/14736711660",
+  );
+  await expect(page.getByTestId("journey-frame-list").getByRole("button")).toHaveCount(30);
+  await expect(page.getByTestId("journey-active-image")).toHaveAttribute("src", /km-00\.jpg$/);
+  await page.getByRole("button", { name: "Next kilometer" }).click();
+  await expect(page.getByTestId("journey-active-image")).toHaveAttribute("src", /km-01\.jpg$/);
+  await expect
+    .poll(() => page.getByTestId("journey-active-image").evaluate((image) =>
+      (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0,
+    ))
+    .toBe(true);
+
+  const sceneImages = page.locator('[data-testid^="earth-scene-image-"]');
+  await expect(sceneImages).toHaveCount(2);
+  await expect
+    .poll(async () => sceneImages.evaluateAll((images) =>
+      images.every((image) => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0),
+    ))
+    .toBe(true);
+
+  await page.getByRole("button", { name: "Summer" }).click();
+  await expect(page.getByRole("button", { name: "Summer" })).toHaveAttribute("aria-pressed", "true");
+  await expect(sceneImages.nth(0)).toHaveAttribute("src", /summer\.png$/);
+  await expect(sceneImages.nth(1)).toHaveAttribute("src", /summer\.png$/);
+
+  await page.getByRole("button", { name: "Crete" }).click();
+  await expect(page.getByRole("button", { name: "Crete" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(page.getByTestId("journey-strip-14023448720")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Enter native 3D" })).toHaveAttribute(
+    "href",
+    "#/lab/google-route-navigator/14023448720",
+  );
+  await expect(page.getByTestId("journey-frame-list").getByRole("button")).toHaveCount(23);
+  await expect(page.getByTestId("journey-active-image")).toHaveAttribute("src", /km-00\.jpg$/);
+
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(1);
+});
