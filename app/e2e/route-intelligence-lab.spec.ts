@@ -11,6 +11,21 @@ test("compares the San Francisco and Crete route genomes", async ({ page }) => {
     "Crete, Greece",
   );
   await expect(page.getByText("Satellite observed")).toHaveCount(2);
+  await expect(
+    page
+      .getByTestId("route-genome-14736711660")
+      .getByText("Climb density")
+      .locator(".."),
+  ).toContainText("derived");
+  await expect(
+    page
+      .getByTestId("route-genome-14736711660")
+      .getByText("Vertical range")
+      .locator(".."),
+  ).toContainText("derived");
+  await expect(
+    page.getByText(/water presence uses the surrounding context window/i),
+  ).toBeVisible();
   await expect(page.getByTestId("satellite-ribbon-14736711660")).toBeVisible();
   await expect(page.getByTestId("satellite-ribbon-14023448720")).toBeVisible();
 

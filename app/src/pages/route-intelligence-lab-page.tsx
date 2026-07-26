@@ -455,6 +455,9 @@ function RoutePortrait({ entry, active }: { entry: LabRoute; active: boolean }) 
                   <div className="mt-1 text-micro uppercase leading-tight text-[var(--ink-muted)]">
                     {metric.label}
                   </div>
+                  <div className="mt-1 text-micro capitalize text-[var(--ink-muted)]">
+                    {metric.confidence}
+                  </div>
                 </div>
               ))}
             </div>
@@ -671,7 +674,7 @@ export function RouteIntelligenceLabPage() {
           <div className="flex items-start gap-3 border-l-2 border-[var(--coral)] pl-4 text-caption leading-relaxed text-[var(--ink-secondary)]">
             <CircleDashed className="mt-0.5 size-4 shrink-0 text-[var(--coral)]" aria-hidden="true" />
             {hasMeasuredSignals
-              ? "Satellite signals are measured from the route corridors. Recorded geometry remains source truth; narrative chapters remain editable interpretations."
+              ? "Satellite signals describe the route corridor; water presence uses the surrounding context window. Recorded geometry remains source truth; narrative chapters remain editable interpretations."
               : "Gold environmental bars are hypotheses until Earth Engine replaces them with sourced observations. Recorded and derived track facts are already live."}
           </div>
         </section>

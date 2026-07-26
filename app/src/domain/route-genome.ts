@@ -248,13 +248,13 @@ export function buildRouteGenome(route: QuestRoute): RouteGenome {
         label: "Climb density",
         value: climbDensity,
         display: `${Math.round(climbDensity)} m / km`,
-        confidence: "recorded",
+        confidence: "derived",
       },
       {
         label: "Vertical range",
         value: Math.max(...elevations) - Math.min(...elevations),
         display: `${Math.round(Math.max(...elevations) - Math.min(...elevations))} m`,
-        confidence: "recorded",
+        confidence: "derived",
       },
       {
         label: "Rhythm changes",

@@ -45,6 +45,12 @@ describe("buildRouteGenome", () => {
     expect(genome.metrics.find((metric) => metric.label === "Climb density")?.display).toBe(
       "50 m / km",
     );
+    expect(genome.metrics.find((metric) => metric.label === "Climb density")?.confidence).toBe(
+      "derived",
+    );
+    expect(genome.metrics.find((metric) => metric.label === "Vertical range")?.confidence).toBe(
+      "derived",
+    );
     expect(genome.metrics.find((metric) => metric.label === "Loop closure")?.display).toBe(
       "Closed loop",
     );
