@@ -99,9 +99,9 @@ export function RoutesPage() {
   return (
     <section className="grid content-start gap-7">
       <PageTitle
-        eyebrow="Routes"
-        title="Your route library."
-        copy="Find a remembered day by place, effort, or feeling, then open its canonical guide."
+        eyebrow="Ledger"
+        title="Your route ledger."
+        copy="A ruled record of inked and pencil days — find one by place, effort, or feeling."
       />
 
       {libraryRoutes.length === 0 ? (

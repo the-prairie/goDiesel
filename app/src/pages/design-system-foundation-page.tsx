@@ -29,32 +29,34 @@ import {
 } from "@/components/ui/tooltip";
 
 const swatches = [
-  ["Canvas", "var(--canvas)"],
+  ["Paper", "var(--canvas)"],
   ["Surface", "var(--surface)"],
-  ["Forest", "var(--forest)"],
-  ["Route", "var(--route)"],
-  ["Position", "var(--coral)"],
+  ["Moss", "var(--forest)"],
+  ["Indigo", "var(--route)"],
+  ["Vermilion", "var(--coral)"],
+  ["Gold", "var(--gold-repair)"],
+  ["Graphite", "var(--graphite)"],
 ] as const;
 
 export function DesignSystemFoundationPage() {
   return (
     <main
-      className="field-guide-theme min-h-full w-full min-w-0 overflow-x-clip bg-[var(--canvas)] text-[var(--ink)]"
+      className="field-guide-theme paper-grain min-h-full w-full min-w-0 overflow-x-clip bg-[var(--canvas)] text-[var(--ink)]"
       data-testid="field-guide-foundation"
     >
       <header className="min-w-0 border-b border-[var(--line)] bg-[var(--surface)] px-5 py-8 sm:px-8 lg:px-12">
-        <p className="text-micro font-semibold uppercase text-[var(--forest)]">
+        <p className="text-micro font-semibold uppercase tracking-[0.14em] text-[var(--forest)]">
           goDiesel design lab
         </p>
-        <h1 className="mt-3 text-place-lg font-semibold text-[var(--ink)]">
-          Field guide foundation
+        <h1 className="mt-3 font-editorial text-place-lg font-medium text-[var(--ink)]">
+          Weathered Atlas foundation
         </h1>
         <p
           className="mt-3 max-w-2xl text-body text-[var(--ink-secondary)]"
           data-clipping-check="intro"
         >
-          Terrain is the canvas, route data is the annotation, and interface
-          chrome behaves like an editorial field guide.
+          Terrain is the paper, routes are ink that ages with you, and the
+          interface is the binding of a personal atlas.
         </p>
       </header>
 
@@ -62,20 +64,22 @@ export function DesignSystemFoundationPage() {
         <section className="min-w-0 overflow-hidden border-b border-[var(--line)] p-5 sm:p-8 lg:border-r lg:px-12 lg:py-10">
           <div className="flex min-w-0 flex-wrap items-end justify-between gap-4">
             <div>
-              <p className="text-caption font-semibold uppercase text-[var(--ink-secondary)]">
-                Cartographic roles
+              <p className="text-caption font-semibold uppercase tracking-[0.12em] text-[var(--ink-secondary)]">
+                Patina cartography
               </p>
-              <h2 className="mt-2 font-editorial text-title">Kyoto foothills</h2>
+              <h2 className="mt-2 font-editorial text-title font-medium">
+                Kyoto foothills
+              </h2>
             </div>
             <div
               className="flex min-w-0 flex-wrap items-center justify-end gap-3 text-caption text-[var(--ink-secondary)]"
               data-clipping-check="route-metrics"
             >
-              <span className="inline-flex items-center gap-1.5">
+              <span className="inline-flex items-center gap-1.5 font-tabular">
                 <Route className="size-4 text-[var(--route)]" aria-hidden="true" />
                 21.3 km
               </span>
-              <span className="inline-flex items-center gap-1.5">
+              <span className="inline-flex items-center gap-1.5 font-tabular">
                 <CircleDot className="size-4 text-[var(--coral)]" aria-hidden="true" />
                 680 m up
               </span>
@@ -83,12 +87,22 @@ export function DesignSystemFoundationPage() {
           </div>
 
           <div className="relative mt-6 aspect-[16/9] min-h-60 overflow-hidden rounded-[var(--radius-panel)] border border-[var(--line)] bg-[var(--surface-muted)]">
-            <div className="absolute inset-0 bg-[linear-gradient(145deg,transparent_0_35%,rgb(14_64_57/8%)_35%_52%,transparent_52%),repeating-linear-gradient(18deg,transparent_0_32px,rgb(23_32_30/5%)_33px_34px)]" />
+            <div className="absolute inset-0 bg-[linear-gradient(145deg,transparent_0_35%,rgb(47_61_44/8%)_35%_52%,transparent_52%),repeating-linear-gradient(18deg,transparent_0_32px,rgb(28_31_28/4%)_33px_34px)]" />
             <svg
               aria-label="Selected route cartography example"
               className="absolute inset-0 size-full"
               viewBox="0 0 800 450"
             >
+              {/* Faded historical ghost */}
+              <path
+                d="M55 360 C140 340 170 300 240 310 S350 360 410 280 S510 140 590 180"
+                fill="none"
+                stroke="var(--route-muted)"
+                strokeLinecap="round"
+                strokeWidth="2"
+                opacity="0.7"
+              />
+              {/* Selected ink + halo */}
               <path
                 d="M40 345 C130 350 155 270 230 286 S340 330 390 245 S490 90 580 155 S675 305 760 190"
                 fill="none"
@@ -102,6 +116,16 @@ export function DesignSystemFoundationPage() {
                 stroke="var(--route)"
                 strokeLinecap="round"
                 strokeWidth="4"
+                className="ink-draw"
+                pathLength={1}
+              />
+              {/* Kintsugi seam */}
+              <path
+                d="M390 245 L430 220"
+                fill="none"
+                stroke="var(--gold-repair)"
+                strokeLinecap="round"
+                strokeWidth="2.5"
               />
               <circle
                 cx="390"
@@ -123,18 +147,21 @@ export function DesignSystemFoundationPage() {
                 1
               </text>
             </svg>
-            <div className="absolute bottom-4 left-4 rounded-[var(--radius-control)] border border-white/70 bg-[var(--surface-map-glass)] px-3 py-2 shadow-[var(--shadow-panel)]">
-              <p className="font-editorial text-lg font-medium">Higashiyama</p>
-              <p className="text-caption text-[var(--ink-secondary)]">
-                Shaded climb into quiet temple roads
+            <div className="absolute bottom-4 left-4 max-w-[14rem]">
+              <p className="font-editorial text-lg font-medium text-[var(--ink)]">
+                Higashiyama
+              </p>
+              <p className="font-marginalia text-caption text-[var(--ink-secondary)]">
+                Shaded climb into quiet temple roads — signal lost for 400m,
+                path estimated.
               </p>
             </div>
           </div>
         </section>
 
         <section className="min-w-0 border-b border-[var(--line)] p-5 sm:p-8 lg:px-10 lg:py-10">
-          <p className="text-caption font-semibold uppercase text-[var(--ink-secondary)]">
-            Semantic palette
+          <p className="text-caption font-semibold uppercase tracking-[0.12em] text-[var(--ink-secondary)]">
+            Pigment palette
           </p>
           <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 lg:grid-cols-2">
             {swatches.map(([label, color]) => (
@@ -152,13 +179,13 @@ export function DesignSystemFoundationPage() {
             Crete
           </p>
           <p className="mt-2 text-body text-[var(--ink-secondary)]">
-            Editorial type belongs to places, routes, and a short sense of the
-            day. Interface type carries every action and fact.
+            Editorial type belongs to places, routes, premises, and marginalia.
+            Interface type carries every action and fact.
           </p>
         </section>
 
         <section className="min-w-0 border-b border-[var(--line)] p-5 sm:p-8 lg:border-r lg:px-12 lg:py-10">
-          <p className="text-caption font-semibold uppercase text-[var(--ink-secondary)]">
+          <p className="text-caption font-semibold uppercase tracking-[0.12em] text-[var(--ink-secondary)]">
             Controls and inputs
           </p>
           <div className="mt-5 flex flex-wrap items-center gap-3">
@@ -190,7 +217,7 @@ export function DesignSystemFoundationPage() {
             </TooltipProvider>
             <Sheet>
               <SheetTrigger asChild>
-                <Button variant="secondary">Open route sheet</Button>
+                <Button variant="secondary">Open route margin</Button>
               </SheetTrigger>
               <SheetContent className="field-guide-theme">
                 <SheetHeader>
@@ -222,7 +249,7 @@ export function DesignSystemFoundationPage() {
         </section>
 
         <section className="min-w-0 p-5 sm:p-8 lg:px-10 lg:py-10">
-          <p className="text-caption font-semibold uppercase text-[var(--ink-secondary)]">
+          <p className="text-caption font-semibold uppercase tracking-[0.12em] text-[var(--ink-secondary)]">
             Status and loading
           </p>
           <div className="mt-5 grid gap-3">
@@ -244,6 +271,18 @@ export function DesignSystemFoundationPage() {
                 <p className="text-control font-semibold">Limited water</p>
                 <p className="text-caption text-[var(--ink-secondary)]">
                   Carry enough for the exposed middle section.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 border-l-2 border-[var(--gold-repair)] py-2 pl-3">
+              <CircleDot
+                className="mt-0.5 size-4 text-[var(--gold-repair)]"
+                aria-hidden="true"
+              />
+              <div>
+                <p className="text-control font-semibold">Kintsugi seam</p>
+                <p className="font-marginalia text-caption text-[var(--ink-secondary)]">
+                  Signal lost for 400m — path estimated.
                 </p>
               </div>
             </div>

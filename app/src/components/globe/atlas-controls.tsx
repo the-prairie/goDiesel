@@ -14,8 +14,8 @@ export function AtlasControls({
   onSelectRegion,
 }: AtlasControlsProps) {
   return (
-    <div className="absolute bottom-3 left-3 z-20 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-md border border-border bg-background/90 p-2 shadow-2xl backdrop-blur sm:bottom-4 sm:left-4">
-      <Map className="ml-1 size-4 shrink-0 text-primary" aria-hidden="true" />
+    <div className="absolute bottom-[calc(var(--mobile-navigation-height)+0.75rem)] left-[var(--mobile-edge)] z-[var(--z-map-controls)] flex max-w-[calc(100%-2rem)] items-center gap-2 rounded-[var(--radius-control)] border border-line bg-surface/94 p-2 shadow-[var(--shadow-panel)] backdrop-blur-sm md:bottom-[var(--space-map-edge)] md:left-[var(--space-map-edge)]">
+      <Map className="ml-1 size-4 shrink-0 text-route" aria-hidden="true" />
       <label className="sr-only" htmlFor="atlas-region-select">
         Browse route regions
       </label>
@@ -27,7 +27,7 @@ export function AtlasControls({
           const region = regions.find((candidate) => candidate.name === event.target.value);
           if (region) onSelectRegion(region);
         }}
-        className="min-h-9 min-w-0 max-w-60 rounded-sm border border-border bg-card px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="min-h-11 min-w-0 max-w-60 rounded-[var(--radius-control)] border border-line bg-surface-raised px-3 text-control text-ink outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <option value="" disabled>
           Browse regions

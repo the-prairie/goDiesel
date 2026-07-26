@@ -220,10 +220,10 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
           clampToGround: true,
           classificationType: Cesium.ClassificationType.CESIUM_3D_TILE,
           material: new Cesium.PolylineGlowMaterialProperty({
-            color: Cesium.Color.fromCssColorString("#00f19f").withAlpha(0.98),
+            color: Cesium.Color.fromCssColorString("#33507a").withAlpha(0.98),
             glowPower: 0.18,
           }),
-          depthFailMaterial: Cesium.Color.fromCssColorString("#00f19f").withAlpha(
+          depthFailMaterial: Cesium.Color.fromCssColorString("#33507a").withAlpha(
             0.94,
           ),
         },
@@ -239,7 +239,7 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
         ),
         point: {
           pixelSize: 16,
-          color: Cesium.Color.fromCssColorString("#00f19f"),
+          color: Cesium.Color.fromCssColorString("#33507a"),
           outlineColor: Cesium.Color.WHITE,
           outlineWidth: 4,
           disableDepthTestDistance: Number.POSITIVE_INFINITY,

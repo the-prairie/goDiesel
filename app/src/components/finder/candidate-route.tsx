@@ -20,7 +20,7 @@ export function CandidateRoute({
   return (
     <article
       aria-label={`${route.region} candidate`}
-      className="grid min-w-0 overflow-hidden rounded-md border border-border bg-card sm:grid-cols-[minmax(13rem,0.8fr)_minmax(0,1.2fr)]"
+      className="grid min-w-0 overflow-hidden rounded-[var(--radius-panel)] border border-dashed border-graphite/70 bg-surface sm:grid-cols-[minmax(13rem,0.8fr)_minmax(0,1.2fr)]"
     >
       <RouteThread route={route} className="h-48 border-b sm:h-full sm:min-h-72 sm:border-b-0 sm:border-r" />
       <div className="grid content-start gap-5 p-5">

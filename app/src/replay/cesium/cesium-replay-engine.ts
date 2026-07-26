@@ -275,10 +275,10 @@ export class CesiumReplayEngine implements ReplayEngine {
           clampToGround: true,
           classificationType: ClassificationType.CESIUM_3D_TILE,
           material: new PolylineGlowMaterialProperty({
-            color: Color.fromCssColorString("#00f19f").withAlpha(0.98),
+            color: Color.fromCssColorString("#33507a").withAlpha(0.98),
             glowPower: 0.18,
           }),
-          depthFailMaterial: Color.fromCssColorString("#00f19f").withAlpha(0.94),
+          depthFailMaterial: Color.fromCssColorString("#33507a").withAlpha(0.94),
         },
       });
       this.routeEntity = routeEntity;
@@ -371,7 +371,7 @@ export class CesiumReplayEngine implements ReplayEngine {
         scale: 1.4,
         minimumPixelSize: 48,
         maximumScale: 16,
-        silhouetteColor: Color.fromCssColorString("#00f19f"),
+        silhouetteColor: Color.fromCssColorString("#33507a"),
         silhouetteSize: 1.5,
         allowPicking: false,
       });

@@ -121,12 +121,12 @@ function makeGlobeHeatLine(route: RouteSummary, regionIndex: number, density: nu
   const points = routeToGlobeHeatPoints(route);
   if (points.length < 2) return null;
 
-  const ride = route.type === "Ride";
   const best = route.replay.bestInEarth;
-  const baseOpacity = Math.min(0.86, 0.34 + density * 0.42 + (best ? 0.08 : 0));
+  // Weathered Atlas pigments: indigo ink, gold for featured seams, vermilion never as route fill
+  const baseOpacity = Math.min(0.82, 0.28 + density * 0.46 + (best ? 0.1 : 0));
   const curve = new CatmullRomCurve3(points);
   const material = new MeshBasicMaterial({
-    color: best ? 0xe8d49a : ride ? 0xff6a3d : 0x00d7ff,
+    color: best ? 0xb98a2f : 0x33507a,
     transparent: true,
     opacity: baseOpacity,
     blending: AdditiveBlending,
@@ -136,7 +136,7 @@ function makeGlobeHeatLine(route: RouteSummary, regionIndex: number, density: nu
     new TubeGeometry(
       curve,
       Math.min(260, Math.max(16, points.length * 2)),
-      best ? 0.0075 : 0.0055,
+      best ? 0.008 + density * 0.004 : 0.0045 + density * 0.004,
       5,
       false,
     ),
@@ -610,7 +610,7 @@ export function AtlasGlobe({
   return (
     <div
       className={cn(
-        "relative min-h-[520px] overflow-hidden rounded-md border border-border bg-[#02070a]",
+        "relative min-h-[520px] overflow-hidden rounded-none border-0 bg-[#0c1210]",
         className,
       )}
     >
@@ -633,10 +633,10 @@ export function AtlasGlobe({
             aria-label={`Select ${region.name} on globe`}
             onClick={() => onSelectRegion(region)}
             className={cn(
-              "pointer-events-auto absolute hidden -translate-x-1/2 -translate-y-1/2 items-center gap-2 whitespace-nowrap rounded-md border border-border bg-card/80 px-3 py-1.5 text-[11px] font-semibold uppercase text-muted-foreground shadow-xl backdrop-blur transition-colors hover:border-primary hover:text-foreground data-[active=true]:border-primary data-[active=true]:text-primary",
+              "pointer-events-auto absolute hidden -translate-x-1/2 -translate-y-1/2 items-center gap-2 whitespace-nowrap rounded-[var(--radius-control)] border border-line bg-surface/90 px-3 py-1.5 font-editorial text-[11px] font-medium uppercase tracking-[0.16em] text-ink-secondary shadow-[var(--shadow-panel)] backdrop-blur-sm transition-colors hover:border-route hover:text-ink data-[active=true]:border-route data-[active=true]:text-route",
             )}
           >
-            <span className="size-2 rounded-full bg-primary shadow-[0_0_18px_var(--primary)]" />
+            <span className="size-1.5 rounded-full bg-coral" />
             {region.name} · {region.routes.length}
           </button>
         ))}

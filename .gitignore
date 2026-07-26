@@ -32,3 +32,6 @@ venv/
 # Temporary files
 tmp/
 *.tmp
+
+# Nested lottie-player deps
+lottie-player/node_modules/

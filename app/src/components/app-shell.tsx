@@ -1,13 +1,7 @@
-import { Menu } from "lucide-react";
 import { Suspense } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 
-import { AppSidebar } from "@/components/app-sidebar";
-import {
-  SidebarInset,
-  SidebarProvider,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
+import { AtlasSpine } from "@/components/atlas-spine";
 import { appSectionForPath } from "@/navigation";
 import { cn } from "@/lib/utils";
 
@@ -17,39 +11,50 @@ export function AppShell() {
   const isAtlas = section.id === "atlas";
   const isReplayLab = location.pathname.startsWith("/lab/");
   const isImmersive = isAtlas || isReplayLab || section.id === "replay";
+  const isUtility = section.id === "routes" || section.id === "admin" || section.id === "finder";
 
   return (
-    <SidebarProvider>
-      <AppSidebar />
-      <SidebarInset className="min-w-0 bg-background text-foreground">
-        <header
-          data-testid="app-header"
-          className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/92 px-3 backdrop-blur sm:px-4 md:px-5"
-        >
-          <SidebarTrigger
-            aria-label="Open navigation"
-            className="size-9 border border-border"
+    <div
+      className="weathered-atlas field-guide-theme relative flex min-h-dvh w-full bg-canvas text-ink"
+      data-surface={isImmersive ? "immersive" : "utility"}
+    >
+      <AtlasSpine />
+
+      <div
+        className={cn(
+          "flex min-h-dvh min-w-0 flex-1 flex-col",
+          "md:pl-[var(--spine-rail-width)] lg:pl-[var(--spine-width)]",
+          "pb-[var(--mobile-navigation-height)] md:pb-0",
+        )}
+      >
+        {isUtility ? (
+          <header
+            data-testid="app-header"
+            className="sticky top-0 z-[var(--z-map-controls)] flex h-14 items-center gap-3 border-b border-line bg-surface/95 px-4 backdrop-blur-sm sm:px-5"
           >
-            <Menu className="size-4" aria-hidden="true" />
-          </SidebarTrigger>
-          <div className="min-w-0 flex-1">
-            <div data-testid="app-page-title" className="truncate text-sm font-semibold">
-              {section.label}
+            <div className="min-w-0 flex-1">
+              <div
+                data-testid="app-page-title"
+                className="truncate text-control font-semibold text-ink"
+              >
+                {section.label}
+              </div>
+              <div
+                data-testid="global-product-subtitle"
+                className="hidden truncate text-caption text-ink-muted sm:block"
+              >
+                Relive where you have been. Discover where to go next.
+              </div>
             </div>
-            <div
-              data-testid="global-product-subtitle"
-              className="hidden truncate text-xs text-muted-foreground sm:block"
-            >
-              Relive where you have been. Discover where to go next.
-            </div>
-          </div>
-        </header>
-        <div
+          </header>
+        ) : null}
+
+        <main
           className={cn(
-            "grid w-full flex-1",
+            "grid w-full flex-1 leaf-turn-enter",
             isImmersive
-              ? "min-h-[calc(100dvh-3.5rem)] overflow-hidden"
-              : "mx-auto max-w-7xl gap-6 p-4 sm:p-6",
+              ? "min-h-0 overflow-hidden"
+              : "mx-auto max-w-7xl content-start gap-8 p-4 sm:p-6 lg:p-8",
           )}
         >
           <Suspense
@@ -57,7 +62,7 @@ export function AppShell() {
               <div
                 role="status"
                 aria-live="polite"
-                className="rounded-md border border-border bg-card p-5 text-sm text-muted-foreground"
+                className="rounded-[var(--radius-panel)] border border-line bg-surface p-5 text-control text-ink-muted"
               >
                 Loading view.
               </div>
@@ -65,8 +70,8 @@ export function AppShell() {
           >
             <Outlet />
           </Suspense>
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
+        </main>
+      </div>
+    </div>
   );
 }

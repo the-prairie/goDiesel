@@ -114,7 +114,7 @@ export class MapLibreAtlasReplayEngine implements ReplayEngine {
         type: "line",
         source: "replay-route",
         paint: {
-          "line-color": "#001d18",
+          "line-color": "#1f3355",
           "line-width": 11,
           "line-opacity": 0.82,
         },
@@ -125,7 +125,7 @@ export class MapLibreAtlasReplayEngine implements ReplayEngine {
         type: "line",
         source: "replay-route",
         paint: {
-          "line-color": "#00f19f",
+          "line-color": "#33507a",
           "line-width": 5,
           "line-opacity": 1,
         },

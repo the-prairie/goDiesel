@@ -1,5 +1,6 @@
 @import "@fontsource-variable/inter";
 @import "@fontsource/cormorant-garamond/latin-500.css";
+@import "@fontsource/cormorant-garamond/latin-500-italic.css";
 @import "@fontsource/cormorant-garamond/latin-600.css";
 @import "tailwindcss";
 
@@ -35,47 +36,77 @@
   --color-surface: var(--surface);
   --color-surface-raised: var(--surface-raised);
   --color-surface-muted: var(--surface-muted);
+  --color-paper-lifted: var(--paper-lifted);
   --color-ink: var(--ink);
   --color-ink-secondary: var(--ink-secondary);
   --color-ink-muted: var(--ink-muted);
+  --color-ink-faded: var(--ink-faded);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
   --color-forest: var(--forest);
+  --color-forest-hover: var(--forest-hover);
+  --color-forest-active: var(--forest-active);
+  --color-forest-soft: var(--forest-soft);
   --color-route: var(--route);
+  --color-route-history: var(--route-history);
   --color-coral: var(--coral);
+  --color-gold-repair: var(--gold-repair);
+  --color-graphite: var(--graphite);
   --color-success: var(--success);
   --color-warning: var(--warning);
 }
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   font-family: var(--font-interface);
-  --canvas: #f5f4ef;
-  --surface: #fbfaf7;
-  --surface-raised: #ffffff;
-  --surface-muted: #eeede8;
-  --surface-map-glass: rgb(251 250 247 / 94%);
-  --ink: #17201e;
-  --ink-secondary: #515957;
-  --ink-muted: #7c817f;
-  --line: #d5d5cf;
-  --line-strong: #b8bbb6;
-  --forest: #0e4039;
-  --forest-hover: #143f39;
-  --forest-active: #082f2a;
-  --forest-soft: #dce8e3;
-  --route: #3379df;
-  --route-history: #4588de;
-  --route-muted: rgb(51 121 223 / 42%);
-  --route-halo: rgb(255 255 255 / 82%);
-  --coral: #d95737;
-  --coral-hover: #bf452b;
+
+  /* Cool mineral washi — low chroma, moss-leaning, not warm cream */
+  --paper: #e9ebe8;
+  --canvas: #e9ebe8;
+  --paper-lifted: #f4f5f2;
+  --surface: #f3f4f1;
+  --surface-raised: #fafaf8;
+  --surface-muted: #dfe2dd;
+  --surface-map-glass: rgb(243 244 241 / 92%);
+
+  --ink: #1c1f1c;
+  --ink-secondary: #4f554f;
+  --ink-muted: #727872;
+  --ink-faded: #8b8d8a;
+
+  --line: #cfd3cc;
+  --line-strong: #b4b9b1;
+
+  /* Moss (actions) — legacy token name: forest */
+  --forest: #2f3d2c;
+  --forest-hover: #3a4a36;
+  --forest-active: #243022;
+  --forest-soft: #d8e0d4;
+
+  /* Indigo (routes) — legacy token name: route */
+  --route: #33507a;
+  --route-history: #4a6690;
+  --route-muted: rgb(51 80 122 / 42%);
+  --route-halo: rgb(250 250 248 / 82%);
+  --route-worn: #1f3355;
+
+  /* Vermilion (singular now) — legacy token name: coral */
+  --coral: #c24a2e;
+  --coral-hover: #a83d25;
+
+  --gold-repair: #b98a2f;
+  --graphite: #9a968c;
+
   --success: #3d7461;
   --warning: #b46a2b;
-  --shadow-panel: 0 8px 24px rgb(21 31 29 / 14%);
-  --shadow-sheet: 0 -8px 30px rgb(21 31 29 / 16%);
+
+  --shadow-panel: 0 1px 0 rgb(28 31 28 / 6%), 0 8px 20px rgb(28 31 28 / 8%);
+  --shadow-sheet: 0 -1px 0 rgb(28 31 28 / 6%), 0 -10px 28px rgb(28 31 28 / 10%);
+  --shadow-paper: 0 1px 0 rgb(28 31 28 / 4%);
+
   --font-editorial: "Cormorant Garamond", Georgia, serif;
   --font-interface: "Inter Variable", Inter, system-ui, sans-serif;
+
   --text-place-xl: 2.5rem;
   --text-place-lg: 1.875rem;
   --text-place-mobile: 1.75rem;
@@ -84,13 +115,17 @@
   --text-control: 0.875rem;
   --text-caption: 0.75rem;
   --text-micro: 0.625rem;
+
   --sidebar-width-field-guide: 10.375rem;
+  --spine-width: 10.375rem;
+  --spine-rail-width: 4rem;
   --inspector-width: 20rem;
+  --margin-width: 20rem;
   --top-control-height: 2.5rem;
   --button-height: 2.75rem;
   --mobile-control-height: 3rem;
-  --radius-control: 0.375rem;
-  --radius-panel: 0.375rem;
+  --radius-control: 0.1875rem;
+  --radius-panel: 0.1875rem;
   --radius-sheet: 1.375rem;
   --space-map-edge: 1.125rem;
   --mobile-edge: 1rem;
@@ -99,42 +134,51 @@
   --safe-area-right: env(safe-area-inset-right, 0px);
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-left: env(safe-area-inset-left, 0px);
+
   --z-map: 0;
   --z-map-controls: 20;
   --z-inspector: 30;
   --z-navigation: 40;
   --z-overlay: 50;
+
   --duration-fast: 120ms;
-  --duration-standard: 200ms;
+  --duration-standard: 220ms;
+  --duration-settle: 340ms;
   --duration-slow: 320ms;
+  --duration-breathe: 640ms;
+  --duration-draw: 900ms;
   --ease-interface: cubic-bezier(0.2, 0, 0, 1);
-  --background: hsl(205 33% 4%);
-  --foreground: hsl(210 24% 94%);
-  --card: hsl(198 31% 7%);
-  --card-foreground: hsl(210 24% 94%);
-  --primary: hsl(160 100% 47%);
-  --primary-foreground: hsl(170 44% 6%);
-  --secondary: hsl(208 25% 10%);
-  --secondary-foreground: hsl(210 24% 94%);
-  --muted: hsl(204 18% 14%);
-  --muted-foreground: hsl(210 8% 64%);
-  --accent: hsl(199 28% 13%);
-  --accent-foreground: hsl(210 24% 94%);
-  --border: hsl(204 21% 18%);
-  --input: hsl(204 21% 24%);
-  --ring: hsl(160 100% 47%);
-  --destructive: hsl(0 72% 51%);
-  --destructive-foreground: hsl(0 0% 100%);
-  --sidebar: hsl(203 34% 6%);
-  --sidebar-foreground: hsl(210 24% 94%);
-  --sidebar-primary: hsl(160 100% 12%);
-  --sidebar-primary-foreground: hsl(160 100% 72%);
-  --sidebar-accent: hsl(200 27% 12%);
-  --sidebar-accent-foreground: hsl(210 24% 94%);
-  --sidebar-border: hsl(204 21% 18%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* shadcn aliases → Weathered Atlas light theme */
+  --background: var(--canvas);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --primary: var(--forest);
+  --primary-foreground: var(--surface-raised);
+  --secondary: var(--surface-muted);
+  --secondary-foreground: var(--ink);
+  --muted: var(--surface-muted);
+  --muted-foreground: var(--ink-secondary);
+  --accent: var(--forest-soft);
+  --accent-foreground: var(--forest);
+  --border: var(--line);
+  --input: var(--line-strong);
+  --ring: var(--route);
+  --destructive: var(--coral);
+  --destructive-foreground: var(--surface-raised);
+  --sidebar: var(--surface);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--forest);
+  --sidebar-primary-foreground: var(--surface-raised);
+  --sidebar-accent: var(--forest-soft);
+  --sidebar-accent-foreground: var(--forest);
+  --sidebar-border: var(--line);
+  --sidebar-ring: var(--route);
 }
 
+/* Migration alias — Weathered Atlas ships through this class */
 .field-guide-theme {
   color-scheme: light;
   font-family: var(--font-interface);
@@ -162,7 +206,7 @@
   --sidebar-accent: var(--forest-soft);
   --sidebar-accent-foreground: var(--forest);
   --sidebar-border: var(--line);
-  --sidebar-ring: hsl(215 71% 54%);
+  --sidebar-ring: var(--route);
 }
 
 .field-guide-theme [data-slot="button"],
@@ -213,6 +257,17 @@
   font-family: var(--font-editorial);
 }
 
+.font-marginalia {
+  font-family: var(--font-editorial);
+  font-style: italic;
+  font-weight: 500;
+}
+
+.font-tabular {
+  font-variant-numeric: tabular-nums;
+  font-weight: 450;
+}
+
 .text-place-lg {
   font-size: var(--text-place-lg);
   line-height: 1.08;
@@ -222,6 +277,15 @@
 .text-place-mobile {
   font-size: var(--text-place-mobile);
   line-height: 1.1;
+}
+
+.text-place-label {
+  font-family: var(--font-editorial);
+  font-size: var(--text-place-mobile);
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
 .text-title {
@@ -249,18 +313,94 @@
   line-height: 1.25;
 }
 
+/* Quiet paper grain — fixed, low contrast, never on text glyphs */
+.paper-grain {
+  position: relative;
+  isolation: isolate;
+}
+
+.paper-grain::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: multiply;
+}
+
+.paper-grain > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Motion verbs */
+.motion-settle {
+  animation: atlas-settle var(--duration-settle) var(--ease-settle) both;
+}
+
+.motion-breathe {
+  transition:
+    opacity var(--duration-breathe) var(--ease-interface),
+    filter var(--duration-breathe) var(--ease-interface);
+}
+
+@keyframes atlas-settle {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes atlas-draw-ink {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.ink-draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: atlas-draw-ink var(--duration-draw) var(--ease-settle) forwards;
+}
+
+.leaf-turn-enter {
+  animation: atlas-settle var(--duration-settle) var(--ease-settle) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .field-guide-theme *,
   .field-guide-theme *::before,
-  .field-guide-theme *::after {
+  .field-guide-theme *::after,
+  .weathered-atlas *,
+  .weathered-atlas *::before,
+  .weathered-atlas *::after {
     scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 
-  .field-guide-theme [data-slot="skeleton"] {
+  .field-guide-theme [data-slot="skeleton"],
+  .weathered-atlas [data-slot="skeleton"] {
     animation: none !important;
+  }
+
+  .ink-draw {
+    stroke-dashoffset: 0;
+    animation: none;
+  }
+
+  .paper-grain::before {
+    display: none;
   }
 }
 
@@ -277,6 +417,7 @@ body,
 body {
   margin: 0;
   background: var(--background);
+  color: var(--foreground);
 }
 
 button,
@@ -284,15 +425,61 @@ a {
   font: inherit;
 }
 
-.dark {
-  --sidebar: hsl(240 5.9% 10%);
-  --sidebar-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-primary: hsl(224.3 76.3% 48%);
-  --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(240 3.7% 15.9%);
-  --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-border: hsl(240 3.7% 15.9%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+/* Spine — journal binding */
+.atlas-spine {
+  border-right: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-paper);
+}
+
+.atlas-spine-rule {
+  width: 1px;
+  background: var(--line-strong);
+  opacity: 0.55;
+}
+
+.atlas-spine-mark {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 999px;
+  background: var(--coral);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+.atlas-spine-mobile {
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-sheet);
+  padding-bottom: var(--safe-area-bottom);
+}
+
+/* Margin — shared detail system */
+.atlas-margin {
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-paper);
+}
+
+.atlas-margin-fold {
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+  background: var(--surface);
+  box-shadow: var(--shadow-sheet);
+}
+
+.atlas-margin-fold::before {
+  content: "";
+  display: block;
+  width: 2.5rem;
+  height: 0.25rem;
+  margin: 0.625rem auto 0.25rem;
+  border-radius: 999px;
+  background: var(--line-strong);
+}
+
+.atlas-region-inspector {
+  /* compatibility hook for legacy layout queries */
 }
 
 @media (max-width: 639px) {
@@ -302,19 +489,6 @@ a {
 }
 
 @media (max-height: 576px) {
-  .atlas-intro {
-    max-width: calc(100% - 26rem);
-  }
-
-  .atlas-intro h1 {
-    font-size: 1.5rem;
-    line-height: 1.75rem;
-  }
-
-  .atlas-intro p {
-    display: none;
-  }
-
   .atlas-search-panel {
     right: 1.25rem;
     left: auto;
@@ -377,13 +551,15 @@ a {
 }
 
 @media (max-width: 639px) and (max-height: 576px) {
-  .atlas-intro {
-    display: none;
-  }
-
   .atlas-search-panel {
     right: 1rem;
     left: 1rem;
     width: auto;
+  }
+}
+
+@media (forced-colors: active) {
+  .paper-grain::before {
+    display: none;
   }
 }

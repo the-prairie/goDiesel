@@ -40,8 +40,8 @@ export function FinderPage() {
     <section className="grid content-start gap-7">
       <PageTitle
         eyebrow="Finder"
-        title="Plan the next day."
-        copy="Future routes live here until a completed activity turns them into Atlas memories."
+        title="Commit the next day to ink."
+        copy="Unexplored ground lifts on the page. Candidates arrive as pencil until you save them — then they wait in your atlas, untraveled."
       />
 
       <div className="grid gap-8 border-y border-border py-7 lg:grid-cols-[minmax(17rem,0.72fr)_minmax(0,1.28fr)] lg:gap-12">
@@ -99,11 +99,14 @@ function FinderState({
   role?: "status";
 }) {
   return (
-    <div role={role} className="grid min-h-72 place-items-center border border-dashed border-border p-8 text-center">
+    <div
+      role={role}
+      className="grid min-h-72 place-items-center rounded-[var(--radius-panel)] border border-dashed border-line bg-paper-lifted/60 p-8 text-center"
+    >
       <div className="grid max-w-md justify-items-center gap-3">
-        <SearchX className="size-6 text-primary" aria-hidden="true" />
-        <h2 className="text-lg font-semibold">{title}</h2>
-        <p className="text-sm leading-6 text-muted-foreground">{copy}</p>
+        <SearchX className="size-6 text-graphite" aria-hidden="true" />
+        <h2 className="font-editorial text-lg font-medium tracking-[0.01em]">{title}</h2>
+        <p className="font-marginalia text-sm leading-6 text-ink-secondary">{copy}</p>
       </div>
     </div>
   );
