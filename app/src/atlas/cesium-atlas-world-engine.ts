@@ -41,9 +41,9 @@ import {
   GOOGLE_3D_TILES_RENDER_OPTIONS,
 } from "@/replay/cesium/cesium-render-quality";
 
-const DEFAULT_VIEW = { lat: 24, lng: 12, heightM: 18_500_000 };
+const DEFAULT_VIEW = { lat: 37, lng: 10, heightM: 13_250_000 };
 const GLOBAL_SELECTION_HEIGHT_M = DEFAULT_VIEW.heightM;
-const ROUTE_COLOR = Color.fromCssColorString("#62a7ff");
+const ROUTE_COLOR = Color.fromCssColorString("#8de8d2");
 const SELECTED_ROUTE_COLOR = Color.fromCssColorString("#df674b");
 const TILE_FAILURE_THRESHOLD = 8;
 const TERRAIN_READY_TIMEOUT_MS = 8_000;
@@ -121,6 +121,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   private removeCameraChangedListener?: () => void;
   private keyDownHandler?: (event: KeyboardEvent) => void;
   private onStatus?: AtlasWorldEngineMountOptions["onStatus"];
+  private onSelectRegion?: AtlasWorldEngineMountOptions["onSelectRegion"];
   private onSelectRoute?: AtlasWorldEngineMountOptions["onSelectRoute"];
   private routeSelectionHandler?: ScreenSpaceEventHandler;
   private tileset?: Cesium3DTileset;
@@ -141,11 +142,13 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     container,
     regions,
     onStatus,
+    onSelectRegion,
     onSelectRoute,
   }: AtlasWorldEngineMountOptions) {
     const generation = ++this.generation;
     this.regions = regions;
     this.onStatus = onStatus;
+    this.onSelectRegion = onSelectRegion;
     this.onSelectRoute = onSelectRoute;
     onStatus({ state: "loading", message: "Opening the Atlas world." });
 
@@ -225,12 +228,12 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
               positions: points.map((point) =>
                 Cartesian3.fromDegrees(point.lng, point.lat),
               ),
-              width: 4,
+              width: 5,
               ...CESIUM_GROUND_ROUTE_OPTIONS,
               classificationType: ClassificationType.BOTH,
               material: new PolylineGlowMaterialProperty({
                 color: ROUTE_COLOR.withAlpha(0.92),
-                glowPower: 0.16,
+                glowPower: 0.28,
               }),
             },
           });
@@ -382,6 +385,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     this.keyDownHandler = undefined;
     this.routeSelectionHandler = undefined;
     this.onStatus = undefined;
+    this.onSelectRegion = undefined;
     this.onSelectRoute = undefined;
     this.selectedRegionName = undefined;
     this.selectedRouteSlug = undefined;
@@ -544,17 +548,22 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
       const inSelectedRegion = regionName === this.selectedRegionName;
       const active =
         inSelectedRegion && route.slug === this.selectedRouteSlug;
-      entity.polyline.width = new ConstantProperty(active ? 8 : inSelectedRegion ? 5 : 4);
+      entity.polyline.width = new ConstantProperty(
+        active ? 5 : inSelectedRegion ? 3 : 5,
+      );
       entity.polyline.material = active
         ? new PolylineGlowMaterialProperty({
             color: SELECTED_ROUTE_COLOR.withAlpha(1),
-            glowPower: 0.24,
+            glowPower: 0.18,
           })
-        : new ColorMaterialProperty(
-            ROUTE_COLOR.withAlpha(
-              this.selectedRegionName ? (inSelectedRegion ? 0.48 : 0.2) : 0.92,
-            ),
-          );
+        : this.selectedRegionName
+          ? new ColorMaterialProperty(
+              ROUTE_COLOR.withAlpha(inSelectedRegion ? 0.48 : 0.2),
+            )
+          : new PolylineGlowMaterialProperty({
+              color: ROUTE_COLOR.withAlpha(0.96),
+              glowPower: 0.28,
+            });
     });
   }
 
@@ -609,14 +618,59 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     if (!viewer || viewer.isDestroyed()) return;
     this.regionGeneration += 1;
     this.clearRegionalTiles();
-    viewer.useDefaultRenderLoop = false;
-    viewer.canvas.dataset.atlasState = "region-fallback";
-    viewer.canvas.dataset.cameraState = "settled";
-    viewer.canvas.dataset.terrainState = "fallback";
-    this.onStatus?.({
-      state: "region-fallback",
-      regionName: region.name,
-      message: "3D terrain partially unavailable",
+    viewer.useDefaultRenderLoop = true;
+    viewer.scene.globe.show = true;
+    if (this.baseImageryLayer) this.baseImageryLayer.show = true;
+    viewer.canvas.dataset.cameraState = "transitioning";
+    const routePositions = region.routes.flatMap((route) =>
+      sampleRegionalRoutePoints(route).map((point) =>
+        Cartesian3.fromDegrees(point.lng, point.lat),
+      ),
+    );
+    const settleFallback = () => {
+      if (
+        !this.viewer ||
+        this.viewer.isDestroyed() ||
+        this.selectedRegionName !== region.name
+      ) {
+        return;
+      }
+      viewer.canvas.dataset.atlasState = "region-fallback";
+      viewer.canvas.dataset.cameraState = "settled";
+      viewer.canvas.dataset.terrainState = "fallback";
+      viewer.scene.requestRender();
+      this.onStatus?.({
+        state: "region-fallback",
+        regionName: region.name,
+        message: "3D terrain partially unavailable",
+      });
+    };
+
+    if (routePositions.length < 2) {
+      settleFallback();
+      return;
+    }
+
+    const sphere = BoundingSphere.fromPoints(routePositions);
+    const fallbackHeightM = Math.max(sphere.radius * 5, 120_000);
+    this.resetFrustumOffsets();
+    viewer.canvas.dataset.cameraTarget = fallbackHeightM.toFixed(0);
+    viewer.camera.flyTo({
+      destination: Cartesian3.fromDegrees(
+        region.centerLng,
+        region.centerLat,
+        fallbackHeightM,
+      ),
+      orientation: new HeadingPitchRoll(
+        0,
+        -CesiumMath.PI_OVER_TWO,
+        0,
+      ),
+      duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? 0
+        : 0.8,
+      complete: settleFallback,
+      cancel: settleFallback,
     });
   }
 
@@ -706,16 +760,21 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     this.routeSelectionHandler = new ScreenSpaceEventHandler(viewer.scene.canvas);
     this.routeSelectionHandler.setInputAction(
       (event: ScreenSpaceEventHandler.PositionedEvent) => {
-        if (!this.selectedRegionName) return;
         const picked = viewer.scene.pick(event.position) as { id?: Entity } | undefined;
-        const selectedRoute = routeForPickedEntity(
-          this.routeEntities,
-          this.selectedRegionName,
-          picked?.id,
+        const pickedRoute = this.routeEntities.find(
+          ({ entity }) => entity === picked?.id,
         );
-        if (!selectedRoute) return;
-        this.setSelectedRoute(selectedRoute);
-        this.onSelectRoute?.(selectedRoute);
+        if (!pickedRoute) return;
+        if (!this.selectedRegionName) {
+          const region = this.regions.find(
+            (candidate) => candidate.name === pickedRoute.regionName,
+          );
+          if (region) this.onSelectRegion?.(region);
+          return;
+        }
+        if (pickedRoute.regionName !== this.selectedRegionName) return;
+        this.setSelectedRoute(pickedRoute.route);
+        this.onSelectRoute?.(pickedRoute.route);
       },
       ScreenSpaceEventType.LEFT_CLICK,
     );

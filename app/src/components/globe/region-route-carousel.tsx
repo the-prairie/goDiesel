@@ -16,7 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 
 export const ROUTE_CAROUSEL_SLIDE_CLASS =
-  "min-w-0 flex-[0_0_84%] pl-3 sm:basis-[44%] sm:pl-4 xl:basis-[calc((100%-2rem)/3)]";
+  "min-w-0 flex-[0_0_84%] pr-3 sm:basis-[44%] sm:pr-4 xl:basis-1/4";
 
 export interface RegionRouteCarouselProps {
   region: RouteRegion;
@@ -48,8 +48,8 @@ export function RegionRouteCarousel({
     ),
   );
   const [viewportRef, emblaApi] = useEmblaCarousel({
-    align: "center",
-    containScroll: false,
+    align: "start",
+    containScroll: "trimSnaps",
     dragFree: false,
     loop: false,
     skipSnaps: false,
@@ -147,9 +147,9 @@ export function RegionRouteCarousel({
     return (
       <section
         aria-label={`${region.name} routes`}
-        className="min-h-[23rem] border-t border-white/15 bg-[#07151c]/92 text-white backdrop-blur-sm sm:min-h-[22rem] [@media(max-height:500px)]:min-h-[13rem]"
+        className="min-h-[17.5rem] border-t border-white/15 bg-[#02070a]/90 text-white backdrop-blur-md [@media(max-height:500px)]:min-h-[13rem] [@media(max-height:360px)]:min-h-[9.5rem]"
       >
-        <div className="grid min-h-[23rem] place-items-center sm:min-h-[22rem] [@media(max-height:500px)]:min-h-[13rem]">
+        <div className="grid min-h-[17.5rem] place-items-center [@media(max-height:500px)]:min-h-[13rem] [@media(max-height:360px)]:min-h-[9.5rem]">
           <p role="status" aria-live="polite" className="text-sm text-white/70">
             Loading {region.name} terrain
           </p>
@@ -166,19 +166,15 @@ export function RegionRouteCarousel({
   return (
     <section
       aria-label={`${region.name} routes`}
-      className="min-h-[23rem] overflow-hidden border-t border-white/15 bg-[#07151c]/92 text-white backdrop-blur-sm sm:min-h-[22rem] [@media(max-height:500px)]:min-h-[13rem]"
+      className="min-h-[17.5rem] overflow-hidden border-t border-white/15 bg-[#02070a]/90 text-white backdrop-blur-md [@media(max-height:500px)]:min-h-[13rem] [@media(max-height:360px)]:min-h-[9.5rem]"
     >
-      <header className="mx-auto flex max-w-[96rem] items-center justify-between gap-3 px-3 py-3 sm:px-5 [@media(max-height:500px)]:py-1">
+      <header className="mx-auto flex max-w-[96rem] items-center justify-between gap-3 px-3 py-3 sm:px-5 [@media(max-height:500px)]:py-1 [@media(max-height:360px)]:hidden">
         <div className="min-w-0 flex-1">
-          <h2 className="truncate font-editorial text-xl font-semibold uppercase sm:text-2xl">
-            {region.name}
+          <h2 className="truncate font-editorial text-lg font-semibold sm:text-xl">
+            Journeys through {region.name}
           </h2>
-          <p className="flex flex-wrap gap-x-1 text-xs leading-4 text-white/65 sm:block sm:truncate sm:text-sm">
-            <span>{region.routes.length} routes · {region.totalKm.toFixed(0)} km</span>
-            <span>
-              <span className="hidden sm:inline">· </span>
-              {Math.round(region.totalClimbM).toLocaleString()} m climbed
-            </span>
+          <p className="flex flex-wrap gap-x-1 text-xs leading-4 text-white/52 sm:block sm:truncate">
+            Choose a route to see it on the terrain
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -237,7 +233,7 @@ export function RegionRouteCarousel({
           onKeyDown={onCarouselKeyDown}
           className="overflow-hidden pb-4 outline-none [touch-action:pan-y_pinch-zoom] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#63d6cf] [@media(max-height:500px)]:pb-2"
         >
-          <div className="-ml-3 flex sm:-ml-4">
+          <div className="flex px-3 sm:px-5">
             {region.routes.map((route, index) => (
               <div key={route.slug} className={ROUTE_CAROUSEL_SLIDE_CLASS}>
                 <RegionalRouteCard
@@ -290,6 +286,7 @@ function RegionalRouteCard({
 }) {
   const reviewed =
     route.guide.reviewStatus === "reviewed" || route.guide.reviewStatus === "published";
+  const title = routeDisplayTitle(route);
   const trace = useMemo(() => routeTracePolyline(route.trace), [route.trace]);
   const profile = useMemo(() => elevationProfileGeometry(route.trace), [route.trace]);
 
@@ -300,10 +297,10 @@ function RegionalRouteCard({
       data-route-slug={route.slug}
       data-selected={selected}
       className={cn(
-        "relative grid h-[17rem] min-w-0 grid-rows-[7rem_minmax(0,1fr)_3.75rem] overflow-hidden rounded-[8px] border bg-[#0b2029] text-white shadow-sm transition-[border-color,opacity] [@media(max-height:500px)]:h-[9rem] [@media(max-height:500px)]:grid-rows-[3rem_minmax(0,1fr)_2.5rem]",
+        "relative grid h-[12.5rem] min-w-0 grid-rows-[5rem_minmax(0,1fr)_3rem] overflow-hidden rounded-[6px] border bg-[#07151c] text-white transition-[border-color,opacity,transform] [@media(max-height:500px)]:h-[9rem] [@media(max-height:500px)]:grid-rows-[3rem_minmax(0,1fr)_2.5rem]",
         selected
-          ? "border-[#ff6b4a] before:absolute before:inset-x-0 before:top-0 before:z-10 before:h-1 before:bg-[#ff6b4a]"
-          : "border-white/20 opacity-75 hover:opacity-100",
+          ? "-translate-y-1 border-white/72"
+          : "border-white/16 opacity-68 hover:opacity-100",
       )}
     >
       <button
@@ -322,7 +319,7 @@ function RegionalRouteCard({
         loadThumbnail={loadThumbnail}
       />
       <div className="min-w-0 px-4 py-3 [@media(max-height:500px)]:py-1">
-        <h3 className="truncate font-editorial text-xl font-semibold leading-6 [@media(max-height:500px)]:text-base [@media(max-height:500px)]:leading-5">{route.name}</h3>
+        <h3 className="truncate font-editorial text-xl font-semibold leading-6 [@media(max-height:500px)]:text-base [@media(max-height:500px)]:leading-5">{title}</h3>
         <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-white/72">
           <span>{route.distanceKm.toFixed(1)} km</span>
           <span>{route.elevationGainM.toLocaleString()} m climb</span>
@@ -331,9 +328,11 @@ function RegionalRouteCard({
             {route.type}
           </span>
         </p>
-        <p className="mt-2 line-clamp-2 text-xs leading-4 text-white/65 [@media(max-height:500px)]:hidden">
-          {reviewed && route.guide.vibe ? route.guide.vibe : "Guide not yet reviewed"}
-        </p>
+        {reviewed && route.guide.vibe ? (
+          <p className="mt-1 truncate text-xs leading-4 text-white/65 [@media(max-height:500px)]:hidden">
+            {route.guide.vibe}
+          </p>
+        ) : null}
       </div>
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3 border-t border-white/10 px-3 py-2 [@media(max-height:500px)]:py-0">
         <ElevationProfilePreview route={route} geometry={profile} />
@@ -350,6 +349,13 @@ function RegionalRouteCard({
   );
 }
 
+export function routeDisplayTitle(route: RouteSummary) {
+  const candidate = route.activityName.trim() || route.subtitle.trim();
+  return candidate && candidate.toLowerCase() !== route.region.toLowerCase()
+    ? candidate
+    : route.name;
+}
+
 function RouteTracePreview({
   route,
   points,
@@ -363,7 +369,6 @@ function RouteTracePreview({
 }) {
   return (
     <div className="relative overflow-hidden bg-[#102b33]">
-      <div className="absolute inset-0 opacity-30 [background-image:linear-gradient(rgba(255,255,255,0.14)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.14)_1px,transparent_1px)] [background-size:24px_24px]" />
       {points ? (
         <svg viewBox={`0 0 ${traceWidth} ${traceHeight}`} role="img" aria-label={`${route.name} recorded route trace`} className="absolute inset-0 size-full" preserveAspectRatio="xMidYMid meet">
           <polyline points={points} fill="none" stroke="rgba(3,12,17,0.8)" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />

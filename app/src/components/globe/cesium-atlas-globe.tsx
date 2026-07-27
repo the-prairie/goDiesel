@@ -1,7 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 
-import { visibleAtlasLabels } from "@/components/globe/atlas-label-layout";
-import { AtlasRegionalFallback } from "@/components/globe/atlas-regional-fallback";
 import type {
   AtlasGlobeHandle,
   AtlasGlobeProps,
@@ -28,12 +26,14 @@ export const CesiumAtlasGlobe = forwardRef<
   forwardedRef,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const labelRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const engineRef = useRef<AtlasWorldEngine | undefined>(undefined);
   const readyEngineRef = useRef<AtlasWorldEngine | undefined>(undefined);
   const selectedRegionRef = useRef(selectedRegion);
   const selectedRouteRef = useRef(selectedRoute);
+  const onSelectRegionRef = useRef(onSelectRegion);
   const onSelectRouteRef = useRef(onSelectRoute);
+  const onStatusChangeRef = useRef(onStatusChange);
+  const onRegionPresentationReadyRef = useRef(onRegionPresentationReady);
   const [status, setStatus] = useState<AtlasWorldStatus>({
     state: "loading",
     message: "Opening the Atlas world.",
@@ -47,7 +47,10 @@ export const CesiumAtlasGlobe = forwardRef<
 
   selectedRegionRef.current = selectedRegion;
   selectedRouteRef.current = selectedRoute;
+  onSelectRegionRef.current = onSelectRegion;
   onSelectRouteRef.current = onSelectRoute;
+  onStatusChangeRef.current = onStatusChange;
+  onRegionPresentationReadyRef.current = onRegionPresentationReady;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -58,20 +61,25 @@ export const CesiumAtlasGlobe = forwardRef<
       .mount({
         container,
         regions,
+        onSelectRegion: (region) => onSelectRegionRef.current?.(region),
         onSelectRoute: (route) => onSelectRouteRef.current?.(route),
         onStatus: (nextStatus) => {
           setStatus(nextStatus);
-          onStatusChange?.(nextStatus);
+          onStatusChangeRef.current?.(nextStatus);
           if (nextStatus.state === "region-loading") {
-            onRegionPresentationReady?.(false);
+            onRegionPresentationReadyRef.current?.(false);
           } else if (nextStatus.state === "region-ready") {
-            onRegionPresentationReady?.(true);
+            onRegionPresentationReadyRef.current?.(true);
+          } else if (nextStatus.state === "region-fallback") {
+            onRegionPresentationReadyRef.current?.(true);
           } else if (
             nextStatus.state === "ready"
           ) {
-            onRegionPresentationReady?.(false);
+            onRegionPresentationReadyRef.current?.(false);
           } else if (nextStatus.state === "unavailable") {
-            onRegionPresentationReady?.(Boolean(selectedRegionRef.current));
+            onRegionPresentationReadyRef.current?.(
+              Boolean(selectedRegionRef.current),
+            );
           }
         },
       })
@@ -87,7 +95,7 @@ export const CesiumAtlasGlobe = forwardRef<
       engine.destroy();
       if (engineRef.current === engine) engineRef.current = undefined;
     };
-  }, [onRegionPresentationReady, onStatusChange, regions]);
+  }, [regions]);
 
   useEffect(() => {
     readyEngineRef.current?.setSelectedRegion(selectedRegion);
@@ -96,50 +104,6 @@ export const CesiumAtlasGlobe = forwardRef<
   useEffect(() => {
     readyEngineRef.current?.setSelectedRoute(selectedRoute);
   }, [selectedRoute]);
-
-  useEffect(() => {
-    const updateLabels = () => {
-      const projections = engineRef.current?.projectRegions() ?? [];
-      const projectionByName = new Map(
-        projections.map((projection) => [projection.name, projection]),
-      );
-      const viewport = {
-        width: containerRef.current?.clientWidth ?? 1,
-        height: containerRef.current?.clientHeight ?? 1,
-      };
-      const visible = new Set(
-        visibleAtlasLabels(
-          regions.flatMap((region, index) => {
-            const projection = projectionByName.get(region.name);
-            const label = labelRefs.current[index];
-            if (!projection || !label) return [];
-            return [{
-              ...projection,
-              width: label.offsetWidth || 130,
-              height: label.offsetHeight || 28,
-              priority:
-                (selectedRegion?.name === region.name ? 100 : 0) +
-                region.routes.length,
-              selected: selectedRegion?.name === region.name,
-            }];
-          }),
-          viewport,
-        ),
-      );
-      regions.forEach((region, index) => {
-        const label = labelRefs.current[index];
-        const projection = projectionByName.get(region.name);
-        if (!label || !projection) return;
-        label.style.left = `${projection.x}px`;
-        label.style.top = `${projection.y}px`;
-        label.style.display = visible.has(region.name) ? "flex" : "none";
-        label.dataset.active = String(selectedRegion?.name === region.name);
-      });
-    };
-    updateLabels();
-    const interval = window.setInterval(updateLabels, 80);
-    return () => window.clearInterval(interval);
-  }, [regions, selectedRegion]);
 
   return (
     <div
@@ -162,42 +126,8 @@ export const CesiumAtlasGlobe = forwardRef<
     >
       <div
         ref={containerRef}
-        className={cn(
-          "absolute inset-0",
-          status.state === "region-fallback" && "invisible",
-        )}
+        className="absolute inset-0"
       />
-      {status.state === "region-fallback" && selectedRegion ? (
-        <AtlasRegionalFallback
-          region={selectedRegion}
-          selectedRoute={selectedRoute}
-          onSelectRoute={(route) => onSelectRouteRef.current?.(route)}
-          onReady={() => onRegionPresentationReady?.(true)}
-        />
-      ) : null}
-      <div
-        className={cn(
-          "pointer-events-none absolute inset-0",
-          status.state !== "ready" && "hidden",
-        )}
-      >
-        {regions.map((region, index) => (
-          <button
-            key={region.name}
-            ref={(node) => {
-              labelRefs.current[index] = node;
-            }}
-            type="button"
-            data-globe-region={region.name}
-            aria-label={`Select ${region.name} on globe`}
-            onClick={() => onSelectRegion(region)}
-            className="pointer-events-auto absolute hidden -translate-x-1/2 -translate-y-1/2 items-center gap-2 whitespace-nowrap rounded-sm border border-white/30 bg-[#f6f2e8]/90 px-3 py-1.5 text-[11px] font-semibold uppercase text-[#24322d] shadow-lg backdrop-blur transition-colors hover:border-[#315fb4] hover:text-[#183a76] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#315fb4] focus-visible:ring-offset-2 focus-visible:ring-offset-[#02070a] data-[active=true]:border-[#df674b] data-[active=true]:text-[#9b321f]"
-          >
-            <span className="size-1.5 rounded-full bg-[#df674b]" />
-            {region.name} · {region.routes.length}
-          </button>
-        ))}
-      </div>
       {status.state === "loading" || status.state === "region-loading" ? (
         <div
           role="status"

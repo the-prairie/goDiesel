@@ -1,6 +1,8 @@
-import { Search } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { useDeferredValue, useMemo } from "react";
 
+import type { AtlasActivityMode } from "@/components/globe/atlas-controls";
+import { Button } from "@/components/ui/button";
 import type { RouteRegion } from "@/data/route-regions";
 import type { RouteSummary } from "@/domain/routes";
 import { cn } from "@/lib/utils";
@@ -23,6 +25,9 @@ interface AtlasSearchProps {
   onQueryChange: (query: string) => void;
   selectedRegion?: RouteRegion;
   selectedRoute?: RouteSummary;
+  mode: AtlasActivityMode;
+  onModeChange: (mode: AtlasActivityMode) => void;
+  onClose: () => void;
   className?: string;
 }
 
@@ -65,6 +70,9 @@ export function AtlasSearch({
   onQueryChange,
   selectedRegion,
   selectedRoute,
+  mode,
+  onModeChange,
+  onClose,
   className,
 }: AtlasSearchProps) {
   const deferredQuery = useDeferredValue(query);
@@ -127,17 +135,38 @@ export function AtlasSearch({
   return (
     <section
       className={cn(
-        "rounded-sm border border-white/35 bg-[#f6f2e8]/94 p-3 text-[#24322d] shadow-lg backdrop-blur",
+        "border border-white/18 bg-[#061017]/94 p-4 text-white shadow-2xl backdrop-blur-xl",
         className,
       )}
       aria-label="Atlas search"
       data-state={state}
     >
+      <header className="mb-4 flex items-center justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase text-[#8de8d2]">
+            {selectedRegion ? "Search this place" : "Find a memory"}
+          </p>
+          <h2 className="mt-1 font-editorial text-2xl font-semibold">
+            {selectedRegion?.name ?? "Your world"}
+          </h2>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label="Close Atlas search"
+          onClick={onClose}
+          className="size-10 rounded-sm text-white/72 hover:bg-white/10 hover:text-white"
+        >
+          <X aria-hidden="true" />
+        </Button>
+      </header>
+
       <label className="sr-only">
         {selectedRegion ? `Search ${selectedRegion.name}` : "Search memories"}
       </label>
-      <div className="flex min-h-11 items-center gap-3 rounded-sm border border-[#c7c1b5] bg-[#fffdf8] px-3 focus-within:ring-2 focus-within:ring-[#315fb4]">
-        <Search className="size-4 text-[#5d685f]" aria-hidden="true" />
+      <div className="flex min-h-12 items-center gap-3 border border-white/22 bg-white/8 px-3 focus-within:ring-2 focus-within:ring-[#8de8d2]">
+        <Search className="size-4 text-white/52" aria-hidden="true" />
         <input
           value={query}
           onChange={(event) => {
@@ -145,11 +174,33 @@ export function AtlasSearch({
           }}
           aria-label={selectedRegion ? "Search this place" : "Search regions, routes, replay-worthy days"}
           placeholder={selectedRegion ? "Search this place" : "Search places and routes"}
-          className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[#6e756e]"
+          autoFocus
+          className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/42"
         />
       </div>
 
-      <div className={cn("atlas-search-status text-sm text-[#626a64]", state === "initial" ? "sr-only" : "mt-3")}>
+      {!selectedRegion ? (
+        <div
+          className="mt-3 grid grid-cols-3 border border-white/16 p-1"
+          aria-label="Activity filter"
+        >
+          {(["all", "runs", "rides"] as const).map((value) => (
+            <Button
+              key={value}
+              type="button"
+              variant="ghost"
+              aria-label={`Show ${value === "all" ? "all activities" : value}`}
+              aria-pressed={mode === value}
+              onClick={() => onModeChange(value)}
+              className="h-10 rounded-sm text-white/62 hover:bg-white/8 hover:text-white aria-pressed:bg-white aria-pressed:text-[#10201b]"
+            >
+              {value[0].toUpperCase() + value.slice(1)}
+            </Button>
+          ))}
+        </div>
+      ) : null}
+
+      <div className={cn("atlas-search-status text-sm text-white/58", state === "initial" ? "sr-only" : "mt-3")}>
         {state === "initial" && "Start with a place, route name, ride, run, or replay quality."}
         {state === "typing" && "Keep typing to search completed route memories."}
         {state === "loading" && "Searching completed memories."}
@@ -163,6 +214,24 @@ export function AtlasSearch({
         {state === "grouped-results" && "Grouped results"}
       </div>
 
+      {state === "initial" && !selectedRegion ? (
+        <ResultGroup title="Places">
+          {regions.slice(0, 8).map((region) => (
+            <button
+              key={region.name}
+              type="button"
+              onClick={() => selectRegion(region)}
+              className="flex min-h-12 items-center justify-between gap-4 border-b border-white/10 px-1 text-left text-sm outline-none transition-colors last:border-b-0 hover:text-[#8de8d2] focus-visible:ring-2 focus-visible:ring-[#8de8d2]"
+            >
+              <span className="font-editorial text-base">{region.name}</span>
+              <span className="text-xs tabular-nums text-white/48">
+                {region.routes.length} journeys · {region.totalKm.toFixed(0)} km
+              </span>
+            </button>
+          ))}
+        </ResultGroup>
+      ) : null}
+
       {state === "grouped-results" ? (
         <div className="atlas-search-results mt-4 grid gap-4">
           <ResultGroup title="Regions">
@@ -171,10 +240,10 @@ export function AtlasSearch({
                 key={region.name}
                 type="button"
                 onClick={() => selectRegion(region)}
-                className="rounded-md border border-border px-3 py-2 text-left text-sm hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="border-b border-white/10 px-1 py-3 text-left text-sm hover:text-[#8de8d2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8de8d2]"
               >
                 <b>{region.name}</b>
-                <span className="ml-2 text-muted-foreground">
+                <span className="ml-2 text-white/48">
                   {region.routes.length} routes · {region.totalKm.toFixed(0)} km
                 </span>
               </button>
@@ -188,10 +257,10 @@ export function AtlasSearch({
                 type="button"
                 onClick={() => selectRoute(route)}
                 aria-pressed={selectedRoute?.slug === route.slug}
-                className="rounded-md border border-border px-3 py-2 text-left text-sm hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="border-b border-white/10 px-1 py-3 text-left text-sm hover:text-[#8de8d2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8de8d2]"
               >
                 <b>{route.name}</b>
-                <span className="ml-2 text-muted-foreground">
+                <span className="ml-2 text-white/48">
                   {route.type} · {route.distanceKm.toFixed(1)} km
                 </span>
               </button>
@@ -205,10 +274,10 @@ export function AtlasSearch({
                 type="button"
                 onClick={() => selectRoute(route)}
                 aria-pressed={selectedRoute?.slug === route.slug}
-                className="rounded-md border border-border px-3 py-2 text-left text-sm hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="border-b border-white/10 px-1 py-3 text-left text-sm hover:text-[#8de8d2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8de8d2]"
               >
                 <b>{route.name}</b>
-                <span className="ml-2 text-muted-foreground">{route.difficulty}</span>
+                <span className="ml-2 text-white/48">{route.difficulty}</span>
               </button>
             ))}
           </ResultGroup>
@@ -229,8 +298,8 @@ function ResultGroup({
   if (!hasChildren) return null;
 
   return (
-    <div className="grid gap-2">
-      <div className="text-xs font-semibold uppercase text-muted-foreground">
+    <div className="mt-4 grid gap-1">
+      <div className="mb-1 text-xs font-semibold uppercase text-[#8de8d2]">
         {title}
       </div>
       {children}

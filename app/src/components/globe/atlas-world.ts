@@ -38,6 +38,7 @@ export interface AtlasWorldEngineMountOptions {
   container: HTMLElement;
   regions: RouteRegion[];
   onStatus: (status: AtlasWorldStatus) => void;
+  onSelectRegion?: (region: RouteRegion) => void;
   onSelectRoute?: (route: RouteSummary) => void;
 }
 

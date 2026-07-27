@@ -36,12 +36,10 @@ describe("region route carousel geometry", () => {
     expect(elevationProfileGeometry([{ ...trace[0], lat: Number.NaN }])).toBeNull();
   });
 
-  it("reserves one card plus a mobile peek, two-plus on tablet, and three on desktop", () => {
+  it("reserves one card plus a mobile peek, two-plus on tablet, and four on desktop", () => {
     expect(ROUTE_CAROUSEL_SLIDE_CLASS).toContain("flex-[0_0_84%]");
     expect(ROUTE_CAROUSEL_SLIDE_CLASS).toContain("sm:basis-[44%]");
-    expect(ROUTE_CAROUSEL_SLIDE_CLASS).toContain(
-      "xl:basis-[calc((100%-2rem)/3)]",
-    );
+    expect(ROUTE_CAROUSEL_SLIDE_CLASS).toContain("xl:basis-1/4");
   });
 
   it("loads every visible card plus one neighboring card on each side", () => {

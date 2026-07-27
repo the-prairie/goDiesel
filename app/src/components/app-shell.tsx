@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 
 import { AtlasSpine } from "@/components/atlas-spine";
-import { AtlasImmersiveNavigation } from "@/components/atlas-immersive-navigation";
 import { APP_PATHS, appSectionForPath } from "@/navigation";
 import { cn } from "@/lib/utils";
 
@@ -26,7 +25,6 @@ export function AppShell() {
   return (
     <div className="weathered-atlas field-guide-theme relative flex min-h-dvh bg-background text-foreground">
       <AtlasSpine hideDesktop={isAtlas} />
-      {isAtlas ? <AtlasImmersiveNavigation /> : null}
       <div
         className={cn(
           "flex min-h-dvh min-w-0 flex-1 flex-col pb-[var(--mobile-navigation-height)] md:pb-0",

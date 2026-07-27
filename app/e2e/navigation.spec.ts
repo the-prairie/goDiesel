@@ -36,7 +36,7 @@ test("compact Atlas navigation supports keyboard entry and restores focus", asyn
   await trigger.focus();
   await page.keyboard.press("Enter");
 
-  const navigation = page.getByRole("dialog", { name: "goDiesel navigation" });
+  const navigation = page.getByRole("dialog", { name: "goDiesel", exact: true });
   await expect(navigation).toBeVisible();
   await expect(navigation.getByRole("link", { name: "Atlas" })).toBeFocused();
   await page.keyboard.press("Tab");
