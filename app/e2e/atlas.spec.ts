@@ -421,7 +421,7 @@ test("Replay back control restores the originating Atlas selection", async ({ pa
     .getByRole("link", { name: "Open route" })
     .click();
   await expect(page).toHaveURL(/#\/replay\//);
-  await page.getByRole("link", { name: "Back to Atlas" }).click();
+  await page.getByRole("button", { name: "Back to Atlas" }).click();
   await expect(page).toHaveURL(atlasUrl);
 });
 

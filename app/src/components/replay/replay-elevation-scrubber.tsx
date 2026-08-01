@@ -26,6 +26,9 @@ const PROFILE_HEIGHT = 92;
 const TRAVELED_COLOR = "#315fb4";
 const FUTURE_COLOR = "#aebad0";
 const PLAYHEAD_COLOR = "#d95d45";
+const INTELLIGENCE_TRAVELED_COLOR = "#ef684e";
+const INTELLIGENCE_FUTURE_COLOR = "#f6f3ed";
+const INTELLIGENCE_PLAYHEAD_COLOR = "#ef684e";
 
 export interface ReplayElevationScrubberHandle {
   sync(progressM: number): void;
@@ -39,6 +42,7 @@ export const ReplayElevationScrubber = forwardRef<
     totalDistanceM: number;
     disabled?: boolean;
     compact?: boolean;
+    tone?: "default" | "intelligence";
     className?: string;
     onSeek: (progressM: number) => void;
   }
@@ -49,6 +53,7 @@ export const ReplayElevationScrubber = forwardRef<
     totalDistanceM,
     disabled = false,
     compact = false,
+    tone = "default",
     className,
     onSeek,
   },
@@ -82,6 +87,12 @@ export const ReplayElevationScrubber = forwardRef<
   }, [repairs]);
   const repairYRatio = (distanceRatio: number) =>
     profileYAtRatio(profile.points, distanceRatio) / PROFILE_HEIGHT;
+  const traveledColor =
+    tone === "intelligence" ? INTELLIGENCE_TRAVELED_COLOR : TRAVELED_COLOR;
+  const futureColor =
+    tone === "intelligence" ? INTELLIGENCE_FUTURE_COLOR : FUTURE_COLOR;
+  const playheadColor =
+    tone === "intelligence" ? INTELLIGENCE_PLAYHEAD_COLOR : PLAYHEAD_COLOR;
 
   const sync = (nextProgressM: number) => {
     const ratio = Math.min(1, Math.max(0, nextProgressM / totalDistanceM));
@@ -96,10 +107,13 @@ export const ReplayElevationScrubber = forwardRef<
       ref={hostRef}
       data-testid="replay-elevation-scrubber"
       data-distance-axis="route-metres"
-      data-traveled-color={TRAVELED_COLOR}
-      data-playhead-color={PLAYHEAD_COLOR}
+      data-traveled-color={traveledColor}
+      data-playhead-color={playheadColor}
       className={cn(
-        "group relative min-w-0 overflow-visible border-x border-line bg-surface focus-within:ring-2 focus-within:ring-route focus-within:ring-inset",
+        "group relative min-w-0 overflow-visible focus-within:ring-2 focus-within:ring-route focus-within:ring-inset",
+        tone === "intelligence"
+          ? "border-x border-white/15 bg-black/45"
+          : "border-x border-line bg-surface",
         compact ? "h-[4.5rem]" : "h-[6.25rem]",
         className,
       )}
@@ -126,14 +140,19 @@ export const ReplayElevationScrubber = forwardRef<
           x2={PROFILE_WIDTH}
           y1={PROFILE_HEIGHT - 10}
           y2={PROFILE_HEIGHT - 10}
-          stroke="var(--line)"
+          stroke={tone === "intelligence" ? "rgba(255,255,255,0.2)" : "var(--line)"}
           strokeWidth="1"
         />
-        <path d={profile.area} fill="#dfe5ee" opacity="0.72" />
+        <path
+          d={profile.area}
+          fill={tone === "intelligence" ? "#253a3a" : "#dfe5ee"}
+          opacity={tone === "intelligence" ? "0.6" : "0.72"}
+        />
         <polyline
           points={profile.line}
           fill="none"
-          stroke={FUTURE_COLOR}
+          stroke={futureColor}
+          opacity={tone === "intelligence" ? "0.62" : "1"}
           strokeWidth="2.5"
           strokeLinejoin="round"
           vectorEffect="non-scaling-stroke"
@@ -142,7 +161,7 @@ export const ReplayElevationScrubber = forwardRef<
           points={profile.line}
           clipPath={`url(#${clipId})`}
           fill="none"
-          stroke={TRAVELED_COLOR}
+          stroke={traveledColor}
           strokeWidth="3"
           strokeLinejoin="round"
           vectorEffect="non-scaling-stroke"
@@ -151,9 +170,19 @@ export const ReplayElevationScrubber = forwardRef<
 
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute inset-y-0 left-[var(--replay-progress)] z-10 w-px -translate-x-1/2 bg-coral"
+        className={cn(
+          "pointer-events-none absolute inset-y-0 left-[var(--replay-progress)] z-10 w-px -translate-x-1/2",
+          tone === "intelligence" ? "bg-[#ef684e]" : "bg-coral",
+        )}
       >
-        <span className="absolute left-1/2 top-2 size-3 -translate-x-1/2 rounded-full border-2 border-surface bg-coral shadow-sm" />
+        <span
+          className={cn(
+            "absolute left-1/2 top-2 size-3 -translate-x-1/2 rounded-full border-2 shadow-sm",
+            tone === "intelligence"
+              ? "border-black bg-[#ef684e]"
+              : "border-surface bg-coral",
+          )}
+        />
       </span>
 
       {repairs.map((repair) => (
@@ -218,7 +247,12 @@ export const ReplayElevationScrubber = forwardRef<
         className="absolute inset-0 z-20 h-full w-full cursor-ew-resize opacity-0 disabled:cursor-not-allowed"
       />
 
-      <div className="pointer-events-none absolute inset-x-3 bottom-1 z-10 flex justify-between text-[10px] font-semibold text-ink-muted">
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-x-3 bottom-1 z-10 flex justify-between text-[10px] font-semibold",
+          tone === "intelligence" ? "text-white/55" : "text-ink-muted",
+        )}
+      >
         <span>0 km</span>
         {!compact ? <span>{(totalDistanceM / 2_000).toFixed(1)} km</span> : null}
         <span>{(totalDistanceM / 1_000).toFixed(1)} km</span>

@@ -79,7 +79,7 @@ test("Replay uses the same source-backed repair distances in both engines", asyn
   page,
 }) => {
   await installDeterministicReplayEngine(page);
-  await page.goto(`/#/replay/${repairedRouteSlug}`);
+  await page.goto(`/#/replay/${repairedRouteSlug}?renderer=cesium`);
 
   const scrubber = page.getByTestId("replay-elevation-scrubber");
   const repairMarks = scrubber.getByTestId("replay-repair-mark");
@@ -103,7 +103,7 @@ test("Replay actions and repair affordances share their visual baselines", async
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await installDeterministicReplayEngine(page);
-  await page.goto(`/#/replay/${repairedCreteRouteSlug}`);
+  await page.goto(`/#/replay/${repairedCreteRouteSlug}?renderer=cesium`);
   await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-state", "partial");
 
   const enterRoute = await page.getByRole("link", { name: "Enter route" }).boundingBox();

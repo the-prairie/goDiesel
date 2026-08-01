@@ -76,11 +76,15 @@ export function EarthReplayStage({
   pickerRoutes,
   backPath,
   backLabel,
+  initialEngineMode = "earth",
+  allowEarthMode = true,
 }: {
   route: QuestRoute;
   pickerRoutes: RouteSummary[];
   backPath: string;
   backLabel: string;
+  initialEngineMode?: ReplayEngineMode;
+  allowEarthMode?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const elevationScrubberRef = useRef<
@@ -90,9 +94,10 @@ export function EarthReplayStage({
   const mountedRouteRef = useRef<string | undefined>(undefined);
   const controlRef = useRef(initialReplayState());
   const [status, setStatus] = useState<ReplayStatus>(() =>
-    initialReplayStatus("earth"),
+    initialReplayStatus(initialEngineMode),
   );
-  const [engineMode, setEngineMode] = useState<ReplayEngineMode>("earth");
+  const [engineMode, setEngineMode] =
+    useState<ReplayEngineMode>(initialEngineMode);
   const [control, setControl] = useState(controlRef.current);
   const [contextState, setContextState] =
     useState<RouteContextHudState>("preview");
@@ -123,8 +128,8 @@ export function EarthReplayStage({
     const container = containerRef.current;
     if (!container) return;
     const routeChanged = mountedRouteRef.current !== route.slug;
-    if (routeChanged && engineMode !== "earth") {
-      setEngineMode("earth");
+    if (routeChanged && engineMode !== initialEngineMode) {
+      setEngineMode(initialEngineMode);
       return;
     }
     const engine = createReplayEngine(engineMode);
@@ -149,7 +154,7 @@ export function EarthReplayStage({
       engine.destroy();
       if (engineRef.current === engine) engineRef.current = undefined;
     };
-  }, [engineMode, route]);
+  }, [engineMode, initialEngineMode, route]);
 
   useEffect(() => {
     if (!operational || !control.playing) return;
@@ -262,7 +267,7 @@ export function EarthReplayStage({
                 </Button>
               </div>
             ) : null}
-            {engineMode === "atlas" ? (
+            {engineMode === "atlas" && allowEarthMode ? (
               <Button
                 type="button"
                 variant="outline"
@@ -292,6 +297,7 @@ export function EarthReplayStage({
               )}
               <ReplayRoutePicker
                 currentSlug={route.slug}
+                renderer={allowEarthMode ? "cesium" : "atlas"}
                 routes={pickerRoutes}
                 returnPath={backPath.startsWith(APP_PATHS.atlas) ? backPath : undefined}
               />

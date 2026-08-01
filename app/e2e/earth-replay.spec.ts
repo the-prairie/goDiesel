@@ -166,7 +166,7 @@ async function installDeterministicReplayEngine(page: Page) {
 
 test("bundled React Replay mounts, plays, pauses, and cleans up", async ({ page }) => {
   await installDeterministicReplayEngine(page);
-  await page.goto(`/#/replay/${routeSlug}`);
+  await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
 
   const replay = page.getByTestId("replay-stage");
   await expect(replay).toHaveAttribute("data-engine", "cesium-bundled");
@@ -237,7 +237,7 @@ test("bundled React Replay mounts, plays, pauses, and cleans up", async ({ page 
 
 test("Replay controls stay synchronized across route changes", async ({ page }) => {
   await installDeterministicReplayEngine(page);
-  await page.goto(`/#/replay/${routeSlug}`);
+  await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
 
   const replay = page.getByTestId("replay-stage");
   await expect(replay).toHaveAttribute("data-state", "ready");
@@ -258,7 +258,7 @@ test("Replay controls stay synchronized across route changes", async ({ page }) 
   await expect(replay).toHaveAttribute("data-camera-range", "720");
 
   await page.evaluate(() => {
-    window.location.hash = "#/replay/13358070690";
+    window.location.hash = "#/replay/13358070690?renderer=cesium";
   });
   await expect(replay).toHaveAttribute("data-route-slug", "13358070690");
   await expect(replay).toHaveAttribute("data-state", "ready");
@@ -270,7 +270,7 @@ test("Replay controls stay synchronized across route changes", async ({ page }) 
 
 test("Replay renders only the route thread", async ({ page }) => {
   await installDeterministicReplayEngine(page);
-  await page.goto(`/#/replay/${routeSlug}`);
+  await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
 
   await expect(page.getByTestId("route-thread")).toBeVisible();
 });
@@ -280,7 +280,7 @@ test("Replay uses the elevation profile as its single distance-based timeline", 
 }) => {
   await installDeterministicReplayEngine(page);
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto(`/#/replay/${routeSlug}`);
+  await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
 
   const replay = page.getByTestId("replay-stage");
   const dock = page.getByTestId("replay-controls");
@@ -310,7 +310,7 @@ test("mobile Replay keeps one compact dock and expands tools above it", async ({
 }) => {
   await installDeterministicReplayEngine(page);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(`/#/replay/${routeSlug}`);
+  await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
 
   const dock = page.getByTestId("replay-controls");
   const scrubber = page.getByTestId("replay-elevation-scrubber");
@@ -336,7 +336,7 @@ test("nonessential Replay chrome yields during playback and returns on intent", 
   page,
 }) => {
   await installDeterministicReplayEngine(page);
-  await page.goto(`/#/replay/${routeSlug}`);
+  await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
 
   const replay = page.getByTestId("replay-stage");
   await page.getByRole("button", { name: "Play route" }).click();
@@ -351,7 +351,7 @@ test("nonessential Replay chrome yields during playback and returns on intent", 
 test("reduced motion keeps Replay chrome visible while playback progresses", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await installDeterministicReplayEngine(page);
-  await page.goto(`/#/replay/${routeSlug}`);
+  await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
 
   const replay = page.getByTestId("replay-stage");
   await expect(replay).toHaveAttribute("data-state", "ready");
@@ -376,7 +376,7 @@ test("city and mountain Replay controls remain usable on desktop and mobile", as
       { width: 390, height: 844 },
     ]) {
       await page.setViewportSize(viewport);
-      await page.goto(`/#/replay/${route}`);
+      await page.goto(`/#/replay/${route}?renderer=cesium`);
       const replay = page.getByTestId("replay-stage");
       await expect(replay).toHaveAttribute("data-state", "ready");
       await expect(page.getByTestId("replay-context")).toBeVisible();
@@ -411,7 +411,7 @@ test("city, mountain, short, and long routes switch without stale Replay state",
     "13358070690", // mountain
     "9845102380", // long
   ];
-  await page.goto(`/#/replay/${representativeRoutes[0]}`);
+  await page.goto(`/#/replay/${representativeRoutes[0]}?renderer=cesium`);
   const replay = page.getByTestId("replay-stage");
   await expect(replay).toHaveAttribute("data-state", "ready");
   await page.getByLabel("Route progress").fill("2000");
@@ -419,7 +419,7 @@ test("city, mountain, short, and long routes switch without stale Replay state",
 
   for (const [index, slug] of representativeRoutes.slice(1).entries()) {
     await page.evaluate((nextSlug) => {
-      window.location.hash = `#/replay/${nextSlug}`;
+      window.location.hash = `#/replay/${nextSlug}?renderer=cesium`;
     }, slug);
     await expect(replay).toHaveAttribute("data-route-slug", slug);
     await expect(replay).toHaveAttribute("data-state", "ready");
@@ -449,7 +449,7 @@ test("Change route searches every replay-ready route and updates the world", asy
   page,
 }) => {
   await installDeterministicReplayEngine(page);
-  await page.goto(`/#/replay/${routeSlug}`);
+  await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
   await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-state", "ready");
 
   await page.getByRole("button", { name: "Change route" }).click();
@@ -473,13 +473,15 @@ test("Change route searches every replay-ready route and updates the world", asy
   );
   await expect(chooser.getByRole("region", { name: /\d+ matches/ })).toBeVisible();
   await expect(chooser.getByRole("region", { name: "Featured shortlist" })).toHaveCount(0);
-  const destination = chooser.locator("a[href$='/replay/5650407638']");
+  const destination = chooser.locator(
+    "a[href$='/replay/5650407638?renderer=cesium']",
+  );
   await expect(destination).toContainText("Victoria, BC");
   await expect(destination).toContainText("Ride · 84.6 km");
   await expect(destination).toContainText("Replay ready");
   await destination.click();
 
-  await expect(page).toHaveURL(/#\/replay\/5650407638$/);
+  await expect(page).toHaveURL(/#\/replay\/5650407638\?renderer=cesium$/);
   await expect(page.getByTestId("replay-stage")).toHaveAttribute(
     "data-route-slug",
     "5650407638",
@@ -497,7 +499,7 @@ test("Change route searches every replay-ready route and updates the world", asy
 test("Replay route chooser has intentional empty and mobile states", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await installDeterministicReplayEngine(page);
-  await page.goto(`/#/replay/${routeSlug}`);
+  await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
   await page.getByRole("button", { name: "Show route details" }).click();
   await page.getByRole("button", { name: "Change route" }).click();
 
@@ -528,14 +530,16 @@ for (const [device, viewport] of [
       await request.continue();
     });
     await page.setViewportSize(viewport);
-    await page.goto(`/#/replay/${routeSlug}`);
+    await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
     if (device === "mobile") {
       await page.getByRole("button", { name: "Show route details" }).click();
     }
     await page.getByRole("button", { name: "Change route" }).click();
     const chooser = page.getByRole("dialog", { name: "Choose a replay route" });
     await chooser.getByRole("searchbox", { name: "Search replay routes" }).fill("Victoria");
-    await chooser.locator("a[href$='/replay/5650407638']").click();
+    await chooser
+      .locator("a[href$='/replay/5650407638?renderer=cesium']")
+      .click();
     await expect(page.getByRole("status")).toHaveText("Loading Earth Replay.");
     await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-state", "ready");
   });
@@ -548,7 +552,7 @@ test("Earth Replay enters Playable Earth and returns to the same route", async (
     { width: 390, height: 844 },
   ]) {
     await page.setViewportSize(viewport);
-    await page.goto(`/#/replay/${routeSlug}`);
+    await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
     await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-state", "ready");
     const replayContext = page.getByTestId("replay-context");
     await expect(replayContext).toHaveAttribute("data-ui", "route-context-hud");
@@ -589,7 +593,7 @@ test("Replay explains when Playable Earth is unavailable", async ({ page }) => {
     body.replay.replay_eligible = false;
     await request.fulfill({ response, json: body });
   });
-  await page.goto(`/#/replay/${routeSlug}`);
+  await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
 
   await expect(page.getByRole("link", { name: "Enter route" })).toHaveCount(0);
   await expect(page.getByRole("status")).toContainText(
@@ -601,7 +605,7 @@ for (const width of [320, 430]) {
   test(`mobile Replay HUD prioritizes the world at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
     await installDeterministicReplayEngine(page);
-    await page.goto(`/#/replay/${routeSlug}`);
+    await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
 
     const replay = page.getByTestId("replay-stage");
     const context = page.getByTestId("replay-context");
@@ -651,7 +655,7 @@ for (const width of [320, 430]) {
 for (const earthState of ["partial", "unavailable"] as const) {
   test(`Earth ${earthState} state switches cleanly to Atlas replay`, async ({ page }) => {
     await installReplayStatusEngines(page, earthState);
-    await page.goto(`/#/replay/${routeSlug}`);
+    await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
 
     const replay = page.getByTestId("replay-stage");
     await expect(replay).toHaveAttribute("data-state", earthState);
@@ -684,7 +688,7 @@ for (const earthState of ["partial", "unavailable"] as const) {
       .toBe(1);
 
     await page.evaluate(() => {
-      window.location.hash = "#/replay/13358070690";
+      window.location.hash = "#/replay/13358070690?renderer=cesium";
     });
     await expect(replay).toHaveAttribute("data-route-slug", "13358070690");
     await expect(replay).toHaveAttribute("data-engine", "cesium-bundled");
@@ -710,7 +714,7 @@ for (const earthState of ["partial", "unavailable"] as const) {
 
 test("real Atlas adapter fills the stage and advances the route", async ({ page }) => {
   await installUnavailableEarthWithRealAtlas(page);
-  await page.goto(`/#/replay/${routeSlug}`);
+  await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
   await page.getByRole("button", { name: "Use Atlas replay" }).click();
 
   const replay = page.getByTestId("replay-stage");
@@ -738,7 +742,7 @@ test("missing Replay geometry remains intentional and navigable", async ({ page 
     body.route = [];
     await request.fulfill({ response, json: body });
   });
-  await page.goto(`/#/replay/${routeSlug}`);
+  await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
 
   await expect(page.getByRole("alert")).toContainText("Route geometry unavailable");
   await expect(page.getByRole("button", { name: "Use Atlas replay" })).toBeVisible();

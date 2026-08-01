@@ -1,6 +1,9 @@
 import {
+  ArrowLeft,
   Eye,
   Gauge,
+  LocateFixed,
+  LockKeyhole,
   MapPinned,
   Mountain,
   Navigation,
@@ -8,23 +11,24 @@ import {
   Play,
   Route,
   ScanLine,
+  Settings2,
+  Unlock,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
-import {
-  RouteContextHud,
-  type RouteContextHudState,
-} from "@/components/replay/route-context-hud";
+import { ReplayElevationScrubber } from "@/components/replay/replay-elevation-scrubber";
+import { ReplayRoutePicker } from "@/components/replay/replay-route-picker";
 import { Button } from "@/components/ui/button";
-import type { QuestRoute } from "@/domain/routes";
+import type { QuestRoute, RouteSummary } from "@/domain/routes";
 import { cn } from "@/lib/utils";
 import {
   advanceGoogleRouteNavigator,
   cycleGoogleRouteSpeed,
   googleRouteCameraPose,
+  googleRouteTelemetry,
   initialGoogleRouteNavigatorState,
   seekGoogleRouteNavigator,
   zoomGoogleRouteNavigator,
@@ -58,15 +62,36 @@ const CAMERA_MODES: Array<{
   { mode: "overview", label: "Overview", icon: MapPinned },
 ];
 
-export function GoogleRouteNavigatorStage({ route }: { route: QuestRoute }) {
+interface GoogleRouteNavigatorStageProps {
+  route: QuestRoute;
+  variant?: "lab" | "replay";
+  pickerRoutes?: RouteSummary[];
+  backPath?: string;
+  backLabel?: string;
+  onUseAtlas?: () => void;
+}
+
+export function GoogleRouteNavigatorStage({
+  route,
+  variant = "lab",
+  pickerRoutes = [],
+  backPath = "/lab/route-intelligence",
+  backLabel = "Back to route intelligence",
+  onUseAtlas,
+}: GoogleRouteNavigatorStageProps) {
+  const navigate = useNavigate();
+  const productionReplay = variant === "replay";
   const containerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<GoogleRouteNavigatorEngine | undefined>(undefined);
   const controlRef = useRef(initialGoogleRouteNavigatorState());
   const [control, setControl] = useState(controlRef.current);
   const [status, setStatus] = useState<GoogleRouteNavigatorStatus>(INITIAL_STATUS);
-  const [contextState, setContextState] =
-    useState<RouteContextHudState>("preview");
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const totalDistanceM = routeDistanceM(route);
+  const telemetry = useMemo(
+    () => googleRouteTelemetry(route, control.progressM),
+    [control.progressM, route],
+  );
 
   const commitControl = useCallback(
     (
@@ -94,7 +119,7 @@ export function GoogleRouteNavigatorStage({ route }: { route: QuestRoute }) {
     engineRef.current = engine;
     controlRef.current = initial;
     setControl(initial);
-    setContextState("preview");
+    setSettingsOpen(false);
     setStatus(INITIAL_STATUS);
 
     void engine.mount({
@@ -102,6 +127,12 @@ export function GoogleRouteNavigatorStage({ route }: { route: QuestRoute }) {
       container,
       route,
       groundingMode: initial.groundingMode,
+      routeStyle: {
+        color: "#ef684e",
+        outerColor: "#15100d",
+        outerWidth: 0.48,
+        width: 6,
+      },
       onStatus: (next) => {
         setStatus(next);
         if (next.state === "ready") {
@@ -145,19 +176,47 @@ export function GoogleRouteNavigatorStage({ route }: { route: QuestRoute }) {
   }, [route, status.state, totalDistanceM]);
 
   useEffect(() => {
-    if (control.playing) setContextState("compact");
-  }, [control.playing]);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") navigate(backPath);
+      if (event.key === " " && event.target === document.body) {
+        event.preventDefault();
+        commitControl((current) => ({ ...current, playing: !current.playing }));
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [backPath, commitControl, navigate]);
+
+  const togglePlayback = () =>
+    commitControl((current) => ({
+      ...current,
+      playing: !current.playing,
+    }));
+
+  const selectCamera = (mode: GoogleRouteCameraMode) =>
+    commitControl((current) => ({
+      ...current,
+      cameraMode: mode,
+      following: true,
+    }));
 
   return (
     <section
-      aria-label="Google route navigator lab"
-      className="relative h-[calc(100dvh-var(--mobile-navigation-height))] min-h-[34rem] overflow-hidden bg-[#d9e5e8] md:h-dvh"
+      aria-label={productionReplay ? "Google 3D Replay" : "Google route navigator lab"}
+      className={cn(
+        "fixed right-0 top-0 z-[100] min-h-[34rem] overflow-hidden bg-[#081112]",
+        productionReplay
+          ? "bottom-[var(--mobile-navigation-height)] left-0 md:bottom-0 md:left-[var(--spine-rail-width)] lg:left-[var(--spine-width)]"
+          : "bottom-0 left-0",
+      )}
       data-camera-mode={control.cameraMode}
       data-following={control.following}
       data-grounding-mode={control.groundingMode}
+      data-hud-state={control.playing ? "compact" : "expanded"}
+      data-engine="google-3d-maps"
       data-route-slug={route.slug}
       data-state={status.state}
-      data-testid="google-route-navigator"
+      data-testid={productionReplay ? "replay-stage" : "google-route-navigator"}
     >
       <div
         aria-label={`Google photorealistic 3D view of ${route.name}`}
@@ -165,146 +224,271 @@ export function GoogleRouteNavigatorStage({ route }: { route: QuestRoute }) {
         ref={containerRef}
       />
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start p-3 sm:p-5">
-        <RouteContextHud
-          backLabel="Back to route intelligence"
-          backPath="/lab/route-intelligence"
-          detailsTestId="google-route-context-details"
-          icon={<ScanLine aria-hidden="true" className="size-4 shrink-0" />}
-          label="Native Google 3D lab"
-          onStateChange={setContextState}
-          route={route}
-          state={contextState}
-          summary={
-            <div className="mt-3 flex flex-wrap gap-2">
-              {FIELD_TEST_ROUTES.map((candidate) => (
-                <Button
-                  asChild
-                  className="h-8"
-                  key={candidate.slug}
-                  size="sm"
-                  variant={candidate.slug === route.slug ? "default" : "outline"}
-                >
-                  <Link to={`/lab/google-route-navigator/${candidate.slug}`}>
-                    {candidate.label}
-                  </Link>
-                </Button>
-              ))}
+      <div className="pointer-events-none absolute inset-0 z-10 bg-[linear-gradient(180deg,rgba(0,0,0,.42)_0%,transparent_22%,transparent_70%,rgba(0,0,0,.52)_100%)]" />
+
+      <header className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center justify-between border-b border-white/15 bg-black/42 px-3 py-2 text-white backdrop-blur-md sm:px-5">
+        <div className="pointer-events-auto flex min-w-0 items-center gap-3">
+          <Button
+            aria-label={backLabel}
+            className="border-white/20 bg-black/25 text-white hover:bg-white/10"
+            onClick={() => navigate(backPath)}
+            size="icon-sm"
+            type="button"
+            variant="outline"
+          >
+            <ArrowLeft aria-hidden="true" />
+          </Button>
+          <div className="min-w-0">
+            <h1 className="truncate text-sm font-semibold">{route.region}</h1>
+            <div className="truncate text-[11px] text-white/58">
+              {route.distanceKm.toFixed(1)} km · {Math.round(route.elevationGainM)} m up ·{" "}
+              {route.type}
             </div>
-          }
-          testId="google-route-context"
+          </div>
+        </div>
+        <div className="pointer-events-auto flex items-center gap-2">
+          <div className="hidden items-center gap-2 border-r border-white/15 pr-3 text-[10px] font-semibold uppercase text-white/62 sm:flex">
+            <ScanLine aria-hidden="true" className="size-3.5 text-[#ef684e]" />
+            {productionReplay ? "Google 3D Replay" : "Field replay"}
+          </div>
+          <div className="flex items-center gap-1.5 text-[11px] text-white/72">
+            {control.following ? (
+              <LockKeyhole aria-hidden="true" className="size-3.5" />
+            ) : (
+              <Unlock aria-hidden="true" className="size-3.5" />
+            )}
+            <span className="hidden sm:inline">
+              {CAMERA_MODES.find(({ mode }) => mode === control.cameraMode)?.label}
+            </span>
+          </div>
+          <Button
+            aria-expanded={settingsOpen}
+            aria-label="Replay settings"
+            className="text-white hover:bg-white/10 hover:text-white"
+            onClick={() => setSettingsOpen((open) => !open)}
+            size="icon-sm"
+            type="button"
+            variant="ghost"
+          >
+            <Settings2 aria-hidden="true" />
+          </Button>
+          {productionReplay && pickerRoutes.length > 0 ? (
+            <div className="min-w-36 text-ink">
+              <ReplayRoutePicker
+                currentSlug={route.slug}
+                routes={pickerRoutes}
+                returnPath={backPath.startsWith("/atlas") ? backPath : undefined}
+              />
+            </div>
+          ) : null}
+        </div>
+      </header>
+
+      {settingsOpen ? (
+        <ReplaySettings
+          control={control}
+          onCommit={commitControl}
+          route={route}
+          showFieldRoutes={!productionReplay}
         />
-      </div>
+      ) : null}
 
       {status.state !== "ready" ? (
-        <div className="absolute inset-0 z-10 grid place-items-center bg-background/78 p-6">
+        <div className="absolute inset-0 z-20 grid place-items-center bg-black/58 p-6">
           <div
             aria-live="polite"
-            className="max-w-md border border-line bg-surface p-6 text-center shadow-panel"
+            className="max-w-md border border-white/20 bg-[#0b1112]/94 p-6 text-center text-white shadow-2xl"
             role={status.state === "unavailable" ? "alert" : "status"}
           >
-            <ScanLine aria-hidden="true" className="mx-auto size-5 text-route" />
+            <ScanLine aria-hidden="true" className="mx-auto size-5 text-[#ef684e]" />
             <h2 className="mt-3 font-editorial text-2xl font-semibold">
               {status.state === "loading" ? "Entering the route" : "3D world unavailable"}
             </h2>
-            <p className="mt-2 text-control text-ink-secondary">{status.message}</p>
+            <p className="mt-2 text-sm text-white/62">{status.message}</p>
+            {status.state === "unavailable" && onUseAtlas ? (
+              <Button
+                className="mt-5 bg-white text-black hover:bg-white/90"
+                onClick={onUseAtlas}
+                type="button"
+              >
+                <MapPinned aria-hidden="true" />
+                Use Atlas replay
+              </Button>
+            ) : null}
           </div>
         </div>
       ) : null}
 
-      <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex justify-center sm:inset-x-5 sm:bottom-5">
-        <div
-          className="pointer-events-auto grid w-full max-w-6xl gap-3 border border-line bg-surface/94 p-3 shadow-panel backdrop-blur-xl lg:grid-cols-[auto_minmax(12rem,1fr)_auto_auto] lg:items-center"
-          data-testid="google-route-controls"
-        >
-          <div className="flex min-w-36 items-center gap-3">
-            <Route aria-hidden="true" className="size-4 shrink-0 text-route" />
-            <div>
-              <div className="text-micro font-semibold uppercase text-route">
-                Route thread
-              </div>
-              <div
-                aria-live="off"
-                className="text-control tabular-nums text-ink-secondary"
-                data-testid="google-route-progress"
-              >
-                {(control.progressM / 1_000).toFixed(2)} / {route.distanceKm.toFixed(1)} km
-              </div>
+      <div
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-30"
+        data-testid={productionReplay ? "replay-controls" : undefined}
+      >
+        {control.playing ? (
+          <CompactReplayRail
+            control={control}
+            disabled={status.state !== "ready"}
+            onCommit={commitControl}
+            onSelectCamera={selectCamera}
+            onTogglePlayback={togglePlayback}
+            route={route}
+            telemetry={telemetry}
+            totalDistanceM={totalDistanceM}
+          />
+        ) : (
+          <ExpandedReplayHud
+            control={control}
+            disabled={status.state !== "ready"}
+            onCommit={commitControl}
+            onSelectCamera={selectCamera}
+            onTogglePlayback={togglePlayback}
+            route={route}
+            telemetry={telemetry}
+            totalDistanceM={totalDistanceM}
+          />
+        )}
+      </div>
+    </section>
+  );
+}
+
+function CompactReplayRail({
+  control,
+  disabled,
+  onCommit,
+  onSelectCamera,
+  onTogglePlayback,
+  route,
+  telemetry,
+  totalDistanceM,
+}: ReplayHudProps) {
+  return (
+    <div
+      className="pointer-events-auto mx-auto grid w-full items-center gap-3 border-t border-white/15 bg-[#071011]/92 px-3 py-2 text-white shadow-2xl backdrop-blur-xl sm:grid-cols-[auto_minmax(9rem,1fr)_auto] sm:px-5"
+      data-testid="google-route-controls"
+    >
+      <div className="flex items-center gap-3">
+        <ReplayButton
+          disabled={disabled}
+          onClick={onTogglePlayback}
+          playing={control.playing}
+        />
+        <div className="min-w-[7.5rem]">
+          <div
+            className="text-xs font-semibold tabular-nums"
+            data-testid="google-route-progress"
+          >
+            {(control.progressM / 1_000).toFixed(2)} / {route.distanceKm.toFixed(1)} km
+          </div>
+          <div className="text-[9px] uppercase text-white/42">Route position</div>
+        </div>
+      </div>
+
+      <input
+        aria-label="Route progress"
+        className="h-8 min-w-0 w-full accent-[#ef684e]"
+        disabled={disabled}
+        max={totalDistanceM}
+        min={0}
+        onChange={(event) =>
+          onCommit((current) =>
+            seekGoogleRouteNavigator(
+              current,
+              Number(event.target.value),
+              totalDistanceM,
+            ),
+          )
+        }
+        step={1}
+        type="range"
+        value={control.progressM}
+      />
+
+      <div className="flex items-center justify-between gap-3 sm:justify-end">
+        <Metric label="Elapsed" value={formatDuration(telemetry.elapsedS)} />
+        <Metric label="Pace" value={formatPace(telemetry.paceSPerKm, route.type)} />
+        <Metric label="Elev" value={`${Math.round(telemetry.elevationM)} m`} />
+        <CameraControls
+          active={control.cameraMode}
+          disabled={disabled}
+          onSelect={onSelectCamera}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ExpandedReplayHud({
+  control,
+  disabled,
+  onCommit,
+  onSelectCamera,
+  onTogglePlayback,
+  route,
+  telemetry,
+  totalDistanceM,
+}: ReplayHudProps) {
+  return (
+    <div
+      className="pointer-events-auto mx-auto w-full border-t border-white/15 bg-[#071011]/94 text-white shadow-2xl backdrop-blur-xl"
+      data-testid="google-route-controls"
+    >
+      <div className="grid min-h-28 md:grid-cols-[15rem_minmax(18rem,1fr)_auto]">
+        <div className="flex items-center gap-3 border-b border-white/12 px-4 py-3 md:border-b-0 md:border-r">
+          <ReplayButton
+            disabled={disabled}
+            onClick={onTogglePlayback}
+            playing={control.playing}
+          />
+          <Route aria-hidden="true" className="size-4 text-[#ef684e]" />
+          <div>
+            <div className="text-[9px] font-semibold uppercase text-[#ef684e]">
+              Route telemetry
+            </div>
+            <div
+              className="mt-0.5 text-sm font-semibold tabular-nums"
+              data-testid="google-route-progress"
+            >
+              {(control.progressM / 1_000).toFixed(2)} / {route.distanceKm.toFixed(1)} km
             </div>
           </div>
+        </div>
 
-          <input
-            aria-label="Route progress"
-            className="h-9 min-w-0 w-full accent-[var(--route)]"
-            disabled={status.state !== "ready"}
-            max={totalDistanceM}
-            min={0}
-            onChange={(event) =>
-              commitControl((current) =>
-                seekGoogleRouteNavigator(
-                  current,
-                  Number(event.target.value),
-                  totalDistanceM,
-                ),
-              )
-            }
-            step={1}
-            type="range"
-            value={control.progressM}
-          />
+        <ReplayElevationScrubber
+          className="border-0"
+          disabled={disabled}
+          onSeek={(progressM) =>
+            onCommit((current) =>
+              seekGoogleRouteNavigator(current, progressM, totalDistanceM),
+            )
+          }
+          progressM={control.progressM}
+          route={route}
+          tone="intelligence"
+          totalDistanceM={totalDistanceM}
+        />
 
-          <div
-            aria-label="Camera perspective"
-            className="grid grid-cols-3 border border-line bg-surface-muted p-1"
-            role="group"
-          >
-            {CAMERA_MODES.map(({ mode, label, icon: Icon }) => (
-              <button
-                aria-label={label}
-                aria-pressed={control.cameraMode === mode}
-                className={cn(
-                  "flex min-h-9 items-center justify-center gap-1.5 px-2 text-caption font-medium",
-                  control.cameraMode === mode
-                    ? "bg-forest text-white"
-                    : "text-ink-secondary hover:bg-surface",
-                )}
-                disabled={status.state !== "ready"}
-                key={mode}
-                onClick={() =>
-                  commitControl((current) => ({
-                    ...current,
-                    cameraMode: mode,
-                    following: true,
-                  }))
-                }
-                title={`${label} camera`}
-                type="button"
-              >
-                <Icon aria-hidden="true" className="size-3.5" />
-                <span className="hidden sm:inline">{label}</span>
-              </button>
-            ))}
+        <div className="flex flex-wrap items-center justify-between gap-4 border-t border-white/12 px-4 py-3 md:min-w-[27rem] md:border-l md:border-t-0">
+          <div className="grid grid-cols-4 gap-x-5 gap-y-2">
+            <Metric label="Elapsed" value={formatDuration(telemetry.elapsedS)} />
+            <Metric label="Pace" value={formatPace(telemetry.paceSPerKm, route.type)} />
+            <Metric label="Elevation" value={`${Math.round(telemetry.elevationM)} m`} />
+            <Metric
+              label="Grade"
+              value={`${telemetry.gradePercent >= 0 ? "+" : ""}${telemetry.gradePercent.toFixed(1)}%`}
+            />
           </div>
-
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Button
-              aria-label={control.playing ? "Pause route" : "Play route"}
-              disabled={status.state !== "ready"}
-              onClick={() =>
-                commitControl((current) => ({
-                  ...current,
-                  playing: !current.playing,
-                }))
-              }
-              size="icon"
-              type="button"
-            >
-              {control.playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
-            </Button>
+          <div className="flex items-center gap-2">
+            <CameraControls
+              active={control.cameraMode}
+              disabled={disabled}
+              onSelect={onSelectCamera}
+            />
             <Button
               aria-label={`Playback speed ${control.speed}x`}
-              disabled={status.state !== "ready"}
-              onClick={() => commitControl(cycleGoogleRouteSpeed)}
+              className="border-white/20 bg-transparent text-white hover:bg-white/10"
+              disabled={disabled}
+              onClick={() => onCommit(cycleGoogleRouteSpeed)}
+              size="sm"
               title="Change playback speed"
               type="button"
               variant="outline"
@@ -312,89 +496,276 @@ export function GoogleRouteNavigatorStage({ route }: { route: QuestRoute }) {
               <Gauge aria-hidden="true" />
               {control.speed}x
             </Button>
-            <Button
-              aria-label="Zoom in"
-              disabled={status.state !== "ready"}
-              onClick={() =>
-                commitControl((current) =>
-                  zoomGoogleRouteNavigator(current, "in"),
-                )
-              }
-              size="icon"
-              title="Zoom in"
-              type="button"
-              variant="outline"
-            >
-              <ZoomIn aria-hidden="true" />
-            </Button>
-            <Button
-              aria-label="Zoom out"
-              disabled={status.state !== "ready"}
-              onClick={() =>
-                commitControl((current) =>
-                  zoomGoogleRouteNavigator(current, "out"),
-                )
-              }
-              size="icon"
-              title="Zoom out"
-              type="button"
-              variant="outline"
-            >
-              <ZoomOut aria-hidden="true" />
-            </Button>
-            <Button
-              aria-label={control.following ? "Take manual control" : "Resume following"}
-              disabled={status.state !== "ready"}
-              onClick={() =>
-                commitControl((current) => ({
-                  ...current,
-                  following: !current.following,
-                }))
-              }
-              type="button"
-              variant={control.following ? "default" : "outline"}
-            >
-              <Navigation aria-hidden="true" />
-              {control.following ? "Following" : "Resume"}
-            </Button>
-          </div>
-
-          <div className="flex items-center justify-between gap-3 border-t border-line pt-3 lg:col-span-4">
-            <div className="flex items-center gap-2 text-caption text-ink-secondary">
-              <Mountain aria-hidden="true" className="size-4 text-forest" />
-              Route placement
-            </div>
-            <div
-              aria-label="Route placement"
-              className="grid grid-cols-2 border border-line bg-surface-muted p-1"
-              role="group"
-            >
-              {(["ground", "mesh"] as const).map((mode) => (
-                <button
-                  aria-pressed={control.groundingMode === mode}
-                  className={cn(
-                    "min-h-8 px-3 text-caption font-medium capitalize",
-                    control.groundingMode === mode
-                      ? "bg-forest text-white"
-                      : "text-ink-secondary hover:bg-surface",
-                  )}
-                  disabled={status.state !== "ready"}
-                  key={mode}
-                  onClick={() =>
-                    commitControl((current) => ({
-                      ...current,
-                      groundingMode: mode,
-                    }))
-                  }
-                  type="button"
-                >
-                  {mode}
-                </button>
-              ))}
-            </div>
           </div>
         </div>
       </div>
-    </section>
+    </div>
   );
+}
+
+function ReplaySettings({
+  control,
+  onCommit,
+  route,
+  showFieldRoutes,
+}: {
+  control: GoogleRouteNavigatorState;
+  onCommit: ReplayHudProps["onCommit"];
+  route: QuestRoute;
+  showFieldRoutes: boolean;
+}) {
+  return (
+    <aside
+      aria-label="Replay settings panel"
+      className="absolute right-3 top-14 z-40 w-[min(21rem,calc(100%-1.5rem))] border border-white/18 bg-[#081011]/94 p-4 text-white shadow-2xl backdrop-blur-xl sm:right-5"
+    >
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-[9px] font-semibold uppercase text-[#ef684e]">
+            Replay settings
+          </div>
+          <div className="mt-1 text-sm font-semibold">{route.region}</div>
+        </div>
+        <Settings2 aria-hidden="true" className="size-4 text-white/50" />
+      </div>
+
+      <div className="mt-4 grid gap-4">
+        <SettingGroup icon={Mountain} label="Route placement">
+          {(["ground", "mesh"] as const).map((mode) => (
+            <SettingButton
+              active={control.groundingMode === mode}
+              key={mode}
+              label={mode}
+              onClick={() =>
+                onCommit((current) => ({ ...current, groundingMode: mode }))
+              }
+            />
+          ))}
+        </SettingGroup>
+
+        <SettingGroup icon={LocateFixed} label="Camera lock">
+          <SettingButton
+            active={control.following}
+            label="Locked"
+            onClick={() =>
+              onCommit((current) => ({ ...current, following: true }))
+            }
+          />
+          <SettingButton
+            active={!control.following}
+            label="Free"
+            onClick={() =>
+              onCommit((current) => ({ ...current, following: false }))
+            }
+          />
+        </SettingGroup>
+
+        <SettingGroup icon={Gauge} label="Lens range">
+          <Button
+            aria-label="Zoom in"
+            className="border-white/20 bg-transparent text-white hover:bg-white/10"
+            onClick={() =>
+              onCommit((current) => zoomGoogleRouteNavigator(current, "in"))
+            }
+            size="icon-sm"
+            title="Zoom in"
+            type="button"
+            variant="outline"
+          >
+            <ZoomIn aria-hidden="true" />
+          </Button>
+          <Button
+            aria-label="Zoom out"
+            className="border-white/20 bg-transparent text-white hover:bg-white/10"
+            onClick={() =>
+              onCommit((current) => zoomGoogleRouteNavigator(current, "out"))
+            }
+            size="icon-sm"
+            title="Zoom out"
+            type="button"
+            variant="outline"
+          >
+            <ZoomOut aria-hidden="true" />
+          </Button>
+        </SettingGroup>
+
+        {showFieldRoutes ? <div className="border-t border-white/12 pt-3">
+          <div className="text-[9px] font-semibold uppercase text-white/42">
+            Field routes
+          </div>
+          <div className="mt-2 flex gap-2">
+            {FIELD_TEST_ROUTES.map((candidate) => (
+              <Button
+                asChild
+                className={cn(
+                  "h-8 border-white/20 bg-transparent text-white hover:bg-white/10",
+                  candidate.slug === route.slug && "border-[#ef684e] text-[#ff8a73]",
+                )}
+                key={candidate.slug}
+                size="sm"
+                variant="outline"
+              >
+                <Link to={`/lab/google-route-navigator/${candidate.slug}`}>
+                  {candidate.label}
+                </Link>
+              </Button>
+            ))}
+          </div>
+        </div> : null}
+      </div>
+    </aside>
+  );
+}
+
+function SettingGroup({
+  children,
+  icon: Icon,
+  label,
+}: {
+  children: React.ReactNode;
+  icon: typeof Mountain;
+  label: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center gap-2 text-xs text-white/58">
+        <Icon aria-hidden="true" className="size-3.5" />
+        {label}
+      </div>
+      <div className="flex border border-white/15 bg-black/25 p-0.5">{children}</div>
+    </div>
+  );
+}
+
+function SettingButton({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      aria-label={label === "Locked" ? "Resume following" : label}
+      aria-pressed={active}
+      className={cn(
+        "min-h-7 px-2.5 text-[11px] font-medium capitalize",
+        active ? "bg-white text-black" : "text-white/58 hover:bg-white/10",
+      )}
+      onClick={onClick}
+      type="button"
+    >
+      {label}
+    </button>
+  );
+}
+
+function CameraControls({
+  active,
+  disabled,
+  onSelect,
+}: {
+  active: GoogleRouteCameraMode;
+  disabled: boolean;
+  onSelect: (mode: GoogleRouteCameraMode) => void;
+}) {
+  return (
+    <div
+      aria-label="Camera perspective"
+      className="flex border border-white/15 bg-black/25 p-0.5"
+      role="group"
+    >
+      {CAMERA_MODES.map(({ mode, label, icon: Icon }) => (
+        <button
+          aria-label={label}
+          aria-pressed={active === mode}
+          className={cn(
+            "grid size-8 place-items-center text-white/55 hover:bg-white/10 hover:text-white",
+            active === mode && "bg-white text-black hover:bg-white hover:text-black",
+          )}
+          disabled={disabled}
+          key={mode}
+          onClick={() => onSelect(mode)}
+          title={`${label} camera`}
+          type="button"
+        >
+          <Icon aria-hidden="true" className="size-3.5" />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ReplayButton({
+  disabled,
+  onClick,
+  playing,
+}: {
+  disabled: boolean;
+  onClick: () => void;
+  playing: boolean;
+}) {
+  return (
+    <Button
+      aria-label={playing ? "Pause route" : "Play route"}
+      className="border border-[#ef684e] bg-[#ef684e] text-black hover:bg-[#ff826c]"
+      disabled={disabled}
+      onClick={onClick}
+      size="icon"
+      type="button"
+    >
+      {playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+    </Button>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <div className="whitespace-nowrap text-[11px] font-semibold tabular-nums">
+        {value}
+      </div>
+      <div className="whitespace-nowrap text-[8px] font-semibold uppercase text-white/38">
+        {label}
+      </div>
+    </div>
+  );
+}
+
+interface ReplayHudProps {
+  control: GoogleRouteNavigatorState;
+  disabled: boolean;
+  onCommit: (
+    update: (
+      current: GoogleRouteNavigatorState,
+    ) => GoogleRouteNavigatorState,
+  ) => void;
+  onSelectCamera: (mode: GoogleRouteCameraMode) => void;
+  onTogglePlayback: () => void;
+  route: QuestRoute;
+  telemetry: ReturnType<typeof googleRouteTelemetry>;
+  totalDistanceM: number;
+}
+
+function formatDuration(totalSeconds: number) {
+  const safeSeconds = Math.max(0, Math.round(totalSeconds));
+  const hours = Math.floor(safeSeconds / 3_600);
+  const minutes = Math.floor((safeSeconds % 3_600) / 60);
+  const seconds = safeSeconds % 60;
+  return hours > 0
+    ? `${hours}:${minutes.toString().padStart(2, "0")}:${seconds
+        .toString()
+        .padStart(2, "0")}`
+    : `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function formatPace(paceSPerKm: number | undefined, activityType: string) {
+  if (paceSPerKm === undefined || !Number.isFinite(paceSPerKm)) return "--";
+  if (activityType.toLowerCase().includes("ride")) {
+    const speedKmh = 3_600 / paceSPerKm;
+    return `${speedKmh.toFixed(1)} km/h`;
+  }
+  return `${formatDuration(paceSPerKm)} /km`;
 }

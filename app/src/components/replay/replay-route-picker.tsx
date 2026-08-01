@@ -17,10 +17,12 @@ import { replayPath } from "@/navigation";
 
 export function ReplayRoutePicker({
   currentSlug,
+  renderer,
   routes,
   returnPath,
 }: {
   currentSlug: string;
+  renderer?: "atlas" | "cesium";
   routes: RouteSummary[];
   returnPath?: string;
 }) {
@@ -102,6 +104,7 @@ export function ReplayRoutePicker({
               routes={featured}
               currentSlug={currentSlug}
               onSelect={closePicker}
+              renderer={renderer}
               returnPath={returnPath}
             />
           ) : null}
@@ -111,6 +114,7 @@ export function ReplayRoutePicker({
               routes={generalResults}
               currentSlug={currentSlug}
               onSelect={closePicker}
+              renderer={renderer}
               returnPath={returnPath}
             />
           ) : (
@@ -135,6 +139,7 @@ function RouteGroup({
   routes,
   currentSlug,
   onSelect,
+  renderer,
   returnPath,
 }: {
   label: string;
@@ -142,6 +147,7 @@ function RouteGroup({
   routes: RouteSummary[];
   currentSlug: string;
   onSelect: () => void;
+  renderer?: "atlas" | "cesium";
   returnPath?: string;
 }) {
   return (
@@ -155,10 +161,14 @@ function RouteGroup({
       <div className="grid gap-1">
         {routes.map((route) => {
           const selected = route.slug === currentSlug;
+          const routePath = replayPath(route.slug, returnPath);
+          const destination = renderer
+            ? `${routePath}${routePath.includes("?") ? "&" : "?"}renderer=${renderer}`
+            : routePath;
           return (
             <Link
               key={`${label}-${route.slug}`}
-              to={replayPath(route.slug, returnPath)}
+              to={destination}
               aria-current={selected ? "page" : undefined}
               onClick={onSelect}
               className="grid min-h-14 grid-cols-[1fr_auto] items-center gap-3 rounded-sm border border-transparent px-3 py-2 outline-none hover:border-border hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:border-primary aria-[current=page]:bg-primary/10"

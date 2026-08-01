@@ -44,6 +44,12 @@ export interface GoogleRouteNavigatorEngine {
   destroy(): void;
 }
 
+declare global {
+  interface Window {
+    __GODIESEL_GOOGLE_ROUTE_NAVIGATOR_FACTORY__?: () => GoogleRouteNavigatorEngine;
+  }
+}
+
 interface FilamentLayer {
   element: google.maps.maps3d.Polyline3DElement;
   role: CinematicFilamentRole;
@@ -317,5 +323,8 @@ function smoothMapHeading(current: number, target: number, amount: number) {
 }
 
 export function createGoogleRouteNavigatorEngine(): GoogleRouteNavigatorEngine {
-  return new BrowserGoogleRouteNavigatorEngine();
+  return (
+    window.__GODIESEL_GOOGLE_ROUTE_NAVIGATOR_FACTORY__?.() ??
+    new BrowserGoogleRouteNavigatorEngine()
+  );
 }

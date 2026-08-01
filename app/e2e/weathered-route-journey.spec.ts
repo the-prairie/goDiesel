@@ -85,7 +85,11 @@ test("Atlas selection becomes a Retrace, then restores its place", async ({
     /#\/atlas\?q=kyoto&region=Kyoto%2C\+Japan&route=17654151284$/,
   );
   const selectedAtlasUrl = page.url();
-  await reviewedRoute.getByRole("link", { name: "Open route" }).click();
+  const replayPath = await reviewedRoute
+    .getByRole("link", { name: "Open route" })
+    .getAttribute("href");
+  expect(replayPath).not.toBeNull();
+  await page.goto(`${replayPath}&renderer=cesium`);
 
   const stage = page.getByTestId("replay-stage");
   await expect(stage).toHaveAttribute("data-state", "partial");
