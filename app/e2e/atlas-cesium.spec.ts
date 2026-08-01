@@ -509,7 +509,7 @@ test("opening a non-selected card preserves its exact Atlas return selection", a
   await target.getByRole("link", { name: "Open route" }).click();
 
   await expect(page).toHaveURL(new RegExp(`#/replay/${targetSlug}`));
-  await page.getByRole("link", { name: "Back to Atlas" }).click();
+  await page.getByRole("button", { name: "Back to Atlas" }).click();
   await expect(page).toHaveURL(/#\/atlas\?region=Crete%2C\+Greece/);
   await expect(page).toHaveURL(new RegExp(`route=${targetSlug}`));
   await expect(

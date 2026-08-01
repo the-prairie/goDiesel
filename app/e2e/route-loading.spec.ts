@@ -228,7 +228,7 @@ test("route briefing fits mobile and keeps Replay prominent", async ({ page }) =
 
 test("changing routes never flashes the previous route detail", async ({ page }) => {
   const nextSlug = "17665674778";
-  await page.goto(`/#/replay/${routeSlug}`);
+  await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
   await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
   await expect(page.getByText(/^21\.3 km · 680 m up$/)).toBeVisible();
 
@@ -237,7 +237,7 @@ test("changing routes never flashes the previous route detail", async ({ page })
     await route.continue();
   });
   await page.evaluate((slug) => {
-    window.location.hash = `#/replay/${slug}`;
+    window.location.hash = `#/replay/${slug}?renderer=cesium`;
   }, nextSlug);
 
   await expect(page.getByRole("status")).toHaveText("Loading Earth Replay.");

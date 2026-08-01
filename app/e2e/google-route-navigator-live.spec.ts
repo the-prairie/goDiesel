@@ -27,22 +27,27 @@ for (const route of ROUTES) {
     await expect(page.locator("gmp-map-3d")).toBeVisible();
     await expect(page.locator("gmp-polyline-3d")).toHaveCount(1);
     await expect(page.getByTestId("google-route-controls")).toBeVisible();
+    await expect(navigator).toHaveAttribute("data-hud-state", "expanded");
 
     await page.getByRole("button", { name: "Play route" }).click();
+    await expect(navigator).toHaveAttribute("data-hud-state", "compact");
     const progress = page.getByTestId("google-route-progress");
     await expect
       .poll(async () => Number((await progress.textContent())?.split(" ")[0]))
       .toBeGreaterThan(0);
     await page.getByRole("button", { name: "Pause route" }).click();
+    await expect(navigator).toHaveAttribute("data-hud-state", "expanded");
 
     await page.getByRole("button", { name: "Chase" }).click();
     await expect(navigator).toHaveAttribute("data-camera-mode", "chase");
     await page.getByRole("button", { name: "Overview" }).click();
     await expect(navigator).toHaveAttribute("data-camera-mode", "overview");
 
+    await page.getByRole("button", { name: "Replay settings" }).click();
+    await expect(page.getByRole("complementary", { name: "Replay settings panel" })).toBeVisible();
     await page.getByRole("button", { name: "Mesh" }).click();
     await expect(navigator).toHaveAttribute("data-grounding-mode", "mesh");
-    await page.getByRole("button", { name: "Take manual control" }).click();
+    await page.getByRole("button", { name: "Free" }).click();
     await expect(navigator).toHaveAttribute("data-following", "false");
     await page.getByRole("button", { name: "Resume following" }).click();
     await expect(navigator).toHaveAttribute("data-following", "true");
@@ -89,4 +94,8 @@ test("keeps the San Francisco navigator usable on a phone viewport", async ({
   );
   await expect(page.getByRole("button", { name: "Play route" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Chase" })).toBeVisible();
+  await page.getByRole("button", { name: "Play route" }).click();
+  await expect(navigator).toHaveAttribute("data-hud-state", "compact");
+  await expect(page.getByText("Elapsed")).toBeVisible();
+  await expect(page.getByText("Pace")).toBeVisible();
 });

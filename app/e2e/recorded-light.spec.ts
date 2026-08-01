@@ -31,7 +31,7 @@ async function installReplayEngine(page: Page, earthState: "ready" | "partial" =
 
 test("urban and mountain replays use their recorded local light", async ({ page }) => {
   await installReplayEngine(page);
-  await page.goto("/#/replay/17654151284");
+  await page.goto("/#/replay/17654151284?renderer=cesium");
 
   const stage = page.getByTestId("replay-stage");
   const lighting = page.getByTestId("recorded-light");
@@ -39,14 +39,14 @@ test("urban and mountain replays use their recorded local light", async ({ page 
   await expect(lighting).toHaveAttribute("data-light-phase", "dawn");
   await expect(page.getByText(/Recorded dawn/i)).toBeVisible();
 
-  await page.goto("/#/replay/13358070690");
+  await page.goto("/#/replay/13358070690?renderer=cesium");
   await expect(stage).toHaveAttribute("data-route-slug", "13358070690");
   await expect(lighting).toHaveAttribute("data-light-phase", "midday");
 });
 
 test("lighting remains stable when Earth falls back to Atlas", async ({ page }) => {
   await installReplayEngine(page, "partial");
-  await page.goto("/#/replay/17654151284");
+  await page.goto("/#/replay/17654151284?renderer=cesium");
 
   const lighting = page.getByTestId("recorded-light");
   await expect(lighting).toHaveAttribute("data-light-phase", "dawn");
@@ -66,7 +66,7 @@ test("missing local-time provenance stays neutral and reduced motion removes dri
     delete body.provenance.temporal.time_zone;
     await request.fulfill({ response, json: body });
   });
-  await page.goto("/#/replay/17654151284");
+  await page.goto("/#/replay/17654151284?renderer=cesium");
 
   const lighting = page.getByTestId("recorded-light");
   await expect(lighting).toHaveAttribute("data-light-phase", "neutral");

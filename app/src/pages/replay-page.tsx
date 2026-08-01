@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 
 import { EarthReplayStage } from "@/components/replay/earth-replay-stage";
+import { GoogleRouteNavigatorStage } from "@/components/replay/google-route-navigator-stage";
 import { RouteNotFound } from "@/components/routes/route-not-found";
 import { completedRoutes, findRouteBySlug } from "@/data/routes";
 import { useRouteDetail } from "@/data/use-route-detail";
@@ -21,6 +23,14 @@ export function ReplayPage() {
       : undefined
     : representativeRoute;
   const detail = useRouteDetail(selectedSummary?.slug);
+  const requestedRenderer = searchParams.get("renderer");
+  const requestedAtlas = requestedRenderer === "atlas";
+  const useLegacyEarth = requestedRenderer === "cesium";
+  const [atlasFallback, setAtlasFallback] = useState(requestedAtlas);
+
+  useEffect(() => {
+    setAtlasFallback(requestedAtlas);
+  }, [requestedAtlas, selectedSummary?.slug]);
 
   if (routeSlug && !selectedSummary) return <RouteNotFound />;
 
@@ -44,12 +54,27 @@ export function ReplayPage() {
   if (detail.status !== "ready") return <RouteNotFound />;
 
   const returnPath = atlasReturnPath(searchParams);
+  if (!useLegacyEarth && !atlasFallback) {
+    return (
+      <GoogleRouteNavigatorStage
+        route={detail.route}
+        variant="replay"
+        pickerRoutes={pickerRoutes}
+        backPath={returnPath ?? APP_PATHS.routes}
+        backLabel={returnPath ? "Back to Atlas" : "All routes"}
+        onUseAtlas={() => setAtlasFallback(true)}
+      />
+    );
+  }
+
   return (
     <EarthReplayStage
       route={detail.route}
       pickerRoutes={pickerRoutes}
       backPath={returnPath ?? APP_PATHS.routes}
       backLabel={returnPath ? "Back to Atlas" : "All routes"}
+      initialEngineMode={atlasFallback ? "atlas" : "earth"}
+      allowEarthMode={useLegacyEarth}
     />
   );
 }

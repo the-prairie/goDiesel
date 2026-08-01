@@ -1,4 +1,4 @@
-import type { QuestRoute } from "@/domain/routes";
+import type { QuestRoute, RoutePoint } from "@/domain/routes";
 import { bearingDegrees, routeDistanceM, routePathPose } from "@/replay/route-path";
 
 export type GoogleRouteCameraMode = "runner" | "chase" | "overview";
@@ -15,12 +15,20 @@ export interface GoogleRouteNavigatorState {
 }
 
 export interface GoogleRouteCameraPose {
-  center: { lat: number; lng: number };
+  center: { lat: number; lng: number; altitude?: number };
   headingDeg: number;
   rangeM: number;
   tiltDeg: number;
   fovDeg: number;
   progressM: number;
+}
+
+export interface GoogleRouteTelemetry {
+  elapsedS: number;
+  paceSPerKm?: number;
+  elevationM: number;
+  gradePercent: number;
+  headingDeg: number;
 }
 
 export const GOOGLE_ROUTE_SPEEDS = [0.5, 1, 2, 4] as const;
@@ -113,8 +121,13 @@ export function googleRouteCameraPose(
 ): GoogleRouteCameraPose {
   const totalDistanceM = routeDistanceM(route);
   if (state.cameraMode === "overview") {
+    const midpoint = routePathPose(route, totalDistanceM * 0.5);
     return {
-      center: { lat: route.centerLat, lng: route.centerLng },
+      center: {
+        lat: route.centerLat,
+        lng: route.centerLng,
+        altitude: midpoint.elev,
+      },
       headingDeg: routePathPose(route, totalDistanceM * 0.25).bearingDeg,
       rangeM: clamp(totalDistanceM * 0.72 * state.rangeScale, 1_400, 26_000),
       tiltDeg: 42,
@@ -134,7 +147,7 @@ export function googleRouteCameraPose(
   );
 
   return {
-    center: { lat: target.lat, lng: target.lng },
+    center: { lat: target.lat, lng: target.lng, altitude: target.elev },
     headingDeg: bearingDegrees(
       { ...current, d: current.progressM },
       { ...target, d: target.progressM },
@@ -143,6 +156,56 @@ export function googleRouteCameraPose(
     tiltDeg: profile.tiltDeg,
     fovDeg: profile.fovDeg,
     progressM: state.progressM,
+  };
+}
+
+export function googleRouteTelemetry(
+  route: QuestRoute,
+  progressM: number,
+): GoogleRouteTelemetry {
+  const totalDistanceM = routeDistanceM(route);
+  const clampedProgressM = clamp(progressM, 0, totalDistanceM);
+  const current = routePathPose(route, clampedProgressM);
+  const sampleRadiusM = Math.min(90, Math.max(30, totalDistanceM * 0.02));
+  const beforeM = Math.max(0, clampedProgressM - sampleRadiusM);
+  const afterM = Math.min(totalDistanceM, clampedProgressM + sampleRadiusM);
+  const before = routePathPose(route, beforeM);
+  const after = routePathPose(route, afterM);
+  const distanceSpanM = Math.max(1, afterM - beforeM);
+  const elapsedBeforeS = elapsedAtDistance(route, beforeM);
+  const elapsedAfterS = elapsedAtDistance(route, afterM);
+  const elapsedSpanS = elapsedAfterS - elapsedBeforeS;
+  const localPaceSPerKm =
+    elapsedSpanS > 0 ? (elapsedSpanS / distanceSpanM) * 1_000 : undefined;
+  const elapsedS = elapsedAtDistance(route, clampedProgressM);
+  const averagePaceSPerKm =
+    clampedProgressM >= 100 && elapsedS > 0
+      ? (elapsedS / clampedProgressM) * 1_000
+      : route.provenance.temporal.elapsedTimeS &&
+          totalDistanceM > 0
+        ? (route.provenance.temporal.elapsedTimeS / totalDistanceM) * 1_000
+        : undefined;
+  const paceSPerKm =
+    localPaceSPerKm !== undefined &&
+    averagePaceSPerKm !== undefined &&
+    localPaceSPerKm >= averagePaceSPerKm * 0.25 &&
+    localPaceSPerKm <= averagePaceSPerKm * 3
+      ? localPaceSPerKm
+      : averagePaceSPerKm;
+
+  return {
+    elapsedS,
+    paceSPerKm:
+      paceSPerKm !== undefined && Number.isFinite(paceSPerKm)
+        ? paceSPerKm
+        : undefined,
+    elevationM: current.elev,
+    gradePercent: clamp(
+      ((after.elev - before.elev) / distanceSpanM) * 100,
+      -30,
+      30,
+    ),
+    headingDeg: current.bearingDeg,
   };
 }
 
@@ -164,4 +227,37 @@ export function densifyGoogleRoutePath(route: QuestRoute, intervalM = 12) {
   const last = route.route.at(-1);
   if (last) path.push({ lat: last.lat, lng: last.lng });
   return path;
+}
+
+function elapsedAtDistance(route: QuestRoute, progressM: number) {
+  const timed = route.route.filter(
+    (point): point is RoutePoint & { elapsedS: number } =>
+      point.elapsedS !== undefined && Number.isFinite(point.elapsedS),
+  );
+  if (timed.length > 0) {
+    if (progressM <= timed[0].d) return timed[0].elapsedS;
+    for (let index = 1; index < timed.length; index += 1) {
+      const current = timed[index];
+      if (current.d < progressM) continue;
+      const previous = timed[index - 1];
+      const distanceSpanM = current.d - previous.d;
+      const ratio =
+        distanceSpanM > 0 ? (progressM - previous.d) / distanceSpanM : 0;
+      return previous.elapsedS + (current.elapsedS - previous.elapsedS) * ratio;
+    }
+    return timed.at(-1)!.elapsedS;
+  }
+
+  const fallbackElapsedS = route.provenance.temporal.elapsedTimeS ?? 0;
+  return totalElapsedAtDistance(routeDistanceM(route), progressM, fallbackElapsedS);
+}
+
+function totalElapsedAtDistance(
+  totalDistanceM: number,
+  progressM: number,
+  elapsedS: number,
+) {
+  const ratio =
+    totalDistanceM > 0 ? clamp(progressM / totalDistanceM, 0, 1) : 0;
+  return elapsedS * ratio;
 }
