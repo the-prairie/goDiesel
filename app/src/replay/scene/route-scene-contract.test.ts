@@ -186,4 +186,48 @@ describe("route scene contract", () => {
     expect(Math.abs(after.camera.tiltDeg - before.camera.tiltDeg)).toBeLessThan(2);
     expect(Math.abs(after.camera.target.altitude - before.camera.target.altitude)).toBeLessThan(8);
   });
+
+  it("bounds camera acceleration across recorded route vertices", () => {
+    const cornerRoute = {
+      ...route,
+      distanceKm: 0.5,
+      route: [
+        { lat: 51, lng: -1, elev: 20, d: 0, elapsedS: 0 },
+        { lat: 51, lng: -0.9986, elev: 21, d: 100, elapsedS: 30 },
+        { lat: 51.0009, lng: -0.9986, elev: 22, d: 200, elapsedS: 60 },
+        { lat: 51.0009, lng: -0.9972, elev: 23, d: 300, elapsedS: 90 },
+        { lat: 51.0018, lng: -0.9972, elev: 24, d: 400, elapsedS: 120 },
+        { lat: 51.0018, lng: -0.9958, elev: 25, d: 500, elapsedS: 150 },
+      ],
+    } as unknown as QuestRoute;
+    const manifest = createRouteSceneManifest(cornerRoute);
+    const targets = Array.from({ length: 21 }, (_, index) =>
+      resolveRouteSceneFrame(manifest, {
+        cameraMode: "auto",
+        following: true,
+        progressM: 80 + index * 4,
+        rangeScale: 1,
+      }).camera.target,
+    );
+    const displacements = targets.slice(1).map((target, index) => {
+      const previous = targets[index];
+      return {
+        eastM:
+          (target.lng - previous.lng) *
+          111_320 *
+          Math.cos((target.lat * Math.PI) / 180),
+        northM: (target.lat - previous.lat) * 111_320,
+      };
+    });
+    const peakAccelerationM = Math.max(
+      ...displacements.slice(1).map((step, index) =>
+        Math.hypot(
+          step.eastM - displacements[index].eastM,
+          step.northM - displacements[index].northM,
+        ),
+      ),
+    );
+
+    expect(peakAccelerationM).toBeLessThan(10);
+  });
 });

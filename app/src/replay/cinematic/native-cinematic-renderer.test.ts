@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { GoogleRouteCameraPose } from "@/replay/google-route-navigator-controller";
+import {
+  advanceRouteCameraMotion,
+  createRouteCameraMotionState,
+} from "@/replay/camera/route-camera-stabilizer";
 import { stabilizeCamera } from "@/replay/cinematic/native-cinematic-renderer";
 import {
   buildCinematicThreadStyles,
@@ -58,6 +62,22 @@ describe("native cinematic camera stabilizer", () => {
     const floor = stabilizeCamera(start, target, 0.1, 0.08);
     expect(clamped).toEqual(floor);
   });
+
+  it("carries camera velocity continuously through changing targets", () => {
+    let motion = createRouteCameraMotionState(start);
+    const positions: number[] = [];
+    for (let index = 0; index < 20; index += 1) {
+      const desired = index < 8 ? target : { ...target, center: start.center };
+      motion = advanceRouteCameraMotion(motion, desired, 1 / 30);
+      positions.push(motion.pose.center.lng);
+    }
+    const velocities = positions.slice(1).map((value, index) => value - positions[index]);
+    const peakVelocityChange = Math.max(
+      ...velocities.slice(1).map((value, index) => Math.abs(value - velocities[index])),
+    );
+
+    expect(peakVelocityChange).toBeLessThan(0.0004);
+  });
 });
 
 describe("cinematic route filament", () => {
@@ -83,11 +103,12 @@ describe("cinematic route filament", () => {
     expect(guide?.opacity ?? 0).toBeGreaterThan(0.4);
     expect(thread?.endRatio).toBe(0.61);
     expect(thread?.startRatio).toBe(0.31);
-    expect(thread?.width ?? 0).toBeGreaterThan(4);
-    expect(thread?.outerWidth ?? 0).toBeGreaterThan(0);
+    expect(thread?.width ?? 0).toBeGreaterThan(2.4);
+    expect(thread?.width ?? 0).toBeLessThanOrEqual(4.2);
+    expect(thread?.outerWidth ?? 1).toBeLessThanOrEqual(0.2);
     expect(future?.opacity ?? 1).toBeLessThan(thread?.opacity ?? 0);
     expect(glint?.color).toBe("#fffdf1");
-    expect(glint?.width ?? 0).toBeGreaterThan(thread?.width ?? 0);
+    expect(glint?.width ?? 0).toBeLessThanOrEqual(thread?.width ?? 0);
   });
 
   it("keeps the active route legible at chase-camera distance", () => {
@@ -104,8 +125,8 @@ describe("cinematic route filament", () => {
     );
     const guide = styles.find(({ role }) => role === "guide");
     const thread = styles.find(({ role }) => role === "thread");
-    expect(guide?.width ?? 0).toBeGreaterThan(3);
-    expect(thread?.width ?? 0).toBeGreaterThan(6);
+    expect(guide?.width ?? 0).toBeGreaterThan(1.4);
+    expect(thread?.width ?? 0).toBeGreaterThan(2.4);
   });
 
   it("makes the complete route quieter for the release shot", () => {

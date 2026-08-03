@@ -345,9 +345,18 @@ function localTurnSeverity(
   progressM: number,
   totalDistanceM: number,
 ) {
-  const before = routePathPose(route, Math.max(0, progressM - 90));
-  const after = routePathPose(route, Math.min(totalDistanceM, progressM + 260));
-  const delta = Math.abs(((after.bearingDeg - before.bearingDeg + 540) % 360) - 180);
+  const before = routePathPose(route, Math.max(0, progressM - 140));
+  const current = routePathPose(route, progressM);
+  const after = routePathPose(route, Math.min(totalDistanceM, progressM + 280));
+  const incoming = bearingDegrees(
+    { ...before, d: Math.max(0, progressM - 140) },
+    { ...current, d: progressM },
+  );
+  const outgoing = bearingDegrees(
+    { ...current, d: progressM },
+    { ...after, d: Math.min(totalDistanceM, progressM + 280) },
+  );
+  const delta = Math.abs(((outgoing - incoming + 540) % 360) - 180);
   return smoothstep(8, 95, delta);
 }
 
@@ -370,11 +379,12 @@ function smoothRouteTarget(
   progressM: number,
   radiusM: number,
 ) {
-  const anchor = routePathPose(manifest.sourceRoute, progressM);
+  let lat = 0;
+  let lng = 0;
   let elev = 0;
   let totalWeight = 0;
-  for (let index = -3; index <= 3; index += 1) {
-    const offset = index / 3;
+  for (let index = -6; index <= 6; index += 1) {
+    const offset = index / 6;
     const sample = routePathPose(
       manifest.sourceRoute,
       clamp(
@@ -383,13 +393,15 @@ function smoothRouteTarget(
         manifest.totalDistanceM,
       ),
     );
-    const weight = Math.cos((Math.abs(offset) * Math.PI) / 2) ** 2 + 0.08;
+    const weight = Math.cos((Math.abs(offset) * Math.PI) / 2) ** 2 + 0.04;
+    lat += sample.lat * weight;
+    lng += sample.lng * weight;
     elev += sample.elev * weight;
     totalWeight += weight;
   }
   return {
-    lat: anchor.lat,
-    lng: anchor.lng,
+    lat: lat / totalWeight,
+    lng: lng / totalWeight,
     elev: elev / totalWeight,
     progressM,
   };

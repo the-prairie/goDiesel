@@ -43,6 +43,12 @@ import {
   type GoogleRouteNavigatorStatus,
 } from "@/replay/google/google-route-navigator-engine";
 import { routeDistanceM } from "@/replay/route-path";
+import {
+  advanceRouteCameraMotion,
+  createRouteCameraMotionState,
+  type RouteCameraMotionState,
+} from "@/replay/camera/route-camera-stabilizer";
+import type { GoogleRouteCameraPose } from "@/replay/google-route-navigator-controller";
 
 const FIELD_TEST_ROUTES = [
   { slug: "14736711660", label: "San Francisco" },
@@ -86,6 +92,8 @@ export function GoogleRouteNavigatorStage({
   const productionReplay = variant === "replay";
   const containerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<GoogleRouteNavigatorEngine | undefined>(undefined);
+  const cameraMotionRef = useRef<RouteCameraMotionState | undefined>(undefined);
+  const lastCameraAtRef = useRef<number | undefined>(undefined);
   const controlRef = useRef(initialGoogleRouteNavigatorState());
   const [control, setControl] = useState(controlRef.current);
   const [status, setStatus] = useState<GoogleRouteNavigatorStatus>(INITIAL_STATUS);
@@ -100,6 +108,23 @@ export function GoogleRouteNavigatorStage({
     [control, route],
   );
 
+  const renderCamera = useCallback(
+    (desired: GoogleRouteCameraPose, now = performance.now(), force = false) => {
+      const previous = cameraMotionRef.current;
+      const previousAt = lastCameraAtRef.current;
+      const elapsedSeconds =
+        previousAt === undefined ? 1 / 30 : Math.min(0.1, (now - previousAt) / 1_000);
+      const motion =
+        force || !previous
+          ? createRouteCameraMotionState(desired)
+          : advanceRouteCameraMotion(previous, desired, elapsedSeconds, 0.48);
+      cameraMotionRef.current = motion;
+      lastCameraAtRef.current = now;
+      engineRef.current?.setCamera(motion.pose);
+    },
+    [],
+  );
+
   const commitControl = useCallback(
     (
       update: (
@@ -112,13 +137,13 @@ export function GoogleRouteNavigatorStage({
       engineRef.current?.setFollowing(next.following);
       engineRef.current?.setGrounding(next.groundingMode);
       if (next.following) {
-        engineRef.current?.setCamera(googleRouteCameraPose(route, next));
+        renderCamera(googleRouteCameraPose(route, next));
       }
       engineRef.current?.setCinematicRoute(
         googleRouteThreadTreatment(route, next),
       );
     },
-    [route],
+    [renderCamera, route],
   );
 
   useEffect(() => {
@@ -127,6 +152,8 @@ export function GoogleRouteNavigatorStage({
     const engine = createGoogleRouteNavigatorEngine();
     const initial = initialGoogleRouteNavigatorState();
     engineRef.current = engine;
+    cameraMotionRef.current = undefined;
+    lastCameraAtRef.current = undefined;
     controlRef.current = initial;
     setControl(initial);
     setSettingsOpen(false);
@@ -148,7 +175,7 @@ export function GoogleRouteNavigatorStage({
       onStatus: (next) => {
         setStatus(next);
         if (next.state === "ready") {
-          engine.setCamera(googleRouteCameraPose(route, controlRef.current));
+          renderCamera(googleRouteCameraPose(route, controlRef.current), performance.now(), true);
           engine.setCinematicRoute(
             googleRouteThreadTreatment(route, controlRef.current),
           );
@@ -158,9 +185,11 @@ export function GoogleRouteNavigatorStage({
 
     return () => {
       engine.destroy();
+      cameraMotionRef.current = undefined;
+      lastCameraAtRef.current = undefined;
       if (engineRef.current === engine) engineRef.current = undefined;
     };
-  }, [route]);
+  }, [renderCamera, route]);
 
   useEffect(() => {
     if (status.state !== "ready") return;
@@ -178,10 +207,10 @@ export function GoogleRouteNavigatorStage({
       previous = now;
       controlRef.current = next;
       if (next.following && now - lastCameraUpdate >= 32) {
-        engineRef.current?.setCamera(googleRouteCameraPose(route, next));
+        renderCamera(googleRouteCameraPose(route, next), now);
         lastCameraUpdate = now;
       }
-      if (now - lastRouteUpdate >= 120) {
+      if (now - lastRouteUpdate >= 40) {
         engineRef.current?.setCinematicRoute(
           googleRouteThreadTreatment(route, next),
         );
@@ -195,7 +224,7 @@ export function GoogleRouteNavigatorStage({
     };
     animationFrame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animationFrame);
-  }, [route, status.state, totalDistanceM]);
+  }, [renderCamera, route, status.state, totalDistanceM]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

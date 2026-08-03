@@ -7,6 +7,7 @@ import {
 } from "@/replay/google/google-route-navigator-engine";
 import type { GoogleRouteCameraPose } from "@/replay/google-route-navigator-controller";
 import { routeDistanceM } from "@/replay/route-path";
+import { stabilizeRouteCamera } from "@/replay/camera/route-camera-stabilizer";
 
 interface MountOptions {
   container: HTMLElement;
@@ -72,7 +73,7 @@ export class NativeCinematicRenderer {
     const camera =
       !this.renderedCamera || isChapterCut || isSeek
         ? desired
-        : stabilizeCamera(
+        : stabilizeRouteCamera(
             this.renderedCamera,
             desired,
             elapsedDelta,
@@ -118,39 +119,4 @@ function focalLengthToFieldOfView(focalLengthMm: number) {
   return Math.min(68, Math.max(24, fieldOfView));
 }
 
-function interpolate(start: number, end: number, amount: number) {
-  return start + (end - start) * amount;
-}
-
-function interpolateHeading(start: number, end: number, amount: number) {
-  const delta = ((end - start + 540) % 360) - 180;
-  return (start + delta * amount + 360) % 360;
-}
-
-export function stabilizeCamera(
-  current: GoogleRouteCameraPose,
-  desired: GoogleRouteCameraPose,
-  elapsedSeconds: number,
-  responseSeconds = 0.2,
-): GoogleRouteCameraPose {
-  const amount =
-    1 -
-    Math.exp(
-      -Math.max(0, elapsedSeconds) / Math.max(0.08, responseSeconds),
-    );
-  return {
-    center: {
-      lat: interpolate(current.center.lat, desired.center.lat, amount),
-      lng: interpolate(current.center.lng, desired.center.lng, amount),
-    },
-    fovDeg: interpolate(current.fovDeg, desired.fovDeg, amount),
-    headingDeg: interpolateHeading(
-      current.headingDeg,
-      desired.headingDeg,
-      amount,
-    ),
-    progressM: interpolate(current.progressM, desired.progressM, amount),
-    rangeM: interpolate(current.rangeM, desired.rangeM, amount),
-    tiltDeg: interpolate(current.tiltDeg, desired.tiltDeg, amount),
-  };
-}
+export { stabilizeRouteCamera as stabilizeCamera } from "@/replay/camera/route-camera-stabilizer";

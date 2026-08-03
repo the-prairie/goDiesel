@@ -6,6 +6,10 @@ async function installGoogleReplay(
 ) {
   await page.addInitScript((providerState) => {
     const replayWindow = window as typeof window & {
+      __GODIESEL_CAMERA_CALLS__?: Array<{
+        center: { lat: number; lng: number };
+        headingDeg: number;
+      }>;
       __GODIESEL_CINEMATIC_ROUTE_CALLS__?: Array<{
         startRatio: number;
         focusRatio: number;
@@ -45,6 +49,7 @@ async function installGoogleReplay(
     };
 
     replayWindow.__GODIESEL_CINEMATIC_ROUTE_CALLS__ = [];
+    replayWindow.__GODIESEL_CAMERA_CALLS__ = [];
     replayWindow.__GODIESEL_GOOGLE_ROUTE_NAVIGATOR_FACTORY__ = () => ({
       async mount({ container, onStatus }) {
         if (providerState === "unavailable") {
@@ -62,7 +67,12 @@ async function installGoogleReplay(
         container.replaceChildren(canvas);
         onStatus({ state: "ready", message: "Google 3D fixture ready." });
       },
-      setCamera() {},
+      setCamera(pose: {
+        center: { lat: number; lng: number };
+        headingDeg: number;
+      }) {
+        replayWindow.__GODIESEL_CAMERA_CALLS__?.push(pose);
+      },
       setFollowing() {},
       setGrounding() {},
       setCinematicRoute(treatment) {
@@ -112,6 +122,12 @@ test("opens production Replay in Google 3D", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Pause route" })).toBeVisible();
   await expect(scrubber).toBeVisible();
   await expect(page.getByText("Grade", { exact: true })).toBeVisible();
+  await page.evaluate(() => {
+    const replayWindow = window as typeof window & {
+      __GODIESEL_CAMERA_CALLS__?: unknown[];
+    };
+    replayWindow.__GODIESEL_CAMERA_CALLS__ = [];
+  });
   await expect
     .poll(async () =>
       Number((await page.getByTestId("google-route-progress").textContent())?.split(" ")[0]),
@@ -130,6 +146,52 @@ test("opens production Replay in Google 3D", async ({ page }) => {
       }),
     )
     .toBeGreaterThan(0);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as typeof window & {
+              __GODIESEL_CAMERA_CALLS__?: unknown[];
+            }
+          ).__GODIESEL_CAMERA_CALLS__?.length ?? 0,
+      ),
+    )
+    .toBeGreaterThan(8);
+  const cameraMotion = await page.evaluate(() => {
+    const calls = (
+      window as typeof window & {
+        __GODIESEL_CAMERA_CALLS__?: Array<{
+          center: { lat: number; lng: number };
+          headingDeg: number;
+        }>;
+      }
+    ).__GODIESEL_CAMERA_CALLS__ ?? [];
+    const steps = calls.slice(1).map((call, index) => {
+      const previous = calls[index];
+      return {
+        eastM:
+          (call.center.lng - previous.center.lng) *
+          111_320 *
+          Math.cos((call.center.lat * Math.PI) / 180),
+        northM: (call.center.lat - previous.center.lat) * 111_320,
+      };
+    });
+    return {
+      count: calls.length,
+      peakAccelerationM: Math.max(
+        0,
+        ...steps.slice(1).map((step, index) =>
+          Math.hypot(
+            step.eastM - steps[index].eastM,
+            step.northM - steps[index].northM,
+          ),
+        ),
+      ),
+    };
+  });
+  expect(cameraMotion.count).toBeGreaterThan(8);
+  expect(cameraMotion.peakAccelerationM).toBeLessThan(2);
 });
 
 test("falls back from Google 3D to Atlas replay", async ({ page }) => {
