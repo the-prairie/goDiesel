@@ -61,7 +61,7 @@ describe("native cinematic camera stabilizer", () => {
 });
 
 describe("cinematic route filament", () => {
-  it("builds a restrained guide, warm thread, and luminous focus", () => {
+  it("builds a legible guide, warm thread, and luminous focus", () => {
     const styles = buildCinematicThreadStyles(
       {
         endRatio: 0.68,
@@ -73,14 +73,39 @@ describe("cinematic route filament", () => {
       },
       21_500,
     );
-    expect(styles).toHaveLength(3);
+    expect(styles).toHaveLength(4);
+    const guide = styles.find(({ role }) => role === "guide");
     const thread = styles.find(({ role }) => role === "thread");
     const future = styles.find(({ role }) => role === "future");
     const glint = styles.find(({ role }) => role === "glint");
+    expect(guide?.startRatio).toBe(0.31);
+    expect(guide?.endRatio).toBe(0.68);
+    expect(guide?.opacity ?? 0).toBeGreaterThan(0.4);
     expect(thread?.endRatio).toBe(0.61);
     expect(thread?.startRatio).toBe(0.31);
+    expect(thread?.width ?? 0).toBeGreaterThan(4);
+    expect(thread?.outerWidth ?? 0).toBeGreaterThan(0);
     expect(future?.opacity ?? 1).toBeLessThan(thread?.opacity ?? 0);
     expect(glint?.color).toBe("#fffdf1");
+    expect(glint?.width ?? 0).toBeGreaterThan(thread?.width ?? 0);
+  });
+
+  it("keeps the active route legible at chase-camera distance", () => {
+    const styles = buildCinematicThreadStyles(
+      {
+        endRatio: 0.48,
+        focusRatio: 0.42,
+        motionIntensity: 0.8,
+        rangeM: 260,
+        shotKind: "tracking",
+        startRatio: 0.37,
+      },
+      28_500,
+    );
+    const guide = styles.find(({ role }) => role === "guide");
+    const thread = styles.find(({ role }) => role === "thread");
+    expect(guide?.width ?? 0).toBeGreaterThan(3);
+    expect(thread?.width ?? 0).toBeGreaterThan(6);
   });
 
   it("makes the complete route quieter for the release shot", () => {
