@@ -23,10 +23,11 @@ interface MountOptions {
   container: HTMLElement;
   route: QuestRoute;
   groundingMode: GoogleRouteGroundingMode;
+  initialCamera?: GoogleRouteCameraPose;
   onStatus: (status: GoogleRouteNavigatorStatus) => void;
   routeStyle?: {
     color: string;
-    mode?: "filament" | "solid";
+    mode?: "filament" | "hidden" | "solid";
     outerColor: string;
     outerWidth: number;
     width: number;
@@ -52,7 +53,43 @@ declare global {
 
 interface FilamentLayer {
   element: google.maps.maps3d.Polyline3DElement;
+  endRatio: number;
   role: CinematicFilamentRole;
+  startRatio: number;
+}
+
+const FILAMENT_CLEARANCE_M: Record<CinematicFilamentRole, number> = {
+  guide: 0.1,
+  future: 0.14,
+  thread: 0.2,
+  glint: 0.24,
+};
+
+const GOOGLE_SCENE_READY_TIMEOUT_MS = 30_000;
+
+function waitForGoogleSceneReady(map: google.maps.maps3d.Map3DElement) {
+  return new Promise<void>((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      cleanup();
+      reject(new Error("Google photorealistic 3D did not finish loading."));
+    }, GOOGLE_SCENE_READY_TIMEOUT_MS);
+    const onSteady = (event: Event) => {
+      if (!(event as google.maps.maps3d.SteadyChangeEvent).isSteady) return;
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error("Google photorealistic 3D could not render this scene."));
+    };
+    const cleanup = () => {
+      window.clearTimeout(timeout);
+      map.removeEventListener("gmp-steadychange", onSteady);
+      map.removeEventListener("gmp-error", onError);
+    };
+    map.addEventListener("gmp-steadychange", onSteady);
+    map.addEventListener("gmp-error", onError, { once: true });
+  });
 }
 
 class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
@@ -73,6 +110,7 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
     container,
     route,
     groundingMode,
+    initialCamera,
     onStatus,
     routeStyle,
     headingSmoothing,
@@ -116,14 +154,15 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
 
       const first = route.route[0];
       const map = new Map3DElement({
-        center: { lat: first.lat, lng: first.lng },
-        range: 115,
-        tilt: 72,
-        heading: 0,
-        fov: 54,
+        center: initialCamera?.center ?? { lat: first.lat, lng: first.lng },
+        range: initialCamera?.rangeM ?? 115,
+        tilt: initialCamera?.tiltDeg ?? 72,
+        heading: initialCamera?.headingDeg ?? 0,
+        fov: initialCamera?.fovDeg ?? 54,
         mode: MapMode.SATELLITE,
         gestureHandling: GestureHandling.GREEDY,
         defaultUIHidden: true,
+        maxTilt: 78,
         description: `Interactive 3D navigation along ${route.name}`,
       });
       map.style.width = "100%";
@@ -143,7 +182,9 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
           ? AltitudeMode.RELATIVE_TO_MESH
           : AltitudeMode.CLAMP_TO_GROUND;
       let routeLine: google.maps.maps3d.Polyline3DElement | undefined;
-      if (routeStyle?.mode === "filament") {
+      if (routeStyle?.mode === "hidden") {
+        routeLine = undefined;
+      } else if (routeStyle?.mode === "filament") {
         this.filamentLayers = createFilamentLayers({
           Polyline3DElement,
           altitudeMode,
@@ -170,6 +211,8 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
       this.routePath = routePath;
       this.routeDistanceM = Math.max(1, routeDistanceM(route));
       this.routeWidth = routeStyle?.width ?? 8;
+      await waitForGoogleSceneReady(map);
+      if (generation !== this.generation) return;
       onStatus({ state: "ready", message: "Native Google 3D route world ready." });
     } catch (error) {
       if (generation !== this.generation) return;
@@ -228,13 +271,25 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
         setLineVisibility(layer.element, false);
         continue;
       }
-      layer.element.path = slicePathByRatio(
-        this.routePath,
-        style.startRatio,
-        style.endRatio,
-      );
+      if (
+        Math.abs(layer.startRatio - style.startRatio) > 0.0001 ||
+        Math.abs(layer.endRatio - style.endRatio) > 0.0001
+      ) {
+        layer.element.path = slicePathByRatio(
+          this.routePath,
+          style.startRatio,
+          style.endRatio,
+        ).map((point) => ({
+          ...point,
+          altitude: FILAMENT_CLEARANCE_M[layer.role],
+        }));
+        layer.startRatio = style.startRatio;
+        layer.endRatio = style.endRatio;
+      }
       layer.element.strokeColor = style.color;
       layer.element.strokeWidth = style.width;
+      layer.element.outerColor = style.outerColor;
+      layer.element.outerWidth = style.outerWidth;
       setLineVisibility(layer.element, style.opacity > 0.01);
       layer.element.style.opacity = String(style.opacity);
     }
@@ -289,7 +344,12 @@ function createFilamentLayers({
   map: google.maps.maps3d.Map3DElement;
   routePath: Array<{ lat: number; lng: number }>;
 }) {
-  const roles: FilamentLayer["role"][] = ["future", "thread", "glint"];
+  const roles: FilamentLayer["role"][] = [
+    "guide",
+    "future",
+    "thread",
+    "glint",
+  ];
   return roles.map((role, index) => {
     const element = new Polyline3DElement({
       path: routePath.slice(0, 2),
@@ -305,7 +365,7 @@ function createFilamentLayers({
     element.dataset.routeVisible = "false";
     element.style.display = "none";
     map.append(element);
-    return { element, role };
+    return { element, endRatio: -1, role, startRatio: -1 };
   });
 }
 

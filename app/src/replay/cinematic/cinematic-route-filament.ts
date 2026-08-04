@@ -1,4 +1,4 @@
-export type CinematicFilamentRole = "future" | "thread" | "glint";
+export type CinematicFilamentRole = "guide" | "future" | "thread" | "glint";
 
 export interface CinematicRouteTreatment {
   endRatio: number;
@@ -13,6 +13,8 @@ export interface CinematicThreadStyle {
   color: string;
   endRatio: number;
   opacity: number;
+  outerColor: string;
+  outerWidth: number;
   role: CinematicFilamentRole;
   startRatio: number;
   width: number;
@@ -30,38 +32,55 @@ export function buildCinematicThreadStyles(
   );
   const shotScale =
     treatment.shotKind === "release"
-      ? 0.76
+      ? 0.82
       : treatment.shotKind === "tracking"
-        ? 0.88
+        ? 0.94
         : 1;
-  const baseWidth = (1.7 + rangeScale * 1.2) * shotScale;
-  const glintSpan = clamp(85 / Math.max(1, totalDistanceM), 0.00045, 0.006);
+  const baseWidth = (3 + rangeScale * 0.9) * shotScale;
+  const glintSpan = clamp(180 / Math.max(1, totalDistanceM), 0.0012, 0.012);
   const isRelease = treatment.shotKind === "release";
+  const hasTreatment = end > start;
   const motionLift = 0.9 + clamp(treatment.motionIntensity) * 0.1;
   return [
     {
-      color: "#9c765c",
-      endRatio: end,
-      opacity: isRelease ? 0.07 : 0.12,
-      role: "future",
-      startRatio: focus,
-      width: Math.max(0.65, baseWidth * 0.34),
+      color: "#f2e8db",
+      endRatio: isRelease ? 1 : end,
+      opacity: hasTreatment ? (isRelease ? 0.26 : 0.44) : 0,
+      outerColor: "#211b17",
+      outerWidth: 0.12,
+      role: "guide",
+      startRatio: isRelease ? 0 : start,
+      width: Math.max(1.6, baseWidth * 0.56),
     },
     {
-      color: "#e7bc91",
+      color: "#d6b8a8",
+      endRatio: end,
+      opacity: hasTreatment ? (isRelease ? 0.18 : 0.3) : 0,
+      outerColor: "#211b17",
+      outerWidth: 0.1,
+      role: "future",
+      startRatio: focus,
+      width: Math.max(1.4, baseWidth * 0.54),
+    },
+    {
+      color: "#f06b50",
       endRatio: focus,
-      opacity: isRelease ? 0.42 : 0.7,
+      opacity: hasTreatment ? (isRelease ? 0.68 : 0.92) : 0,
+      outerColor: "#35221c",
+      outerWidth: 0.14,
       role: "thread",
       startRatio: start,
-      width: baseWidth * 0.72 * motionLift,
+      width: baseWidth * motionLift,
     },
     {
       color: "#fffdf1",
-      endRatio: Math.min(end, focus + glintSpan * 0.25),
-      opacity: isRelease ? 0.32 : 0.82,
+      endRatio: Math.min(end, focus + glintSpan * 0.35),
+      opacity: hasTreatment ? (isRelease ? 0.38 : 0.68) : 0,
+      outerColor: "transparent",
+      outerWidth: 0,
       role: "glint",
       startRatio: Math.max(start, focus - glintSpan),
-      width: Math.max(0.8, baseWidth * 0.3),
+      width: Math.max(1.8, baseWidth * 0.72),
     },
   ];
 }

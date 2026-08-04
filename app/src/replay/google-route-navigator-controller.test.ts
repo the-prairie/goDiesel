@@ -5,6 +5,7 @@ import {
   advanceGoogleRouteNavigator,
   densifyGoogleRoutePath,
   googleRouteCameraPose,
+  googleRouteThreadTreatment,
   googleRouteTelemetry,
   initialGoogleRouteNavigatorState,
   smoothHeadingDegrees,
@@ -55,15 +56,25 @@ describe("Google route navigator controller", () => {
       ...initial,
       cameraMode: "overview",
     });
-    expect(runner.rangeM).toBe(14);
-    expect(runner.tiltDeg).toBeGreaterThan(80);
+    expect(runner.rangeM).toBe(160);
+    expect(runner.tiltDeg).toBeLessThanOrEqual(65);
     expect(chase.rangeM).toBeGreaterThan(200);
     expect(chase.tiltDeg).toBeLessThan(70);
-    expect(initial.cameraMode).toBe("chase");
+    expect(initial.cameraMode).toBe("auto");
     expect(initial.groundingMode).toBe("mesh");
     expect(overview.rangeM).toBeGreaterThan(1_000);
     expect(overview.center).toMatchObject({ lat: 51, lng: -1 });
     expect(overview.center.altitude).toBeCloseTo(31.67, 1);
+  });
+
+  it("reports the automatic director's active framing", () => {
+    const pose = googleRouteCameraPose(route, {
+      ...initialGoogleRouteNavigatorState(),
+      progressM: 1_000,
+    });
+
+    expect(pose.directedMode).toBe("chase");
+    expect(pose.protection).toContain("recorded-terrain-envelope");
   });
 
   it("smooths headings across north without rotating the long way", () => {
@@ -87,6 +98,49 @@ describe("Google route navigator controller", () => {
     expect(telemetry.gradePercent).toBeGreaterThan(0);
     expect(telemetry.headingDeg).toBeGreaterThanOrEqual(0);
     expect(telemetry.headingDeg).toBeLessThan(360);
+  });
+
+  it("adapts the grounded route filament to replay progress", () => {
+    const treatment = googleRouteThreadTreatment(route, {
+      ...initialGoogleRouteNavigatorState(),
+      playing: true,
+      progressM: 1_000,
+    });
+
+    expect(treatment.focusRatio).toBeCloseTo(0.5);
+    expect(treatment.startRatio).toBeGreaterThan(0);
+    expect(treatment.startRatio).toBeLessThan(treatment.focusRatio);
+    expect(treatment.endRatio).toBeGreaterThan(treatment.focusRatio);
+    expect(treatment.motionIntensity).toBeGreaterThan(0.5);
+    expect(treatment.shotKind).toBe("tracking");
+  });
+
+  it("eases the route filament through the automatic reveal", () => {
+    const before = googleRouteThreadTreatment(route, {
+      ...initialGoogleRouteNavigatorState(),
+      progressM: 79,
+    });
+    const after = googleRouteThreadTreatment(route, {
+      ...initialGoogleRouteNavigatorState(),
+      progressM: 81,
+    });
+
+    expect(Math.abs(after.startRatio - before.startRatio)).toBeLessThan(0.02);
+    expect(Math.abs(after.endRatio - before.endRatio)).toBeLessThan(0.02);
+  });
+
+  it("settles the complete route filament at the finish", () => {
+    const treatment = googleRouteThreadTreatment(route, {
+      ...initialGoogleRouteNavigatorState(),
+      progressM: 2_000,
+    });
+
+    expect(treatment).toMatchObject({
+      endRatio: 1,
+      focusRatio: 1,
+      shotKind: "release",
+      startRatio: 0,
+    });
   });
 
   it("falls back to total elapsed time when points are not timed", () => {

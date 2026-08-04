@@ -82,6 +82,7 @@ Cards must not be nested inside other cards.
 - Selected routes use a `4px` cobalt line with a `2px` pale halo outside Atlas.
 - The selected Atlas route uses a `4px` coral line with a restrained pale halo.
 - Replay routes use a `5px` cobalt line.
+- Automatic cinematic replay may replace the baseline route with a layered filament: a restrained coral travelled thread, pale future guide, and narrow white focus glint. The treatment must remain terrain-seated and visually lighter than the baseline replay route.
 - Waypoints use a `28px` coral circle, `2px` white border, and a white numeric label.
 - Current replay position uses an `18px` coral point with a `3px` white ring.
 - Region labels use editorial uppercase type between `28px` and `36px` with `0.22em` tracking.

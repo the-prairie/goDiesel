@@ -1,42 +1,150 @@
-import { expect, test } from "@playwright/test";
+import { mkdir } from "node:fs/promises";
+
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+  type TestInfo,
+} from "@playwright/test";
 
 const ROUTES = [
   { slug: "14736711660", label: "San Francisco" },
   { slug: "14023448720", label: "Crete" },
 ] as const;
 
+const EVIDENCE_DIR = "e2e/evidence/auto-director";
+
+async function captureEvidence(page: Page, filename: string) {
+  await mkdir(EVIDENCE_DIR, { recursive: true });
+  await page.screenshot({
+    path: `${EVIDENCE_DIR}/${filename}`,
+  });
+}
+
+function expectNoRuntimeErrors(consoleErrors: string[], pageErrors: string[]) {
+  expect(pageErrors).toEqual([]);
+  expect(
+    consoleErrors.filter(
+      (message) =>
+        !message.includes("favicon") &&
+        !message.includes("Failed to load resource"),
+    ),
+  ).toEqual([]);
+}
+
+async function expectLiveSceneReady({
+  consoleErrors,
+  navigator,
+  page,
+  pageErrors,
+  testInfo,
+}: {
+  consoleErrors: string[];
+  navigator: Locator;
+  page: Page;
+  pageErrors: string[];
+  testInfo: TestInfo;
+}) {
+  await expect
+    .poll(async () => navigator.getAttribute("data-state"), {
+      timeout: 30_000,
+    })
+    .not.toBe("loading");
+
+  const state = await navigator.getAttribute("data-state");
+  if (state !== "ready") {
+    const alert = page.getByRole("alert");
+    const visibleError =
+      (await alert.count()) === 1 ? await alert.innerText() : "";
+    await testInfo.attach("google-3d-provider-diagnostics", {
+      body: Buffer.from(
+        JSON.stringify(
+          {
+            consoleErrors,
+            pageErrors,
+            state,
+            visibleError,
+          },
+          null,
+          2,
+        ),
+      ),
+      contentType: "application/json",
+    });
+  }
+
+  expect(
+    state,
+    "Google 3D must be ready. Inspect the attached provider diagnostics when unavailable.",
+  ).toBe("ready");
+}
+
 for (const route of ROUTES) {
   test(`navigates the ${route.label} route in native Google 3D`, async ({
     page,
-  }) => {
+  }, testInfo) => {
     test.skip(
       process.env.GODIESEL_LIVE_GOOGLE_3D_E2E !== "1",
       "Live Google 3D verification is opt-in.",
     );
 
     const consoleErrors: string[] = [];
+    const pageErrors: string[] = [];
     page.on("console", (message) => {
       if (message.type() === "error") consoleErrors.push(message.text());
     });
+    page.on("pageerror", (error) => pageErrors.push(error.message));
     await page.goto(`/#/lab/google-route-navigator/${route.slug}`);
 
     const navigator = page.getByTestId("google-route-navigator");
-    await expect(navigator).toHaveAttribute("data-state", "ready", {
-      timeout: 30_000,
+    await expectLiveSceneReady({
+      consoleErrors,
+      navigator,
+      page,
+      pageErrors,
+      testInfo,
     });
     await expect(page.locator("gmp-map-3d")).toBeVisible();
-    await expect(page.locator("gmp-polyline-3d")).toHaveCount(1);
+    await expect(page.locator("gmp-polyline-3d")).toHaveCount(4);
     await expect(page.getByTestId("google-route-controls")).toBeVisible();
     await expect(navigator).toHaveAttribute("data-hud-state", "expanded");
+    await expect(navigator).toHaveAttribute("data-camera-mode", "auto");
+    await expect(navigator).toHaveAttribute("data-directed-camera", "overview");
+    await page.waitForTimeout(2_500);
+    await captureEvidence(page, `${route.slug}-desktop-overview.png`);
 
     await page.getByRole("button", { name: "Play route" }).click();
-    await expect(navigator).toHaveAttribute("data-hud-state", "compact");
+    await expect(navigator).toHaveAttribute("data-hud-state", "expanded");
+    await expect(page.getByTestId("replay-elevation-scrubber")).toBeVisible();
     const progress = page.getByTestId("google-route-progress");
     await expect
       .poll(async () => Number((await progress.textContent())?.split(" ")[0]))
       .toBeGreaterThan(0);
+    await page.waitForTimeout(3_500);
+    await captureEvidence(page, `${route.slug}-desktop-playback.png`);
     await page.getByRole("button", { name: "Pause route" }).click();
     await expect(navigator).toHaveAttribute("data-hud-state", "expanded");
+
+    await page
+      .getByLabel("Route progress")
+      .fill(String(route.slug === "14736711660" ? 14_250 : 10_750));
+    await expect(navigator).toHaveAttribute("data-directed-camera", "chase");
+    await expect(navigator).toHaveAttribute(
+      "data-camera-protection",
+      /recorded-terrain-envelope.*horizon-guard/,
+    );
+    await page.waitForTimeout(2_000);
+    const automaticCamera = await page
+      .locator("gmp-map-3d")
+      .evaluate((element) => {
+        const map = element as google.maps.maps3d.Map3DElement;
+        return { range: map.range, tilt: map.tilt };
+      });
+    expect(automaticCamera.range).toBeGreaterThanOrEqual(390);
+    expect(automaticCamera.range).toBeLessThanOrEqual(780);
+    expect(automaticCamera.tilt).toBeLessThanOrEqual(58);
+    await captureEvidence(page, `${route.slug}-desktop-chase.png`);
 
     await page.getByRole("button", { name: "Chase" }).click();
     await expect(navigator).toHaveAttribute("data-camera-mode", "chase");
@@ -44,7 +152,9 @@ for (const route of ROUTES) {
     await expect(navigator).toHaveAttribute("data-camera-mode", "overview");
 
     await page.getByRole("button", { name: "Replay settings" }).click();
-    await expect(page.getByRole("complementary", { name: "Replay settings panel" })).toBeVisible();
+    await expect(
+      page.getByRole("complementary", { name: "Replay settings panel" }),
+    ).toBeVisible();
     await page.getByRole("button", { name: "Mesh" }).click();
     await expect(navigator).toHaveAttribute("data-grounding-mode", "mesh");
     await page.getByRole("button", { name: "Free" }).click();
@@ -52,50 +162,116 @@ for (const route of ROUTES) {
     await page.getByRole("button", { name: "Resume following" }).click();
     await expect(navigator).toHaveAttribute("data-following", "true");
 
-    expect(
-      consoleErrors.filter(
-        (message) =>
-          !message.includes("favicon") &&
-          !message.includes("Failed to load resource"),
-      ),
-    ).toEqual([]);
+    expectNoRuntimeErrors(consoleErrors, pageErrors);
   });
 }
 
-test("keeps the San Francisco navigator usable on a phone viewport", async ({
+for (const route of ROUTES) {
+  test(`keeps the ${route.label} navigator usable on a phone viewport`, async ({
+    page,
+  }, testInfo) => {
+    test.skip(
+      process.env.GODIESEL_LIVE_GOOGLE_3D_E2E !== "1",
+      "Live Google 3D verification is opt-in.",
+    );
+
+    const consoleErrors: string[] = [];
+    const pageErrors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") consoleErrors.push(message.text());
+    });
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/#/lab/google-route-navigator/${route.slug}`);
+
+    const navigator = page.getByTestId("google-route-navigator");
+    await expectLiveSceneReady({
+      consoleErrors,
+      navigator,
+      page,
+      pageErrors,
+      testInfo,
+    });
+    const controls = page.getByTestId("google-route-controls");
+    await expect(controls).toBeVisible();
+
+    const [navigatorBox, controlsBox] = await Promise.all([
+      navigator.boundingBox(),
+      controls.boundingBox(),
+    ]);
+    expect(navigatorBox).not.toBeNull();
+    expect(controlsBox).not.toBeNull();
+    expect(
+      (controlsBox?.x ?? 0) + (controlsBox?.width ?? 0),
+    ).toBeLessThanOrEqual(390);
+    expect(
+      (controlsBox?.y ?? 0) + (controlsBox?.height ?? 0),
+    ).toBeLessThanOrEqual(navigatorBox?.height ?? 0);
+    await expect(
+      page.getByRole("button", { name: "Play route" }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Chase" })).toBeVisible();
+    await page.getByRole("button", { name: "Play route" }).click();
+    await expect(navigator).toHaveAttribute("data-hud-state", "expanded");
+    await expect(page.getByTestId("replay-elevation-scrubber")).toBeVisible();
+    await expect(page.getByText("Elapsed")).toBeVisible();
+    await expect(page.getByText("Pace")).toBeVisible();
+    await page.waitForTimeout(2_500);
+    await captureEvidence(page, `${route.slug}-mobile-playback.png`);
+    expectNoRuntimeErrors(consoleErrors, pageErrors);
+  });
+}
+
+test("keeps the San Francisco runner view above coarse mesh", async ({
   page,
-}) => {
+}, testInfo) => {
   test.skip(
     process.env.GODIESEL_LIVE_GOOGLE_3D_E2E !== "1",
     "Live Google 3D verification is opt-in.",
   );
 
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/#/lab/google-route-navigator/14736711660");
-
-  const navigator = page.getByTestId("google-route-navigator");
-  await expect(navigator).toHaveAttribute("data-state", "ready", {
-    timeout: 30_000,
+  const consoleErrors: string[] = [];
+  const pageErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
   });
-  const controls = page.getByTestId("google-route-controls");
-  await expect(controls).toBeVisible();
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.goto("/#/lab/google-route-navigator/14736711660");
+  const navigator = page.getByTestId("google-route-navigator");
+  await expectLiveSceneReady({
+    consoleErrors,
+    navigator,
+    page,
+    pageErrors,
+    testInfo,
+  });
+  await page.getByRole("button", { name: "Runner" }).click();
+  await page.getByLabel("Route progress").fill("4360");
+  await expect(navigator).toHaveAttribute("data-camera-mode", "runner");
+  await page.waitForTimeout(3_000);
 
-  const [navigatorBox, controlsBox] = await Promise.all([
-    navigator.boundingBox(),
-    controls.boundingBox(),
-  ]);
-  expect(navigatorBox).not.toBeNull();
-  expect(controlsBox).not.toBeNull();
-  expect((controlsBox?.x ?? 0) + (controlsBox?.width ?? 0)).toBeLessThanOrEqual(
-    390,
-  );
-  expect((controlsBox?.y ?? 0) + (controlsBox?.height ?? 0)).toBeLessThanOrEqual(
-    navigatorBox?.height ?? 0,
-  );
-  await expect(page.getByRole("button", { name: "Play route" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Chase" })).toBeVisible();
-  await page.getByRole("button", { name: "Play route" }).click();
-  await expect(navigator).toHaveAttribute("data-hud-state", "compact");
-  await expect(page.getByText("Elapsed")).toBeVisible();
-  await expect(page.getByText("Pace")).toBeVisible();
+  const camera = await page.locator("gmp-map-3d").evaluate((element) => {
+    const map = element as google.maps.maps3d.Map3DElement;
+    return {
+      maxTilt: map.maxTilt,
+      range: map.range,
+      tilt: map.tilt,
+    };
+  });
+  expect(camera.range).toBeGreaterThanOrEqual(150);
+  expect(camera.tilt).toBeLessThanOrEqual(65);
+  expect(camera.maxTilt).toBe(78);
+
+  const filaments = await page
+    .locator("gmp-polyline-3d")
+    .evaluateAll((elements) =>
+      elements.map(
+        (element) =>
+          (element as google.maps.maps3d.Polyline3DElement)
+            .drawsOccludedSegments,
+      ),
+    );
+  expect(filaments).toEqual([false, false, false, false]);
+  await captureEvidence(page, "14736711660-desktop-runner.png");
+  expectNoRuntimeErrors(consoleErrors, pageErrors);
 });

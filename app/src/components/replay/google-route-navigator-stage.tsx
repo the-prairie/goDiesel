@@ -12,6 +12,7 @@ import {
   Route,
   ScanLine,
   Settings2,
+  Sparkles,
   Unlock,
   ZoomIn,
   ZoomOut,
@@ -28,6 +29,7 @@ import {
   advanceGoogleRouteNavigator,
   cycleGoogleRouteSpeed,
   googleRouteCameraPose,
+  googleRouteThreadTreatment,
   googleRouteTelemetry,
   initialGoogleRouteNavigatorState,
   seekGoogleRouteNavigator,
@@ -41,6 +43,12 @@ import {
   type GoogleRouteNavigatorStatus,
 } from "@/replay/google/google-route-navigator-engine";
 import { routeDistanceM } from "@/replay/route-path";
+import {
+  advanceRouteCameraMotion,
+  createRouteCameraMotionState,
+  type RouteCameraMotionState,
+} from "@/replay/camera/route-camera-stabilizer";
+import type { GoogleRouteCameraPose } from "@/replay/google-route-navigator-controller";
 
 const FIELD_TEST_ROUTES = [
   { slug: "14736711660", label: "San Francisco" },
@@ -57,6 +65,7 @@ const CAMERA_MODES: Array<{
   label: string;
   icon: typeof Navigation;
 }> = [
+  { mode: "auto", label: "Auto director", icon: Sparkles },
   { mode: "runner", label: "Runner", icon: Navigation },
   { mode: "chase", label: "Chase", icon: Eye },
   { mode: "overview", label: "Overview", icon: MapPinned },
@@ -83,21 +92,53 @@ export function GoogleRouteNavigatorStage({
   const productionReplay = variant === "replay";
   const containerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<GoogleRouteNavigatorEngine | undefined>(undefined);
+  const cameraMotionRef = useRef<RouteCameraMotionState | undefined>(undefined);
+  const cameraTargetRef = useRef<GoogleRouteCameraPose | undefined>(undefined);
+  const cameraSettlingRef = useRef(false);
+  const lastCameraAtRef = useRef<number | undefined>(undefined);
   const controlRef = useRef(initialGoogleRouteNavigatorState());
   const [control, setControl] = useState(controlRef.current);
-  const [status, setStatus] = useState<GoogleRouteNavigatorStatus>(INITIAL_STATUS);
+  const [status, setStatus] =
+    useState<GoogleRouteNavigatorStatus>(INITIAL_STATUS);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const totalDistanceM = routeDistanceM(route);
   const telemetry = useMemo(
     () => googleRouteTelemetry(route, control.progressM),
     [control.progressM, route],
   );
+  const cameraPose = useMemo(
+    () => googleRouteCameraPose(route, control),
+    [control, route],
+  );
+
+  const renderCamera = useCallback(
+    (
+      desired: GoogleRouteCameraPose,
+      now = performance.now(),
+      force = false,
+    ) => {
+      const previous = cameraMotionRef.current;
+      const previousAt = lastCameraAtRef.current;
+      const elapsedSeconds =
+        previousAt === undefined
+          ? 1 / 30
+          : Math.min(0.1, (now - previousAt) / 1_000);
+      const motion =
+        force || !previous
+          ? createRouteCameraMotionState(desired)
+          : advanceRouteCameraMotion(previous, desired, elapsedSeconds, 0.48);
+      cameraMotionRef.current = motion;
+      cameraTargetRef.current = desired;
+      cameraSettlingRef.current = !cameraPoseHasSettled(motion.pose, desired);
+      lastCameraAtRef.current = now;
+      engineRef.current?.setCamera(motion.pose);
+    },
+    [],
+  );
 
   const commitControl = useCallback(
     (
-      update: (
-        current: GoogleRouteNavigatorState,
-      ) => GoogleRouteNavigatorState,
+      update: (current: GoogleRouteNavigatorState) => GoogleRouteNavigatorState,
     ) => {
       const next = update(controlRef.current);
       controlRef.current = next;
@@ -105,10 +146,13 @@ export function GoogleRouteNavigatorStage({
       engineRef.current?.setFollowing(next.following);
       engineRef.current?.setGrounding(next.groundingMode);
       if (next.following) {
-        engineRef.current?.setCamera(googleRouteCameraPose(route, next));
+        renderCamera(googleRouteCameraPose(route, next));
       }
+      engineRef.current?.setCinematicRoute(
+        googleRouteThreadTreatment(route, next),
+      );
     },
-    [route],
+    [renderCamera, route],
   );
 
   useEffect(() => {
@@ -117,6 +161,10 @@ export function GoogleRouteNavigatorStage({
     const engine = createGoogleRouteNavigatorEngine();
     const initial = initialGoogleRouteNavigatorState();
     engineRef.current = engine;
+    cameraMotionRef.current = undefined;
+    cameraTargetRef.current = undefined;
+    cameraSettlingRef.current = false;
+    lastCameraAtRef.current = undefined;
     controlRef.current = initial;
     setControl(initial);
     setSettingsOpen(false);
@@ -127,45 +175,76 @@ export function GoogleRouteNavigatorStage({
       container,
       route,
       groundingMode: initial.groundingMode,
+      initialCamera: googleRouteCameraPose(route, initial),
       routeStyle: {
         color: "#ef684e",
+        mode: "filament",
         outerColor: "#15100d",
-        outerWidth: 0.48,
-        width: 6,
+        outerWidth: 0.14,
+        width: 3,
       },
       onStatus: (next) => {
         setStatus(next);
         if (next.state === "ready") {
-          engine.setCamera(googleRouteCameraPose(route, controlRef.current));
+          renderCamera(
+            googleRouteCameraPose(route, controlRef.current),
+            performance.now(),
+            true,
+          );
+          engine.setCinematicRoute(
+            googleRouteThreadTreatment(route, controlRef.current),
+          );
         }
       },
     });
 
     return () => {
       engine.destroy();
+      cameraMotionRef.current = undefined;
+      cameraTargetRef.current = undefined;
+      cameraSettlingRef.current = false;
+      lastCameraAtRef.current = undefined;
       if (engineRef.current === engine) engineRef.current = undefined;
     };
-  }, [route]);
+  }, [renderCamera, route]);
 
   useEffect(() => {
     if (status.state !== "ready") return;
     let animationFrame = 0;
     let previous = performance.now();
     let lastCameraUpdate = previous;
+    let lastRouteUpdate = previous;
     let lastUiUpdate = previous;
     const tick = (now: number) => {
+      const current = controlRef.current;
       const next = advanceGoogleRouteNavigator(
-        controlRef.current,
+        current,
         (now - previous) / 1_000,
         totalDistanceM,
       );
       previous = now;
       controlRef.current = next;
-      if (next.following && now - lastCameraUpdate >= 32) {
-        engineRef.current?.setCamera(googleRouteCameraPose(route, next));
+      const progressChanged = next.progressM !== current.progressM;
+      const playbackChanged = next.playing !== current.playing;
+      const cameraSettling = cameraSettlingRef.current;
+      if (
+        next.following &&
+        (progressChanged || cameraSettling) &&
+        now - lastCameraUpdate >= 32
+      ) {
+        const desired = progressChanged
+          ? googleRouteCameraPose(route, next)
+          : cameraTargetRef.current;
+        if (desired) renderCamera(desired, now);
         lastCameraUpdate = now;
       }
-      if (now - lastUiUpdate >= 90) {
+      if (progressChanged && now - lastRouteUpdate >= 40) {
+        engineRef.current?.setCinematicRoute(
+          googleRouteThreadTreatment(route, next),
+        );
+        lastRouteUpdate = now;
+      }
+      if ((progressChanged || playbackChanged) && now - lastUiUpdate >= 90) {
         setControl(next);
         lastUiUpdate = now;
       }
@@ -173,7 +252,7 @@ export function GoogleRouteNavigatorStage({
     };
     animationFrame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animationFrame);
-  }, [route, status.state, totalDistanceM]);
+  }, [renderCamera, route, status.state, totalDistanceM]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -202,7 +281,9 @@ export function GoogleRouteNavigatorStage({
 
   return (
     <section
-      aria-label={productionReplay ? "Google 3D Replay" : "Google route navigator lab"}
+      aria-label={
+        productionReplay ? "Google 3D Replay" : "Google route navigator lab"
+      }
       className={cn(
         "fixed right-0 top-0 z-[100] min-h-[34rem] overflow-hidden bg-[#081112]",
         productionReplay
@@ -210,9 +291,11 @@ export function GoogleRouteNavigatorStage({
           : "bottom-0 left-0",
       )}
       data-camera-mode={control.cameraMode}
+      data-camera-protection={cameraPose.protection?.join(" ") ?? "manual"}
+      data-directed-camera={cameraPose.directedMode ?? control.cameraMode}
       data-following={control.following}
       data-grounding-mode={control.groundingMode}
-      data-hud-state={control.playing ? "compact" : "expanded"}
+      data-hud-state="expanded"
       data-engine="google-3d-maps"
       data-route-slug={route.slug}
       data-state={status.state}
@@ -241,8 +324,8 @@ export function GoogleRouteNavigatorStage({
           <div className="min-w-0">
             <h1 className="truncate text-sm font-semibold">{route.region}</h1>
             <div className="truncate text-[11px] text-white/58">
-              {route.distanceKm.toFixed(1)} km · {Math.round(route.elevationGainM)} m up ·{" "}
-              {route.type}
+              {route.distanceKm.toFixed(1)} km ·{" "}
+              {Math.round(route.elevationGainM)} m up · {route.type}
             </div>
           </div>
         </div>
@@ -258,7 +341,10 @@ export function GoogleRouteNavigatorStage({
               <Unlock aria-hidden="true" className="size-3.5" />
             )}
             <span className="hidden sm:inline">
-              {CAMERA_MODES.find(({ mode }) => mode === control.cameraMode)?.label}
+              {control.cameraMode === "auto"
+                ? `Auto · ${cameraPose.directedMode === "overview" ? "Reveal" : "Follow"}`
+                : CAMERA_MODES.find(({ mode }) => mode === control.cameraMode)
+                    ?.label}
             </span>
           </div>
           <Button
@@ -277,7 +363,9 @@ export function GoogleRouteNavigatorStage({
               <ReplayRoutePicker
                 currentSlug={route.slug}
                 routes={pickerRoutes}
-                returnPath={backPath.startsWith("/atlas") ? backPath : undefined}
+                returnPath={
+                  backPath.startsWith("/atlas") ? backPath : undefined
+                }
               />
             </div>
           ) : null}
@@ -300,9 +388,14 @@ export function GoogleRouteNavigatorStage({
             className="max-w-md border border-white/20 bg-[#0b1112]/94 p-6 text-center text-white shadow-2xl"
             role={status.state === "unavailable" ? "alert" : "status"}
           >
-            <ScanLine aria-hidden="true" className="mx-auto size-5 text-[#ef684e]" />
+            <ScanLine
+              aria-hidden="true"
+              className="mx-auto size-5 text-[#ef684e]"
+            />
             <h2 className="mt-3 font-editorial text-2xl font-semibold">
-              {status.state === "loading" ? "Entering the route" : "3D world unavailable"}
+              {status.state === "loading"
+                ? "Entering the route"
+                : "3D world unavailable"}
             </h2>
             <p className="mt-2 text-sm text-white/62">{status.message}</p>
             {status.state === "unavailable" && onUseAtlas ? (
@@ -323,97 +416,39 @@ export function GoogleRouteNavigatorStage({
         className="pointer-events-none absolute inset-x-0 bottom-0 z-30"
         data-testid={productionReplay ? "replay-controls" : undefined}
       >
-        {control.playing ? (
-          <CompactReplayRail
-            control={control}
-            disabled={status.state !== "ready"}
-            onCommit={commitControl}
-            onSelectCamera={selectCamera}
-            onTogglePlayback={togglePlayback}
-            route={route}
-            telemetry={telemetry}
-            totalDistanceM={totalDistanceM}
-          />
-        ) : (
-          <ExpandedReplayHud
-            control={control}
-            disabled={status.state !== "ready"}
-            onCommit={commitControl}
-            onSelectCamera={selectCamera}
-            onTogglePlayback={togglePlayback}
-            route={route}
-            telemetry={telemetry}
-            totalDistanceM={totalDistanceM}
-          />
-        )}
+        <ExpandedReplayHud
+          control={control}
+          disabled={status.state !== "ready"}
+          onCommit={commitControl}
+          onSelectCamera={selectCamera}
+          onTogglePlayback={togglePlayback}
+          route={route}
+          telemetry={telemetry}
+          totalDistanceM={totalDistanceM}
+        />
       </div>
     </section>
   );
 }
 
-function CompactReplayRail({
-  control,
-  disabled,
-  onCommit,
-  onSelectCamera,
-  onTogglePlayback,
-  route,
-  telemetry,
-  totalDistanceM,
-}: ReplayHudProps) {
+function cameraPoseHasSettled(
+  current: GoogleRouteCameraPose,
+  desired: GoogleRouteCameraPose,
+) {
+  const headingDelta = Math.abs(
+    ((desired.headingDeg - current.headingDeg + 540) % 360) - 180,
+  );
   return (
-    <div
-      className="pointer-events-auto mx-auto grid w-full items-center gap-3 border-t border-white/15 bg-[#071011]/92 px-3 py-2 text-white shadow-2xl backdrop-blur-xl sm:grid-cols-[auto_minmax(9rem,1fr)_auto] sm:px-5"
-      data-testid="google-route-controls"
-    >
-      <div className="flex items-center gap-3">
-        <ReplayButton
-          disabled={disabled}
-          onClick={onTogglePlayback}
-          playing={control.playing}
-        />
-        <div className="min-w-[7.5rem]">
-          <div
-            className="text-xs font-semibold tabular-nums"
-            data-testid="google-route-progress"
-          >
-            {(control.progressM / 1_000).toFixed(2)} / {route.distanceKm.toFixed(1)} km
-          </div>
-          <div className="text-[9px] uppercase text-white/42">Route position</div>
-        </div>
-      </div>
-
-      <input
-        aria-label="Route progress"
-        className="h-8 min-w-0 w-full accent-[#ef684e]"
-        disabled={disabled}
-        max={totalDistanceM}
-        min={0}
-        onChange={(event) =>
-          onCommit((current) =>
-            seekGoogleRouteNavigator(
-              current,
-              Number(event.target.value),
-              totalDistanceM,
-            ),
-          )
-        }
-        step={1}
-        type="range"
-        value={control.progressM}
-      />
-
-      <div className="flex items-center justify-between gap-3 sm:justify-end">
-        <Metric label="Elapsed" value={formatDuration(telemetry.elapsedS)} />
-        <Metric label="Pace" value={formatPace(telemetry.paceSPerKm, route.type)} />
-        <Metric label="Elev" value={`${Math.round(telemetry.elevationM)} m`} />
-        <CameraControls
-          active={control.cameraMode}
-          disabled={disabled}
-          onSelect={onSelectCamera}
-        />
-      </div>
-    </div>
+    Math.abs(current.center.lat - desired.center.lat) < 0.000_001 &&
+    Math.abs(current.center.lng - desired.center.lng) < 0.000_001 &&
+    Math.abs(
+      (current.center.altitude ?? desired.center.altitude ?? 0) -
+        (desired.center.altitude ?? current.center.altitude ?? 0),
+    ) < 0.5 &&
+    headingDelta < 0.2 &&
+    Math.abs(current.rangeM - desired.rangeM) < 1.5 &&
+    Math.abs(current.tiltDeg - desired.tiltDeg) < 0.1 &&
+    Math.abs(current.fovDeg - desired.fovDeg) < 0.1
   );
 }
 
@@ -432,29 +467,33 @@ function ExpandedReplayHud({
       className="pointer-events-auto mx-auto w-full border-t border-white/15 bg-[#071011]/94 text-white shadow-2xl backdrop-blur-xl"
       data-testid="google-route-controls"
     >
-      <div className="grid min-h-28 md:grid-cols-[15rem_minmax(18rem,1fr)_auto]">
-        <div className="flex items-center gap-3 border-b border-white/12 px-4 py-3 md:border-b-0 md:border-r">
+      <div className="grid grid-cols-[10rem_minmax(0,1fr)] md:min-h-28 md:grid-cols-[15rem_minmax(18rem,1fr)_auto]">
+        <div className="flex min-w-0 items-center gap-2 border-r border-white/12 px-3 py-2 md:gap-3 md:px-4 md:py-3">
           <ReplayButton
             disabled={disabled}
             onClick={onTogglePlayback}
             playing={control.playing}
           />
-          <Route aria-hidden="true" className="size-4 text-[#ef684e]" />
-          <div>
+          <Route
+            aria-hidden="true"
+            className="hidden size-4 text-[#ef684e] md:block"
+          />
+          <div className="min-w-0">
             <div className="text-[9px] font-semibold uppercase text-[#ef684e]">
               Route telemetry
             </div>
             <div
-              className="mt-0.5 text-sm font-semibold tabular-nums"
+              className="mt-0.5 truncate text-[11px] font-semibold tabular-nums md:text-sm"
               data-testid="google-route-progress"
             >
-              {(control.progressM / 1_000).toFixed(2)} / {route.distanceKm.toFixed(1)} km
+              {(control.progressM / 1_000).toFixed(2)} /{" "}
+              {route.distanceKm.toFixed(1)} km
             </div>
           </div>
         </div>
 
         <ReplayElevationScrubber
-          className="border-0"
+          className="h-[4.75rem] border-0 md:h-[6.25rem]"
           disabled={disabled}
           onSeek={(progressM) =>
             onCommit((current) =>
@@ -467,11 +506,20 @@ function ExpandedReplayHud({
           totalDistanceM={totalDistanceM}
         />
 
-        <div className="flex flex-wrap items-center justify-between gap-4 border-t border-white/12 px-4 py-3 md:min-w-[27rem] md:border-l md:border-t-0">
-          <div className="grid grid-cols-4 gap-x-5 gap-y-2">
-            <Metric label="Elapsed" value={formatDuration(telemetry.elapsedS)} />
-            <Metric label="Pace" value={formatPace(telemetry.paceSPerKm, route.type)} />
-            <Metric label="Elevation" value={`${Math.round(telemetry.elevationM)} m`} />
+        <div className="col-span-2 flex min-w-0 items-center justify-between gap-2 border-t border-white/12 px-3 py-2 md:col-span-1 md:min-w-[27rem] md:gap-4 md:border-l md:border-t-0 md:px-4 md:py-3">
+          <div className="grid min-w-0 flex-1 grid-cols-4 gap-x-2 md:gap-x-5 md:gap-y-2">
+            <Metric
+              label="Elapsed"
+              value={formatDuration(telemetry.elapsedS)}
+            />
+            <Metric
+              label="Pace"
+              value={formatPace(telemetry.paceSPerKm, route.type)}
+            />
+            <Metric
+              label="Elevation"
+              value={`${Math.round(telemetry.elevationM)} m`}
+            />
             <Metric
               label="Grade"
               value={`${telemetry.gradePercent >= 0 ? "+" : ""}${telemetry.gradePercent.toFixed(1)}%`}
@@ -589,29 +637,32 @@ function ReplaySettings({
           </Button>
         </SettingGroup>
 
-        {showFieldRoutes ? <div className="border-t border-white/12 pt-3">
-          <div className="text-[9px] font-semibold uppercase text-white/42">
-            Field routes
+        {showFieldRoutes ? (
+          <div className="border-t border-white/12 pt-3">
+            <div className="text-[9px] font-semibold uppercase text-white/42">
+              Field routes
+            </div>
+            <div className="mt-2 flex gap-2">
+              {FIELD_TEST_ROUTES.map((candidate) => (
+                <Button
+                  asChild
+                  className={cn(
+                    "h-8 border-white/20 bg-transparent text-white hover:bg-white/10",
+                    candidate.slug === route.slug &&
+                      "border-[#ef684e] text-[#ff8a73]",
+                  )}
+                  key={candidate.slug}
+                  size="sm"
+                  variant="outline"
+                >
+                  <Link to={`/lab/google-route-navigator/${candidate.slug}`}>
+                    {candidate.label}
+                  </Link>
+                </Button>
+              ))}
+            </div>
           </div>
-          <div className="mt-2 flex gap-2">
-            {FIELD_TEST_ROUTES.map((candidate) => (
-              <Button
-                asChild
-                className={cn(
-                  "h-8 border-white/20 bg-transparent text-white hover:bg-white/10",
-                  candidate.slug === route.slug && "border-[#ef684e] text-[#ff8a73]",
-                )}
-                key={candidate.slug}
-                size="sm"
-                variant="outline"
-              >
-                <Link to={`/lab/google-route-navigator/${candidate.slug}`}>
-                  {candidate.label}
-                </Link>
-              </Button>
-            ))}
-          </div>
-        </div> : null}
+        ) : null}
       </div>
     </aside>
   );
@@ -632,7 +683,9 @@ function SettingGroup({
         <Icon aria-hidden="true" className="size-3.5" />
         {label}
       </div>
-      <div className="flex border border-white/15 bg-black/25 p-0.5">{children}</div>
+      <div className="flex border border-white/15 bg-black/25 p-0.5">
+        {children}
+      </div>
     </div>
   );
 }
@@ -682,8 +735,9 @@ function CameraControls({
           aria-label={label}
           aria-pressed={active === mode}
           className={cn(
-            "grid size-8 place-items-center text-white/55 hover:bg-white/10 hover:text-white",
-            active === mode && "bg-white text-black hover:bg-white hover:text-black",
+            "grid size-11 place-items-center text-white/55 hover:bg-white/10 hover:text-white",
+            active === mode &&
+              "bg-white text-black hover:bg-white hover:text-black",
           )}
           disabled={disabled}
           key={mode}
@@ -738,9 +792,7 @@ interface ReplayHudProps {
   control: GoogleRouteNavigatorState;
   disabled: boolean;
   onCommit: (
-    update: (
-      current: GoogleRouteNavigatorState,
-    ) => GoogleRouteNavigatorState,
+    update: (current: GoogleRouteNavigatorState) => GoogleRouteNavigatorState,
   ) => void;
   onSelectCamera: (mode: GoogleRouteCameraMode) => void;
   onTogglePlayback: () => void;
