@@ -46,8 +46,12 @@ test("reviewed route guide loads directly and survives refresh", async ({ page }
 test("imported Strava route opens as a discovered guide with replay", async ({ page }) => {
   await page.goto(`/#/routes/${importedRouteSlug}`);
 
-  await expect(page.getByRole("heading", { name: "Rome, Italy" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "breaking ankles on the Appian Way" }),
+  ).toBeVisible();
+  await expect(page.getByText("Rome, Italy", { exact: true })).toBeVisible();
   await expect(page.getByText("Discovered", { exact: true })).toBeVisible();
+  await expect(page.getByText("December 9, 2022", { exact: true })).toBeVisible();
   await expect(page.getByText("28.5 km", { exact: true })).toBeVisible();
   await expect(page.getByText("247 m", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "What it feels like" })).toBeVisible();

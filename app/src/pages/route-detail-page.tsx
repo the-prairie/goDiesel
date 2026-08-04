@@ -167,7 +167,7 @@ function RouteMargin({
               {route.region}
             </p>
             <h1 className="mt-1 font-editorial text-3xl font-semibold leading-none text-ink">
-              {route.name}
+              {route.lifecycle === "discovered" ? route.activityName : route.name}
             </h1>
           </div>
           {isMobile ? (
@@ -218,7 +218,7 @@ function RouteMargin({
               <LeafMetric label="Activity" value={route.type} />
               <LeafMetric
                 label={routeDateLabel(route.lifecycle)}
-                value={route.date || "Not recorded"}
+                value={formatRouteDate(route.date)}
               />
             </dl>
           </>
@@ -301,4 +301,19 @@ function routeDateLabel(lifecycle: QuestRoute["lifecycle"]) {
   if (lifecycle === "planned") return "Planned for";
   if (lifecycle === "discovered") return "Discovered";
   return "Completed";
+}
+
+function formatRouteDate(value: string) {
+  if (!value) return "Not recorded";
+
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return value;
+
+  const [, year, month, day] = match;
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(Number(year), Number(month) - 1, Number(day))));
 }
