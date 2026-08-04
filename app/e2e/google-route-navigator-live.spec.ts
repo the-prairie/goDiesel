@@ -22,6 +22,17 @@ async function captureEvidence(page: Page, filename: string) {
   });
 }
 
+function expectNoRuntimeErrors(consoleErrors: string[], pageErrors: string[]) {
+  expect(pageErrors).toEqual([]);
+  expect(
+    consoleErrors.filter(
+      (message) =>
+        !message.includes("favicon") &&
+        !message.includes("Failed to load resource"),
+    ),
+  ).toEqual([]);
+}
+
 async function expectLiveSceneReady({
   consoleErrors,
   navigator,
@@ -70,10 +81,9 @@ async function expectLiveSceneReady({
 }
 
 for (const route of ROUTES) {
-  test(`navigates the ${route.label} route in native Google 3D`, async (
-    { page },
-    testInfo,
-  ) => {
+  test(`navigates the ${route.label} route in native Google 3D`, async ({
+    page,
+  }, testInfo) => {
     test.skip(
       process.env.GODIESEL_LIVE_GOOGLE_3D_E2E !== "1",
       "Live Google 3D verification is opt-in.",
@@ -125,10 +135,12 @@ for (const route of ROUTES) {
       /recorded-terrain-envelope.*horizon-guard/,
     );
     await page.waitForTimeout(2_000);
-    const automaticCamera = await page.locator("gmp-map-3d").evaluate((element) => {
-      const map = element as google.maps.maps3d.Map3DElement;
-      return { range: map.range, tilt: map.tilt };
-    });
+    const automaticCamera = await page
+      .locator("gmp-map-3d")
+      .evaluate((element) => {
+        const map = element as google.maps.maps3d.Map3DElement;
+        return { range: map.range, tilt: map.tilt };
+      });
     expect(automaticCamera.range).toBeGreaterThanOrEqual(390);
     expect(automaticCamera.range).toBeLessThanOrEqual(780);
     expect(automaticCamera.tilt).toBeLessThanOrEqual(58);
@@ -140,7 +152,9 @@ for (const route of ROUTES) {
     await expect(navigator).toHaveAttribute("data-camera-mode", "overview");
 
     await page.getByRole("button", { name: "Replay settings" }).click();
-    await expect(page.getByRole("complementary", { name: "Replay settings panel" })).toBeVisible();
+    await expect(
+      page.getByRole("complementary", { name: "Replay settings panel" }),
+    ).toBeVisible();
     await page.getByRole("button", { name: "Mesh" }).click();
     await expect(navigator).toHaveAttribute("data-grounding-mode", "mesh");
     await page.getByRole("button", { name: "Free" }).click();
@@ -148,21 +162,14 @@ for (const route of ROUTES) {
     await page.getByRole("button", { name: "Resume following" }).click();
     await expect(navigator).toHaveAttribute("data-following", "true");
 
-    expect(
-      consoleErrors.filter(
-        (message) =>
-          !message.includes("favicon") &&
-          !message.includes("Failed to load resource"),
-      ),
-    ).toEqual([]);
+    expectNoRuntimeErrors(consoleErrors, pageErrors);
   });
 }
 
 for (const route of ROUTES) {
-  test(`keeps the ${route.label} navigator usable on a phone viewport`, async (
-    { page },
-    testInfo,
-  ) => {
+  test(`keeps the ${route.label} navigator usable on a phone viewport`, async ({
+    page,
+  }, testInfo) => {
     test.skip(
       process.env.GODIESEL_LIVE_GOOGLE_3D_E2E !== "1",
       "Live Google 3D verification is opt-in.",
@@ -194,13 +201,15 @@ for (const route of ROUTES) {
     ]);
     expect(navigatorBox).not.toBeNull();
     expect(controlsBox).not.toBeNull();
-    expect((controlsBox?.x ?? 0) + (controlsBox?.width ?? 0)).toBeLessThanOrEqual(
-      390,
-    );
+    expect(
+      (controlsBox?.x ?? 0) + (controlsBox?.width ?? 0),
+    ).toBeLessThanOrEqual(390);
     expect(
       (controlsBox?.y ?? 0) + (controlsBox?.height ?? 0),
     ).toBeLessThanOrEqual(navigatorBox?.height ?? 0);
-    await expect(page.getByRole("button", { name: "Play route" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Play route" }),
+    ).toBeVisible();
     await expect(page.getByRole("button", { name: "Chase" })).toBeVisible();
     await page.getByRole("button", { name: "Play route" }).click();
     await expect(navigator).toHaveAttribute("data-hud-state", "expanded");
@@ -209,13 +218,13 @@ for (const route of ROUTES) {
     await expect(page.getByText("Pace")).toBeVisible();
     await page.waitForTimeout(2_500);
     await captureEvidence(page, `${route.slug}-mobile-playback.png`);
+    expectNoRuntimeErrors(consoleErrors, pageErrors);
   });
 }
 
-test("keeps the San Francisco runner view above coarse mesh", async (
-  { page },
-  testInfo,
-) => {
+test("keeps the San Francisco runner view above coarse mesh", async ({
+  page,
+}, testInfo) => {
   test.skip(
     process.env.GODIESEL_LIVE_GOOGLE_3D_E2E !== "1",
     "Live Google 3D verification is opt-in.",
@@ -253,13 +262,16 @@ test("keeps the San Francisco runner view above coarse mesh", async (
   expect(camera.tilt).toBeLessThanOrEqual(65);
   expect(camera.maxTilt).toBe(78);
 
-  const filaments = await page.locator("gmp-polyline-3d").evaluateAll(
-    (elements) =>
-      elements.map((element) =>
-        (element as google.maps.maps3d.Polyline3DElement)
-          .drawsOccludedSegments,
+  const filaments = await page
+    .locator("gmp-polyline-3d")
+    .evaluateAll((elements) =>
+      elements.map(
+        (element) =>
+          (element as google.maps.maps3d.Polyline3DElement)
+            .drawsOccludedSegments,
       ),
-  );
+    );
   expect(filaments).toEqual([false, false, false, false]);
   await captureEvidence(page, "14736711660-desktop-runner.png");
+  expectNoRuntimeErrors(consoleErrors, pageErrors);
 });

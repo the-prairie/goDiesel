@@ -93,10 +93,13 @@ export function GoogleRouteNavigatorStage({
   const containerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<GoogleRouteNavigatorEngine | undefined>(undefined);
   const cameraMotionRef = useRef<RouteCameraMotionState | undefined>(undefined);
+  const cameraTargetRef = useRef<GoogleRouteCameraPose | undefined>(undefined);
+  const cameraSettlingRef = useRef(false);
   const lastCameraAtRef = useRef<number | undefined>(undefined);
   const controlRef = useRef(initialGoogleRouteNavigatorState());
   const [control, setControl] = useState(controlRef.current);
-  const [status, setStatus] = useState<GoogleRouteNavigatorStatus>(INITIAL_STATUS);
+  const [status, setStatus] =
+    useState<GoogleRouteNavigatorStatus>(INITIAL_STATUS);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const totalDistanceM = routeDistanceM(route);
   const telemetry = useMemo(
@@ -109,16 +112,24 @@ export function GoogleRouteNavigatorStage({
   );
 
   const renderCamera = useCallback(
-    (desired: GoogleRouteCameraPose, now = performance.now(), force = false) => {
+    (
+      desired: GoogleRouteCameraPose,
+      now = performance.now(),
+      force = false,
+    ) => {
       const previous = cameraMotionRef.current;
       const previousAt = lastCameraAtRef.current;
       const elapsedSeconds =
-        previousAt === undefined ? 1 / 30 : Math.min(0.1, (now - previousAt) / 1_000);
+        previousAt === undefined
+          ? 1 / 30
+          : Math.min(0.1, (now - previousAt) / 1_000);
       const motion =
         force || !previous
           ? createRouteCameraMotionState(desired)
           : advanceRouteCameraMotion(previous, desired, elapsedSeconds, 0.48);
       cameraMotionRef.current = motion;
+      cameraTargetRef.current = desired;
+      cameraSettlingRef.current = !cameraPoseHasSettled(motion.pose, desired);
       lastCameraAtRef.current = now;
       engineRef.current?.setCamera(motion.pose);
     },
@@ -127,9 +138,7 @@ export function GoogleRouteNavigatorStage({
 
   const commitControl = useCallback(
     (
-      update: (
-        current: GoogleRouteNavigatorState,
-      ) => GoogleRouteNavigatorState,
+      update: (current: GoogleRouteNavigatorState) => GoogleRouteNavigatorState,
     ) => {
       const next = update(controlRef.current);
       controlRef.current = next;
@@ -153,6 +162,8 @@ export function GoogleRouteNavigatorStage({
     const initial = initialGoogleRouteNavigatorState();
     engineRef.current = engine;
     cameraMotionRef.current = undefined;
+    cameraTargetRef.current = undefined;
+    cameraSettlingRef.current = false;
     lastCameraAtRef.current = undefined;
     controlRef.current = initial;
     setControl(initial);
@@ -169,13 +180,17 @@ export function GoogleRouteNavigatorStage({
         color: "#ef684e",
         mode: "filament",
         outerColor: "#15100d",
-        outerWidth: 0.48,
-        width: 6,
+        outerWidth: 0.14,
+        width: 3,
       },
       onStatus: (next) => {
         setStatus(next);
         if (next.state === "ready") {
-          renderCamera(googleRouteCameraPose(route, controlRef.current), performance.now(), true);
+          renderCamera(
+            googleRouteCameraPose(route, controlRef.current),
+            performance.now(),
+            true,
+          );
           engine.setCinematicRoute(
             googleRouteThreadTreatment(route, controlRef.current),
           );
@@ -186,6 +201,8 @@ export function GoogleRouteNavigatorStage({
     return () => {
       engine.destroy();
       cameraMotionRef.current = undefined;
+      cameraTargetRef.current = undefined;
+      cameraSettlingRef.current = false;
       lastCameraAtRef.current = undefined;
       if (engineRef.current === engine) engineRef.current = undefined;
     };
@@ -199,24 +216,35 @@ export function GoogleRouteNavigatorStage({
     let lastRouteUpdate = previous;
     let lastUiUpdate = previous;
     const tick = (now: number) => {
+      const current = controlRef.current;
       const next = advanceGoogleRouteNavigator(
-        controlRef.current,
+        current,
         (now - previous) / 1_000,
         totalDistanceM,
       );
       previous = now;
       controlRef.current = next;
-      if (next.following && now - lastCameraUpdate >= 32) {
-        renderCamera(googleRouteCameraPose(route, next), now);
+      const progressChanged = next.progressM !== current.progressM;
+      const playbackChanged = next.playing !== current.playing;
+      const cameraSettling = cameraSettlingRef.current;
+      if (
+        next.following &&
+        (progressChanged || cameraSettling) &&
+        now - lastCameraUpdate >= 32
+      ) {
+        const desired = progressChanged
+          ? googleRouteCameraPose(route, next)
+          : cameraTargetRef.current;
+        if (desired) renderCamera(desired, now);
         lastCameraUpdate = now;
       }
-      if (now - lastRouteUpdate >= 40) {
+      if (progressChanged && now - lastRouteUpdate >= 40) {
         engineRef.current?.setCinematicRoute(
           googleRouteThreadTreatment(route, next),
         );
         lastRouteUpdate = now;
       }
-      if (now - lastUiUpdate >= 90) {
+      if ((progressChanged || playbackChanged) && now - lastUiUpdate >= 90) {
         setControl(next);
         lastUiUpdate = now;
       }
@@ -253,7 +281,9 @@ export function GoogleRouteNavigatorStage({
 
   return (
     <section
-      aria-label={productionReplay ? "Google 3D Replay" : "Google route navigator lab"}
+      aria-label={
+        productionReplay ? "Google 3D Replay" : "Google route navigator lab"
+      }
       className={cn(
         "fixed right-0 top-0 z-[100] min-h-[34rem] overflow-hidden bg-[#081112]",
         productionReplay
@@ -294,8 +324,8 @@ export function GoogleRouteNavigatorStage({
           <div className="min-w-0">
             <h1 className="truncate text-sm font-semibold">{route.region}</h1>
             <div className="truncate text-[11px] text-white/58">
-              {route.distanceKm.toFixed(1)} km · {Math.round(route.elevationGainM)} m up ·{" "}
-              {route.type}
+              {route.distanceKm.toFixed(1)} km ·{" "}
+              {Math.round(route.elevationGainM)} m up · {route.type}
             </div>
           </div>
         </div>
@@ -313,7 +343,8 @@ export function GoogleRouteNavigatorStage({
             <span className="hidden sm:inline">
               {control.cameraMode === "auto"
                 ? `Auto · ${cameraPose.directedMode === "overview" ? "Reveal" : "Follow"}`
-                : CAMERA_MODES.find(({ mode }) => mode === control.cameraMode)?.label}
+                : CAMERA_MODES.find(({ mode }) => mode === control.cameraMode)
+                    ?.label}
             </span>
           </div>
           <Button
@@ -332,7 +363,9 @@ export function GoogleRouteNavigatorStage({
               <ReplayRoutePicker
                 currentSlug={route.slug}
                 routes={pickerRoutes}
-                returnPath={backPath.startsWith("/atlas") ? backPath : undefined}
+                returnPath={
+                  backPath.startsWith("/atlas") ? backPath : undefined
+                }
               />
             </div>
           ) : null}
@@ -355,9 +388,14 @@ export function GoogleRouteNavigatorStage({
             className="max-w-md border border-white/20 bg-[#0b1112]/94 p-6 text-center text-white shadow-2xl"
             role={status.state === "unavailable" ? "alert" : "status"}
           >
-            <ScanLine aria-hidden="true" className="mx-auto size-5 text-[#ef684e]" />
+            <ScanLine
+              aria-hidden="true"
+              className="mx-auto size-5 text-[#ef684e]"
+            />
             <h2 className="mt-3 font-editorial text-2xl font-semibold">
-              {status.state === "loading" ? "Entering the route" : "3D world unavailable"}
+              {status.state === "loading"
+                ? "Entering the route"
+                : "3D world unavailable"}
             </h2>
             <p className="mt-2 text-sm text-white/62">{status.message}</p>
             {status.state === "unavailable" && onUseAtlas ? (
@@ -393,6 +431,27 @@ export function GoogleRouteNavigatorStage({
   );
 }
 
+function cameraPoseHasSettled(
+  current: GoogleRouteCameraPose,
+  desired: GoogleRouteCameraPose,
+) {
+  const headingDelta = Math.abs(
+    ((desired.headingDeg - current.headingDeg + 540) % 360) - 180,
+  );
+  return (
+    Math.abs(current.center.lat - desired.center.lat) < 0.000_001 &&
+    Math.abs(current.center.lng - desired.center.lng) < 0.000_001 &&
+    Math.abs(
+      (current.center.altitude ?? desired.center.altitude ?? 0) -
+        (desired.center.altitude ?? current.center.altitude ?? 0),
+    ) < 0.5 &&
+    headingDelta < 0.2 &&
+    Math.abs(current.rangeM - desired.rangeM) < 1.5 &&
+    Math.abs(current.tiltDeg - desired.tiltDeg) < 0.1 &&
+    Math.abs(current.fovDeg - desired.fovDeg) < 0.1
+  );
+}
+
 function ExpandedReplayHud({
   control,
   disabled,
@@ -415,7 +474,10 @@ function ExpandedReplayHud({
             onClick={onTogglePlayback}
             playing={control.playing}
           />
-          <Route aria-hidden="true" className="hidden size-4 text-[#ef684e] md:block" />
+          <Route
+            aria-hidden="true"
+            className="hidden size-4 text-[#ef684e] md:block"
+          />
           <div className="min-w-0">
             <div className="text-[9px] font-semibold uppercase text-[#ef684e]">
               Route telemetry
@@ -424,7 +486,8 @@ function ExpandedReplayHud({
               className="mt-0.5 truncate text-[11px] font-semibold tabular-nums md:text-sm"
               data-testid="google-route-progress"
             >
-              {(control.progressM / 1_000).toFixed(2)} / {route.distanceKm.toFixed(1)} km
+              {(control.progressM / 1_000).toFixed(2)} /{" "}
+              {route.distanceKm.toFixed(1)} km
             </div>
           </div>
         </div>
@@ -445,9 +508,18 @@ function ExpandedReplayHud({
 
         <div className="col-span-2 flex min-w-0 items-center justify-between gap-2 border-t border-white/12 px-3 py-2 md:col-span-1 md:min-w-[27rem] md:gap-4 md:border-l md:border-t-0 md:px-4 md:py-3">
           <div className="grid min-w-0 flex-1 grid-cols-4 gap-x-2 md:gap-x-5 md:gap-y-2">
-            <Metric label="Elapsed" value={formatDuration(telemetry.elapsedS)} />
-            <Metric label="Pace" value={formatPace(telemetry.paceSPerKm, route.type)} />
-            <Metric label="Elevation" value={`${Math.round(telemetry.elevationM)} m`} />
+            <Metric
+              label="Elapsed"
+              value={formatDuration(telemetry.elapsedS)}
+            />
+            <Metric
+              label="Pace"
+              value={formatPace(telemetry.paceSPerKm, route.type)}
+            />
+            <Metric
+              label="Elevation"
+              value={`${Math.round(telemetry.elevationM)} m`}
+            />
             <Metric
               label="Grade"
               value={`${telemetry.gradePercent >= 0 ? "+" : ""}${telemetry.gradePercent.toFixed(1)}%`}
@@ -565,29 +637,32 @@ function ReplaySettings({
           </Button>
         </SettingGroup>
 
-        {showFieldRoutes ? <div className="border-t border-white/12 pt-3">
-          <div className="text-[9px] font-semibold uppercase text-white/42">
-            Field routes
+        {showFieldRoutes ? (
+          <div className="border-t border-white/12 pt-3">
+            <div className="text-[9px] font-semibold uppercase text-white/42">
+              Field routes
+            </div>
+            <div className="mt-2 flex gap-2">
+              {FIELD_TEST_ROUTES.map((candidate) => (
+                <Button
+                  asChild
+                  className={cn(
+                    "h-8 border-white/20 bg-transparent text-white hover:bg-white/10",
+                    candidate.slug === route.slug &&
+                      "border-[#ef684e] text-[#ff8a73]",
+                  )}
+                  key={candidate.slug}
+                  size="sm"
+                  variant="outline"
+                >
+                  <Link to={`/lab/google-route-navigator/${candidate.slug}`}>
+                    {candidate.label}
+                  </Link>
+                </Button>
+              ))}
+            </div>
           </div>
-          <div className="mt-2 flex gap-2">
-            {FIELD_TEST_ROUTES.map((candidate) => (
-              <Button
-                asChild
-                className={cn(
-                  "h-8 border-white/20 bg-transparent text-white hover:bg-white/10",
-                  candidate.slug === route.slug && "border-[#ef684e] text-[#ff8a73]",
-                )}
-                key={candidate.slug}
-                size="sm"
-                variant="outline"
-              >
-                <Link to={`/lab/google-route-navigator/${candidate.slug}`}>
-                  {candidate.label}
-                </Link>
-              </Button>
-            ))}
-          </div>
-        </div> : null}
+        ) : null}
       </div>
     </aside>
   );
@@ -608,7 +683,9 @@ function SettingGroup({
         <Icon aria-hidden="true" className="size-3.5" />
         {label}
       </div>
-      <div className="flex border border-white/15 bg-black/25 p-0.5">{children}</div>
+      <div className="flex border border-white/15 bg-black/25 p-0.5">
+        {children}
+      </div>
     </div>
   );
 }
@@ -658,8 +735,9 @@ function CameraControls({
           aria-label={label}
           aria-pressed={active === mode}
           className={cn(
-            "grid size-8 place-items-center text-white/55 hover:bg-white/10 hover:text-white",
-            active === mode && "bg-white text-black hover:bg-white hover:text-black",
+            "grid size-11 place-items-center text-white/55 hover:bg-white/10 hover:text-white",
+            active === mode &&
+              "bg-white text-black hover:bg-white hover:text-black",
           )}
           disabled={disabled}
           key={mode}
@@ -714,9 +792,7 @@ interface ReplayHudProps {
   control: GoogleRouteNavigatorState;
   disabled: boolean;
   onCommit: (
-    update: (
-      current: GoogleRouteNavigatorState,
-    ) => GoogleRouteNavigatorState,
+    update: (current: GoogleRouteNavigatorState) => GoogleRouteNavigatorState,
   ) => void;
   onSelectCamera: (mode: GoogleRouteCameraMode) => void;
   onTogglePlayback: () => void;
