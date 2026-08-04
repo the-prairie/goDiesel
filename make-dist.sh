@@ -4,17 +4,43 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 echo "Building React application..."
-npm --prefix app run build
+SINGLE_ROUTE_SLUG="${GODIESEL_SINGLE_ROUTE_SLUG:-}"
+if [[ -n "$SINGLE_ROUTE_SLUG" && ! "$SINGLE_ROUTE_SLUG" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "Invalid GODIESEL_SINGLE_ROUTE_SLUG: $SINGLE_ROUTE_SLUG" >&2
+  exit 1
+fi
+
+if [[ -n "$SINGLE_ROUTE_SLUG" ]]; then
+  VITE_SINGLE_ROUTE_SLUG="$SINGLE_ROUTE_SLUG" npm --prefix app run build
+else
+  npm --prefix app run build
+fi
 npm --prefix app run test:bundle
 
 rm -rf dist
 mkdir -p dist
 cp -R app/dist/. dist/
 
-cat > dist/robots.txt <<'EOF'
+if [[ -n "$SINGLE_ROUTE_SLUG" ]]; then
+  ROUTE_FILE="dist/data/routes/${SINGLE_ROUTE_SLUG}.json"
+  if [[ ! -f "$ROUTE_FILE" ]]; then
+    echo "Single-route detail file was not built: $ROUTE_FILE" >&2
+    exit 1
+  fi
+  find dist/data/routes -type f ! -name "${SINGLE_ROUTE_SLUG}.json" -delete
+fi
+
+if [[ -n "$SINGLE_ROUTE_SLUG" ]]; then
+  cat > dist/robots.txt <<'EOF'
+User-agent: *
+Disallow: /
+EOF
+else
+  cat > dist/robots.txt <<'EOF'
 User-agent: *
 Allow: /
 EOF
+fi
 
 cat > dist/_headers <<'EOF'
 /assets/*

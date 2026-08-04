@@ -1,4 +1,5 @@
 import generated from "@/data/generated/routes.manifest.json";
+import { singleRouteMicrositeSlug } from "@/config/single-route-microsite";
 import { isCompletedRoute } from "@/domain/route-lifecycle";
 import { parseRouteSummary, type RouteSummary } from "@/domain/routes";
 
@@ -8,7 +9,11 @@ interface GeneratedRouteManifest {
 
 const manifest = generated as GeneratedRouteManifest;
 
-export const routes: RouteSummary[] = (manifest.routes ?? []).map(parseRouteSummary);
+const manifestRoutes = (manifest.routes ?? []).map(parseRouteSummary);
+
+export const routes: RouteSummary[] = singleRouteMicrositeSlug
+  ? manifestRoutes.filter((route) => route.slug === singleRouteMicrositeSlug)
+  : manifestRoutes;
 
 export const completedRoutes = routes.filter(isCompletedRoute);
 export const plannedRoutes = routes.filter((route) => route.lifecycle === "planned");

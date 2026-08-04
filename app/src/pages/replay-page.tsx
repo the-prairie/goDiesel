@@ -4,6 +4,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { EarthReplayStage } from "@/components/replay/earth-replay-stage";
 import { GoogleRouteNavigatorStage } from "@/components/replay/google-route-navigator-stage";
 import { RouteNotFound } from "@/components/routes/route-not-found";
+import { singleRouteMicrosite } from "@/config/single-route-microsite";
 import { completedRoutes, findRouteBySlug } from "@/data/routes";
 import { useRouteDetail } from "@/data/use-route-detail";
 import { APP_PATHS, atlasReturnPath, decodedRouteSlug } from "@/navigation";
@@ -37,7 +38,9 @@ export function ReplayPage() {
   const eligibleRoutes = completedRoutes.filter(
     (route) => route.replay.replayEligible,
   );
-  const pickerRoutes = selectedSummary
+  const pickerRoutes = singleRouteMicrosite
+    ? []
+    : selectedSummary
     ? [
         selectedSummary,
         ...eligibleRoutes.filter((route) => route.slug !== selectedSummary.slug),
@@ -54,14 +57,20 @@ export function ReplayPage() {
   if (detail.status !== "ready") return <RouteNotFound />;
 
   const returnPath = atlasReturnPath(searchParams);
+  const backPath = singleRouteMicrosite?.guidePath ?? returnPath ?? APP_PATHS.routes;
+  const backLabel = singleRouteMicrosite
+    ? "Route guide"
+    : returnPath
+      ? "Back to Atlas"
+      : "All routes";
   if (!useLegacyEarth && !atlasFallback) {
     return (
       <GoogleRouteNavigatorStage
         route={detail.route}
         variant="replay"
         pickerRoutes={pickerRoutes}
-        backPath={returnPath ?? APP_PATHS.routes}
-        backLabel={returnPath ? "Back to Atlas" : "All routes"}
+        backPath={backPath}
+        backLabel={backLabel}
         onUseAtlas={() => setAtlasFallback(true)}
       />
     );
@@ -71,8 +80,8 @@ export function ReplayPage() {
     <EarthReplayStage
       route={detail.route}
       pickerRoutes={pickerRoutes}
-      backPath={returnPath ?? APP_PATHS.routes}
-      backLabel={returnPath ? "Back to Atlas" : "All routes"}
+      backPath={backPath}
+      backLabel={backLabel}
       initialEngineMode={atlasFallback ? "atlas" : "earth"}
       allowEarthMode={useLegacyEarth}
     />
