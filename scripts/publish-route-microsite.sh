@@ -29,6 +29,10 @@ if [[ ! "$SHARE_NAME" =~ ^[a-z0-9]+([a-z0-9-]*[a-z0-9])?$ ]]; then
   echo "Share name must use lowercase letters, numbers, and internal hyphens." >&2
   exit 1
 fi
+if (( ${#SHARE_NAME} > 57 )); then
+  echo "Share name must be at most 57 characters so the Pages hostname is valid." >&2
+  exit 1
+fi
 if [[ -n "$MODE" && "$MODE" != "--dry-run" ]]; then
   usage
   exit 1

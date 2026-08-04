@@ -108,6 +108,7 @@ Prepare a route-only public share without publishing it:
 ```
 
 The dry run validates the route and replay data, builds a bundle containing only that route, and runs the focused microsite browser journey.
+The route-only bundle removes all unrelated public data and sends a site-wide `X-Robots-Tag: noindex` header in addition to `robots.txt`.
 
 Publish the validated bundle to its stable Cloudflare Pages branch URL:
 

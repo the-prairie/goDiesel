@@ -1,6 +1,7 @@
 """Validated metadata for route files that are not recorded Strava activities."""
 
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 
@@ -24,6 +25,8 @@ def imported_route_from_spec(spec: dict[str, object], checkout_root: Path) -> Im
         raise ValueError("source_gpx must be a non-empty relative path")
 
     source_root = (checkout_root / "route_sources").resolve()
+    if Path(source_value).is_absolute():
+        raise ValueError("source_gpx must be a relative path inside route_sources")
     source_path = (checkout_root / source_value).resolve()
     if not source_path.is_relative_to(source_root):
         raise ValueError("source_gpx must resolve inside route_sources")
@@ -39,7 +42,7 @@ def imported_route_from_spec(spec: dict[str, object], checkout_root: Path) -> Im
         path=source_path,
         name=name,
         activity_type=activity_type,
-        date=_optional_string(spec, "date"),
+        date=_optional_iso_date(spec, "date"),
         description=_optional_string(spec, "description"),
     )
 
@@ -58,3 +61,16 @@ def _optional_string(spec: dict[str, object], field: str) -> str:
     if not isinstance(value, str):
         raise ValueError(f"{field} must be a string")
     return value.strip()
+
+
+def _optional_iso_date(spec: dict[str, object], field: str) -> str:
+    value = _optional_string(spec, field)
+    if not value:
+        return ""
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError as error:
+        raise ValueError(f"{field} must use a valid YYYY-MM-DD date") from error
+    if parsed.isoformat() != value:
+        raise ValueError(f"{field} must use a valid YYYY-MM-DD date")
+    return value

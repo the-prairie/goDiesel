@@ -8,6 +8,12 @@ const [publicUrl, routeSlug] = process.argv.slice(2);
 if (!publicUrl || !routeSlug) {
   throw new Error("Usage: smoke-single-route-microsite.mjs <url> <route-slug>");
 }
+if (!/^https:\/\/[^/]+\/$/.test(publicUrl)) {
+  throw new Error("The public URL must be an HTTPS origin ending in a slash.");
+}
+if (!/^[A-Za-z0-9._-]+$/.test(routeSlug)) {
+  throw new Error("The route slug contains unsafe characters.");
+}
 
 const route = JSON.parse(
   fs.readFileSync(
@@ -24,9 +30,10 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 
 try {
   let lastError;
+  let response;
   for (let attempt = 1; attempt <= 5; attempt += 1) {
     try {
-      await page.goto(publicUrl, {
+      response = await page.goto(publicUrl, {
         waitUntil: "domcontentloaded",
         timeout: 30_000,
       });
@@ -41,6 +48,10 @@ try {
     }
   }
   if (lastError) throw lastError;
+  const robotsHeader = response?.headers()["x-robots-tag"] ?? "";
+  if (!robotsHeader.toLowerCase().includes("noindex")) {
+    throw new Error("public route does not send X-Robots-Tag: noindex");
+  }
 
   if (!page.url().includes(`#/routes/${routeSlug}`)) {
     throw new Error(`public root did not resolve to route ${routeSlug}`);

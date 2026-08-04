@@ -44,6 +44,24 @@ class ImportedRouteTest(unittest.TestCase):
                     root,
                 )
 
+    def test_rejects_invalid_imported_route_dates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "route_sources" / "route.gpx"
+            source.parent.mkdir(parents=True)
+            source.write_text("<gpx />")
+
+            with self.assertRaisesRegex(ValueError, "valid YYYY-MM-DD"):
+                imported_route_from_spec(
+                    {
+                        "source_gpx": "route_sources/route.gpx",
+                        "activity_name": "Invalid date route",
+                        "activity_type": "Run",
+                        "date": "2026-02-30",
+                    },
+                    root,
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
