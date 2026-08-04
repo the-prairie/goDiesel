@@ -96,10 +96,11 @@ Generated deploy files are not committed.
 Deploy the generated React output with Wrangler:
 
 ```bash
-npx wrangler pages deploy dist --project-name=godiesel
+npx wrangler pages deploy dist --project-name=godiesel --branch=production
 ```
 
 Cloudflare Pages should use `./make-dist.sh` as the build command and `dist` as the output directory.
+The `godiesel` Pages project uses `production` as its production branch, so the branch flag is required for the canonical `https://godiesel.pages.dev/` deployment.
 Hash routing keeps direct Atlas, route, and Replay links compatible with static hosting.
 
 ## Static Fallback
