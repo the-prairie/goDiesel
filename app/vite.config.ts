@@ -9,12 +9,14 @@ const cesiumBuild = "node_modules/cesium/Build/Cesium";
 const cesiumBaseUrl = "/cesiumStatic";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, path.resolve(__dirname, ".."), "");
-  const googleMapsApiKey =
-    env.VITE_GOOGLE_MAPS_API_KEY ||
-    env.GOOGLE_MAPS_API_KEY ||
-    process.env.VITE_GOOGLE_MAPS_API_KEY ||
-    process.env.GOOGLE_MAPS_API_KEY ||
-    "";
+  const liveProvidersDisabled = process.env.GODIESEL_DISABLE_LIVE_PROVIDERS === "1";
+  const googleMapsApiKey = liveProvidersDisabled
+    ? ""
+    : env.VITE_GOOGLE_MAPS_API_KEY ||
+      env.GOOGLE_MAPS_API_KEY ||
+      process.env.VITE_GOOGLE_MAPS_API_KEY ||
+      process.env.GOOGLE_MAPS_API_KEY ||
+      "";
   const singleRouteSlug =
     env.VITE_SINGLE_ROUTE_SLUG || process.env.VITE_SINGLE_ROUTE_SLUG || "";
   const routeManifestPath = path.resolve(

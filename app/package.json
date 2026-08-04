@@ -19,9 +19,11 @@
     "render:route-film:4k": "node scripts/render-route-film.mjs --width=3840 --height=2160 --fps=24",
     "render:route-film:review": "node scripts/render-route-film-review.mjs",
     "test:e2e:atlas-live": "playwright test --config playwright.live.config.ts atlas-region-live.spec.ts",
+    "test:e2e:live-pipeline": "playwright test --config playwright.pipeline.config.ts e2e/live-pipeline.spec.ts",
     "test:bundle": "node scripts/check-bundle-budget.mjs",
     "verify:ticket": "npm run typecheck && npm run build && npm run test:unit && playwright test e2e/navigation.spec.ts --grep \"root opens Atlas|compact Atlas navigation|every product surface|mobile bottom spine\"",
-    "verify": "npm run typecheck && npm run test:unit && npm run build && npm run test:bundle && npm run test:e2e"
+    "verify": "npm run typecheck && npm run test:unit && npm run build && npm run test:bundle && npm run test:e2e",
+    "verify:live-pipeline": "../scripts/verify-live-pipeline.sh"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",

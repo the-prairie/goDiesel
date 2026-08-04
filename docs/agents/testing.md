@@ -46,6 +46,22 @@ The complete release gate is:
 npm run verify
 ```
 
+The real-data, no-interception pipeline acceptance gate is:
+
+```sh
+GODIESEL_EARTH_ENGINE_PROJECT=playground-406023 \
+GODIESEL_PIPELINE_SHARE_NAME=pipeline-proof \
+npm run verify:live-pipeline
+```
+
+Run it only when proving a production cutover or the complete provider pipeline.
+It reads the complete private Strava export, sends selected real route geometry to the configured providers, and creates a real Cloudflare Pages branch deployment.
+It must fail when credentials, billing, quota, browser acceleration, raw source data, or any provider are unavailable.
+It never substitutes network responses, route records, renderers, or writer APIs.
+
+The generated evidence under `app/artifacts/live-pipeline/` is intentionally ignored because it contains source and response hashes derived from private inputs.
+Do not commit it.
+
 Live Atlas provider verification is:
 
 ```sh
