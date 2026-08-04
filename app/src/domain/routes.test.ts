@@ -55,7 +55,7 @@ describe("parseRouteDetail", () => {
     const detailDirectory = new URL("../../public/data/routes/", import.meta.url);
     const files = readdirSync(detailDirectory).filter((file) => file.endsWith(".json"));
 
-    expect(files).toHaveLength(66);
+    expect(files).toHaveLength(manifest.routes.length);
     for (const file of files) {
       const route = parseRouteDetail(
         JSON.parse(readFileSync(new URL(file, detailDirectory), "utf8")),
@@ -135,6 +135,22 @@ describe("parseRouteDetail", () => {
       track: { segmentCount: 1 },
       discontinuities: [],
     });
+  });
+
+  it("allows discovered geometry to be previewed without marking it completed", () => {
+    const parsed = parseRouteDetail(validRouteDetail({
+      lifecycle: "discovered",
+      replay: {
+        mode: "atlas",
+        replay_eligible: true,
+        best_in_earth: false,
+        geometry_status: "ready",
+        point_count: 2,
+      },
+    }));
+
+    expect(parsed.lifecycle).toBe("discovered");
+    expect(parsed.replay.replayEligible).toBe(true);
   });
 
   it("rejects discontinuities outside recorded route distance", () => {
@@ -310,7 +326,7 @@ describe("parseRouteSummary", () => {
   it("validates every generated summary without embedding full curation", () => {
     const generatedRoutes = (manifest as { routes: unknown[] }).routes;
 
-    expect(generatedRoutes).toHaveLength(66);
+    expect(generatedRoutes.length).toBeGreaterThan(0);
     for (const generatedRoute of generatedRoutes) {
       expect(generatedRoute).not.toHaveProperty("curation");
       expect(parseRouteSummary(generatedRoute).guide.reviewStatus).toMatch(

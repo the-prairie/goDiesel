@@ -69,7 +69,7 @@ def build_replay_metadata(
         raise ValueError("replay lifecycle must be completed, planned, or discovered")
 
     geometry_ready = point_count > 1
-    replay_eligible = geometry_ready and lifecycle == "completed"
+    replay_eligible = geometry_ready and lifecycle in ("completed", "discovered")
     best_in_earth = replay_eligible and str(activity_id) in best_in_earth_ids
     return {
         "mode": "earth" if best_in_earth else "atlas",

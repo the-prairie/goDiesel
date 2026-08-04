@@ -212,7 +212,7 @@ function RouteMargin({
             <p className="mt-4 font-editorial text-lg italic leading-6 text-ink-secondary">
               {premise}
             </p>
-            <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-y border-line py-4 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4">
+            <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-y border-line py-4">
               <LeafMetric label="Distance" value={`${route.distanceKm.toFixed(1)} km`} />
               <LeafMetric label="Climb" value={`${route.elevationGainM.toLocaleString()} m`} />
               <LeafMetric label="Activity" value={route.type} />
