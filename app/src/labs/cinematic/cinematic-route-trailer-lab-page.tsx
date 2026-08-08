@@ -1,7 +1,7 @@
 import { useParams } from "react-router-dom";
 
 import { CinematicRouteTrailerStage } from "@/surfaces/replay/cinematic/cinematic-route-trailer-stage";
-import { RouteNotFound } from "@/surfaces/routes/components/route-not-found";
+import { RouteNotFound } from "@/ui/route-not-found";
 import { findRouteBySlug } from "@/data/routes";
 import { useRouteDetail } from "@/data/use-route-detail";
 import { decodedRouteSlug } from "@/app/route-paths";

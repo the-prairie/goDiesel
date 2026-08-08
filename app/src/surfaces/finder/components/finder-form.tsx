@@ -3,7 +3,7 @@ import type { FormEvent } from "react";
 
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
-import type { FinderIntent } from "@/surfaces/finder/planning";
+import type { FinderIntent } from "@/domain/planning";
 
 export function FinderForm({
   intent,

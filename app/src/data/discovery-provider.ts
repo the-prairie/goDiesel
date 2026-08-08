@@ -3,7 +3,7 @@ import type {
   DiscoveryCandidate,
   FinderIntent,
   RouteDiscoveryProvider,
-} from "@/surfaces/finder/planning";
+} from "@/domain/planning";
 
 const candidateDefinitions = [
   {

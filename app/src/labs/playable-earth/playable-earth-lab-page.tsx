@@ -1,7 +1,7 @@
 import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import { PlayableEarthStage } from "@/labs/playable-earth/playable-earth-stage";
-import { RouteNotFound } from "@/surfaces/routes/components/route-not-found";
+import { RouteNotFound } from "@/ui/route-not-found";
 import { Button } from "@/ui/button";
 import { findRouteBySlug } from "@/data/routes";
 import { useRouteDetail } from "@/data/use-route-detail";

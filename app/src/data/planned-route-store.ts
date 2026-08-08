@@ -4,7 +4,7 @@ import type {
   DiscoveryCandidate,
   FinderIntent,
   PlannedRoute,
-} from "@/surfaces/finder/planning";
+} from "@/domain/planning";
 
 export const PLANNED_ROUTE_STORAGE_KEY = "godiesel.planned-routes.v1";
 const STORE_VERSION = 1 as const;

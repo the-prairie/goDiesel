@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 
 import { PageTitle } from "@/ui/page-title";
-import { RouteCard } from "@/surfaces/routes/components/route-card";
+import { RouteCard } from "@/ui/route-card";
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
 import { usePlannedRoutes } from "@/data/planned-route-store";

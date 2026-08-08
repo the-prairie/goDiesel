@@ -11,7 +11,7 @@ import { Link, useParams } from "react-router-dom";
 import { ElevationProfile } from "@/surfaces/routes/components/route-briefing";
 import { RouteGuide } from "@/surfaces/routes/components/route-guide";
 import { RouteLeafMap } from "@/surfaces/routes/components/route-leaf-map";
-import { RouteNotFound } from "@/surfaces/routes/components/route-not-found";
+import { RouteNotFound } from "@/ui/route-not-found";
 import { Button } from "@/ui/button";
 import { singleRouteMicrosite } from "@/app/single-route-microsite";
 import { findRouteBySlug } from "@/data/routes";

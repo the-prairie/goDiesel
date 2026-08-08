@@ -16,7 +16,7 @@ import type {
   DiscoveryCandidate,
   DiscoveryResult,
   FinderIntent,
-} from "@/surfaces/finder/planning";
+} from "@/domain/planning";
 
 const initialIntent: FinderIntent = {
   place: "",

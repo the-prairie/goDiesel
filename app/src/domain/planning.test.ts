@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { curatedRouteDiscoveryProvider } from "@/data/discovery-provider";
-import type { FinderIntent } from "@/surfaces/finder/planning";
+import type { FinderIntent } from "@/domain/planning";
 
 function intent(overrides: Partial<FinderIntent> = {}): FinderIntent {
   return {

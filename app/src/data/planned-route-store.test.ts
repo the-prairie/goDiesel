@@ -6,7 +6,7 @@ import {
   encodePlannedRouteStore,
   savePlannedRoute,
 } from "@/data/planned-route-store";
-import type { FinderIntent } from "@/surfaces/finder/planning";
+import type { FinderIntent } from "@/domain/planning";
 
 const finderIntent: FinderIntent = {
   place: "Kyoto",

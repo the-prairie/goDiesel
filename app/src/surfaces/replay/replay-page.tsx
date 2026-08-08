@@ -3,7 +3,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 
 import { EarthReplayStage } from "@/surfaces/replay/components/earth-replay-stage";
 import { GoogleRouteNavigatorStage } from "@/surfaces/replay/components/google-route-navigator-stage";
-import { RouteNotFound } from "@/surfaces/routes/components/route-not-found";
+import { RouteNotFound } from "@/ui/route-not-found";
 import { singleRouteMicrosite } from "@/app/single-route-microsite";
 import { completedRoutes, findRouteBySlug } from "@/data/routes";
 import { useRouteDetail } from "@/data/use-route-detail";

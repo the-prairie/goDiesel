@@ -1,9 +1,9 @@
 import { Check, Eye, MapPin, Plus, Route as RouteIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import { RouteThread } from "@/surfaces/routes/components/route-card";
+import { RouteThread } from "@/ui/route-card";
 import { Button } from "@/ui/button";
-import type { DiscoveryCandidate, PlannedRoute } from "@/surfaces/finder/planning";
+import type { DiscoveryCandidate, PlannedRoute } from "@/domain/planning";
 import { cn } from "@/ui/utils";
 import { APP_PATHS } from "@/app/route-paths";
 
