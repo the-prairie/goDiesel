@@ -279,6 +279,12 @@ These hold across the whole system. Breaking one is a defect, not a tradeoff.
 9. The route data model and canonical URLs are stable. Redesign work does not
    change them.
 10. A microsite bundle contains exactly one route's data.
+11. Production code never imports from `labs/`. `app/router.tsx` is the single
+    exception, because it is the composition root that builds the route table.
+12. `domain/` imports no upward layer, and no surface imports another surface.
+    Shared components live in `ui/`.
+
+Invariants 11 and 12 are enforced by `app/src/structure.test.ts`.
 
 ## 10. Where things live
 
@@ -290,10 +296,13 @@ These hold across the whole system. Breaking one is a defect, not a tradeoff.
 | Owner writer | `admin.py` (loopback only) |
 | Route summaries (bundled) | `app/src/data/generated/routes.manifest.json` |
 | Route details (lazy) | `app/public/data/routes/<slug>.json` |
-| Domain model | `app/src/domain/` |
+| Application shell, routing | `app/src/app/` |
+| Domain model (pure) | `app/src/domain/`, with the contract in `app/src/domain/route/` |
 | Data access | `app/src/data/` |
-| Replay engines | `app/src/replay/` |
-| Atlas world | `app/src/atlas/`, `app/src/components/globe/` |
+| Shared provider plumbing | `app/src/providers/` |
+| The five surfaces | `app/src/surfaces/<surface>/` |
+| Labs (no production commitment) | `app/src/labs/` |
+| Design system and shared components | `app/src/ui/` |
 | Private inputs | `../DieselDiaries`, `../Travel` (outside this repository) |
 
 ## 11. Domain-modeling gaps

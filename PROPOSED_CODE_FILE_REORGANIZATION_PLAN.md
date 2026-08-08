@@ -1183,3 +1183,61 @@ Import graph resolved by parsing every `import`/`export ... from`, dynamic
 to `src/*` and resolving `.ts`, `.tsx`, `.json` and `index.*` candidates. Fan-in
 counts in Section 6 include test files, since a test import must be rewritten
 exactly like a production one.
+
+---
+
+## 15. Execution status
+
+**Every move phase is complete.** The plan was executed on 2026-08-08 on branch
+`clanker/reorganize-app-src`, in the order below. Each phase is one commit and
+each was verified before the next began.
+
+| Commit | Phase | Result |
+| --- | --- | --- |
+| `a4f1c32` | Phase 0, deletions | 748 lines removed |
+| `3d22811` | Grounding extraction (8.3) | production no longer imports a lab |
+| `810e3d7` | Labs | 14 files |
+| `8738efe` | providers/ | Atlas to Replay violation gone |
+| `1210545` | Atlas surface | 22 files, port and implementation reunited |
+| `ff21dc4` | Routes, Finder, Admin | 21 files, plus the H3 repair |
+| `c6fc596` | app/ | 9 files, H7 and the navigation split |
+| `b9ec87e` | Replay surface | 34 files, both relative imports repaired |
+| `3840b4d` | ui/ | 10 files, H6 aliases updated |
+| `db9c85c` | domain geometry | route-path leaves replay/ |
+| `0e3a078` | routes.ts split (8.1) | 4 files behind a barrel, CONTEXT.md §8 edited |
+| `cab7d24` | structure guard | 3 invariants enforced, 4 placements corrected |
+
+Final gate: typecheck, **217 unit tests**, build, bundle budget (shell
+326.3 KiB, both frozen chunk basenames intact), **167 e2e tests**, and the
+**41-test Python suite**.
+
+### Corrections to this plan found during execution
+
+1. **H3 was under-counted.** The plan lists 4 `test_react_app.py` paths. There
+   are **16**, plus one asserted `@/` import specifier. Every one is now
+   repaired, and the file carries a comment recording the coupling.
+2. **Four placements in Section 6 were wrong**, and the new structure test found
+   all four: `planning.ts` is not Finder-only (8 importers, including two in
+   `data/`), and `route-not-found.tsx`, `repair-evidence.tsx` and
+   `route-card.tsx` are each shared by more than one surface. They now live in
+   `domain/` and `ui/` respectively.
+3. **`ui/` has a wider charter than stated** — design system primitives *and*
+   components shared by more than one surface.
+
+### Remaining work
+
+Phase 11, the consolidations, is **not** done. It changes behaviour and each
+item needs its own ticket and evidence:
+
+- 7.1 one numeric module, replacing 8 copies of `clamp`
+- 7.2 renderer-health merge, replacing 4 copies of `webglAvailable`
+- 7.3 one MapLibre implementation, ~450 lines (**changes two components to
+  honour `ROUTE_THREAD_STYLE`**)
+- 7.4 `replay-tempo.ts` at **210 seconds**, which changes Cesium/Atlas replay and
+  the Playable Earth lab from 180
+- 7.5 one `ui/metric.tsx`, replacing 4 reimplementations
+- 8.2 the 1,286-line cinematic director split
+- 8.4 the replay stage chrome extraction
+- 8.5 the 701-line route-intelligence page split
+- Port the colour grade from `cesium-cinematic-renderer.ts` to the native
+  renderer, per the owner decision
