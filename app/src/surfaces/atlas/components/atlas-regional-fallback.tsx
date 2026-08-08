@@ -2,7 +2,7 @@ import maplibregl, { Map as MapLibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { atlasViewportInsets } from "@/atlas/atlas-region-camera";
+import { atlasViewportInsets } from "@/surfaces/atlas/atlas-region-camera";
 import type { RouteRegion } from "@/data/route-regions";
 import type { RoutePoint, RouteSummary } from "@/domain/routes";
 import { ROUTE_THREAD_STYLE } from "@/domain/route-thread-style";

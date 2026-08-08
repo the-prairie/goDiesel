@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CesiumAtlasWorldEngine,
   routeForPickedEntity,
-} from "@/atlas/cesium-atlas-world-engine";
+} from "@/surfaces/atlas/cesium-atlas-world-engine";
 import { completedRoutes } from "@/data/routes";
 
 describe("CesiumAtlasWorldEngine", () => {

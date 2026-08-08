@@ -1,8 +1,8 @@
 import { Suspense } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 
-import { AtlasSpine } from "@/components/atlas-spine";
-import { AtlasImmersiveNavigation } from "@/components/atlas-immersive-navigation";
+import { AtlasSpine } from "@/surfaces/atlas/components/atlas-spine";
+import { AtlasImmersiveNavigation } from "@/surfaces/atlas/components/atlas-immersive-navigation";
 import { singleRouteMicrosite } from "@/config/single-route-microsite";
 import { APP_PATHS, appSectionForPath } from "@/navigation";
 import { cn } from "@/lib/utils";

@@ -4,7 +4,7 @@ import {
   atlasCameraFrame,
   atlasRegionTransitionDurationSeconds,
   atlasViewportInsets,
-} from "@/atlas/atlas-region-camera";
+} from "@/surfaces/atlas/atlas-region-camera";
 
 describe("atlas regional camera framing", () => {
   it("reserves desktop space for the heading, inspector, and future route tray", () => {

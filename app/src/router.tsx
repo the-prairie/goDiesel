@@ -14,7 +14,7 @@ const AdminPage = lazy(() =>
   import("@/pages/admin-page").then((module) => ({ default: module.AdminPage })),
 );
 const AtlasPage = lazy(() =>
-  import("@/pages/atlas-page").then((module) => ({ default: module.AtlasPage })),
+  import("@/surfaces/atlas/atlas-page").then((module) => ({ default: module.AtlasPage })),
 );
 const FinderPage = lazy(() =>
   import("@/pages/finder-page").then((module) => ({ default: module.FinderPage })),

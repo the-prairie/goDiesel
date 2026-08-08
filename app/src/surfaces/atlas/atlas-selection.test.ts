@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { buildRouteRegions } from "@/data/route-regions";
 import { completedRoutes } from "@/data/routes";
-import { resolveAtlasSelection } from "@/domain/atlas-selection";
+import { resolveAtlasSelection } from "@/surfaces/atlas/atlas-selection";
 
 describe("resolveAtlasSelection", () => {
   const regions = buildRouteRegions(completedRoutes);

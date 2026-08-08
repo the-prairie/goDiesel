@@ -5,7 +5,7 @@ import {
   ROUTE_CAROUSEL_SLIDE_CLASS,
   routeTracePolyline,
   thumbnailIndexesForSlidesInView,
-} from "@/components/globe/region-route-carousel";
+} from "@/surfaces/atlas/components/region-route-carousel";
 import type { RoutePoint } from "@/domain/routes";
 
 const trace: RoutePoint[] = [

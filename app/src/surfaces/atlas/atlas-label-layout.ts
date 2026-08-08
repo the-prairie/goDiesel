@@ -1,4 +1,4 @@
-import type { AtlasRegionProjection } from "@/components/globe/atlas-world";
+import type { AtlasRegionProjection } from "@/surfaces/atlas/atlas-world";
 
 interface LabelCandidate extends AtlasRegionProjection {
   width: number;

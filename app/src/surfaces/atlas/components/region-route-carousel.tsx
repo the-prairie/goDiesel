@@ -4,7 +4,7 @@ import useEmblaCarousel from "embla-carousel-react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
-import { RouteSatelliteThumbnail } from "@/components/globe/route-satellite-thumbnail";
+import { RouteSatelliteThumbnail } from "@/surfaces/atlas/components/route-satellite-thumbnail";
 import type { RouteRegion } from "@/data/route-regions";
 import type { RoutePoint, RouteSummary } from "@/domain/routes";
 import {

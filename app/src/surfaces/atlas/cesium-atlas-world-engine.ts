@@ -28,11 +28,11 @@ import {
   type AtlasRegionProjection,
   type AtlasWorldEngine,
   type AtlasWorldEngineMountOptions,
-} from "@/components/globe/atlas-world";
+} from "@/surfaces/atlas/atlas-world";
 import {
   atlasCameraFrame,
   atlasRegionTransitionDurationSeconds,
-} from "@/atlas/atlas-region-camera";
+} from "@/surfaces/atlas/atlas-region-camera";
 import type { RouteRegion } from "@/data/route-regions";
 import type { RouteSummary } from "@/domain/routes";
 import { recordTileFailure, rgbaPixelsLookBlank } from "@/providers/render-health";

@@ -1,14 +1,14 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 
-import { visibleAtlasLabels } from "@/components/globe/atlas-label-layout";
-import { AtlasRegionalFallback } from "@/components/globe/atlas-regional-fallback";
+import { visibleAtlasLabels } from "@/surfaces/atlas/atlas-label-layout";
+import { AtlasRegionalFallback } from "@/surfaces/atlas/components/atlas-regional-fallback";
 import type {
   AtlasGlobeHandle,
   AtlasGlobeProps,
   AtlasWorldEngine,
   AtlasWorldStatus,
-} from "@/components/globe/atlas-world";
-import { createAtlasWorldEngine } from "@/atlas/cesium-atlas-world-engine";
+} from "@/surfaces/atlas/atlas-world";
+import { createAtlasWorldEngine } from "@/surfaces/atlas/cesium-atlas-world-engine";
 import { cn } from "@/lib/utils";
 
 export const CesiumAtlasGlobe = forwardRef<

@@ -7,7 +7,7 @@ import {
   regionalRouteCollection,
   type RegionalRouteBounds,
   unwrapLongitudeAroundCenter,
-} from "@/components/globe/atlas-regional-fallback";
+} from "@/surfaces/atlas/components/atlas-regional-fallback";
 import type { RouteRegion } from "@/data/route-regions";
 import type { RouteSummary } from "@/domain/routes";
 

@@ -11,16 +11,16 @@ import { useLocation, useSearchParams } from "react-router-dom";
 import {
   AtlasControls,
   type AtlasActivityMode,
-} from "@/components/globe/atlas-controls";
+} from "@/surfaces/atlas/components/atlas-controls";
 import {
   AtlasGlobe,
   type AtlasGlobeHandle,
-} from "@/components/globe/atlas-globe";
-import { RegionRouteCarousel } from "@/components/globe/region-route-carousel";
-import { AtlasSearch } from "@/components/search/atlas-search";
+} from "@/surfaces/atlas/components/atlas-globe";
+import { RegionRouteCarousel } from "@/surfaces/atlas/components/region-route-carousel";
+import { AtlasSearch } from "@/surfaces/atlas/components/atlas-search";
 import { completedRoutes } from "@/data/routes";
 import { buildRouteRegions, type RouteRegion } from "@/data/route-regions";
-import { resolveAtlasSelection } from "@/domain/atlas-selection";
+import { resolveAtlasSelection } from "@/surfaces/atlas/atlas-selection";
 import type { RouteSummary } from "@/domain/routes";
 import { replayPath } from "@/navigation";
 

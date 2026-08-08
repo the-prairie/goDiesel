@@ -4,7 +4,7 @@ import {
   downsampleThumbnailPath,
   nextThumbnailState,
   routeSatelliteThumbnailUrl,
-} from "@/components/globe/route-satellite-thumbnail";
+} from "@/surfaces/atlas/components/route-satellite-thumbnail";
 import type { RoutePoint } from "@/domain/routes";
 
 function routePoint(index: number): RoutePoint {

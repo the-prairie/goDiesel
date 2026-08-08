@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { visibleAtlasLabels } from "@/components/globe/atlas-label-layout";
+import { visibleAtlasLabels } from "@/surfaces/atlas/atlas-label-layout";
 import {
   sampleGlobalRoutePoints,
   sampleRegionalRoutePoints,
-} from "@/components/globe/atlas-world";
+} from "@/surfaces/atlas/atlas-world";
 import { completedRoutes } from "@/data/routes";
 
 describe("global Atlas geometry", () => {

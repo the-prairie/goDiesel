@@ -3,15 +3,15 @@ import { forwardRef, lazy, Suspense } from "react";
 import {
   type AtlasGlobeHandle,
   type AtlasGlobeProps,
-} from "@/components/globe/atlas-world";
+} from "@/surfaces/atlas/atlas-world";
 
 const CesiumAtlasGlobe = lazy(() =>
-  import("@/components/globe/cesium-atlas-globe").then((module) => ({
+  import("@/surfaces/atlas/components/cesium-atlas-globe").then((module) => ({
     default: module.CesiumAtlasGlobe,
   })),
 );
 
-export type { AtlasGlobeHandle } from "@/components/globe/atlas-world";
+export type { AtlasGlobeHandle } from "@/surfaces/atlas/atlas-world";
 
 export const AtlasGlobe = forwardRef<AtlasGlobeHandle, AtlasGlobeProps>(
   function AtlasGlobe(props, ref) {
