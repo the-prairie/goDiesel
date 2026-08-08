@@ -29,6 +29,7 @@ import gpxpy
 import pandas as pd
 
 from admin_curation import curation_readiness, save_curation_and_rebuild, write_atomic
+from route_imports import route_metadata
 
 try:
     import fitparse
@@ -465,6 +466,25 @@ def polyline_svg(aid):
     return svg
 
 
+def _summary_distance_km(activity_row, generated_route):
+    """Distance for the Admin list.
+
+    A Strava row carries Distance. An imported route does not, so fall back to
+    the generated record, which derives distance from the recorded trace.
+    """
+    if activity_row is not None:
+        try:
+            return round(float(activity_row.get('Distance') or 0), 1)
+        except (TypeError, ValueError):
+            pass
+    if generated_route:
+        try:
+            return round(float(generated_route.get('distance_km') or 0), 1)
+        except (TypeError, ValueError):
+            pass
+    return 0.0
+
+
 def routes_summary():
     cfg = json.loads((QUESTS / 'quests.json').read_text())
     manifest_path = QUESTS / 'app' / 'src' / 'data' / 'generated' / 'routes.manifest.json'
@@ -479,19 +499,18 @@ def routes_summary():
     for r in cfg.get('routes', []):
         aid = r['activity_id']
         act = acts_by_id.get(aid)
-        if act is None:
+        # An imported route describes itself in quests.json and has no export
+        # row. Resolve metadata through the shared adapter so both source kinds
+        # reach the curator. Skipping here is what made an imported route
+        # invisible in Admin, and therefore impossible to curate.
+        meta = route_metadata(r, QUESTS, act)
+        if meta is None:
             continue
-        name_raw = act.get('Activity Name')
-        name = name_raw if isinstance(name_raw, str) and name_raw.strip() else '(unnamed)'
-        date_obj = act['date']
-        date = date_obj.strftime('%Y-%m-%d') if date_obj is not None else ''
-        typ = act.get('Activity Type') or ''
-        try:
-            km = float(act.get('Distance') or 0)
-        except (TypeError, ValueError):
-            km = 0.0
-        desc_raw = act.get('Activity Description', '')
-        desc = str(desc_raw) if desc_raw and str(desc_raw) != 'nan' else ''
+        name = meta.name
+        date = meta.date
+        typ = meta.activity_type
+        desc = meta.description
+        km = _summary_distance_km(act, generated_routes.get(str(aid)))
         status = r.get('status', 'pending')
         # Treat legacy 'rejected' as 'archived' (same concept, friendlier name)
         if status == 'rejected':
@@ -499,13 +518,14 @@ def routes_summary():
         auto_region = (geo_cache.get(aid) or {}).get('region') or ''
         item = {
             'activity_id': aid,
+            'source_kind': meta.source_kind,
             'status': status,
             'region': r.get('region') or '',
             'auto_region': auto_region,
             'name': name,
             'date': date,
             'type': typ,
-            'distance_km': round(km, 1),
+            'distance_km': km,
             'description': desc[:240],
             'visibility': r.get('visibility') or 'public',
             'curation': r.get('curation') or {'review_status': 'draft'},

@@ -58,6 +58,23 @@ The original recorded geometry: a GPX or FIT file under `route_sources/`. Source
 files are the ground truth for geometry, elevation, and time. Nothing downstream
 may contradict them.
 
+### Source kind
+
+`source_kind` names where a route's geometry and metadata come from.
+
+| Value | Meaning |
+| --- | --- |
+| `strava-export` | The activity row in the Strava export supplies the metadata. |
+| `imported-gpx` | The route has a `source_gpx` file. `quests.json` supplies the metadata. |
+
+The value is **derived, never stored**, so it cannot drift away from the data it
+describes. `route_imports.route_source_kind()` is the single definition, and
+`route_imports.route_metadata()` is the single adapter. Both `build.py` and
+`admin.py` use them, so the generator and the curation surface cannot disagree
+about a route again.
+
+Current data: 66 `strava-export`, 1 `imported-gpx`.
+
 ### Master routes list
 
 `quests.json` at the repository root. The owner-curated record of every known
@@ -315,10 +332,7 @@ not tasks with owners.
    (bounding boxes in `build.py`, `REGIONS` in `admin.py`, and
    `REGION_TIME_ZONES`). They can disagree, which silently drops a route's
    timezone. The domain has no single definition of a region.
-2. **`source_kind` is not modelled.** The distinction between a route from the
-   Strava export and one imported from a standalone GPX file is real, is
-   exercised by the live pipeline matrix, and affects whether a route is editable
-   in Admin — but it has no field in the route contract.
+2. ~~**`source_kind` is not modelled.**~~ **Closed 2026-08-08.** See section 2.
 3. **`bestInEarth` is editorial data stored in code.** It is a hardcoded set of
    activity ids in `build.py` rather than curation held in `quests.json`.
 4. **"Difficulty" is overloaded.** It exists both as a generated quest attribute
