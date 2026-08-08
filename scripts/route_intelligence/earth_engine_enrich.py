@@ -18,6 +18,9 @@ DYNAMIC_WORLD = "GOOGLE/DYNAMICWORLD/V1"
 ALPHA_EARTH = "GOOGLE/SATELLITE_EMBEDDING/V1/ANNUAL"
 COPERNICUS_DEM = "COPERNICUS/DEM/GLO30_2024_1"
 SENTINEL_2 = "COPERNICUS/S2_SR_HARMONIZED"
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+THUMBNAIL_ATTEMPTS = 5
+RETRYABLE_HTTP_STATUSES = frozenset({408, 429, 500, 502, 503, 504})
 
 
 def parse_args() -> argparse.Namespace:
@@ -107,28 +110,80 @@ def visualized_true_color(image: ee.Image, line: ee.Geometry) -> ee.Image:
     return base.blend(route_overlay(line))
 
 
+def valid_png_payload(content: bytes, content_type: str) -> bool:
+    return (
+        content_type.lower().startswith("image/png")
+        and len(content) > 10_000
+        and content.startswith(PNG_SIGNATURE)
+    )
+
+
+def valid_png_file(path: Path) -> bool:
+    if not path.is_file() or path.stat().st_size <= 10_000:
+        return False
+    with path.open("rb") as source:
+        return source.read(len(PNG_SIGNATURE)) == PNG_SIGNATURE
+
+
+def retry_delay(response: requests.Response | None, attempt: int) -> float:
+    if response is not None:
+        retry_after = response.headers.get("Retry-After")
+        if retry_after:
+            try:
+                return min(60.0, max(0.0, float(retry_after)))
+            except ValueError:
+                pass
+    return min(30.0, 2.0 ** (attempt - 1))
+
+
 def download_thumbnail(image: ee.Image, region: ee.Geometry, destination: Path) -> None:
-    for attempt in range(3):
-        url = image.getThumbURL(
-            {
-                "region": region,
-                "dimensions": 1400,
-                "format": "png",
-                "crs": "EPSG:3857",
-            }
-        )
+    last_error = "unknown provider failure"
+    for attempt in range(1, THUMBNAIL_ATTEMPTS + 1):
+        response: requests.Response | None = None
         try:
+            url = image.getThumbURL(
+                {
+                    "region": region,
+                    "dimensions": 1400,
+                    "format": "png",
+                    "crs": "EPSG:3857",
+                }
+            )
             response = requests.get(url, timeout=300)
-            if not response.ok:
-                raise RuntimeError(
-                    f"Earth Engine thumbnail failed ({response.status_code}): {response.text[:1200]}"
+        except (ee.EEException, requests.RequestException) as error:
+            last_error = f"transport failure: {error}"
+        else:
+            if response.ok and valid_png_payload(
+                response.content, response.headers.get("Content-Type", "")
+            ):
+                temporary = destination.with_suffix(destination.suffix + ".tmp")
+                temporary.write_bytes(response.content)
+                temporary.replace(destination)
+                return
+            if response.ok:
+                last_error = (
+                    "invalid successful response "
+                    f"({response.headers.get('Content-Type', 'no content type')}, "
+                    f"{len(response.content)} bytes)"
                 )
-            destination.write_bytes(response.content)
-            return
-        except requests.RequestException:
-            if attempt == 2:
-                raise
-            time.sleep(2 ** attempt)
+            else:
+                last_error = (
+                    f"HTTP {response.status_code}: {response.text[:1200]}"
+                )
+                if response.status_code not in RETRYABLE_HTTP_STATUSES:
+                    raise RuntimeError(
+                        f"Earth Engine thumbnail failed permanently: {last_error}"
+                    )
+        if attempt == THUMBNAIL_ATTEMPTS:
+            raise RuntimeError(
+                f"Earth Engine thumbnail failed after {THUMBNAIL_ATTEMPTS} attempts: {last_error}"
+            )
+        delay = retry_delay(response, attempt)
+        print(
+            f"Earth Engine thumbnail attempt {attempt}/{THUMBNAIL_ATTEMPTS} failed; "
+            f"retrying in {delay:g}s ({last_error})"
+        )
+        time.sleep(delay)
 
 
 def render_scenes(
@@ -190,7 +245,7 @@ def render_scenes(
     for key, label, image in scenes:
         filename = f"{key}.png"
         scene_path = destination / filename
-        if scene_path.exists() and scene_path.stat().st_size > 10_000:
+        if valid_png_file(scene_path):
             print(f"Reused {scene_path}")
         else:
             rendered = visualized_true_color(image, line)
