@@ -1053,6 +1053,14 @@ Its own commit, paired with the `CONTEXT.md` §8 edit. Split `routes.test.ts`
 includes a filesystem sweep over `public/data/routes/*.json`, which is a strong
 regression check on both parsers.
 
+### Owner decisions (recorded 2026-08-08)
+
+| # | Question | Decision |
+| --- | --- | --- |
+| 1 | Replay duration: 180 s or 210 s (§7.4) | **210 seconds.** `replay-tempo.ts` uses 210 for every replay path. This changes the Cesium/Atlas replay and the Playable Earth lab from 180 to 210. Record the value in `CONTEXT.md` §7. |
+| 2 | `cesium-cinematic-renderer.ts` (§9) | **Keep the file. Port the colour grade to the native renderer.** The grade, depth of field, bloom and fog become reachable on the ADR-0009 primary path. Add a follow-up note to ADR-0009, which currently records the choice as open. |
+| 3 | `domain/routes.ts` split needs a `CONTEXT.md` §8 edit (§8.1) | **Accepted.** |
+
 ### Phase 11 — Consolidations that change behaviour
 
 Sections 7.1–7.5, and the cinematic director split (8.2), the stage chrome
@@ -1062,8 +1070,10 @@ These are **not** pure moves:
 
 - 7.3 changes two map components to honour `ROUTE_THREAD_STYLE` instead of
   hardcoded hex.
-- 7.4 resolves the 180-vs-210 second duration divergence — **needs an owner
-  decision first**.
+- 7.4 resolves the 180-vs-210 second duration divergence. The owner chose
+  **210 seconds** for every path, so the Cesium/Atlas replay and the Playable
+  Earth lab change from 180 to 210. This is a deliberate, visible timing change
+  and needs its own evidence.
 - The antimeridian fix in 7.6 changes `route-card` rendering.
 
 *Verify:* this is where the testing policy escalates. Per
@@ -1120,10 +1130,8 @@ that change code content, and each is independently revertible.
 
 - **Does not move `data/generated/`** (10.4) — cosmetic gain, silent ADR-0011
   failure mode.
-- **Does not delete `cesium-cinematic-renderer.ts`** (Section 9) — a product
-  decision recorded as an open consequence in ADR-0009.
-- **Does not resolve the 180-vs-210 second replay duration** without an owner
-  decision (7.4).
+- **Does not delete `cesium-cinematic-renderer.ts`** (Section 9). The owner chose
+  to keep the file and port the colour grade to the native renderer.
 - **Does not touch `index.css`** or attempt the three-way design-token drift
   (field-guide tokens vs stock shadcn vs raw hex). That is a design-system ticket;
   a file move would only relocate it.
