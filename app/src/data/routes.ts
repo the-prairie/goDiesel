@@ -1,6 +1,6 @@
 import generated from "@/data/generated/routes.manifest.json";
 import { singleRouteMicrositeSlug } from "@/app/single-route-microsite";
-import { isCompletedRoute } from "@/domain/route-lifecycle";
+import { isCompletedRoute } from "@/domain/route/lifecycle";
 import { parseRouteSummary, type RouteSummary } from "@/domain/routes";
 
 interface GeneratedRouteManifest {

@@ -1,4 +1,4 @@
-import type { RouteLifecycle } from "@/domain/route-lifecycle";
+import type { RouteLifecycle } from "@/domain/route/lifecycle";
 import type { RouteSummary } from "@/domain/routes";
 
 export interface RouteFilters {

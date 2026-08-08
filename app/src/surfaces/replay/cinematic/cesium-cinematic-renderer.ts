@@ -18,7 +18,7 @@ import type { CinematicFrame } from "@/surfaces/replay/cinematic/route-cinematic
 import {
   GOOGLE_3D_TILES_RENDER_OPTIONS,
 } from "@/providers/cesium-render-quality";
-import { routeDistanceM, routePathPose } from "@/replay/route-path";
+import { routeDistanceM, routePathPose } from "@/domain/geometry/route-path";
 
 export type CinematicRendererStatus =
   | { state: "loading"; message: string }

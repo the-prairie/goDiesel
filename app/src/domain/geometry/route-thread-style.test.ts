@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ROUTE_THREAD_STYLE } from "@/domain/route-thread-style";
+import { ROUTE_THREAD_STYLE } from "@/domain/geometry/route-thread-style";
 
 describe("ROUTE_THREAD_STYLE", () => {
   it("uses the Weathered Atlas cartographic palette", () => {

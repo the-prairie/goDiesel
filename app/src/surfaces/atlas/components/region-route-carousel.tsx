@@ -12,7 +12,7 @@ import {
   projectRouteGeometry,
   sampleElevationProfile,
   sampleRoutePoints,
-} from "@/domain/route-visualization";
+} from "@/domain/geometry/route-visualization";
 import { cn } from "@/ui/utils";
 
 export const ROUTE_CAROUSEL_SLIDE_CLASS =

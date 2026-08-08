@@ -11,7 +11,7 @@ import {
   type GoogleRouteGroundingMode,
 } from "@/surfaces/replay/playback/route-navigator-controller";
 import { loadGoogleMaps } from "@/providers/google-maps-loader";
-import { routeDistanceM } from "@/replay/route-path";
+import { routeDistanceM } from "@/domain/geometry/route-path";
 
 export type GoogleRouteNavigatorStatus =
   | { state: "loading"; message: string }

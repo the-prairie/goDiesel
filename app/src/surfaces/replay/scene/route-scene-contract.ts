@@ -4,7 +4,7 @@ import {
   bearingDegrees,
   routeDistanceM,
   routePathPose,
-} from "@/replay/route-path";
+} from "@/domain/geometry/route-path";
 
 export type DirectedRouteSceneCameraMode = "runner" | "chase" | "overview";
 export type RouteSceneCameraMode = "auto" | DirectedRouteSceneCameraMode;

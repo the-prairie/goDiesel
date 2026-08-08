@@ -1,6 +1,6 @@
 import { Moon, SunMedium } from "lucide-react";
 
-import type { RecordedLight } from "@/domain/recorded-light";
+import type { RecordedLight } from "@/domain/geometry/recorded-light";
 import { cn } from "@/ui/utils";
 
 const phaseTreatment: Record<RecordedLight["phase"], string> = {

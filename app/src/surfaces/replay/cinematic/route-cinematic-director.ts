@@ -1,5 +1,5 @@
 import type { QuestRoute } from "@/domain/routes";
-import { bearingDegrees, routeDistanceM, routePathPose } from "@/replay/route-path";
+import { bearingDegrees, routeDistanceM, routePathPose } from "@/domain/geometry/route-path";
 
 export type CinematicCut = "feature" | "monumental" | "kinetic" | "intimate";
 export type CinematicShotKind =

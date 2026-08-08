@@ -42,7 +42,7 @@ import {
   type GoogleRouteNavigatorEngine,
   type GoogleRouteNavigatorStatus,
 } from "@/surfaces/replay/renderers/google-route-navigator-engine";
-import { routeDistanceM } from "@/replay/route-path";
+import { routeDistanceM } from "@/domain/geometry/route-path";
 import {
   advanceRouteCameraMotion,
   createRouteCameraMotionState,

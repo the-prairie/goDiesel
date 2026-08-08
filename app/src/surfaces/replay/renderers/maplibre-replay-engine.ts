@@ -4,7 +4,7 @@ import maplibregl, {
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import { ROUTE_THREAD_STYLE } from "@/domain/route-thread-style";
+import { ROUTE_THREAD_STYLE } from "@/domain/geometry/route-thread-style";
 import type {
   ReplayEngine,
   ReplayEngineMountOptions,

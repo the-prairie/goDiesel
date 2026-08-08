@@ -1,8 +1,8 @@
-import type { RouteRepair } from "@/domain/route-repairs";
+import type { RouteRepair } from "@/domain/geometry/route-repairs";
 import {
   routeRepairEvidence,
   routeRepairSourceLabel,
-} from "@/domain/route-repairs";
+} from "@/domain/geometry/route-repairs";
 import { cn } from "@/ui/utils";
 
 export function RepairEvidence({

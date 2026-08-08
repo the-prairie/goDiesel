@@ -1,6 +1,6 @@
 import type { QuestRoute } from "@/domain/routes";
 import type { CinematicRouteTreatment } from "@/surfaces/replay/cinematic/cinematic-route-filament";
-import { routeDistanceM } from "@/replay/route-path";
+import { routeDistanceM } from "@/domain/geometry/route-path";
 import {
   createRouteSceneManifest,
   resolveRouteSceneFrame,

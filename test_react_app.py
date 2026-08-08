@@ -52,7 +52,7 @@ def test_app_shell_defines_expected_navigation_and_hash_route_support():
 
 
 def test_route_domain_models_completed_planned_and_discovered_states():
-    lifecycle = (APP / "src/domain/route-lifecycle.ts").read_text()
+    lifecycle = (APP / "src/domain/route/lifecycle.ts").read_text()
     routes = (APP / "src/domain/routes.ts").read_text()
 
     assert '"completed" | "planned" | "discovered"' in lifecycle

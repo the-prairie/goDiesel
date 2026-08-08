@@ -12,20 +12,20 @@ import {
 } from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 
-import { ROUTE_THREAD_STYLE } from "@/domain/route-thread-style";
+import { ROUTE_THREAD_STYLE } from "@/domain/geometry/route-thread-style";
 import {
   advanceRouteGrounding,
   initialRouteGrounding,
   type RouteGroundingObservation,
   type RouteGroundingState,
-} from "@/replay/route-grounding";
+} from "@/surfaces/replay/scene/route-grounding";
 import type {
   ReplayEngine,
   ReplayEngineMountOptions,
 } from "@/surfaces/replay/renderer-port";
 import type { ReplayPose } from "@/surfaces/replay/playback/replay-controller";
 import { recordTileFailure, rgbaPixelsLookBlank } from "@/providers/render-health";
-import { bearingDegrees, routePathPose } from "@/replay/route-path";
+import { bearingDegrees, routePathPose } from "@/domain/geometry/route-path";
 import type { QuestRoute } from "@/domain/routes";
 import {
   advanceReplayCameraClearance,

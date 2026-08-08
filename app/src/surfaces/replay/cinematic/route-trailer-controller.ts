@@ -1,6 +1,6 @@
 import type { QuestRoute } from "@/domain/routes";
 import type { GoogleRouteCameraPose } from "@/surfaces/replay/playback/route-navigator-controller";
-import { bearingDegrees, routeDistanceM, routePathPose } from "@/replay/route-path";
+import { bearingDegrees, routeDistanceM, routePathPose } from "@/domain/geometry/route-path";
 
 export const ROUTE_TRAILER_DURATION_SECONDS = 17.5;
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { deriveGeographicBounds } from "@/domain/geographic-bounds";
+import { deriveGeographicBounds } from "@/domain/geometry/geographic-bounds";
 import type { RoutePoint, RouteSummary } from "@/domain/routes";
 
 function point(lat: number, lng: number): RoutePoint {

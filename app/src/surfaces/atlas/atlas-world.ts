@@ -1,5 +1,5 @@
 import type { RouteRegion } from "@/data/route-regions";
-import { isValidCoordinate } from "@/domain/geographic-bounds";
+import { isValidCoordinate } from "@/domain/geometry/geographic-bounds";
 import type { RoutePoint, RouteSummary } from "@/domain/routes";
 
 export interface AtlasGlobeProps {

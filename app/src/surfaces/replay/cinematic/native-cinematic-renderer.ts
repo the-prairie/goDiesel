@@ -6,7 +6,7 @@ import {
   type GoogleRouteNavigatorEngine,
 } from "@/surfaces/replay/renderers/google-route-navigator-engine";
 import type { GoogleRouteCameraPose } from "@/surfaces/replay/playback/route-navigator-controller";
-import { routeDistanceM } from "@/replay/route-path";
+import { routeDistanceM } from "@/domain/geometry/route-path";
 import { stabilizeRouteCamera } from "@/surfaces/replay/scene/route-camera-stabilizer";
 
 interface MountOptions {

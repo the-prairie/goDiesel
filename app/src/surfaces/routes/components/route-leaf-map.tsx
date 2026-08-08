@@ -9,7 +9,7 @@ import {
   routeRepairAriaLabel,
   routeRepairs,
   type RouteRepair,
-} from "@/domain/route-repairs";
+} from "@/domain/geometry/route-repairs";
 import type { QuestRoute } from "@/domain/routes";
 
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";

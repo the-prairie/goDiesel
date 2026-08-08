@@ -13,12 +13,12 @@ import {
   routeRepairAriaLabel,
   routeRepairs,
   type RouteRepair,
-} from "@/domain/route-repairs";
+} from "@/domain/geometry/route-repairs";
 import type { QuestRoute } from "@/domain/routes";
 import {
   elevationRange,
   sampleElevationProfile,
-} from "@/domain/route-visualization";
+} from "@/domain/geometry/route-visualization";
 import { cn } from "@/ui/utils";
 
 const PROFILE_WIDTH = 720;

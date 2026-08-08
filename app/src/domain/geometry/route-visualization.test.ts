@@ -4,7 +4,7 @@ import type { RoutePoint } from "@/domain/routes";
 import {
   projectRouteGeometry,
   sampleElevationProfile,
-} from "@/domain/route-visualization";
+} from "@/domain/geometry/route-visualization";
 
 function point(index: number, overrides: Partial<RoutePoint> = {}): RoutePoint {
   return {

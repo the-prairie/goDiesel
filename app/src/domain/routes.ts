@@ -1,7 +1,7 @@
 import {
   normalizeRouteLifecycle,
   type RouteLifecycle,
-} from "@/domain/route-lifecycle";
+} from "@/domain/route/lifecycle";
 
 export type RouteActivityType = "Run" | "Ride" | string;
 export type RouteGeometryStatus = "ready" | "missing" | "invalid";

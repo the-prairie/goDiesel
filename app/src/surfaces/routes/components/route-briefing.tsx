@@ -6,7 +6,7 @@ import {
   projectRouteGeometry,
   sampleElevationProfile,
   sampleRoutePoints,
-} from "@/domain/route-visualization";
+} from "@/domain/geometry/route-visualization";
 
 const traceWidth = 640;
 const traceHeight = 280;

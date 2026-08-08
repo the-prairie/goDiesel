@@ -1,5 +1,5 @@
 import type { QuestRoute } from "@/domain/routes";
-import { routeDistanceM, routePathPose } from "@/replay/route-path";
+import { routeDistanceM, routePathPose } from "@/domain/geometry/route-path";
 import {
   advanceRouteGrounding,
   initialRouteGrounding,
@@ -7,7 +7,7 @@ import {
   type RouteGroundingReason,
   type RouteGroundingSource,
   type RouteGroundingState,
-} from "@/replay/route-grounding";
+} from "@/surfaces/replay/scene/route-grounding";
 
 export type PlayableEarthMode = "replay" | "guided";
 
@@ -44,7 +44,7 @@ export const PLAYABLE_EARTH_CAMERA_RANGES_M = [120, 240, 720, 1_400] as const;
 export const PLAYABLE_EARTH_DEFAULT_CAMERA_RANGE_M = 720;
 const REPLAY_DURATION_SECONDS = 180;
 
-export { routeDistanceM } from "@/replay/route-path";
+export { routeDistanceM } from "@/domain/geometry/route-path";
 
 export function initialPlayableEarthState(): PlayableEarthControlState {
   return {

@@ -3,7 +3,7 @@ import {
   routeDistanceM,
   routePathPose,
   type RoutePathPose,
-} from "@/replay/route-path";
+} from "@/domain/geometry/route-path";
 
 export interface ReplayControlState {
   playing: boolean;
@@ -106,4 +106,4 @@ export function replayPose(route: QuestRoute, state: ReplayControlState): Replay
   };
 }
 
-export { routeDistanceM } from "@/replay/route-path";
+export { routeDistanceM } from "@/domain/geometry/route-path";
