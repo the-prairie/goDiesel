@@ -14,11 +14,11 @@ import "cesium/Build/Cesium/Widgets/widgets.css";
 
 import { ROUTE_THREAD_STYLE } from "@/domain/route-thread-style";
 import {
-  advancePlayableEarthGrounding,
-  initialPlayableEarthGrounding,
-  type PlayableEarthGroundingObservation,
-  type PlayableEarthGroundingState,
-} from "@/replay/playable-earth-controller";
+  advanceRouteGrounding,
+  initialRouteGrounding,
+  type RouteGroundingObservation,
+  type RouteGroundingState,
+} from "@/replay/route-grounding";
 import type {
   ReplayEngine,
   ReplayEngineMountOptions,
@@ -126,8 +126,8 @@ export class CesiumReplayEngine implements ReplayEngine {
   private latestCameraTarget?: CameraTarget;
   private cameraSamplePosition?: CameraTarget;
   private lastCameraUpdateMs?: number;
-  private grounding?: PlayableEarthGroundingState;
-  private pendingGroundingObservation?: PlayableEarthGroundingObservation;
+  private grounding?: RouteGroundingState;
+  private pendingGroundingObservation?: RouteGroundingObservation;
   private latestPose?: ReplayPose;
   private lastGroundingUpdateMs?: number;
   private lastSurfaceSampleMs = Number.NEGATIVE_INFINITY;
@@ -341,7 +341,7 @@ export class CesiumReplayEngine implements ReplayEngine {
     const now = performance.now();
     this.latestPose = pose;
     if (!this.grounding) {
-      this.grounding = initialPlayableEarthGrounding(pose.elev);
+      this.grounding = initialRouteGrounding(pose.elev);
     }
     const elapsedSeconds =
       this.lastGroundingUpdateMs === undefined
@@ -350,7 +350,7 @@ export class CesiumReplayEngine implements ReplayEngine {
     this.lastGroundingUpdateMs = now;
     const observation = this.pendingGroundingObservation;
     this.pendingGroundingObservation = undefined;
-    this.grounding = advancePlayableEarthGrounding(
+    this.grounding = advanceRouteGrounding(
       this.grounding,
       pose.elev,
       elapsedSeconds,
