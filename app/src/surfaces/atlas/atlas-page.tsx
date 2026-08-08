@@ -22,7 +22,7 @@ import { completedRoutes } from "@/data/routes";
 import { buildRouteRegions, type RouteRegion } from "@/data/route-regions";
 import { resolveAtlasSelection } from "@/surfaces/atlas/atlas-selection";
 import type { RouteSummary } from "@/domain/routes";
-import { replayPath } from "@/navigation";
+import { replayPath } from "@/app/route-paths";
 
 export function AtlasPage() {
   const location = useLocation();

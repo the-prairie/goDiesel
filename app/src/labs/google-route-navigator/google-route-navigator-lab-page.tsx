@@ -4,7 +4,7 @@ import { GoogleRouteNavigatorStage } from "@/components/replay/google-route-navi
 import { RouteNotFound } from "@/surfaces/routes/components/route-not-found";
 import { findRouteBySlug } from "@/data/routes";
 import { useRouteDetail } from "@/data/use-route-detail";
-import { decodedRouteSlug } from "@/navigation";
+import { decodedRouteSlug } from "@/app/route-paths";
 
 export function GoogleRouteNavigatorLabPage() {
   const { routeSlug } = useParams();

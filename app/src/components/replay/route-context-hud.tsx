@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import type { QuestRoute } from "@/domain/routes";
 import { cn } from "@/lib/utils";
-import { routeDetailPath } from "@/navigation";
+import { routeDetailPath } from "@/app/route-paths";
 
 export type RouteContextHudState = "preview" | "compact" | "expanded";
 

@@ -36,7 +36,7 @@ import {
   APP_PATHS,
   playableEarthLabPath,
   routeDetailPath,
-} from "@/navigation";
+} from "@/app/route-paths";
 import {
   advanceReplay,
   cycleReplaySpeed,

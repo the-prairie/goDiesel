@@ -1,4 +1,4 @@
-import { replayPath, routeDetailPath } from "@/navigation";
+import { replayPath, routeDetailPath } from "@/app/route-paths";
 
 export function normalizeSingleRouteSlug(value: string | undefined) {
   const slug = value?.trim();

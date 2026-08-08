@@ -3,8 +3,9 @@ import { Outlet, useLocation } from "react-router-dom";
 
 import { AtlasSpine } from "@/surfaces/atlas/components/atlas-spine";
 import { AtlasImmersiveNavigation } from "@/surfaces/atlas/components/atlas-immersive-navigation";
-import { singleRouteMicrosite } from "@/config/single-route-microsite";
-import { APP_PATHS, appSectionForPath } from "@/navigation";
+import { singleRouteMicrosite } from "@/app/single-route-microsite";
+import { APP_PATHS } from "@/app/route-paths";
+import { appSectionForPath } from "@/app/app-sections";
 import { cn } from "@/lib/utils";
 
 export function AppShell() {

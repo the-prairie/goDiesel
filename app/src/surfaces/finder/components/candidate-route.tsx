@@ -5,7 +5,7 @@ import { RouteThread } from "@/surfaces/routes/components/route-card";
 import { Button } from "@/components/ui/button";
 import type { DiscoveryCandidate, PlannedRoute } from "@/surfaces/finder/planning";
 import { cn } from "@/lib/utils";
-import { APP_PATHS } from "@/navigation";
+import { APP_PATHS } from "@/app/route-paths";
 
 export function CandidateRoute({
   candidate,

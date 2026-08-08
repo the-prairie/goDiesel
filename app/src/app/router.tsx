@@ -6,9 +6,9 @@ import {
   useParams,
 } from "react-router-dom";
 
-import { AppShell } from "@/components/app-shell";
-import { singleRouteMicrosite } from "@/config/single-route-microsite";
-import { APP_PATHS, canonicalizeLegacyQuestHash } from "@/navigation";
+import { AppShell } from "@/app/app-shell";
+import { singleRouteMicrosite } from "@/app/single-route-microsite";
+import { APP_PATHS, canonicalizeLegacyQuestHash } from "@/app/route-paths";
 
 const AdminPage = lazy(() =>
   import("@/surfaces/admin/admin-page").then((module) => ({ default: module.AdminPage })),

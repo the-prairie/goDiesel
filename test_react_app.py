@@ -24,13 +24,14 @@ def test_shadcn_project_config_exists():
 
 
 def test_app_shell_defines_expected_navigation_and_hash_route_support():
-    shell = (APP / "src/components/app-shell.tsx").read_text()
+    shell = (APP / "src/app/app-shell.tsx").read_text()
     spine = (APP / "src/surfaces/atlas/components/atlas-spine.tsx").read_text()
-    router = (APP / "src/router.tsx").read_text()
-    navigation = (APP / "src/navigation.ts").read_text()
+    router = (APP / "src/app/router.tsx").read_text()
+    navigation = (APP / "src/app/route-paths.ts").read_text()
+    sections = (APP / "src/app/app-sections.ts").read_text()
 
     for label in ("Atlas", "Finder", "Routes", "Replay", "Admin"):
-        assert label in navigation
+        assert label in sections
 
     assert 'createHashRouter' in router
     assert 'Navigate to={APP_PATHS.atlas} replace' in router

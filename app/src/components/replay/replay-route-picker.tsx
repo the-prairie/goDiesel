@@ -13,7 +13,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import type { RouteSummary } from "@/domain/routes";
-import { replayPath } from "@/navigation";
+import { replayPath } from "@/app/route-paths";
 
 export function ReplayRoutePicker({
   currentSlug,

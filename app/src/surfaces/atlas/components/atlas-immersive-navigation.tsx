@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/sheet";
 import routeStats from "@/data/generated/route-stats.json";
 import { cn } from "@/lib/utils";
-import { APP_PATHS, APP_SECTIONS } from "@/navigation";
+import { APP_PATHS } from "@/app/route-paths";
+import { APP_SECTIONS } from "@/app/app-sections";
 
 export function AtlasImmersiveNavigation() {
   const firstDestinationRef = useRef<HTMLAnchorElement>(null);

@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 
 import { PageTitle } from "@/components/page-title";
 import { Button } from "@/components/ui/button";
-import { APP_PATHS } from "@/navigation";
+import { APP_PATHS } from "@/app/route-paths";
 
 export function RouteNotFound() {
   return (

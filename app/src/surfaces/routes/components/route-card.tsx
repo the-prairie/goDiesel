@@ -8,7 +8,7 @@ import { Link } from "react-router-dom";
 
 import type { RouteSummary } from "@/domain/routes";
 import { isPlannedRoute } from "@/surfaces/finder/planning";
-import { APP_PATHS, routeDetailPath } from "@/navigation";
+import { APP_PATHS, routeDetailPath } from "@/app/route-paths";
 import { cn } from "@/lib/utils";
 
 export function RouteCard({

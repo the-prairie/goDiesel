@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeSingleRouteSlug } from "@/config/single-route-microsite";
+import { normalizeSingleRouteSlug } from "@/app/single-route-microsite";
 
 describe("normalizeSingleRouteSlug", () => {
   it("accepts activity identifiers used by shared routes", () => {

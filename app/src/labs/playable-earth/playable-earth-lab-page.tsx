@@ -5,7 +5,7 @@ import { RouteNotFound } from "@/surfaces/routes/components/route-not-found";
 import { Button } from "@/components/ui/button";
 import { findRouteBySlug } from "@/data/routes";
 import { useRouteDetail } from "@/data/use-route-detail";
-import { decodedRouteSlug, replayPath, routeDetailPath } from "@/navigation";
+import { decodedRouteSlug, replayPath, routeDetailPath } from "@/app/route-paths";
 
 export function PlayableEarthLabPage() {
   const { routeSlug } = useParams();

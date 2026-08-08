@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { atlasReturnPath, replayPath } from "@/navigation";
+import { atlasReturnPath, replayPath } from "@/app/route-paths";
 
 describe("Atlas replay navigation", () => {
   it("carries a selected Atlas URL into Replay", () => {

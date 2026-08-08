@@ -4,10 +4,10 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { EarthReplayStage } from "@/components/replay/earth-replay-stage";
 import { GoogleRouteNavigatorStage } from "@/components/replay/google-route-navigator-stage";
 import { RouteNotFound } from "@/surfaces/routes/components/route-not-found";
-import { singleRouteMicrosite } from "@/config/single-route-microsite";
+import { singleRouteMicrosite } from "@/app/single-route-microsite";
 import { completedRoutes, findRouteBySlug } from "@/data/routes";
 import { useRouteDetail } from "@/data/use-route-detail";
-import { APP_PATHS, atlasReturnPath, decodedRouteSlug } from "@/navigation";
+import { APP_PATHS, atlasReturnPath, decodedRouteSlug } from "@/app/route-paths";
 
 const representativeRoute =
   completedRoutes.find(
