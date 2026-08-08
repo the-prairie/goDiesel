@@ -12,7 +12,7 @@ import {
 import {
   CESIUM_GROUND_ROUTE_OPTIONS,
   GOOGLE_3D_TILES_RENDER_OPTIONS,
-} from "@/replay/cesium/cesium-render-quality";
+} from "@/providers/cesium-render-quality";
 
 export type PlayableEarthStatus =
   | { state: "loading"; title: string; message: string }

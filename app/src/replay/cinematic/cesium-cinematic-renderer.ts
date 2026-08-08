@@ -17,7 +17,7 @@ import type { QuestRoute } from "@/domain/routes";
 import type { CinematicFrame } from "@/replay/cinematic/route-cinematic-director";
 import {
   GOOGLE_3D_TILES_RENDER_OPTIONS,
-} from "@/replay/cesium/cesium-render-quality";
+} from "@/providers/cesium-render-quality";
 import { routeDistanceM, routePathPose } from "@/replay/route-path";
 
 export type CinematicRendererStatus =

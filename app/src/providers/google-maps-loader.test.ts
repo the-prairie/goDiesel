@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { loadGoogleMaps } from "@/replay/google/google-maps-loader";
+import { loadGoogleMaps } from "@/providers/google-maps-loader";
 
 class ScriptStub extends EventTarget {
   async = false;

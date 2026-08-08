@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { recordTileFailure, rgbaPixelsLookBlank } from "@/replay/replay-health";
+import { recordTileFailure, rgbaPixelsLookBlank } from "@/providers/render-health";
 
 describe("recordTileFailure", () => {
   it("keeps interleaved failures inside the rolling window", () => {

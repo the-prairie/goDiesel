@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   CESIUM_GROUND_ROUTE_OPTIONS,
   GOOGLE_3D_TILES_RENDER_OPTIONS,
-} from "@/replay/cesium/cesium-render-quality";
+} from "@/providers/cesium-render-quality";
 
 describe("Cesium render quality", () => {
   it("refines complete photogrammetry tiles instead of exposing skipped LOD gaps", () => {

@@ -35,11 +35,11 @@ import {
 } from "@/atlas/atlas-region-camera";
 import type { RouteRegion } from "@/data/route-regions";
 import type { RouteSummary } from "@/domain/routes";
-import { recordTileFailure, rgbaPixelsLookBlank } from "@/replay/replay-health";
+import { recordTileFailure, rgbaPixelsLookBlank } from "@/providers/render-health";
 import {
   CESIUM_GROUND_ROUTE_OPTIONS,
   GOOGLE_3D_TILES_RENDER_OPTIONS,
-} from "@/replay/cesium/cesium-render-quality";
+} from "@/providers/cesium-render-quality";
 
 const DEFAULT_VIEW = { lat: 24, lng: 12, heightM: 18_500_000 };
 const GLOBAL_SELECTION_HEIGHT_M = DEFAULT_VIEW.heightM;

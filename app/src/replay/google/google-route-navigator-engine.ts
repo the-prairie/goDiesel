@@ -10,7 +10,7 @@ import {
   type GoogleRouteCameraPose,
   type GoogleRouteGroundingMode,
 } from "@/replay/google-route-navigator-controller";
-import { loadGoogleMaps } from "@/replay/google/google-maps-loader";
+import { loadGoogleMaps } from "@/providers/google-maps-loader";
 import { routeDistanceM } from "@/replay/route-path";
 
 export type GoogleRouteNavigatorStatus =

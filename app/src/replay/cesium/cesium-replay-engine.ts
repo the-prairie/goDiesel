@@ -24,7 +24,7 @@ import type {
   ReplayEngineMountOptions,
 } from "@/replay/replay-engine";
 import type { ReplayPose } from "@/replay/replay-controller";
-import { recordTileFailure, rgbaPixelsLookBlank } from "@/replay/replay-health";
+import { recordTileFailure, rgbaPixelsLookBlank } from "@/providers/render-health";
 import { bearingDegrees, routePathPose } from "@/replay/route-path";
 import type { QuestRoute } from "@/domain/routes";
 import {
@@ -37,7 +37,7 @@ import {
 import {
   CESIUM_GROUND_ROUTE_OPTIONS,
   GOOGLE_3D_TILES_RENDER_OPTIONS,
-} from "@/replay/cesium/cesium-render-quality";
+} from "@/providers/cesium-render-quality";
 
 const SURFACE_VISUAL_OFFSET_M = 3;
 const SURFACE_SAMPLE_INTERVAL_MS = 250;
