@@ -45,13 +45,6 @@ export function deriveGeographicBounds(
   };
 }
 
-export function unwrapLongitude(longitude: number, around: number) {
-  let unwrapped = longitude;
-  while (unwrapped - around > 180) unwrapped -= 360;
-  while (unwrapped - around < -180) unwrapped += 360;
-  return unwrapped;
-}
-
 export function isValidCoordinate(lat: number, lng: number): boolean {
   return (
     Number.isFinite(lat) &&

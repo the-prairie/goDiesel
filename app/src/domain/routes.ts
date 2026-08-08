@@ -658,7 +658,3 @@ export function parseRouteDetail(value: unknown): QuestRoute {
     provenance: validatedProvenance(input.provenance, route),
   };
 }
-
-export function hasRouteGeometry(route: QuestRoute) {
-  return route.replay.geometryStatus === "ready" && route.route.length > 1;
-}

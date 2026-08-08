@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 export const ROUTE_CAROUSEL_SLIDE_CLASS =
   "min-w-0 flex-[0_0_84%] pl-3 sm:basis-[44%] sm:pl-4 xl:basis-[calc((100%-2rem)/3)]";
 
-export interface RegionRouteCarouselProps {
+interface RegionRouteCarouselProps {
   region: RouteRegion;
   selectedRoute?: RouteSummary;
   onSelectRoute: (route: RouteSummary) => void;

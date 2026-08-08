@@ -7,7 +7,7 @@ const thumbnailWidth = 640;
 const thumbnailHeight = 224;
 const maximumPathPoints = 36;
 
-export type RouteThumbnailState =
+type RouteThumbnailState =
   | "deferred"
   | "loading"
   | "loaded"

@@ -1,4 +1,4 @@
-export const TILE_FAILURE_WINDOW_MS = 15_000;
+const TILE_FAILURE_WINDOW_MS = 15_000;
 
 export function recordTileFailure(
   failures: readonly number[],
