@@ -11,13 +11,13 @@ import { singleRouteMicrosite } from "@/config/single-route-microsite";
 import { APP_PATHS, canonicalizeLegacyQuestHash } from "@/navigation";
 
 const AdminPage = lazy(() =>
-  import("@/pages/admin-page").then((module) => ({ default: module.AdminPage })),
+  import("@/surfaces/admin/admin-page").then((module) => ({ default: module.AdminPage })),
 );
 const AtlasPage = lazy(() =>
   import("@/surfaces/atlas/atlas-page").then((module) => ({ default: module.AtlasPage })),
 );
 const FinderPage = lazy(() =>
-  import("@/pages/finder-page").then((module) => ({ default: module.FinderPage })),
+  import("@/surfaces/finder/finder-page").then((module) => ({ default: module.FinderPage })),
 );
 const ReplayPage = lazy(() =>
   import("@/pages/replay-page").then((module) => ({ default: module.ReplayPage })),
@@ -28,12 +28,12 @@ const PlayableEarthLabPage = lazy(() =>
   })),
 );
 const RouteDetailPage = lazy(() =>
-  import("@/pages/route-detail-page").then((module) => ({
+  import("@/surfaces/routes/route-detail-page").then((module) => ({
     default: module.RouteDetailPage,
   })),
 );
 const RoutesPage = lazy(() =>
-  import("@/pages/routes-page").then((module) => ({ default: module.RoutesPage })),
+  import("@/surfaces/routes/routes-page").then((module) => ({ default: module.RoutesPage })),
 );
 const DesignSystemLabPage = lazy(() =>
   import("@/labs/design-system/design-system-lab-page").then((module) => ({

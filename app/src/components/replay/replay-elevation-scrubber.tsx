@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 
-import { RepairEvidence } from "@/components/routes/repair-evidence";
+import { RepairEvidence } from "@/surfaces/routes/components/repair-evidence";
 import {
   routeRepairAriaLabel,
   routeRepairs,

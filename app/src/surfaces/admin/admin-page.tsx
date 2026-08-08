@@ -1,7 +1,7 @@
 import { Circle, Database, LockKeyhole, Search, SearchX } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { RouteEditor } from "@/components/admin/route-editor";
+import { RouteEditor } from "@/surfaces/admin/components/route-editor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -10,7 +10,7 @@ import {
   saveAdminCuration,
   type AdminWorkspace,
 } from "@/data/admin-repository";
-import type { CurationDraft } from "@/domain/admin-curation";
+import type { CurationDraft } from "@/surfaces/admin/admin-curation";
 
 interface RouteSaveState {
   saving: boolean;

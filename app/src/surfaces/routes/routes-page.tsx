@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 
 import { PageTitle } from "@/components/page-title";
-import { RouteCard } from "@/components/routes/route-card";
+import { RouteCard } from "@/surfaces/routes/components/route-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePlannedRoutes } from "@/data/planned-route-store";
@@ -16,7 +16,7 @@ import {
   DEFAULT_ROUTE_FILTERS,
   filterRoutes,
   type RouteFilters,
-} from "@/domain/route-filters";
+} from "@/surfaces/routes/route-filters";
 
 const distanceOptions = [
   ["all", "Any distance"],

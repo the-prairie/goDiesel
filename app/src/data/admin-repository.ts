@@ -5,7 +5,7 @@ import {
   toCurationPayload,
   type AdminRouteRecord,
   type CurationDraft,
-} from "@/domain/admin-curation";
+} from "@/surfaces/admin/admin-curation";
 import type { RouteCuration } from "@/domain/routes";
 
 const adminApiBase =

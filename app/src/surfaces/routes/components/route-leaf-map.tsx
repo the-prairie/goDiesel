@@ -3,7 +3,7 @@ import maplibregl, { LngLatBounds, Map as MapLibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { RepairEvidence } from "@/components/routes/repair-evidence";
+import { RepairEvidence } from "@/surfaces/routes/components/repair-evidence";
 import { Button } from "@/components/ui/button";
 import {
   routeRepairAriaLabel,

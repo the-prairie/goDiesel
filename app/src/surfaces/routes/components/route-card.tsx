@@ -7,7 +7,7 @@ import {
 import { Link } from "react-router-dom";
 
 import type { RouteSummary } from "@/domain/routes";
-import { isPlannedRoute } from "@/domain/planning";
+import { isPlannedRoute } from "@/surfaces/finder/planning";
 import { APP_PATHS, routeDetailPath } from "@/navigation";
 import { cn } from "@/lib/utils";
 

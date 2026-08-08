@@ -2,9 +2,9 @@ import { Database, SlidersHorizontal, SearchX, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import { CandidateRoute } from "@/components/finder/candidate-route";
-import { FinderForm } from "@/components/finder/finder-form";
-import { FinderRouteMap } from "@/components/finder/finder-route-map";
+import { CandidateRoute } from "@/surfaces/finder/components/candidate-route";
+import { FinderForm } from "@/surfaces/finder/components/finder-form";
+import { FinderRouteMap } from "@/surfaces/finder/components/finder-route-map";
 import { Button } from "@/components/ui/button";
 import { curatedRouteDiscoveryProvider } from "@/data/discovery-provider";
 import {
@@ -16,7 +16,7 @@ import type {
   DiscoveryCandidate,
   DiscoveryResult,
   FinderIntent,
-} from "@/domain/planning";
+} from "@/surfaces/finder/planning";
 
 const initialIntent: FinderIntent = {
   place: "",

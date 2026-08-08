@@ -1,13 +1,13 @@
 import { Save } from "lucide-react";
 
-import { CurationStatus } from "@/components/admin/curation-status";
+import { CurationStatus } from "@/surfaces/admin/components/curation-status";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   validateCuration,
   type AdminRouteRecord,
   type CurationDraft,
-} from "@/domain/admin-curation";
+} from "@/surfaces/admin/admin-curation";
 
 export function RouteEditor({
   route,

@@ -8,6 +8,9 @@ from quest_meta import build_route_curation
 
 ROOT = Path(__file__).parent
 APP = ROOT / "app"
+# NOTE: the paths below track the app/src layout. They are a filename coupling
+# that TypeScript cannot verify, so they must be updated in the same commit as
+# any move of the files they read.
 MANIFEST = APP / "src/data/generated/routes.manifest.json"
 ROUTE_DETAILS = APP / "public/data/routes"
 
@@ -22,7 +25,7 @@ def test_shadcn_project_config_exists():
 
 def test_app_shell_defines_expected_navigation_and_hash_route_support():
     shell = (APP / "src/components/app-shell.tsx").read_text()
-    spine = (APP / "src/components/atlas-spine.tsx").read_text()
+    spine = (APP / "src/surfaces/atlas/components/atlas-spine.tsx").read_text()
     router = (APP / "src/router.tsx").read_text()
     navigation = (APP / "src/navigation.ts").read_text()
 
@@ -212,13 +215,13 @@ def test_interrupted_route_publication_restores_last_complete_generation(tmp_pat
 
 
 def test_atlas_globe_ports_route_heat_traces_and_interaction():
-    globe = (APP / "src/components/globe/atlas-globe.tsx").read_text()
-    cesium_globe = (APP / "src/components/globe/cesium-atlas-globe.tsx").read_text()
-    engine = (APP / "src/atlas/cesium-atlas-world-engine.ts").read_text()
-    atlas = (APP / "src/pages/atlas-page.tsx").read_text()
+    globe = (APP / "src/surfaces/atlas/components/atlas-globe.tsx").read_text()
+    cesium_globe = (APP / "src/surfaces/atlas/components/cesium-atlas-globe.tsx").read_text()
+    engine = (APP / "src/surfaces/atlas/cesium-atlas-world-engine.ts").read_text()
+    atlas = (APP / "src/surfaces/atlas/atlas-page.tsx").read_text()
 
     assert 'lazy(() =>' in globe
-    assert 'import("@/components/globe/cesium-atlas-globe")' in globe
+    assert 'import("@/surfaces/atlas/components/cesium-atlas-globe")' in globe
     assert "<Suspense" in globe
     assert "<CesiumAtlasGlobe ref={ref} {...props} />" in globe
     assert "createAtlasWorldEngine()" in cesium_globe
@@ -235,7 +238,7 @@ def test_atlas_globe_ports_route_heat_traces_and_interaction():
 
 
 def test_atlas_search_models_memory_search_states():
-    search = (APP / "src/components/search/atlas-search.tsx").read_text()
+    search = (APP / "src/surfaces/atlas/components/atlas-search.tsx").read_text()
 
     for state in (
         "initial",

@@ -4,7 +4,7 @@ import {
   DEFAULT_ROUTE_FILTERS,
   filterRoutes,
   type RouteFilters,
-} from "@/domain/route-filters";
+} from "@/surfaces/routes/route-filters";
 import type { RouteSummary } from "@/domain/routes";
 
 type TestRoute = RouteSummary;

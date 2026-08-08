@@ -8,10 +8,10 @@ import {
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
-import { ElevationProfile } from "@/components/routes/route-briefing";
-import { RouteGuide } from "@/components/routes/route-guide";
-import { RouteLeafMap } from "@/components/routes/route-leaf-map";
-import { RouteNotFound } from "@/components/routes/route-not-found";
+import { ElevationProfile } from "@/surfaces/routes/components/route-briefing";
+import { RouteGuide } from "@/surfaces/routes/components/route-guide";
+import { RouteLeafMap } from "@/surfaces/routes/components/route-leaf-map";
+import { RouteNotFound } from "@/surfaces/routes/components/route-not-found";
 import { Button } from "@/components/ui/button";
 import { singleRouteMicrosite } from "@/config/single-route-microsite";
 import { findRouteBySlug } from "@/data/routes";

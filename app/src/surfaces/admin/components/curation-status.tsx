@@ -3,7 +3,7 @@ import { AlertTriangle, CheckCircle2, CircleDashed, Database, Map, Play } from "
 import type {
   AdminRouteRecord,
   CurationValidation,
-} from "@/domain/admin-curation";
+} from "@/surfaces/admin/admin-curation";
 
 export function CurationStatus({
   route,

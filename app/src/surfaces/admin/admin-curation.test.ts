@@ -5,7 +5,7 @@ import {
   toCurationPayload,
   validateCuration,
   type CurationDraft,
-} from "@/domain/admin-curation";
+} from "@/surfaces/admin/admin-curation";
 
 const complete: CurationDraft = {
   vibe: "Quiet lanes opening into a climb.",
