@@ -33,3 +33,10 @@ venv/
 # Temporary files
 tmp/
 *.tmp
+
+# Node dependencies (app/ has its own ignore; this covers the repository root)
+node_modules/
+
+# Local experiments and unrelated build output, not part of goDiesel
+/lottie-player/
+/target/
