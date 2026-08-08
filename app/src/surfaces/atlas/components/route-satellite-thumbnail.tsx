@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import type { RoutePoint, RouteSummary } from "@/domain/routes";
+import type { RoutePoint, RouteSummary } from "@/domain/route";
 import { cn } from "@/ui/utils";
 
 const thumbnailWidth = 640;

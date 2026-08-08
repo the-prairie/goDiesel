@@ -23,7 +23,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { ReplayElevationScrubber } from "@/surfaces/replay/components/replay-elevation-scrubber";
 import { ReplayRoutePicker } from "@/surfaces/replay/components/replay-route-picker";
 import { Button } from "@/ui/button";
-import type { QuestRoute, RouteSummary } from "@/domain/routes";
+import type { QuestRoute, RouteSummary } from "@/domain/route";
 import { cn } from "@/ui/utils";
 import {
   advanceGoogleRouteNavigator,

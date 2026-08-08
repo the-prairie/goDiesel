@@ -1,4 +1,4 @@
-import type { QuestRoute } from "@/domain/routes";
+import type { QuestRoute } from "@/domain/route";
 import type { GoogleRouteCameraPose } from "@/surfaces/replay/playback/route-navigator-controller";
 import { bearingDegrees, routeDistanceM, routePathPose } from "@/domain/geometry/route-path";
 

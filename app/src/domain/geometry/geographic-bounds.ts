@@ -1,4 +1,4 @@
-import type { RouteSummary } from "@/domain/routes";
+import type { RouteSummary } from "@/domain/route";
 
 export interface GeographicBounds {
   south: number;

@@ -1,4 +1,4 @@
-import type { QuestRoute } from "@/domain/routes";
+import type { QuestRoute } from "@/domain/route";
 import type { CinematicRouteTreatment } from "@/surfaces/replay/cinematic/cinematic-route-filament";
 import { routeDistanceM } from "@/domain/geometry/route-path";
 import {

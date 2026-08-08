@@ -34,7 +34,7 @@ import {
   atlasRegionTransitionDurationSeconds,
 } from "@/surfaces/atlas/atlas-region-camera";
 import type { RouteRegion } from "@/data/route-regions";
-import type { RouteSummary } from "@/domain/routes";
+import type { RouteSummary } from "@/domain/route";
 import { recordTileFailure, rgbaPixelsLookBlank } from "@/providers/render-health";
 import {
   CESIUM_GROUND_ROUTE_OPTIONS,

@@ -3,7 +3,7 @@ import {
   deriveGeographicBounds,
   type GeographicBounds,
 } from "@/domain/geometry/geographic-bounds";
-import type { RouteSummary } from "@/domain/routes";
+import type { RouteSummary } from "@/domain/route";
 
 export interface RouteRegion {
   name: string;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { QuestRoute } from "@/domain/routes";
+import type { QuestRoute } from "@/domain/route";
 import {
   ROUTE_TRAILER_DURATION_SECONDS,
   routeTrailerFrame,

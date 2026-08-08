@@ -25,7 +25,7 @@ import {
   type RouteJourneyFrame,
   type RouteVisualScene,
 } from "@/labs/route-intelligence/route-genome";
-import type { QuestRoute } from "@/domain/routes";
+import type { QuestRoute } from "@/domain/route";
 import { loadRouteDetail } from "@/data/route-repository";
 import { cn } from "@/ui/utils";
 

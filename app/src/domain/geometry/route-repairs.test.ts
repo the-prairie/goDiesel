@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { routeRepairEvidence, routeRepairs } from "@/domain/geometry/route-repairs";
-import type { QuestRoute } from "@/domain/routes";
+import type { QuestRoute } from "@/domain/route";
 
 function route(discontinuities: QuestRoute["provenance"]["discontinuities"]) {
   return {

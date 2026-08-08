@@ -21,7 +21,7 @@ import {
   RouteContextHud,
   type RouteContextHudState,
 } from "@/surfaces/replay/components/route-context-hud";
-import type { QuestRoute } from "@/domain/routes";
+import type { QuestRoute } from "@/domain/route";
 import { useIsMobile } from "@/ui/use-mobile";
 import {
   advancePlayableEarth,

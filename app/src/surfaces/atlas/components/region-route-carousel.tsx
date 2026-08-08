@@ -6,7 +6,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/ui/button";
 import { RouteSatelliteThumbnail } from "@/surfaces/atlas/components/route-satellite-thumbnail";
 import type { RouteRegion } from "@/data/route-regions";
-import type { RoutePoint, RouteSummary } from "@/domain/routes";
+import type { RoutePoint, RouteSummary } from "@/domain/route";
 import {
   elevationRange,
   projectRouteGeometry,

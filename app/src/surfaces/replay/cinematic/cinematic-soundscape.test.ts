@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { QuestRoute } from "@/domain/routes";
+import type { QuestRoute } from "@/domain/route";
 import { cinematicSoundMix } from "@/surfaces/replay/cinematic/cinematic-soundscape";
 import { cinematicFrame } from "@/surfaces/replay/cinematic/route-cinematic-director";
 

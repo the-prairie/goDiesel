@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
 
 import manifest from "@/data/generated/routes.manifest.json";
-import { parseRouteDetail, parseRouteSummary } from "@/domain/routes";
+import { parseRouteDetail, parseRouteSummary } from "@/domain/route";
 
 function validRouteDetail(overrides: Record<string, unknown> = {}) {
   return {

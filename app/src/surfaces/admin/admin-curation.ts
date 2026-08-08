@@ -1,4 +1,4 @@
-import type { CurationReviewStatus, RouteGeometryStatus } from "@/domain/routes";
+import type { CurationReviewStatus, RouteGeometryStatus } from "@/domain/route";
 
 export interface CurationDraft {
   vibe: string;

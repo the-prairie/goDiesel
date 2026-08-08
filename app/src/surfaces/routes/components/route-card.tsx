@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import type { RouteSummary } from "@/domain/routes";
+import type { RouteSummary } from "@/domain/route";
 import { isPlannedRoute } from "@/surfaces/finder/planning";
 import { APP_PATHS, routeDetailPath } from "@/app/route-paths";
 import { cn } from "@/ui/utils";

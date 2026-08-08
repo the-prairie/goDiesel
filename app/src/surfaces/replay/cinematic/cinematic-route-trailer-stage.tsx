@@ -11,7 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/ui/button";
-import type { QuestRoute } from "@/domain/routes";
+import type { QuestRoute } from "@/domain/route";
 import {
   ROUTE_TRAILER_DURATION_SECONDS,
   routeTrailerFrame,

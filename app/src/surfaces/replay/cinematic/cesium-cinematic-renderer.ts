@@ -13,7 +13,7 @@ import {
 } from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 
-import type { QuestRoute } from "@/domain/routes";
+import type { QuestRoute } from "@/domain/route";
 import type { CinematicFrame } from "@/surfaces/replay/cinematic/route-cinematic-director";
 import {
   GOOGLE_3D_TILES_RENDER_OPTIONS,

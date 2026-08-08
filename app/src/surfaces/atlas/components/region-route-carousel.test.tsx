@@ -6,7 +6,7 @@ import {
   routeTracePolyline,
   thumbnailIndexesForSlidesInView,
 } from "@/surfaces/atlas/components/region-route-carousel";
-import type { RoutePoint } from "@/domain/routes";
+import type { RoutePoint } from "@/domain/route";
 
 const trace: RoutePoint[] = [
   { lat: 35.1, lng: 179.8, elev: 120, d: 0 },

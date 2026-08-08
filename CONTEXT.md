@@ -242,8 +242,10 @@ either; they are a data and type contract, and renaming them is its own ticket.
 ### Case boundary
 
 Generated JSON is `snake_case`. The TypeScript domain layer is `camelCase`. The
-parsing functions in `app/src/domain/routes.ts` are the only sanctioned boundary
-between the two conventions.
+parsing functions in `app/src/domain/route/` are the only sanctioned boundary
+between the two conventions. That directory splits along the two tiers of
+ADR-0004: `summary-parse.ts` is lenient and `detail-parse.ts` is strict. Import
+the contract as `@/domain/route`.
 
 ### Non-canonical words
 

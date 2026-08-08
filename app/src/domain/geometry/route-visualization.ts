@@ -1,4 +1,4 @@
-import type { RoutePoint } from "@/domain/routes";
+import type { RoutePoint } from "@/domain/route";
 
 export interface ProjectedRoutePoint {
   point: RoutePoint;

@@ -5,7 +5,7 @@ import {
   nextThumbnailState,
   routeSatelliteThumbnailUrl,
 } from "@/surfaces/atlas/components/route-satellite-thumbnail";
-import type { RoutePoint } from "@/domain/routes";
+import type { RoutePoint } from "@/domain/route";
 
 function routePoint(index: number): RoutePoint {
   return {

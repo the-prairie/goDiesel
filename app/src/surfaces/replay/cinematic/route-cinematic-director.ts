@@ -1,4 +1,4 @@
-import type { QuestRoute } from "@/domain/routes";
+import type { QuestRoute } from "@/domain/route";
 import { bearingDegrees, routeDistanceM, routePathPose } from "@/domain/geometry/route-path";
 
 export type CinematicCut = "feature" | "monumental" | "kinetic" | "intimate";

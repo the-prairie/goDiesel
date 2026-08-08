@@ -1,4 +1,4 @@
-import type { QuestRoute } from "@/domain/routes";
+import type { QuestRoute } from "@/domain/route";
 import { ROUTE_THREAD_STYLE } from "@/domain/geometry/route-thread-style";
 import {
   advancePlayableEarthGrounding,

@@ -1,4 +1,4 @@
-import type { RouteSummary } from "@/domain/routes";
+import type { RouteSummary } from "@/domain/route";
 
 export type FinderActivity = "Run" | "Ride";
 export type FinderTerrain = "any" | "road" | "trail" | "mixed" | "mountain";

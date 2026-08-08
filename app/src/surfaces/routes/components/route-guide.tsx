@@ -7,7 +7,7 @@ import {
   Sparkles,
 } from "lucide-react";
 
-import type { RouteCuration } from "@/domain/routes";
+import type { RouteCuration } from "@/domain/route";
 import { cn } from "@/ui/utils";
 
 export function RouteGuide({

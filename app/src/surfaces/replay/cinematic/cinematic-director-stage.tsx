@@ -16,7 +16,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/ui/button";
 import { RecordedLightLayer } from "@/surfaces/replay/components/recorded-light-layer";
 import { recordedLightAt } from "@/domain/geometry/recorded-light";
-import type { QuestRoute } from "@/domain/routes";
+import type { QuestRoute } from "@/domain/route";
 import { CinematicSoundscape } from "@/surfaces/replay/cinematic/cinematic-soundscape";
 import {
   type CinematicRendererStatus,

@@ -53,7 +53,11 @@ def test_app_shell_defines_expected_navigation_and_hash_route_support():
 
 def test_route_domain_models_completed_planned_and_discovered_states():
     lifecycle = (APP / "src/domain/route/lifecycle.ts").read_text()
-    routes = (APP / "src/domain/routes.ts").read_text()
+    # The route contract is split across domain/route/ per ADR-0004, so read the
+    # whole directory rather than one file.
+    routes = "\n".join(
+        path.read_text() for path in sorted((APP / "src/domain/route").glob("*.ts"))
+    )
 
     assert '"completed" | "planned" | "discovered"' in lifecycle
     assert 'RouteGeometryStatus = "ready" | "missing"' in routes

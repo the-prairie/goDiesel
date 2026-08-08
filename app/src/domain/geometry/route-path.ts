@@ -1,4 +1,4 @@
-import type { QuestRoute, RoutePoint } from "@/domain/routes";
+import type { QuestRoute, RoutePoint } from "@/domain/route";
 
 export interface RoutePathPose {
   lat: number;

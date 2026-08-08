@@ -6,7 +6,7 @@ import maplibregl, {
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef, useState } from "react";
 
-import type { QuestRoute } from "@/domain/routes";
+import type { QuestRoute } from "@/domain/route";
 
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 

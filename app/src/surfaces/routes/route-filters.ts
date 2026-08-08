@@ -1,5 +1,5 @@
 import type { RouteLifecycle } from "@/domain/route/lifecycle";
-import type { RouteSummary } from "@/domain/routes";
+import type { RouteSummary } from "@/domain/route";
 
 export interface RouteFilters {
   query: string;

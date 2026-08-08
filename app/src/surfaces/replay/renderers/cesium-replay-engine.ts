@@ -26,7 +26,7 @@ import type {
 import type { ReplayPose } from "@/surfaces/replay/playback/replay-controller";
 import { recordTileFailure, rgbaPixelsLookBlank } from "@/providers/render-health";
 import { bearingDegrees, routePathPose } from "@/domain/geometry/route-path";
-import type { QuestRoute } from "@/domain/routes";
+import type { QuestRoute } from "@/domain/route";
 import {
   advanceReplayCameraClearance,
   initialReplayCameraClearance,

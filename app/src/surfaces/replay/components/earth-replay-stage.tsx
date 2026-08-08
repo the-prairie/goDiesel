@@ -29,7 +29,7 @@ import {
   RecordedLightLayer,
 } from "@/surfaces/replay/components/recorded-light-layer";
 import { recordedLightAt } from "@/domain/geometry/recorded-light";
-import type { QuestRoute, RouteSummary } from "@/domain/routes";
+import type { QuestRoute, RouteSummary } from "@/domain/route";
 import { useIsMobile } from "@/ui/use-mobile";
 import { useReducedMotion } from "@/ui/use-reduced-motion";
 import {

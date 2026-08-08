@@ -1,5 +1,5 @@
 import type { RouteRegion } from "@/data/route-regions";
-import type { RouteSummary } from "@/domain/routes";
+import type { RouteSummary } from "@/domain/route";
 
 export interface AtlasSelection {
   selectedRegion?: RouteRegion;

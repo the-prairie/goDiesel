@@ -2,7 +2,7 @@ import type {
   QuestRoute,
   RouteDiscontinuityEvidence,
   RoutePoint,
-} from "@/domain/routes";
+} from "@/domain/route";
 
 export interface RouteRepair extends RouteDiscontinuityEvidence {
   id: string;

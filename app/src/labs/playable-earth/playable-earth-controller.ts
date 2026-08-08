@@ -1,4 +1,4 @@
-import type { QuestRoute } from "@/domain/routes";
+import type { QuestRoute } from "@/domain/route";
 import { routeDistanceM, routePathPose } from "@/domain/geometry/route-path";
 import {
   advanceRouteGrounding,

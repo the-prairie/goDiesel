@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { recordedLightAt } from "@/domain/geometry/recorded-light";
-import type { RoutePoint, RouteTemporalProvenance } from "@/domain/routes";
+import type { RoutePoint, RouteTemporalProvenance } from "@/domain/route";
 
 const route: RoutePoint[] = [
   { lat: 35, lng: 135, elev: 10, d: 0, elapsedS: 0 },

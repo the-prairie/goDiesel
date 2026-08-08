@@ -1,4 +1,4 @@
-import type { QuestRoute } from "@/domain/routes";
+import type { QuestRoute } from "@/domain/route";
 import type { CinematicRendererStatus } from "@/surfaces/replay/cinematic/cesium-cinematic-renderer";
 import type { CinematicFrame } from "@/surfaces/replay/cinematic/route-cinematic-director";
 import {

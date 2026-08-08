@@ -1,4 +1,4 @@
-import type { RoutePoint, RouteTemporalProvenance } from "@/domain/routes";
+import type { RoutePoint, RouteTemporalProvenance } from "@/domain/route";
 
 export type RecordedLightPhase = "neutral" | "dawn" | "midday" | "dusk" | "night";
 

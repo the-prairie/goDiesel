@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { QuestRoute } from "@/domain/routes";
+import type { QuestRoute } from "@/domain/route";
 import {
   PLAYABLE_EARTH_CORRIDOR_M,
   PLAYABLE_EARTH_CAMERA_RANGES_M,

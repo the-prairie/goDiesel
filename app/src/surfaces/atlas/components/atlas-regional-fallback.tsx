@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { atlasViewportInsets } from "@/surfaces/atlas/atlas-region-camera";
 import type { RouteRegion } from "@/data/route-regions";
-import type { RoutePoint, RouteSummary } from "@/domain/routes";
+import type { RoutePoint, RouteSummary } from "@/domain/route";
 import { ROUTE_THREAD_STYLE } from "@/domain/geometry/route-thread-style";
 
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";

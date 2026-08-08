@@ -1,4 +1,4 @@
-import type { QuestRoute, RoutePoint } from "@/domain/routes";
+import type { QuestRoute, RoutePoint } from "@/domain/route";
 import type { ReplayPose } from "@/surfaces/replay/playback/replay-controller";
 import {
   bearingDegrees,

@@ -10,7 +10,7 @@ import {
   routeRepairs,
   type RouteRepair,
 } from "@/domain/geometry/route-repairs";
-import type { QuestRoute } from "@/domain/routes";
+import type { QuestRoute } from "@/domain/route";
 
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 const ROUTE_COLOR = "#315fb4";

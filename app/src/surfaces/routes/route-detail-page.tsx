@@ -17,7 +17,7 @@ import { singleRouteMicrosite } from "@/app/single-route-microsite";
 import { findRouteBySlug } from "@/data/routes";
 import { routeLibraryReturnPath } from "@/data/route-library-return";
 import { useRouteDetail, type RouteDetailState } from "@/data/use-route-detail";
-import type { QuestRoute } from "@/domain/routes";
+import type { QuestRoute } from "@/domain/route";
 import { useIsMobile } from "@/ui/use-mobile";
 import { cn } from "@/ui/utils";
 import { APP_PATHS, decodedRouteSlug, replayPath } from "@/app/route-paths";

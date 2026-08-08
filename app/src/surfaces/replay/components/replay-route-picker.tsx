@@ -12,7 +12,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/ui/sheet";
-import type { RouteSummary } from "@/domain/routes";
+import type { RouteSummary } from "@/domain/route";
 import { replayPath } from "@/app/route-paths";
 
 export function ReplayRoutePicker({

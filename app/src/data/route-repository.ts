@@ -1,4 +1,4 @@
-import { parseRouteDetail, type QuestRoute } from "@/domain/routes";
+import { parseRouteDetail, type QuestRoute } from "@/domain/route";
 
 export type RouteDetailResult =
   | { status: "ready"; route: QuestRoute }

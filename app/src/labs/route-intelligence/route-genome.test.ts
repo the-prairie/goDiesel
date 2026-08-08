@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { applyRouteGenomeEnrichment, buildRouteGenome } from "@/labs/route-intelligence/route-genome";
-import { parseRouteDetail } from "@/domain/routes";
+import { parseRouteDetail } from "@/domain/route";
 
 const fixture = parseRouteDetail({
   slug: "test-route",

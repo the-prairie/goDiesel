@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { RoutePoint } from "@/domain/routes";
+import type { RoutePoint } from "@/domain/route";
 import {
   projectRouteGeometry,
   sampleElevationProfile,

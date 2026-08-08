@@ -14,7 +14,7 @@ import {
   routeRepairs,
   type RouteRepair,
 } from "@/domain/geometry/route-repairs";
-import type { QuestRoute } from "@/domain/routes";
+import type { QuestRoute } from "@/domain/route";
 import {
   elevationRange,
   sampleElevationProfile,

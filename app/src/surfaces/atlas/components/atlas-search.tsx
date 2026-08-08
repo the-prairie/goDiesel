@@ -2,7 +2,7 @@ import { Search } from "lucide-react";
 import { useDeferredValue, useMemo } from "react";
 
 import type { RouteRegion } from "@/data/route-regions";
-import type { RouteSummary } from "@/domain/routes";
+import type { RouteSummary } from "@/domain/route";
 import { cn } from "@/ui/utils";
 
 type AtlasSearchState =

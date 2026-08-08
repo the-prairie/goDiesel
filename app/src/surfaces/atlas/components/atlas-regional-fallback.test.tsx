@@ -9,7 +9,7 @@ import {
   unwrapLongitudeAroundCenter,
 } from "@/surfaces/atlas/components/atlas-regional-fallback";
 import type { RouteRegion } from "@/data/route-regions";
-import type { RouteSummary } from "@/domain/routes";
+import type { RouteSummary } from "@/domain/route";
 
 function route(overrides: Partial<RouteSummary> = {}): RouteSummary {
   return {
