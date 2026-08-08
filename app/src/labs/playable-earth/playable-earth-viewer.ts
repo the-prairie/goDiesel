@@ -8,7 +8,7 @@ import {
   type PlayableEarthGroundingSource,
   type PlayableEarthGroundingState,
   type PlayableEarthPose,
-} from "@/replay/playable-earth-controller";
+} from "@/labs/playable-earth/playable-earth-controller";
 import {
   CESIUM_GROUND_ROUTE_OPTIONS,
   GOOGLE_3D_TILES_RENDER_OPTIONS,

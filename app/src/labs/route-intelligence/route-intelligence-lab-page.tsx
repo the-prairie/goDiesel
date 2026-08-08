@@ -24,7 +24,7 @@ import {
   type RouteGenomeEnrichment,
   type RouteJourneyFrame,
   type RouteVisualScene,
-} from "@/domain/route-genome";
+} from "@/labs/route-intelligence/route-genome";
 import type { QuestRoute } from "@/domain/routes";
 import { loadRouteDetail } from "@/data/route-repository";
 import { cn } from "@/lib/utils";

@@ -36,13 +36,13 @@ import {
   zoomPlayableEarth,
   type PlayableEarthControlState,
   type PlayableEarthInput,
-} from "@/replay/playable-earth-controller";
+} from "@/labs/playable-earth/playable-earth-controller";
 import {
   createPlayableEarthViewer,
   type PlayableEarthGroundingDebug,
   type PlayableEarthStatus,
   type PlayableEarthViewer,
-} from "@/replay/playable-earth-viewer";
+} from "@/labs/playable-earth/playable-earth-viewer";
 
 const INITIAL_STATUS: PlayableEarthStatus = {
   state: "loading",

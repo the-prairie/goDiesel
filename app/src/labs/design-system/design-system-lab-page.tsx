@@ -36,7 +36,7 @@ const swatches = [
   ["Position", "var(--coral)"],
 ] as const;
 
-export function DesignSystemFoundationPage() {
+export function DesignSystemLabPage() {
   return (
     <main
       className="field-guide-theme min-h-full w-full min-w-0 overflow-x-clip bg-[var(--canvas)] text-[var(--ink)]"

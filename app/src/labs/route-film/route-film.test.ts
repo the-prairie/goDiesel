@@ -6,7 +6,7 @@ import {
   parseRouteFilm,
   RouteFilmValidationError,
   validateRouteFilm,
-} from "@/domain/route-film";
+} from "@/labs/route-film/route-film";
 
 const identity = {
   routeId: "14736711660",

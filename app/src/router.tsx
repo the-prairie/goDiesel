@@ -23,7 +23,7 @@ const ReplayPage = lazy(() =>
   import("@/pages/replay-page").then((module) => ({ default: module.ReplayPage })),
 );
 const PlayableEarthLabPage = lazy(() =>
-  import("@/pages/playable-earth-lab-page").then((module) => ({
+  import("@/labs/playable-earth/playable-earth-lab-page").then((module) => ({
     default: module.PlayableEarthLabPage,
   })),
 );
@@ -35,28 +35,28 @@ const RouteDetailPage = lazy(() =>
 const RoutesPage = lazy(() =>
   import("@/pages/routes-page").then((module) => ({ default: module.RoutesPage })),
 );
-const DesignSystemFoundationPage = lazy(() =>
-  import("@/pages/design-system-foundation-page").then((module) => ({
-    default: module.DesignSystemFoundationPage,
+const DesignSystemLabPage = lazy(() =>
+  import("@/labs/design-system/design-system-lab-page").then((module) => ({
+    default: module.DesignSystemLabPage,
   })),
 );
 const RouteIntelligenceLabPage = lazy(() =>
-  import("@/pages/route-intelligence-lab-page").then((module) => ({
+  import("@/labs/route-intelligence/route-intelligence-lab-page").then((module) => ({
     default: module.RouteIntelligenceLabPage,
   })),
 );
 const GoogleRouteNavigatorLabPage = lazy(() =>
-  import("@/pages/google-route-navigator-lab-page").then((module) => ({
+  import("@/labs/google-route-navigator/google-route-navigator-lab-page").then((module) => ({
     default: module.GoogleRouteNavigatorLabPage,
   })),
 );
 const CinematicRouteTrailerLabPage = lazy(() =>
-  import("@/pages/cinematic-route-trailer-lab-page").then((module) => ({
+  import("@/labs/cinematic/cinematic-route-trailer-lab-page").then((module) => ({
     default: module.CinematicRouteTrailerLabPage,
   })),
 );
 const CinematicDirectorLabPage = lazy(() =>
-  import("@/pages/cinematic-director-lab-page").then((module) => ({
+  import("@/labs/cinematic/cinematic-director-lab-page").then((module) => ({
     default: module.CinematicDirectorLabPage,
   })),
 );
@@ -82,7 +82,7 @@ const productRoutes = [
   { path: APP_PATHS.replay.slice(1), element: <ReplayPage /> },
   { path: "replay/:routeSlug", element: <ReplayPage /> },
   { path: "lab/playable-earth/:routeSlug", element: <PlayableEarthLabPage /> },
-  { path: "lab/design-system", element: <DesignSystemFoundationPage /> },
+  { path: "lab/design-system", element: <DesignSystemLabPage /> },
   { path: "lab/route-intelligence", element: <RouteIntelligenceLabPage /> },
   {
     path: "lab/google-route-navigator/:routeSlug",

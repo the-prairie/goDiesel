@@ -13,7 +13,7 @@ import {
   seekPlayableEarth,
   setPlayableEarthMode,
   zoomPlayableEarth,
-} from "@/replay/playable-earth-controller";
+} from "@/labs/playable-earth/playable-earth-controller";
 
 const route = {
   distanceKm: 1,
