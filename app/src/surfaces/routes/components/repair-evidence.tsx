@@ -3,7 +3,7 @@ import {
   routeRepairEvidence,
   routeRepairSourceLabel,
 } from "@/domain/route-repairs";
-import { cn } from "@/lib/utils";
+import { cn } from "@/ui/utils";
 
 export function RepairEvidence({
   repairs,

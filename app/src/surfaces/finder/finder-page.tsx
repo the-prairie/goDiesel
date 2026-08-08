@@ -5,7 +5,7 @@ import { useSearchParams } from "react-router-dom";
 import { CandidateRoute } from "@/surfaces/finder/components/candidate-route";
 import { FinderForm } from "@/surfaces/finder/components/finder-form";
 import { FinderRouteMap } from "@/surfaces/finder/components/finder-route-map";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/ui/button";
 import { curatedRouteDiscoveryProvider } from "@/data/discovery-provider";
 import {
   savePlannedRoute,

@@ -2,8 +2,8 @@ import { Circle, Database, LockKeyhole, Search, SearchX } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { RouteEditor } from "@/surfaces/admin/components/route-editor";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/ui/button";
+import { Input } from "@/ui/input";
 import {
   loadAdminWorkspace,
   loadBundledCuration,

@@ -1,7 +1,7 @@
 import { Moon, SunMedium } from "lucide-react";
 
 import type { RecordedLight } from "@/domain/recorded-light";
-import { cn } from "@/lib/utils";
+import { cn } from "@/ui/utils";
 
 const phaseTreatment: Record<RecordedLight["phase"], string> = {
   neutral: "bg-transparent",

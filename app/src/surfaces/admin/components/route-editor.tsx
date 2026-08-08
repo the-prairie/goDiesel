@@ -1,8 +1,8 @@
 import { Save } from "lucide-react";
 
 import { CurationStatus } from "@/surfaces/admin/components/curation-status";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/ui/button";
+import { Input } from "@/ui/input";
 import {
   validateCuration,
   type AdminRouteRecord,

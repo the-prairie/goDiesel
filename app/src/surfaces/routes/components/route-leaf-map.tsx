@@ -4,7 +4,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { RepairEvidence } from "@/surfaces/routes/components/repair-evidence";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/ui/button";
 import {
   routeRepairAriaLabel,
   routeRepairs,

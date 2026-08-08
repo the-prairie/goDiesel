@@ -9,7 +9,7 @@ import type {
   AtlasWorldStatus,
 } from "@/surfaces/atlas/atlas-world";
 import { createAtlasWorldEngine } from "@/surfaces/atlas/cesium-atlas-world-engine";
-import { cn } from "@/lib/utils";
+import { cn } from "@/ui/utils";
 
 export const CesiumAtlasGlobe = forwardRef<
   AtlasGlobeHandle,

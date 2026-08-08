@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 
 import type { RouteCuration } from "@/domain/routes";
-import { cn } from "@/lib/utils";
+import { cn } from "@/ui/utils";
 
 export function RouteGuide({
   curation,

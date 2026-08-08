@@ -6,7 +6,7 @@ import { AtlasImmersiveNavigation } from "@/surfaces/atlas/components/atlas-imme
 import { singleRouteMicrosite } from "@/app/single-route-microsite";
 import { APP_PATHS } from "@/app/route-paths";
 import { appSectionForPath } from "@/app/app-sections";
-import { cn } from "@/lib/utils";
+import { cn } from "@/ui/utils";
 
 export function AppShell() {
   const location = useLocation();

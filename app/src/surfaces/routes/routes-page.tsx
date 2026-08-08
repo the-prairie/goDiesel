@@ -2,10 +2,10 @@ import { ChevronDown, RotateCcw, Search, SlidersHorizontal } from "lucide-react"
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 
-import { PageTitle } from "@/components/page-title";
+import { PageTitle } from "@/ui/page-title";
 import { RouteCard } from "@/surfaces/routes/components/route-card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/ui/button";
+import { Input } from "@/ui/input";
 import { usePlannedRoutes } from "@/data/planned-route-store";
 import {
   rememberRouteLibraryReturn,

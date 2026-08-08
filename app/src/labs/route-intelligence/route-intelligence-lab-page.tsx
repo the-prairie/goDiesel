@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/ui/button";
 import {
   applyRouteGenomeEnrichment,
   buildRouteGenome,
@@ -27,7 +27,7 @@ import {
 } from "@/labs/route-intelligence/route-genome";
 import type { QuestRoute } from "@/domain/routes";
 import { loadRouteDetail } from "@/data/route-repository";
-import { cn } from "@/lib/utils";
+import { cn } from "@/ui/utils";
 
 const ROUTE_IDS = ["14736711660", "14023448720"] as const;
 const SCENE_KEYS: RouteVisualScene["key"][] = [

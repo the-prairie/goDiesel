@@ -19,7 +19,7 @@ def test_shadcn_project_config_exists():
     config = json.loads((APP / "components.json").read_text())
 
     assert config["tsx"] is True
-    assert config["aliases"]["ui"] == "@/components/ui"
+    assert config["aliases"]["ui"] == "@/ui"
     assert config["tailwind"]["css"] == "src/index.css"
 
 

@@ -1,8 +1,8 @@
 import { LocateFixed, Map, Minus, Plus } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/ui/button";
 import type { RouteRegion } from "@/data/route-regions";
-import { cn } from "@/lib/utils";
+import { cn } from "@/ui/utils";
 
 export type AtlasActivityMode = "all" | "runs" | "rides";
 

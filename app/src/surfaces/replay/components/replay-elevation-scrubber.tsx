@@ -19,7 +19,7 @@ import {
   elevationRange,
   sampleElevationProfile,
 } from "@/domain/route-visualization";
-import { cn } from "@/lib/utils";
+import { cn } from "@/ui/utils";
 
 const PROFILE_WIDTH = 720;
 const PROFILE_HEIGHT = 92;

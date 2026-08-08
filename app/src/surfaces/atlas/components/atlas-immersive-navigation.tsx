@@ -2,7 +2,7 @@ import { Menu } from "lucide-react";
 import { useRef } from "react";
 import { Link } from "react-router-dom";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/ui/button";
 import {
   Sheet,
   SheetClose,
@@ -12,9 +12,9 @@ import {
   SheetHeader,
   SheetTitle,
   SheetTrigger,
-} from "@/components/ui/sheet";
+} from "@/ui/sheet";
 import routeStats from "@/data/generated/route-stats.json";
-import { cn } from "@/lib/utils";
+import { cn } from "@/ui/utils";
 import { APP_PATHS } from "@/app/route-paths";
 import { APP_SECTIONS } from "@/app/app-sections";
 

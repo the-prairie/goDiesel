@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useEmblaCarousel from "embla-carousel-react";
 import { Link } from "react-router-dom";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/ui/button";
 import { RouteSatelliteThumbnail } from "@/surfaces/atlas/components/route-satellite-thumbnail";
 import type { RouteRegion } from "@/data/route-regions";
 import type { RoutePoint, RouteSummary } from "@/domain/routes";
@@ -13,7 +13,7 @@ import {
   sampleElevationProfile,
   sampleRoutePoints,
 } from "@/domain/route-visualization";
-import { cn } from "@/lib/utils";
+import { cn } from "@/ui/utils";
 
 export const ROUTE_CAROUSEL_SLIDE_CLASS =
   "min-w-0 flex-[0_0_84%] pl-3 sm:basis-[44%] sm:pl-4 xl:basis-[calc((100%-2rem)/3)]";

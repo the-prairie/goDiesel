@@ -1,8 +1,8 @@
 import { Search } from "lucide-react";
 import type { FormEvent } from "react";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/ui/button";
+import { Input } from "@/ui/input";
 import type { FinderIntent } from "@/surfaces/finder/planning";
 
 export function FinderForm({

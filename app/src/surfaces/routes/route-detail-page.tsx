@@ -12,14 +12,14 @@ import { ElevationProfile } from "@/surfaces/routes/components/route-briefing";
 import { RouteGuide } from "@/surfaces/routes/components/route-guide";
 import { RouteLeafMap } from "@/surfaces/routes/components/route-leaf-map";
 import { RouteNotFound } from "@/surfaces/routes/components/route-not-found";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/ui/button";
 import { singleRouteMicrosite } from "@/app/single-route-microsite";
 import { findRouteBySlug } from "@/data/routes";
 import { routeLibraryReturnPath } from "@/data/route-library-return";
 import { useRouteDetail, type RouteDetailState } from "@/data/use-route-detail";
 import type { QuestRoute } from "@/domain/routes";
-import { useIsMobile } from "@/hooks/use-mobile";
-import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/ui/use-mobile";
+import { cn } from "@/ui/utils";
 import { APP_PATHS, decodedRouteSlug, replayPath } from "@/app/route-paths";
 
 type RouteMarginPosition = "peek" | "half" | "expanded";

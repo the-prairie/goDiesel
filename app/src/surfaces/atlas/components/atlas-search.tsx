@@ -3,7 +3,7 @@ import { useDeferredValue, useMemo } from "react";
 
 import type { RouteRegion } from "@/data/route-regions";
 import type { RouteSummary } from "@/domain/routes";
-import { cn } from "@/lib/utils";
+import { cn } from "@/ui/utils";
 
 type AtlasSearchState =
   | "initial"

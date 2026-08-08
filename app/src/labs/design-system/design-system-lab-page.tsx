@@ -9,9 +9,9 @@ import {
   Route,
 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
+import { Button } from "@/ui/button";
+import { Input } from "@/ui/input";
+import { Separator } from "@/ui/separator";
 import {
   Sheet,
   SheetContent,
@@ -19,14 +19,14 @@ import {
   SheetHeader,
   SheetTitle,
   SheetTrigger,
-} from "@/components/ui/sheet";
-import { Skeleton } from "@/components/ui/skeleton";
+} from "@/ui/sheet";
+import { Skeleton } from "@/ui/skeleton";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@/ui/tooltip";
 
 const swatches = [
   ["Canvas", "var(--canvas)"],

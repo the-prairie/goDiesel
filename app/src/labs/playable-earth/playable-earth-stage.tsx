@@ -16,13 +16,13 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/ui/button";
 import {
   RouteContextHud,
   type RouteContextHudState,
 } from "@/surfaces/replay/components/route-context-hud";
 import type { QuestRoute } from "@/domain/routes";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useIsMobile } from "@/ui/use-mobile";
 import {
   advancePlayableEarth,
   PLAYABLE_EARTH_CAMERA_RANGES_M,

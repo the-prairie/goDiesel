@@ -13,7 +13,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/ui/button";
 import { RecordedLightLayer } from "@/surfaces/replay/components/recorded-light-layer";
 import { recordedLightAt } from "@/domain/recorded-light";
 import type { QuestRoute } from "@/domain/routes";

@@ -2,9 +2,9 @@ import { ArrowLeft, ChevronDown, ChevronUp, Map, Route } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/ui/button";
 import type { QuestRoute } from "@/domain/routes";
-import { cn } from "@/lib/utils";
+import { cn } from "@/ui/utils";
 import { routeDetailPath } from "@/app/route-paths";
 
 export type RouteContextHudState = "preview" | "compact" | "expanded";

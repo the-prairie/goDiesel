@@ -1,7 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 
 import routeStats from "@/data/generated/route-stats.json";
-import { cn } from "@/lib/utils";
+import { cn } from "@/ui/utils";
 import { APP_PATHS } from "@/app/route-paths";
 import { APP_SECTIONS, appSectionForPath } from "@/app/app-sections";
 

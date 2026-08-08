@@ -14,7 +14,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/ui/button";
 import {
   ReplayElevationScrubber,
   type ReplayElevationScrubberHandle,
@@ -30,8 +30,8 @@ import {
 } from "@/surfaces/replay/components/recorded-light-layer";
 import { recordedLightAt } from "@/domain/recorded-light";
 import type { QuestRoute, RouteSummary } from "@/domain/routes";
-import { useIsMobile } from "@/hooks/use-mobile";
-import { useReducedMotion } from "@/hooks/use-reduced-motion";
+import { useIsMobile } from "@/ui/use-mobile";
+import { useReducedMotion } from "@/ui/use-reduced-motion";
 import {
   APP_PATHS,
   playableEarthLabPath,
