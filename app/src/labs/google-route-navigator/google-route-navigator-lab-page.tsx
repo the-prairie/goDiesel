@@ -1,6 +1,6 @@
 import { useParams } from "react-router-dom";
 
-import { GoogleRouteNavigatorStage } from "@/components/replay/google-route-navigator-stage";
+import { GoogleRouteNavigatorStage } from "@/surfaces/replay/components/google-route-navigator-stage";
 import { RouteNotFound } from "@/surfaces/routes/components/route-not-found";
 import { findRouteBySlug } from "@/data/routes";
 import { useRouteDetail } from "@/data/use-route-detail";

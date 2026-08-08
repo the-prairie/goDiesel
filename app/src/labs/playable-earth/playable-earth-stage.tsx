@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import {
   RouteContextHud,
   type RouteContextHudState,
-} from "@/components/replay/route-context-hud";
+} from "@/surfaces/replay/components/route-context-hud";
 import type { QuestRoute } from "@/domain/routes";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {

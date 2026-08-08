@@ -20,7 +20,7 @@ const FinderPage = lazy(() =>
   import("@/surfaces/finder/finder-page").then((module) => ({ default: module.FinderPage })),
 );
 const ReplayPage = lazy(() =>
-  import("@/pages/replay-page").then((module) => ({ default: module.ReplayPage })),
+  import("@/surfaces/replay/replay-page").then((module) => ({ default: module.ReplayPage })),
 );
 const PlayableEarthLabPage = lazy(() =>
   import("@/labs/playable-earth/playable-earth-lab-page").then((module) => ({

@@ -1,11 +1,11 @@
 import { useParams, useSearchParams } from "react-router-dom";
 
-import { CinematicDirectorStage } from "@/components/replay/cinematic-director-stage";
+import { CinematicDirectorStage } from "@/surfaces/replay/cinematic/cinematic-director-stage";
 import { RouteNotFound } from "@/surfaces/routes/components/route-not-found";
 import { findRouteBySlug } from "@/data/routes";
 import { useRouteDetail } from "@/data/use-route-detail";
 import { decodedRouteSlug } from "@/app/route-paths";
-import type { CinematicCut } from "@/replay/cinematic/route-cinematic-director";
+import type { CinematicCut } from "@/surfaces/replay/cinematic/route-cinematic-director";
 
 const CINEMATIC_CUTS = new Set<CinematicCut>([
   "feature",

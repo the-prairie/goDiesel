@@ -261,8 +261,8 @@ def test_atlas_search_models_memory_search_states():
 
 
 def test_replay_picker_pins_selected_route_and_avoids_mobile_nav_overlap():
-    replay = (APP / "src/pages/replay-page.tsx").read_text()
-    picker = (APP / "src/components/replay/replay-route-picker.tsx").read_text()
+    replay = (APP / "src/surfaces/replay/replay-page.tsx").read_text()
+    picker = (APP / "src/surfaces/replay/components/replay-route-picker.tsx").read_text()
 
     assert "const pickerRoutes = singleRouteMicrosite" in replay
     assert "? []" in replay
