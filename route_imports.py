@@ -74,3 +74,83 @@ def _optional_iso_date(spec: dict[str, object], field: str) -> str:
     if parsed.isoformat() != value:
         raise ValueError(f"{field} must use a valid YYYY-MM-DD date")
     return value
+
+
+STRAVA_EXPORT = "strava-export"
+IMPORTED_GPX = "imported-gpx"
+SOURCE_KINDS = frozenset((STRAVA_EXPORT, IMPORTED_GPX))
+
+
+def route_source_kind(spec: dict[str, object]) -> str:
+    """Name where a route's geometry and metadata come from.
+
+    A route with `source_gpx` was imported from a standalone file. Every other
+    route comes from the Strava export. The kind is derived, never stored, so it
+    cannot drift away from the data it describes.
+    """
+    return IMPORTED_GPX if spec.get("source_gpx") else STRAVA_EXPORT
+
+
+@dataclass(frozen=True)
+class RouteMetadata:
+    """Display metadata for a route, from whichever source owns it."""
+
+    source_kind: str
+    name: str
+    activity_type: str
+    date: str
+    description: str
+    source_path: Path | None
+
+
+def route_metadata(
+    spec: dict[str, object],
+    checkout_root: Path,
+    activity_row: object = None,
+) -> RouteMetadata | None:
+    """Resolve metadata for one route.
+
+    An imported route describes itself in `quests.json`. A Strava route
+    describes itself in the export row. Returns None only when a Strava route
+    has no row, which is the one case a caller cannot render.
+    """
+    imported = imported_route_from_spec(spec, checkout_root)
+    if imported is not None:
+        return RouteMetadata(
+            source_kind=IMPORTED_GPX,
+            name=imported.name,
+            activity_type=imported.activity_type,
+            date=imported.date,
+            description=imported.description,
+            source_path=imported.path,
+        )
+
+    if activity_row is None:
+        return None
+
+    return RouteMetadata(
+        source_kind=STRAVA_EXPORT,
+        name=_activity_name(activity_row),
+        activity_type=_activity_text(activity_row, "Activity Type"),
+        date=_activity_date(activity_row),
+        description=_activity_text(activity_row, "Activity Description"),
+        source_path=None,
+    )
+
+
+def _activity_name(row: object) -> str:
+    value = row.get("Activity Name")
+    return value if isinstance(value, str) and value.strip() else "(unnamed)"
+
+
+def _activity_text(row: object, field: str) -> str:
+    value = row.get(field, "")
+    if value is None:
+        return ""
+    text = str(value)
+    return "" if not text or text == "nan" else text
+
+
+def _activity_date(row: object) -> str:
+    value = row.get("date")
+    return value.strftime("%Y-%m-%d") if value is not None else ""

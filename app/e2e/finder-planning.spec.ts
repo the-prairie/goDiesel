@@ -91,6 +91,14 @@ test("Finder explains source limits instead of fabricating an unsupported result
 });
 
 test("a planned route never changes completed Atlas totals", async ({ page }) => {
+  await page.goto("/#/atlas");
+  await page.getByRole("button", { name: "Open application navigation" }).click();
+  const initialNavigation = page.getByRole("dialog", { name: "goDiesel navigation" });
+  const initialTotals = (await initialNavigation.locator("p").allTextContents()).filter((text) =>
+    /^(\d+ routes|\d+ km inked)$/.test(text),
+  );
+  expect(initialTotals).toHaveLength(2);
+
   await page.goto("/#/finder");
   await searchKyoto(page);
   await page.getByRole("button", { name: "Save planned route" }).click();
@@ -98,8 +106,10 @@ test("a planned route never changes completed Atlas totals", async ({ page }) =>
   await page.goto("/#/atlas");
   await page.getByRole("button", { name: "Open application navigation" }).click();
   const navigation = page.getByRole("dialog", { name: "goDiesel navigation" });
-  await expect(navigation.getByText("66 routes")).toBeVisible();
-  await expect(navigation.getByText("1908 km inked")).toBeVisible();
+  const finalTotals = (await navigation.locator("p").allTextContents()).filter((text) =>
+    /^(\d+ routes|\d+ km inked)$/.test(text),
+  );
+  expect(finalTotals).toEqual(initialTotals);
   await expect(page.getByText("planned-owner-route-17654151284")).toHaveCount(0);
 });
 

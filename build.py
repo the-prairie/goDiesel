@@ -19,9 +19,11 @@ from quest_meta import (
     build_replay_metadata,
     build_route_curation,
     elevation_gain_m,
+    route_guide_preview,
 )
 from route_provenance import build_route_provenance, load_source_route_points
-from route_imports import imported_route_from_spec
+from route_annotations import build_route_annotations
+from route_imports import route_metadata, route_source_kind
 from route_timezones import route_time_zone
 
 try: import imagehash
@@ -409,25 +411,15 @@ print('[4/5] Building quests…')
 routes_data = []
 for spec in quest_specs:
     aid = spec['activity_id']
-    imported_route = imported_route_from_spec(spec, QUESTS)
-    if imported_route:
-        fp = imported_route.path
-        name = imported_route.name
-        date = imported_route.date
-        typ = imported_route.activity_type
-        desc = imported_route.description
-    else:
-        act = acts_by_id.get(aid)
-        if act is None:
-            print(f'    ✗ {aid}: not found in activities.csv'); continue
-        fp = find_activity_file(aid)
-        if fp is None:
-            print(f'    ✗ {aid}: no .gpx/.fit file'); continue
-        name = (act['Activity Name'] if isinstance(act['Activity Name'], str) else '(unnamed)')
-        date = act['date'].strftime('%Y-%m-%d') if act['date'] else ''
-        typ = act['Activity Type']
-        desc = act.get('Activity Description', '')
-        desc = str(desc) if desc and str(desc) != 'nan' else ''
+    act = acts_by_id.get(aid)
+    meta = route_metadata(spec, QUESTS, act)
+    if meta is None:
+        print(f'    ✗ {aid}: not found in activities.csv'); continue
+    source_kind = meta.source_kind
+    name, date, typ, desc = meta.name, meta.date, meta.activity_type, meta.description
+    fp = meta.source_path or find_activity_file(aid)
+    if fp is None:
+        print(f'    ✗ {aid}: no .gpx/.fit file'); continue
     route_provenance = build_route_provenance(load_source_route_points(fp))
     route_js = route_provenance.route
     if not route_js:
@@ -479,6 +471,7 @@ for spec in quest_specs:
     quest = {
         'slug': slug,
         'activity_id': aid,
+        'source_kind': source_kind,
         'name': region_label,
         'subtitle': subtitle,
         'activity_name': name,
@@ -502,6 +495,16 @@ for spec in quest_specs:
     }
     if spec.get('curation') is not None:
         quest['curation'] = build_route_curation(spec['curation'])
+        # A Strava activity description is empty for most routes, but a public
+        # guide must say something. When the owner has written a guide, its
+        # vibe is the description: their own words, not an invention. A route
+        # with neither stays without one, and the publisher refuses it.
+        if not quest['description']:
+            quest['description'] = quest['curation'].get('vibe', '')
+    if spec.get('annotations') is not None:
+        quest['annotations'] = build_route_annotations(
+            spec['annotations'], route_js[-1]['d']
+        )
     quest['lifecycle'] = lifecycle
     routes_data.append(quest)
     # Generate share card
@@ -555,15 +558,11 @@ def simplify_route_for_manifest(points, max_points=96):
 
 def react_route_manifest_record(route):
     record = react_route_record(route)
-    curation = record.get('curation') or {}
-    guide_preview = {
-        'review_status': curation.get('review_status', 'draft'),
-    }
-    if curation.get('vibe'):
-        guide_preview['vibe'] = curation['vibe']
+    guide_preview = route_guide_preview(record.get('curation'))
     return {
         'slug': record['slug'],
         'activity_id': record['activity_id'],
+        'source_kind': record.get('source_kind', 'strava-export'),
         'lifecycle': record['lifecycle'],
         'name': record['name'],
         'subtitle': record['subtitle'],

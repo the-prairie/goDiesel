@@ -2,8 +2,8 @@ import { completedRoutes } from "@/data/routes";
 import {
   deriveGeographicBounds,
   type GeographicBounds,
-} from "@/domain/geographic-bounds";
-import type { RouteSummary } from "@/domain/routes";
+} from "@/domain/geometry/geographic-bounds";
+import type { RouteSummary } from "@/domain/route";
 
 export interface RouteRegion {
   name: string;

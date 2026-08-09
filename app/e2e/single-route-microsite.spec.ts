@@ -3,20 +3,36 @@ import fs from "node:fs";
 import path from "node:path";
 
 const routeSlug = process.env.VITE_SINGLE_ROUTE_SLUG;
+const routesDirectory = path.resolve(process.cwd(), "public/data/routes");
+
 const route = routeSlug
   ? (JSON.parse(
-      fs.readFileSync(
-        path.resolve(process.cwd(), `public/data/routes/${routeSlug}.json`),
-        "utf8",
-      ),
+      fs.readFileSync(path.join(routesDirectory, `${routeSlug}.json`), "utf8"),
     ) as {
       activity_name?: string;
+      lifecycle?: string;
       name: string;
       region: string;
       subtitle?: string;
     })
   : null;
-const routeTitle = route?.subtitle || route?.activity_name || route?.name;
+
+// Mirror the rule in route-detail-page.tsx: a discovered route leads with what
+// it is called, because it is not a place the owner has been. Anything else
+// leads with the place. Assuming one or the other made this spec pass only for
+// the discovered route it was written against.
+const routeTitle =
+  route?.lifecycle === "discovered"
+    ? route?.activity_name || route?.name
+    : route?.name;
+
+// Any route that is not the shared one, so the redirect assertion is real.
+const otherSlug = routeSlug
+  ? fs
+      .readdirSync(routesDirectory)
+      .map((file) => file.replace(/\.json$/, ""))
+      .find((slug) => slug !== routeSlug)
+  : undefined;
 
 test.describe("single-route microsite", () => {
   test.skip(!routeSlug, "VITE_SINGLE_ROUTE_SLUG is required");
@@ -36,7 +52,8 @@ test.describe("single-route microsite", () => {
     await page.goto("/#/admin");
     await expect(page).toHaveURL(new RegExp(`#\/routes\/${routeSlug}$`));
 
-    await page.goto("/#/routes/17654151284");
+    expect(otherSlug, "another route is needed to prove the redirect").toBeTruthy();
+    await page.goto(`/#/routes/${otherSlug}`);
     await expect(page).toHaveURL(new RegExp(`#\/routes\/${routeSlug}$`));
 
     await page.getByRole("link", { name: "Open replay" }).click();

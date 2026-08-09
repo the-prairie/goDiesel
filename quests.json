@@ -37,8 +37,42 @@
           "Traffic and crossings break continuity leaving and re-entering central Rome",
           "Carry water and plan shade in warm weather"
         ],
-        "review_status": "draft"
-      }
+        "review_status": "reviewed"
+      },
+      "annotations": [
+        {
+          "id": "tiber",
+          "at_distance_m": 1500.0,
+          "kind": "note",
+          "evidence": "hypothesis",
+          "body": "Flat and fast. Bank the time here.",
+          "title": "Tiber riverfront"
+        },
+        {
+          "id": "circus-maximus",
+          "at_distance_m": 5124.2,
+          "kind": "landmark",
+          "evidence": "hypothesis",
+          "body": "The city loosens here. This is where the run stops being urban and starts being archaeological.",
+          "title": "Circus Maximus"
+        },
+        {
+          "id": "cobbles-begin",
+          "at_distance_m": 9679.0,
+          "kind": "warning",
+          "evidence": "hypothesis",
+          "body": "Uneven stone from here. Shorten your stride and expect the rhythm to break.",
+          "title": "Historic cobbles"
+        },
+        {
+          "id": "caffarella",
+          "at_distance_m": 14803.1,
+          "kind": "landmark",
+          "evidence": "hypothesis",
+          "body": "Open archaeological landscape. The payoff of the route, and the point to save legs for the return.",
+          "title": "Parco della Caffarella"
+        }
+      ]
     },
     {
       "activity_id": "13134774070",
@@ -1028,7 +1062,37 @@
         "seasonality": "Seasonal access has not been validated; check current weather and local conditions.",
         "editorial_note": "Selected as the first guide because the recorded route combines urban Kyoto with 680 m of climbing.",
         "review_status": "reviewed"
-      }
+      },
+      "annotations": [
+        {
+          "id": "frame-18f6e2e4",
+          "at_distance_m": 7572.266,
+          "kind": "image",
+          "evidence": "recorded",
+          "title": "Stone stairway",
+          "body": "The long stone stairway through the hillside woods. Autumn leaves on every tread.",
+          "media": {
+            "url": "media/17654151284/18f6e2e4f52a67c7.jpg",
+            "thumb_url": "media/17654151284/18f6e2e4f52a67c7-thumb.jpg",
+            "width": 900,
+            "height": 1600
+          }
+        },
+        {
+          "id": "frame-739b6b1a",
+          "at_distance_m": 8632.414,
+          "kind": "image",
+          "evidence": "recorded",
+          "title": "The ridge opens",
+          "body": "The climb pays out. Kyoto's hills fold away north under low cloud.",
+          "media": {
+            "url": "media/17654151284/739b6b1a48e3411e.jpg",
+            "thumb_url": "media/17654151284/739b6b1a48e3411e-thumb.jpg",
+            "width": 900,
+            "height": 1600
+          }
+        }
+      ]
     },
     {
       "activity_id": "17616195995",

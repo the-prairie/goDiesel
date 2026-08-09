@@ -81,12 +81,15 @@ test("Routes progressively reveals all summaries without fetching route detail J
     "page",
   );
   await expect(routeCards(page)).toHaveCount(24);
-  await expect(page.getByText(/showing 24 of 66 routes/i)).toBeVisible();
+  const initialSummary = page.getByText(/showing 24 of \d+ routes/i);
+  await expect(initialSummary).toBeVisible();
+  const routeTotal = Number((await initialSummary.textContent())?.match(/of (\d+)/)?.[1]);
+  expect(routeTotal).toBeGreaterThan(48);
   await page.getByRole("button", { name: "Load more routes" }).click();
   await expect(routeCards(page)).toHaveCount(48);
   await expect.poll(() => routeSearchParam(page, "page")).toBe("2");
   await page.getByRole("button", { name: "Load more routes" }).click();
-  await expect(routeCards(page)).toHaveCount(66);
+  await expect(routeCards(page)).toHaveCount(routeTotal);
   await expect(page.getByRole("button", { name: "Load more routes" })).toHaveCount(0);
   const cardNames = await routeCards(page)
     .getByRole("link")

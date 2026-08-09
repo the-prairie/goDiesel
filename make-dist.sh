@@ -16,6 +16,7 @@ else
   npm --prefix app run build
 fi
 npm --prefix app run test:bundle
+node scripts/check-provider-key.mjs
 
 rm -rf dist
 mkdir -p dist

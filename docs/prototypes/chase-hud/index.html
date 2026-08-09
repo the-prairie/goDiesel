@@ -1,0 +1,959 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>goDiesel Chase HUD Prototype</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        --ink: #f6f2e9;
+        --muted: #b8c0bd;
+        --panel: rgba(7, 15, 18, 0.86);
+        --line: rgba(239, 242, 234, 0.22);
+        --teal: #7be2d0;
+        --orange: #ff7156;
+        --blue: #8bc5ff;
+        --signal: #e54a32;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        overflow: hidden;
+        background: #071014;
+        color: var(--ink);
+      }
+
+      button {
+        color: inherit;
+        font: inherit;
+      }
+
+      .prototype {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+        min-height: 680px;
+        overflow: hidden;
+        background: #071014;
+      }
+
+      .world {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+      }
+
+      .world img {
+        position: absolute;
+        left: -220px;
+        width: calc(100% + 220px);
+        height: 100%;
+        object-fit: cover;
+        object-position: center 42%;
+        filter: saturate(0.78) contrast(1.06) brightness(0.8);
+        transform: scale(1.025);
+      }
+
+      .world::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          linear-gradient(180deg, rgba(2, 9, 12, 0.42), transparent 24%),
+          linear-gradient(0deg, rgba(2, 9, 12, 0.66), transparent 28%);
+        pointer-events: none;
+      }
+
+      .topbar {
+        position: absolute;
+        top: 22px;
+        left: 24px;
+        right: 24px;
+        z-index: 4;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        pointer-events: none;
+      }
+
+      .place {
+        display: grid;
+        grid-template-columns: 36px auto;
+        align-items: center;
+        gap: 12px;
+        pointer-events: auto;
+      }
+
+      .icon-button,
+      .control-button {
+        display: inline-grid;
+        place-items: center;
+        height: 36px;
+        min-width: 36px;
+        padding: 0 11px;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        background: rgba(4, 11, 14, 0.74);
+        backdrop-filter: blur(16px);
+        cursor: pointer;
+      }
+
+      .place-copy {
+        text-shadow: 0 2px 16px rgba(0, 0, 0, 0.7);
+      }
+
+      .place-copy strong {
+        display: block;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 24px;
+        font-weight: 500;
+      }
+
+      .place-copy span {
+        display: block;
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .top-actions {
+        display: flex;
+        gap: 8px;
+        pointer-events: auto;
+      }
+
+      .hud {
+        position: absolute;
+        z-index: 5;
+        transition:
+          opacity 220ms ease,
+          transform 220ms ease;
+      }
+
+      .metric-label {
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 650;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .metric-value {
+        display: block;
+        margin-top: 3px;
+        font-variant-numeric: tabular-nums;
+        font-size: 16px;
+        font-weight: 600;
+      }
+
+      .metric-value em {
+        color: var(--muted);
+        font-size: 11px;
+        font-style: normal;
+        font-weight: 500;
+      }
+
+      .progress {
+        position: relative;
+        height: 2px;
+        background: rgba(255, 255, 255, 0.2);
+      }
+
+      .progress::before {
+        content: "";
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 37%;
+        background: var(--orange);
+      }
+
+      .progress::after {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 37%;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--orange);
+        transform: translate(-50%, -50%);
+      }
+
+      .variant {
+        display: none;
+      }
+
+      body[data-variant="A"] .variant-a,
+      body[data-variant="B"] .variant-b,
+      body[data-variant="C"] .variant-c,
+      body[data-variant="D"] .variant-d {
+        display: block;
+      }
+
+      /* A: a single instrumentation rail */
+      .variant-a {
+        left: 24px;
+        right: 24px;
+        bottom: 48px;
+        padding: 14px 16px 12px;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        background: var(--panel);
+        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur(18px);
+      }
+
+      .rail {
+        display: grid;
+        grid-template-columns: auto 1fr repeat(4, minmax(72px, auto)) auto;
+        align-items: center;
+        gap: 20px;
+      }
+
+      .rail-progress {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .rail-progress span {
+        color: var(--muted);
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .view-switch {
+        display: flex;
+        gap: 2px;
+        padding: 2px;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+      }
+
+      .view-switch button {
+        padding: 7px 10px;
+        border: 0;
+        border-radius: 2px;
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+      }
+
+      .view-switch .active {
+        background: var(--ink);
+        color: #0b1518;
+      }
+
+      /* B: almost no chrome, metrics anchored to the world */
+      .variant-b {
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .variant-b button {
+        pointer-events: auto;
+      }
+
+      .variant-b .corner-metrics {
+        position: absolute;
+        right: 24px;
+        bottom: 76px;
+        display: grid;
+        grid-template-columns: repeat(2, 104px);
+        border-top: 1px solid rgba(255, 255, 255, 0.44);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(3, 10, 13, 0.48);
+        backdrop-filter: blur(10px);
+      }
+
+      .corner-metrics > div {
+        padding: 12px;
+      }
+
+      .corner-metrics > div:nth-child(odd) {
+        border-right: 1px solid var(--line);
+      }
+
+      .variant-b .bottom-line {
+        position: absolute;
+        left: 24px;
+        right: 24px;
+        bottom: 48px;
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .variant-b .bottom-line strong {
+        min-width: 118px;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .variant-b .bottom-line span {
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      /* C: the paused/expanded state */
+      .variant-c {
+        left: 50%;
+        bottom: 48px;
+        width: min(860px, calc(100% - 48px));
+        transform: translateX(-50%);
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        background: var(--panel);
+        box-shadow: 0 22px 64px rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(20px);
+      }
+
+      .cockpit-main {
+        display: grid;
+        grid-template-columns: auto minmax(220px, 1fr) repeat(4, auto);
+        align-items: center;
+        gap: 18px;
+        padding: 14px 16px;
+      }
+
+      .elevation {
+        position: relative;
+        height: 82px;
+        margin: 0 16px 16px;
+        border-top: 1px solid var(--line);
+        overflow: hidden;
+      }
+
+      .elevation svg {
+        width: 100%;
+        height: 100%;
+      }
+
+      .elevation path {
+        fill: rgba(123, 226, 208, 0.12);
+        stroke: var(--teal);
+        stroke-width: 2;
+        vector-effect: non-scaling-stroke;
+      }
+
+      .elevation .marker {
+        position: absolute;
+        top: 8px;
+        bottom: 0;
+        left: 37%;
+        width: 1px;
+        background: var(--orange);
+      }
+
+      /* D: cinematic field intelligence */
+      body[data-variant="D"] .world img {
+        filter: grayscale(1) contrast(1.34) brightness(0.48);
+      }
+
+      body[data-variant="D"] .world::after {
+        background:
+          linear-gradient(180deg, rgba(0, 0, 0, 0.62), transparent 28%),
+          linear-gradient(0deg, rgba(0, 0, 0, 0.88), transparent 45%),
+          linear-gradient(90deg, rgba(0, 0, 0, 0.38), transparent 28%);
+      }
+
+      body[data-variant="D"] .topbar {
+        display: none;
+      }
+
+      .variant-d {
+        inset: 0;
+        overflow: hidden;
+        pointer-events: none;
+        font-family: "Arial Narrow", "Roboto Condensed", Arial, sans-serif;
+      }
+
+      .intel-grid {
+        position: absolute;
+        inset: 0;
+        opacity: 0.15;
+        background-image:
+          linear-gradient(rgba(255, 255, 255, 0.22) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.22) 1px, transparent 1px);
+        background-size: 88px 88px;
+        mask-image: linear-gradient(180deg, black, transparent 78%);
+      }
+
+      .intel-scan {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 43%;
+        width: 1px;
+        background: rgba(255, 255, 255, 0.42);
+        box-shadow: 0 0 28px rgba(255, 255, 255, 0.34);
+      }
+
+      .intel-scan::after {
+        content: "";
+        position: absolute;
+        top: 42%;
+        left: 50%;
+        width: 12px;
+        height: 12px;
+        border: 1px solid white;
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+        box-shadow:
+          0 0 0 8px rgba(255, 255, 255, 0.06),
+          0 0 18px rgba(255, 255, 255, 0.34);
+      }
+
+      .intel-header {
+        position: absolute;
+        top: 22px;
+        left: 26px;
+        right: 26px;
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: start;
+        color: rgba(255, 255, 255, 0.74);
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .intel-header strong {
+        display: block;
+        margin-bottom: 5px;
+        color: white;
+        font-size: 17px;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+      }
+
+      .intel-header .operation {
+        text-align: center;
+      }
+
+      .intel-header .status {
+        text-align: right;
+      }
+
+      .intel-header .status b {
+        color: var(--signal);
+        font-weight: 700;
+      }
+
+      .intel-location {
+        position: absolute;
+        top: 20%;
+        left: 26px;
+        width: 220px;
+        padding-top: 10px;
+        border-top: 1px solid rgba(255, 255, 255, 0.6);
+        color: rgba(255, 255, 255, 0.68);
+        font-size: 10px;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+      }
+
+      .intel-location strong {
+        display: block;
+        margin-bottom: 5px;
+        color: white;
+        font-size: 24px;
+        font-weight: 400;
+        letter-spacing: 0.03em;
+      }
+
+      .intel-location .coordinate {
+        display: block;
+        margin-top: 12px;
+        color: var(--signal);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .intel-telemetry {
+        position: absolute;
+        top: 20%;
+        right: 26px;
+        width: 178px;
+        border-top: 1px solid rgba(255, 255, 255, 0.6);
+      }
+
+      .intel-telemetry > div {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        padding: 10px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+      }
+
+      .intel-telemetry .metric-label {
+        color: rgba(255, 255, 255, 0.52);
+      }
+
+      .intel-telemetry .metric-value {
+        margin: 0;
+        color: white;
+        font-size: 15px;
+      }
+
+      .intel-route-tag {
+        position: absolute;
+        top: 42%;
+        left: calc(43% + 18px);
+        padding: 8px 10px;
+        border-left: 2px solid var(--signal);
+        background: rgba(0, 0, 0, 0.74);
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 9px;
+        letter-spacing: 0.08em;
+        line-height: 1.45;
+        text-transform: uppercase;
+      }
+
+      .intel-route-tag strong {
+        display: block;
+        color: white;
+        font-size: 11px;
+        font-weight: 600;
+      }
+
+      .intel-timeline {
+        position: absolute;
+        right: 0;
+        bottom: 34px;
+        left: 0;
+        height: 190px;
+        padding: 16px 26px 14px;
+        border-top: 1px solid rgba(255, 255, 255, 0.52);
+        background: rgba(0, 0, 0, 0.84);
+        pointer-events: auto;
+      }
+
+      .intel-timeline-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        margin-bottom: 8px;
+        color: rgba(255, 255, 255, 0.56);
+        font-size: 9px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .intel-timeline-head strong {
+        color: white;
+        font-size: 14px;
+        font-weight: 500;
+      }
+
+      .intel-chart {
+        position: relative;
+        height: 98px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.42);
+        background-image: linear-gradient(
+          90deg,
+          transparent 0 9.7%,
+          rgba(255, 255, 255, 0.12) 9.8% 10%,
+          transparent 10% 19.7%,
+          rgba(255, 255, 255, 0.12) 19.8% 20%,
+          transparent 20% 29.7%,
+          rgba(255, 255, 255, 0.12) 29.8% 30%,
+          transparent 30% 39.7%,
+          rgba(255, 255, 255, 0.12) 39.8% 40%,
+          transparent 40% 49.7%,
+          rgba(255, 255, 255, 0.12) 49.8% 50%,
+          transparent 50% 59.7%,
+          rgba(255, 255, 255, 0.12) 59.8% 60%,
+          transparent 60% 69.7%,
+          rgba(255, 255, 255, 0.12) 69.8% 70%,
+          transparent 70% 79.7%,
+          rgba(255, 255, 255, 0.12) 79.8% 80%,
+          transparent 80% 89.7%,
+          rgba(255, 255, 255, 0.12) 89.8% 90%,
+          transparent 90%
+        );
+      }
+
+      .intel-chart svg {
+        width: 100%;
+        height: 100%;
+      }
+
+      .intel-chart path {
+        fill: rgba(255, 255, 255, 0.08);
+        stroke: rgba(255, 255, 255, 0.9);
+        stroke-width: 1.4;
+        vector-effect: non-scaling-stroke;
+      }
+
+      .intel-progress-marker {
+        position: absolute;
+        top: 0;
+        bottom: -20px;
+        left: 37%;
+        width: 1px;
+        background: var(--signal);
+      }
+
+      .intel-progress-marker::before {
+        content: "04.61 KM";
+        position: absolute;
+        top: -1px;
+        left: 7px;
+        color: var(--signal);
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+      }
+
+      .intel-controls {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 9px;
+      }
+
+      .intel-controls .control-button {
+        height: 28px;
+        min-width: 28px;
+        border-color: rgba(255, 255, 255, 0.34);
+        border-radius: 0;
+        background: transparent;
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .intel-controls .mode {
+        color: rgba(255, 255, 255, 0.62);
+        font-size: 9px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .intel-controls .mode strong {
+        margin-left: 8px;
+        color: white;
+        font-weight: 600;
+      }
+
+      .switcher {
+        position: fixed;
+        z-index: 20;
+        left: 50%;
+        bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px;
+        border: 1px solid rgba(255, 255, 255, 0.24);
+        border-radius: 4px;
+        background: #071014;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.38);
+        transform: translateX(-50%);
+      }
+
+      .switcher button {
+        height: 26px;
+        border: 0;
+        border-radius: 2px;
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+      }
+
+      .switcher button:first-child,
+      .switcher button:last-child {
+        width: 28px;
+      }
+
+      .switcher .variant-name {
+        min-width: 160px;
+        padding: 0 12px;
+        color: var(--ink);
+        font-size: 11px;
+        text-align: center;
+      }
+
+      .playing .topbar {
+        opacity: 0.58;
+      }
+
+      @media (max-width: 800px) {
+        .world img {
+          left: -120px;
+          width: calc(100% + 120px);
+        }
+
+        .place-copy strong {
+          font-size: 19px;
+        }
+
+        .rail {
+          grid-template-columns: auto 1fr auto;
+        }
+
+        .rail > .metric {
+          display: none;
+        }
+
+        .view-switch button:not(.active) {
+          display: none;
+        }
+
+        .variant-b .corner-metrics {
+          grid-template-columns: repeat(2, 88px);
+        }
+
+        .cockpit-main {
+          grid-template-columns: auto 1fr repeat(2, auto);
+        }
+
+        .cockpit-main .metric:nth-of-type(n + 3) {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body data-variant="A">
+    <!-- Three variants of a chase-view HUD, switchable via ?variant=A|B|C. -->
+    <main class="prototype" id="prototype">
+      <div class="world" aria-hidden="true">
+        <img src="./chase-source.png" alt="" />
+      </div>
+
+      <header class="topbar">
+        <div class="place">
+          <button class="icon-button" aria-label="Exit chase view">←</button>
+          <div class="place-copy">
+            <strong>Bay Area, CA</strong>
+            <span>28.5 km · 493 m up · Run</span>
+          </div>
+        </div>
+        <div class="top-actions">
+          <button class="control-button">Chase</button>
+          <button class="icon-button" aria-label="More options">•••</button>
+        </div>
+      </header>
+
+      <section class="hud variant variant-a" aria-label="Telemetry rail">
+        <div class="rail">
+          <button class="control-button play-toggle">Pause</button>
+          <div class="rail-progress">
+            <span>4.61 km</span>
+            <div class="progress"></div>
+            <span>28.5 km</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Elapsed</span>
+            <span class="metric-value">42:18</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Pace</span>
+            <span class="metric-value">5:32 <em>/km</em></span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Elevation</span>
+            <span class="metric-value">184 <em>m</em></span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Grade</span>
+            <span class="metric-value">3.8 <em>%</em></span>
+          </div>
+          <div class="view-switch" aria-label="Camera view">
+            <button>Runner</button>
+            <button class="active">Chase</button>
+            <button>Overview</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="hud variant variant-b" aria-label="Corner HUD">
+        <div class="corner-metrics">
+          <div>
+            <span class="metric-label">Pace</span>
+            <span class="metric-value">5:32 <em>/km</em></span>
+          </div>
+          <div>
+            <span class="metric-label">Elevation</span>
+            <span class="metric-value">184 <em>m</em></span>
+          </div>
+          <div>
+            <span class="metric-label">Elapsed</span>
+            <span class="metric-value">42:18</span>
+          </div>
+          <div>
+            <span class="metric-label">Grade</span>
+            <span class="metric-value">3.8 <em>%</em></span>
+          </div>
+        </div>
+        <div class="bottom-line">
+          <button class="control-button play-toggle">Pause</button>
+          <div class="progress"></div>
+          <strong>4.61 / 28.5 km</strong>
+        </div>
+      </section>
+
+      <section class="hud variant variant-c" aria-label="Expanded cockpit HUD">
+        <div class="cockpit-main">
+          <button class="control-button play-toggle">Pause</button>
+          <div class="rail-progress">
+            <span>4.61 km</span>
+            <div class="progress"></div>
+            <span>28.5 km</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Elapsed</span>
+            <span class="metric-value">42:18</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Pace</span>
+            <span class="metric-value">5:32 <em>/km</em></span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Elevation</span>
+            <span class="metric-value">184 <em>m</em></span>
+          </div>
+          <div class="view-switch">
+            <button>Runner</button>
+            <button class="active">Chase</button>
+            <button>Overview</button>
+          </div>
+        </div>
+        <div class="elevation" aria-label="Elevation profile">
+          <svg viewBox="0 0 800 80" preserveAspectRatio="none">
+            <path
+              d="M0,67 C45,65 58,54 92,56 S145,38 181,42 S229,25 268,31 S323,18 356,24 S408,51 451,48 S508,29 545,35 S603,20 650,27 S705,49 800,41 L800,80 L0,80 Z"
+            />
+          </svg>
+          <div class="marker"></div>
+        </div>
+      </section>
+
+      <section class="hud variant variant-d" aria-label="Field intelligence HUD">
+        <div class="intel-grid" aria-hidden="true"></div>
+        <div class="intel-scan" aria-hidden="true"></div>
+        <header class="intel-header">
+          <div>
+            <strong>goDiesel</strong>
+            Personal route intelligence
+          </div>
+          <div class="operation">
+            Field replay / activity 14736711660<br />
+            2025-03-05 · Run
+          </div>
+          <div class="status">
+            Route lock <b>active</b><br />
+            Signal 98.4%
+          </div>
+        </header>
+        <div class="intel-location">
+          <strong>Bay Area, CA</strong>
+          Chase view · Segment 04
+          <span class="coordinate">37.7694° N · 122.4862° W</span>
+        </div>
+        <aside class="intel-telemetry" aria-label="Run telemetry">
+          <div>
+            <span class="metric-label">Elapsed</span>
+            <span class="metric-value">42:18</span>
+          </div>
+          <div>
+            <span class="metric-label">Pace</span>
+            <span class="metric-value">5:32 <em>/km</em></span>
+          </div>
+          <div>
+            <span class="metric-label">Elevation</span>
+            <span class="metric-value">184 <em>m</em></span>
+          </div>
+          <div>
+            <span class="metric-label">Grade</span>
+            <span class="metric-value">3.8 <em>%</em></span>
+          </div>
+        </aside>
+        <div class="intel-route-tag">
+          <strong>Route position acquired</strong>
+          4.61 / 28.5 km<br />
+          Heading 013°
+        </div>
+        <div class="intel-timeline">
+          <div class="intel-timeline-head">
+            <strong>Terrain profile</strong>
+            <span>28.5 km · 493 m ascent · 01:38:12 projected</span>
+          </div>
+          <div class="intel-chart">
+            <svg viewBox="0 0 1000 100" preserveAspectRatio="none">
+              <path
+                d="M0,83 C45,78 70,62 110,65 S166,45 208,52 S278,28 332,35 S397,18 440,30 S505,67 558,60 S625,36 680,44 S752,25 814,34 S892,65 1000,51 L1000,100 L0,100 Z"
+              />
+            </svg>
+            <div class="intel-progress-marker"></div>
+          </div>
+          <div class="intel-controls">
+            <button class="control-button play-toggle">Pause</button>
+            <span class="mode">Camera mode <strong>Chase / locked</strong></span>
+            <button class="control-button">Exit field view</button>
+          </div>
+        </div>
+      </section>
+
+      <nav class="switcher" aria-label="Prototype variants">
+        <button id="previous" aria-label="Previous variant">←</button>
+        <button class="variant-name" id="variant-name">A · Telemetry rail</button>
+        <button id="next" aria-label="Next variant">→</button>
+      </nav>
+    </main>
+
+    <script>
+      const variants = [
+        ["A", "Telemetry rail"],
+        ["B", "Corner HUD"],
+        ["C", "Expanded cockpit"],
+        ["D", "Field intelligence"],
+      ];
+      const params = new URLSearchParams(window.location.search);
+      let current = Math.max(
+        0,
+        variants.findIndex(([key]) => key === (params.get("variant") || "A")),
+      );
+
+      function renderVariant() {
+        const [key, name] = variants[current];
+        document.body.dataset.variant = key;
+        document.getElementById("variant-name").textContent = `${key} · ${name}`;
+        const nextUrl = new URL(window.location.href);
+        nextUrl.searchParams.set("variant", key);
+        history.replaceState({}, "", nextUrl);
+      }
+
+      function move(delta) {
+        current = (current + delta + variants.length) % variants.length;
+        renderVariant();
+      }
+
+      document.getElementById("previous").addEventListener("click", () => move(-1));
+      document.getElementById("next").addEventListener("click", () => move(1));
+      document.querySelectorAll(".play-toggle").forEach((button) => {
+        button.addEventListener("click", () => {
+          const playing = document.getElementById("prototype").classList.toggle("playing");
+          document.querySelectorAll(".play-toggle").forEach((control) => {
+            control.textContent = playing ? "Play" : "Pause";
+          });
+        });
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "ArrowLeft") move(-1);
+        if (event.key === "ArrowRight") move(1);
+      });
+      renderVariant();
+    </script>
+  </body>
+</html>

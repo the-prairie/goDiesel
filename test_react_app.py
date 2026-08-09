@@ -8,6 +8,9 @@ from quest_meta import build_route_curation
 
 ROOT = Path(__file__).parent
 APP = ROOT / "app"
+# NOTE: the paths below track the app/src layout. They are a filename coupling
+# that TypeScript cannot verify, so they must be updated in the same commit as
+# any move of the files they read.
 MANIFEST = APP / "src/data/generated/routes.manifest.json"
 ROUTE_DETAILS = APP / "public/data/routes"
 
@@ -16,18 +19,19 @@ def test_shadcn_project_config_exists():
     config = json.loads((APP / "components.json").read_text())
 
     assert config["tsx"] is True
-    assert config["aliases"]["ui"] == "@/components/ui"
+    assert config["aliases"]["ui"] == "@/ui"
     assert config["tailwind"]["css"] == "src/index.css"
 
 
 def test_app_shell_defines_expected_navigation_and_hash_route_support():
-    shell = (APP / "src/components/app-shell.tsx").read_text()
-    spine = (APP / "src/components/atlas-spine.tsx").read_text()
-    router = (APP / "src/router.tsx").read_text()
-    navigation = (APP / "src/navigation.ts").read_text()
+    shell = (APP / "src/app/app-shell.tsx").read_text()
+    spine = (APP / "src/surfaces/atlas/components/atlas-spine.tsx").read_text()
+    router = (APP / "src/app/router.tsx").read_text()
+    navigation = (APP / "src/app/route-paths.ts").read_text()
+    sections = (APP / "src/app/app-sections.ts").read_text()
 
     for label in ("Atlas", "Finder", "Routes", "Replay", "Admin"):
-        assert label in navigation
+        assert label in sections
 
     assert 'createHashRouter' in router
     assert 'Navigate to={APP_PATHS.atlas} replace' in router
@@ -42,13 +46,18 @@ def test_app_shell_defines_expected_navigation_and_hash_route_support():
     assert 'aria-label="Primary"' in spine
     assert 'appSectionForPath(location.pathname)' in spine
     assert 'aria-current={isActive ? "page" : undefined}' in spine
-    assert '<AtlasSpine />' in shell
+    assert "singleRouteMicrosite ? null" in shell
+    assert '<AtlasSpine hideDesktop={isAtlas} />' in shell
     assert '<Outlet />' in shell
 
 
 def test_route_domain_models_completed_planned_and_discovered_states():
-    lifecycle = (APP / "src/domain/route-lifecycle.ts").read_text()
-    routes = (APP / "src/domain/routes.ts").read_text()
+    lifecycle = (APP / "src/domain/route/lifecycle.ts").read_text()
+    # The route contract is split across domain/route/ per ADR-0004, so read the
+    # whole directory rather than one file.
+    routes = "\n".join(
+        path.read_text() for path in sorted((APP / "src/domain/route").glob("*.ts"))
+    )
 
     assert '"completed" | "planned" | "discovered"' in lifecycle
     assert 'RouteGeometryStatus = "ready" | "missing"' in routes
@@ -145,6 +154,7 @@ def test_release_build_packages_the_react_application():
     packaging = (ROOT / "make-dist.sh").read_text()
     readme = (ROOT / "README.md").read_text()
     wrangler = (ROOT / "wrangler.toml").read_text()
+    vite = (APP / "vite.config.ts").read_text()
 
     assert "npm --prefix app run build" in packaging
     assert "npm --prefix app run test:bundle" in packaging
@@ -153,6 +163,7 @@ def test_release_build_packages_the_react_application():
     assert "The React application is the canonical product" in readme
     assert "static-fallback-2026-07-14" in readme
     assert 'pages_build_output_dir = "./dist"' in wrangler
+    assert 'process.env.GODIESEL_DISABLE_LIVE_PROVIDERS === "1"' in vite
 
 
 def test_generated_route_publication_is_staged_and_rollback_safe():
@@ -209,25 +220,30 @@ def test_interrupted_route_publication_restores_last_complete_generation(tmp_pat
 
 
 def test_atlas_globe_ports_route_heat_traces_and_interaction():
-    globe = (APP / "src/components/globe/atlas-globe.tsx").read_text()
-    atlas = (APP / "src/pages/atlas-page.tsx").read_text()
+    globe = (APP / "src/surfaces/atlas/components/atlas-globe.tsx").read_text()
+    cesium_globe = (APP / "src/surfaces/atlas/components/cesium-atlas-globe.tsx").read_text()
+    engine = (APP / "src/surfaces/atlas/cesium-atlas-world-engine.ts").read_text()
+    atlas = (APP / "src/surfaces/atlas/atlas-page.tsx").read_text()
 
-    assert 'from "three"' in globe
-    assert "function routeToGlobeHeatPoints" in globe
-    assert "function makeGlobeHeatLine" in globe
-    assert "function syncLabelBounds" in globe
-    assert "state.labelBounds" in globe
-    assert "label.offsetWidth" not in globe[globe.find("function updateLabels"):]
-    assert "new TubeGeometry" in globe
-    assert "blending: AdditiveBlending" in globe
-    assert "new TextureLoader().load" in globe
-    assert "intersectObjects(state.anchors" in globe
-    assert "cameraDistance + event.deltaY * 0.004" in globe
+    assert 'lazy(() =>' in globe
+    assert 'import("@/surfaces/atlas/components/cesium-atlas-globe")' in globe
+    assert "<Suspense" in globe
+    assert "<CesiumAtlasGlobe ref={ref} {...props} />" in globe
+    assert "createAtlasWorldEngine()" in cesium_globe
+    assert "engine.destroy()" in cesium_globe
+    assert "readyEngineRef.current?.setSelectedRegion(selectedRegion)" in cesium_globe
+    assert "readyEngineRef.current?.setSelectedRoute(selectedRoute)" in cesium_globe
+    assert 'from "cesium"' in engine
+    assert "Cesium3DTileset.fromUrl" in engine
+    assert "sampleGlobalRoutePoints(route)" in engine
+    assert "sampleRegionalRoutePoints(route)" in engine
+    assert "this.installRouteSelection(viewer)" in engine
+    assert "routeForPickedEntity" in engine
     assert "<AtlasGlobe" in atlas
 
 
 def test_atlas_search_models_memory_search_states():
-    search = (APP / "src/components/search/atlas-search.tsx").read_text()
+    search = (APP / "src/surfaces/atlas/components/atlas-search.tsx").read_text()
 
     for state in (
         "initial",
@@ -244,15 +260,17 @@ def test_atlas_search_models_memory_search_states():
     assert "Best in Earth" in search
     assert "function searchState" in search
     assert "selectedLabel" not in search
-    assert "selectionActive: Boolean(selectedRegion)" in search
+    assert "selectionActive: Boolean(selectedRoute)" in search
     assert "SelectedSearchResult" not in search
 
 
 def test_replay_picker_pins_selected_route_and_avoids_mobile_nav_overlap():
-    replay = (APP / "src/pages/replay-page.tsx").read_text()
-    picker = (APP / "src/components/replay/replay-route-picker.tsx").read_text()
+    replay = (APP / "src/surfaces/replay/replay-page.tsx").read_text()
+    picker = (APP / "src/surfaces/replay/components/replay-route-picker.tsx").read_text()
 
-    assert "const pickerRoutes = selectedSummary" in replay
+    assert "const pickerRoutes = singleRouteMicrosite" in replay
+    assert "? []" in replay
+    assert "selectedSummary," in replay
     assert ".filter((route) => route.slug !== selectedSummary.slug)" in replay
     assert "Change route" in picker
     assert "min-h-0 flex-1" in picker

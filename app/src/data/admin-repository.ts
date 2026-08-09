@@ -5,8 +5,8 @@ import {
   toCurationPayload,
   type AdminRouteRecord,
   type CurationDraft,
-} from "@/domain/admin-curation";
-import type { RouteCuration } from "@/domain/routes";
+} from "@/surfaces/admin/admin-curation";
+import type { RouteCuration } from "@/domain/route";
 
 const adminApiBase =
   import.meta.env.VITE_ADMIN_API_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8766";

@@ -11,6 +11,7 @@ Endpoints:
 """
 import gzip
 import json
+import os
 import math
 import re
 import subprocess
@@ -27,25 +28,65 @@ from urllib.parse import urlparse
 import gpxpy
 import pandas as pd
 
-from admin_curation import curation_readiness, save_curation_and_rebuild
+from admin_curation import curation_readiness, save_curation_and_rebuild, write_atomic
+import hashlib
+import tempfile
+
+from curation_publish import (
+    CurationPublishError,
+    publish_annotations,
+    publish_curation,
+)
+from route_imports import route_metadata
+from route_media import (
+    match_photo_to_route,
+    publish_photo,
+    read_photo_metadata,
+)
 
 try:
     import fitparse
 except ImportError:
     fitparse = None
 
-QUESTS = Path('/Users/laurenzary/Desktop/goDiesel')
-DD = Path('/Users/laurenzary/Desktop/DieselDiaries')
+QUESTS = Path(
+    os.environ.get("GODIESEL_CHECKOUT_ROOT", Path(__file__).resolve().parent)
+).resolve()
+DD = Path(
+    os.environ.get("GODIESEL_DIESEL_DIARIES_ROOT", "/Users/laurenzary/Desktop/DieselDiaries")
+).resolve()
 ACTIVITY_DIR = DD / 'strava_export' / 'activities'
 GEO_CACHE_PATH = QUESTS / '.geo_cache.json'
 GEOCODE_BUCKETS_PATH = QUESTS / '.geocode_buckets.json'
-PORT = 8766
+PORT = int(os.environ.get("GODIESEL_ADMIN_PORT", "8766"))
+CONFIGURED_APP_ORIGINS = frozenset(
+    origin.strip()
+    for origin in os.environ.get(
+        "GODIESEL_APP_ORIGINS",
+        "http://localhost:8787,http://127.0.0.1:8787",
+    ).split(",")
+    if origin.strip()
+)
+ALLOWED_ORIGINS = CONFIGURED_APP_ORIGINS | {
+    f'http://localhost:{PORT}',
+    f'http://127.0.0.1:{PORT}',
+}
+MAX_POST_BYTES = 1024 * 1024
+# A photograph is far larger than a JSON body, and HEIC from a recent iPhone can
+# be several megabytes. This cap applies only to the media upload path.
+MAX_MEDIA_BYTES = 25 * 1024 * 1024
+SLUG_PATTERN = re.compile(r'^[A-Za-z0-9._-]+$')
+MEDIA_ROOT = QUESTS / 'app' / 'public' / 'media'
+OWNER_MUTATION_LOCK = threading.Lock()
 TEAL = '#00F19F'
 CURATION_TEXT_FIELDS = ('title', 'theme', 'difficulty', 'blurb', 'completion_rule')
 CURATION_VISIBILITIES = ('public', 'hidden')
 
 # Nominatim fair-use: max 1 req/sec, descriptive User-Agent required.
-NOMINATIM_USER_AGENT = 'QuestsAdmin/1.0 (personal use; lauren@purposemed.com)'
+NOMINATIM_USER_AGENT = os.environ.get(
+    'GODIESEL_NOMINATIM_USER_AGENT',
+    'goDieselOwnerAdmin/1.0',
+)
 NOMINATIM_URL = 'https://nominatim.openstreetmap.org/reverse'
 GEOCODE_BUCKET_DEG = 0.05  # ~5 km cells — nearby rides share a single API call
 
@@ -443,6 +484,25 @@ def polyline_svg(aid):
     return svg
 
 
+def _summary_distance_km(activity_row, generated_route):
+    """Distance for the Admin list.
+
+    A Strava row carries Distance. An imported route does not, so fall back to
+    the generated record, which derives distance from the recorded trace.
+    """
+    if activity_row is not None:
+        try:
+            return round(float(activity_row.get('Distance') or 0), 1)
+        except (TypeError, ValueError):
+            pass
+    if generated_route:
+        try:
+            return round(float(generated_route.get('distance_km') or 0), 1)
+        except (TypeError, ValueError):
+            pass
+    return 0.0
+
+
 def routes_summary():
     cfg = json.loads((QUESTS / 'quests.json').read_text())
     manifest_path = QUESTS / 'app' / 'src' / 'data' / 'generated' / 'routes.manifest.json'
@@ -457,19 +517,18 @@ def routes_summary():
     for r in cfg.get('routes', []):
         aid = r['activity_id']
         act = acts_by_id.get(aid)
-        if act is None:
+        # An imported route describes itself in quests.json and has no export
+        # row. Resolve metadata through the shared adapter so both source kinds
+        # reach the curator. Skipping here is what made an imported route
+        # invisible in Admin, and therefore impossible to curate.
+        meta = route_metadata(r, QUESTS, act)
+        if meta is None:
             continue
-        name_raw = act.get('Activity Name')
-        name = name_raw if isinstance(name_raw, str) and name_raw.strip() else '(unnamed)'
-        date_obj = act['date']
-        date = date_obj.strftime('%Y-%m-%d') if date_obj is not None else ''
-        typ = act.get('Activity Type') or ''
-        try:
-            km = float(act.get('Distance') or 0)
-        except (TypeError, ValueError):
-            km = 0.0
-        desc_raw = act.get('Activity Description', '')
-        desc = str(desc_raw) if desc_raw and str(desc_raw) != 'nan' else ''
+        name = meta.name
+        date = meta.date
+        typ = meta.activity_type
+        desc = meta.description
+        km = _summary_distance_km(act, generated_routes.get(str(aid)))
         status = r.get('status', 'pending')
         # Treat legacy 'rejected' as 'archived' (same concept, friendlier name)
         if status == 'rejected':
@@ -477,13 +536,14 @@ def routes_summary():
         auto_region = (geo_cache.get(aid) or {}).get('region') or ''
         item = {
             'activity_id': aid,
+            'source_kind': meta.source_kind,
             'status': status,
             'region': r.get('region') or '',
             'auto_region': auto_region,
             'name': name,
             'date': date,
             'type': typ,
-            'distance_km': round(km, 1),
+            'distance_km': km,
             'description': desc[:240],
             'visibility': r.get('visibility') or 'public',
             'curation': r.get('curation') or {'review_status': 'draft'},
@@ -516,16 +576,23 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Length', str(len(body)))
         self.send_header('Cache-Control', 'no-store')
         origin = self.headers.get('Origin')
-        if origin in ('http://localhost:8787', 'http://127.0.0.1:8787'):
+        if origin in ALLOWED_ORIGINS:
             self.send_header('Access-Control-Allow-Origin', origin)
             self.send_header('Vary', 'Origin')
         self.end_headers()
         self.wfile.write(body)
 
+    def _origin_allowed(self):
+        origin = self.headers.get('Origin')
+        return origin is None or origin in ALLOWED_ORIGINS
+
     def do_OPTIONS(self):
         origin = self.headers.get('Origin')
+        if origin not in ALLOWED_ORIGINS:
+            self._send(403, {'error': 'origin not allowed'})
+            return
         self.send_response(204)
-        if origin in ('http://localhost:8787', 'http://127.0.0.1:8787'):
+        if origin in ALLOWED_ORIGINS:
             self.send_header('Access-Control-Allow-Origin', origin)
             self.send_header('Vary', 'Origin')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
@@ -565,59 +632,181 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._send(404, {'error': 'not found'})
 
+    def _handle_media_upload(self):
+        """Accept one dropped photograph and propose where it belongs.
+
+        The browser cannot decode HEIC and cannot read EXIF, so the file arrives
+        here as raw bytes. This endpoint reads the position and the clock,
+        proposes an anchor, and publishes a stripped copy. It does not create an
+        annotation. A curator accepts a proposal through /api/annotations/save.
+        """
+        slug = self.headers.get('X-Route-Slug', '')
+        if not SLUG_PATTERN.match(slug or ''):
+            self._send(400, {'error': 'X-Route-Slug is missing or malformed'})
+            return
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+        except ValueError:
+            self._send(400, {'error': 'invalid Content-Length'})
+            return
+        if length <= 0:
+            self._send(400, {'error': 'empty upload'})
+            return
+        if length > MAX_MEDIA_BYTES:
+            self._send(413, {'error': 'image too large'})
+            return
+
+        detail_path = QUESTS / 'app' / 'public' / 'data' / 'routes' / f'{slug}.json'
+        if not detail_path.is_file():
+            self._send(404, {'error': f'route {slug} has no generated record'})
+            return
+        detail = json.loads(detail_path.read_text(encoding='utf-8'))
+        temporal = detail.get('provenance', {}).get('temporal', {})
+
+        payload = self.rfile.read(length)
+        digest = hashlib.sha256(payload).hexdigest()[:16]
+        with tempfile.NamedTemporaryFile(delete=False) as staged:
+            staged.write(payload)
+            staged_path = Path(staged.name)
+        try:
+            try:
+                photo = read_photo_metadata(
+                    staged_path, fallback_time_zone=temporal.get('time_zone')
+                )
+            except Exception:
+                self._send(400, {'error': 'the upload is not a readable image'})
+                return
+            proposal = match_photo_to_route(
+                photo,
+                detail.get('route') or [],
+                temporal,
+                detail.get('provenance', {}).get('discontinuities'),
+            )
+            media = publish_photo(staged_path, MEDIA_ROOT / slug, slug, digest)
+        finally:
+            staged_path.unlink(missing_ok=True)
+
+        self._send(200, {
+            'ok': True,
+            'digest': digest,
+            'media': media,
+            'match': proposal,
+            'had_position': photo.get('lat') is not None,
+            'had_time': photo.get('taken_utc') is not None,
+        })
+
     def do_POST(self):
         path = urlparse(self.path).path
-        n = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(n).decode('utf-8') if n else ''
+        if not self._origin_allowed():
+            self._send(403, {'error': 'origin not allowed'})
+            return
+        # Media arrives as raw bytes, so it is handled before the UTF-8 decode
+        # that every JSON endpoint depends on.
+        if path == '/api/media/upload':
+            if not OWNER_MUTATION_LOCK.acquire(blocking=False):
+                self._send(409, {'error': 'another owner mutation is in progress'})
+                return
+            try:
+                self._handle_media_upload()
+            finally:
+                OWNER_MUTATION_LOCK.release()
+            return
+        try:
+            n = int(self.headers.get('Content-Length', 0))
+        except ValueError:
+            self._send(400, {'error': 'invalid Content-Length'})
+            return
+        if n < 0:
+            self._send(400, {'error': 'invalid Content-Length'})
+            return
+        if n > MAX_POST_BYTES:
+            self._send(413, {'error': 'request body too large'})
+            return
+        try:
+            body = self.rfile.read(n).decode('utf-8') if n else ''
+        except UnicodeDecodeError:
+            self._send(400, {'error': 'request body must be UTF-8'})
+            return
         if path == '/api/save':
-            data = json.loads(body)
-            updates = data.get('routes', [])
-            cfg = json.loads((QUESTS / 'quests.json').read_text())
-            by_id = {r['activity_id']: r for r in cfg['routes']}
-            for u in updates:
-                aid = u['activity_id']
-                if aid not in by_id:
-                    continue
-                if 'status' in u:
-                    by_id[aid]['status'] = u['status']
-                if 'region' in u:
-                    by_id[aid]['region'] = u['region'] or None
-                for field in CURATION_TEXT_FIELDS:
-                    if field in u:
-                        value = str(u[field]).strip()
-                        if value:
-                            by_id[aid][field] = value
+            if not OWNER_MUTATION_LOCK.acquire(blocking=False):
+                self._send(409, {'error': 'another owner mutation is in progress'})
+                return
+            try:
+                data = json.loads(body)
+                if not isinstance(data, dict) or not isinstance(data.get('routes', []), list):
+                    raise ValueError('request must contain a routes list')
+                updates = data.get('routes', [])
+                if any(not isinstance(update, dict) or 'activity_id' not in update for update in updates):
+                    raise ValueError('every route update must contain an activity_id')
+                config_path = QUESTS / 'quests.json'
+                cfg = json.loads(config_path.read_text(encoding='utf-8'))
+                routes = cfg.get('routes')
+                if not isinstance(routes, list):
+                    raise ValueError('quests.json must contain a routes list')
+                route_ids = [route.get('activity_id') for route in routes]
+                if len(route_ids) != len(set(route_ids)):
+                    raise ValueError('quests.json contains duplicate activity ids')
+                by_id = {route['activity_id']: route for route in routes}
+                updated = 0
+                for update in updates:
+                    aid = update['activity_id']
+                    if aid not in by_id:
+                        continue
+                    if 'status' in update:
+                        by_id[aid]['status'] = update['status']
+                    if 'region' in update:
+                        by_id[aid]['region'] = update['region'] or None
+                    for field in CURATION_TEXT_FIELDS:
+                        if field in update:
+                            value = str(update[field]).strip()
+                            if value:
+                                by_id[aid][field] = value
+                            else:
+                                by_id[aid].pop(field, None)
+                    if 'visibility' in update:
+                        value = str(update['visibility']).strip()
+                        if value and value not in CURATION_VISIBILITIES:
+                            raise ValueError(
+                                f'visibility must be one of: {", ".join(CURATION_VISIBILITIES)}'
+                            )
+                        if value and value != 'public':
+                            by_id[aid]['visibility'] = value
                         else:
-                            by_id[aid].pop(field, None)
-                if 'visibility' in u:
-                    value = str(u['visibility']).strip()
-                    if value and value not in CURATION_VISIBILITIES:
-                        self._send(400, {
-                            'error': f'visibility must be one of: {", ".join(CURATION_VISIBILITIES)}'
-                        })
-                        return
-                    if value and value != 'public':
-                        by_id[aid]['visibility'] = value
-                    else:
-                        by_id[aid].pop('visibility', None)
-            cfg['routes'] = list(by_id.values())
-            (QUESTS / 'quests.json').write_text(json.dumps(cfg, indent=2))
-            self._send(200, {'ok': True, 'updated': len(updates)})
+                            by_id[aid].pop('visibility', None)
+                    updated += 1
+                cfg['routes'] = list(by_id.values())
+                write_atomic(config_path, json.dumps(cfg, indent=2) + '\n')
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send(400, {'error': str(error)})
+                return
+            finally:
+                OWNER_MUTATION_LOCK.release()
+            self._send(200, {'ok': True, 'updated': updated})
             return
         if path == '/api/curation/save':
+            if not OWNER_MUTATION_LOCK.acquire(blocking=False):
+                self._send(409, {'error': 'another owner mutation is in progress'})
+                return
             try:
                 data = json.loads(body)
                 activity_id = str(data['activity_id'])
                 curation = data['curation']
 
                 def rebuild():
-                    subprocess.run(
-                        [sys.executable, str(QUESTS / 'build.py')],
-                        cwd=str(QUESTS),
-                        check=True,
-                        capture_output=True,
-                        text=True,
-                    )
+                    # A curation edit changes no geometry, so republish only the
+                    # artifacts that carry curation. test_curation_publish.py
+                    # asserts this equals a full rebuild byte for byte. A route
+                    # with no generated record yet still needs the full path.
+                    try:
+                        publish_curation(QUESTS, activity_id, curation)
+                    except CurationPublishError:
+                        subprocess.run(
+                            [sys.executable, str(QUESTS / 'build.py')],
+                            cwd=str(QUESTS),
+                            check=True,
+                            capture_output=True,
+                            text=True,
+                        )
 
                 route = save_curation_and_rebuild(
                     QUESTS / 'quests.json', activity_id, curation, rebuild
@@ -631,6 +820,8 @@ class Handler(BaseHTTPRequestHandler):
                     'detail': error.stderr[-1000:] if error.stderr else '',
                 })
                 return
+            finally:
+                OWNER_MUTATION_LOCK.release()
             self._send(200, {
                 'ok': True,
                 'activity_id': activity_id,
@@ -638,11 +829,60 @@ class Handler(BaseHTTPRequestHandler):
                 'generation_status': 'ready',
             })
             return
+        if path == '/api/annotations/save':
+            if not OWNER_MUTATION_LOCK.acquire(blocking=False):
+                self._send(409, {'error': 'another owner mutation is in progress'})
+                return
+            try:
+                data = json.loads(body)
+                activity_id = str(data['activity_id'])
+                annotations = data['annotations']
+                config_path = QUESTS / 'quests.json'
+                original = config_path.read_text(encoding='utf-8')
+                config = json.loads(original)
+                matching = [
+                    route for route in config.get('routes', [])
+                    if str(route.get('activity_id')) == activity_id
+                ]
+                if len(matching) != 1:
+                    raise ValueError(f'route {activity_id} was not found')
+                # Publish first, so an invalid anchor is refused before the
+                # source of truth changes.
+                published = publish_annotations(QUESTS, activity_id, annotations)
+                matching[0]['annotations'] = published
+                write_atomic(config_path, json.dumps(config, indent=2) + '\n')
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send(400, {'error': str(error)})
+                return
+            except CurationPublishError as error:
+                self._send(409, {'error': str(error)})
+                return
+            finally:
+                OWNER_MUTATION_LOCK.release()
+            self._send(200, {
+                'ok': True,
+                'activity_id': activity_id,
+                'annotations': published,
+            })
+            return
         if path == '/api/rebuild':
-            subprocess.Popen([sys.executable, str(QUESTS / 'build.py')],
-                             cwd=str(QUESTS),
-                             stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL)
+            if not OWNER_MUTATION_LOCK.acquire(blocking=False):
+                self._send(409, {'error': 'another owner mutation is in progress'})
+                return
+
+            def rebuild_in_background():
+                try:
+                    subprocess.run(
+                        [sys.executable, str(QUESTS / 'build.py')],
+                        cwd=str(QUESTS),
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        check=False,
+                    )
+                finally:
+                    OWNER_MUTATION_LOCK.release()
+
+            threading.Thread(target=rebuild_in_background, daemon=True).start()
             self._send(200, {'ok': True, 'msg': 'Rebuild started in background.'})
             return
         if path == '/api/auto-classify':

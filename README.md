@@ -80,6 +80,24 @@ npm --prefix app run verify
 The JavaScript gate includes type checking, unit tests, production build, bundle budgets, and Playwright journeys.
 The Python gate covers generation, curation validation, atomic publication, and rollback behavior.
 
+### Complete live pipeline proof
+
+The ordinary release gate includes deterministic fault-injection scenarios and does not claim that third-party providers are live.
+For an explicit real-data, no-interception proof from the complete Strava export through deployment, configure Earth Engine and a stable Cloudflare branch name, then run:
+
+```bash
+GODIESEL_EARTH_ENGINE_PROJECT=playground-406023 \
+GODIESEL_PIPELINE_SHARE_NAME=pipeline-proof \
+npm --prefix app run verify:live-pipeline
+```
+
+This gate checks all 103 columns and every approved activity row in the real Strava export, parses every original GPX/FIT source, rebuilds all generated route records in isolation, and compares every route detail, manifest record, geometry point, provenance record, and statistic.
+It then exercises real Run/Ride, Earth/Atlas, recorded/imported, completed/discovered, and reviewed/draft cases through the browser.
+The browser must receive successful responses from Google Maps JavaScript, Google Photorealistic 3D Tiles, Google Maps Static, OpenFreeMap, the isolated local owner writer, Nominatim, Earth Engine, and the deployed Cloudflare Pages artifact.
+
+The command intentionally fails instead of skipping when a credential, provider, billing account, quota, hardware renderer, source export, or deployed response is unavailable.
+Evidence is written under ignored `app/artifacts/live-pipeline/` using hashes and field inventories rather than raw personal values.
+
 ## Build
 
 Build the React application and prepare the root Cloudflare output directory:
