@@ -29,6 +29,7 @@ import gpxpy
 import pandas as pd
 
 from admin_curation import curation_readiness, save_curation_and_rebuild, write_atomic
+from curation_publish import CurationPublishError, publish_curation
 from route_imports import route_metadata
 
 try:
@@ -701,13 +702,20 @@ class Handler(BaseHTTPRequestHandler):
                 curation = data['curation']
 
                 def rebuild():
-                    subprocess.run(
-                        [sys.executable, str(QUESTS / 'build.py')],
-                        cwd=str(QUESTS),
-                        check=True,
-                        capture_output=True,
-                        text=True,
-                    )
+                    # A curation edit changes no geometry, so republish only the
+                    # artifacts that carry curation. test_curation_publish.py
+                    # asserts this equals a full rebuild byte for byte. A route
+                    # with no generated record yet still needs the full path.
+                    try:
+                        publish_curation(QUESTS, activity_id, curation)
+                    except CurationPublishError:
+                        subprocess.run(
+                            [sys.executable, str(QUESTS / 'build.py')],
+                            cwd=str(QUESTS),
+                            check=True,
+                            capture_output=True,
+                            text=True,
+                        )
 
                 route = save_curation_and_rebuild(
                     QUESTS / 'quests.json', activity_id, curation, rebuild

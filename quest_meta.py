@@ -152,3 +152,18 @@ def build_quest_meta(activity_type, distance_km, elevation_gain, region_label, a
             f"{activity_name or region_label} route."
         ),
     }
+
+
+def route_guide_preview(curation):
+    """Reduce a curation record to the summary tier's guide preview.
+
+    ADR-0004 keeps the manifest lightweight, so the summary carries only the
+    review status and the vibe. This is the single definition, shared by the
+    full generator and the incremental curation publisher, so the two cannot
+    disagree about what a saved guide looks like.
+    """
+    curation = curation or {}
+    preview = {"review_status": curation.get("review_status", "draft")}
+    if curation.get("vibe"):
+        preview["vibe"] = curation["vibe"]
+    return preview

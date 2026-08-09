@@ -19,6 +19,7 @@ from quest_meta import (
     build_replay_metadata,
     build_route_curation,
     elevation_gain_m,
+    route_guide_preview,
 )
 from route_provenance import build_route_provenance, load_source_route_points
 from route_imports import route_metadata, route_source_kind
@@ -546,12 +547,7 @@ def simplify_route_for_manifest(points, max_points=96):
 
 def react_route_manifest_record(route):
     record = react_route_record(route)
-    curation = record.get('curation') or {}
-    guide_preview = {
-        'review_status': curation.get('review_status', 'draft'),
-    }
-    if curation.get('vibe'):
-        guide_preview['vibe'] = curation['vibe']
+    guide_preview = route_guide_preview(record.get('curation'))
     return {
         'slug': record['slug'],
         'activity_id': record['activity_id'],
