@@ -1062,7 +1062,37 @@
         "seasonality": "Seasonal access has not been validated; check current weather and local conditions.",
         "editorial_note": "Selected as the first guide because the recorded route combines urban Kyoto with 680 m of climbing.",
         "review_status": "reviewed"
-      }
+      },
+      "annotations": [
+        {
+          "id": "frame-18f6e2e4",
+          "at_distance_m": 7572.266,
+          "kind": "image",
+          "evidence": "recorded",
+          "title": "Stone stairway",
+          "body": "The long stone stairway through the hillside woods. Autumn leaves on every tread.",
+          "media": {
+            "url": "media/17654151284/18f6e2e4f52a67c7.jpg",
+            "thumb_url": "media/17654151284/18f6e2e4f52a67c7-thumb.jpg",
+            "width": 900,
+            "height": 1600
+          }
+        },
+        {
+          "id": "frame-739b6b1a",
+          "at_distance_m": 8632.414,
+          "kind": "image",
+          "evidence": "recorded",
+          "title": "The ridge opens",
+          "body": "The climb pays out. Kyoto's hills fold away north under low cloud.",
+          "media": {
+            "url": "media/17654151284/739b6b1a48e3411e.jpg",
+            "thumb_url": "media/17654151284/739b6b1a48e3411e-thumb.jpg",
+            "width": 900,
+            "height": 1600
+          }
+        }
+      ]
     },
     {
       "activity_id": "17616195995",

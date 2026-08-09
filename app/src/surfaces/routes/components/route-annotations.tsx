@@ -38,7 +38,10 @@ export function RouteAnnotations({
   annotations: RouteAnnotation[];
   className?: string;
 }) {
-  if (annotations.length === 0) return null;
+  // Image annotations are shown by the polaroid fan, which owns their
+  // presentation. The margin carries the written ones.
+  const written = annotations.filter((annotation) => annotation.kind !== "image");
+  if (written.length === 0) return null;
 
   return (
     <section
@@ -50,7 +53,7 @@ export function RouteAnnotations({
         Along the route
       </p>
       <ol className="mt-2 border-l border-line">
-        {annotations.map((annotation) => {
+        {written.map((annotation) => {
           const evidence = EVIDENCE_LABEL[annotation.evidence];
           return (
             <li
