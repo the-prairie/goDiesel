@@ -29,7 +29,11 @@ import gpxpy
 import pandas as pd
 
 from admin_curation import curation_readiness, save_curation_and_rebuild, write_atomic
-from curation_publish import CurationPublishError, publish_curation
+from curation_publish import (
+    CurationPublishError,
+    publish_annotations,
+    publish_curation,
+)
 from route_imports import route_metadata
 
 try:
@@ -736,6 +740,42 @@ class Handler(BaseHTTPRequestHandler):
                 'activity_id': activity_id,
                 'curation': route['curation'],
                 'generation_status': 'ready',
+            })
+            return
+        if path == '/api/annotations/save':
+            if not OWNER_MUTATION_LOCK.acquire(blocking=False):
+                self._send(409, {'error': 'another owner mutation is in progress'})
+                return
+            try:
+                data = json.loads(body)
+                activity_id = str(data['activity_id'])
+                annotations = data['annotations']
+                config_path = QUESTS / 'quests.json'
+                original = config_path.read_text(encoding='utf-8')
+                config = json.loads(original)
+                matching = [
+                    route for route in config.get('routes', [])
+                    if str(route.get('activity_id')) == activity_id
+                ]
+                if len(matching) != 1:
+                    raise ValueError(f'route {activity_id} was not found')
+                # Publish first, so an invalid anchor is refused before the
+                # source of truth changes.
+                published = publish_annotations(QUESTS, activity_id, annotations)
+                matching[0]['annotations'] = published
+                write_atomic(config_path, json.dumps(config, indent=2) + '\n')
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send(400, {'error': str(error)})
+                return
+            except CurationPublishError as error:
+                self._send(409, {'error': str(error)})
+                return
+            finally:
+                OWNER_MUTATION_LOCK.release()
+            self._send(200, {
+                'ok': True,
+                'activity_id': activity_id,
+                'annotations': published,
             })
             return
         if path == '/api/rebuild':

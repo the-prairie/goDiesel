@@ -437,3 +437,80 @@ describe("parseRouteSummary", () => {
     ]);
   });
 });
+
+describe("route annotations", () => {
+  const annotation = {
+    id: "gate",
+    at_distance_m: 100,
+    kind: "landmark",
+    evidence: "hypothesis",
+    body: "The gate at the start of the climb.",
+    title: "Gate",
+  };
+
+  it("parses an annotation anchored to the recorded trace", () => {
+    const route = parseRouteDetail(
+      validRouteDetail({ annotations: [annotation] }),
+    );
+
+    expect(route.annotations).toHaveLength(1);
+    expect(route.annotations[0].atDistanceM).toBe(100);
+    expect(route.annotations[0].evidence).toBe("hypothesis");
+    expect(route.annotations[0].title).toBe("Gate");
+  });
+
+  it("treats a route with no annotations as empty rather than absent", () => {
+    expect(parseRouteDetail(validRouteDetail()).annotations).toEqual([]);
+  });
+
+  it("refuses an anchor beyond the recorded route", () => {
+    expect(() =>
+      parseRouteDetail(
+        validRouteDetail({
+          annotations: [{ ...annotation, at_distance_m: 999_999 }],
+        }),
+      ),
+    ).toThrow(/does not fall on the recorded route/);
+  });
+
+  it("refuses an unknown evidence label", () => {
+    expect(() =>
+      parseRouteDetail(
+        validRouteDetail({
+          annotations: [{ ...annotation, evidence: "probably" }],
+        }),
+      ),
+    ).toThrow(/unknown evidence label/);
+  });
+
+  it("refuses an unknown field rather than dropping it", () => {
+    expect(() =>
+      parseRouteDetail(
+        validRouteDetail({
+          annotations: [{ ...annotation, caption: "silently dropped" }],
+        }),
+      ),
+    ).toThrow(/unknown fields/);
+  });
+
+  it("refuses annotations that are not ordered by distance travelled", () => {
+    expect(() =>
+      parseRouteDetail(
+        validRouteDetail({
+          annotations: [
+            { ...annotation, id: "second", at_distance_m: 200 },
+            { ...annotation, id: "first", at_distance_m: 100 },
+          ],
+        }),
+      ),
+    ).toThrow(/ordered by distance/);
+  });
+
+  it("refuses a duplicated annotation id", () => {
+    expect(() =>
+      parseRouteDetail(
+        validRouteDetail({ annotations: [annotation, annotation] }),
+      ),
+    ).toThrow(/duplicated/);
+  });
+});

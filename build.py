@@ -22,6 +22,7 @@ from quest_meta import (
     route_guide_preview,
 )
 from route_provenance import build_route_provenance, load_source_route_points
+from route_annotations import build_route_annotations
 from route_imports import route_metadata, route_source_kind
 from route_timezones import route_time_zone
 
@@ -494,6 +495,10 @@ for spec in quest_specs:
     }
     if spec.get('curation') is not None:
         quest['curation'] = build_route_curation(spec['curation'])
+    if spec.get('annotations') is not None:
+        quest['annotations'] = build_route_annotations(
+            spec['annotations'], route_js[-1]['d']
+        )
     quest['lifecycle'] = lifecycle
     routes_data.append(quest)
     # Generate share card

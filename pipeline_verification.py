@@ -82,6 +82,7 @@ MATRIX_CASES = (
 BUILD_FILES = (
     "build.py",
     "quest_meta.py",
+    "route_annotations.py",
     "route_imports.py",
     "route_provenance.py",
     "route_timezones.py",

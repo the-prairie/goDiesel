@@ -1,7 +1,7 @@
 // The strict tier (ADR-0004). Any contract violation throws.
 
 import type { RouteLifecycle } from "@/domain/route/lifecycle";
-import type { GeneratedQuestRoute, QuestRoute, ReplayMetadata, RouteCuration, RouteGeometryStatus, RoutePoint, RouteProvenance, RouteDiscontinuityKind, RouteDiscontinuitySource, RouteTemporalProvenance } from "@/domain/route/contract";
+import type { RouteAnnotation, GeneratedQuestRoute, QuestRoute, ReplayMetadata, RouteCuration, RouteGeometryStatus, RoutePoint, RouteProvenance, RouteDiscontinuityKind, RouteDiscontinuitySource, RouteTemporalProvenance } from "@/domain/route/contract";
 import { curationFieldSet, curationFields, generatedRoute, numberValue, optionalCurationList, optionalCurationText, parsedRoutePoints, requiredSlug, stringValue, validTimeZone } from "@/domain/route/parse-shared";
 
 function validatedCuration(value: unknown): RouteCuration {
@@ -291,6 +291,102 @@ function validatedDetailFields(
   };
 }
 
+const ANNOTATION_KINDS = new Set(["note", "landmark", "warning", "image"]);
+const ANNOTATION_EVIDENCE = new Set([
+  "recorded",
+  "derived",
+  "measured",
+  "hypothesis",
+]);
+const ANNOTATION_FIELDS = new Set([
+  "id",
+  "at_distance_m",
+  "kind",
+  "evidence",
+  "body",
+  "title",
+]);
+
+/**
+ * Annotations are anchored to the recorded trace, so an anchor that does not
+ * fall on the route is a contract violation rather than a rendering problem.
+ * The generator sorts by anchor; the strict tier verifies that order survived.
+ */
+function validatedAnnotations(
+  value: unknown,
+  route: RoutePoint[],
+): RouteAnnotation[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error("annotations must be an array");
+
+  const totalDistance = route.at(-1)?.d ?? 0;
+  const seen = new Set<string>();
+  let previousDistance = -1;
+
+  return value.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error("annotation must be an object");
+    }
+    const source = item as Record<string, unknown>;
+    const unknownFields = Object.keys(source).filter(
+      (field) => !ANNOTATION_FIELDS.has(field),
+    );
+    if (unknownFields.length > 0) {
+      throw new Error(
+        `annotation has unknown fields: ${unknownFields.sort().join(", ")}`,
+      );
+    }
+
+    const id = source.id;
+    if (typeof id !== "string" || !id.trim()) {
+      throw new Error("annotation id must be a non-empty string");
+    }
+    if (seen.has(id)) throw new Error(`annotation id ${id} is duplicated`);
+    seen.add(id);
+
+    const kind = source.kind;
+    if (typeof kind !== "string" || !ANNOTATION_KINDS.has(kind)) {
+      throw new Error(`annotation ${id} has an unknown kind`);
+    }
+    const evidence = source.evidence;
+    if (typeof evidence !== "string" || !ANNOTATION_EVIDENCE.has(evidence)) {
+      throw new Error(`annotation ${id} has an unknown evidence label`);
+    }
+
+    const atDistanceM = source.at_distance_m;
+    if (
+      typeof atDistanceM !== "number" ||
+      !Number.isFinite(atDistanceM) ||
+      atDistanceM < 0 ||
+      (route.length > 0 && atDistanceM > totalDistance)
+    ) {
+      throw new Error(`annotation ${id} does not fall on the recorded route`);
+    }
+    if (atDistanceM < previousDistance) {
+      throw new Error("annotations must be ordered by distance travelled");
+    }
+    previousDistance = atDistanceM;
+
+    const body = source.body;
+    if (typeof body !== "string" || !body.trim()) {
+      throw new Error(`annotation ${id} body must be a non-empty string`);
+    }
+    const title = source.title;
+    if (title !== undefined && (typeof title !== "string" || !title.trim())) {
+      throw new Error(`annotation ${id} title must be a non-empty string`);
+    }
+
+    return {
+      id,
+      atDistanceM,
+      kind: kind as RouteAnnotation["kind"],
+      evidence: evidence as RouteAnnotation["evidence"],
+      body,
+      ...(typeof title === "string" ? { title } : {}),
+    };
+  });
+}
+
 export function parseRouteDetail(value: unknown): QuestRoute {
   const input = generatedRoute(value, "Route detail");
   const slug = requiredSlug(input, "Route detail");
@@ -306,6 +402,7 @@ export function parseRouteDetail(value: unknown): QuestRoute {
     ...validatedDetailFields(input, slug, geometryStatus),
     route,
     midIdx,
+    annotations: validatedAnnotations(input.annotations, route),
     provenance: validatedProvenance(input.provenance, route),
   };
 }

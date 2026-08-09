@@ -11,6 +11,7 @@ from pathlib import Path
 from curation_publish import (
     CurationPublishError,
     generated_paths,
+    publish_annotations,
     publish_curation,
 )
 
@@ -111,6 +112,70 @@ class CurationPublishTest(unittest.TestCase):
             self.assertEqual(_artifact_text(workspace), before)
 
 
+class AnnotationPublishTest(unittest.TestCase):
+    ANNOTATIONS = [
+        {
+            "id": "gate",
+            "at_distance_m": 100.0,
+            "kind": "landmark",
+            "evidence": "hypothesis",
+            "title": "The gate",
+            "body": "Where the climb starts.",
+        }
+    ]
+
+    def test_incremental_annotation_publication_equals_a_full_rebuild(self):
+        slug = _first_generated_slug()
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory) / "checkout"
+            _copy_workspace(workspace)
+
+            config_path = workspace / "quests.json"
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            for route in config["routes"]:
+                if str(route["activity_id"]) == slug:
+                    route["annotations"] = [dict(a) for a in self.ANNOTATIONS]
+                    break
+            config_path.write_text(
+                json.dumps(config, indent=2) + "\n", encoding="utf-8"
+            )
+
+            publish_annotations(workspace, slug, self.ANNOTATIONS)
+            incremental = _artifact_text(workspace)
+
+            result = subprocess.run(
+                [sys.executable, str(workspace / "build.py")],
+                cwd=str(workspace),
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr[-2000:])
+            rebuilt = _artifact_text(workspace)
+
+            for name, text in rebuilt.items():
+                self.assertEqual(
+                    incremental[name],
+                    text,
+                    f"{name} differs between an incremental save and a rebuild",
+                )
+
+    def test_an_anchor_beyond_the_route_is_refused(self):
+        slug = _first_generated_slug()
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory) / "checkout"
+            _copy_workspace(workspace)
+            before = _artifact_text(workspace)
+
+            with self.assertRaises(ValueError):
+                publish_annotations(
+                    workspace,
+                    slug,
+                    [{**self.ANNOTATIONS[0], "at_distance_m": 9_999_999}],
+                )
+
+            self.assertEqual(_artifact_text(workspace), before)
+
+
 def _copy_workspace(workspace):
     """Copy the files a generation run reads and writes."""
     workspace.mkdir(parents=True)
@@ -120,6 +185,7 @@ def _copy_workspace(workspace):
         "quest_meta.py",
         "route_provenance.py",
         "route_imports.py",
+        "route_annotations.py",
         "route_timezones.py",
         ".env",
     ):

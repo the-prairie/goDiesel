@@ -53,6 +53,31 @@ export interface ReplayMetadata {
   geometryStatus: RouteGeometryStatus;
 }
 
+export type RouteAnnotationKind = "note" | "landmark" | "warning" | "image";
+
+/**
+ * How much the product knows about a value. CONTEXT.md section 4.
+ * Editorial interpretation is `hypothesis` and must be marked as such.
+ */
+export type RouteAnnotationEvidence =
+  | "recorded"
+  | "derived"
+  | "measured"
+  | "hypothesis";
+
+/**
+ * Editorial content pinned to a distance along the recorded trace. One anchor
+ * drives the guide margin, Replay, and the cinematic director.
+ */
+export interface RouteAnnotation {
+  id: string;
+  atDistanceM: number;
+  kind: RouteAnnotationKind;
+  evidence: RouteAnnotationEvidence;
+  body: string;
+  title?: string;
+}
+
 export type CurationReviewStatus = "draft" | "reviewed" | "published";
 
 export interface RouteCuration {
@@ -100,6 +125,7 @@ export interface QuestRoute extends Omit<RouteSummary, "trace" | "guide"> {
   route: RoutePoint[];
   midIdx: number;
   curation: RouteCuration;
+  annotations: RouteAnnotation[];
   provenance: RouteProvenance;
 }
 
@@ -129,6 +155,7 @@ export interface GeneratedQuestRoute {
   replay?: unknown;
   curation?: unknown;
   guide_preview?: unknown;
+  annotations?: unknown;
   provenance?: unknown;
 }
 

@@ -9,6 +9,7 @@ import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { ElevationProfile } from "@/surfaces/routes/components/route-briefing";
+import { RouteAnnotations } from "@/surfaces/routes/components/route-annotations";
 import { RouteGuide } from "@/surfaces/routes/components/route-guide";
 import { RouteLeafMap } from "@/surfaces/routes/components/route-leaf-map";
 import { RouteNotFound } from "@/ui/route-not-found";
@@ -251,6 +252,10 @@ function RouteMargin({
               Elevation profile unavailable. Climb distribution needs recorded route points.
             </div>
           )}
+          <RouteAnnotations
+            annotations={route.annotations}
+            className="border-b border-line py-6"
+          />
           <div className="pt-6">
             <RouteGuide curation={route.curation} compact />
           </div>

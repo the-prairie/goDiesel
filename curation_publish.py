@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from quest_meta import build_route_curation, route_guide_preview
+from route_annotations import build_route_annotations
 
 
 class CurationPublishError(RuntimeError):
@@ -29,6 +30,56 @@ def generated_paths(checkout_root):
         "manifest": root / "app" / "src" / "data" / "generated" / "routes.manifest.json",
         "payload": root / "app" / "src" / "data" / "quests.generated.json",
     }
+
+
+def publish_annotations(checkout_root, activity_id, annotations):
+    """Rewrite the generated artifacts for one route's annotations.
+
+    Annotations are editorial content anchored to the recorded trace. Like
+    curation, they change no geometry, so the same narrow path applies. The
+    anchor is validated against the route's own recorded distance, so an
+    annotation can never be published off the end of the route.
+    """
+    activity_id = str(activity_id)
+    paths = generated_paths(checkout_root)
+    detail_path = paths["detail"] / f"{activity_id}.json"
+    if not detail_path.is_file():
+        raise CurationPublishError(
+            f"route {activity_id} has no generated record; run a full rebuild first"
+        )
+
+    detail = json.loads(detail_path.read_text(encoding="utf-8"))
+    route = detail.get("route") or []
+    if not route:
+        raise CurationPublishError(f"route {activity_id} has no recorded geometry")
+    normalized = build_route_annotations(annotations, route[-1]["d"])
+
+    generated_at = _now()
+    staged = [
+        (
+            detail_path,
+            json.dumps(_with_annotations(detail, normalized), ensure_ascii=False),
+        )
+    ]
+
+    payload = json.loads(paths["payload"].read_text(encoding="utf-8"))
+    payload["generated_at"] = generated_at
+    _replace_in_place(
+        payload.get("routes", []),
+        activity_id,
+        lambda record: _with_annotations(record, normalized),
+        "quests.generated.json",
+    )
+    staged.append((paths["payload"], json.dumps(payload, ensure_ascii=False)))
+
+    # The manifest is the summary tier and carries no annotations (ADR-0004),
+    # but its generated_at must stay in step with the payload.
+    manifest = json.loads(paths["manifest"].read_text(encoding="utf-8"))
+    manifest["generated_at"] = generated_at
+    staged.append((paths["manifest"], json.dumps(manifest, ensure_ascii=False)))
+
+    _write_all_atomic(staged)
+    return normalized
 
 
 def publish_curation(checkout_root, activity_id, curation):
@@ -58,7 +109,7 @@ def publish_curation(checkout_root, activity_id, curation):
 
     # A rebuild stamps both artifacts with one timestamp. Match that, so the
     # manifest and the payload never disagree about when they were generated.
-    generated_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    generated_at = _now()
 
     manifest = json.loads(paths["manifest"].read_text(encoding="utf-8"))
     manifest["generated_at"] = generated_at
@@ -84,25 +135,38 @@ def publish_curation(checkout_root, activity_id, curation):
     return normalized
 
 
+def _now():
+    return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _with_annotations(record, normalized):
+    """Place annotations where a rebuild puts them: after curation, before lifecycle."""
+    return _with_key_before(record, "annotations", normalized, "lifecycle")
+
+
 def _with_curation(record, normalized):
-    """Return the record with curation in the position a rebuild puts it.
+    """Place curation where a rebuild puts it: immediately before lifecycle.
 
     build.py sets curation on the quest dict after the derived quest metadata
-    and before react_route_record appends lifecycle and replay, so the key lands
-    immediately before `lifecycle`. Appending instead would still be valid JSON,
-    but pipeline_verification.py byte-compares generated output against a fresh
-    rebuild, so key order is part of the contract.
+    and before react_route_record appends lifecycle and replay. Appending
+    instead would still be valid JSON, but pipeline_verification.py
+    byte-compares generated output against a fresh rebuild, so key order is
+    part of the contract.
     """
+    return _with_key_before(record, "curation", normalized, "lifecycle")
+
+
+def _with_key_before(record, key, value, before):
     rebuilt = {}
     inserted = False
-    for key, value in record.items():
-        if key == "lifecycle" and not inserted:
-            rebuilt["curation"] = normalized
-            inserted = True
-        if key != "curation":
+    for existing, existing_value in record.items():
+        if existing == before and not inserted:
             rebuilt[key] = value
+            inserted = True
+        if existing != key:
+            rebuilt[existing] = existing_value
     if not inserted:
-        rebuilt["curation"] = normalized
+        rebuilt[key] = value
     return rebuilt
 
 

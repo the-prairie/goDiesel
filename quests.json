@@ -38,7 +38,41 @@
           "Carry water and plan shade in warm weather"
         ],
         "review_status": "reviewed"
-      }
+      },
+      "annotations": [
+        {
+          "id": "tiber",
+          "at_distance_m": 1500.0,
+          "kind": "note",
+          "evidence": "hypothesis",
+          "body": "Flat and fast. Bank the time here.",
+          "title": "Tiber riverfront"
+        },
+        {
+          "id": "circus-maximus",
+          "at_distance_m": 5124.2,
+          "kind": "landmark",
+          "evidence": "hypothesis",
+          "body": "The city loosens here. This is where the run stops being urban and starts being archaeological.",
+          "title": "Circus Maximus"
+        },
+        {
+          "id": "cobbles-begin",
+          "at_distance_m": 9679.0,
+          "kind": "warning",
+          "evidence": "hypothesis",
+          "body": "Uneven stone from here. Shorten your stride and expect the rhythm to break.",
+          "title": "Historic cobbles"
+        },
+        {
+          "id": "caffarella",
+          "at_distance_m": 14803.1,
+          "kind": "landmark",
+          "evidence": "hypothesis",
+          "body": "Open archaeological landscape. The payoff of the route, and the point to save legs for the return.",
+          "title": "Parco della Caffarella"
+        }
+      ]
     },
     {
       "activity_id": "13134774070",
