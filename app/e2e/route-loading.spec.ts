@@ -1,7 +1,31 @@
 import { expect, test } from "@playwright/test";
+import fs from "node:fs";
+import path from "node:path";
 
 const routeSlug = "17654151284";
 const importedRouteSlug = "3519505225411091950";
+
+/**
+ * Read the generated record a route actually ships with.
+ *
+ * Asserting a hardcoded review status made this spec fail the moment a guide
+ * was promoted from draft to reviewed, which is ordinary curation rather than a
+ * regression. Derive the expectation instead, so the spec tracks the data.
+ */
+function generatedRoute(slug: string) {
+  return JSON.parse(
+    fs.readFileSync(
+      path.resolve(process.cwd(), `public/data/routes/${slug}.json`),
+      "utf8",
+    ),
+  ) as { curation?: { review_status?: string } };
+}
+
+function guideBadge(slug: string) {
+  return generatedRoute(slug).curation?.review_status === "reviewed"
+    ? "Reviewed guide"
+    : "Draft guide";
+}
 
 test("Atlas does not fetch full route records before selection", async ({ page }) => {
   const detailRequests: string[] = [];
@@ -56,7 +80,9 @@ test("imported Strava route opens as a discovered guide with replay", async ({ p
   await expect(page.getByText("247 m", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "What it feels like" })).toBeVisible();
   await expect(page.getByText(/urban-to-ancient-road run/i)).toBeVisible();
-  await expect(page.getByText("Draft guide", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText(guideBadge(importedRouteSlug), { exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole("link", { name: "Open replay" })).toHaveAttribute(
     "href",
     `#/replay/${importedRouteSlug}`,

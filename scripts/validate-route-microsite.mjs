@@ -25,10 +25,22 @@ function validateRoute(route, expectedSlug) {
   }
   if (route.slug !== expectedSlug) fail(`route slug must equal ${expectedSlug}`);
 
-  for (const field of ["name", "region", "date", "type", "description"]) {
+  for (const field of ["name", "region", "date", "type"]) {
     if (typeof route[field] !== "string" || !route[field].trim()) {
       fail(`${field} is required`);
     }
+  }
+
+  // A published page must say something about the route. Either the recorded
+  // activity description or the owner's curated vibe satisfies that. They are
+  // different fields with different provenance — the activity's own words
+  // versus the editorial premise — so neither is copied into the other.
+  // Copying produced a page that printed the same sentence twice.
+  const hasWords = [route.description, route.curation?.vibe].some(
+    (value) => typeof value === "string" && value.trim(),
+  );
+  if (!hasWords) {
+    fail("a published route needs an activity description or a curated vibe");
   }
 
   if (

@@ -46,9 +46,16 @@ def route_status(checkout_root, activity_id):
     # These are the fields scripts/validate-route-microsite.mjs refuses to
     # publish without. Reporting readiness without checking them gave false
     # confidence: it called a route ready that the publisher then rejected.
-    for field in ("name", "region", "date", "type", "description"):
+    for field in ("name", "region", "date", "type"):
         if generated and not str(detail.get(field) or "").strip():
             problems.append(f"{field} is empty; the publisher requires it")
+    # Mirrors scripts/validate-route-microsite.mjs: a page needs words, from
+    # either the recorded activity description or the curated vibe.
+    if generated and not (
+        str(detail.get("description") or "").strip()
+        or str((detail.get("curation") or {}).get("vibe") or "").strip()
+    ):
+        problems.append("no activity description and no curated vibe; the page would be wordless")
     if generated and not (
         str(detail.get("subtitle") or "").strip()
         or str(detail.get("activity_name") or "").strip()
