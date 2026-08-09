@@ -79,15 +79,20 @@ MATRIX_CASES = (
         "covers": ("run", "atlas", "imported-gpx", "discovered", "draft"),
     },
 )
-BUILD_FILES = (
-    "build.py",
-    "quest_meta.py",
-    "route_annotations.py",
-    "route_imports.py",
-    "route_provenance.py",
-    "route_timezones.py",
-    "quests.json",
-)
+def build_files():
+    """Every top-level Python module, plus the source of truth.
+
+    A hand-kept list rots. route_annotations.py had to be added here after a
+    rebuild in an isolated workspace failed with ModuleNotFoundError, and the
+    same list in app/e2e/live-pipeline.spec.ts failed the live gate the same
+    way. Derive it so adding a module cannot break the proof.
+    """
+    modules = sorted(
+        path.name
+        for path in Path(__file__).resolve().parent.glob("*.py")
+        if not path.name.startswith("test_")
+    )
+    return (*modules, "quests.json")
 
 
 class VerificationError(RuntimeError):
@@ -229,7 +234,7 @@ def normalized_generated(path: Path) -> Any:
 def compare_regeneration(root: Path, python: Path) -> dict[str, Any]:
     with tempfile.TemporaryDirectory(prefix="godiesel-real-pipeline-") as directory:
         workspace = Path(directory)
-        for relative in BUILD_FILES:
+        for relative in build_files():
             shutil.copy2(root / relative, workspace / relative)
         shutil.copytree(root / "route_sources", workspace / "route_sources")
         (workspace / "cards").mkdir()

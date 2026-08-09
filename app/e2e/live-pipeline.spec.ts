@@ -4,6 +4,7 @@ import {
   cp,
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   rm,
   writeFile,
@@ -23,16 +24,20 @@ const matrixSlugs = [
   "14736711660",
   "3519505225411091950",
 ] as const;
-const adminWorkspaceFiles = [
-  "admin.py",
-  "admin_curation.py",
-  "build.py",
-  "quest_meta.py",
-  "route_imports.py",
-  "route_provenance.py",
-  "route_timezones.py",
-  "quests.json",
-] as const;
+// Every top-level Python module, not a hand-kept subset.
+//
+// A fixed list silently rots: admin.py grew imports for curation_publish and
+// route_media, which transitively need route_annotations and quest_meta, and
+// the isolated workspace failed with ModuleNotFoundError at stage 3 of the live
+// gate. Deriving the list means adding a module can never break this again.
+// Test modules are excluded because the workspace only has to run the app.
+async function adminWorkspaceFiles() {
+  const entries = await readdir(repositoryRoot);
+  const modules = entries.filter(
+    (name) => name.endsWith(".py") && !name.startsWith("test_"),
+  );
+  return [...modules, "quests.json"];
+}
 
 interface ProviderObservation {
   category: string;
@@ -224,7 +229,7 @@ async function stopAdmin() {
 test.describe("real source to live provider pipeline", () => {
   test.beforeAll(async () => {
     adminWorkspace = await mkdtemp(path.join(tmpdir(), "godiesel-live-admin-"));
-    for (const relative of adminWorkspaceFiles) {
+    for (const relative of await adminWorkspaceFiles()) {
       await cp(path.join(repositoryRoot, relative), path.join(adminWorkspace, relative));
     }
     await cp(path.join(repositoryRoot, "route_sources"), path.join(adminWorkspace, "route_sources"), {
