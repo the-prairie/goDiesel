@@ -470,7 +470,7 @@ function replayMetadata(
   return {
     replayMode,
     replayEligible:
-      lifecycle === "completed" && geometryStatus === "ready" && replayRequested,
+      lifecycle !== "planned" && geometryStatus === "ready" && replayRequested,
     bestInEarth,
     geometryStatus,
   };
@@ -574,7 +574,7 @@ function validatedReplayMetadata(
   return {
     replayMode: source.mode,
     replayEligible:
-      lifecycle === "completed" && geometryStatus === "ready" && source.replay_eligible,
+      lifecycle !== "planned" && geometryStatus === "ready" && source.replay_eligible,
     bestInEarth: source.best_in_earth,
     geometryStatus,
   };

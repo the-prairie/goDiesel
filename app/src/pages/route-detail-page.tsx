@@ -13,6 +13,7 @@ import { RouteGuide } from "@/components/routes/route-guide";
 import { RouteLeafMap } from "@/components/routes/route-leaf-map";
 import { RouteNotFound } from "@/components/routes/route-not-found";
 import { Button } from "@/components/ui/button";
+import { singleRouteMicrosite } from "@/config/single-route-microsite";
 import { findRouteBySlug } from "@/data/routes";
 import { routeLibraryReturnPath } from "@/data/route-library-return";
 import { useRouteDetail, type RouteDetailState } from "@/data/use-route-detail";
@@ -36,7 +37,14 @@ export function RouteDetailPage() {
   if (!summary) return <RouteNotFound />;
 
   return (
-    <section className="relative h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 overflow-hidden md:h-dvh">
+    <section
+      className={cn(
+        "relative min-h-0 overflow-hidden md:h-dvh",
+        singleRouteMicrosite
+          ? "h-dvh"
+          : "h-[calc(100dvh-var(--mobile-navigation-height))]",
+      )}
+    >
       <RouteDetailContent
         state={detail}
         routesPath={routesPath}
@@ -157,17 +165,19 @@ function RouteMargin({
       <div className={cn("border-b border-line", isMobile ? "p-3" : "p-6")}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <Button asChild variant="ghost" size="sm" className="-ml-2 mb-2 w-fit">
-              <Link to={routesPath}>
-                <ArrowLeft aria-hidden="true" />
-                All routes
-              </Link>
-            </Button>
+            {singleRouteMicrosite ? null : (
+              <Button asChild variant="ghost" size="sm" className="-ml-2 mb-2 w-fit">
+                <Link to={routesPath}>
+                  <ArrowLeft aria-hidden="true" />
+                  All routes
+                </Link>
+              </Button>
+            )}
             <p className="text-caption font-semibold uppercase text-cobalt">
               {route.region}
             </p>
             <h1 className="mt-1 font-editorial text-3xl font-semibold leading-none text-ink">
-              {route.name}
+              {route.lifecycle === "discovered" ? route.activityName : route.name}
             </h1>
           </div>
           {isMobile ? (
@@ -212,13 +222,13 @@ function RouteMargin({
             <p className="mt-4 font-editorial text-lg italic leading-6 text-ink-secondary">
               {premise}
             </p>
-            <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-y border-line py-4 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4">
+            <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-y border-line py-4">
               <LeafMetric label="Distance" value={`${route.distanceKm.toFixed(1)} km`} />
               <LeafMetric label="Climb" value={`${route.elevationGainM.toLocaleString()} m`} />
               <LeafMetric label="Activity" value={route.type} />
               <LeafMetric
                 label={routeDateLabel(route.lifecycle)}
-                value={route.date || "Not recorded"}
+                value={formatRouteDate(route.date)}
               />
             </dl>
           </>
@@ -285,12 +295,14 @@ function RouteLeafState({
   return (
     <div className="grid h-full place-items-center bg-surface-muted p-6">
       <div className="max-w-md border-y border-line py-8">
-        <Button asChild variant="ghost" className="-ml-3 mb-4 w-fit">
-          <Link to={routesPath}>
-            <ArrowLeft aria-hidden="true" />
-            All routes
-          </Link>
-        </Button>
+        {singleRouteMicrosite ? null : (
+          <Button asChild variant="ghost" className="-ml-3 mb-4 w-fit">
+            <Link to={routesPath}>
+              <ArrowLeft aria-hidden="true" />
+              All routes
+            </Link>
+          </Button>
+        )}
         {children}
       </div>
     </div>
@@ -301,4 +313,19 @@ function routeDateLabel(lifecycle: QuestRoute["lifecycle"]) {
   if (lifecycle === "planned") return "Planned for";
   if (lifecycle === "discovered") return "Discovered";
   return "Completed";
+}
+
+function formatRouteDate(value: string) {
+  if (!value) return "Not recorded";
+
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return value;
+
+  const [, year, month, day] = match;
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(Number(year), Number(month) - 1, Number(day))));
 }

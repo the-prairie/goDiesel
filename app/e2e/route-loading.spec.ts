@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 const routeSlug = "17654151284";
+const importedRouteSlug = "3519505225411091950";
 
 test("Atlas does not fetch full route records before selection", async ({ page }) => {
   const detailRequests: string[] = [];
@@ -40,6 +41,26 @@ test("reviewed route guide loads directly and survives refresh", async ({ page }
   await page.reload();
   await expect(page).toHaveURL(new RegExp(`#\/routes\/${routeSlug}$`));
   await expect(page.getByRole("heading", { name: "What it feels like" })).toBeVisible();
+});
+
+test("imported Strava route opens as a discovered guide with replay", async ({ page }) => {
+  await page.goto(`/#/routes/${importedRouteSlug}`);
+
+  await expect(
+    page.getByRole("heading", { name: "breaking ankles on the Appian Way" }),
+  ).toBeVisible();
+  await expect(page.getByText("Rome, Italy", { exact: true })).toBeVisible();
+  await expect(page.getByText("Discovered", { exact: true })).toBeVisible();
+  await expect(page.getByText("December 9, 2022", { exact: true })).toBeVisible();
+  await expect(page.getByText("28.5 km", { exact: true })).toBeVisible();
+  await expect(page.getByText("247 m", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "What it feels like" })).toBeVisible();
+  await expect(page.getByText(/urban-to-ancient-road run/i)).toBeVisible();
+  await expect(page.getByText("Draft guide", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open replay" })).toHaveAttribute(
+    "href",
+    `#/replay/${importedRouteSlug}`,
+  );
 });
 
 test("route detail is a geography-first Leaf with a bounded editorial margin", async ({

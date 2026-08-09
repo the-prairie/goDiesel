@@ -2,6 +2,45 @@
   "_comment": "Master routes list. Manage via admin.sh (visual UI) or edit this file directly. status: approved | pending | rejected/archived. Optional curation fields per route: title, theme, difficulty, blurb, completion_rule, visibility (public default, hidden optional). Build only renders approved.",
   "routes": [
     {
+      "activity_id": "3519505225411091950",
+      "status": "approved",
+      "source_gpx": "route_sources/strava/3519505225411091950.gpx",
+      "activity_name": "breaking ankles on the Appian Way",
+      "activity_type": "Run",
+      "date": "2022-12-09",
+      "region": "Rome, Italy",
+      "title": "breaking ankles on the Appian Way",
+      "lifecycle": "discovered",
+      "description": "A 28.5 km route from central Rome toward the Appian Way, linking the riverfront and monumental city with the old road and Caffarella landscape.",
+      "theme": "Ancient Road",
+      "difficulty": "Moderate",
+      "completion_rule": "Run the 28.5 km route from central Rome to the Appian Way and back.",
+      "blurb": "Leave central Rome behind and follow the city into the layered landscape of the Appian Way.",
+      "curation": {
+        "vibe": "A long urban-to-ancient-road run that leaves central Rome for the Appian Way, trading riverfront and monuments for cobbles, pines, and open archaeological landscape.",
+        "ideal_use": "A destination long run when you want Rome's history to unfold as part of the route, not as a sightseeing detour.",
+        "difficulty": "Moderate-to-hard: 28.5 km is the real challenge. The climbing is modest, but uneven historic surfaces and city crossings interrupt rhythm.",
+        "seasonality": "Best early in the morning in cooler months. Summer heat and exposed sections can make the return feel much harder.",
+        "editorial_note": "Start restrained. The route's payoff comes when Rome loosens into the Appian landscape; save enough legs to enjoy the long return rather than surviving it.",
+        "terrain": [
+          "City pavement and riverfront paths",
+          "Historic cobbles and uneven stone",
+          "Park paths and mixed road surfaces"
+        ],
+        "highlights": [
+          "Tiber riverfront approach",
+          "Circus Maximus and the southern city transition",
+          "Via Appia Antica and Parco della Caffarella"
+        ],
+        "caveats": [
+          "Historic cobbles can be awkward at running pace",
+          "Traffic and crossings break continuity leaving and re-entering central Rome",
+          "Carry water and plan shade in warm weather"
+        ],
+        "review_status": "draft"
+      }
+    },
+    {
       "activity_id": "13134774070",
       "status": "approved",
       "region": "Crete, Greece"

@@ -21,6 +21,7 @@ from quest_meta import (
     elevation_gain_m,
 )
 from route_provenance import build_route_provenance, load_source_route_points
+from route_imports import imported_route_from_spec
 from route_timezones import route_time_zone
 
 try: import imagehash
@@ -408,24 +409,30 @@ print('[4/5] Building quests…')
 routes_data = []
 for spec in quest_specs:
     aid = spec['activity_id']
-    act = acts_by_id.get(aid)
-    if act is None:
-        print(f'    ✗ {aid}: not found in activities.csv'); continue
-    fp = find_activity_file(aid)
-    if fp is None:
-        print(f'    ✗ {aid}: no .gpx/.fit file'); continue
+    imported_route = imported_route_from_spec(spec, QUESTS)
+    if imported_route:
+        fp = imported_route.path
+        name = imported_route.name
+        date = imported_route.date
+        typ = imported_route.activity_type
+        desc = imported_route.description
+    else:
+        act = acts_by_id.get(aid)
+        if act is None:
+            print(f'    ✗ {aid}: not found in activities.csv'); continue
+        fp = find_activity_file(aid)
+        if fp is None:
+            print(f'    ✗ {aid}: no .gpx/.fit file'); continue
+        name = (act['Activity Name'] if isinstance(act['Activity Name'], str) else '(unnamed)')
+        date = act['date'].strftime('%Y-%m-%d') if act['date'] else ''
+        typ = act['Activity Type']
+        desc = act.get('Activity Description', '')
+        desc = str(desc) if desc and str(desc) != 'nan' else ''
     route_provenance = build_route_provenance(load_source_route_points(fp))
     route_js = route_provenance.route
     if not route_js:
         print(f'    ✗ {aid}: empty polyline'); continue
     distance_km = route_js[-1]['d'] / 1000
-
-    # Auto-fill metadata from CSV
-    name = (act['Activity Name'] if isinstance(act['Activity Name'], str) else '(unnamed)')
-    date = act['date'].strftime('%Y-%m-%d') if act['date'] else ''
-    typ = act['Activity Type']
-    desc = act.get('Activity Description', '')
-    desc = str(desc) if desc and str(desc) != 'nan' else ''
 
     # Auto-detect region if not specified
     region_label = spec.get('region') or region(route_js[0]['lat'], route_js[0]['lng'])

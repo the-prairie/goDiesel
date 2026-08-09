@@ -256,3 +256,25 @@ test("keeps playback telemetry visible on a phone", async ({ page }) => {
     390,
   );
 });
+
+test("commits the final playback state after a throttled UI update", async ({
+  page,
+}) => {
+  await installGoogleReplay(page, "ready");
+  await page.goto("/#/replay/14023448720");
+
+  const progress = page.getByTestId("google-route-progress");
+  await page.getByRole("button", { name: "Play route" }).click();
+  await expect
+    .poll(async () => Number((await progress.textContent())?.split(" ")[0]))
+    .toBeGreaterThan(0);
+
+  const scrubber = page.getByLabel("Route progress");
+  const maximum = Number(await scrubber.getAttribute("max"));
+  await scrubber.fill(String(Math.floor(maximum) - 1));
+
+  await expect(page.getByRole("button", { name: "Play route" })).toBeVisible({
+    timeout: 1_000,
+  });
+  await expect(progress).toContainText(`${(maximum / 1_000).toFixed(2)} /`);
+});

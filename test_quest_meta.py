@@ -73,6 +73,11 @@ class QuestMetaTests(unittest.TestCase):
         self.assertEqual(planned["mode"], "atlas")
         self.assertEqual(planned["geometry_status"], "ready")
 
+        discovered = build_replay_metadata("route-2", 2, best_ids, "discovered")
+        self.assertTrue(discovered["replay_eligible"])
+        self.assertFalse(discovered["best_in_earth"])
+        self.assertEqual(discovered["mode"], "atlas")
+
         with self.assertRaisesRegex(ValueError, "replay lifecycle"):
             build_replay_metadata("route-1", 2, best_ids, "unknown")
 

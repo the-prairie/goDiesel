@@ -99,6 +99,27 @@ Deploy the generated React output with Wrangler:
 npx wrangler pages deploy dist --project-name=godiesel
 ```
 
+## Publish a single-route microsite
+
+Prepare a route-only public share without publishing it:
+
+```bash
+./scripts/publish-route-microsite.sh 3519505225411091950 appian-way --dry-run
+```
+
+The dry run validates the route and replay data, builds a bundle containing only that route, and runs the focused microsite browser journey.
+The route-only bundle removes all unrelated public data and sends a site-wide `X-Robots-Tag: noindex` header in addition to `robots.txt`.
+
+Publish the validated bundle to its stable Cloudflare Pages branch URL:
+
+```bash
+./scripts/publish-route-microsite.sh 3519505225411091950 appian-way
+```
+
+This produces `https://share-appian-way.godiesel.pages.dev/` and smoke-tests the public guide and replay shell.
+Choose a durable share name because it defines the stable URL.
+Live Google 3D imagery must still be reviewed in a hardware-accelerated browser.
+
 Cloudflare Pages should use `./make-dist.sh` as the build command and `dist` as the output directory.
 Hash routing keeps direct Atlas, route, and Replay links compatible with static hosting.
 

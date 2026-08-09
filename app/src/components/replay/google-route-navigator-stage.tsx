@@ -230,7 +230,7 @@ export function GoogleRouteNavigatorStage({
       if (
         next.following &&
         (progressChanged || cameraSettling) &&
-        now - lastCameraUpdate >= 32
+        (playbackChanged || now - lastCameraUpdate >= 32)
       ) {
         const desired = progressChanged
           ? googleRouteCameraPose(route, next)
@@ -238,13 +238,19 @@ export function GoogleRouteNavigatorStage({
         if (desired) renderCamera(desired, now);
         lastCameraUpdate = now;
       }
-      if (progressChanged && now - lastRouteUpdate >= 40) {
+      if (
+        progressChanged &&
+        (playbackChanged || now - lastRouteUpdate >= 40)
+      ) {
         engineRef.current?.setCinematicRoute(
           googleRouteThreadTreatment(route, next),
         );
         lastRouteUpdate = now;
       }
-      if ((progressChanged || playbackChanged) && now - lastUiUpdate >= 90) {
+      if (
+        playbackChanged ||
+        (progressChanged && now - lastUiUpdate >= 90)
+      ) {
         setControl(next);
         lastUiUpdate = now;
       }

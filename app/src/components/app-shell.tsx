@@ -3,6 +3,7 @@ import { Outlet, useLocation } from "react-router-dom";
 
 import { AtlasSpine } from "@/components/atlas-spine";
 import { AtlasImmersiveNavigation } from "@/components/atlas-immersive-navigation";
+import { singleRouteMicrosite } from "@/config/single-route-microsite";
 import { APP_PATHS, appSectionForPath } from "@/navigation";
 import { cn } from "@/lib/utils";
 
@@ -25,12 +26,16 @@ export function AppShell() {
 
   return (
     <div className="weathered-atlas field-guide-theme relative flex min-h-dvh bg-background text-foreground">
-      <AtlasSpine hideDesktop={isAtlas} />
-      {isAtlas ? <AtlasImmersiveNavigation /> : null}
+      {singleRouteMicrosite ? null : <AtlasSpine hideDesktop={isAtlas} />}
+      {isAtlas && !singleRouteMicrosite ? <AtlasImmersiveNavigation /> : null}
       <div
         className={cn(
-          "flex min-h-dvh min-w-0 flex-1 flex-col pb-[var(--mobile-navigation-height)] md:pb-0",
-          !isAtlas && "md:pl-[var(--spine-rail-width)] lg:pl-[var(--spine-width)]",
+          "flex min-h-dvh min-w-0 flex-1 flex-col",
+          !singleRouteMicrosite &&
+            "pb-[var(--mobile-navigation-height)] md:pb-0",
+          !singleRouteMicrosite &&
+            !isAtlas &&
+            "md:pl-[var(--spine-rail-width)] lg:pl-[var(--spine-width)]",
         )}
       >
         {isUtility ? (
