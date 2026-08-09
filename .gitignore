@@ -37,6 +37,10 @@ tmp/
 # Node dependencies (app/ has its own ignore; this covers the repository root)
 node_modules/
 
+# Published route media is product content and is tracked. Uncomment only if
+# the photo library moves out of the repository.
+# /app/public/media/
+
 # Local experiments and unrelated build output, not part of goDiesel
 /lottie-player/
 /target/

@@ -1,7 +1,7 @@
 // The strict tier (ADR-0004). Any contract violation throws.
 
 import type { RouteLifecycle } from "@/domain/route/lifecycle";
-import type { RouteAnnotation, GeneratedQuestRoute, QuestRoute, ReplayMetadata, RouteCuration, RouteGeometryStatus, RoutePoint, RouteProvenance, RouteDiscontinuityKind, RouteDiscontinuitySource, RouteTemporalProvenance } from "@/domain/route/contract";
+import type { RouteAnnotation, RouteAnnotationMedia, GeneratedQuestRoute, QuestRoute, ReplayMetadata, RouteCuration, RouteGeometryStatus, RoutePoint, RouteProvenance, RouteDiscontinuityKind, RouteDiscontinuitySource, RouteTemporalProvenance } from "@/domain/route/contract";
 import { curationFieldSet, curationFields, generatedRoute, numberValue, optionalCurationList, optionalCurationText, parsedRoutePoints, requiredSlug, stringValue, validTimeZone } from "@/domain/route/parse-shared";
 
 function validatedCuration(value: unknown): RouteCuration {
@@ -305,7 +305,42 @@ const ANNOTATION_FIELDS = new Set([
   "evidence",
   "body",
   "title",
+  "media",
 ]);
+const MEDIA_FIELDS = new Set(["url", "thumb_url", "width", "height"]);
+
+function validatedMedia(value: unknown, id: string): RouteAnnotationMedia {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`annotation ${id} media must be an object`);
+  }
+  const source = value as Record<string, unknown>;
+  const unknown = Object.keys(source).filter((field) => !MEDIA_FIELDS.has(field));
+  if (unknown.length > 0) {
+    throw new Error(`annotation ${id} media has unknown fields: ${unknown.sort().join(", ")}`);
+  }
+  const url = source.url;
+  const thumbUrl = source.thumb_url;
+  // A published path only. An annotation must never reference a file outside
+  // the published media directory.
+  for (const [field, candidate] of [["url", url], ["thumb_url", thumbUrl]] as const) {
+    if (typeof candidate !== "string" || !candidate.startsWith("media/")) {
+      throw new Error(`annotation ${id} media ${field} must be a published media path`);
+    }
+  }
+  const width = source.width;
+  const height = source.height;
+  for (const [field, candidate] of [["width", width], ["height", height]] as const) {
+    if (typeof candidate !== "number" || !Number.isInteger(candidate) || candidate <= 0) {
+      throw new Error(`annotation ${id} media ${field} must be a positive integer`);
+    }
+  }
+  return {
+    url: url as string,
+    thumbUrl: thumbUrl as string,
+    width: width as number,
+    height: height as number,
+  };
+}
 
 /**
  * Annotations are anchored to the recorded trace, so an anchor that does not
@@ -371,6 +406,11 @@ function validatedAnnotations(
     if (typeof body !== "string" || !body.trim()) {
       throw new Error(`annotation ${id} body must be a non-empty string`);
     }
+    const media = source.media;
+    if (kind === "image" && media === undefined) {
+      throw new Error(`annotation ${id} of kind image requires media`);
+    }
+
     const title = source.title;
     if (title !== undefined && (typeof title !== "string" || !title.trim())) {
       throw new Error(`annotation ${id} title must be a non-empty string`);
@@ -383,6 +423,7 @@ function validatedAnnotations(
       evidence: evidence as RouteAnnotation["evidence"],
       body,
       ...(typeof title === "string" ? { title } : {}),
+      ...(media !== undefined ? { media: validatedMedia(media, id) } : {}),
     };
   });
 }

@@ -15,8 +15,9 @@ interpretation is `hypothesis` and must never be presented as recorded truth.
 ANNOTATION_KINDS = ("note", "landmark", "warning", "image")
 ANNOTATION_EVIDENCE = ("recorded", "derived", "measured", "hypothesis")
 ANNOTATION_FIELDS = frozenset(
-    ("id", "at_distance_m", "kind", "body", "evidence", "title")
+    ("id", "at_distance_m", "kind", "body", "evidence", "title", "media")
 )
+MEDIA_FIELDS = frozenset(("url", "thumb_url", "width", "height"))
 MAX_BODY_LENGTH = 2000
 MAX_TITLE_LENGTH = 120
 
@@ -95,6 +96,12 @@ def _build_one(item, index, route_distance_m):
         "body": body.strip(),
     }
 
+    media = item.get("media")
+    if annotation["kind"] == "image" and media is None:
+        raise ValueError(f"annotation {identifier} of kind image requires media")
+    if media is not None:
+        annotation["media"] = _build_media(media, identifier)
+
     title = item.get("title")
     if title is not None:
         if not isinstance(title, str) or not title.strip():
@@ -107,3 +114,36 @@ def _build_one(item, index, route_distance_m):
         annotation["title"] = title.strip()
 
     return annotation
+
+
+def _build_media(media, identifier):
+    """Validate a published image reference.
+
+    The published paths come from route_media.publish_photo, which strips EXIF,
+    so a reference here never carries the coordinates or the clock of the
+    photograph it came from. A path outside the published media directory is
+    refused, so an annotation can never point at the curator's own filesystem.
+    """
+    if not isinstance(media, dict):
+        raise ValueError(f"annotation {identifier} media must be an object")
+    unknown = sorted(set(media) - MEDIA_FIELDS)
+    if unknown:
+        raise ValueError(
+            f"annotation {identifier} media has unknown fields: {', '.join(unknown)}"
+        )
+    built = {}
+    for field in ("url", "thumb_url"):
+        value = media.get(field)
+        if not isinstance(value, str) or not value.startswith("media/"):
+            raise ValueError(
+                f"annotation {identifier} media {field} must be a published media path"
+            )
+        built[field] = value
+    for field in ("width", "height"):
+        value = media.get(field)
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ValueError(
+                f"annotation {identifier} media {field} must be a positive integer"
+            )
+        built[field] = value
+    return built

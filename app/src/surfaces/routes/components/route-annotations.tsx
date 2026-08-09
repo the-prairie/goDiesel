@@ -79,6 +79,17 @@ export function RouteAnnotations({
                   </span>
                 ) : null}
               </p>
+              {annotation.media ? (
+                <img
+                  src={annotation.media.thumbUrl}
+                  alt={annotation.title ?? annotation.body}
+                  width={annotation.media.width}
+                  height={annotation.media.height}
+                  loading="lazy"
+                  data-testid="route-annotation-image"
+                  className="mt-2 h-auto w-full max-w-[14rem] border border-line bg-surface-muted object-cover"
+                />
+              ) : null}
               {annotation.title ? (
                 <p className="mt-1 text-control font-semibold text-ink">
                   {annotation.title}

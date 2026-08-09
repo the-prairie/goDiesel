@@ -29,12 +29,20 @@ import gpxpy
 import pandas as pd
 
 from admin_curation import curation_readiness, save_curation_and_rebuild, write_atomic
+import hashlib
+import tempfile
+
 from curation_publish import (
     CurationPublishError,
     publish_annotations,
     publish_curation,
 )
 from route_imports import route_metadata
+from route_media import (
+    match_photo_to_route,
+    publish_photo,
+    read_photo_metadata,
+)
 
 try:
     import fitparse
@@ -64,6 +72,11 @@ ALLOWED_ORIGINS = CONFIGURED_APP_ORIGINS | {
     f'http://127.0.0.1:{PORT}',
 }
 MAX_POST_BYTES = 1024 * 1024
+# A photograph is far larger than a JSON body, and HEIC from a recent iPhone can
+# be several megabytes. This cap applies only to the media upload path.
+MAX_MEDIA_BYTES = 25 * 1024 * 1024
+SLUG_PATTERN = re.compile(r'^[A-Za-z0-9._-]+$')
+MEDIA_ROOT = QUESTS / 'app' / 'public' / 'media'
 OWNER_MUTATION_LOCK = threading.Lock()
 TEAL = '#00F19F'
 CURATION_TEXT_FIELDS = ('title', 'theme', 'difficulty', 'blurb', 'completion_rule')
@@ -619,10 +632,79 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._send(404, {'error': 'not found'})
 
+    def _handle_media_upload(self):
+        """Accept one dropped photograph and propose where it belongs.
+
+        The browser cannot decode HEIC and cannot read EXIF, so the file arrives
+        here as raw bytes. This endpoint reads the position and the clock,
+        proposes an anchor, and publishes a stripped copy. It does not create an
+        annotation. A curator accepts a proposal through /api/annotations/save.
+        """
+        slug = self.headers.get('X-Route-Slug', '')
+        if not SLUG_PATTERN.match(slug or ''):
+            self._send(400, {'error': 'X-Route-Slug is missing or malformed'})
+            return
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+        except ValueError:
+            self._send(400, {'error': 'invalid Content-Length'})
+            return
+        if length <= 0:
+            self._send(400, {'error': 'empty upload'})
+            return
+        if length > MAX_MEDIA_BYTES:
+            self._send(413, {'error': 'image too large'})
+            return
+
+        detail_path = QUESTS / 'app' / 'public' / 'data' / 'routes' / f'{slug}.json'
+        if not detail_path.is_file():
+            self._send(404, {'error': f'route {slug} has no generated record'})
+            return
+        detail = json.loads(detail_path.read_text(encoding='utf-8'))
+        temporal = detail.get('provenance', {}).get('temporal', {})
+
+        payload = self.rfile.read(length)
+        digest = hashlib.sha256(payload).hexdigest()[:16]
+        with tempfile.NamedTemporaryFile(delete=False) as staged:
+            staged.write(payload)
+            staged_path = Path(staged.name)
+        try:
+            try:
+                photo = read_photo_metadata(
+                    staged_path, fallback_time_zone=temporal.get('time_zone')
+                )
+            except Exception:
+                self._send(400, {'error': 'the upload is not a readable image'})
+                return
+            proposal = match_photo_to_route(photo, detail.get('route') or [], temporal)
+            media = publish_photo(staged_path, MEDIA_ROOT / slug, slug, digest)
+        finally:
+            staged_path.unlink(missing_ok=True)
+
+        self._send(200, {
+            'ok': True,
+            'digest': digest,
+            'media': media,
+            'match': proposal,
+            'had_position': photo.get('lat') is not None,
+            'had_time': photo.get('taken_utc') is not None,
+        })
+
     def do_POST(self):
         path = urlparse(self.path).path
         if not self._origin_allowed():
             self._send(403, {'error': 'origin not allowed'})
+            return
+        # Media arrives as raw bytes, so it is handled before the UTF-8 decode
+        # that every JSON endpoint depends on.
+        if path == '/api/media/upload':
+            if not OWNER_MUTATION_LOCK.acquire(blocking=False):
+                self._send(409, {'error': 'another owner mutation is in progress'})
+                return
+            try:
+                self._handle_media_upload()
+            finally:
+                OWNER_MUTATION_LOCK.release()
             return
         try:
             n = int(self.headers.get('Content-Length', 0))

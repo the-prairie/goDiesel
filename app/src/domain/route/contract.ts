@@ -69,6 +69,14 @@ export type RouteAnnotationEvidence =
  * Editorial content pinned to a distance along the recorded trace. One anchor
  * drives the guide margin, Replay, and the cinematic director.
  */
+/** A published image. EXIF is stripped before publication. */
+export interface RouteAnnotationMedia {
+  url: string;
+  thumbUrl: string;
+  width: number;
+  height: number;
+}
+
 export interface RouteAnnotation {
   id: string;
   atDistanceM: number;
@@ -76,6 +84,7 @@ export interface RouteAnnotation {
   evidence: RouteAnnotationEvidence;
   body: string;
   title?: string;
+  media?: RouteAnnotationMedia;
 }
 
 export type CurationReviewStatus = "draft" | "reviewed" | "published";

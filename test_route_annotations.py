@@ -89,3 +89,42 @@ class BuildRouteAnnotationsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AnnotationMediaTest(unittest.TestCase):
+    MEDIA = {
+        "url": "media/route-1/abc.jpg",
+        "thumb_url": "media/route-1/abc-thumb.jpg",
+        "width": 1600,
+        "height": 1067,
+    }
+
+    def test_an_image_annotation_carries_published_media(self):
+        result = build_route_annotations(
+            [annotation(kind="image", media=dict(self.MEDIA))], 1000
+        )
+
+        self.assertEqual(result[0]["media"]["width"], 1600)
+
+    def test_an_image_annotation_without_media_is_refused(self):
+        with self.assertRaises(ValueError):
+            build_route_annotations([annotation(kind="image")], 1000)
+
+    def test_media_must_point_at_a_published_path(self):
+        """Never reference a file outside the published media directory."""
+        with self.assertRaises(ValueError):
+            build_route_annotations(
+                [
+                    annotation(
+                        kind="image",
+                        media={**self.MEDIA, "url": "/Users/someone/Photos/IMG.HEIC"},
+                    )
+                ],
+                1000,
+            )
+
+    def test_unknown_media_fields_are_refused(self):
+        with self.assertRaises(ValueError):
+            build_route_annotations(
+                [annotation(kind="image", media={**self.MEDIA, "lat": 35.6})], 1000
+            )
