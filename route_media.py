@@ -17,6 +17,9 @@ curator accepts them. `'source': 'auto'` was the defect in the old matcher, not
 the matching itself.
 """
 
+import json
+import re
+import subprocess
 from datetime import datetime, timedelta, timezone
 from math import asin, cos, radians, sin, sqrt
 
@@ -301,3 +304,98 @@ def publish_photo(source_path, destination_dir, slug, digest, max_size=1600, thu
         "width": width,
         "height": height,
     }
+
+
+# ── Reading a video ────────────────────────────────────────────────────────────
+#
+# A video is a better ingest source than a photograph for one reason:
+# `com.apple.quicktime.creationdate` carries the UTC offset, so its timestamp is
+# unambiguous. A photograph's DateTimeOriginal is bare local time and has to
+# borrow a zone from the route.
+#
+# Two traps, both observed in real files:
+#
+#   com.apple.quicktime.creationdate   2025-11-25T07:50:41+0900  <- when it was shot
+#   creation_time                      2025-11-24T22:56:53Z      <- when the file was written
+#
+# Those differed by six minutes on a thirteen-second clip, which is about a
+# kilometre of route at running pace. Always read the Apple key.
+#
+# And re-encoding destroys every Apple key. A clip cut with `-c copy` also loses
+# them unless `-movflags use_metadata_tags` is given.
+
+VIDEO_LOCATION_PATTERN = re.compile(
+    r"^([+-]\d+(?:\.\d+)?)([+-]\d+(?:\.\d+)?)(?:([+-]\d+(?:\.\d+)?))?"
+)
+
+
+def read_video_metadata(path):
+    """Read when and where a video was shot, using ffprobe."""
+    probe = subprocess.run(
+        [
+            "ffprobe", "-v", "quiet", "-print_format", "json",
+            "-show_format", str(path),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    document = json.loads(probe.stdout)["format"]
+    tags = document.get("tags", {})
+
+    created = tags.get("com.apple.quicktime.creationdate")
+    taken = None
+    if created:
+        try:
+            taken = datetime.fromisoformat(created).astimezone(timezone.utc)
+        except ValueError:
+            taken = None
+
+    lat = lng = altitude = None
+    matched = VIDEO_LOCATION_PATTERN.match(
+        tags.get("com.apple.quicktime.location.ISO6709", "")
+    )
+    if matched:
+        lat = float(matched.group(1))
+        lng = float(matched.group(2))
+        altitude = float(matched.group(3)) if matched.group(3) else None
+
+    return {
+        "taken_utc": taken,
+        "lat": lat,
+        "lng": lng,
+        "altitude_m": altitude,
+        "duration_s": float(document.get("duration", 0.0)),
+        "model": tags.get("com.apple.quicktime.model"),
+    }
+
+
+def frame_photo(video, offset_seconds):
+    """Describe the frame at an offset as though it were a photograph.
+
+    The video supplies the moment. The route supplies the position for that
+    moment, so a frame is matchable even though the video records only one
+    position for the whole clip.
+    """
+    if video.get("taken_utc") is None:
+        return {"lat": video.get("lat"), "lng": video.get("lng"), "taken_utc": None}
+    return {
+        "lat": video.get("lat"),
+        "lng": video.get("lng"),
+        "taken_utc": video["taken_utc"] + timedelta(seconds=offset_seconds),
+    }
+
+
+def extract_frame(video_path, offset_seconds, destination):
+    """Write one frame to disk. The frame carries no metadata of its own."""
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-v", "error",
+            "-ss", f"{offset_seconds:.3f}",
+            "-i", str(video_path),
+            "-frames:v", "1",
+            str(destination),
+        ],
+        check=True,
+    )
+    return destination
