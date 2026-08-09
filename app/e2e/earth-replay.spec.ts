@@ -531,6 +531,7 @@ for (const [device, viewport] of [
     });
     await page.setViewportSize(viewport);
     await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
+    await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-state", "ready");
     if (device === "mobile") {
       await page.getByRole("button", { name: "Show route details" }).click();
     }

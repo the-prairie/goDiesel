@@ -11,6 +11,7 @@ Endpoints:
 """
 import gzip
 import json
+import os
 import math
 import re
 import subprocess
@@ -27,25 +28,46 @@ from urllib.parse import urlparse
 import gpxpy
 import pandas as pd
 
-from admin_curation import curation_readiness, save_curation_and_rebuild
+from admin_curation import curation_readiness, save_curation_and_rebuild, write_atomic
 
 try:
     import fitparse
 except ImportError:
     fitparse = None
 
-QUESTS = Path('/Users/laurenzary/Desktop/goDiesel')
-DD = Path('/Users/laurenzary/Desktop/DieselDiaries')
+QUESTS = Path(
+    os.environ.get("GODIESEL_CHECKOUT_ROOT", Path(__file__).resolve().parent)
+).resolve()
+DD = Path(
+    os.environ.get("GODIESEL_DIESEL_DIARIES_ROOT", "/Users/laurenzary/Desktop/DieselDiaries")
+).resolve()
 ACTIVITY_DIR = DD / 'strava_export' / 'activities'
 GEO_CACHE_PATH = QUESTS / '.geo_cache.json'
 GEOCODE_BUCKETS_PATH = QUESTS / '.geocode_buckets.json'
-PORT = 8766
+PORT = int(os.environ.get("GODIESEL_ADMIN_PORT", "8766"))
+CONFIGURED_APP_ORIGINS = frozenset(
+    origin.strip()
+    for origin in os.environ.get(
+        "GODIESEL_APP_ORIGINS",
+        "http://localhost:8787,http://127.0.0.1:8787",
+    ).split(",")
+    if origin.strip()
+)
+ALLOWED_ORIGINS = CONFIGURED_APP_ORIGINS | {
+    f'http://localhost:{PORT}',
+    f'http://127.0.0.1:{PORT}',
+}
+MAX_POST_BYTES = 1024 * 1024
+OWNER_MUTATION_LOCK = threading.Lock()
 TEAL = '#00F19F'
 CURATION_TEXT_FIELDS = ('title', 'theme', 'difficulty', 'blurb', 'completion_rule')
 CURATION_VISIBILITIES = ('public', 'hidden')
 
 # Nominatim fair-use: max 1 req/sec, descriptive User-Agent required.
-NOMINATIM_USER_AGENT = 'QuestsAdmin/1.0 (personal use; lauren@purposemed.com)'
+NOMINATIM_USER_AGENT = os.environ.get(
+    'GODIESEL_NOMINATIM_USER_AGENT',
+    'goDieselOwnerAdmin/1.0',
+)
 NOMINATIM_URL = 'https://nominatim.openstreetmap.org/reverse'
 GEOCODE_BUCKET_DEG = 0.05  # ~5 km cells — nearby rides share a single API call
 
@@ -516,16 +538,23 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Length', str(len(body)))
         self.send_header('Cache-Control', 'no-store')
         origin = self.headers.get('Origin')
-        if origin in ('http://localhost:8787', 'http://127.0.0.1:8787'):
+        if origin in ALLOWED_ORIGINS:
             self.send_header('Access-Control-Allow-Origin', origin)
             self.send_header('Vary', 'Origin')
         self.end_headers()
         self.wfile.write(body)
 
+    def _origin_allowed(self):
+        origin = self.headers.get('Origin')
+        return origin is None or origin in ALLOWED_ORIGINS
+
     def do_OPTIONS(self):
         origin = self.headers.get('Origin')
+        if origin not in ALLOWED_ORIGINS:
+            self._send(403, {'error': 'origin not allowed'})
+            return
         self.send_response(204)
-        if origin in ('http://localhost:8787', 'http://127.0.0.1:8787'):
+        if origin in ALLOWED_ORIGINS:
             self.send_header('Access-Control-Allow-Origin', origin)
             self.send_header('Vary', 'Origin')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
@@ -567,44 +596,85 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
-        n = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(n).decode('utf-8') if n else ''
+        if not self._origin_allowed():
+            self._send(403, {'error': 'origin not allowed'})
+            return
+        try:
+            n = int(self.headers.get('Content-Length', 0))
+        except ValueError:
+            self._send(400, {'error': 'invalid Content-Length'})
+            return
+        if n < 0:
+            self._send(400, {'error': 'invalid Content-Length'})
+            return
+        if n > MAX_POST_BYTES:
+            self._send(413, {'error': 'request body too large'})
+            return
+        try:
+            body = self.rfile.read(n).decode('utf-8') if n else ''
+        except UnicodeDecodeError:
+            self._send(400, {'error': 'request body must be UTF-8'})
+            return
         if path == '/api/save':
-            data = json.loads(body)
-            updates = data.get('routes', [])
-            cfg = json.loads((QUESTS / 'quests.json').read_text())
-            by_id = {r['activity_id']: r for r in cfg['routes']}
-            for u in updates:
-                aid = u['activity_id']
-                if aid not in by_id:
-                    continue
-                if 'status' in u:
-                    by_id[aid]['status'] = u['status']
-                if 'region' in u:
-                    by_id[aid]['region'] = u['region'] or None
-                for field in CURATION_TEXT_FIELDS:
-                    if field in u:
-                        value = str(u[field]).strip()
-                        if value:
-                            by_id[aid][field] = value
+            if not OWNER_MUTATION_LOCK.acquire(blocking=False):
+                self._send(409, {'error': 'another owner mutation is in progress'})
+                return
+            try:
+                data = json.loads(body)
+                if not isinstance(data, dict) or not isinstance(data.get('routes', []), list):
+                    raise ValueError('request must contain a routes list')
+                updates = data.get('routes', [])
+                if any(not isinstance(update, dict) or 'activity_id' not in update for update in updates):
+                    raise ValueError('every route update must contain an activity_id')
+                config_path = QUESTS / 'quests.json'
+                cfg = json.loads(config_path.read_text(encoding='utf-8'))
+                routes = cfg.get('routes')
+                if not isinstance(routes, list):
+                    raise ValueError('quests.json must contain a routes list')
+                route_ids = [route.get('activity_id') for route in routes]
+                if len(route_ids) != len(set(route_ids)):
+                    raise ValueError('quests.json contains duplicate activity ids')
+                by_id = {route['activity_id']: route for route in routes}
+                updated = 0
+                for update in updates:
+                    aid = update['activity_id']
+                    if aid not in by_id:
+                        continue
+                    if 'status' in update:
+                        by_id[aid]['status'] = update['status']
+                    if 'region' in update:
+                        by_id[aid]['region'] = update['region'] or None
+                    for field in CURATION_TEXT_FIELDS:
+                        if field in update:
+                            value = str(update[field]).strip()
+                            if value:
+                                by_id[aid][field] = value
+                            else:
+                                by_id[aid].pop(field, None)
+                    if 'visibility' in update:
+                        value = str(update['visibility']).strip()
+                        if value and value not in CURATION_VISIBILITIES:
+                            raise ValueError(
+                                f'visibility must be one of: {", ".join(CURATION_VISIBILITIES)}'
+                            )
+                        if value and value != 'public':
+                            by_id[aid]['visibility'] = value
                         else:
-                            by_id[aid].pop(field, None)
-                if 'visibility' in u:
-                    value = str(u['visibility']).strip()
-                    if value and value not in CURATION_VISIBILITIES:
-                        self._send(400, {
-                            'error': f'visibility must be one of: {", ".join(CURATION_VISIBILITIES)}'
-                        })
-                        return
-                    if value and value != 'public':
-                        by_id[aid]['visibility'] = value
-                    else:
-                        by_id[aid].pop('visibility', None)
-            cfg['routes'] = list(by_id.values())
-            (QUESTS / 'quests.json').write_text(json.dumps(cfg, indent=2))
-            self._send(200, {'ok': True, 'updated': len(updates)})
+                            by_id[aid].pop('visibility', None)
+                    updated += 1
+                cfg['routes'] = list(by_id.values())
+                write_atomic(config_path, json.dumps(cfg, indent=2) + '\n')
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send(400, {'error': str(error)})
+                return
+            finally:
+                OWNER_MUTATION_LOCK.release()
+            self._send(200, {'ok': True, 'updated': updated})
             return
         if path == '/api/curation/save':
+            if not OWNER_MUTATION_LOCK.acquire(blocking=False):
+                self._send(409, {'error': 'another owner mutation is in progress'})
+                return
             try:
                 data = json.loads(body)
                 activity_id = str(data['activity_id'])
@@ -631,6 +701,8 @@ class Handler(BaseHTTPRequestHandler):
                     'detail': error.stderr[-1000:] if error.stderr else '',
                 })
                 return
+            finally:
+                OWNER_MUTATION_LOCK.release()
             self._send(200, {
                 'ok': True,
                 'activity_id': activity_id,
@@ -639,10 +711,23 @@ class Handler(BaseHTTPRequestHandler):
             })
             return
         if path == '/api/rebuild':
-            subprocess.Popen([sys.executable, str(QUESTS / 'build.py')],
-                             cwd=str(QUESTS),
-                             stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL)
+            if not OWNER_MUTATION_LOCK.acquire(blocking=False):
+                self._send(409, {'error': 'another owner mutation is in progress'})
+                return
+
+            def rebuild_in_background():
+                try:
+                    subprocess.run(
+                        [sys.executable, str(QUESTS / 'build.py')],
+                        cwd=str(QUESTS),
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        check=False,
+                    )
+                finally:
+                    OWNER_MUTATION_LOCK.release()
+
+            threading.Thread(target=rebuild_in_background, daemon=True).start()
             self._send(200, {'ok': True, 'msg': 'Rebuild started in background.'})
             return
         if path == '/api/auto-classify':

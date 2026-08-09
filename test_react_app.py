@@ -42,7 +42,8 @@ def test_app_shell_defines_expected_navigation_and_hash_route_support():
     assert 'aria-label="Primary"' in spine
     assert 'appSectionForPath(location.pathname)' in spine
     assert 'aria-current={isActive ? "page" : undefined}' in spine
-    assert '<AtlasSpine />' in shell
+    assert "singleRouteMicrosite ? null" in shell
+    assert '<AtlasSpine hideDesktop={isAtlas} />' in shell
     assert '<Outlet />' in shell
 
 
@@ -145,6 +146,7 @@ def test_release_build_packages_the_react_application():
     packaging = (ROOT / "make-dist.sh").read_text()
     readme = (ROOT / "README.md").read_text()
     wrangler = (ROOT / "wrangler.toml").read_text()
+    vite = (APP / "vite.config.ts").read_text()
 
     assert "npm --prefix app run build" in packaging
     assert "npm --prefix app run test:bundle" in packaging
@@ -153,6 +155,7 @@ def test_release_build_packages_the_react_application():
     assert "The React application is the canonical product" in readme
     assert "static-fallback-2026-07-14" in readme
     assert 'pages_build_output_dir = "./dist"' in wrangler
+    assert 'process.env.GODIESEL_DISABLE_LIVE_PROVIDERS === "1"' in vite
 
 
 def test_generated_route_publication_is_staged_and_rollback_safe():
@@ -210,19 +213,24 @@ def test_interrupted_route_publication_restores_last_complete_generation(tmp_pat
 
 def test_atlas_globe_ports_route_heat_traces_and_interaction():
     globe = (APP / "src/components/globe/atlas-globe.tsx").read_text()
+    cesium_globe = (APP / "src/components/globe/cesium-atlas-globe.tsx").read_text()
+    engine = (APP / "src/atlas/cesium-atlas-world-engine.ts").read_text()
     atlas = (APP / "src/pages/atlas-page.tsx").read_text()
 
-    assert 'from "three"' in globe
-    assert "function routeToGlobeHeatPoints" in globe
-    assert "function makeGlobeHeatLine" in globe
-    assert "function syncLabelBounds" in globe
-    assert "state.labelBounds" in globe
-    assert "label.offsetWidth" not in globe[globe.find("function updateLabels"):]
-    assert "new TubeGeometry" in globe
-    assert "blending: AdditiveBlending" in globe
-    assert "new TextureLoader().load" in globe
-    assert "intersectObjects(state.anchors" in globe
-    assert "cameraDistance + event.deltaY * 0.004" in globe
+    assert 'lazy(() =>' in globe
+    assert 'import("@/components/globe/cesium-atlas-globe")' in globe
+    assert "<Suspense" in globe
+    assert "<CesiumAtlasGlobe ref={ref} {...props} />" in globe
+    assert "createAtlasWorldEngine()" in cesium_globe
+    assert "engine.destroy()" in cesium_globe
+    assert "readyEngineRef.current?.setSelectedRegion(selectedRegion)" in cesium_globe
+    assert "readyEngineRef.current?.setSelectedRoute(selectedRoute)" in cesium_globe
+    assert 'from "cesium"' in engine
+    assert "Cesium3DTileset.fromUrl" in engine
+    assert "sampleGlobalRoutePoints(route)" in engine
+    assert "sampleRegionalRoutePoints(route)" in engine
+    assert "this.installRouteSelection(viewer)" in engine
+    assert "routeForPickedEntity" in engine
     assert "<AtlasGlobe" in atlas
 
 
@@ -244,7 +252,7 @@ def test_atlas_search_models_memory_search_states():
     assert "Best in Earth" in search
     assert "function searchState" in search
     assert "selectedLabel" not in search
-    assert "selectionActive: Boolean(selectedRegion)" in search
+    assert "selectionActive: Boolean(selectedRoute)" in search
     assert "SelectedSearchResult" not in search
 
 
@@ -252,7 +260,9 @@ def test_replay_picker_pins_selected_route_and_avoids_mobile_nav_overlap():
     replay = (APP / "src/pages/replay-page.tsx").read_text()
     picker = (APP / "src/components/replay/replay-route-picker.tsx").read_text()
 
-    assert "const pickerRoutes = selectedSummary" in replay
+    assert "const pickerRoutes = singleRouteMicrosite" in replay
+    assert "? []" in replay
+    assert "selectedSummary," in replay
     assert ".filter((route) => route.slug !== selectedSummary.slug)" in replay
     assert "Change route" in picker
     assert "min-h-0 flex-1" in picker

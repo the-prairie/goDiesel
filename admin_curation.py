@@ -59,11 +59,11 @@ def save_curation_and_rebuild(config_path, activity_id, value, rebuild):
     updated = update_route_curation(config, activity_id, value)
     serialized = json.dumps(updated, indent=2) + "\n"
 
-    _write_atomic(config_path, serialized)
+    write_atomic(config_path, serialized)
     try:
         rebuild()
     except Exception:
-        _write_atomic(config_path, original)
+        write_atomic(config_path, original)
         raise
 
     route = next(
@@ -73,7 +73,8 @@ def save_curation_and_rebuild(config_path, activity_id, value, rebuild):
     return route
 
 
-def _write_atomic(path, content):
+def write_atomic(path, content):
+    """Replace a text file without exposing a partially written destination."""
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(content, encoding="utf-8")
     os.replace(temporary, path)
