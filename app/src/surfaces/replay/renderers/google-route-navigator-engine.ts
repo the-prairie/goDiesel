@@ -10,6 +10,7 @@ import {
   type GoogleRouteCameraPose,
   type GoogleRouteGroundingMode,
 } from "@/surfaces/replay/playback/route-navigator-controller";
+import { ProviderError, providerFailureMessage } from "@/providers/provider-error";
 import { loadGoogleMaps } from "@/providers/google-maps-loader";
 import { routeDistanceM } from "@/domain/geometry/route-path";
 
@@ -71,7 +72,7 @@ function waitForGoogleSceneReady(map: google.maps.maps3d.Map3DElement) {
   return new Promise<void>((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       cleanup();
-      reject(new Error("Google photorealistic 3D did not finish loading."));
+      reject(new ProviderError("Google photorealistic 3D did not finish loading."));
     }, GOOGLE_SCENE_READY_TIMEOUT_MS);
     const onSteady = (event: Event) => {
       if (!(event as google.maps.maps3d.SteadyChangeEvent).isSteady) return;
@@ -80,7 +81,7 @@ function waitForGoogleSceneReady(map: google.maps.maps3d.Map3DElement) {
     };
     const onError = () => {
       cleanup();
-      reject(new Error("Google photorealistic 3D could not render this scene."));
+      reject(new ProviderError("Google photorealistic 3D could not render this scene."));
     };
     const cleanup = () => {
       window.clearTimeout(timeout);
@@ -218,10 +219,10 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
       if (generation !== this.generation) return;
       onStatus({
         state: "unavailable",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Google 3D Maps could not start.",
+        message: providerFailureMessage(
+          error,
+          "Google photorealistic 3D could not start in this browser. Atlas replay works everywhere.",
+        ),
       });
     }
   }

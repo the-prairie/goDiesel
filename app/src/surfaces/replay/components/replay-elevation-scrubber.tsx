@@ -96,7 +96,15 @@ export const ReplayElevationScrubber = forwardRef<
 
   const sync = (nextProgressM: number) => {
     const ratio = Math.min(1, Math.max(0, nextProgressM / totalDistanceM));
-    hostRef.current?.style.setProperty("--replay-progress", `${ratio * 100}%`);
+    // Two variables for one value. The percentage positions the playhead, a
+    // plain HTML element, where a length is what CSS wants. The unitless ratio
+    // scales the SVG clip: an SVG geometry attribute cannot take var(), so the
+    // clip is a full-width rect scaled on its x axis instead. WebKit rejects
+    // `width="var(--replay-progress)"` outright, which left the played portion
+    // of the profile unfilled in Safari.
+    const host = hostRef.current;
+    host?.style.setProperty("--replay-progress", `${ratio * 100}%`);
+    host?.style.setProperty("--replay-progress-scale", `${ratio}`);
   };
 
   useImperativeHandle(ref, () => ({ sync }), [totalDistanceM]);
@@ -117,7 +125,12 @@ export const ReplayElevationScrubber = forwardRef<
         compact ? "h-[4.5rem]" : "h-[6.25rem]",
         className,
       )}
-      style={{ "--replay-progress": "0%" } as React.CSSProperties}
+      style={
+        {
+          "--replay-progress": "0%",
+          "--replay-progress-scale": "0",
+        } as React.CSSProperties
+      }
     >
       <svg
         viewBox={`0 0 ${PROFILE_WIDTH} ${PROFILE_HEIGHT}`}
@@ -130,8 +143,13 @@ export const ReplayElevationScrubber = forwardRef<
             <rect
               x="0"
               y="0"
-              width="var(--replay-progress)"
+              width={PROFILE_WIDTH}
               height={PROFILE_HEIGHT}
+              style={{
+                transform: "scaleX(var(--replay-progress-scale))",
+                transformOrigin: "left",
+                transformBox: "fill-box",
+              }}
             />
           </clipPath>
         </defs>

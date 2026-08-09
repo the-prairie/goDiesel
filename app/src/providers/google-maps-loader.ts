@@ -1,3 +1,5 @@
+import { ProviderError } from "@/providers/provider-error";
+
 let mapsPromise: Promise<void> | undefined;
 
 declare global {
@@ -58,12 +60,12 @@ export function loadGoogleMaps(apiKey: string) {
     };
 
     function handleScriptError() {
-      fail(new Error("Google Maps could not be loaded."));
+      fail(new ProviderError("Google Maps could not be loaded."));
     }
 
     function handleAuthFailure() {
       window.dispatchEvent(new CustomEvent("godiesel:google-maps-auth-failure"));
-      fail(new Error("Google Maps rejected this browser key."));
+      fail(new ProviderError("Google Maps rejected this browser key."));
     }
 
     window.__godieselGoogleMapsReady = complete;
@@ -75,7 +77,7 @@ export function loadGoogleMaps(apiKey: string) {
       `&v=weekly&loading=async&callback=${callbackName}`;
     script.addEventListener("error", handleScriptError, { once: true });
     timeout = window.setTimeout(() => {
-      fail(new Error("Google Maps did not finish loading."));
+      fail(new ProviderError("Google Maps did not finish loading."));
     }, 20_000);
     document.head.append(script);
   }).catch((error) => {
