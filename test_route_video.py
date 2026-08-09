@@ -26,8 +26,14 @@ KYOTO = ROOT / "app/public/data/routes/17654151284.json"
 
 # Measured against the full originals, not the trimmed fixtures.
 EXPECTED = {
-    "kyoto-stairway.mov": {"at_distance_m": 7519.3, "altitude_m": 285.845},
-    "kyoto-summit.mov": {"at_distance_m": 8632.4, "altitude_m": 469.875},
+    # Measured with time as the gate and position as the instrument. Separation
+    # is the quality signal: 10.4 m and 0.9 m from a single GPS fix.
+    "kyoto-stairway.mov": {
+        "at_distance_m": 7572.3, "altitude_m": 285.845, "max_separation_m": 15.0
+    },
+    "kyoto-summit.mov": {
+        "at_distance_m": 8632.4, "altitude_m": 469.875, "max_separation_m": 5.0
+    },
 }
 
 
@@ -65,6 +71,9 @@ class VideoIngestTest(unittest.TestCase):
                 self.assertEqual(match["evidence"], "recorded")
                 self.assertAlmostEqual(
                     match["at_distance_m"], expected["at_distance_m"], delta=1.0
+                )
+                self.assertLessEqual(
+                    match["separation_m"], expected["max_separation_m"]
                 )
 
     def test_recorded_elevation_agrees_with_the_video_altitude(self):

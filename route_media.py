@@ -20,12 +20,17 @@ the matching itself.
 import json
 import re
 import subprocess
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from math import asin, cos, radians, sin, sqrt
 
 EARTH_RADIUS_M = 6_371_000.0
 
 # A high-confidence match must agree in both time and position.
+# Time gates which stretch of the route is plausible. It is deliberately wider
+# than the position tolerance, because a clock is reliable and a single GPS fix
+# is not; position then picks the anchor inside that window.
+TIME_GATE_SECONDS = 120
 HIGH_CONFIDENCE_SECONDS = 90
 HIGH_CONFIDENCE_METRES = 100
 # Position-only, for a scouted route or a photo with no usable timestamp.
@@ -42,12 +47,16 @@ def haversine_m(lat_a, lng_a, lat_b, lng_b):
     return 2 * EARTH_RADIUS_M * asin(sqrt(h))
 
 
-def match_photo_to_route(photo, route, temporal):
+def match_photo_to_route(photo, route, temporal, discontinuities=None):
     """Propose where a photograph belongs on a route.
 
     `photo` carries `lat`, `lng` and an optional timezone-aware `taken_utc`.
     Returns a proposal with a confidence, the anchor in metres, and the evidence
     label the annotation should carry if a curator accepts it.
+
+    `discontinuities` is accepted for callers that already hold it, and is
+    currently unused: the anchor is always an actual recorded point, so no
+    geometry is interpolated and CONTEXT.md invariant 8 cannot be violated here.
     """
     if not route:
         return _no_match("the route has no recorded geometry")
@@ -56,14 +65,24 @@ def match_photo_to_route(photo, route, temporal):
     if not has_position:
         return _no_match("the photograph carries no coordinates")
 
-    timed = _time_match(photo, route, temporal)
+    timed = _time_match(photo, route, temporal, discontinuities)
     if timed is not None:
         return timed
     return _position_match(photo, route)
 
 
-def _time_match(photo, route, temporal):
-    """Anchor by recorded time, then confirm with position."""
+def _time_match(photo, route, temporal, discontinuities=None):
+    """Anchor with time as the gate and position as the instrument.
+
+    Time decides *which stretch* of the route is plausible, which is what
+    position alone cannot do on an out-and-back. Position then decides *where*
+    within that stretch, because a GPS fix is accurate to a few metres while
+    recorded points are about twenty seconds apart.
+
+    Using time alone was measurably worse: on a real clip shot almost exactly at
+    a recorded point, interpolating by time moved the anchor 24 m away from a
+    position that agreed to 0.9 m.
+    """
     taken = photo.get("taken_utc")
     if taken is None or (temporal or {}).get("status") != "recorded":
         return None
@@ -73,19 +92,30 @@ def _time_match(photo, route, temporal):
 
     offset = (taken - start).total_seconds()
     elapsed_total = temporal.get("elapsed_time_s")
-    if offset < -HIGH_CONFIDENCE_SECONDS:
+    if offset < -TIME_GATE_SECONDS:
         return None
-    if elapsed_total is not None and offset > elapsed_total + HIGH_CONFIDENCE_SECONDS:
-        return None
-
-    point = _point_at_elapsed(route, offset)
-    if point is None:
+    if elapsed_total is not None and offset > elapsed_total + TIME_GATE_SECONDS:
         return None
 
+    window = [
+        point
+        for point in route
+        if point.get("elapsed_s") is not None
+        and abs(point["elapsed_s"] - offset) <= TIME_GATE_SECONDS
+    ]
+    if not window:
+        return None
+
+    point = min(
+        window,
+        key=lambda candidate: haversine_m(
+            photo["lat"], photo["lng"], candidate["lat"], candidate["lng"]
+        ),
+    )
     separation = haversine_m(photo["lat"], photo["lng"], point["lat"], point["lng"])
-    time_error = abs(offset - point.get("elapsed_s", offset))
+    time_error = abs(offset - point["elapsed_s"])
 
-    if separation <= HIGH_CONFIDENCE_METRES and time_error <= HIGH_CONFIDENCE_SECONDS:
+    if separation <= HIGH_CONFIDENCE_METRES and time_error <= TIME_GATE_SECONDS:
         return _proposal(
             "high",
             point["d"],
@@ -138,13 +168,6 @@ def _position_match(photo, route):
         at_distance_m=nearest["d"],
         separation_m=separation,
     )
-
-
-def _point_at_elapsed(route, offset_seconds):
-    timed = [point for point in route if point.get("elapsed_s") is not None]
-    if not timed:
-        return None
-    return min(timed, key=lambda point: abs(point["elapsed_s"] - offset_seconds))
 
 
 def _proposal(confidence, at_distance_m, evidence, reason, separation_m, time_error_s):
@@ -399,3 +422,101 @@ def extract_frame(video_path, offset_seconds, destination):
         check=True,
     )
     return destination
+
+
+# ── Auto-sampling a video ──────────────────────────────────────────────────────
+#
+# A curator should not have to scrub a clip to find a usable still. Sample at a
+# fixed interval, score each frame for sharpness, and offer the best. Scrubbing
+# stays available for the frame the curator actually wants.
+#
+# Sharpness is the variance of the Laplacian, the standard cheap focus measure.
+# A blurred or motion-smeared frame has little high-frequency content and scores
+# low. On a running video most frames are smeared, so this matters.
+
+DEFAULT_SAMPLE_INTERVAL_S = 3.0
+MIN_SHARPNESS = 12.0
+
+
+def frame_sharpness(path):
+    """Variance of the Laplacian. Higher is sharper."""
+    from PIL import Image
+    import numpy as np
+
+    with Image.open(path) as image:
+        grey = np.asarray(image.convert("L"), dtype=np.float64)
+    if grey.size == 0:
+        return 0.0
+    # A 3x3 Laplacian, applied by slicing rather than a convolution dependency.
+    laplacian = (
+        -4 * grey[1:-1, 1:-1]
+        + grey[:-2, 1:-1]
+        + grey[2:, 1:-1]
+        + grey[1:-1, :-2]
+        + grey[1:-1, 2:]
+    )
+    return float(laplacian.var())
+
+
+def sample_video_frames(
+    video_path,
+    route,
+    temporal,
+    destination_dir,
+    discontinuities=None,
+    interval_s=DEFAULT_SAMPLE_INTERVAL_S,
+    limit=None,
+):
+    """Offer the frames of a video that are worth keeping.
+
+    Each candidate carries its offset, a sharpness score, and the match proposal
+    for the moment it was shot. Nothing is published and nothing is annotated. A
+    curator chooses.
+    """
+    video = read_video_metadata(video_path)
+    duration = video.get("duration_s") or 0.0
+    if duration <= 0:
+        return {"video": video, "candidates": []}
+
+    destination_dir = Path(destination_dir)
+    destination_dir.mkdir(parents=True, exist_ok=True)
+
+    offsets = []
+    offset = 0.0
+    while offset < duration:
+        offsets.append(round(offset, 3))
+        offset += interval_s
+    if not offsets:
+        offsets = [0.0]
+
+    candidates = []
+    for offset in offsets:
+        # The filename records the millisecond offset, which is how a frame's
+        # moment stays recoverable after extraction strips everything else.
+        frame_path = destination_dir / f"frame_{int(round(offset * 1000))}.png"
+        try:
+            extract_frame(video_path, offset, frame_path)
+        except subprocess.CalledProcessError:
+            continue
+        if not frame_path.is_file():
+            continue
+        sharpness = frame_sharpness(frame_path)
+        match = match_photo_to_route(
+            frame_photo(video, offset), route, temporal, discontinuities
+        )
+        candidates.append(
+            {
+                "offset_s": offset,
+                "path": frame_path,
+                "sharpness": round(sharpness, 1),
+                "usable": sharpness >= MIN_SHARPNESS,
+                "match": match,
+            }
+        )
+
+    candidates.sort(key=lambda item: item["sharpness"], reverse=True)
+    if limit is not None:
+        candidates = candidates[:limit]
+    # Present in route order, because that is the order every surface uses.
+    candidates.sort(key=lambda item: item["match"]["at_distance_m"] or 0.0)
+    return {"video": video, "candidates": candidates}

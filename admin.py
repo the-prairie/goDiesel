@@ -676,7 +676,12 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 self._send(400, {'error': 'the upload is not a readable image'})
                 return
-            proposal = match_photo_to_route(photo, detail.get('route') or [], temporal)
+            proposal = match_photo_to_route(
+                photo,
+                detail.get('route') or [],
+                temporal,
+                detail.get('provenance', {}).get('discontinuities'),
+            )
             media = publish_photo(staged_path, MEDIA_ROOT / slug, slug, digest)
         finally:
             staged_path.unlink(missing_ok=True)

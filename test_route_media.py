@@ -98,6 +98,46 @@ class MatchPhotoToRouteTest(unittest.TestCase):
         self.assertEqual(result["confidence"], "none")
 
 
+class TimeGatePositionInstrumentTest(unittest.TestCase):
+    """Time decides which stretch. Position decides where within it.
+
+    Measured on a real clip: anchoring by interpolated time alone moved the
+    summit video 24 m away from a recorded point its GPS agreed with to 0.9 m.
+    Anchoring by position alone cannot tell the two passes of an out-and-back
+    apart. Only the combination is right in both cases.
+    """
+
+    def test_position_picks_the_anchor_inside_the_time_window(self):
+        """Two recorded points fall inside the gate; the nearer one wins."""
+        route = [
+            {"lat": 35.0000, "lng": 139.0000, "d": 0.0, "elapsed_s": 0},
+            {"lat": 35.0010, "lng": 139.0000, "d": 111.0, "elapsed_s": 60},
+            {"lat": 35.0020, "lng": 139.0000, "d": 222.0, "elapsed_s": 120},
+        ]
+        temporal = {
+            "status": "recorded",
+            "start_time_utc": "2025-01-01T00:00:00Z",
+            "elapsed_time_s": 120,
+        }
+        # Shot at 60 s, but standing exactly on the 120 s point.
+        item = {"lat": 35.0020, "lng": 139.0000, "taken_utc": START.replace(
+            year=2025, month=1, day=1, hour=0, minute=1, second=0
+        )}
+
+        result = match_photo_to_route(item, route, temporal)
+
+        self.assertEqual(result["at_distance_m"], 222.0)
+        self.assertLess(result["separation_m"], 1.0)
+
+    def test_the_time_gate_still_excludes_a_distant_pass(self):
+        """Without the gate, position alone would pick the wrong pass."""
+        result = match_photo_to_route(
+            photo(35.0100, 139.0000, 10), OUT_AND_BACK, TEMPORAL
+        )
+
+        self.assertEqual(result["at_distance_m"], 1112.0)
+
+
 class HaversineTest(unittest.TestCase):
     def test_a_known_separation(self):
         # One hundredth of a degree of latitude is about 1.11 km.
