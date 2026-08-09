@@ -156,6 +156,7 @@ test.describe("live Earth Replay terrain clearance", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/#/replay/${kyotoRouteSlug}?renderer=cesium`);
     const stage = page.getByTestId("replay-stage");
+    const world = page.getByLabel("Earth Replay world");
     await expect(stage).toHaveAttribute("data-state", /ready|partial/, {
       timeout: 60_000,
     });
