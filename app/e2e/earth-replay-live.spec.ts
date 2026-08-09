@@ -11,19 +11,27 @@ const longestRouteSlug = "9845102380";
  * attributes only the Cesium engine wrote, and so silently stopped covering the
  * default path when ADR-0009 made native Google 3D primary on 2026-08-01.
  */
-async function expectActualClearance(stage: Locator, timeout = 15_000) {
+/**
+ * Read clearance from whichever element the mounted engine publishes it on.
+ *
+ * Cesium samples photogrammetry height and reports a measured clearance on its
+ * world container — strictly better evidence. Google's runtime cannot, so the
+ * scene contract derives clearance from recorded elevation and the stage
+ * publishes it. Both satisfy the same guarantee.
+ */
+async function expectActualClearance(source: Locator, timeout = 15_000) {
   await expect
     .poll(
       async () => {
-        const value = await stage.getAttribute("data-camera-clearance-m");
+        const value = await source.getAttribute("data-camera-clearance-m");
         return value !== null && value !== "" && Number.isFinite(Number(value));
       },
       { timeout },
     )
     .toBe(true);
   const [clearanceM, minimumClearanceM] = await Promise.all([
-    stage.getAttribute("data-camera-clearance-m"),
-    stage.getAttribute("data-minimum-camera-clearance-m"),
+    source.getAttribute("data-camera-clearance-m"),
+    source.getAttribute("data-minimum-camera-clearance-m"),
   ]);
   expect(Number(clearanceM)).toBeGreaterThanOrEqual(Number(minimumClearanceM));
 }
@@ -65,7 +73,7 @@ test.describe("live Earth Replay terrain clearance", () => {
       await expect(stage).toHaveAttribute("data-speed", String(speed));
       for (const fraction of [0.05, 0.33, 0.66, 0.9]) {
         await progress.fill(String(maxProgressM * fraction));
-        await expectActualClearance(stage);
+        await expectActualClearance(world);
         if (index === 0 && fraction === 0.33) {
           await testInfo.attach("kyoto-steep-section", {
             body: await page.screenshot(),
@@ -81,13 +89,13 @@ test.describe("live Earth Replay terrain clearance", () => {
       expect(Number(await stage.getAttribute("data-progress"))).toBeGreaterThanOrEqual(
         maxProgressM - 25,
       );
-      await expectActualClearance(stage);
+      await expectActualClearance(world);
     }
 
     await progress.fill(String(maxProgressM * 0.4));
     await page.getByRole("button", { name: "Zoom out from route" }).click();
     await expect(stage).toHaveAttribute("data-camera-range", "720");
-    await expectActualClearance(stage);
+    await expectActualClearance(world);
 
     const screenshot = await world.screenshot();
     const png = PNG.sync.read(screenshot);
@@ -114,7 +122,7 @@ test.describe("live Earth Replay terrain clearance", () => {
     await expect(stage).toHaveAttribute("data-state", /ready|partial/, {
       timeout: 60_000,
     });
-    await expectActualClearance(stage);
+    await expectActualClearance(world);
     const initialPosition = await Promise.all([
       world.getAttribute("data-camera-latitude"),
       world.getAttribute("data-camera-longitude"),
@@ -126,7 +134,7 @@ test.describe("live Earth Replay terrain clearance", () => {
     await page.getByRole("button", { name: "Play route" }).click();
     for (let sample = 0; sample < 8; sample += 1) {
       await page.waitForTimeout(1_000);
-      await expectActualClearance(stage);
+      await expectActualClearance(world);
     }
     await page.getByRole("button", { name: "Pause route" }).click();
 
@@ -152,7 +160,7 @@ test.describe("live Earth Replay terrain clearance", () => {
       timeout: 60_000,
     });
     await page.getByLabel("Route progress").fill("8500");
-    await expectActualClearance(stage);
+    await expectActualClearance(world);
 
     await testInfo.attach("kyoto-mobile", {
       body: await page.screenshot(),

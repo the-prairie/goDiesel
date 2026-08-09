@@ -44,7 +44,7 @@ test.describe("live regional Atlas terrain", () => {
   test("global Atlas renders real route threads and keeps camera motion responsive", async ({
     page,
   }, testInfo) => {
-    test.setTimeout(90_000);
+    test.setTimeout(240_000);
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`${previewUrl}/#/atlas`);
 
@@ -111,7 +111,10 @@ test.describe("live regional Atlas terrain", () => {
     test(`${scenario.name} enters source-backed 3D terrain`, async ({
       page,
     }, testInfo) => {
-      test.setTimeout(90_000);
+      // Regional terrain streams Google photorealistic tiles for a whole
+      // region, then this test reads pixels back. 90 seconds was not enough on
+      // the first run that ever reached it.
+      test.setTimeout(240_000);
       await page.setViewportSize({ width: 1440, height: 900 });
       const region = encodeURIComponent(scenario.name).replaceAll("%20", "+");
       await page.goto(`${previewUrl}/#/atlas?region=${region}`);
@@ -157,7 +160,7 @@ test.describe("live regional Atlas terrain", () => {
   }
 
   test("Kyoto regional terrain remains framed on mobile", async ({ page }, testInfo) => {
-    test.setTimeout(90_000);
+    test.setTimeout(240_000);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`${previewUrl}/#/atlas?region=Kyoto%2C+Japan`);
 
@@ -190,7 +193,7 @@ test.describe("live regional Atlas terrain", () => {
   test("Kyoto regional terrain keeps the approved tablet composition", async ({
     page,
   }, testInfo) => {
-    test.setTimeout(90_000);
+    test.setTimeout(240_000);
     await page.setViewportSize({ width: 834, height: 1112 });
     await page.goto(`${previewUrl}/#/atlas?region=Kyoto%2C+Japan`);
 
@@ -218,7 +221,7 @@ test.describe("live regional Atlas terrain", () => {
   test("visible Kyoto cards load real static satellite thumbnails", async ({
     page,
   }, testInfo) => {
-    test.setTimeout(90_000);
+    test.setTimeout(240_000);
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`${previewUrl}/#/atlas?region=Kyoto%2C+Japan`);
 
