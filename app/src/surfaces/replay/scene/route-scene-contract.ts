@@ -51,6 +51,23 @@ export interface RouteSceneCamera {
   directedMode: DirectedRouteSceneCameraMode;
   overviewWeight: number;
   protection: RouteSceneCameraProtection[];
+  /**
+   * Height of the camera above the local recorded terrain envelope, in metres,
+   * and the floor it must stay above.
+   *
+   * Derived from recorded elevation, not from the renderer. Cesium can sample
+   * photogrammetry height and so could measure this itself; Google's maps3d
+   * runtime owns its camera and exposes no surface height, which left the
+   * primary replay path with no terrain-clearance guarantee at all. Both terms
+   * here are the product's own data, so the guarantee holds on every engine.
+   *
+   * Honest limit: recorded elevation describes the route surface, not a hillside
+   * the camera may sit behind. That is why the placement adds margin scaled by
+   * local relief. This is a strong approximation, not a substitute for sampling
+   * the surface directly.
+   */
+  clearanceM: number;
+  minimumClearanceM: number;
 }
 
 export interface RouteSceneTelemetry {
@@ -166,22 +183,34 @@ function resolveCamera(
       manifest.sourceRoute,
       manifest.totalDistanceM * 0.5,
     );
+    const overviewRangeM = clamp(
+      manifest.totalDistanceM * 0.72 * request.rangeScale,
+      1_400,
+      26_000,
+    );
     return {
       target: { ...manifest.center, altitude: midpoint.elev },
       headingDeg: routePathPose(
         manifest.sourceRoute,
         manifest.totalDistanceM * 0.25,
       ).bearingDeg,
-      rangeM: clamp(
-        manifest.totalDistanceM * 0.72 * request.rangeScale,
-        1_400,
-        26_000,
-      ),
+      rangeM: overviewRangeM,
       tiltDeg: 42,
       fovDeg: 48,
       directedMode: "overview",
       overviewWeight: 1,
       protection: ["horizon-guard"],
+      ...cameraClearance(
+        midpoint.elev,
+        overviewRangeM,
+        42,
+        localTerrainEnvelope(
+          manifest.sourceRoute,
+          manifest.totalDistanceM * 0.5,
+          manifest.totalDistanceM,
+        ),
+        12,
+      ),
     };
   }
 
@@ -215,6 +244,20 @@ function resolveCamera(
     directedMode: request.cameraMode,
     overviewWeight: 0,
     protection: [],
+    // Manual runner and chase modes sit deliberately closer than the automatic
+    // camera, so their floor is the profile's own clearance rather than the
+    // occlusion-scaled one.
+    ...cameraClearance(
+      target.elev + profile.clearanceM,
+      profile.rangeM * request.rangeScale,
+      profile.tiltDeg,
+      localTerrainEnvelope(
+        manifest.sourceRoute,
+        progressM,
+        manifest.totalDistanceM,
+      ),
+      profile.clearanceM,
+    ),
   };
 }
 
@@ -296,27 +339,55 @@ function resolveAutomaticCamera(
   ];
   if (occlusionRisk >= 0.34) protection.push("occlusion-buffer");
 
+  const targetAltitudeM = mix(
+    trackingTarget.altitude,
+    overviewTarget.altitude,
+    overviewWeight,
+  );
+  const rangeM = clamp(
+    mix(trackingRangeM, overviewRangeM, overviewWeight) * request.rangeScale,
+    mix(390, 1_400, overviewWeight),
+    mix(900, 26_000, overviewWeight),
+  );
+  const tiltDeg = mix(trackingTiltDeg, 42, overviewWeight);
+
   return {
     target: {
       lat: mix(trackingTarget.lat, overviewTarget.lat, overviewWeight),
       lng: mix(trackingTarget.lng, overviewTarget.lng, overviewWeight),
-      altitude: mix(
-        trackingTarget.altitude,
-        overviewTarget.altitude,
-        overviewWeight,
-      ),
+      altitude: targetAltitudeM,
     },
     headingDeg: mixHeading(headingDeg, overviewHeadingDeg, overviewWeight),
-    rangeM: clamp(
-      mix(trackingRangeM, overviewRangeM, overviewWeight) * request.rangeScale,
-      mix(390, 1_400, overviewWeight),
-      mix(900, 26_000, overviewWeight),
-    ),
-    tiltDeg: mix(trackingTiltDeg, 42, overviewWeight),
+    rangeM,
+    tiltDeg,
     fovDeg: mix(52, 48, overviewWeight),
     directedMode: overviewWeight >= 0.55 ? "overview" : "chase",
     overviewWeight,
     protection,
+    ...cameraClearance(targetAltitudeM, rangeM, tiltDeg, terrain, plannedClearanceM),
+  };
+}
+
+/**
+ * Clearance above the local recorded terrain envelope.
+ *
+ * Tilt follows the Cesium and maps3d convention: 0 looks straight down, 90 looks
+ * at the horizon. So the camera sits `range * cos(tilt)` above its target, and
+ * its height above ground is that, plus the target's own height above the
+ * envelope's ceiling.
+ */
+function cameraClearance(
+  targetAltitudeM: number,
+  rangeM: number,
+  tiltDeg: number,
+  terrain: { minimumM: number; maximumM: number },
+  plannedClearanceM: number,
+) {
+  const cameraAltitudeM =
+    targetAltitudeM + rangeM * Math.cos((tiltDeg * Math.PI) / 180);
+  return {
+    clearanceM: cameraAltitudeM - terrain.maximumM,
+    minimumClearanceM: plannedClearanceM,
   };
 }
 

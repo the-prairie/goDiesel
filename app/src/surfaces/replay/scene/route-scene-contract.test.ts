@@ -231,3 +231,42 @@ describe("route scene contract", () => {
     expect(peakAccelerationM).toBeLessThan(10);
   });
 });
+
+describe("camera clearance is engine-agnostic", () => {
+  /**
+   * Cesium can sample photogrammetry height and measure its own clearance.
+   * Google's maps3d runtime cannot, which left the primary replay path with no
+   * terrain-clearance guarantee. These assert the guarantee holds from recorded
+   * elevation alone, so it applies to whichever renderer is mounted.
+   */
+  it("keeps the automatic camera above its floor for every mode and speed", () => {
+    const manifest = createRouteSceneManifest(route);
+    for (const cameraMode of ["auto", "runner", "chase", "overview"] as const) {
+      for (const rangeScale of [0.6, 1, 1.8]) {
+        for (const ratio of [0, 0.13, 0.5, 0.87, 1]) {
+          const frame = resolveRouteSceneFrame(manifest, {
+            cameraMode,
+            following: true,
+            progressM: manifest.totalDistanceM * ratio,
+            rangeScale,
+          });
+          expect(
+            frame.camera.clearanceM,
+            `${cameraMode} at ${ratio} scale ${rangeScale}`,
+          ).toBeGreaterThanOrEqual(frame.camera.minimumClearanceM);
+        }
+      }
+    }
+  });
+
+  it("reports a finite clearance and floor", () => {
+    const frame = resolveRouteSceneFrame(createRouteSceneManifest(route), {
+      cameraMode: "auto",
+      following: true,
+      progressM: 100,
+      rangeScale: 1,
+    });
+    expect(Number.isFinite(frame.camera.clearanceM)).toBe(true);
+    expect(frame.camera.minimumClearanceM).toBeGreaterThan(0);
+  });
+});

@@ -34,6 +34,9 @@ export interface GoogleRouteCameraPose {
   directedMode?: DirectedRouteSceneCameraMode;
   overviewWeight?: number;
   protection?: RouteSceneCameraProtection[];
+  /** Height above the local recorded terrain envelope, and its floor. */
+  clearanceM?: number;
+  minimumClearanceM?: number;
 }
 
 export type GoogleRouteTelemetry = RouteSceneTelemetry;
@@ -147,6 +150,8 @@ export function googleRouteCameraPose(
     directedMode: frame.camera.directedMode,
     overviewWeight: frame.camera.overviewWeight,
     protection: frame.camera.protection,
+    clearanceM: frame.camera.clearanceM,
+    minimumClearanceM: frame.camera.minimumClearanceM,
   };
 }
 

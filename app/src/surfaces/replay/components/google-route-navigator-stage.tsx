@@ -297,6 +297,8 @@ export function GoogleRouteNavigatorStage({
           : "bottom-0 left-0",
       )}
       data-camera-mode={control.cameraMode}
+      data-camera-clearance-m={cameraPose.clearanceM?.toFixed(2)}
+      data-minimum-camera-clearance-m={cameraPose.minimumClearanceM?.toFixed(2)}
       data-camera-protection={cameraPose.protection?.join(" ") ?? "manual"}
       data-directed-camera={cameraPose.directedMode ?? control.cameraMode}
       data-following={control.following}

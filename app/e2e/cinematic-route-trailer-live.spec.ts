@@ -13,6 +13,10 @@ for (const route of ROUTES) {
       process.env.GODIESEL_LIVE_GOOGLE_3D_E2E !== "1",
       "Live Google 3D verification is opt-in.",
     );
+    // A live photorealistic scene must stream tiles, settle, and play a preroll
+    // before the decision is reachable. The 30 second default is a deterministic
+    // budget; every other live spec allows minutes.
+    test.setTimeout(180_000);
 
     await page.goto(`/#/lab/route-trailer/${route.slug}`);
 
@@ -57,6 +61,7 @@ test("keeps the Crete trailer decision usable on a phone", async ({ page }) => {
     process.env.GODIESEL_LIVE_GOOGLE_3D_E2E !== "1",
     "Live Google 3D verification is opt-in.",
   );
+  test.setTimeout(180_000);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/#/lab/route-trailer/14023448720");
 

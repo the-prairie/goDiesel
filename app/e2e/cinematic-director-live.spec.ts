@@ -80,13 +80,16 @@ for (const route of ROUTES) {
       "Live Google 3D verification is opt-in.",
     );
 
+    test.setTimeout(180_000);
+
     await page.goto(`/#/lab/cinematic-director/${route.slug}`);
     const director = page.getByTestId("cinematic-director");
     await expect(director).toHaveAttribute("data-state", "ready", {
       timeout: 30_000,
     });
     await expect(page.locator("gmp-map-3d")).toBeVisible();
-    await expect(page.locator("gmp-polyline-3d")).toHaveCount(3);
+    // The filament renders four roles: guide, future, thread and glint.
+    await expect(page.locator("gmp-polyline-3d")).toHaveCount(4);
     await expect(page.getByTestId("cinematic-preroll")).toBeVisible();
     await expect(director).toHaveAttribute("data-cut", "feature");
     await expect(

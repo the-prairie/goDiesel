@@ -5,23 +5,38 @@ const liveEarthEnabled = process.env.GODIESEL_LIVE_EARTH_E2E === "1";
 const kyotoRouteSlug = "17654151284";
 const longestRouteSlug = "9845102380";
 
-async function expectActualClearance(world: Locator, timeout = 15_000) {
+/**
+ * Clearance is published by the scene contract, not by a renderer, so this
+ * exercises whichever engine the page mounts by default. It previously polled
+ * attributes only the Cesium engine wrote, and so silently stopped covering the
+ * default path when ADR-0009 made native Google 3D primary on 2026-08-01.
+ */
+async function expectActualClearance(stage: Locator, timeout = 15_000) {
   await expect
     .poll(
       async () => {
-        const value = await world.getAttribute("data-camera-clearance-m");
+        const value = await stage.getAttribute("data-camera-clearance-m");
         return value !== null && value !== "" && Number.isFinite(Number(value));
       },
       { timeout },
     )
     .toBe(true);
   const [clearanceM, minimumClearanceM] = await Promise.all([
-    world.getAttribute("data-camera-clearance-m"),
-    world.getAttribute("data-minimum-camera-clearance-m"),
+    stage.getAttribute("data-camera-clearance-m"),
+    stage.getAttribute("data-minimum-camera-clearance-m"),
   ]);
   expect(Number(clearanceM)).toBeGreaterThanOrEqual(Number(minimumClearanceM));
 }
 
+// ADR-0009 made native Google 3D the primary renderer on 2026-08-01 and moved
+// Cesium behind ?renderer=cesium. Every other Cesium spec was updated then;
+// this one was missed, so it had been asserting Cesium's measured camera
+// attributes against the Google engine, which publishes none of them. Because
+// the live suites only run with credentials, nothing noticed until the live
+// pipeline reached stage 6 for the first time.
+//
+// Clearance itself now comes from the scene contract rather than a renderer, so
+// the final test below covers the default path too.
 test.describe("live Earth Replay terrain clearance", () => {
   test.skip(
     !liveEarthEnabled,
@@ -33,7 +48,7 @@ test.describe("live Earth Replay terrain clearance", () => {
   }, testInfo) => {
     test.setTimeout(600_000);
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.goto(`/#/replay/${kyotoRouteSlug}`);
+    await page.goto(`/#/replay/${kyotoRouteSlug}?renderer=cesium`);
 
     const stage = page.getByTestId("replay-stage");
     const world = page.getByLabel("Earth Replay world");
@@ -50,7 +65,7 @@ test.describe("live Earth Replay terrain clearance", () => {
       await expect(stage).toHaveAttribute("data-speed", String(speed));
       for (const fraction of [0.05, 0.33, 0.66, 0.9]) {
         await progress.fill(String(maxProgressM * fraction));
-        await expectActualClearance(world);
+        await expectActualClearance(stage);
         if (index === 0 && fraction === 0.33) {
           await testInfo.attach("kyoto-steep-section", {
             body: await page.screenshot(),
@@ -66,13 +81,13 @@ test.describe("live Earth Replay terrain clearance", () => {
       expect(Number(await stage.getAttribute("data-progress"))).toBeGreaterThanOrEqual(
         maxProgressM - 25,
       );
-      await expectActualClearance(world);
+      await expectActualClearance(stage);
     }
 
     await progress.fill(String(maxProgressM * 0.4));
     await page.getByRole("button", { name: "Zoom out from route" }).click();
     await expect(stage).toHaveAttribute("data-camera-range", "720");
-    await expectActualClearance(world);
+    await expectActualClearance(stage);
 
     const screenshot = await world.screenshot();
     const png = PNG.sync.read(screenshot);
@@ -92,14 +107,14 @@ test.describe("live Earth Replay terrain clearance", () => {
   test("longest route advances safely during sustained 4x playback", async ({ page }) => {
     test.setTimeout(120_000);
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.goto(`/#/replay/${longestRouteSlug}`);
+    await page.goto(`/#/replay/${longestRouteSlug}?renderer=cesium`);
 
     const stage = page.getByTestId("replay-stage");
     const world = page.getByLabel("Earth Replay world");
     await expect(stage).toHaveAttribute("data-state", /ready|partial/, {
       timeout: 60_000,
     });
-    await expectActualClearance(world);
+    await expectActualClearance(stage);
     const initialPosition = await Promise.all([
       world.getAttribute("data-camera-latitude"),
       world.getAttribute("data-camera-longitude"),
@@ -111,7 +126,7 @@ test.describe("live Earth Replay terrain clearance", () => {
     await page.getByRole("button", { name: "Play route" }).click();
     for (let sample = 0; sample < 8; sample += 1) {
       await page.waitForTimeout(1_000);
-      await expectActualClearance(world);
+      await expectActualClearance(stage);
     }
     await page.getByRole("button", { name: "Pause route" }).click();
 
@@ -131,13 +146,13 @@ test.describe("live Earth Replay terrain clearance", () => {
   test("Kyoto Earth Replay remains framed on mobile", async ({ page }, testInfo) => {
     test.setTimeout(90_000);
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto(`/#/replay/${kyotoRouteSlug}`);
+    await page.goto(`/#/replay/${kyotoRouteSlug}?renderer=cesium`);
     const stage = page.getByTestId("replay-stage");
     await expect(stage).toHaveAttribute("data-state", /ready|partial/, {
       timeout: 60_000,
     });
     await page.getByLabel("Route progress").fill("8500");
-    await expectActualClearance(page.getByLabel("Earth Replay world"));
+    await expectActualClearance(stage);
 
     await testInfo.attach("kyoto-mobile", {
       body: await page.screenshot(),
@@ -146,5 +161,30 @@ test.describe("live Earth Replay terrain clearance", () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       390,
     );
+  });
+
+  test("the primary Google renderer keeps its camera above the recorded envelope", async ({
+    page,
+  }) => {
+    // The default path, with no renderer parameter. Google's maps3d runtime
+    // exposes no surface height, so before clearance moved into the scene
+    // contract this guarantee could not be checked on the renderer the product
+    // actually ships.
+    test.setTimeout(180_000);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(`/#/replay/${kyotoRouteSlug}`);
+
+    const stage = page.getByTestId("replay-stage");
+    await expect(stage).toHaveAttribute("data-state", /ready|partial/, {
+      timeout: 60_000,
+    });
+    await expect(stage).toHaveAttribute("data-engine", "google-3d-maps");
+    await expectActualClearance(stage);
+
+    await page.getByRole("button", { name: "Play route" }).click();
+    for (let sample = 0; sample < 4; sample += 1) {
+      await page.waitForTimeout(1_500);
+      await expectActualClearance(stage);
+    }
   });
 });
