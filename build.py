@@ -495,6 +495,12 @@ for spec in quest_specs:
     }
     if spec.get('curation') is not None:
         quest['curation'] = build_route_curation(spec['curation'])
+        # A Strava activity description is empty for most routes, but a public
+        # guide must say something. When the owner has written a guide, its
+        # vibe is the description: their own words, not an invention. A route
+        # with neither stays without one, and the publisher refuses it.
+        if not quest['description']:
+            quest['description'] = quest['curation'].get('vibe', '')
     if spec.get('annotations') is not None:
         quest['annotations'] = build_route_annotations(
             spec['annotations'], route_js[-1]['d']
