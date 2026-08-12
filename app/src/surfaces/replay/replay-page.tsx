@@ -7,7 +7,12 @@ import { RouteNotFound } from "@/ui/route-not-found";
 import { singleRouteMicrosite } from "@/app/single-route-microsite";
 import { completedRoutes, findRouteBySlug } from "@/data/routes";
 import { useRouteDetail } from "@/data/use-route-detail";
-import { APP_PATHS, atlasReturnPath, decodedRouteSlug } from "@/app/route-paths";
+import {
+  APP_PATHS,
+  atlasReturnPath,
+  decodedRouteSlug,
+  routeDetailPath,
+} from "@/app/route-paths";
 
 const representativeRoute =
   completedRoutes.find(
@@ -57,12 +62,15 @@ export function ReplayPage() {
   if (detail.status !== "ready") return <RouteNotFound />;
 
   const returnPath = atlasReturnPath(searchParams);
-  const backPath = singleRouteMicrosite?.guidePath ?? returnPath ?? APP_PATHS.routes;
+  const backPath =
+    singleRouteMicrosite?.guidePath ??
+    returnPath ??
+    routeDetailPath(detail.route.slug);
   const backLabel = singleRouteMicrosite
     ? "Route guide"
     : returnPath
       ? "Back to Atlas"
-      : "All routes";
+      : "Route story";
   if (!useLegacyEarth && !atlasFallback) {
     return (
       <GoogleRouteNavigatorStage
