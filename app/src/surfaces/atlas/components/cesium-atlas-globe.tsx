@@ -23,6 +23,7 @@ export const CesiumAtlasGlobe = forwardRef<
     onSelectRoute,
     onStatusChange,
     onRegionPresentationReady,
+    routeDisplayMode = "standard",
     className,
   },
   forwardedRef,
@@ -59,6 +60,7 @@ export const CesiumAtlasGlobe = forwardRef<
         container,
         regions,
         onSelectRoute: (route) => onSelectRouteRef.current?.(route),
+        routeDisplayMode,
         onStatus: (nextStatus) => {
           setStatus(nextStatus);
           onStatusChange?.(nextStatus);
@@ -88,6 +90,10 @@ export const CesiumAtlasGlobe = forwardRef<
       if (engineRef.current === engine) engineRef.current = undefined;
     };
   }, [onRegionPresentationReady, onStatusChange, regions]);
+
+  useEffect(() => {
+    readyEngineRef.current?.setRouteDisplayMode?.(routeDisplayMode);
+  }, [routeDisplayMode]);
 
   useEffect(() => {
     readyEngineRef.current?.setSelectedRegion(selectedRegion);
@@ -171,6 +177,7 @@ export const CesiumAtlasGlobe = forwardRef<
         <AtlasRegionalFallback
           region={selectedRegion}
           selectedRoute={selectedRoute}
+          routeDisplayMode={routeDisplayMode}
           onSelectRoute={(route) => onSelectRouteRef.current?.(route)}
           onReady={() => onRegionPresentationReady?.(true)}
         />

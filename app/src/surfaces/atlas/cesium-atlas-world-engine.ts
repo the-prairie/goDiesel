@@ -132,6 +132,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   private blankFrameCount = 0;
   private selectedRegionName?: string;
   private selectedRouteSlug?: string;
+  private routeDisplayMode: "standard" | "density" | "terrain" = "standard";
   private regionGeneration = 0;
   private generation = 0;
   private surfaceNormal = new Cartesian3();
@@ -142,11 +143,13 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     regions,
     onStatus,
     onSelectRoute,
+    routeDisplayMode = "standard",
   }: AtlasWorldEngineMountOptions) {
     const generation = ++this.generation;
     this.regions = regions;
     this.onStatus = onStatus;
     this.onSelectRoute = onSelectRoute;
+    this.routeDisplayMode = routeDisplayMode;
     onStatus({ state: "loading", message: "Opening the Atlas world." });
 
     if (!webglAvailable()) {
@@ -299,6 +302,11 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     if (this.viewer && !this.viewer.isDestroyed()) {
       this.viewer.canvas.dataset.selectedRoute = route?.slug ?? "";
     }
+    this.styleRouteEntities();
+  }
+
+  setRouteDisplayMode(mode: "standard" | "density" | "terrain") {
+    this.routeDisplayMode = mode;
     this.styleRouteEntities();
   }
 
@@ -544,17 +552,27 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
       const inSelectedRegion = regionName === this.selectedRegionName;
       const active =
         inSelectedRegion && route.slug === this.selectedRouteSlug;
-      entity.polyline.width = new ConstantProperty(active ? 8 : inSelectedRegion ? 5 : 4);
+      const regionalWidth = this.routeDisplayMode === "density" ? 9 : this.routeDisplayMode === "terrain" ? 2 : 5;
+      entity.polyline.width = new ConstantProperty(active ? 9 : inSelectedRegion ? regionalWidth : 4);
       entity.polyline.material = active
         ? new PolylineGlowMaterialProperty({
             color: SELECTED_ROUTE_COLOR.withAlpha(1),
             glowPower: 0.24,
           })
-        : new ColorMaterialProperty(
-            ROUTE_COLOR.withAlpha(
-              this.selectedRegionName ? (inSelectedRegion ? 0.48 : 0.2) : 0.92,
-            ),
-          );
+        : this.routeDisplayMode === "density" && inSelectedRegion
+          ? new PolylineGlowMaterialProperty({
+              color: Color.fromCssColorString("#f29bc2").withAlpha(0.74),
+              glowPower: 0.42,
+            })
+          : new ColorMaterialProperty(
+              ROUTE_COLOR.withAlpha(
+                this.selectedRegionName
+                  ? inSelectedRegion
+                    ? this.routeDisplayMode === "terrain" ? 0.18 : 0.48
+                    : 0.2
+                  : 0.92,
+              ),
+            );
     });
   }
 

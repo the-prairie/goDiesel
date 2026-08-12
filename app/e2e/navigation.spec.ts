@@ -8,7 +8,7 @@ test("root opens Atlas and primary navigation follows browser history", async ({
 }) => {
   await page.goto("/");
 
-  await expect(page).toHaveURL(/#\/atlas$/);
+  await expect(page).toHaveURL(/#\/atlas\?region=Tokyo%2C\+Japan$/);
   await expect(
     page.getByRole("link", { name: "Memories", exact: true }),
   ).toHaveAttribute("aria-current", "page");
@@ -18,7 +18,7 @@ test("root opens Atlas and primary navigation follows browser history", async ({
   await expect(page.getByRole("heading", { name: /plan/i })).toBeVisible();
 
   await page.goBack();
-  await expect(page).toHaveURL(/#\/atlas$/);
+  await expect(page).toHaveURL(/#\/atlas\?region=Tokyo%2C\+Japan$/);
 
   await page.goForward();
   await expect(page).toHaveURL(/#\/finder$/);
