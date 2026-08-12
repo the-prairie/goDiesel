@@ -100,7 +100,7 @@ for (const viewport of [
   }) => {
     test.setTimeout(60_000);
     await page.setViewportSize(viewport);
-    await page.goto("/#/atlas");
+    await page.goto("/#/atlas?view=world");
     const canvas = page.getByLabel("Interactive route globe");
     await expect(canvas).toBeVisible({ timeout: 15_000 });
     await expect(canvas).toHaveAttribute("data-heat-lines", "66", { timeout: 15_000 });
@@ -152,9 +152,56 @@ for (const viewport of [
   });
 }
 
-test("globe label selection synchronizes the region URL and route carousel", async ({ page }) => {
+test("Atlas opens at the latest regional memory and keeps world view explicit", async ({
+  page,
+}) => {
   test.setTimeout(60_000);
   await page.goto("/#/atlas");
+
+  await expect(page).toHaveURL(/region=Tokyo%2C\+Japan/);
+  await expect(
+    page.getByRole("region", {
+      name: "Tokyo, Japan recorded routes",
+      exact: true,
+    }),
+  ).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Show routes" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+
+  await page.getByRole("button", { name: "Explore terrain" }).click();
+  await expect(page).toHaveURL(/lens=terrain/);
+  await expect(page.getByRole("region", { name: "Tokyo, Japan terrain reading" })).toContainText(
+    "Derived from recorded tracks",
+  );
+
+  await page.getByRole("button", { name: "All places" }).click();
+  await expect(page).toHaveURL(/view=world/);
+  await expect(page).not.toHaveURL(/region=/);
+  await expect(page).not.toHaveURL(/lens=/);
+  await expect(page.getByRole("region", { name: "Tokyo, Japan recorded routes" })).toHaveCount(0);
+
+  await page.reload();
+  await expect(page).toHaveURL(/view=world/);
+  await expect(page.getByRole("region", { name: "Tokyo, Japan recorded routes" })).toHaveCount(0);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#/atlas?region=Tokyo%2C+Japan&lens=terrain");
+  const terrainReading = page.getByRole("region", { name: "Tokyo, Japan terrain reading" });
+  const routeRail = page.getByRole("region", { name: "Tokyo, Japan routes", exact: true });
+  await expect(terrainReading).toBeVisible();
+  await expect(routeRail).toBeVisible();
+  const terrainBox = await terrainReading.boundingBox();
+  const railBox = await routeRail.boundingBox();
+  expect(terrainBox).not.toBeNull();
+  expect(railBox).not.toBeNull();
+  expect(terrainBox!.y + terrainBox!.height).toBeLessThanOrEqual(railBox!.y + 1);
+});
+
+test("globe label selection synchronizes the region URL and route carousel", async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.goto("/#/atlas?view=world");
 
   const visibleGlobeLabel = page.locator("button[data-globe-region]:visible").first();
   await expect(visibleGlobeLabel).toBeVisible({ timeout: 15_000 });
@@ -174,13 +221,13 @@ test("globe label selection synchronizes the region URL and route carousel", asy
       exact: true,
     }),
   ).toBeVisible();
-  await page.getByRole("button", { name: `Close ${globeRegion} routes` }).click();
+  await page.getByRole("button", { name: "All places" }).click();
   await expect(page).not.toHaveURL(/region=/);
 });
 
 test("region controls, search, carousel, and URL stay synchronized", async ({ page }) => {
   test.setTimeout(90_000);
-  await page.goto("/#/atlas");
+  await page.goto("/#/atlas?view=world");
 
   await page.getByRole("combobox", { name: "Browse route regions" }).selectOption({
     label: "Canary Islands",
@@ -188,13 +235,13 @@ test("region controls, search, carousel, and URL stay synchronized", async ({ pa
   await expect(page).toHaveURL(/region=Canary\+Islands/);
   await expect(page.getByRole("heading", { level: 2, name: "Canary Islands" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Close Canary Islands routes" }).click();
+  await page.getByRole("button", { name: "All places" }).click();
   await expect(page).not.toHaveURL(/region=/);
   await expect(page.getByRole("heading", { level: 2, name: "Canary Islands" })).toHaveCount(0);
   await page.goBack();
   await expect(page).toHaveURL(/region=Canary\+Islands/);
   await expect(page.getByRole("heading", { level: 2, name: "Canary Islands" })).toBeVisible();
-  await page.getByRole("button", { name: "Close Canary Islands routes" }).click();
+  await page.getByRole("button", { name: "All places" }).click();
 
   const search = page.getByRole("textbox", {
     name: "Search regions, routes, replay-worthy days",
@@ -263,7 +310,7 @@ test("region controls, search, carousel, and URL stay synchronized", async ({ pa
 });
 
 test("global search focuses a completed route memory", async ({ page }) => {
-  await page.goto("/#/atlas");
+  await page.goto("/#/atlas?view=world");
 
   const search = page.getByRole("textbox", {
     name: "Search regions, routes, replay-worthy days",
@@ -286,7 +333,7 @@ test("global search focuses a completed route memory", async ({ page }) => {
 
 test("desktop Atlas gives the world the full viewport width", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/#/atlas");
+  await page.goto("/#/atlas?view=world");
 
   const main = page.getByRole("main");
   const canvas = page.getByLabel("Interactive route globe");
@@ -307,7 +354,7 @@ test("desktop Atlas gives the world the full viewport width", async ({ page }) =
 test("desktop Atlas exposes activity modes and working globe utilities", async ({ page }) => {
   test.setTimeout(60_000);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/#/atlas");
+  await page.goto("/#/atlas?view=world");
 
   const canvas = page.getByLabel("Interactive route globe");
   await expect(canvas).toHaveAttribute("data-route-palette", "cobalt");
@@ -400,7 +447,7 @@ test("invalid Atlas selection is repaired and Escape closes one hierarchy level"
   await expect(page).not.toHaveURL(/region=/);
 
   await page.goto("/#/atlas?region=Nowhere&route=missing");
-  await expect(page).toHaveURL(/#\/atlas$/);
+  await expect(page).toHaveURL(/#\/atlas\?view=world$/);
 });
 
 test("Replay back control restores the originating Atlas selection", async ({ page }) => {
@@ -462,7 +509,7 @@ test("mobile globe supports two-finger pinch without losing region state", async
   });
   const page = await context.newPage();
   try {
-    await page.goto("/#/atlas");
+    await page.goto("/#/atlas?view=world");
     const canvas = page.getByLabel("Interactive route globe");
     await expect(page.locator('div[data-atlas-engine="cesium"]')).toHaveAttribute(
       "data-atlas-status",
@@ -518,11 +565,11 @@ for (const viewport of [
     const carouselSection = page.getByRole("region", { name: "Kyoto, Japan routes" });
     const mobileNavigation = page.getByTestId("atlas-spine-mobile");
     await expect(carouselSection).toBeVisible();
-    if (viewport.height > 500) {
+    if (viewport.height > 600) {
       await expect(page.getByRole("button", { name: "Show all activities" })).toBeVisible();
     } else {
       await expect(page.getByRole("button", { name: "Show all activities" })).toHaveCount(0);
-      await expect(page.getByRole("button", { name: "Close Kyoto, Japan routes" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "All places" })).toBeVisible();
     }
 
     const layout = await page.evaluate(() => {
@@ -598,7 +645,7 @@ for (const viewport of [
   }) => {
     test.setTimeout(90_000);
     await page.setViewportSize(viewport);
-    await page.goto("/#/atlas");
+    await page.goto("/#/atlas?view=world");
     const heading = page.getByRole("heading", { name: "Real places, playable days." });
     const search = page.getByRole("region", { name: "Atlas search" });
     await expect(search).toBeVisible({ timeout: 15_000 });
@@ -621,19 +668,19 @@ for (const viewport of [
       ? await search.boundingBox()
       : null;
     const carouselBox = await carouselSection.boundingBox();
-    const controlsBox = viewport.height > 500
+    const controlsBox = viewport.height > 600
       ? await page
           .getByRole("combobox", { name: "Browse route regions" })
           .locator("..")
           .boundingBox()
       : null;
     expect(carouselBox).not.toBeNull();
-    if (viewport.height > 500) expect(controlsBox).not.toBeNull();
+    if (viewport.height > 600) expect(controlsBox).not.toBeNull();
     if (selectedSearchBox) {
       expect(boxesOverlap(selectedSearchBox, carouselBox!)).toBe(false);
     }
     if (controlsBox) expect(boxesOverlap(carouselBox!, controlsBox)).toBe(false);
-    const clearSelection = page.getByRole("button", { name: "Close Canary Islands routes" });
+    const clearSelection = page.getByRole("button", { name: "All places" });
     await expect(clearSelection).toBeVisible();
     if (
       viewport.height === 320 ||
@@ -657,7 +704,7 @@ for (const viewport of [
 
 test("desktop Atlas toolbar controls share one alignment rhythm", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
-  await page.goto("/#/atlas");
+  await page.goto("/#/atlas?view=world");
 
   const region = page.locator(".atlas-region-select");
   const search = page.getByRole("region", { name: "Atlas search" });
@@ -688,7 +735,7 @@ test("desktop Atlas toolbar controls share one alignment rhythm", async ({ page 
 
 test("short-landscape search results remain actionable", async ({ page }) => {
   await page.setViewportSize({ width: 667, height: 375 });
-  await page.goto("/#/atlas");
+  await page.goto("/#/atlas?view=world");
   const search = page.getByRole("textbox", {
     name: "Search regions, routes, replay-worthy days",
   });
@@ -702,13 +749,13 @@ test("short-landscape search results remain actionable", async ({ page }) => {
   await baliResult.click();
   await expect(page).toHaveURL(/region=Bali%2C\+Indonesia/);
   await expect(page.getByRole("heading", { level: 2, name: "Bali, Indonesia" })).toBeVisible();
-  await page.getByRole("button", { name: "Close Bali, Indonesia routes" }).click();
+  await page.getByRole("button", { name: "All places" }).click();
   await expect(page).not.toHaveURL(/region=/);
 });
 
 test("globe supports pointer, wheel, and keyboard exploration", async ({ page }) => {
   test.setTimeout(90_000);
-  await page.goto("/#/atlas");
+  await page.goto("/#/atlas?view=world");
   const canvas = page.getByLabel("Interactive route globe");
   await expect(canvas).toHaveAttribute("data-heat-lines", "66", { timeout: 15_000 });
   const bounds = await canvas.boundingBox();

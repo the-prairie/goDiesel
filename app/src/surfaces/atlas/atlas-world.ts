@@ -11,6 +11,7 @@ export interface AtlasGlobeProps {
   onSelectRoute?: (route: RouteSummary) => void;
   onStatusChange?: (status: AtlasWorldStatus) => void;
   onRegionPresentationReady?: (ready: boolean) => void;
+  routeDisplayMode?: "standard" | "density" | "terrain";
   className?: string;
 }
 
@@ -41,12 +42,14 @@ export interface AtlasWorldEngineMountOptions {
   illuminationTimeIso?: string;
   onStatus: (status: AtlasWorldStatus) => void;
   onSelectRoute?: (route: RouteSummary) => void;
+  routeDisplayMode?: "standard" | "density" | "terrain";
 }
 
 export interface AtlasWorldEngine {
   mount(options: AtlasWorldEngineMountOptions): Promise<void>;
   setSelectedRegion(region?: RouteRegion): void;
   setSelectedRoute(route?: RouteSummary): void;
+  setRouteDisplayMode?(mode: "standard" | "density" | "terrain"): void;
   projectRegions(): AtlasRegionProjection[];
   zoomIn(): void;
   zoomOut(): void;

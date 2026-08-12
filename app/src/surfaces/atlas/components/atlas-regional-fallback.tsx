@@ -162,6 +162,7 @@ interface AtlasRegionalFallbackProps {
   selectedRoute?: RouteSummary;
   onSelectRoute?: (route: RouteSummary) => void;
   onReady?: () => void;
+  routeDisplayMode?: "standard" | "density" | "terrain";
 }
 
 export function AtlasRegionalFallback({
@@ -169,6 +170,7 @@ export function AtlasRegionalFallback({
   selectedRoute,
   onSelectRoute,
   onReady,
+  routeDisplayMode = "standard",
 }: AtlasRegionalFallbackProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | undefined>(undefined);
@@ -195,15 +197,15 @@ export function AtlasRegionalFallback({
       "case",
       ["==", ["get", "slug"], selectedSlug],
       7,
-      3,
+      routeDisplayMode === "density" ? 5 : routeDisplayMode === "terrain" ? 2 : 3,
     ]);
     map.setPaintProperty("regional-route-thread", "line-opacity", [
       "case",
       ["==", ["get", "slug"], selectedSlug],
       1,
-      selectedSlug ? 0.52 : 0.9,
+      selectedSlug ? 0.52 : routeDisplayMode === "terrain" ? 0.24 : 0.9,
     ]);
-  }, [selectedRoute?.slug]);
+  }, [routeDisplayMode, selectedRoute?.slug]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -271,8 +273,8 @@ export function AtlasRegionalFallback({
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
           "line-color": ROUTE_THREAD_STYLE.halo,
-          "line-width": 9,
-          "line-opacity": 0.88,
+          "line-width": routeDisplayMode === "density" ? 18 : 9,
+          "line-opacity": routeDisplayMode === "terrain" ? 0.12 : routeDisplayMode === "density" ? 0.42 : 0.88,
         },
       });
       map.addLayer({
@@ -291,13 +293,13 @@ export function AtlasRegionalFallback({
             "case",
             ["==", ["get", "slug"], selectedRoute?.slug ?? ""],
             7,
-            3,
+            routeDisplayMode === "density" ? 5 : routeDisplayMode === "terrain" ? 2 : 3,
           ],
           "line-opacity": [
             "case",
             ["==", ["get", "slug"], selectedRoute?.slug ?? ""],
             1,
-            selectedRoute ? 0.52 : 0.9,
+            selectedRoute ? 0.52 : routeDisplayMode === "terrain" ? 0.24 : 0.9,
           ],
         },
       });
@@ -361,7 +363,7 @@ export function AtlasRegionalFallback({
       if (mapRef.current === map) mapRef.current = undefined;
       host.replaceChildren();
     };
-  }, [bounds, region, routes]);
+  }, [bounds, region, routeDisplayMode, routes]);
 
   const statusCopy =
     status === "loading"
@@ -411,10 +413,10 @@ export function AtlasRegionalFallback({
               d={path}
               fill="none"
               stroke={ROUTE_THREAD_STYLE.halo}
-              strokeWidth="9"
+              strokeWidth={routeDisplayMode === "density" ? "18" : "9"}
               strokeLinecap="round"
               strokeLinejoin="round"
-              opacity={active ? "1" : selectedRoute ? "0.45" : "0.88"}
+              opacity={active ? "1" : selectedRoute ? "0.45" : routeDisplayMode === "terrain" ? "0.12" : routeDisplayMode === "density" ? "0.42" : "0.88"}
             />
             <path
               d={path}

@@ -1,4 +1,13 @@
-import { ArrowRight, Bike, ChevronLeft, ChevronRight, Footprints, X } from "lucide-react";
+import {
+  ArrowRight,
+  Bike,
+  ChevronLeft,
+  ChevronRight,
+  Footprints,
+  Globe2,
+  Mountain,
+  Route,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useEmblaCarousel from "embla-carousel-react";
 import { Link } from "react-router-dom";
@@ -14,6 +23,7 @@ import {
   sampleRoutePoints,
 } from "@/domain/geometry/route-visualization";
 import { cn } from "@/ui/utils";
+import type { AtlasLens } from "@/surfaces/atlas/atlas-regional-view";
 
 export const ROUTE_CAROUSEL_SLIDE_CLASS =
   "min-w-0 flex-[0_0_84%] pl-3 sm:basis-[44%] sm:pl-4 xl:basis-[calc((100%-2rem)/3)]";
@@ -25,6 +35,8 @@ interface RegionRouteCarouselProps {
   onClear: () => void;
   replayPathForRoute: (route: RouteSummary) => string;
   presentationReady: boolean;
+  lens: AtlasLens;
+  onLensChange: (lens: AtlasLens) => void;
 }
 
 const traceWidth = 360;
@@ -39,6 +51,8 @@ export function RegionRouteCarousel({
   onClear,
   replayPathForRoute,
   presentationReady,
+  lens,
+  onLensChange,
 }: RegionRouteCarouselProps) {
   const effectiveSelectedRoute = selectedRoute ?? region.routes[0];
   const selectedIndex = Math.max(
@@ -147,12 +161,22 @@ export function RegionRouteCarousel({
     return (
       <section
         aria-label={`${region.name} routes`}
-        className="min-h-[23rem] border-t border-white/15 bg-[#07151c]/92 text-white backdrop-blur-sm sm:min-h-[22rem] [@media(max-height:500px)]:min-h-[13rem]"
+        className="min-h-[9rem] border-t border-white/15 bg-[#07151c]/92 text-white backdrop-blur-sm"
       >
-        <div className="grid min-h-[23rem] place-items-center sm:min-h-[22rem] [@media(max-height:500px)]:min-h-[13rem]">
-          <p role="status" aria-live="polite" className="text-sm text-white/70">
-            Loading {region.name} terrain
-          </p>
+        <div className="mx-auto flex min-h-[9rem] max-w-[96rem] items-center gap-4 px-4 sm:px-5">
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-editorial text-xl font-semibold uppercase sm:text-2xl">
+              {region.name}
+            </p>
+            <p role="status" aria-live="polite" className="mt-1 text-sm text-white/65">
+              Fitting recorded routes to the terrain
+            </p>
+          </div>
+          <div className="hidden w-[min(34rem,45vw)] grid-cols-3 gap-2 sm:grid" aria-hidden="true">
+            <span className="h-16 animate-pulse rounded-sm bg-white/10" />
+            <span className="h-16 animate-pulse rounded-sm bg-white/10" />
+            <span className="h-16 animate-pulse rounded-sm bg-white/10" />
+          </div>
         </div>
       </section>
     );
@@ -182,6 +206,30 @@ export function RegionRouteCarousel({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          <div className="mr-1 hidden items-center rounded-sm border border-white/25 p-0.5 sm:flex" aria-label="Region lens">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-label="Show routes"
+              aria-pressed={lens === "routes"}
+              onClick={() => onLensChange("routes")}
+              className="h-9 rounded-sm px-2 text-white hover:bg-white/10 hover:text-white aria-pressed:bg-[#f6f2e8] aria-pressed:text-[#24322d]"
+            >
+              <Route aria-hidden="true" /> Routes
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-label="Explore terrain"
+              aria-pressed={lens === "terrain"}
+              onClick={() => onLensChange("terrain")}
+              className="h-9 rounded-sm px-2 text-white hover:bg-white/10 hover:text-white aria-pressed:bg-[#f6f2e8] aria-pressed:text-[#24322d]"
+            >
+              <Mountain aria-hidden="true" /> Terrain
+            </Button>
+          </div>
           <span className="mr-1 min-w-12 text-right text-xs tabular-nums text-white/65" aria-live="polite">
             {currentPosition} of {region.routes.length}
           </span>
@@ -212,16 +260,44 @@ export function RegionRouteCarousel({
           <Button
             type="button"
             variant="ghost"
-            size="icon"
-            aria-label={`Close ${region.name} routes`}
-            title="Close region"
+            size="sm"
+            aria-label="All places"
+            title="Return to all places"
             onClick={onClear}
-            className="size-10 text-white hover:bg-white/10 hover:text-white"
+            className="h-10 rounded-sm border border-white/25 px-2 text-white hover:bg-white/10 hover:text-white"
           >
-            <X aria-hidden="true" />
+            <Globe2 aria-hidden="true" />
+            <span className="hidden md:inline">All places</span>
           </Button>
         </div>
       </header>
+
+      <div className="flex px-3 pb-2 sm:hidden">
+        <div className="grid w-full grid-cols-2 rounded-sm border border-white/25 p-0.5" aria-label="Region lens">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label="Show routes"
+            aria-pressed={lens === "routes"}
+            onClick={() => onLensChange("routes")}
+            className="rounded-sm text-white hover:bg-white/10 hover:text-white aria-pressed:bg-[#f6f2e8] aria-pressed:text-[#24322d]"
+          >
+            <Route aria-hidden="true" /> Routes
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label="Explore terrain"
+            aria-pressed={lens === "terrain"}
+            onClick={() => onLensChange("terrain")}
+            className="rounded-sm text-white hover:bg-white/10 hover:text-white aria-pressed:bg-[#f6f2e8] aria-pressed:text-[#24322d]"
+          >
+            <Mountain aria-hidden="true" /> Terrain
+          </Button>
+        </div>
+      </div>
 
       {region.routes.length === 0 ? (
         <div className="grid min-h-[17rem] place-items-center px-5 text-sm text-white/65" role="status">
