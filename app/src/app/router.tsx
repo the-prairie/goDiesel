@@ -60,6 +60,11 @@ const CinematicDirectorLabPage = lazy(() =>
     default: module.CinematicDirectorLabPage,
   })),
 );
+const DaydreamAtlasPrototypePage = lazy(() =>
+  import("@/labs/daydream-atlas-prototype/daydream-atlas-prototype-page").then(
+    (module) => ({ default: module.DaydreamAtlasPrototypePage }),
+  ),
+);
 
 canonicalizeLegacyQuestHash();
 window.addEventListener("hashchange", canonicalizeLegacyQuestHash);
@@ -130,6 +135,10 @@ const micrositeRoutes = singleRouteMicrosite
   : undefined;
 
 const router = createHashRouter([
+  {
+    path: "lab/daydream-atlas",
+    element: <DaydreamAtlasPrototypePage />,
+  },
   {
     element: <AppShell />,
     children: micrositeRoutes ?? productRoutes,
