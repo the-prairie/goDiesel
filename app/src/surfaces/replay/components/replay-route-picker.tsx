@@ -16,11 +16,13 @@ import type { RouteSummary } from "@/domain/route";
 import { replayPath } from "@/app/route-paths";
 
 export function ReplayRoutePicker({
+  compact = false,
   currentSlug,
   renderer,
   routes,
   returnPath,
 }: {
+  compact?: boolean;
   currentSlug: string;
   renderer?: "atlas" | "cesium";
   routes: RouteSummary[];
@@ -56,9 +58,16 @@ export function ReplayRoutePicker({
       }}
     >
       <SheetTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="w-full">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={compact ? "w-9 px-0 sm:w-full sm:px-3" : "w-full"}
+        >
           <Search aria-hidden="true" />
-          Change route
+          <span className={compact ? "sr-only sm:not-sr-only" : undefined}>
+            Change route
+          </span>
         </Button>
       </SheetTrigger>
       <SheetContent

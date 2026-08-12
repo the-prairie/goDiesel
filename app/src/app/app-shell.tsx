@@ -15,6 +15,7 @@ export function AppShell() {
   const isReplayLab = location.pathname.startsWith("/lab/");
   const isRouteDetail = /^\/routes\/[^/]+$/.test(location.pathname);
   const isRoutesLibrary = section.id === "routes" && !isRouteDetail;
+  const isReplay = section.id === "replay";
   const isWideUtility = isRoutesLibrary || section.id === "admin";
   const isImmersive =
     isAtlas ||
@@ -27,15 +28,19 @@ export function AppShell() {
 
   return (
     <div className="weathered-atlas field-guide-theme relative flex min-h-dvh bg-background text-foreground">
-      {singleRouteMicrosite ? null : <AtlasSpine hideDesktop={isAtlas} />}
+      {singleRouteMicrosite || isReplay ? null : (
+        <AtlasSpine hideDesktop={isAtlas} />
+      )}
       {isAtlas && !singleRouteMicrosite ? <AtlasImmersiveNavigation /> : null}
       <div
         className={cn(
           "flex min-h-dvh min-w-0 flex-1 flex-col",
           !singleRouteMicrosite &&
+            !isReplay &&
             "pb-[var(--mobile-navigation-height)] md:pb-0",
           !singleRouteMicrosite &&
             !isAtlas &&
+            !isReplay &&
             "md:pl-[var(--spine-rail-width)] lg:pl-[var(--spine-width)]",
         )}
       >

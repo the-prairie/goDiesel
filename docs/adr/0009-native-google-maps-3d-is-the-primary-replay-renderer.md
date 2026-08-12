@@ -52,7 +52,29 @@ diagnostic fallback, and chase as the most legible default camera.
 - Replay duration is 180 seconds in `replay-controller.ts` and
   `playable-earth-controller.ts` but 210 seconds in
   `google-route-navigator-controller.ts`. The primary path disagrees with the
-  others.
+  others. The owner chose 210 seconds on 2026-08-08; the constants are not yet
+  unified.
+- **The decision removed the terrain-clearance guarantee from the shipping path,
+  and that was not recorded at the time.** Cesium samples photogrammetry height
+  and can measure how far the camera sits above the surface. Google's `maps3d`
+  runtime owns its camera and exposes no surface height, so the primary renderer
+  had no such measurement and could not have one. Photorealistic 3D has no
+  collision detection, so a camera that sinks into a building or hillside simply
+  looks broken.
+
+  Resolved on 2026-08-09 (`1f20ebd8`). Clearance no longer comes from a
+  renderer. `route-scene-contract.ts` already placed the camera above a local
+  terrain envelope derived from recorded elevation, scaling margin by relief,
+  turn severity and grade; it now also publishes the resulting clearance and its
+  floor, and the stage exposes them. Both terms are the product's own data, so
+  the guarantee holds on whichever engine is mounted, and a unit test asserts it
+  across four camera modes, three range scales and five points along a route
+  with no browser involved.
+
+  Honest limit: recorded elevation describes the route surface, not a hillside
+  the camera may sit behind. The placement adds margin for that reason. It is a
+  strong approximation, not a substitute for sampling the surface, and Cesium
+  still reports its measured value where it can.
 
 ## Process note
 
@@ -70,6 +92,13 @@ only after a 66-route scorecard, and ADR-0008, which was declined on evidence.
 The outstanding obligation is a route scorecard for native Google 3D across the
 atlas. Until it exists, this ADR is accepted on implementation but unproven at
 the scale its own spike asked for.
+
+Partial evidence arrived on 2026-08-09. The live pipeline gate passed for the
+first time, and all 23 hardware-backed live journeys passed against real
+photorealistic imagery, including six Google route navigator cases. That
+demonstrates the renderer works on the routes it was tested against. It is not
+the scorecard: the 2026-06-15 Cesium scorecard rated all 66 approved routes for
+experience quality, and no equivalent exists for Google.
 
 ## Evidence
 

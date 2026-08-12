@@ -74,6 +74,10 @@ Live Earth Replay provider verification is:
 GODIESEL_ATLAS_PREVIEW_URL=<preview-url> npm run test:e2e:earth
 ```
 
+Local native Google 3D verification must use `http://localhost:8787` rather
+than `http://127.0.0.1:8787`. The configured browser key authorizes the
+`localhost` origin, and Google treats the loopback IP as a different referrer.
+
 ## Gate Validity
 
 Record the exact commands and results in the pull request.

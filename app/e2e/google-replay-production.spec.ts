@@ -96,6 +96,45 @@ async function installGoogleReplay(page: Page, state: "ready" | "unavailable") {
   }, state);
 }
 
+test("presents production Replay as an immersive Story Flight", async ({
+  page,
+}) => {
+  await installGoogleReplay(page, "ready");
+  await page.goto("/#/replay/14130782031");
+
+  const replay = page.getByTestId("replay-stage");
+  await expect(replay).toHaveAttribute("data-replay-shell", "story-flight");
+  await expect(page.getByTestId("atlas-spine")).toHaveCount(0);
+  await expect(page.getByTestId("atlas-spine-mobile")).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "the final boss", exact: true }),
+  ).toBeVisible();
+
+  const chapters = page.getByRole("navigation", { name: "Replay chapters" });
+  await expect(chapters).toBeVisible();
+  await expect(
+    chapters.getByRole("button", { name: /hardest rise/i }),
+  ).toBeVisible();
+  await expect(
+    chapters.getByRole("button", { name: /high point/i }),
+  ).toBeVisible();
+  await expect(
+    chapters.getByRole("button", { name: /origin/i }),
+  ).toHaveCSS("left", "0px");
+
+  const progress = page.getByTestId("google-route-progress");
+  await chapters.getByRole("button", { name: /high point/i }).click();
+  await expect
+    .poll(async () => Number((await progress.textContent())?.split(" ")[0]))
+    .toBeGreaterThan(0);
+  await expect(
+    page.getByRole("button", { name: "Play route" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Change route" }),
+  ).toBeVisible();
+});
+
 for (const routeSlug of ["14023448720", "14736711660"] as const) {
   test(`opens production Replay in Google 3D for ${routeSlug}`, async ({
     page,
@@ -231,6 +270,7 @@ for (const routeSlug of ["14023448720", "14736711660"] as const) {
 
 test("falls back from Google 3D to Atlas replay", async ({ page }) => {
   await installGoogleReplay(page, "unavailable");
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/#/replay/14023448720");
 
   await expect(page.getByRole("alert")).toContainText("3D world unavailable");
@@ -240,6 +280,29 @@ test("falls back from Google 3D to Atlas replay", async ({ page }) => {
   await expect(replay).toHaveAttribute("data-engine", "maplibre-atlas");
   await expect(replay).toHaveAttribute("data-state", "ready");
   await expect(page.locator('[data-renderer="atlas-fallback"]')).toBeVisible();
+  const fallbackBox = await replay.boundingBox();
+  expect(fallbackBox?.height).toBe(844);
+  expect(fallbackBox?.y).toBe(0);
+});
+
+test("wraps a long personal activity title without colliding on a phone", async ({
+  page,
+}) => {
+  await installGoogleReplay(page, "ready");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#/replay/14080158961");
+
+  const title = page.getByRole("heading", {
+    name: /DONT EVER, FOR ANY REASON/i,
+  });
+  const chapter = page.getByTestId("replay-active-chapter");
+  await expect(title).toBeVisible();
+  const titleBox = await title.boundingBox();
+  const chapterBox = await chapter.boundingBox();
+  expect((titleBox?.y ?? 0) + (titleBox?.height ?? 0)).toBeLessThanOrEqual(
+    chapterBox?.y ?? 0,
+  );
+  await expect(title).not.toHaveCSS("text-overflow", "ellipsis");
 });
 
 test("keeps playback telemetry visible on a phone", async ({ page }) => {
@@ -254,6 +317,28 @@ test("keeps playback telemetry visible on a phone", async ({ page }) => {
   expect((await dock.boundingBox())?.height ?? 0).toBeLessThan(170);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(
     390,
+  );
+  await page.waitForTimeout(2_000);
+  await page.getByTestId("replay-stage").dispatchEvent("pointermove");
+  await page.waitForTimeout(1_800);
+  await expect(page.getByTestId("replay-stage")).toHaveAttribute(
+    "data-hud-state",
+    "expanded",
+  );
+  await expect(page.getByTestId("replay-stage")).toHaveAttribute(
+    "data-hud-state",
+    "hidden",
+    { timeout: 2_500 },
+  );
+  await page.getByTestId("replay-stage").dispatchEvent("pointermove");
+  await expect(page.getByTestId("replay-stage")).toHaveAttribute(
+    "data-hud-state",
+    "expanded",
+  );
+  await expect(page.getByTestId("replay-stage")).toHaveAttribute(
+    "data-hud-state",
+    "hidden",
+    { timeout: 5_000 },
   );
 });
 

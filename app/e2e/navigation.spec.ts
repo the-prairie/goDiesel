@@ -56,12 +56,21 @@ test("every product surface has a canonical URL", async ({ page }) => {
     ["Replay", "replay"],
     ["Admin", "admin"],
   ] as const) {
-    await page.getByRole("link", { name: label }).click();
+    if (label === "Admin") {
+      await page.goto("/#/admin");
+    } else {
+      await page.getByRole("link", { name: label }).click();
+    }
     await expect(page).toHaveURL(new RegExp(`#/${path}$`));
-    await expect(page.getByRole("link", { name: label })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
+    if (label === "Replay") {
+      await expect(page.locator('[data-replay-shell="story-flight"]')).toBeVisible();
+      await expect(page.getByTestId("atlas-spine")).toHaveCount(0);
+    } else {
+      await expect(page.getByRole("link", { name: label })).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+    }
   }
 });
 
@@ -79,6 +88,11 @@ test("canonical product and selected-route URLs load directly", async ({
   ] as const) {
     await page.goto(`/#/${path}`);
     await expect(page).toHaveURL(new RegExp(`#/${path}$`));
+    if (path.startsWith("replay")) {
+      await expect(page.locator('[data-replay-shell="story-flight"]')).toBeVisible();
+      await expect(page.getByTestId("atlas-spine")).toHaveCount(0);
+      continue;
+    }
     if (path === "atlas") {
       await page.getByRole("button", { name: "Open application navigation" }).click();
     }
@@ -131,28 +145,32 @@ test("malformed legacy quest links canonicalize to the unavailable route state",
 
 test("browser history restores the selected Replay route", async ({ page }) => {
   await page.goto(`/#/replay/${routeSlug}`);
-  await expect(
-    page.getByRole("heading", { name: "Kyoto, Japan" }),
-  ).toBeVisible();
+  await expect(page.getByTestId("replay-stage")).toHaveAttribute(
+    "data-route-slug",
+    routeSlug,
+  );
 
   await page.getByText("Change route", { exact: true }).click();
   await page.locator(`a[href="#/replay/${historyRouteSlug}"]`).click();
   await expect(page).toHaveURL(new RegExp(`#\/replay\/${historyRouteSlug}$`));
-  await expect(
-    page.getByRole("heading", { name: "Tokyo, Japan" }),
-  ).toBeVisible();
+  await expect(page.getByTestId("replay-stage")).toHaveAttribute(
+    "data-route-slug",
+    historyRouteSlug,
+  );
 
   await page.goBack();
   await expect(page).toHaveURL(new RegExp(`#\/replay\/${routeSlug}$`));
-  await expect(
-    page.getByRole("heading", { name: "Kyoto, Japan" }),
-  ).toBeVisible();
+  await expect(page.getByTestId("replay-stage")).toHaveAttribute(
+    "data-route-slug",
+    routeSlug,
+  );
 
   await page.goForward();
   await expect(page).toHaveURL(new RegExp(`#\/replay\/${historyRouteSlug}$`));
-  await expect(
-    page.getByRole("heading", { name: "Tokyo, Japan" }),
-  ).toBeVisible();
+  await expect(page.getByTestId("replay-stage")).toHaveAttribute(
+    "data-route-slug",
+    historyRouteSlug,
+  );
 });
 
 test("mobile bottom spine navigates without covering the current page", async ({
@@ -234,7 +252,7 @@ test("navigation does not persistently overlap Replay across breakpoints", async
   }
 });
 
-test("mobile Replay reserves the safe area below navigation", async ({
+test("mobile Replay owns the viewport without global navigation", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -246,28 +264,21 @@ test("mobile Replay reserves the safe area below navigation", async ({
   });
 
   const layout = await page.evaluate(() => {
-    const navigation = document
-      .querySelector<HTMLElement>('[data-testid="atlas-spine-mobile"]')!
-      .getBoundingClientRect();
     const controls = document
       .querySelector<HTMLElement>('[data-testid="replay-controls"]')!
       .getBoundingClientRect();
 
     return {
-      navigationHeight: navigation.height,
-      navigationTop: navigation.top,
-      navigationPaddingBottom: getComputedStyle(
-        document.querySelector<HTMLElement>(
-          '[data-testid="atlas-spine-mobile"]',
-        )!,
-      ).paddingBottom,
       controlsBottom: controls.bottom,
+      documentWidth: document.documentElement.scrollWidth,
+      viewportHeight: window.innerHeight,
+      viewportWidth: window.innerWidth,
     };
   });
 
-  expect(layout.navigationHeight).toBeGreaterThanOrEqual(106);
-  expect(layout.navigationPaddingBottom).toBe("24px");
-  expect(layout.controlsBottom).toBeLessThanOrEqual(layout.navigationTop + 1);
+  await expect(page.getByTestId("atlas-spine-mobile")).toHaveCount(0);
+  expect(layout.controlsBottom).toBeLessThanOrEqual(layout.viewportHeight + 1);
+  expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth);
 });
 
 test("mobile spine keeps every primary destination legible", async ({
@@ -280,7 +291,6 @@ test("mobile spine keeps every primary destination legible", async ({
       ["atlas", "Atlas"],
       ["finder", "Finder"],
       ["routes", "Routes"],
-      ["replay", "Replay"],
       ["admin", "Admin"],
     ] as const) {
       await page.goto(`/#/${path}`);
