@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   atlasCameraFrame,
   atlasRegionTransitionDurationSeconds,
+  atlasRouteTransitionDurationSeconds,
   atlasViewportInsets,
 } from "@/surfaces/atlas/atlas-region-camera";
 
@@ -41,5 +42,7 @@ describe("atlas regional camera framing", () => {
   it("caps reduced motion at 150 milliseconds", () => {
     expect(atlasRegionTransitionDurationSeconds(false)).toBe(1.15);
     expect(atlasRegionTransitionDurationSeconds(true)).toBeLessThanOrEqual(0.15);
+    expect(atlasRouteTransitionDurationSeconds(false)).toBeLessThan(0.7);
+    expect(atlasRouteTransitionDurationSeconds(true)).toBeLessThanOrEqual(0.15);
   });
 });

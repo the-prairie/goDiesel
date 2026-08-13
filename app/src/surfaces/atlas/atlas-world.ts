@@ -6,6 +6,8 @@ export interface AtlasGlobeProps {
   regions: RouteRegion[];
   selectedRegion?: RouteRegion;
   selectedRoute?: RouteSummary;
+  previewedRoute?: RouteSummary;
+  framedRoute?: RouteSummary;
   onSelectRegion: (region: RouteRegion) => void;
   onSelectRoute?: (route: RouteSummary) => void;
   onStatusChange?: (status: AtlasWorldStatus) => void;
@@ -47,6 +49,8 @@ export interface AtlasWorldEngine {
   mount(options: AtlasWorldEngineMountOptions): Promise<void>;
   setSelectedRegion(region?: RouteRegion): void;
   setSelectedRoute(route?: RouteSummary): void;
+  setPreviewedRoute?(route?: RouteSummary): void;
+  frameRoute?(route?: RouteSummary): void;
   setRouteDisplayMode?(mode: "standard" | "density" | "terrain"): void;
   projectRegions(): AtlasRegionProjection[];
   zoomIn(): void;

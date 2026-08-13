@@ -107,6 +107,20 @@ export function regionalFitBounds(
   ];
 }
 
+export function regionalRouteFitBounds(
+  route: RouteSummary,
+  centerLng: number,
+): [[number, number], [number, number]] | undefined {
+  if (!validRecordedTrace(route)) return undefined;
+  const coordinates = unwrappedTrace(route.trace, centerLng);
+  const longitudes = coordinates.map(([lng]) => lng);
+  const latitudes = coordinates.map(([, lat]) => lat);
+  return [
+    [Math.min(...longitudes), Math.min(...latitudes)],
+    [Math.max(...longitudes), Math.max(...latitudes)],
+  ];
+}
+
 export function regionalRouteCollection(region: RouteRegion) {
   const bounds = validBounds(region);
   const routes = bounds ? region.routes.filter(validRecordedTrace) : [];
@@ -160,6 +174,8 @@ function fitRegionalRoutes(
 interface AtlasRegionalFallbackProps {
   region: RouteRegion;
   selectedRoute?: RouteSummary;
+  previewedRoute?: RouteSummary;
+  framedRoute?: RouteSummary;
   onSelectRoute?: (route: RouteSummary) => void;
   onReady?: () => void;
   routeDisplayMode?: "standard" | "density" | "terrain";
@@ -168,6 +184,8 @@ interface AtlasRegionalFallbackProps {
 export function AtlasRegionalFallback({
   region,
   selectedRoute,
+  previewedRoute,
+  framedRoute,
   onSelectRoute,
   onReady,
   routeDisplayMode = "standard",
@@ -176,21 +194,23 @@ export function AtlasRegionalFallback({
   const mapRef = useRef<MapLibreMap | undefined>(undefined);
   const onSelectRouteRef = useRef(onSelectRoute);
   const onReadyRef = useRef(onReady);
+  const lastFramedRouteSlugRef = useRef<string | undefined>(undefined);
   const [status, setStatus] = useState<MapStatus>("loading");
   const [routePaths, setRoutePaths] = useState<string[]>([]);
   const routes = useMemo(() => regionalRouteCollection(region), [region]);
   const bounds = useMemo(() => regionalFitBounds(region), [region]);
   onSelectRouteRef.current = onSelectRoute;
   onReadyRef.current = onReady;
+  const activeRoute = previewedRoute ?? selectedRoute;
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map?.getLayer("regional-route-thread")) return;
-    const selectedSlug = selectedRoute?.slug ?? "";
+    const selectedSlug = activeRoute?.slug ?? "";
     map.setPaintProperty("regional-route-thread", "line-color", [
       "case",
       ["==", ["get", "slug"], selectedSlug],
-      ROUTE_THREAD_STYLE.marker,
+      previewedRoute ? "#63d6cf" : ROUTE_THREAD_STYLE.marker,
       ROUTE_THREAD_STYLE.color,
     ]);
     map.setPaintProperty("regional-route-thread", "line-width", [
@@ -203,9 +223,27 @@ export function AtlasRegionalFallback({
       "case",
       ["==", ["get", "slug"], selectedSlug],
       1,
-      selectedSlug ? 0.52 : routeDisplayMode === "terrain" ? 0.24 : 0.9,
+      previewedRoute ? 0.12 : selectedSlug ? 0.52 : routeDisplayMode === "terrain" ? 0.24 : 0.9,
     ]);
-  }, [routeDisplayMode, selectedRoute?.slug]);
+  }, [activeRoute?.slug, previewedRoute, routeDisplayMode]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const host = hostRef.current;
+    const regionBounds = validBounds(region);
+    if (status !== "ready" || !map || !host || !regionBounds) return;
+    const routeBounds = framedRoute
+      ? regionalRouteFitBounds(framedRoute, regionBounds.centerLng)
+      : undefined;
+    if (!routeBounds && !lastFramedRouteSlugRef.current) return;
+    map.fitBounds(routeBounds ?? bounds!, {
+      padding: regionalMapPadding(host.clientWidth, host.clientHeight),
+      maxZoom: 15,
+      duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 120 : 650,
+    });
+    host.dataset.cameraRoute = framedRoute?.slug ?? "";
+    lastFramedRouteSlugRef.current = framedRoute?.slug;
+  }, [bounds, framedRoute, region, status]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -285,21 +323,21 @@ export function AtlasRegionalFallback({
         paint: {
           "line-color": [
             "case",
-            ["==", ["get", "slug"], selectedRoute?.slug ?? ""],
-            ROUTE_THREAD_STYLE.marker,
+            ["==", ["get", "slug"], activeRoute?.slug ?? ""],
+            previewedRoute ? "#63d6cf" : ROUTE_THREAD_STYLE.marker,
             ROUTE_THREAD_STYLE.color,
           ],
           "line-width": [
             "case",
-            ["==", ["get", "slug"], selectedRoute?.slug ?? ""],
+            ["==", ["get", "slug"], activeRoute?.slug ?? ""],
             7,
             routeDisplayMode === "density" ? 5 : routeDisplayMode === "terrain" ? 2 : 3,
           ],
           "line-opacity": [
             "case",
-            ["==", ["get", "slug"], selectedRoute?.slug ?? ""],
+            ["==", ["get", "slug"], activeRoute?.slug ?? ""],
             1,
-            selectedRoute ? 0.52 : routeDisplayMode === "terrain" ? 0.24 : 0.9,
+            previewedRoute ? 0.12 : activeRoute ? 0.52 : routeDisplayMode === "terrain" ? 0.24 : 0.9,
           ],
         },
       });
@@ -377,6 +415,8 @@ export function AtlasRegionalFallback({
       data-atlas-engine="maplibre-regional-fallback"
       data-map-status={status}
       data-region-route-count={routes.features.length}
+      data-previewed-route={previewedRoute?.slug ?? ""}
+      data-selected-route={selectedRoute?.slug ?? ""}
       className="relative h-full min-h-[420px] w-full overflow-hidden bg-[#d9ddd2]"
     >
       <div
@@ -392,7 +432,7 @@ export function AtlasRegionalFallback({
       >
         {routePaths.map((path, index) => {
           const slug = routes.features[index]?.properties.slug;
-          const active = slug === selectedRoute?.slug;
+          const active = slug === activeRoute?.slug;
           return (
           <g key={`${region.name}-${slug ?? index}`}>
             <path
@@ -416,12 +456,12 @@ export function AtlasRegionalFallback({
               strokeWidth={routeDisplayMode === "density" ? "18" : "9"}
               strokeLinecap="round"
               strokeLinejoin="round"
-              opacity={active ? "1" : selectedRoute ? "0.45" : routeDisplayMode === "terrain" ? "0.12" : routeDisplayMode === "density" ? "0.42" : "0.88"}
+              opacity={active ? "1" : previewedRoute ? "0.12" : selectedRoute ? "0.45" : routeDisplayMode === "terrain" ? "0.12" : routeDisplayMode === "density" ? "0.42" : "0.88"}
             />
             <path
               d={path}
               fill="none"
-              stroke={active ? ROUTE_THREAD_STYLE.marker : ROUTE_THREAD_STYLE.color}
+              stroke={active ? (previewedRoute ? "#63d6cf" : ROUTE_THREAD_STYLE.marker) : ROUTE_THREAD_STYLE.color}
               strokeWidth={active ? "7" : "3"}
               strokeLinecap="round"
               strokeLinejoin="round"

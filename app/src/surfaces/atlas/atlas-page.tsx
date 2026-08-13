@@ -38,6 +38,7 @@ export function AtlasPage() {
   searchParamsRef.current = searchParams;
   const globeRef = useRef<AtlasGlobeHandle>(null);
   const [regionPresentationReady, setRegionPresentationReady] = useState(false);
+  const [previewedRoute, setPreviewedRoute] = useState<RouteSummary>();
   const activityParam = searchParams.get("activity");
   const mode: AtlasActivityMode =
     activityParam === "runs" || activityParam === "rides" ? activityParam : "all";
@@ -91,6 +92,7 @@ export function AtlasPage() {
 
   useLayoutEffect(() => {
     setRegionPresentationReady(false);
+    setPreviewedRoute(undefined);
   }, [selectedRegion?.name]);
 
   useEffect(() => {
@@ -130,6 +132,7 @@ export function AtlasPage() {
   }
 
   function selectRoute(route: RouteSummary) {
+    setPreviewedRoute(undefined);
     updateSearchParams((next) => {
       next.set("region", route.region);
       next.set("route", route.slug);
@@ -190,6 +193,8 @@ export function AtlasPage() {
         regions={routeRegions}
         selectedRegion={selectedRegion}
         selectedRoute={presentedRoute}
+        previewedRoute={previewedRoute}
+        framedRoute={selectedRoute}
         onSelectRegion={selectRegion}
         onSelectRoute={selectRoute}
         onRegionPresentationReady={setRegionPresentationReady}
@@ -223,6 +228,7 @@ export function AtlasPage() {
           <RegionRouteCarousel
             region={selectedRegion}
             selectedRoute={selectedRoute}
+            onPreviewRoute={setPreviewedRoute}
             onClear={clearRegion}
             onSelectRoute={selectRoute}
             replayPathForRoute={replayPathForRoute}
