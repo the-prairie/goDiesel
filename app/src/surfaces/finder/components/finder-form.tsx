@@ -22,10 +22,10 @@ export function FinderForm({
   return (
     <form
       aria-label="Find a route"
-      className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(12rem,1.35fr)_minmax(8rem,0.7fr)_minmax(7rem,0.65fr)_minmax(8rem,0.7fr)_minmax(12rem,1.2fr)_auto] lg:items-end"
+      className="grid grid-cols-2 gap-3"
       onSubmit={submit}
     >
-      <Field label="Place" className="sm:col-span-2 lg:col-span-1">
+      <Field label="Place" className="col-span-2">
         <Input
           required
           value={intent.place}
@@ -74,7 +74,7 @@ export function FinderForm({
         }
       />
 
-      <Field label="Vibe" className="sm:col-span-2 lg:col-span-1">
+      <Field label="Vibe" className="col-span-2">
         <Input
           value={intent.vibe}
           placeholder="Exploratory climbing, coastal, touring..."
@@ -82,7 +82,7 @@ export function FinderForm({
         />
       </Field>
 
-      <Button type="submit" className="w-full sm:col-span-2 lg:col-span-1 lg:w-fit">
+      <Button type="submit" className="col-span-2 w-full">
         <Search aria-hidden="true" />
         Find curated routes
       </Button>
