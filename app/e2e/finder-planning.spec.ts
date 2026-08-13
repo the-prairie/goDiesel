@@ -35,6 +35,7 @@ test("Finder searches explicit route-backed candidates and saves a durable plan"
     timeout: 15_000,
   });
   await expect(map).toHaveAttribute("data-selected-route", "17654151284");
+  await expect(map).toHaveAttribute("data-route-count", "1");
 
   const candidate = page.getByRole("article", { name: "Kyoto, Japan candidate" });
   await expect(candidate).toContainText("Owner-curated from recorded GPX");
@@ -70,6 +71,26 @@ test("Finder searches explicit route-backed candidates and saves a durable plan"
   await expect(plannedCard).toContainText("Planned");
   await expect(plannedCard).toContainText("Owner-curated from recorded GPX");
   await expect(plannedCard.getByRole("link", { name: "Open route guide" })).toHaveCount(0);
+});
+
+test("Finder previews a candidate spatially before committing it to the URL", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/#/finder");
+  await searchKyoto(page);
+
+  const map = page.getByRole("region", { name: "Finder route map" });
+  const candidate = page.getByRole("article", { name: "Kyoto, Japan candidate" });
+  await expect(page).not.toHaveURL(/candidate=/);
+
+  await candidate.hover();
+  await expect(map).toHaveAttribute("data-previewed-route", "17654151284");
+  await expect(page).not.toHaveURL(/candidate=/);
+
+  await candidate.getByRole("button", { name: "Choose Kyoto, Japan" }).click();
+  await expect(page).toHaveURL(/candidate=17654151284/);
+  await expect(map).toHaveAttribute("data-selected-route", "17654151284");
 });
 
 test("Finder explains source limits instead of fabricating an unsupported result", async ({
@@ -142,6 +163,7 @@ test("Finder restores submitted intent through history and exposes removable mob
   await page.goto("/#/routes");
   await page.goBack();
   await page.getByRole("button", { name: "Edit filters" }).click();
+  await expect(page.getByRole("dialog", { name: "Edit route plan" })).toBeVisible();
   const form = page.getByRole("form", { name: "Find a route" });
   await expect(form.getByLabel("Place")).toHaveValue("Kyoto");
   await expect(form.getByLabel("Terrain")).toHaveValue("mixed");

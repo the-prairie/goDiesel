@@ -1,6 +1,6 @@
 # Daydream Production Implementation
 
-Last updated: 2026-08-12
+Last updated: 2026-08-13
 
 This checklist tracks the approved Daydream direction as it moves from the isolated lab prototype into the production application.
 
@@ -48,7 +48,18 @@ Status: Verified
 - [x] Surface one derived terrain distinction for each route.
 - [x] Keep selection synchronized between desktop rail, mobile surface, map, and URL.
 
-### 4. Routes as a memory library
+### 4. Finder as a Daydream planning map
+
+Status: Verified
+
+- [x] Make the recorded regional map the primary Finder surface.
+- [x] Replace the persistent filter grid with a compact intent summary and responsive edit sheet.
+- [x] Render every matched candidate trace together and link card hover/focus to map emphasis.
+- [x] Commit route selection through the `candidate` URL parameter while keeping previews transient.
+- [x] Keep planned-route saving, recorded-source honesty, no-match behavior, and Atlas totals intact.
+- [x] Verify desktop and phone composition, responsive filtering, accessible controls, and horizontal fit.
+
+### 5. Routes as a memory library
 
 Status: Planned
 
@@ -57,7 +68,7 @@ Status: Planned
 - [ ] Replace the overflowing desktop ledger with a responsive comparison model.
 - [ ] Preserve search, filters, canonical route URLs, and large-library performance.
 
-### 5. Cross-surface quality and continuity
+### 6. Cross-surface quality and continuity
 
 Status: Planned
 
@@ -107,3 +118,11 @@ Status: Planned
 - Every route card exposes one terrain distinction derived only from recorded elevation samples: recorded relief when meaningful, otherwise high point.
 - TypeScript, the production build, all 246 unit tests, the 20-case Atlas fixture suite, and the four-check navigation ticket gate passed on 2026-08-12.
 - Live Cesium screenshots at 1440 x 960 and 390 x 844 were inspected; hover isolation, map-first framing, card rhythm, 44 px mobile controls, and zero horizontal document overflow were verified.
+
+### Slice 4
+
+- Finder now renders every matching recorded trace in a single MapLibre source and uses card hover/focus or map hover to preview one route without mutating history.
+- Candidate activation from the card or route line commits `candidate=<source route slug>` in the URL and preserves the submitted planning intent.
+- Desktop and phone frames were inspected in the live local app; the initial oversized form and clipped mobile chips were corrected before acceptance.
+- The mobile bottom sheet preserves the submitted form state, exposes a named dialog, fits 390 x 844, and leaves the regional route visible behind the modal surface.
+- The production build and all seven focused Finder browser scenarios passed on 2026-08-13, including the negative unsupported-place case and the completed-Atlas-total isolation check.
