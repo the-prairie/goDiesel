@@ -4,6 +4,7 @@ import { buildRouteRegions } from "@/data/route-regions";
 import type { RouteSummary } from "@/domain/route";
 import {
   atlasLensFromSearchParams,
+  deriveRouteTerrainDistinction,
   deriveTerrainReading,
   latestRecordedRegion,
   shouldOpenLatestRegion,
@@ -74,6 +75,10 @@ describe("regional Atlas entry", () => {
       reliefM: 250,
       recordedClimbM: 420,
       sampleCount: 2,
+    });
+    expect(deriveRouteTerrainDistinction(region.routes[0])).toEqual({
+      label: "Recorded relief",
+      valueM: 250,
     });
   });
 });

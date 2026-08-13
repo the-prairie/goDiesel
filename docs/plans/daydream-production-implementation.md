@@ -41,12 +41,12 @@ Status: Verified
 
 ### 3. Spatial continuity from route cards to terrain
 
-Status: Planned
+Status: Verified
 
-- [ ] Make card hover and focus isolate the corresponding route.
-- [ ] Fit or reframe the selected route without disorienting camera movement.
-- [ ] Surface one derived terrain distinction for each route.
-- [ ] Keep selection synchronized between desktop rail, mobile surface, map, and URL.
+- [x] Make card hover and focus isolate the corresponding route.
+- [x] Fit or reframe the selected route without disorienting camera movement.
+- [x] Surface one derived terrain distinction for each route.
+- [x] Keep selection synchronized between desktop rail, mobile surface, map, and URL.
 
 ### 4. Routes as a memory library
 
@@ -98,3 +98,12 @@ Status: Planned
 - The 40-case Atlas browser matrix passed after its two small-height collision failures were fixed and the affected seven responsive cases were rerun.
 - Desktop and phone screenshots at 1440 x 960 and 390 x 844 were inspected; a phone terrain-panel collision was fixed and guarded with a geometry assertion.
 - Live Cesium verification passed for source-backed Kyoto terrain on desktop and phone, including settled camera state, selected-route contrast, regional framing, route rail selection, and document width.
+
+### Slice 3
+
+- Card hover and keyboard focus now preview one recorded route on both Cesium and the regional fallback without changing URL state or camera position.
+- Route activation from cards, carousel drag, keyboard navigation, or the map commits the URL selection and reframes the recorded route with a 650 ms transition; reduced motion uses 120 ms.
+- Escape clears the route selection and restores the whole-region camera frame before the existing second Escape returns to the world overview.
+- Every route card exposes one terrain distinction derived only from recorded elevation samples: recorded relief when meaningful, otherwise high point.
+- TypeScript, the production build, all 246 unit tests, the 20-case Atlas fixture suite, and the four-check navigation ticket gate passed on 2026-08-12.
+- Live Cesium screenshots at 1440 x 960 and 390 x 844 were inspected; hover isolation, map-first framing, card rhythm, 44 px mobile controls, and zero horizontal document overflow were verified.

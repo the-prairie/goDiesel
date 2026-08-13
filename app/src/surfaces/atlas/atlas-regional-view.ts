@@ -9,6 +9,11 @@ export interface TerrainReading {
   sampleCount: number;
 }
 
+export interface RouteTerrainDistinction {
+  label: "Recorded relief" | "High point";
+  valueM: number;
+}
+
 export function latestRecordedRegion(regions: RouteRegion[]) {
   return regions.reduce<RouteRegion | undefined>((latest, region) => {
     const regionDate = newestRecordedDate(region);
@@ -50,6 +55,21 @@ export function deriveTerrainReading(region: RouteRegion): TerrainReading | null
     recordedClimbM: region.totalClimbM,
     sampleCount: elevations.length,
   };
+}
+
+export function deriveRouteTerrainDistinction(
+  route: RouteRegion["routes"][number],
+): RouteTerrainDistinction | null {
+  const elevations = route.trace
+    .map((point) => point.elev)
+    .filter((elevation) => Number.isFinite(elevation));
+  if (elevations.length === 0) return null;
+
+  const highPointM = Math.max(...elevations);
+  const reliefM = highPointM - Math.min(...elevations);
+  return reliefM >= 30
+    ? { label: "Recorded relief", valueM: reliefM }
+    : { label: "High point", valueM: highPointM };
 }
 
 function newestRecordedDate(region: RouteRegion) {

@@ -20,6 +20,8 @@ export const CesiumAtlasGlobe = forwardRef<
     illuminationTimeIso,
     selectedRegion,
     selectedRoute,
+    previewedRoute,
+    framedRoute,
     onSelectRegion,
     onSelectRoute,
     onStatusChange,
@@ -35,6 +37,8 @@ export const CesiumAtlasGlobe = forwardRef<
   const readyEngineRef = useRef<AtlasWorldEngine | undefined>(undefined);
   const selectedRegionRef = useRef(selectedRegion);
   const selectedRouteRef = useRef(selectedRoute);
+  const previewedRouteRef = useRef(previewedRoute);
+  const lastFramedRouteSlugRef = useRef<string | undefined>(undefined);
   const onSelectRouteRef = useRef(onSelectRoute);
   const [status, setStatus] = useState<AtlasWorldStatus>({
     state: "loading",
@@ -49,6 +53,7 @@ export const CesiumAtlasGlobe = forwardRef<
 
   selectedRegionRef.current = selectedRegion;
   selectedRouteRef.current = selectedRoute;
+  previewedRouteRef.current = previewedRoute;
   onSelectRouteRef.current = onSelectRoute;
 
   useEffect(() => {
@@ -86,6 +91,7 @@ export const CesiumAtlasGlobe = forwardRef<
           readyEngineRef.current = engine;
           engine.setSelectedRegion(selectedRegionRef.current);
           engine.setSelectedRoute(selectedRouteRef.current);
+          engine.setPreviewedRoute?.(previewedRouteRef.current);
         }
       });
     return () => {
@@ -106,6 +112,21 @@ export const CesiumAtlasGlobe = forwardRef<
   useEffect(() => {
     readyEngineRef.current?.setSelectedRoute(selectedRoute);
   }, [selectedRoute]);
+
+  useEffect(() => {
+    readyEngineRef.current?.setPreviewedRoute?.(previewedRoute);
+  }, [previewedRoute]);
+
+  useEffect(() => {
+    if (status.state !== "region-ready") return;
+    if (framedRoute) {
+      readyEngineRef.current?.frameRoute?.(framedRoute);
+      lastFramedRouteSlugRef.current = framedRoute.slug;
+    } else if (lastFramedRouteSlugRef.current) {
+      readyEngineRef.current?.frameRoute?.(undefined);
+      lastFramedRouteSlugRef.current = undefined;
+    }
+  }, [framedRoute, status.state]);
 
   useEffect(() => {
     const updateLabels = () => {
@@ -181,6 +202,8 @@ export const CesiumAtlasGlobe = forwardRef<
         <AtlasRegionalFallback
           region={selectedRegion}
           selectedRoute={selectedRoute}
+          previewedRoute={previewedRoute}
+          framedRoute={framedRoute}
           routeDisplayMode={routeDisplayMode}
           onSelectRoute={(route) => onSelectRouteRef.current?.(route)}
           onReady={() => onRegionPresentationReady?.(true)}

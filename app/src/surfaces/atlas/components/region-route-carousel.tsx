@@ -24,6 +24,7 @@ import {
 } from "@/domain/geometry/route-visualization";
 import { cn } from "@/ui/utils";
 import type { AtlasLens } from "@/surfaces/atlas/atlas-regional-view";
+import { deriveRouteTerrainDistinction } from "@/surfaces/atlas/atlas-regional-view";
 
 export const ROUTE_CAROUSEL_SLIDE_CLASS =
   "min-w-0 flex-[0_0_84%] pl-3 sm:basis-[44%] sm:pl-4 xl:basis-[calc((100%-2rem)/3)]";
@@ -32,6 +33,7 @@ interface RegionRouteCarouselProps {
   region: RouteRegion;
   selectedRoute?: RouteSummary;
   onSelectRoute: (route: RouteSummary) => void;
+  onPreviewRoute: (route?: RouteSummary) => void;
   onClear: () => void;
   replayPathForRoute: (route: RouteSummary) => string;
   presentationReady: boolean;
@@ -48,6 +50,7 @@ export function RegionRouteCarousel({
   region,
   selectedRoute,
   onSelectRoute,
+  onPreviewRoute,
   onClear,
   replayPathForRoute,
   presentationReady,
@@ -73,6 +76,8 @@ export function RegionRouteCarousel({
   const [thumbnailIndexes, setThumbnailIndexes] = useState(() =>
     thumbnailIndexesForSlidesInView([selectedIndex], region.routes.length),
   );
+  const [hoveredRoute, setHoveredRoute] = useState<RouteSummary>();
+  const [focusedRoute, setFocusedRoute] = useState<RouteSummary>();
   const programmaticSelectionRef = useRef<string | undefined>(undefined);
   const commitCenteredRoute = useCallback(() => {
     if (!emblaApi) return;
@@ -118,6 +123,15 @@ export function RegionRouteCarousel({
     );
     if (index >= 0 && index !== emblaApi.selectedScrollSnap()) emblaApi.scrollTo(index);
   }, [effectiveSelectedRoute, emblaApi, region.routes]);
+
+  useEffect(() => {
+    onPreviewRoute(hoveredRoute ?? focusedRoute);
+  }, [focusedRoute, hoveredRoute, onPreviewRoute]);
+
+  useEffect(
+    () => () => onPreviewRoute(undefined),
+    [onPreviewRoute],
+  );
 
   const selectRoute = useCallback(
     (route: RouteSummary, index: number) => {
@@ -324,6 +338,8 @@ export function RegionRouteCarousel({
                   replayPath={replayPathForRoute(route)}
                   loadThumbnail={thumbnailIndexes.has(index)}
                   onSelect={() => selectRoute(route, index)}
+                  onHover={(previewed) => setHoveredRoute(previewed ? route : undefined)}
+                  onFocus={(focused) => setFocusedRoute(focused ? route : undefined)}
                 />
               </div>
             ))}
@@ -355,6 +371,8 @@ function RegionalRouteCard({
   replayPath,
   loadThumbnail,
   onSelect,
+  onHover,
+  onFocus,
 }: {
   route: RouteSummary;
   selected: boolean;
@@ -363,11 +381,17 @@ function RegionalRouteCard({
   replayPath: string;
   loadThumbnail: boolean;
   onSelect: () => void;
+  onHover: (hovered: boolean) => void;
+  onFocus: (focused: boolean) => void;
 }) {
   const reviewed =
     route.guide.reviewStatus === "reviewed" || route.guide.reviewStatus === "published";
   const trace = useMemo(() => routeTracePolyline(route.trace), [route.trace]);
   const profile = useMemo(() => elevationProfileGeometry(route.trace), [route.trace]);
+  const terrainDistinction = useMemo(
+    () => deriveRouteTerrainDistinction(route),
+    [route],
+  );
 
   return (
     <article
@@ -375,6 +399,14 @@ function RegionalRouteCard({
       aria-current={selected ? "true" : undefined}
       data-route-slug={route.slug}
       data-selected={selected}
+      onMouseEnter={() => onHover(true)}
+      onMouseLeave={() => onHover(false)}
+      onFocusCapture={() => onFocus(true)}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          onFocus(false);
+        }
+      }}
       className={cn(
         "relative grid h-[17rem] min-w-0 grid-rows-[7rem_minmax(0,1fr)_3.75rem] overflow-hidden rounded-[8px] border bg-[#0b2029] text-white shadow-sm transition-[border-color,opacity] [@media(max-height:500px)]:h-[9rem] [@media(max-height:500px)]:grid-rows-[3rem_minmax(0,1fr)_2.5rem]",
         selected
@@ -408,6 +440,15 @@ function RegionalRouteCard({
           </span>
         </p>
         <p className="mt-2 line-clamp-2 text-xs leading-4 text-white/65 [@media(max-height:500px)]:hidden">
+          {terrainDistinction ? (
+            <span
+              className="mr-2 inline-flex items-center gap-1 font-medium text-[#9be7e1]"
+              title="Derived from recorded elevation samples"
+            >
+              <Mountain className="size-3.5" aria-hidden="true" />
+              {Math.round(terrainDistinction.valueM).toLocaleString()} m {terrainDistinction.label.toLowerCase()}
+            </span>
+          ) : null}
           {reviewed && route.guide.vibe ? route.guide.vibe : "Guide not yet reviewed"}
         </p>
       </div>
