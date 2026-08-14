@@ -24,7 +24,7 @@ export function FinderPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const submittedIntent = useMemo(() => intentFromSearchParams(searchParams), [searchParams]);
   const [intent, setIntent] = useState(submittedIntent ?? initialIntent);
-  const [filtersOpen, setFiltersOpen] = useState(!submittedIntent);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [previewedSlug, setPreviewedSlug] = useState<string>();
   const isMobile = useIsMobile();
   const result = useMemo(
