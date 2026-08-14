@@ -3,6 +3,10 @@ import { expect, test, type Page } from "@playwright/test";
 const plannedRouteStorageKey = "godiesel.planned-routes.v1";
 
 async function searchKyoto(page: Page) {
+  const existingForm = page.getByRole("form", { name: "Find a route" });
+  if (!(await existingForm.isVisible())) {
+    await page.getByRole("button", { name: /^(Shape the day|Edit filters)$/ }).click();
+  }
   const form = page.getByRole("form", { name: "Find a route" });
   await form.getByLabel("Place").fill("Kyoto");
   await form.getByLabel("Activity").selectOption("Run");
@@ -42,7 +46,6 @@ test("Finder searches explicit route-backed candidates and saves a durable plan"
   await expect(candidate).toContainText("21.3 km");
   await expect(candidate).toContainText("Why it matches");
   await expect(candidate).toContainText(/mixed terrain/i);
-  await page.getByLabel("Place").fill("Patagonia");
   await candidate.getByRole("button", { name: "Save planned route" }).click();
   await expect(candidate.getByRole("status")).toContainText("Saved to Planned routes");
 
@@ -97,6 +100,7 @@ test("Finder explains source limits instead of fabricating an unsupported result
   page,
 }) => {
   await page.goto("/#/finder");
+  await page.getByRole("button", { name: "Shape the day" }).click();
   const form = page.getByRole("form", { name: "Find a route" });
   await form.getByLabel("Place").fill("Patagonia");
   await form.getByLabel("Activity").selectOption("Run");
@@ -163,15 +167,17 @@ test("Finder restores submitted intent through history and exposes removable mob
   await page.goto("/#/routes");
   await page.goBack();
   await page.getByRole("button", { name: "Edit filters" }).click();
-  await expect(page.getByRole("dialog", { name: "Edit route plan" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Shape the next day" })).toBeVisible();
   const form = page.getByRole("form", { name: "Find a route" });
   await expect(form.getByLabel("Place")).toHaveValue("Kyoto");
   await expect(form.getByLabel("Terrain")).toHaveValue("mixed");
+  await page.getByRole("button", { name: "Close" }).click();
   await expect(page.getByRole("article", { name: "Kyoto, Japan candidate" })).toBeVisible();
 
   await page.getByRole("button", { name: "Remove terrain filter" }).click();
-  await expect(form.getByLabel("Terrain")).toHaveValue("any");
   await expect(page).not.toHaveURL(/terrain=mixed/);
+  await page.getByRole("button", { name: "Edit filters" }).click();
+  await expect(page.getByRole("form", { name: "Find a route" }).getByLabel("Terrain")).toHaveValue("any");
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
     390,
   );
