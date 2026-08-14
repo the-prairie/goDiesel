@@ -14,6 +14,7 @@ export function FinderRouteMap({
   selectedSlug,
   committedSlug,
   previewedSlug,
+  showEmptyPrompt,
   onSelect,
   onPreview,
 }: {
@@ -21,6 +22,7 @@ export function FinderRouteMap({
   selectedSlug?: string;
   committedSlug?: string;
   previewedSlug?: string;
+  showEmptyPrompt: boolean;
   onSelect: (slug: string) => void;
   onPreview: (slug?: string) => void;
 }) {
@@ -127,7 +129,7 @@ export function FinderRouteMap({
           <div className="max-w-sm"><p className="font-semibold text-ink">Planning map unavailable</p><p className="mt-2 text-control leading-6 text-ink-muted">Candidate records remain available, but source-backed map tiles could not load in this session.</p></div>
         </div>
       ) : null}
-      {!candidates.length && status === "ready" ? (
+      {showEmptyPrompt && !candidates.length && status === "ready" ? (
         <div className="absolute left-4 top-28 max-w-xs border-l-2 border-l-route bg-surface/92 p-4 shadow-panel backdrop-blur md:left-[26rem] md:top-5">
           <p className="font-editorial text-xl font-semibold text-ink">Choose the shape of the day.</p>
           <p className="mt-1 text-control leading-6 text-ink-secondary">Recorded candidate routes will gather here after a search.</p>
@@ -177,7 +179,20 @@ function showCandidates(map: MapLibreMap, candidates: DiscoveryCandidate[], sele
       geometry: { type: "LineString" as const, coordinates: candidate.route.trace.map((point) => [point.lng, point.lat]) },
     }));
   (map.getSource(SOURCE_ID) as GeoJSONSource | undefined)?.setData(featureCollection(features));
-  if (fit) fitCandidates(map, candidates);
+  if (fit) {
+    if (candidates.length) fitCandidates(map, candidates);
+    else resetCandidateViewport(map);
+  }
+}
+
+function resetCandidateViewport(map: MapLibreMap) {
+  map.easeTo({
+    bearing: -8,
+    center: [20, 28],
+    duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 450,
+    pitch: 28,
+    zoom: 1.4,
+  });
 }
 
 function fitCandidates(map: MapLibreMap, candidates: DiscoveryCandidate[]) {

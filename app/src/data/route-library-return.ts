@@ -38,6 +38,10 @@ export function takeRouteLibraryScroll(path: string) {
   return record.scrollY;
 }
 
+export function hasRouteLibraryScroll(path: string) {
+  return readReturnRecord()?.path === path;
+}
+
 function readReturnRecord(): RouteLibraryReturnRecord | undefined {
   try {
     const value = JSON.parse(sessionStorage.getItem(storageKey) ?? "null") as unknown;

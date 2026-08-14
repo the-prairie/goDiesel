@@ -93,6 +93,13 @@ test("canonical product and selected-route URLs load directly", async ({
       await expect(page.getByTestId("atlas-spine")).toHaveCount(0);
       continue;
     }
+    if (path.startsWith("routes/")) {
+      await expect(
+        page.getByRole("region", { name: "Route story", exact: true }),
+      ).toBeVisible();
+      await expect(page.getByTestId("atlas-spine")).toHaveCount(0);
+      continue;
+    }
     if (path === "atlas") {
       await page.getByRole("button", { name: "Open application navigation" }).click();
     }
@@ -114,8 +121,11 @@ test("legacy quest links preserve the route in canonical detail", async ({
   await expect(page).toHaveURL(new RegExp(`#\/routes\/${routeSlug}$`));
   await expect(page.getByRole("main")).toContainText(/km/i);
   await expect(
-    page.getByRole("link", { name: /open replay/i }),
-  ).toHaveAttribute("href", `#/replay/${routeSlug}`);
+    page.getByRole("link", { name: "Cinematic replay", exact: true }),
+  ).toHaveAttribute(
+    "href",
+    `#/replay/${routeSlug}?from=%2Froutes%2F${routeSlug}`,
+  );
 });
 
 test("legacy quest links are canonicalized after the app has started", async ({
@@ -128,8 +138,9 @@ test("legacy quest links are canonicalized after the app has started", async ({
 
   await expect(page).toHaveURL(new RegExp(`#\/routes\/${routeSlug}$`));
   await expect(
-    page.getByRole("link", { name: "Routes", exact: true }),
-  ).toHaveAttribute("aria-current", "page");
+    page.getByRole("region", { name: "Route story", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByTestId("atlas-spine")).toHaveCount(0);
 });
 
 test("malformed legacy quest links canonicalize to the unavailable route state", async ({
@@ -374,7 +385,7 @@ test("field-guide shell has stable desktop and mobile compositions", async ({
   await page.goto("/#/routes");
   await expect(page.getByTestId("atlas-spine")).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Your route library." }),
+    page.getByRole("heading", { name: "The routes that made the map." }),
   ).toBeVisible();
   await expect(page).toHaveScreenshot("field-guide-shell-desktop.png", {
     animations: "disabled",
@@ -384,9 +395,68 @@ test("field-guide shell has stable desktop and mobile compositions", async ({
   await page.goto("/#/routes");
   await expect(page.getByTestId("atlas-spine-mobile")).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Your route library." }),
+    page.getByRole("heading", { name: "The routes that made the map." }),
   ).toBeVisible();
   await expect(page).toHaveScreenshot("field-guide-shell-mobile.png", {
     animations: "disabled",
   });
+});
+
+test("path navigation moves focus to the new view and history restores scroll", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 700 });
+  await page.goto("/#/routes");
+  await expect(
+    page.getByRole("heading", { name: "The routes that made the map." }),
+  ).toBeVisible();
+
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  const routesScrollY = await page.evaluate(() => window.scrollY);
+  expect(routesScrollY).toBeGreaterThan(200);
+
+  await page.getByTestId("atlas-spine").getByRole("link", { name: "Finder" }).click();
+  await expect(page).toHaveURL(/#\/finder$/);
+  await expect(page.getByRole("heading", { name: "Plan the next day." })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  await expect(page.locator("main")).toBeFocused();
+
+  await page.goBack();
+  await expect(page).toHaveURL(/#\/routes$/);
+  await expect
+    .poll(() => page.evaluate(() => window.scrollY))
+    .toBeGreaterThan(routesScrollY - 50);
+});
+
+test("immersive route stories restore their own reading position through history", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#/routes/17654151284");
+  const story = page.getByRole("region", { name: "Route story", exact: true });
+  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+  await story.evaluate((element) => element.scrollTo(0, 520));
+  await expect.poll(() => story.evaluate((element) => element.scrollTop)).toBeGreaterThan(450);
+
+  await story.getByRole("link", { name: "Routes", exact: true }).click();
+  await expect(page).toHaveURL(/#\/routes$/);
+  await page.goBack();
+  await expect(page).toHaveURL(/#\/routes\/17654151284$/);
+  await expect
+    .poll(() => story.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(450);
+});
+
+test("reduced motion removes decorative movement without changing navigation", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/#/routes");
+  const firstRoute = page.getByRole("article").first();
+  await expect(firstRoute).toBeVisible();
+  await firstRoute.hover();
+  await expect(firstRoute).toHaveCSS("transform", "none");
+  expect(
+    await page.evaluate(() => getComputedStyle(document.documentElement).scrollBehavior),
+  ).toBe("auto");
 });

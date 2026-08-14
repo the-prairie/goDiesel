@@ -82,13 +82,13 @@ Status: Verified
 
 ### 7. Cross-surface quality and continuity
 
-Status: Planned
+Status: Verified
 
-- [ ] Add explicit scroll restoration for hash-route transitions.
-- [ ] Fix Finder desktop overflow and improve no-match recovery.
-- [ ] Ensure cinematic chapter controls retain accessible names on mobile.
-- [ ] Validate reduced motion, focus restoration, touch targets, and safe-area behavior.
-- [ ] Complete the production visual consistency pass across Atlas, Finder, Routes, Replay, and Admin.
+- [x] Add explicit scroll restoration for hash-route transitions.
+- [x] Fix Finder desktop overflow and improve no-match recovery.
+- [x] Ensure cinematic chapter controls retain accessible names on mobile.
+- [x] Validate reduced motion, focus restoration, touch targets, and safe-area behavior.
+- [x] Complete the production visual consistency pass across Atlas, Finder, Routes, Replay, and Admin.
 
 ## Decisions
 
@@ -154,3 +154,11 @@ Status: Planned
 - Search and six filters live in a compact responsive tray, while readable applied-filter chips preserve context and support one-step removal when the tray is closed.
 - Desktop and phone frames were inspected at 1440 x 900 and 390 x 844; card hierarchy, filter fit, mobile navigation clearance, and zero horizontal overflow were verified.
 - The production build, all 251 unit tests, all 18 focused Routes browser scenarios, and all seven affected Finder planning scenarios passed on 2026-08-14, including progressive 24-route loading, canonical URLs, return scroll, planned and discovered route separation, blocked storage, invalid parameters, and empty and unavailable states.
+
+### Slice 7
+
+- Hash-route transitions now move focus into the destination, reset new views to their start, and restore both window and opt-in immersive-region scroll positions through browser history without disturbing query-only state changes.
+- Finder now fits without header and result-shelf overlap at 768 x 576, returns an unsupported search to a neutral world view, offers a source-honest Edit search recovery action, and restores focus to the control that opened its filter sheet.
+- Mobile Replay chapter controls expose chapter position, route moment, and distance in their accessible names, retain 44 px targets, remain seekable under reduced motion, and clear the configured bottom safe area.
+- Desktop, compact-desktop, and phone frames were inspected across Finder, Routes, route story, Admin, and shared navigation. Atlas control and loading states were checked in one restrained production load; the provider did not settle during this pass, so no new live-terrain acceptance claim is made beyond the verified Slice 2 evidence.
+- The final release gate passed on 2026-08-14: production build, all 251 unit tests, bundle budget, and all 91 production browser scenarios. The gate caught a Routes return-scroll ordering regression; the destination-specific restoration policy was fixed, its focused scenario passed, and the complete gate then passed on rerun.

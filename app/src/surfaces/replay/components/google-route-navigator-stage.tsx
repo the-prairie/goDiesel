@@ -689,7 +689,7 @@ function StoryFlightReplayHud({
   chapters: ReplayStoryChapter[];
 }) {
   return (
-    <div className="px-2 pb-1 sm:px-4 sm:pb-4">
+    <div className="px-2 pb-[max(0.25rem,var(--safe-area-bottom))] sm:px-4 sm:pb-[max(1rem,var(--safe-area-bottom))]">
       <div className="pointer-events-auto mb-1 ml-auto grid w-full grid-cols-6 rounded-md border border-white/45 bg-[#1d2d50]/72 p-1 text-white shadow-xl backdrop-blur-xl sm:mb-2 sm:w-[min(47rem,calc(100vw-2rem))] sm:p-1.5">
         <StoryMetric
           label="Distance"
@@ -719,7 +719,7 @@ function StoryFlightReplayHud({
         />
       </div>
 
-      <div className="pointer-events-auto grid min-h-[6.75rem] grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-white/60 bg-[#f5f7fb]/94 p-2 text-[#1d2946] shadow-2xl backdrop-blur-xl sm:grid-cols-[3.5rem_minmax(0,1fr)_auto] sm:gap-3 sm:p-3">
+      <div data-testid="story-flight-controls" className="pointer-events-auto grid min-h-[6.75rem] grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-white/60 bg-[#f5f7fb]/94 p-2 text-[#1d2946] shadow-2xl backdrop-blur-xl sm:grid-cols-[3.5rem_minmax(0,1fr)_auto] sm:gap-3 sm:p-3">
         <ReplayButton
           disabled={disabled}
           onClick={onTogglePlayback}
@@ -735,7 +735,7 @@ function StoryFlightReplayHud({
             {chapters.map((chapter, index) => (
               <button
                 aria-current={activeChapterIndex === index ? "step" : undefined}
-                aria-label={`Go to ${chapter.label} at ${(chapter.progressM / 1_000).toFixed(1)} km`}
+                aria-label={`Chapter ${index + 1} of ${chapters.length}: Go to ${chapter.label} at ${(chapter.progressM / 1_000).toFixed(1)} km`}
                 className="group pointer-events-auto absolute top-0 grid min-h-11 w-11 justify-items-center gap-0.5 rounded-sm px-0.5 text-[#60708e] outline-none hover:text-[#1d2946] focus-visible:ring-2 focus-visible:ring-[#d86f9e] aria-[current=step]:text-[#b94f83] lg:w-24"
                 key={chapter.kind}
                 onClick={() =>
