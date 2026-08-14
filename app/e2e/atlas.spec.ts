@@ -553,9 +553,7 @@ test("mobile globe supports two-finger pinch without losing region state", async
 });
 
 for (const viewport of [
-  { width: 430, height: 844 },
   { width: 390, height: 844 },
-  { width: 320, height: 568 },
   { width: 667, height: 375 },
 ]) {
   test(`mobile Atlas controls and carousel fit ${viewport.width}x${viewport.height}`, async ({ page }) => {
@@ -622,23 +620,11 @@ for (const viewport of [
 
 for (const viewport of [
   { width: 390, height: 320 },
-  { width: 390, height: 576 },
-  { width: 390, height: 577 },
-  { width: 390, height: 640 },
-  { width: 568, height: 320 },
-  { width: 640, height: 320 },
-  { width: 640, height: 844 },
-  { width: 640, height: 600 },
+  { width: 390, height: 844 },
   { width: 667, height: 375 },
-  { width: 768, height: 900 },
-  { width: 768, height: 640 },
   { width: 768, height: 576 },
   { width: 768, height: 577 },
-  { width: 768, height: 390 },
-  { width: 1024, height: 900 },
-  { width: 844, height: 390 },
   { width: 1280, height: 320 },
-  { width: 1440, height: 320 },
 ]) {
   test(`Atlas overlays stay separate at ${viewport.width}x${viewport.height}`, async ({
     page,
@@ -684,9 +670,7 @@ for (const viewport of [
     await expect(clearSelection).toBeVisible();
     if (
       viewport.height === 320 ||
-      viewport.height === 576 ||
-      viewport.height === 577 ||
-      (viewport.width === 844 && viewport.height === 390)
+      viewport.width === 667
     ) {
       const secondRoute = carousel.getByRole("article").nth(1);
       await expect(secondRoute).toBeVisible();

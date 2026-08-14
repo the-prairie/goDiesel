@@ -2,6 +2,9 @@ import { expect, test } from "@playwright/test";
 import { PNG } from "pngjs";
 
 const previewUrl = process.env.GODIESEL_ATLAS_PREVIEW_URL;
+if (!previewUrl) {
+  throw new Error("Set GODIESEL_ATLAS_PREVIEW_URL to a deployed Pages preview.");
+}
 
 async function expectNonblankCanvas(canvas: import("@playwright/test").Locator) {
   const screenshot = PNG.sync.read(await canvas.screenshot());
@@ -39,8 +42,6 @@ async function expectSelectedRouteContrast(
 }
 
 test.describe("live regional Atlas terrain", () => {
-  test.skip(!previewUrl, "Set GODIESEL_ATLAS_PREVIEW_URL to a Pages preview.");
-
   test("global Atlas renders real route threads and keeps camera motion responsive", async ({
     page,
   }, testInfo) => {
