@@ -342,6 +342,51 @@ test("keeps playback telemetry visible on a phone", async ({ page }) => {
   );
 });
 
+test("keeps mobile chapter controls named, touchable, and above the safe area", async ({
+  page,
+}) => {
+  await installGoogleReplay(page, "ready");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#/replay/14023448720");
+  await page.addStyleTag({
+    content: ":root { --safe-area-bottom: 28px !important; }",
+  });
+
+  const chapterNavigation = page.getByRole("navigation", {
+    name: "Replay chapters",
+  });
+  await expect(page.getByTestId("replay-stage")).toHaveAttribute(
+    "data-state",
+    "ready",
+  );
+  await expect(chapterNavigation).toBeVisible();
+  const chapterButtons = chapterNavigation.getByRole("button");
+  const chapterCount = await chapterButtons.count();
+  expect(chapterCount).toBeGreaterThan(1);
+  for (let index = 0; index < chapterCount; index += 1) {
+    const chapter = chapterButtons.nth(index);
+    await expect(chapter).toHaveAccessibleName(
+      new RegExp(`^Chapter ${index + 1} of ${chapterCount}: Go to .+ at \\d+\\.\\d km$`),
+    );
+    const box = await chapter.boundingBox();
+    expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+  }
+
+  await chapterButtons.last().click();
+  await expect
+    .poll(async () =>
+      Number(
+        (await page.getByTestId("google-route-progress").textContent())?.split(" ")[0],
+      ),
+    )
+    .toBeGreaterThan(0);
+
+  const controlsBox = await page.getByTestId("story-flight-controls").boundingBox();
+  expect(844 - ((controlsBox?.y ?? 0) + (controlsBox?.height ?? 0))).toBeGreaterThanOrEqual(28);
+});
+
 test("commits the final playback state after a throttled UI update", async ({
   page,
 }) => {

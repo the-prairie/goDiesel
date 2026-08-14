@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { Suspense, useRef } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 
 import { AtlasSpine } from "@/surfaces/atlas/components/atlas-spine";
@@ -6,10 +6,13 @@ import { AtlasImmersiveNavigation } from "@/surfaces/atlas/components/atlas-imme
 import { singleRouteMicrosite } from "@/app/single-route-microsite";
 import { APP_PATHS } from "@/app/route-paths";
 import { appSectionForPath } from "@/app/app-sections";
+import { useNavigationContinuity } from "@/app/navigation-continuity";
 import { cn } from "@/ui/utils";
 
 export function AppShell() {
   const location = useLocation();
+  const mainRef = useRef<HTMLElement>(null);
+  useNavigationContinuity(mainRef);
   const section = appSectionForPath(location.pathname);
   const isAtlas = location.pathname === APP_PATHS.atlas;
   const isReplayLab = location.pathname.startsWith("/lab/");
@@ -67,8 +70,10 @@ export function AppShell() {
           </header>
         ) : null}
         <main
+          ref={mainRef}
+          tabIndex={-1}
           className={cn(
-            "w-full flex-1",
+            "w-full flex-1 focus:outline-none",
             isImmersive
               ? "min-h-0 overflow-hidden"
               : isWideUtility

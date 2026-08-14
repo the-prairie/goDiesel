@@ -115,8 +115,24 @@ test("Finder explains source limits instead of fabricating an unsupported result
 
   const status = page.getByRole("region", { name: "Finder results" }).getByRole("status");
   await expect(status).toContainText("No owner-curated route matches this search yet");
+  await expect(page.getByText("Choose the shape of the day.")).toHaveCount(0);
   await expect(page.getByRole("article")).toHaveCount(0);
   expect(await page.evaluate((key) => localStorage.getItem(key), plannedRouteStorageKey)).toBeNull();
+
+  const editSearch = page.getByRole("button", { name: "Edit search" });
+  await editSearch.click();
+  const dialog = page.getByRole("dialog", { name: "Shape the next day" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(editSearch).toBeFocused();
+
+  await editSearch.click();
+  await dialog.getByLabel("Place").fill("Kyoto");
+  await dialog.getByLabel("Distance").fill("21");
+  await dialog.getByLabel("Terrain").selectOption("mixed");
+  await dialog.getByLabel("Vibe").fill("exploratory climbing");
+  await dialog.getByRole("button", { name: "Find curated routes" }).click();
+  await expect(page.getByRole("article", { name: "Kyoto, Japan candidate" })).toBeVisible();
 });
 
 test("a planned route never changes completed Atlas totals", async ({ page }) => {
@@ -144,6 +160,7 @@ test("a planned route never changes completed Atlas totals", async ({ page }) =>
 
 for (const viewport of [
   { name: "desktop", width: 1280, height: 900 },
+  { name: "compact desktop", width: 768, height: 576 },
   { name: "mobile", width: 390, height: 844 },
 ]) {
   test(`Finder planning workspace fits ${viewport.name}`, async ({ page }) => {
@@ -157,6 +174,14 @@ for (const viewport of [
       viewportWidth: window.innerWidth,
     }));
     expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth + 1);
+
+    if (viewport.name === "compact desktop") {
+      const headerBox = await page.getByTestId("finder-header").boundingBox();
+      const resultsBox = await page.getByTestId("finder-results").boundingBox();
+      expect((headerBox?.y ?? 0) + (headerBox?.height ?? 0)).toBeLessThanOrEqual(
+        resultsBox?.y ?? 0,
+      );
+    }
   });
 }
 

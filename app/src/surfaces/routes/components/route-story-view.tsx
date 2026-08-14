@@ -8,10 +8,11 @@ import {
   Mountain,
   Play,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { replayPath, routeDetailPath } from "@/app/route-paths";
+import { useNavigationScrollRegion } from "@/app/navigation-continuity";
 import { singleRouteMicrosite } from "@/app/single-route-microsite";
 import {
   formatRouteDate,
@@ -46,6 +47,8 @@ export function RouteStoryView({
   route: QuestRoute;
   routesPath: string;
 }) {
+  const storyRef = useRef<HTMLElement>(null);
+  useNavigationScrollRegion("route-story", storyRef);
   const chapters = useMemo(() => routeStoryChapters(route), [route]);
   const [activeChapter, setActiveChapter] = useState(chapters[0]?.id);
   const heroChapter = chapters.find((chapter) => chapter.media);
@@ -55,6 +58,10 @@ export function RouteStoryView({
   const replayHref = singleRouteMicrosite
     ? replayPath(route.slug)
     : replayPath(route.slug, routeDetailPath(route.slug));
+
+  useLayoutEffect(() => {
+    storyRef.current?.scrollTo({ behavior: "auto", left: 0, top: 0 });
+  }, [route.slug]);
 
   useEffect(() => {
     const elements = chapters
@@ -75,6 +82,8 @@ export function RouteStoryView({
 
   return (
     <article
+      ref={storyRef}
+      data-navigation-scroll="route-story"
       role="region"
       aria-label="Route story"
       className="h-full overflow-y-auto bg-canvas text-ink motion-safe:scroll-smooth"

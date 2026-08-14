@@ -8,6 +8,7 @@ import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
 import { usePlannedRoutes } from "@/data/planned-route-store";
 import {
+  hasRouteLibraryScroll,
   rememberRouteLibraryReturn,
   takeRouteLibraryScroll,
 } from "@/data/route-library-return";
@@ -74,6 +75,7 @@ export function RoutesPage() {
   const page = Math.min(pageFromParams(searchParams), maximumPage);
   const visibleRoutes = matchingRoutes.slice(0, page * routesPerPage);
   const returnPath = `${location.pathname}${location.search}`;
+  const restoresLibraryScroll = hasRouteLibraryScroll(returnPath);
   const hasFilters = Object.entries(filters).some(
     ([key, value]) => value !== DEFAULT_ROUTE_FILTERS[key as keyof RouteFilters],
   );
@@ -102,7 +104,10 @@ export function RoutesPage() {
   }
 
   return (
-    <section className="grid content-start gap-6">
+    <section
+      className="grid content-start gap-6"
+      data-navigation-window-scroll={restoresLibraryScroll ? "managed" : undefined}
+    >
       <PageTitle
         eyebrow="Routes"
         title={
