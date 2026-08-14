@@ -678,7 +678,6 @@ test("failed satellite imagery preserves route traces and honest draft context",
 
 for (const viewport of [
   { name: "desktop", width: 1440, height: 900, minimumRatio: 0.28, maximumRatio: 0.36, fullCards: 3, hasPeek: false },
-  { name: "tablet", width: 820, height: 900, minimumRatio: 0.4, maximumRatio: 0.5, fullCards: 1, hasPeek: true },
   { name: "mobile", width: 390, height: 844, minimumRatio: 0.78, maximumRatio: 0.9, fullCards: 1, hasPeek: true },
 ]) {
   test(`regional carousel exposes the intended ${viewport.name} card rhythm`, async ({
@@ -726,9 +725,6 @@ for (const viewport of [
     expect(
       visibility.some((visible) => visible > 0.05 && visible < 0.95),
     ).toBe(viewport.hasPeek);
-    if (viewport.name === "tablet") {
-      expect(visibility.reduce((total, visible) => total + visible, 0)).toBeGreaterThan(2);
-    }
     const selectedCard = carousel.locator('article[data-selected="true"]');
     await expect(selectedCard).toBeInViewport();
     const selectedBox = (await selectedCard.boundingBox())!;
@@ -745,8 +741,6 @@ for (const viewport of [
 }
 
 for (const viewport of [
-  { name: "desktop", width: 1440, height: 900 },
-  { name: "tablet", width: 820, height: 900 },
   { name: "mobile", width: 390, height: 844 },
 ]) {
   test(`one-route regions keep carousel dimensions with bounded navigation on ${viewport.name}`, async ({

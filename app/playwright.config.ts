@@ -6,7 +6,7 @@ const runningOnLinux = process.platform === "linux";
 
 export default defineConfig({
   testDir: "./e2e",
-  testIgnore: "**/live-pipeline.spec.ts",
+  testIgnore: ["**/live-pipeline.spec.ts", "**/*-live.spec.ts"],
   fullyParallel: false,
   workers: 1,
   retries: 0,

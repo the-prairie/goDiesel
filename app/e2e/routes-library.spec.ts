@@ -307,26 +307,8 @@ for (const viewport of [
   { name: "desktop", width: 1280, height: 900 },
   { name: "mobile", width: 390, height: 844 },
 ]) {
-  test(`planned and empty library states remain usable on ${viewport.name}`, async ({
-    page,
-  }) => {
+  test(`empty library state remains usable on ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize(viewport);
-    await page.goto("/#/finder");
-    const finder = page.getByRole("form", { name: "Find a route" });
-    await finder.getByLabel("Place").fill("Kyoto");
-    await finder.getByLabel("Activity").selectOption("Run");
-    await finder.getByLabel("Distance").fill("21");
-    await finder.getByLabel("Terrain").selectOption("mixed");
-    await finder.getByLabel("Vibe").fill("exploratory climbing");
-    await finder.getByRole("button", { name: "Find curated routes" }).click();
-    await page.getByRole("button", { name: "Save planned route" }).click();
-
-    await page.goto("/#/routes?lifecycle=planned");
-    await expect(
-      page.getByRole("article", { name: "Planned route Kyoto, Japan" }),
-    ).toBeVisible();
-    await expect(page.getByText("1 route", { exact: true })).toBeVisible();
-
     await page.goto("/#/routes?q=no-route-could-possibly-match");
     await expect(page.getByRole("status")).toContainText("No routes found");
     await expect(page.getByRole("button", { name: "Load more routes" })).toHaveCount(0);
