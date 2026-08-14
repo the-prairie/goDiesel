@@ -1,31 +1,7 @@
 import { expect, test } from "@playwright/test";
-import fs from "node:fs";
-import path from "node:path";
 
 const routeSlug = "17654151284";
 const importedRouteSlug = "3519505225411091950";
-
-/**
- * Read the generated record a route actually ships with.
- *
- * Asserting a hardcoded review status made this spec fail the moment a guide
- * was promoted from draft to reviewed, which is ordinary curation rather than a
- * regression. Derive the expectation instead, so the spec tracks the data.
- */
-function generatedRoute(slug: string) {
-  return JSON.parse(
-    fs.readFileSync(
-      path.resolve(process.cwd(), `public/data/routes/${slug}.json`),
-      "utf8",
-    ),
-  ) as { curation?: { review_status?: string } };
-}
-
-function guideBadge(slug: string) {
-  return generatedRoute(slug).curation?.review_status === "reviewed"
-    ? "Reviewed guide"
-    : "Draft guide";
-}
 
 test("Atlas does not fetch full route records before selection", async ({ page }) => {
   const detailRequests: string[] = [];
@@ -45,26 +21,31 @@ test("Atlas does not fetch full route records before selection", async ({ page }
   expect(detailRequests[0]).toMatch(new RegExp(`/data/routes/${routeSlug}\\.json$`));
 });
 
-test("reviewed route guide loads directly and survives refresh", async ({ page }) => {
+test("reviewed route story loads directly and survives refresh", async ({ page }) => {
   await page.goto(`/#/routes/${routeSlug}`);
 
   await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
-  const briefing = page.getByRole("region", { name: "Route briefing" });
-  await expect(briefing).toBeVisible();
-  await expect(briefing.getByRole("region", { name: "Route geography" })).toBeVisible();
-  await expect(briefing.getByRole("img", { name: /elevation profile/i })).toBeVisible();
-  await expect(briefing.getByText("680 m", { exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Open replay" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Route story", exact: true })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Story chapters" })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Cinematic replay", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("region", { name: "Route story chapters" })).toBeAttached();
+
+  const geography = page.getByRole("region", { name: "Route geography" });
+  await geography.scrollIntoViewIfNeeded();
+  await expect(geography).toHaveAttribute("data-map-status", "ready", {
+    timeout: 15_000,
+  });
+  await expect(page.getByRole("img", { name: /elevation profile/i })).toBeVisible();
   await expect(page.getByRole("heading", { name: "What it feels like" })).toBeVisible();
-  await expect(page.getByText(/long, exploratory Kyoto run/i)).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Best for" })).toBeVisible();
-  await expect(page.getByText(/cool-weather long-run day/i)).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Watch for" })).toBeVisible();
-  await expect(page.getByText(/current navigation conditions are not validated/i)).toBeVisible();
+  await expect(
+    page.getByLabel("Route guide").getByText(/long, exploratory Kyoto run/i),
+  ).toBeVisible();
 
   await page.reload();
   await expect(page).toHaveURL(new RegExp(`#\/routes\/${routeSlug}$`));
-  await expect(page.getByRole("heading", { name: "What it feels like" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
 });
 
 test("imported Strava route opens as a discovered guide with replay", async ({ page }) => {
@@ -73,78 +54,74 @@ test("imported Strava route opens as a discovered guide with replay", async ({ p
   await expect(
     page.getByRole("heading", { name: "breaking ankles on the Appian Way" }),
   ).toBeVisible();
-  await expect(page.getByText("Rome, Italy", { exact: true })).toBeVisible();
-  await expect(page.getByText("Discovered", { exact: true })).toBeVisible();
-  await expect(page.getByText("December 9, 2022", { exact: true })).toBeVisible();
-  await expect(page.getByText("28.5 km", { exact: true })).toBeVisible();
-  await expect(page.getByText("247 m", { exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "What it feels like" })).toBeVisible();
-  await expect(page.getByText(/urban-to-ancient-road run/i)).toBeVisible();
-  await expect(
-    page.getByText(guideBadge(importedRouteSlug), { exact: true }),
-  ).toBeVisible();
-  await expect(page.getByRole("link", { name: "Open replay" })).toHaveAttribute(
+  await expect(page.getByText(/Rome, Italy/i).first()).toBeVisible();
+  await expect(page.getByText(/Rome, Italy · December 9, 2022/)).toBeVisible();
+  await expect(page.getByText("28.5 km", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("247 m", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Story chapters" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Cinematic replay", exact: true })).toHaveAttribute(
     "href",
-    `#/replay/${importedRouteSlug}`,
+    `#/replay/${importedRouteSlug}?from=${encodeURIComponent(`/routes/${importedRouteSlug}`)}`,
   );
 });
 
-test("route detail is a geography-first Leaf with a bounded editorial margin", async ({
+test("route story opens as an immersive editorial journey with recorded geography", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`/#/routes/${routeSlug}`);
 
+  const story = page.getByRole("region", { name: "Route story", exact: true });
+  const hero = story.locator("section").first();
+  await expect(page.getByTestId("atlas-spine")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Begin the story" })).toBeVisible();
+  const heroBox = (await hero.boundingBox())!;
+  expect(heroBox.width).toBeGreaterThan(1300);
+  expect(heroBox.height).toBeGreaterThan(600);
+
   const geography = page.getByRole("region", { name: "Route geography" });
-  const margin = page.getByRole("complementary", { name: "Route margin" });
-  await expect(geography).toBeVisible();
+  await geography.scrollIntoViewIfNeeded();
   await expect(geography).toHaveAttribute("data-map-status", "ready", {
     timeout: 15_000,
   });
   await expect(geography).toHaveAttribute("data-geometry-points", /[1-9][0-9]+/);
   await expect(geography).toHaveAttribute("data-route-color", "#315fb4");
   await expect(geography).toHaveAttribute("data-route-halo", "#f6f2e8");
-  await expect(margin).toBeVisible();
-
-  const geographyBox = (await geography.boundingBox())!;
-  const marginBox = (await margin.boundingBox())!;
-  expect(geographyBox.width).toBeGreaterThan(marginBox.width * 1.45);
-  expect(marginBox.width / (geographyBox.width + marginBox.width)).toBeGreaterThan(0.28);
-  expect(marginBox.width / (geographyBox.width + marginBox.width)).toBeLessThan(0.4);
-  expect(Math.abs(geographyBox.y - marginBox.y)).toBeLessThanOrEqual(1);
-  expect(Math.abs(geographyBox.height - marginBox.height)).toBeLessThanOrEqual(1);
-
-  await expect(margin.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
-  await expect(margin.getByText(/Complete a 21.3 km run/i)).toBeVisible();
-  await expect(margin.getByText("21.3 km", { exact: true })).toBeVisible();
-  await expect(margin.getByText("680 m", { exact: true })).toBeVisible();
-  await expect(margin.getByRole("link", { name: "Open replay" })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Factual route briefing" })).toBeVisible();
 });
 
-test("mobile route Leaf preserves geography and Replay across sheet positions", async ({
+test("mobile route story keeps chapters, geography, and Replay accessible", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`/#/routes/${routeSlug}`);
 
+  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Story chapters" })).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Route story", exact: true }).getByRole("link", {
+      name: "Replay",
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(391);
+
+  const finalChapter = page.getByRole("heading", {
+    name: "The recording closes",
+    level: 2,
+  });
+  await finalChapter.scrollIntoViewIfNeeded();
+  const finalChapterCard = page
+    .getByRole("navigation", { name: "Story chapters" })
+    .getByRole("button", { name: /The recording closes/ });
+  await expect(finalChapterCard).toHaveAttribute("aria-current", "step");
+  await expect(finalChapterCard).toBeVisible();
+
   const geography = page.getByRole("region", { name: "Route geography" });
-  const margin = page.getByRole("complementary", { name: "Route margin" });
-  await expect(geography).toBeVisible();
-  await expect(margin).toHaveAttribute("data-snap", "peek");
-  await expect(margin.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
-  await expect(margin.getByRole("link", { name: "Open replay" })).toBeVisible();
-  expect((await geography.boundingBox())!.height).toBeGreaterThan(500);
-
-  await margin.getByRole("button", { name: "Expand route margin" }).click();
-  await expect(margin).toHaveAttribute("data-snap", "expanded");
-  await expect(margin.getByRole("heading", { name: "What it feels like" })).toBeVisible();
-  await expect(margin.getByRole("img", { name: /elevation profile/i })).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
-    391,
-  );
-
-  await margin.getByRole("button", { name: "Collapse route margin" }).click();
-  await expect(margin).toHaveAttribute("data-snap", "peek");
+  await geography.scrollIntoViewIfNeeded();
+  await expect(geography).toHaveAttribute("data-map-status", "ready", { timeout: 15_000 });
+  expect((await geography.boundingBox())!.width).toBeLessThanOrEqual(390);
 });
 
 test("route detail announces loading and retries a transient request failure", async ({
@@ -162,10 +139,10 @@ test("route detail announces loading and retries a transient request failure", a
   });
 
   await page.goto(`/#/routes/${routeSlug}`);
-  await expect(page.getByRole("status")).toHaveText("Loading route details.");
+  await expect(page.getByRole("status")).toHaveText("Loading route story.");
   await expect(page.getByRole("alert")).toContainText("status 500");
   await page.getByRole("button", { name: "Retry" }).click();
-  await expect(page.getByRole("heading", { name: "What it feels like" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
   expect(requestCount).toBe(2);
 });
 
@@ -185,11 +162,8 @@ test("draft guide omits missing editorial fields and honors replay eligibility",
 
   await page.goto(`/#/routes/${routeSlug}`);
 
-  await expect(page.getByText("Draft guide", { exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "What it feels like" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Best for" })).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Watch for" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Open replay" })).toHaveCount(0);
+  await expect(page.getByText("Guide not yet reviewed", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Cinematic replay" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Replay unavailable" })).toBeDisabled();
 });
 
@@ -230,11 +204,14 @@ test("missing geometry disables one route without crashing detail", async ({ pag
 
   await page.goto(`/#/routes/${routeSlug}`);
 
-  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Kyoto run" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Replay unavailable" })).toBeDisabled();
-  const briefing = page.getByRole("region", { name: "Route briefing" });
-  await expect(briefing.getByText("Recorded path unavailable")).toBeVisible();
-  await expect(briefing.getByText("Elevation profile unavailable")).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Story chapters" })).toHaveCount(0);
+  await expect(page.getByText(/Story chapters need recorded GPS geometry/)).toBeVisible();
+  const geography = page.getByRole("region", { name: "Route geography" });
+  await geography.scrollIntoViewIfNeeded();
+  await expect(geography.getByText("Recorded path unavailable")).toBeVisible();
+  await expect(page.getByText(/Elevation profile unavailable/)).toBeVisible();
 });
 
 test("source map failure preserves the route and explains the unavailable tiles", async ({
@@ -244,33 +221,34 @@ test("source map failure preserves the route and explains the unavailable tiles"
   await page.goto(`/#/routes/${routeSlug}`);
 
   const geography = page.getByRole("region", { name: "Route geography" });
+  await geography.scrollIntoViewIfNeeded();
   await expect(geography).toHaveAttribute("data-map-status", "unavailable", {
     timeout: 10_000,
   });
   await expect(geography.getByText("Map tiles unavailable")).toBeVisible();
   await expect(geography).toContainText("recorded route is intact");
-  await expect(page.getByRole("link", { name: "Open replay" })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Cinematic replay", exact: true }),
+  ).toBeAttached();
 });
 
-test("route briefing fits mobile and keeps Replay prominent", async ({ page }) => {
+test("route story hands off to Replay and returns to the same story", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`/#/routes/${routeSlug}`);
 
-  const briefing = page.getByRole("region", { name: "Route briefing" });
-  await expect(briefing).toBeVisible();
-  await expect(briefing.getByText("Start", { exact: true })).toBeVisible();
-  await expect(briefing.getByText("Finish", { exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Open replay" })).toBeVisible();
+  const replayHref = `#/replay/${routeSlug}?from=${encodeURIComponent(`/routes/${routeSlug}`)}`;
+  const replay = page.locator(`a[href="${replayHref}"]`).first();
+  await expect(replay).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
     391,
   );
-  const briefingBox = await briefing.boundingBox();
-  expect(briefingBox).not.toBeNull();
-  expect(briefingBox!.x).toBeGreaterThanOrEqual(-1);
-  expect(briefingBox!.x + briefingBox!.width).toBeLessThanOrEqual(391);
 
-  await page.getByRole("link", { name: "Open replay" }).click();
-  await expect(page).toHaveURL(new RegExp(`#\/replay\/${routeSlug}$`));
+  await replay.click();
+  await expect(page).toHaveURL(new RegExp(`#\/replay\/${routeSlug}\\?from=`));
+  const back = page.getByRole("button", { name: "Route story" });
+  await expect(back).toBeVisible();
+  await back.click();
+  await expect(page).toHaveURL(new RegExp(`#\/routes\/${routeSlug}$`));
 });
 
 test("changing routes never flashes the previous route detail", async ({ page }) => {

@@ -9,8 +9,8 @@ import { completedRoutes, findRouteBySlug } from "@/data/routes";
 import { useRouteDetail } from "@/data/use-route-detail";
 import {
   APP_PATHS,
-  atlasReturnPath,
   decodedRouteSlug,
+  replayReturnPath,
   routeDetailPath,
 } from "@/app/route-paths";
 
@@ -61,14 +61,14 @@ export function ReplayPage() {
   }
   if (detail.status !== "ready") return <RouteNotFound />;
 
-  const returnPath = atlasReturnPath(searchParams);
+  const returnPath = replayReturnPath(searchParams, detail.route.slug);
   const backPath =
     singleRouteMicrosite?.guidePath ??
     returnPath ??
     routeDetailPath(detail.route.slug);
   const backLabel = singleRouteMicrosite
     ? "Route guide"
-    : returnPath
+    : returnPath?.startsWith(APP_PATHS.atlas)
       ? "Back to Atlas"
       : "Route story";
   if (!useLegacyEarth && !atlasFallback) {

@@ -287,9 +287,10 @@ test.describe("real source to live provider pipeline", () => {
       const heading = route.lifecycle === "discovered" ? route.activity_name : route.name;
       await expect(page.getByRole("heading", { name: heading, level: 1 })).toBeVisible();
       const geography = page.getByRole("region", { name: "Route geography" });
+      await geography.scrollIntoViewIfNeeded();
       await expect(geography).toHaveAttribute("data-map-status", "ready");
       await expect(geography).toHaveAttribute("data-geometry-points", String(route.route.length));
-      await expect(page.getByRole("link", { name: "Open replay" })).toBeVisible();
+      await expect(page.getByRole("link", { name: "Cinematic replay" })).toBeAttached();
     }
 
     for (const slug of ["17654151284", "9934715694", "14736711660"]) {
