@@ -12,7 +12,7 @@ The governing rule is:
 | --- | --- | --- | --- |
 | Spatial atlas | Atlas | Full-bleed Cesium world with compact navigation and route carousel | Remember and revisit |
 | Planning map | Finder | Full-height terrain with controls and inspector | Plan |
-| Editorial route | Route detail | Real geography with route inspector | Understand one route |
+| Editorial route | Route detail | Chapter-led field story with recorded geography | Understand one route |
 | Immersive | Replay and approved replay labs | Full-bleed terrain with one control dock | Relive one route |
 | Utility | Routes and Admin | Dense content workspace | Compare or curate |
 
@@ -92,9 +92,11 @@ Cards must not be nested inside other cards.
 
 ### Desktop
 
-At `1024px` and wider, the desktop sidebar is fixed at the left edge except on Atlas.
+At `1024px` and wider, the desktop sidebar is fixed at the left edge except on Atlas and Route detail.
 
 Atlas uses compact navigation over a full-width world and does not reserve permanent sidebar space.
+
+Route detail uses its own compact story header over a full-width editorial canvas.
 
 Map and immersive surfaces do not use a global top header.
 
@@ -120,13 +122,19 @@ All interactive controls remain at least `44px` square and respect safe-area ins
 
 ## Inspection
 
-Desktop route detail and Finder region detail use a collapsible `320px` inspector.
+Finder region detail uses a collapsible `320px` inspector.
+
+Route detail is a vertically scrolling field story.
+
+It leads with a source-backed route photograph when one exists, uses an evidence-labelled chapter rail, and places the real map, elevation profile, and factual guide inside a recorded-geography section.
+
+Replay is a deliberate transition from the story and must preserve a return path to that route.
 
 Atlas region selection uses a centered route carousel over the world rather than a permanent inspector.
 
-Mobile route detail uses a three-position sheet with `180px`, `52vh`, and `88vh` stops.
+Mobile route detail remains a continuous story page with its chapter rail below the compact route header.
 
-The map remains visible in peek and half states.
+The mobile navigation remains visible, and the map and factual guide stack within the story without horizontal overflow.
 
 Editorial imagery is optional and must be source-backed.
 

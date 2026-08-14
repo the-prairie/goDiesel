@@ -28,6 +28,17 @@ export function atlasReturnPath(searchParams: URLSearchParams) {
     : undefined;
 }
 
+export function replayReturnPath(
+  searchParams: URLSearchParams,
+  routeSlug: string,
+) {
+  const atlasPath = atlasReturnPath(searchParams);
+  if (atlasPath) return atlasPath;
+
+  const path = searchParams.get("from");
+  return path === routeDetailPath(routeSlug) ? path : undefined;
+}
+
 export function playableEarthLabPath(slug: string, origin?: "replay") {
   const path = `${PLAYABLE_EARTH_LAB_PATH}/${encodedSlug(slug)}`;
   return origin ? `${path}?from=${origin}` : path;

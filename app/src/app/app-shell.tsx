@@ -29,7 +29,7 @@ export function AppShell() {
   return (
     <div className="weathered-atlas field-guide-theme relative flex min-h-dvh bg-background text-foreground">
       {singleRouteMicrosite || isReplay ? null : (
-        <AtlasSpine hideDesktop={isAtlas} />
+        <AtlasSpine hideDesktop={isAtlas || isRouteDetail} />
       )}
       {isAtlas && !singleRouteMicrosite ? <AtlasImmersiveNavigation /> : null}
       <div
@@ -38,8 +38,9 @@ export function AppShell() {
           !singleRouteMicrosite &&
             !isReplay &&
             "pb-[var(--mobile-navigation-height)] md:pb-0",
-          !singleRouteMicrosite &&
+            !singleRouteMicrosite &&
             !isAtlas &&
+            !isRouteDetail &&
             !isReplay &&
             "md:pl-[var(--spine-rail-width)] lg:pl-[var(--spine-width)]",
         )}

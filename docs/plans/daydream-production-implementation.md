@@ -59,7 +59,19 @@ Status: Verified
 - [x] Keep planned-route saving, recorded-source honesty, no-match behavior, and Atlas totals intact.
 - [x] Verify desktop and phone composition, responsive filtering, accessible controls, and horizontal fit.
 
-### 5. Routes as a memory library
+### 5. Route detail as an immersive field story
+
+Status: Verified
+
+- [x] Lead with a source-backed route image or the recorded route trace when no image exists.
+- [x] Build the story from recorded annotations, track-derived high point, and recorded start and finish evidence.
+- [x] Add a responsive timeline of compact chapter cards that follows and seeks within the story.
+- [x] Keep the real map, elevation profile, and factual guide available as recorded geography.
+- [x] Hand off clearly to cinematic Replay and preserve return to the same route story.
+- [x] Preserve loading, retry, missing-geometry, provider-failure, draft-guide, and replay-ineligible states.
+- [x] Verify desktop and phone composition, source honesty, responsive fit, and Replay continuity.
+
+### 6. Routes as a memory library
 
 Status: Planned
 
@@ -68,7 +80,7 @@ Status: Planned
 - [ ] Replace the overflowing desktop ledger with a responsive comparison model.
 - [ ] Preserve search, filters, canonical route URLs, and large-library performance.
 
-### 6. Cross-surface quality and continuity
+### 7. Cross-surface quality and continuity
 
 Status: Planned
 
@@ -126,3 +138,11 @@ Status: Planned
 - Desktop and phone frames were inspected in the live local app; the initial oversized form and clipped mobile chips were corrected before acceptance.
 - The mobile bottom sheet preserves the submitted form state, exposes a named dialog, fits 390 x 844, and leaves the regional route visible behind the modal surface.
 - The production build and all seven focused Finder browser scenarios passed on 2026-08-13, including the negative unsupported-place case and the completed-Atlas-total isolation check.
+
+### Slice 5
+
+- Route detail now opens as a source-backed field story with an editorial hero, evidence-labelled chapters, a sticky Director-style timeline of compact chapter cards, recorded geography, and a deliberate cinematic Replay transition.
+- Chapter order comes from recorded annotations and route distance. The high-point chapter is track-derived and is omitted when it would duplicate an endpoint or nearby recorded annotation.
+- Replay accepts only the matching route story or a valid Atlas URL as a return destination, retaining the existing protection against arbitrary redirect paths.
+- Desktop and phone frames were inspected at 1440 x 900 and 390 x 844. The route photograph, editorial hierarchy, mobile navigation clearance, chapter access, and zero horizontal overflow were verified.
+- The production build, seven focused unit assertions, all eleven focused Route Story browser scenarios, and the single-route microsite contract passed on 2026-08-14, including provider failure, missing geometry, transient retry, mobile active-card visibility, and the story-to-Replay-to-story loop.
