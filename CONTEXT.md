@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-08
+last_updated: 2026-08-14
 status: canonical
 ---
 
@@ -170,14 +170,17 @@ The schema is closed. Unknown fields are rejected rather than ignored.
 
 | Value | Meaning |
 | --- | --- |
-| `draft` | Partial curation is allowed. Presented as not yet reviewed. |
+| `draft` | Partial curation is allowed. Admin presents it as not yet reviewed. |
 | `reviewed` | The owner has approved it. All eight fields are required. |
 | `published` | Same completeness requirement as `reviewed`. |
 
 Current data: 66 `draft`, 1 `reviewed`.
 
-An unreviewed route shows the neutral label "Guide not yet reviewed". It must
-never be given invented claims to fill the space.
+Admin and factual guide surfaces show an unreviewed route with the neutral label
+"Guide not yet reviewed".
+The Routes memory library omits guide review status and never uses draft guide
+copy as route context.
+An unreviewed route must never be given invented claims to fill the space.
 
 ## 6. Surfaces
 
@@ -194,6 +197,22 @@ routing, and tests.
 
 The root redirects to Atlas. Atlas is the home of the product; the card gallery
 is not.
+
+Routes uses `Collection` as the consumer-facing label for filtering by
+`lifecycle` without exposing curation workflow language.
+Its values map exactly as follows: `Atlas routes` includes `completed` and
+`discovered`, `Memories` is `completed`, `Discovered routes` is `discovered`,
+and `Planned routes` is `planned`.
+The default route library excludes `planned` routes; they appear only when the
+owner explicitly selects `Planned routes`, remain visibly labelled as plans,
+and return to Finder for editing.
+Route cards label source activity descriptions as `Recorded note`, approved
+guide interpretation as `Editorial hypothesis`, and missing source copy as
+`Recorded note unavailable`.
+Discovered routes do not promote an unproven description; they state that owner
+experience is unavailable.
+Card source labels are `Recorded activity`, `Imported geometry`, and `Planning
+intent` rather than lifecycle or guide-review workflow states.
 
 ### Related surface terms
 

@@ -13,13 +13,16 @@ import { Link } from "react-router-dom";
 
 import { replayPath, routeDetailPath } from "@/app/route-paths";
 import { singleRouteMicrosite } from "@/app/single-route-microsite";
-import type { QuestRoute, RouteAnnotationEvidence } from "@/domain/route";
+import {
+  formatRouteDate,
+  type QuestRoute,
+  type RouteAnnotationEvidence,
+} from "@/domain/route";
 import { ElevationProfile } from "@/surfaces/routes/components/route-briefing";
 import { RouteGuide } from "@/surfaces/routes/components/route-guide";
 import { RouteLeafMap } from "@/surfaces/routes/components/route-leaf-map";
 import {
   distanceLabel,
-  formatRouteStoryDate,
   highestPoint,
   routeStoryChapters,
   routeStoryPremise,
@@ -123,7 +126,7 @@ export function RouteStoryView({
         <div className="absolute inset-0 bg-[#102c29]/58" aria-hidden="true" />
         <div className="relative z-10 w-full px-5 pb-16 pt-20 sm:px-10 lg:px-[max(4rem,calc((100vw-76rem)/2))]">
           <p className="text-caption font-semibold uppercase text-white/75">
-            {route.region} · {formatRouteStoryDate(route.date)}
+            {route.region} · {formatRouteDate(route.date)}
           </p>
           <h1 className="mt-3 max-w-5xl font-editorial text-5xl font-medium leading-[0.92] sm:text-6xl lg:text-7xl">
             {title}

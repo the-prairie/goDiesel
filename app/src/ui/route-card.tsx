@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import type { RouteSummary } from "@/domain/route";
+import { formatRouteDate, type RouteSummary } from "@/domain/route";
 import { isPlannedRoute } from "@/domain/planning";
 import { APP_PATHS, routeDetailPath } from "@/app/route-paths";
 import { cn } from "@/ui/utils";
@@ -19,9 +19,28 @@ export function RouteCard({
   onOpen?: () => void;
 }) {
   const planned = isPlannedRoute(route);
-  const reviewed =
-    route.guide.reviewStatus === "reviewed" || route.guide.reviewStatus === "published";
+  const guideReviewed =
+    route.guide.reviewStatus === "reviewed" ||
+    route.guide.reviewStatus === "published";
   const destination = planned ? APP_PATHS.finder : routeDetailPath(route.slug);
+  const personalTitle = route.activityName.trim() || route.subtitle.trim() || route.name;
+  const context = planned
+    ? { label: "Planning source", text: route.planning.sourceLabel }
+    : route.lifecycle === "discovered"
+      ? {
+          label: "Owner experience unavailable",
+          text: "This imported route has not been recorded by the owner.",
+        }
+      : route.description.trim()
+      ? { label: "Recorded note", text: route.description }
+      : guideReviewed && route.guide.vibe
+        ? { label: "Editorial hypothesis", text: route.guide.vibe }
+        : { label: "Recorded note unavailable", text: "No recorded activity note." };
+  const sourceLabel = planned
+    ? "Planning intent"
+    : route.lifecycle === "discovered"
+      ? "Imported geometry"
+      : "Recorded activity";
   const accessibleLabel = planned
     ? `Edit planned ${route.name} route in Finder`
     : `Open ${route.name} route from ${route.date || "an unknown date"}, ${route.distanceKm.toFixed(1)} km`;
@@ -29,110 +48,66 @@ export function RouteCard({
   return (
     <article
       aria-label={planned ? `Planned route ${route.region}` : undefined}
-      className="min-w-0 border-b border-line bg-surface transition-colors hover:bg-surface-raised"
+      className="group min-w-0 border border-line bg-surface transition-[border-color,box-shadow,transform] duration-[var(--duration-standard)] hover:-translate-y-0.5 hover:border-line-strong hover:shadow-panel focus-within:border-line-strong focus-within:shadow-panel motion-reduce:hover:translate-y-0"
     >
       <Link
         to={destination}
         onClick={planned ? undefined : onOpen}
         aria-label={accessibleLabel}
-        className="group grid min-w-0 gap-0 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:grid-cols-[minmax(20rem,2.2fr)_7rem_5.5rem_6rem_6.5rem_minmax(9rem,1fr)_7.5rem_4.5rem]"
+        className="flex h-full min-w-0 flex-col text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       >
-        <div className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] border-line md:grid-cols-[9.5rem_minmax(0,1fr)] md:border-r">
-          <RouteThread
-            route={route}
-            className="h-full min-h-28 border-b-0 border-r md:min-h-32"
-          />
-          <div className="grid min-w-0 content-center gap-1.5 px-3 py-3 md:px-4">
-            <p className="truncate text-micro font-semibold uppercase text-ink-muted">
+        <RouteThread route={route} className="h-44 shrink-0 border-b" />
+
+        <div className="flex flex-1 flex-col px-4 pb-4 pt-4 sm:px-5 sm:pb-5">
+          <div className="flex min-w-0 items-start justify-between gap-4">
+            <p className="min-w-0 truncate text-micro font-semibold uppercase text-coral">
               {route.region}
             </p>
-            <h2 className="truncate font-editorial text-xl font-semibold leading-tight text-ink md:text-2xl">
-              {route.name}
-            </h2>
-            {route.subtitle ? (
-              <p className="line-clamp-2 text-caption italic text-ink-secondary">
-                {route.subtitle}
-              </p>
-            ) : null}
-            <span className="mt-1 w-fit border border-line bg-surface-muted px-1.5 py-0.5 text-micro uppercase text-ink-secondary">
-              {route.theme}
-            </span>
-            {planned ? (
-              <span className="line-clamp-1 text-micro text-ink-muted">
-                {route.planning.sourceLabel}
-              </span>
-            ) : null}
+            <time
+              dateTime={route.date || undefined}
+              className="shrink-0 text-micro font-semibold uppercase text-ink-muted"
+            >
+              {formatRouteDate(route.date)}
+            </time>
           </div>
-        </div>
+          <h2 className="mt-2 line-clamp-2 min-h-14 font-editorial text-2xl font-semibold leading-7 text-ink sm:text-3xl sm:leading-8">
+            {personalTitle}
+          </h2>
+          <div className="mt-3 min-h-[4.5rem]">
+            <p className="text-micro font-semibold uppercase text-ink-muted">
+              {context.label}
+            </p>
+            <p className="mt-1 line-clamp-2 text-caption leading-6 text-ink-secondary">
+              {context.text}
+            </p>
+          </div>
 
-        <LedgerCell label="Date" className="hidden md:flex">
-          {route.date || "Unknown"}
-        </LedgerCell>
-        <LedgerCell label="Activity" className="hidden md:flex">
-          <span className="inline-flex items-center gap-2">
-            {route.type === "Ride" ? (
-              <Bike className="size-4 text-route" aria-hidden="true" />
-            ) : (
-              <Footprints className="size-4 text-route" aria-hidden="true" />
-            )}
-            {route.type}
-          </span>
-        </LedgerCell>
-        <LedgerCell label="Distance" className="hidden md:flex">
-          {route.distanceKm.toFixed(1)} km
-        </LedgerCell>
-        <LedgerCell label="Climb" className="hidden md:flex">
-          {route.elevationGainM.toLocaleString()} m up
-        </LedgerCell>
-        <LedgerCell label="Vibe" className="hidden md:flex">
-          <span className="line-clamp-3 italic">
-            {reviewed && route.guide.vibe
-              ? route.guide.vibe
-              : "Editorial vibe awaiting review"}
-          </span>
-        </LedgerCell>
-        <LedgerCell label="Lifecycle" className="hidden md:flex">
-          <span className="grid gap-1">
-            <span className="inline-flex items-center gap-2">
-              <span
-                aria-hidden="true"
-                className={cn(
-                  "size-1.5 rounded-full",
-                  planned ? "bg-warning" : "bg-route",
+          <dl className="mt-5 grid grid-cols-3 border-y border-line">
+            <MemoryFact label="Activity">
+              <span className="inline-flex items-center gap-1.5">
+                {route.type === "Ride" ? (
+                  <Bike className="size-4 text-route" aria-hidden="true" />
+                ) : (
+                  <Footprints className="size-4 text-route" aria-hidden="true" />
                 )}
-              />
-              {capitalize(route.lifecycle)}
-            </span>
-            <span className="text-micro text-ink-muted">
-              {planned ? "Future route" : reviewed ? "Reviewed guide" : "Draft guide"}
-            </span>
-          </span>
-        </LedgerCell>
-        <div className="hidden items-center justify-center text-sm font-medium text-forest md:flex">
-          <span className="sr-only">Action</span>
-          <ArrowRight
-            className="size-4 transition-transform group-hover:translate-x-1"
-            aria-hidden="true"
-          />
-        </div>
+                {route.type}
+              </span>
+            </MemoryFact>
+            <MemoryFact label="Distance">{route.distanceKm.toFixed(1)} km</MemoryFact>
+            <MemoryFact label="Climb">{route.elevationGainM.toLocaleString()} m up</MemoryFact>
+          </dl>
 
-        <div className="grid grid-cols-2 gap-x-4 gap-y-2 border-t border-line px-3 py-3 text-caption md:hidden">
-          <MobileFact label="Activity" value={route.type} />
-          <MobileFact label="Distance" value={`${route.distanceKm.toFixed(1)} km`} />
-          <MobileFact label="Climb" value={`${route.elevationGainM.toLocaleString()} m up`} />
-          <MobileFact
-            label="Lifecycle"
-            value={`${capitalize(route.lifecycle)} · ${planned ? "Future route" : reviewed ? "Reviewed guide" : "Draft guide"}`}
-          />
-          <div className="col-span-2 flex items-start justify-between gap-4 border-t border-line pt-2">
-            <span className="line-clamp-2 italic text-ink-secondary">
-              {reviewed && route.guide.vibe
-                ? route.guide.vibe
-                : planned
-                  ? "Saved for a future day"
-                  : "Editorial vibe awaiting review"}
+          <div className="mt-4 flex min-w-0 items-center justify-between gap-4">
+            <span className="min-w-0 truncate border border-line bg-surface-muted px-2 py-1 text-micro uppercase text-ink-secondary">
+              {sourceLabel}
             </span>
-            <ArrowRight className="mt-0.5 size-4 shrink-0 text-forest" aria-hidden="true" />
+            <span className="inline-flex shrink-0 items-center gap-2 text-caption font-semibold text-forest">
+              {planned ? "Shape this route" : "Open field story"}
+              <ArrowRight
+                className="size-4 transition-transform group-hover:translate-x-1"
+                aria-hidden="true"
+              />
+            </span>
           </div>
         </div>
       </Link>
@@ -140,34 +115,18 @@ export function RouteCard({
   );
 }
 
-function LedgerCell({
+function MemoryFact({
   label,
-  className,
   children,
 }: {
   label: string;
-  className?: string;
   children: React.ReactNode;
 }) {
   return (
-    <div
-      className={cn(
-        "min-w-0 items-center border-r border-line px-3 py-4 text-caption text-ink-secondary",
-        className,
-      )}
-    >
-      <span className="sr-only">{label}: </span>
-      {children}
+    <div className="min-w-0 border-r border-line px-2 py-3 last:border-r-0 sm:px-3">
+      <dt className="text-micro uppercase text-ink-muted">{label}</dt>
+      <dd className="mt-1 truncate text-caption font-semibold text-ink">{children}</dd>
     </div>
-  );
-}
-
-function MobileFact({ label, value }: { label: string; value: string }) {
-  return (
-    <span className="min-w-0">
-      <span className="text-micro uppercase text-ink-muted">{label}</span>
-      <span className="mt-0.5 block truncate font-medium text-ink">{value}</span>
-    </span>
   );
 }
 
@@ -253,8 +212,4 @@ function normalizedTrace(route: RouteSummary) {
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     })
     .join(" ");
-}
-
-function capitalize(value: string) {
-  return value.charAt(0).toUpperCase() + value.slice(1);
 }
