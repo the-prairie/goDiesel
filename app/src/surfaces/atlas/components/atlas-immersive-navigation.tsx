@@ -28,7 +28,7 @@ export function AtlasImmersiveNavigation() {
         className="fixed left-5 top-5 z-[var(--z-navigation)] hidden h-[54px] items-center border border-white/40 bg-[#07151c]/94 text-white shadow-lg backdrop-blur-md md:flex"
       >
         <Link
-          to={APP_PATHS.atlas}
+          to={`${APP_PATHS.atlas}?view=world`}
           aria-label="Return to global Atlas"
           className="flex h-full items-center gap-2.5 px-3 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#63d6cf]"
         >

@@ -364,7 +364,7 @@ test("immersive Atlas replaces the content spine with compact navigation", async
   await expect(navigation).toBeHidden();
 
   await page.getByRole("link", { name: "Return to global Atlas" }).click();
-  await expect(page).toHaveURL(/#\/atlas$/);
+  await expect(page).toHaveURL(/#\/atlas\?view=world$/);
 });
 
 test("field-guide shell has stable desktop and mobile compositions", async ({
