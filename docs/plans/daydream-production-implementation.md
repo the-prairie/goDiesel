@@ -73,12 +73,12 @@ Status: Verified
 
 ### 6. Routes as a memory library
 
-Status: Planned
+Status: Verified
 
-- [ ] Make place, personal title, date, trace, and remembered context the primary scan hierarchy.
-- [ ] Move lifecycle and guide-review language into Admin.
-- [ ] Replace the overflowing desktop ledger with a responsive comparison model.
-- [ ] Preserve search, filters, canonical route URLs, and large-library performance.
+- [x] Make place, personal title, date, trace, and remembered context the primary scan hierarchy.
+- [x] Remove lifecycle and guide-review workflow language from memory cards while keeping evidence form and route relationship legible.
+- [x] Replace the overflowing desktop ledger with a responsive comparison model.
+- [x] Preserve search, filters, canonical route URLs, and large-library performance.
 
 ### 7. Cross-surface quality and continuity
 
@@ -146,3 +146,11 @@ Status: Planned
 - Replay accepts only the matching route story or a valid Atlas URL as a return destination, retaining the existing protection against arbitrary redirect paths.
 - Desktop and phone frames were inspected at 1440 x 900 and 390 x 844. The route photograph, editorial hierarchy, mobile navigation clearance, chapter access, and zero horizontal overflow were verified.
 - The production build, seven focused unit assertions, all eleven focused Route Story browser scenarios, and the single-route microsite contract passed on 2026-08-14, including provider failure, missing geometry, transient retry, mobile active-card visibility, and the story-to-Replay-to-story loop.
+
+### Slice 6
+
+- Routes now presents a two-column desktop memory library and a single-column phone library, led by recorded trace, place, date, personal activity title, remembered context, and aligned effort facts.
+- Consumer cards no longer expose lifecycle or guide-review workflow language; evidence form stays visible, and the existing lifecycle filter remains URL-compatible under the canonical Collection label.
+- Search and six filters live in a compact responsive tray, while readable applied-filter chips preserve context and support one-step removal when the tray is closed.
+- Desktop and phone frames were inspected at 1440 x 900 and 390 x 844; card hierarchy, filter fit, mobile navigation clearance, and zero horizontal overflow were verified.
+- The production build, all 251 unit tests, all 18 focused Routes browser scenarios, and all seven affected Finder planning scenarios passed on 2026-08-14, including progressive 24-route loading, canonical URLs, return scroll, planned and discovered route separation, blocked storage, invalid parameters, and empty and unavailable states.

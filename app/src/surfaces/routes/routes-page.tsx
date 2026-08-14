@@ -1,4 +1,4 @@
-import { ChevronDown, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
+import { ChevronDown, RotateCcw, Search, SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 
@@ -34,10 +34,10 @@ const climbOptions = [
 ] as const;
 
 const lifecycleOptions = [
-  ["all", "Any status"],
-  ["completed", "Completed"],
-  ["planned", "Planned"],
-  ["discovered", "Discovered"],
+  ["all", "Atlas routes"],
+  ["completed", "Memories"],
+  ["planned", "Planned routes"],
+  ["discovered", "Discovered routes"],
 ] as const;
 
 const routesPerPage = 24;
@@ -45,7 +45,7 @@ const routesPerPage = 24;
 export function RoutesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
-  const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
   const localPlans = usePlannedRoutes();
   const libraryRoutes = useMemo(() => [...routes, ...localPlans], [localPlans]);
   const activityOptions = useMemo(
@@ -65,7 +65,11 @@ export function RoutesPage() {
     regions: regionOptions,
     vibes: vibeOptions,
   });
-  const matchingRoutes = filterRoutes(libraryRoutes, filters);
+  const routesInView =
+    filters.lifecycle === "planned"
+      ? libraryRoutes
+      : libraryRoutes.filter((route) => route.lifecycle !== "planned");
+  const matchingRoutes = filterRoutes(routesInView, filters);
   const maximumPage = Math.max(1, Math.ceil(matchingRoutes.length / routesPerPage));
   const page = Math.min(pageFromParams(searchParams), maximumPage);
   const visibleRoutes = matchingRoutes.slice(0, page * routesPerPage);
@@ -73,6 +77,7 @@ export function RoutesPage() {
   const hasFilters = Object.entries(filters).some(
     ([key, value]) => value !== DEFAULT_ROUTE_FILTERS[key as keyof RouteFilters],
   );
+  const appliedFilters = appliedFilterLabels(filters);
 
   useEffect(() => {
     const canonical = paramsFromFilters(filters, page);
@@ -100,8 +105,16 @@ export function RoutesPage() {
     <section className="grid content-start gap-6">
       <PageTitle
         eyebrow="Routes"
-        title="Your route library."
-        copy="Find a remembered day by place, effort, or feeling, then open its canonical guide."
+        title={
+          filters.lifecycle === "planned"
+            ? "Routes waiting to be made."
+            : "The routes that made the map."
+        }
+        copy={
+          filters.lifecycle === "planned"
+            ? "Review a planned route, then return to Finder to shape the next experience."
+            : "Find a recorded memory or discovered route by place, personal title, effort, or vibe."
+        }
       />
 
       {libraryRoutes.length === 0 ? (
@@ -116,7 +129,7 @@ export function RoutesPage() {
             className="grid gap-4 border-y border-border py-5"
             onSubmit={(event) => event.preventDefault()}
           >
-            <div className="flex max-w-2xl gap-2">
+            <div className="flex max-w-3xl gap-2">
               <div className="relative min-w-0 flex-1">
                 <Search
                   className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
@@ -126,34 +139,43 @@ export function RoutesPage() {
                   type="search"
                   aria-label="Search routes"
                   value={filters.query}
-                  placeholder="Search places, memories, or route vibes"
+                  placeholder="Search routes"
                   className="pl-9"
                   onChange={(event) => updateFilter("query", event.target.value)}
                 />
+                {filters.query ? (
+                  <button
+                    type="button"
+                    aria-label="Clear route search"
+                    className="absolute right-1 top-1/2 grid size-8 -translate-y-1/2 place-items-center text-ink-muted outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => updateFilter("query", "")}
+                  >
+                    <X className="size-4" aria-hidden="true" />
+                  </button>
+                ) : null}
               </div>
               <Button
                 type="button"
                 variant="outline"
-                aria-expanded={showMobileFilters}
+                aria-expanded={showFilters}
                 aria-controls="route-filter-options"
-                className="sm:hidden"
-                onClick={() => setShowMobileFilters((visible) => !visible)}
+                onClick={() => setShowFilters((visible) => !visible)}
               >
                 <SlidersHorizontal aria-hidden="true" />
-                Filters
+                Filters{appliedFilters.length ? ` · ${appliedFilters.length}` : ""}
                 <ChevronDown
                   aria-hidden="true"
-                  className={showMobileFilters ? "rotate-180 transition-transform" : "transition-transform"}
+                  className={showFilters ? "rotate-180 transition-transform" : "transition-transform"}
                 />
               </Button>
             </div>
 
             <div
               id="route-filter-options"
-              className={`${showMobileFilters ? "grid" : "hidden"} gap-3 sm:grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6`}
+              className={`${showFilters ? "grid" : "hidden"} gap-3 border-t border-line pt-4 sm:grid-cols-2 xl:grid-cols-3`}
             >
               <FilterSelect
-                label="Lifecycle"
+                label="Collection"
                 value={filters.lifecycle}
                 options={lifecycleOptions}
                 onChange={(value) =>
@@ -195,6 +217,24 @@ export function RoutesPage() {
                 onChange={(value) => updateFilter("vibe", value)}
               />
             </div>
+
+            {appliedFilters.length ? (
+              <div role="group" aria-label="Applied route filters" className="flex flex-wrap gap-2">
+                {appliedFilters.map((filter) => (
+                  <button
+                    key={filter.key}
+                    type="button"
+                    aria-label={`Remove ${filter.label} filter`}
+                    className="inline-flex min-h-8 items-center gap-2 border border-line bg-surface-muted px-2.5 text-caption text-ink outline-none hover:border-line-strong focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => updateFilter(filter.key, DEFAULT_ROUTE_FILTERS[filter.key])}
+                  >
+                    <span className="text-ink-muted">{filter.label}</span>
+                    <span className="font-medium">{filter.value}</span>
+                    <X className="size-3.5" aria-hidden="true" />
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </form>
 
           <div className="flex min-h-9 flex-wrap items-center justify-between gap-3">
@@ -224,7 +264,7 @@ export function RoutesPage() {
             ) : null}
           </div>
 
-          <section aria-label="Route results" data-testid="route-ledger">
+          <section aria-label="Route results">
             {matchingRoutes.length === 0 ? (
               <LibraryState
                 title="No routes found"
@@ -242,21 +282,8 @@ export function RoutesPage() {
                 }
               />
             ) : (
-              <div className="grid gap-5">
-                <div className="overflow-hidden border-x border-t border-line bg-surface">
-                  <div
-                    data-testid="route-ledger-head"
-                    className="hidden grid-cols-[minmax(20rem,2.2fr)_7rem_5.5rem_6rem_6.5rem_minmax(9rem,1fr)_7.5rem_4.5rem] border-b border-line bg-surface-muted text-micro font-semibold uppercase text-ink-muted md:grid"
-                  >
-                    <span className="px-4 py-2">Route</span>
-                    <span className="border-l border-line px-3 py-2">Date</span>
-                    <span className="border-l border-line px-3 py-2">Activity</span>
-                    <span className="border-l border-line px-3 py-2">Distance</span>
-                    <span className="border-l border-line px-3 py-2">Climb</span>
-                    <span className="border-l border-line px-3 py-2">Vibe</span>
-                    <span className="border-l border-line px-3 py-2">Lifecycle</span>
-                    <span className="border-l border-line px-3 py-2 text-center">Action</span>
-                  </div>
+              <div className="grid gap-6">
+                <div data-testid="route-memory-grid" className="grid items-stretch gap-4 lg:grid-cols-2">
                   {visibleRoutes.map((route) => (
                     <RouteCard
                       key={route.slug}
@@ -358,6 +385,37 @@ function withAllOption(values: string[], label: string) {
     ["all", label] as const,
     ...values.map((value) => [value, value] as const),
   ];
+}
+
+function appliedFilterLabels(filters: RouteFilters) {
+  const labels: Partial<Record<keyof RouteFilters, string>> = {
+    lifecycle: "Collection",
+    activity: "Activity",
+    region: "Place",
+    distance: "Distance",
+    climb: "Climb",
+    vibe: "Vibe",
+  };
+  return (Object.entries(filters) as [keyof RouteFilters, string][])
+    .filter(([key, value]) => key !== "query" && value !== DEFAULT_ROUTE_FILTERS[key])
+    .map(([key, value]) => ({
+      key,
+      label: labels[key] ?? key,
+      value: filterValueLabel(key, value),
+    }));
+}
+
+function filterValueLabel(key: keyof RouteFilters, value: string) {
+  if (key === "lifecycle") {
+    return lifecycleOptions.find(([option]) => option === value)?.[1] ?? value;
+  }
+  if (key === "distance") {
+    return distanceOptions.find(([option]) => option === value)?.[1] ?? value;
+  }
+  if (key === "climb") {
+    return climbOptions.find(([option]) => option === value)?.[1] ?? value;
+  }
+  return value;
 }
 
 function filtersFromParams(

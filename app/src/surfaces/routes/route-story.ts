@@ -3,6 +3,7 @@ import type {
   RouteAnnotationEvidence,
   RouteAnnotationMedia,
 } from "@/domain/route";
+import { formatRouteDate } from "@/domain/route";
 
 export interface RouteStoryChapter {
   id: string;
@@ -35,7 +36,7 @@ export function routeStoryChapters(route: QuestRoute): RouteStoryChapter[] {
       id: "recorded-start",
       kind: "start",
       title: "The line begins",
-      body: `The recorded ${route.type.toLowerCase()} starts in ${route.region}${route.date ? ` on ${formatRouteStoryDate(route.date)}` : ""}.`,
+      body: `The recorded ${route.type.toLowerCase()} starts in ${route.region}${route.date ? ` on ${formatRouteDate(route.date)}` : ""}.`,
       evidence: "recorded",
       distanceM: 0,
       elevationM: start?.elev,
@@ -116,16 +117,4 @@ function annotationKindTitle(kind: QuestRoute["annotations"][number]["kind"]) {
   if (kind === "landmark") return "A recorded landmark";
   if (kind === "image") return "A photographed moment";
   return "Field note";
-}
-
-export function formatRouteStoryDate(value: string) {
-  if (!value) return "Date not recorded";
-  const date = new Date(`${value}T12:00:00`);
-  return Number.isNaN(date.getTime())
-    ? value
-    : new Intl.DateTimeFormat("en", {
-        month: "long",
-        day: "numeric",
-        year: "numeric",
-      }).format(date);
 }

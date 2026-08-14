@@ -98,27 +98,29 @@ test("Routes progressively reveals all summaries without fetching route detail J
   expect(detailRequests).toEqual([]);
 });
 
-test("Routes presents an editorial comparison ledger on desktop and compact entries on mobile", async ({
+test("Routes presents comparable memory cards on desktop and mobile", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/#/routes?q=exploratory");
 
-  const ledger = page.getByTestId("route-ledger");
-  await expect(ledger).toBeVisible();
-  await expect(page.getByTestId("route-ledger-head")).toContainText(
-    "DateActivityDistanceClimbVibeLifecycleAction",
-  );
+  const library = page.getByTestId("route-memory-grid");
+  await expect(library).toBeVisible();
   const desktopRow = routeCards(page).first();
   const desktopBox = await desktopRow.boundingBox();
   expect(desktopBox).not.toBeNull();
-  expect(desktopBox!.width).toBeGreaterThan(900);
-  expect(desktopBox!.height).toBeLessThan(190);
+  expect(desktopBox!.width).toBeGreaterThan(450);
+  expect(desktopBox!.width).toBeLessThan(700);
+  expect(desktopBox!.height).toBeGreaterThan(300);
+  await expect(desktopRow).toContainText("Kyoto, Japan");
+  await expect(desktopRow).toContainText("November 24, 2025");
+  await expect(desktopRow).toContainText("🍑🍑🍑🍑💦💦💦💦");
   await expect(desktopRow).toContainText("Run");
   await expect(desktopRow).toContainText("21.3 km");
   await expect(desktopRow).toContainText("680 m up");
-  await expect(desktopRow).toContainText("Completed");
+  await expect(desktopRow).toContainText("Editorial hypothesis");
   await expect(desktopRow).toContainText(/long, exploratory Kyoto run/i);
+  await expect(desktopRow).not.toContainText(/lifecycle|draft guide|reviewed guide/i);
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
@@ -126,8 +128,8 @@ test("Routes presents an editorial comparison ledger on desktop and compact entr
   const mobileBox = await mobileRow.boundingBox();
   expect(mobileBox).not.toBeNull();
   expect(mobileBox!.width).toBeLessThanOrEqual(358);
-  expect(mobileBox!.height).toBeLessThan(280);
-  await expect(page.getByTestId("route-ledger-head")).toBeHidden();
+  expect(mobileBox!.height).toBeGreaterThan(300);
+  await expect(page.getByTestId("route-memory-grid")).toBeVisible();
 });
 
 test("search and every route filter update the URL", async ({ page }) => {
@@ -137,7 +139,8 @@ test("search and every route filter update the URL", async ({ page }) => {
   await filters.getByRole("searchbox", { name: "Search routes" }).fill("kyoto");
   await expect.poll(() => routeSearchParam(page, "q")).toBe("kyoto");
 
-  await filters.getByRole("combobox", { name: "Lifecycle" }).selectOption("completed");
+  await filters.getByRole("button", { name: /Filters/ }).click();
+  await filters.getByRole("combobox", { name: "Collection" }).selectOption("completed");
   await expect.poll(() => routeSearchParam(page, "lifecycle")).toBe("completed");
 
   await filters.getByRole("combobox", { name: "Activity" }).selectOption("Run");
@@ -154,6 +157,9 @@ test("search and every route filter update the URL", async ({ page }) => {
 
   await filters.getByRole("combobox", { name: "Vibe" }).selectOption("Big Day");
   await expect.poll(() => routeSearchParam(page, "vibe")).toBe("Big Day");
+
+  await filters.getByRole("button", { name: "Clear route search" }).click();
+  await expect.poll(() => routeSearchParam(page, "q")).toBeNull();
 });
 
 test("combined route filters persist through reload", async ({ page }) => {
@@ -165,7 +171,8 @@ test("combined route filters persist through reload", async ({ page }) => {
   await expect(filters.getByRole("searchbox", { name: "Search routes" })).toHaveValue(
     "exploratory",
   );
-  await expect(filters.getByRole("combobox", { name: "Lifecycle" })).toHaveValue(
+  await filters.getByRole("button", { name: /Filters/ }).click();
+  await expect(filters.getByRole("combobox", { name: "Collection" })).toHaveValue(
     "completed",
   );
   await expect(filters.getByRole("combobox", { name: "Activity" })).toHaveValue("Run");
@@ -183,11 +190,18 @@ test("combined route filters persist through reload", async ({ page }) => {
   await expect(filters.getByRole("searchbox", { name: "Search routes" })).toHaveValue(
     "exploratory",
   );
+  await expect(page.getByRole("group", { name: "Applied route filters" })).toContainText(
+    "Kyoto, Japan",
+  );
+  await filters.getByRole("button", { name: /Filters/ }).click();
   await expect(filters.getByRole("combobox", { name: "Region" })).toHaveValue(
     "Kyoto, Japan",
   );
   await expect(routeCards(page)).toHaveCount(1);
   await expect.poll(() => routeSearchParam(page, "climb")).toBe("250-750");
+
+  await page.getByRole("button", { name: "Remove Place filter" }).click();
+  await expect.poll(() => routeSearchParam(page, "region")).toBeNull();
 });
 
 test("no matching routes are announced and all filters can be reset", async ({ page }) => {
@@ -230,7 +244,8 @@ test("returning from a guide restores filters, loaded depth, and scroll", async 
   expect(priorScrollY).toBeGreaterThan(0);
   await target.click();
 
-  await page.getByRole("link", { name: "All routes" }).click();
+  await expect(page.getByRole("region", { name: "Route story", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Route collection" }).click();
   await expect(page).toHaveURL(/#\/routes\?activity=Run&page=2$/);
   await expect(routeCards(page)).toHaveCount(48);
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(
@@ -259,8 +274,8 @@ test("reviewed Kyoto card opens its canonical guide and fetches only that detail
 
   const kyotoCard = routeCardWithText(page, /long, exploratory Kyoto run/i);
   await expect(kyotoCard).toHaveCount(1);
-  await expect(kyotoCard).toContainText("Reviewed");
   await expect(kyotoCard).toContainText(/long, exploratory Kyoto run/i);
+  await expect(kyotoCard).not.toContainText(/reviewed|draft|lifecycle/i);
   expect(detailRequests).toEqual([]);
 
   const canonicalGuide = kyotoCard.getByRole("link", {
@@ -277,19 +292,31 @@ test("reviewed Kyoto card opens its canonical guide and fetches only that detail
   );
 });
 
-test("draft cards identify themselves without invented reviewed copy", async ({ page }) => {
+test("unreviewed routes remain useful without exposing curation workflow", async ({ page }) => {
   await page.goto("/#/routes?q=crosswalk+sprints");
 
   const draftCard = routeCardWithText(page, "crosswalk sprints");
   await expect(draftCard).toHaveCount(1);
-  await expect(draftCard).toContainText("Draft guide");
-  await expect(draftCard).not.toContainText("Reviewed");
-  await expect(draftCard).not.toContainText("What it feels like");
+  await expect(draftCard).toContainText("Tokyo, Japan");
+  await expect(draftCard).toContainText("crosswalk sprints");
+  await expect(draftCard).toContainText("Recorded note");
+  await expect(draftCard).toContainText(/could not figure out how to cross the bridge/i);
+  await expect(draftCard).not.toContainText(/draft|reviewed|lifecycle/i);
   await expect(
     draftCard.getByRole("link", {
       name: "Open Tokyo, Japan route from 2025-11-26, 21.8 km",
     }),
   ).toHaveAttribute("href", `#/routes/${draftTokyoSlug}`);
+});
+
+test("discovered routes never read as owner memories", async ({ page }) => {
+  await page.goto("/#/routes?lifecycle=discovered");
+
+  const discoveredCard = routeCardWithText(page, "breaking ankles on the Appian Way");
+  await expect(discoveredCard).toContainText("Owner experience unavailable");
+  await expect(discoveredCard).toContainText("Imported geometry");
+  await expect(discoveredCard).not.toContainText(/recorded memory|recorded note/i);
+  await expect(page.getByText(/recorded memory or discovered route/i)).toBeVisible();
 });
 
 test("invalid and unknown filter parameters are removed from the shared URL", async ({
@@ -299,6 +326,7 @@ test("invalid and unknown filter parameters are removed from the shared URL", as
 
   await expect(page).toHaveURL(/#\/routes$/);
   await expect(routeCards(page)).toHaveCount(24);
+  await page.getByRole("button", { name: /Filters/ }).click();
   await expect(page.getByRole("combobox", { name: "Activity" })).toHaveValue("all");
   await expect(page.getByRole("button", { name: "Reset filters" })).toHaveCount(0);
 });
@@ -360,7 +388,7 @@ for (const viewport of [
       expect(cardBoxes[0].y).toBeLessThan(viewport.height);
       await filterButton.click();
       await expect(filterButton).toHaveAttribute("aria-expanded", "true");
-      await expect(page.getByRole("combobox", { name: "Lifecycle" })).toBeVisible();
+      await expect(page.getByRole("combobox", { name: "Collection" })).toBeVisible();
     }
   });
 }

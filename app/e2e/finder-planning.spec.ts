@@ -68,10 +68,14 @@ test("Finder searches explicit route-backed candidates and saves a durable plan"
   await searchKyoto(page);
   await expect(candidate.getByRole("button", { name: "Already planned" })).toBeDisabled();
 
+  await page.goto("/#/routes");
+  await expect(page.getByRole("article", { name: "Planned route Kyoto, Japan" })).toHaveCount(0);
+
   await page.goto("/#/routes?lifecycle=planned");
   const plannedCard = page.getByRole("article", { name: "Planned route Kyoto, Japan" });
   await expect(plannedCard).toBeVisible();
-  await expect(plannedCard).toContainText("Planned");
+  await expect(plannedCard).toContainText("Planning intent");
+  await expect(page.getByRole("heading", { name: "Routes waiting to be made." })).toBeVisible();
   await expect(plannedCard).toContainText("Owner-curated from recorded GPX");
   await expect(plannedCard.getByRole("link", { name: "Open route guide" })).toHaveCount(0);
 });
