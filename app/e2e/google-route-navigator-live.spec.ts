@@ -251,7 +251,7 @@ test("keeps production Story Flight composed over live Google terrain on a phone
   await expect(page.locator("gmp-map-3d")).toBeVisible();
   await expect(page.locator("gmp-polyline-3d")).toHaveCount(4);
   await expect(page.getByTestId("replay-active-chapter")).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Replay chapters" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Chapter stepper" })).toBeVisible();
 
   const controls = page.getByTestId("story-flight-controls");
   const [replayBox, controlsBox] = await Promise.all([
