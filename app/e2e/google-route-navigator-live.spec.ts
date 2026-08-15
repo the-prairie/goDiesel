@@ -222,6 +222,60 @@ for (const route of ROUTES) {
   });
 }
 
+test("keeps production Story Flight composed over live Google terrain on a phone", async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    process.env.GODIESEL_LIVE_GOOGLE_3D_E2E !== "1",
+    "Live Google 3D verification is opt-in.",
+  );
+
+  const consoleErrors: string[] = [];
+  const pageErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#/replay/14023448720");
+
+  const replay = page.getByTestId("replay-stage");
+  await expectLiveSceneReady({
+    consoleErrors,
+    navigator: replay,
+    page,
+    pageErrors,
+    testInfo,
+  });
+  await expect(replay).toHaveAttribute("data-replay-shell", "story-flight");
+  await expect(page.locator("gmp-map-3d")).toBeVisible();
+  await expect(page.locator("gmp-polyline-3d")).toHaveCount(4);
+  await expect(page.getByTestId("replay-active-chapter")).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Replay chapters" })).toBeVisible();
+
+  const controls = page.getByTestId("story-flight-controls");
+  const [replayBox, controlsBox] = await Promise.all([
+    replay.boundingBox(),
+    controls.boundingBox(),
+  ]);
+  expect(replayBox).not.toBeNull();
+  expect(controlsBox).not.toBeNull();
+  expect((controlsBox?.x ?? 0) + (controlsBox?.width ?? 0)).toBeLessThanOrEqual(390);
+  expect((controlsBox?.y ?? 0) + (controlsBox?.height ?? 0)).toBeLessThanOrEqual(844);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+
+  await page.getByRole("button", { name: "Play route" }).click();
+  await expect(page.getByRole("button", { name: "Pause route" })).toBeVisible();
+  await expect
+    .poll(async () =>
+      Number((await page.getByTestId("google-route-progress").textContent())?.split(" ")[0]),
+    )
+    .toBeGreaterThan(0);
+  await page.waitForTimeout(2_500);
+  await captureEvidence(page, "14023448720-story-flight-mobile-live.png");
+  expectNoRuntimeErrors(consoleErrors, pageErrors);
+});
+
 test("keeps the San Francisco runner view above coarse mesh", async ({
   page,
 }, testInfo) => {
