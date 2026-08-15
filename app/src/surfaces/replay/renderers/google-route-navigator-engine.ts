@@ -60,10 +60,10 @@ interface FilamentLayer {
 }
 
 const FILAMENT_CLEARANCE_M: Record<CinematicFilamentRole, number> = {
-  guide: 0.1,
+  guide: 0.08,
   future: 0.14,
   thread: 0.2,
-  glint: 0.24,
+  glint: 0.28,
 };
 
 const GOOGLE_SCENE_READY_TIMEOUT_MS = 30_000;

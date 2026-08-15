@@ -28,59 +28,59 @@ export function buildCinematicThreadStyles(
   const end = clamp(treatment.endRatio);
   const focus = clamp(treatment.focusRatio, start, end);
   const rangeScale = clamp(
-    Math.log10(Math.max(350, treatment.rangeM) / 350) / 1.65,
+    Math.log2(Math.max(350, treatment.rangeM) / 350) / 4.2,
   );
   const shotScale =
     treatment.shotKind === "release"
-      ? 0.82
+      ? 0.84
       : treatment.shotKind === "tracking"
-        ? 0.94
-        : 1;
-  const baseWidth = (3 + rangeScale * 0.9) * shotScale;
-  const glintSpan = clamp(180 / Math.max(1, totalDistanceM), 0.0012, 0.012);
+        ? 1
+        : 1.05;
+  const ribbonWidth = (4.6 + rangeScale * 0.8) * shotScale;
+  const glintSpan = clamp(55 / Math.max(1, totalDistanceM), 0.0006, 0.006);
   const isRelease = treatment.shotKind === "release";
   const hasTreatment = end > start;
-  const motionLift = 0.9 + clamp(treatment.motionIntensity) * 0.1;
+  const motionLift = 0.96 + clamp(treatment.motionIntensity) * 0.04;
   return [
     {
-      color: "#f2e8db",
+      color: "#f4efe7",
       endRatio: isRelease ? 1 : end,
-      opacity: hasTreatment ? (isRelease ? 0.26 : 0.44) : 0,
-      outerColor: "#211b17",
+      opacity: hasTreatment ? (isRelease ? 0.42 : 0.82) : 0,
+      outerColor: "rgba(23, 35, 58, 0.56)",
       outerWidth: 0.12,
       role: "guide",
       startRatio: isRelease ? 0 : start,
-      width: Math.max(1.6, baseWidth * 0.56),
+      width: ribbonWidth + 2,
     },
     {
-      color: "#d6b8a8",
+      color: "#fffaf2",
       endRatio: end,
-      opacity: hasTreatment ? (isRelease ? 0.18 : 0.3) : 0,
-      outerColor: "#211b17",
-      outerWidth: 0.1,
+      opacity: hasTreatment ? (isRelease ? 0.5 : 0.94) : 0,
+      outerColor: "transparent",
+      outerWidth: 0,
       role: "future",
       startRatio: focus,
-      width: Math.max(1.4, baseWidth * 0.54),
+      width: ribbonWidth * 0.82,
     },
     {
       color: "#f06b50",
       endRatio: focus,
-      opacity: hasTreatment ? (isRelease ? 0.68 : 0.92) : 0,
-      outerColor: "#35221c",
-      outerWidth: 0.14,
+      opacity: hasTreatment ? (isRelease ? 0.7 : 0.98) : 0,
+      outerColor: "rgba(50, 31, 40, 0.64)",
+      outerWidth: 0.18,
       role: "thread",
       startRatio: start,
-      width: baseWidth * motionLift,
+      width: ribbonWidth * motionLift,
     },
     {
-      color: "#fffdf1",
-      endRatio: Math.min(end, focus + glintSpan * 0.35),
-      opacity: hasTreatment ? (isRelease ? 0.38 : 0.68) : 0,
-      outerColor: "transparent",
-      outerWidth: 0,
+      color: "#fffdf6",
+      endRatio: Math.min(end, focus + glintSpan * 0.2),
+      opacity: hasTreatment ? (isRelease ? 0.58 : 1) : 0,
+      outerColor: "rgba(240, 107, 80, 0.92)",
+      outerWidth: 0.32,
       role: "glint",
       startRatio: Math.max(start, focus - glintSpan),
-      width: Math.max(1.8, baseWidth * 0.72),
+      width: ribbonWidth + 1.8,
     },
   ];
 }

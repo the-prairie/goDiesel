@@ -108,6 +108,15 @@ Status: Verified
 - [x] Preserve labeled direct chapter jumps where the viewport has room.
 - [x] Keep 44 px targets, safe-area clearance, and the compact terrain-visibility budget.
 
+### 10. Story Flight terrain ribbon
+
+Status: Verified
+
+- [x] Replace the scratchy route filament with a camera-aware pearl terrain ribbon.
+- [x] Distinguish travelled route in coral and upcoming route in pearl without obscuring terrain.
+- [x] Give the current route position a short luminous playhead treatment.
+- [x] Verify the four semantic ribbon layers against live Google 3D terrain at overview, playback, and chase distances.
+
 ## Decisions
 
 - The real Google 3D renderer remains the production replay engine.
@@ -196,3 +205,12 @@ Status: Verified
 - Compact Story Flight now names the active chapter and exposes familiar previous and next controls instead of presenting an unexplained row of dots.
 - The chapter status identifies the gold elevation-profile diamonds as route-data notes. Desktop retains direct, labeled chapter markers.
 - The ticket gate passed on 2026-08-15 with the production build and all 253 unit tests. All eight focused production Replay scenarios passed, including chapter navigation, 44 px targets, safe-area clearance, and a controls dock below the 170 px terrain budget.
+
+### Slice 10
+
+- The route thread now renders as four intentional layers: a pearl terrain-separated guide, a quieter pearl future, a coral travelled segment, and a short luminous playhead.
+- Ribbon width responds conservatively to camera range so chase shots remain precise and overview shots remain legible without reading as a heavy map boundary.
+- The ticket gate passed with the production build and all 254 unit tests, including the ten-assertion cinematic style contract.
+- All eight deterministic production Replay scenarios passed after the final ribbon values were applied.
+- A headed live Google 3D Crete journey passed on 2026-08-15 and asserted the final layer widths, opacities, and casing proportions in the provider DOM.
+- Live overview, active-playback, and chase evidence frames were captured and visually inspected against ocean, pale rock, and detailed photogrammetry.
