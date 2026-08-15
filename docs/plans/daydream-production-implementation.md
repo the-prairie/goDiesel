@@ -99,6 +99,15 @@ Status: Verified
 - [x] Capture and inspect live Story Flight evidence at 390 x 844.
 - [x] Pass the complete production release gate after the extraction.
 
+### 9. Story Flight timeline clarity
+
+Status: Verified
+
+- [x] Replace unexplained compact chapter dots with a named previous and next chapter stepper.
+- [x] Identify recorded route-data notes without competing with the elevation profile.
+- [x] Preserve labeled direct chapter jumps where the viewport has room.
+- [x] Keep 44 px targets, safe-area clearance, and the compact terrain-visibility budget.
+
 ## Decisions
 
 - The real Google 3D renderer remains the production replay engine.
@@ -181,3 +190,9 @@ Status: Verified
 - The ticket gate passed on 2026-08-15: production build and all 253 unit tests.
 - The complete release gate passed on 2026-08-15 after the final shared-presentation consolidation: production build, all 253 unit tests, bundle budget, and all 91 production browser scenarios.
 - Independent standards and specification reviews found no remaining blockers after camera metadata, controls, duration formatting, and pace formatting were given one shared owner.
+
+### Slice 9
+
+- Compact Story Flight now names the active chapter and exposes familiar previous and next controls instead of presenting an unexplained row of dots.
+- The chapter status identifies the gold elevation-profile diamonds as route-data notes. Desktop retains direct, labeled chapter markers.
+- The ticket gate passed on 2026-08-15 with the production build and all 253 unit tests. All eight focused production Replay scenarios passed, including chapter navigation, 44 px targets, safe-area clearance, and a controls dock below the 170 px terrain budget.

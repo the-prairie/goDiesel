@@ -354,27 +354,37 @@ test("keeps mobile chapter controls named, touchable, and above the safe area", 
   });
 
   const chapterNavigation = page.getByRole("navigation", {
-    name: "Replay chapters",
+    name: "Chapter stepper",
   });
   await expect(page.getByTestId("replay-stage")).toHaveAttribute(
     "data-state",
     "ready",
   );
   await expect(chapterNavigation).toBeVisible();
-  const chapterButtons = chapterNavigation.getByRole("button");
-  const chapterCount = await chapterButtons.count();
-  expect(chapterCount).toBeGreaterThan(1);
-  for (let index = 0; index < chapterCount; index += 1) {
-    const chapter = chapterButtons.nth(index);
-    await expect(chapter).toHaveAccessibleName(
-      new RegExp(`^Chapter ${index + 1} of ${chapterCount}: Go to .+ at \\d+\\.\\d km$`),
-    );
-    const box = await chapter.boundingBox();
+  const previousChapter = chapterNavigation.getByRole("button", {
+    name: "Previous chapter",
+  });
+  const nextChapter = chapterNavigation.getByRole("button", {
+    name: /^Next chapter:/,
+  });
+  await expect(previousChapter).toBeDisabled();
+  await expect(nextChapter).toBeEnabled();
+  for (const control of [previousChapter, nextChapter]) {
+    const box = await control.boundingBox();
     expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
     expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
   }
 
-  await chapterButtons.last().click();
+  await expect(page.getByTestId("story-flight-chapter-status")).toContainText(
+    "1 of 5 · Origin",
+  );
+  await expect(page.getByTestId("story-flight-chapter-status")).toContainText(
+    "3 route data notes",
+  );
+  await nextChapter.click();
+  await expect(page.getByTestId("story-flight-chapter-status")).toContainText(
+    "2 of 5 · High point",
+  );
   await expect
     .poll(async () =>
       Number(
