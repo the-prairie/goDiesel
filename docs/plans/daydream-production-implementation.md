@@ -1,6 +1,6 @@
 # Daydream Production Implementation
 
-Last updated: 2026-08-13
+Last updated: 2026-08-15
 
 This checklist tracks the approved Daydream direction as it moves from the isolated lab prototype into the production application.
 
@@ -15,7 +15,7 @@ Status vocabulary:
 
 ### 1. Story Flight shell for real Google 3D Replay
 
-Status: Implemented
+Status: Verified
 
 - [x] Remove the persistent product spine from immersive production Replay.
 - [x] Preserve the real Google 3D renderer, camera modes, route picker, settings, fallback, repairs, and playback state.
@@ -25,10 +25,10 @@ Status: Implemented
 - [x] Use progressive disclosure so the route and terrain remain visually dominant.
 - [x] Resolve the mobile telemetry collisions and title truncation found in the UX audit.
 - [x] Preserve keyboard playback, seeking, camera selection, fallback, and accessible names.
-- [ ] Extract the Story Flight HUD and chapter derivation from the renderer stage before the next Replay feature expansion.
+- [x] Extract the Story Flight HUD and chapter derivation from the renderer stage before the next Replay feature expansion.
 - [x] Verify desktop and mobile behavior with the provider fixture.
 - [x] Verify desktop composition with the live local Google renderer.
-- [ ] Verify phone composition with the live local Google renderer.
+- [x] Verify phone composition with the live local Google renderer.
 
 ### 2. Regional Atlas as the primary discovery model
 
@@ -90,6 +90,15 @@ Status: Verified
 - [x] Validate reduced motion, focus restoration, touch targets, and safe-area behavior.
 - [x] Complete the production visual consistency pass across Atlas, Finder, Routes, Replay, and Admin.
 
+### 8. Release-readiness proof
+
+Status: Verified
+
+- [x] Isolate Story Flight chapter derivation and the production HUD from the Google renderer lifecycle.
+- [x] Add a production-specific live Google 3D phone acceptance scenario to the explicit provider gate.
+- [x] Capture and inspect live Story Flight evidence at 390 x 844.
+- [x] Pass the complete production release gate after the extraction.
+
 ## Decisions
 
 - The real Google 3D renderer remains the production replay engine.
@@ -110,7 +119,9 @@ Status: Verified
 - Desktop and phone fallback frames were inspected at 1440 x 960 and 390 x 844; both had exact viewport width and no document overflow.
 - The earlier local `unavailable` result was a verification-origin bug: the check used `http://127.0.0.1:8787`, while the Google browser key authorizes `http://localhost:8787`.
 - On 2026-08-12 the production Replay was inspected on the authorized localhost origin. The stage reported `ready`, rendered a full-size `gmp-map-3d`, showed photorealistic Crete terrain and the recorded route thread, and emitted no browser warnings or errors.
-- Phone behavior and layout remain covered by the provider fixture at 390 x 844. Live Google terrain at phone width is the only remaining visual acceptance item; the in-app browser blocked changing the localhost tab's viewport under its local-URL safety policy.
+- Before the release-readiness slice, phone behavior was covered by the provider fixture at 390 x 844 while the in-app browser's local-URL safety policy prevented live phone-width evidence.
+- On 2026-08-15 the production Story Flight route was verified in a headed Chromium session at 390 x 844 on the authorized localhost origin. The native Google 3D stage reached `ready`, rendered photorealistic Crete terrain and four route filaments, played the recorded route, kept all Story Flight controls within the viewport, and produced no runtime errors.
+- The durable live scenario is `google-route-navigator-live.spec.ts` and captures `e2e/evidence/auto-director/14023448720-story-flight-mobile-live.png`. A headless diagnostic run correctly failed closed because Google 3D requires the accelerated headed browser used by the explicit live command.
 
 ### Slice 2
 
@@ -162,3 +173,11 @@ Status: Verified
 - Mobile Replay chapter controls expose chapter position, route moment, and distance in their accessible names, retain 44 px targets, remain seekable under reduced motion, and clear the configured bottom safe area.
 - Desktop, compact-desktop, and phone frames were inspected across Finder, Routes, route story, Admin, and shared navigation. Atlas control and loading states were checked in one restrained production load; the provider did not settle during this pass, so no new live-terrain acceptance claim is made beyond the verified Slice 2 evidence.
 - The final release gate passed on 2026-08-14: production build, all 251 unit tests, bundle budget, and all 91 production browser scenarios. The gate caught a Routes return-scroll ordering regression; the destination-specific restoration policy was fixed, its focused scenario passed, and the complete gate then passed on rerun.
+
+### Slice 8
+
+- Story Flight chapter derivation, active-chapter selection, and climb calculation now live in a pure module with focused unit contracts; the production HUD is independently owned by a dedicated component.
+- The production-specific live phone scenario passed on 2026-08-15 in the required headed browser mode and its captured frame was visually inspected for terrain visibility, route legibility, hierarchy, control fit, and horizontal overflow.
+- The ticket gate passed on 2026-08-15: production build and all 253 unit tests.
+- The complete release gate passed on 2026-08-15 after the final shared-presentation consolidation: production build, all 253 unit tests, bundle budget, and all 91 production browser scenarios.
+- Independent standards and specification reviews found no remaining blockers after camera metadata, controls, duration formatting, and pace formatting were given one shared owner.

@@ -6,13 +6,11 @@ import {
   LockKeyhole,
   MapPinned,
   Mountain,
-  Navigation,
   Pause,
   Play,
   Route,
   ScanLine,
   Settings2,
-  Sparkles,
   Unlock,
   ZoomIn,
   ZoomOut,
@@ -21,6 +19,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { ReplayElevationScrubber } from "@/surfaces/replay/components/replay-elevation-scrubber";
+import {
+  formatReplayDuration,
+  formatReplayPace,
+  REPLAY_CAMERA_MODES,
+  ReplayCameraControls,
+} from "@/surfaces/replay/components/replay-presentation";
 import { ReplayRoutePicker } from "@/surfaces/replay/components/replay-route-picker";
 import { Button } from "@/ui/button";
 import type { QuestRoute, RouteSummary } from "@/domain/route";
@@ -50,7 +54,11 @@ import {
   type RouteCameraMotionState,
 } from "@/surfaces/replay/scene/route-camera-stabilizer";
 import type { GoogleRouteCameraPose } from "@/surfaces/replay/playback/route-navigator-controller";
-import { cinematicMoments } from "@/surfaces/replay/cinematic/route-cinematic-director";
+import {
+  activeReplayStoryChapter,
+  replayStoryChapters,
+} from "@/surfaces/replay/story-flight/story-flight-chapters";
+import { StoryFlightReplayHud } from "@/surfaces/replay/story-flight/story-flight-replay-hud";
 
 const FIELD_TEST_ROUTES = [
   { slug: "14736711660", label: "San Francisco" },
@@ -61,17 +69,6 @@ const INITIAL_STATUS: GoogleRouteNavigatorStatus = {
   state: "loading",
   message: "Preparing the native Google 3D route world.",
 };
-
-const CAMERA_MODES: Array<{
-  mode: GoogleRouteCameraMode;
-  label: string;
-  icon: typeof Navigation;
-}> = [
-  { mode: "auto", label: "Auto director", icon: Sparkles },
-  { mode: "runner", label: "Runner", icon: Navigation },
-  { mode: "chase", label: "Chase", icon: Eye },
-  { mode: "overview", label: "Overview", icon: MapPinned },
-];
 
 interface GoogleRouteNavigatorStageProps {
   route: QuestRoute;
@@ -446,7 +443,9 @@ export function GoogleRouteNavigatorStage({
             <span>
               {control.cameraMode === "auto"
                 ? `Auto · ${cameraPose.directedMode === "overview" ? "Reveal" : "Follow"}`
-                : CAMERA_MODES.find(({ mode }) => mode === control.cameraMode)
+                : REPLAY_CAMERA_MODES.find(
+                    ({ mode }) => mode === control.cameraMode,
+                  )
                     ?.label}
             </span>
           </div>
@@ -611,236 +610,6 @@ function cameraPoseHasSettled(
   );
 }
 
-interface ReplayStoryChapter {
-  kind: ReturnType<typeof cinematicMoments>[number]["kind"];
-  label: string;
-  progressM: number;
-  progressRatio: number;
-}
-
-export function replayStoryChapters(
-  route: QuestRoute,
-  totalDistanceM: number,
-): ReplayStoryChapter[] {
-  const chapters = cinematicMoments(route)
-    .map((moment) => ({
-      kind: moment.kind,
-      label: moment.label,
-      progressM: moment.progressRatio * totalDistanceM,
-      progressRatio: moment.progressRatio,
-    }))
-    .sort((left, right) => left.progressRatio - right.progressRatio);
-  return chapters.reduce<ReplayStoryChapter[]>((grouped, chapter) => {
-    const previous = grouped.at(-1);
-    if (
-      previous &&
-      Math.abs(previous.progressRatio - chapter.progressRatio) < 0.001
-    ) {
-      previous.label = `${previous.label} + ${chapter.label}`;
-      return grouped;
-    }
-    grouped.push({ ...chapter });
-    return grouped;
-  }, []);
-}
-
-function activeReplayStoryChapter(
-  chapters: ReplayStoryChapter[],
-  progressM: number,
-) {
-  let activeIndex = 0;
-  for (const [index, chapter] of chapters.entries()) {
-    if (chapter.progressM > progressM) break;
-    activeIndex = index;
-  }
-  return activeIndex;
-}
-
-function replayClimbM(route: QuestRoute, progressM: number) {
-  let climbM = 0;
-  for (let index = 1; index < route.route.length; index += 1) {
-    const previous = route.route[index - 1];
-    const current = route.route[index];
-    if (previous.d >= progressM) break;
-    const segmentDistanceM = Math.max(1, current.d - previous.d);
-    const completedRatio = Math.min(
-      1,
-      Math.max(0, (progressM - previous.d) / segmentDistanceM),
-    );
-    climbM += Math.max(0, current.elev - previous.elev) * completedRatio;
-    if (current.d >= progressM) break;
-  }
-  return climbM;
-}
-
-function StoryFlightReplayHud({
-  activeChapterIndex,
-  chapters,
-  control,
-  disabled,
-  onCommit,
-  onSelectCamera,
-  onTogglePlayback,
-  route,
-  telemetry,
-  totalDistanceM,
-}: ReplayHudProps & {
-  activeChapterIndex: number;
-  chapters: ReplayStoryChapter[];
-}) {
-  return (
-    <div className="px-2 pb-[max(0.25rem,var(--safe-area-bottom))] sm:px-4 sm:pb-[max(1rem,var(--safe-area-bottom))]">
-      <div className="pointer-events-auto mb-1 ml-auto grid w-full grid-cols-6 rounded-md border border-white/45 bg-[#1d2d50]/72 p-1 text-white shadow-xl backdrop-blur-xl sm:mb-2 sm:w-[min(47rem,calc(100vw-2rem))] sm:p-1.5">
-        <StoryMetric
-          label="Distance"
-          mobileValue={`${(control.progressM / 1_000).toFixed(2)} km`}
-          testId="google-route-progress"
-          value={`${(control.progressM / 1_000).toFixed(2)} / ${route.distanceKm.toFixed(1)} km`}
-        />
-        <StoryMetric
-          label="Elevation"
-          value={`${Math.round(telemetry.elevationM)} m`}
-        />
-        <StoryMetric
-          label="Climb"
-          value={`+${Math.round(replayClimbM(route, control.progressM))} m`}
-        />
-        <StoryMetric
-          label="Grade"
-          value={`${telemetry.gradePercent >= 0 ? "+" : ""}${telemetry.gradePercent.toFixed(1)}%`}
-        />
-        <StoryMetric
-          label={route.type.toLowerCase().includes("ride") ? "Speed" : "Pace"}
-          value={formatPace(telemetry.paceSPerKm, route.type)}
-        />
-        <StoryMetric
-          label="Elapsed"
-          value={formatDuration(telemetry.elapsedS)}
-        />
-      </div>
-
-      <div data-testid="story-flight-controls" className="pointer-events-auto grid min-h-[6.75rem] grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-white/60 bg-[#f5f7fb]/94 p-2 text-[#1d2946] shadow-2xl backdrop-blur-xl sm:grid-cols-[3.5rem_minmax(0,1fr)_auto] sm:gap-3 sm:p-3">
-        <ReplayButton
-          disabled={disabled}
-          onClick={onTogglePlayback}
-          playing={control.playing}
-          tone="story"
-        />
-
-        <div className="relative min-w-0">
-          <nav
-            aria-label="Replay chapters"
-            className="pointer-events-none absolute inset-x-1 top-0 z-40 h-11"
-          >
-            {chapters.map((chapter, index) => (
-              <button
-                aria-current={activeChapterIndex === index ? "step" : undefined}
-                aria-label={`Chapter ${index + 1} of ${chapters.length}: Go to ${chapter.label} at ${(chapter.progressM / 1_000).toFixed(1)} km`}
-                className="group pointer-events-auto absolute top-0 grid min-h-11 w-11 justify-items-center gap-0.5 rounded-sm px-0.5 text-[#60708e] outline-none hover:text-[#1d2946] focus-visible:ring-2 focus-visible:ring-[#d86f9e] aria-[current=step]:text-[#b94f83] lg:w-24"
-                key={chapter.kind}
-                onClick={() =>
-                  onCommit((current) =>
-                    seekGoogleRouteNavigator(
-                      current,
-                      chapter.progressM,
-                      totalDistanceM,
-                    ),
-                  )
-                }
-                style={{
-                  left: `${chapter.progressRatio * 100}%`,
-                  transform:
-                    index === 0
-                      ? "none"
-                      : index === chapters.length - 1
-                        ? "translateX(-100%)"
-                        : "translateX(-50%)",
-                }}
-                type="button"
-              >
-                <span className="size-2.5 rounded-full border-2 border-white bg-[#b8afd9] shadow-[0_0_0_1px_#9ca8bf] group-aria-[current=step]:bg-[#e789bd] group-aria-[current=step]:shadow-[0_0_0_6px_rgba(231,137,189,.2)]" />
-                <strong className="hidden max-w-full truncate font-editorial text-[11px] font-semibold lg:block">
-                  {chapter.label}
-                </strong>
-              </button>
-            ))}
-          </nav>
-          <ReplayElevationScrubber
-            className="h-[5.25rem] rounded-md border-0 bg-transparent pt-6"
-            compact
-            disabled={disabled}
-            onSeek={(progressM) =>
-              onCommit((current) =>
-                seekGoogleRouteNavigator(current, progressM, totalDistanceM),
-              )
-            }
-            progressM={control.progressM}
-            route={route}
-            totalDistanceM={totalDistanceM}
-          />
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="hidden lg:block">
-            <CameraControls
-              active={control.cameraMode}
-              disabled={disabled}
-              onSelect={onSelectCamera}
-              tone="story"
-            />
-          </div>
-          <Button
-            aria-label={`Playback speed ${control.speed}x`}
-            className="border-[#9ca8bf] bg-transparent text-[#1d2946] hover:bg-white"
-            disabled={disabled}
-            onClick={() => onCommit(cycleGoogleRouteSpeed)}
-            size="sm"
-            title="Change playback speed"
-            type="button"
-            variant="outline"
-          >
-            <Gauge aria-hidden="true" />
-            <span className="hidden sm:inline">{control.speed}x</span>
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function StoryMetric({
-  label,
-  mobileValue,
-  testId,
-  value,
-}: {
-  label: string;
-  mobileValue?: string;
-  testId?: string;
-  value: string;
-}) {
-  return (
-    <div className="min-w-0 border-r border-white/18 px-1 py-1 last:border-r-0 sm:px-2">
-      <div className="text-[8px] font-semibold uppercase text-white/55">
-        {label}
-      </div>
-      <div
-        className="mt-0.5 truncate text-[11px] font-semibold tabular-nums sm:text-xs"
-        data-testid={testId}
-      >
-        {mobileValue ? (
-          <>
-            <span className="sm:hidden">{mobileValue}</span>
-            <span className="hidden sm:inline">{value}</span>
-          </>
-        ) : (
-          value
-        )}
-      </div>
-    </div>
-  );
-}
-
 function ExpandedReplayHud({
   control,
   disabled,
@@ -899,11 +668,11 @@ function ExpandedReplayHud({
           <div className="grid min-w-0 flex-1 grid-cols-4 gap-x-2 md:gap-x-5 md:gap-y-2">
             <Metric
               label="Elapsed"
-              value={formatDuration(telemetry.elapsedS)}
+              value={formatReplayDuration(telemetry.elapsedS)}
             />
             <Metric
               label="Pace"
-              value={formatPace(telemetry.paceSPerKm, route.type)}
+              value={formatReplayPace(telemetry.paceSPerKm, route.type)}
             />
             <Metric
               label="Elevation"
@@ -915,7 +684,7 @@ function ExpandedReplayHud({
             />
           </div>
           <div className="flex items-center gap-2">
-            <CameraControls
+            <ReplayCameraControls
               active={control.cameraMode}
               disabled={disabled}
               onSelect={onSelectCamera}
@@ -1000,7 +769,7 @@ function ReplaySettings({
         </SettingGroup>
 
         <SettingGroup icon={Eye} label="Camera view">
-          {CAMERA_MODES.map(({ label, mode }) => (
+          {REPLAY_CAMERA_MODES.map(({ label, mode }) => (
             <SettingButton
               active={control.cameraMode === mode}
               key={mode}
@@ -1117,55 +886,6 @@ function SettingButton({
   );
 }
 
-function CameraControls({
-  active,
-  disabled,
-  onSelect,
-  tone = "intelligence",
-}: {
-  active: GoogleRouteCameraMode;
-  disabled: boolean;
-  onSelect: (mode: GoogleRouteCameraMode) => void;
-  tone?: "intelligence" | "story";
-}) {
-  return (
-    <div
-      aria-label="Camera perspective"
-      className={cn(
-        "flex p-0.5",
-        tone === "story"
-          ? "border border-[#9ca8bf] bg-white/35"
-          : "border border-white/15 bg-black/25",
-      )}
-      role="group"
-    >
-      {CAMERA_MODES.map(({ mode, label, icon: Icon }) => (
-        <button
-          aria-label={label}
-          aria-pressed={active === mode}
-          className={cn(
-            "grid size-11 place-items-center",
-            tone === "story"
-              ? "text-[#60708e] hover:bg-white hover:text-[#1d2946]"
-              : "text-white/55 hover:bg-white/10 hover:text-white",
-            active === mode &&
-              (tone === "story"
-                ? "bg-white text-[#1d2946]"
-                : "bg-white text-black hover:bg-white hover:text-black"),
-          )}
-          disabled={disabled}
-          key={mode}
-          onClick={() => onSelect(mode)}
-          title={`${label} camera`}
-          type="button"
-        >
-          <Icon aria-hidden="true" className="size-3.5" />
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function ReplayButton({
   disabled,
   onClick,
@@ -1220,25 +940,4 @@ interface ReplayHudProps {
   route: QuestRoute;
   telemetry: ReturnType<typeof googleRouteTelemetry>;
   totalDistanceM: number;
-}
-
-function formatDuration(totalSeconds: number) {
-  const safeSeconds = Math.max(0, Math.round(totalSeconds));
-  const hours = Math.floor(safeSeconds / 3_600);
-  const minutes = Math.floor((safeSeconds % 3_600) / 60);
-  const seconds = safeSeconds % 60;
-  return hours > 0
-    ? `${hours}:${minutes.toString().padStart(2, "0")}:${seconds
-        .toString()
-        .padStart(2, "0")}`
-    : `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}
-
-function formatPace(paceSPerKm: number | undefined, activityType: string) {
-  if (paceSPerKm === undefined || !Number.isFinite(paceSPerKm)) return "--";
-  if (activityType.toLowerCase().includes("ride")) {
-    const speedKmh = 3_600 / paceSPerKm;
-    return `${speedKmh.toFixed(1)} km/h`;
-  }
-  return `${formatDuration(paceSPerKm)} /km`;
 }
