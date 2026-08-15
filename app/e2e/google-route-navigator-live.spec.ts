@@ -121,6 +121,30 @@ for (const route of ROUTES) {
     await expect
       .poll(async () => Number((await progress.textContent())?.split(" ")[0]))
       .toBeGreaterThan(0);
+    const ribbonLayers = await page
+      .locator("gmp-polyline-3d")
+      .evaluateAll((elements) =>
+        elements.map((element) => {
+          const line = element as google.maps.maps3d.Polyline3DElement;
+          return {
+            opacity: Number(line.style.opacity),
+            outerWidth: line.outerWidth,
+            role: line.dataset.threadLayer,
+            strokeWidth: line.strokeWidth,
+          };
+        }),
+      );
+    const ribbonLayer = (role: string) =>
+      ribbonLayers.find((layer) => layer.role === role);
+    expect(ribbonLayer("guide")?.strokeWidth ?? 0).toBeGreaterThan(6.5);
+    expect(ribbonLayer("guide")?.outerWidth ?? 0).toBeGreaterThan(0.1);
+    expect(ribbonLayer("future")?.strokeWidth ?? 0).toBeGreaterThan(3.5);
+    expect(ribbonLayer("thread")?.strokeWidth ?? 0).toBeGreaterThan(4.5);
+    expect(ribbonLayer("thread")?.opacity ?? 0).toBeGreaterThan(0.9);
+    expect(ribbonLayer("glint")?.strokeWidth ?? 0).toBeGreaterThan(
+      ribbonLayer("thread")?.strokeWidth ?? Number.POSITIVE_INFINITY,
+    );
+    expect(ribbonLayer("glint")?.outerWidth ?? 0).toBeGreaterThan(0.3);
     await page.waitForTimeout(3_500);
     await captureEvidence(page, `${route.slug}-desktop-playback.png`);
     await page.getByRole("button", { name: "Pause route" }).click();
