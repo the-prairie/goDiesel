@@ -5,6 +5,8 @@ export type CinematicFilamentRole =
   | "lead";
 
 export interface CinematicRouteTreatment {
+  bearingDeg?: number;
+  cameraHeadingDeg?: number;
   endRatio: number;
   focusRatio: number;
   motionIntensity: number;
@@ -31,40 +33,51 @@ export function buildCinematicThreadStyles(
   const start = clamp(treatment.startRatio);
   const end = clamp(treatment.endRatio);
   const focus = clamp(treatment.focusRatio, start, end);
-  const rangeScale = clamp(
+  const continuousRangeScale = clamp(
     Math.log2(Math.max(350, treatment.rangeM) / 350) / 4.2,
   );
+  const rangeScale =
+    continuousRangeScale < 0.28
+      ? 0
+      : continuousRangeScale < 0.72
+        ? 0.5
+        : 1;
   const shotScale = treatment.shotKind === "release" ? 0.84 : 1;
-  const threadWidth = (2.65 + rangeScale * 0.4) * shotScale;
-  const leadSpan = clamp(160 / Math.max(1, totalDistanceM), 0.0015, 0.012);
+  const threadWidth = (2.25 + rangeScale * 0.28) * shotScale;
+  const leadSpan = clamp(110 / Math.max(1, totalDistanceM), 0.0012, 0.01);
+  const farOverlap = clamp(12 / Math.max(1, totalDistanceM), 0.0002, 0.0015);
   const isRelease = treatment.shotKind === "release";
+  const isOverview =
+    treatment.shotKind === "establishing" ||
+    treatment.shotKind === "reveal" ||
+    isRelease;
   const hasTreatment = end > start;
   const motionLift = 0.98 + clamp(treatment.motionIntensity) * 0.04;
   return [
     {
       color: "#f4efe7",
       endRatio: isRelease ? 1 : end,
-      opacity: hasTreatment ? (isRelease ? 0.2 : 0.26) : 0,
-      outerColor: "transparent",
-      outerWidth: 0,
+      opacity: hasTreatment && isOverview ? (isRelease ? 0.24 : 0.32) : 0,
+      outerColor: "rgba(28, 45, 75, 0.62)",
+      outerWidth: 0.1,
       role: "context",
       startRatio: isRelease ? 0 : start,
-      width: threadWidth + 0.55,
+      width: threadWidth * 0.9,
     },
     {
       color: "#fffaf2",
       endRatio: end,
-      opacity: hasTreatment ? (isRelease ? 0.32 : 0.68) : 0,
-      outerColor: "transparent",
-      outerWidth: 0,
+      opacity: hasTreatment && !isOverview ? 0.5 : 0,
+      outerColor: "rgba(28, 45, 75, 0.56)",
+      outerWidth: 0.1,
       role: "future",
-      startRatio: focus,
-      width: threadWidth * 0.65,
+      startRatio: Math.max(focus, focus + leadSpan - farOverlap),
+      width: threadWidth * 0.62,
     },
     {
       color: "#f06b50",
       endRatio: focus,
-      opacity: hasTreatment ? (isRelease ? 0.54 : 0.96) : 0,
+      opacity: hasTreatment && !isOverview ? 0.94 : 0,
       outerColor: "transparent",
       outerWidth: 0,
       role: "traveled",
@@ -74,12 +87,12 @@ export function buildCinematicThreadStyles(
     {
       color: "#ffd9c8",
       endRatio: Math.min(end, focus + leadSpan),
-      opacity: hasTreatment ? (isRelease ? 0.4 : 0.9) : 0,
+      opacity: hasTreatment && !isOverview ? 0.84 : 0,
       outerColor: "transparent",
       outerWidth: 0,
       role: "lead",
       startRatio: focus,
-      width: threadWidth + 0.4,
+      width: threadWidth + 0.2,
     },
   ];
 }

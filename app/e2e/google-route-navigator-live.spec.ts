@@ -137,13 +137,16 @@ for (const route of ROUTES) {
       );
     const ribbonLayer = (role: string) =>
       ribbonLayers.find((layer) => layer.role === role);
-    expect(ribbonLayer("context")?.strokeWidth ?? 0).toBeGreaterThan(3.1);
-    expect(ribbonLayer("context")?.strokeWidth ?? 99).toBeLessThan(4);
-    expect(ribbonLayer("context")?.outerWidth ?? 0).toBe(0);
-    expect(ribbonLayer("context")?.opacity ?? 1).toBeLessThan(0.3);
-    expect(ribbonLayer("future")?.strokeWidth ?? 0).toBeGreaterThan(1.7);
-    expect(ribbonLayer("traveled")?.strokeWidth ?? 0).toBeGreaterThan(2.6);
-    expect(ribbonLayer("traveled")?.opacity ?? 0).toBeGreaterThan(0.9);
+    expect(ribbonLayer("context")?.strokeWidth ?? 0).toBeGreaterThan(2.1);
+    expect(ribbonLayer("context")?.strokeWidth ?? 99).toBeLessThan(2.7);
+    expect(ribbonLayer("context")?.outerWidth ?? 0).toBeCloseTo(0.1);
+    expect(ribbonLayer("context")?.opacity).toBeCloseTo(0.32);
+    expect(ribbonLayer("future")?.strokeWidth ?? 0).toBeGreaterThan(1.3);
+    expect(ribbonLayer("future")?.outerWidth ?? 0).toBeCloseTo(0.1);
+    expect(ribbonLayer("traveled")?.strokeWidth ?? 0).toBeGreaterThan(2.2);
+    expect(ribbonLayer("future")?.opacity).toBe(0);
+    expect(ribbonLayer("traveled")?.opacity).toBe(0);
+    expect(ribbonLayer("lead")?.opacity).toBe(0);
     expect(ribbonLayer("lead")?.strokeWidth ?? 0).toBeGreaterThan(
       ribbonLayer("traveled")?.strokeWidth ?? Number.POSITIVE_INFINITY,
     );
@@ -152,6 +155,9 @@ for (const route of ROUTES) {
     await expect(
       page.getByTestId("google-route-playhead").locator("div"),
     ).toHaveAttribute("data-moving", "true");
+    await expect(
+      page.getByTestId("google-route-playhead").locator("div"),
+    ).toHaveAttribute("data-relative-bearing", /\d/);
     await page.waitForTimeout(3_500);
     await captureEvidence(page, `${route.slug}-desktop-playback.png`);
     await page.getByRole("button", { name: "Pause route" }).click();
@@ -304,6 +310,67 @@ test("keeps production Story Flight composed over live Google terrain on a phone
     .toBeGreaterThan(0);
   await page.waitForTimeout(2_500);
   await captureEvidence(page, "14023448720-story-flight-mobile-live.png");
+  expectNoRuntimeErrors(consoleErrors, pageErrors);
+});
+
+test("frames an active Story Flight thread above the desktop HUD", async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    process.env.GODIESEL_LIVE_GOOGLE_3D_E2E !== "1",
+    "Live Google 3D verification is opt-in.",
+  );
+
+  const consoleErrors: string[] = [];
+  const pageErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.goto("/#/replay/14023448720");
+
+  const replay = page.getByTestId("replay-stage");
+  await expectLiveSceneReady({
+    consoleErrors,
+    navigator: replay,
+    page,
+    pageErrors,
+    testInfo,
+  });
+  await page.getByLabel("Route progress").fill("10750");
+  await page.getByRole("button", { name: "Play route" }).click();
+  await expect(replay).toHaveAttribute("data-directed-camera", "chase");
+  await page.waitForTimeout(2_500);
+  await expect(replay).toHaveAttribute("data-hud-state", "hidden");
+  await captureEvidence(
+    page,
+    "14023448720-story-flight-desktop-chase-immersive-live.png",
+  );
+  await replay.dispatchEvent("pointermove");
+  await expect(replay).toHaveAttribute("data-hud-state", "expanded");
+  await page.waitForTimeout(300);
+
+  const subjectBand = {
+    minimumY: Number(await replay.getAttribute("data-subject-band-min-y")),
+    maximumY: Number(await replay.getAttribute("data-subject-band-max-y")),
+  };
+  const controlsBox = await page.getByTestId("replay-controls").boundingBox();
+  expect(subjectBand.minimumY).toBeGreaterThan(0);
+  expect(subjectBand.maximumY).toBeGreaterThan(subjectBand.minimumY);
+  expect(subjectBand.maximumY).toBeLessThan(controlsBox?.y ?? 0);
+  await expect(page.locator('[data-thread-layer="context"]')).toHaveAttribute(
+    "data-route-visible",
+    "false",
+  );
+  await expect(page.locator('[data-thread-layer="traveled"]')).toHaveAttribute(
+    "data-route-visible",
+    "true",
+  );
+  await expect(page.locator('[data-thread-layer="future"]')).toHaveAttribute(
+    "data-route-visible",
+    "true",
+  );
+  await captureEvidence(page, "14023448720-story-flight-desktop-chase-live.png");
   expectNoRuntimeErrors(consoleErrors, pageErrors);
 });
 

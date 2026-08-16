@@ -399,3 +399,33 @@ Do not migrate renderers for the next iteration.
 Make the camera composition the primary design system, make the route a quiet temporal trace, and make every other layer prove that it helps the viewer feel progression through a real place.
 
 If this package passes the live-provider scorecard and the desired result still depends on true gradient, glow, emissive, trim, depth-fail, or exact screen-projection control, then the remaining gap is architectural and ADR-0009 should be revisited explicitly.
+
+## Implementation outcome
+
+Implemented on 2026-08-16 without changing the primary Google Photorealistic 3D renderer.
+
+The production Replay now measures its header and control dock, exposes a terrain subject band, and adapts tracking center, range, and tilt around occupied screen space.
+
+One animation-frame clock now advances the map camera, temporal route treatment, directional playhead, and elevation cursor while React text updates remain throttled.
+
+Tracking uses short coral traveled, peach lead, and pearl upcoming segments with a restrained casing.
+
+Overview and release shots retain the complete contextual route.
+
+The playhead is a bearing-aware directional needle with no looping pulse.
+
+The permanent full-screen wash was replaced by local top, bottom, and chapter scrims with a 150 millisecond chrome transition and a 1.8 second idle exit.
+
+Reduced-motion playback holds a static overview camera while progress, chapters, telemetry, seeking, and explicit camera controls remain functional.
+
+Range-dependent line width now changes in stable buckets rather than continuously rebuilding the visual weight.
+
+The live-provider evidence is stored under `app/e2e/evidence/auto-director/`, including visible-HUD and immersive desktop chase frames for Crete.
+
+Deterministic production Replay passed 9 browser tests.
+
+The focused camera, filament, and framing suite passed 23 unit tests.
+
+The live Google gate passed both desktop navigator routes, the production desktop chase frame, both phone navigators, the production phone composition, the San Francisco runner mesh case, trailer/export cases, and both cinematic director routes.
+
+One San Francisco director camera sample exceeded its existing step threshold during the combined live run and passed on immediate isolated rerun, so it is recorded as provider-timing variance rather than a reproducible implementation regression.
