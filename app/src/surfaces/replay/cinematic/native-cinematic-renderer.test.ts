@@ -8,6 +8,7 @@ import {
 import { stabilizeCamera } from "@/surfaces/replay/cinematic/native-cinematic-renderer";
 import {
   buildCinematicThreadStyles,
+  conditionCinematicPath,
   slicePathByRatio,
 } from "@/surfaces/replay/cinematic/cinematic-route-filament";
 
@@ -212,5 +213,25 @@ describe("cinematic route filament", () => {
       { lat: 10, lng: 10 },
       { lat: 15, lng: 15 },
     ]);
+  });
+
+  it("removes redundant wide-view points while preserving endpoints and turns", () => {
+    const path = [
+      { lat: 37, lng: 23 },
+      { lat: 37.000_01, lng: 23.000_01 },
+      { lat: 37.000_02, lng: 23.000_02 },
+      { lat: 37.000_3, lng: 23.000_02 },
+      { lat: 37.000_04, lng: 23.000_51 },
+    ];
+
+    const close = conditionCinematicPath(path, 600);
+    const overview = conditionCinematicPath(path, 8_000);
+
+    expect(close[0]).toEqual(path[0]);
+    expect(close.at(-1)).toEqual(path.at(-1));
+    expect(overview[0]).toEqual(path[0]);
+    expect(overview.at(-1)).toEqual(path.at(-1));
+    expect(overview).toContainEqual(path[3]);
+    expect(overview.length).toBeLessThan(close.length);
   });
 });
