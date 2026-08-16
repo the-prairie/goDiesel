@@ -60,10 +60,10 @@ interface FilamentLayer {
 }
 
 const FILAMENT_CLEARANCE_M: Record<CinematicFilamentRole, number> = {
-  guide: 0.08,
+  context: 0.08,
   future: 0.14,
-  thread: 0.2,
-  glint: 0.28,
+  traveled: 0.2,
+  lead: 0.26,
 };
 
 const GOOGLE_SCENE_READY_TIMEOUT_MS = 30_000;
@@ -97,6 +97,8 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
   private map?: google.maps.maps3d.Map3DElement;
   private routeLine?: google.maps.maps3d.Polyline3DElement;
   private filamentLayers: FilamentLayer[] = [];
+  private playheadMarker?: google.maps.maps3d.MarkerElement;
+  private playheadVisual?: HTMLDivElement;
   private routePath: Array<{ lat: number; lng: number }> = [];
   private routeDistanceM = 1;
   private routeWidth = 8;
@@ -149,6 +151,7 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
         GestureHandling,
         Map3DElement,
         MapMode,
+        MarkerElement,
         Polyline3DElement,
       } = (await google.maps.importLibrary("maps3d")) as google.maps.Maps3DLibrary;
       if (generation !== this.generation) return;
@@ -192,6 +195,22 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
           map,
           routePath,
         });
+        const playheadVisual = document.createElement("div");
+        playheadVisual.className = "godiesel-route-playhead";
+        playheadVisual.dataset.moving = "false";
+        const playheadMarker = new MarkerElement({
+          altitudeMode,
+          anchorLeft: "-50%",
+          anchorTop: "-50%",
+          position: { ...routePath[0], altitude: 0.34 },
+          title: "Current route position",
+        });
+        playheadMarker.dataset.testid = "google-route-playhead";
+        playheadMarker.style.display = "none";
+        playheadMarker.append(playheadVisual);
+        map.append(playheadMarker);
+        this.playheadMarker = playheadMarker;
+        this.playheadVisual = playheadVisual;
       } else {
         routeLine = new Polyline3DElement({
           path: routePath,
@@ -258,6 +277,7 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
     this.filamentLayers.forEach(({ element }) => {
       element.altitudeMode = altitudeMode;
     });
+    if (this.playheadMarker) this.playheadMarker.altitudeMode = altitudeMode;
   }
 
   setCinematicRoute(treatment: CinematicRouteTreatment) {
@@ -294,6 +314,20 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
       setLineVisibility(layer.element, style.opacity > 0.01);
       layer.element.style.opacity = String(style.opacity);
     }
+    if (this.playheadMarker && this.playheadVisual) {
+      const [position] = slicePathByRatio(
+        this.routePath,
+        treatment.focusRatio,
+        treatment.focusRatio,
+      );
+      this.playheadMarker.position = { ...position, altitude: 0.34 };
+      const visible = styles.some((style) => style.opacity > 0.01);
+      this.playheadMarker.style.display = visible ? "" : "none";
+      this.playheadMarker.dataset.routeVisible = String(visible);
+      this.playheadVisual.dataset.moving = String(
+        treatment.shotKind !== "release" && treatment.motionIntensity > 0.45,
+      );
+    }
   }
 
   setRouteReveal(progress: number) {
@@ -321,6 +355,8 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
     this.map = undefined;
     this.routeLine = undefined;
     this.filamentLayers = [];
+    this.playheadMarker = undefined;
+    this.playheadVisual = undefined;
     this.routePath = [];
     this.routeDistanceM = 1;
     this.headingDeg = undefined;
@@ -346,10 +382,10 @@ function createFilamentLayers({
   routePath: Array<{ lat: number; lng: number }>;
 }) {
   const roles: FilamentLayer["role"][] = [
-    "guide",
+    "context",
     "future",
-    "thread",
-    "glint",
+    "traveled",
+    "lead",
   ];
   return roles.map((role, index) => {
     const element = new Polyline3DElement({
