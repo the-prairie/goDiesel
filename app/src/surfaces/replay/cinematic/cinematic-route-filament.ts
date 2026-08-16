@@ -1,4 +1,8 @@
-export type CinematicFilamentRole = "guide" | "future" | "thread" | "glint";
+export type CinematicFilamentRole =
+  | "context"
+  | "future"
+  | "traveled"
+  | "lead";
 
 export interface CinematicRouteTreatment {
   endRatio: number;
@@ -30,57 +34,52 @@ export function buildCinematicThreadStyles(
   const rangeScale = clamp(
     Math.log2(Math.max(350, treatment.rangeM) / 350) / 4.2,
   );
-  const shotScale =
-    treatment.shotKind === "release"
-      ? 0.84
-      : treatment.shotKind === "tracking"
-        ? 1
-        : 1.05;
-  const ribbonWidth = (4.6 + rangeScale * 0.8) * shotScale;
-  const glintSpan = clamp(55 / Math.max(1, totalDistanceM), 0.0006, 0.006);
+  const shotScale = treatment.shotKind === "release" ? 0.84 : 1;
+  const threadWidth = (2.65 + rangeScale * 0.4) * shotScale;
+  const leadSpan = clamp(160 / Math.max(1, totalDistanceM), 0.0015, 0.012);
   const isRelease = treatment.shotKind === "release";
   const hasTreatment = end > start;
-  const motionLift = 0.96 + clamp(treatment.motionIntensity) * 0.04;
+  const motionLift = 0.98 + clamp(treatment.motionIntensity) * 0.04;
   return [
     {
       color: "#f4efe7",
       endRatio: isRelease ? 1 : end,
-      opacity: hasTreatment ? (isRelease ? 0.42 : 0.82) : 0,
-      outerColor: "rgba(23, 35, 58, 0.56)",
-      outerWidth: 0.12,
-      role: "guide",
+      opacity: hasTreatment ? (isRelease ? 0.2 : 0.26) : 0,
+      outerColor: "transparent",
+      outerWidth: 0,
+      role: "context",
       startRatio: isRelease ? 0 : start,
-      width: ribbonWidth + 2,
+      width: threadWidth + 0.55,
     },
     {
       color: "#fffaf2",
       endRatio: end,
-      opacity: hasTreatment ? (isRelease ? 0.5 : 0.94) : 0,
+      opacity: hasTreatment ? (isRelease ? 0.32 : 0.68) : 0,
       outerColor: "transparent",
       outerWidth: 0,
       role: "future",
       startRatio: focus,
-      width: ribbonWidth * 0.82,
+      width: threadWidth * 0.65,
     },
     {
       color: "#f06b50",
       endRatio: focus,
-      opacity: hasTreatment ? (isRelease ? 0.7 : 0.98) : 0,
-      outerColor: "rgba(50, 31, 40, 0.64)",
-      outerWidth: 0.18,
-      role: "thread",
+      opacity: hasTreatment ? (isRelease ? 0.54 : 0.96) : 0,
+      outerColor: "transparent",
+      outerWidth: 0,
+      role: "traveled",
       startRatio: start,
-      width: ribbonWidth * motionLift,
+      width: threadWidth * motionLift,
     },
     {
-      color: "#fffdf6",
-      endRatio: Math.min(end, focus + glintSpan * 0.2),
-      opacity: hasTreatment ? (isRelease ? 0.58 : 1) : 0,
-      outerColor: "rgba(240, 107, 80, 0.92)",
-      outerWidth: 0.32,
-      role: "glint",
-      startRatio: Math.max(start, focus - glintSpan),
-      width: ribbonWidth + 1.8,
+      color: "#ffd9c8",
+      endRatio: Math.min(end, focus + leadSpan),
+      opacity: hasTreatment ? (isRelease ? 0.4 : 0.9) : 0,
+      outerColor: "transparent",
+      outerWidth: 0,
+      role: "lead",
+      startRatio: focus,
+      width: threadWidth + 0.4,
     },
   ];
 }

@@ -108,14 +108,14 @@ Status: Verified
 - [x] Preserve labeled direct chapter jumps where the viewport has room.
 - [x] Keep 44 px targets, safe-area clearance, and the compact terrain-visibility budget.
 
-### 10. Story Flight terrain ribbon
+### 10. Story Flight terrain thread
 
 Status: Verified
 
-- [x] Replace the scratchy route filament with a camera-aware pearl terrain ribbon.
+- [x] Replace the scratchy route filament with a camera-aware terrain thread.
 - [x] Distinguish travelled route in coral and upcoming route in pearl without obscuring terrain.
-- [x] Give the current route position a short luminous playhead treatment.
-- [x] Verify the four semantic ribbon layers against live Google 3D terrain at overview, playback, and chase distances.
+- [x] Mark the exact current route position with a terrain-anchored coral playhead and short blush lead.
+- [x] Verify the four semantic thread layers against live Google 3D terrain at overview, playback, and chase distances.
 
 ## Decisions
 
@@ -208,9 +208,10 @@ Status: Verified
 
 ### Slice 10
 
-- The route thread now renders as four intentional layers: a pearl terrain-separated guide, a quieter pearl future, a coral travelled segment, and a short luminous playhead.
-- Ribbon width responds conservatively to camera range so chase shots remain precise and overview shots remain legible without reading as a heavy map boundary.
-- The ticket gate passed with the production build and all 254 unit tests, including the ten-assertion cinematic style contract.
-- All eight deterministic production Replay scenarios passed after the final ribbon values were applied.
-- A headed live Google 3D Crete journey passed on 2026-08-15 and asserted the final layer widths, opacities, and casing proportions in the provider DOM.
+- The route thread now renders as four intentional states: a quiet pearl context trace, a fine pearl future, a coral travelled segment, and a short blush lead.
+- A custom Google 3D marker anchors the coral playhead to the recorded position. Its restrained motion halo is disabled for reduced-motion users.
+- Thread width responds conservatively to camera range. The final treatment removes the previous dark casing and oversized white glint so terrain remains dominant at overview and chase distances.
+- The ticket gate passed on 2026-08-16 with the production build and all 254 unit tests, including the ten-assertion cinematic style contract.
+- All eight deterministic production Replay scenarios passed after the final thread and playhead values were applied.
+- A headed live Google 3D Crete journey passed on 2026-08-16 and asserted the final layer widths, opacities, casing removal, playhead visibility, and motion state in the provider DOM.
 - Live overview, active-playback, and chase evidence frames were captured and visually inspected against ocean, pale rock, and detailed photogrammetry.

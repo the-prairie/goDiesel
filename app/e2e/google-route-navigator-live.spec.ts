@@ -107,6 +107,7 @@ for (const route of ROUTES) {
     });
     await expect(page.locator("gmp-map-3d")).toBeVisible();
     await expect(page.locator("gmp-polyline-3d")).toHaveCount(4);
+    await expect(page.getByTestId("google-route-playhead")).toBeAttached();
     await expect(page.getByTestId("google-route-controls")).toBeVisible();
     await expect(navigator).toHaveAttribute("data-hud-state", "expanded");
     await expect(navigator).toHaveAttribute("data-camera-mode", "auto");
@@ -136,15 +137,21 @@ for (const route of ROUTES) {
       );
     const ribbonLayer = (role: string) =>
       ribbonLayers.find((layer) => layer.role === role);
-    expect(ribbonLayer("guide")?.strokeWidth ?? 0).toBeGreaterThan(6.5);
-    expect(ribbonLayer("guide")?.outerWidth ?? 0).toBeGreaterThan(0.1);
-    expect(ribbonLayer("future")?.strokeWidth ?? 0).toBeGreaterThan(3.5);
-    expect(ribbonLayer("thread")?.strokeWidth ?? 0).toBeGreaterThan(4.5);
-    expect(ribbonLayer("thread")?.opacity ?? 0).toBeGreaterThan(0.9);
-    expect(ribbonLayer("glint")?.strokeWidth ?? 0).toBeGreaterThan(
-      ribbonLayer("thread")?.strokeWidth ?? Number.POSITIVE_INFINITY,
+    expect(ribbonLayer("context")?.strokeWidth ?? 0).toBeGreaterThan(3.1);
+    expect(ribbonLayer("context")?.strokeWidth ?? 99).toBeLessThan(4);
+    expect(ribbonLayer("context")?.outerWidth ?? 0).toBe(0);
+    expect(ribbonLayer("context")?.opacity ?? 1).toBeLessThan(0.3);
+    expect(ribbonLayer("future")?.strokeWidth ?? 0).toBeGreaterThan(1.7);
+    expect(ribbonLayer("traveled")?.strokeWidth ?? 0).toBeGreaterThan(2.6);
+    expect(ribbonLayer("traveled")?.opacity ?? 0).toBeGreaterThan(0.9);
+    expect(ribbonLayer("lead")?.strokeWidth ?? 0).toBeGreaterThan(
+      ribbonLayer("traveled")?.strokeWidth ?? Number.POSITIVE_INFINITY,
     );
-    expect(ribbonLayer("glint")?.outerWidth ?? 0).toBeGreaterThan(0.3);
+    expect(ribbonLayer("lead")?.outerWidth ?? 0).toBe(0);
+    await expect(page.getByTestId("google-route-playhead")).toBeVisible();
+    await expect(
+      page.getByTestId("google-route-playhead").locator("div"),
+    ).toHaveAttribute("data-moving", "true");
     await page.waitForTimeout(3_500);
     await captureEvidence(page, `${route.slug}-desktop-playback.png`);
     await page.getByRole("button", { name: "Pause route" }).click();
