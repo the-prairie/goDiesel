@@ -939,7 +939,7 @@ function ReplaySettings({
   return (
     <aside
       aria-label="Replay settings panel"
-      className="absolute right-3 top-14 z-40 w-[min(21rem,calc(100%-1.5rem))] border border-white/18 bg-[#081011]/94 p-4 text-white shadow-2xl backdrop-blur-xl sm:right-5"
+      className="absolute right-3 top-14 z-40 max-h-[calc(100dvh-4.5rem)] w-[min(27rem,calc(100%-1.5rem))] overflow-y-auto border border-white/18 bg-[#081011]/94 p-4 text-white shadow-2xl backdrop-blur-xl sm:right-5"
     >
       <div className="flex items-center justify-between">
         <div>
@@ -996,7 +996,7 @@ function ReplaySettings({
         <SettingGroup icon={Gauge} label="Lens range">
           <Button
             aria-label="Zoom in"
-            className="border-white/20 bg-transparent text-white hover:bg-white/10"
+            className="flex-1 border-white/20 bg-transparent text-white hover:bg-white/10"
             onClick={() =>
               onCommit((current) => zoomGoogleRouteNavigator(current, "in"))
             }
@@ -1009,7 +1009,7 @@ function ReplaySettings({
           </Button>
           <Button
             aria-label="Zoom out"
-            className="border-white/20 bg-transparent text-white hover:bg-white/10"
+            className="flex-1 border-white/20 bg-transparent text-white hover:bg-white/10"
             onClick={() =>
               onCommit((current) => zoomGoogleRouteNavigator(current, "out"))
             }
@@ -1063,12 +1063,12 @@ function SettingGroup({
   label: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <div className="flex items-center gap-2 text-xs text-white/58">
+    <div className="grid min-w-0 gap-2 sm:grid-cols-[7.25rem_minmax(0,1fr)] sm:items-center sm:gap-3">
+      <div className="flex min-w-0 items-center gap-2 text-xs text-white/58">
         <Icon aria-hidden="true" className="size-3.5" />
         {label}
       </div>
-      <div className="flex border border-white/15 bg-black/25 p-0.5">
+      <div className="flex min-w-0 w-full border border-white/15 bg-black/25 p-0.5 [&>button]:min-w-0">
         {children}
       </div>
     </div>
@@ -1089,7 +1089,7 @@ function SettingButton({
       aria-label={label === "Locked" ? "Resume following" : label}
       aria-pressed={active}
       className={cn(
-        "min-h-7 px-2.5 text-[11px] font-medium capitalize",
+        "min-h-7 flex-1 px-1.5 text-[11px] font-medium capitalize sm:px-2.5",
         active ? "bg-white text-black" : "text-white/58 hover:bg-white/10",
       )}
       onClick={onClick}

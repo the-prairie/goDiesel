@@ -138,6 +138,110 @@ test("presents production Replay as an immersive Story Flight", async ({
   ).toBeVisible();
 });
 
+test("keeps desktop chapter names visible without interaction", async ({
+  page,
+}) => {
+  await installGoogleReplay(page, "ready");
+  await page.setViewportSize({ width: 1440, height: 960 });
+  await page.goto("/#/replay/14023448720");
+
+  const labels = page.getByTestId("story-flight-chapter-label");
+  await expect(labels).toHaveCount(5);
+  for (const label of await labels.all()) {
+    await expect(label).toBeVisible();
+    expect(
+      Number(
+        await label.evaluate((element) => getComputedStyle(element).opacity),
+      ),
+    ).toBeGreaterThanOrEqual(0.7);
+  }
+  const boxes = await labels.evaluateAll((elements) =>
+    elements.map((element) => {
+      const { bottom, left, right, top } = element.getBoundingClientRect();
+      return { bottom, left, right, text: element.textContent?.trim(), top };
+    }),
+  );
+  for (const [index, box] of boxes.entries()) {
+    for (const other of boxes.slice(index + 1)) {
+      const overlap =
+        box.left < other.right &&
+        box.right > other.left &&
+        box.top < other.bottom &&
+        box.bottom > other.top;
+      expect(
+        overlap,
+        `${box.text} overlaps ${other.text}: ${JSON.stringify({ box, other })}`,
+      ).toBe(false);
+    }
+  }
+});
+
+for (const viewport of [
+  { name: "desktop", width: 1440, height: 960 },
+  { name: "reported breakpoint", width: 996, height: 768 },
+  { name: "phone", width: 390, height: 844 },
+] as const) {
+  test(`keeps Replay settings contained on ${viewport.name}`, async ({
+    page,
+  }) => {
+    await installGoogleReplay(page, "ready");
+    await page.setViewportSize(viewport);
+    await page.goto("/#/replay/14023448720");
+    await page.getByRole("button", { name: "Replay settings" }).click();
+
+    const panel = page.getByRole("complementary", {
+      name: "Replay settings panel",
+    });
+    await expect(panel).toBeVisible();
+    const panelBox = await panel.boundingBox();
+    expect(panelBox).not.toBeNull();
+    expect(panelBox?.x ?? -1).toBeGreaterThanOrEqual(0);
+    expect((panelBox?.x ?? 0) + (panelBox?.width ?? 0)).toBeLessThanOrEqual(
+      viewport.width,
+    );
+    expect((panelBox?.y ?? 0) + (panelBox?.height ?? 0)).toBeLessThanOrEqual(
+      viewport.height,
+    );
+
+    for (const name of [
+      "ground",
+      "mesh",
+      "Resume following",
+      "Free",
+      "Auto",
+      "Runner",
+      "Chase",
+      "Overview",
+      "Zoom in",
+      "Zoom out",
+    ]) {
+      const control = panel.getByRole("button", { name, exact: true });
+      await expect(control).toBeVisible();
+      const controlBox = await control.boundingBox();
+      expect(controlBox).not.toBeNull();
+      expect(controlBox?.x ?? -1).toBeGreaterThanOrEqual(panelBox?.x ?? 0);
+      expect(
+        (controlBox?.x ?? 0) + (controlBox?.width ?? 0),
+      ).toBeLessThanOrEqual(
+        (panelBox?.x ?? 0) + (panelBox?.width ?? 0) + 1,
+      );
+      expect(controlBox?.y ?? -1).toBeGreaterThanOrEqual(panelBox?.y ?? 0);
+      expect(
+        (controlBox?.y ?? 0) + (controlBox?.height ?? 0),
+      ).toBeLessThanOrEqual(
+        Math.min(
+          (panelBox?.y ?? 0) + (panelBox?.height ?? 0) + 1,
+          viewport.height,
+        ),
+      );
+    }
+
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(
+      viewport.width,
+    );
+  });
+}
+
 test("hands manual map movement camera ownership until Recenter", async ({
   page,
 }) => {

@@ -473,7 +473,9 @@ function StoryMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 border-r border-line px-3 py-4 last:border-r-0">
       <dt className="text-micro uppercase text-ink-muted">{label}</dt>
-      <dd className="mt-1 truncate font-editorial text-lg text-ink">{value}</dd>
+      <dd className="mt-1 break-words font-editorial text-lg leading-snug text-ink">
+        {value}
+      </dd>
     </div>
   );
 }

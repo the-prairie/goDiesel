@@ -163,6 +163,21 @@ test("draft guide omits missing editorial fields and honors replay eligibility",
   await page.goto(`/#/routes/${routeSlug}`);
 
   await expect(page.getByText("Guide not yet reviewed", { exact: true })).toBeVisible();
+  const guideStatus = page.getByText("Guide not yet reviewed", { exact: true });
+  await expect(guideStatus).not.toHaveCSS("text-overflow", "ellipsis");
+  expect(
+    await guideStatus.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      const parentBounds = element.parentElement?.getBoundingClientRect();
+      return (
+        element.scrollWidth <= element.clientWidth &&
+        element.scrollHeight <= element.clientHeight &&
+        parentBounds !== undefined &&
+        bounds.right <= parentBounds.right &&
+        bounds.bottom <= parentBounds.bottom
+      );
+    }),
+  ).toBe(true);
   await expect(page.getByRole("link", { name: "Cinematic replay" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Replay unavailable" })).toBeDisabled();
 });

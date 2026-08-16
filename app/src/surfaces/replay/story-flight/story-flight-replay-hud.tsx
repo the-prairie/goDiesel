@@ -24,6 +24,7 @@ import {
   type ReplayStoryChapter,
 } from "@/surfaces/replay/story-flight/story-flight-chapters";
 import { Button } from "@/ui/button";
+import { cn } from "@/ui/utils";
 
 interface StoryFlightReplayHudProps {
   activeChapterIndex: number;
@@ -187,7 +188,17 @@ export function StoryFlightReplayHud({
                   type="button"
                 >
                   <span className="size-2.5 rounded-full border-2 border-white bg-[#b8afd9] shadow-[0_0_0_1px_#9ca8bf] group-aria-[current=step]:bg-[#e789bd] group-aria-[current=step]:shadow-[0_0_0_6px_rgba(231,137,189,.2)]" />
-                  <strong className="hidden max-w-full truncate text-[10px] font-semibold opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100 group-aria-[current=step]:opacity-100 lg:block">
+                  <strong
+                    className={cn(
+                      "hidden max-w-none whitespace-nowrap rounded-sm bg-[#f5f7fb]/82 px-1 text-[10px] font-semibold leading-none text-[#51617f] opacity-70 shadow-sm backdrop-blur-sm transition-[color,opacity] duration-150 group-hover:text-[#1d2946] group-hover:opacity-100 group-focus-visible:text-[#1d2946] group-focus-visible:opacity-100 group-aria-[current=step]:text-[#b94f83] group-aria-[current=step]:opacity-100 lg:block",
+                      index > 0 &&
+                        chapter.progressRatio -
+                          chapters[index - 1].progressRatio <
+                          0.1 &&
+                        "translate-y-6",
+                    )}
+                    data-testid="story-flight-chapter-label"
+                  >
                     {chapter.label}
                   </strong>
                 </button>
