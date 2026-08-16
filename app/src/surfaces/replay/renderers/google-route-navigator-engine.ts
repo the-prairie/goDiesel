@@ -324,6 +324,14 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
       const visible = styles.some((style) => style.opacity > 0.01);
       this.playheadMarker.style.display = visible ? "" : "none";
       this.playheadMarker.dataset.routeVisible = String(visible);
+      const cameraHeading = this.headingDeg ?? treatment.cameraHeadingDeg ?? 0;
+      const relativeBearing =
+        ((treatment.bearingDeg ?? cameraHeading) - cameraHeading + 360) % 360;
+      this.playheadVisual.style.setProperty(
+        "--route-playhead-bearing",
+        `${relativeBearing.toFixed(1)}deg`,
+      );
+      this.playheadVisual.dataset.relativeBearing = relativeBearing.toFixed(1);
       this.playheadVisual.dataset.moving = String(
         treatment.shotKind !== "release" && treatment.motionIntensity > 0.45,
       );

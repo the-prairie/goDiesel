@@ -2,7 +2,11 @@ import { ChevronLeft, ChevronRight, Gauge, Pause, Play } from "lucide-react";
 
 import { routeRepairs } from "@/domain/geometry/route-repairs";
 import type { QuestRoute } from "@/domain/route";
-import { ReplayElevationScrubber } from "@/surfaces/replay/components/replay-elevation-scrubber";
+import {
+  ReplayElevationScrubber,
+  type ReplayElevationScrubberHandle,
+} from "@/surfaces/replay/components/replay-elevation-scrubber";
+import type { Ref } from "react";
 import {
   formatReplayDuration,
   formatReplayPace,
@@ -26,6 +30,7 @@ interface StoryFlightReplayHudProps {
   chapters: ReplayStoryChapter[];
   control: GoogleRouteNavigatorState;
   disabled: boolean;
+  elevationScrubberRef?: Ref<ReplayElevationScrubberHandle>;
   onCommit: (
     update: (current: GoogleRouteNavigatorState) => GoogleRouteNavigatorState,
   ) => void;
@@ -41,6 +46,7 @@ export function StoryFlightReplayHud({
   chapters,
   control,
   disabled,
+  elevationScrubberRef,
   onCommit,
   onSelectCamera,
   onTogglePlayback,
@@ -181,13 +187,14 @@ export function StoryFlightReplayHud({
                   type="button"
                 >
                   <span className="size-2.5 rounded-full border-2 border-white bg-[#b8afd9] shadow-[0_0_0_1px_#9ca8bf] group-aria-[current=step]:bg-[#e789bd] group-aria-[current=step]:shadow-[0_0_0_6px_rgba(231,137,189,.2)]" />
-                  <strong className="hidden max-w-full truncate text-[10px] font-semibold lg:block">
+                  <strong className="hidden max-w-full truncate text-[10px] font-semibold opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100 group-aria-[current=step]:opacity-100 lg:block">
                     {chapter.label}
                   </strong>
                 </button>
               ))}
             </nav>
             <ReplayElevationScrubber
+              ref={elevationScrubberRef}
               className="h-12 rounded-md border-0 bg-transparent lg:h-[5.25rem] lg:pt-6"
               compact
               disabled={disabled}

@@ -320,7 +320,7 @@ test("keeps playback telemetry visible on a phone", async ({ page }) => {
   );
   await page.waitForTimeout(2_000);
   await page.getByTestId("replay-stage").dispatchEvent("pointermove");
-  await page.waitForTimeout(1_800);
+  await page.waitForTimeout(900);
   await expect(page.getByTestId("replay-stage")).toHaveAttribute(
     "data-hud-state",
     "expanded",
@@ -328,7 +328,7 @@ test("keeps playback telemetry visible on a phone", async ({ page }) => {
   await expect(page.getByTestId("replay-stage")).toHaveAttribute(
     "data-hud-state",
     "hidden",
-    { timeout: 2_500 },
+    { timeout: 1_500 },
   );
   await page.getByTestId("replay-stage").dispatchEvent("pointermove");
   await expect(page.getByTestId("replay-stage")).toHaveAttribute(
@@ -340,6 +340,47 @@ test("keeps playback telemetry visible on a phone", async ({ page }) => {
     "hidden",
     { timeout: 5_000 },
   );
+});
+
+test("keeps reduced-motion playback on a static overview edit", async ({
+  page,
+}) => {
+  await installGoogleReplay(page, "ready");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/#/replay/14023448720");
+
+  const replay = page.getByTestId("replay-stage");
+  await expect(replay).toHaveAttribute("data-reduced-motion", "true");
+  await expect(replay).toHaveAttribute("data-directed-camera", "overview");
+  await page.evaluate(() => {
+    const replayWindow = window as typeof window & {
+      __GODIESEL_CAMERA_CALLS__?: unknown[];
+    };
+    replayWindow.__GODIESEL_CAMERA_CALLS__ = [];
+  });
+  await page.getByRole("button", { name: "Play route" }).click();
+  await expect
+    .poll(async () =>
+      Number(
+        (await page.getByTestId("google-route-progress").textContent())?.split(
+          " ",
+        )[0],
+      ),
+    )
+    .toBeGreaterThan(0);
+  await expect(replay).toHaveAttribute("data-hud-state", "expanded");
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as typeof window & {
+              __GODIESEL_CAMERA_CALLS__?: unknown[];
+            }
+          ).__GODIESEL_CAMERA_CALLS__?.length ?? 0,
+      ),
+    )
+    .toBe(0);
 });
 
 test("keeps mobile chapter controls named, touchable, and above the safe area", async ({

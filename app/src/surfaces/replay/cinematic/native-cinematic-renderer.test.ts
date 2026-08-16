@@ -101,21 +101,24 @@ describe("cinematic route filament", () => {
     expect(context?.startRatio).toBe(0.31);
     expect(context?.endRatio).toBe(0.68);
     expect(context?.color).toBe("#f4efe7");
-    expect(context?.opacity ?? 1).toBeLessThan(0.4);
-    expect(context?.outerWidth).toBe(0);
+    expect(context?.opacity).toBe(0);
+    expect(context?.outerWidth).toBeCloseTo(0.1);
     expect(traveled?.endRatio).toBe(0.61);
     expect(traveled?.startRatio).toBe(0.31);
     expect(traveled?.color).toBe("#f06b50");
-    expect(traveled?.width ?? 0).toBeGreaterThan(2.6);
-    expect(traveled?.width ?? 0).toBeLessThan(3.6);
+    expect(traveled?.width ?? 0).toBeGreaterThan(2.2);
+    expect(traveled?.width ?? 0).toBeLessThan(2.8);
     expect(traveled?.outerWidth).toBe(0);
     expect(future?.opacity ?? 1).toBeLessThan(traveled?.opacity ?? 0);
     expect(future?.color).toBe("#fffaf2");
     expect(future?.width ?? 99).toBeLessThan(traveled?.width ?? 0);
+    expect(future?.startRatio ?? 0).toBeGreaterThan(lead?.startRatio ?? 1);
     expect(lead?.color).toBe("#ffd9c8");
     expect(lead?.outerWidth).toBe(0);
     expect(lead?.startRatio).toBe(0.61);
-    expect(lead?.endRatio).toBeCloseTo(0.61744, 4);
+    expect(((lead?.endRatio ?? 0) - (lead?.startRatio ?? 0)) * 21_500).toBeCloseTo(
+      110,
+    );
     expect((lead?.endRatio ?? 0) - (lead?.startRatio ?? 1)).toBeLessThan(0.008);
   });
 
@@ -131,10 +134,10 @@ describe("cinematic route filament", () => {
       },
       28_500,
     );
-    const context = styles.find(({ role }) => role === "context");
     const traveled = styles.find(({ role }) => role === "traveled");
-    expect(context?.width ?? 0).toBeGreaterThan(3.15);
-    expect(traveled?.width ?? 0).toBeGreaterThan(2.6);
+    const lead = styles.find(({ role }) => role === "lead");
+    expect(traveled?.width ?? 0).toBeGreaterThan(2.2);
+    expect(lead?.width ?? 0).toBeGreaterThan(traveled?.width ?? 0);
   });
 
   it("keeps the terrain thread legible in distant overview shots", () => {
