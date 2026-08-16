@@ -122,6 +122,81 @@ export function slicePathByRatio<T extends { lat: number; lng: number }>(
   return points;
 }
 
+export function conditionCinematicPath<T extends { lat: number; lng: number }>(
+  path: T[],
+  rangeM: number,
+): Array<{ lat: number; lng: number }> {
+  if (path.length < 3 || rangeM <= 800) return path;
+  const toleranceM =
+    rangeM <= 2_500 ? 2 : rangeM <= 6_000 ? 5 : 10;
+  const retained = new Set<number>([0, path.length - 1]);
+  const segments: Array<[number, number]> = [[0, path.length - 1]];
+  while (segments.length > 0) {
+    const [startIndex, endIndex] = segments.pop() ?? [0, 0];
+    const detailIndex = mostDetailedPoint(
+      path,
+      startIndex,
+      endIndex,
+      toleranceM,
+    );
+    if (detailIndex < 0) continue;
+    retained.add(detailIndex);
+    segments.push([startIndex, detailIndex], [detailIndex, endIndex]);
+  }
+  return [...retained]
+    .sort((a, b) => a - b)
+    .map((index) => ({ lat: path[index].lat, lng: path[index].lng }));
+}
+
+function mostDetailedPoint<T extends { lat: number; lng: number }>(
+  path: T[],
+  startIndex: number,
+  endIndex: number,
+  toleranceM: number,
+) {
+  let detailIndex = -1;
+  let greatestDistanceM = 0;
+  for (let index = startIndex + 1; index < endIndex; index += 1) {
+    const distanceM = pointToSegmentDistanceM(
+      path[index],
+      path[startIndex],
+      path[endIndex],
+    );
+    if (distanceM > greatestDistanceM) {
+      detailIndex = index;
+      greatestDistanceM = distanceM;
+    }
+  }
+  return greatestDistanceM > toleranceM ? detailIndex : -1;
+}
+
+function pointToSegmentDistanceM(
+  point: { lat: number; lng: number },
+  start: { lat: number; lng: number },
+  end: { lat: number; lng: number },
+) {
+  const latitudeRadians = (point.lat * Math.PI) / 180;
+  const xScale = 111_320 * Math.cos(latitudeRadians);
+  const pointX = point.lng * xScale;
+  const pointY = point.lat * 111_320;
+  const startX = start.lng * xScale;
+  const startY = start.lat * 111_320;
+  const endX = end.lng * xScale;
+  const endY = end.lat * 111_320;
+  const segmentX = endX - startX;
+  const segmentY = endY - startY;
+  const lengthSquared = segmentX * segmentX + segmentY * segmentY;
+  if (lengthSquared === 0) return Math.hypot(pointX - startX, pointY - startY);
+  const amount = clamp(
+    ((pointX - startX) * segmentX + (pointY - startY) * segmentY) /
+      lengthSquared,
+  );
+  return Math.hypot(
+    pointX - (startX + segmentX * amount),
+    pointY - (startY + segmentY * amount),
+  );
+}
+
 function interpolatePathPoint<T extends { lat: number; lng: number }>(
   path: T[],
   position: number,

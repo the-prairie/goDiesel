@@ -12,9 +12,11 @@ async function installGoogleReplay(page: Page, state: "ready" | "unavailable") {
         focusRatio: number;
         endRatio: number;
       }>;
+      __GODIESEL_CAMERA_INTERACTION__?: () => void;
       __GODIESEL_GOOGLE_ROUTE_NAVIGATOR_FACTORY__?: () => {
         mount(options: {
           container: HTMLElement;
+          onCameraInteraction?: () => void;
           onStatus: (status: {
             state: "ready" | "unavailable";
             message: string;
@@ -48,7 +50,8 @@ async function installGoogleReplay(page: Page, state: "ready" | "unavailable") {
     replayWindow.__GODIESEL_CINEMATIC_ROUTE_CALLS__ = [];
     replayWindow.__GODIESEL_CAMERA_CALLS__ = [];
     replayWindow.__GODIESEL_GOOGLE_ROUTE_NAVIGATOR_FACTORY__ = () => ({
-      async mount({ container, onStatus }) {
+      async mount({ container, onCameraInteraction, onStatus }) {
+        replayWindow.__GODIESEL_CAMERA_INTERACTION__ = onCameraInteraction;
         if (providerState === "unavailable") {
           onStatus({
             state: "unavailable",
@@ -133,6 +136,47 @@ test("presents production Replay as an immersive Story Flight", async ({
   await expect(
     page.getByRole("button", { name: "Change route" }),
   ).toBeVisible();
+});
+
+test("hands manual map movement camera ownership until Recenter", async ({
+  page,
+}) => {
+  await installGoogleReplay(page, "ready");
+  await page.goto("/#/replay/14023448720");
+
+  const replay = page.getByTestId("replay-stage");
+  await page.getByRole("button", { name: "Play route" }).click();
+  await expect.poll(() => page.evaluate(() => (
+    window as typeof window & { __GODIESEL_CAMERA_CALLS__?: unknown[] }
+  ).__GODIESEL_CAMERA_CALLS__?.length ?? 0)).toBeGreaterThan(4);
+
+  await page.evaluate(() => (
+    window as typeof window & { __GODIESEL_CAMERA_INTERACTION__?: () => void }
+  ).__GODIESEL_CAMERA_INTERACTION__?.());
+  await expect(replay).toHaveAttribute("data-following", "false");
+  await expect(page.getByRole("button", { name: "Recenter route" })).toBeVisible();
+  const cameraCallsWhileFree = await page.evaluate(() => (
+    window as typeof window & { __GODIESEL_CAMERA_CALLS__?: unknown[] }
+  ).__GODIESEL_CAMERA_CALLS__?.length ?? 0);
+  const progressWhileFree = Number(
+    (await page.getByTestId("google-route-progress").textContent())?.split(" ")[0],
+  );
+  await page.waitForTimeout(2_200);
+  await expect(page.getByRole("button", { name: "Recenter route" })).toBeVisible();
+  await expect(replay).toHaveAttribute("data-hud-state", "expanded");
+  expect(await page.evaluate(() => (
+    window as typeof window & { __GODIESEL_CAMERA_CALLS__?: unknown[] }
+  ).__GODIESEL_CAMERA_CALLS__?.length ?? 0)).toBe(cameraCallsWhileFree);
+  await expect.poll(async () => Number(
+    (await page.getByTestId("google-route-progress").textContent())?.split(" ")[0],
+  )).toBeGreaterThan(progressWhileFree);
+
+  await page.getByRole("button", { name: "Recenter route" }).click();
+  await expect(replay).toHaveAttribute("data-following", "true");
+  await expect(page.getByRole("button", { name: "Recenter route" })).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => (
+    window as typeof window & { __GODIESEL_CAMERA_CALLS__?: unknown[] }
+  ).__GODIESEL_CAMERA_CALLS__?.length ?? 0)).toBeGreaterThan(cameraCallsWhileFree);
 });
 
 for (const routeSlug of ["14023448720", "14736711660"] as const) {

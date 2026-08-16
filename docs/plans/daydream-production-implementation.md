@@ -1,6 +1,6 @@
 # Daydream Production Implementation
 
-Last updated: 2026-08-15
+Last updated: 2026-08-16
 
 This checklist tracks the approved Daydream direction as it moves from the isolated lab prototype into the production application.
 
@@ -117,6 +117,17 @@ Status: Verified
 - [x] Mark the exact current route position with a terrain-anchored coral playhead and short blush lead.
 - [x] Verify the four semantic thread layers against live Google 3D terrain at overview, playback, and chase distances.
 
+### 11. Story Flight production cutover
+
+Status: Verified
+
+- [x] Give direct map gestures camera ownership without pausing route playback.
+- [x] Expose an explicit, accessible Recenter action that restores the authored camera.
+- [x] Condition render-only filament geometry by camera range while preserving recorded endpoints and route detail.
+- [x] Record a bounded 30-second frame, dropped-frame, and long-task report in the Replay stage.
+- [x] Verify following and free-camera composition on desktop and phone against live Google 3D terrain.
+- [x] Pass the complete release gate and the affected live-provider matrix.
+
 ## Decisions
 
 - The real Google 3D renderer remains the production replay engine.
@@ -215,3 +226,13 @@ Status: Verified
 - All eight deterministic production Replay scenarios passed after the final thread and playhead values were applied.
 - A headed live Google 3D Crete journey passed on 2026-08-16 and asserted the final layer widths, opacities, casing removal, playhead visibility, and motion state in the provider DOM.
 - Live overview, active-playback, and chase evidence frames were captured and visually inspected against ocean, pale rock, and detailed photogrammetry.
+
+### Slice 11
+
+- Manual pointer, wheel, and keyboard map input now releases the authored camera while playback, telemetry, the terrain thread, and the elevation cursor continue. Recenter restores the current directed pose in one explicit action.
+- Render-only route geometry now uses a camera-range tolerance, preserves exact segment endpoints and sharp turns, and skips path writes for invisible thread roles. In the live Crete playback sample, the visible layers carried 2 to 26 points and the wide context trace carried 41 points instead of the complete densified route.
+- The Replay stage now records a bounded 30-second performance report through data attributes. A headed live 10-second diagnostic measured a 18.5 ms p95 frame duration and a 0.34% over-34-ms frame ratio; the formal 30-second live gate passed its 34 ms p95 and 5% dropped-frame budgets.
+- Desktop following, desktop free-camera, and 390 x 844 free-camera frames were inspected against live Google terrain. The Recenter action remained legible, the phone controls retained stable targets, and the document had zero horizontal overflow.
+- The complete release gate passed on 2026-08-16: production build, all 260 unit tests, bundle budget, and all 93 production browser journeys.
+- The live Google matrix passed 13 of 15 journeys on its first run. Two navigator checks identified hidden-layer style drift; the renderer was corrected to preserve style contracts while skipping only expensive hidden geometry, and both affected San Francisco and Crete journeys passed on rerun.
+- Independent standards and product reviews identified performance-probe overhead, tap ownership, hidden Recenter, background-tab timing, and stale paused-camera rendering. All were corrected; the final 261-unit sweep, deterministic ownership journey, two live regional journeys, 30-second budget, and production phone free-camera journey passed, and both reviewers reported no remaining blockers.

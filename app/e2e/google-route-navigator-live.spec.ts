@@ -160,6 +160,64 @@ for (const route of ROUTES) {
     ).toHaveAttribute("data-relative-bearing", /\d/);
     await page.waitForTimeout(3_500);
     await captureEvidence(page, `${route.slug}-desktop-playback.png`);
+
+    const map = page.locator("gmp-map-3d");
+    const mapBox = await map.boundingBox();
+    expect(mapBox).not.toBeNull();
+    const interactionPoint = {
+      x: (mapBox?.x ?? 0) + (mapBox?.width ?? 0) * 0.72,
+      y: (mapBox?.y ?? 0) + (mapBox?.height ?? 0) * 0.42,
+    };
+    await page.mouse.click(interactionPoint.x, interactionPoint.y);
+    await expect(navigator).toHaveAttribute("data-following", "true");
+    const poseBeforeDrag = await map.evaluate((element) => {
+      const googleMap = element as google.maps.maps3d.Map3DElement;
+      return { center: googleMap.center, heading: googleMap.heading, range: googleMap.range };
+    });
+    const progressBeforeDrag = Number((await progress.textContent())?.split(" ")[0]);
+    await page.mouse.move(interactionPoint.x, interactionPoint.y);
+    await page.mouse.down();
+    await page.mouse.move(interactionPoint.x + 80, interactionPoint.y + 32, {
+      steps: 6,
+    });
+    await page.mouse.up();
+    await expect(navigator).toHaveAttribute("data-following", "false");
+    await expect(page.getByRole("button", { name: "Recenter route" })).toBeVisible();
+    await page.waitForTimeout(2_200);
+    await expect(page.getByRole("button", { name: "Recenter route" })).toBeVisible();
+    await expect(navigator).toHaveAttribute("data-hud-state", "expanded");
+    await expect
+      .poll(async () => Number((await progress.textContent())?.split(" ")[0]))
+      .toBeGreaterThan(progressBeforeDrag);
+    const poseAfterDrag = await map.evaluate((element) => {
+      const googleMap = element as google.maps.maps3d.Map3DElement;
+      return { center: googleMap.center, heading: googleMap.heading, range: googleMap.range };
+    });
+    expect(poseAfterDrag).not.toEqual(poseBeforeDrag);
+
+    await map.evaluate((element) => {
+      const googleMap = element as google.maps.maps3d.Map3DElement;
+      googleMap.range = 3_200;
+      googleMap.heading = ((googleMap.heading ?? 0) + 45) % 360;
+    });
+    await expect
+      .poll(async () => {
+        const [mapRange, geometryRange] = await Promise.all([
+          map.evaluate(
+            (element) =>
+              (element as google.maps.maps3d.Map3DElement).range ?? 0,
+          ),
+          page
+            .locator('gmp-polyline-3d[data-route-visible="true"]')
+            .first()
+            .getAttribute("data-geometry-range-m"),
+        ]);
+        return Math.abs(mapRange - Number(geometryRange));
+      })
+      .toBeLessThan(1);
+    await captureEvidence(page, `${route.slug}-desktop-free-camera.png`);
+    await page.getByRole("button", { name: "Recenter route" }).click();
+    await expect(navigator).toHaveAttribute("data-following", "true");
     await page.getByRole("button", { name: "Pause route" }).click();
     await expect(navigator).toHaveAttribute("data-hud-state", "expanded");
 
@@ -196,12 +254,91 @@ for (const route of ROUTES) {
     await expect(navigator).toHaveAttribute("data-grounding-mode", "mesh");
     await page.getByRole("button", { name: "Free" }).click();
     await expect(navigator).toHaveAttribute("data-following", "false");
+    await map.evaluate((element) => {
+      const googleMap = element as google.maps.maps3d.Map3DElement;
+      googleMap.range = 5_400;
+      googleMap.heading = ((googleMap.heading ?? 0) + 55) % 360;
+    });
+    await expect
+      .poll(async () => {
+        const [mapRange, geometryRange] = await Promise.all([
+          map.evaluate(
+            (element) =>
+              (element as google.maps.maps3d.Map3DElement).range ?? 0,
+          ),
+          page
+            .locator('gmp-polyline-3d[data-route-visible="true"]')
+            .first()
+            .getAttribute("data-geometry-range-m"),
+        ]);
+        return Math.abs(mapRange - Number(geometryRange));
+      })
+      .toBeLessThan(1);
     await page.getByRole("button", { name: "Resume following" }).click();
     await expect(navigator).toHaveAttribute("data-following", "true");
 
     expectNoRuntimeErrors(consoleErrors, pageErrors);
   });
 }
+
+test("holds the Story Flight frame budget for thirty seconds", async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    process.env.GODIESEL_LIVE_GOOGLE_3D_E2E !== "1",
+    "Live Google 3D verification is opt-in.",
+  );
+  test.setTimeout(75_000);
+
+  const consoleErrors: string[] = [];
+  const pageErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.goto("/#/replay/14023448720");
+
+  const replay = page.getByTestId("replay-stage");
+  await expectLiveSceneReady({
+    consoleErrors,
+    navigator: replay,
+    page,
+    pageErrors,
+    testInfo,
+  });
+  await page.getByRole("button", { name: "Play route" }).click();
+  await expect(replay).toHaveAttribute("data-performance-state", "complete", {
+    timeout: 40_000,
+  });
+
+  const report = await replay.evaluate((element) => ({
+    droppedFrameRatio: Number(element.dataset.performanceDroppedFrameRatio),
+    durationMs: Number(element.dataset.performanceDurationMs),
+    frameCount: Number(element.dataset.performanceFrameCount),
+    longestFrameMs: Number(element.dataset.performanceLongestFrameMs),
+    longestLongTaskMs: Number(element.dataset.performanceLongestLongTaskMs),
+    longTaskCount: Number(element.dataset.performanceLongTaskCount),
+    p95FrameMs: Number(element.dataset.performanceP95FrameMs),
+    visibleGeometry: [...document.querySelectorAll("gmp-polyline-3d")]
+      .filter((line) => line.dataset.routeVisible === "true")
+      .map((line) => ({
+        points: Number(line.dataset.renderPointCount),
+        role: line.dataset.threadLayer,
+      })),
+  }));
+  await testInfo.attach("story-flight-performance", {
+    body: Buffer.from(JSON.stringify(report, null, 2)),
+    contentType: "application/json",
+  });
+
+  expect(report.durationMs).toBeGreaterThanOrEqual(30_000);
+  expect(report.frameCount).toBeGreaterThan(750);
+  expect(report.p95FrameMs).toBeLessThanOrEqual(34);
+  expect(report.droppedFrameRatio).toBeLessThan(0.05);
+  expect(report.visibleGeometry.length).toBeGreaterThan(0);
+  expect(Math.max(...report.visibleGeometry.map(({ points }) => points))).toBeLessThanOrEqual(120);
+  expectNoRuntimeErrors(consoleErrors, pageErrors);
+});
 
 for (const route of ROUTES) {
   test(`keeps the ${route.label} navigator usable on a phone viewport`, async ({
@@ -308,6 +445,40 @@ test("keeps production Story Flight composed over live Google terrain on a phone
       Number((await page.getByTestId("google-route-progress").textContent())?.split(" ")[0]),
     )
     .toBeGreaterThan(0);
+  const mobileMap = page.locator("gmp-map-3d");
+  const mobileMapBox = await mobileMap.boundingBox();
+  expect(mobileMapBox).not.toBeNull();
+  const mobileInteractionPoint = {
+    x: (mobileMapBox?.x ?? 0) + (mobileMapBox?.width ?? 0) * 0.72,
+    y: (mobileMapBox?.y ?? 0) + (mobileMapBox?.height ?? 0) * 0.42,
+  };
+  await page.mouse.click(mobileInteractionPoint.x, mobileInteractionPoint.y);
+  await expect(replay).toHaveAttribute("data-following", "true");
+  const progressBeforeDrag = Number(
+    (await page.getByTestId("google-route-progress").textContent())?.split(" ")[0],
+  );
+  await page.mouse.move(mobileInteractionPoint.x, mobileInteractionPoint.y);
+  await page.mouse.down();
+  await page.mouse.move(
+    mobileInteractionPoint.x + 48,
+    mobileInteractionPoint.y + 24,
+    { steps: 6 },
+  );
+  await page.mouse.up();
+  await expect(replay).toHaveAttribute("data-following", "false");
+  await page.waitForTimeout(2_200);
+  await expect(page.getByRole("button", { name: "Recenter route" })).toBeVisible();
+  await expect(replay).toHaveAttribute("data-hud-state", "expanded");
+  await expect
+    .poll(async () =>
+      Number(
+        (await page.getByTestId("google-route-progress").textContent())?.split(" ")[0],
+      ),
+    )
+    .toBeGreaterThan(progressBeforeDrag);
+  await captureEvidence(page, "14023448720-story-flight-mobile-free-camera-live.png");
+  await page.getByRole("button", { name: "Recenter route" }).click();
+  await expect(replay).toHaveAttribute("data-following", "true");
   await page.waitForTimeout(2_500);
   await captureEvidence(page, "14023448720-story-flight-mobile-live.png");
   expectNoRuntimeErrors(consoleErrors, pageErrors);

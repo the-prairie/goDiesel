@@ -67,6 +67,7 @@ import {
   replaySubjectBand,
   type ReplayViewportInsets,
 } from "@/surfaces/replay/story-flight/replay-camera-framing";
+import { ReplayPerformanceMonitor } from "@/surfaces/replay/story-flight/replay-performance";
 
 const FIELD_TEST_ROUTES = [
   { slug: "14736711660", label: "San Francisco" },
@@ -110,6 +111,8 @@ export function GoogleRouteNavigatorStage({
   const lastCameraAtRef = useRef<number | undefined>(undefined);
   const chromeTimerRef = useRef<number | undefined>(undefined);
   const chromeVisibleRef = useRef(true);
+  const performanceMonitorRef = useRef(new ReplayPerformanceMonitor());
+  const lastPerformancePublishAtRef = useRef(0);
   const reducedMotionRef = useRef(reducedMotion);
   const viewportInsetsRef = useRef<ReplayViewportInsets>({
     bottom: 0,
@@ -222,6 +225,25 @@ export function GoogleRouteNavigatorStage({
     [renderCamera, resolveCamera, route],
   );
 
+  const takeCameraOwnership = useCallback(() => {
+    if (!controlRef.current.following) return;
+    cameraSettlingRef.current = false;
+    if (chromeTimerRef.current !== undefined) {
+      window.clearTimeout(chromeTimerRef.current);
+      chromeTimerRef.current = undefined;
+    }
+    setChromeVisible(true);
+    commitControl((current) => ({ ...current, following: false }));
+  }, [commitControl]);
+
+  const recenterCamera = useCallback(() => {
+    cameraMotionRef.current = undefined;
+    cameraTargetRef.current = undefined;
+    cameraSettlingRef.current = false;
+    lastCameraAtRef.current = undefined;
+    commitControl((current) => ({ ...current, following: true }));
+  }, [commitControl]);
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -244,6 +266,7 @@ export function GoogleRouteNavigatorStage({
       route,
       groundingMode: initial.groundingMode,
       initialCamera: resolveCamera(initial),
+      onCameraInteraction: takeCameraOwnership,
       routeStyle: {
         color: "#ef684e",
         mode: "filament",
@@ -274,7 +297,35 @@ export function GoogleRouteNavigatorStage({
       lastCameraAtRef.current = undefined;
       if (engineRef.current === engine) engineRef.current = undefined;
     };
-  }, [renderCamera, resolveCamera, route]);
+  }, [renderCamera, resolveCamera, route, takeCameraOwnership]);
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const monitor = new ReplayPerformanceMonitor();
+    performanceMonitorRef.current = monitor;
+    lastPerformancePublishAtRef.current = 0;
+    publishPerformanceReport(stage, monitor.report());
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== "visible") monitor.suspend();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    const observer =
+      typeof PerformanceObserver !== "undefined" &&
+      PerformanceObserver.supportedEntryTypes.includes("longtask")
+        ? new PerformanceObserver((list) => {
+            for (const entry of list.getEntries()) {
+              monitor.recordLongTask(entry.duration);
+            }
+          })
+        : undefined;
+    observer?.observe({ entryTypes: ["longtask"] });
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      observer?.disconnect();
+    };
+  }, [route.slug]);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -322,6 +373,7 @@ export function GoogleRouteNavigatorStage({
     if (
       !productionReplay ||
       !controlRef.current.playing ||
+      !controlRef.current.following ||
       reducedMotion ||
       settingsOpen
     ) {
@@ -347,7 +399,7 @@ export function GoogleRouteNavigatorStage({
         chromeTimerRef.current = undefined;
       }
     };
-  }, [control.playing, scheduleChromeHide]);
+  }, [control.following, control.playing, scheduleChromeHide]);
 
   useEffect(() => {
     if (status.state !== "ready") return;
@@ -362,6 +414,24 @@ export function GoogleRouteNavigatorStage({
         totalDistanceM,
       );
       previous = now;
+      const performanceState = performanceMonitorRef.current.sampleFrame(
+        now,
+        next.playing && document.visibilityState === "visible",
+      );
+      if (
+        now - lastPerformancePublishAtRef.current >= 1_000 ||
+        (performanceState === "complete" &&
+          stageRef.current?.dataset.performanceState !== "complete")
+      ) {
+        const stage = stageRef.current;
+        if (stage) {
+          publishPerformanceReport(
+            stage,
+            performanceMonitorRef.current.report(),
+          );
+        }
+        lastPerformancePublishAtRef.current = now;
+      }
       controlRef.current = next;
       const progressChanged = next.progressM !== current.progressM;
       const playbackChanged = next.playing !== current.playing;
@@ -551,7 +621,9 @@ export function GoogleRouteNavigatorStage({
               <Unlock aria-hidden="true" className="size-3.5" />
             )}
             <span>
-              {control.cameraMode === "auto"
+              {!control.following
+                ? "Free camera"
+                : control.cameraMode === "auto"
                 ? `Auto · ${cameraPose.directedMode === "overview" ? "Reveal" : "Follow"}`
                 : REPLAY_CAMERA_MODES.find(
                     ({ mode }) => mode === control.cameraMode,
@@ -559,6 +631,20 @@ export function GoogleRouteNavigatorStage({
                     ?.label}
             </span>
           </div>
+          {!control.following ? (
+            <Button
+              aria-label="Recenter route"
+              className="border-white/24 bg-white/10 text-white hover:bg-white/18"
+              onClick={recenterCamera}
+              size="sm"
+              title="Recenter route"
+              type="button"
+              variant="outline"
+            >
+              <LocateFixed aria-hidden="true" />
+              <span className="hidden sm:inline">Recenter</span>
+            </Button>
+          ) : null}
           {productionReplay ? (
             <span className="hidden text-[9px] font-semibold uppercase text-white/58 sm:inline">
               Google 3D Replay
@@ -699,6 +785,22 @@ export function GoogleRouteNavigatorStage({
       </div>
     </section>
   );
+}
+
+function publishPerformanceReport(
+  stage: HTMLElement,
+  report: ReturnType<ReplayPerformanceMonitor["report"]>,
+) {
+  stage.dataset.performanceState = report.state;
+  stage.dataset.performanceDurationMs = report.durationMs.toFixed(1);
+  stage.dataset.performanceFrameCount = String(report.frameCount);
+  stage.dataset.performanceP95FrameMs = report.p95FrameMs.toFixed(2);
+  stage.dataset.performanceLongestFrameMs = report.longestFrameMs.toFixed(2);
+  stage.dataset.performanceDroppedFrameRatio =
+    report.droppedFrameRatio.toFixed(4);
+  stage.dataset.performanceLongTaskCount = String(report.longTaskCount);
+  stage.dataset.performanceLongestLongTaskMs =
+    report.longestLongTaskMs.toFixed(2);
 }
 
 function cameraPoseHasSettled(
