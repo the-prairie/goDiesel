@@ -1,0 +1,196 @@
+@import "@fontsource-variable/figtree";
+@import "@fontsource-variable/newsreader";
+
+.daylight-excursion-atlas {
+  --cloud: #f8fbff;
+  --sky: #dfeafa;
+  --ink: #172951;
+  --muted: #5c6c8f;
+  --route: #6988e6;
+  --apricot: #ef8d70;
+  --butter: #ffd45f;
+  --berry: #a8395e;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--sky);
+  color: var(--ink);
+  font-family: "Figtree Variable", sans-serif;
+}
+
+.daylight-excursion-atlas ::selection { background: var(--butter); color: var(--ink); }
+.daylight-focus { outline: none; }
+.daylight-focus:focus-visible { box-shadow: 0 0 0 3px var(--butter), 0 0 0 5px var(--ink); }
+
+.daylight-header {
+  position: relative;
+  z-index: 60;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  height: 64px;
+  padding: 0 18px;
+  border-bottom: 1px solid rgb(23 41 81 / 14%);
+  background: rgb(248 251 255 / 94%);
+}
+
+.daylight-icon-link {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid rgb(23 41 81 / 22%);
+  border-radius: 10px;
+  color: var(--ink);
+  transition: background-color 160ms ease, transform 160ms ease;
+}
+.daylight-icon-link:hover { background: var(--sky); transform: translateX(-2px); }
+.daylight-icon-link svg, .daylight-brand-mark svg, .daylight-replay svg { width: 18px; height: 18px; }
+
+.daylight-brand { display: flex; min-width: 0; align-items: center; gap: 9px; justify-self: center; }
+.daylight-brand-mark { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 50%; background: var(--butter); color: var(--ink); }
+.daylight-brand-name { font-family: "Newsreader Variable", serif; font-size: 21px; font-weight: 650; }
+.daylight-brand-edition { padding-left: 10px; border-left: 1px solid rgb(23 41 81 / 22%); color: var(--muted); font-size: 12px; font-weight: 650; }
+
+.daylight-replay {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 15px;
+  border: 1px solid var(--ink);
+  border-radius: 10px;
+  background: var(--ink);
+  color: white;
+  font-size: 13px;
+  font-weight: 720;
+  transition: background-color 160ms ease, transform 160ms ease;
+}
+.daylight-replay:hover { background: #263f74; transform: translateY(-1px); }
+.daylight-replay-unavailable { color: var(--muted); font-size: 12px; }
+
+.daylight-stage { position: relative; height: calc(100% - 64px); min-height: 0; overflow: hidden; background: #bfd2e6; }
+.daylight-terrain, .daylight-map-wash { position: absolute; inset: 0; }
+.daylight-terrain { transform: scale(1.018) translateY(8px); opacity: .88; transition: transform 760ms cubic-bezier(.16,1,.3,1), opacity 620ms ease; }
+.daylight-excursion-atlas[data-arrived="true"] .daylight-terrain { transform: scale(1) translateY(0); opacity: 1; }
+.daylight-terrain-image { filter: saturate(.78) contrast(.94) brightness(1.22); }
+.daylight-map-wash { z-index: 2; background: rgb(214 230 246 / 17%); }
+
+.daylight-route-map { pointer-events: none; position: absolute; inset: 0; z-index: 12; width: 100%; height: 100%; filter: drop-shadow(0 6px 9px rgb(23 41 81 / 20%)); }
+.daylight-route-map path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.daylight-route-shadow path { stroke: rgb(23 41 81 / 21%); stroke-width: 21px; }
+.daylight-route-casing path { stroke: rgb(248 251 255 / 96%); stroke-width: 17px; }
+.daylight-route-recorded path { stroke: var(--route); stroke-width: 8px; }
+.daylight-route-progress path { stroke: var(--apricot); stroke-width: 9px; transition: stroke-dasharray 620ms cubic-bezier(.16,1,.3,1); }
+.daylight-current-halo { fill: rgb(248 251 255 / 94%); stroke: var(--ink); stroke-width: 2px; }
+.daylight-current-dot { fill: var(--butter); stroke: var(--ink); stroke-width: 2px; }
+
+.daylight-story {
+  position: absolute;
+  z-index: 25;
+  top: clamp(42px, 8vh, 90px);
+  left: clamp(24px, 5vw, 78px);
+  width: min(680px, 55vw);
+  padding: 28px 32px 30px;
+  border: 1px solid rgb(23 41 81 / 16%);
+  border-radius: 12px;
+  background: rgb(248 251 255 / 91%);
+  box-shadow: 0 18px 50px rgb(23 41 81 / 13%);
+  transition: opacity 260ms ease, transform 260ms ease;
+}
+.daylight-story-leaving { opacity: 0; transform: translateY(-8px); }
+.daylight-kicker { display: flex; align-items: center; gap: 7px; color: var(--berry); font-size: 11px; font-weight: 760; text-transform: uppercase; }
+.daylight-kicker svg { width: 14px; height: 14px; }
+.daylight-story h1 { max-width: 17ch; margin-top: 16px; font-family: "Newsreader Variable", serif; font-size: clamp(41px, 4vw, 60px); font-weight: 540; line-height: .96; letter-spacing: 0; text-wrap: balance; }
+.daylight-premise { display: grid; grid-template-columns: 106px 1fr; gap: 14px; align-items: start; margin-top: 22px; padding-top: 16px; border-top: 1px solid rgb(23 41 81 / 16%); }
+.daylight-premise span { color: var(--berry); font-size: 10px; font-weight: 760; text-transform: uppercase; }
+.daylight-premise p { color: #314468; font-family: "Newsreader Variable", serif; font-size: 17px; font-style: italic; line-height: 1.35; }
+
+.daylight-ticket { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); margin-top: 22px; overflow: hidden; border: 1px solid rgb(23 41 81 / 22%); border-radius: 10px; background: var(--cloud); }
+.daylight-ticket div { min-width: 0; padding: 11px 13px; border-left: 1px dashed rgb(23 41 81 / 28%); }
+.daylight-ticket div:first-child { border-left: 0; }
+.daylight-ticket dt { color: var(--muted); font-size: 9px; font-weight: 750; text-transform: uppercase; }
+.daylight-ticket dd { margin-top: 2px; overflow: hidden; color: var(--ink); font-size: 14px; font-weight: 780; text-overflow: ellipsis; white-space: nowrap; }
+
+.daylight-position { position: absolute; z-index: 26; top: 44%; right: clamp(20px,6vw,96px); display: grid; grid-template-columns: auto 28px auto; align-items: center; gap: 9px; color: var(--ink); filter: drop-shadow(0 1px 0 white) drop-shadow(0 0 10px white); transition: opacity 220ms ease, transform 220ms ease; }
+.daylight-position-leaving { opacity: 0; transform: translateX(8px); }
+.daylight-position-number { display: grid; width: 35px; height: 35px; place-items: center; border: 2px solid var(--ink); border-radius: 50%; background: var(--butter); font-size: 11px; font-weight: 820; }
+.daylight-position-rule { height: 1px; background: var(--ink); }
+.daylight-position-copy { display: grid; }
+.daylight-position-copy strong { font-size: 12px; font-weight: 820; }
+.daylight-position-copy small { color: #314468; font-size: 9px; font-weight: 740; text-transform: uppercase; }
+
+.daylight-journey { position: absolute; z-index: 30; right: clamp(18px,3vw,48px); bottom: 70px; left: clamp(18px,3vw,48px); display: grid; grid-template-columns: 138px 1fr; min-height: 112px; overflow: hidden; border: 1px solid rgb(23 41 81 / 18%); border-radius: 12px; background: rgb(248 251 255 / 96%); box-shadow: 0 18px 46px rgb(23 41 81 / 16%); transition: opacity 230ms ease, transform 230ms ease; }
+.daylight-journey-leaving { opacity: 0; transform: translateY(10px); }
+.daylight-journey-intro { display: flex; flex-direction: column; justify-content: space-between; padding: 18px; border-right: 1px dashed rgb(23 41 81 / 25%); background: var(--sky); }
+.daylight-journey-intro span { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 780; text-transform: uppercase; }
+.daylight-journey-intro svg { width: 14px; height: 14px; color: var(--berry); }
+.daylight-journey-intro strong { font-family: "Newsreader Variable", serif; font-size: 19px; font-weight: 620; }
+.daylight-journey-stops { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); min-width: 0; }
+
+.daylight-stop { position: relative; display: grid; min-width: 0; grid-template-columns: 26px 1fr; gap: 10px; align-items: center; padding: 15px 16px; border-left: 1px solid rgb(23 41 81 / 12%); color: var(--muted); text-align: left; transition: background-color 150ms ease, color 150ms ease; }
+.daylight-stop:first-child { border-left: 0; }
+.daylight-stop:focus-visible { box-shadow: inset 0 0 0 3px var(--butter), inset 0 0 0 5px var(--ink); }
+.daylight-stop:hover { background: rgb(223 234 250 / 62%); color: var(--ink); }
+.daylight-stop.is-active { background: #fff8e5; color: var(--ink); }
+.daylight-stop-track { position: relative; display: grid; width: 26px; height: 54px; place-items: center; }
+.daylight-stop-track::before { position: absolute; top: -22px; bottom: 28px; left: 50%; width: 2px; background: rgb(105 136 230 / 28%); content: ""; }
+.daylight-stop:first-child .daylight-stop-track::before { display: none; }
+.daylight-stop-track i { position: relative; z-index: 1; display: block; width: 12px; height: 12px; border: 2px solid var(--route); border-radius: 50%; background: var(--cloud); }
+.daylight-stop.is-visited .daylight-stop-track i { background: var(--apricot); }
+.daylight-stop.is-active .daylight-stop-track i { width: 18px; height: 18px; border-color: var(--ink); background: var(--butter); box-shadow: 0 0 0 5px rgb(255 212 95 / 30%); }
+.daylight-stop-copy { display: grid; min-width: 0; gap: 3px; }
+.daylight-stop-copy small { overflow: hidden; color: var(--berry); font-size: 9px; font-style: normal; font-weight: 760; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.daylight-stop-copy strong { overflow: hidden; font-size: 13px; font-weight: 760; text-overflow: ellipsis; white-space: nowrap; }
+.daylight-stop-copy em { color: var(--muted); font-size: 10px; font-style: normal; font-weight: 650; }
+
+.daylight-reveal { pointer-events: none; position: absolute; inset: 0; z-index: 50; display: grid; place-items: center; background: rgb(223 234 250 / 0%); opacity: 0; transition: background-color 420ms ease, opacity 320ms ease; }
+.daylight-excursion-atlas[data-revealing-replay="true"] .daylight-reveal { background: rgb(223 234 250 / 68%); opacity: 1; }
+.daylight-reveal div { display: grid; gap: 5px; text-align: center; }
+.daylight-reveal span { color: var(--berry); font-size: 10px; font-weight: 780; text-transform: uppercase; }
+.daylight-reveal strong { font-family: "Newsreader Variable", serif; font-size: clamp(34px,5vw,68px); font-weight: 580; }
+
+@media (max-width: 760px) {
+  .daylight-header { height: 56px; padding: 0 10px; }
+  .daylight-icon-link { width: 44px; height: 44px; }
+  .daylight-brand { gap: 6px; }
+  .daylight-brand-mark { width: 26px; height: 26px; }
+  .daylight-brand-name { font-size: 18px; }
+  .daylight-brand-edition { display: none; }
+  .daylight-replay { min-width: 44px; min-height: 44px; padding: 0 11px; }
+  .daylight-replay span { display: none; }
+  .daylight-stage { height: calc(100% - 56px); }
+  .daylight-story { top: 14px; right: 12px; left: 12px; width: auto; padding: 15px 19px 14px; border-radius: 11px; }
+  .daylight-story h1 { max-width: 17ch; margin-top: 8px; font-size: clamp(31px,9.2vw,38px); line-height: .95; }
+  .daylight-premise { display: block; margin-top: 9px; padding-top: 8px; }
+  .daylight-premise p { display: -webkit-box; margin-top: 4px; overflow: hidden; font-size: 13px; -webkit-box-orient: vertical; -webkit-line-clamp: 1; }
+  .daylight-ticket { margin-top: 10px; }
+  .daylight-ticket div { padding: 7px 9px; }
+  .daylight-ticket dd { font-size: 12px; }
+  .daylight-route-map { top: 20%; height: 58%; }
+  .daylight-route-shadow path { stroke-width: 24px; }
+  .daylight-route-casing path { stroke-width: 20px; }
+  .daylight-route-recorded path, .daylight-route-progress path { stroke-width: 10px; }
+  .daylight-position { display: none; }
+  .daylight-journey { right: 8px; bottom: 74px; left: 8px; display: block; min-height: 0; overflow: visible; border-radius: 11px; }
+  .daylight-journey-intro { flex-direction: row; padding: 9px 12px; border-right: 0; border-bottom: 1px dashed rgb(23 41 81 / 25%); }
+  .daylight-journey-intro strong { font-family: "Figtree Variable", sans-serif; font-size: 11px; }
+  .daylight-journey-stops { display: flex; max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-color: var(--route) transparent; scrollbar-width: thin; }
+  .daylight-stop { width: 188px; min-height: 70px; flex: 0 0 188px; grid-template-columns: 22px 1fr; gap: 7px; padding: 9px 11px; }
+  .daylight-stop-track { width: 22px; height: 42px; }
+  .daylight-stop-track::before { top: -18px; }
+  .daylight-stop-copy strong { font-size: 12px; }
+}
+
+@media (max-height: 780px) and (min-width: 761px) {
+  .daylight-story { top: 16px; padding: 18px 24px; }
+  .daylight-story h1 { margin-top: 8px; font-size: 42px; }
+  .daylight-premise { margin-top: 10px; padding-top: 8px; }
+  .daylight-premise p { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+  .daylight-ticket { margin-top: 10px; }
+  .daylight-journey { bottom: 60px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .daylight-excursion-atlas *, .daylight-excursion-atlas *::before, .daylight-excursion-atlas *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}

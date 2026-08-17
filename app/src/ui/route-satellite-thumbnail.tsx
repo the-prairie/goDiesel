@@ -24,6 +24,7 @@ export function RouteSatelliteThumbnail({
   route,
   enabled,
   cinematic = false,
+  priority = false,
   showRoute = true,
   className,
   imageClassName,
@@ -31,6 +32,7 @@ export function RouteSatelliteThumbnail({
   route: RouteSummary;
   enabled: boolean;
   cinematic?: boolean;
+  priority?: boolean;
   showRoute?: boolean;
   className?: string;
   imageClassName?: string;
@@ -73,7 +75,8 @@ export function RouteSatelliteThumbnail({
         <img
           src={url!}
           alt=""
-          loading="lazy"
+          loading={priority ? "eager" : "lazy"}
+          fetchPriority={priority ? "high" : "auto"}
           decoding="async"
           onLoad={() => setState("loaded")}
           onError={() => setState("failed")}
