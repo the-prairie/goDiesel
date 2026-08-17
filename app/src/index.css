@@ -218,6 +218,52 @@
   font-family: var(--font-editorial);
 }
 
+@keyframes planned-route-camera-drift {
+  0%,
+  100% {
+    transform: scale(1.04) translate3d(-0.6%, -0.4%, 0);
+  }
+  50% {
+    transform: scale(1.11) translate3d(1.2%, 0.8%, 0);
+  }
+}
+
+@keyframes planned-route-progress {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: -1;
+  }
+}
+
+.planned-route-preview-camera {
+  animation: planned-route-camera-drift 18s var(--ease-interface) infinite;
+  will-change: transform;
+}
+
+.planned-route-preview-progress {
+  animation: planned-route-progress 9s linear infinite;
+  stroke-dasharray: 0.22 0.78;
+  stroke-dashoffset: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .planned-route-preview-camera,
+  .planned-route-preview-progress {
+    animation: none;
+  }
+
+  .planned-route-preview-camera {
+    transform: scale(1.04);
+  }
+
+  .planned-route-preview-progress {
+    stroke-dasharray: 0.32 0.68;
+    stroke-dashoffset: 0;
+  }
+}
+
 @keyframes route-genome-draw {
   from {
     stroke-dashoffset: 1;

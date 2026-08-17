@@ -49,6 +49,7 @@ test("Finder searches explicit route-backed candidates and saves a durable plan"
   await expect(page).toHaveURL(/terrain=mixed/);
   const map = page.getByRole("region", { name: "Finder route map" });
   await expect(map).toBeVisible();
+  await expect(map).toHaveAttribute("data-map-style", "fiord");
   await expect(map).toHaveAttribute("data-map-status", "ready", {
     timeout: 15_000,
   });
@@ -183,6 +184,8 @@ test("a planned route has a durable detail, edit, and remove journey", async ({ 
   await expect(page).toHaveURL(/#\/routes\/planned-owner-route-17654151284$/);
   await expect(page.getByRole("heading", { name: "Kyoto" })).toBeVisible();
   await expect(page.getByText("This is a plan, not a recorded activity.")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Living planning preview" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "What this plan does" })).toBeVisible();
   await expect(page.getByText("No later recorded activity matches this plan yet.")).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
     await page.evaluate(() => window.innerWidth + 1),
@@ -190,6 +193,7 @@ test("a planned route has a durable detail, edit, and remove journey", async ({ 
 
   await page.getByRole("button", { name: "Edit plan" }).click();
   const editPlan = page.getByRole("dialog", { name: "Edit planned route" });
+  await expect(editPlan).toContainText("Changes update what Finder watches for");
   await editPlan.getByLabel("Planning source").selectOption("5650407638");
   await expect(editPlan.getByLabel("Place")).toHaveValue("Victoria, BC");
   await expect(editPlan.getByLabel("Activity")).toHaveValue("Ride");
@@ -234,6 +238,25 @@ test("a planned route has a durable detail, edit, and remove journey", async ({ 
   await page.getByRole("button", { name: "Remove planned route" }).click();
   await expect(page).toHaveURL(/#\/routes\?lifecycle=planned$/);
   await expect(page.getByRole("article", { name: "Planned route Victoria, BC" })).toHaveCount(0);
+});
+
+test("Finder filter chips never collide with the edit control", async ({ page }) => {
+  await page.setViewportSize({ width: 1340, height: 900 });
+  await page.goto("/#/finder");
+  await searchKyoto(page);
+
+  const chipTray = page.getByLabel("Active Finder filters");
+  const editFilters = page.getByRole("button", { name: "Edit filters" });
+  const [trayBox, editBox] = await Promise.all([
+    chipTray.boundingBox(),
+    editFilters.boundingBox(),
+  ]);
+
+  expect(trayBox).not.toBeNull();
+  expect(editBox).not.toBeNull();
+  expect((trayBox?.x ?? 0) + (trayBox?.width ?? 0)).toBeLessThanOrEqual(
+    (editBox?.x ?? 0) - 4,
+  );
 });
 
 test("a failed durable write keeps the plan open and reports the problem", async ({ page }) => {

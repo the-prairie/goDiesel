@@ -18,7 +18,9 @@ import {
   formatRouteDate,
   type QuestRoute,
   type RouteAnnotationEvidence,
+  type RouteSummary,
 } from "@/domain/route";
+import { RouteSatelliteThumbnail } from "@/ui/route-satellite-thumbnail";
 import { ElevationProfile } from "@/surfaces/routes/components/route-briefing";
 import { RouteGuide } from "@/surfaces/routes/components/route-guide";
 import { RouteLeafMap } from "@/surfaces/routes/components/route-leaf-map";
@@ -55,6 +57,14 @@ export function RouteStoryView({
   const title = routeStoryTitle(route);
   const premise = routeStoryPremise(route);
   const summit = highestPoint(route);
+  const satelliteRoute = useMemo<RouteSummary>(() => ({
+    ...route,
+    trace: route.route,
+    guide: {
+      vibe: route.curation.vibe,
+      reviewStatus: route.curation.reviewStatus,
+    },
+  }), [route]);
   const replayHref = singleRouteMicrosite
     ? replayPath(route.slug)
     : replayPath(route.slug, routeDetailPath(route.slug));
@@ -130,7 +140,16 @@ export function RouteStoryView({
             fetchPriority="high"
           />
         ) : (
-          <RouteStoryTrace route={route} distanceM={route.distanceKm * 620} hero />
+          <div data-testid="route-story-satellite-preview" className="absolute inset-0 overflow-hidden bg-[#163b36]">
+            <RouteSatelliteThumbnail
+              route={satelliteRoute}
+              enabled
+              cinematic
+              showRoute={false}
+              imageClassName="planned-route-preview-camera saturate-[0.78] contrast-[1.08] brightness-[0.72]"
+            />
+            <RouteStoryTrace route={route} distanceM={route.distanceKm * 620} hero overlay />
+          </div>
         )}
         <div className="absolute inset-0 bg-[#102c29]/58" aria-hidden="true" />
         <div className="relative z-10 w-full px-5 pb-16 pt-20 sm:px-10 lg:px-[max(4rem,calc((100vw-76rem)/2))]">
@@ -401,10 +420,12 @@ function RouteStoryTrace({
   route,
   distanceM,
   hero = false,
+  overlay = false,
 }: {
   route: QuestRoute;
   distanceM: number;
   hero?: boolean;
+  overlay?: boolean;
 }) {
   const trace = routeTrace(route);
   if (!trace) {
@@ -425,10 +446,14 @@ function RouteStoryTrace({
       viewBox="0 0 800 600"
       role="img"
       aria-label={`${route.name} route trace at ${distanceLabel(distanceM)}`}
-      className={cn("aspect-[4/3] size-full", hero ? "text-white" : "text-cobalt")}
+      className={cn(
+        "aspect-[4/3] size-full",
+        hero ? "text-white" : "text-cobalt",
+        overlay && "absolute inset-0 z-[2]",
+      )}
       preserveAspectRatio="xMidYMid meet"
     >
-      <rect width="800" height="600" fill={hero ? "#244f49" : "#e7ece8"} />
+      <rect width="800" height="600" fill={overlay ? "transparent" : hero ? "#244f49" : "#e7ece8"} />
       <path d={trace.path} fill="none" stroke={hero ? "rgb(255 255 255 / 38%)" : "#ffffff"} strokeWidth="16" strokeLinecap="round" strokeLinejoin="round" />
       <path d={trace.path} fill="none" stroke="currentColor" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
       <circle cx={point.x} cy={point.y} r="17" fill="#d95737" stroke="#fff" strokeWidth="7" />

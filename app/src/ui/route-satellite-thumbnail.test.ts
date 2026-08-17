@@ -4,7 +4,7 @@ import {
   downsampleThumbnailPath,
   nextThumbnailState,
   routeSatelliteThumbnailUrl,
-} from "@/surfaces/atlas/components/route-satellite-thumbnail";
+} from "@/ui/route-satellite-thumbnail";
 import type { RoutePoint } from "@/domain/route";
 
 function routePoint(index: number): RoutePoint {
@@ -40,6 +40,22 @@ describe("route satellite thumbnail adapter", () => {
     expect(parsed.searchParams.get("key")).toBe("test-key");
     expect(path.split("|").slice(2)).toHaveLength(36);
     expect(url!.length).toBeLessThan(8_192);
+  });
+
+  it("supports a square cinematic request without changing the card default", () => {
+    const points = [routePoint(0), routePoint(1)];
+    const cinematic = new URL(routeSatelliteThumbnailUrl(
+      points,
+      "test-key",
+      { width: 640, height: 640 },
+      false,
+    )!);
+    const card = new URL(routeSatelliteThumbnailUrl(points, "test-key")!);
+
+    expect(cinematic.searchParams.get("size")).toBe("640x640");
+    expect(cinematic.searchParams.get("path")).toContain("color:0x00000000");
+    expect(card.searchParams.get("size")).toBe("640x224");
+    expect(card.searchParams.get("path")).toContain("color:0x63d6cfff");
   });
 
   it("does not request imagery without a credential or usable geometry", () => {

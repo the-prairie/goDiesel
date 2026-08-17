@@ -15,6 +15,7 @@ export function AppShell() {
   useNavigationContinuity(mainRef);
   const section = appSectionForPath(location.pathname);
   const isAtlas = location.pathname === APP_PATHS.atlas;
+  const isFinder = location.pathname === APP_PATHS.finder;
   const isReplayLab = location.pathname.startsWith("/lab/");
   const isRouteDetail = /^\/routes\/[^/]+$/.test(location.pathname);
   const isRoutesLibrary = section.id === "routes" && !isRouteDetail;
@@ -32,9 +33,11 @@ export function AppShell() {
   return (
     <div className="weathered-atlas field-guide-theme relative flex min-h-dvh bg-background text-foreground">
       {singleRouteMicrosite || isReplay ? null : (
-        <AtlasSpine hideDesktop={isAtlas || isRouteDetail} />
+        <AtlasSpine hideDesktop={isAtlas || isFinder || isRouteDetail} />
       )}
-      {isAtlas && !singleRouteMicrosite ? <AtlasImmersiveNavigation /> : null}
+      {(isAtlas || isFinder) && !singleRouteMicrosite ? (
+        <AtlasImmersiveNavigation activeMode={isFinder ? "finder" : "atlas"} />
+      ) : null}
       <div
         className={cn(
           "flex min-h-dvh min-w-0 flex-1 flex-col",
@@ -43,6 +46,7 @@ export function AppShell() {
             "pb-[var(--mobile-navigation-height)] md:pb-0",
             !singleRouteMicrosite &&
             !isAtlas &&
+            !isFinder &&
             !isRouteDetail &&
             !isReplay &&
             "md:pl-[var(--spine-rail-width)] lg:pl-[var(--spine-width)]",

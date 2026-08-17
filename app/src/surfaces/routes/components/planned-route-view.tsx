@@ -1,10 +1,13 @@
 import {
   ArrowLeft,
+  Bookmark,
   CalendarClock,
   CheckCircle2,
   Map,
   Pencil,
+  ScanSearch,
   Search,
+  ShieldCheck,
   Trash2,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -24,6 +27,7 @@ import {
 } from "@/domain/plan-completion";
 import type { FinderIntent, PlannedRoute } from "@/domain/planning";
 import { formatRouteDate } from "@/domain/route";
+import { PlannedRoutePreview } from "@/surfaces/routes/components/planned-route-preview";
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
 import { RouteThread } from "@/ui/route-card";
@@ -116,7 +120,7 @@ export function PlannedRouteView({ route }: { route: PlannedRoute }) {
 
       <main>
         <section className="border-b border-line bg-surface">
-          <div className="mx-auto grid max-w-7xl lg:grid-cols-[minmax(22rem,0.85fr)_minmax(0,1.15fr)]">
+          <div className="mx-auto grid max-w-7xl lg:grid-cols-[minmax(24rem,0.9fr)_minmax(0,1.1fr)]">
             <div className="order-2 flex min-w-0 flex-col justify-center px-5 py-10 md:px-8 md:py-14 lg:order-1 lg:px-12">
               <p className="text-micro font-semibold uppercase text-coral">
                 {route.planning.intent.activity} in {route.planning.intent.place || route.region}
@@ -128,11 +132,32 @@ export function PlannedRouteView({ route }: { route: PlannedRoute }) {
                 This is a plan, not a recorded activity.
               </p>
               <p className="mt-2 max-w-xl text-control leading-6 text-ink-muted">
-                The line is an owner-curated planning source. A recorded activity must be
-                imported before this route can enter the memory atlas.
+                It keeps this future route in Planned routes and watches later imports for a
+                close recorded match. Nothing enters Memories until you compare and confirm it.
               </p>
 
-              <div className="mt-7 flex flex-wrap gap-2">
+              <div className="mt-7 border-y border-line py-5">
+                <h2 className="font-editorial text-2xl font-semibold text-ink">What this plan does</h2>
+                <div className="mt-4 grid gap-4 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
+                  <PlanPurpose
+                    icon={Bookmark}
+                    title="Keeps the intention"
+                    copy="Saves the route, target effort, terrain, and feeling in Planned routes."
+                  />
+                  <PlanPurpose
+                    icon={ScanSearch}
+                    title="Watches future imports"
+                    copy="Compares later recorded activities against this source line and target."
+                  />
+                  <PlanPurpose
+                    icon={ShieldCheck}
+                    title="Waits for you"
+                    copy="Never creates a memory or removes the plan without your confirmation."
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6 flex flex-wrap gap-2">
                 <Button type="button" onClick={() => setEditOpen(true)}>
                   <Pencil aria-hidden="true" />
                   Edit plan
@@ -153,15 +178,15 @@ export function PlannedRouteView({ route }: { route: PlannedRoute }) {
               </dl>
 
               {route.planning.intent.vibe ? (
-                <div className="mt-5 border-l-2 border-coral pl-4">
+                <div className="mt-5 bg-surface-muted p-4">
                   <p className="text-micro font-semibold uppercase text-ink-muted">Desired feeling</p>
                   <p className="mt-1 font-editorial text-xl text-ink">{route.planning.intent.vibe}</p>
                 </div>
               ) : null}
             </div>
 
-            <div className="order-1 min-h-56 border-b border-line lg:order-2 lg:min-h-[36rem] lg:border-b-0 lg:border-l">
-              <RouteThread route={route} className="h-full min-h-56 border-0 lg:min-h-[36rem]" />
+            <div className="order-1 min-h-72 border-b border-line lg:order-2 lg:min-h-[40rem] lg:border-b-0 lg:border-l">
+              <PlannedRoutePreview route={route} />
             </div>
           </div>
         </section>
@@ -256,7 +281,7 @@ export function PlannedRouteView({ route }: { route: PlannedRoute }) {
           <SheetHeader className="border-b border-line px-5 pb-4 pt-5 text-left">
             <SheetTitle className="font-editorial text-2xl">Edit planned route</SheetTitle>
             <SheetDescription>
-              Adjust the place, activity, distance, terrain, and feeling for this future route.
+              Change what Finder should watch for when later recorded activities arrive.
             </SheetDescription>
           </SheetHeader>
           <PlanIntentEditor
@@ -450,8 +475,15 @@ function PlanIntentEditor({
         onSubmit();
       }}
     >
+      <div className="bg-forest-soft p-4 text-control leading-6 text-forest">
+        <p className="font-semibold">Changes update what Finder watches for.</p>
+        <p className="mt-1 text-caption leading-5">
+          Distance, terrain, and feeling change the matching rules. Choosing another recorded
+          source replaces the planning line and restarts the completion clock from today.
+        </p>
+      </div>
       <label className="grid gap-1.5 text-control font-medium">
-        Planning source
+        Recorded route used as the planning line
         <select
           aria-label="Planning source"
           value={sourceSlug}
@@ -478,6 +510,10 @@ function PlanIntentEditor({
           <Input aria-label="Activity" readOnly value={intent.activity} />
         </label>
       </div>
+      <p className="-mt-2 text-caption leading-5 text-ink-muted">
+        Place and activity come from the selected recorded source. Choose another source to
+        change them.
+      </p>
       <label className="grid gap-1.5 text-control font-medium">
         <span className="flex justify-between gap-2">Distance <span className="text-xs text-ink-muted">km</span></span>
         <Input
@@ -519,8 +555,30 @@ function PlanIntentEditor({
           {error}
         </p>
       ) : null}
-      <Button type="submit" className="mt-2 w-full">Save plan changes</Button>
+      <Button type="submit" aria-label="Save plan changes" className="mt-2 w-full">
+        Update plan and matching rules
+      </Button>
     </form>
+  );
+}
+
+function PlanPurpose({
+  icon: Icon,
+  title,
+  copy,
+}: {
+  icon: typeof Bookmark;
+  title: string;
+  copy: string;
+}) {
+  return (
+    <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
+      <span className="row-span-2 grid size-9 place-items-center bg-forest-soft text-forest">
+        <Icon className="size-4" aria-hidden="true" />
+      </span>
+      <h3 className="text-caption font-semibold text-ink">{title}</h3>
+      <p className="text-caption leading-5 text-ink-secondary">{copy}</p>
+    </div>
   );
 }
 

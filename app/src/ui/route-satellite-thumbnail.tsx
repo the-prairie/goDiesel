@@ -23,9 +23,17 @@ declare global {
 export function RouteSatelliteThumbnail({
   route,
   enabled,
+  cinematic = false,
+  showRoute = true,
+  className,
+  imageClassName,
 }: {
   route: RouteSummary;
   enabled: boolean;
+  cinematic?: boolean;
+  showRoute?: boolean;
+  className?: string;
+  imageClassName?: string;
 }) {
   const url = useMemo(
     () =>
@@ -34,8 +42,10 @@ export function RouteSatelliteThumbnail({
         window.__GODIESEL_STATIC_MAPS_API_KEY__ ||
           import.meta.env.VITE_GOOGLE_MAPS_API_KEY ||
           "",
+        cinematic ? { width: 640, height: 640 } : undefined,
+        showRoute,
       ),
-    [route.trace],
+    [cinematic, route.trace, showRoute],
   );
   const [state, setState] = useState<RouteThumbnailState>(() =>
     thumbnailState(enabled, url),
@@ -54,7 +64,10 @@ export function RouteSatelliteThumbnail({
     <div
       data-route-thumbnail={route.slug}
       data-thumbnail-state={state}
-      className="pointer-events-none absolute inset-0 z-[1] overflow-hidden"
+      className={cn(
+        "pointer-events-none absolute inset-0 z-[1] overflow-hidden",
+        className,
+      )}
     >
       {requestImage ? (
         <img
@@ -67,6 +80,7 @@ export function RouteSatelliteThumbnail({
           className={cn(
             "size-full object-cover transition-opacity duration-200 motion-reduce:transition-none",
             state === "loaded" ? "opacity-100" : "opacity-0",
+            imageClassName,
           )}
         />
       ) : null}
@@ -97,20 +111,29 @@ export function nextThumbnailState(
 export function routeSatelliteThumbnailUrl(
   points: RoutePoint[],
   apiKey: string,
+  size: { width: number; height: number } = {
+    width: thumbnailWidth,
+    height: thumbnailHeight,
+  },
+  showRoute = true,
 ) {
   const path = downsampleThumbnailPath(points);
   if (!apiKey || path.length < 2) return null;
 
   const params = new URLSearchParams({
-    size: `${thumbnailWidth}x${thumbnailHeight}`,
+    size: `${size.width}x${size.height}`,
     scale: "2",
     maptype: "satellite",
     format: "png",
-    path: `color:0x63d6cfff|weight:4|${path
-      .map((point) => `${point.lat.toFixed(5)},${point.lng.toFixed(5)}`)
-      .join("|")}`,
     key: apiKey,
   });
+
+  params.set(
+    "path",
+    `${showRoute ? "color:0x63d6cfff|weight:4" : "color:0x00000000|weight:1"}|${path
+      .map((point) => `${point.lat.toFixed(5)},${point.lng.toFixed(5)}`)
+      .join("|")}`,
+  );
 
   return `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`;
 }

@@ -108,7 +108,7 @@ export function FinderPage() {
   }
 
   return (
-    <section className="relative h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 overflow-hidden bg-[#cadfdc] md:h-dvh">
+    <section className="relative h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 overflow-hidden bg-[#102b33] md:h-dvh">
       <FinderRouteMap
         candidates={candidates}
         selectedSlug={selectedCandidate?.sourceRouteSlug}
@@ -119,25 +119,25 @@ export function FinderPage() {
         showEmptyPrompt={!submittedIntent}
       />
 
-      <header data-testid="finder-header" className="pointer-events-none absolute inset-x-0 top-0 z-20 p-3 md:right-auto md:w-[25rem] md:p-5 [@media(max-height:640px)]:w-[min(36rem,calc(100%-1.5rem))] [@media(max-height:640px)]:p-3">
-        <div className="pointer-events-auto border border-white/65 bg-surface/90 p-3 shadow-panel backdrop-blur-xl md:p-5 [@media(max-height:640px)]:p-3">
+      <header data-testid="finder-header" className="pointer-events-none absolute inset-x-0 top-0 z-20 p-3 md:inset-x-auto md:left-5 md:top-[5.75rem] md:w-[28rem] md:p-0 [@media(max-height:640px)]:left-3 [@media(max-height:640px)]:top-[5rem] [@media(max-height:640px)]:w-[min(30rem,calc(100%-1.5rem))]">
+        <div className="pointer-events-auto border border-white/30 bg-[#07151c]/90 p-3 text-white shadow-panel backdrop-blur-xl md:p-5 [@media(max-height:640px)]:p-3">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="mb-0.5 flex items-center gap-1.5 text-[0.68rem] font-semibold uppercase text-primary md:mb-1 md:text-xs">
+              <div className="mb-0.5 flex items-center gap-1.5 text-[0.68rem] font-semibold uppercase text-[#9be7e1] md:mb-1 md:text-xs">
                 <Sparkles className="size-3.5" aria-hidden="true" /> Daydream Finder
               </div>
-              <h1 className="font-editorial text-[1.45rem] font-semibold text-ink md:text-3xl">Plan the next day.</h1>
-              <p className="mt-1 hidden text-control text-ink-secondary sm:block [@media(max-height:640px)]:hidden">
+              <h1 className="font-editorial text-[1.45rem] font-semibold text-white md:text-3xl">Plan the next day.</h1>
+              <p className="mt-1 hidden text-control text-white/68 sm:block [@media(max-height:640px)]:hidden">
                 Name the feeling. Finder brings the recorded possibilities into view.
               </p>
             </div>
           </div>
 
           {submittedIntent ? (
-            <div className="mt-2 flex min-w-0 items-center justify-between gap-2 border-t border-line/80 pt-2 md:mt-3 md:gap-3 md:pt-3">
+            <div className="mt-2 flex min-w-0 items-start gap-2 border-t border-white/15 pt-2 md:mt-3 md:items-center md:pt-3">
               <ActiveFilterChips intent={submittedIntent} onRemove={removeFilter} />
-              <Button type="button" variant="ghost" size="sm" className="shrink-0 px-2 md:px-3" aria-label="Edit filters" onClick={(event) => openFilters(event.currentTarget)}>
-                <SlidersHorizontal aria-hidden="true" /> <span className="hidden md:inline [@media(max-height:640px)]:hidden">Edit filters</span>
+              <Button type="button" variant="ghost" size="icon" className="size-9 shrink-0 text-white hover:bg-white/12 hover:text-white" aria-label="Edit filters" title="Edit filters" onClick={(event) => openFilters(event.currentTarget)}>
+                <SlidersHorizontal aria-hidden="true" />
               </Button>
             </div>
           ) : (
@@ -205,22 +205,22 @@ function FinderResults({
     <section
       aria-label="Finder results"
       data-testid="finder-results"
-      className="absolute inset-x-0 bottom-0 z-20 border-t border-white/50 bg-[#dce7ed]/88 pb-2 pt-3 shadow-[0_-14px_40px_rgba(20,39,68,0.18)] backdrop-blur-xl md:pb-4 md:pt-4"
+      className="absolute inset-x-0 bottom-0 z-20 border-t border-white/15 bg-[#07151c]/92 pb-2 pt-3 text-white shadow-[0_-8px_24px_rgba(3,12,18,0.32)] backdrop-blur-xl md:pb-4 md:pt-4"
     >
       <div className="mb-2 flex items-center justify-between gap-4 px-4 md:px-5">
         <div className="min-w-0">
-          <h2 className="font-editorial text-lg font-semibold text-ink md:text-xl">
+          <h2 className="font-editorial text-lg font-semibold text-white md:text-xl">
             {result?.status === "matches"
               ? `${result.candidates.length} recorded ${result.candidates.length === 1 ? "possibility" : "possibilities"}`
               : "Recorded possibilities"}
           </h2>
-          <p aria-live="polite" className="truncate text-xs text-ink-muted">
+          <p aria-live="polite" className="truncate text-xs text-white/58">
             {result?.message ?? "Search the curated shelf to reveal routes on the map."}
           </p>
         </div>
-        <div className="hidden items-center gap-2 text-xs text-ink-muted sm:flex">
-          <Database className="size-4 text-primary" aria-hidden="true" />
-          <span><strong className="font-semibold text-ink">Finder does not generate routes.</strong> Recorded GPX only.</span>
+        <div className="hidden items-center gap-2 text-xs text-white/58 sm:flex">
+          <Database className="size-4 text-[#9be7e1]" aria-hidden="true" />
+          <span><strong className="font-semibold text-white">Finder does not generate routes.</strong> Recorded GPX only.</span>
         </div>
       </div>
 
@@ -262,9 +262,9 @@ function ActiveFilterChips({ intent, onRemove }: { intent: FinderIntent; onRemov
     ...(intent.vibe ? [{ key: "vibe" as const, label: intent.vibe, aria: "Remove vibe filter" }] : []),
   ];
   return (
-    <div aria-label="Active Finder filters" className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div aria-label="Active Finder filters" className="flex min-w-0 flex-1 flex-wrap gap-1.5 pr-1 sm:flex-nowrap sm:overflow-x-auto sm:[scrollbar-width:none] sm:[&::-webkit-scrollbar]:hidden">
       {chips.map((chip) => (
-        <Button key={chip.key} type="button" variant="outline" size="sm" className="h-8 shrink-0 bg-surface/80 px-2 capitalize" aria-label={chip.aria} onClick={() => onRemove(chip.key)}>
+        <Button key={chip.key} type="button" variant="outline" size="sm" className="h-8 shrink-0 border-white/25 bg-white/10 px-2 capitalize text-white hover:bg-white/18 hover:text-white" aria-label={chip.aria} onClick={() => onRemove(chip.key)}>
           {chip.label}<X aria-hidden="true" />
         </Button>
       ))}
@@ -289,9 +289,9 @@ function FinderState({
   return (
     <div role={role} className="grid min-h-28 place-items-center px-6 py-4 text-center">
       <div className="grid max-w-md justify-items-center gap-2">
-        <SearchX className="size-5 text-primary" aria-hidden="true" />
-        <h3 className="font-editorial text-lg font-semibold text-ink">{title}</h3>
-        <p className="text-control text-ink-secondary">{copy}</p>
+        <SearchX className="size-5 text-[#9be7e1]" aria-hidden="true" />
+        <h3 className="font-editorial text-lg font-semibold text-white">{title}</h3>
+        <p className="text-control text-white/66">{copy}</p>
         {action ? (
           <Button
             className="mt-1 min-h-11"

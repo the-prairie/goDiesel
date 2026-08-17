@@ -341,7 +341,12 @@ test("Finder uses the map shell without global header chrome", async ({
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/#/finder");
 
-  await expect(page.getByTestId("atlas-spine")).toBeVisible();
+  await expect(page.getByTestId("atlas-spine")).toHaveCount(0);
+  await expect(page.getByTestId("atlas-compact-navigation")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Plan" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
   await expect(page.getByTestId("app-header")).toBeHidden();
   await expect(page.getByRole("heading", { name: "Plan the next day." })).toBeVisible();
 });
