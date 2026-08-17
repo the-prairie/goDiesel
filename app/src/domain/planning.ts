@@ -34,6 +34,7 @@ export interface PlannedRouteMetadata {
   candidateId: string;
   sourceRouteSlug: string;
   sourceLabel: DiscoveryCandidate["sourceLabel"];
+  sourceSnapshot?: RouteSummary;
   createdAt: string;
   storeVersion: 1;
   intent: FinderIntent;

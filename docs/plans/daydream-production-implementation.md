@@ -128,6 +128,17 @@ Status: Verified
 - [x] Verify following and free-camera composition on desktop and phone against live Google 3D terrain.
 - [x] Pass the complete release gate and the affected live-provider matrix.
 
+### 12. Plan-to-memory loop
+
+Status: Verified
+
+- [x] Open every saved Finder plan at a durable canonical route URL.
+- [x] Let the owner edit future intent, reopen the source in Finder, or remove the plan.
+- [x] Derive possible completions only from later recorded activities with matching facts and nearby recorded geometry.
+- [x] Require an explicit plan-versus-recording comparison before confirmation.
+- [x] Remove the plan only after confirmation and open the existing recorded route as the memory.
+- [x] Verify desktop and phone composition, storage durability, source honesty, and Atlas isolation.
+
 ## Decisions
 
 - The real Google 3D renderer remains the production replay engine.
@@ -236,3 +247,14 @@ Status: Verified
 - The complete release gate passed on 2026-08-16: production build, all 260 unit tests, bundle budget, and all 93 production browser journeys.
 - The live Google matrix passed 13 of 15 journeys on its first run. Two navigator checks identified hidden-layer style drift; the renderer was corrected to preserve style contracts while skipping only expensive hidden geometry, and both affected San Francisco and Crete journeys passed on rerun.
 - Independent standards and product reviews identified performance-probe overhead, tap ownership, hidden Recenter, background-tab timing, and stale paused-camera rendering. All were corrected; the final 261-unit sweep, deterministic ownership journey, two live regional journeys, 30-second budget, and production phone free-camera journey passed, and both reviewers reported no remaining blockers.
+
+### Slice 12
+
+- Every saved Finder plan now opens at a durable canonical route URL with source-honest planning intent, source context, edit, reopen, and remove actions.
+- Place or activity changes rebind the plan atomically to a selected recorded source, reset the temporal baseline, preserve an immutable source snapshot, and replace the browser URL when the canonical slug changes.
+- Finder can restore a retired catalog source from that completed recorded-source snapshot without manufacturing a completed activity from the planned route.
+- Completion candidates are independently completed activities recorded after the current source binding, with matching activity, place, distance tolerance, and at least 55% bidirectional proximity between recorded traces.
+- Saving, editing, removing, and confirming fail closed when browser storage is unavailable, with actionable errors inside the active interaction surface; malformed stored records are isolated without discarding valid siblings.
+- Desktop, compact-desktop, and phone Finder composition passed the focused browser matrix with no overflow, and the plan comparison and confirmation journey preserves Atlas route totals.
+- The final verification passed on 2026-08-16: production build, all 277 unit tests, all 13 Finder planning journeys, and 29 adjacent Routes and route-loading journeys.
+- Independent standards and product reviews found no remaining durability, provenance, canonical identity, accessibility, or transaction-model blockers.

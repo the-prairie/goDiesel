@@ -16,6 +16,20 @@ async function searchKyoto(page: Page) {
   await form.getByRole("button", { name: "Find curated routes" }).click();
 }
 
+async function searchBanff(page: Page) {
+  const existingForm = page.getByRole("form", { name: "Find a route" });
+  if (!(await existingForm.isVisible())) {
+    await page.getByRole("button", { name: /^(Shape the day|Edit filters)$/ }).click();
+  }
+  const form = page.getByRole("form", { name: "Find a route" });
+  await form.getByLabel("Place").fill("Banff");
+  await form.getByLabel("Activity").selectOption("Run");
+  await form.getByLabel("Distance").fill("21");
+  await form.getByLabel("Terrain").selectOption("trail");
+  await form.getByLabel("Vibe").fill("big day");
+  await form.getByRole("button", { name: "Find curated routes" }).click();
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
   await page.evaluate((key) => localStorage.removeItem(key), plannedRouteStorageKey);
@@ -69,10 +83,10 @@ test("Finder searches explicit route-backed candidates and saves a durable plan"
   await expect(candidate.getByRole("button", { name: "Already planned" })).toBeDisabled();
 
   await page.goto("/#/routes");
-  await expect(page.getByRole("article", { name: "Planned route Kyoto, Japan" })).toHaveCount(0);
+  await expect(page.getByRole("article", { name: "Planned route Kyoto" })).toHaveCount(0);
 
   await page.goto("/#/routes?lifecycle=planned");
-  const plannedCard = page.getByRole("article", { name: "Planned route Kyoto, Japan" });
+  const plannedCard = page.getByRole("article", { name: "Planned route Kyoto" });
   await expect(plannedCard).toBeVisible();
   await expect(plannedCard).toContainText("Planning intent");
   await expect(page.getByRole("heading", { name: "Routes waiting to be made." })).toBeVisible();
@@ -156,6 +170,196 @@ test("a planned route never changes completed Atlas totals", async ({ page }) =>
   );
   expect(finalTotals).toEqual(initialTotals);
   await expect(page.getByText("planned-owner-route-17654151284")).toHaveCount(0);
+});
+
+test("a planned route has a durable detail, edit, and remove journey", async ({ page }) => {
+  await page.goto("/#/finder");
+  await searchKyoto(page);
+  await page.getByRole("button", { name: "Save planned route" }).click();
+
+  await page.goto("/#/routes?lifecycle=planned");
+  await page.getByRole("link", { name: "Open planned Kyoto route" }).click();
+
+  await expect(page).toHaveURL(/#\/routes\/planned-owner-route-17654151284$/);
+  await expect(page.getByRole("heading", { name: "Kyoto" })).toBeVisible();
+  await expect(page.getByText("This is a plan, not a recorded activity.")).toBeVisible();
+  await expect(page.getByText("No later recorded activity matches this plan yet.")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+    await page.evaluate(() => window.innerWidth + 1),
+  );
+
+  await page.getByRole("button", { name: "Edit plan" }).click();
+  const editPlan = page.getByRole("dialog", { name: "Edit planned route" });
+  await editPlan.getByLabel("Planning source").selectOption("5650407638");
+  await expect(editPlan.getByLabel("Place")).toHaveValue("Victoria, BC");
+  await expect(editPlan.getByLabel("Activity")).toHaveValue("Ride");
+  await editPlan.getByLabel("Distance").fill("90");
+  await editPlan.getByLabel("Vibe").fill("quiet farm roads");
+  await editPlan.getByRole("button", { name: "Save plan changes" }).click();
+  await expect(page).toHaveURL(/#\/routes\/planned-owner-route-5650407638$/);
+  await expect(page.getByText("90.0 km", { exact: true })).toBeVisible();
+  await expect(page.getByText("quiet farm roads", { exact: true })).toBeVisible();
+
+  const storedPlanning = await page.evaluate((key) => {
+    const value = JSON.parse(localStorage.getItem(key) ?? "null");
+    return value.routes[0].planning;
+  }, plannedRouteStorageKey);
+  expect(storedPlanning).toMatchObject({
+    sourceRouteSlug: "5650407638",
+    intent: {
+      place: "Victoria, BC",
+      activity: "Ride",
+      distanceKm: 90,
+      vibe: "quiet farm roads",
+    },
+  });
+
+  await page.goto("/#/routes?lifecycle=planned");
+  const updatedCard = page.getByRole("article", { name: "Planned route Victoria, BC" });
+  await expect(updatedCard).toContainText("90.0 km");
+  await expect(updatedCard).toContainText("Ride");
+  await expect(updatedCard).toContainText("Road");
+  await expect(updatedCard).not.toContainText("21.3 km");
+  await updatedCard.getByRole("link", { name: "Open planned Victoria, BC route" }).click();
+
+  await page.getByRole("link", { name: "Reopen source in Finder" }).click();
+  await expect(page).toHaveURL(/#\/finder\?.*candidate=5650407638/);
+  await expect(page.getByRole("article", { name: "Victoria, BC candidate" })).toBeVisible();
+  await page.goBack();
+
+  await page.getByRole("button", { name: "Remove plan" }).click();
+  await page.getByRole("button", { name: "Keep plan" }).click();
+  await expect(page.getByRole("button", { name: "Remove plan" })).toBeFocused();
+  await page.getByRole("button", { name: "Remove plan" }).click();
+  await page.getByRole("button", { name: "Remove planned route" }).click();
+  await expect(page).toHaveURL(/#\/routes\?lifecycle=planned$/);
+  await expect(page.getByRole("article", { name: "Planned route Victoria, BC" })).toHaveCount(0);
+});
+
+test("a failed durable write keeps the plan open and reports the problem", async ({ page }) => {
+  await page.goto("/#/finder");
+  await searchKyoto(page);
+  await page.getByRole("button", { name: "Save planned route" }).click();
+  await page.goto("/#/routes/planned-owner-route-17654151284");
+
+  await page.evaluate(() => {
+    Object.defineProperty(window, "__originalSetItem", {
+      configurable: true,
+      value: Storage.prototype.setItem,
+    });
+    Storage.prototype.setItem = () => {
+      throw new DOMException("Storage blocked", "SecurityError");
+    };
+  });
+  await page.getByRole("button", { name: "Edit plan" }).click();
+  const editPlan = page.getByRole("dialog", { name: "Edit planned route" });
+  await editPlan.getByLabel("Distance").fill("24");
+  await editPlan.getByRole("button", { name: "Save plan changes" }).click();
+  await expect(editPlan.getByRole("alert")).toContainText("Plan changes could not be saved");
+  await editPlan.getByRole("button", { name: "Close" }).click();
+  await page.getByRole("button", { name: "Remove plan" }).click();
+  await page.getByRole("button", { name: "Remove planned route" }).click();
+
+  await expect(page).toHaveURL(/#\/routes\/planned-owner-route-17654151284$/);
+  await expect(page.getByRole("alert")).toContainText("Plan could not be removed");
+  await expect(page.getByRole("heading", { name: "Kyoto" })).toBeVisible();
+});
+
+test("Finder reopens a saved source snapshot after its catalog entry is retired", async ({ page }) => {
+  await page.goto("/#/finder");
+  await searchKyoto(page);
+  await page.getByRole("button", { name: "Save planned route" }).click();
+  await page.evaluate((key) => {
+    const value = JSON.parse(localStorage.getItem(key) ?? "null");
+    value.routes[0].planning.candidateId = "owner-route-retired-kyoto";
+    value.routes[0].planning.sourceRouteSlug = "retired-kyoto-source";
+    value.routes[0].planning.sourceSnapshot.slug = "retired-kyoto-source";
+    localStorage.setItem(key, JSON.stringify(value));
+  }, plannedRouteStorageKey);
+
+  await page.goto("/#/routes/planned-owner-route-17654151284");
+  await page.getByRole("link", { name: "Reopen source in Finder" }).click();
+
+  await expect(page).toHaveURL(/candidate=retired-kyoto-source/);
+  await expect(page.getByText("Saved planning source reopened from its durable route snapshot."))
+    .toBeVisible();
+  await expect(page.getByRole("region", { name: "Finder route map" }))
+    .toHaveAttribute("data-selected-route", "retired-kyoto-source");
+});
+
+test("Finder reports a plan that browser storage could not save", async ({ page }) => {
+  await page.goto("/#/finder");
+  await searchKyoto(page);
+  await page.evaluate(() => {
+    Storage.prototype.setItem = () => {
+      throw new DOMException("Storage blocked", "SecurityError");
+    };
+  });
+
+  const candidate = page.getByRole("article", { name: "Kyoto, Japan candidate" });
+  await candidate.getByRole("button", { name: "Save planned route" }).click();
+
+  await expect(candidate.getByRole("alert")).toContainText("Plan could not be saved");
+  await expect(candidate.getByRole("button", { name: "Save planned route" })).toBeEnabled();
+});
+
+test("a plan becomes a memory only after confirming a later recorded match", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#/finder");
+  await searchBanff(page);
+  await page.getByRole("button", { name: "Save planned route" }).click();
+
+  await page.evaluate((key) => {
+    const value = JSON.parse(localStorage.getItem(key) ?? "null");
+    value.routes[0].planning.createdAt = "2024-10-01T12:00:00.000Z";
+    value.routes[0].date = "2024-10-01";
+    localStorage.setItem(key, JSON.stringify(value));
+  }, plannedRouteStorageKey);
+
+  await page.goto("/#/routes/planned-owner-route-13358070690");
+  const candidate = page.getByRole("article", { name: /Recorded completion candidate/ }).first();
+  await expect(candidate).toContainText("Derived match");
+  await expect(candidate).toContainText("Recorded activity");
+
+  const storedBeforeConfirmation = await page.evaluate(
+    (key) => JSON.parse(localStorage.getItem(key) ?? "null").routes.length,
+    plannedRouteStorageKey,
+  );
+  expect(storedBeforeConfirmation).toBe(1);
+
+  await candidate.getByRole("button", { name: "Compare recorded activity" }).click();
+  const comparison = page.getByRole("dialog", {
+    name: "Compare plan with recorded activity",
+  });
+  await expect(comparison.getByText("Planning target")).toBeVisible();
+  await expect(comparison.getByText("Recorded activity", { exact: true })).toBeVisible();
+  await expect(comparison.getByText("Derived geometry comparison")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(391);
+  await page.evaluate(() => {
+    Object.defineProperty(window, "__originalSetItem", {
+      configurable: true,
+      value: Storage.prototype.setItem,
+    });
+    Storage.prototype.setItem = () => {
+      throw new DOMException("Storage blocked", "SecurityError");
+    };
+  });
+  await comparison.getByRole("button", { name: "Confirm recorded completion" }).click();
+  await expect(comparison.getByRole("alert")).toContainText("Completion could not be confirmed");
+  await page.evaluate(() => {
+    Storage.prototype.setItem = (
+      window as typeof window & { __originalSetItem: typeof Storage.prototype.setItem }
+    ).__originalSetItem;
+  });
+  await comparison.getByRole("button", { name: "Confirm recorded completion" }).click();
+
+  await expect(page).toHaveURL(/#\/routes\/(?!planned-)[^?]+$/);
+  await expect(page.getByText("This is a plan, not a recorded activity.")).toHaveCount(0);
+  const storedAfterConfirmation = await page.evaluate(
+    (key) => JSON.parse(localStorage.getItem(key) ?? "null").routes.length,
+    plannedRouteStorageKey,
+  );
+  expect(storedAfterConfirmation).toBe(0);
 });
 
 for (const viewport of [

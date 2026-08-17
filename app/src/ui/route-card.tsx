@@ -8,7 +8,7 @@ import { Link } from "react-router-dom";
 
 import { formatRouteDate, type RouteSummary } from "@/domain/route";
 import { isPlannedRoute } from "@/domain/planning";
-import { APP_PATHS, routeDetailPath } from "@/app/route-paths";
+import { routeDetailPath } from "@/app/route-paths";
 import { cn } from "@/ui/utils";
 
 export function RouteCard({
@@ -22,10 +22,22 @@ export function RouteCard({
   const guideReviewed =
     route.guide.reviewStatus === "reviewed" ||
     route.guide.reviewStatus === "published";
-  const destination = planned ? APP_PATHS.finder : routeDetailPath(route.slug);
-  const personalTitle = route.activityName.trim() || route.subtitle.trim() || route.name;
+  const destination = routeDetailPath(route.slug);
+  const displayRegion = planned
+    ? route.planning.intent.place.trim() || route.region
+    : route.region;
+  const displayActivity = planned ? route.planning.intent.activity : route.type;
+  const displayDistanceKm = planned
+    ? route.planning.intent.distanceKm
+    : route.distanceKm;
+  const personalTitle = planned
+    ? displayRegion
+    : route.activityName.trim() || route.subtitle.trim() || route.name;
   const context = planned
-    ? { label: "Planning source", text: route.planning.sourceLabel }
+    ? {
+        label: "Planning source",
+        text: `${route.name} - ${route.planning.sourceLabel}`,
+      }
     : route.lifecycle === "discovered"
       ? {
           label: "Owner experience unavailable",
@@ -42,17 +54,17 @@ export function RouteCard({
       ? "Imported geometry"
       : "Recorded activity";
   const accessibleLabel = planned
-    ? `Edit planned ${route.name} route in Finder`
+    ? `Open planned ${displayRegion} route`
     : `Open ${route.name} route from ${route.date || "an unknown date"}, ${route.distanceKm.toFixed(1)} km`;
 
   return (
     <article
-      aria-label={planned ? `Planned route ${route.region}` : undefined}
+      aria-label={planned ? `Planned route ${displayRegion}` : undefined}
       className="group min-w-0 border border-line bg-surface transition-[border-color,box-shadow,transform] duration-[var(--duration-standard)] hover:-translate-y-0.5 hover:border-line-strong hover:shadow-panel focus-within:border-line-strong focus-within:shadow-panel motion-reduce:hover:translate-y-0"
     >
       <Link
         to={destination}
-        onClick={planned ? undefined : onOpen}
+        onClick={onOpen}
         aria-label={accessibleLabel}
         className="flex h-full min-w-0 flex-col text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       >
@@ -61,7 +73,7 @@ export function RouteCard({
         <div className="flex flex-1 flex-col px-4 pb-4 pt-4 sm:px-5 sm:pb-5">
           <div className="flex min-w-0 items-start justify-between gap-4">
             <p className="min-w-0 truncate text-micro font-semibold uppercase text-coral">
-              {route.region}
+              {displayRegion}
             </p>
             <time
               dateTime={route.date || undefined}
@@ -85,16 +97,22 @@ export function RouteCard({
           <dl className="mt-5 grid grid-cols-3 border-y border-line">
             <MemoryFact label="Activity">
               <span className="inline-flex items-center gap-1.5">
-                {route.type === "Ride" ? (
+                {displayActivity === "Ride" ? (
                   <Bike className="size-4 text-route" aria-hidden="true" />
                 ) : (
                   <Footprints className="size-4 text-route" aria-hidden="true" />
                 )}
-                {route.type}
+                {displayActivity}
               </span>
             </MemoryFact>
-            <MemoryFact label="Distance">{route.distanceKm.toFixed(1)} km</MemoryFact>
-            <MemoryFact label="Climb">{route.elevationGainM.toLocaleString()} m up</MemoryFact>
+            <MemoryFact label="Distance">{displayDistanceKm.toFixed(1)} km</MemoryFact>
+            {planned ? (
+              <MemoryFact label="Terrain">
+                {formatTerrain(route.planning.intent.terrain)}
+              </MemoryFact>
+            ) : (
+              <MemoryFact label="Climb">{route.elevationGainM.toLocaleString()} m up</MemoryFact>
+            )}
           </dl>
 
           <div className="mt-4 flex min-w-0 items-center justify-between gap-4">
@@ -102,7 +120,7 @@ export function RouteCard({
               {sourceLabel}
             </span>
             <span className="inline-flex shrink-0 items-center gap-2 text-caption font-semibold text-forest">
-              {planned ? "Shape this route" : "Open field story"}
+              {planned ? "Open route plan" : "Open field story"}
               <ArrowRight
                 className="size-4 transition-transform group-hover:translate-x-1"
                 aria-hidden="true"
@@ -113,6 +131,12 @@ export function RouteCard({
       </Link>
     </article>
   );
+}
+
+function formatTerrain(terrain: string) {
+  return terrain === "any"
+    ? "Any terrain"
+    : `${terrain.charAt(0).toUpperCase()}${terrain.slice(1)}`;
 }
 
 function MemoryFact({
@@ -138,6 +162,7 @@ export function RouteThread({
   className?: string;
 }) {
   const points = normalizedTrace(route);
+  const planned = isPlannedRoute(route);
 
   return (
     <div
@@ -167,8 +192,9 @@ export function RouteThread({
           <polyline
             points={points}
             fill="none"
-            stroke="var(--route)"
+            stroke={planned ? "var(--warning)" : "var(--route)"}
             strokeWidth="2.5"
+            strokeDasharray={planned ? "7 5" : undefined}
             strokeLinecap="round"
             strokeLinejoin="round"
             vectorEffect="non-scaling-stroke"
@@ -179,7 +205,7 @@ export function RouteThread({
           Route trace unavailable
         </div>
       )}
-      {isPlannedRoute(route) ? (
+      {planned ? (
         <CalendarClock
           className="absolute bottom-2 right-2 size-4 text-warning"
           aria-label="Planned"

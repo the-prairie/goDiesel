@@ -4,7 +4,16 @@ import { useSearchParams } from "react-router-dom";
 
 import { curatedRouteDiscoveryProvider } from "@/data/discovery-provider";
 import { savePlannedRoute, usePlannedRoutes } from "@/data/planned-route-store";
-import type { DiscoveryCandidate, DiscoveryResult, FinderIntent } from "@/domain/planning";
+import {
+  finderIntentFromSearchParams,
+  finderSearchParamsForIntent,
+} from "@/domain/finder-intent-url";
+import type {
+  DiscoveryCandidate,
+  DiscoveryResult,
+  FinderIntent,
+  PlannedRoute,
+} from "@/domain/planning";
 import { CandidateRoute } from "@/surfaces/finder/components/candidate-route";
 import { FinderForm } from "@/surfaces/finder/components/finder-form";
 import { FinderRouteMap } from "@/surfaces/finder/components/finder-route-map";
@@ -22,28 +31,48 @@ const initialIntent: FinderIntent = {
 
 export function FinderPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const submittedIntent = useMemo(() => intentFromSearchParams(searchParams), [searchParams]);
+  const submittedIntent = useMemo(
+    () => finderIntentFromSearchParams(searchParams),
+    [searchParams],
+  );
   const [intent, setIntent] = useState(submittedIntent ?? initialIntent);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filterReturnFocusRef = useRef<HTMLButtonElement | null>(null);
   const [previewedSlug, setPreviewedSlug] = useState<string>();
   const isMobile = useIsMobile();
+  const plannedRoutes = usePlannedRoutes();
+  const requestedSlug = searchParams.get("candidate") ?? undefined;
   const result = useMemo(
-    () => submittedIntent ? curatedRouteDiscoveryProvider.search(submittedIntent) : null,
-    [submittedIntent],
+    () => {
+      if (!submittedIntent) return null;
+      const discovered = curatedRouteDiscoveryProvider.search(submittedIntent);
+      const sourceAlreadyPresent = discovered.candidates.some(
+        (candidate) => candidate.sourceRouteSlug === requestedSlug,
+      );
+      const savedPlan = requestedSlug && !sourceAlreadyPresent
+        ? plannedRoutes.find((route) => route.planning.sourceRouteSlug === requestedSlug)
+        : undefined;
+      if (!savedPlan) return discovered;
+      const restored = savedPlanAsCandidate(savedPlan);
+      if (!restored) return discovered;
+      return {
+        status: "matches" as const,
+        candidates: [...discovered.candidates, restored],
+        message: "Saved planning source reopened from its durable route snapshot.",
+      };
+    },
+    [plannedRoutes, requestedSlug, submittedIntent],
   );
   const candidates = result?.status === "matches" ? result.candidates : [];
-  const requestedSlug = searchParams.get("candidate") ?? undefined;
   const selectedCandidate =
     candidates.find((candidate) => candidate.sourceRouteSlug === requestedSlug) ?? candidates[0];
-  const plannedRoutes = usePlannedRoutes();
 
   useEffect(() => {
     setIntent(submittedIntent ?? initialIntent);
   }, [submittedIntent]);
 
   function search() {
-    setSearchParams(paramsForIntent(intent));
+    setSearchParams(finderSearchParamsForIntent(intent));
     setFiltersOpen(false);
     setPreviewedSlug(undefined);
   }
@@ -75,7 +104,7 @@ export function FinderPage() {
       ...(filter === "vibe" ? { vibe: "" } : {}),
     };
     setIntent(next);
-    setSearchParams(next.place ? paramsForIntent(next) : new URLSearchParams());
+    setSearchParams(next.place ? finderSearchParamsForIntent(next) : new URLSearchParams());
   }
 
   return (
@@ -207,7 +236,7 @@ function FinderResults({
               plannedRoute={plannedRoutes.find((route) => route.planning.candidateId === candidate.id)}
               onSelect={() => onSelect(candidate)}
               onPreview={(previewing) => onPreview(previewing ? candidate.sourceRouteSlug : undefined)}
-              onSave={() => savePlannedRoute(candidate, submittedIntent!).route}
+              onSave={() => savePlannedRoute(candidate, submittedIntent!).persisted}
             />
           ))}
         </div>
@@ -288,19 +317,18 @@ function matchReason(candidate: DiscoveryCandidate, intent: FinderIntent) {
   return `${parts.filter(Boolean).join(", ")}.`;
 }
 
-function intentFromSearchParams(params: URLSearchParams): FinderIntent | null {
-  const place = params.get("place")?.trim() ?? "";
-  if (!place) return null;
-  const activity = params.get("activity") === "Ride" ? "Ride" : "Run";
-  const distance = Number(params.get("distance"));
-  const terrainValue = params.get("terrain");
-  const terrain = ["road", "trail", "mixed", "mountain"].includes(terrainValue ?? "") ? terrainValue as FinderIntent["terrain"] : "any";
-  return { place, activity, distanceKm: Number.isFinite(distance) && distance > 0 ? distance : 20, terrain, vibe: params.get("vibe")?.trim() ?? "" };
-}
-
-function paramsForIntent(intent: FinderIntent) {
-  const params = new URLSearchParams({ place: intent.place.trim(), activity: intent.activity, distance: String(intent.distanceKm) });
-  if (intent.terrain !== "any") params.set("terrain", intent.terrain);
-  if (intent.vibe.trim()) params.set("vibe", intent.vibe.trim());
-  return params;
+function savedPlanAsCandidate(plan: PlannedRoute): DiscoveryCandidate | undefined {
+  const sourceSnapshot = plan.planning.sourceSnapshot;
+  if (!sourceSnapshot) return undefined;
+  const terrain: DiscoveryCandidate["terrain"] = plan.planning.intent.terrain === "any"
+    ? []
+    : [plan.planning.intent.terrain];
+  return {
+    id: plan.planning.candidateId,
+    sourceRouteSlug: plan.planning.sourceRouteSlug,
+    sourceLabel: plan.planning.sourceLabel,
+    terrain,
+    vibes: plan.planning.intent.vibe ? [plan.planning.intent.vibe] : [],
+    route: sourceSnapshot,
+  };
 }

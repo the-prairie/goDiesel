@@ -1,4 +1,5 @@
 import { Check, MapPin, Plus, Route as RouteIcon } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import { APP_PATHS } from "@/app/route-paths";
@@ -23,9 +24,14 @@ export function CandidateRoute({
   matchReason?: string;
   onSelect?: () => void;
   onPreview?: (previewing: boolean) => void;
-  onSave: () => PlannedRoute;
+  onSave: () => boolean;
 }) {
   const route = candidate.route;
+  const [saveError, setSaveError] = useState(false);
+
+  function save() {
+    setSaveError(!onSave());
+  }
 
   return (
     <article
@@ -91,7 +97,7 @@ export function CandidateRoute({
           size="sm"
           disabled={Boolean(plannedRoute)}
           aria-label={plannedRoute ? "Already planned" : "Save planned route"}
-          onClick={onSave}
+          onClick={save}
         >
           {plannedRoute ? <Check aria-hidden="true" /> : <Plus aria-hidden="true" />}
           {plannedRoute ? "Planned" : "Plan it"}
@@ -105,6 +111,11 @@ export function CandidateRoute({
           </>
         ) : null}
       </div>
+      {saveError ? (
+        <p role="alert" className="border-l-2 border-destructive pl-3 text-xs text-destructive">
+          Plan could not be saved. Check browser storage and try again.
+        </p>
+      ) : null}
     </article>
   );
 }

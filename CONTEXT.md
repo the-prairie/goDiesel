@@ -92,7 +92,7 @@ product.
 | --- | --- |
 | `completed` | The owner recorded this route by doing it. It is a memory. |
 | `discovered` | The route's geometry is real and imported, but the owner has not recorded doing it. |
-| `planned` | An intention. It has no recorded geometry and is never replay-eligible. |
+| `planned` | An intention. It has no owner-recorded completion geometry and is never replay-eligible. It may reference visibly labelled planning-source geometry. |
 
 Current data: 66 `completed`, 1 `discovered`, 0 `planned` generated.
 
@@ -205,7 +205,21 @@ Its values map exactly as follows: `Atlas routes` includes `completed` and
 and `Planned routes` is `planned`.
 The default route library excludes `planned` routes; they appear only when the
 owner explicitly selects `Planned routes`, remain visibly labelled as plans,
-and return to Finder for editing.
+and open a source-honest plan detail that can return to Finder.
+Plan detail may edit future intent or remove the plan, but it never changes the
+planning source into recorded evidence.
+Changing place, activity, or source rebinds the plan atomically to a selected
+recorded source, resets the completion-time baseline, and updates its canonical
+plan identity.
+A saved plan may retain an immutable completed-source snapshot so Finder can
+reopen that source after catalog changes without treating the plan itself as a
+recorded activity.
+It may offer a `derived` completion candidate only when an independently
+recorded activity is later than the plan, matches its activity, region, and
+distance tolerance, and has recorded geometry near the planning trace.
+The planning source itself is never a completion candidate.
+The owner must compare and explicitly confirm a recorded candidate before the
+plan is removed and the existing recorded route opens as the memory.
 Route cards label source activity descriptions as `Recorded note`, approved
 guide interpretation as `Editorial hypothesis`, and missing source copy as
 `Recorded note unavailable`.

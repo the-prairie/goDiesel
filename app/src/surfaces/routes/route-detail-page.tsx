@@ -5,9 +5,11 @@ import { Link, useParams } from "react-router-dom";
 import { APP_PATHS, decodedRouteSlug } from "@/app/route-paths";
 import { singleRouteMicrosite } from "@/app/single-route-microsite";
 import { findRouteBySlug } from "@/data/routes";
+import { usePlannedRoutes } from "@/data/planned-route-store";
 import { routeLibraryReturnPath } from "@/data/route-library-return";
 import { useRouteDetail, type RouteDetailState } from "@/data/use-route-detail";
 import { RouteStoryView } from "@/surfaces/routes/components/route-story-view";
+import { PlannedRouteView } from "@/surfaces/routes/components/planned-route-view";
 import { Button } from "@/ui/button";
 import { RouteNotFound } from "@/ui/route-not-found";
 import { cn } from "@/ui/utils";
@@ -16,12 +18,17 @@ export function RouteDetailPage() {
   const { routeSlug } = useParams();
   const decodedSlug = decodedRouteSlug(routeSlug);
   const summary = decodedSlug ? findRouteBySlug(decodedSlug) : undefined;
+  const plannedRoutes = usePlannedRoutes();
+  const plannedRoute = decodedSlug
+    ? plannedRoutes.find((route) => route.slug === decodedSlug)
+    : undefined;
   const [requestKey, setRequestKey] = useState(0);
   const detail = useRouteDetail(summary?.slug, requestKey);
   const routesPath = summary
     ? (routeLibraryReturnPath(summary.slug) ?? APP_PATHS.routes)
     : APP_PATHS.routes;
 
+  if (plannedRoute) return <PlannedRouteView route={plannedRoute} />;
   if (!summary) return <RouteNotFound />;
 
   return (
