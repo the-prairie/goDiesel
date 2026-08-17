@@ -21,7 +21,7 @@ import { APP_SECTIONS } from "@/app/app-sections";
 export function AtlasImmersiveNavigation({
   activeMode = "atlas",
 }: {
-  activeMode?: "atlas" | "finder";
+  activeMode?: "atlas" | "finder" | "routes";
 }) {
   const firstDestinationRef = useRef<HTMLAnchorElement>(null);
   const location = useLocation();
@@ -128,6 +128,18 @@ export function AtlasImmersiveNavigation({
           )}
         >
           Memories
+        </Link>
+        <Link
+          to={APP_PATHS.routes}
+          aria-current={activeMode === "routes" ? "page" : undefined}
+          className={cn(
+            "inline-flex h-11 items-center px-4 text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#63d6cf]",
+            activeMode === "routes"
+              ? "bg-white font-semibold text-[#15221e]"
+              : "text-white/78 hover:bg-white/10 hover:text-white",
+          )}
+        >
+          Routes
         </Link>
         <Link
           to={APP_PATHS.finder}

@@ -59,7 +59,11 @@ test("every product surface has a canonical URL", async ({ page }) => {
     if (label === "Admin") {
       await page.goto("/#/admin");
     } else {
-      await page.getByRole("link", { name: label }).click();
+      const navigation = page.getByRole("dialog", { name: "goDiesel navigation" });
+      if (!(await navigation.isVisible())) {
+        await page.getByRole("button", { name: "Open application navigation" }).click();
+      }
+      await navigation.getByRole("link", { name: label, exact: true }).click();
     }
     await expect(page).toHaveURL(new RegExp(`#/${path}$`));
     if (label === "Replay") {
@@ -78,8 +82,8 @@ test("canonical product and selected-route URLs load directly", async ({
   page,
 }) => {
   for (const [path, activeNavigation] of [
-    ["atlas", "Atlas"],
-    ["finder", "Finder"],
+    ["atlas", "Memories"],
+    ["finder", "Plan"],
     ["routes", "Routes"],
     ["replay", "Replay"],
     ["admin", "Admin"],
@@ -100,15 +104,8 @@ test("canonical product and selected-route URLs load directly", async ({
       await expect(page.getByTestId("atlas-spine")).toHaveCount(0);
       continue;
     }
-    if (path === "atlas") {
-      await page.getByRole("button", { name: "Open application navigation" }).click();
-    }
     await expect(
-      path === "atlas"
-        ? page
-            .getByRole("dialog", { name: "goDiesel navigation" })
-            .getByRole("link", { name: activeNavigation, exact: true })
-        : page.getByRole("link", { name: activeNavigation, exact: true }),
+      page.getByRole("link", { name: activeNavigation, exact: true }),
     ).toHaveAttribute("aria-current", "page");
   }
 });
@@ -321,13 +318,22 @@ test("mobile spine keeps every primary destination legible", async ({
   }
 });
 
-test("utility surfaces retain the product subtitle on desktop", async ({
+test("Routes uses the immersive library shell while Admin retains utility chrome", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/#/routes");
 
-  await expect(page.getByTestId("app-page-title")).toHaveText("Routes");
+  await expect(page.getByTestId("app-header")).toHaveCount(0);
+  await expect(page.getByTestId("atlas-spine")).toHaveCount(0);
+  await expect(page.getByTestId("atlas-compact-navigation")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Routes", exact: true })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+
+  await page.goto("/#/admin");
+  await expect(page.getByTestId("app-page-title")).toHaveText("Admin");
   await expect(page.getByTestId("global-product-subtitle")).toHaveText(
     "Relive where you have been. Discover where to go next.",
   );
@@ -388,7 +394,8 @@ test("field-guide shell has stable desktop and mobile compositions", async ({
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/#/routes");
-  await expect(page.getByTestId("atlas-spine")).toBeVisible();
+  await expect(page.getByTestId("atlas-spine")).toHaveCount(0);
+  await expect(page.getByTestId("atlas-compact-navigation")).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "The routes that made the map." }),
   ).toBeVisible();
@@ -420,7 +427,7 @@ test("path navigation moves focus to the new view and history restores scroll", 
   const routesScrollY = await page.evaluate(() => window.scrollY);
   expect(routesScrollY).toBeGreaterThan(200);
 
-  await page.getByTestId("atlas-spine").getByRole("link", { name: "Finder" }).click();
+  await page.getByRole("link", { name: "Plan", exact: true }).click();
   await expect(page).toHaveURL(/#\/finder$/);
   await expect(page.getByRole("heading", { name: "Plan the next day." })).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);

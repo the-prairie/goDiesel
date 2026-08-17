@@ -120,6 +120,8 @@ test("Routes presents comparable memory cards on desktop and mobile", async ({
   await expect(desktopRow).toContainText("680 m up");
   await expect(desktopRow).toContainText("Editorial hypothesis");
   await expect(desktopRow).toContainText(/long, exploratory Kyoto run/i);
+  await expect(desktopRow).toContainText("Recorded geography");
+  await expect(desktopRow.locator("[data-route-thumbnail]")).toHaveCount(1);
   await expect(desktopRow).not.toContainText(/lifecycle|draft guide|reviewed guide/i);
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -383,6 +385,12 @@ for (const viewport of [
     }
 
     if (viewport.name === "mobile") {
+      const collectionTabs = page.getByRole("group", { name: "Route collections" });
+      const collectionBoxes = await boxesFor(collectionTabs.getByRole("button"));
+      for (const tab of collectionBoxes) {
+        expect(tab.x).toBeGreaterThanOrEqual(-1);
+        expect(tab.x + tab.width).toBeLessThanOrEqual(viewport.width + 1);
+      }
       const filterButton = page.getByRole("button", { name: "Filters" });
       await expect(filterButton).toHaveAttribute("aria-expanded", "false");
       expect(cardBoxes[0].y).toBeLessThan(viewport.height);

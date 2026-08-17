@@ -2,7 +2,6 @@ import { ChevronDown, RotateCcw, Search, SlidersHorizontal, X } from "lucide-rea
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 
-import { PageTitle } from "@/ui/page-title";
 import { RouteCard } from "@/ui/route-card";
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
@@ -39,6 +38,13 @@ const lifecycleOptions = [
   ["completed", "Memories"],
   ["planned", "Planned routes"],
   ["discovered", "Discovered routes"],
+] as const;
+
+const collectionTabs = [
+  ["all", "All routes"],
+  ["completed", "Memories"],
+  ["planned", "Plans"],
+  ["discovered", "Discovered"],
 ] as const;
 
 const routesPerPage = 24;
@@ -105,36 +111,69 @@ export function RoutesPage() {
 
   return (
     <section
-      className="grid content-start gap-6"
+      className="min-h-[calc(100dvh-var(--mobile-navigation-height))] bg-[#edf1ee] md:min-h-dvh"
       data-navigation-window-scroll={restoresLibraryScroll ? "managed" : undefined}
     >
-      <PageTitle
-        eyebrow="Routes"
-        title={
-          filters.lifecycle === "planned"
-            ? "Routes waiting to be made."
-            : "The routes that made the map."
-        }
-        copy={
-          filters.lifecycle === "planned"
-            ? "Review a planned route, then return to Finder to shape the next experience."
-            : "Find a recorded memory or discovered route by place, personal title, effort, or vibe."
-        }
-      />
+      <header className="bg-[#0b292b] text-white">
+        <div className="mx-auto max-w-[86rem] px-4 pb-8 pt-8 sm:px-6 md:pb-14 md:pt-28 lg:px-8">
+          <div className="flex flex-col justify-between gap-8 md:flex-row md:items-end">
+            <div className="max-w-4xl">
+              <p className="text-control font-semibold text-[#9be7e1]">Personal route atlas</p>
+              <h1 className="mt-3 text-balance font-editorial text-4xl font-semibold leading-[0.96] text-white sm:text-6xl sm:leading-[0.94]">
+                {filters.lifecycle === "planned"
+                  ? "Routes waiting to be made."
+                  : "The routes that made the map."}
+              </h1>
+              <p className="mt-4 max-w-2xl text-pretty text-body leading-7 text-white/70">
+                {filters.lifecycle === "planned"
+                  ? "Review a planned route, then return to Finder to shape the next experience."
+                  : "Find a recorded memory or discovered route by place, personal title, effort, or vibe."}
+              </p>
+            </div>
+            <p className="border-l border-white/25 pl-4 text-caption leading-5 text-white/62">
+              {libraryRoutes.length} routes across {regionOptions.length} places
+              <br />Recorded, imported, and intentionally planned.
+            </p>
+          </div>
+        </div>
+      </header>
 
-      {libraryRoutes.length === 0 ? (
-        <LibraryState
-          title="No routes yet"
-          copy="Imported and planned routes will appear here when the library has data."
-        />
-      ) : (
-        <>
+      <div className="mx-auto grid max-w-[86rem] content-start gap-6 px-4 pb-12 sm:px-6 lg:px-8">
+        {libraryRoutes.length === 0 ? (
+          <LibraryState
+            title="No routes yet"
+            copy="Imported and planned routes will appear here when the library has data."
+          />
+        ) : (
+          <>
           <form
             aria-label="Route filters"
-            className="grid gap-4 border-y border-border py-5"
+            className="relative z-10 -mt-4 grid gap-4 border border-line bg-surface-raised p-4 md:-mt-6 md:p-5"
             onSubmit={(event) => event.preventDefault()}
           >
-            <div className="flex max-w-3xl gap-2">
+            <div
+              role="group"
+              aria-label="Route collections"
+              className="flex min-w-0 gap-1 overflow-x-auto border-b border-line pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
+              {collectionTabs.map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={filters.lifecycle === value}
+                  className={
+                    filters.lifecycle === value
+                      ? "min-h-10 shrink-0 bg-forest px-2 text-control font-semibold text-white outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-4"
+                      : "min-h-10 shrink-0 px-2 text-control font-medium text-ink-secondary outline-none hover:bg-surface-muted hover:text-ink focus-visible:ring-2 focus-visible:ring-ring sm:px-4"
+                  }
+                  onClick={() => updateFilter("lifecycle", value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex max-w-4xl gap-2">
               <div className="relative min-w-0 flex-1">
                 <Search
                   className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
@@ -242,7 +281,7 @@ export function RoutesPage() {
             ) : null}
           </form>
 
-          <div className="flex min-h-9 flex-wrap items-center justify-between gap-3">
+          <div className="flex min-h-9 flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
             <p
               aria-live="polite"
               data-testid="route-result-count"
@@ -288,7 +327,7 @@ export function RoutesPage() {
               />
             ) : (
               <div className="grid gap-6">
-                <div data-testid="route-memory-grid" className="grid items-stretch gap-4 lg:grid-cols-2">
+                <div data-testid="route-memory-grid" className="grid items-stretch gap-5 lg:grid-cols-2">
                   {visibleRoutes.map((route) => (
                     <RouteCard
                       key={route.slug}
@@ -321,8 +360,9 @@ export function RoutesPage() {
               </div>
             )}
           </section>
-        </>
-      )}
+          </>
+        )}
+      </div>
     </section>
   );
 }

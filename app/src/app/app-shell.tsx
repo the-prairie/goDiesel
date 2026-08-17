@@ -20,23 +20,24 @@ export function AppShell() {
   const isRouteDetail = /^\/routes\/[^/]+$/.test(location.pathname);
   const isRoutesLibrary = section.id === "routes" && !isRouteDetail;
   const isReplay = section.id === "replay";
-  const isWideUtility = isRoutesLibrary || section.id === "admin";
+  const isWideUtility = section.id === "admin";
   const isImmersive =
     isAtlas ||
     isReplayLab ||
     isRouteDetail ||
     section.id === "finder" ||
     section.id === "replay";
-  const isUtility =
-    isRoutesLibrary || section.id === "admin";
+  const isUtility = section.id === "admin";
 
   return (
     <div className="weathered-atlas field-guide-theme relative flex min-h-dvh bg-background text-foreground">
       {singleRouteMicrosite || isReplay ? null : (
-        <AtlasSpine hideDesktop={isAtlas || isFinder || isRouteDetail} />
+        <AtlasSpine hideDesktop={isAtlas || isFinder || isRoutesLibrary || isRouteDetail} />
       )}
-      {(isAtlas || isFinder) && !singleRouteMicrosite ? (
-        <AtlasImmersiveNavigation activeMode={isFinder ? "finder" : "atlas"} />
+      {(isAtlas || isFinder || isRoutesLibrary) && !singleRouteMicrosite ? (
+        <AtlasImmersiveNavigation
+          activeMode={isFinder ? "finder" : isRoutesLibrary ? "routes" : "atlas"}
+        />
       ) : null}
       <div
         className={cn(
@@ -47,6 +48,7 @@ export function AppShell() {
             !singleRouteMicrosite &&
             !isAtlas &&
             !isFinder &&
+            !isRoutesLibrary &&
             !isRouteDetail &&
             !isReplay &&
             "md:pl-[var(--spine-rail-width)] lg:pl-[var(--spine-width)]",
@@ -80,7 +82,9 @@ export function AppShell() {
             "w-full flex-1 focus:outline-none",
             isImmersive
               ? "min-h-0 overflow-hidden"
-              : isWideUtility
+              : isRoutesLibrary
+                ? "min-h-0"
+                : isWideUtility
                 ? "grid gap-6 p-4 sm:p-6"
                 : "mx-auto grid max-w-7xl gap-6 p-4 sm:p-6",
           )}
