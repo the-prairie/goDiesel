@@ -30,7 +30,7 @@ Terrain fills the viewport beneath a compact white route-story header.
 On desktop, a translucent atmospheric field occupies the left edge so the title reads directly over the world without a floating card.
 The trace is framed primarily in the right two-thirds, keeping geography visible and preventing the line from crossing the title.
 Facts sit as an unframed line beneath the premise.
-The chapter sequence is one continuous white timeline near the lower edge, with a coral progress rule and evidence-labelled stops.
+The chapter sequence is an edge-to-edge translucent film index near the lower edge, with a coral progress rule and evidence-labelled stops.
 
 On mobile, the atmosphere occupies the upper portion of the viewport, the route moves into the middle terrain field, and the chapter timeline becomes horizontally scrollable.
 The active chapter scrolls toward center without page-level scroll snapping.
@@ -39,7 +39,7 @@ The lab switcher receives dedicated clearance and must not obscure route control
 ## Route treatment
 
 Render only `prototypeTrace(route)` geometry.
-The trace uses a restrained terrain shadow, a cloud casing, a pale cobalt recorded line, and a coral active segment.
+The trace uses a restrained terrain shadow, a narrow cloud casing, a two-pixel cobalt recorded line, and a coral active segment.
 Rounded caps and joins preserve continuity without turning the route into a logo.
 The current position is a small sun-colored point inside a cloud ring.
 Discontinuities remain visible and no plausible replacement geometry is invented.
@@ -63,7 +63,7 @@ Satellite terrain comes through the existing source-backed imagery path and is g
 
 Back and Replay remain at least 44px square.
 Keyboard focus uses cloud and cobalt rings visible over both terrain and paper.
-The trace has a route-specific image label, facts use a description list, chapters use labelled navigation, and the selected chapter exposes `aria-current="step"`.
+The trace has a route-specific image label, facts remain concise and source-backed, chapters use labelled navigation, and the selected chapter exposes `aria-current="step"`.
 The title, facts, active chapter, and evidence label cannot be removed by truncation.
 
 ## Do not reintroduce

@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, MapPin, Mountain, Play, Route as RouteIcon } from "lucide-react";
+import { ArrowLeft, ArrowRight, MapPin, Play, Route as RouteIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -120,21 +120,13 @@ export function CinematicCartographyPrototype({ route, routesPath }: RouteStoryP
         <section className={cn("luminous-story", revealingReplay && "is-leaving")}>
           <p className="luminous-place"><MapPin aria-hidden="true" />{route.region}<span aria-hidden="true">/</span>{new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(new Date(`${route.date}T00:00:00`))}</p>
           <h1>{title}</h1>
-          <div className="luminous-wave" aria-hidden="true"><i /><i /><i /></div>
-          <div className="luminous-premise"><span>{premise.label}</span><p>{premise.text}</p></div>
-          <dl className="luminous-facts" aria-label="Route facts">
-            <div><dt><RouteIcon aria-hidden="true" />Distance</dt><dd>{route.distanceKm.toFixed(1)} km</dd></div>
-            <div><dt><Mountain aria-hidden="true" />Climb</dt><dd>{route.elevationGainM.toLocaleString()} m</dd></div>
-            <div><dt>Story</dt><dd>{chapters.length} chapters</dd></div>
-          </dl>
+          <p className="luminous-premise"><span>{premise.label}</span>{premise.text}</p>
+          <p className="luminous-facts" aria-label="Route facts">
+            <strong>{route.distanceKm.toFixed(1)} km</strong><span aria-hidden="true">·</span>
+            <strong>{route.elevationGainM.toLocaleString()} m climbing</strong><span aria-hidden="true">·</span>
+            <strong>{chapters.length} chapters</strong>
+          </p>
         </section>
-
-        {activeChapter ? (
-          <aside className={cn("luminous-position", revealingReplay && "is-leaving")} aria-live="polite">
-            <span className="luminous-position-dot" aria-hidden="true" />
-            <span><strong>{distanceLabel(activeChapter.distanceM)}</strong><small>{EVIDENCE_LABEL[activeChapter.evidence]}</small></span>
-          </aside>
-        ) : null}
 
         <nav className={cn("luminous-chapters", revealingReplay && "is-leaving")} aria-label="Story chapters">
           <div className="luminous-chapter-line" aria-hidden="true"><i style={{ transform: `scaleX(${chapters.length > 1 ? activeIndex / (chapters.length - 1) : 1})` }} /></div>

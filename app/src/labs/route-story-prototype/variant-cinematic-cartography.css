@@ -70,63 +70,52 @@
 .luminous-terrain, .luminous-atmosphere { position: absolute; inset: 0; }
 .luminous-terrain { transform: scale(1.02) translateY(9px); opacity: .9; transition: transform 760ms cubic-bezier(.16,1,.3,1), opacity 560ms ease; }
 .luminous-route-story[data-arrived="true"] .luminous-terrain { transform: scale(1) translateY(0); opacity: 1; }
-.luminous-terrain-image { filter: saturate(.84) contrast(.96) brightness(1.07); }
-.luminous-atmosphere { z-index: 2; width: 39%; background: rgb(220 235 241 / 84%); box-shadow: 70px 0 72px rgb(220 235 241 / 84%); backdrop-filter: blur(2px); }
+.luminous-terrain-image { filter: saturate(.86) contrast(.97) brightness(1.04); }
+.luminous-atmosphere { z-index: 2; width: 29%; background: rgb(220 235 241 / 48%); box-shadow: 132px 0 112px rgb(220 235 241 / 48%); backdrop-filter: blur(1px); }
 
-.luminous-route-map { pointer-events: none; position: absolute; inset: 2% 0 14% 39%; z-index: 12; width: 61%; height: 84%; filter: drop-shadow(0 5px 10px rgb(19 43 66 / 24%)); }
+.luminous-route-map { pointer-events: none; position: absolute; inset: 3% 1% 14% 32%; z-index: 12; width: 67%; height: 83%; filter: drop-shadow(0 2px 4px rgb(19 43 66 / 14%)); }
 .luminous-route-map path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
-.luminous-route-shadow path { stroke: rgb(19 43 66 / 22%); stroke-width: 13px; }
-.luminous-route-casing path { stroke: rgb(251 252 248 / 96%); stroke-width: 10px; }
-.luminous-route-recorded path { stroke: var(--cobalt-pale); stroke-width: 5px; }
-.luminous-route-progress path { stroke: var(--coral); stroke-width: 5.5px; transition: stroke-dasharray 560ms cubic-bezier(.16,1,.3,1); }
-.luminous-current-ring { fill: var(--cloud); stroke: var(--ink); stroke-width: 2px; }
-.luminous-current-dot { fill: var(--sun); stroke: var(--cloud); stroke-width: 2px; }
+.luminous-route-shadow path { stroke: rgb(19 43 66 / 15%); stroke-width: 6px; }
+.luminous-route-casing path { stroke: rgb(251 252 248 / 82%); stroke-width: 4.5px; }
+.luminous-route-recorded path { stroke: #386ca9; stroke-width: 2px; }
+.luminous-route-progress path { stroke: var(--coral); stroke-width: 4px; transition: stroke-dasharray 560ms cubic-bezier(.16,1,.3,1); }
+.luminous-current-ring { fill: var(--cloud); stroke: var(--ink); stroke-width: 1.5px; }
+.luminous-current-dot { fill: var(--sun); stroke: var(--cloud); stroke-width: 1.5px; }
 
 .luminous-story {
   position: absolute;
   z-index: 25;
   top: clamp(46px, 8vh, 92px);
   left: clamp(30px, 5vw, 76px);
-  width: min(480px, 38vw);
+  width: min(500px, 37vw);
   transition: opacity 240ms ease, transform 240ms ease;
 }
 .luminous-story.is-leaving { opacity: 0; transform: translateY(-8px); }
 .luminous-place { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; color: #285c75; font-size: 11px; font-weight: 760; text-transform: uppercase; }
 .luminous-place svg { width: 14px; height: 14px; }
 .luminous-place span { color: var(--coral); }
-.luminous-story h1 { max-width: 12ch; margin-top: 18px; font-family: "Newsreader Variable", serif; font-size: clamp(42px, 4.4vw, 68px); font-weight: 520; line-height: .94; letter-spacing: -.02em; text-wrap: balance; }
-.luminous-wave { display: flex; gap: 4px; margin-top: 18px; }
-.luminous-wave i { width: 17px; height: 4px; border: solid var(--coral); border-width: 2px 0 0; border-radius: 50%; transform: rotate(-7deg); }
-.luminous-premise { max-width: 430px; margin-top: 13px; }
-.luminous-premise span { color: #316880; font-size: 9px; font-weight: 780; text-transform: uppercase; }
-.luminous-premise p { margin-top: 5px; color: #25465b; font-family: "Newsreader Variable", serif; font-size: 17px; font-style: italic; line-height: 1.35; }
+.luminous-story h1 { max-width: 13ch; margin-top: 16px; font-family: "Newsreader Variable", serif; font-size: clamp(40px, 3.8vw, 58px); font-weight: 520; line-height: .97; letter-spacing: 0; text-wrap: balance; }
+.luminous-premise { max-width: 440px; margin-top: 24px; color: #25465b; font-family: "Newsreader Variable", serif; font-size: 17px; font-style: italic; line-height: 1.4; }
+.luminous-premise::before { display: block; width: 42px; height: 2px; margin-bottom: 13px; background: var(--coral); content: ""; }
+.luminous-premise span { display: block; margin-bottom: 5px; color: #316880; font-family: "Figtree Variable", sans-serif; font-size: 9px; font-style: normal; font-weight: 780; text-transform: uppercase; }
 
-.luminous-facts { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 24px; }
-.luminous-facts div { min-width: 88px; }
-.luminous-facts dt { display: flex; align-items: center; gap: 5px; color: #3f6375; font-size: 9px; font-weight: 760; text-transform: uppercase; }
-.luminous-facts dt svg { width: 13px; height: 13px; }
-.luminous-facts dd { margin-top: 3px; font-family: "Newsreader Variable", serif; font-size: 21px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.luminous-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 20px; color: #31586f; font-size: 12px; font-variant-numeric: tabular-nums; }
+.luminous-facts strong { font-weight: 720; }
+.luminous-facts span { color: var(--coral); }
 
-.luminous-position { position: absolute; z-index: 27; top: 22%; right: 5%; display: flex; align-items: center; gap: 9px; padding: 8px 10px; background: rgb(251 252 248 / 90%); color: var(--ink); box-shadow: 0 8px 22px rgb(19 43 66 / 16%); transition: opacity 220ms ease, transform 220ms ease; }
-.luminous-position.is-leaving { opacity: 0; transform: translateX(8px); }
-.luminous-position-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--coral); box-shadow: 0 0 0 3px var(--cloud); }
-.luminous-position span:last-child { display: grid; }
-.luminous-position strong { font-size: 11px; font-weight: 800; }
-.luminous-position small { color: var(--ink-soft); font-size: 8px; font-weight: 730; text-transform: uppercase; }
-
-.luminous-chapters { position: absolute; z-index: 30; right: 26px; bottom: 82px; left: 26px; min-height: 96px; padding: 0 22px; background: rgb(251 252 248 / 95%); box-shadow: 0 16px 40px rgb(19 43 66 / 16%); transition: opacity 220ms ease, transform 220ms ease; }
+.luminous-chapters { position: absolute; z-index: 30; right: 0; bottom: 72px; left: 0; min-height: 70px; padding: 0 46px; border-top: 1px solid rgb(251 252 248 / 76%); border-bottom: 1px solid rgb(19 43 66 / 9%); background: rgb(251 252 248 / 80%); box-shadow: 0 8px 24px rgb(19 43 66 / 8%); backdrop-filter: blur(10px); transition: opacity 220ms ease, transform 220ms ease; }
 .luminous-chapters.is-leaving { opacity: 0; transform: translateY(10px); }
-.luminous-chapter-line { position: absolute; top: 29px; right: 11%; left: 11%; height: 1px; background: rgb(62 120 200 / 30%); }
+.luminous-chapter-line { position: absolute; top: 22px; right: 11%; left: 11%; height: 1px; background: rgb(62 120 200 / 22%); }
 .luminous-chapter-line i { display: block; width: 100%; height: 2px; transform-origin: left center; background: var(--coral); transition: transform 480ms cubic-bezier(.16,1,.3,1); }
 .luminous-chapter-list { position: relative; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); height: 100%; }
-.luminous-chapter { position: relative; display: grid; min-width: 0; grid-template-columns: 18px 1fr; gap: 10px; align-items: start; padding: 20px 18px 15px; color: var(--ink-soft); text-align: left; transition: color 150ms ease, background-color 150ms ease; }
+.luminous-chapter { position: relative; display: grid; min-width: 0; grid-template-columns: 16px 1fr; gap: 10px; align-items: start; padding: 13px 18px 10px; color: var(--ink-soft); text-align: left; transition: color 150ms ease, background-color 150ms ease; }
 .luminous-chapter:hover { color: var(--ink); background: rgb(220 235 241 / 44%); }
 .luminous-chapter:focus-visible { box-shadow: inset 0 0 0 3px var(--cobalt); }
-.luminous-chapter-marker { position: relative; z-index: 1; width: 11px; height: 11px; margin-top: 4px; border: 2px solid var(--cobalt); border-radius: 50%; background: var(--cloud); transition: border-color 150ms ease, background-color 150ms ease, transform 150ms ease; }
-.luminous-chapter.is-active .luminous-chapter-marker { border-color: var(--cloud); background: var(--coral); box-shadow: 0 0 0 3px var(--coral); transform: scale(1.05); }
+.luminous-chapter-marker { position: relative; z-index: 1; width: 9px; height: 9px; margin-top: 5px; border: 1.5px solid var(--cobalt); border-radius: 50%; background: var(--cloud); transition: border-color 150ms ease, background-color 150ms ease, transform 150ms ease; }
+.luminous-chapter.is-active .luminous-chapter-marker { border-color: var(--cloud); background: var(--coral); box-shadow: 0 0 0 2px var(--coral); transform: scale(1.05); }
 .luminous-chapter-copy { display: grid; min-width: 0; gap: 3px; }
 .luminous-chapter-copy small { overflow: hidden; color: #4d7080; font-size: 9px; font-weight: 740; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
-.luminous-chapter-copy strong { overflow: hidden; color: inherit; font-family: "Newsreader Variable", serif; font-size: 15px; font-weight: 640; text-overflow: ellipsis; white-space: nowrap; }
+.luminous-chapter-copy strong { overflow: hidden; color: inherit; font-family: "Newsreader Variable", serif; font-size: 14px; font-weight: 640; text-overflow: ellipsis; white-space: nowrap; }
 .luminous-chapter.is-active .luminous-chapter-copy strong { color: var(--ink); }
 
 .luminous-reveal { pointer-events: none; position: absolute; inset: 0; z-index: 50; display: grid; place-items: center; background: rgb(220 235 241 / 0%); opacity: 0; transition: background-color 360ms ease, opacity 260ms ease; }
@@ -143,23 +132,21 @@
   .luminous-replay { min-width: 44px; padding: 0 10px; }
   .luminous-replay span, .luminous-replay svg:last-child { display: none; }
   .luminous-stage { height: calc(100% - 56px); }
-  .luminous-atmosphere { width: 100%; height: 44%; background: rgb(220 235 241 / 80%); box-shadow: 0 42px 54px rgb(220 235 241 / 80%); backdrop-filter: blur(1.5px); }
+  .luminous-atmosphere { width: 100%; height: 40%; background: rgb(220 235 241 / 52%); box-shadow: 0 74px 84px rgb(220 235 241 / 52%); backdrop-filter: blur(.75px); }
   .luminous-story { top: 18px; right: 18px; left: 18px; width: auto; }
-  .luminous-story h1 { max-width: 15ch; margin-top: 10px; font-size: clamp(31px,9vw,41px); line-height: .96; }
-  .luminous-wave { margin-top: 10px; }
-  .luminous-premise { margin-top: 7px; }
-  .luminous-premise p { display: -webkit-box; overflow: hidden; font-size: 14px; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-  .luminous-facts { gap: 18px; margin-top: 12px; }
-  .luminous-facts dd { font-size: 17px; }
-  .luminous-route-map { inset: 31% 0 15%; width: 100%; height: 54%; }
-  .luminous-route-shadow path { stroke-width: 15px; }
-  .luminous-route-casing path { stroke-width: 12px; }
-  .luminous-route-recorded path, .luminous-route-progress path { stroke-width: 6px; }
-  .luminous-position { display: none; }
-  .luminous-chapters { right: 8px; bottom: 84px; left: 8px; min-height: 82px; padding: 0; overflow: hidden; }
+  .luminous-story h1 { max-width: 15ch; margin-top: 9px; font-size: clamp(30px,8.4vw,38px); line-height: .98; }
+  .luminous-premise { display: -webkit-box; margin-top: 13px; overflow: hidden; font-size: 13px; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+  .luminous-premise::before { width: 34px; margin-bottom: 9px; }
+  .luminous-facts { gap: 6px; margin-top: 10px; font-size: 11px; }
+  .luminous-route-map { inset: 30% 0 16%; width: 100%; height: 54%; }
+  .luminous-route-shadow path { stroke-width: 7px; }
+  .luminous-route-casing path { stroke-width: 5px; }
+  .luminous-route-recorded path { stroke-width: 2.25px; }
+  .luminous-route-progress path { stroke-width: 4px; }
+  .luminous-chapters { right: 0; bottom: 76px; left: 0; min-height: 78px; padding: 0 8px; overflow: hidden; }
   .luminous-chapter-line { display: none; }
   .luminous-chapter-list { display: flex; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-color: var(--cobalt) transparent; scrollbar-width: thin; }
-  .luminous-chapter { width: 196px; min-height: 88px; flex: 0 0 196px; padding: 15px 12px 10px; }
+  .luminous-chapter { width: 196px; min-height: 78px; flex: 0 0 196px; padding: 12px 12px 9px; }
   .luminous-chapter::before { position: absolute; top: 23px; right: 0; left: 0; height: 1px; background: rgb(62 120 200 / 30%); content: ""; }
   .luminous-chapter-copy strong { overflow: visible; font-size: 14px; line-height: 1.15; text-overflow: clip; white-space: normal; }
 }
