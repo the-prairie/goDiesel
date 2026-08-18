@@ -1,15 +1,15 @@
 @import "@fontsource-variable/figtree";
 @import "@fontsource-variable/newsreader";
 
-.daylight-excursion-atlas {
-  --cloud: #f8fbff;
-  --sky: #dfeafa;
-  --ink: #172951;
-  --muted: #5c6c8f;
-  --route: #6988e6;
-  --apricot: #ef8d70;
-  --butter: #ffd45f;
-  --berry: #a8395e;
+.luminous-route-story {
+  --sky: #dcebf1;
+  --cloud: #fbfcf8;
+  --ink: #132b42;
+  --ink-soft: #47637a;
+  --cobalt: #3e78c8;
+  --cobalt-pale: #a9c9f1;
+  --sun: #f4bb57;
+  --coral: #ef7d74;
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -18,179 +18,162 @@
   font-family: "Figtree Variable", sans-serif;
 }
 
-.daylight-excursion-atlas ::selection { background: var(--butter); color: var(--ink); }
-.daylight-focus { outline: none; }
-.daylight-focus:focus-visible { box-shadow: 0 0 0 3px var(--butter), 0 0 0 5px var(--ink); }
+.luminous-route-story ::selection { background: var(--sun); color: var(--ink); }
+.luminous-focus { outline: none; }
+.luminous-focus:focus-visible { box-shadow: 0 0 0 3px var(--cloud), 0 0 0 6px var(--cobalt); }
 
-.daylight-header {
+.luminous-header {
   position: relative;
   z-index: 60;
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  height: 64px;
-  padding: 0 18px;
-  border-bottom: 1px solid rgb(23 41 81 / 14%);
-  background: rgb(248 251 255 / 94%);
+  height: 60px;
+  padding: 0 20px;
+  border-bottom: 1px solid rgb(19 43 66 / 14%);
+  background: rgb(251 252 248 / 96%);
 }
 
-.daylight-icon-link {
+.luminous-back {
   display: grid;
   width: 44px;
   height: 44px;
   place-items: center;
-  border: 1px solid rgb(23 41 81 / 22%);
-  border-radius: 10px;
   color: var(--ink);
-  transition: background-color 160ms ease, transform 160ms ease;
+  transition: color 150ms ease, transform 150ms ease;
 }
-.daylight-icon-link:hover { background: var(--sky); transform: translateX(-2px); }
-.daylight-icon-link svg, .daylight-brand-mark svg, .daylight-replay svg { width: 18px; height: 18px; }
+.luminous-back:hover { color: var(--cobalt); transform: translateX(-2px); }
+.luminous-back svg, .luminous-replay svg, .luminous-route-context svg { width: 18px; height: 18px; }
 
-.daylight-brand { display: flex; min-width: 0; align-items: center; gap: 9px; justify-self: center; }
-.daylight-brand-mark { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 50%; background: var(--butter); color: var(--ink); }
-.daylight-brand-name { font-family: "Newsreader Variable", serif; font-size: 21px; font-weight: 650; }
-.daylight-brand-edition { padding-left: 10px; border-left: 1px solid rgb(23 41 81 / 22%); color: var(--muted); font-size: 12px; font-weight: 650; }
+.luminous-identity { display: flex; min-width: 0; align-items: center; gap: 16px; justify-self: center; }
+.luminous-wordmark { font-family: "Newsreader Variable", serif; font-size: 22px; font-weight: 650; }
+.luminous-route-context { display: inline-flex; align-items: center; gap: 7px; padding-left: 16px; border-left: 1px solid rgb(19 43 66 / 22%); color: var(--ink-soft); font-size: 11px; font-weight: 720; text-transform: uppercase; }
 
-.daylight-replay {
+.luminous-replay {
   display: inline-flex;
   min-height: 44px;
   align-items: center;
   gap: 9px;
-  padding: 0 15px;
+  padding: 0 14px;
   border: 1px solid var(--ink);
-  border-radius: 10px;
+  border-radius: 6px;
   background: var(--ink);
-  color: white;
+  color: var(--cloud);
   font-size: 13px;
   font-weight: 720;
-  transition: background-color 160ms ease, transform 160ms ease;
+  transition: background-color 150ms ease, transform 150ms ease;
 }
-.daylight-replay:hover { background: #263f74; transform: translateY(-1px); }
-.daylight-replay-unavailable { color: var(--muted); font-size: 12px; }
+.luminous-replay:hover { background: #204966; transform: translateY(-1px); }
+.luminous-replay-unavailable { color: var(--ink-soft); font-size: 12px; }
 
-.daylight-stage { position: relative; height: calc(100% - 64px); min-height: 0; overflow: hidden; background: #bfd2e6; }
-.daylight-terrain, .daylight-map-wash { position: absolute; inset: 0; }
-.daylight-terrain { transform: scale(1.018) translateY(8px); opacity: .88; transition: transform 760ms cubic-bezier(.16,1,.3,1), opacity 620ms ease; }
-.daylight-excursion-atlas[data-arrived="true"] .daylight-terrain { transform: scale(1) translateY(0); opacity: 1; }
-.daylight-terrain-image { filter: saturate(.78) contrast(.94) brightness(1.22); }
-.daylight-map-wash { z-index: 2; background: rgb(214 230 246 / 17%); }
+.luminous-stage { position: relative; height: calc(100% - 60px); min-height: 0; overflow: hidden; background: #b9d0d8; }
+.luminous-terrain, .luminous-atmosphere { position: absolute; inset: 0; }
+.luminous-terrain { transform: scale(1.02) translateY(9px); opacity: .9; transition: transform 760ms cubic-bezier(.16,1,.3,1), opacity 560ms ease; }
+.luminous-route-story[data-arrived="true"] .luminous-terrain { transform: scale(1) translateY(0); opacity: 1; }
+.luminous-terrain-image { filter: saturate(.84) contrast(.96) brightness(1.07); }
+.luminous-atmosphere { z-index: 2; width: 39%; background: rgb(220 235 241 / 84%); box-shadow: 70px 0 72px rgb(220 235 241 / 84%); backdrop-filter: blur(2px); }
 
-.daylight-route-map { pointer-events: none; position: absolute; inset: 0; z-index: 12; width: 100%; height: 100%; filter: drop-shadow(0 6px 9px rgb(23 41 81 / 20%)); }
-.daylight-route-map path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
-.daylight-route-shadow path { stroke: rgb(23 41 81 / 21%); stroke-width: 21px; }
-.daylight-route-casing path { stroke: rgb(248 251 255 / 96%); stroke-width: 17px; }
-.daylight-route-recorded path { stroke: var(--route); stroke-width: 8px; }
-.daylight-route-progress path { stroke: var(--apricot); stroke-width: 9px; transition: stroke-dasharray 620ms cubic-bezier(.16,1,.3,1); }
-.daylight-current-halo { fill: rgb(248 251 255 / 94%); stroke: var(--ink); stroke-width: 2px; }
-.daylight-current-dot { fill: var(--butter); stroke: var(--ink); stroke-width: 2px; }
+.luminous-route-map { pointer-events: none; position: absolute; inset: 2% 0 14% 39%; z-index: 12; width: 61%; height: 84%; filter: drop-shadow(0 5px 10px rgb(19 43 66 / 24%)); }
+.luminous-route-map path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.luminous-route-shadow path { stroke: rgb(19 43 66 / 22%); stroke-width: 13px; }
+.luminous-route-casing path { stroke: rgb(251 252 248 / 96%); stroke-width: 10px; }
+.luminous-route-recorded path { stroke: var(--cobalt-pale); stroke-width: 5px; }
+.luminous-route-progress path { stroke: var(--coral); stroke-width: 5.5px; transition: stroke-dasharray 560ms cubic-bezier(.16,1,.3,1); }
+.luminous-current-ring { fill: var(--cloud); stroke: var(--ink); stroke-width: 2px; }
+.luminous-current-dot { fill: var(--sun); stroke: var(--cloud); stroke-width: 2px; }
 
-.daylight-story {
+.luminous-story {
   position: absolute;
   z-index: 25;
-  top: clamp(42px, 8vh, 90px);
-  left: clamp(24px, 5vw, 78px);
-  width: min(680px, 55vw);
-  padding: 28px 32px 30px;
-  border: 1px solid rgb(23 41 81 / 16%);
-  border-radius: 12px;
-  background: rgb(248 251 255 / 91%);
-  box-shadow: 0 18px 50px rgb(23 41 81 / 13%);
-  transition: opacity 260ms ease, transform 260ms ease;
+  top: clamp(46px, 8vh, 92px);
+  left: clamp(30px, 5vw, 76px);
+  width: min(480px, 38vw);
+  transition: opacity 240ms ease, transform 240ms ease;
 }
-.daylight-story-leaving { opacity: 0; transform: translateY(-8px); }
-.daylight-kicker { display: flex; align-items: center; gap: 7px; color: var(--berry); font-size: 11px; font-weight: 760; text-transform: uppercase; }
-.daylight-kicker svg { width: 14px; height: 14px; }
-.daylight-story h1 { max-width: 17ch; margin-top: 16px; font-family: "Newsreader Variable", serif; font-size: clamp(41px, 4vw, 60px); font-weight: 540; line-height: .96; letter-spacing: 0; text-wrap: balance; }
-.daylight-premise { display: grid; grid-template-columns: 106px 1fr; gap: 14px; align-items: start; margin-top: 22px; padding-top: 16px; border-top: 1px solid rgb(23 41 81 / 16%); }
-.daylight-premise span { color: var(--berry); font-size: 10px; font-weight: 760; text-transform: uppercase; }
-.daylight-premise p { color: #314468; font-family: "Newsreader Variable", serif; font-size: 17px; font-style: italic; line-height: 1.35; }
+.luminous-story.is-leaving { opacity: 0; transform: translateY(-8px); }
+.luminous-place { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; color: #285c75; font-size: 11px; font-weight: 760; text-transform: uppercase; }
+.luminous-place svg { width: 14px; height: 14px; }
+.luminous-place span { color: var(--coral); }
+.luminous-story h1 { max-width: 12ch; margin-top: 18px; font-family: "Newsreader Variable", serif; font-size: clamp(42px, 4.4vw, 68px); font-weight: 520; line-height: .94; letter-spacing: -.02em; text-wrap: balance; }
+.luminous-wave { display: flex; gap: 4px; margin-top: 18px; }
+.luminous-wave i { width: 17px; height: 4px; border: solid var(--coral); border-width: 2px 0 0; border-radius: 50%; transform: rotate(-7deg); }
+.luminous-premise { max-width: 430px; margin-top: 13px; }
+.luminous-premise span { color: #316880; font-size: 9px; font-weight: 780; text-transform: uppercase; }
+.luminous-premise p { margin-top: 5px; color: #25465b; font-family: "Newsreader Variable", serif; font-size: 17px; font-style: italic; line-height: 1.35; }
 
-.daylight-ticket { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); margin-top: 22px; overflow: hidden; border: 1px solid rgb(23 41 81 / 22%); border-radius: 10px; background: var(--cloud); }
-.daylight-ticket div { min-width: 0; padding: 11px 13px; border-left: 1px dashed rgb(23 41 81 / 28%); }
-.daylight-ticket div:first-child { border-left: 0; }
-.daylight-ticket dt { color: var(--muted); font-size: 9px; font-weight: 750; text-transform: uppercase; }
-.daylight-ticket dd { margin-top: 2px; overflow: hidden; color: var(--ink); font-size: 14px; font-weight: 780; text-overflow: ellipsis; white-space: nowrap; }
+.luminous-facts { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 24px; }
+.luminous-facts div { min-width: 88px; }
+.luminous-facts dt { display: flex; align-items: center; gap: 5px; color: #3f6375; font-size: 9px; font-weight: 760; text-transform: uppercase; }
+.luminous-facts dt svg { width: 13px; height: 13px; }
+.luminous-facts dd { margin-top: 3px; font-family: "Newsreader Variable", serif; font-size: 21px; font-weight: 650; font-variant-numeric: tabular-nums; }
 
-.daylight-position { position: absolute; z-index: 26; top: 44%; right: clamp(20px,6vw,96px); display: grid; grid-template-columns: auto 28px auto; align-items: center; gap: 9px; color: var(--ink); filter: drop-shadow(0 1px 0 white) drop-shadow(0 0 10px white); transition: opacity 220ms ease, transform 220ms ease; }
-.daylight-position-leaving { opacity: 0; transform: translateX(8px); }
-.daylight-position-number { display: grid; width: 35px; height: 35px; place-items: center; border: 2px solid var(--ink); border-radius: 50%; background: var(--butter); font-size: 11px; font-weight: 820; }
-.daylight-position-rule { height: 1px; background: var(--ink); }
-.daylight-position-copy { display: grid; }
-.daylight-position-copy strong { font-size: 12px; font-weight: 820; }
-.daylight-position-copy small { color: #314468; font-size: 9px; font-weight: 740; text-transform: uppercase; }
+.luminous-position { position: absolute; z-index: 27; top: 22%; right: 5%; display: flex; align-items: center; gap: 9px; padding: 8px 10px; background: rgb(251 252 248 / 90%); color: var(--ink); box-shadow: 0 8px 22px rgb(19 43 66 / 16%); transition: opacity 220ms ease, transform 220ms ease; }
+.luminous-position.is-leaving { opacity: 0; transform: translateX(8px); }
+.luminous-position-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--coral); box-shadow: 0 0 0 3px var(--cloud); }
+.luminous-position span:last-child { display: grid; }
+.luminous-position strong { font-size: 11px; font-weight: 800; }
+.luminous-position small { color: var(--ink-soft); font-size: 8px; font-weight: 730; text-transform: uppercase; }
 
-.daylight-journey { position: absolute; z-index: 30; right: clamp(18px,3vw,48px); bottom: 70px; left: clamp(18px,3vw,48px); display: grid; grid-template-columns: 138px 1fr; min-height: 112px; overflow: hidden; border: 1px solid rgb(23 41 81 / 18%); border-radius: 12px; background: rgb(248 251 255 / 96%); box-shadow: 0 18px 46px rgb(23 41 81 / 16%); transition: opacity 230ms ease, transform 230ms ease; }
-.daylight-journey-leaving { opacity: 0; transform: translateY(10px); }
-.daylight-journey-intro { display: flex; flex-direction: column; justify-content: space-between; padding: 18px; border-right: 1px dashed rgb(23 41 81 / 25%); background: var(--sky); }
-.daylight-journey-intro span { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 780; text-transform: uppercase; }
-.daylight-journey-intro svg { width: 14px; height: 14px; color: var(--berry); }
-.daylight-journey-intro strong { font-family: "Newsreader Variable", serif; font-size: 19px; font-weight: 620; }
-.daylight-journey-stops { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); min-width: 0; }
+.luminous-chapters { position: absolute; z-index: 30; right: 26px; bottom: 82px; left: 26px; min-height: 96px; padding: 0 22px; background: rgb(251 252 248 / 95%); box-shadow: 0 16px 40px rgb(19 43 66 / 16%); transition: opacity 220ms ease, transform 220ms ease; }
+.luminous-chapters.is-leaving { opacity: 0; transform: translateY(10px); }
+.luminous-chapter-line { position: absolute; top: 29px; right: 11%; left: 11%; height: 1px; background: rgb(62 120 200 / 30%); }
+.luminous-chapter-line i { display: block; width: 100%; height: 2px; transform-origin: left center; background: var(--coral); transition: transform 480ms cubic-bezier(.16,1,.3,1); }
+.luminous-chapter-list { position: relative; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); height: 100%; }
+.luminous-chapter { position: relative; display: grid; min-width: 0; grid-template-columns: 18px 1fr; gap: 10px; align-items: start; padding: 20px 18px 15px; color: var(--ink-soft); text-align: left; transition: color 150ms ease, background-color 150ms ease; }
+.luminous-chapter:hover { color: var(--ink); background: rgb(220 235 241 / 44%); }
+.luminous-chapter:focus-visible { box-shadow: inset 0 0 0 3px var(--cobalt); }
+.luminous-chapter-marker { position: relative; z-index: 1; width: 11px; height: 11px; margin-top: 4px; border: 2px solid var(--cobalt); border-radius: 50%; background: var(--cloud); transition: border-color 150ms ease, background-color 150ms ease, transform 150ms ease; }
+.luminous-chapter.is-active .luminous-chapter-marker { border-color: var(--cloud); background: var(--coral); box-shadow: 0 0 0 3px var(--coral); transform: scale(1.05); }
+.luminous-chapter-copy { display: grid; min-width: 0; gap: 3px; }
+.luminous-chapter-copy small { overflow: hidden; color: #4d7080; font-size: 9px; font-weight: 740; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.luminous-chapter-copy strong { overflow: hidden; color: inherit; font-family: "Newsreader Variable", serif; font-size: 15px; font-weight: 640; text-overflow: ellipsis; white-space: nowrap; }
+.luminous-chapter.is-active .luminous-chapter-copy strong { color: var(--ink); }
 
-.daylight-stop { position: relative; display: grid; min-width: 0; grid-template-columns: 26px 1fr; gap: 10px; align-items: center; padding: 15px 16px; border-left: 1px solid rgb(23 41 81 / 12%); color: var(--muted); text-align: left; transition: background-color 150ms ease, color 150ms ease; }
-.daylight-stop:first-child { border-left: 0; }
-.daylight-stop:focus-visible { box-shadow: inset 0 0 0 3px var(--butter), inset 0 0 0 5px var(--ink); }
-.daylight-stop:hover { background: rgb(223 234 250 / 62%); color: var(--ink); }
-.daylight-stop.is-active { background: #fff8e5; color: var(--ink); }
-.daylight-stop-track { position: relative; display: grid; width: 26px; height: 54px; place-items: center; }
-.daylight-stop-track::before { position: absolute; top: -22px; bottom: 28px; left: 50%; width: 2px; background: rgb(105 136 230 / 28%); content: ""; }
-.daylight-stop:first-child .daylight-stop-track::before { display: none; }
-.daylight-stop-track i { position: relative; z-index: 1; display: block; width: 12px; height: 12px; border: 2px solid var(--route); border-radius: 50%; background: var(--cloud); }
-.daylight-stop.is-visited .daylight-stop-track i { background: var(--apricot); }
-.daylight-stop.is-active .daylight-stop-track i { width: 18px; height: 18px; border-color: var(--ink); background: var(--butter); box-shadow: 0 0 0 5px rgb(255 212 95 / 30%); }
-.daylight-stop-copy { display: grid; min-width: 0; gap: 3px; }
-.daylight-stop-copy small { overflow: hidden; color: var(--berry); font-size: 9px; font-style: normal; font-weight: 760; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
-.daylight-stop-copy strong { overflow: hidden; font-size: 13px; font-weight: 760; text-overflow: ellipsis; white-space: nowrap; }
-.daylight-stop-copy em { color: var(--muted); font-size: 10px; font-style: normal; font-weight: 650; }
-
-.daylight-reveal { pointer-events: none; position: absolute; inset: 0; z-index: 50; display: grid; place-items: center; background: rgb(223 234 250 / 0%); opacity: 0; transition: background-color 420ms ease, opacity 320ms ease; }
-.daylight-excursion-atlas[data-revealing-replay="true"] .daylight-reveal { background: rgb(223 234 250 / 68%); opacity: 1; }
-.daylight-reveal div { display: grid; gap: 5px; text-align: center; }
-.daylight-reveal span { color: var(--berry); font-size: 10px; font-weight: 780; text-transform: uppercase; }
-.daylight-reveal strong { font-family: "Newsreader Variable", serif; font-size: clamp(34px,5vw,68px); font-weight: 580; }
+.luminous-reveal { pointer-events: none; position: absolute; inset: 0; z-index: 50; display: grid; place-items: center; background: rgb(220 235 241 / 0%); opacity: 0; transition: background-color 360ms ease, opacity 260ms ease; }
+.luminous-route-story[data-revealing-replay="true"] .luminous-reveal { background: rgb(220 235 241 / 78%); opacity: 1; }
+.luminous-reveal div { display: grid; gap: 5px; text-align: center; }
+.luminous-reveal span { color: #356b82; font-size: 10px; font-weight: 780; text-transform: uppercase; }
+.luminous-reveal strong { font-family: "Newsreader Variable", serif; font-size: clamp(34px,5vw,66px); font-weight: 580; }
 
 @media (max-width: 760px) {
-  .daylight-header { height: 56px; padding: 0 10px; }
-  .daylight-icon-link { width: 44px; height: 44px; }
-  .daylight-brand { gap: 6px; }
-  .daylight-brand-mark { width: 26px; height: 26px; }
-  .daylight-brand-name { font-size: 18px; }
-  .daylight-brand-edition { display: none; }
-  .daylight-replay { min-width: 44px; min-height: 44px; padding: 0 11px; }
-  .daylight-replay span { display: none; }
-  .daylight-stage { height: calc(100% - 56px); }
-  .daylight-story { top: 14px; right: 12px; left: 12px; width: auto; padding: 15px 19px 14px; border-radius: 11px; }
-  .daylight-story h1 { max-width: 17ch; margin-top: 8px; font-size: clamp(31px,9.2vw,38px); line-height: .95; }
-  .daylight-premise { display: block; margin-top: 9px; padding-top: 8px; }
-  .daylight-premise p { display: -webkit-box; margin-top: 4px; overflow: hidden; font-size: 13px; -webkit-box-orient: vertical; -webkit-line-clamp: 1; }
-  .daylight-ticket { margin-top: 10px; }
-  .daylight-ticket div { padding: 7px 9px; }
-  .daylight-ticket dd { font-size: 12px; }
-  .daylight-route-map { top: 20%; height: 58%; }
-  .daylight-route-shadow path { stroke-width: 24px; }
-  .daylight-route-casing path { stroke-width: 20px; }
-  .daylight-route-recorded path, .daylight-route-progress path { stroke-width: 10px; }
-  .daylight-position { display: none; }
-  .daylight-journey { right: 8px; bottom: 74px; left: 8px; display: block; min-height: 0; overflow: visible; border-radius: 11px; }
-  .daylight-journey-intro { flex-direction: row; padding: 9px 12px; border-right: 0; border-bottom: 1px dashed rgb(23 41 81 / 25%); }
-  .daylight-journey-intro strong { font-family: "Figtree Variable", sans-serif; font-size: 11px; }
-  .daylight-journey-stops { display: flex; max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-color: var(--route) transparent; scrollbar-width: thin; }
-  .daylight-stop { width: 188px; min-height: 70px; flex: 0 0 188px; grid-template-columns: 22px 1fr; gap: 7px; padding: 9px 11px; }
-  .daylight-stop-track { width: 22px; height: 42px; }
-  .daylight-stop-track::before { top: -18px; }
-  .daylight-stop-copy strong { font-size: 12px; }
+  .luminous-header { height: 56px; padding: 0 8px; }
+  .luminous-identity { gap: 0; }
+  .luminous-wordmark { font-size: 19px; }
+  .luminous-route-context { display: none; }
+  .luminous-replay { min-width: 44px; padding: 0 10px; }
+  .luminous-replay span, .luminous-replay svg:last-child { display: none; }
+  .luminous-stage { height: calc(100% - 56px); }
+  .luminous-atmosphere { width: 100%; height: 44%; background: rgb(220 235 241 / 80%); box-shadow: 0 42px 54px rgb(220 235 241 / 80%); backdrop-filter: blur(1.5px); }
+  .luminous-story { top: 18px; right: 18px; left: 18px; width: auto; }
+  .luminous-story h1 { max-width: 15ch; margin-top: 10px; font-size: clamp(31px,9vw,41px); line-height: .96; }
+  .luminous-wave { margin-top: 10px; }
+  .luminous-premise { margin-top: 7px; }
+  .luminous-premise p { display: -webkit-box; overflow: hidden; font-size: 14px; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+  .luminous-facts { gap: 18px; margin-top: 12px; }
+  .luminous-facts dd { font-size: 17px; }
+  .luminous-route-map { inset: 31% 0 15%; width: 100%; height: 54%; }
+  .luminous-route-shadow path { stroke-width: 15px; }
+  .luminous-route-casing path { stroke-width: 12px; }
+  .luminous-route-recorded path, .luminous-route-progress path { stroke-width: 6px; }
+  .luminous-position { display: none; }
+  .luminous-chapters { right: 8px; bottom: 84px; left: 8px; min-height: 82px; padding: 0; overflow: hidden; }
+  .luminous-chapter-line { display: none; }
+  .luminous-chapter-list { display: flex; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-color: var(--cobalt) transparent; scrollbar-width: thin; }
+  .luminous-chapter { width: 196px; min-height: 88px; flex: 0 0 196px; padding: 15px 12px 10px; }
+  .luminous-chapter::before { position: absolute; top: 23px; right: 0; left: 0; height: 1px; background: rgb(62 120 200 / 30%); content: ""; }
+  .luminous-chapter-copy strong { overflow: visible; font-size: 14px; line-height: 1.15; text-overflow: clip; white-space: normal; }
 }
 
-@media (max-height: 780px) and (min-width: 761px) {
-  .daylight-story { top: 16px; padding: 18px 24px; }
-  .daylight-story h1 { margin-top: 8px; font-size: 42px; }
-  .daylight-premise { margin-top: 10px; padding-top: 8px; }
-  .daylight-premise p { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-  .daylight-ticket { margin-top: 10px; }
-  .daylight-journey { bottom: 60px; }
+@media (max-height: 720px) and (min-width: 761px) {
+  .luminous-story { top: 24px; }
+  .luminous-story h1 { margin-top: 9px; font-size: 44px; }
+  .luminous-premise { margin-top: 8px; }
+  .luminous-facts { margin-top: 12px; }
+  .luminous-chapters { bottom: 72px; min-height: 82px; }
+  .luminous-chapter { padding-top: 15px; }
+  .luminous-chapter-line { top: 24px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .daylight-excursion-atlas *, .daylight-excursion-atlas *::before, .daylight-excursion-atlas *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+  .luminous-route-story *, .luminous-route-story *::before, .luminous-route-story *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }

@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, MapPin, Play, Route as RouteIcon, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, MapPin, Mountain, Play, Route as RouteIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -13,7 +13,7 @@ import { cn } from "@/ui/utils";
 import "./variant-cinematic-cartography.css";
 
 const ARRIVAL_DELAY_MS = 80;
-const REPLAY_REVEAL_MS = 680;
+const REPLAY_REVEAL_MS = 620;
 
 export function CinematicCartographyPrototype({ route, routesPath }: RouteStoryPrototypeProps) {
   const navigate = useNavigate();
@@ -78,82 +78,80 @@ export function CinematicCartographyPrototype({ route, routesPath }: RouteStoryP
   };
 
   return (
-    <div className="daylight-excursion-atlas" data-arrived={arrived ? "true" : "false"} data-revealing-replay={revealingReplay ? "true" : "false"}>
-      <header className="daylight-header">
-        <Link to={routesPath} className="daylight-icon-link daylight-focus" aria-label="Back to route collection"><ArrowLeft aria-hidden="true" /></Link>
-        <div className="daylight-brand">
-          <span className="daylight-brand-mark" aria-hidden="true"><RouteIcon /></span>
-          <span className="daylight-brand-name">goDiesel</span>
-          <span className="daylight-brand-edition">Daylight Atlas</span>
+    <div className="luminous-route-story" data-arrived={arrived ? "true" : "false"} data-revealing-replay={revealingReplay ? "true" : "false"}>
+      <header className="luminous-header">
+        <Link to={routesPath} className="luminous-back luminous-focus" aria-label="Back to route collection"><ArrowLeft aria-hidden="true" /></Link>
+        <div className="luminous-identity">
+          <span className="luminous-wordmark">goDiesel</span>
+          <span className="luminous-route-context"><RouteIcon aria-hidden="true" /> Route story</span>
         </div>
         {route.replay.replayEligible ? (
-          <Link to={replayHref} onClick={beginReplay} className="daylight-replay daylight-focus" aria-label="Enter cinematic Replay">
+          <Link to={replayHref} onClick={beginReplay} className="luminous-replay luminous-focus" aria-label="Enter cinematic Replay">
             <Play aria-hidden="true" /><span>Enter Replay</span><ArrowRight aria-hidden="true" />
           </Link>
-        ) : <span className="daylight-replay-unavailable">Replay unavailable</span>}
+        ) : <span className="luminous-replay-unavailable">Replay unavailable</span>}
       </header>
 
-      <main className="daylight-stage" aria-label="Daylight excursion route story">
-        <div className="daylight-terrain" aria-hidden="true">
-          <RouteSatelliteThumbnail route={summary} enabled cinematic priority showRoute={false} imageClassName="daylight-terrain-image" />
-          <div className="daylight-map-wash" />
+      <main className="luminous-stage" aria-label="Cinematic route story">
+        <div className="luminous-terrain" aria-hidden="true">
+          <RouteSatelliteThumbnail route={summary} enabled cinematic priority showRoute={false} imageClassName="luminous-terrain-image" />
+          <div className="luminous-atmosphere" />
         </div>
 
         {trace ? (
-          <svg viewBox="0 0 1000 700" role="img" aria-label={`${route.name} recorded route trace`} className="daylight-route-map" preserveAspectRatio="xMidYMid meet">
-            <g className="daylight-route-shadow">{trace.segments.map((segment) => <path key={segment.id} d={segment.path} pathLength="1" />)}</g>
-            <g className="daylight-route-casing">{trace.segments.map((segment) => <path key={segment.id} d={segment.path} pathLength="1" />)}</g>
-            <g className="daylight-route-recorded">{trace.segments.map((segment) => <path key={segment.id} d={segment.path} pathLength="1" />)}</g>
-            <g className="daylight-route-progress">
+          <svg viewBox="0 0 1000 700" role="img" aria-label={`${route.name} recorded route trace`} className="luminous-route-map" preserveAspectRatio="xMidYMid meet">
+            <g className="luminous-route-shadow">{trace.segments.map((segment) => <path key={segment.id} d={segment.path} pathLength="1" />)}</g>
+            <g className="luminous-route-casing">{trace.segments.map((segment) => <path key={segment.id} d={segment.path} pathLength="1" />)}</g>
+            <g className="luminous-route-recorded">{trace.segments.map((segment) => <path key={segment.id} d={segment.path} pathLength="1" />)}</g>
+            <g className="luminous-route-progress">
               {trace.segments.map((segment) => {
                 const progress = Math.max(0, Math.min(1, (visibleDistanceM - segment.startD) / Math.max(segment.endD - segment.startD, 1)));
                 return <path key={segment.id} d={segment.path} pathLength="1" style={{ strokeDasharray: `${progress} 1` }} />;
               })}
             </g>
             {activePoint ? (
-              <g className="daylight-current-marker" transform={`translate(${activePoint.x} ${activePoint.y})`}>
-                <circle className="daylight-current-halo" r="18" /><circle className="daylight-current-dot" r="10" />
+              <g className="luminous-current-marker" transform={`translate(${activePoint.x} ${activePoint.y})`}>
+                <circle className="luminous-current-ring" r="13" /><circle className="luminous-current-dot" r="6" />
               </g>
             ) : null}
           </svg>
         ) : null}
 
-        <section className={cn("daylight-story", revealingReplay && "daylight-story-leaving")}>
-          <p className="daylight-kicker"><MapPin aria-hidden="true" />{route.region} · {new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(new Date(`${route.date}T00:00:00`))}</p>
+        <section className={cn("luminous-story", revealingReplay && "is-leaving")}>
+          <p className="luminous-place"><MapPin aria-hidden="true" />{route.region}<span aria-hidden="true">/</span>{new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(new Date(`${route.date}T00:00:00`))}</p>
           <h1>{title}</h1>
-          <div className="daylight-premise"><span>{premise.label}</span><p>{premise.text}</p></div>
-          <dl className="daylight-ticket" aria-label="Route summary">
-            <div><dt>Distance</dt><dd>{route.distanceKm.toFixed(1)} km</dd></div>
-            <div><dt>Climb</dt><dd>{route.elevationGainM.toLocaleString()} m</dd></div>
-            <div><dt>Journey</dt><dd>{chapters.length} chapters</dd></div>
+          <div className="luminous-wave" aria-hidden="true"><i /><i /><i /></div>
+          <div className="luminous-premise"><span>{premise.label}</span><p>{premise.text}</p></div>
+          <dl className="luminous-facts" aria-label="Route facts">
+            <div><dt><RouteIcon aria-hidden="true" />Distance</dt><dd>{route.distanceKm.toFixed(1)} km</dd></div>
+            <div><dt><Mountain aria-hidden="true" />Climb</dt><dd>{route.elevationGainM.toLocaleString()} m</dd></div>
+            <div><dt>Story</dt><dd>{chapters.length} chapters</dd></div>
           </dl>
         </section>
 
         {activeChapter ? (
-          <aside className={cn("daylight-position", revealingReplay && "daylight-position-leaving")} aria-live="polite">
-            <span className="daylight-position-number">{String(activeIndex + 1).padStart(2, "0")}</span>
-            <span className="daylight-position-rule" aria-hidden="true" />
-            <span className="daylight-position-copy"><strong>{distanceLabel(activeChapter.distanceM)}</strong><small>{EVIDENCE_LABEL[activeChapter.evidence]}</small></span>
+          <aside className={cn("luminous-position", revealingReplay && "is-leaving")} aria-live="polite">
+            <span className="luminous-position-dot" aria-hidden="true" />
+            <span><strong>{distanceLabel(activeChapter.distanceM)}</strong><small>{EVIDENCE_LABEL[activeChapter.evidence]}</small></span>
           </aside>
         ) : null}
 
-        <nav className={cn("daylight-journey", revealingReplay && "daylight-journey-leaving")} aria-label="Story chapters">
-          <div className="daylight-journey-intro"><span><Sparkles aria-hidden="true" /> Route journey</span><strong>{activeIndex + 1} of {chapters.length}</strong></div>
-          <div className="daylight-journey-stops">
+        <nav className={cn("luminous-chapters", revealingReplay && "is-leaving")} aria-label="Story chapters">
+          <div className="luminous-chapter-line" aria-hidden="true"><i style={{ transform: `scaleX(${chapters.length > 1 ? activeIndex / (chapters.length - 1) : 1})` }} /></div>
+          <div className="luminous-chapter-list">
             {chapters.map((chapter, index) => {
               const selected = index === activeIndex;
-              const visited = index <= activeIndex;
               return (
-                <button ref={(node) => { chapterRefs.current[index] = node; }} key={chapter.id} type="button" aria-current={selected ? "step" : undefined} onClick={() => selectChapter(index)} className={cn("daylight-stop daylight-focus", selected && "is-active", visited && "is-visited")}>
-                  <span className="daylight-stop-track" aria-hidden="true"><i /></span>
-                  <span className="daylight-stop-copy"><small>{String(index + 1).padStart(2, "0")} · {EVIDENCE_LABEL[chapter.evidence]}</small><strong>{chapter.title}</strong><em>{distanceLabel(chapter.distanceM)}</em></span>
+                <button ref={(node) => { chapterRefs.current[index] = node; }} key={chapter.id} type="button" aria-current={selected ? "step" : undefined} onClick={() => selectChapter(index)} className={cn("luminous-chapter luminous-focus", selected && "is-active")}>
+                  <span className="luminous-chapter-marker" aria-hidden="true" />
+                  <span className="luminous-chapter-copy"><small>{distanceLabel(chapter.distanceM)} · {EVIDENCE_LABEL[chapter.evidence]}</small><strong>{chapter.title}</strong></span>
                 </button>
               );
             })}
           </div>
         </nav>
 
-        <div className="daylight-reveal" aria-live="polite">{revealingReplay ? <div><span>Recorded route</span><strong>Opening the terrain</strong></div> : null}</div>
+        <div className="luminous-reveal" aria-live="polite">{revealingReplay ? <div><span>Recorded route</span><strong>Enter the replay</strong></div> : null}</div>
       </main>
     </div>
   );
