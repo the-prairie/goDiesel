@@ -1,6 +1,13 @@
 name: Route Studio workspace
 
 on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
   push:
     branches:
       - feat/route-studio
@@ -14,8 +21,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: feat/route-studio
       - name: Package source workspace
         run: |
           git archive --format=tar.gz --output=godiesel-route-studio.tar.gz HEAD
