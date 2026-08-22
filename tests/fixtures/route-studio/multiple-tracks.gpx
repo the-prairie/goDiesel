@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="goDiesel synthetic fixture" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><name>North option</name><trkseg>
+    <trkpt lat="51.0200" lon="-114.0000"/><trkpt lat="51.0210" lon="-114.0010"/>
+  </trkseg></trk>
+  <trk><name>South option</name><trkseg>
+    <trkpt lat="50.9800" lon="-114.0000"/><trkpt lat="50.9790" lon="-114.0010"/>
+  </trkseg></trk>
+</gpx>

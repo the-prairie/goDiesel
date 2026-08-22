@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2">
+  <Document><Placemark><name>Timed KML Track</name><gx:Track>
+    <when>2026-08-01T14:00:00Z</when><when>2026-08-01T14:05:00Z</when>
+    <gx:coord>-114.0000 51.0000 1000</gx:coord><gx:coord>-114.0100 51.0100 1020</gx:coord>
+  </gx:Track></Placemark></Document>
+</kml>

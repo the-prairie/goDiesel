@@ -1,5 +1,6 @@
-import { Circle, Database, LockKeyhole, Search, SearchX } from "lucide-react";
+import { Circle, Database, LockKeyhole, Route, Search, SearchX } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { RouteEditor } from "@/surfaces/admin/components/route-editor";
 import { Button } from "@/ui/button";
@@ -142,9 +143,10 @@ export function AdminPage() {
           <p className="text-micro font-semibold uppercase text-forest">Owner workspace</p>
           <h1 className="mt-1 text-2xl font-semibold text-ink">Curation ledger</h1>
         </div>
-        <p className="max-w-xl text-caption text-ink-secondary">
-          Review route readiness, shape the experience, and regenerate source-backed guide data.
-        </p>
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <p className="max-w-xl text-caption text-ink-secondary">Review route readiness, shape the experience, and regenerate source-backed guide data.</p>
+          {workspace?.mode === "editable" ? <Button asChild size="sm"><Link to="/admin/studio"><Route />Route Studio</Link></Button> : null}
+        </div>
       </header>
 
       {workspace === null ? (

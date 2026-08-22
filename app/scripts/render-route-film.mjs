@@ -33,6 +33,8 @@ function argument(name, fallback) {
 }
 
 const slug = argument("route", "14023448720");
+const filmUrlOverride = argument("film-url", "");
+const sourceFingerprint = argument("source-fingerprint", "");
 const cut = argument("cut", "feature");
 const baseUrl = argument("base-url", "http://127.0.0.1:8787");
 const width = Number(argument("width", "3840"));
@@ -106,7 +108,7 @@ const page = await browser.newPage({
 let manifest;
 let completedSuccessfully = false;
 try {
-  const filmUrl = `${baseUrl}/#/lab/cinematic-director/${slug}?render=1&cut=${cut}`;
+  const filmUrl = filmUrlOverride || `${baseUrl}/#/lab/cinematic-director/${slug}?render=1&cut=${cut}`;
   console.log(`Staging ${filmUrl}`);
   console.log(
     `Preparing deterministic ${width}x${height} master at ${fps} fps from ${captureWidth}x${captureHeight}`,
@@ -167,6 +169,7 @@ try {
     motionSamples,
     qualityPolicyVersion: 1,
     route: slug,
+    sourceFingerprint,
     settleAttempts,
     settleDelayMs,
     spatialScale,

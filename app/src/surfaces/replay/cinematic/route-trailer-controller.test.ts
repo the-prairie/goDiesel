@@ -43,4 +43,20 @@ describe("cinematic route trailer controller", () => {
     expect(frame.camera.center).toEqual({ lat: 35.2, lng: 24.8 });
     expect(frame.camera.rangeM).toBeGreaterThan(2_000);
   });
+
+  it("selects a route-specific terrain moment", () => {
+    const lateSummit = {
+      ...route,
+      route: [
+        { lat: 35.1, lng: 24.7, elev: 20, d: 0 },
+        { lat: 35.15, lng: 24.75, elev: 30, d: 5_000 },
+        { lat: 35.2, lng: 24.8, elev: 40, d: 10_000 },
+        { lat: 35.25, lng: 24.85, elev: 500, d: 18_000 },
+        { lat: 35.3, lng: 24.9, elev: 80, d: 20_000 },
+      ],
+    } as QuestRoute;
+    expect(routeTrailerFrame(lateSummit, 12).routeProgressM).not.toBe(
+      routeTrailerFrame(route, 12).routeProgressM,
+    );
+  });
 });

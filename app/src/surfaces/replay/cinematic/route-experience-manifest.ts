@@ -1,0 +1,112 @@
+import type { QuestRoute } from "@/domain/route";
+import {
+  cinematicMoments,
+  cinematicProfile,
+  cinematicShotTimeline,
+  cinematicVisualMoments,
+  type CinematicCut,
+} from "@/surfaces/replay/cinematic/route-cinematic-director";
+
+export const ROUTE_EXPERIENCE_ANALYSIS_VERSION = 1;
+export const ROUTE_EXPERIENCE_DIRECTOR_VERSION = 1;
+
+export function routeExperienceManifest(route: QuestRoute) {
+  const routeFingerprint = fingerprint(
+    route.route.map((point) => [
+      round(point.lat, 7), round(point.lng, 7), round(point.elev, 2), round(point.d, 2),
+    ]),
+  );
+  const profile = cinematicProfile(route);
+  const elevationAvailable = route.provenance?.elevation?.status !== "unavailable";
+  const moments = cinematicMoments(route).filter(
+    (moment) => elevationAvailable || (moment.kind !== "climb" && moment.kind !== "summit"),
+  );
+  const visualMoments = cinematicVisualMoments(route).filter(
+    (moment) => elevationAvailable || moment.kind !== "terrain",
+  );
+  const recommendedCut: CinematicCut =
+    !elevationAvailable
+      ? profile.turningIntensityDeg > 95 ? "kinetic" : "feature"
+      : profile.character === "mountain"
+        ? "monumental"
+        : profile.turningIntensityDeg > 95
+        ? "kinetic"
+        : profile.reliefM < 80
+          ? "intimate"
+          : "feature";
+  const reasons = [
+    elevationAvailable ? `${profile.character} route profile` : "route shape from recorded geometry",
+    elevationAvailable
+      ? profile.reliefM >= 180 ? "substantial recorded relief" : "restrained recorded relief"
+      : "elevation unavailable in the source",
+    profile.turningIntensityDeg > 95 ? "high turning intensity" : "legible route direction",
+  ];
+  const turn = moments.find((moment) => moment.kind === "turn");
+  const climb = moments.find((moment) => moment.kind === "climb");
+  const summit = moments.find((moment) => moment.kind === "summit");
+  const visualHero = visualMoments[0];
+  const terrainMoment = bestMoment([visualHero, summit, climb], 0.55);
+  const lineMoment = bestMoment([turn, climb], 0.28);
+  const teaserTimeline = [
+    { chapter: "the-place", startSeconds: 0, endSeconds: 3.6, progressRatio: 0 },
+    { chapter: "the-line", startSeconds: 3.6, endSeconds: 7.4, progressRatio: lineMoment },
+    { chapter: "the-terrain", startSeconds: 7.4, endSeconds: 13.4, progressRatio: terrainMoment },
+    { chapter: "the-decision", startSeconds: 13.4, endSeconds: 17.5, progressRatio: 1 },
+  ] as const;
+  const featureTimeline = cinematicShotTimeline(route, recommendedCut);
+  const selectedMeaningfulMoments = [...moments, ...visualMoments]
+    .sort((first, second) => second.score - first.score)
+    .slice(0, 6)
+    .map((moment) => ({
+      kind: moment.kind,
+      progressRatio: round(moment.progressRatio, 6),
+      score: round(moment.score, 4),
+    }));
+  const renderFingerprint = fingerprint({
+    analysisVersion: ROUTE_EXPERIENCE_ANALYSIS_VERSION,
+    directorVersion: ROUTE_EXPERIENCE_DIRECTOR_VERSION,
+    elevationStatus: route.provenance?.elevation?.status ?? "legacy",
+    featureTimeline,
+    recommendedCut,
+    routeFingerprint,
+    teaserTimeline,
+  });
+  return {
+    routeFingerprint,
+    analysisVersion: ROUTE_EXPERIENCE_ANALYSIS_VERSION,
+    directorVersion: ROUTE_EXPERIENCE_DIRECTOR_VERSION,
+    routeProfile: elevationAvailable
+      ? profile
+      : { ...profile, character: "unknown" as const, reliefM: null },
+    selectedMeaningfulMoments,
+    recommendedCinematicCut: recommendedCut,
+    recommendationReasons: reasons,
+    teaserTimeline,
+    featureTimeline,
+    renderFingerprint,
+  } as const;
+}
+
+function bestMoment(
+  moments: Array<{ progressRatio: number } | undefined>,
+  fallback: number,
+) {
+  return round(moments.find(Boolean)?.progressRatio ?? fallback, 6);
+}
+
+function fingerprint(value: unknown) {
+  const input = JSON.stringify(value);
+  let first = 0x811c9dc5;
+  let second = 0x9e3779b9;
+  for (let index = 0; index < input.length; index += 1) {
+    const code = input.charCodeAt(index);
+    first = Math.imul(first ^ code, 0x01000193);
+    second = Math.imul(second ^ code, 0x85ebca6b);
+  }
+  return `${(first >>> 0).toString(16).padStart(8, "0")}${(second >>> 0).toString(16).padStart(8, "0")}`;
+}
+
+function round(value: number, precision: number) {
+  const factor = 10 ** precision;
+  return Math.round(value * factor) / factor;
+}

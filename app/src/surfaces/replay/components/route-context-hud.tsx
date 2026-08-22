@@ -101,7 +101,7 @@ export function RouteContextHud({
         className={cn(!detailsVisible && "hidden")}
       >
         <p className="mt-1 text-control text-ink-secondary">
-          {route.distanceKm.toFixed(1)} km · {route.elevationGainM.toLocaleString()} m up
+          {route.distanceKm.toFixed(1)} km · {route.provenance.elevation?.status === "unavailable" ? "Elevation unavailable" : `${route.elevationGainM.toLocaleString()} m up`}
         </p>
         {summary}
         {actions ? (

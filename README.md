@@ -68,6 +68,22 @@ Launch the React app and local owner writer together:
 Admin edits the complete experiential guide contract, validates draft and reviewed states, and regenerates application route data on save.
 The deployed Admin is read-only because the loopback writer is not available there.
 
+## Import Routes With Route Studio
+
+Start the React app and owner writer with `./admin.sh`, then open `#/admin/studio`.
+Drop a GPX, KML, or KMZ file to preserve and inspect it, select a geometry when the source contains alternatives, record only the missing owner facts, and compile a staged route.
+Staging does not publish the route or change canonical generated data.
+
+Future and reference routes use Preview, Explore, Route film, and Cinematic timing language.
+Replay and owner-recorded timing are reserved for routes explicitly confirmed as completed by the owner with trustworthy recorded timestamps.
+The default privacy is private, which promotes a hidden canonical specification and verifies that no public detail or manifest entry was generated.
+
+Route Studio can queue a resumable landscape H.264 teaser through the existing deterministic local renderer.
+Film export is local owner tooling only.
+The project does not claim that third-party imagery licenses permit public downloadable exports; review the active provider terms before distributing any rendered imagery.
+
+Original uploads, SQLite state, receipts, and rendered artifacts remain local and ignored by Git.
+
 ## Test
 
 Run the complete release gate:

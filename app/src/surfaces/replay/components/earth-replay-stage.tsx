@@ -57,7 +57,7 @@ import {
   type ReplayStatus,
 } from "@/surfaces/replay/renderer-port";
 
-function initialReplayStatus(mode: ReplayEngineMode): ReplayStatus {
+function initialReplayStatus(mode: ReplayEngineMode, experienceLabel = "Replay"): ReplayStatus {
   return mode === "earth"
     ? {
         state: "loading",
@@ -66,7 +66,7 @@ function initialReplayStatus(mode: ReplayEngineMode): ReplayStatus {
       }
     : {
         state: "loading",
-        title: "Opening Atlas replay",
+        title: `Opening Atlas ${experienceLabel.toLowerCase()}`,
         message: "Preparing the fallback route map.",
       };
 }
@@ -78,6 +78,7 @@ export function EarthReplayStage({
   backLabel,
   initialEngineMode = "earth",
   allowEarthMode = true,
+  experienceMode = "replay",
 }: {
   route: QuestRoute;
   pickerRoutes: RouteSummary[];
@@ -85,6 +86,7 @@ export function EarthReplayStage({
   backLabel: string;
   initialEngineMode?: ReplayEngineMode;
   allowEarthMode?: boolean;
+  experienceMode?: "preview" | "replay";
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const elevationScrubberRef = useRef<
@@ -93,8 +95,9 @@ export function EarthReplayStage({
   const engineRef = useRef<ReplayEngine | undefined>(undefined);
   const mountedRouteRef = useRef<string | undefined>(undefined);
   const controlRef = useRef(initialReplayState());
+  const experienceLabel = experienceMode === "preview" ? "Preview" : "Replay";
   const [status, setStatus] = useState<ReplayStatus>(() =>
-    initialReplayStatus(initialEngineMode),
+    initialReplayStatus(initialEngineMode, experienceLabel),
   );
   const [engineMode, setEngineMode] =
     useState<ReplayEngineMode>(initialEngineMode);
@@ -109,7 +112,7 @@ export function EarthReplayStage({
   const operational = status.state === "ready" || status.state === "partial";
   const recordedLight = recordedLightAt(
     route.route,
-    route.provenance.temporal,
+    experienceMode === "preview" ? { status: "unavailable" } : route.provenance.temporal,
     control.progressM,
   );
 
@@ -138,7 +141,7 @@ export function EarthReplayStage({
     mountedRouteRef.current = route.slug;
     controlRef.current = initialControl;
     setControl(initialControl);
-    setStatus(initialReplayStatus(engineMode));
+    setStatus(initialReplayStatus(engineMode, experienceLabel));
     void engine.mount({
       container,
       route,
@@ -205,7 +208,7 @@ export function EarthReplayStage({
 
   return (
     <section
-      aria-label={engineMode === "earth" ? "Earth Replay" : "Atlas Replay"}
+      aria-label={engineMode === "earth" ? `Earth ${experienceLabel}` : `Atlas ${experienceLabel}`}
       data-testid="replay-stage"
       data-engine={engineMode === "earth" ? "cesium-bundled" : "maplibre-atlas"}
       data-state={status.state}
@@ -225,7 +228,7 @@ export function EarthReplayStage({
     >
       <div
         ref={containerRef}
-        aria-label={engineMode === "earth" ? "Earth Replay world" : "Atlas Replay map"}
+        aria-label={engineMode === "earth" ? `Earth ${experienceLabel} world` : `Atlas ${experienceLabel} map`}
         className="absolute inset-0"
       />
       <RecordedLightLayer light={recordedLight} reducedMotion={reducedMotion} />
@@ -233,7 +236,7 @@ export function EarthReplayStage({
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-4 p-3 sm:p-5">
         <RouteContextHud
           route={route}
-          label={engineMode === "earth" ? "Earth Replay" : "Atlas Replay"}
+          label={engineMode === "earth" ? `Earth ${experienceLabel}` : `Atlas ${experienceLabel}`}
           testId="replay-context"
           detailsTestId="replay-context-details"
           state={contextState}
@@ -263,7 +266,7 @@ export function EarthReplayStage({
                   onClick={() => setEngineMode("atlas")}
                 >
                   <Map aria-hidden="true" />
-                  Use Atlas replay
+                  Use Atlas {experienceLabel.toLowerCase()}
                 </Button>
               </div>
             ) : null}
@@ -276,13 +279,13 @@ export function EarthReplayStage({
                 onClick={() => setEngineMode("earth")}
               >
                 <Route aria-hidden="true" />
-                Try Earth replay
+                Try Earth {experienceLabel.toLowerCase()}
               </Button>
             ) : null}
             </>
           }
           actions={
-            <div className="grid grid-cols-2 gap-2">
+            experienceMode === "preview" ? null : <div className="grid grid-cols-2 gap-2">
               {route.replay.replayEligible ? (
                 <Button asChild size="sm" className="w-full bg-forest text-white hover:bg-forest/90">
                   <Link to={playableEarthLabPath(route.slug, "replay")}>
@@ -320,11 +323,11 @@ export function EarthReplayStage({
                 {engineMode === "earth" ? (
                   <Button type="button" onClick={() => setEngineMode("atlas")}>
                     <Map aria-hidden="true" />
-                    Use Atlas replay
+                    Use Atlas {experienceLabel.toLowerCase()}
                   </Button>
                 ) : null}
                 <Button asChild variant={engineMode === "earth" ? "outline" : "default"}>
-                  <Link to={routeDetailPath(route.slug)}>Return to route guide</Link>
+                  <Link to={experienceMode === "preview" ? backPath : routeDetailPath(route.slug)}>{experienceMode === "preview" ? "Return to Route Studio" : "Return to route guide"}</Link>
                 </Button>
               </div>
             ) : null}

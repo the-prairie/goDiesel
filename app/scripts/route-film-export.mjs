@@ -52,6 +52,7 @@ export function exportFingerprint(configuration) {
     fps: configuration.fps,
     motionSamples: configuration.motionSamples,
     route: configuration.route,
+    sourceFingerprint: configuration.sourceFingerprint ?? "",
     qualityPolicyVersion: configuration.qualityPolicyVersion,
     settleAttempts: configuration.settleAttempts,
     settleDelayMs: configuration.settleDelayMs,

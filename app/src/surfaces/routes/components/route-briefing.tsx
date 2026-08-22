@@ -15,6 +15,7 @@ const profileHeight = 180;
 
 export function RouteBriefing({ route }: { route: QuestRoute }) {
   const hasGeometry = route.route.length > 1;
+  const hasElevation = route.provenance.elevation?.status !== "unavailable";
 
   return (
     <section
@@ -63,10 +64,10 @@ export function RouteBriefing({ route }: { route: QuestRoute }) {
               Elevation character
             </span>
             <span className="text-xs text-muted-foreground">
-              {route.elevationGainM.toLocaleString()} m total climb
+              {hasElevation ? `${route.elevationGainM.toLocaleString()} m total climb` : "Elevation unavailable"}
             </span>
           </figcaption>
-          {hasGeometry ? (
+          {hasGeometry && hasElevation ? (
             <ElevationProfile route={route} />
           ) : (
             <BriefingUnavailable
@@ -119,6 +120,9 @@ function RouteTrace({ route }: { route: QuestRoute }) {
 }
 
 export function ElevationProfile({ route }: { route: QuestRoute }) {
+  if (route.provenance.elevation?.status === "unavailable") {
+    return <BriefingUnavailable title="Elevation profile unavailable" copy="The source contains no recorded elevation." />;
+  }
   const points = sampleElevationProfile(route.route);
   const { minimum, maximum } = elevationRange(route.route);
   const range = Math.max(1, maximum - minimum);

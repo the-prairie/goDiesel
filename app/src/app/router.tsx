@@ -13,6 +13,15 @@ import { APP_PATHS, canonicalizeLegacyQuestHash } from "@/app/route-paths";
 const AdminPage = lazy(() =>
   import("@/surfaces/admin/admin-page").then((module) => ({ default: module.AdminPage })),
 );
+const RouteStudioPage = lazy(() =>
+  import("@/surfaces/admin/route-studio-page").then((module) => ({ default: module.RouteStudioPage })),
+);
+const RouteStudioJobPage = lazy(() =>
+  import("@/surfaces/admin/route-studio-job-page").then((module) => ({ default: module.RouteStudioJobPage })),
+);
+const StagedStudioPreviewPage = lazy(() =>
+  import("@/surfaces/replay/staged-studio-preview-page").then((module) => ({ default: module.StagedStudioPreviewPage })),
+);
 const AtlasPage = lazy(() =>
   import("@/surfaces/atlas/atlas-page").then((module) => ({ default: module.AtlasPage })),
 );
@@ -97,6 +106,9 @@ const productRoutes = [
     element: <CinematicDirectorLabPage />,
   },
   { path: APP_PATHS.admin.slice(1), element: <AdminPage /> },
+  { path: "admin/studio", element: <RouteStudioPage /> },
+  { path: "admin/studio/:jobId", element: <RouteStudioJobPage /> },
+  { path: "admin/studio/:jobId/preview", element: <StagedStudioPreviewPage /> },
   { path: "*", element: <Navigate to={APP_PATHS.atlas} replace /> },
 ];
 

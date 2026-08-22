@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="goDiesel synthetic fixture" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><name>Mountain Traverse</name><trkseg>
+    <trkpt lat="51.1000" lon="-115.1000"><ele>1450</ele></trkpt>
+    <trkpt lat="51.1100" lon="-115.1100"><ele>1710</ele></trkpt>
+    <trkpt lat="51.1200" lon="-115.1200"><ele>2025</ele></trkpt>
+    <trkpt lat="51.1300" lon="-115.1300"><ele>1870</ele></trkpt>
+  </trkseg></trk>
+</gpx>

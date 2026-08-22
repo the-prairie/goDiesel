@@ -41,7 +41,7 @@ def update_route_curation(config, activity_id, value):
     updated = copy.deepcopy(config)
     matching = [
         route for route in updated.get("routes", [])
-        if str(route.get("activity_id")) == str(activity_id)
+        if str(route.get("route_id") or route.get("activity_id")) == str(activity_id)
     ]
     if not matching:
         raise ValueError(f"route {activity_id} was not found")
@@ -68,7 +68,7 @@ def save_curation_and_rebuild(config_path, activity_id, value, rebuild):
 
     route = next(
         route for route in updated["routes"]
-        if str(route.get("activity_id")) == str(activity_id)
+        if str(route.get("route_id") or route.get("activity_id")) == str(activity_id)
     )
     return route
 
