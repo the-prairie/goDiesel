@@ -1,0 +1,27 @@
+name: Route Studio workspace
+
+on:
+  push:
+    branches:
+      - feat/route-studio
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/route-studio
+      - name: Package source workspace
+        run: |
+          git archive --format=tar.gz --output=godiesel-route-studio.tar.gz HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: godiesel-route-studio-workspace
+          path: godiesel-route-studio.tar.gz
+          if-no-files-found: error
+          retention-days: 1
