@@ -27,6 +27,7 @@ for (const route of ROUTES) {
     await expect(page.locator("gmp-map-3d")).toBeVisible();
     await expect(page.locator("gmp-polyline-3d")).toHaveCount(1);
     await expect(page.getByTestId("route-trailer-chapter")).toBeVisible();
+    await page.getByRole("button", { name: "Pause trailer" }).click();
 
     const openingPathLength = await page
       .locator("gmp-polyline-3d")
