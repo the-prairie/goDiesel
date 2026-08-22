@@ -6,6 +6,7 @@ from datetime import date
 
 from route_imports import (
     IMPORTED_GPX,
+    OWNER_IMPORT,
     STRAVA_EXPORT,
     imported_route_from_spec,
     route_metadata,
@@ -84,6 +85,22 @@ class RouteSourceKindTest(unittest.TestCase):
 
     def test_a_route_without_a_source_file_comes_from_the_strava_export(self):
         self.assertEqual(route_source_kind({"activity_id": "123"}), STRAVA_EXPORT)
+
+    def test_canonical_owner_import_requires_source_evidence(self):
+        self.assertEqual(
+            route_source_kind({
+                "source_gpx": "route_sources/studio/route.gpx",
+                "source_kind": OWNER_IMPORT,
+            }),
+            OWNER_IMPORT,
+        )
+        with self.assertRaisesRegex(ValueError, "requires a canonical source file"):
+            route_source_kind({"source_kind": OWNER_IMPORT})
+        with self.assertRaisesRegex(ValueError, "cannot use source_kind"):
+            route_source_kind({
+                "source_gpx": "route_sources/studio/route.gpx",
+                "source_kind": STRAVA_EXPORT,
+            })
 
 
 class _Row(dict):

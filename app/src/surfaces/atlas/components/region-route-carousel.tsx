@@ -325,7 +325,7 @@ function RegionalRouteCard({
         <h3 className="truncate font-editorial text-xl font-semibold leading-6 [@media(max-height:500px)]:text-base [@media(max-height:500px)]:leading-5">{route.name}</h3>
         <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-white/72">
           <span>{route.distanceKm.toFixed(1)} km</span>
-          <span>{route.elevationGainM.toLocaleString()} m climb</span>
+          <span>{route.elevationStatus === "unavailable" ? "Elevation unavailable" : `${route.elevationGainM.toLocaleString()} m climb`}</span>
           <span className="inline-flex items-center gap-1">
             {route.type === "Ride" ? <Bike className="size-3.5" aria-hidden="true" /> : <Footprints className="size-3.5" aria-hidden="true" />}
             {route.type}
@@ -378,7 +378,7 @@ function RouteTracePreview({
 }
 
 function ElevationProfilePreview({ route, geometry }: { route: RouteSummary; geometry: ElevationGeometry | null }) {
-  if (!geometry) {
+  if (!geometry || route.elevationStatus === "unavailable") {
     return <span className="self-center text-xs text-white/45">Elevation unavailable</span>;
   }
 

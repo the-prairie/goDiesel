@@ -15,6 +15,8 @@ class ImportedRoute:
     activity_type: str
     date: str
     description: str
+    source_kind: str
+    source_format: str
 
 
 def imported_route_from_spec(spec: dict[str, object], checkout_root: Path) -> ImportedRoute | None:
@@ -44,6 +46,8 @@ def imported_route_from_spec(spec: dict[str, object], checkout_root: Path) -> Im
         activity_type=activity_type,
         date=_optional_iso_date(spec, "date"),
         description=_optional_string(spec, "description"),
+        source_kind=route_source_kind(spec),
+        source_format=route_source_format(spec),
     )
 
 
@@ -78,17 +82,63 @@ def _optional_iso_date(spec: dict[str, object], field: str) -> str:
 
 STRAVA_EXPORT = "strava-export"
 IMPORTED_GPX = "imported-gpx"
-SOURCE_KINDS = frozenset((STRAVA_EXPORT, IMPORTED_GPX))
+OWNER_IMPORT = "owner-import"
+SOURCE_KINDS = frozenset((STRAVA_EXPORT, IMPORTED_GPX, OWNER_IMPORT))
+SOURCE_FORMATS = frozenset(("gpx", "kml", "kmz", "fit"))
 
 
 def route_source_kind(spec: dict[str, object]) -> str:
     """Name where a route's geometry and metadata come from.
 
     A route with `source_gpx` was imported from a standalone file. Every other
-    route comes from the Strava export. The kind is derived, never stored, so it
-    cannot drift away from the data it describes.
+    route comes from the Strava export. An explicit kind is accepted for
+    canonical owner imports and validated against the presence of source_gpx.
     """
-    return IMPORTED_GPX if spec.get("source_gpx") else STRAVA_EXPORT
+    explicit = spec.get("source_kind")
+    derived = IMPORTED_GPX if spec.get("source_gpx") else STRAVA_EXPORT
+    if explicit is not None:
+        if explicit not in SOURCE_KINDS:
+            raise ValueError(f"source_kind must be one of: {', '.join(sorted(SOURCE_KINDS))}")
+        if derived == IMPORTED_GPX and explicit == STRAVA_EXPORT:
+            raise ValueError("source_gpx cannot use source_kind strava-export")
+        if derived == STRAVA_EXPORT and explicit != STRAVA_EXPORT:
+            raise ValueError("owner import source_kind requires a canonical source file")
+        return str(explicit)
+    return derived
+
+
+def route_source_format(spec: dict[str, object], source_path: Path | None = None) -> str:
+    """Name the original source container independently from source ownership."""
+    explicit = spec.get("source_format")
+    if explicit is not None:
+        if explicit not in SOURCE_FORMATS:
+            raise ValueError(f"source_format must be one of: {', '.join(sorted(SOURCE_FORMATS))}")
+        return str(explicit)
+    path = source_path
+    if path is None and isinstance(spec.get("source_gpx"), str):
+        path = Path(str(spec["source_gpx"]))
+    if path is not None:
+        if path.name.endswith(".fit.gz"):
+            return "fit"
+        suffix = path.suffix.lower().lstrip(".")
+        if suffix in SOURCE_FORMATS:
+            return suffix
+    return "gpx" if spec.get("source_gpx") else "fit"
+
+
+def route_identity(spec: dict[str, object]) -> tuple[str, str | None, str]:
+    """Return stable route id, optional Strava activity id, and identity kind."""
+    route_id = spec.get("route_id")
+    activity_id = spec.get("activity_id")
+    if route_id is not None:
+        if not isinstance(route_id, str) or not route_id.strip():
+            raise ValueError("route_id must be a non-empty string")
+        if activity_id is not None:
+            raise ValueError("an imported route_id must not also claim a Strava activity_id")
+        return route_id.strip(), None, "imported-route"
+    if not isinstance(activity_id, str) or not activity_id.strip():
+        raise ValueError("route must contain activity_id or route_id")
+    return activity_id.strip(), activity_id.strip(), "strava-activity"
 
 
 @dataclass(frozen=True)
@@ -101,6 +151,7 @@ class RouteMetadata:
     date: str
     description: str
     source_path: Path | None
+    source_format: str
 
 
 def route_metadata(
@@ -117,12 +168,13 @@ def route_metadata(
     imported = imported_route_from_spec(spec, checkout_root)
     if imported is not None:
         return RouteMetadata(
-            source_kind=IMPORTED_GPX,
+            source_kind=imported.source_kind,
             name=imported.name,
             activity_type=imported.activity_type,
             date=imported.date,
             description=imported.description,
             source_path=imported.path,
+            source_format=imported.source_format,
         )
 
     if activity_row is None:
@@ -135,6 +187,7 @@ def route_metadata(
         date=_activity_date(activity_row),
         description=_activity_text(activity_row, "Activity Description"),
         source_path=None,
+        source_format=route_source_format(spec),
     )
 
 

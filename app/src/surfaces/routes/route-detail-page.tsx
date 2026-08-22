@@ -226,7 +226,7 @@ function RouteMargin({
             </p>
             <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-y border-line py-4">
               <LeafMetric label="Distance" value={`${route.distanceKm.toFixed(1)} km`} />
-              <LeafMetric label="Climb" value={`${route.elevationGainM.toLocaleString()} m`} />
+              <LeafMetric label="Climb" value={route.provenance.elevation?.status === "unavailable" ? "Unavailable" : `${route.elevationGainM.toLocaleString()} m`} />
               <LeafMetric label="Activity" value={route.type} />
               <LeafMetric
                 label={routeDateLabel(route.lifecycle)}
@@ -239,7 +239,7 @@ function RouteMargin({
 
       {hasDetails ? (
         <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-24">
-          {route.route.length > 1 ? (
+          {route.route.length > 1 && route.provenance.elevation?.status !== "unavailable" ? (
             <section aria-label="Elevation" className="border-b border-line pb-6">
               <p className="text-caption font-semibold uppercase text-ink-muted">
                 Elevation

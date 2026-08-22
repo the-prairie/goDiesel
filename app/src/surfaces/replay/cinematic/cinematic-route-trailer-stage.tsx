@@ -219,7 +219,7 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
               </h1>
               <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-white/72">
                 <span>{route.distanceKm.toFixed(1)} km</span>
-                <span>{route.elevationGainM.toLocaleString()} m up</span>
+                <span>{route.provenance.elevation?.status === "unavailable" ? "Elevation unavailable" : `${route.elevationGainM.toLocaleString()} m up`}</span>
                 <span>{route.type}</span>
                 <span>{route.date}</span>
               </div>

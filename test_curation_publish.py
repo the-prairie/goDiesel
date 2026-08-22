@@ -184,6 +184,7 @@ def _copy_workspace(workspace):
         "quests.json",
         "quest_meta.py",
         "route_provenance.py",
+        "route_compiler.py",
         "route_imports.py",
         "route_annotations.py",
         "route_timezones.py",

@@ -82,7 +82,7 @@ export function RouteCard({
           {route.distanceKm.toFixed(1)} km
         </LedgerCell>
         <LedgerCell label="Climb" className="hidden md:flex">
-          {route.elevationGainM.toLocaleString()} m up
+          {route.elevationStatus === "unavailable" ? "Unavailable" : `${route.elevationGainM.toLocaleString()} m up`}
         </LedgerCell>
         <LedgerCell label="Vibe" className="hidden md:flex">
           <span className="line-clamp-3 italic">
@@ -119,7 +119,7 @@ export function RouteCard({
         <div className="grid grid-cols-2 gap-x-4 gap-y-2 border-t border-line px-3 py-3 text-caption md:hidden">
           <MobileFact label="Activity" value={route.type} />
           <MobileFact label="Distance" value={`${route.distanceKm.toFixed(1)} km`} />
-          <MobileFact label="Climb" value={`${route.elevationGainM.toLocaleString()} m up`} />
+          <MobileFact label="Climb" value={route.elevationStatus === "unavailable" ? "Unavailable" : `${route.elevationGainM.toLocaleString()} m up`} />
           <MobileFact
             label="Lifecycle"
             value={`${capitalize(route.lifecycle)} · ${planned ? "Future route" : reviewed ? "Reviewed guide" : "Draft guide"}`}
