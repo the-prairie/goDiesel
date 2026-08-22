@@ -18,6 +18,9 @@ venv/
 .geo_cache.json
 .geocode_buckets.json
 .rebuild.log
+.route-studio/
+/route_sources/studio/
+/route_sources/receipts/
 
 # Generated build output.
 /index.html
