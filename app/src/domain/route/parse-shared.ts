@@ -101,7 +101,10 @@ function parsedRouteSource(
   return { kind, format } as const;
 }
 
-export function parsedRoutePoints(value: unknown) {
+export function parsedRoutePoints(
+  value: unknown,
+  allowUnavailableElevation = false,
+) {
   if (!Array.isArray(value) || value.length < 2) {
     return { points: [] as RoutePoint[], status: "missing" as const };
   }
@@ -117,7 +120,11 @@ export function parsedRoutePoints(value: unknown) {
         : undefined;
     const lat = source ? numberValue(source.lat, Number.NaN) : Number.NaN;
     const lng = source ? numberValue(source.lng, Number.NaN) : Number.NaN;
-    const elev = source ? numberValue(source.elev, Number.NaN) : Number.NaN;
+    const rawElevation = source?.elev;
+    const elev =
+      allowUnavailableElevation && (rawElevation === null || rawElevation === undefined)
+        ? 0
+        : numberValue(rawElevation, Number.NaN);
     const d = source ? numberValue(source.d, Number.NaN) : Number.NaN;
     const rawElapsed = source?.elapsed_s;
     const elapsedS =

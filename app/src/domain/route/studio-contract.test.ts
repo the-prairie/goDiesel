@@ -60,6 +60,18 @@ describe("Route Studio identity compatibility", () => {
     expect(route.provenance.elevation?.status).toBe("unavailable");
   });
 
+  it("accepts unavailable source altitude without treating it as recorded zero", () => {
+    const route = parseRouteDetail(detail({
+      route: [
+        { lat: 27.986, lng: 86.922, elev: null, d: 0 },
+        { lat: 27.99, lng: 86.928, elev: null, d: 1_200 },
+      ],
+    }));
+
+    expect(route.replay.geometryStatus).toBe("ready");
+    expect(route.provenance.elevation?.status).toBe("unavailable");
+  });
+
   it("keeps legacy Strava summaries stable", () => {
     const summary = parseRouteSummary({
       ...detail({

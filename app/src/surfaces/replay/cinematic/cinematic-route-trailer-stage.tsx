@@ -17,6 +17,7 @@ import {
   routeTrailerFrame,
   type RouteTrailerFrame,
 } from "@/surfaces/replay/cinematic/route-trailer-controller";
+import { routeExperienceManifest } from "@/surfaces/replay/cinematic/route-experience-manifest";
 import {
   createGoogleRouteNavigatorEngine,
   type GoogleRouteNavigatorEngine,
@@ -43,7 +44,23 @@ function routePictureLine(route: QuestRoute) {
   return `A ${route.distanceKm.toFixed(1)} kilometre line through ${route.region}.`;
 }
 
-export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
+interface CinematicRouteTrailerStageProps {
+  backLabel?: string;
+  backPath?: string;
+  decisionLabel?: string;
+  decisionPath?: string;
+  renderMode?: boolean;
+  route: QuestRoute;
+}
+
+export function CinematicRouteTrailerStage({
+  backLabel = "Back to route intelligence",
+  backPath = "/lab/route-intelligence",
+  decisionLabel = "Enter the route",
+  decisionPath,
+  renderMode = false,
+  route,
+}: CinematicRouteTrailerStageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<GoogleRouteNavigatorEngine | undefined>(undefined);
   const elapsedRef = useRef(0);
@@ -53,6 +70,7 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
   const [frame, setFrame] = useState<RouteTrailerFrame>(() =>
     routeTrailerFrame(route, 0),
   );
+  const manifest = routeExperienceManifest(route);
 
   const commitFrame = (elapsedSeconds: number) => {
     const next = routeTrailerFrame(route, elapsedSeconds);
@@ -95,7 +113,7 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
         engine.setCamera(initialFrame.camera);
         engine.setRouteReveal(initialFrame.reveal);
         setFrame(initialFrame);
-        setPlayback(!reducedMotion);
+        setPlayback(renderMode ? false : !reducedMotion);
       },
     });
 
@@ -104,7 +122,17 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
       engine.destroy();
       if (engineRef.current === engine) engineRef.current = undefined;
     };
-  }, [route]);
+  }, [renderMode, route]);
+
+  useEffect(() => {
+    if (!renderMode) return;
+    const seek = (event: Event) => {
+      const seconds = Number((event as CustomEvent<{ seconds?: number }>).detail?.seconds);
+      if (Number.isFinite(seconds)) commitFrame(Math.min(ROUTE_TRAILER_DURATION_SECONDS, Math.max(0, seconds)));
+    };
+    window.addEventListener("godiesel:route-film-seek", seek);
+    return () => window.removeEventListener("godiesel:route-film-seek", seek);
+  }, [renderMode, route]);
 
   useEffect(() => {
     if (status.state !== "ready") return;
@@ -150,12 +178,23 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
       aria-label={`Cinematic preview of ${route.name}`}
       className="fixed inset-0 z-[100] overflow-hidden bg-black text-white"
       data-chapter={frame.chapter}
+      data-decision-frame={frame.showDecision ? "true" : "false"}
+      data-director-version={manifest.directorVersion}
+      data-duration={ROUTE_TRAILER_DURATION_SECONDS}
+      data-frame-seconds={frame.progress * ROUTE_TRAILER_DURATION_SECONDS}
+      data-manifest-version={manifest.analysisVersion}
+      data-route-film="trailer"
+      data-shot-count={manifest.teaserTimeline.length}
+      data-shot-kind={frame.chapter}
+      data-shot-timeline={JSON.stringify(manifest.teaserTimeline)}
       data-state={status.state}
+      data-terrain-character={manifest.routeProfile.character}
       data-testid="route-trailer"
     >
       <div
         aria-label={`Google photorealistic 3D trailer of ${route.name}`}
         className="absolute inset-0"
+        data-testid="cinematic-world"
         ref={containerRef}
       />
 
@@ -168,9 +207,9 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
 
       <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-4 px-5 pt-7 sm:px-8 sm:pt-9">
         <Link
-          aria-label="Back to route intelligence"
+          aria-label={backLabel}
           className="inline-flex size-10 items-center justify-center border border-white/30 bg-black/35 text-white backdrop-blur-md transition-colors hover:bg-black/60"
-          to="/lab/route-intelligence"
+          to={backPath}
         >
           <ArrowLeft aria-hidden="true" className="size-4" />
         </Link>
@@ -237,8 +276,8 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
                 asChild
                 className="bg-[#f16c4b] text-white hover:bg-[#d95639]"
               >
-                <Link to={`/lab/google-route-navigator/${route.slug}`}>
-                  Enter the route
+                <Link to={decisionPath ?? `/lab/google-route-navigator/${route.slug}`}>
+                  {decisionLabel}
                   <ChevronRight aria-hidden="true" />
                 </Link>
               </Button>

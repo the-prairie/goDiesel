@@ -3,7 +3,8 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
+import signal
 import zipfile
 
 from route_studio import RouteStudio, StudioConflict, StudioError
@@ -126,8 +127,12 @@ class RouteStudioWorkflowTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
+        self.durable_source_root = self.root / "durable-route-sources"
         (self.root / "quests.json").write_text('{"routes": []}\n', encoding="utf-8")
-        self.studio = RouteStudio(self.root)
+        self.studio = RouteStudio(
+            self.root,
+            durable_source_root=self.durable_source_root,
+        )
 
     def tearDown(self):
         self.studio.close()
@@ -263,6 +268,27 @@ class RouteStudioWorkflowTests(unittest.TestCase):
         self.assertEqual(compiled["provenance"]["temporal"]["status"], "unavailable")
         self.assertTrue(all("elapsed_s" not in point for point in compiled["route"]))
 
+    def test_high_altitude_route_without_elevation_keeps_altitude_unavailable(self):
+        payload = b'''<gpx><trk><trkseg>
+          <trkpt lat="27.986" lon="86.922" />
+          <trkpt lat="27.988" lon="86.925" />
+          <trkpt lat="27.990" lon="86.928" />
+        </trkseg></trk></gpx>'''
+        uploaded = self.studio.upload("high-altitude.gpx", payload)
+        self.studio.set_metadata(
+            uploaded["job_id"],
+            {
+                **self._metadata(completed=False),
+                "region": "Khumbu, Nepal",
+            },
+        )
+
+        compiled = self.studio.compile(uploaded["job_id"])
+
+        self.assertEqual(compiled["provenance"]["elevation"]["status"], "unavailable")
+        self.assertTrue(all(point["elev"] is None for point in compiled["route"]))
+        self.assertIn("Elevation is unavailable", compiled["completion_rule"])
+
     def test_geometry_or_metadata_edits_invalidate_compiled_and_render_state(self):
         uploaded = self.studio.upload("alternatives.kml", fixture("multiple-lines.kml"))
         job_id = uploaded["job_id"]
@@ -300,7 +326,10 @@ class RouteStudioWorkflowTests(unittest.TestCase):
         self.studio.store.start_render(job_id, "attempt-1", "fingerprint", self.studio.get_job(job_id)["route_fingerprint"])
         self.studio.close()
 
-        self.studio = RouteStudio(self.root)
+        self.studio = RouteStudio(
+            self.root,
+            durable_source_root=self.durable_source_root,
+        )
         job = self.studio.get_job(job_id)
 
         self.assertEqual(job["status"], "render_interrupted")
@@ -335,10 +364,115 @@ class RouteStudioWorkflowTests(unittest.TestCase):
 
         command = thread.call_args.kwargs["args"][2]
         self.assertIn(
-            f"--film-url=http://127.0.0.1:8787/#/admin/studio/{job_id}/preview?render=1&cut=feature",
+            f"--film-url=http://127.0.0.1:8787/#/admin/studio/{job_id}/preview?render=1",
             command,
         )
         self.assertTrue(any(item.startswith("--source-fingerprint=") for item in command))
+        self.assertIn("--manifest-version=2", command)
+        self.assertIn("--director-version=2", command)
+        self.assertIn("--max-seconds=17.5", command)
+
+    def test_render_publishes_only_a_started_worker(self):
+        uploaded = self.studio.upload("simple.gpx", fixture("simple.gpx"))
+        job_id = uploaded["job_id"]
+        self.studio.set_metadata(job_id, self._metadata(completed=False))
+        self.studio.compile(job_id)
+
+        def assert_start_is_atomic():
+            acquired = self.studio._render_lock.acquire(blocking=False)
+            if acquired:
+                self.studio._render_lock.release()
+            self.assertFalse(acquired)
+
+        with patch("route_studio.threading.Thread") as thread:
+            thread.return_value.start.side_effect = assert_start_is_atomic
+            self.studio.render(job_id)
+
+        thread.return_value.start.assert_called_once_with()
+
+    def test_cancel_terminates_the_complete_render_process_group(self):
+        uploaded = self.studio.upload("simple.gpx", fixture("simple.gpx"))
+        job_id = uploaded["job_id"]
+        self.studio.set_metadata(job_id, self._metadata(completed=False))
+        self.studio.compile(job_id)
+        self.studio.store.start_render(
+            job_id, "attempt-1", "render", self.studio.get_job(job_id)["route_fingerprint"]
+        )
+        process = MagicMock(pid=4217)
+        process.poll.return_value = None
+        process.wait.return_value = 0
+        self.studio._render_processes[job_id] = process
+
+        with patch("route_studio.os.killpg") as kill_group:
+            self.studio.cancel(job_id)
+
+        kill_group.assert_called_once_with(4217, signal.SIGTERM)
+
+    def test_cancel_before_process_registration_terminates_the_spawned_group(self):
+        uploaded = self.studio.upload("simple.gpx", fixture("simple.gpx"))
+        job_id = uploaded["job_id"]
+        self.studio.set_metadata(job_id, self._metadata(completed=False))
+        self.studio.compile(job_id)
+        self.studio.store.start_render(
+            job_id, "attempt-1", "render", self.studio.get_job(job_id)["route_fingerprint"]
+        )
+        self.studio.cancel(job_id)
+        process = MagicMock(pid=4218, stdout=[])
+        process.poll.return_value = None
+        process.wait.return_value = -signal.SIGTERM
+
+        with (
+            patch("route_studio.subprocess.Popen", return_value=process),
+            patch("route_studio.os.killpg") as kill_group,
+        ):
+            self.studio._run_render(
+                job_id,
+                "attempt-1",
+                ["node", "render-route-film.mjs"],
+                self.root / "teaser.mp4",
+                self.root / "teaser.report.json",
+            )
+
+        kill_group.assert_called_once_with(4218, signal.SIGTERM)
+        job = self.studio.get_job(job_id)
+        self.assertEqual(job["status"], "staged")
+        self.assertEqual(job["render_attempts"][0]["status"], "cancelled")
+
+    def test_shutdown_before_process_registration_terminates_the_spawned_group(self):
+        uploaded = self.studio.upload("simple.gpx", fixture("simple.gpx"))
+        job_id = uploaded["job_id"]
+        self.studio.set_metadata(job_id, self._metadata(completed=False))
+        self.studio.compile(job_id)
+        self.studio.store.start_render(
+            job_id, "attempt-1", "render", self.studio.get_job(job_id)["route_fingerprint"]
+        )
+        process = MagicMock(pid=4219, stdout=[])
+        process.poll.return_value = None
+        process.wait.return_value = -signal.SIGTERM
+        self.studio._closing.set()
+
+        with (
+            patch("route_studio.subprocess.Popen", return_value=process),
+            patch("route_studio.os.killpg") as kill_group,
+        ):
+            self.studio._run_render(
+                job_id,
+                "attempt-1",
+                ["node", "render-route-film.mjs"],
+                self.root / "teaser.mp4",
+                self.root / "teaser.report.json",
+            )
+
+        kill_group.assert_called_once_with(4219, signal.SIGTERM)
+
+    def test_close_joins_render_workers_before_closing_sqlite(self):
+        worker = MagicMock()
+        self.studio._render_threads["job"] = worker
+        with patch.object(self.studio.store, "close") as close_store:
+            self.studio.close()
+        worker.join.assert_called_once_with()
+        close_store.assert_called_once_with()
+        self.studio._render_threads.clear()
 
     def test_running_render_must_be_cancelled_before_edit_or_delete(self):
         uploaded = self.studio.upload("simple.gpx", fixture("simple.gpx"))
@@ -545,7 +679,10 @@ class RouteStudioWorkflowTests(unittest.TestCase):
         manifest.write_text('{"routes":[{"slug":"partial"}]}\n', encoding="utf-8")
         self.studio.close()
 
-        self.studio = RouteStudio(self.root)
+        self.studio = RouteStudio(
+            self.root,
+            durable_source_root=self.durable_source_root,
+        )
         recovered = self.studio.get_job(job_id)
 
         self.assertEqual(config_path.read_text(encoding="utf-8"), original_config)
@@ -555,6 +692,31 @@ class RouteStudioWorkflowTests(unittest.TestCase):
         self.assertFalse(receipt_path.exists())
         self.assertEqual(recovered["status"], "promotion_failed")
         self.assertTrue(recovered["retryable"])
+
+    def test_interrupted_promotion_is_closed_before_backup_cleanup(self):
+        uploaded = self.studio.upload("simple.gpx", fixture("simple.gpx"))
+        job_id = uploaded["job_id"]
+        self.studio.set_metadata(job_id, self._metadata(completed=False))
+        self.studio.compile(job_id)
+        backup = self.studio._create_promotion_backup(
+            job_id, (self.root / "quests.json").read_text(encoding="utf-8")
+        )
+        self.studio.store.start_promotion(job_id, {
+            "backup_path": str(backup.relative_to(self.studio.root)),
+            "source_path": "route_sources/studio/interrupted.gpx",
+            "receipt_path": "route_sources/receipts/interrupted.json",
+        }, self.studio.get_job(job_id)["route_fingerprint"])
+        observed_statuses = []
+        remove_backup = self.studio._remove_promotion_backup
+
+        def observe_then_remove(path):
+            observed_statuses.append(self.studio.get_job(job_id)["status"])
+            remove_backup(path)
+
+        with patch.object(self.studio, "_remove_promotion_backup", side_effect=observe_then_remove):
+            self.studio._recover_interrupted_promotions()
+
+        self.assertEqual(observed_statuses, ["promotion_failed"])
 
     def test_promotion_writes_canonical_spec_and_receipt_then_marks_promoted(self):
         uploaded = self.studio.upload("simple.gpx", fixture("simple.gpx"))
@@ -574,8 +736,21 @@ class RouteStudioWorkflowTests(unittest.TestCase):
         self.assertNotIn("activity_id", config["routes"][0])
         self.assertTrue((self.root / config["routes"][0]["source_gpx"]).is_file())
         self.assertTrue((self.root / config["routes"][0]["source_receipt"]).is_file())
+        self.assertEqual(
+            config["routes"][0]["source_policy"],
+            "private-durable-backup",
+        )
+        durable_source = self.durable_source_root / config["routes"][0]["source_backup"]
+        self.assertTrue(durable_source.is_file())
         canonical = (self.root / config["routes"][0]["source_gpx"]).read_text(encoding="utf-8")
         self.assertNotIn("<time>", canonical)
+        (self.root / config["routes"][0]["source_gpx"]).unlink()
+        owner_routes = self.studio.owner_routes()
+        self.assertEqual([route["slug"] for route in owner_routes], [staged["slug"]])
+        self.assertEqual(owner_routes[0]["lifecycle"], "discovered")
+        durable_source.write_bytes(b"tampered")
+        with self.assertRaisesRegex(ValueError, "checksum"):
+            self.studio.owner_routes()
         self.assertEqual(self.studio.get_job(job_id)["status"], "promoted")
 
     def test_promotion_preserves_unavailable_elevation_in_canonical_spec(self):

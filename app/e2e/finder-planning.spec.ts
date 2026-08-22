@@ -1,4 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
+import {
+  installOwnerDiscoveredRoute,
+  ownerDiscoveredRouteSlug,
+} from "./owner-discovered-route-fixture";
 
 const plannedRouteStorageKey = "godiesel.planned-routes.v1";
 
@@ -13,6 +17,7 @@ async function searchKyoto(page: Page) {
 }
 
 test.beforeEach(async ({ page }) => {
+  await installOwnerDiscoveredRoute(page);
   await page.goto("/");
   await page.evaluate((key) => localStorage.removeItem(key), plannedRouteStorageKey);
 });
@@ -34,10 +39,10 @@ test("Finder searches explicit route-backed candidates and saves a durable plan"
   await expect(map).toHaveAttribute("data-map-status", "ready", {
     timeout: 15_000,
   });
-  await expect(map).toHaveAttribute("data-selected-route", "17654151284");
+  await expect(map).toHaveAttribute("data-selected-route", ownerDiscoveredRouteSlug);
 
   const candidate = page.getByRole("article", { name: "Kyoto, Japan candidate" });
-  await expect(candidate).toContainText("Owner-curated from recorded GPX");
+  await expect(candidate).toContainText("Owner-curated route source");
   await expect(candidate).toContainText("21.3 km");
   await expect(candidate).toContainText("Why it matches");
   await expect(candidate).toContainText(/mixed terrain/i);
@@ -52,7 +57,7 @@ test("Finder searches explicit route-backed candidates and saves a durable plan"
       {
         lifecycle: "planned",
         planning: {
-          sourceRouteSlug: "17654151284",
+          sourceRouteSlug: ownerDiscoveredRouteSlug,
           storeVersion: 1,
           intent: { place: "Kyoto" },
         },
@@ -68,7 +73,7 @@ test("Finder searches explicit route-backed candidates and saves a durable plan"
   const plannedCard = page.getByRole("article", { name: "Planned route Kyoto, Japan" });
   await expect(plannedCard).toBeVisible();
   await expect(plannedCard).toContainText("Planned");
-  await expect(plannedCard).toContainText("Owner-curated from recorded GPX");
+  await expect(plannedCard).toContainText("Owner-curated route source");
   await expect(plannedCard.getByRole("link", { name: "Open route guide" })).toHaveCount(0);
 });
 
@@ -110,7 +115,7 @@ test("a planned route never changes completed Atlas totals", async ({ page }) =>
     /^(\d+ routes|\d+ km inked)$/.test(text),
   );
   expect(finalTotals).toEqual(initialTotals);
-  await expect(page.getByText("planned-owner-route-17654151284")).toHaveCount(0);
+  await expect(page.getByText(`planned-owner-route-${ownerDiscoveredRouteSlug}`)).toHaveCount(0);
 });
 
 for (const viewport of [

@@ -14,6 +14,7 @@ import json
 import os
 import math
 import re
+import signal
 import subprocess
 import sys
 import threading
@@ -626,6 +627,46 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/studio/jobs':
             self._send(200, STUDIO.list_jobs())
             return
+        if path == '/api/owner/routes':
+            try:
+                self._send(200, {'routes': STUDIO.owner_routes()})
+            except (OSError, ValueError, StudioError) as error:
+                self._send(409, {'error': str(error)})
+            return
+        owner_route_match = re.fullmatch(r'/api/owner/routes/([^/]+)', path)
+        if owner_route_match:
+            try:
+                matches = [
+                    route for route in STUDIO.owner_routes()
+                    if route.get('slug') == owner_route_match.group(1)
+                ]
+            except (OSError, ValueError, StudioError) as error:
+                self._send(409, {'error': str(error)})
+                return
+            if len(matches) != 1:
+                self._send(404, {'error': 'owner route was not found'})
+                return
+            self._send(200, matches[0])
+            return
+        artifact_match = re.fullmatch(r'/api/studio/artifacts/([^/]+)/([^/]+)', path)
+        if artifact_match:
+            job_id, filename = artifact_match.groups()
+            try:
+                job = STUDIO.get_job(job_id)
+            except StudioNotFound as error:
+                self._send(404, {'error': str(error)})
+                return
+            expected = f'.route-studio/artifacts/{job_id}/{filename}'
+            if not any(item.get('path') == expected for item in job.get('artifacts', [])):
+                self._send(404, {'error': 'Studio artifact was not found'})
+                return
+            artifact_path = (QUESTS / expected).resolve()
+            artifact_root = (QUESTS / '.route-studio' / 'artifacts' / job_id).resolve()
+            if artifact_path.parent != artifact_root or not artifact_path.is_file():
+                self._send(404, {'error': 'Studio artifact was not found'})
+                return
+            self._send(200, artifact_path.read_bytes(), 'video/mp4')
+            return
         studio_match = re.fullmatch(r'/api/studio/jobs/([^/]+)(?:/(events|route))?', path)
         if studio_match:
             job_id, resource = studio_match.groups()
@@ -1027,12 +1068,19 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     server = ThreadingHTTPServer(('127.0.0.1', PORT), Handler)
+    def stop(_signum, _frame):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGINT, stop)
+    signal.signal(signal.SIGTERM, stop)
     print(f'\n✓ Admin server running: http://localhost:{PORT}')
     print('  Press Ctrl+C to stop.\n')
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print('\nStopped.')
+    finally:
+        server.server_close()
+        STUDIO.close()
 
 
 if __name__ == '__main__':

@@ -54,7 +54,15 @@ describe("Route Experience Manifest", () => {
     const manifest = routeExperienceManifest(unavailable);
 
     expect(manifest.recommendationReasons).toContain("elevation unavailable in the source");
-    expect(manifest.routeProfile).toMatchObject({ character: "unknown", reliefM: null });
+    expect(manifest.routeProfile).toMatchObject({
+      character: "unknown",
+      maximumElevationM: null,
+      maximumGradePct: null,
+      minimumElevationM: null,
+      positiveGainM: null,
+      reliefM: null,
+    });
+    expect(manifest.featureTimeline).toEqual([]);
     expect(manifest.recommendedCinematicCut).not.toBe("intimate");
     expect(manifest.selectedMeaningfulMoments).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: "climb" }),

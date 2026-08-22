@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { installOwnerDiscoveredRoute } from "./owner-discovered-route-fixture";
 
 const reviewedKyotoSlug = "17654151284";
 const draftTokyoSlug = "17665674778";
@@ -310,6 +311,7 @@ for (const viewport of [
   test(`planned and empty library states remain usable on ${viewport.name}`, async ({
     page,
   }) => {
+    await installOwnerDiscoveredRoute(page);
     await page.setViewportSize(viewport);
     await page.goto("/#/finder");
     const finder = page.getByRole("form", { name: "Find a route" });

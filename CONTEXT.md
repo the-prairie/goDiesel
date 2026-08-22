@@ -58,6 +58,9 @@ The preserved geometry evidence for a route.
 It may be a GPX, FIT, KML, or KMZ file.
 Recorded fields in a route source are ground truth for geometry, elevation, and time; absent fields remain unavailable.
 Nothing downstream may contradict the source.
+Private promoted owner imports use the `private-durable-backup` policy.
+Their route specification records the canonical source checksum and a relative backup key.
+The local owner read model resolves a healthy canonical copy first, then the durable backup rooted at `GODIESEL_PRIVATE_ROUTE_SOURCE_ROOT` (defaulting to the user's Application Support directory), and refuses checksum drift or a missing source.
 
 ### Source kind
 
@@ -204,6 +207,7 @@ is not.
 
 **Route Studio** is an owner-only workflow within Admin at `#/admin/studio`.
 It preserves, inspects, stages, previews, renders, and promotes route sources without becoming a sixth public surface.
+Private promoted routes are rebuilt into a loopback-only owner read model: completed routes join local Atlas memories and discovered routes join Finder, while both remain absent from public generated bundles.
 The deployed read-only Admin never exposes upload or mutation controls.
 
 ### Related surface terms

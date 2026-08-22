@@ -16,7 +16,7 @@ export type RouteSceneCameraProtection =
 export interface RouteScenePoint {
   lat: number;
   lng: number;
-  elevationM: number;
+  elevationM?: number;
   progressM: number;
   elapsedS?: number;
 }
@@ -30,7 +30,7 @@ export interface RouteSceneManifest {
   center: { lat: number; lng: number };
   totalDistanceM: number;
   elevationGainM: number;
-  altitudeSource: "recorded-activity";
+  altitudeSource: "recorded-activity" | "mesh-relative";
   path: RouteScenePoint[];
   sourceRoute: QuestRoute;
 }
@@ -43,7 +43,7 @@ export interface RouteSceneFrameRequest {
 }
 
 export interface RouteSceneCamera {
-  target: { lat: number; lng: number; altitude: number };
+  target: { lat: number; lng: number; altitude?: number };
   headingDeg: number;
   rangeM: number;
   tiltDeg: number;
@@ -66,15 +66,15 @@ export interface RouteSceneCamera {
    * local relief. This is a strong approximation, not a substitute for sampling
    * the surface directly.
    */
-  clearanceM: number;
-  minimumClearanceM: number;
+  clearanceM?: number;
+  minimumClearanceM?: number;
 }
 
 export interface RouteSceneTelemetry {
   elapsedS: number;
   paceSPerKm?: number;
-  elevationM: number;
-  gradePercent: number;
+  elevationM?: number;
+  gradePercent?: number;
   headingDeg: number;
 }
 
@@ -84,7 +84,7 @@ export interface RouteSceneFrame {
   subject: {
     lat: number;
     lng: number;
-    elevationM: number;
+    elevationM?: number;
     bearingDeg: number;
     progressM: number;
   };
@@ -117,6 +117,8 @@ function clamp(value: number, minimum: number, maximum: number) {
 }
 
 export function createRouteSceneManifest(route: QuestRoute): RouteSceneManifest {
+  const elevationAvailable =
+    route.provenance.elevation?.status !== "unavailable";
   return {
     id: route.slug,
     activityId: route.activityId,
@@ -126,11 +128,11 @@ export function createRouteSceneManifest(route: QuestRoute): RouteSceneManifest 
     center: { lat: route.centerLat, lng: route.centerLng },
     totalDistanceM: routeDistanceM(route),
     elevationGainM: route.elevationGainM,
-    altitudeSource: "recorded-activity",
+    altitudeSource: elevationAvailable ? "recorded-activity" : "mesh-relative",
     path: route.route.map((point) => ({
       lat: point.lat,
       lng: point.lng,
-      elevationM: point.elev,
+      ...(elevationAvailable ? { elevationM: point.elev } : {}),
       progressM: point.d,
       elapsedS: point.elapsedS,
     })),
@@ -145,8 +147,21 @@ export function resolveRouteSceneFrame(
   const { sourceRoute: route, totalDistanceM } = manifest;
   const progressM = clamp(request.progressM, 0, totalDistanceM);
   const current = routePathPose(route, progressM);
-  const camera = resolveCamera(manifest, request, progressM, current.bearingDeg);
-  const telemetry = resolveTelemetry(route, progressM, totalDistanceM);
+  const elevationAvailable = manifest.altitudeSource === "recorded-activity";
+  const camera = elevationAvailable
+    ? resolveCamera(manifest, request, progressM, current.bearingDeg)
+    : resolveMeshRelativeCamera(
+        manifest,
+        request,
+        progressM,
+        current.bearingDeg,
+      );
+  const telemetry = resolveTelemetry(
+    route,
+    progressM,
+    totalDistanceM,
+    elevationAvailable,
+  );
 
   return {
     progressM,
@@ -154,7 +169,7 @@ export function resolveRouteSceneFrame(
     subject: {
       lat: current.lat,
       lng: current.lng,
-      elevationM: current.elev,
+      ...(elevationAvailable ? { elevationM: current.elev } : {}),
       bearingDeg: current.bearingDeg,
       progressM,
     },
@@ -165,6 +180,66 @@ export function resolveRouteSceneFrame(
       following: request.following,
       cameraRangeM: camera.rangeM,
     },
+  };
+}
+
+function resolveMeshRelativeCamera(
+  manifest: RouteSceneManifest,
+  request: RouteSceneFrameRequest,
+  progressM: number,
+  fallbackHeadingDeg: number,
+): RouteSceneCamera {
+  const { sourceRoute: route, totalDistanceM } = manifest;
+  const progressRatio = totalDistanceM > 0 ? progressM / totalDistanceM : 0;
+  const overview = request.cameraMode === "overview";
+  const automaticOverview =
+    request.cameraMode === "auto"
+      ? Math.max(
+          1 - smoothstep(0.012, 0.065, progressRatio),
+          smoothstep(0.92, 0.985, progressRatio),
+        )
+      : 0;
+  const overviewWeight = overview ? 1 : automaticOverview;
+  const current = routePathPose(route, progressM);
+  const target = routePathPose(
+    route,
+    Math.min(totalDistanceM, progressM + 180),
+  );
+  const trackingRangeM =
+    request.cameraMode === "runner"
+      ? CAMERA_PROFILES.runner.rangeM
+      : request.cameraMode === "chase"
+        ? CAMERA_PROFILES.chase.rangeM
+        : 460;
+  const overviewRangeM = clamp(totalDistanceM * 0.72, 1_400, 26_000);
+  const rangeM = mix(trackingRangeM, overviewRangeM, overviewWeight) *
+    request.rangeScale;
+  return {
+    target: {
+      lat: mix(target.lat, manifest.center.lat, overviewWeight),
+      lng: mix(target.lng, manifest.center.lng, overviewWeight),
+    },
+    headingDeg: mixHeading(
+      current.progressM === target.progressM
+        ? fallbackHeadingDeg
+        : bearingDegrees(
+            { ...current, d: current.progressM },
+            { ...target, d: target.progressM },
+          ),
+      routePathPose(route, totalDistanceM * 0.25).bearingDeg,
+      overviewWeight,
+    ),
+    rangeM,
+    tiltDeg: mix(request.cameraMode === "runner" ? 64 : 57, 42, overviewWeight),
+    fovDeg: mix(request.cameraMode === "runner" ? 50 : 52, 48, overviewWeight),
+    directedMode:
+      overviewWeight >= 0.55
+        ? "overview"
+        : request.cameraMode === "runner"
+          ? "runner"
+          : "chase",
+    overviewWeight,
+    protection: ["horizon-guard"],
   };
 }
 
@@ -273,7 +348,7 @@ function resolveAutomaticCamera(
   const turnSeverity = localTurnSeverity(route, progressM, totalDistanceM);
   const terrain = localTerrainEnvelope(route, progressM, totalDistanceM);
   const terrainReliefM = terrain.maximumM - terrain.minimumM;
-  const gradeSeverity = clamp(Math.abs(telemetry.gradePercent) / 18, 0, 1);
+  const gradeSeverity = clamp(Math.abs(telemetry.gradePercent ?? 0) / 18, 0, 1);
   const occlusionRisk = clamp(
     terrainReliefM / 130 + turnSeverity * 0.28 + gradeSeverity * 0.32,
     0,
@@ -482,6 +557,7 @@ function resolveTelemetry(
   route: QuestRoute,
   progressM: number,
   totalDistanceM: number,
+  elevationAvailable = true,
 ): RouteSceneTelemetry {
   const current = routePathPose(route, progressM);
   const sampleRadiusM = Math.min(90, Math.max(30, totalDistanceM * 0.02));
@@ -516,12 +592,16 @@ function resolveTelemetry(
       paceSPerKm !== undefined && Number.isFinite(paceSPerKm)
         ? paceSPerKm
         : undefined,
-    elevationM: current.elev,
-    gradePercent: clamp(
-      ((after.elev - before.elev) / distanceSpanM) * 100,
-      -30,
-      30,
-    ),
+    ...(elevationAvailable
+      ? {
+          elevationM: current.elev,
+          gradePercent: clamp(
+            ((after.elev - before.elev) / distanceSpanM) * 100,
+            -30,
+            30,
+          ),
+        }
+      : {}),
     headingDeg: current.bearingDeg,
   };
 }

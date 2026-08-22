@@ -25,8 +25,18 @@ Source kind and source format are separate fields; legacy `imported-gpx` inputs 
 Promotion writes the canonical source, receipt, and route specification, invokes the atomic generator, verifies the generated public detail and manifest for public routes or verified public exclusion for private routes, then marks the job promoted.
 Any failure restores `quests.json`, removes new canonical source metadata, preserves the staged job, and leaves the previously published atlas intact.
 
+Private promotion also writes an atomic source backup outside the ignored checkout under `GODIESEL_PRIVATE_ROUTE_SOURCE_ROOT`.
+The route specification stores a relative backup key, the `private-durable-backup` policy, and a checksum of the canonical GPX.
+The shared source adapter accepts the canonical checkout copy or the durable backup only when that checksum matches, so a clean checkout can recover locally and corruption fails closed.
+
+Private promoted routes compile on demand into a loopback-only owner read model.
+Completed owner routes join local Atlas memories and discovered owner routes feed Finder from their recorded metadata, replacing Finder's former fixed candidate list.
+This local model is never written into public generated detail or manifest bundles.
+
 Future and reference routes use Preview language and cinematic timing.
 Replay and owner-recorded timing require explicit owner completion and trustworthy source timestamps.
+Preview preserves third-party timestamps as provenance but never displays their elapsed time or pace.
+Missing elevation remains unavailable through route compilation, mesh-relative camera placement, telemetry, and cinematic analysis.
 Local film export retains deterministic frame verification but does not grant or assert provider permission for public downloadable imagery.
 
 ## Consequences
@@ -35,6 +45,7 @@ The normal owner journey no longer needs manual `quests.json` edits, slug lookup
 Original sources, jobs, decisions, renders, artifacts, errors, cancellation, retry, and promotion state survive restarts.
 SQLite and source artifacts remain single-owner local state and are not suitable for a deployed multi-user service.
 Private promoted routes intentionally remain absent from public generated detail data, so their canonical verification proves exclusion rather than public presence.
+They remain available on the owning machine only while a checksum-valid canonical or durable backup source exists.
 Stable imported identity follows geometry; a materially edited geometry becomes a new route identity.
 
 ## Evidence

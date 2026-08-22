@@ -11,6 +11,7 @@ import {
   retryStudioJob,
   saveStudioMetadata,
   selectStudioGeometry,
+  studioArtifactUrl,
   type StudioCandidate,
   type StudioJob,
   type StudioMetadata,
@@ -63,6 +64,7 @@ export function RouteStudioJobPage() {
   const language = staged
     ? studioExperienceLanguage(staged.lifecycle, staged.provenance.temporal.status)
     : null;
+  const playableArtifact = job?.renderAttempts.find((attempt) => attempt.status === "complete" && attempt.outputPath)?.outputPath ?? null;
 
   if (!job) return <div className="grid min-h-64 place-items-center" role={message ? "alert" : "status"}>{message ?? "Loading Route Studio job..."}</div>;
 
@@ -110,6 +112,7 @@ export function RouteStudioJobPage() {
             <Button disabled={busy !== null || job.status === "rendering"} onClick={() => void act("Promote", () => promoteStudioRoute(job.id))}><Rocket />Promote route</Button>
           </div>
           {job.renderAttempts[0] ? <div className="border-l-2 border-forest pl-3 text-sm" role="status"><strong className="capitalize">{job.renderAttempts[0].status}</strong> · {Math.round(job.renderAttempts[0].progress * 100)}%{job.renderAttempts[0].outputPath ? ` · ${job.renderAttempts[0].outputPath}` : ""}</div> : null}
+          {playableArtifact ? <div className="grid gap-2"><video className="aspect-video w-full max-w-3xl bg-black" controls data-testid="studio-teaser" preload="metadata" src={studioArtifactUrl(job.id, playableArtifact)} /><a className="text-sm font-medium text-forest underline" href={studioArtifactUrl(job.id, playableArtifact)} rel="noreferrer" target="_blank">Open H.264 teaser</a></div> : null}
         </section>
       ) : null}
 

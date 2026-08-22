@@ -1,4 +1,5 @@
 import { parseRouteDetail, type QuestRoute } from "@/domain/route";
+import { invalidateOwnerRoutes } from "@/data/owner-route-repository";
 
 const studioApiBase =
   import.meta.env.VITE_ADMIN_API_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8766";
@@ -123,7 +124,15 @@ export async function retryStudioJob(jobId: string) {
 }
 
 export async function promoteStudioRoute(jobId: string) {
-  return mutateJob(jobId, "promote", {});
+  const job = await mutateJob(jobId, "promote", {});
+  invalidateOwnerRoutes();
+  return job;
+}
+
+export function studioArtifactUrl(jobId: string, outputPath: string) {
+  const filename = outputPath.split("/").at(-1);
+  if (!filename) throw new Error("Studio artifact path is invalid.");
+  return `${studioApiBase}/api/studio/artifacts/${encodeURIComponent(jobId)}/${encodeURIComponent(filename)}`;
 }
 
 async function mutateJob(jobId: string, action: string, body: unknown) {

@@ -135,6 +135,10 @@ export interface RouteSummary {
   centerLng: number;
   replay: ReplayMetadata;
   guide: RouteGuidePreview;
+  discovery?: {
+    terrain: Array<"road" | "trail" | "mixed" | "mountain">;
+    vibes: string[];
+  };
 }
 
 export interface QuestRoute extends Omit<RouteSummary, "trace" | "guide"> {

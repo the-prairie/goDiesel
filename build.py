@@ -435,7 +435,10 @@ for spec in quest_specs:
         lifecycle=lifecycle,
         source_points=source_points,
         spec=spec,
-        elevation_status=str(spec.get('elevation_status', 'recorded')),
+        elevation_status=str(spec.get(
+            'elevation_status',
+            'recorded' if all(point.elevation is not None for point in source_points) else 'unavailable',
+        )),
     ), best_in_earth_ids=BEST_IN_EARTH_IDS)
     route_js = quest['route']
     distance_km = quest['distance_km']
@@ -499,7 +502,7 @@ def simplify_route_for_manifest(points, max_points=96):
         indices = [round(index * last / (max_points - 1)) for index in range(max_points)]
         simplified = [points[index] for index in indices]
     return [
-        [point['lat'], point['lng'], point.get('elev', 0), point.get('d', 0)]
+        [point['lat'], point['lng'], point.get('elev'), point.get('d', 0)]
         for point in simplified
     ]
 

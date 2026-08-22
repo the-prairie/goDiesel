@@ -107,8 +107,13 @@ export function GoogleRouteNavigatorStage({
   const totalDistanceM = routeDistanceM(route);
   const elevationAvailable = route.provenance.elevation?.status !== "unavailable";
   const telemetry = useMemo(
-    () => googleRouteTelemetry(route, control.progressM),
-    [control.progressM, route],
+    () =>
+      googleRouteTelemetry(
+        route,
+        control.progressM,
+        studioPreview ? "cinematic" : "source",
+      ),
+    [control.progressM, route, studioPreview],
   );
   const cameraPose = useMemo(
     () => googleRouteCameraPose(route, control),
@@ -437,6 +442,7 @@ export function GoogleRouteNavigatorStage({
           onTogglePlayback={togglePlayback}
           route={route}
           telemetry={telemetry}
+          telemetryClock={studioPreview ? "cinematic" : "source"}
           totalDistanceM={totalDistanceM}
         />
       </div>
@@ -473,6 +479,7 @@ function ExpandedReplayHud({
   onTogglePlayback,
   route,
   telemetry,
+  telemetryClock,
   totalDistanceM,
 }: ReplayHudProps) {
   return (
@@ -528,20 +535,24 @@ function ExpandedReplayHud({
         <div className="col-span-2 flex min-w-0 items-center justify-between gap-2 border-t border-white/12 px-3 py-2 md:col-span-1 md:min-w-[27rem] md:gap-4 md:border-l md:border-t-0 md:px-4 md:py-3">
           <div className="grid min-w-0 flex-1 grid-cols-4 gap-x-2 md:gap-x-5 md:gap-y-2">
             <Metric
-              label="Elapsed"
+              label={telemetryClock === "cinematic" ? "Cinematic time" : "Elapsed"}
               value={formatDuration(telemetry.elapsedS)}
             />
             <Metric
               label="Pace"
-              value={formatPace(telemetry.paceSPerKm, route.type)}
+              value={
+                telemetryClock === "cinematic"
+                  ? "Not shown"
+                  : formatPace(telemetry.paceSPerKm, route.type)
+              }
             />
             <Metric
               label="Elevation"
-              value={route.provenance.elevation?.status === "unavailable" ? "Unavailable" : `${Math.round(telemetry.elevationM)} m`}
+              value={route.provenance.elevation?.status === "unavailable" ? "Unavailable" : `${Math.round(telemetry.elevationM ?? 0)} m`}
             />
             <Metric
               label="Grade"
-              value={route.provenance.elevation?.status === "unavailable" ? "Unavailable" : `${telemetry.gradePercent >= 0 ? "+" : ""}${telemetry.gradePercent.toFixed(1)}%`}
+              value={route.provenance.elevation?.status === "unavailable" ? "Unavailable" : `${(telemetry.gradePercent ?? 0) >= 0 ? "+" : ""}${(telemetry.gradePercent ?? 0).toFixed(1)}%`}
             />
           </div>
           <div className="flex items-center gap-2">
@@ -819,6 +830,7 @@ interface ReplayHudProps {
   onTogglePlayback: () => void;
   route: QuestRoute;
   telemetry: ReturnType<typeof googleRouteTelemetry>;
+  telemetryClock: "source" | "cinematic";
   totalDistanceM: number;
 }
 

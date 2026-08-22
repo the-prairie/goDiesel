@@ -44,7 +44,6 @@ const INITIAL_STATUS: CinematicRendererStatus = {
 };
 
 function routeLogline(route: QuestRoute) {
-  const profile = cinematicProfile(route);
   const elevationAvailable = route.provenance.elevation?.status !== "unavailable";
   const curated =
     route.curation.reviewStatus === "reviewed" ||
@@ -52,6 +51,10 @@ function routeLogline(route: QuestRoute) {
       ? route.curation.vibe || route.curation.editorialNote
       : undefined;
   if (curated) return curated;
+  if (!elevationAvailable) {
+    return `${route.distanceKm.toFixed(1)} kilometres through ${route.region}, directed from the recorded route shape while elevation remains unavailable.`;
+  }
+  const profile = cinematicProfile(route);
   if (elevationAvailable && profile.character === "mountain") {
     return `${route.region} does not give this one away: ${route.distanceKm.toFixed(1)} kilometres, ${route.elevationGainM.toLocaleString()} metres of ascent, and a line that keeps climbing into the horizon.`;
   }
@@ -226,7 +229,6 @@ export function CinematicDirectorStage({
   const ready = status.state === "ready" || status.state === "partial";
   const preRoll =
     !renderMode && ready && frame.elapsedSeconds === 0 && !playing;
-  const profile = cinematicProfile(route);
   const invitation = routeInvitation(route);
   const recordedLight = recordedLightAt(
     route.route,
@@ -241,19 +243,23 @@ export function CinematicDirectorStage({
       className="fixed inset-0 z-[110] overflow-hidden bg-[#050707] text-white"
       data-chapter={frame.chapter}
       data-cut={cut}
+      data-decision-frame={frame.showDecision ? "true" : "false"}
+      data-director-version={experienceManifest.directorVersion}
       data-duration={frame.durationSeconds}
       data-frame-seconds={frame.elapsedSeconds.toFixed(3)}
       data-light-phase={recordedLight.phase}
+      data-manifest-version={experienceManifest.analysisVersion}
       data-experience-mode={experienceMode}
       data-route-fingerprint={experienceManifest.routeFingerprint}
       data-render-fingerprint={experienceManifest.renderFingerprint}
       data-recommended-cut={experienceManifest.recommendedCinematicCut}
       data-render-mode={renderMode ? "true" : "false"}
+      data-route-film="feature"
       data-shot-count={frame.shotCount}
       data-shot-kind={frame.shotKind}
       data-shot-timeline={JSON.stringify(cinematicShotTimeline(route, cut))}
       data-state={status.state}
-      data-terrain-character={profile.character}
+      data-terrain-character={experienceManifest.routeProfile.character}
       data-terrain-relief={frame.terrainReliefM.toFixed(1)}
       data-testid="cinematic-director"
       data-visual-moment-score={frame.visualMomentScore.toFixed(3)}

@@ -3,43 +3,51 @@ import {
   cinematicMoments,
   cinematicProfile,
   cinematicShotTimeline,
+  cinematicTurningIntensity,
   cinematicVisualMoments,
   type CinematicCut,
 } from "@/surfaces/replay/cinematic/route-cinematic-director";
+import routeExperienceVersion from "@/surfaces/replay/cinematic/route-experience-version.json";
 
-export const ROUTE_EXPERIENCE_ANALYSIS_VERSION = 1;
-export const ROUTE_EXPERIENCE_DIRECTOR_VERSION = 1;
+export const ROUTE_EXPERIENCE_ANALYSIS_VERSION = routeExperienceVersion.manifestVersion;
+export const ROUTE_EXPERIENCE_DIRECTOR_VERSION = routeExperienceVersion.directorVersion;
 
 export function routeExperienceManifest(route: QuestRoute) {
+  const elevationAvailable = route.provenance?.elevation?.status !== "unavailable";
   const routeFingerprint = fingerprint(
     route.route.map((point) => [
-      round(point.lat, 7), round(point.lng, 7), round(point.elev, 2), round(point.d, 2),
+      round(point.lat, 7), round(point.lng, 7), elevationAvailable ? round(point.elev, 2) : null, round(point.d, 2),
     ]),
   );
-  const profile = cinematicProfile(route);
-  const elevationAvailable = route.provenance?.elevation?.status !== "unavailable";
-  const moments = cinematicMoments(route).filter(
-    (moment) => elevationAvailable || (moment.kind !== "climb" && moment.kind !== "summit"),
-  );
-  const visualMoments = cinematicVisualMoments(route).filter(
-    (moment) => elevationAvailable || moment.kind !== "terrain",
-  );
+  const turningIntensityDeg = cinematicTurningIntensity(route);
+  const recordedProfile = elevationAvailable ? cinematicProfile(route) : null;
+  const profile = recordedProfile ?? {
+    character: "unknown" as const,
+    maximumElevationM: null,
+    maximumGradePct: null,
+    minimumElevationM: null,
+    positiveGainM: null,
+    reliefM: null,
+    turningIntensityDeg,
+  };
+  const moments = elevationAvailable ? cinematicMoments(route) : [];
+  const visualMoments = elevationAvailable ? cinematicVisualMoments(route) : [];
   const recommendedCut: CinematicCut =
     !elevationAvailable
-      ? profile.turningIntensityDeg > 95 ? "kinetic" : "feature"
-      : profile.character === "mountain"
+      ? turningIntensityDeg > 95 ? "kinetic" : "feature"
+        : recordedProfile!.character === "mountain"
         ? "monumental"
-        : profile.turningIntensityDeg > 95
+        : turningIntensityDeg > 95
         ? "kinetic"
-        : profile.reliefM < 80
+        : recordedProfile!.reliefM < 80
           ? "intimate"
           : "feature";
   const reasons = [
-    elevationAvailable ? `${profile.character} route profile` : "route shape from recorded geometry",
+    elevationAvailable ? `${recordedProfile!.character} route profile` : "route shape from recorded geometry",
     elevationAvailable
-      ? profile.reliefM >= 180 ? "substantial recorded relief" : "restrained recorded relief"
+      ? recordedProfile!.reliefM >= 180 ? "substantial recorded relief" : "restrained recorded relief"
       : "elevation unavailable in the source",
-    profile.turningIntensityDeg > 95 ? "high turning intensity" : "legible route direction",
+    turningIntensityDeg > 95 ? "high turning intensity" : "legible route direction",
   ];
   const turn = moments.find((moment) => moment.kind === "turn");
   const climb = moments.find((moment) => moment.kind === "climb");
@@ -53,7 +61,7 @@ export function routeExperienceManifest(route: QuestRoute) {
     { chapter: "the-terrain", startSeconds: 7.4, endSeconds: 13.4, progressRatio: terrainMoment },
     { chapter: "the-decision", startSeconds: 13.4, endSeconds: 17.5, progressRatio: 1 },
   ] as const;
-  const featureTimeline = cinematicShotTimeline(route, recommendedCut);
+  const featureTimeline = elevationAvailable ? cinematicShotTimeline(route, recommendedCut) : [];
   const selectedMeaningfulMoments = [...moments, ...visualMoments]
     .sort((first, second) => second.score - first.score)
     .slice(0, 6)
@@ -75,9 +83,7 @@ export function routeExperienceManifest(route: QuestRoute) {
     routeFingerprint,
     analysisVersion: ROUTE_EXPERIENCE_ANALYSIS_VERSION,
     directorVersion: ROUTE_EXPERIENCE_DIRECTOR_VERSION,
-    routeProfile: elevationAvailable
-      ? profile
-      : { ...profile, character: "unknown" as const, reliefM: null },
+    routeProfile: profile,
     selectedMeaningfulMoments,
     recommendedCinematicCut: recommendedCut,
     recommendationReasons: reasons,

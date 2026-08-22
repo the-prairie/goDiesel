@@ -14,7 +14,7 @@ from fitparse import FitFile
 class SourceRoutePoint:
     lat: float | None
     lng: float | None
-    elevation: float
+    elevation: float | None
     timestamp: datetime | None = None
     segment_index: int = 0
 
@@ -50,11 +50,13 @@ def source_point_from_fit_fields(
         lat = lat * (180 / 2**31)
     if has_position and isinstance(lng, int):
         lng = lng * (180 / 2**31)
-    altitude = fields.get("enhanced_altitude") or fields.get("altitude") or 0
+    altitude = fields.get("enhanced_altitude")
+    if altitude is None:
+        altitude = fields.get("altitude")
     return SourceRoutePoint(
         lat=float(lat) if has_position else None,
         lng=float(lng) if has_position else None,
-        elevation=float(altitude),
+        elevation=float(altitude) if isinstance(altitude, (int, float)) else None,
         timestamp=timestamp,
         segment_index=segment_index,
     )
@@ -74,7 +76,11 @@ def load_source_route_points(path: str | Path) -> list[SourceRoutePoint]:
                     SourceRoutePoint(
                         lat=point.latitude,
                         lng=point.longitude,
-                        elevation=float(point.elevation or 0),
+                        elevation=(
+                            float(point.elevation)
+                            if point.elevation is not None
+                            else None
+                        ),
                         timestamp=_recorded_timestamp(point.time),
                         segment_index=segment_index,
                     )
@@ -171,7 +177,7 @@ def build_route_provenance(
             discontinuities=[],
         )
 
-    route: list[dict[str, float]] = []
+    route: list[dict[str, float | None]] = []
     source_distances = [0.0]
     cumulative_m = 0.0
     positioned_points = [point for _, point in positioned]

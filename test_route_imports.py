@@ -1,3 +1,4 @@
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -15,6 +16,39 @@ from route_imports import (
 
 
 class ImportedRouteTest(unittest.TestCase):
+    def test_private_source_uses_durable_backup_and_validates_checksum(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "checkout"
+            durable_root = Path(directory) / "durable-sources"
+            root.mkdir()
+            backup = durable_root / "studio" / "route.gpx"
+            backup.parent.mkdir(parents=True)
+            payload = b"<gpx><trk><trkseg /></trk></gpx>"
+            backup.write_bytes(payload)
+            spec = {
+                "source_gpx": "route_sources/studio/route.gpx",
+                "source_backup": "studio/route.gpx",
+                "source_policy": "private-durable-backup",
+                "canonical_source_sha256": hashlib.sha256(payload).hexdigest(),
+                "activity_name": "Private ridge",
+                "activity_type": "Run",
+            }
+
+            imported = imported_route_from_spec(
+                spec,
+                root,
+                durable_source_root=durable_root,
+            )
+
+            self.assertEqual(imported.path, backup.resolve())
+            backup.write_bytes(b"tampered")
+            with self.assertRaisesRegex(ValueError, "checksum"):
+                imported_route_from_spec(
+                    spec,
+                    root,
+                    durable_source_root=durable_root,
+                )
+
     def test_loads_route_metadata_from_a_repo_owned_gpx(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

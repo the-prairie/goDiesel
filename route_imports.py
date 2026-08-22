@@ -2,10 +2,14 @@
 
 from dataclasses import dataclass
 from datetime import date
+import hashlib
+import os
 from pathlib import Path
 
 
 SUPPORTED_ACTIVITY_TYPES = frozenset(("Run", "Ride"))
+PRIVATE_DURABLE_BACKUP = "private-durable-backup"
+SOURCE_POLICIES = frozenset((PRIVATE_DURABLE_BACKUP,))
 
 
 @dataclass(frozen=True)
@@ -19,7 +23,25 @@ class ImportedRoute:
     source_format: str
 
 
-def imported_route_from_spec(spec: dict[str, object], checkout_root: Path) -> ImportedRoute | None:
+def private_route_source_root(checkout_root: Path) -> Path:
+    configured = os.environ.get("GODIESEL_PRIVATE_ROUTE_SOURCE_ROOT")
+    if configured:
+        return Path(configured).expanduser().resolve()
+    return (
+        Path.home()
+        / "Library"
+        / "Application Support"
+        / "goDiesel"
+        / "route-sources"
+    ).resolve()
+
+
+def imported_route_from_spec(
+    spec: dict[str, object],
+    checkout_root: Path,
+    *,
+    durable_source_root: Path | None = None,
+) -> ImportedRoute | None:
     source_value = spec.get("source_gpx")
     if source_value is None:
         return None
@@ -29,10 +51,41 @@ def imported_route_from_spec(spec: dict[str, object], checkout_root: Path) -> Im
     source_root = (checkout_root / "route_sources").resolve()
     if Path(source_value).is_absolute():
         raise ValueError("source_gpx must be a relative path inside route_sources")
-    source_path = (checkout_root / source_value).resolve()
-    if not source_path.is_relative_to(source_root):
+    canonical_source_path = (checkout_root / source_value).resolve()
+    if not canonical_source_path.is_relative_to(source_root):
         raise ValueError("source_gpx must resolve inside route_sources")
-    if source_path.suffix.lower() != ".gpx" or not source_path.is_file():
+    if canonical_source_path.suffix.lower() != ".gpx":
+        raise ValueError(f"source_gpx does not identify a GPX file: {source_value}")
+
+    source_policy = spec.get("source_policy")
+    source_path = canonical_source_path
+    if source_policy is not None:
+        if source_policy not in SOURCE_POLICIES:
+            raise ValueError(
+                f"source_policy must be one of: {', '.join(sorted(SOURCE_POLICIES))}"
+            )
+        backup_value = spec.get("source_backup")
+        checksum = spec.get("canonical_source_sha256")
+        if not isinstance(backup_value, str) or not backup_value.strip():
+            raise ValueError("private durable sources require source_backup")
+        if not isinstance(checksum, str) or len(checksum) != 64:
+            raise ValueError("private durable sources require canonical_source_sha256")
+        backup_root = (durable_source_root or private_route_source_root(checkout_root)).resolve()
+        if Path(backup_value).is_absolute():
+            raise ValueError("source_backup must be relative to the durable source root")
+        backup_path = (backup_root / backup_value).resolve()
+        if not backup_path.is_relative_to(backup_root):
+            raise ValueError("source_backup escaped the durable source root")
+        if not source_path.is_file():
+            source_path = backup_path
+        if not source_path.is_file():
+            raise ValueError(
+                f"private route source is missing from canonical and durable storage: {source_value}"
+            )
+        actual_checksum = hashlib.sha256(source_path.read_bytes()).hexdigest()
+        if actual_checksum != checksum:
+            raise ValueError(f"private route source checksum mismatch: {source_value}")
+    elif not source_path.is_file():
         raise ValueError(f"source_gpx does not identify a GPX file: {source_value}")
 
     name = _required_string(spec, "activity_name")
@@ -158,6 +211,8 @@ def route_metadata(
     spec: dict[str, object],
     checkout_root: Path,
     activity_row: object = None,
+    *,
+    durable_source_root: Path | None = None,
 ) -> RouteMetadata | None:
     """Resolve metadata for one route.
 
@@ -165,7 +220,11 @@ def route_metadata(
     describes itself in the export row. Returns None only when a Strava route
     has no row, which is the one case a caller cannot render.
     """
-    imported = imported_route_from_spec(spec, checkout_root)
+    imported = imported_route_from_spec(
+        spec,
+        checkout_root,
+        durable_source_root=durable_source_root,
+    )
     if imported is not None:
         return RouteMetadata(
             source_kind=imported.source_kind,

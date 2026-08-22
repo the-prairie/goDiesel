@@ -6,7 +6,12 @@ import { CandidateRoute } from "@/surfaces/finder/components/candidate-route";
 import { FinderForm } from "@/surfaces/finder/components/finder-form";
 import { FinderRouteMap } from "@/surfaces/finder/components/finder-route-map";
 import { Button } from "@/ui/button";
-import { curatedRouteDiscoveryProvider } from "@/data/discovery-provider";
+import { createCuratedRouteDiscoveryProvider } from "@/data/discovery-provider";
+import { discoveredRoutes } from "@/data/routes";
+import {
+  mergeRouteSummaries,
+  useOwnerRoutes,
+} from "@/data/owner-route-repository";
 import {
   savePlannedRoute,
   usePlannedRoutes,
@@ -27,6 +32,14 @@ const initialIntent: FinderIntent = {
 };
 
 export function FinderPage() {
+  const ownerRoutes = useOwnerRoutes();
+  const discoveryProvider = useMemo(
+    () =>
+      createCuratedRouteDiscoveryProvider(
+        mergeRouteSummaries(discoveredRoutes, ownerRoutes),
+      ),
+    [ownerRoutes],
+  );
   const [searchParams, setSearchParams] = useSearchParams();
   const submittedIntent = useMemo(
     () => intentFromSearchParams(searchParams),
@@ -37,9 +50,9 @@ export function FinderPage() {
   const result = useMemo(
     () =>
       submittedIntent
-        ? curatedRouteDiscoveryProvider.search(submittedIntent)
+        ? discoveryProvider.search(submittedIntent)
         : null,
-    [submittedIntent],
+    [discoveryProvider, submittedIntent],
   );
   const [selectedCandidateId, setSelectedCandidateId] = useState<string>();
   const plannedRoutes = usePlannedRoutes();

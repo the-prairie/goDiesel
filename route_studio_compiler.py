@@ -14,7 +14,7 @@ def compile_route(candidate, metadata, receipt):
         points.extend(SourceRoutePoint(
             lat=point.lat,
             lng=point.lng,
-            elevation=point.elevation if point.elevation is not None else 0.0,
+            elevation=point.elevation,
             timestamp=point.timestamp if recorded_timing else None,
             segment_index=segment_index,
         ) for point in segment)

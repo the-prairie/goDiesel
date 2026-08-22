@@ -444,7 +444,18 @@ function validatedAnnotations(
 export function parseRouteDetail(value: unknown): QuestRoute {
   const input = generatedRoute(value, "Route detail");
   const slug = requiredSlug(input, "Route detail");
-  const parsedRoute = parsedRoutePoints(input.route);
+  const provenanceInput =
+    input.provenance && typeof input.provenance === "object"
+      ? (input.provenance as Record<string, unknown>)
+      : {};
+  const elevationInput =
+    provenanceInput.elevation && typeof provenanceInput.elevation === "object"
+      ? (provenanceInput.elevation as Record<string, unknown>)
+      : {};
+  const parsedRoute = parsedRoutePoints(
+    input.route,
+    elevationInput.status === "unavailable",
+  );
   const route = parsedRoute.points;
   const geometryStatus = parsedRoute.status;
   const midIdx = requiredNumberField(input, "mid_idx", { min: 0, integer: true });

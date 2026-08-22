@@ -184,6 +184,36 @@ test("completed route earns Replay language and future route falls back to Atlas
   await expect(page.getByTestId("replay-stage")).toHaveAttribute("aria-label", "Atlas Preview");
 });
 
+test("discovered Preview uses a cinematic clock and hides source pace", async ({ page }) => {
+  await mockAdminStatus(page, true);
+  const job = rawJob({ staged: true, completed: false });
+  job.staged_route.provenance.temporal = { status: "recorded", start_time_utc: "2026-08-01T14:00:00Z", elapsed_time_s: 600, time_zone: "America/Edmonton" };
+  job.staged_route.route = job.staged_route.route.map((point: Record<string, unknown>, index: number) => ({ ...point, elapsed_s: index * 600 }));
+  await mockStudio(page, job);
+  await page.goto("/#/admin/studio/job-abc/preview");
+  await expect(page.getByText("Cinematic time")).toBeVisible();
+  await expect(page.getByText("Not shown")).toBeVisible();
+  await expect(page.getByText("10:00 /km")).toHaveCount(0);
+});
+
+test("completed film without elevation stays on the mesh-relative trailer", async ({ page }) => {
+  await mockAdminStatus(page, true);
+  const job = rawJob({ staged: true, completed: true });
+  job.staged_route.elevation_gain_m = 0;
+  job.staged_route.provenance.elevation = { status: "unavailable" };
+  job.staged_route.route = job.staged_route.route.map((point: Record<string, unknown>) => ({
+    ...point,
+    elev: null,
+  }));
+  await mockStudio(page, job);
+
+  await page.goto("/#/admin/studio/job-abc/preview?film=1");
+
+  await expect(page.getByTestId("route-trailer")).toHaveAttribute("data-terrain-character", "unknown");
+  await expect(page.getByTestId("cinematic-director")).toHaveCount(0);
+  await expect(page.getByText(/metres of climbing|metres from low point to high/)).toHaveCount(0);
+});
+
 test("render progress, retry, and failed promotion remain staged", async ({ page }) => {
   await mockAdminStatus(page, true);
   const studio = await mockStudio(page, rawJob({ staged: true, status: "render_failed", retryable: true }));
@@ -194,6 +224,29 @@ test("render progress, retry, and failed promotion remain staged", async ({ page
   expect(studio.current().staged_route).not.toBeNull();
 });
 
+test("completed H.264 teaser is playable and openable from Studio", async ({ page }) => {
+  await mockAdminStatus(page, true);
+  const job = rawJob({ staged: true, status: "rendered" });
+  job.render_attempts = [{ id: "render-1", status: "complete", progress: 1, output_path: ".route-studio/artifacts/job-abc/teaser.mp4", render_fingerprint: "render" }];
+  await mockStudio(page, job);
+  await page.goto("/#/admin/studio/job-abc");
+  await expect(page.getByTestId("studio-teaser")).toHaveAttribute("src", `${adminApi}/api/studio/artifacts/job-abc/teaser.mp4`);
+  await expect(page.getByRole("link", { name: "Open H.264 teaser" })).toHaveAttribute("target", "_blank");
+});
+
+test("Route Studio render exposes the manifest teaser and decision frame", async ({ page }) => {
+  await mockAdminStatus(page, true);
+  await mockStudio(page, rawJob({ staged: true }));
+  await page.goto("/#/admin/studio/job-abc/preview?render=1");
+  const film = page.getByTestId("route-trailer");
+  await expect(film).toHaveAttribute("data-route-film", "trailer");
+  await expect(film).toHaveAttribute("data-duration", "17.5");
+  await expect(film).toHaveAttribute("data-shot-count", "4");
+  await expect(page.getByTestId("cinematic-world")).toBeVisible();
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("godiesel:route-film-seek", { detail: { seconds: 17.5 } })));
+  await expect(film).toHaveAttribute("data-decision-frame", "true");
+});
+
 test("promotion preserves the confirmed completed lifecycle", async ({ page }) => {
   await mockAdminStatus(page, true);
   const studio = await mockStudio(page, rawJob({ staged: true, completed: true }));
@@ -202,6 +255,39 @@ test("promotion preserves the confirmed completed lifecycle", async ({ page }) =
 
   await expect(page.getByTestId("route-studio-job")).toHaveAttribute("data-job-status", "promoted");
   expect(studio.current().staged_route.lifecycle).toBe("completed");
+});
+
+test("private promotion refreshes the owner route in the same Atlas session", async ({ page }) => {
+  await mockAdminStatus(page, true);
+  const studio = await mockStudio(page, rawJob({ staged: true, completed: true }));
+  await page.route(`${adminApi}/api/owner/routes`, (route) => route.fulfill({
+    json: {
+      routes: studio.current().status === "promoted"
+        ? [studio.current().staged_route]
+        : [],
+    },
+  }));
+  await page.route(`${adminApi}/api/owner/routes/route-a1b2c3d4e5f6`, (route) => route.fulfill({
+    json: studio.current().staged_route,
+  }));
+  await page.route("**/data/routes/route-a1b2c3d4e5f6.json", (route) => route.fulfill({
+    status: 404,
+    body: "not found",
+  }));
+
+  await page.goto("/#/atlas?q=Synthetic%20ridge");
+  await expect(page.getByRole("button", { name: /Calgary, AB.*1\.2 km/ })).toHaveCount(0);
+  await page.goto("/#/admin/studio/job-abc");
+  await page.getByRole("button", { name: "Promote route" }).click();
+  await page.goto("/#/atlas?q=Synthetic%20ridge");
+
+  const ownerRoute = page.getByRole("button", { name: /Calgary, AB.*1\.2 km/ });
+  await expect(ownerRoute).toBeVisible();
+  await ownerRoute.click();
+  await page.locator('article[data-selected="true"]').getByRole("link", { name: "Open route" }).click();
+  await expect(page).toHaveURL(/#\/replay\/route-a1b2c3d4e5f6/);
+  await expect(page.getByLabel("Google 3D Replay")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Calgary, AB" })).toBeVisible();
 });
 
 test("failed promotion leaves the published Atlas response unchanged", async ({ page }) => {

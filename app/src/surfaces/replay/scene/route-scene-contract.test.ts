@@ -43,6 +43,39 @@ describe("route scene contract", () => {
     expect(manifest.altitudeSource).toBe("recorded-activity");
   });
 
+  it("uses mesh-relative altitude for a high route without elevation", () => {
+    const highRoute = {
+      ...route,
+      centerLat: 27.988,
+      centerLng: 86.925,
+      route: route.route.map((point, index) => ({
+        ...point,
+        lat: 27.986 + index * 0.002,
+        lng: 86.922 + index * 0.003,
+        elev: 0,
+      })),
+      provenance: {
+        ...route.provenance,
+        elevation: { status: "unavailable" },
+      },
+    } as QuestRoute;
+
+    const manifest = createRouteSceneManifest(highRoute);
+    const frame = resolveRouteSceneFrame(manifest, {
+      cameraMode: "auto",
+      following: true,
+      progressM: 1_000,
+      rangeScale: 1,
+    });
+
+    expect(manifest.altitudeSource).toBe("mesh-relative");
+    expect(manifest.path.every((point) => point.elevationM === undefined)).toBe(true);
+    expect(frame.camera.target.altitude).toBeUndefined();
+    expect(frame.camera.protection).not.toContain("recorded-terrain-envelope");
+    expect(frame.telemetry.elevationM).toBeUndefined();
+    expect(frame.telemetry.gradePercent).toBeUndefined();
+  });
+
   it("resolves one chase frame for every renderer", () => {
     const frame = resolveRouteSceneFrame(createRouteSceneManifest(route), {
       cameraMode: "chase",
@@ -97,10 +130,10 @@ describe("route scene contract", () => {
 
     expect(Math.hypot(northM, eastM)).toBeLessThan(120);
     expect(beforeTurn.camera.target.altitude).toBeGreaterThan(
-      beforeTurn.subject.elevationM,
+      beforeTurn.subject.elevationM!,
     );
     expect(afterTurn.camera.target.altitude).toBeGreaterThan(
-      afterTurn.subject.elevationM,
+      afterTurn.subject.elevationM!,
     );
   });
 
@@ -112,7 +145,7 @@ describe("route scene contract", () => {
       rangeScale: 1,
     });
 
-    expect(frame.camera.target.altitude - frame.subject.elevationM).toBeGreaterThan(21);
+    expect(frame.camera.target.altitude! - frame.subject.elevationM!).toBeGreaterThan(21);
     expect(frame.camera.rangeM).toBeGreaterThanOrEqual(150);
     expect(frame.camera.tiltDeg).toBeLessThanOrEqual(65);
     expect(frame.camera.fovDeg).toBeLessThanOrEqual(50);
@@ -144,7 +177,7 @@ describe("route scene contract", () => {
     ).toBeGreaterThanOrEqual(200);
     expect(tracking.camera.protection).toContain("recorded-terrain-envelope");
     expect(tracking.camera.target.altitude).toBeGreaterThan(
-      tracking.subject.elevationM + 15,
+      tracking.subject.elevationM! + 15,
     );
   });
 
@@ -184,7 +217,7 @@ describe("route scene contract", () => {
 
     expect(Math.abs(after.camera.rangeM - before.camera.rangeM)).toBeLessThan(12);
     expect(Math.abs(after.camera.tiltDeg - before.camera.tiltDeg)).toBeLessThan(2);
-    expect(Math.abs(after.camera.target.altitude - before.camera.target.altitude)).toBeLessThan(8);
+    expect(Math.abs(after.camera.target.altitude! - before.camera.target.altitude!)).toBeLessThan(8);
   });
 
   it("bounds camera acceleration across recorded route vertices", () => {
@@ -253,7 +286,7 @@ describe("camera clearance is engine-agnostic", () => {
           expect(
             frame.camera.clearanceM,
             `${cameraMode} at ${ratio} scale ${rangeScale}`,
-          ).toBeGreaterThanOrEqual(frame.camera.minimumClearanceM);
+          ).toBeGreaterThanOrEqual(frame.camera.minimumClearanceM!);
         }
       }
     }

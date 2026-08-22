@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 
 import { loadStudioJob, type StudioJob } from "@/data/studio-repository";
 import { CinematicDirectorStage } from "@/surfaces/replay/cinematic/cinematic-director-stage";
+import { CinematicRouteTrailerStage } from "@/surfaces/replay/cinematic/cinematic-route-trailer-stage";
 import type { CinematicCut } from "@/surfaces/replay/cinematic/route-cinematic-director";
 import { EarthReplayStage } from "@/surfaces/replay/components/earth-replay-stage";
 import { GoogleRouteNavigatorStage } from "@/surfaces/replay/components/google-route-navigator-stage";
@@ -27,8 +28,14 @@ export function StagedStudioPreviewPage() {
   const completed = route.lifecycle === "completed";
   const backPath = `/admin/studio/${encodeURIComponent(jobId)}`;
   const requestedCut = searchParams.get("cut") as CinematicCut | null;
-  if (searchParams.get("render") === "1" || searchParams.get("film") === "1") {
-    return <CinematicDirectorStage backLabel="Back to Route Studio" backPath={backPath} decisionLabel={`Open interactive ${completed ? "Replay" : "Preview"}`} decisionPath={`/admin/studio/${encodeURIComponent(jobId)}/preview`} experienceMode={completed ? "replay" : "preview"} initialCut={requestedCut && cuts.has(requestedCut) ? requestedCut : "feature"} renderMode={searchParams.get("render") === "1"} route={route} />;
+  if (searchParams.get("render") === "1") {
+    return <CinematicRouteTrailerStage backLabel="Back to Route Studio" backPath={backPath} decisionLabel={`Open interactive ${completed ? "Replay" : "Preview"}`} decisionPath={`/admin/studio/${encodeURIComponent(jobId)}/preview`} renderMode route={route} />;
+  }
+  if (searchParams.get("film") === "1") {
+    if (!completed || route.provenance.elevation?.status === "unavailable") {
+      return <CinematicRouteTrailerStage backLabel="Back to Route Studio" backPath={backPath} decisionLabel={`Open interactive ${completed ? "Replay" : "Preview"}`} decisionPath={`/admin/studio/${encodeURIComponent(jobId)}/preview`} route={route} />;
+    }
+    return <CinematicDirectorStage backLabel="Back to Route Studio" backPath={backPath} decisionLabel={`Open interactive ${completed ? "Replay" : "Preview"}`} decisionPath={`/admin/studio/${encodeURIComponent(jobId)}/preview`} experienceMode={completed ? "replay" : "preview"} initialCut={requestedCut && cuts.has(requestedCut) ? requestedCut : "feature"} route={route} />;
   }
   if (!atlasFallback) {
     return <GoogleRouteNavigatorStage backLabel="Back to Route Studio" backPath={backPath} onUseAtlas={() => setAtlasFallback(true)} pickerRoutes={[]} route={route} variant={completed ? "replay" : "preview"} />;

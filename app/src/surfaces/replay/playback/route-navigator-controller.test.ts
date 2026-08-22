@@ -100,6 +100,13 @@ describe("Google route navigator controller", () => {
     expect(telemetry.headingDeg).toBeLessThan(360);
   });
 
+  it("uses a cinematic clock and hides source pace in Preview", () => {
+    const telemetry = googleRouteTelemetry(route, 1_000, "cinematic");
+
+    expect(telemetry.elapsedS).toBeCloseTo(105);
+    expect(telemetry.paceSPerKm).toBeUndefined();
+  });
+
   it("adapts the grounded route filament to replay progress", () => {
     const treatment = googleRouteThreadTreatment(route, {
       ...initialGoogleRouteNavigatorState(),

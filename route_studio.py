@@ -7,11 +7,13 @@ import os
 from pathlib import Path
 import re
 import shutil
+import signal
 import subprocess
 import threading
 import uuid
 
 from admin_curation import write_atomic
+from private_route_read_model import private_owner_routes
 from route_studio_compiler import compile_route
 from route_studio_importers import (
     Finding,
@@ -23,6 +25,7 @@ from route_studio_importers import (
     inspect_source,
 )
 from route_studio_store import StudioStateConflict, StudioStore
+from route_imports import PRIVATE_DURABLE_BACKUP, private_route_source_root
 
 
 class StudioError(RuntimeError):
@@ -38,25 +41,36 @@ class StudioNotFound(StudioError):
 
 
 class RouteStudio:
-    def __init__(self, checkout_root):
+    def __init__(self, checkout_root, *, durable_source_root=None):
         self.root = Path(checkout_root).resolve()
+        self.durable_source_root = Path(
+            durable_source_root or private_route_source_root(self.root)
+        ).expanduser().resolve()
         self.state_root = self.root / ".route-studio"
         self.sources_root = self.state_root / "sources"
         self.store = StudioStore(self.state_root / "studio.sqlite3")
         self._render_processes = {}
+        self._render_threads = {}
         self._render_lock = threading.Lock()
+        self._closing = threading.Event()
         self._recover_interrupted_promotions()
 
+    def owner_routes(self):
+        return private_owner_routes(
+            self.root,
+            durable_source_root=self.durable_source_root,
+        )
+
     def close(self):
+        self._closing.set()
         with self._render_lock:
             processes = list(self._render_processes.values())
+            threads = list(self._render_threads.values())
         for process in processes:
-            if process.poll() is None:
-                process.terminate()
-                try:
-                    process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    process.kill()
+            self._terminate_process_group(process)
+        for thread in threads:
+            if thread is not threading.current_thread():
+                thread.join()
         self.store.close()
 
     def upload(self, filename, payload):
@@ -185,9 +199,11 @@ class RouteStudio:
         receipt_relative = Path("route_sources") / "receipts" / f"{slug}.json"
         source_path = self.root / source_relative
         receipt_path = self.root / receipt_relative
+        durable_relative = Path("studio") / f"{slug}.gpx"
+        durable_path = self.durable_source_root / durable_relative
         config_path = self.root / "quests.json"
         original_config = config_path.read_text(encoding="utf-8")
-        if source_path.exists() or receipt_path.exists():
+        if source_path.exists() or receipt_path.exists() or durable_path.exists():
             raise StudioConflict(f"canonical source for {slug} already exists")
         config = json.loads(original_config)
         routes = config.setdefault("routes", [])
@@ -198,6 +214,7 @@ class RouteStudio:
             "backup_path": str(backup_path.relative_to(self.root)),
             "source_path": str(source_path.relative_to(self.root)),
             "receipt_path": str(receipt_path.relative_to(self.root)),
+            "durable_path": str(durable_path),
         }
         try:
             self.store.start_promotion(job_id, journal, job["route_fingerprint"])
@@ -207,11 +224,14 @@ class RouteStudio:
         try:
             source_path.parent.mkdir(parents=True, exist_ok=True)
             receipt_path.parent.mkdir(parents=True, exist_ok=True)
-            self._write_bytes_atomic(source_path, canonical_gpx(
+            canonical_source = canonical_gpx(
                 candidate,
                 name=job["metadata"]["name"],
                 preserve_timing=candidate.timing_status == "recorded",
-            ))
+            )
+            self._write_bytes_atomic(source_path, canonical_source)
+            self._write_bytes_atomic(durable_path, canonical_source)
+            canonical_checksum = hashlib.sha256(canonical_source).hexdigest()
             write_atomic(
                 receipt_path,
                 json.dumps(staged["source_receipt"], indent=2) + "\n",
@@ -220,6 +240,9 @@ class RouteStudio:
                 "route_id": slug,
                 "source_gpx": source_relative.as_posix(),
                 "source_receipt": receipt_relative.as_posix(),
+                "source_backup": durable_relative.as_posix(),
+                "source_policy": PRIVATE_DURABLE_BACKUP,
+                "canonical_source_sha256": canonical_checksum,
                 "source_kind": "owner-import",
                 "source_format": staged["source_format"],
                 "source_sha256": job["source"]["sha256"],
@@ -238,12 +261,16 @@ class RouteStudio:
             rebuild()
             self._verify_promotion(staged, job["metadata"]["privacy"])
         except StudioConflict as error:
-            self._restore_promotion_backup(backup_path, source_path, receipt_path)
+            self._restore_promotion_backup(
+                backup_path, source_path, receipt_path, durable_path
+            )
             self.store.mark_promotion_failed(job_id, str(error))
             self._remove_promotion_backup(backup_path)
             raise
         except Exception as error:
-            self._restore_promotion_backup(backup_path, source_path, receipt_path)
+            self._restore_promotion_backup(
+                backup_path, source_path, receipt_path, durable_path
+            )
             self.store.mark_promotion_failed(job_id, str(error))
             self._remove_promotion_backup(backup_path)
             raise StudioError("Canonical generation failed; promotion was rolled back and the staged route is intact.") from error
@@ -257,7 +284,7 @@ class RouteStudio:
         with self._render_lock:
             process = self._render_processes.get(job_id)
         if process is not None and process.poll() is None:
-            process.terminate()
+            self._terminate_process_group(process)
         return self.get_job(job_id)
 
     def render(self, job_id, *, base_url="http://127.0.0.1:8787"):
@@ -268,8 +295,14 @@ class RouteStudio:
         if any(attempt["status"] == "running" for attempt in job["render_attempts"]):
             raise StudioConflict("A render is already running for this Studio job")
         route_fingerprint = job["route_fingerprint"]
+        version_path = self.root / "app" / "src" / "surfaces" / "replay" / "cinematic" / "route-experience-version.json"
+        if not version_path.is_file():
+            version_path = Path(__file__).parent / "app" / "src" / "surfaces" / "replay" / "cinematic" / "route-experience-version.json"
+        versions = json.loads(version_path.read_text(encoding="utf-8"))
+        manifest_version = int(versions["manifestVersion"])
+        director_version = int(versions["directorVersion"])
         render_fingerprint = hashlib.sha256(
-            f"{route_fingerprint}|teaser-v1|1920x1080|24|15".encode("ascii")
+            f"{route_fingerprint}|teaser|manifest-{manifest_version}|director-{director_version}|1920x1080|24|17.5".encode("ascii")
         ).hexdigest()
         attempt_id = f"render-{uuid.uuid4().hex[:16]}"
         artifact_root = self.state_root / "artifacts" / job_id
@@ -280,14 +313,16 @@ class RouteStudio:
             "node",
             str(self.root / "app" / "scripts" / "render-route-film.mjs"),
             f"--route={job['staged_route']['slug']}",
-            f"--film-url={base_url}/#/admin/studio/{job_id}/preview?render=1&cut=feature",
+            f"--film-url={base_url}/#/admin/studio/{job_id}/preview?render=1",
             f"--output={output_path}",
             f"--report={report_path}",
             f"--source-fingerprint={render_fingerprint}",
+            f"--manifest-version={manifest_version}",
+            f"--director-version={director_version}",
             "--width=1920",
             "--height=1080",
             "--fps=24",
-            "--max-seconds=15",
+            "--max-seconds=17.5",
             "--proxy=false",
             "--resume=true",
         ]
@@ -302,7 +337,9 @@ class RouteStudio:
             args=(job_id, attempt_id, command, output_path, report_path),
             daemon=True,
         )
-        thread.start()
+        with self._render_lock:
+            self._render_threads[job_id] = thread
+            thread.start()
         return self.get_job(job_id)
 
     def retry(self, job_id, *, base_url="http://127.0.0.1:8787", rebuild=None):
@@ -334,9 +371,12 @@ class RouteStudio:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                start_new_session=True,
             )
             with self._render_lock:
                 self._render_processes[job_id] = process
+            if self._closing.is_set() or self.get_job(job_id)["cancellation_requested"]:
+                self._terminate_process_group(process)
             output_tail = []
             for line in process.stdout or ():
                 output_tail.append(line.rstrip())
@@ -380,6 +420,23 @@ class RouteStudio:
         finally:
             with self._render_lock:
                 self._render_processes.pop(job_id, None)
+                self._render_threads.pop(job_id, None)
+
+    @staticmethod
+    def _terminate_process_group(process):
+        if process.poll() is not None:
+            return
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+            process.wait(timeout=5)
+        except ProcessLookupError:
+            return
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                return
+            process.wait(timeout=5)
 
     def _inspection(self, job_id):
         job = self.get_job(job_id)
@@ -427,6 +484,19 @@ class RouteStudio:
         if privacy == "private":
             if detail_path.exists() or manifest_matches:
                 raise StudioError("private route appeared in public generated route data")
+            private_matches = [
+                route for route in self.owner_routes()
+                if route.get("slug") == slug
+            ]
+            if len(private_matches) != 1:
+                raise StudioError("private route did not enter the owner read model")
+            if (
+                self._geometry_signature(private_matches[0].get("route"))
+                != self._geometry_signature(staged.get("route"))
+            ):
+                raise StudioError(
+                    "private owner read-model geometry does not match the staged route"
+                )
             return
         if not detail_path.is_file() or len(manifest_matches) != 1:
             raise StudioError("canonical generator did not publish one matching detail and manifest record")
@@ -484,7 +554,11 @@ class RouteStudio:
                 (
                     round(float(point["lat"]), 7),
                     round(float(point["lng"]), 7),
-                    round(float(point["elev"]), 2),
+                    (
+                        round(float(point["elev"]), 2)
+                        if point.get("elev") is not None
+                        else None
+                    ),
                     round(float(point["d"]), 1),
                     point.get("elapsed_s"),
                 )
@@ -507,7 +581,7 @@ class RouteStudio:
             ]
         try:
             return [
-                [point["lat"], point["lng"], point.get("elev", 0), point.get("d", 0)]
+                [point["lat"], point["lng"], point.get("elev"), point.get("d", 0)]
                 for point in simplified
             ]
         except (KeyError, TypeError):
@@ -554,7 +628,9 @@ class RouteStudio:
         )
         return backup
 
-    def _restore_promotion_backup(self, backup, source_path, receipt_path):
+    def _restore_promotion_backup(
+        self, backup, source_path, receipt_path, durable_path=None
+    ):
         metadata = json.loads((backup / "metadata.json").read_text(encoding="utf-8"))
         write_atomic(
             self.root / "quests.json",
@@ -562,6 +638,8 @@ class RouteStudio:
         )
         source_path.unlink(missing_ok=True)
         receipt_path.unlink(missing_ok=True)
+        if durable_path is not None:
+            durable_path.unlink(missing_ok=True)
         files = {}
         for index, (relative, present) in enumerate(metadata["files"].items()):
             path = self.root / relative
@@ -586,16 +664,30 @@ class RouteStudio:
                 backup = (self.root / journal["backup_path"]).resolve()
                 source_path = (self.root / journal["source_path"]).resolve()
                 receipt_path = (self.root / journal["receipt_path"]).resolve()
+                durable_path = Path(journal.get("durable_path", "")).resolve()
                 backup_root = (self.state_root / "promotion-backups").resolve()
-                if not backup.is_relative_to(backup_root) or not source_path.is_relative_to(self.root) or not receipt_path.is_relative_to(self.root):
+                if (
+                    not backup.is_relative_to(backup_root)
+                    or not source_path.is_relative_to(self.root)
+                    or not receipt_path.is_relative_to(self.root)
+                    or (
+                        journal.get("durable_path")
+                        and not durable_path.is_relative_to(self.durable_source_root)
+                    )
+                ):
                     raise StudioError("promotion journal path escaped the checkout")
-                self._restore_promotion_backup(backup, source_path, receipt_path)
+                self._restore_promotion_backup(
+                    backup,
+                    source_path,
+                    receipt_path,
+                    durable_path if journal.get("durable_path") else None,
+                )
+                self.store.mark_promotion_interrupted(job_id)
                 self._remove_promotion_backup(backup)
             except Exception as error:
                 raise StudioError(
                     f"interrupted promotion {job_id} could not restore its rollback journal: {error}"
                 ) from error
-            self.store.mark_promotion_interrupted(job_id)
 
     def _restore_publication(self, snapshot):
         details = self.root / "app" / "public" / "data" / "routes"
@@ -645,6 +737,7 @@ class RouteStudio:
 
     @staticmethod
     def _write_bytes_atomic(path, payload):
+        path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_name(f".{path.name}.studio-{uuid.uuid4().hex}")
         temporary.write_bytes(payload)
         os.replace(temporary, path)

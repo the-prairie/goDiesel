@@ -160,7 +160,7 @@ def test_fit_adapter_preserves_timestamp_when_position_is_missing():
     assert point == SourceRoutePoint(
         lat=None,
         lng=None,
-        elevation=0,
+        elevation=None,
         timestamp=datetime(2025, 11, 26, 21, 21, 5, tzinfo=UTC),
         segment_index=0,
     )

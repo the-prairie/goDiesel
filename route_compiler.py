@@ -55,6 +55,12 @@ def compile_route_contract(value, *, best_in_earth_ids=frozenset()):
         value.region,
         value.activity_name,
     )
+    if value.elevation_status == "unavailable":
+        verb = "ride" if value.activity_type == "Ride" else "run"
+        route_meta["completion_rule"] = (
+            f"Complete a {distance_km:.1f} km {verb} in {value.region}. "
+            "Elevation is unavailable in the source."
+        )
     for field, target in (
         ("theme", "theme"),
         ("difficulty", "difficulty"),

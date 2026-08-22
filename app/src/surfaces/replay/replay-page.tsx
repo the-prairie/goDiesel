@@ -6,6 +6,7 @@ import { GoogleRouteNavigatorStage } from "@/surfaces/replay/components/google-r
 import { RouteNotFound } from "@/ui/route-not-found";
 import { singleRouteMicrosite } from "@/app/single-route-microsite";
 import { completedRoutes, findRouteBySlug } from "@/data/routes";
+import { ownerRouteSummary } from "@/data/owner-route-repository";
 import { useRouteDetail } from "@/data/use-route-detail";
 import { APP_PATHS, atlasReturnPath, decodedRouteSlug } from "@/app/route-paths";
 
@@ -18,12 +19,13 @@ export function ReplayPage() {
   const { routeSlug } = useParams();
   const [searchParams] = useSearchParams();
   const decodedSlug = decodedRouteSlug(routeSlug);
-  const selectedSummary = routeSlug
+  const bundledSummary = routeSlug
     ? decodedSlug
       ? findRouteBySlug(decodedSlug)
       : undefined
     : representativeRoute;
-  const detail = useRouteDetail(selectedSummary?.slug);
+  const detailSlug = routeSlug ? decodedSlug : representativeRoute?.slug;
+  const detail = useRouteDetail(detailSlug);
   const requestedRenderer = searchParams.get("renderer");
   const requestedAtlas = requestedRenderer === "atlas";
   const useLegacyEarth = requestedRenderer === "cesium";
@@ -31,21 +33,9 @@ export function ReplayPage() {
 
   useEffect(() => {
     setAtlasFallback(requestedAtlas);
-  }, [requestedAtlas, selectedSummary?.slug]);
+  }, [detailSlug, requestedAtlas]);
 
-  if (routeSlug && !selectedSummary) return <RouteNotFound />;
-
-  const eligibleRoutes = completedRoutes.filter(
-    (route) => route.replay.replayEligible,
-  );
-  const pickerRoutes = singleRouteMicrosite
-    ? []
-    : selectedSummary
-    ? [
-        selectedSummary,
-        ...eligibleRoutes.filter((route) => route.slug !== selectedSummary.slug),
-      ]
-    : eligibleRoutes;
+  if (routeSlug && !decodedSlug) return <RouteNotFound />;
 
   if (detail.status === "idle" || detail.status === "loading") {
     return (
@@ -55,6 +45,23 @@ export function ReplayPage() {
     );
   }
   if (detail.status !== "ready") return <RouteNotFound />;
+  if (
+    detail.route.lifecycle !== "completed" ||
+    !detail.route.replay.replayEligible
+  ) {
+    return <RouteNotFound />;
+  }
+
+  const selectedSummary = bundledSummary ?? ownerRouteSummary(detail.route);
+  const eligibleRoutes = completedRoutes.filter(
+    (route) => route.replay.replayEligible,
+  );
+  const pickerRoutes = singleRouteMicrosite
+    ? []
+    : [
+        selectedSummary,
+        ...eligibleRoutes.filter((route) => route.slug !== selectedSummary.slug),
+      ];
 
   const returnPath = atlasReturnPath(searchParams);
   const backPath = singleRouteMicrosite?.guidePath ?? returnPath ?? APP_PATHS.routes;
