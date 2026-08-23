@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - chore/deploy-production-branch-safety
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
 
 permissions:
   contents: read
