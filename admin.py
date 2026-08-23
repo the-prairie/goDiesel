@@ -44,6 +44,7 @@ from route_media import (
     publish_photo,
     read_photo_metadata,
 )
+from route_inbox import RouteInbox, route_inbox_origin_allowed
 from route_studio import RouteStudio, StudioConflict, StudioError, StudioNotFound
 
 try:
@@ -82,6 +83,15 @@ SLUG_PATTERN = re.compile(r'^[A-Za-z0-9._-]+$')
 MEDIA_ROOT = QUESTS / 'app' / 'public' / 'media'
 OWNER_MUTATION_LOCK = threading.Lock()
 STUDIO = RouteStudio(QUESTS)
+ROUTE_INBOX_ROOTS = tuple(
+    Path(value).expanduser()
+    for value in os.environ.get(
+        "GODIESEL_ROUTE_INBOX_ROOTS",
+        str(Path.home() / "Downloads"),
+    ).split(os.pathsep)
+    if value.strip()
+)
+ROUTE_INBOX = RouteInbox(STUDIO, ROUTE_INBOX_ROOTS)
 TEAL = '#00F19F'
 CURATION_TEXT_FIELDS = ('title', 'theme', 'difficulty', 'blurb', 'completion_rule')
 CURATION_VISIBILITIES = ('public', 'hidden')
@@ -627,6 +637,15 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/studio/jobs':
             self._send(200, STUDIO.list_jobs())
             return
+        if path == '/api/studio/inbox':
+            if not route_inbox_origin_allowed(self.headers, ALLOWED_ORIGINS):
+                self._send(403, {'error': 'origin not allowed'})
+                return
+            try:
+                self._send(200, ROUTE_INBOX.list_entries())
+            except OSError as error:
+                self._send(409, {'error': str(error)})
+            return
         if path == '/api/owner/routes':
             try:
                 self._send(200, {'routes': STUDIO.owner_routes()})
@@ -817,6 +836,20 @@ class Handler(BaseHTTPRequestHandler):
             body = self.rfile.read(n).decode('utf-8') if n else ''
         except UnicodeDecodeError:
             self._send(400, {'error': 'request body must be UTF-8'})
+            return
+        inbox_match = re.fullmatch(r'/api/studio/inbox/([a-f0-9]{24})/import', path)
+        if inbox_match:
+            if not OWNER_MUTATION_LOCK.acquire(blocking=False):
+                self._send(409, {'error': 'another owner mutation is in progress'})
+                return
+            try:
+                result = ROUTE_INBOX.import_entry(inbox_match.group(1))
+            except (OSError, StudioError, ValueError) as error:
+                self._send(400, {'error': str(error)})
+                return
+            finally:
+                OWNER_MUTATION_LOCK.release()
+            self._send(200, result)
             return
         studio_match = re.fullmatch(
             r'/api/studio/jobs/([^/]+)/(select-geometry|metadata|compile|render|cancel|retry|promote)',

@@ -207,6 +207,8 @@ is not.
 
 **Route Studio** is an owner-only workflow within Admin at `#/admin/studio`.
 It preserves, inspects, stages, previews, renders, and promotes route sources without becoming a sixth public surface.
+Its **Export Inbox** discovers direct-child route exports inside explicit local folders and hands an eligible file to the same immutable-source workflow.
+Inbox discovery never publishes, recursively scans, follows symlinks, or treats unsupported source formats as successfully imported.
 Private promoted routes are rebuilt into a loopback-only owner read model: completed routes join local Atlas memories and discovered routes join Finder, while both remain absent from public generated bundles.
 The deployed read-only Admin never exposes upload or mutation controls.
 

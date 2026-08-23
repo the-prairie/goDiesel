@@ -81,8 +81,15 @@ async function mockAdminStatus(page: Page, editable: boolean) {
   await page.route(`${adminApi}/api/routes`, (route) => route.fulfill({ json: [], status: editable ? 200 : 503 }));
 }
 
-async function mockStudio(page: Page, initial: ReturnType<typeof rawJob>) {
+async function mockStudio(
+  page: Page,
+  initial: ReturnType<typeof rawJob>,
+  inboxEntries: Array<Record<string, unknown>> = [],
+) {
   let job = structuredClone(initial);
+  await page.route(`${adminApi}/api/studio/inbox`, (route) => route.fulfill({
+    json: { roots: ["/Users/owner/Downloads"], entries: inboxEntries },
+  }));
   await page.route(`${adminApi}/api/studio/jobs`, (route) => route.fulfill({ json: [job] }));
   await page.route(`${adminApi}/api/studio/jobs/job-abc`, (route) => route.fulfill({ json: job }));
   await page.route(`${adminApi}/api/studio/jobs/job-abc/**`, async (route) => {
@@ -113,6 +120,66 @@ async function mockStudio(page: Page, initial: ReturnType<typeof rawJob>) {
   });
   return { current: () => job, replace: (next: typeof job) => { job = next; } };
 }
+
+test("Export Inbox imports GPX and explains blocked FIT sources", async ({ page }) => {
+  await mockAdminStatus(page, true);
+  const inboxEntries: Array<Record<string, unknown>> = [
+    {
+      id: "a".repeat(24), filename: "Morning Run.gpx", source_format: "gpx",
+      size_bytes: 397, modified_at: "2026-08-23T15:30:00Z", eligible: true, reason: null,
+      imported: false, job_id: null,
+    },
+    {
+      id: "b".repeat(24), filename: "original.fit.gz", source_format: "fit",
+      size_bytes: 2048, modified_at: "2026-08-23T15:00:00Z", eligible: false,
+      reason: "Route Studio needs a GPX export for FIT/FIT.GZ sources.",
+      imported: false, job_id: null,
+    },
+    {
+      id: "c".repeat(24), filename: "Large archived route.gpx", source_format: "gpx",
+      size_bytes: 24_000_000, modified_at: "2026-08-23T14:30:00Z", eligible: true,
+      reason: null, imported: false, job_id: null, checksum_status: "deferred",
+    },
+  ];
+  await mockStudio(page, rawJob(), inboxEntries);
+  await page.route(`${adminApi}/api/studio/inbox/${"a".repeat(24)}/import`, (route) => {
+    inboxEntries[0].imported = true;
+    inboxEntries[0].job_id = "job-abc";
+    return route.fulfill({ json: { job_id: "job-abc", exact_duplicate: false } });
+  });
+
+  await page.goto("/#/admin/studio");
+
+  await expect(page.getByRole("heading", { name: "Export Inbox" })).toBeVisible();
+  await expect(page.getByText("Morning Run.gpx")).toBeVisible();
+  await expect(page.getByText("original.fit.gz")).toBeVisible();
+  await expect(page.getByText("Route Studio needs a GPX export for FIT/FIT.GZ sources.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Needs GPX original.fit.gz" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Check and open Large archived route.gpx" })).toBeVisible();
+  await page.getByRole("button", { name: "Import Morning Run.gpx" }).click();
+  await expect(page).toHaveURL(/admin\/studio\/job-abc$/);
+  await page.unroute(`${adminApi}/api/studio/inbox`);
+  await page.route(`${adminApi}/api/studio/inbox`, (route) => route.fulfill({
+    json: { roots: ["/Users/owner/Downloads"], entries: inboxEntries },
+  }));
+  await page.goto("/#/admin/studio");
+  await expect(page.getByRole("button", { name: "Reopen Morning Run.gpx" })).toBeVisible();
+});
+
+test("an unavailable Export Inbox does not hide staged routes", async ({ page }) => {
+  await mockAdminStatus(page, true);
+  await mockStudio(page, rawJob());
+  await page.route(`${adminApi}/api/studio/inbox`, (route) => route.fulfill({
+    status: 409,
+    json: { error: "Export Inbox is temporarily unavailable." },
+  }));
+
+  await page.goto("/#/admin/studio");
+
+  await expect(page.getByRole("alert")).toContainText("Export Inbox is temporarily unavailable.");
+  await expect(page.getByRole("link", { name: /ridge\.gpx/ })).toBeVisible();
+  await expect(page.getByText("Scanning local route exports...")).toHaveCount(0);
+});
 
 test("editable local Admin exposes Route Studio while read-only Admin cannot upload", async ({ page }) => {
   await mockAdminStatus(page, true);

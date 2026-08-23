@@ -16,6 +16,8 @@ It must preserve ADR-0003, the loopback-only writer in ADR-0010, strict detail p
 Route Studio is a local owner-only Admin workflow backed by SQLite and a content-addressed immutable source store.
 Uploads compile to strict staged route details through the same pure one-route compiler used by `build.py`.
 Staged details are served only by the loopback API and parsed through the production strict parser.
+The local Export Inbox discovers direct-child files in configured owner folders, refuses symlinks and oversized sources, and imports eligible files through the existing checksum-addressed upload boundary.
+GPX, KML, and KMZ are importable; FIT and FIT.GZ remain visible but blocked until their binary source-faithfulness contract is covered independently.
 
 Stable identity is generalized to a route id.
 Existing Strava routes retain their numeric activity id and URLs unchanged.
@@ -42,6 +44,7 @@ Local film export retains deterministic frame verification but does not grant or
 ## Consequences
 
 The normal owner journey no longer needs manual `quests.json` edits, slug lookup, or terminal commands.
+Downloaded route exports can enter that journey from the local Export Inbox without a second file-picker step.
 Original sources, jobs, decisions, renders, artifacts, errors, cancellation, retry, and promotion state survive restarts.
 SQLite and source artifacts remain single-owner local state and are not suitable for a deployed multi-user service.
 Private promoted routes intentionally remain absent from public generated detail data, so their canonical verification proves exclusion rather than public presence.

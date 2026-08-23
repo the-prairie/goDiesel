@@ -74,6 +74,11 @@ Start the React app and owner writer with `./admin.sh`, then open `#/admin/studi
 Drop a GPX, KML, or KMZ file to preserve and inspect it, select a geometry when the source contains alternatives, record only the missing owner facts, and compile a staged route.
 Staging does not publish the route or change canonical generated data.
 
+The local Export Inbox scans `~/Downloads` by default and lists supported route files without scanning nested folders or following symlinks.
+Set `GODIESEL_ROUTE_INBOX_ROOTS` to an `os.pathsep`-separated list of explicit local folders to change that boundary.
+Importable GPX, KML, and KMZ files enter the same checksum-addressed Route Studio workflow, and an already preserved file reopens its existing job.
+FIT and FIT.GZ exports remain visible but require a GPX export until Route Studio has a source-faithful binary FIT importer.
+
 Future and reference routes use Preview, Explore, Route film, and Cinematic timing language.
 Replay and owner-recorded timing are reserved for routes explicitly confirmed as completed by the owner with trustworthy recorded timestamps.
 The default privacy is private, which promotes a hidden canonical specification and verifies that no public detail or manifest entry was generated.

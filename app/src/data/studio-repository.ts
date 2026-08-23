@@ -62,6 +62,38 @@ export interface StudioMetadata {
   privacy: "private" | "public";
 }
 
+export interface RouteInboxEntry {
+  id: string;
+  filename: string;
+  sourceFormat: "gpx" | "kml" | "kmz" | "fit";
+  sizeBytes: number;
+  modifiedAt: string;
+  eligible: boolean;
+  reason: string | null;
+  imported: boolean;
+  jobId: string | null;
+  checksumStatus: "checked" | "deferred";
+}
+
+export interface RouteInbox {
+  roots: string[];
+  entries: RouteInboxEntry[];
+  warnings: string[];
+}
+
+export async function loadRouteInbox() {
+  const response = await fetch(`${studioApiBase}/api/studio/inbox`);
+  return parseRouteInbox(await responseBody(response));
+}
+
+export async function importRouteInboxEntry(entryId: string) {
+  const response = await fetch(
+    `${studioApiBase}/api/studio/inbox/${encodeURIComponent(entryId)}/import`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
+  );
+  return responseBody(response) as Promise<{ job_id: string; exact_duplicate: boolean }>;
+}
+
 export async function uploadStudioSource(file: File) {
   const response = await fetch(`${studioApiBase}/api/studio/sources`, {
     method: "POST",
@@ -153,6 +185,33 @@ export function parseStagedRoute(value: unknown, expectedSlug?: string) {
     throw new Error("Staged route did not match the selected Studio job.");
   }
   return route;
+}
+
+export function parseRouteInbox(value: unknown): RouteInbox {
+  const source = record(value, "Route export inbox");
+  if (!Array.isArray(source.roots) || !Array.isArray(source.entries)) {
+    throw new Error("Route export inbox is invalid.");
+  }
+  return {
+    roots: source.roots.map((root) => text(root)).filter(Boolean),
+    warnings: (Array.isArray(source.warnings) ? source.warnings : [])
+      .map((warning) => text(warning)).filter(Boolean),
+    entries: source.entries.map((value) => {
+      const entry = record(value, "Route export inbox entry");
+      return {
+        id: text(entry.id),
+        filename: text(entry.filename),
+        sourceFormat: inboxSourceFormat(entry.source_format),
+        sizeBytes: number(entry.size_bytes),
+        modifiedAt: text(entry.modified_at),
+        eligible: entry.eligible === true,
+        reason: nullableText(entry.reason),
+        imported: entry.imported === true,
+        jobId: nullableText(entry.job_id),
+        checksumStatus: entry.checksum_status === "deferred" ? "deferred" : "checked",
+      };
+    }),
+  };
 }
 
 function parseStudioJob(value: unknown): StudioJob {
@@ -252,6 +311,10 @@ function number(value: unknown) { return typeof value === "number" && Number.isF
 function nullableNumber(value: unknown) { return typeof value === "number" && Number.isFinite(value) ? value : null; }
 function availability(value: unknown) { return value === "recorded" ? "recorded" : "unavailable"; }
 function sourceFormat(value: unknown) { return value === "kml" || value === "kmz" ? value : "gpx"; }
+function inboxSourceFormat(value: unknown): RouteInboxEntry["sourceFormat"] {
+  if (value === "gpx" || value === "kml" || value === "kmz" || value === "fit") return value;
+  throw new Error("Route export inbox source format is invalid.");
+}
 function parsePreviewSegments(value: unknown): Array<Array<[number, number, number | null]>> {
   if (!Array.isArray(value)) return [];
   return value.map((segment) =>

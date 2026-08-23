@@ -61,6 +61,10 @@ class RouteStudio:
             durable_source_root=self.durable_source_root,
         )
 
+    def job_for_source_sha(self, digest):
+        source = self.store.source_by_sha(digest)
+        return self.store.job_for_source(source["id"]) if source else None
+
     def close(self):
         self._closing.set()
         with self._render_lock:
