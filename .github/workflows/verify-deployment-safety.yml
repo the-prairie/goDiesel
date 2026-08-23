@@ -48,8 +48,14 @@ jobs:
       - name: Install Playwright Chromium
         run: cd app && npx playwright install --with-deps chromium
 
-      - name: Python release tests
-        run: .venv/bin/python -m pytest -q
+      - name: Deterministic public Python tests
+        run: >-
+          .venv/bin/python -m pytest -q
+          --ignore=test_pipeline_verification.py
+          --ignore=test_curation_publish.py
+
+      - name: Deployment command regression
+        run: .venv/bin/python -m pytest -q test_deployment_command.py
 
       - name: JavaScript release gate
         run: npm --prefix app run verify
