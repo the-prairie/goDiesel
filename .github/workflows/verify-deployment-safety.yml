@@ -1,0 +1,57 @@
+name: Verify deployment branch safety
+
+on:
+  push:
+    branches:
+      - chore/deploy-production-branch-safety
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install Python dependencies
+        shell: bash
+        run: |
+          python -m venv .venv
+          . .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install application dependencies
+        run: npm ci --prefix app
+
+      - name: Install Playwright Chromium
+        run: cd app && npx playwright install --with-deps chromium
+
+      - name: Python release tests
+        run: .venv/bin/python -m pytest -q
+
+      - name: JavaScript release gate
+        run: npm --prefix app run verify
+
+      - name: Build canonical deployment output
+        run: ./make-dist.sh
+
+      - name: Shell and diff hygiene
+        shell: bash
+        run: |
+          bash -n make-dist.sh
+          git diff --check origin/main...HEAD
