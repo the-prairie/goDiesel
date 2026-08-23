@@ -95,6 +95,7 @@ jobs:
           git add app/src/surfaces/admin/components/route-studio-workspace.tsx
           rm -rf .route-studio-patch
           rm -f .github/workflows/apply-route-studio-remediation.yml
+          git diff --cached --binary > /tmp/applied-remediation.patch
 
       - name: Install Python dependencies
         if: steps.patch.outputs.present == 'true'
@@ -139,6 +140,15 @@ jobs:
       - name: Diff hygiene
         if: steps.patch.outputs.present == 'true'
         run: git diff --check
+
+      - name: Upload applied remediation for diagnosis
+        if: always() && steps.patch.outputs.present == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: applied-route-studio-remediation
+          path: /tmp/applied-remediation.patch
+          if-no-files-found: error
+          retention-days: 2
 
       - name: Commit verified remediation
         if: steps.patch.outputs.present == 'true' && success()
