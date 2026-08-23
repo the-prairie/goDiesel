@@ -1,18 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const pinchTest = /mobile globe supports two-finger pinch without losing region state/;
-const linuxVisualCompatibility =
-  process.platform === "linux"
-    ? {
-        // The committed field-guide baselines were captured with the same
-        // Chromium build on macOS. Linux font rasterization changes edge pixels
-        // without changing the composition, so compare against that reviewed
-        // baseline with a bounded whole-page pixel budget. macOS remains exact.
-        snapshotPathTemplate:
-          "{testDir}/{testFilePath}-snapshots/{arg}-{projectName}-darwin{ext}",
-        toHaveScreenshot: { maxDiffPixelRatio: 0.075 },
-      }
-    : {};
+const runningOnLinux = process.platform === "linux";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -21,8 +10,20 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   reporter: "list",
+  // The committed field-guide baselines were captured with the same Chromium
+  // build on macOS. Linux font rasterization changes edge pixels without
+  // changing the composition, so compare against that reviewed baseline with a
+  // bounded whole-page pixel budget. macOS remains exact.
+  snapshotPathTemplate: runningOnLinux
+    ? "{testDir}/{testFilePath}-snapshots/{arg}-{projectName}-darwin{ext}"
+    : undefined,
   // Regional terrain intentionally waits up to 8s before using its fallback.
-  expect: { timeout: 15_000, ...linuxVisualCompatibility },
+  expect: {
+    timeout: 15_000,
+    ...(runningOnLinux
+      ? { toHaveScreenshot: { maxDiffPixelRatio: 0.075 } }
+      : {}),
+  },
   use: {
     baseURL: "http://127.0.0.1:8791",
     screenshot: "only-on-failure",
