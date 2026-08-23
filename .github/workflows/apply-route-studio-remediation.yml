@@ -65,7 +65,9 @@ jobs:
           PY
           gzip -dc /tmp/remediation.patch.gz > /tmp/remediation.patch
           echo "e786acb10c03a0128562bb16871d7bcdf3a94743a4e9421f53535c9ccfe21e3a  /tmp/remediation.patch" | shasum -a 256 -c -
-          git apply --index /tmp/remediation.patch
+          echo "HEAD admin.py blob: $(git rev-parse HEAD:admin.py)"
+          echo "Worktree admin.py blob: $(git hash-object admin.py)"
+          git apply --3way --index /tmp/remediation.patch
           rm -rf .route-studio-patch
           rm -f .github/workflows/apply-route-studio-remediation.yml
 
