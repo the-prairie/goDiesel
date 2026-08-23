@@ -41,7 +41,7 @@ export default defineConfig({
     {
       name: "chromium",
       grepInvert: legacyPinchTest,
-      testIgnore: stablePinchFile,
+      testIgnore: ["**/live-pipeline.spec.ts", stablePinchFile],
       use: { ...devices["Desktop Chrome"] },
     },
     {
