@@ -1,0 +1,97 @@
+name: Apply Route Studio byte-range implementation
+
+on:
+  push:
+    branches:
+      - feat/route-studio-byte-range
+
+permissions:
+  contents: write
+
+jobs:
+  implement-and-verify:
+    if: ${{ !contains(github.event.head_commit.message, '[byte-range-applied]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install Python dependencies
+        run: python -m pip install --disable-pip-version-check gpxpy pandas fitparse pytest
+
+      - name: Install application dependencies
+        run: npm --prefix app ci
+
+      - name: Install Chromium
+        run: npx --prefix app playwright install --with-deps chromium
+
+      - name: Apply isolated implementation
+        run: |
+          cp admin.py /tmp/admin-before-byte-range.py
+          python scripts/apply-byte-range-implementation.py
+          python -m py_compile admin.py http_file_delivery.py
+
+      - name: Focused Python contract
+        run: python -m unittest -q test_http_file_delivery test_admin_artifact_delivery
+
+      - name: Focused browser contract
+        run: |
+          npm --prefix app run typecheck
+          npx --prefix app playwright test app/e2e/route-studio.spec.ts --grep "completed teaser preloads metadata and seeks through byte ranges"
+
+      - name: Benchmark before and after
+        run: |
+          python scripts/benchmark-studio-artifact-delivery.py \
+            --repository . \
+            --baseline-admin /tmp/admin-before-byte-range.py \
+            --size-mib 256 \
+            --requests 5 \
+            --output-json docs/dogfood-reports/route-studio-byte-range-benchmark.json \
+            --output-markdown docs/dogfood-reports/2026-08-23-route-studio-byte-range.md
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          result = json.loads(Path('docs/dogfood-reports/route-studio-byte-range-benchmark.json').read_text())
+          assert result['baseline']['range']['statuses'] == [200] * 5
+          assert result['baseline']['range']['bytes_received_per_request'] == 256 * 1024 * 1024
+          assert result['after']['range']['statuses'] == [206] * 5
+          assert result['after']['range']['bytes_received_per_request'] == 4096
+          assert result['after']['range']['peak_rss_mib'] < result['baseline']['range']['peak_rss_mib']
+          PY
+
+      - name: Complete verification
+        run: |
+          python -m pytest -q
+          npm --prefix app run verify:ticket
+          npx --prefix app playwright test app/e2e/route-studio.spec.ts
+          npm --prefix app run verify
+          git diff --check
+          grep -R -- '+faststart' app/scripts >/dev/null
+
+      - name: Commit verified implementation
+        run: |
+          git rm .github/workflows/apply-byte-range-implementation.yml
+          git rm scripts/apply-byte-range-implementation.py
+          git add admin.py http_file_delivery.py test_http_file_delivery.py \
+            test_admin_artifact_delivery.py scripts/benchmark-studio-artifact-delivery.py \
+            app/e2e/route-studio.spec.ts \
+            app/e2e/fixtures/route-studio/range-teaser.mp4 \
+            docs/dogfood-reports/route-studio-byte-range-benchmark.json \
+            docs/dogfood-reports/2026-08-23-route-studio-byte-range.md
+          git diff --cached --check
+          git config user.name 'goDiesel Route Studio Agent'
+          git config user.email 'actions@users.noreply.github.com'
+          git commit -m 'perf(studio): stream film artifacts by byte range [byte-range-applied]'
+          git push origin HEAD:feat/route-studio-byte-range
