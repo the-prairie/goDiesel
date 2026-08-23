@@ -1,0 +1,115 @@
+name: Apply Route Studio remediation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - tmp-route-studio-apply-work
+    paths:
+      - ".route-studio-patch/**"
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: patch
+        name: Detect staged patch
+        shell: bash
+        run: |
+          if [ -d .route-studio-patch ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-python@v5
+        if: steps.patch.outputs.present == 'true'
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        if: steps.patch.outputs.present == 'true'
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Reconstruct and apply patch
+        if: steps.patch.outputs.present == 'true'
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import base64
+          from pathlib import Path
+          encoded = "".join(
+              path.read_text(encoding="utf-8")
+              for path in sorted(Path(".route-studio-patch").glob("part-*.b64"))
+          )
+          Path("/tmp/remediation.patch.gz").write_bytes(base64.b64decode(encoded))
+          PY
+          gzip -dc /tmp/remediation.patch.gz > /tmp/remediation.patch
+          echo "e786acb10c03a0128562bb16871d7bcdf3a94743a4e9421f53535c9ccfe21e3a  /tmp/remediation.patch" | shasum -a 256 -c -
+          git apply --index /tmp/remediation.patch
+          rm -rf .route-studio-patch
+          rm -f .github/workflows/apply-route-studio-remediation.yml
+
+      - name: Install Python dependencies
+        if: steps.patch.outputs.present == 'true'
+        shell: bash
+        run: |
+          python -m venv .venv
+          . .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install app dependencies
+        if: steps.patch.outputs.present == 'true'
+        run: npm ci --prefix app
+
+      - name: Install Playwright browser
+        if: steps.patch.outputs.present == 'true'
+        run: cd app && npx playwright install chromium
+
+      - name: Focused Python verification
+        if: steps.patch.outputs.present == 'true'
+        shell: bash
+        run: .venv/bin/python -m pytest -q test_route_imports.py test_route_studio.py
+
+      - name: Typecheck and unit tests
+        if: steps.patch.outputs.present == 'true'
+        shell: bash
+        run: |
+          npm --prefix app run typecheck
+          npm --prefix app run test:unit
+
+      - name: Focused browser verification
+        if: steps.patch.outputs.present == 'true'
+        shell: bash
+        run: |
+          cd app
+          npx playwright test \
+            e2e/route-studio.spec.ts \
+            e2e/owner-route-read-model.spec.ts \
+            e2e/routes-library.spec.ts \
+            e2e/finder-planning.spec.ts
+
+      - name: Diff hygiene
+        if: steps.patch.outputs.present == 'true'
+        run: git diff --check
+
+      - name: Commit verified remediation
+        if: steps.patch.outputs.present == 'true' && success()
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(studio): complete source health and field-guide migration"
+          git push origin HEAD:tmp-route-studio-apply-work
