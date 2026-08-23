@@ -65,9 +65,34 @@ jobs:
           PY
           gzip -dc /tmp/remediation.patch.gz > /tmp/remediation.patch
           echo "e786acb10c03a0128562bb16871d7bcdf3a94743a4e9421f53535c9ccfe21e3a  /tmp/remediation.patch" | shasum -a 256 -c -
-          echo "HEAD admin.py blob: $(git rev-parse HEAD:admin.py)"
-          echo "Worktree admin.py blob: $(git hash-object admin.py)"
           git apply --3way --index /tmp/remediation.patch
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          path = Path("app/src/surfaces/admin/components/route-studio-workspace.tsx")
+          text = path.read_text(encoding="utf-8")
+          pattern = re.compile(
+              r'''          const visual =\n.*?          return \(\n            <li\n              key=\{step\.label\}\n              \{\.\.\.attribute\}''',
+              re.DOTALL,
+          )
+          replacement = '''          const current = index === currentIndex;
+          const tone =
+            index < currentIndex
+              ? "complete"
+              : current
+                ? "current"
+                : "upcoming";
+          return (
+            <li
+              key={step.label}
+              aria-current={current ? "step" : undefined}'''
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit("Could not apply Route Studio stepper parser fix")
+          text = text.replace("data-tone={visual.tone}", "data-tone={tone}")
+          path.write_text(text, encoding="utf-8")
+          PY
+          git add app/src/surfaces/admin/components/route-studio-workspace.tsx
           rm -rf .route-studio-patch
           rm -f .github/workflows/apply-route-studio-remediation.yml
 
