@@ -57,7 +57,7 @@ jobs:
       - name: Deployment command regression
         run: .venv/bin/python -m pytest -q test_deployment_command.py
 
-      - name: Test the inverse synthetic pinch direction
+      - name: Test pinch after the real global camera destination
         shell: bash
         run: |
           python - <<'PY'
@@ -65,28 +65,14 @@ jobs:
 
           path = Path("app/e2e/atlas.spec.ts")
           source = path.read_text(encoding="utf-8")
-          outward_start = '''    await client.send("Input.dispatchTouchEvent", {
-              type: "touchStart",
-              touchPoints: [
-                { x: centerX - 45, y: centerY, id: 11 },
-                { x: centerX + 45, y: centerY, id: 12 },
-              ],
-            });'''
-          inward_start = outward_start.replace("- 45", "- 100").replace("+ 45", "+ 100")
-          outward_move = '''    await client.send("Input.dispatchTouchEvent", {
-              type: "touchMove",
-              touchPoints: [
-                { x: centerX - 100, y: centerY, id: 11 },
-                { x: centerX + 100, y: centerY, id: 12 },
-              ],
-            });'''
-          inward_move = outward_move.replace("- 100", "- 45").replace("+ 100", "+ 45")
-          if outward_start not in source or outward_move not in source:
-              raise SystemExit("expected pinch fixture was not found")
-          path.write_text(
-              source.replace(outward_start, inward_start, 1).replace(outward_move, inward_move, 1),
-              encoding="utf-8",
-          )
+          marker = '''    const before = Number(await canvas.getAttribute("data-camera-target"));'''
+          replacement = '''    await expect
+              .poll(async () => Number(await canvas.getAttribute("data-camera-target")))
+              .toBeGreaterThan(18_000_000);
+            const before = Number(await canvas.getAttribute("data-camera-target"));'''
+          if marker not in source:
+              raise SystemExit("expected pinch baseline was not found")
+          path.write_text(source.replace(marker, replacement, 1), encoding="utf-8")
           PY
           cd app
           npx playwright test e2e/atlas.spec.ts \
