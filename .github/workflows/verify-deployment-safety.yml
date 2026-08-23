@@ -1,8 +1,9 @@
-name: Verify deployment branch safety
+name: Verify main
 
 on:
   push:
     branches:
+      - main
       - chore/deploy-production-branch-safety
   pull_request:
     branches:
@@ -57,28 +58,12 @@ jobs:
       - name: Deployment command regression
         run: .venv/bin/python -m pytest -q test_deployment_command.py
 
-      - name: Test pinch after the real global camera destination
-        shell: bash
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path("app/e2e/atlas.spec.ts")
-          source = path.read_text(encoding="utf-8")
-          marker = '''    const before = Number(await canvas.getAttribute("data-camera-target"));'''
-          replacement = '''    await expect
-              .poll(async () => Number(await canvas.getAttribute("data-camera-target")))
-              .toBeGreaterThan(18_000_000);
-            const before = Number(await canvas.getAttribute("data-camera-target"));'''
-          if marker not in source:
-              raise SystemExit("expected pinch baseline was not found")
-          path.write_text(source.replace(marker, replacement, 1), encoding="utf-8")
-          PY
-          cd app
-          npx playwright test e2e/atlas.spec.ts \
-            --project=chromium-pinch \
-            --grep "mobile globe supports two-finger pinch without losing region state" \
-            --repeat-each=5
+      - name: Stress the stable Atlas pinch contract
+        run: >-
+          cd app &&
+          npx playwright test e2e/atlas-pinch-stable.spec.ts
+          --project=chromium-pinch
+          --repeat-each=5
 
       - name: JavaScript release gate
         run: npm --prefix app run verify
@@ -90,4 +75,8 @@ jobs:
         shell: bash
         run: |
           bash -n make-dist.sh
-          git diff --check origin/main...HEAD
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            git diff --check "origin/${{ github.base_ref }}...HEAD"
+          else
+            git diff --check HEAD^..HEAD
+          fi
