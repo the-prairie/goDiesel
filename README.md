@@ -114,8 +114,10 @@ Generated deploy files are not committed.
 Deploy the generated React output with Wrangler:
 
 ```bash
-npx wrangler pages deploy dist --project-name=godiesel
+npx wrangler pages deploy dist --project-name=godiesel --branch=production
 ```
+
+The `godiesel` Pages project uses `production` as its production branch. The explicit branch flag is required so the canonical `https://godiesel.pages.dev/` deployment is updated instead of creating only a preview deployment.
 
 ## Publish a single-route microsite
 
