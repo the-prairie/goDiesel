@@ -57,13 +57,30 @@ jobs:
       - name: Deployment command regression
         run: .venv/bin/python -m pytest -q test_deployment_command.py
 
-      - name: Stress the Atlas pinch contract
-        run: >-
-          cd app &&
-          npx playwright test e2e/atlas.spec.ts
-          --project=chromium-pinch
-          --grep "mobile globe supports two-finger pinch without losing region state"
-          --repeat-each=5
+      - name: Test the inverse synthetic pinch direction
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("app/e2e/atlas.spec.ts")
+          source = path.read_text(encoding="utf-8")
+          source = source.replace(
+              '{ x: centerX - 45, y: centerY, id: 11 },\n        { x: centerX + 45, y: centerY, id: 12 },',
+              '{ x: centerX - 100, y: centerY, id: 11 },\n        { x: centerX + 100, y: centerY, id: 12 },',
+              1,
+          )
+          source = source.replace(
+              '{ x: centerX - 100, y: centerY, id: 11 },\n        { x: centerX + 100, y: centerY, id: 12 },',
+              '{ x: centerX - 45, y: centerY, id: 11 },\n        { x: centerX + 45, y: centerY, id: 12 },',
+              1,
+          )
+          path.write_text(source, encoding="utf-8")
+          PY
+          cd app
+          npx playwright test e2e/atlas.spec.ts \
+            --project=chromium-pinch \
+            --grep "mobile globe supports two-finger pinch without losing region state" \
+            --repeat-each=5
 
       - name: JavaScript release gate
         run: npm --prefix app run verify
