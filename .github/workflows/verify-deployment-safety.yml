@@ -57,12 +57,13 @@ jobs:
       - name: Deployment command regression
         run: .venv/bin/python -m pytest -q test_deployment_command.py
 
-      - name: Generate missing Linux field-guide baselines
+      - name: Stress the Atlas pinch contract
         run: >-
           cd app &&
-          npx playwright test e2e/navigation.spec.ts
-          --grep "field-guide shell has stable desktop and mobile compositions"
-          --update-snapshots
+          npx playwright test e2e/atlas.spec.ts
+          --project=chromium-pinch
+          --grep "mobile globe supports two-finger pinch without losing region state"
+          --repeat-each=5
 
       - name: JavaScript release gate
         run: npm --prefix app run verify
@@ -75,12 +76,3 @@ jobs:
         run: |
           bash -n make-dist.sh
           git diff --check origin/main...HEAD
-
-      - name: Upload Linux visual baselines for review
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: field-guide-linux-snapshots
-          path: app/e2e/navigation.spec.ts-snapshots/*-chromium-linux.png
-          if-no-files-found: error
-          retention-days: 1
