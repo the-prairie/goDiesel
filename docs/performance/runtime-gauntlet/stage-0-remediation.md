@@ -21,6 +21,7 @@ This document records the correction boundary for the runtime performance harnes
 - The 10,000-candidate Finder corpus cycles through every current owner-curated candidate.
 - The pure Finder provider is required to equal the current production provider on the canonical real-corpus intent.
 - A benchmark-only Vite page renders the production Cesium Atlas component with the 2,500-route source-backed corpus on desktop and mobile.
+- The live-provider workload fails unless `GODIESEL_FIXED_GPU_HOSTNAME` matches the executing host, a real Google Maps credential is present, and regional photorealistic terrain reaches `region-ready` without fallback.
 
 ## Required current-head evidence
 
