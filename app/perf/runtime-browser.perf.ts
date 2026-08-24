@@ -513,7 +513,12 @@ async function measureTransitions(
     for (let cycle = 1; cycle <= 20; cycle += 1) {
       const detailStarted = performance.now();
       await navigateHash(`#/routes/${ROUTE_SLUG}`);
-      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      await expect(
+        page.getByRole("region", { name: "Route briefing" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("region", { name: "Route geography" }),
+      ).toHaveAttribute("data-map-status", /ready|unavailable/);
       const detailLatencyMs = performance.now() - detailStarted;
       const detailWebgl = await readWebglSnapshot(page);
 
@@ -678,9 +683,9 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
   expect(
     transitionSamples.every(
       (sample) =>
-        sample.detailWebgl.activeContexts === 0 &&
-        sample.replayWebgl.activeContexts <= 1 &&
-        sample.atlasWebgl.activeContexts <= 1,
+        sample.detailWebgl.activeContexts === 1 &&
+        sample.replayWebgl.activeContexts === 1 &&
+        sample.atlasWebgl.activeContexts === 1,
     ),
   ).toBe(true);
 });
