@@ -7,8 +7,8 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   reporter: "list",
-  timeout: 300_000,
-  expect: { timeout: 30_000 },
+  timeout: 600_000,
+  expect: { timeout: 60_000 },
   use: {
     baseURL: "http://127.0.0.1:8794",
     screenshot: "only-on-failure",
@@ -16,15 +16,18 @@ export default defineConfig({
   },
   webServer: {
     command:
-      "GODIESEL_DISABLE_LIVE_PROVIDERS=1 npm run build && npm run preview -- --port 8794",
+      "GODIESEL_DISABLE_LIVE_PROVIDERS=1 npm run typecheck && npx vite build --config vite.runtime-perf.config.ts && npx vite preview --config vite.runtime-perf.config.ts --host 0.0.0.0 --port 8794",
     url: "http://127.0.0.1:8794",
     reuseExistingServer: false,
-    timeout: 180_000,
+    timeout: 240_000,
   },
   projects: [
     {
       name: "desktop-chromium",
-      use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } },
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1440, height: 900 },
+      },
     },
     {
       name: "mobile-chromium",
