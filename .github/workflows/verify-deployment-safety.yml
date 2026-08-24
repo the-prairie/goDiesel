@@ -1,0 +1,81 @@
+name: Verify main
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install Python dependencies
+        shell: bash
+        run: |
+          python -m venv .venv
+          . .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install application dependencies
+        run: npm ci --prefix app
+
+      - name: Install Playwright Chromium
+        run: cd app && npx playwright install --with-deps chromium
+
+      - name: Deterministic public Python tests
+        run: >-
+          .venv/bin/python -m pytest -q
+          --ignore=test_pipeline_verification.py
+          --ignore=test_curation_publish.py
+
+      - name: Deployment command regression
+        run: .venv/bin/python -m pytest -q test_deployment_command.py
+
+      - name: Stress the stable Atlas pinch contract
+        run: >-
+          cd app &&
+          npx playwright test e2e/atlas-pinch-stable.spec.ts
+          --project=chromium-pinch
+          --repeat-each=5
+
+      - name: JavaScript release gate
+        run: npm --prefix app run verify
+
+      - name: Build canonical deployment output
+        run: ./make-dist.sh
+
+      - name: Shell and diff hygiene
+        shell: bash
+        run: |
+          bash -n make-dist.sh
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            git diff --check "origin/${{ github.base_ref }}...HEAD"
+          else
+            git diff --check HEAD^..HEAD
+          fi
