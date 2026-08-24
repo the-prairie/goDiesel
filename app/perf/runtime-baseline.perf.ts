@@ -15,16 +15,12 @@ import {
   curatedDiscoveryCandidates,
   curatedRouteDiscoveryProvider,
 } from "@/data/discovery-provider";
-import type {
-  DiscoveryCandidate,
-  FinderIntent,
-} from "@/domain/planning";
+import type { FinderIntent } from "@/domain/planning";
 import {
   parseRouteDetail,
   parseRouteSummary,
   type QuestRoute,
   type RoutePoint,
-  type RouteSummary,
 } from "@/domain/route";
 import { routePathPose } from "@/domain/geometry/route-path";
 import { filterRoutes, type RouteFilters } from "@/surfaces/routes/route-filters";
@@ -32,6 +28,12 @@ import {
   createRouteSceneManifest,
   resolveRouteSceneFrame,
 } from "@/surfaces/replay/scene/route-scene-contract";
+import {
+  createSourceBackedCandidateCorpus,
+  createSourceBackedRouteCorpus,
+  findRouteBySlugInCorpus,
+  searchDiscoveryCandidates,
+} from "./runtime-corpus";
 
 interface Distribution {
   samplesMs: number[];
@@ -119,68 +121,6 @@ function benchmark<T>(options: {
   };
 }
 
-function cloneSummary(
-  base: RouteSummary,
-  index: number,
-  overrides: Partial<RouteSummary> = {},
-): RouteSummary {
-  const regionIndex = index % 125;
-  const lifecycle = index % 11 === 0 ? "discovered" : "completed";
-  return {
-    ...base,
-    slug: `synthetic-${index.toString().padStart(5, "0")}`,
-    activityId: `synthetic-activity-${index}`,
-    lifecycle,
-    name: `Synthetic route ${index}`,
-    subtitle: `Synthetic comparison route ${index}`,
-    activityName: `Synthetic activity ${index}`,
-    region: `Region ${regionIndex.toString().padStart(3, "0")}`,
-    distanceKm: 4 + (index % 80) * 0.9,
-    elevationGainM: (index * 37) % 1_600,
-    type: index % 7 === 0 ? "Ride" : "Run",
-    description: `Synthetic route ${index} through region ${regionIndex}`,
-    difficulty: ["Easy", "Moderate", "Hard"][index % 3],
-    theme: ["Exploratory", "Coastal", "Mountain", "Urban"][index % 4],
-    xp: index % 100,
-    centerLat: -55 + (index % 110),
-    centerLng: -170 + ((index * 13) % 340),
-    trace: base.trace,
-    guide: {
-      ...base.guide,
-      vibe: ["exploratory", "coastal", "mountain", "urban"][index % 4],
-    },
-    ...overrides,
-  };
-}
-
-function syntheticSummaries(count: number) {
-  const base = routes[0];
-  if (!base) throw new Error("Runtime benchmark requires at least one route");
-  return Array.from({ length: count }, (_, index) => cloneSummary(base, index));
-}
-
-function syntheticCandidates(count: number): DiscoveryCandidate[] {
-  const base = curatedDiscoveryCandidates[0];
-  if (!base) throw new Error("Runtime benchmark requires one Finder candidate");
-  return Array.from({ length: count }, (_, index) => {
-    const route = cloneSummary(base.route, index, {
-      region: index % 20 === 0 ? "Kyoto, Japan" : `Region ${index % 125}`,
-      type: index % 7 === 0 ? "Ride" : "Run",
-      distanceKm: 8 + (index % 28),
-      theme: index % 3 === 0 ? "Exploratory" : "Mountain",
-      guide: { reviewStatus: "draft", vibe: index % 3 === 0 ? "playful" : "wild" },
-    });
-    return {
-      id: `synthetic-candidate-${index}`,
-      sourceRouteSlug: route.slug,
-      sourceLabel: "Owner-curated from recorded GPX",
-      terrain: index % 4 === 0 ? ["trail", "mountain"] : ["road", "mixed"],
-      vibes: index % 3 === 0 ? ["playful", "exploratory"] : ["wild", "mountain"],
-      route,
-    };
-  });
-}
-
 function syntheticQuestRoute(pointCount: number): QuestRoute {
   const base = largestCurrentDetail();
   const points: RoutePoint[] = Array.from({ length: pointCount }, (_, index) => ({
@@ -228,16 +168,6 @@ function largestCurrentDetail() {
   return cachedLargestDetail;
 }
 
-function withArrayContents<T, R>(target: T[], replacement: T[], run: () => R): R {
-  const original = [...target];
-  target.splice(0, target.length, ...replacement);
-  try {
-    return run();
-  } finally {
-    target.splice(0, target.length, ...original);
-  }
-}
-
 function stableDigest(values: readonly string[]) {
   let hash = 2_166_136_261;
   for (const value of values) {
@@ -267,8 +197,11 @@ test("records the deterministic production-runtime baseline", () => {
   const manifestText = fs.readFileSync(MANIFEST_PATH, "utf8");
   const manifestValue = JSON.parse(manifestText) as { routes?: unknown[] };
   const generatedRoutes = manifestValue.routes ?? [];
-  const synthetic2_500 = syntheticSummaries(2_500);
-  const synthetic10_000Candidates = syntheticCandidates(10_000);
+  const routeCorpus = createSourceBackedRouteCorpus(routes, 2_500);
+  const candidateCorpus = createSourceBackedCandidateCorpus(
+    curatedDiscoveryCandidates,
+    10_000,
+  );
   const synthetic50_000PointRoute = syntheticQuestRoute(50_000);
   const largestDetail = largestCurrentDetail();
   const sceneManifest = createRouteSceneManifest(largestDetail);
@@ -287,33 +220,55 @@ test("records the deterministic production-runtime baseline", () => {
     }),
   });
 
-  const lookupQueries = Array.from({ length: 5_000 }, (_, index) =>
-    index % 7 === 0 ? `missing-${index}` : synthetic2_500[index % synthetic2_500.length].slug,
+  const currentLookupQueries = Array.from({ length: 5_000 }, (_, index) =>
+    index % 7 === 0
+      ? `missing-${index}`
+      : routes[index % routes.length].slug,
   );
-  const routeLookupBenchmark = withArrayContents(routes, synthetic2_500, () =>
-    benchmark({
-      name: "route-lookup-2,500-routes",
-      operationsPerSample: lookupQueries.length,
-      samples: 15,
-      run: () => lookupQueries.map((slug) => findRouteBySlug(slug)?.slug ?? "missing"),
-      digest: (result) => ({ count: result.length, digest: stableDigest(result) }),
-    }),
+  const currentRouteLookupBenchmark = benchmark({
+    name: "route-lookup-current-library",
+    operationsPerSample: currentLookupQueries.length,
+    samples: 15,
+    run: () =>
+      currentLookupQueries.map(
+        (slug) => findRouteBySlug(slug)?.slug ?? "missing",
+      ),
+    digest: (result) => ({ count: result.length, digest: stableDigest(result) }),
+  });
+
+  const sourceBackedLookupQueries = Array.from({ length: 5_000 }, (_, index) =>
+    index % 7 === 0
+      ? `missing-${index}`
+      : routeCorpus.routes[index % routeCorpus.routes.length].slug,
   );
+  const routeLookupBenchmark = benchmark({
+    name: "route-lookup-2,500-source-backed-replicas",
+    operationsPerSample: sourceBackedLookupQueries.length,
+    samples: 15,
+    run: () =>
+      sourceBackedLookupQueries.map(
+        (slug) =>
+          findRouteBySlugInCorpus(routeCorpus.routes, slug)?.slug ?? "missing",
+      ),
+    digest: (result) => ({ count: result.length, digest: stableDigest(result) }),
+  });
 
   const regionBenchmark = benchmark({
-    name: "region-build-2,500-routes",
-    operationsPerSample: synthetic2_500.length,
+    name: "region-build-2,500-source-backed-replicas",
+    operationsPerSample: routeCorpus.routes.length,
     samples: 20,
-    run: () => buildRouteRegions(synthetic2_500),
+    run: () => buildRouteRegions(routeCorpus.routes),
     digest: (result) => ({
       count: result.length,
-      orderDigest: stableDigest(result.map((region) => `${region.name}:${region.routes.length}`)),
+      orderDigest: stableDigest(
+        result.map((region) => `${region.name}:${region.routes.length}`),
+      ),
     }),
   });
 
   const filterMatrix: RouteFilters[] = [
     {
-      query: "synthetic route 24",
+      query: routes[0]?.name.toLowerCase() ?? "route",
       lifecycle: "all",
       activity: "all",
       region: "all",
@@ -325,13 +280,13 @@ test("records the deterministic production-runtime baseline", () => {
       query: "",
       lifecycle: "completed",
       activity: "Run",
-      region: "Region 024",
+      region: routes.find((route) => route.type === "Run")?.region ?? "all",
       distance: "20-50",
       climb: "250-750",
-      vibe: "Exploratory",
+      vibe: "all",
     },
     {
-      query: "region 011",
+      query: routes.at(-1)?.region.toLowerCase() ?? "",
       lifecycle: "all",
       activity: "Ride",
       region: "all",
@@ -346,17 +301,20 @@ test("records the deterministic production-runtime baseline", () => {
       region: "all",
       distance: "50-plus",
       climb: "750-plus",
-      vibe: "Mountain",
+      vibe: "all",
     },
   ];
   const routeFilterBenchmark = benchmark({
-    name: "routes-filter-matrix-2,500-routes",
-    operationsPerSample: synthetic2_500.length * filterMatrix.length,
+    name: "routes-filter-matrix-2,500-source-backed-replicas",
+    operationsPerSample: routeCorpus.routes.length * filterMatrix.length,
     samples: 25,
-    run: () => filterMatrix.map((filters) => filterRoutes(synthetic2_500, filters)),
+    run: () =>
+      filterMatrix.map((filters) => filterRoutes(routeCorpus.routes, filters)),
     digest: (result) => ({
       counts: result.map((routesForFilter) => routesForFilter.length),
-      digests: result.map((routesForFilter) => stableDigest(routesForFilter.map((route) => route.slug))),
+      digests: result.map((routesForFilter) =>
+        stableDigest(routesForFilter.map((route) => route.slug)),
+      ),
     }),
   });
 
@@ -367,22 +325,21 @@ test("records the deterministic production-runtime baseline", () => {
     terrain: "trail",
     vibe: "playful exploratory",
   };
-  const finderBenchmark = withArrayContents(
-    curatedDiscoveryCandidates,
-    synthetic10_000Candidates,
-    () =>
-      benchmark({
-        name: "finder-search-10,000-candidates",
-        operationsPerSample: synthetic10_000Candidates.length,
-        samples: 25,
-        run: () => curatedRouteDiscoveryProvider.search(finderIntent),
-        digest: (result) => ({
-          status: result.status,
-          count: result.candidates.length,
-          digest: stableDigest(result.candidates.map((candidate) => candidate.id)),
-        }),
-      }),
-  );
+  expect(
+    searchDiscoveryCandidates(curatedDiscoveryCandidates, finderIntent),
+  ).toEqual(curatedRouteDiscoveryProvider.search(finderIntent));
+  const finderBenchmark = benchmark({
+    name: "finder-search-10,000-source-backed-replicas",
+    operationsPerSample: candidateCorpus.candidates.length,
+    samples: 25,
+    run: () =>
+      searchDiscoveryCandidates(candidateCorpus.candidates, finderIntent),
+    digest: (result) => ({
+      status: result.status,
+      count: result.candidates.length,
+      digest: stableDigest(result.candidates.map((candidate) => candidate.id)),
+    }),
+  });
 
   const poseQueries = Array.from({ length: 500 }, (_, index) =>
     ((index * 7_919) % 50_000) * 4 + 1.25,
@@ -433,25 +390,39 @@ test("records the deterministic production-runtime baseline", () => {
     count: 67,
     orderDigest: stableDigest(routes.map((route) => route.slug)),
   });
-  expect((finderBenchmark.resultDigest as { status: string }).status).toBe("matches");
-  expect((regionBenchmark.resultDigest as { count: number }).count).toBe(125);
+  expect((finderBenchmark.resultDigest as { status: string }).status).toBe(
+    "matches",
+  );
+  expect(new Set(routeCorpus.sourceSlugs).size).toBe(routes.length);
 
   const report = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     environment: environmentMetadata(),
     corpus: {
       currentManifestBytes: Buffer.byteLength(manifestText),
       currentRouteCount: routes.length,
       currentCompletedRouteCount: completedRoutes.length,
-      currentDetailCount: fs.readdirSync(DETAIL_DIR).filter((file) => file.endsWith(".json")).length,
-      syntheticRouteCount: synthetic2_500.length,
-      syntheticFinderCandidateCount: synthetic10_000Candidates.length,
+      currentDetailCount: fs
+        .readdirSync(DETAIL_DIR)
+        .filter((file) => file.endsWith(".json")).length,
+      sourceBackedReplicaCount: routeCorpus.routes.length,
+      sourceBackedRouteCount: new Set(routeCorpus.sourceSlugs).size,
+      sourceBackedTraceLengths: Array.from(
+        new Set(routes.map((route) => route.trace.length)),
+      ).sort((left, right) => left - right),
+      sourceBackedFinderCandidateReplicaCount: candidateCorpus.candidates.length,
+      sourceFinderCandidateCount: new Set(
+        candidateCorpus.sourceCandidateIds,
+      ).size,
       syntheticLongRoutePointCount: synthetic50_000PointRoute.route.length,
       largestCurrentDetailSlug: largestDetail.slug,
       largestCurrentDetailPointCount: largestDetail.route.length,
+      methodology:
+        "The 2,500-route corpus cycles through every real generated route and preserves each source route's geometry and attributes. Only route identity is replicated to exercise production cardinality.",
     },
     benchmarks: [
       manifestBenchmark,
+      currentRouteLookupBenchmark,
       routeLookupBenchmark,
       regionBenchmark,
       routeFilterBenchmark,
