@@ -80,7 +80,10 @@ interface TransitionSample {
 declare global {
   interface Window {
     __runtimePerf?: {
-      beginPhase: (phase: "action" | "observation") => void;
+      beginPhase: (
+        phase: "action" | "observation",
+        durationMs?: number,
+      ) => void;
       snapshot: () => {
         action: RuntimePhaseSnapshot;
         observation: RuntimePhaseSnapshot;
@@ -133,12 +136,42 @@ async function installInstrumentation(context: BrowserContext) {
     let phase: Phase = "action";
     const webglRecords = new Map<HTMLCanvasElement, WebglRecord>();
     let totalContextsCreated = 0;
+    let previousFrame = performance.now();
+    let phaseStartedAt = previousFrame;
+    let phaseDeadline = Number.POSITIVE_INFINITY;
+    let longTaskObserver: PerformanceObserver | undefined;
 
-    function resetPhase(nextPhase: Phase) {
+    function recordLongTasks(entries: PerformanceEntryList) {
+      for (const entry of entries) {
+        if (
+          entry.startTime < phaseStartedAt ||
+          entry.startTime > phaseDeadline
+        ) {
+          continue;
+        }
+        phases[phase].longTasks.push({
+          startTime: entry.startTime,
+          duration: entry.duration,
+        });
+      }
+    }
+
+    function flushLongTasks() {
+      if (longTaskObserver) recordLongTasks(longTaskObserver.takeRecords());
+    }
+
+    function resetPhase(nextPhase: Phase, durationMs?: number) {
+      flushLongTasks();
       phase = nextPhase;
       phases[nextPhase].longTasks.length = 0;
       phases[nextPhase].frameIntervals.length = 0;
       phases[nextPhase].reactCommits = 0;
+      phaseStartedAt = performance.now();
+      phaseDeadline =
+        durationMs === undefined
+          ? Number.POSITIVE_INFINITY
+          : phaseStartedAt + durationMs;
+      previousFrame = phaseStartedAt;
     }
 
     function webglSnapshot(): WebglSnapshot {
@@ -157,10 +190,11 @@ async function installInstrumentation(context: BrowserContext) {
     }
 
     window.__runtimePerf = {
-      beginPhase(nextPhase) {
-        resetPhase(nextPhase);
+      beginPhase(nextPhase, durationMs) {
+        resetPhase(nextPhase, durationMs);
       },
       snapshot() {
+        flushLongTasks();
         return {
           action: {
             longTasks: [...phases.action.longTasks],
@@ -179,23 +213,22 @@ async function installInstrumentation(context: BrowserContext) {
 
     if ("PerformanceObserver" in window) {
       try {
-        const observer = new PerformanceObserver((list) => {
-          for (const entry of list.getEntries()) {
-            phases[phase].longTasks.push({
-              startTime: entry.startTime,
-              duration: entry.duration,
-            });
-          }
+        longTaskObserver = new PerformanceObserver((list) => {
+          recordLongTasks(list.getEntries());
         });
-        observer.observe({ type: "longtask", buffered: false });
+        longTaskObserver.observe({ type: "longtask", buffered: false });
       } catch {
         // Chromium supports longtask; another engine can omit it honestly.
       }
     }
 
-    let previousFrame = performance.now();
     const sampleFrame = (now: number) => {
-      const interval = now - previousFrame;
+      if (now < phaseStartedAt) {
+        requestAnimationFrame(sampleFrame);
+        return;
+      }
+      const interval =
+        Math.min(now, phaseDeadline) - Math.max(previousFrame, phaseStartedAt);
       if (interval > 0 && interval < 1_000) {
         phases[phase].frameIntervals.push(interval);
       }
@@ -239,7 +272,9 @@ async function installInstrumentation(context: BrowserContext) {
         return rendererId;
       },
       onCommitFiberRoot() {
-        phases[phase].reactCommits += 1;
+        if (performance.now() <= phaseDeadline) {
+          phases[phase].reactCommits += 1;
+        }
       },
       onCommitFiberUnmount() {},
       onPostCommitFiberRoot() {},
@@ -349,21 +384,21 @@ async function captureSample(
   const actionStarted = performance.now();
   await action();
   const actionLatencyMs = performance.now() - actionStarted;
-  const actionMetricsAfter = await readPerformanceMetrics(client);
-  const actionResources = await browserResources(page);
   const actionRuntime = await page.evaluate(
     () => window.__runtimePerf?.snapshot().action,
   );
+  const actionMetricsAfter = await readPerformanceMetrics(client);
+  const actionResources = await browserResources(page);
 
-  await page.evaluate(() => {
-    performance.clearResourceTimings();
-    window.__runtimePerf?.beginPhase("observation");
-  });
   const observationMetricsBefore = await readPerformanceMetrics(client);
+  await page.evaluate((observationWindowMs) => {
+    performance.clearResourceTimings();
+    window.__runtimePerf?.beginPhase("observation", observationWindowMs);
+  }, OBSERVATION_WINDOW_MS);
   await page.waitForTimeout(OBSERVATION_WINDOW_MS);
+  const snapshot = await page.evaluate(() => window.__runtimePerf?.snapshot());
   const observationMetricsAfter = await readPerformanceMetrics(client);
   const observationResources = await browserResources(page);
-  const snapshot = await page.evaluate(() => window.__runtimePerf?.snapshot());
   const heap = await client.send("Runtime.getHeapUsage");
   const metricMap = observationMetricsAfter;
   const navigation = await page.evaluate(() => {
@@ -596,7 +631,11 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
     await freshSample(browser, testInfo, "routes-cold", async (page) => {
       await page.goto("/#/routes", { waitUntil: "domcontentloaded" });
       await expect(
-        page.getByRole("heading", { level: 1, name: "Your route library." }),
+        page.getByRole("heading", {
+          level: 1,
+          name: "Your route library.",
+          exact: true,
+        }),
       ).toBeVisible();
     }),
   );
@@ -604,7 +643,11 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
     await freshSample(browser, testInfo, "finder-cold", async (page) => {
       await page.goto("/#/finder", { waitUntil: "domcontentloaded" });
       await expect(
-        page.getByRole("heading", { level: 1, name: "Plan the next day." }),
+        page.getByRole("heading", {
+          level: 1,
+          name: "Plan the next day.",
+          exact: true,
+        }),
       ).toBeVisible();
     }),
   );
@@ -679,6 +722,18 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
         sample.sampleWallMs >=
           sample.actionLatencyMs + sample.observationWindowMs,
     ),
+  ).toBe(true);
+  expect(
+    samples.every((sample) => {
+      const observedFrameTime = sample.observation.frameIntervalsMs.reduce(
+        (total, interval) => total + interval,
+        0,
+      );
+      return (
+        sample.observation.frameIntervalsMs.length > 0 &&
+        observedFrameTime <= sample.observationWindowMs + 1
+      );
+    }),
   ).toBe(true);
   expect(
     transitionSamples.every(
