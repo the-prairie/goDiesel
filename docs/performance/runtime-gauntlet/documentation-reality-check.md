@@ -1,7 +1,7 @@
 # Documentation reality check
 
-**Branch base:** `main` at `0b8dd50836f4faaf1e66dc1dec41e5dd5a2cd60b`  
-**Assessment date:** 2026-08-24  
+**Branch base:** `main` at `0b8dd50836f4faaf1e66dc1dec41e5dd5a2cd60b`
+**Assessment date:** 2026-08-24
 **Scope:** production runtime only — Atlas, Finder, Routes, route detail, Replay, and the data structures they consume
 
 This assessment separates product rules from historical descriptions before any production optimization is attempted.
