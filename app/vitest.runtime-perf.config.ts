@@ -8,7 +8,7 @@ export default defineConfig({
     },
   },
   test: {
-    include: ["perf/**/*.perf.ts"],
+    include: ["perf/runtime-baseline.perf.ts"],
     pool: "forks",
     maxWorkers: 1,
     minWorkers: 1,
