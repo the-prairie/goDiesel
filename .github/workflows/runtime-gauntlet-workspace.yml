@@ -4,12 +4,20 @@ on:
   push:
     branches:
       - perf/runtime-performance-gauntlet
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
 
 permissions:
   contents: read
 
 jobs:
   package:
+    if: github.head_ref == 'perf/runtime-performance-gauntlet' || github.ref_name == 'perf/runtime-performance-gauntlet'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
