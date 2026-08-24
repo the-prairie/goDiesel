@@ -1,8 +1,8 @@
 # goDiesel production runtime performance gauntlet
 
-**Status:** implementation contract  
-**Base:** `main` at `0b8dd50836f4faaf1e66dc1dec41e5dd5a2cd60b` or later  
-**Branch:** `perf/runtime-performance-gauntlet`  
+**Status:** implementation contract
+**Base:** `main` at `0b8dd50836f4faaf1e66dc1dec41e5dd5a2cd60b` or later
+**Branch:** `perf/runtime-performance-gauntlet`
 **Merge policy:** draft PR only until every exit criterion is supported by reproducible evidence
 
 ## Goal
@@ -144,14 +144,14 @@ Run the existing deterministic test and release gates and record exact commands 
 
 Create committed, repeatable workloads for:
 
-A. The current real generated route library.  
-B. A synthetic library of at least 2,500 source-backed route summaries.  
-C. A synthetic Finder index of at least 10,000 candidates.  
-D. Twenty consecutive Atlas → route detail → Replay → Atlas transitions.  
-E. Cold-start and warm-start desktop runs.  
-F. Cold-start and warm-start mobile runs.  
-G. Reduced-motion mode.  
-H. Live-provider mode.  
+A. The current real generated route library.
+B. A synthetic library of at least 2,500 source-backed route summaries.
+C. A synthetic Finder index of at least 10,000 candidates.
+D. Twenty consecutive Atlas → route detail → Replay → Atlas transitions.
+E. Cold-start and warm-start desktop runs.
+F. Cold-start and warm-start mobile runs.
+G. Reduced-motion mode.
+H. Live-provider mode.
 I. Deterministic provider-disabled mode.
 
 For each relevant workload, record:
