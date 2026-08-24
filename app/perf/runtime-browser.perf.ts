@@ -17,6 +17,8 @@ const ROUTE_SLUG = "17654151284";
 const OBSERVATION_WINDOW_MS = 750;
 
 interface RuntimePhaseSnapshot {
+  measurementStartedAtMs: number;
+  measurementEndedAtMs: number;
   longTasks: Array<{ startTime: number; duration: number }>;
   frameIntervals: number[];
   reactCommits: number;
@@ -29,6 +31,8 @@ interface WebglSnapshot {
 }
 
 interface PhaseMetrics {
+  measurementWindowMs: number;
+  cdpWindowMs: number;
   longTasks: Array<{ startTime: number; duration: number }>;
   frameIntervalsMs: number[];
   frameP50Ms: number;
@@ -119,6 +123,8 @@ async function installInstrumentation(context: BrowserContext) {
   await context.addInitScript(() => {
     type Phase = "action" | "observation";
     type PhaseData = {
+      measurementStartedAtMs: number;
+      measurementDeadlineMs: number;
       longTasks: Array<{ startTime: number; duration: number }>;
       frameIntervals: number[];
       reactCommits: number;
@@ -129,9 +135,22 @@ async function installInstrumentation(context: BrowserContext) {
       lost: boolean;
     };
 
+    const initializedAt = performance.now();
     const phases: Record<Phase, PhaseData> = {
-      action: { longTasks: [], frameIntervals: [], reactCommits: 0 },
-      observation: { longTasks: [], frameIntervals: [], reactCommits: 0 },
+      action: {
+        measurementStartedAtMs: initializedAt,
+        measurementDeadlineMs: Number.POSITIVE_INFINITY,
+        longTasks: [],
+        frameIntervals: [],
+        reactCommits: 0,
+      },
+      observation: {
+        measurementStartedAtMs: initializedAt,
+        measurementDeadlineMs: Number.POSITIVE_INFINITY,
+        longTasks: [],
+        frameIntervals: [],
+        reactCommits: 0,
+      },
     };
     let phase: Phase = "action";
     const webglRecords = new Map<HTMLCanvasElement, WebglRecord>();
@@ -172,6 +191,8 @@ async function installInstrumentation(context: BrowserContext) {
           ? Number.POSITIVE_INFINITY
           : phaseStartedAt + durationMs;
       previousFrame = phaseStartedAt;
+      phases[nextPhase].measurementStartedAtMs = phaseStartedAt;
+      phases[nextPhase].measurementDeadlineMs = phaseDeadline;
     }
 
     function webglSnapshot(): WebglSnapshot {
@@ -195,17 +216,20 @@ async function installInstrumentation(context: BrowserContext) {
       },
       snapshot() {
         flushLongTasks();
+        const capturedAt = performance.now();
+        const snapshotPhase = (phaseData: PhaseData): RuntimePhaseSnapshot => ({
+          measurementStartedAtMs: phaseData.measurementStartedAtMs,
+          measurementEndedAtMs: Math.min(
+            capturedAt,
+            phaseData.measurementDeadlineMs,
+          ),
+          longTasks: [...phaseData.longTasks],
+          frameIntervals: [...phaseData.frameIntervals],
+          reactCommits: phaseData.reactCommits,
+        });
         return {
-          action: {
-            longTasks: [...phases.action.longTasks],
-            frameIntervals: [...phases.action.frameIntervals],
-            reactCommits: phases.action.reactCommits,
-          },
-          observation: {
-            longTasks: [...phases.observation.longTasks],
-            frameIntervals: [...phases.observation.frameIntervals],
-            reactCommits: phases.observation.reactCommits,
-          },
+          action: snapshotPhase(phases.action),
+          observation: snapshotPhase(phases.observation),
           webgl: webglSnapshot(),
         };
       },
@@ -299,16 +323,25 @@ function metricDelta(
   return Math.max(0, ((after[name] ?? 0) - (before[name] ?? 0)) * scale);
 }
 
-async function browserResources(page: Page) {
-  return page.evaluate(() =>
-    (performance.getEntriesByType("resource") as PerformanceResourceTiming[]).map(
-      (resource) => ({
-        name: resource.name.replace(location.origin, ""),
-        transferSize: resource.transferSize,
-        decodedBodySize: resource.decodedBodySize,
-        duration: resource.duration,
-      }),
-    ),
+async function browserResources(
+  page: Page,
+  measurementStartedAtMs: number,
+  measurementEndedAtMs: number,
+) {
+  return page.evaluate(
+    ({ startedAt, endedAt }) =>
+      (performance.getEntriesByType("resource") as PerformanceResourceTiming[])
+        .filter(
+          (resource) =>
+            resource.startTime >= startedAt && resource.startTime <= endedAt,
+        )
+        .map((resource) => ({
+          name: resource.name.replace(location.origin, ""),
+          transferSize: resource.transferSize,
+          decodedBodySize: resource.decodedBodySize,
+          duration: resource.duration,
+        })),
+    { startedAt: measurementStartedAtMs, endedAt: measurementEndedAtMs },
   );
 }
 
@@ -322,6 +355,9 @@ function phaseMetrics(
   const p95 = percentile(runtime.frameIntervals, 0.95);
   const p99 = percentile(runtime.frameIntervals, 0.99);
   return {
+    measurementWindowMs:
+      runtime.measurementEndedAtMs - runtime.measurementStartedAtMs,
+    cdpWindowMs: metricDelta(after, before, "Timestamp", 1_000),
     longTasks: runtime.longTasks,
     frameIntervalsMs: runtime.frameIntervals,
     frameP50Ms: p50,
@@ -388,7 +424,11 @@ async function captureSample(
     () => window.__runtimePerf?.snapshot().action,
   );
   const actionMetricsAfter = await readPerformanceMetrics(client);
-  const actionResources = await browserResources(page);
+  const actionResources = await browserResources(
+    page,
+    actionRuntime.measurementStartedAtMs,
+    actionRuntime.measurementEndedAtMs,
+  );
 
   const observationMetricsBefore = await readPerformanceMetrics(client);
   await page.evaluate((observationWindowMs) => {
@@ -398,7 +438,11 @@ async function captureSample(
   await page.waitForTimeout(OBSERVATION_WINDOW_MS);
   const snapshot = await page.evaluate(() => window.__runtimePerf?.snapshot());
   const observationMetricsAfter = await readPerformanceMetrics(client);
-  const observationResources = await browserResources(page);
+  const observationResources = await browserResources(
+    page,
+    snapshot?.observation.measurementStartedAtMs ?? 0,
+    snapshot?.observation.measurementEndedAtMs ?? 0,
+  );
   const heap = await client.send("Runtime.getHeapUsage");
   const metricMap = observationMetricsAfter;
   const navigation = await page.evaluate(() => {
@@ -506,7 +550,9 @@ async function writeProjectReport(
       observationWindowMs:
         "A separate fixed window used for frame pacing, long tasks, React commits, and post-readiness CDP counter deltas.",
       resources:
-        "Resource timing is cleared at each phase boundary; each list contains only entries created during that phase in a fresh document.",
+        "Resource timing is cleared at each phase boundary and filtered to entries whose startTime falls inside the in-page measurement bounds.",
+      cdpWindowMs:
+        "CDP counter deltas use their own Performance.Timestamp interval. This may exceed the fixed in-page observation window when main-thread work delays the protocol capture.",
       webgl:
         "activeContexts counts connected, non-lost WebGL contexts at observation end. totalContextsCreated is cumulative and is never used as the active-renderer assertion.",
     },
@@ -731,6 +777,8 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
       );
       return (
         sample.observation.frameIntervalsMs.length > 0 &&
+        sample.observation.measurementWindowMs <=
+          sample.observationWindowMs + 1 &&
         observedFrameTime <= sample.observationWindowMs + 1
       );
     }),
