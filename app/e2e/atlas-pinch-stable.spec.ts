@@ -21,9 +21,15 @@ test("mobile globe pinches after the global camera settles", async ({ browser })
       "data-atlas-status",
       "ready",
     );
-    await expect
-      .poll(async () => Number(await canvas.getAttribute("data-camera-target")))
-      .toBeGreaterThan(18_000_000);
+    await expect.poll(async () => {
+      const first = Number(await canvas.getAttribute("data-camera-target"));
+      await page.waitForTimeout(250);
+      const second = Number(await canvas.getAttribute("data-camera-target"));
+      return (
+        Math.abs(first - 18_500_000) < 25_000 &&
+        Math.abs(second - first) < 1_000
+      );
+    }).toBe(true);
 
     const before = Number(await canvas.getAttribute("data-camera-target"));
     const box = (await canvas.boundingBox())!;
@@ -38,14 +44,16 @@ test("mobile globe pinches after the global camera settles", async ({ browser })
         { x: centerX + 45, y: centerY, id: 12 },
       ],
     });
-    await client.send("Input.dispatchTouchEvent", {
-      type: "touchMove",
-      touchPoints: [
-        { x: centerX - 100, y: centerY, id: 11 },
-        { x: centerX + 100, y: centerY, id: 12 },
-      ],
-    });
-    await page.waitForTimeout(50);
+    for (const radius of [60, 75, 90, 105]) {
+      await client.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [
+          { x: centerX - radius, y: centerY, id: 11 },
+          { x: centerX + radius, y: centerY, id: 12 },
+        ],
+      });
+      await page.waitForTimeout(40);
+    }
     await client.send("Input.dispatchTouchEvent", {
       type: "touchEnd",
       touchPoints: [],
