@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - chore/deploy-production-branch-safety
   pull_request:
     branches:
       - main
