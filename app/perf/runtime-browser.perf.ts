@@ -120,7 +120,7 @@ async function installInstrumentation(page: Page) {
 }
 
 async function waitForAtlas(page: Page) {
-  await expect(page.locator('[data-atlas-engine="cesium"]')).toHaveAttribute(
+  await expect(page.locator('div[data-atlas-engine="cesium"]')).toHaveAttribute(
     "data-atlas-status",
     /ready|fallback/,
     { timeout: 30_000 },
