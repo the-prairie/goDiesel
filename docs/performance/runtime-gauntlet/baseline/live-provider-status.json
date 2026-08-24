@@ -1,0 +1,4 @@
+{
+  "available": false,
+  "reason": "Hosted baseline CI intentionally has no Google Maps provider credential or fixed GPU reference hardware. Live-provider performance remains a separate owner release gate and is not fabricated here."
+}

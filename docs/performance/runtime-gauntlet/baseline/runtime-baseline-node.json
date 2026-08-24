@@ -1,0 +1,434 @@
+{
+  "schemaVersion": 2,
+  "environment": {
+    "generatedAt": "2026-08-24T08:01:25.457Z",
+    "node": "v22.23.2",
+    "platform": "linux",
+    "arch": "x64",
+    "cpuCount": 4,
+    "cpuModel": "INTEL(R) XEON(R) PLATINUM 8573C",
+    "totalMemoryBytes": 16765370368,
+    "processArgs": [
+      "/opt/hostedtoolcache/node/22.23.2/x64/bin/node",
+      "/home/runner/work/goDiesel/goDiesel/app/node_modules/vitest/dist/workers/forks.js"
+    ]
+  },
+  "corpus": {
+    "currentManifestBytes": 498249,
+    "currentRouteCount": 67,
+    "currentCompletedRouteCount": 66,
+    "currentDetailCount": 67,
+    "sourceBackedReplicaCount": 2500,
+    "sourceBackedRouteCount": 67,
+    "sourceBackedTraceLengths": [
+      96
+    ],
+    "sourceBackedFinderCandidateReplicaCount": 10000,
+    "sourceFinderCandidateCount": 4,
+    "syntheticLongRoutePointCount": 50000,
+    "largestCurrentDetailSlug": "9845102380",
+    "largestCurrentDetailPointCount": 2949,
+    "methodology": "The 2,500-route corpus cycles through every real generated route and preserves each source route's geometry and attributes. Only route identity is replicated to exercise production cardinality."
+  },
+  "benchmarks": [
+    {
+      "name": "manifest-json-and-summary-parse",
+      "samplesMs": [
+        5.359962999999993,
+        3.032220000000052,
+        3.274991,
+        3.2221289999999954,
+        2.9581499999999323,
+        3.0043699999999944,
+        3.055796999999984,
+        3.5672340000000986,
+        2.953444999999988,
+        2.900765999999976,
+        2.97018300000002,
+        2.950150000000008,
+        2.94662500000004,
+        4.247092000000066,
+        3.063474999999926,
+        3.080693999999994,
+        2.9412379999999985,
+        2.932653999999957,
+        2.9290019999999686,
+        2.9792320000000245
+      ],
+      "p50Ms": 2.9792320000000245,
+      "p95Ms": 4.247092000000066,
+      "p99Ms": 5.359962999999993,
+      "meanMs": 3.218470500000001,
+      "operationsPerSample": 67,
+      "p50UsPerOperation": 44.46614925373171,
+      "p95UsPerOperation": 63.38943283582188,
+      "p99UsPerOperation": 79.99944776119393,
+      "resultDigest": {
+        "count": 67,
+        "orderDigest": "c79b9989"
+      },
+      "memoryBefore": {
+        "rss": 141979648,
+        "heapTotal": 77299712,
+        "heapUsed": 54421360,
+        "external": 2208806,
+        "arrayBuffers": 19951
+      },
+      "memoryAfter": {
+        "rss": 158887936,
+        "heapTotal": 93814784,
+        "heapUsed": 75009704,
+        "external": 2208846,
+        "arrayBuffers": 19951
+      }
+    },
+    {
+      "name": "route-lookup-current-library",
+      "samplesMs": [
+        0.48036899999999605,
+        0.5171770000000606,
+        0.4664020000000164,
+        0.4754530000000159,
+        0.45523499999990236,
+        0.4862600000000157,
+        0.5066049999999223,
+        0.5367039999999861,
+        0.5153540000000021,
+        0.511019000000033,
+        0.49547500000005584,
+        0.510672999999997,
+        0.5017239999999674,
+        0.46333000000004176,
+        0.48158300000000054
+      ],
+      "p50Ms": 0.49547500000005584,
+      "p95Ms": 0.5367039999999861,
+      "p99Ms": 0.5367039999999861,
+      "meanMs": 0.4935575333333342,
+      "operationsPerSample": 5000,
+      "p50UsPerOperation": 0.09909500000001117,
+      "p95UsPerOperation": 0.10734079999999721,
+      "p99UsPerOperation": 0.10734079999999721,
+      "resultDigest": {
+        "count": 5000,
+        "digest": "c839dbfa"
+      },
+      "memoryBefore": {
+        "rss": 159576064,
+        "heapTotal": 94863360,
+        "heapUsed": 60402904,
+        "external": 2208846,
+        "arrayBuffers": 19951
+      },
+      "memoryAfter": {
+        "rss": 159576064,
+        "heapTotal": 94863360,
+        "heapUsed": 61063464,
+        "external": 2208846,
+        "arrayBuffers": 19951
+      }
+    },
+    {
+      "name": "route-lookup-2,500-source-backed-replicas",
+      "samplesMs": [
+        22.977621,
+        24.19067999999993,
+        22.873759999999947,
+        22.894407999999885,
+        23.06939199999988,
+        23.766014999999925,
+        22.947889999999916,
+        25.321329000000105,
+        23.80092599999989,
+        22.879239000000098,
+        23.21759300000008,
+        23.05906899999991,
+        23.54883400000017,
+        23.24364400000013,
+        23.03972399999998
+      ],
+      "p50Ms": 23.06939199999988,
+      "p95Ms": 25.321329000000105,
+      "p99Ms": 25.321329000000105,
+      "meanMs": 23.388674933333323,
+      "operationsPerSample": 5000,
+      "p50UsPerOperation": 4.613878399999976,
+      "p95UsPerOperation": 5.064265800000022,
+      "p99UsPerOperation": 5.064265800000022,
+      "resultDigest": {
+        "count": 5000,
+        "digest": "9de5667a"
+      },
+      "memoryBefore": {
+        "rss": 159838208,
+        "heapTotal": 94863360,
+        "heapUsed": 61879520,
+        "external": 2208846,
+        "arrayBuffers": 19951
+      },
+      "memoryAfter": {
+        "rss": 159838208,
+        "heapTotal": 94863360,
+        "heapUsed": 62516168,
+        "external": 2208846,
+        "arrayBuffers": 19951
+      }
+    },
+    {
+      "name": "region-build-2,500-source-backed-replicas",
+      "samplesMs": [
+        53.14487999999983,
+        50.4378270000002,
+        49.75446299999999,
+        48.94520599999987,
+        50.569162000000006,
+        52.64637300000004,
+        50.09129699999994,
+        48.63208200000008,
+        52.18264900000008,
+        51.533176999999796,
+        51.61504300000024,
+        51.886769000000186,
+        50.33178399999997,
+        51.119574000000284,
+        49.620326000000205,
+        51.5796049999999,
+        52.53959799999984,
+        50.021372000000156,
+        52.25947300000007,
+        51.51353800000015
+      ],
+      "p50Ms": 51.119574000000284,
+      "p95Ms": 52.64637300000004,
+      "p99Ms": 53.14487999999983,
+      "meanMs": 51.021209900000045,
+      "operationsPerSample": 2500,
+      "p50UsPerOperation": 20.447829600000112,
+      "p95UsPerOperation": 21.058549200000016,
+      "p99UsPerOperation": 21.257951999999932,
+      "resultDigest": {
+        "count": 29,
+        "orderDigest": "38c12258"
+      },
+      "memoryBefore": {
+        "rss": 163344384,
+        "heapTotal": 97665024,
+        "heapUsed": 65887168,
+        "external": 2208846,
+        "arrayBuffers": 19951
+      },
+      "memoryAfter": {
+        "rss": 179032064,
+        "heapTotal": 113344512,
+        "heapUsed": 80608672,
+        "external": 2208846,
+        "arrayBuffers": 19951
+      }
+    },
+    {
+      "name": "routes-filter-matrix-2,500-source-backed-replicas",
+      "samplesMs": [
+        0.8825819999997293,
+        0.8700180000000728,
+        0.862622999999985,
+        0.94729899999993,
+        0.8821060000000216,
+        1.1928840000000491,
+        0.8742069999998421,
+        0.8132190000001174,
+        0.8456660000001648,
+        0.8630499999999302,
+        0.888151999999991,
+        0.8885199999999713,
+        0.8389690000003611,
+        0.8246659999999792,
+        0.8155639999999948,
+        0.8380459999998493,
+        0.8321930000001885,
+        1.1550230000002557,
+        0.835645999999997,
+        0.8136370000001989,
+        0.8091669999998885,
+        0.9048290000000634,
+        0.8127169999997932,
+        0.8413139999997838,
+        0.8426580000000286
+      ],
+      "p50Ms": 0.8456660000001648,
+      "p95Ms": 1.1550230000002557,
+      "p99Ms": 1.1928840000000491,
+      "meanMs": 0.8789902000000075,
+      "operationsPerSample": 10000,
+      "p50UsPerOperation": 0.08456660000001648,
+      "p95UsPerOperation": 0.11550230000002557,
+      "p99UsPerOperation": 0.11928840000000492,
+      "resultDigest": {
+        "counts": [
+          114,
+          76,
+          0,
+          0
+        ],
+        "digests": [
+          "b7eadc0a",
+          "22b91839",
+          "811c9dc5",
+          "811c9dc5"
+        ]
+      },
+      "memoryBefore": {
+        "rss": 179294208,
+        "heapTotal": 113344512,
+        "heapUsed": 85869392,
+        "external": 2208846,
+        "arrayBuffers": 19951
+      },
+      "memoryAfter": {
+        "rss": 179294208,
+        "heapTotal": 113606656,
+        "heapUsed": 88750448,
+        "external": 2208846,
+        "arrayBuffers": 19951
+      }
+    },
+    {
+      "name": "finder-search-10,000-source-backed-replicas",
+      "samplesMs": [
+        2.784635999999864,
+        2.797892999999931,
+        2.973059999999805,
+        2.747045000000071,
+        2.7535760000000664,
+        2.823206999999911,
+        2.9938969999998335,
+        2.790827000000263,
+        2.749565000000075,
+        2.784135999999762,
+        2.9229400000003807,
+        2.7990639999998166,
+        2.8186430000000655,
+        2.7881790000001274,
+        2.993670000000293,
+        2.8208260000001246,
+        2.8678030000000945,
+        2.8674730000002455,
+        2.9343840000001364,
+        2.7273230000000694,
+        2.7650760000001355,
+        3.040038000000095,
+        2.7808939999999893,
+        2.8096959999998035,
+        2.805692000000363
+      ],
+      "p50Ms": 2.805692000000363,
+      "p95Ms": 2.9938969999998335,
+      "p99Ms": 3.040038000000095,
+      "meanMs": 2.837581720000053,
+      "operationsPerSample": 10000,
+      "p50UsPerOperation": 0.28056920000003627,
+      "p95UsPerOperation": 0.2993896999999833,
+      "p99UsPerOperation": 0.3040038000000095,
+      "resultDigest": {
+        "status": "matches",
+        "count": 2500,
+        "digest": "c8491a57"
+      },
+      "memoryBefore": {
+        "rss": 179294208,
+        "heapTotal": 113606656,
+        "heapUsed": 85102976,
+        "external": 2208846,
+        "arrayBuffers": 19951
+      },
+      "memoryAfter": {
+        "rss": 179294208,
+        "heapTotal": 113606656,
+        "heapUsed": 90575008,
+        "external": 2208846,
+        "arrayBuffers": 19951
+      }
+    },
+    {
+      "name": "route-path-pose-50,000-points",
+      "samplesMs": [
+        75.82257500000014,
+        75.48279400000001,
+        75.9308289999999,
+        56.82748400000037,
+        52.41560400000026,
+        52.798165000000154,
+        52.48151400000006,
+        52.607154000000264,
+        53.04976499999975,
+        52.13440100000025
+      ],
+      "p50Ms": 52.798165000000154,
+      "p95Ms": 75.9308289999999,
+      "p99Ms": 75.9308289999999,
+      "meanMs": 59.95502850000012,
+      "operationsPerSample": 500,
+      "p50UsPerOperation": 105.59633000000031,
+      "p95UsPerOperation": 151.86165799999984,
+      "p99UsPerOperation": 151.86165799999984,
+      "resultDigest": {
+        "count": 500,
+        "digest": "638c3244"
+      },
+      "memoryBefore": {
+        "rss": 179425280,
+        "heapTotal": 113606656,
+        "heapUsed": 94408208,
+        "external": 2208846,
+        "arrayBuffers": 19951
+      },
+      "memoryAfter": {
+        "rss": 179949568,
+        "heapTotal": 113606656,
+        "heapUsed": 82842144,
+        "external": 2208846,
+        "arrayBuffers": 19951
+      }
+    },
+    {
+      "name": "replay-scene-frame-current-largest-route",
+      "samplesMs": [
+        21.437668999999914,
+        21.921522000000095,
+        22.060423999999784,
+        21.547084000000268,
+        21.373231999999916,
+        22.564624999999978,
+        21.6643839999997,
+        21.11997799999972,
+        21.354573000000073,
+        21.35026099999959
+      ],
+      "p50Ms": 21.437668999999914,
+      "p95Ms": 22.564624999999978,
+      "p99Ms": 22.564624999999978,
+      "meanMs": 21.639375199999904,
+      "operationsPerSample": 120,
+      "p50UsPerOperation": 178.64724166666596,
+      "p95UsPerOperation": 188.03854166666648,
+      "p99UsPerOperation": 188.03854166666648,
+      "resultDigest": {
+        "count": 120,
+        "digest": "33c589bb"
+      },
+      "memoryBefore": {
+        "rss": 180211712,
+        "heapTotal": 114393088,
+        "heapUsed": 78970464,
+        "external": 2208846,
+        "arrayBuffers": 19951
+      },
+      "memoryAfter": {
+        "rss": 183226368,
+        "heapTotal": 115179520,
+        "heapUsed": 86203248,
+        "external": 2208846,
+        "arrayBuffers": 19951
+      }
+    }
+  ]
+}
