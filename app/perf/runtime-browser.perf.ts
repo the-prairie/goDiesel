@@ -35,7 +35,8 @@ declare global {
     __runtimePerf?: {
       longTasks: Array<{ startTime: number; duration: number }>;
       frameIntervals: number[];
-      webglContexts: Set<unknown>;
+      seenWebglContexts: WeakSet<object>;
+      webglContextCount: number;
       reactCommits: number;
       reset: () => void;
     };
@@ -54,7 +55,8 @@ async function installInstrumentation(page: Page) {
     const state = {
       longTasks: [] as Array<{ startTime: number; duration: number }>,
       frameIntervals: [] as number[],
-      webglContexts: new Set<unknown>(),
+      seenWebglContexts: new WeakSet<object>(),
+      webglContextCount: 0,
       reactCommits: 0,
       reset() {
         this.longTasks.length = 0;
@@ -91,7 +93,10 @@ async function installInstrumentation(page: Page) {
       const context = originalGetContext.apply(this, args as never);
       const kind = args[0];
       if (context && (kind === "webgl" || kind === "webgl2" || kind === "experimental-webgl")) {
-        state.webglContexts.add(context);
+        if (typeof context === "object" && !state.seenWebglContexts.has(context)) {
+          state.seenWebglContexts.add(context);
+          state.webglContextCount += 1;
+        }
       }
       return context;
     } as typeof originalGetContext;
@@ -152,7 +157,7 @@ async function captureSample(
     return {
       longTasks: perf?.longTasks ?? [],
       frameIntervals: perf?.frameIntervals ?? [],
-      webglContextsCreated: perf?.webglContexts.size ?? 0,
+      webglContextsCreated: perf?.webglContextCount ?? 0,
       reactCommits: perf?.reactCommits ?? 0,
       resources: resources.map((resource) => ({
         name: resource.name.replace(location.origin, ""),
@@ -281,7 +286,7 @@ test("records cold/warm surface and transition baselines", async ({ page }, test
     await client.send("HeapProfiler.collectGarbage");
     const heap = await client.send("Runtime.getHeapUsage");
     const webglContextsCreated = await page.evaluate(
-      () => window.__runtimePerf?.webglContexts.size ?? 0,
+      () => window.__runtimePerf?.webglContextCount ?? 0,
     );
     await client.detach();
     transitionHeap.push({ cycle, usedHeapBytes: heap.usedSize, webglContextsCreated });
