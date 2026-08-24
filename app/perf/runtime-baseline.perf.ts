@@ -318,12 +318,16 @@ test("records the deterministic production-runtime baseline", () => {
     }),
   });
 
+  const canonicalFinderCandidate = curatedDiscoveryCandidates[0];
+  if (!canonicalFinderCandidate) {
+    throw new Error("The production Finder corpus is empty");
+  }
   const finderIntent: FinderIntent = {
-    place: "Kyoto",
-    activity: "Run",
-    distanceKm: 15,
-    terrain: "trail",
-    vibe: "playful exploratory",
+    place: canonicalFinderCandidate.route.region,
+    activity: canonicalFinderCandidate.route.type,
+    distanceKm: canonicalFinderCandidate.route.distanceKm,
+    terrain: "any",
+    vibe: "",
   };
   expect(
     searchDiscoveryCandidates(curatedDiscoveryCandidates, finderIntent),
