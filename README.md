@@ -90,7 +90,15 @@ Install and verify the deterministic archive in another local repository:
 ```
 
 Core v1 preserves exact route truth, deterministic procedural terrain, separate visual and physical meshes, navigation, quality-cell provenance, camera plans, integrity, and custody metadata.
-Its unavailable source categories remain explicit, and this compiler foundation does not promote Playable Earth or replace production Replay.
+Its unavailable source categories remain explicit, and the three fixed Core references remain in the Playable Earth lab rather than replacing production Replay.
+
+Rebuild the three committed browser-readable reference packs from the fixed corpus:
+
+```bash
+.venv/bin/python -m scripts.publish_reference_world_packs
+```
+
+The publication command compiles in a temporary repository, independently verifies each sealed pack, and atomically replaces only `app/public/world-packs`.
 
 ## Curate Routes
 
