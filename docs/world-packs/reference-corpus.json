@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "9d82ce0be05012a6a17e0f93bf06425158e926ed",
+  "routes": [
+    {
+      "id": "tokyo-urban",
+      "class": "dense-urban",
+      "slug": "17665674778",
+      "routeDetail": "app/public/data/routes/17665674778.json",
+      "corridorRadiusM": 1000,
+      "explorationRadiusM": 1600,
+      "qualityCellSizeM": 250,
+      "requiredCases": [
+        "dense-structures",
+        "road-alignment",
+        "crossings",
+        "route-discontinuities",
+        "world-edge-recovery"
+      ]
+    },
+    {
+      "id": "banff-mountain",
+      "class": "high-relief-mountain",
+      "slug": "15573295095",
+      "routeDetail": "app/public/data/routes/15573295095.json",
+      "corridorRadiusM": 1400,
+      "explorationRadiusM": 2200,
+      "qualityCellSizeM": 250,
+      "requiredCases": [
+        "steep-slopes",
+        "cliffs",
+        "trail-continuity",
+        "route-discontinuity",
+        "collision-recovery"
+      ]
+    },
+    {
+      "id": "ucluelet-coastal",
+      "class": "remote-coastal",
+      "slug": "6496900063",
+      "routeDetail": "app/public/data/routes/6496900063.json",
+      "corridorRadiusM": 1200,
+      "explorationRadiusM": 2000,
+      "qualityCellSizeM": 250,
+      "requiredCases": [
+        "coastline",
+        "water-boundary",
+        "forest",
+        "sparse-structures",
+        "trail-continuity"
+      ]
+    }
+  ]
+}
