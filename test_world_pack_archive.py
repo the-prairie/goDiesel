@@ -155,6 +155,28 @@ def test_clean_repository_import_preserves_pack_identity(tmp_path: Path):
     }
 
 
+def test_reimport_restores_corrupted_pack_and_quarantines_evidence(tmp_path: Path):
+    built = build_pack(tmp_path / "source-repository")
+    archive = export_pack(built.path, tmp_path / "portable.worldpack.zip")
+    repository = tmp_path / "target-repository"
+    imported = import_pack(archive.path, repository)
+    retained_source = imported.path / "sources/original/route-detail.json"
+    retained_source.chmod(0o644)
+    retained_source.write_bytes(b"corrupted installed source")
+
+    restored = import_pack(archive.path, repository)
+
+    assert restored.pack_id == built.pack_id
+    assert verify_pack(restored.path).status == "complete"
+    quarantined = list(
+        (repository / f"quarantine/tokyo-archive-test").glob(f"{built.pack_id}.*")
+    )
+    assert len(quarantined) == 1
+    assert (
+        quarantined[0] / "sources/original/route-detail.json"
+    ).read_bytes() == b"corrupted installed source"
+
+
 def write_malicious_archive(
     path: Path,
     entries: list[tuple[zipfile.ZipInfo | str, bytes]],

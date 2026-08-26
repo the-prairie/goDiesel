@@ -14,6 +14,7 @@ from pathlib import Path, PurePosixPath
 from .canonical import sha256_file, strict_json_load
 from .compiler import WorldPackCompiler
 from .errors import IntegrityError
+from .storage import ContentAddressedStore
 from .verification import verify_pack
 
 
@@ -153,7 +154,54 @@ def import_pack(
         pack_id = manifest.get("packId")
         if not isinstance(world_id, str) or not isinstance(pack_id, str):
             raise IntegrityError("imported pack identity is invalid")
-        result = WorldPackCompiler(repository)._promote(staging, world_id, pack_id)
+        compiler = WorldPackCompiler(repository)
+        final = compiler.packs / world_id / pack_id
+        quarantine: Path | None = None
+        if final.exists():
+            installed_identity = None
+            installed_manifest = final / "manifest.json"
+            current_pointer = final.parent / "current.json"
+            if installed_manifest.is_file():
+                try:
+                    installed_value = strict_json_load(installed_manifest)
+                    if isinstance(installed_value, dict):
+                        installed_identity = installed_value.get("packId")
+                except Exception:
+                    pass
+            if installed_identity is None and current_pointer.is_file():
+                try:
+                    current_value = strict_json_load(current_pointer)
+                    if isinstance(current_value, dict):
+                        installed_identity = current_value.get("packId")
+                except Exception:
+                    pass
+            if installed_identity != pack_id:
+                raise IntegrityError(
+                    f"conflicting pack directory has no matching identity: {final}"
+                )
+            try:
+                verify_pack(final)
+            except Exception:
+                quarantine = (
+                    repository
+                    / "quarantine"
+                    / world_id
+                    / f"{pack_id}.{uuid.uuid4().hex}"
+                )
+                quarantine.parent.mkdir(parents=True, exist_ok=True)
+                final.chmod(0o755)
+                os.replace(final, quarantine)
+        try:
+            result = compiler._promote(staging, world_id, pack_id)
+            _populate_content_store(result.path, repository)
+            verify_pack(result.path)
+        except Exception:
+            if quarantine is not None:
+                if final.exists():
+                    compiler._make_writable(final)
+                    shutil.rmtree(final)
+                os.replace(quarantine, final)
+            raise
         return ArchiveResult(
             result.path,
             sha256_file(archive_path),
@@ -165,3 +213,31 @@ def import_pack(
             WorldPackCompiler._make_writable(staging)
             shutil.rmtree(staging)
         raise
+
+
+def _populate_content_store(pack: Path, repository: Path) -> None:
+    manifest = strict_json_load(pack / "manifest.json")
+    if not isinstance(manifest, dict) or not isinstance(manifest.get("artifacts"), list):
+        raise IntegrityError("imported manifest artifact inventory is invalid")
+    store = ContentAddressedStore(repository / "objects")
+    for artifact in manifest["artifacts"]:
+        if not isinstance(artifact, dict):
+            raise IntegrityError("imported manifest artifact record is invalid")
+        logical_path = artifact.get("logicalPath")
+        media_type = artifact.get("mediaType")
+        format_version = artifact.get("formatVersion")
+        expected_digest = artifact.get("sha256")
+        if not all(
+            isinstance(value, str)
+            for value in (logical_path, media_type, format_version, expected_digest)
+        ):
+            raise IntegrityError("imported manifest artifact record is incomplete")
+        record = store.admit(
+            (pack / logical_path).read_bytes(),
+            media_type=media_type,
+            format_version=format_version,
+        )
+        if record.sha256 != expected_digest:
+            raise IntegrityError(
+                f"imported artifact digest changed during admission: {logical_path}"
+            )
