@@ -2,7 +2,7 @@
 
 import type { RouteLifecycle } from "@/domain/route/lifecycle";
 import type { RouteAnnotation, RouteAnnotationMedia, GeneratedQuestRoute, QuestRoute, ReplayMetadata, RouteCuration, RouteGeometryStatus, RoutePoint, RouteProvenance, RouteDiscontinuityKind, RouteDiscontinuitySource, RouteTemporalProvenance } from "@/domain/route/contract";
-import { curationFieldSet, curationFields, generatedRoute, numberValue, optionalCurationList, optionalCurationText, parsedRoutePoints, requiredSlug, stringValue, validTimeZone } from "@/domain/route/parse-shared";
+import { curationFieldSet, curationFields, generatedRoute, numberValue, optionalCurationList, optionalCurationText, parsedRouteIdentity, parsedRoutePoints, requiredSlug, stringValue, validTimeZone } from "@/domain/route/parse-shared";
 
 function validatedCuration(value: unknown): RouteCuration {
   if (value === undefined) return { reviewStatus: "draft" };
@@ -64,6 +64,18 @@ function validatedProvenance(
     throw new Error("provenance must be an object");
   }
   const source = value as Record<string, unknown>;
+  const elevationSource = source.elevation;
+  let elevation: RouteProvenance["elevation"] | undefined;
+  if (elevationSource !== undefined) {
+    if (!elevationSource || typeof elevationSource !== "object" || Array.isArray(elevationSource)) {
+      throw new Error("provenance.elevation must be an object");
+    }
+    const status = (elevationSource as Record<string, unknown>).status;
+    if (status !== "recorded" && status !== "unavailable") {
+      throw new Error("provenance.elevation.status must be recorded or unavailable");
+    }
+    elevation = { status };
+  }
   const temporalSource = source.temporal;
   if (!temporalSource || typeof temporalSource !== "object" || Array.isArray(temporalSource)) {
     throw new Error("provenance.temporal must be an object");
@@ -180,6 +192,7 @@ function validatedProvenance(
 
   return {
     temporal,
+    ...(elevation ? { elevation } : {}),
     track: { segmentCount },
     discontinuities,
   };
@@ -269,7 +282,7 @@ function validatedDetailFields(
 
   return {
     slug,
-    activityId: requiredStringField(input, "activity_id", false),
+    ...parsedRouteIdentity(input, slug),
     lifecycle,
     name: requiredStringField(input, "name", false),
     subtitle: requiredStringField(input, "subtitle"),
@@ -431,7 +444,18 @@ function validatedAnnotations(
 export function parseRouteDetail(value: unknown): QuestRoute {
   const input = generatedRoute(value, "Route detail");
   const slug = requiredSlug(input, "Route detail");
-  const parsedRoute = parsedRoutePoints(input.route);
+  const provenanceInput =
+    input.provenance && typeof input.provenance === "object"
+      ? (input.provenance as Record<string, unknown>)
+      : {};
+  const elevationInput =
+    provenanceInput.elevation && typeof provenanceInput.elevation === "object"
+      ? (provenanceInput.elevation as Record<string, unknown>)
+      : {};
+  const parsedRoute = parsedRoutePoints(
+    input.route,
+    elevationInput.status === "unavailable",
+  );
   const route = parsedRoute.points;
   const geometryStatus = parsedRoute.status;
   const midIdx = requiredNumberField(input, "mid_idx", { min: 0, integer: true });

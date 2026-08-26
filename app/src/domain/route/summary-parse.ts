@@ -2,7 +2,7 @@
 
 import { normalizeRouteLifecycle, type RouteLifecycle } from "@/domain/route/lifecycle";
 import type { GeneratedQuestRoute, ReplayMetadata, RouteGeometryStatus, RouteGuidePreview, RouteSummary } from "@/domain/route/contract";
-import { generatedRoute, numberValue, parsedRoutePoints, requiredSlug, stringValue } from "@/domain/route/parse-shared";
+import { generatedRoute, numberValue, parsedRouteIdentity, parsedRoutePoints, requiredSlug, stringValue } from "@/domain/route/parse-shared";
 
 function validatedGuidePreview(value: unknown): RouteGuidePreview {
   if (value === undefined) return { reviewStatus: "draft" };
@@ -70,10 +70,19 @@ function commonRouteFields(
   geometryStatus: RouteGeometryStatus,
 ) {
   const lifecycle = normalizeRouteLifecycle(input.lifecycle ?? input.status);
+  const provenance = input.provenance && typeof input.provenance === "object"
+    ? input.provenance as Record<string, unknown>
+    : {};
+  const elevation = provenance.elevation && typeof provenance.elevation === "object"
+    ? provenance.elevation as Record<string, unknown>
+    : {};
+  const elevationStatus = input.elevation_status === "unavailable" || elevation.status === "unavailable"
+    ? "unavailable" as const
+    : "recorded" as const;
 
   return {
     slug,
-    activityId: stringValue(input.activity_id, slug),
+    ...parsedRouteIdentity(input, slug),
     lifecycle,
     name: stringValue(input.name, "Untitled route"),
     subtitle: stringValue(input.subtitle),
@@ -82,6 +91,7 @@ function commonRouteFields(
     date: stringValue(input.date),
     distanceKm: numberValue(input.distance_km),
     elevationGainM: numberValue(input.elevation_gain_m),
+    elevationStatus,
     type: stringValue(input.type, "Run"),
     description: stringValue(input.description),
     completionRule: stringValue(input.completion_rule),
@@ -97,7 +107,18 @@ function commonRouteFields(
 export function parseRouteSummary(value: unknown): RouteSummary {
   const input = generatedRoute(value, "Route summary");
   const slug = requiredSlug(input, "Route summary");
-  const parsedTrace = parsedRoutePoints(input.trace);
+  const provenance =
+    input.provenance && typeof input.provenance === "object"
+      ? (input.provenance as Record<string, unknown>)
+      : {};
+  const elevation =
+    provenance.elevation && typeof provenance.elevation === "object"
+      ? (provenance.elevation as Record<string, unknown>)
+      : {};
+  const parsedTrace = parsedRoutePoints(
+    input.trace,
+    input.elevation_status === "unavailable" || elevation.status === "unavailable",
+  );
   const trace = parsedTrace.points;
   const geometryStatus =
     input.replay &&

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="goDiesel synthetic fixture" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><name>Untimed Route</name><trkseg>
+    <trkpt lat="51.0100" lon="-114.0100"><ele>1050</ele></trkpt>
+    <trkpt lat="51.0110" lon="-114.0120"><ele>1060</ele></trkpt>
+  </trkseg></trk>
+</gpx>

@@ -14,6 +14,7 @@ import json
 import os
 import math
 import re
+import signal
 import subprocess
 import sys
 import threading
@@ -37,12 +38,14 @@ from curation_publish import (
     publish_annotations,
     publish_curation,
 )
-from route_imports import route_metadata
+from route_imports import route_identity, route_metadata
 from route_media import (
     match_photo_to_route,
     publish_photo,
     read_photo_metadata,
 )
+from route_inbox import RouteInbox, route_inbox_origin_allowed
+from route_studio import RouteStudio, StudioConflict, StudioError, StudioNotFound
 
 try:
     import fitparse
@@ -75,9 +78,20 @@ MAX_POST_BYTES = 1024 * 1024
 # A photograph is far larger than a JSON body, and HEIC from a recent iPhone can
 # be several megabytes. This cap applies only to the media upload path.
 MAX_MEDIA_BYTES = 25 * 1024 * 1024
+MAX_STUDIO_SOURCE_BYTES = 25 * 1024 * 1024
 SLUG_PATTERN = re.compile(r'^[A-Za-z0-9._-]+$')
 MEDIA_ROOT = QUESTS / 'app' / 'public' / 'media'
 OWNER_MUTATION_LOCK = threading.Lock()
+STUDIO = RouteStudio(QUESTS)
+ROUTE_INBOX_ROOTS = tuple(
+    Path(value).expanduser()
+    for value in os.environ.get(
+        "GODIESEL_ROUTE_INBOX_ROOTS",
+        str(Path.home() / "Downloads"),
+    ).split(os.pathsep)
+    if value.strip()
+)
+ROUTE_INBOX = RouteInbox(STUDIO, ROUTE_INBOX_ROOTS)
 TEAL = '#00F19F'
 CURATION_TEXT_FIELDS = ('title', 'theme', 'difficulty', 'blurb', 'completion_rule')
 CURATION_VISIBILITIES = ('public', 'hidden')
@@ -214,7 +228,7 @@ def build_geo_cache():
         except Exception:
             cache = {}
     cfg = json.loads((QUESTS / 'quests.json').read_text())
-    all_ids = [r['activity_id'] for r in cfg.get('routes', [])]
+    all_ids = [route_identity(route)[0] for route in cfg.get('routes', [])]
     todo = [aid for aid in all_ids if aid not in cache]
     if not todo:
         return cache
@@ -515,8 +529,8 @@ def routes_summary():
         generated_routes = {}
     out = []
     for r in cfg.get('routes', []):
-        aid = r['activity_id']
-        act = acts_by_id.get(aid)
+        aid, activity_id, _identity_kind = route_identity(r)
+        act = acts_by_id.get(activity_id) if activity_id is not None else None
         # An imported route describes itself in quests.json and has no export
         # row. Resolve metadata through the shared adapter so both source kinds
         # reach the curator. Skipping here is what made an imported route
@@ -595,8 +609,8 @@ class Handler(BaseHTTPRequestHandler):
         if origin in ALLOWED_ORIGINS:
             self.send_header('Access-Control-Allow-Origin', origin)
             self.send_header('Vary', 'Origin')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-Source-Filename')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
         self.end_headers()
 
     def do_GET(self):
@@ -619,6 +633,76 @@ class Handler(BaseHTTPRequestHandler):
                     if manifest_path.exists() else None
                 ),
             })
+            return
+        if path == '/api/studio/jobs':
+            self._send(200, STUDIO.list_jobs())
+            return
+        if path == '/api/studio/inbox':
+            if not route_inbox_origin_allowed(self.headers, ALLOWED_ORIGINS):
+                self._send(403, {'error': 'origin not allowed'})
+                return
+            try:
+                self._send(200, ROUTE_INBOX.list_entries())
+            except OSError as error:
+                self._send(409, {'error': str(error)})
+            return
+        if path == '/api/owner/routes':
+            try:
+                self._send(200, {'routes': STUDIO.owner_routes()})
+            except (OSError, ValueError, StudioError) as error:
+                self._send(409, {'error': str(error)})
+            return
+        owner_route_match = re.fullmatch(r'/api/owner/routes/([^/]+)', path)
+        if owner_route_match:
+            try:
+                matches = [
+                    route for route in STUDIO.owner_routes()
+                    if route.get('slug') == owner_route_match.group(1)
+                ]
+            except (OSError, ValueError, StudioError) as error:
+                self._send(409, {'error': str(error)})
+                return
+            if len(matches) != 1:
+                self._send(404, {'error': 'owner route was not found'})
+                return
+            self._send(200, matches[0])
+            return
+        artifact_match = re.fullmatch(r'/api/studio/artifacts/([^/]+)/([^/]+)', path)
+        if artifact_match:
+            job_id, filename = artifact_match.groups()
+            try:
+                job = STUDIO.get_job(job_id)
+            except StudioNotFound as error:
+                self._send(404, {'error': str(error)})
+                return
+            expected = f'.route-studio/artifacts/{job_id}/{filename}'
+            if not any(item.get('path') == expected for item in job.get('artifacts', [])):
+                self._send(404, {'error': 'Studio artifact was not found'})
+                return
+            artifact_path = (QUESTS / expected).resolve()
+            artifact_root = (QUESTS / '.route-studio' / 'artifacts' / job_id).resolve()
+            if artifact_path.parent != artifact_root or not artifact_path.is_file():
+                self._send(404, {'error': 'Studio artifact was not found'})
+                return
+            self._send(200, artifact_path.read_bytes(), 'video/mp4')
+            return
+        studio_match = re.fullmatch(r'/api/studio/jobs/([^/]+)(?:/(events|route))?', path)
+        if studio_match:
+            job_id, resource = studio_match.groups()
+            try:
+                if resource == 'events':
+                    payload = STUDIO.events(job_id)
+                elif resource == 'route':
+                    payload = STUDIO.staged_route(job_id)
+                else:
+                    payload = STUDIO.get_job(job_id)
+            except StudioNotFound as error:
+                self._send(404, {'error': str(error)})
+                return
+            except StudioConflict as error:
+                self._send(409, {'error': str(error)})
+                return
+            self._send(200, payload)
             return
         if path.startswith('/api/polyline/'):
             aid = path.rsplit('/', 1)[1]
@@ -711,6 +795,32 @@ class Handler(BaseHTTPRequestHandler):
             finally:
                 OWNER_MUTATION_LOCK.release()
             return
+        if path == '/api/studio/sources':
+            if not OWNER_MUTATION_LOCK.acquire(blocking=False):
+                self._send(409, {'error': 'another owner mutation is in progress'})
+                return
+            try:
+                try:
+                    length = int(self.headers.get('Content-Length', 0))
+                except ValueError:
+                    self._send(400, {'error': 'invalid Content-Length'})
+                    return
+                if length <= 0:
+                    self._send(400, {'error': 'empty route source'})
+                    return
+                if length > MAX_STUDIO_SOURCE_BYTES:
+                    self._send(413, {'error': 'route source exceeds the 25 MiB limit'})
+                    return
+                filename = self.headers.get('X-Source-Filename', '')
+                payload = self.rfile.read(length)
+                result = STUDIO.upload(filename, payload)
+            except StudioError as error:
+                self._send(400, {'error': str(error)})
+                return
+            finally:
+                OWNER_MUTATION_LOCK.release()
+            self._send(201, result)
+            return
         try:
             n = int(self.headers.get('Content-Length', 0))
         except ValueError:
@@ -726,6 +836,77 @@ class Handler(BaseHTTPRequestHandler):
             body = self.rfile.read(n).decode('utf-8') if n else ''
         except UnicodeDecodeError:
             self._send(400, {'error': 'request body must be UTF-8'})
+            return
+        inbox_match = re.fullmatch(r'/api/studio/inbox/([a-f0-9]{24})/import', path)
+        if inbox_match:
+            if not OWNER_MUTATION_LOCK.acquire(blocking=False):
+                self._send(409, {'error': 'another owner mutation is in progress'})
+                return
+            try:
+                result = ROUTE_INBOX.import_entry(inbox_match.group(1))
+            except (OSError, StudioError, ValueError) as error:
+                self._send(400, {'error': str(error)})
+                return
+            finally:
+                OWNER_MUTATION_LOCK.release()
+            self._send(200, result)
+            return
+        studio_match = re.fullmatch(
+            r'/api/studio/jobs/([^/]+)/(select-geometry|metadata|compile|render|cancel|retry|promote)',
+            path,
+        )
+        if studio_match:
+            job_id, action = studio_match.groups()
+            try:
+                data = json.loads(body or '{}')
+                def rebuild_studio_route():
+                    subprocess.run(
+                        [sys.executable, str(QUESTS / 'build.py')],
+                        cwd=str(QUESTS),
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    )
+                if action == 'select-geometry':
+                    result = STUDIO.select_geometry(job_id, data['candidate_id'])
+                elif action == 'metadata':
+                    result = STUDIO.set_metadata(job_id, data)
+                elif action == 'compile':
+                    result = STUDIO.compile(job_id)
+                elif action == 'render':
+                    result = STUDIO.render(job_id, base_url=data.get('base_url', 'http://127.0.0.1:8787'))
+                elif action == 'cancel':
+                    result = STUDIO.cancel(job_id)
+                elif action == 'retry':
+                    if not OWNER_MUTATION_LOCK.acquire(blocking=False):
+                        self._send(409, {'error': 'another owner mutation is in progress'})
+                        return
+                    try:
+                        result = STUDIO.retry(
+                            job_id,
+                            base_url=data.get('base_url', 'http://127.0.0.1:8787'),
+                            rebuild=rebuild_studio_route,
+                        )
+                    finally:
+                        OWNER_MUTATION_LOCK.release()
+                else:
+                    if not OWNER_MUTATION_LOCK.acquire(blocking=False):
+                        self._send(409, {'error': 'another owner mutation is in progress'})
+                        return
+                    try:
+                        result = STUDIO.promote(job_id, rebuild=rebuild_studio_route)
+                    finally:
+                        OWNER_MUTATION_LOCK.release()
+            except StudioNotFound as error:
+                self._send(404, {'error': str(error)})
+                return
+            except (StudioConflict, KeyError) as error:
+                self._send(409, {'error': str(error)})
+                return
+            except (StudioError, TypeError, ValueError, json.JSONDecodeError) as error:
+                self._send(400, {'error': str(error)})
+                return
+            self._send(200, result)
             return
         if path == '/api/save':
             if not OWNER_MUTATION_LOCK.acquire(blocking=False):
@@ -743,10 +924,13 @@ class Handler(BaseHTTPRequestHandler):
                 routes = cfg.get('routes')
                 if not isinstance(routes, list):
                     raise ValueError('quests.json must contain a routes list')
-                route_ids = [route.get('activity_id') for route in routes]
+                route_ids = [route.get('route_id') or route.get('activity_id') for route in routes]
                 if len(route_ids) != len(set(route_ids)):
                     raise ValueError('quests.json contains duplicate activity ids')
-                by_id = {route['activity_id']: route for route in routes}
+                by_id = {
+                    route.get('route_id') or route.get('activity_id'): route
+                    for route in routes
+                }
                 updated = 0
                 for update in updates:
                     aid = update['activity_id']
@@ -842,7 +1026,7 @@ class Handler(BaseHTTPRequestHandler):
                 config = json.loads(original)
                 matching = [
                     route for route in config.get('routes', [])
-                    if str(route.get('activity_id')) == activity_id
+                    if str(route.get('route_id') or route.get('activity_id')) == activity_id
                 ]
                 if len(matching) != 1:
                     raise ValueError(f'route {activity_id} was not found')
@@ -898,15 +1082,38 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._send(404, {'error': 'not found'})
 
+    def do_DELETE(self):
+        path = urlparse(self.path).path
+        if not self._origin_allowed():
+            self._send(403, {'error': 'origin not allowed'})
+            return
+        match = re.fullmatch(r'/api/studio/jobs/([^/]+)', path)
+        if not match:
+            self._send(404, {'error': 'not found'})
+            return
+        try:
+            STUDIO.delete(match.group(1))
+        except StudioNotFound as error:
+            self._send(404, {'error': str(error)})
+            return
+        self._send(200, {'ok': True})
+
 
 def main():
     server = ThreadingHTTPServer(('127.0.0.1', PORT), Handler)
+    def stop(_signum, _frame):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGINT, stop)
+    signal.signal(signal.SIGTERM, stop)
     print(f'\n✓ Admin server running: http://localhost:{PORT}')
     print('  Press Ctrl+C to stop.\n')
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print('\nStopped.')
+    finally:
+        server.server_close()
+        STUDIO.close()
 
 
 if __name__ == '__main__':

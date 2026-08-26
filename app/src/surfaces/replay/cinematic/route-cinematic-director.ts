@@ -520,6 +520,19 @@ export function cinematicProfile(route: QuestRoute): CinematicProfile {
   return profile;
 }
 
+export function cinematicTurningIntensity(route: QuestRoute) {
+  let turningIntensityDeg = 0;
+  for (let index = 1; index < route.route.length - 1; index += 1) {
+    const incoming = bearingDegrees(route.route[index - 1], route.route[index]);
+    const outgoing = bearingDegrees(route.route[index], route.route[index + 1]);
+    turningIntensityDeg = Math.max(
+      turningIntensityDeg,
+      Math.abs(((outgoing - incoming + 540) % 360) - 180),
+    );
+  }
+  return turningIntensityDeg;
+}
+
 function looks(cut: CinematicCut): Record<string, CinematicLook> {
   const feature = {
     bloom: 0.1,

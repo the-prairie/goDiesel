@@ -61,7 +61,7 @@ export function CandidateRoute({
 
         <dl className={cn("grid grid-cols-3 gap-px overflow-hidden border border-line bg-line text-sm", compact && "hidden sm:grid")}>
           <Metric label="Distance" value={`${route.distanceKm.toFixed(1)} km`} />
-          <Metric label="Climb" value={`${route.elevationGainM.toLocaleString()} m`} />
+          <Metric label="Climb" value={route.elevationStatus === "unavailable" ? "Unavailable" : `${route.elevationGainM.toLocaleString()} m`} />
           <Metric label="Activity" value={route.type} />
         </dl>
 

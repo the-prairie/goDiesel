@@ -1,3 +1,4 @@
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -6,6 +7,7 @@ from datetime import date
 
 from route_imports import (
     IMPORTED_GPX,
+    OWNER_IMPORT,
     STRAVA_EXPORT,
     imported_route_from_spec,
     route_metadata,
@@ -14,6 +16,39 @@ from route_imports import (
 
 
 class ImportedRouteTest(unittest.TestCase):
+    def test_private_source_uses_durable_backup_and_validates_checksum(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "checkout"
+            durable_root = Path(directory) / "durable-sources"
+            root.mkdir()
+            backup = durable_root / "studio" / "route.gpx"
+            backup.parent.mkdir(parents=True)
+            payload = b"<gpx><trk><trkseg /></trk></gpx>"
+            backup.write_bytes(payload)
+            spec = {
+                "source_gpx": "route_sources/studio/route.gpx",
+                "source_backup": "studio/route.gpx",
+                "source_policy": "private-durable-backup",
+                "canonical_source_sha256": hashlib.sha256(payload).hexdigest(),
+                "activity_name": "Private ridge",
+                "activity_type": "Run",
+            }
+
+            imported = imported_route_from_spec(
+                spec,
+                root,
+                durable_source_root=durable_root,
+            )
+
+            self.assertEqual(imported.path, backup.resolve())
+            backup.write_bytes(b"tampered")
+            with self.assertRaisesRegex(ValueError, "checksum"):
+                imported_route_from_spec(
+                    spec,
+                    root,
+                    durable_source_root=durable_root,
+                )
+
     def test_loads_route_metadata_from_a_repo_owned_gpx(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -84,6 +119,22 @@ class RouteSourceKindTest(unittest.TestCase):
 
     def test_a_route_without_a_source_file_comes_from_the_strava_export(self):
         self.assertEqual(route_source_kind({"activity_id": "123"}), STRAVA_EXPORT)
+
+    def test_canonical_owner_import_requires_source_evidence(self):
+        self.assertEqual(
+            route_source_kind({
+                "source_gpx": "route_sources/studio/route.gpx",
+                "source_kind": OWNER_IMPORT,
+            }),
+            OWNER_IMPORT,
+        )
+        with self.assertRaisesRegex(ValueError, "requires a canonical source file"):
+            route_source_kind({"source_kind": OWNER_IMPORT})
+        with self.assertRaisesRegex(ValueError, "cannot use source_kind"):
+            route_source_kind({
+                "source_gpx": "route_sources/studio/route.gpx",
+                "source_kind": STRAVA_EXPORT,
+            })
 
 
 class _Row(dict):

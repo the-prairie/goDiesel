@@ -43,6 +43,7 @@ export type GoogleRouteTelemetry = RouteSceneTelemetry;
 
 export const GOOGLE_ROUTE_SPEEDS = [0.5, 1, 2, 4] as const;
 const REPLAY_DURATION_SECONDS = 210;
+export type RouteTelemetryClock = "source" | "cinematic";
 const manifestCache = new WeakMap<QuestRoute, RouteSceneManifest>();
 
 function clamp(value: number, minimum: number, maximum: number) {
@@ -158,13 +159,22 @@ export function googleRouteCameraPose(
 export function googleRouteTelemetry(
   route: QuestRoute,
   progressM: number,
+  clock: RouteTelemetryClock = "source",
 ): GoogleRouteTelemetry {
-  return resolveRouteSceneFrame(sceneManifest(route), {
+  const telemetry = resolveRouteSceneFrame(sceneManifest(route), {
     cameraMode: "chase",
     following: true,
     progressM,
     rangeScale: 1,
   }).telemetry;
+  if (clock === "source") return telemetry;
+  const totalDistanceM = Math.max(1, routeDistanceM(route));
+  return {
+    ...telemetry,
+    elapsedS: (Math.min(totalDistanceM, Math.max(0, progressM)) / totalDistanceM) *
+      REPLAY_DURATION_SECONDS,
+    paceSPerKm: undefined,
+  };
 }
 
 export function googleRouteThreadTreatment(
@@ -207,7 +217,7 @@ export function googleRouteThreadTreatment(
           ),
         }
       : trackingWindow;
-  const grade = Math.abs(telemetry.gradePercent);
+  const grade = Math.abs(telemetry.gradePercent ?? 0);
 
   return {
     endRatio: clamp((state.progressM + window.aheadM) / totalDistanceM, 0, 1),

@@ -11,6 +11,15 @@ from pipeline_verification import (
 )
 
 
+def test_approved_specs_accept_public_owner_import_identity(tmp_path):
+    (tmp_path / "quests.json").write_text(
+        '{"routes":[{"route_id":"route-owner","source_gpx":"route_sources/studio/route-owner.gpx","source_kind":"owner-import"}]}',
+        encoding="utf-8",
+    )
+
+    assert [spec["route_id"] for spec in approved_specs(tmp_path)] == ["route-owner"]
+
+
 @pytest.fixture(scope="module")
 def real_report():
     return verify_real_pipeline()
@@ -53,7 +62,7 @@ def test_real_route_sources_are_outside_generated_output_tree(real_report):
     generated_root = (ROOT / "app/public/data/routes").resolve()
 
     for route in report["inputs"]["routes"]:
-        assert route["source_kind"] in {"strava-export", "imported-gpx"}
+        assert route["source_kind"] in {"strava-export", "imported-gpx", "owner-import"}
         assert route["source_point_records"] >= route["published_points"] >= 2
     assert generated_root.is_dir()
 

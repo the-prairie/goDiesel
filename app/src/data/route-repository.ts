@@ -1,4 +1,5 @@
 import { parseRouteDetail, type QuestRoute } from "@/domain/route";
+import { loadOwnerRouteDetail } from "@/data/owner-route-repository";
 
 export type RouteDetailResult =
   | { status: "ready"; route: QuestRoute }
@@ -23,7 +24,22 @@ async function fetchRouteDetail(slug: string): Promise<RouteDetailResult> {
     return { status: "error", message: "Route data could not be loaded." };
   }
 
-  if (response.status === 404) return { status: "not-found" };
+  if (response.status === 404) {
+    try {
+      const ownerRoute = await loadOwnerRouteDetail(slug);
+      return ownerRoute
+        ? { status: "ready", route: ownerRoute }
+        : { status: "not-found" };
+    } catch (error) {
+      return {
+        status: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Owner route data could not be loaded.",
+      };
+    }
+  }
   if (!response.ok) {
     return {
       status: "error",

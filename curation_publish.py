@@ -140,20 +140,21 @@ def _now():
 
 
 def _with_annotations(record, normalized):
-    """Place annotations where a rebuild puts them: after curation, before lifecycle."""
-    return _with_key_before(record, "annotations", normalized, "lifecycle")
+    """Place annotations where the shared compiler puts them: before replay."""
+    return _with_key_before(record, "annotations", normalized, "replay")
 
 
 def _with_curation(record, normalized):
-    """Place curation where a rebuild puts it: immediately before lifecycle.
+    """Place curation where a rebuild puts it: immediately before replay.
 
-    build.py sets curation on the quest dict after the derived quest metadata
-    and before react_route_record appends lifecycle and replay. Appending
-    instead would still be valid JSON, but pipeline_verification.py
+    The shared route compiler appends editorial fields after the derived route
+    metadata and before replay. Appending instead would still be valid JSON, but
+    pipeline_verification.py
     byte-compares generated output against a fresh rebuild, so key order is
     part of the contract.
     """
-    return _with_key_before(record, "curation", normalized, "lifecycle")
+    before = "annotations" if "annotations" in record else "replay"
+    return _with_key_before(record, "curation", normalized, before)
 
 
 def _with_key_before(record, key, value, before):

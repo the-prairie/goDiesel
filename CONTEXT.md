@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-08
+last_updated: 2026-08-22
 status: canonical
 ---
 
@@ -39,9 +39,9 @@ sub-contexts and no translation layers between them.
 The central entity. A **route** is a real, specific path through the world,
 grounded in recorded activity data and enriched with owner curation.
 
-A route is identified by a **slug**, which is currently always its Strava
-**activity id** (for example `17665674778`). The slug is the stable public
-identifier and appears in every canonical URL.
+A route is identified by a stable **route id**, exposed as its **slug** in URLs.
+Existing Strava routes retain their numeric activity id as both route id and slug (for example `17665674778`).
+Owner-imported routes use a content-derived `route-<fingerprint>` identity and never pretend to have a Strava activity id.
 
 A route is **not** a segment, a plan, a workout, or a performance. Metrics exist
 to describe the experience, not to score it.
@@ -52,11 +52,15 @@ A row in the private Strava export (`../DieselDiaries/activities.csv`, 103
 columns). It supplies recorded fact: name, type, date, distance, elevation, and
 the pointer to its original **source file**.
 
-### Source file
+### Route source
 
-The original recorded geometry: a GPX or FIT file under `route_sources/`. Source
-files are the ground truth for geometry, elevation, and time. Nothing downstream
-may contradict them.
+The preserved geometry evidence for a route.
+It may be a GPX, FIT, KML, or KMZ file.
+Recorded fields in a route source are ground truth for geometry, elevation, and time; absent fields remain unavailable.
+Nothing downstream may contradict the source.
+Private promoted owner imports use the `private-durable-backup` policy.
+Their route specification records the canonical source checksum and a relative backup key.
+The local owner read model resolves a healthy canonical copy first, then the durable backup rooted at `GODIESEL_PRIVATE_ROUTE_SOURCE_ROOT` (defaulting to the user's Application Support directory), and refuses checksum drift or a missing source.
 
 ### Source kind
 
@@ -65,15 +69,21 @@ may contradict them.
 | Value | Meaning |
 | --- | --- |
 | `strava-export` | The activity row in the Strava export supplies the metadata. |
-| `imported-gpx` | The route has a `source_gpx` file. `quests.json` supplies the metadata. |
+| `owner-import` | Route Studio or an owner-managed canonical source supplies geometry. `quests.json` supplies owner metadata. |
 
-The value is **derived, never stored**, so it cannot drift away from the data it
-describes. `route_imports.route_source_kind()` is the single definition, and
-`route_imports.route_metadata()` is the single adapter. Both `build.py` and
-`admin.py` use them, so the generator and the curation surface cannot disagree
-about a route again.
+The value is derived for legacy routes and stored for canonical owner imports.
+`route_imports.route_source_kind()` validates the stored value against the
+presence of canonical source evidence, and `route_imports.route_metadata()` is
+the single adapter. Both `build.py` and `admin.py` use them, so the generator and
+the curation surface cannot disagree about a route again.
 
-Current data: 66 `strava-export`, 1 `imported-gpx`.
+Legacy `imported-gpx` inputs remain accepted and normalize to the owner-import concept.
+
+### Source format
+
+`source_format` names the file representation separately from its source kind.
+Supported canonical values are `fit`, `gpx`, `kml`, and `kmz`.
+Format never implies that a route was completed, recorded by Strava, or experienced by the owner.
 
 ### Master routes list
 
@@ -195,6 +205,13 @@ routing, and tests.
 The root redirects to Atlas. Atlas is the home of the product; the card gallery
 is not.
 
+**Route Studio** is an owner-only workflow within Admin at `#/admin/studio`.
+It preserves, inspects, stages, previews, renders, and promotes route sources without becoming a sixth public surface.
+Its **Export Inbox** discovers direct-child route exports inside explicit local folders and hands an eligible file to the same immutable-source workflow.
+Inbox discovery never publishes, recursively scans, follows symlinks, or treats unsupported source formats as successfully imported.
+Private promoted routes are rebuilt into a loopback-only owner read model: completed routes join local Atlas memories and discovered routes join Finder, while both remain absent from public generated bundles.
+The deployed read-only Admin never exposes upload or mutation controls.
+
 ### Related surface terms
 
 - **Leaf** — a single route's detail page, the field-guide page for one route.
@@ -210,6 +227,10 @@ is not.
 ## 7. Replay
 
 **Replay** is immersive playback of a recorded route through real-world imagery.
+
+**Preview** is an interactive inspection or cinematic presentation of a future, reference, or otherwise not-owner-completed route.
+Preview may use derived cinematic timing, but it must not claim recorded temporal progression or owner experience.
+Only an owner-confirmed completed route may use Replay language, and owner-recorded timing requires trustworthy source timestamps.
 
 **Replay mode** describes the intended visual world for a route:
 

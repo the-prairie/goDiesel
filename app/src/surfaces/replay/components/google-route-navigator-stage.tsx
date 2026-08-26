@@ -73,7 +73,7 @@ const CAMERA_MODES: Array<{
 
 interface GoogleRouteNavigatorStageProps {
   route: QuestRoute;
-  variant?: "lab" | "replay";
+  variant?: "lab" | "replay" | "preview";
   pickerRoutes?: RouteSummary[];
   backPath?: string;
   backLabel?: string;
@@ -90,6 +90,9 @@ export function GoogleRouteNavigatorStage({
 }: GoogleRouteNavigatorStageProps) {
   const navigate = useNavigate();
   const productionReplay = variant === "replay";
+  const studioPreview = variant === "preview";
+  const productExperience = productionReplay || studioPreview;
+  const experienceLabel = studioPreview ? "Preview" : "Replay";
   const containerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<GoogleRouteNavigatorEngine | undefined>(undefined);
   const cameraMotionRef = useRef<RouteCameraMotionState | undefined>(undefined);
@@ -102,9 +105,15 @@ export function GoogleRouteNavigatorStage({
     useState<GoogleRouteNavigatorStatus>(INITIAL_STATUS);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const totalDistanceM = routeDistanceM(route);
+  const elevationAvailable = route.provenance.elevation?.status !== "unavailable";
   const telemetry = useMemo(
-    () => googleRouteTelemetry(route, control.progressM),
-    [control.progressM, route],
+    () =>
+      googleRouteTelemetry(
+        route,
+        control.progressM,
+        studioPreview ? "cinematic" : "source",
+      ),
+    [control.progressM, route, studioPreview],
   );
   const cameraPose = useMemo(
     () => googleRouteCameraPose(route, control),
@@ -288,11 +297,11 @@ export function GoogleRouteNavigatorStage({
   return (
     <section
       aria-label={
-        productionReplay ? "Google 3D Replay" : "Google route navigator lab"
+        productExperience ? `Google 3D ${experienceLabel}` : "Google route navigator lab"
       }
       className={cn(
         "fixed right-0 top-0 z-[100] min-h-[34rem] overflow-hidden bg-[#081112]",
-        productionReplay
+        productExperience
           ? "bottom-[var(--mobile-navigation-height)] left-0 md:bottom-0 md:left-[var(--spine-rail-width)] lg:left-[var(--spine-width)]"
           : "bottom-0 left-0",
       )}
@@ -307,7 +316,7 @@ export function GoogleRouteNavigatorStage({
       data-engine="google-3d-maps"
       data-route-slug={route.slug}
       data-state={status.state}
-      data-testid={productionReplay ? "replay-stage" : "google-route-navigator"}
+      data-testid={studioPreview ? "studio-preview-stage" : productionReplay ? "replay-stage" : "google-route-navigator"}
     >
       <div
         aria-label={`Google photorealistic 3D view of ${route.name}`}
@@ -333,14 +342,14 @@ export function GoogleRouteNavigatorStage({
             <h1 className="truncate text-sm font-semibold">{route.region}</h1>
             <div className="truncate text-[11px] text-white/58">
               {route.distanceKm.toFixed(1)} km ·{" "}
-              {Math.round(route.elevationGainM)} m up · {route.type}
+              {elevationAvailable ? `${Math.round(route.elevationGainM)} m up` : "Elevation unavailable"} · {route.type}
             </div>
           </div>
         </div>
         <div className="pointer-events-auto flex items-center gap-2">
           <div className="hidden items-center gap-2 border-r border-white/15 pr-3 text-[10px] font-semibold uppercase text-white/62 sm:flex">
             <ScanLine aria-hidden="true" className="size-3.5 text-[#ef684e]" />
-            {productionReplay ? "Google 3D Replay" : "Field replay"}
+            {productExperience ? `Google 3D ${experienceLabel}` : "Field replay"}
           </div>
           <div className="flex items-center gap-1.5 text-[11px] text-white/72">
             {control.following ? (
@@ -357,7 +366,7 @@ export function GoogleRouteNavigatorStage({
           </div>
           <Button
             aria-expanded={settingsOpen}
-            aria-label="Replay settings"
+            aria-label={`${experienceLabel} settings`}
             className="text-white hover:bg-white/10 hover:text-white"
             onClick={() => setSettingsOpen((open) => !open)}
             size="icon-sm"
@@ -385,7 +394,8 @@ export function GoogleRouteNavigatorStage({
           control={control}
           onCommit={commitControl}
           route={route}
-          showFieldRoutes={!productionReplay}
+          experienceLabel={experienceLabel}
+          showFieldRoutes={!productExperience}
         />
       ) : null}
 
@@ -413,7 +423,7 @@ export function GoogleRouteNavigatorStage({
                 type="button"
               >
                 <MapPinned aria-hidden="true" />
-                Use Atlas replay
+                Use Atlas {experienceLabel.toLowerCase()}
               </Button>
             ) : null}
           </div>
@@ -422,7 +432,7 @@ export function GoogleRouteNavigatorStage({
 
       <div
         className="pointer-events-none absolute inset-x-0 bottom-0 z-30"
-        data-testid={productionReplay ? "replay-controls" : undefined}
+        data-testid={studioPreview ? "preview-controls" : productionReplay ? "replay-controls" : undefined}
       >
         <ExpandedReplayHud
           control={control}
@@ -432,6 +442,7 @@ export function GoogleRouteNavigatorStage({
           onTogglePlayback={togglePlayback}
           route={route}
           telemetry={telemetry}
+          telemetryClock={studioPreview ? "cinematic" : "source"}
           totalDistanceM={totalDistanceM}
         />
       </div>
@@ -468,6 +479,7 @@ function ExpandedReplayHud({
   onTogglePlayback,
   route,
   telemetry,
+  telemetryClock,
   totalDistanceM,
 }: ReplayHudProps) {
   return (
@@ -500,37 +512,47 @@ function ExpandedReplayHud({
           </div>
         </div>
 
-        <ReplayElevationScrubber
-          className="h-[4.75rem] border-0 md:h-[6.25rem]"
-          disabled={disabled}
-          onSeek={(progressM) =>
-            onCommit((current) =>
-              seekGoogleRouteNavigator(current, progressM, totalDistanceM),
-            )
-          }
-          progressM={control.progressM}
-          route={route}
-          tone="intelligence"
-          totalDistanceM={totalDistanceM}
-        />
+        {route.provenance.elevation?.status === "unavailable" ? (
+          <div className="grid h-[4.75rem] place-items-center border-0 px-4 text-xs text-white/58 md:h-[6.25rem]">
+            Elevation profile unavailable in the source
+          </div>
+        ) : (
+          <ReplayElevationScrubber
+            className="h-[4.75rem] border-0 md:h-[6.25rem]"
+            disabled={disabled}
+            onSeek={(progressM) =>
+              onCommit((current) =>
+                seekGoogleRouteNavigator(current, progressM, totalDistanceM),
+              )
+            }
+            progressM={control.progressM}
+            route={route}
+            tone="intelligence"
+            totalDistanceM={totalDistanceM}
+          />
+        )}
 
         <div className="col-span-2 flex min-w-0 items-center justify-between gap-2 border-t border-white/12 px-3 py-2 md:col-span-1 md:min-w-[27rem] md:gap-4 md:border-l md:border-t-0 md:px-4 md:py-3">
           <div className="grid min-w-0 flex-1 grid-cols-4 gap-x-2 md:gap-x-5 md:gap-y-2">
             <Metric
-              label="Elapsed"
+              label={telemetryClock === "cinematic" ? "Cinematic time" : "Elapsed"}
               value={formatDuration(telemetry.elapsedS)}
             />
             <Metric
               label="Pace"
-              value={formatPace(telemetry.paceSPerKm, route.type)}
+              value={
+                telemetryClock === "cinematic"
+                  ? "Not shown"
+                  : formatPace(telemetry.paceSPerKm, route.type)
+              }
             />
             <Metric
               label="Elevation"
-              value={`${Math.round(telemetry.elevationM)} m`}
+              value={route.provenance.elevation?.status === "unavailable" ? "Unavailable" : `${Math.round(telemetry.elevationM ?? 0)} m`}
             />
             <Metric
               label="Grade"
-              value={`${telemetry.gradePercent >= 0 ? "+" : ""}${telemetry.gradePercent.toFixed(1)}%`}
+              value={route.provenance.elevation?.status === "unavailable" ? "Unavailable" : `${(telemetry.gradePercent ?? 0) >= 0 ? "+" : ""}${(telemetry.gradePercent ?? 0).toFixed(1)}%`}
             />
           </div>
           <div className="flex items-center gap-2">
@@ -561,24 +583,26 @@ function ExpandedReplayHud({
 
 function ReplaySettings({
   control,
+  experienceLabel,
   onCommit,
   route,
   showFieldRoutes,
 }: {
   control: GoogleRouteNavigatorState;
+  experienceLabel: "Preview" | "Replay";
   onCommit: ReplayHudProps["onCommit"];
   route: QuestRoute;
   showFieldRoutes: boolean;
 }) {
   return (
     <aside
-      aria-label="Replay settings panel"
+      aria-label={`${experienceLabel} settings panel`}
       className="absolute right-3 top-14 z-40 w-[min(21rem,calc(100%-1.5rem))] border border-white/18 bg-[#081011]/94 p-4 text-white shadow-2xl backdrop-blur-xl sm:right-5"
     >
       <div className="flex items-center justify-between">
         <div>
           <div className="text-[9px] font-semibold uppercase text-[#ef684e]">
-            Replay settings
+            {experienceLabel} settings
           </div>
           <div className="mt-1 text-sm font-semibold">{route.region}</div>
         </div>
@@ -806,6 +830,7 @@ interface ReplayHudProps {
   onTogglePlayback: () => void;
   route: QuestRoute;
   telemetry: ReturnType<typeof googleRouteTelemetry>;
+  telemetryClock: "source" | "cinematic";
   totalDistanceM: number;
 }
 

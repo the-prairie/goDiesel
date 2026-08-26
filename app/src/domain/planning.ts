@@ -14,7 +14,7 @@ export interface FinderIntent {
 export interface DiscoveryCandidate {
   id: string;
   sourceRouteSlug: string;
-  sourceLabel: "Owner-curated from recorded GPX";
+  sourceLabel: "Owner-curated route source";
   terrain: Exclude<FinderTerrain, "any">[];
   vibes: string[];
   route: RouteSummary;

@@ -253,6 +253,36 @@ describe("route film export", () => {
     expect(exportFingerprint(configuration)).toBe(manifest.fingerprint);
   });
 
+  it("invalidates cached frames when manifest or director versions change", () => {
+    const configuration = {
+      allowUnsettled: false,
+      captureHeight: 1080,
+      captureWidth: 1920,
+      cut: "feature",
+      directorVersion: 2,
+      durationSeconds: 17.5,
+      filmKind: "trailer",
+      fps: 24,
+      manifestVersion: 2,
+      motionSamples: 1,
+      qualityPolicyVersion: 1,
+      route: "route-private",
+      settleAttempts: 12,
+      settleDelayMs: 180,
+      stabilityPolicyVersion: 1,
+    };
+
+    expect(exportFingerprint({ ...configuration, manifestVersion: 3 })).not.toBe(
+      exportFingerprint(configuration),
+    );
+    expect(exportFingerprint({ ...configuration, directorVersion: 3 })).not.toBe(
+      exportFingerprint(configuration),
+    );
+    expect(exportFingerprint({ ...configuration, filmKind: "feature" })).not.toBe(
+      exportFingerprint(configuration),
+    );
+  });
+
   it("does not resume strict exports from diagnostic unsettled frames", () => {
     const frames = createFramePlan({
       durationSeconds: 1,

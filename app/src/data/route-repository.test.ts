@@ -11,6 +11,7 @@ describe("loadRouteDetail", () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
       .mockResolvedValueOnce(new Response(null, { status: 404 }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -19,6 +20,6 @@ describe("loadRouteDetail", () => {
       message: "Route data could not be loaded.",
     });
     await expect(loadRouteDetail("retry-route")).resolves.toEqual({ status: "not-found" });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });

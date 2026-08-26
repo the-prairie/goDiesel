@@ -19,12 +19,17 @@ import {
 import { RegionRouteCarousel } from "@/surfaces/atlas/components/region-route-carousel";
 import { AtlasSearch } from "@/surfaces/atlas/components/atlas-search";
 import { completedRoutes } from "@/data/routes";
+import {
+  mergeRouteSummaries,
+  useOwnerRoutes,
+} from "@/data/owner-route-repository";
 import { buildRouteRegions, type RouteRegion } from "@/data/route-regions";
 import { resolveAtlasSelection } from "@/surfaces/atlas/atlas-selection";
 import type { RouteSummary } from "@/domain/route";
 import { replayPath } from "@/app/route-paths";
 
 export function AtlasPage() {
+  const ownerRoutes = useOwnerRoutes();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const searchParamsRef = useRef(searchParams);
@@ -34,14 +39,21 @@ export function AtlasPage() {
   const activityParam = searchParams.get("activity");
   const mode: AtlasActivityMode =
     activityParam === "runs" || activityParam === "rides" ? activityParam : "all";
+  const localCompletedRoutes = useMemo(
+    () =>
+      mergeRouteSummaries(completedRoutes, ownerRoutes).filter(
+        (route) => route.lifecycle === "completed",
+      ),
+    [ownerRoutes],
+  );
   const visibleRoutes = useMemo(
     () =>
-      completedRoutes.filter((route) => {
+      localCompletedRoutes.filter((route) => {
         if (mode === "runs") return route.type === "Run";
         if (mode === "rides") return route.type === "Ride";
         return true;
       }),
-    [mode],
+    [localCompletedRoutes, mode],
   );
   const routeRegions = useMemo(() => buildRouteRegions(visibleRoutes), [visibleRoutes]);
   const selection = resolveAtlasSelection(searchParams, routeRegions);

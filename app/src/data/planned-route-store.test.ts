@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { curatedRouteDiscoveryProvider } from "@/data/discovery-provider";
+import { createCuratedRouteDiscoveryProvider } from "@/data/discovery-provider";
+import type { RouteSummary } from "@/domain/route";
 import {
   decodePlannedRouteStore,
   encodePlannedRouteStore,
@@ -15,6 +16,17 @@ const finderIntent: FinderIntent = {
   terrain: "mixed",
   vibe: "exploratory climbing",
 };
+const discoveryProvider = createCuratedRouteDiscoveryProvider([{
+  slug: "route-discovered",
+  lifecycle: "discovered",
+  region: "Kyoto",
+  type: "Run",
+  distanceKm: 21,
+  theme: "exploratory climbing",
+  trace: [{ lat: 35, lng: 135, elev: 10, d: 0 }, { lat: 35.1, lng: 135.1, elev: 20, d: 21_000 }],
+  guide: { reviewStatus: "draft" },
+  discovery: { terrain: ["mixed"], vibes: ["exploratory climbing"] },
+} as RouteSummary]);
 
 describe("planned route store", () => {
   beforeEach(() => {
@@ -30,12 +42,12 @@ describe("planned route store", () => {
   });
 
   it("persists a versioned planned route without making it replay eligible", () => {
-    const candidate = curatedRouteDiscoveryProvider.search(finderIntent).candidates[0];
+    const candidate = discoveryProvider.search(finderIntent).candidates[0];
     const result = savePlannedRoute(candidate, finderIntent, new Date("2026-07-14T12:00:00Z"));
 
     expect(result.created).toBe(true);
     expect(result.route).toMatchObject({
-      slug: "planned-owner-route-17654151284",
+      slug: "planned-owner-route-route-discovered",
       lifecycle: "planned",
       date: "2026-07-14",
       replay: {
@@ -43,8 +55,8 @@ describe("planned route store", () => {
         bestInEarth: false,
       },
       planning: {
-        candidateId: "owner-route-17654151284",
-        sourceRouteSlug: "17654151284",
+        candidateId: "owner-route-route-discovered",
+        sourceRouteSlug: "route-discovered",
         storeVersion: 1,
       },
     });
@@ -55,7 +67,7 @@ describe("planned route store", () => {
   });
 
   it("does not duplicate the same candidate", () => {
-    const candidate = curatedRouteDiscoveryProvider.search(finderIntent).candidates[0];
+    const candidate = discoveryProvider.search(finderIntent).candidates[0];
 
     expect(savePlannedRoute(candidate, finderIntent).created).toBe(true);
     expect(savePlannedRoute(candidate, finderIntent).created).toBe(false);

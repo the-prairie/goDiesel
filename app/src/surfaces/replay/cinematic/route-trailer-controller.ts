@@ -1,6 +1,7 @@
 import type { QuestRoute } from "@/domain/route";
 import type { GoogleRouteCameraPose } from "@/surfaces/replay/playback/route-navigator-controller";
 import { bearingDegrees, routeDistanceM, routePathPose } from "@/domain/geometry/route-path";
+import { routeExperienceManifest } from "@/surfaces/replay/cinematic/route-experience-manifest";
 
 export const ROUTE_TRAILER_DURATION_SECONDS = 17.5;
 
@@ -126,11 +127,14 @@ export function routeTrailerFrame(
   const elapsed = clamp(elapsedSeconds, 0, ROUTE_TRAILER_DURATION_SECONDS);
   const totalDistanceM = routeDistanceM(route);
   const progress = elapsed / ROUTE_TRAILER_DURATION_SECONDS;
+  const manifest = routeExperienceManifest(route);
+  const lineMoment = manifest.teaserTimeline.find((item) => item.chapter === "the-line")?.progressRatio ?? 0.28;
+  const terrainMoment = manifest.teaserTimeline.find((item) => item.chapter === "the-terrain")?.progressRatio ?? 0.55;
   const establishStart = overviewCamera(route, 1.48, -34, 30);
   const establishEnd = overviewCamera(route, 1.08, -12, 42);
   const revealEnd = overviewCamera(route, 0.58, 8, 57);
-  const pursuitStart = routeCamera(route, 0.12, 1_650, 49, 44);
-  const pursuitEnd = routeCamera(route, 0.62, 950, 58, 47);
+  const pursuitStart = routeCamera(route, clamp(lineMoment - 0.035), 1_650, 49, 44);
+  const pursuitEnd = routeCamera(route, clamp(terrainMoment + 0.035), 950, 58, 47);
   const resolveEnd = overviewCamera(route, 0.9, 24, 47);
 
   if (elapsed < 3.6) {

@@ -14,17 +14,10 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter
 import pillow_heif; pillow_heif.register_heif_opener()
 import pandas as pd
 
-from quest_meta import (
-    build_quest_meta,
-    build_replay_metadata,
-    build_route_curation,
-    elevation_gain_m,
-    route_guide_preview,
-)
-from route_provenance import build_route_provenance, load_source_route_points
-from route_annotations import build_route_annotations
-from route_imports import route_metadata, route_source_kind
-from route_timezones import route_time_zone
+from quest_meta import build_replay_metadata, route_guide_preview
+from route_compiler import RouteCompilationInput, compile_route_contract
+from route_provenance import load_source_route_points
+from route_imports import route_identity, route_metadata, route_source_format
 
 try: import imagehash
 except ImportError: imagehash = None
@@ -410,34 +403,45 @@ def region(lat, lng):
 print('[4/5] Building quests…')
 routes_data = []
 for spec in quest_specs:
-    aid = spec['activity_id']
-    act = acts_by_id.get(aid)
+    route_id, activity_id, identity_kind = route_identity(spec)
+    act = acts_by_id.get(activity_id) if activity_id is not None else None
     meta = route_metadata(spec, QUESTS, act)
     if meta is None:
-        print(f'    ✗ {aid}: not found in activities.csv'); continue
+        print(f'    ✗ {route_id}: not found in activities.csv'); continue
     source_kind = meta.source_kind
     name, date, typ, desc = meta.name, meta.date, meta.activity_type, meta.description
-    fp = meta.source_path or find_activity_file(aid)
+    fp = meta.source_path or find_activity_file(activity_id)
     if fp is None:
-        print(f'    ✗ {aid}: no .gpx/.fit file'); continue
-    route_provenance = build_route_provenance(load_source_route_points(fp))
-    route_js = route_provenance.route
-    if not route_js:
-        print(f'    ✗ {aid}: empty polyline'); continue
-    distance_km = route_js[-1]['d'] / 1000
+        print(f'    ✗ {route_id}: no .gpx/.fit file'); continue
+    source_points = tuple(load_source_route_points(fp))
+    positioned_points = [point for point in source_points if point.lat is not None and point.lng is not None]
+    if len(positioned_points) < 2:
+        print(f'    ✗ {route_id}: empty polyline'); continue
 
     # Auto-detect region if not specified
-    region_label = spec.get('region') or region(route_js[0]['lat'], route_js[0]['lng'])
-    temporal_provenance = dict(route_provenance.temporal)
-    time_zone = route_time_zone(region_label)
-    if temporal_provenance.get('status') == 'recorded' and time_zone:
-        temporal_provenance['time_zone'] = time_zone
-
-    # Slug from activity_id
-    slug = aid
-
-    lats = [p['lat'] for p in route_js]; lngs = [p['lng'] for p in route_js]
-    cx = (min(lats) + max(lats)) / 2; cy = (min(lngs) + max(lngs)) / 2
+    region_label = spec.get('region') or region(positioned_points[0].lat, positioned_points[0].lng)
+    lifecycle = spec.get('lifecycle', 'completed')
+    quest = compile_route_contract(RouteCompilationInput(
+        route_id=route_id,
+        activity_id=activity_id,
+        identity_kind=identity_kind,
+        source_kind=source_kind,
+        source_format=route_source_format(spec, fp),
+        activity_name=name,
+        activity_type=typ,
+        date=date,
+        description=desc,
+        region=region_label,
+        lifecycle=lifecycle,
+        source_points=source_points,
+        spec=spec,
+        elevation_status=str(spec.get(
+            'elevation_status',
+            'recorded' if all(point.elevation is not None for point in source_points) else 'unavailable',
+        )),
+    ), best_in_earth_ids=BEST_IN_EARTH_IDS)
+    route_js = quest['route']
+    distance_km = quest['distance_km']
     # Personal archive photos are intentionally not attached to quests. The
     # match radius was too broad and made the atlas feel untrustworthy.
     baseline_photos = []
@@ -447,62 +451,14 @@ for spec in quest_specs:
         'description': 'Stable route art shown without personal photo matching.',
     }
 
-    quest_meta = build_quest_meta(
-        activity_type=typ,
-        distance_km=round(distance_km, 1),
-        elevation_gain=elevation_gain_m(route_js),
-        region_label=region_label,
-        activity_name=name,
-    )
-    for _field, _target in (
-        ('theme', 'theme'),
-        ('difficulty', 'difficulty'),
-        ('completion_rule', 'completion_rule'),
-        ('blurb', 'quest_blurb'),
-    ):
-        if spec.get(_field):
-            quest_meta[_target] = str(spec[_field]).strip()
-
-    subtitle = str(spec.get('title') or name).strip()
-    lifecycle = spec.get('lifecycle', 'completed')
-    if lifecycle not in ('completed', 'planned', 'discovered'):
-        raise ValueError(f'Invalid lifecycle for {aid}: {lifecycle!r}')
-
-    quest = {
-        'slug': slug,
-        'activity_id': aid,
-        'source_kind': source_kind,
-        'name': region_label,
-        'subtitle': subtitle,
-        'activity_name': name,
-        'region': region_label,
-        'date': date,
-        'distance_km': round(distance_km, 1),
-        'type': typ,
-        'description': desc,
-        'route': route_js,
-        'provenance': {
-            'temporal': temporal_provenance,
-            'track': route_provenance.track,
-            'discontinuities': route_provenance.discontinuities,
-        },
-        'center_lat': cx, 'center_lng': cy,
-        'mid_idx': len(route_js) // 2,
+    quest.update({
         'baseline_photos': baseline_photos,
         'visual_source': visual_source,
         'svg': route_svg(route_js),
-        **quest_meta,
-    }
-    if spec.get('curation') is not None:
-        quest['curation'] = build_route_curation(spec['curation'])
-    if spec.get('annotations') is not None:
-        quest['annotations'] = build_route_annotations(
-            spec['annotations'], route_js[-1]['d']
-        )
-    quest['lifecycle'] = lifecycle
+    })
     routes_data.append(quest)
     # Generate share card
-    render_share_card(quest, baseline_photos, CARDS / f'{slug}.png')
+    render_share_card(quest, baseline_photos, CARDS / f'{route_id}.png')
     print(f'    ✓ {region_label:28s} {typ:5s} {distance_km:.1f}km · {len(baseline_photos)} photos · card saved')
 
 # Sort routes by date (newest first feels right for a portfolio)
@@ -524,13 +480,13 @@ curation_json = json.dumps({
 })
 
 def react_route_record(route):
-    aid = str(route.get('activity_id') or route.get('slug') or '')
+    aid = str(route.get('route_id') or route.get('activity_id') or route.get('slug') or '')
     point_count = len(route.get('route', []))
     lifecycle = route.get('lifecycle', 'completed')
     return {
         **route,
         'lifecycle': lifecycle,
-        'replay': build_replay_metadata(
+        'replay': route.get('replay') or build_replay_metadata(
             aid,
             point_count,
             BEST_IN_EARTH_IDS,
@@ -546,7 +502,7 @@ def simplify_route_for_manifest(points, max_points=96):
         indices = [round(index * last / (max_points - 1)) for index in range(max_points)]
         simplified = [points[index] for index in indices]
     return [
-        [point['lat'], point['lng'], point.get('elev', 0), point.get('d', 0)]
+        [point['lat'], point['lng'], point.get('elev'), point.get('d', 0)]
         for point in simplified
     ]
 
@@ -555,8 +511,11 @@ def react_route_manifest_record(route):
     guide_preview = route_guide_preview(record.get('curation'))
     return {
         'slug': record['slug'],
-        'activity_id': record['activity_id'],
+        'route_id': record.get('route_id', record['slug']),
+        **({'activity_id': record['activity_id']} if record.get('activity_id') else {}),
+        'identity_kind': record.get('identity_kind', 'strava-activity'),
         'source_kind': record.get('source_kind', 'strava-export'),
+        'source_format': record.get('source_format', 'gpx'),
         'lifecycle': record['lifecycle'],
         'name': record['name'],
         'subtitle': record['subtitle'],
@@ -565,6 +524,7 @@ def react_route_manifest_record(route):
         'date': record['date'],
         'distance_km': record['distance_km'],
         'elevation_gain_m': record['elevation_gain_m'],
+        'elevation_status': record.get('provenance', {}).get('elevation', {}).get('status', 'recorded'),
         'type': record['type'],
         'description': record['description'],
         'completion_rule': record['completion_rule'],

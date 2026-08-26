@@ -50,7 +50,61 @@ export function requiredSlug(input: GeneratedQuestRoute, context: string) {
   return slug;
 }
 
-export function parsedRoutePoints(value: unknown) {
+export function parsedRouteIdentity(input: GeneratedQuestRoute, slug: string) {
+  const routeId = stringValue(input.route_id, slug).trim();
+  if (!routeId) throw new Error("route_id must be a non-empty string");
+  const explicitKind = input.identity_kind;
+  const identityKind =
+    explicitKind === "imported-route"
+      ? "imported-route"
+      : explicitKind === "strava-activity" || explicitKind === undefined
+        ? "strava-activity"
+        : undefined;
+  if (!identityKind) {
+    throw new Error("identity_kind must be strava-activity or imported-route");
+  }
+  const rawActivityId = input.activity_id ?? (explicitKind === undefined ? slug : undefined);
+  if (identityKind === "imported-route" && rawActivityId !== undefined) {
+    throw new Error("imported route must not claim a Strava activity_id");
+  }
+  if (
+    identityKind === "strava-activity" &&
+    (typeof rawActivityId !== "string" || !rawActivityId.trim())
+  ) {
+    throw new Error("strava activity route requires activity_id");
+  }
+  const stravaActivityId =
+    identityKind === "strava-activity" ? (rawActivityId as string).trim() : undefined;
+  return {
+    routeId,
+    identityKind,
+    source: parsedRouteSource(input, identityKind),
+    ...(stravaActivityId ? { stravaActivityId } : {}),
+    activityId: stravaActivityId ?? routeId,
+  } as const;
+}
+
+function parsedRouteSource(
+  input: GeneratedQuestRoute,
+  identityKind: "strava-activity" | "imported-route",
+) {
+  const fallbackKind = identityKind === "strava-activity" ? "strava-export" : "owner-import";
+  const kind = input.source_kind ?? fallbackKind;
+  if (kind !== "strava-export" && kind !== "imported-gpx" && kind !== "owner-import") {
+    throw new Error("source_kind must be strava-export, imported-gpx, or owner-import");
+  }
+  const fallbackFormat = kind === "imported-gpx" ? "gpx" : "gpx";
+  const format = input.source_format ?? fallbackFormat;
+  if (format !== "gpx" && format !== "kml" && format !== "kmz" && format !== "fit") {
+    throw new Error("source_format must be gpx, kml, kmz, or fit");
+  }
+  return { kind, format } as const;
+}
+
+export function parsedRoutePoints(
+  value: unknown,
+  allowUnavailableElevation = false,
+) {
   if (!Array.isArray(value) || value.length < 2) {
     return { points: [] as RoutePoint[], status: "missing" as const };
   }
@@ -66,7 +120,11 @@ export function parsedRoutePoints(value: unknown) {
         : undefined;
     const lat = source ? numberValue(source.lat, Number.NaN) : Number.NaN;
     const lng = source ? numberValue(source.lng, Number.NaN) : Number.NaN;
-    const elev = source ? numberValue(source.elev, Number.NaN) : Number.NaN;
+    const rawElevation = source?.elev;
+    const elev =
+      allowUnavailableElevation && (rawElevation === null || rawElevation === undefined)
+        ? 0
+        : numberValue(rawElevation, Number.NaN);
     const d = source ? numberValue(source.d, Number.NaN) : Number.NaN;
     const rawElapsed = source?.elapsed_s;
     const elapsedS =

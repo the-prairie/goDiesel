@@ -75,9 +75,9 @@ def test_build_pipeline_emits_react_route_artifact():
     assert "REACT_ROUTE_DETAILS" in build
     assert "simplify_route_for_manifest" in build
     assert "lifecycle = spec.get('lifecycle', 'completed')" in build
-    assert "quest['lifecycle'] = lifecycle" in build
-    assert "'lifecycle': lifecycle" in build
-    assert "'replay': build_replay_metadata(" in build
+    assert "compile_route_contract(RouteCompilationInput(" in build
+    assert "lifecycle=lifecycle" in build
+    assert "source_format=route_source_format(spec, fp)" in build
     assert "if route.get('lifecycle', 'completed') == 'completed'" in build
     assert "react_route_payload" in build
 

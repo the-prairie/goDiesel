@@ -22,6 +22,7 @@ from typing import Any
 
 from PIL import Image
 
+from route_imports import route_identity, route_source_kind
 from route_provenance import build_route_provenance, load_source_route_points
 
 
@@ -29,7 +30,6 @@ ROOT = Path(__file__).resolve().parent
 DEFAULT_DIESEL_DIARIES = Path("/Users/laurenzary/Desktop/DieselDiaries")
 OUTPUT_REQUIRED_FIELDS = frozenset(
     {
-        "activity_id",
         "activity_name",
         "baseline_photos",
         "center_lat",
@@ -40,6 +40,7 @@ OUTPUT_REQUIRED_FIELDS = frozenset(
         "difficulty",
         "distance_km",
         "elevation_gain_m",
+        "identity_kind",
         "lifecycle",
         "mid_idx",
         "name",
@@ -47,6 +48,9 @@ OUTPUT_REQUIRED_FIELDS = frozenset(
         "quest_blurb",
         "region",
         "replay",
+        "route_id",
+        "source_format",
+        "source_kind",
         "route",
         "slug",
         "subtitle",
@@ -132,11 +136,12 @@ def approved_specs(root: Path) -> list[dict[str, Any]]:
         if route.get("status", "approved") == "approved"
         and route.get("visibility", "public") != "hidden"
     ]
-    activity_ids = [str(route.get("activity_id", "")) for route in specs]
-    if any(not activity_id for activity_id in activity_ids):
-        raise VerificationError("approved route is missing an activity_id")
-    if len(activity_ids) != len(set(activity_ids)):
-        raise VerificationError("approved routes contain duplicate activity ids")
+    try:
+        route_ids = [route_identity(route)[0] for route in specs]
+    except ValueError as error:
+        raise VerificationError(str(error)) from error
+    if len(route_ids) != len(set(route_ids)):
+        raise VerificationError("approved routes contain duplicate route identities")
     return specs
 
 
@@ -197,7 +202,7 @@ def source_file_for(
         path = (root / str(source_gpx)).resolve()
         if not path.is_relative_to((root / "route_sources").resolve()):
             raise VerificationError(f"imported route escaped route_sources: {source_gpx}")
-        return path, "imported-gpx"
+        return path, route_source_kind(spec)
     activity_id = str(spec["activity_id"])
     base = diesel_diaries / "strava_export" / "activities"
     for suffix in (".gpx", ".fit.gz", ".fit"):
@@ -329,7 +334,7 @@ def verify_real_pipeline(
     )
     generated_by_slug = unique_routes_by_slug(generated.get("routes"), "generated")
     manifest_by_slug = unique_routes_by_slug(manifest.get("routes"), "manifest")
-    approved_ids = {str(spec["activity_id"]) for spec in specs}
+    approved_ids = {route_identity(spec)[0] for spec in specs}
     detail_dir = root / "app/public/data/routes"
     detail_ids = {path.stem for path in detail_dir.glob("*.json")}
     if approved_ids != set(generated_by_slug) or approved_ids != set(manifest_by_slug):
@@ -341,7 +346,7 @@ def verify_real_pipeline(
     source_records: list[dict[str, Any]] = []
     approved_rows: list[list[str]] = []
     for spec in specs:
-        slug = str(spec["activity_id"])
+        slug, activity_id, _identity_kind = route_identity(spec)
         detail = json.loads((detail_dir / f"{slug}.json").read_text(encoding="utf-8"))
         missing_fields = sorted(OUTPUT_REQUIRED_FIELDS - set(detail))
         if missing_fields:
@@ -365,7 +370,7 @@ def verify_real_pipeline(
         if provenance.route != detail["route"]:
             raise VerificationError(f"generated geometry does not match original source for {slug}")
 
-        row = None if source_kind == "imported-gpx" else rows_by_id.get(slug)
+        row = rows_by_id.get(activity_id) if activity_id is not None else None
         if source_kind == "strava-export" and row is None:
             raise VerificationError(f"approved route {slug} is absent from activities.csv")
         if row is not None:
@@ -442,7 +447,7 @@ def verify_real_pipeline(
             "activities_columns": len(headers),
             "approved_activity_rows": len(approved_rows),
             "imported_route_specs": sum(
-                record["source_kind"] == "imported-gpx" for record in source_records
+                record["source_kind"] != "strava-export" for record in source_records
             ),
             "column_evidence": column_evidence,
             "row_evidence": row_evidence,

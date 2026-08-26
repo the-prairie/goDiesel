@@ -10,7 +10,7 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/ui/button";
@@ -29,9 +29,10 @@ import {
   cinematicShotTimeline,
   type CinematicCut,
 } from "@/surfaces/replay/cinematic/route-cinematic-director";
+import { routeExperienceManifest } from "@/surfaces/replay/cinematic/route-experience-manifest";
 
 const CUT_DESCRIPTIONS: Record<CinematicCut, string> = {
-  feature: "A route-directed film shaped by the recorded terrain and line.",
+  feature: "A route-directed film shaped by source-backed geometry and terrain.",
   monumental: "Scale, silence, and the full weight of the landscape.",
   kinetic: "A faster line built from speed, turns, and release.",
   intimate: "Closer to the ground, with the effort left in the frame.",
@@ -43,17 +44,21 @@ const INITIAL_STATUS: CinematicRendererStatus = {
 };
 
 function routeLogline(route: QuestRoute) {
-  const profile = cinematicProfile(route);
+  const elevationAvailable = route.provenance.elevation?.status !== "unavailable";
   const curated =
     route.curation.reviewStatus === "reviewed" ||
     route.curation.reviewStatus === "published"
       ? route.curation.vibe || route.curation.editorialNote
       : undefined;
   if (curated) return curated;
-  if (profile.character === "mountain") {
+  if (!elevationAvailable) {
+    return `${route.distanceKm.toFixed(1)} kilometres through ${route.region}, directed from the recorded route shape while elevation remains unavailable.`;
+  }
+  const profile = cinematicProfile(route);
+  if (elevationAvailable && profile.character === "mountain") {
     return `${route.region} does not give this one away: ${route.distanceKm.toFixed(1)} kilometres, ${route.elevationGainM.toLocaleString()} metres of ascent, and a line that keeps climbing into the horizon.`;
   }
-  if (profile.character === "rolling") {
+  if (elevationAvailable && profile.character === "rolling") {
     return `A restless line through ${route.region}, where ${route.distanceKm.toFixed(1)} kilometres of bends and rises never quite settle into a rhythm.`;
   }
   return `${route.distanceKm.toFixed(1)} open kilometres through ${route.region}. The invitation is simple: find the line, then let it run.`;
@@ -84,10 +89,20 @@ function recordedGrade(phase: ReturnType<typeof recordedLightAt>["phase"]) {
 }
 
 export function CinematicDirectorStage({
+  backLabel = "Back to route intelligence",
+  backPath = "/lab/route-intelligence",
+  decisionLabel,
+  decisionPath,
+  experienceMode = "replay",
   initialCut = "feature",
   renderMode = false,
   route,
 }: {
+  backLabel?: string;
+  backPath?: string;
+  decisionLabel?: string;
+  decisionPath?: string;
+  experienceMode?: "preview" | "replay";
   initialCut?: CinematicCut;
   renderMode?: boolean;
   route: QuestRoute;
@@ -105,6 +120,8 @@ export function CinematicDirectorStage({
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [status, setStatus] =
     useState<CinematicRendererStatus>(INITIAL_STATUS);
+  const experienceManifest = useMemo(() => routeExperienceManifest(route), [route]);
+  const elevationAvailable = route.provenance.elevation?.status !== "unavailable";
 
   const commitFrame = (nextFrame: typeof frame) => {
     elapsedRef.current = nextFrame.elapsedSeconds;
@@ -212,11 +229,10 @@ export function CinematicDirectorStage({
   const ready = status.state === "ready" || status.state === "partial";
   const preRoll =
     !renderMode && ready && frame.elapsedSeconds === 0 && !playing;
-  const profile = cinematicProfile(route);
   const invitation = routeInvitation(route);
   const recordedLight = recordedLightAt(
     route.route,
-    route.provenance.temporal,
+    experienceMode === "preview" ? { status: "unavailable" } : route.provenance.temporal,
     frame.routeProgressM,
   );
   const grade = recordedGrade(recordedLight.phase);
@@ -227,15 +243,23 @@ export function CinematicDirectorStage({
       className="fixed inset-0 z-[110] overflow-hidden bg-[#050707] text-white"
       data-chapter={frame.chapter}
       data-cut={cut}
+      data-decision-frame={frame.showDecision ? "true" : "false"}
+      data-director-version={experienceManifest.directorVersion}
       data-duration={frame.durationSeconds}
       data-frame-seconds={frame.elapsedSeconds.toFixed(3)}
       data-light-phase={recordedLight.phase}
+      data-manifest-version={experienceManifest.analysisVersion}
+      data-experience-mode={experienceMode}
+      data-route-fingerprint={experienceManifest.routeFingerprint}
+      data-render-fingerprint={experienceManifest.renderFingerprint}
+      data-recommended-cut={experienceManifest.recommendedCinematicCut}
       data-render-mode={renderMode ? "true" : "false"}
+      data-route-film="feature"
       data-shot-count={frame.shotCount}
       data-shot-kind={frame.shotKind}
       data-shot-timeline={JSON.stringify(cinematicShotTimeline(route, cut))}
       data-state={status.state}
-      data-terrain-character={profile.character}
+      data-terrain-character={experienceManifest.routeProfile.character}
       data-terrain-relief={frame.terrainReliefM.toFixed(1)}
       data-testid="cinematic-director"
       data-visual-moment-score={frame.visualMomentScore.toFixed(3)}
@@ -314,9 +338,9 @@ export function CinematicDirectorStage({
       {!renderMode ? (
         <div className="absolute inset-x-0 top-0 z-30 flex items-center justify-between px-5 pt-6 sm:px-8 sm:pt-8">
         <Link
-          aria-label="Back to route intelligence"
+          aria-label={backLabel}
           className="grid size-10 place-items-center border border-white/28 bg-black/38 backdrop-blur-md transition-colors hover:bg-black/68"
-          to="/lab/route-intelligence"
+          to={backPath}
         >
           <ArrowLeft aria-hidden="true" className="size-4" />
         </Link>
@@ -337,7 +361,9 @@ export function CinematicDirectorStage({
             <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-end">
               <div>
                 <p className="text-[0.67rem] font-semibold uppercase tracking-[0.24em] text-[#ff896d]">
-                  One real day · Reframed as cinema
+                  {experienceMode === "preview"
+                    ? "Source-backed route · Reframed as cinema"
+                    : "One real day · Reframed as cinema"}
                 </p>
                 <h1 className="mt-4 max-w-4xl font-editorial text-6xl font-semibold leading-[0.86] sm:text-8xl">
                   {route.name}
@@ -347,9 +373,9 @@ export function CinematicDirectorStage({
                 </p>
                 <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-xs uppercase tracking-[0.12em] text-white/58">
                   <span>{route.distanceKm.toFixed(1)} km</span>
-                  <span>{route.elevationGainM.toLocaleString()} m up</span>
+                  <span>{elevationAvailable ? `${route.elevationGainM.toLocaleString()} m up` : "Elevation unavailable"}</span>
                   <span>{route.type}</span>
-                  <span>{route.date}</span>
+                  {route.date ? <span>{route.date}</span> : null}
                 </div>
               </div>
               <div>
@@ -432,9 +458,8 @@ export function CinematicDirectorStage({
                 {invitation.title}
               </h1>
               <p className="mt-4 max-w-2xl text-sm leading-relaxed text-white/62">
-                You have seen the shape of {route.name}. Now meet the real
-                terrain: {route.distanceKm.toFixed(1)} km and{" "}
-                {route.elevationGainM.toLocaleString()} m up.
+                You have seen the source-backed shape of {route.name}: {route.distanceKm.toFixed(1)} km
+                {elevationAvailable ? ` and ${route.elevationGainM.toLocaleString()} m of recorded ascent` : ", with elevation unavailable in the source"}.
               </p>
             </div>
             {!renderMode ? (
@@ -448,8 +473,8 @@ export function CinematicDirectorStage({
                 Another viewing
               </Button>
               <Button asChild className="bg-[#f16c4b] text-white hover:bg-[#d95639]">
-                <Link to={`/lab/google-route-navigator/${route.slug}`}>
-                  {invitation.action}
+                <Link to={decisionPath ?? `/lab/google-route-navigator/${route.slug}`}>
+                  {decisionLabel ?? invitation.action}
                   <ChevronRight aria-hidden="true" />
                 </Link>
               </Button>

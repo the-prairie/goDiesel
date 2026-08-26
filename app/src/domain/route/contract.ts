@@ -42,6 +42,7 @@ export interface RouteDiscontinuityEvidence {
 
 export interface RouteProvenance {
   temporal: RouteTemporalProvenance;
+  elevation?: { status: "recorded" | "unavailable" };
   track: { segmentCount: number };
   discontinuities: RouteDiscontinuityEvidence[];
 }
@@ -108,6 +109,11 @@ export interface RouteGuidePreview {
 
 export interface RouteSummary {
   slug: string;
+  routeId?: string;
+  identityKind?: "strava-activity" | "imported-route";
+  source?: { kind: "strava-export" | "imported-gpx" | "owner-import"; format: "gpx" | "kml" | "kmz" | "fit" };
+  stravaActivityId?: string;
+  /** Compatibility alias. Imported routes expose routeId here, not a fake Strava id. */
   activityId: string;
   lifecycle: RouteLifecycle;
   name: string;
@@ -117,6 +123,7 @@ export interface RouteSummary {
   date: string;
   distanceKm: number;
   elevationGainM: number;
+  elevationStatus?: "recorded" | "unavailable";
   type: RouteActivityType;
   description: string;
   completionRule: string;
@@ -128,6 +135,10 @@ export interface RouteSummary {
   centerLng: number;
   replay: ReplayMetadata;
   guide: RouteGuidePreview;
+  discovery?: {
+    terrain: Array<"road" | "trail" | "mixed" | "mountain">;
+    vibes: string[];
+  };
 }
 
 export interface QuestRoute extends Omit<RouteSummary, "trace" | "guide"> {
@@ -140,7 +151,11 @@ export interface QuestRoute extends Omit<RouteSummary, "trace" | "guide"> {
 
 export interface GeneratedQuestRoute {
   slug?: unknown;
+  route_id?: unknown;
   activity_id?: unknown;
+  identity_kind?: unknown;
+  source_kind?: unknown;
+  source_format?: unknown;
   lifecycle?: unknown;
   status?: unknown;
   name?: unknown;
@@ -150,6 +165,7 @@ export interface GeneratedQuestRoute {
   date?: unknown;
   distance_km?: unknown;
   elevation_gain_m?: unknown;
+  elevation_status?: unknown;
   type?: unknown;
   description?: unknown;
   completion_rule?: unknown;

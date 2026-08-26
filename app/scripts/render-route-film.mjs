@@ -12,6 +12,7 @@ import { dirname, extname, join, resolve } from "node:path";
 
 import { chromium } from "playwright";
 import { PNG } from "pngjs";
+import routeExperienceVersion from "../src/surfaces/replay/cinematic/route-experience-version.json" with { type: "json" };
 
 import {
   createExportManifest,
@@ -33,6 +34,10 @@ function argument(name, fallback) {
 }
 
 const slug = argument("route", "14023448720");
+const filmUrlOverride = argument("film-url", "");
+const sourceFingerprint = argument("source-fingerprint", "");
+const expectedManifestVersion = Number(argument("manifest-version", String(routeExperienceVersion.manifestVersion)));
+const expectedDirectorVersion = Number(argument("director-version", String(routeExperienceVersion.directorVersion)));
 const cut = argument("cut", "feature");
 const baseUrl = argument("base-url", "http://127.0.0.1:8787");
 const width = Number(argument("width", "3840"));
@@ -106,18 +111,18 @@ const page = await browser.newPage({
 let manifest;
 let completedSuccessfully = false;
 try {
-  const filmUrl = `${baseUrl}/#/lab/cinematic-director/${slug}?render=1&cut=${cut}`;
+  const filmUrl = filmUrlOverride || `${baseUrl}/#/lab/cinematic-director/${slug}?render=1&cut=${cut}`;
   console.log(`Staging ${filmUrl}`);
   console.log(
     `Preparing deterministic ${width}x${height} master at ${fps} fps from ${captureWidth}x${captureHeight}`,
   );
   await page.goto(filmUrl, { waitUntil: "domcontentloaded" });
-  const film = page.getByTestId("cinematic-director");
+  const film = page.locator("[data-route-film]");
   await film.waitFor({ state: "visible", timeout: 30_000 });
   await page.waitForFunction(
     () => {
       const state = document
-        .querySelector('[data-testid="cinematic-director"]')
+        .querySelector("[data-route-film]")
         ?.getAttribute("data-state");
       return state === "ready" || state === "unavailable";
     },
@@ -139,6 +144,12 @@ try {
   );
   const terrainCharacter =
     (await film.getAttribute("data-terrain-character")) ?? "rolling";
+  const filmKind = (await film.getAttribute("data-route-film")) ?? "feature";
+  const manifestVersion = Number(await film.getAttribute("data-manifest-version"));
+  const directorVersion = Number(await film.getAttribute("data-director-version"));
+  if (manifestVersion !== expectedManifestVersion || directorVersion !== expectedDirectorVersion) {
+    throw new Error(`Route film version mismatch: expected ${expectedManifestVersion}/${expectedDirectorVersion}, received ${manifestVersion}/${directorVersion}`);
+  }
   const durationSeconds =
     maxSeconds > 0
       ? Math.min(maxSeconds, completeDuration)
@@ -163,10 +174,14 @@ try {
     cut,
     durationSeconds,
     fps,
+    filmKind,
     height,
+    manifestVersion,
     motionSamples,
     qualityPolicyVersion: 1,
     route: slug,
+    sourceFingerprint,
+    directorVersion,
     settleAttempts,
     settleDelayMs,
     spatialScale,
@@ -213,6 +228,12 @@ try {
     }
     await seekFilm(page, 0);
   }
+
+  await seekFilm(page, durationSeconds);
+  if (durationSeconds === completeDuration && (await film.getAttribute("data-decision-frame")) !== "true") {
+    throw new Error("The complete route teaser did not end on its decision frame");
+  }
+  await seekFilm(page, 0);
 
   const existingFiles = new Set(await readdir(frameDirectory));
   const startFrame = resumeFrameIndex(manifest, framePlan, existingFiles);
@@ -351,11 +372,18 @@ async function seekFilm(page, seconds) {
   await page.waitForFunction(
     (time) => {
       const value = document
-        .querySelector('[data-testid="cinematic-director"]')
+        .querySelector("[data-route-film]")
         ?.getAttribute("data-frame-seconds");
-      return value !== null && Math.abs(Number(value) - time) < 0.01;
+      if (value !== null && Math.abs(Number(value) - time) < 0.01) return true;
+      window.dispatchEvent(
+        new CustomEvent("godiesel:route-film-seek", {
+          detail: { seconds: time },
+        }),
+      );
+      return false;
     },
     seconds,
+    { polling: 100, timeout: 30_000 },
   );
   await page.evaluate(
     () =>
