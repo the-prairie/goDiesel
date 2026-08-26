@@ -38,7 +38,13 @@ function referencePack(routeSlug: string): VerifiedWorldPack {
   const collision = new Uint8Array(
     fs.readFileSync(path.join(packRoot, runtime.assets.terrainCollision)),
   );
-  const artifacts = new Map([[runtime.assets.terrainCollision, collision]]);
+  const traversable = new Uint8Array(
+    fs.readFileSync(path.join(packRoot, runtime.assets.traversableSurfaces)),
+  );
+  const artifacts = new Map([
+    [runtime.assets.terrainCollision, collision],
+    [runtime.assets.traversableSurfaces, traversable],
+  ]);
   return {
     entry,
     baseUrl: new URL(`https://godiesel.test${entry.basePath}`),
@@ -70,11 +76,21 @@ describe("World Pack collision runtime", () => {
 
       expect(heightfield.xAxis.length).toBeGreaterThan(2);
       expect(heightfield.yAxis.length).toBeGreaterThan(2);
-      expect(player.z).toBeCloseTo(
-        collisionSurface(heightfield, player.x, player.y)!.heightM,
-        8,
-      );
+      expect(player.z).toBeCloseTo(runtime.navigation.nodes[0].position[2], 2);
       expect(player.grounded).toBe(true);
+    });
+
+    it(`supports every recorded route node without elevation drift for ${routeSlug}`, () => {
+      const runtime = createWorldPhysicsRuntime(referencePack(routeSlug));
+
+      const maximumErrorM = Math.max(
+        ...runtime.navigation.nodes.map((node) => {
+          const player = worldPlayerAtRouteProgress(runtime, node.distanceM);
+          return Math.abs(player.z - node.position[2]);
+        }),
+      );
+
+      expect(maximumErrorM).toBeLessThanOrEqual(0.01);
     });
   }
 
@@ -143,6 +159,7 @@ describe("World Pack collision runtime", () => {
         minimumY: -1,
         maximumY: 1,
       },
+      traversableTriangles: [],
     };
     const start = {
       ...initialWorldPlayer(runtime),

@@ -7,9 +7,9 @@ The committed `index.json` is the machine-readable authority for route, world, p
 
 | Class | Route | World | Sealed pack |
 | --- | --- | --- | --- |
-| Dense urban | `17665674778` | `tokyo-urban` | `wp_8a3397224b13173c3ea0eded9e59179a94b128c1f4946a85d3ccee997d2cb949` |
-| High-relief mountain | `15573295095` | `banff-mountain` | `wp_c6992e733b5e15187f7cbfd999a97b99632ede931aeb4e1db0dd6deab5099f91` |
-| Remote coastal | `6496900063` | `ucluelet-coastal` | `wp_ce46252091affe7c3f8f6de14fe6cf852b82b990716ba02b1f27ad391f7de68a` |
+| Dense urban | `17665674778` | `tokyo-urban` | `wp_72a5535ba78c3de302568dc341bbd6e3e6542dbc239c8be3f926411fad709248` |
+| High-relief mountain | `15573295095` | `banff-mountain` | `wp_a29b4d97d6f2363bfff8e1a226bee9f5bd480527a85540de2c04b1d8ba3657c7` |
+| Remote coastal | `6496900063` | `ucluelet-coastal` | `wp_69410732b128dbe730c57f16cd186c3015e4d920597e35a4a088e42fb7493bef` |
 
 ## Reproducibility
 
@@ -27,6 +27,7 @@ They preserve exact route truth and provide deterministic procedural terrain, se
 They explicitly declare structures, roads, paths, trails, reconstruction, annotations, and media unavailable where the compiler has admitted no retainable source.
 They now pass browser integrity, separate collision-mesh loading, bounded Core free roam, checkpoint recovery, camera-mode, ghost, and rejoin proofs with all non-local requests blocked.
 Tokyo and Banff navigation, route-thread, and traversable-ribbon artifacts omit edges that cross recorded discontinuities; the browser also refuses to interpolate or rejoin across an absent edge.
+The browser parses the sealed indexed traversable surface as a layered physical support and proves every recorded route node is supported within 1 cm without replacing recorded elevation with the procedural heightfield.
 They do not yet satisfy the visual fidelity, full-route repeated traversal, real-structure collision, deterministic film, blind quality, or clean-room archive gates required for promotion beyond the Playable Earth lab.
 
 ## Browser readiness

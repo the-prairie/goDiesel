@@ -234,9 +234,30 @@ function parseRuntime(value: unknown): WorldPackRuntime {
   }
   const origin = record(runtime.origin, "World Pack origin");
   const assets = record(runtime.assets, "World Pack runtime assets");
+  const physicalCapabilities =
+    runtime.physicalCapabilities === undefined
+      ? {
+          terrainCollision: "heightfield",
+          traversableSurfaces: "indexed-triangle-mesh",
+          structuresCollision: "unavailable",
+        }
+      : record(
+          runtime.physicalCapabilities,
+          "World Pack physical capabilities",
+        );
   const modes = Array.isArray(runtime.modes) ? runtime.modes : [];
   if (!modes.includes("guided") || !modes.includes("free-roam")) {
     throw new WorldPackLoadError("World Pack does not declare required traversal modes", "unsupported");
+  }
+  if (
+    physicalCapabilities.terrainCollision !== "heightfield" ||
+    physicalCapabilities.traversableSurfaces !== "indexed-triangle-mesh" ||
+    physicalCapabilities.structuresCollision !== "unavailable"
+  ) {
+    throw new WorldPackLoadError(
+      "World Pack declares unsupported physical capabilities",
+      "unsupported",
+    );
   }
   return {
     schemaVersion: 1,
@@ -259,6 +280,11 @@ function parseRuntime(value: unknown): WorldPackRuntime {
       navigation: path(assets.navigation, "navigation asset"),
       coverage: path(assets.coverage, "coverage asset"),
       cameraTimeline: path(assets.cameraTimeline, "camera timeline asset"),
+    },
+    physicalCapabilities: {
+      terrainCollision: "heightfield",
+      traversableSurfaces: "indexed-triangle-mesh",
+      structuresCollision: "unavailable",
     },
     modes: modes as Array<"guided" | "free-roam">,
   };

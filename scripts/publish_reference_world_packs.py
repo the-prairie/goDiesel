@@ -136,6 +136,8 @@ def publish() -> dict[str, object]:
             for pack in sorted(path for path in world_root.iterdir() if path.is_dir()):
                 _install_pack(pack, PUBLIC_ROOT / world_root.name / pack.name)
         _publish_index(staging / "index.json", PUBLIC_ROOT / "index.json")
+        _make_writable(staging)
+        shutil.rmtree(staging)
     except Exception:
         if staging.exists():
             _make_writable(staging)

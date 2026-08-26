@@ -699,6 +699,11 @@ class WorldPackCompiler:
                     "coverage": coverage_record.logicalPath,
                     "cameraTimeline": camera_record.logicalPath,
                 },
+                "physicalCapabilities": {
+                    "terrainCollision": "heightfield",
+                    "traversableSurfaces": "indexed-triangle-mesh",
+                    "structuresCollision": "unavailable",
+                },
                 "modes": ["guided", "free-roam"],
             }
             validate_document("runtime-world", runtime)

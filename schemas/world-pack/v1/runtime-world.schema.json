@@ -56,6 +56,20 @@
         "cameraTimeline": { "$ref": "#/$defs/path" }
       }
     },
+    "physicalCapabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "terrainCollision",
+        "traversableSurfaces",
+        "structuresCollision"
+      ],
+      "properties": {
+        "terrainCollision": { "const": "heightfield" },
+        "traversableSurfaces": { "const": "indexed-triangle-mesh" },
+        "structuresCollision": { "const": "unavailable" }
+      }
+    },
     "modes": {
       "type": "array",
       "minItems": 2,

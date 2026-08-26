@@ -8,6 +8,7 @@ const GLB_VERSION = 2;
 const JSON_CHUNK = 0x4e4f534a;
 const BINARY_CHUNK = 0x004e4942;
 const EPSILON = 1e-5;
+const SURFACE_EPSILON = 0.002;
 
 export interface CollisionHeightfield {
   xAxis: readonly number[];
@@ -27,6 +28,18 @@ export interface WorldObstacle {
   maximumZ: number;
 }
 
+export interface TraversableTriangle {
+  positions: readonly [
+    readonly [number, number, number],
+    readonly [number, number, number],
+    readonly [number, number, number],
+  ];
+  minimumX: number;
+  maximumX: number;
+  minimumY: number;
+  maximumY: number;
+}
+
 export interface WorldPhysicsRuntime {
   packId: string;
   worldId: string;
@@ -37,6 +50,7 @@ export interface WorldPhysicsRuntime {
   };
   navigation: WorldNavigation;
   heightfield: CollisionHeightfield;
+  traversableTriangles: readonly TraversableTriangle[];
   obstacles: readonly WorldObstacle[];
   walkSpeedMps: number;
   runSpeedMps: number;
@@ -128,13 +142,63 @@ function positionRows(bytes: Uint8Array) {
   const view = new DataView(binary.buffer, binary.byteOffset, binary.byteLength);
   const positions = Array.from({ length: accessor.count }, (_, index) => {
     const offset = start + index * stride;
-    return [
+    const position = [
       view.getFloat32(offset, true),
       view.getFloat32(offset + 4, true),
       view.getFloat32(offset + 8, true),
     ];
+    assert(position.every(Number.isFinite), "position is not finite");
+    return position;
   });
   return { positions, document, binary };
+}
+
+function triangleIndexValues(
+  document: Record<string, unknown>,
+  binary: Uint8Array,
+  positionCount: number,
+) {
+  const accessors = typedArray<GltfAccessor>(document.accessors, "accessors");
+  const bufferViews = typedArray<GltfBufferView>(document.bufferViews, "bufferViews");
+  const accessor = accessors[1];
+  assert(accessor?.componentType === 5125, "indices are not uint32");
+  assert(accessor.type === "SCALAR", "indices are not scalar");
+  assert(accessor.count > 0 && accessor.count % 3 === 0, "triangle indices are invalid");
+  const bufferView = bufferViews[accessor.bufferView];
+  assert(bufferView, "index buffer view is missing");
+  const stride = bufferView.byteStride ?? 4;
+  assert(stride >= 4, "index stride is too small");
+  const start = (bufferView.byteOffset ?? 0) + (accessor.byteOffset ?? 0);
+  assert(start + (accessor.count - 1) * stride + 4 <= binary.byteLength, "indices are truncated");
+  const view = new DataView(binary.buffer, binary.byteOffset, binary.byteLength);
+  return Array.from({ length: accessor.count }, (_, index) => {
+    const value = view.getUint32(start + index * stride, true);
+    assert(value < positionCount, "triangle index is out of bounds");
+    return value;
+  });
+}
+
+export function parseTraversableSurface(bytes: Uint8Array): TraversableTriangle[] {
+  const { positions, document, binary } = positionRows(bytes);
+  const indices = triangleIndexValues(document, binary, positions.length);
+  return Array.from({ length: indices.length / 3 }, (_, triangleIndex) => {
+    const triangle = indices
+      .slice(triangleIndex * 3, triangleIndex * 3 + 3)
+      .map((index) => positions[index] as [number, number, number]) as [
+        [number, number, number],
+        [number, number, number],
+        [number, number, number],
+      ];
+    const xs = triangle.map((position) => position[0]);
+    const ys = triangle.map((position) => position[1]);
+    return {
+      positions: triangle,
+      minimumX: Math.min(...xs),
+      maximumX: Math.max(...xs),
+      minimumY: Math.min(...ys),
+      maximumY: Math.max(...ys),
+    };
+  });
 }
 
 function validateGridIndices(
@@ -345,13 +409,83 @@ function obstacleCollision(
   );
 }
 
+function traversableSurface(
+  triangles: readonly TraversableTriangle[],
+  x: number,
+  y: number,
+  preferredZ: number,
+) {
+  const candidates = [];
+  for (const triangle of triangles) {
+    if (
+      x < triangle.minimumX - SURFACE_EPSILON ||
+      x > triangle.maximumX + SURFACE_EPSILON ||
+      y < triangle.minimumY - SURFACE_EPSILON ||
+      y > triangle.maximumY + SURFACE_EPSILON
+    ) continue;
+    const [a, b, c] = triangle.positions;
+    const denominator =
+      (b[1] - c[1]) * (a[0] - c[0]) +
+      (c[0] - b[0]) * (a[1] - c[1]);
+    if (Math.abs(denominator) <= EPSILON) continue;
+    const wa =
+      ((b[1] - c[1]) * (x - c[0]) + (c[0] - b[0]) * (y - c[1])) /
+      denominator;
+    const wb =
+      ((c[1] - a[1]) * (x - c[0]) + (a[0] - c[0]) * (y - c[1])) /
+      denominator;
+    const wc = 1 - wa - wb;
+    if (
+      wa < -SURFACE_EPSILON ||
+      wb < -SURFACE_EPSILON ||
+      wc < -SURFACE_EPSILON
+    ) continue;
+    const ux = b[0] - a[0];
+    const uy = b[1] - a[1];
+    const uz = b[2] - a[2];
+    const vx = c[0] - a[0];
+    const vy = c[1] - a[1];
+    const vz = c[2] - a[2];
+    const nx = uy * vz - uz * vy;
+    const ny = uz * vx - ux * vz;
+    const nz = ux * vy - uy * vx;
+    if (Math.abs(nz) <= EPSILON) continue;
+    candidates.push({
+      heightM: wa * a[2] + wb * b[2] + wc * c[2],
+      slopeDegrees: (Math.atan(Math.hypot(nx, ny) / Math.abs(nz)) * 180) / Math.PI,
+    });
+  }
+  return candidates.reduce<
+    { heightM: number; slopeDegrees: number } | undefined
+  >(
+    (best, candidate) =>
+      !best || Math.abs(candidate.heightM - preferredZ) < Math.abs(best.heightM - preferredZ)
+        ? candidate
+        : best,
+    undefined,
+  );
+}
+
+function supportSurface(
+  runtime: WorldPhysicsRuntime,
+  x: number,
+  y: number,
+  preferredZ: number,
+) {
+  return (
+    traversableSurface(runtime.traversableTriangles, x, y, preferredZ) ??
+    collisionSurface(runtime.heightfield, x, y)
+  );
+}
+
 function actorSurface(
   runtime: WorldPhysicsRuntime,
   x: number,
   y: number,
+  preferredZ: number,
 ) {
   const radius = runtime.navigation.actor.radiusM;
-  const centre = collisionSurface(runtime.heightfield, x, y);
+  const centre = supportSurface(runtime, x, y, preferredZ);
   if (!centre) return undefined;
   const footprint = [
     [x - radius, y],
@@ -362,7 +496,7 @@ function actorSurface(
   if (
     footprint.some(
       ([sampleX, sampleY]) =>
-        collisionSurface(runtime.heightfield, sampleX, sampleY) === undefined,
+        supportSurface(runtime, sampleX, sampleY, centre.heightM) === undefined,
     )
   ) {
     return undefined;
@@ -379,6 +513,9 @@ export function createWorldPhysicsRuntime(pack: VerifiedWorldPack): WorldPhysics
     heightfield: parseCollisionHeightfield(
       pack.artifact(pack.runtime.assets.terrainCollision),
     ),
+    traversableTriangles: parseTraversableSurface(
+      pack.artifact(pack.runtime.assets.traversableSurfaces),
+    ),
     obstacles: [],
     walkSpeedMps: 3.5,
     runSpeedMps: 6,
@@ -387,7 +524,12 @@ export function createWorldPhysicsRuntime(pack: VerifiedWorldPack): WorldPhysics
 
 export function initialWorldPlayer(runtime: WorldPhysicsRuntime): WorldPlayerState {
   const start = runtime.navigation.nodes[0];
-  const surface = actorSurface(runtime, start.position[0], start.position[1]);
+  const surface = supportSurface(
+    runtime,
+    start.position[0],
+    start.position[1],
+    start.position[2],
+  );
   if (!surface) throw new Error("World Pack route start is outside collision terrain.");
   return {
     x: start.position[0],
@@ -430,7 +572,8 @@ export function worldPlayerAtRouteProgress(
     distance === 0 ? 0 : (boundedProgressM - from.distanceM) / distance;
   const x = from.position[0] + (to.position[0] - from.position[0]) * ratio;
   const y = from.position[1] + (to.position[1] - from.position[1]) * ratio;
-  const surface = actorSurface(runtime, x, y);
+  const routeZ = from.position[2] + (to.position[2] - from.position[2]) * ratio;
+  const surface = supportSurface(runtime, x, y, routeZ);
   if (!surface)
     throw new Error("World Pack route position is outside collision terrain.");
   return {
@@ -474,7 +617,12 @@ export function recoverWorldPlayer(
   state: WorldPlayerState,
 ): WorldPlayerState {
   const anchor = runtime.navigation.nodes[state.checkpointNodeId];
-  const surface = actorSurface(runtime, anchor.position[0], anchor.position[1]);
+  const surface = supportSurface(
+    runtime,
+    anchor.position[0],
+    anchor.position[1],
+    anchor.position[2],
+  );
   if (!surface) throw new Error("World Pack recovery anchor is outside collision terrain.");
   return {
     ...state,
@@ -494,7 +642,7 @@ export function rejoinWorldRoute(
   state: WorldPlayerState,
 ): WorldPlayerState {
   const route = nearestRoutePoint(runtime.navigation, state.x, state.y);
-  const surface = actorSurface(runtime, route.x, route.y);
+  const surface = supportSurface(runtime, route.x, route.y, route.z);
   if (!surface) return recoverWorldPlayer(runtime, state);
   const nearestNode = runtime.navigation.nodes.reduce(
     (best, node) =>
@@ -542,7 +690,7 @@ export function stepWorldPlayer(
   for (let substep = 0; substep < substeps; substep += 1) {
     const nextX = x + totalX / substeps;
     const nextY = y + totalY / substeps;
-    const nextSurface = actorSurface(runtime, nextX, nextY);
+    const nextSurface = actorSurface(runtime, nextX, nextY, z);
     if (!nextSurface) return recoverWorldPlayer(runtime, { ...state, headingDeg });
     const stepHeight = nextSurface.heightM - z;
     if (

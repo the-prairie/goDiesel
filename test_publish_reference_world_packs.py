@@ -2,6 +2,7 @@ from pathlib import Path
 
 from scripts import publish_reference_world_packs
 from scripts.publish_reference_world_packs import CORPUS_PATH, ROOT
+from world_packs.verification import verify_pack
 
 
 def test_reference_publication_inputs_are_fixed_inside_the_repository():
@@ -32,3 +33,14 @@ def test_reference_publication_preserves_previous_sealed_versions(
 
     assert marker.read_bytes() == b"previous sealed bytes"
     assert (public_root / "index.json").is_file()
+    assert not list(tmp_path.glob(".world-packs-publish-*"))
+
+
+def test_first_published_v1_pack_remains_verifiable():
+    first_tokyo = (
+        ROOT
+        / "app/public/world-packs/tokyo-urban"
+        / "wp_d14982d9c6ea7014abe3b0ebfe9d6dfe0afebe66eb7c70a796790a5471740a85"
+    )
+
+    assert verify_pack(first_tokyo).status == "complete"

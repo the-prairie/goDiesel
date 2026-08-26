@@ -62,6 +62,11 @@ export interface WorldPackRuntime {
     coverage: string;
     cameraTimeline: string;
   };
+  physicalCapabilities: {
+    terrainCollision: "heightfield";
+    traversableSurfaces: "indexed-triangle-mesh";
+    structuresCollision: "unavailable";
+  };
   modes: Array<"guided" | "free-roam">;
 }
 

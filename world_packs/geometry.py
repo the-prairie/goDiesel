@@ -217,6 +217,47 @@ def route_ribbon_glb(
         left = index * 2
         next_left = left + 2
         indices.extend([left, left + 1, next_left, left + 1, next_left + 1, next_left])
+    component_starts = [0, *(index + 1 for index in sorted(disconnected_after))]
+    component_ends = [*sorted(disconnected_after), len(points) - 1]
+    for start, end in zip(component_starts, component_ends):
+        if end <= start:
+            continue
+        for point_index, direction in ((start, -1.0), (end, 1.0)):
+            neighbour_index = point_index + 1 if point_index == start else point_index - 1
+            point = points[point_index]
+            neighbour = points[neighbour_index]
+            tangent_x = point.x - neighbour.x
+            tangent_y = point.y - neighbour.y
+            if point_index == start:
+                tangent_x *= -1
+                tangent_y *= -1
+            magnitude = math.hypot(tangent_x, tangent_y) or 1.0
+            extension_x = tangent_x / magnitude * half_width * direction
+            extension_y = tangent_y / magnitude * half_width * direction
+            cap_left = len(positions)
+            positions.extend(
+                [
+                    (
+                        positions[point_index * 2][0] + extension_x,
+                        positions[point_index * 2][1] + extension_y,
+                        point.z,
+                    ),
+                    (
+                        positions[point_index * 2 + 1][0] + extension_x,
+                        positions[point_index * 2 + 1][1] + extension_y,
+                        point.z,
+                    ),
+                ]
+            )
+            route_left = point_index * 2
+            if point_index == start:
+                indices.extend(
+                    [cap_left, cap_left + 1, route_left, cap_left + 1, route_left + 1, route_left]
+                )
+            else:
+                indices.extend(
+                    [route_left, route_left + 1, cap_left, route_left + 1, cap_left + 1, cap_left]
+                )
     return build_glb(
         positions,
         indices=indices,
