@@ -10,6 +10,7 @@ import stat
 import tempfile
 import uuid
 from pathlib import Path
+from urllib.parse import urlencode
 
 from world_packs.canonical import canonical_json_document, sha256_file
 from world_packs.compiler import BuildConfiguration, WorldPackCompiler
@@ -70,6 +71,7 @@ def _publish_index(staging: Path, target: Path) -> None:
 def publish() -> dict[str, object]:
     corpus = json.loads(CORPUS_PATH.read_text(encoding="utf-8"))
     source_commit = corpus["sourceCommit"]
+    osm_policy = corpus["osmSourcePolicy"]
     staging = PUBLIC_ROOT.parent / f".world-packs-publish-{uuid.uuid4().hex}"
     if staging.exists():
         raise RuntimeError(f"publication staging path already exists: {staging}")
@@ -107,6 +109,16 @@ def publish() -> dict[str, object]:
                         ),
                         structure_licence=route.get("structureLicence"),
                         structure_attribution=route.get("structureAttribution"),
+                        osm_network_paths=tuple(
+                            ROOT / source["path"]
+                            for source in route.get("osmSources", [])
+                        ),
+                        osm_source_uris=tuple(
+                            f"{osm_policy['endpoint']}?{urlencode({'data': source['query']})}"
+                            for source in route.get("osmSources", [])
+                        ),
+                        osm_licence=osm_policy["licence"],
+                        osm_attribution=osm_policy["attribution"],
                     ),
                 )
                 health = verify_pack(result.path)

@@ -883,7 +883,11 @@ class WorldPackCompiler:
             )
             structures_collision = assembler.add(
                 "physics/structures-collision.glb",
-                osm_world.collision_glb(points, normalized_terrain)
+                osm_world.collision_glb(
+                    points,
+                    normalized_terrain,
+                    disconnected_after=disconnected_after,
+                )
                 if osm_world is not None
                 else empty_glb("No admitted structures"),
                 media_type="model/gltf-binary",

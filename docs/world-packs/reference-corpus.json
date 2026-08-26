@@ -1,6 +1,11 @@
 {
   "schemaVersion": 1,
   "sourceCommit": "9d82ce0be05012a6a17e0f93bf06425158e926ed",
+  "osmSourcePolicy": {
+    "endpoint": "https://overpass-api.de/api/interpreter",
+    "licence": "ODbL-1.0",
+    "attribution": "OpenStreetMap contributors"
+  },
   "routes": [
     {
       "id": "tokyo-urban",
@@ -15,6 +20,36 @@
       ],
       "structureLicence": "PDL-1.0-CC-BY-4.0-compatible",
       "structureAttribution": "Source: Project PLATEAU, Ministry of Land, Infrastructure, Transport and Tourism, 2025 3D city models for Chiyoda, Chuo, Minato, and Koto, copyright the respective local governments. Modified by goDiesel through route-corridor selection and removal of batch-property metadata.",
+      "osmSources": [
+        {
+          "path": "world-packs-local/sources/osm/2026/tokyo-building-south.json",
+          "query": "[out:json][timeout:180];way[building](35.6155,139.7440,35.6463,139.8110);out geom(35.6155,139.7440,35.6463,139.8110) qt;"
+        },
+        {
+          "path": "world-packs-local/sources/osm/2026/tokyo-building-middle.json",
+          "query": "[out:json][timeout:180];way[building](35.6463,139.7440,35.6772,139.8110);out geom(35.6463,139.7440,35.6772,139.8110) qt;"
+        },
+        {
+          "path": "world-packs-local/sources/osm/2026/tokyo-building-north.json",
+          "query": "[out:json][timeout:180];way[building](35.6772,139.7440,35.7080,139.8110);out geom(35.6772,139.7440,35.7080,139.8110) qt;"
+        },
+        {
+          "path": "world-packs-local/sources/osm/2026/tokyo-highway-south-1.json",
+          "query": "[out:json][timeout:180];way[highway](35.6155,139.7440,35.6309,139.8110);out geom(35.6155,139.7440,35.6309,139.8110) qt;"
+        },
+        {
+          "path": "world-packs-local/sources/osm/2026/tokyo-highway-south-2.json",
+          "query": "[out:json][timeout:180];way[highway](35.6309,139.7440,35.6463,139.8110);out geom(35.6309,139.7440,35.6463,139.8110) qt;"
+        },
+        {
+          "path": "world-packs-local/sources/osm/2026/tokyo-highway-middle.json",
+          "query": "[out:json][timeout:180];way[highway](35.6463,139.7440,35.6772,139.8110);out geom(35.6463,139.7440,35.6772,139.8110) qt;"
+        },
+        {
+          "path": "world-packs-local/sources/osm/2026/tokyo-highway-north-nodes.json",
+          "query": "[out:json][timeout:180];way[highway](35.6772,139.7440,35.7080,139.8110);out body;>;out skel qt;"
+        }
+      ],
       "corridorRadiusM": 1000,
       "explorationRadiusM": 1600,
       "qualityCellSizeM": 250,
@@ -33,6 +68,16 @@
       "slug": "15573295095",
       "routeDetail": "app/public/data/routes/15573295095.json",
       "normalizedTerrain": "docs/world-packs/normalized/banff-mountain-terrain.json",
+      "osmSources": [
+        {
+          "path": "world-packs-local/sources/osm/2026/banff-building.json",
+          "query": "[out:json][timeout:180];way[building](51.123,-115.653,51.203,-115.527);out geom qt;"
+        },
+        {
+          "path": "world-packs-local/sources/osm/2026/banff-highway.json",
+          "query": "[out:json][timeout:180];way[highway](51.123,-115.653,51.203,-115.527);out geom(51.123,-115.653,51.203,-115.527) qt;"
+        }
+      ],
       "corridorRadiusM": 1400,
       "explorationRadiusM": 2200,
       "qualityCellSizeM": 250,
@@ -51,6 +96,16 @@
       "slug": "6496900063",
       "routeDetail": "app/public/data/routes/6496900063.json",
       "normalizedTerrain": "docs/world-packs/normalized/ucluelet-coastal-terrain.json",
+      "osmSources": [
+        {
+          "path": "world-packs-local/sources/osm/2026/ucluelet-building.json",
+          "query": "[out:json][timeout:180];way[building](48.9125,-125.5980,48.9645,-125.5010);out geom(48.9125,-125.5980,48.9645,-125.5010) qt;"
+        },
+        {
+          "path": "world-packs-local/sources/osm/2026/ucluelet-highway.json",
+          "query": "[out:json][timeout:180];way[highway](48.9125,-125.5980,48.9645,-125.5010);out body;>;out skel qt;"
+        }
+      ],
       "corridorRadiusM": 1200,
       "explorationRadiusM": 2000,
       "qualityCellSizeM": 250,

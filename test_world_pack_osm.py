@@ -58,7 +58,7 @@ def source_fixture(tmp_path: Path) -> Path:
 
 def test_osm_normalizer_compiles_recorded_transport_and_collision(tmp_path: Path):
     source = source_fixture(tmp_path)
-    route = [LocalPoint(0, 0, 2, 0), LocalPoint(0, 20, 3, 20)]
+    route = [LocalPoint(-20, 0, 2, 0), LocalPoint(-20, 20, 3, 20)]
 
     data = OsmWorldData.load(
         source,
@@ -84,7 +84,7 @@ def test_osm_normalizer_compiles_recorded_transport_and_collision(tmp_path: Path
 
 def test_osm_normalizer_is_byte_deterministic(tmp_path: Path):
     source = source_fixture(tmp_path)
-    route = [LocalPoint(0, 0, 2, 0), LocalPoint(0, 20, 3, 20)]
+    route = [LocalPoint(-20, 0, 2, 0), LocalPoint(-20, 20, 3, 20)]
     first = OsmWorldData.load(
         source,
         route,
@@ -119,11 +119,11 @@ def test_compiler_retains_osm_and_publishes_physical_capabilities(tmp_path: Path
                         "id": 99,
                         "tags": {"building": "yes", "height": "12"},
                         "geometry": [
-                            {"lat": origin["lat"], "lon": origin["lng"] + 0.00002},
-                            {"lat": origin["lat"], "lon": origin["lng"] + 0.00004},
-                            {"lat": origin["lat"] + 0.00002, "lon": origin["lng"] + 0.00004},
-                            {"lat": origin["lat"] + 0.00002, "lon": origin["lng"] + 0.00002},
-                            {"lat": origin["lat"], "lon": origin["lng"] + 0.00002},
+                            {"lat": origin["lat"], "lon": origin["lng"] + 0.0005},
+                            {"lat": origin["lat"], "lon": origin["lng"] + 0.00052},
+                            {"lat": origin["lat"] + 0.00002, "lon": origin["lng"] + 0.00052},
+                            {"lat": origin["lat"] + 0.00002, "lon": origin["lng"] + 0.0005},
+                            {"lat": origin["lat"], "lon": origin["lng"] + 0.0005},
                         ],
                     }
                 ],

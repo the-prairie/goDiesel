@@ -76,8 +76,10 @@ class OsmWorldData:
             raise ValidationError("OSM source list is empty")
         source_sha256s: list[str] = []
         source_dates: list[str] = []
-        elements_by_id: dict[int, dict[str, object]] = {}
-        for path in paths:
+        element_variants: dict[tuple[int, str], tuple[int, dict[str, object]]] = {}
+        way_variant_counts: dict[int, int] = {}
+        node_coordinates: dict[int, dict[str, float]] = {}
+        for shard_index, path in enumerate(paths):
             if path.is_symlink() or not path.is_file():
                 raise ValidationError(f"OSM source is not a regular file: {path}")
             value = strict_json_load(path)
@@ -95,11 +97,34 @@ class OsmWorldData:
             source_sha256s.append(sha256_file(path))
             source_dates.append(source_date)
             for raw_element in elements:
-                if (
-                    not isinstance(raw_element, dict)
-                    or raw_element.get("type") != "way"
-                ):
-                    raise ValidationError("OSM source may contain only ways")
+                if not isinstance(raw_element, dict):
+                    raise ValidationError("OSM source element is invalid")
+                if raw_element.get("type") == "node":
+                    node_id = raw_element.get("id")
+                    latitude = raw_element.get("lat")
+                    longitude = raw_element.get("lon")
+                    if (
+                        isinstance(node_id, bool)
+                        or not isinstance(node_id, int)
+                        or isinstance(latitude, bool)
+                        or not isinstance(latitude, (int, float))
+                        or isinstance(longitude, bool)
+                        or not isinstance(longitude, (int, float))
+                    ):
+                        raise ValidationError("OSM node is invalid")
+                    coordinate = {"lat": float(latitude), "lon": float(longitude)}
+                    existing_coordinate = node_coordinates.get(node_id)
+                    if (
+                        existing_coordinate is not None
+                        and existing_coordinate != coordinate
+                    ):
+                        raise ValidationError(
+                            f"OSM node {node_id} differs across source shards"
+                        )
+                    node_coordinates[node_id] = coordinate
+                    continue
+                if raw_element.get("type") != "way":
+                    raise ValidationError("OSM source may contain only ways and nodes")
                 way_id = raw_element.get("id")
                 if (
                     isinstance(way_id, bool)
@@ -107,11 +132,17 @@ class OsmWorldData:
                     or way_id <= 0
                 ):
                     raise ValidationError("OSM way ID is invalid")
-                existing = elements_by_id.get(way_id)
-                if existing is not None and existing != raw_element:
-                    raise ValidationError(f"OSM way {way_id} differs across source shards")
-                elements_by_id[way_id] = raw_element
-        elements = [elements_by_id[way_id] for way_id in sorted(elements_by_id)]
+                variant_digest = sha256_bytes(
+                    canonical_json_document(raw_element)
+                )
+                key = (way_id, variant_digest)
+                if key not in element_variants:
+                    element_variants[key] = (shard_index, raw_element)
+                    way_variant_counts[way_id] = way_variant_counts.get(way_id, 0) + 1
+        elements = [
+            (shard_index, raw_element)
+            for _, (shard_index, raw_element) in sorted(element_variants.items())
+        ]
 
         latitude_scale = math.pi * EARTH_RADIUS_M / 180.0
         longitude_scale = latitude_scale * math.cos(math.radians(origin_latitude))
@@ -145,7 +176,7 @@ class OsmWorldData:
 
         buildings: list[OsmBuilding] = []
         transport: list[OsmTransportFeature] = []
-        for raw_element in elements:
+        for shard_index, raw_element in elements:
             if (
                 not isinstance(raw_element, dict)
                 or raw_element.get("type") != "way"
@@ -160,12 +191,31 @@ class OsmWorldData:
                 raise ValidationError("OSM way ID is invalid")
             tags = raw_element.get("tags")
             geometry = raw_element.get("geometry")
-            if not isinstance(tags, dict) or not isinstance(geometry, list):
-                raise ValidationError(f"OSM way {way_id} lacks tags or geometry")
-            positions = tuple(local_position(position) for position in geometry)
+            if not isinstance(tags, dict):
+                raise ValidationError(f"OSM way {way_id} lacks tags")
+            if not isinstance(geometry, list):
+                raw_nodes = raw_element.get("nodes")
+                if not isinstance(raw_nodes, list) or any(
+                    isinstance(node_id, bool) or not isinstance(node_id, int)
+                    for node_id in raw_nodes
+                ):
+                    raise ValidationError(f"OSM way {way_id} lacks geometry")
+                try:
+                    geometry = [node_coordinates[node_id] for node_id in raw_nodes]
+                except KeyError as error:
+                    raise ValidationError(
+                        f"OSM way {way_id} references a missing node"
+                    ) from error
+            positions = tuple(
+                local_position(position) for position in geometry if position is not None
+            )
             if len(positions) < 2 or not in_scope(positions):
                 continue
-            feature_id = f"way/{way_id}"
+            feature_id = (
+                f"way/{way_id}@shard/{shard_index:03d}"
+                if way_variant_counts[way_id] > 1
+                else f"way/{way_id}"
+            )
             if (
                 "building" in tags
                 and len(positions) >= 4
@@ -274,10 +324,107 @@ class OsmWorldData:
         self,
         route_points: list[LocalPoint],
         terrain: NormalizedTerrain | None,
+        *,
+        disconnected_after: frozenset[int] = frozenset(),
     ) -> bytes:
         positions: list[tuple[float, float, float]] = []
         indices: list[int] = []
         obstacles: list[dict[str, object]] = []
+        excluded_route_conflicts: list[str] = []
+
+        def point_in_polygon(
+            footprint: tuple[tuple[float, float], ...],
+            x: float,
+            y: float,
+        ) -> bool:
+            inside = False
+            previous = len(footprint) - 1
+            for index, (current_x, current_y) in enumerate(footprint):
+                previous_x, previous_y = footprint[previous]
+                if (
+                    (current_y > y) != (previous_y > y)
+                    and x
+                    < (previous_x - current_x)
+                    * (y - current_y)
+                    / (previous_y - current_y)
+                    + current_x
+                ):
+                    inside = not inside
+                previous = index
+            return inside
+
+        def orientation(
+            first: tuple[float, float],
+            second: tuple[float, float],
+            third: tuple[float, float],
+        ) -> float:
+            return (second[0] - first[0]) * (third[1] - first[1]) - (
+                second[1] - first[1]
+            ) * (third[0] - first[0])
+
+        def segments_cross(
+            first_start: tuple[float, float],
+            first_end: tuple[float, float],
+            second_start: tuple[float, float],
+            second_end: tuple[float, float],
+        ) -> bool:
+            if (
+                max(first_start[0], first_end[0])
+                < min(second_start[0], second_end[0])
+                or min(first_start[0], first_end[0])
+                > max(second_start[0], second_end[0])
+                or max(first_start[1], first_end[1])
+                < min(second_start[1], second_end[1])
+                or min(first_start[1], first_end[1])
+                > max(second_start[1], second_end[1])
+            ):
+                return False
+            first_a = orientation(first_start, first_end, second_start)
+            first_b = orientation(first_start, first_end, second_end)
+            second_a = orientation(second_start, second_end, first_start)
+            second_b = orientation(second_start, second_end, first_end)
+            return first_a * first_b <= 0 and second_a * second_b <= 0
+
+        def conflicts_with_route(building: OsmBuilding) -> bool:
+            minimum_x = min(point[0] for point in building.footprint)
+            maximum_x = max(point[0] for point in building.footprint)
+            minimum_y = min(point[1] for point in building.footprint)
+            maximum_y = max(point[1] for point in building.footprint)
+            if any(
+                minimum_x <= point.x <= maximum_x
+                and minimum_y <= point.y <= maximum_y
+                and point_in_polygon(building.footprint, point.x, point.y)
+                for point in route_points
+            ):
+                return True
+            for route_index, route_start in enumerate(route_points[:-1]):
+                if route_index in disconnected_after:
+                    continue
+                route_end = route_points[route_index + 1]
+                if (
+                    max(route_start.x, route_end.x) < minimum_x
+                    or min(route_start.x, route_end.x) > maximum_x
+                    or max(route_start.y, route_end.y) < minimum_y
+                    or min(route_start.y, route_end.y) > maximum_y
+                ):
+                    continue
+                route_segment_start = (route_start.x, route_start.y)
+                route_segment_end = (route_end.x, route_end.y)
+                if any(
+                    segments_cross(
+                        route_segment_start,
+                        route_segment_end,
+                        footprint_start,
+                        building.footprint[
+                            (footprint_index + 1) % len(building.footprint)
+                        ],
+                    )
+                    for footprint_index, footprint_start in enumerate(
+                        building.footprint
+                    )
+                ):
+                    return True
+            return False
 
         def ground_height(x: float, y: float) -> float:
             if terrain is not None:
@@ -291,6 +438,9 @@ class OsmWorldData:
             ).z
 
         for building in self.buildings:
+            if conflicts_with_route(building):
+                excluded_route_conflicts.append(building.feature_id)
+                continue
             centre_x = sum(point[0] for point in building.footprint) / len(
                 building.footprint
             )
@@ -347,6 +497,7 @@ class OsmWorldData:
                     "schemaVersion": 1,
                     "coordinateReference": "route-local-enu-v1",
                     "sourceSha256": self.sha256,
+                    "excludedRouteConflictFeatureIds": excluded_route_conflicts,
                     "obstacles": obstacles,
                 }
             },
