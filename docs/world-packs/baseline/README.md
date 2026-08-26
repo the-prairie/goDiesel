@@ -46,5 +46,13 @@ The output records attempted request origin and path but no credentials, query s
 - npm 11.19.0.
 - Playwright 1.61.1 using desktop Chromium at 1440 by 900.
 
-This is the owner-hardware offline-dependency baseline.
-It is not the required current live-provider performance trace, ten-minute stability run, visual recording, collision trace, or blind human-quality baseline.
+## Live-provider current runtime
+
+`live-reference-runtime.json` is the sanitized summary of the fixed three-route, three-surface owner-Mac baseline.
+`live-reference-runtime.md` defines the workload, metric semantics, results, visual findings, ignored local evidence hashes, and metrics that the current runtime cannot expose.
+
+The live workload passed in 10.7 minutes and captured an aggregate 600,000 ms observation across the nine route-surface combinations.
+A separate evidence run retained a 51.6-second WebM and Playwright trace in ignored local artifacts.
+
+This closes the locally obtainable instrumented Stage 0 baseline.
+The blind human-quality baseline remains an explicit promotion gate.

@@ -1,0 +1,174 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-26T08:55:48.783Z",
+  "sourceArtifactSha256": "7c1a6fb24e3f9c2c07ae18458888dae006781f9666c2caf0d0f6772b2e061020",
+  "conditions": {
+    "project": "owner-mac-desktop-chromium",
+    "viewport": { "width": 1440, "height": 900 },
+    "totalObservationMs": 600000,
+    "surfaceObservationMs": 66666,
+    "liveProvidersDisabled": false,
+    "providerCredentialConfigured": true
+  },
+  "routes": [
+    {
+      "id": "tokyo-urban",
+      "atlas": {
+        "state": "region-ready",
+        "readyMs": 2215,
+        "frames": { "p95Ms": 10.3, "p99Ms": 16.7, "over33Ms": 1 },
+        "heap": {
+          "startUsedBytes": 79326096,
+          "peakUsedBytes": 93996016,
+          "settledUsedBytes": 86755640,
+          "settledTotalBytes": 132579328
+        },
+        "webgl": { "activeContexts": 1, "connectedCanvases": 1, "totalContextsCreated": 2 }
+      },
+      "replay": {
+        "state": "ready",
+        "readyMs": 3698,
+        "progressMonotonic": true,
+        "frames": { "p95Ms": 25.0, "p99Ms": 33.5, "over33Ms": 89 },
+        "heap": {
+          "startUsedBytes": 39556764,
+          "peakUsedBytes": 69998852,
+          "settledUsedBytes": 29777788,
+          "settledTotalBytes": 102137856
+        },
+        "webgl": { "activeContexts": 1, "connectedCanvases": 1, "totalContextsCreated": 4 }
+      },
+      "playable": {
+        "state": "ready",
+        "readyMs": 2387,
+        "progressMonotonic": true,
+        "groundingSource": "fallback",
+        "groundingReason": "outlier",
+        "groundingOffsetM": 63.17,
+        "frames": { "p95Ms": 17.6, "p99Ms": 25.0, "over33Ms": 17 },
+        "heap": {
+          "startUsedBytes": 94503232,
+          "peakUsedBytes": 317408416,
+          "settledUsedBytes": 310616056,
+          "settledTotalBytes": 361578496
+        },
+        "webgl": { "activeContexts": 1, "connectedCanvases": 1, "totalContextsCreated": 2 }
+      }
+    },
+    {
+      "id": "banff-mountain",
+      "atlas": {
+        "state": "region-ready",
+        "readyMs": 2126,
+        "frames": { "p95Ms": 10.1, "p99Ms": 10.4, "over33Ms": 0 },
+        "heap": {
+          "startUsedBytes": 65139000,
+          "peakUsedBytes": 140026828,
+          "settledUsedBytes": 140026828,
+          "settledTotalBytes": 187105280
+        },
+        "webgl": { "activeContexts": 1, "connectedCanvases": 1, "totalContextsCreated": 2 }
+      },
+      "replay": {
+        "state": "ready",
+        "readyMs": 3417,
+        "progressMonotonic": true,
+        "frames": { "p95Ms": 10.0, "p99Ms": 10.3, "over33Ms": 2 },
+        "heap": {
+          "startUsedBytes": 159614032,
+          "peakUsedBytes": 159614032,
+          "settledUsedBytes": 45074032,
+          "settledTotalBytes": 102006784
+        },
+        "webgl": { "activeContexts": 1, "connectedCanvases": 1, "totalContextsCreated": 4 }
+      },
+      "playable": {
+        "state": "ready",
+        "readyMs": 1651,
+        "progressMonotonic": true,
+        "groundingSource": "sampled",
+        "groundingReason": "sampled",
+        "groundingOffsetM": 7.29,
+        "frames": { "p95Ms": 10.2, "p99Ms": 16.7, "over33Ms": 0 },
+        "heap": {
+          "startUsedBytes": 53991660,
+          "peakUsedBytes": 224076680,
+          "settledUsedBytes": 224076680,
+          "settledTotalBytes": 277643264
+        },
+        "webgl": { "activeContexts": 1, "connectedCanvases": 1, "totalContextsCreated": 2 }
+      }
+    },
+    {
+      "id": "ucluelet-coastal",
+      "atlas": {
+        "state": "region-ready",
+        "readyMs": 2203,
+        "frames": { "p95Ms": 9.8, "p99Ms": 10.3, "over33Ms": 0 },
+        "heap": {
+          "startUsedBytes": 278621612,
+          "peakUsedBytes": 367144420,
+          "settledUsedBytes": 367144420,
+          "settledTotalBytes": 419037184
+        },
+        "webgl": { "activeContexts": 1, "connectedCanvases": 1, "totalContextsCreated": 2 }
+      },
+      "replay": {
+        "state": "ready",
+        "readyMs": 3282,
+        "progressMonotonic": true,
+        "frames": { "p95Ms": 10.0, "p99Ms": 10.3, "over33Ms": 2 },
+        "heap": {
+          "startUsedBytes": 382395372,
+          "peakUsedBytes": 382395372,
+          "settledUsedBytes": 27928268,
+          "settledTotalBytes": 103579648
+        },
+        "webgl": { "activeContexts": 1, "connectedCanvases": 1, "totalContextsCreated": 4 }
+      },
+      "playable": {
+        "state": "ready",
+        "readyMs": 1611,
+        "progressMonotonic": true,
+        "groundingSource": "sampled",
+        "groundingReason": "sampled",
+        "groundingOffsetM": -46.59,
+        "frames": { "p95Ms": 10.1, "p99Ms": 16.4, "over33Ms": 1 },
+        "heap": {
+          "startUsedBytes": 33513868,
+          "peakUsedBytes": 168458052,
+          "settledUsedBytes": 150030336,
+          "settledTotalBytes": 211075072
+        },
+        "webgl": { "activeContexts": 1, "connectedCanvases": 1, "totalContextsCreated": 2 }
+      }
+    }
+  ],
+  "externalNetwork": {
+    "requestCount": 24981,
+    "failedRequestCount": 1496,
+    "responseErrorCount": 0,
+    "requests": [
+      { "category": "https://cesium.com/cesium-runtime", "count": 189 },
+      { "category": "https://fonts.googleapis.com/font-css", "count": 9 },
+      { "category": "https://fonts.gstatic.com/font-file", "count": 3 },
+      { "category": "https://keyhole-pa.googleapis.com/BulkMetadata", "count": 1485 },
+      { "category": "https://keyhole-pa.googleapis.com/NodeData", "count": 15836 },
+      { "category": "https://keyhole-pa.googleapis.com/rt/earth/Copyrights/pb=", "count": 6 },
+      { "category": "https://keyhole-pa.googleapis.com/rt/earth/PlanetoidMetadata", "count": 6 },
+      { "category": "https://maps.googleapis.com/maps-api-js", "count": 3 },
+      { "category": "https://maps.googleapis.com/maps-api-v3-runtime", "count": 30 },
+      { "category": "https://maps.googleapis.com/maps-runtime", "count": 9 },
+      { "category": "https://maps.googleapis.com/static-map", "count": 8 },
+      { "category": "https://tile.googleapis.com/v1/3dtiles/files/glb", "count": 6071 },
+      { "category": "https://tile.googleapis.com/v1/3dtiles/files/json", "count": 1320 },
+      { "category": "https://tile.googleapis.com/v1/3dtiles/root.json", "count": 6 }
+    ],
+    "failedRequests": [
+      { "category": "https://keyhole-pa.googleapis.com/BulkMetadata net::ERR_ABORTED", "count": 32 },
+      { "category": "https://keyhole-pa.googleapis.com/NodeData net::ERR_ABORTED", "count": 560 },
+      { "category": "https://tile.googleapis.com/v1/3dtiles/files/glb net::ERR_ABORTED", "count": 712 },
+      { "category": "https://tile.googleapis.com/v1/3dtiles/files/json net::ERR_ABORTED", "count": 192 }
+    ]
+  }
+}

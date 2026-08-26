@@ -61,13 +61,15 @@ Original owner GPX, FIT, photos, or videos remain in local restricted storage an
 - Atlas regional dogfood establishes provider-backed urban and mountain framing, not local World Pack durability.
 - `baseline/current-runtime-provider-disabled.json` proves that every current immersive path fails or attempts a non-local request for all three fixed routes when credentials and non-local network access are removed.
 
-## Baseline evidence still required
+## Baseline evidence status
 
-- An owner-Mac trace for current Replay and Playable Earth on the three routes.
-- Ten-minute stability traces for current provider-backed comparison paths.
-- Current live-provider screenshots and recordings for the fixed routes.
-- Route alignment, grounding drift, collision failure, and camera-discontinuity measurements using one fixed workload.
-- A blind baseline rubric for route legibility, sense of place, visual fidelity, grounding, continuity, and emotional resonance.
+- The owner-Mac current-runtime workload is committed in `baseline/live-reference-runtime.json` and `baseline/live-reference-runtime.md`.
+- The workload covers all three routes in Atlas, native Google Replay, and Playable Earth with an aggregate ten-minute observation.
+- The harness captures readiness, frame distribution, route progress, Chromium JS heap, active WebGL contexts, request counts, response errors, and Playable Earth grounding offsets.
+- Screenshots, recording, and trace remain in ignored local evidence with committed hashes because they contain provider-derived imagery.
+- Collision failure is unavailable because the current product has no physical actor or collision world.
+- Numeric route alignment and camera discontinuity are unavailable because the current renderer contracts expose no fixed control-set or camera-pose oracle.
+- A blind human baseline remains required before runtime promotion.
 
-No production implementation begins until the deterministic fixed corpus and the locally obtainable baseline evidence are committed.
-Live-provider and owner-subjective evidence may remain an explicit blocked gate when credentials, fixed hardware, or owner participation are required.
+The deterministic fixed corpus and locally obtainable baseline evidence are now committed prerequisites for production implementation.
+Owner-subjective evidence remains an explicit promotion gate.

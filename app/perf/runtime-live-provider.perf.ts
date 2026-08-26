@@ -46,12 +46,12 @@ test("records fixed-host regional provider settlement", async ({ page }, testInf
   });
   const globalReadyMs = performance.now() - started;
 
-  const regionButton = page.getByRole("button", {
-    name: /Select Kyoto, Japan on globe/i,
+  const regionSelect = page.getByRole("combobox", {
+    name: "Browse route regions",
   });
-  await expect(regionButton).toBeVisible({ timeout: 60_000 });
+  await expect(regionSelect).toBeVisible({ timeout: 60_000 });
   const regionalStarted = performance.now();
-  await regionButton.click();
+  await regionSelect.selectOption("Kyoto, Japan");
   await expect(atlas).toHaveAttribute("data-atlas-status", "region-ready", {
     timeout: 180_000,
   });

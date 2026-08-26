@@ -22,4 +22,9 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 240_000,
   },
+  projects: [
+    {
+      name: "desktop-chromium",
+    },
+  ],
 });
