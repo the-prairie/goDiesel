@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://godiesel.world/schemas/world-pack/v1/migration-version.schema.json",
+  "title": "World Pack migration version",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "minimumReaderVersion", "createdByVersion", "migratedFrom"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "minimumReaderVersion": { "type": "string", "minLength": 1 },
+    "createdByVersion": { "type": "string", "minLength": 1 },
+    "migratedFrom": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["packId", "schemaVersion"],
+      "properties": {
+        "packId": { "type": "string", "pattern": "^wp_[0-9a-f]{64}$" },
+        "schemaVersion": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

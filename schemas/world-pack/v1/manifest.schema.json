@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://godiesel.world/schemas/world-pack/v1/manifest.schema.json",
+  "title": "World Pack manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "packId",
+    "worldId",
+    "routeId",
+    "quality",
+    "compiler",
+    "configuration",
+    "sourceInventorySha256",
+    "transformationGraphSha256",
+    "coverageSha256",
+    "artifacts",
+    "runtime"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "packId": { "type": "string", "pattern": "^wp_[0-9a-f]{64}$" },
+    "worldId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,79}$" },
+    "routeId": { "type": "string", "minLength": 1 },
+    "quality": { "enum": ["core", "detailed", "archival"] },
+    "compiler": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "const": "godiesel-world-compiler" },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "corridorRadiusM",
+        "explorationRadiusM",
+        "qualityCellSizeM",
+        "coordinateReference"
+      ],
+      "properties": {
+        "corridorRadiusM": { "type": "integer", "minimum": 1 },
+        "explorationRadiusM": { "type": "integer", "minimum": 1 },
+        "qualityCellSizeM": { "type": "integer", "minimum": 1 },
+        "coordinateReference": { "const": "route-local-enu-v1" }
+      }
+    },
+    "sourceInventorySha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "transformationGraphSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "coverageSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "logicalPath",
+          "kind",
+          "role",
+          "sha256",
+          "byteSize",
+          "mediaType",
+          "formatVersion",
+          "evidenceClass",
+          "requiredRuntime",
+          "transformationIds"
+        ],
+        "properties": {
+          "logicalPath": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]+$"
+          },
+          "kind": { "enum": ["source", "artifact"] },
+          "role": { "type": "string", "minLength": 1 },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "byteSize": { "type": "integer", "minimum": 0 },
+          "mediaType": { "type": "string", "pattern": "^[^/ ]+/[^/ ]+$" },
+          "formatVersion": { "type": "string", "minLength": 1 },
+          "evidenceClass": {
+            "enum": [
+              "recorded",
+              "derived",
+              "measured",
+              "reconstructed",
+              "procedural",
+              "unavailable"
+            ]
+          },
+          "requiredRuntime": { "type": "boolean" },
+          "transformationIds": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+          }
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entrypoint",
+        "networkRequired",
+        "providerCredentialsRequired",
+        "physicalNeighbourhoodRequired"
+      ],
+      "properties": {
+        "entrypoint": { "type": "string", "minLength": 1 },
+        "networkRequired": { "const": false },
+        "providerCredentialsRequired": { "const": false },
+        "physicalNeighbourhoodRequired": { "const": true }
+      }
+    }
+  }
+}

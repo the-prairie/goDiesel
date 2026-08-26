@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://godiesel.world/schemas/world-pack/v1/artifact.schema.json",
+  "title": "World Pack artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "logicalPath",
+    "kind",
+    "role",
+    "sha256",
+    "byteSize",
+    "mediaType",
+    "formatVersion",
+    "evidenceClass",
+    "requiredRuntime",
+    "transformationIds"
+  ],
+  "properties": {
+    "logicalPath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]+$"
+    },
+    "kind": { "enum": ["source", "artifact"] },
+    "role": { "type": "string", "minLength": 1 },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "byteSize": { "type": "integer", "minimum": 0 },
+    "mediaType": { "type": "string", "pattern": "^[^/ ]+/[^/ ]+$" },
+    "formatVersion": { "type": "string", "minLength": 1 },
+    "evidenceClass": {
+      "enum": [
+        "recorded",
+        "derived",
+        "measured",
+        "reconstructed",
+        "procedural",
+        "unavailable"
+      ]
+    },
+    "requiredRuntime": { "type": "boolean" },
+    "transformationIds": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+    }
+  }
+}

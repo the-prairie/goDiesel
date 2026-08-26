@@ -5,3 +5,5 @@ gpxpy>=1.6
 fitparse>=1.2
 ImageHash>=4.3
 pytest>=8.0
+rfc8785>=0.1.4,<1
+jsonschema>=4.25,<5

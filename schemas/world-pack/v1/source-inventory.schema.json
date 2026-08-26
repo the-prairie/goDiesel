@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://godiesel.world/schemas/world-pack/v1/source-inventory.schema.json",
+  "title": "World Pack retained source inventory",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "sources"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "logicalName",
+          "logicalPath",
+          "sha256",
+          "byteSize",
+          "mediaType",
+          "formatVersion",
+          "evidenceClass",
+          "sourceUri",
+          "acquiredAt",
+          "sourceDate",
+          "licence",
+          "attribution",
+          "adapter",
+          "adapterVersion"
+        ],
+        "properties": {
+          "logicalName": { "type": "string", "minLength": 1 },
+          "logicalPath": {
+            "type": "string",
+            "pattern": "^sources/original/[A-Za-z0-9._/-]+$"
+          },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "byteSize": { "type": "integer", "minimum": 1 },
+          "mediaType": { "type": "string", "pattern": "^[^/ ]+/[^/ ]+$" },
+          "formatVersion": { "type": "string", "minLength": 1 },
+          "evidenceClass": {
+            "enum": ["recorded", "derived", "measured", "reconstructed", "procedural"]
+          },
+          "sourceUri": { "type": "string", "minLength": 1 },
+          "acquiredAt": { "type": "string", "format": "date-time" },
+          "sourceDate": { "type": ["string", "null"] },
+          "licence": { "type": "string", "minLength": 1 },
+          "attribution": { "type": "string", "minLength": 1 },
+          "adapter": { "type": "string", "minLength": 1 },
+          "adapterVersion": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

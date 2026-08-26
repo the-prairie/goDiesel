@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://godiesel.world/schemas/world-pack/v1/canonical-route.schema.json",
+  "title": "World Pack canonical route",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "routeId",
+    "slug",
+    "name",
+    "region",
+    "activityType",
+    "lifecycle",
+    "sourceKind",
+    "coordinates",
+    "segmentCount",
+    "discontinuities"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "routeId": { "type": "string", "minLength": 1 },
+    "slug": { "type": "string", "minLength": 1 },
+    "name": { "type": ["string", "null"] },
+    "region": { "type": ["string", "null"] },
+    "activityType": { "type": ["string", "null"] },
+    "lifecycle": { "type": "string", "minLength": 1 },
+    "sourceKind": { "type": ["string", "null"] },
+    "coordinates": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["latitude", "longitude", "elevationM", "distanceM", "elapsedS"],
+        "properties": {
+          "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+          "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
+          "elevationM": { "type": "number" },
+          "distanceM": { "type": "number", "minimum": 0 },
+          "elapsedS": { "type": ["number", "null"], "minimum": 0 }
+        }
+      }
+    },
+    "segmentCount": { "type": "integer", "minimum": 1 },
+    "discontinuities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "source", "startDistanceM", "endDistanceM", "elapsedS", "missingRecordCount"],
+        "properties": {
+          "kind": { "type": "string", "minLength": 1 },
+          "source": { "type": "string", "minLength": 1 },
+          "startDistanceM": { "type": "number", "minimum": 0 },
+          "endDistanceM": { "type": "number", "minimum": 0 },
+          "elapsedS": { "type": ["number", "null"], "minimum": 0 },
+          "missingRecordCount": { "type": ["integer", "null"], "minimum": 0 }
+        }
+      }
+    }
+  }
+}
