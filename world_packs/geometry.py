@@ -64,9 +64,16 @@ def build_glb(
     indices: Sequence[int] | None,
     mode: int,
     name: str,
+    normals: Sequence[tuple[float, float, float]] | None = None,
+    colors: Sequence[tuple[float, float, float, float]] | None = None,
+    material: dict[str, object] | None = None,
 ) -> bytes:
     if not positions:
         raise ValueError("GLB needs at least one position")
+    if normals is not None and len(normals) != len(positions):
+        raise ValueError("GLB normal count does not match positions")
+    if colors is not None and len(colors) != len(positions):
+        raise ValueError("GLB color count does not match positions")
     position_bytes = b"".join(struct.pack("<fff", *position) for position in positions)
     binary = bytearray(position_bytes)
     buffer_views = [
@@ -113,6 +120,54 @@ def build_glb(
             }
         )
         primitive["indices"] = 1
+    if normals is not None:
+        while len(binary) % 4:
+            binary.append(0)
+        normal_offset = len(binary)
+        normal_bytes = b"".join(struct.pack("<fff", *normal) for normal in normals)
+        binary.extend(normal_bytes)
+        buffer_views.append(
+            {
+                "buffer": 0,
+                "byteOffset": normal_offset,
+                "byteLength": len(normal_bytes),
+                "target": 34962,
+            }
+        )
+        accessors.append(
+            {
+                "bufferView": len(buffer_views) - 1,
+                "componentType": 5126,
+                "count": len(normals),
+                "type": "VEC3",
+            }
+        )
+        primitive["attributes"]["NORMAL"] = len(accessors) - 1
+    if colors is not None:
+        while len(binary) % 4:
+            binary.append(0)
+        color_offset = len(binary)
+        color_bytes = b"".join(struct.pack("<ffff", *color) for color in colors)
+        binary.extend(color_bytes)
+        buffer_views.append(
+            {
+                "buffer": 0,
+                "byteOffset": color_offset,
+                "byteLength": len(color_bytes),
+                "target": 34962,
+            }
+        )
+        accessors.append(
+            {
+                "bufferView": len(buffer_views) - 1,
+                "componentType": 5126,
+                "count": len(colors),
+                "type": "VEC4",
+            }
+        )
+        primitive["attributes"]["COLOR_0"] = len(accessors) - 1
+    if material is not None:
+        primitive["material"] = 0
     document = {
         "asset": {"version": "2.0", "generator": "godiesel-world-compiler/1"},
         "scene": 0,
@@ -123,6 +178,8 @@ def build_glb(
         "bufferViews": buffer_views,
         "accessors": accessors,
     }
+    if material is not None:
+        document["materials"] = [material]
     json_bytes = _padded(
         json.dumps(document, separators=(",", ":"), sort_keys=True).encode("utf-8"),
         b" ",

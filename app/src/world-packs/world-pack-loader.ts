@@ -275,6 +275,9 @@ function parseRuntime(value: unknown): WorldPackRuntime {
       route: path(assets.route, "route asset"),
       terrain: path(assets.terrain, "terrain asset"),
       terrainCollision: path(assets.terrainCollision, "terrain collision asset"),
+      ...(assets.terrainMask === undefined
+        ? {}
+        : { terrainMask: path(assets.terrainMask, "terrain mask asset") }),
       structuresCollision: path(assets.structuresCollision, "structures collision asset"),
       traversableSurfaces: path(assets.traversableSurfaces, "traversable surfaces asset"),
       navigation: path(assets.navigation, "navigation asset"),

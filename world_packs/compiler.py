@@ -23,11 +23,12 @@ from .geometry import (
 from .route import load_canonical_route
 from .schema import validate_document
 from .storage import ContentAddressedStore, ObjectRecord
+from .terrain import NormalizedTerrain
 from .transformations import TransformationGraph, TransformationStep
 
 
 COMPILER_NAME = "godiesel-world-compiler"
-COMPILER_VERSION = "0.1.0"
+COMPILER_VERSION = "0.2.0"
 COORDINATE_REFERENCE = "route-local-enu-v1"
 
 
@@ -44,6 +45,7 @@ class BuildConfiguration:
     licence: str = "owner-controlled-derived-route-data"
     attribution: str = "goDiesel route pipeline"
     deliberate_missing_cell_offsets: tuple[tuple[int, int], ...] = ()
+    normalized_terrain_path: Path | None = None
 
     def __post_init__(self) -> None:
         if not self.world_id or any(
@@ -71,6 +73,11 @@ class BuildConfiguration:
             "deliberateMissingCellOffsets": [
                 list(offset) for offset in self.deliberate_missing_cell_offsets
             ],
+            "terrainInput": (
+                "normalized-measured-v1"
+                if self.normalized_terrain_path is not None
+                else "procedural-route-v1"
+            ),
         }
 
 
@@ -189,6 +196,7 @@ def _coverage_document(
     points: list[LocalPoint],
     configuration: BuildConfiguration,
     source_sha256: str,
+    terrain: NormalizedTerrain | None = None,
 ) -> dict[str, object]:
     size = configuration.quality_cell_size_m
     radius = configuration.exploration_radius_m
@@ -209,9 +217,21 @@ def _coverage_document(
             if nearest_squared > radius**2:
                 continue
             deliberate_gap = (x_index, y_index) in deliberate
+            measured_terrain = terrain is not None and terrain.is_measured_at(
+                center_x, center_y
+            )
+            terrain_source_sha256 = (
+                str(terrain.document["source"]["sha256"])
+                if terrain is not None
+                else source_sha256
+            )
             visual_reason = (
                 "Deliberate source-gap fixture completed with deterministic procedural material"
                 if deliberate_gap
+                else "Measured elevation is rendered with deterministic local material"
+                if measured_terrain
+                else "Raster no-data is represented by declared sea-level fill"
+                if terrain is not None
                 else "No retainable imagery source admitted in Core v1; deterministic procedural material used"
             )
             cells.append(
@@ -220,26 +240,40 @@ def _coverage_document(
                     "eastingM": x_index * size,
                     "northingM": y_index * size,
                     "terrain": _evidence(
-                        "procedural",
-                        source_sha256,
-                        "Terrain shape is procedurally interpolated from recorded route elevations",
+                        "measured" if measured_terrain else "derived" if terrain else "procedural",
+                        terrain_source_sha256,
+                        "Elevation is sampled from the admitted normalized terrain grid"
+                        if measured_terrain
+                        else "Raster no-data is filled at declared aligned sea level"
+                        if terrain
+                        else "Terrain shape is procedurally interpolated from recorded route elevations",
                     ),
-                    "visual": _evidence("procedural", None, visual_reason),
+                    "visual": _evidence(
+                        "derived" if terrain else "procedural",
+                        terrain_source_sha256 if terrain else None,
+                        visual_reason,
+                    ),
                     "structures": _evidence(
                         "unavailable",
                         None,
                         "No retainable structure source has been admitted",
                     ),
                     "collision": _evidence(
-                        "procedural",
-                        source_sha256,
-                        "Stable collision is compiled separately from the procedural terrain",
+                        "measured" if measured_terrain else "unavailable" if terrain else "procedural",
+                        terrain_source_sha256 if measured_terrain else source_sha256 if not terrain else None,
+                        "Collision heightfield is compiled from measured elevation"
+                        if measured_terrain
+                        else "No-data water cells are not declared traversable"
+                        if terrain
+                        else "Stable collision is compiled separately from the procedural terrain",
                     ),
                     "acquisitionDate": configuration.acquired_at,
                     "sourceDate": configuration.source_date,
                     "transformationVersion": COMPILER_VERSION,
                     "accuracyM": None,
-                    "confidence": 0.25 if deliberate_gap else 0.4,
+                    "confidence": (
+                        0.9 if measured_terrain else 0.55 if terrain else 0.25 if deliberate_gap else 0.4
+                    ),
                     "visualQuality": "core",
                     "physicsQuality": "core",
                     "deliberateGap": deliberate_gap,
@@ -383,6 +417,34 @@ class WorldPackCompiler:
                 f"route detail is not a regular source file: {route_detail_path}"
             )
         canonical_route = load_canonical_route(route_detail_path)
+        normalized_terrain: NormalizedTerrain | None = None
+        normalized_terrain_bytes: bytes | None = None
+        normalized_terrain_record: ObjectRecord | None = None
+        if configuration.normalized_terrain_path is not None:
+            terrain_path = configuration.normalized_terrain_path
+            if not terrain_path.is_file() or terrain_path.is_symlink():
+                raise ValidationError(
+                    f"normalized terrain is not a regular source file: {terrain_path}"
+                )
+            normalized_terrain = NormalizedTerrain.load(terrain_path)
+            terrain_origin = normalized_terrain.document["origin"]
+            assert isinstance(terrain_origin, dict)
+            route_origin = canonical_route["coordinates"][0]
+            assert isinstance(route_origin, dict)
+            if terrain_origin != {
+                "latitude": route_origin["latitude"],
+                "longitude": route_origin["longitude"],
+                "elevationM": route_origin["elevationM"],
+            }:
+                raise ValidationError(
+                    "normalized terrain origin does not match canonical route origin"
+                )
+            normalized_terrain_bytes = terrain_path.read_bytes()
+            normalized_terrain_record = self.store.admit(
+                normalized_terrain_bytes,
+                media_type="application/json",
+                format_version="godiesel-normalized-terrain-v1",
+            )
         route_id = str(canonical_route["routeId"])
         source_bytes = route_detail_path.read_bytes()
         source_record = self.store.admit(
@@ -405,6 +467,18 @@ class WorldPackCompiler:
                 required_runtime=False,
                 kind="source",
             )
+            terrain_source_artifact = None
+            if normalized_terrain is not None and normalized_terrain_bytes is not None:
+                terrain_source_artifact = assembler.add(
+                    "sources/derived/normalized-terrain.json",
+                    normalized_terrain_bytes,
+                    media_type="application/json",
+                    format_version="godiesel-normalized-terrain-v1",
+                    evidence_class="derived",
+                    role="normalized-terrain-source",
+                    required_runtime=False,
+                    kind="source",
+                )
             source_inventory = {
                 "schemaVersion": 1,
                 "sources": [
@@ -424,7 +498,29 @@ class WorldPackCompiler:
                         "adapter": "strict-route-detail",
                         "adapterVersion": "1",
                     }
-                ],
+                ]
+                + (
+                    [
+                        {
+                            "logicalName": "normalized-terrain",
+                            "logicalPath": terrain_source_artifact.logicalPath,
+                            "sha256": terrain_source_artifact.sha256,
+                            "byteSize": terrain_source_artifact.byteSize,
+                            "mediaType": terrain_source_artifact.mediaType,
+                            "formatVersion": terrain_source_artifact.formatVersion,
+                            "evidenceClass": terrain_source_artifact.evidenceClass,
+                            "sourceUri": normalized_terrain.document["source"]["sourceUri"],
+                            "acquiredAt": configuration.acquired_at,
+                            "sourceDate": configuration.source_date,
+                            "licence": normalized_terrain.document["source"]["licence"],
+                            "attribution": normalized_terrain.document["source"]["attribution"],
+                            "adapter": "godiesel-raster-normalizer",
+                            "adapterVersion": "1",
+                        }
+                    ]
+                    if terrain_source_artifact is not None and normalized_terrain is not None
+                    else []
+                ),
             }
             validate_document("source-inventory", source_inventory)
             inventory_record = assembler.add_json(
@@ -475,9 +571,25 @@ class WorldPackCompiler:
                 required_runtime=True,
                 transform_name="compile-route-thread-glb",
             )
+            terrain_evidence_class = (
+                "measured"
+                if normalized_terrain is not None
+                and normalized_terrain.measured_vertex_count
+                == len(normalized_terrain.heights_m)
+                else "derived"
+                if normalized_terrain is not None
+                else "procedural"
+            )
+            terrain_transform_input = (
+                (normalized_terrain_record.sha256,)
+                if normalized_terrain_record is not None
+                else None
+            )
             terrain_visual = assembler.add(
                 "terrain/surface/core-terrain.glb",
-                terrain_glb(
+                normalized_terrain.visual_glb()
+                if normalized_terrain is not None
+                else terrain_glb(
                     points,
                     exploration_radius_m=configuration.exploration_radius_m,
                     cell_size_m=configuration.quality_cell_size_m,
@@ -485,14 +597,21 @@ class WorldPackCompiler:
                 ),
                 media_type="model/gltf-binary",
                 format_version="glTF-2.0",
-                evidence_class="procedural",
+                evidence_class=terrain_evidence_class,
                 role="visual-terrain",
                 required_runtime=True,
-                transform_name="compile-procedural-visual-terrain",
+                transform_name=(
+                    "compile-normalized-visual-terrain"
+                    if normalized_terrain is not None
+                    else "compile-procedural-visual-terrain"
+                ),
+                transform_inputs=terrain_transform_input,
             )
             terrain_collision = assembler.add(
                 "physics/terrain-collision.glb",
-                terrain_glb(
+                normalized_terrain.collision_glb()
+                if normalized_terrain is not None
+                else terrain_glb(
                     points,
                     exploration_radius_m=configuration.exploration_radius_m,
                     cell_size_m=configuration.quality_cell_size_m,
@@ -500,10 +619,29 @@ class WorldPackCompiler:
                 ),
                 media_type="model/gltf-binary",
                 format_version="glTF-2.0",
-                evidence_class="procedural",
+                evidence_class=terrain_evidence_class,
                 role="terrain-collision",
                 required_runtime=True,
-                transform_name="compile-stable-terrain-collision",
+                transform_name=(
+                    "compile-normalized-terrain-collision"
+                    if normalized_terrain is not None
+                    else "compile-stable-terrain-collision"
+                ),
+                transform_inputs=terrain_transform_input,
+            )
+            terrain_mask = (
+                assembler.add_json(
+                    "physics/terrain-mask.json",
+                    normalized_terrain.mask_document(),
+                    format_version="1",
+                    evidence_class="derived",
+                    role="terrain-mask",
+                    required_runtime=True,
+                    transform_name="compile-normalized-terrain-mask",
+                    transform_inputs=terrain_transform_input,
+                )
+                if normalized_terrain is not None
+                else None
             )
             structures_collision = assembler.add(
                 "physics/structures-collision.glb",
@@ -591,7 +729,7 @@ class WorldPackCompiler:
                 transform_name="compile-core-lod-policy",
             )
             coverage = _coverage_document(
-                points, configuration, source_record.sha256
+                points, configuration, source_record.sha256, normalized_terrain
             )
             coverage_record = assembler.add_json(
                 "provenance/coverage.json",
@@ -602,13 +740,34 @@ class WorldPackCompiler:
                 required_runtime=True,
                 transform_name="compile-quality-cell-coverage",
             )
+            terrain_alignment = (
+                normalized_terrain.document["verticalAlignment"]
+                if normalized_terrain is not None
+                else None
+            )
+            assert terrain_alignment is None or isinstance(terrain_alignment, dict)
             assembler.add_json(
                 "provenance/accuracy.json",
                 {
                     "schemaVersion": 1,
                     "route": {"class": "derived", "declaredAccuracyM": None},
-                    "terrain": {"class": "procedural", "declaredAccuracyM": None},
-                    "collision": {"class": "procedural", "declaredAccuracyM": None},
+                    "terrain": (
+                        {
+                            "class": "measured",
+                            "declaredAccuracyM": terrain_alignment["residualP95M"],
+                            "verticalAlignmentOffsetM": terrain_alignment["offsetM"],
+                        }
+                        if terrain_alignment is not None
+                        else {"class": "procedural", "declaredAccuracyM": None}
+                    ),
+                    "collision": (
+                        {
+                            "class": "derived",
+                            "declaredAccuracyM": terrain_alignment["residualP95M"],
+                        }
+                        if terrain_alignment is not None
+                        else {"class": "procedural", "declaredAccuracyM": None}
+                    ),
                 },
                 format_version="1",
                 evidence_class="derived",
@@ -631,7 +790,18 @@ class WorldPackCompiler:
                             "licence": "goDiesel-generated-artifact",
                             "attribution": "goDiesel World Compiler",
                         },
-                    ],
+                    ]
+                    + (
+                        [
+                            {
+                                "scope": terrain_source_artifact.logicalPath,
+                                "licence": normalized_terrain.document["source"]["licence"],
+                                "attribution": normalized_terrain.document["source"]["attribution"],
+                            }
+                        ]
+                        if terrain_source_artifact is not None and normalized_terrain is not None
+                        else []
+                    ),
                 },
                 format_version="1",
                 evidence_class="derived",
@@ -693,6 +863,11 @@ class WorldPackCompiler:
                     "route": route_thread.logicalPath,
                     "terrain": terrain_visual.logicalPath,
                     "terrainCollision": terrain_collision.logicalPath,
+                    **(
+                        {"terrainMask": terrain_mask.logicalPath}
+                        if terrain_mask is not None
+                        else {}
+                    ),
                     "structuresCollision": structures_collision.logicalPath,
                     "traversableSurfaces": traversable.logicalPath,
                     "navigation": navigation_record.logicalPath,

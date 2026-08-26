@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://godiesel.world/schemas/world-pack/v1/terrain-mask.schema.json",
+  "title": "Normalized terrain measured-vertex mask",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "columns", "rows", "measuredRuns", "nodataSemantic"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "columns": { "type": "integer", "minimum": 2 },
+    "rows": { "type": "integer", "minimum": 2 },
+    "measuredRuns": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "prefixItems": [
+          { "type": "integer", "minimum": 0 },
+          { "type": "integer", "minimum": 1 }
+        ],
+        "items": false,
+        "minItems": 2,
+        "maxItems": 2
+      }
+    },
+    "nodataSemantic": { "enum": ["water", "unavailable"] }
+  }
+}

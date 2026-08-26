@@ -97,6 +97,11 @@ def publish() -> dict[str, object]:
                             tuple(offset)
                             for offset in route["deliberateMissingCellOffsets"]
                         ),
+                        normalized_terrain_path=(
+                            ROOT / route["normalizedTerrain"]
+                            if "normalizedTerrain" in route
+                            else None
+                        ),
                     ),
                 )
                 health = verify_pack(result.path)

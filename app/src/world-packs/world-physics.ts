@@ -18,6 +18,7 @@ export interface CollisionHeightfield {
   maximumX: number;
   minimumY: number;
   maximumY: number;
+  measuredVertices?: readonly boolean[];
 }
 export interface WorldObstacle {
   minimumX: number;
@@ -245,7 +246,34 @@ function validateGridIndices(
   }
 }
 
-export function parseCollisionHeightfield(bytes: Uint8Array): CollisionHeightfield {
+function parseTerrainMask(
+  bytes: Uint8Array,
+  columns: number,
+  rows: number,
+): boolean[] {
+  const value = JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
+  assert(value.schemaVersion === 1, "terrain mask version is unsupported");
+  assert(value.columns === columns && value.rows === rows, "terrain mask grid disagrees with collision terrain");
+  const runs = typedArray<unknown[]>(value.measuredRuns, "terrain mask measuredRuns");
+  const measured = Array.from({ length: columns * rows }, () => false);
+  let previousEnd = 0;
+  for (const [index, run] of runs.entries()) {
+    assert(Array.isArray(run) && run.length === 2, `terrain mask run ${index} is invalid`);
+    const [start, length] = run;
+    assert(Number.isInteger(start) && Number.isInteger(length), `terrain mask run ${index} is not integral`);
+    assert((start as number) >= previousEnd && (length as number) > 0, `terrain mask run ${index} overlaps`);
+    const end = (start as number) + (length as number);
+    assert(end <= measured.length, `terrain mask run ${index} exceeds the grid`);
+    measured.fill(true, start as number, end);
+    previousEnd = end;
+  }
+  return measured;
+}
+
+export function parseCollisionHeightfield(
+  bytes: Uint8Array,
+  terrainMaskBytes?: Uint8Array,
+): CollisionHeightfield {
   const { positions, document, binary } = positionRows(bytes);
   assert(positions.length >= 4, "terrain has too few vertices");
   const firstY = positions[0][1];
@@ -284,6 +312,9 @@ export function parseCollisionHeightfield(bytes: Uint8Array): CollisionHeightfie
     maximumX: xAxis.at(-1)!,
     minimumY: yAxis[0],
     maximumY: yAxis.at(-1)!,
+    ...(terrainMaskBytes
+      ? { measuredVertices: parseTerrainMask(terrainMaskBytes, rowWidth, rowCount) }
+      : {}),
   };
 }
 
@@ -318,6 +349,16 @@ export function collisionSurface(
   const lowerRight = heightfield.heights[row][column + 1];
   const upperLeft = heightfield.heights[row + 1][column];
   const upperRight = heightfield.heights[row + 1][column + 1];
+  if (heightfield.measuredVertices) {
+    const rowWidth = heightfield.xAxis.length;
+    const indices = [
+      row * rowWidth + column,
+      row * rowWidth + column + 1,
+      (row + 1) * rowWidth + column,
+      (row + 1) * rowWidth + column + 1,
+    ];
+    if (indices.some((index) => !heightfield.measuredVertices![index])) return undefined;
+  }
   let heightM: number;
   let dzdx: number;
   let dzdy: number;
@@ -512,6 +553,9 @@ export function createWorldPhysicsRuntime(pack: VerifiedWorldPack): WorldPhysics
     navigation: pack.navigation,
     heightfield: parseCollisionHeightfield(
       pack.artifact(pack.runtime.assets.terrainCollision),
+      pack.runtime.assets.terrainMask
+        ? pack.artifact(pack.runtime.assets.terrainMask)
+        : undefined,
     ),
     traversableTriangles: parseTraversableSurface(
       pack.artifact(pack.runtime.assets.traversableSurfaces),

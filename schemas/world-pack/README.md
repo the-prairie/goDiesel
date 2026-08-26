@@ -12,6 +12,8 @@ The schemas separate these concerns:
 - `artifact` defines a content-addressed retained or derived file.
 - `source-inventory` records admissible source evidence, licence, attribution, and acquisition lineage without workstation paths.
 - `source-receipt` binds downloaded custody bytes to immutable source versions and retained legal evidence before compiler admission.
+- `normalized-terrain` records a deterministic route-local heightfield, measured-vertex mask, no-data semantics, and vertical alignment.
+- `terrain-mask` carries the measured-vertex boundary into offline collision so declared water and unavailable cells are not traversable.
 - `transformations` records deterministic compiler steps and their input and output content identities.
 - `coverage` records visual and physical provenance for every declared quality cell, including explicit unavailability.
 - `canonical-route` preserves normalized route truth without inventing route history.

@@ -41,6 +41,7 @@
       "class": "remote-coastal",
       "slug": "6496900063",
       "routeDetail": "app/public/data/routes/6496900063.json",
+      "normalizedTerrain": "docs/world-packs/normalized/ucluelet-coastal-terrain.json",
       "corridorRadiusM": 1200,
       "explorationRadiusM": 2000,
       "qualityCellSizeM": 250,

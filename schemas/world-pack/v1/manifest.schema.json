@@ -48,6 +48,9 @@
         "explorationRadiusM": { "type": "integer", "minimum": 1 },
         "qualityCellSizeM": { "type": "integer", "minimum": 1 },
         "coordinateReference": { "const": "route-local-enu-v1" },
+        "terrainInput": {
+          "enum": ["procedural-route-v1", "normalized-measured-v1"]
+        },
         "deliberateMissingCellOffsets": {
           "type": "array",
           "uniqueItems": true,

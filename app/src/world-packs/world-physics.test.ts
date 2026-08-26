@@ -41,9 +41,17 @@ function referencePack(routeSlug: string): VerifiedWorldPack {
   const traversable = new Uint8Array(
     fs.readFileSync(path.join(packRoot, runtime.assets.traversableSurfaces)),
   );
+  const terrainMask = runtime.assets.terrainMask
+    ? new Uint8Array(
+        fs.readFileSync(path.join(packRoot, runtime.assets.terrainMask)),
+      )
+    : undefined;
   const artifacts = new Map([
     [runtime.assets.terrainCollision, collision],
     [runtime.assets.traversableSurfaces, traversable],
+    ...(terrainMask && runtime.assets.terrainMask
+      ? ([[runtime.assets.terrainMask, terrainMask]] as const)
+      : []),
   ]);
   return {
     entry,
@@ -112,6 +120,24 @@ describe("World Pack collision runtime", () => {
     };
 
     expect(run()).toEqual(run());
+  });
+
+  it("blocks coastal no-data water outside the authoritative route ribbon", () => {
+    const runtime = createWorldPhysicsRuntime(referencePack("6496900063"));
+    const validity = runtime.heightfield.measuredVertices;
+    expect(validity).toBeDefined();
+    const index = validity!.findIndex((measured) => !measured);
+    expect(index).toBeGreaterThanOrEqual(0);
+    const row = Math.floor(index / runtime.heightfield.xAxis.length);
+    const column = index % runtime.heightfield.xAxis.length;
+
+    expect(
+      collisionSurface(
+        runtime.heightfield,
+        runtime.heightfield.xAxis[Math.min(column, runtime.heightfield.xAxis.length - 2)],
+        runtime.heightfield.yAxis[Math.min(row, runtime.heightfield.yAxis.length - 2)],
+      ),
+    ).toBeUndefined();
   });
 
   it("cannot tunnel through a structure obstacle at an extreme test speed", () => {

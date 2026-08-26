@@ -4,6 +4,7 @@ import {
   Color,
   ColorBlendMode,
   ConstantPositionProperty,
+  DirectionalLight,
   Entity,
   HeadingPitchRange,
   Math as CesiumMath,
@@ -174,6 +175,14 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
       viewer.scene.globe.show = false;
       if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = false;
       viewer.scene.backgroundColor = Color.fromCssColorString("#17231f");
+      viewer.scene.light = new DirectionalLight({
+        direction: Cartesian3.normalize(
+          new Cartesian3(-0.55, -0.35, -0.76),
+          new Cartesian3(),
+        ),
+        color: Color.fromCssColorString("#fff4d5"),
+        intensity: 2.1,
+      });
       viewer.scene.screenSpaceCameraController.enableCollisionDetection = false;
       viewer.canvas.setAttribute("aria-label", "Verified local World Pack");
       viewer.canvas.dataset.worldPackState = "loading";
@@ -192,13 +201,15 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
         pack,
         pack.runtime.assets.terrain,
         modelMatrix,
-        Color.fromCssColorString("#62735c"),
+        Color.WHITE,
+        0.04,
       );
       await this.addModel(
         pack,
         pack.runtime.assets.traversableSurfaces,
         modelMatrix,
         Color.fromCssColorString("#b9ad82"),
+        0.75,
       );
       if (generation !== this.generation) return;
       await this.waitForModelsReady(generation);
@@ -339,6 +350,7 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
     logicalPath: string,
     modelMatrix: ReturnType<typeof Transforms.eastNorthUpToFixedFrame>,
     color: Color,
+    colorBlendAmount: number,
   ) {
     const url = URL.createObjectURL(
       new Blob([ownedBuffer(pack.artifact(logicalPath))], {
@@ -355,7 +367,7 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
       asynchronous: false,
       color,
       colorBlendMode: ColorBlendMode.MIX,
-      colorBlendAmount: 0.75,
+      colorBlendAmount,
       backFaceCulling: false,
     });
     this.viewer?.scene.primitives.add(model);

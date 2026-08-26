@@ -13,3 +13,18 @@ Validate the Ucluelet custody set with:
 
 Receipt admission fails closed when retention, derivatives, or redistribution are not allowed, when the legal decision is not `admit`, when a filename escapes custody, or when any retained byte differs.
 The receipt does not claim full exploration-envelope coverage; the compiler must still run an exact coverage-union gate before promotion.
+
+Normalize the admitted Ucluelet DEM with the pinned acquisition environment:
+
+```sh
+python -m scripts.normalize_world_terrain \
+  app/public/data/routes/6496900063.json \
+  docs/world-packs/sources/ucluelet-lidarbc-2019.json \
+  world-packs-local/sources/ucluelet/2019 \
+  lidarbc-2019-dem-1m \
+  world-packs-local/normalized/ucluelet-coastal-terrain.json \
+  --exploration-radius-m 2000 \
+  --step-m 25 \
+  --vertical-datum CGVD2013 \
+  --nodata-semantic water
+```

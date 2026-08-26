@@ -49,6 +49,7 @@
         "route": { "$ref": "#/$defs/path" },
         "terrain": { "$ref": "#/$defs/path" },
         "terrainCollision": { "$ref": "#/$defs/path" },
+        "terrainMask": { "$ref": "#/$defs/path" },
         "structuresCollision": { "$ref": "#/$defs/path" },
         "traversableSurfaces": { "$ref": "#/$defs/path" },
         "navigation": { "$ref": "#/$defs/path" },

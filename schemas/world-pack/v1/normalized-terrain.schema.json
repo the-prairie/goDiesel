@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://godiesel.world/schemas/world-pack/v1/normalized-terrain.schema.json",
+  "title": "Deterministic route-local normalized terrain grid",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "coordinateReference",
+    "origin",
+    "source",
+    "grid",
+    "verticalAlignment",
+    "nodata",
+    "normalizer"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "coordinateReference": { "const": "route-local-enu-v1" },
+    "origin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["latitude", "longitude", "elevationM"],
+      "properties": {
+        "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+        "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
+        "elevationM": { "type": "number" }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "logicalName",
+        "sha256",
+        "sourceUri",
+        "sourceVersion",
+        "sourceCrs",
+        "verticalDatum",
+        "licence",
+        "attribution"
+      ],
+      "properties": {
+        "logicalName": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "sourceUri": { "type": "string", "minLength": 1 },
+        "sourceVersion": { "type": "string", "minLength": 1 },
+        "sourceCrs": { "type": "string", "minLength": 1 },
+        "verticalDatum": { "type": "string", "minLength": 1 },
+        "licence": { "type": "string", "minLength": 1 },
+        "attribution": { "type": "string", "minLength": 1 }
+      }
+    },
+    "grid": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimumXM",
+        "minimumYM",
+        "stepM",
+        "columns",
+        "rows",
+        "heightsM",
+        "measuredRuns"
+      ],
+      "properties": {
+        "minimumXM": { "type": "number" },
+        "minimumYM": { "type": "number" },
+        "stepM": { "type": "number", "exclusiveMinimum": 0 },
+        "columns": { "type": "integer", "minimum": 2 },
+        "rows": { "type": "integer", "minimum": 2 },
+        "heightsM": {
+          "type": "array",
+          "minItems": 4,
+          "items": { "type": "number" }
+        },
+        "measuredRuns": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              { "type": "integer", "minimum": 0 },
+              { "type": "integer", "minimum": 1 }
+            ],
+            "items": false,
+            "minItems": 2,
+            "maxItems": 2
+          }
+        }
+      }
+    },
+    "verticalAlignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "offsetM", "routeSampleCount", "residualP95M"],
+      "properties": {
+        "method": { "const": "median-recorded-minus-measured-v1" },
+        "offsetM": { "type": "number" },
+        "routeSampleCount": { "type": "integer", "minimum": 2 },
+        "residualP95M": { "type": "number", "minimum": 0 }
+      }
+    },
+    "nodata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["semantic", "fillAbsoluteElevationM", "filledVertexCount"],
+      "properties": {
+        "semantic": { "enum": ["water", "unavailable"] },
+        "fillAbsoluteElevationM": { "type": "number" },
+        "filledVertexCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "normalizer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "sampling"],
+      "properties": {
+        "name": { "const": "godiesel-raster-normalizer" },
+        "version": { "type": "string", "minLength": 1 },
+        "sampling": { "const": "nearest-source-cell-centre" }
+      }
+    }
+  }
+}

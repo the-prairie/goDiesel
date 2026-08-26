@@ -56,6 +56,7 @@ export interface WorldPackRuntime {
     route: string;
     terrain: string;
     terrainCollision: string;
+    terrainMask?: string;
     structuresCollision: string;
     traversableSurfaces: string;
     navigation: string;

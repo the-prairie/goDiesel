@@ -1,4 +1,5 @@
 import stat
+import math
 from pathlib import Path
 
 import pytest
@@ -6,7 +7,9 @@ import pytest
 from world_packs.canonical import canonical_json_bytes, sha256_bytes, strict_json_load
 from world_packs.compiler import BuildConfiguration, WorldPackCompiler
 from world_packs.errors import ValidationError
-from world_packs.geometry import glb_json
+from world_packs.geometry import glb_json, route_local_points
+from world_packs.route import load_canonical_route
+from world_packs.terrain import NormalizedTerrain
 
 
 ROOT = Path(__file__).resolve().parent
@@ -32,6 +35,70 @@ def tree_bytes(root: Path) -> dict[str, bytes]:
         for path in sorted(root.rglob("*"))
         if path.is_file()
     }
+
+
+def normalized_terrain_fixture(tmp_path: Path) -> Path:
+    route = load_canonical_route(TOKYO)
+    points = route_local_points(route)
+    step = 500
+    minimum_x = math.floor((min(point.x for point in points) - 200) / step) * step
+    maximum_x = math.ceil((max(point.x for point in points) + 200) / step) * step
+    minimum_y = math.floor((min(point.y for point in points) - 200) / step) * step
+    maximum_y = math.ceil((max(point.y for point in points) + 200) / step) * step
+    columns = round((maximum_x - minimum_x) / step) + 1
+    rows = round((maximum_y - minimum_y) / step) + 1
+    origin = route["coordinates"][0]
+    path = tmp_path / "normalized-terrain.json"
+    path.write_bytes(
+        canonical_json_bytes(
+            {
+                "schemaVersion": 1,
+                "coordinateReference": "route-local-enu-v1",
+                "origin": {
+                    "latitude": origin["latitude"],
+                    "longitude": origin["longitude"],
+                    "elevationM": origin["elevationM"],
+                },
+                "source": {
+                    "logicalName": "measured-dem",
+                    "sha256": "c" * 64,
+                    "sourceUri": "https://example.test/dem.tif?versionId=1",
+                    "sourceVersion": "1",
+                    "sourceCrs": "EPSG:9999",
+                    "verticalDatum": "test-datum",
+                    "licence": "OGL-test",
+                    "attribution": "Measured terrain test source",
+                },
+                "grid": {
+                    "minimumXM": minimum_x,
+                    "minimumYM": minimum_y,
+                    "stepM": step,
+                    "columns": columns,
+                    "rows": rows,
+                    "heightsM": [0] * (columns * rows),
+                    "measuredRuns": [[0, columns * rows]],
+                },
+                "verticalAlignment": {
+                    "method": "median-recorded-minus-measured-v1",
+                    "offsetM": 1.25,
+                    "routeSampleCount": len(points),
+                    "residualP95M": 2.5,
+                },
+                "nodata": {
+                    "semantic": "unavailable",
+                    "fillAbsoluteElevationM": 0,
+                    "filledVertexCount": 0,
+                },
+                "normalizer": {
+                    "name": "godiesel-raster-normalizer",
+                    "version": "1",
+                    "sampling": "nearest-source-cell-centre",
+                },
+            }
+        )
+        + b"\n"
+    )
+    return path
 
 
 def test_compiler_builds_byte_identical_sealed_core_packs(tmp_path: Path):
@@ -204,3 +271,38 @@ def test_compiler_rejects_quality_claim_without_sources(tmp_path: Path):
             acquired_at="2026-08-26T00:00:00Z",
             quality="detailed",
         )
+
+
+def test_compiler_uses_normalized_measured_terrain_and_preserves_provenance(
+    tmp_path: Path,
+):
+    terrain_path = normalized_terrain_fixture(tmp_path)
+    measured_configuration = configuration()
+    measured_configuration = BuildConfiguration(
+        **{
+            **measured_configuration.__dict__,
+            "normalized_terrain_path": terrain_path,
+        }
+    )
+
+    result = WorldPackCompiler(tmp_path / "repository").build_route(
+        TOKYO, measured_configuration
+    )
+    manifest = strict_json_load(result.path / "manifest.json")
+    coverage = strict_json_load(result.path / "provenance/coverage.json")
+    accuracy = strict_json_load(result.path / "provenance/accuracy.json")
+    retained = result.path / "sources/derived/normalized-terrain.json"
+    terrain = NormalizedTerrain.load(terrain_path)
+
+    assert retained.read_bytes() == terrain_path.read_bytes()
+    visual = next(
+        artifact for artifact in manifest["artifacts"] if artifact["role"] == "visual-terrain"
+    )
+    assert visual["evidenceClass"] == "measured"
+    assert (result.path / visual["logicalPath"]).read_bytes() == terrain.visual_glb()
+    assert all(cell["terrain"]["class"] == "measured" for cell in coverage["cells"])
+    assert accuracy["terrain"] == {
+        "class": "measured",
+        "declaredAccuracyM": 2.5,
+        "verticalAlignmentOffsetM": 1.25,
+    }
