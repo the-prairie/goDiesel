@@ -6,7 +6,7 @@ This document records the correction boundary for the runtime performance harnes
 
 - `activeContexts` counts only connected, non-lost WebGL contexts at the sample boundary.
 - `totalContextsCreated` is retained as a lifetime diagnostic and is never used as an active-renderer oracle.
-- Route detail intentionally owns one MapLibre WebGL context. The transition guard waits for the Route briefing and map settlement, then requires exactly one active context on route detail, Replay, and Atlas. A zero-context route-detail assertion would contradict the production renderer rather than prove cleanup.
+- Route detail intentionally owns one MapLibre WebGL context. The transition guard waits for the Route briefing and map settlement, then requires exactly one active context on route detail, Replay, and Atlas. A zero-context route-detail assertion would contradict the production renderer rather than prove cleanup. The owner explicitly approved this surface-specific lifecycle invariant on 2026-08-25; it supersedes the earlier requested zero-context route-detail oracle.
 - Every independent product surface runs in a fresh browser context and document.
 - Resource timing is cleared at each action and observation boundary.
 - CDP counters are reported as phase deltas, not page-lifetime totals.

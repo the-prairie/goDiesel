@@ -331,6 +331,7 @@ The completed system must:
 - search and rank 10,000 Finder candidates in under 50 ms at p95 after index load;
 - keep client-side route-selection and region-preparation work below 200 ms at p95, excluding live-provider settlement;
 - retain no more than one intended active world renderer and WebGL context;
+- preserve the approved settled lifecycle invariant of exactly one connected, non-lost WebGL context on route detail, Replay, and Atlas; route detail's context belongs to its intentional production MapLibre renderer;
 - return to within 10% of settled heap baseline after twenty Atlas ↔ Replay cycles;
 - keep the existing initial-shell budget;
 - keep Replay and route detail lazy;
@@ -339,6 +340,8 @@ The completed system must:
 - pass deterministic browser, live-provider, memory, visual, and domain tests.
 
 If a numeric target is physically impossible on the documented reference hardware, do not silently lower it. Produce evidence, isolate provider-bound or hardware-bound cost, and propose a replacement target for explicit approval.
+
+The route-detail lifecycle target was explicitly approved on 2026-08-25 after the corrected Stage 0 evidence showed that a settled route detail intentionally owns one production MapLibre context. The earlier requested zero-context route-detail oracle is superseded by the surface-specific invariant above. This approval changes only the lifecycle oracle; it does not waive cleanup, heap, provider, fidelity, or any other exit criterion.
 
 ## Performance guardrails
 
