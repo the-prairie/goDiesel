@@ -3,21 +3,33 @@ name: Runtime gauntlet baseline
 on:
   push:
     branches:
-      - perf/runtime-performance-gauntlet
+      - main
+    paths:
+      - ".github/workflows/runtime-gauntlet-baseline.yml"
+      - "app/e2e/atlas-pinch-stable.spec.ts"
+      - "app/package-lock.json"
+      - "app/package.json"
+      - "app/perf/**"
+      - "app/src/data/discovery-provider.ts"
+      - "docs/performance/runtime-gauntlet/**"
   pull_request:
     branches:
       - main
-    types:
-      - opened
-      - reopened
-      - synchronize
+    paths:
+      - ".github/workflows/runtime-gauntlet-baseline.yml"
+      - "app/e2e/atlas-pinch-stable.spec.ts"
+      - "app/package-lock.json"
+      - "app/package.json"
+      - "app/perf/**"
+      - "app/src/data/discovery-provider.ts"
+      - "docs/performance/runtime-gauntlet/**"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   baseline:
-    if: github.head_ref == 'perf/runtime-performance-gauntlet' || github.ref_name == 'perf/runtime-performance-gauntlet'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
