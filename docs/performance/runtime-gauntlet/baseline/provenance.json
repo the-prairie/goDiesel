@@ -1,0 +1,13 @@
+{
+  "sourceCommit": "c3b9cddcbf01a88e97da69243456acc471e4a58a",
+  "workflowRunId": 32933428707,
+  "workflowRunUrl": "https://github.com/the-prairie/goDiesel/actions/runs/32933428707",
+  "artifactName": "runtime-gauntlet-baseline",
+  "artifactFiles": {
+    "environment.txt": "sha256:0c791217981ecb78ebeda48b7c6a9f8673ee6fcb3463c8ba3de4be6aec314ad2",
+    "live-provider-status.json": "sha256:8b2102d36f4dbc661e18ae0c926e197186d145bf528179c71a2be4b53d4f403e",
+    "runtime-baseline-browser-desktop-chromium.json": "sha256:29de08d931bbf003dedfc2448f091c8b6b072a6c738ac6dbd34962e6d5aa79dc",
+    "runtime-baseline-browser-mobile-chromium.json": "sha256:21f5eba1a2a9ae50c0cbd1dec1db97d58babec3a04d827eb227fa9acf71a9b31",
+    "runtime-baseline-node.json": "sha256:d416ede1cc6ac1b9d83d238b06811114562bead70a136bb4982a82aed1254f9d"
+  }
+}

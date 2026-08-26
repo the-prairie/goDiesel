@@ -1,0 +1,96 @@
+name: Runtime gauntlet baseline
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/runtime-gauntlet-baseline.yml"
+      - "app/e2e/atlas-pinch-stable.spec.ts"
+      - "app/package-lock.json"
+      - "app/package.json"
+      - "app/perf/**"
+      - "app/src/data/discovery-provider.ts"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/runtime-gauntlet-baseline.yml"
+      - "app/e2e/atlas-pinch-stable.spec.ts"
+      - "app/package-lock.json"
+      - "app/package.json"
+      - "app/perf/**"
+      - "app/src/data/discovery-provider.ts"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install application dependencies
+        run: npm ci --prefix app
+
+      - name: Install Playwright Chromium
+        run: cd app && npx playwright install --with-deps chromium
+
+      - name: Capture reference environment
+        shell: bash
+        run: |
+          mkdir -p app/artifacts/runtime-performance
+          {
+            echo "timestamp=$(date -u +%FT%TZ)"
+            echo "runner=${RUNNER_OS}-${RUNNER_ARCH}"
+            echo "kernel=$(uname -a)"
+            echo "node=$(node --version)"
+            echo "npm=$(npm --version)"
+            echo "cpu_count=$(nproc)"
+            echo "memory_kib=$(awk '/MemTotal/ {print $2}' /proc/meminfo)"
+            lscpu
+          } > app/artifacts/runtime-performance/environment.txt
+
+      - name: Deterministic Node runtime baseline
+        run: >-
+          cd app &&
+          npx vitest run
+          --config vitest.runtime-perf.config.ts
+
+      - name: Browser runtime baseline
+        run: >-
+          cd app &&
+          npx playwright test
+          --config playwright.runtime-perf.config.ts
+
+      - name: Record unavailable live-provider prerequisites
+        if: always()
+        shell: bash
+        run: |
+          cat > app/artifacts/runtime-performance/live-provider-status.json <<'JSON'
+          {
+            "available": false,
+            "reason": "Hosted baseline CI intentionally has no Google Maps provider credential or fixed GPU reference hardware. Live-provider performance remains a separate owner release gate and is not fabricated here."
+          }
+          JSON
+
+      - name: Upload baseline evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-gauntlet-baseline
+          path: app/artifacts/runtime-performance
+          if-no-files-found: error
+          retention-days: 14

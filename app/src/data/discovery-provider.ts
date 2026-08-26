@@ -49,21 +49,29 @@ export const curatedDiscoveryCandidates: DiscoveryCandidate[] = candidateDefinit
 const unsupportedMessage =
   "No owner-curated route matches this search yet. Finder only returns recorded or imported GPX candidates.";
 
-export const curatedRouteDiscoveryProvider: RouteDiscoveryProvider = {
-  search(intent) {
-    const candidates = curatedDiscoveryCandidates.filter((candidate) =>
-      candidateMatchesIntent(candidate, intent),
-    );
+export function createRouteDiscoveryProvider(
+  sourceCandidates: readonly DiscoveryCandidate[],
+): RouteDiscoveryProvider {
+  return {
+    search(intent) {
+      const candidates = sourceCandidates.filter((candidate) =>
+        candidateMatchesIntent(candidate, intent),
+      );
 
-    return candidates.length > 0
-      ? {
-          status: "matches",
-          candidates,
-          message: `${candidates.length} owner-curated ${candidates.length === 1 ? "route" : "routes"} found.`,
-        }
-      : { status: "unsupported", candidates: [], message: unsupportedMessage };
-  },
-};
+      return candidates.length > 0
+        ? {
+            status: "matches",
+            candidates,
+            message: `${candidates.length} owner-curated ${candidates.length === 1 ? "route" : "routes"} found.`,
+          }
+        : { status: "unsupported", candidates: [], message: unsupportedMessage };
+    },
+  };
+}
+
+export const curatedRouteDiscoveryProvider = createRouteDiscoveryProvider(
+  curatedDiscoveryCandidates,
+);
 
 function candidateMatchesIntent(candidate: DiscoveryCandidate, intent: FinderIntent) {
   const place = normalized(intent.place);
