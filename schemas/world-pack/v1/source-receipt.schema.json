@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://godiesel.world/schemas/world-pack/v1/source-receipt.schema.json",
+  "title": "Retained public source custody receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "worldId", "acquiredAt", "licence", "assets"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "worldId": { "type": "string", "minLength": 1 },
+    "acquiredAt": { "type": "string", "format": "date-time" },
+    "licence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "uri",
+        "evidenceFilename",
+        "evidenceSha256",
+        "attribution",
+        "retentionAllowed",
+        "derivativesAllowed",
+        "redistribution",
+        "publicUseObligations",
+        "thirdPartyRights",
+        "decision",
+        "decisionReason"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "uri": { "type": "string", "minLength": 1 },
+        "evidenceFilename": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._/-]+$"
+        },
+        "evidenceSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "attribution": { "type": "string", "minLength": 1 },
+        "retentionAllowed": { "type": "boolean" },
+        "derivativesAllowed": { "type": "boolean" },
+        "redistribution": {
+          "enum": ["allowed", "restricted", "private_only", "unknown"]
+        },
+        "publicUseObligations": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "thirdPartyRights": { "type": "string", "minLength": 1 },
+        "decision": {
+          "enum": ["admit", "private_pack_only", "metadata_only", "reject"]
+        },
+        "decisionReason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "assets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "logicalName",
+          "filename",
+          "sourceUri",
+          "sourceVersion",
+          "sha256",
+          "byteSize",
+          "mediaType",
+          "formatVersion",
+          "evidenceClass",
+          "sourceDate",
+          "adapter",
+          "adapterVersion"
+        ],
+        "properties": {
+          "logicalName": { "type": "string", "minLength": 1 },
+          "filename": { "type": "string", "pattern": "^[A-Za-z0-9._/-]+$" },
+          "sourceUri": { "type": "string", "minLength": 1 },
+          "sourceVersion": { "type": "string", "minLength": 1 },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "byteSize": { "type": "integer", "minimum": 1 },
+          "mediaType": { "type": "string", "pattern": "^[^/ ]+/[^/ ]+$" },
+          "formatVersion": { "type": "string", "minLength": 1 },
+          "evidenceClass": {
+            "enum": ["recorded", "derived", "measured", "reconstructed", "procedural"]
+          },
+          "sourceDate": { "type": ["string", "null"] },
+          "adapter": { "type": "string", "minLength": 1 },
+          "adapterVersion": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

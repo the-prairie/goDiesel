@@ -86,6 +86,7 @@ def test_every_world_pack_schema_is_valid_and_manifest_is_closed():
         "manifest",
         "migration-version",
         "source-inventory",
+        "source-receipt",
         "transformations",
         "runtime-world",
         "world-navigation",

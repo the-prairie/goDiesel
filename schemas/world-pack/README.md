@@ -11,6 +11,7 @@ The schemas separate these concerns:
 - `manifest` identifies one immutable pack and its required artifacts.
 - `artifact` defines a content-addressed retained or derived file.
 - `source-inventory` records admissible source evidence, licence, attribution, and acquisition lineage without workstation paths.
+- `source-receipt` binds downloaded custody bytes to immutable source versions and retained legal evidence before compiler admission.
 - `transformations` records deterministic compiler steps and their input and output content identities.
 - `coverage` records visual and physical provenance for every declared quality cell, including explicit unavailability.
 - `canonical-route` preserves normalized route truth without inventing route history.

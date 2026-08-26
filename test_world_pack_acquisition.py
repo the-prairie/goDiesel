@@ -2,8 +2,10 @@ from pathlib import Path
 
 import pytest
 
-from world_packs.acquisition import AcquiredSource
+from world_packs.acquisition import AcquiredSource, admit_source_receipt
+from world_packs.canonical import canonical_json_document, sha256_bytes
 from world_packs.errors import AcquisitionError
+from scripts.verify_world_source_receipt import verify_receipt
 
 
 def acquired_source(tmp_path: Path, **overrides: object) -> AcquiredSource:
@@ -81,3 +83,88 @@ def test_public_pack_admission_fails_closed(
 
     with pytest.raises(AcquisitionError, match=message):
         source.public_pack_metadata()
+
+
+def test_source_receipt_admits_only_exact_cached_bytes(tmp_path: Path):
+    custody = tmp_path / "custody"
+    custody.mkdir()
+    source = custody / "terrain.tif"
+    source.write_bytes(b"measured terrain")
+    licence = custody / "licence.pdf"
+    licence.write_bytes(b"licence evidence")
+    receipt = tmp_path / "receipt.json"
+    receipt.write_bytes(
+        canonical_json_document(
+            {
+                "schemaVersion": 1,
+                "worldId": "coastal-test",
+                "acquiredAt": "2026-08-26T12:00:00Z",
+                "licence": {
+                    "id": "OGL-BC-2.0",
+                    "uri": "https://example.test/licence",
+                    "evidenceFilename": "licence.pdf",
+                    "evidenceSha256": sha256_bytes(licence.read_bytes()),
+                    "attribution": "Contains information licensed under OGL-BC 2.0.",
+                    "retentionAllowed": True,
+                    "derivativesAllowed": True,
+                    "redistribution": "allowed",
+                    "publicUseObligations": ["attribution", "non-endorsement"],
+                    "thirdPartyRights": "none-declared",
+                    "decision": "admit",
+                    "decisionReason": "Dataset record declares OGL-BC 2.0.",
+                },
+                "assets": [
+                    {
+                        "logicalName": "terrain-dem",
+                        "filename": "terrain.tif",
+                        "sourceUri": "https://example.test/terrain.tif?versionId=1",
+                        "sourceVersion": "1",
+                        "sha256": sha256_bytes(source.read_bytes()),
+                        "byteSize": source.stat().st_size,
+                        "mediaType": "image/tiff",
+                        "formatVersion": "GeoTIFF-1.1",
+                        "evidenceClass": "measured",
+                        "sourceDate": "2019",
+                        "adapter": "pinned-http",
+                        "adapterVersion": "1",
+                    }
+                ],
+            }
+        )
+    )
+
+    admitted = admit_source_receipt(receipt, custody)
+
+    assert [source.logical_name for source in admitted] == ["terrain-dem"]
+    assert admitted[0].public_pack_metadata()["source_version"] == "1"
+    assert verify_receipt(receipt, custody) == {
+        "schemaVersion": 1,
+        "status": "admitted",
+        "sourceCount": 1,
+        "sources": ["terrain-dem"],
+    }
+
+    source.write_bytes(b"tampered terrain")
+    with pytest.raises(AcquisitionError, match="digest mismatch"):
+        admit_source_receipt(receipt, custody)
+
+
+def test_source_receipt_rejects_unknown_contract_fields(tmp_path: Path):
+    custody = tmp_path / "custody"
+    custody.mkdir()
+    receipt = tmp_path / "receipt.json"
+    receipt.write_bytes(
+        canonical_json_document(
+            {
+                "schemaVersion": 1,
+                "worldId": "coastal-test",
+                "acquiredAt": "2026-08-26T12:00:00Z",
+                "licence": {},
+                "assets": [],
+                "providerToken": "must-never-enter-custody",
+            }
+        )
+    )
+
+    with pytest.raises(AcquisitionError, match="Additional properties"):
+        admit_source_receipt(receipt, custody)
