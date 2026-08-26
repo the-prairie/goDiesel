@@ -1,18 +1,27 @@
+import {
+  Axis,
+  Cartesian3,
+  Color,
+  ColorBlendMode,
+  ConstantPositionProperty,
+  Entity,
+  HeadingPitchRange,
+  Math as CesiumMath,
+  Model,
+  PolylineGlowMaterialProperty,
+  Transforms,
+  Viewer,
+} from "cesium";
+import "cesium/Build/Cesium/Widgets/widgets.css";
+
 import type { QuestRoute } from "@/domain/route";
 import { ROUTE_THREAD_STYLE } from "@/domain/geometry/route-thread-style";
-import {
-  advancePlayableEarthGrounding,
-  initialPlayableEarthGrounding,
-  type PlayableEarthGroundingObservation,
-  type PlayableEarthGroundingReason,
-  type PlayableEarthGroundingSource,
-  type PlayableEarthGroundingState,
-  type PlayableEarthPose,
-} from "@/labs/playable-earth/playable-earth-controller";
-import {
-  CESIUM_GROUND_ROUTE_OPTIONS,
-  GOOGLE_3D_TILES_RENDER_OPTIONS,
-} from "@/providers/cesium-render-quality";
+import type { PlayableEarthPose } from "@/labs/playable-earth/playable-earth-controller";
+import { loadWorldPackForRoute } from "@/world-packs/world-pack-loader";
+import type {
+  VerifiedWorldPack,
+  WorldPackLoadPhase,
+} from "@/world-packs/world-pack-types";
 
 export type PlayableEarthStatus =
   | { state: "loading"; title: string; message: string }
@@ -27,8 +36,8 @@ export interface PlayableEarthMountOptions {
 }
 
 export interface PlayableEarthGroundingDebug {
-  source: PlayableEarthGroundingSource;
-  reason: PlayableEarthGroundingReason;
+  source: "fallback" | "sampled";
+  reason: "recorded" | "sampled" | "missing" | "outlier";
   offsetM?: number;
 }
 
@@ -38,66 +47,13 @@ export interface PlayableEarthViewer {
   destroy(): void;
 }
 
-type CesiumGlobal = Record<string, any>;
-
 declare global {
   interface Window {
-    Cesium?: CesiumGlobal;
     __GODIESEL_PLAYABLE_EARTH_FACTORY__?: () => PlayableEarthViewer;
   }
 }
 
-const CESIUM_VERSION = "1.120";
-const SURFACE_VISUAL_OFFSET_M = 3;
-const SURFACE_SAMPLE_INTERVAL_MS = 1_200;
-const MAX_STALE_SAMPLE_DISTANCE_M = 500;
-let cesiumPromise: Promise<CesiumGlobal | undefined> | undefined;
-
-function cameraHeightAboveRouteM(cameraRangeM: number) {
-  if (cameraRangeM <= 240) {
-    return 35 + ((cameraRangeM - 120) / 120) * 75;
-  }
-  return 110 + ((cameraRangeM - 240) / 1_160) * 1_190;
-}
-
-function loadCesium() {
-  if (window.Cesium?.Viewer) return Promise.resolve(window.Cesium);
-  if (cesiumPromise) return cesiumPromise;
-
-  cesiumPromise = new Promise((resolve) => {
-    const cssId = "goDieselCesiumCss";
-    if (!document.getElementById(cssId)) {
-      const link = document.createElement("link");
-      link.id = cssId;
-      link.rel = "stylesheet";
-      link.href = `https://cesium.com/downloads/cesiumjs/releases/${CESIUM_VERSION}/Build/Cesium/Widgets/widgets.css`;
-      document.head.appendChild(link);
-    }
-
-    const existing = document.querySelector<HTMLScriptElement>(
-      'script[data-godiesel-cesium="true"]',
-    );
-    if (existing) {
-      existing.addEventListener("load", () => resolve(window.Cesium), { once: true });
-      existing.addEventListener("error", () => resolve(undefined), { once: true });
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.dataset.godieselCesium = "true";
-    script.src = `https://cesium.com/downloads/cesiumjs/releases/${CESIUM_VERSION}/Build/Cesium/Cesium.js`;
-    script.async = true;
-    script.onload = () => resolve(window.Cesium?.Viewer ? window.Cesium : undefined);
-    script.onerror = () => resolve(undefined);
-    document.head.appendChild(script);
-    window.setTimeout(
-      () => resolve(window.Cesium?.Viewer ? window.Cesium : undefined),
-      15_000,
-    );
-  });
-
-  return cesiumPromise;
-}
+const SURFACE_VISUAL_OFFSET_M = 2.2;
 
 function webglAvailable() {
   try {
@@ -108,18 +64,36 @@ function webglAvailable() {
   }
 }
 
+function loadingMessage(phase: WorldPackLoadPhase): string {
+  switch (phase) {
+    case "index":
+      return "Finding the sealed local world.";
+    case "manifest":
+      return "Checking the World Pack identity.";
+    case "integrity":
+      return "Verifying every required local artifact.";
+    case "physical-neighbourhood":
+      return "Preparing terrain, collision, and route navigation.";
+    case "ready":
+      return "Opening the verified local world.";
+  }
+}
+
+function ownedBuffer(bytes: Uint8Array): ArrayBuffer {
+  const owned = new Uint8Array(bytes.byteLength);
+  owned.set(bytes);
+  return owned.buffer;
+}
+
 class CesiumPlayableEarthViewer implements PlayableEarthViewer {
-  private viewer?: any;
-  private marker?: any;
-  private routeEntity?: any;
+  private viewer?: Viewer;
+  private marker?: Entity;
+  private routeEntity?: Entity;
+  private pack?: VerifiedWorldPack;
+  private models: Model[] = [];
+  private objectUrls: string[] = [];
+  private abortController?: AbortController;
   private cameraHeadingDeg?: number;
-  private grounding?: PlayableEarthGroundingState;
-  private pendingGroundingObservation?: PlayableEarthGroundingObservation;
-  private latestPose?: PlayableEarthPose;
-  private lastGroundingUpdateMs?: number;
-  private lastSurfaceSampleMs = Number.NEGATIVE_INFINITY;
-  private surfaceSampleInFlight = false;
-  private onGroundingChange?: (debug: PlayableEarthGroundingDebug) => void;
   private generation = 0;
 
   async mount({
@@ -129,11 +103,11 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
     onGroundingChange,
   }: PlayableEarthMountOptions) {
     const generation = ++this.generation;
-    this.onGroundingChange = onGroundingChange;
+    this.abortController = new AbortController();
     onStatus({
       state: "loading",
-      title: "Building your route world",
-      message: "Loading Cesium and photorealistic 3D tiles.",
+      title: "Opening your route world",
+      message: "Finding the sealed local World Pack.",
     });
 
     if (route.route.length < 2) {
@@ -153,30 +127,22 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
       return;
     }
 
-    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
-    if (!apiKey) {
-      onStatus({
-        state: "unavailable",
-        title: "Map tiles unavailable",
-        message: "A Google Map Tiles browser key is required for this lab.",
-      });
-      return;
-    }
-
-    const Cesium = await loadCesium();
-    if (generation !== this.generation) return;
-    if (!Cesium?.Viewer) {
-      onStatus({
-        state: "unavailable",
-        title: "Cesium unavailable",
-        message: "The 3D engine could not load in this browser session.",
-      });
-      return;
-    }
-
     try {
-      Cesium.Ion.defaultAccessToken = "";
-      const viewer = new Cesium.Viewer(container, {
+      const pack = await loadWorldPackForRoute(route.slug, {
+        signal: this.abortController.signal,
+        onPhase: (phase) => {
+          if (generation !== this.generation || phase === "ready") return;
+          onStatus({
+            state: "loading",
+            title: "Opening your route world",
+            message: loadingMessage(phase),
+          });
+        },
+      });
+      if (generation !== this.generation) return;
+      this.pack = pack;
+
+      const viewer = new Viewer(container, {
         animation: false,
         baseLayer: false,
         baseLayerPicker: false,
@@ -188,222 +154,197 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
         sceneModePicker: false,
         selectionIndicator: false,
         timeline: false,
-        shouldAnimate: true,
+        shouldAnimate: false,
         requestRenderMode: false,
         contextOptions: { webgl: { preserveDrawingBuffer: true } },
       });
-      this.viewer = viewer;
-      viewer.scene.globe.show = false;
-      viewer.scene.skyAtmosphere.show = true;
-      viewer.scene.screenSpaceCameraController.enableCollisionDetection = true;
-
-      const tilesetUrl = `https://tile.googleapis.com/v1/3dtiles/root.json?key=${encodeURIComponent(apiKey)}`;
-      const tilesetOptions = {
-        showCreditsOnScreen: true,
-        ...GOOGLE_3D_TILES_RENDER_OPTIONS,
-      };
-      const tileset = Cesium.Cesium3DTileset.fromUrl
-        ? await Cesium.Cesium3DTileset.fromUrl(tilesetUrl, tilesetOptions)
-        : new Cesium.Cesium3DTileset({ url: tilesetUrl, ...tilesetOptions });
       if (generation !== this.generation) {
         viewer.destroy();
         return;
       }
-      tileset.enableCollision = true;
-      viewer.scene.primitives.add(tileset);
+      this.viewer = viewer;
+      viewer.scene.globe.show = false;
+      if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = false;
+      viewer.scene.backgroundColor = Color.fromCssColorString("#17231f");
+      viewer.scene.screenSpaceCameraController.enableCollisionDetection = false;
+      viewer.canvas.setAttribute("aria-label", "Verified local World Pack");
+      viewer.canvas.dataset.worldPackState = "loading";
+      viewer.canvas.dataset.worldPackId = pack.manifest.packId;
+      viewer.canvas.dataset.worldId = pack.manifest.worldId;
+      viewer.canvas.dataset.networkRequired = "false";
+      viewer.canvas.dataset.physicalNeighbourhood = "verified";
 
-      const positions = route.route.map((point) =>
-        Cesium.Cartesian3.fromDegrees(point.lng, point.lat),
+      const origin = Cartesian3.fromDegrees(
+        pack.runtime.origin.longitude,
+        pack.runtime.origin.latitude,
+        pack.runtime.origin.elevationM,
       );
-      const routeEntity = viewer.entities.add({
+      const modelMatrix = Transforms.eastNorthUpToFixedFrame(origin);
+      await this.addModel(
+        pack,
+        pack.runtime.assets.terrain,
+        modelMatrix,
+        Color.fromCssColorString("#62735c"),
+      );
+      await this.addModel(
+        pack,
+        pack.runtime.assets.traversableSurfaces,
+        modelMatrix,
+        Color.fromCssColorString("#b9ad82"),
+      );
+      if (generation !== this.generation) return;
+      await this.waitForModelsReady(generation);
+      if (generation !== this.generation) return;
+
+      const positions = pack.canonicalRoute.coordinates.map((point) =>
+        Cartesian3.fromDegrees(
+          point.longitude,
+          point.latitude,
+          point.elevationM + SURFACE_VISUAL_OFFSET_M,
+        ),
+      );
+      this.routeEntity = viewer.entities.add({
         name: `${route.name} route thread`,
         polyline: {
           positions,
-          width: 9,
-          ...CESIUM_GROUND_ROUTE_OPTIONS,
-          classificationType: Cesium.ClassificationType.CESIUM_3D_TILE,
-          material: new Cesium.PolylineGlowMaterialProperty({
-            color: Cesium.Color.fromCssColorString(ROUTE_THREAD_STYLE.color).withAlpha(0.98),
-            glowPower: 0.18,
+          width: 7,
+          material: new PolylineGlowMaterialProperty({
+            color: Color.fromCssColorString(ROUTE_THREAD_STYLE.color).withAlpha(0.98),
+            glowPower: 0.16,
           }),
         },
       });
-      this.routeEntity = routeEntity;
-      const start = route.route[0];
+      const start = pack.canonicalRoute.coordinates[0];
       this.marker = viewer.entities.add({
         name: "Current route position",
-        position: Cesium.Cartesian3.fromDegrees(
-          start.lng,
-          start.lat,
-          start.elev + SURFACE_VISUAL_OFFSET_M,
+        position: Cartesian3.fromDegrees(
+          start.longitude,
+          start.latitude,
+          start.elevationM + SURFACE_VISUAL_OFFSET_M,
         ),
         point: {
-          pixelSize: 1,
-          color: Cesium.Color.TRANSPARENT,
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          pixelSize: 10,
+          color: Color.fromCssColorString("#f7f3e8"),
+          outlineColor: Color.fromCssColorString(ROUTE_THREAD_STYLE.color),
+          outlineWidth: 3,
+          disableDepthTestDistance: 2_000,
         },
       });
-      await viewer.zoomTo(routeEntity, new Cesium.HeadingPitchRange(0, -0.72, 0));
+      viewer.canvas.dataset.worldPackState = "ready";
+      onGroundingChange?.({ source: "sampled", reason: "sampled", offsetM: 0 });
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      );
       if (generation !== this.generation) return;
-
       onStatus({
         state: "ready",
-        title: "Playable Earth ready",
-        message: "The route thread is ready to explore.",
+        title: "Local World Pack ready",
+        message: "Terrain, collision, route truth, and navigation are verified.",
       });
     } catch (error) {
-      console.warn("Playable Earth Lab unavailable", error);
-      if (generation !== this.generation) return;
-      this.destroy();
+      if (generation !== this.generation || this.abortController?.signal.aborted) return;
+      console.warn("Playable Earth World Pack unavailable", error);
+      this.destroyResources();
       onStatus({
         state: "unavailable",
-        title: "Photorealistic world unavailable",
-        message: "Google 3D tiles could not load for this route.",
+        title: "Local World Pack unavailable",
+        message:
+          error instanceof Error
+            ? error.message
+            : "The local world could not be opened.",
       });
     }
   }
 
   setPose(pose: PlayableEarthPose) {
-    const Cesium = window.Cesium;
-    if (!Cesium || !this.viewer || !this.marker || this.viewer.isDestroyed?.()) return;
-    const now = performance.now();
-    this.latestPose = pose;
-    if (!this.grounding) {
-      this.grounding = initialPlayableEarthGrounding(pose.elev);
-      this.notifyGroundingChange();
-    }
-    const elapsedSeconds =
-      this.lastGroundingUpdateMs === undefined
-        ? 0
-        : (now - this.lastGroundingUpdateMs) / 1_000;
-    this.lastGroundingUpdateMs = now;
-    const observation = this.pendingGroundingObservation;
-    this.pendingGroundingObservation = undefined;
-    this.grounding = advancePlayableEarthGrounding(
-      this.grounding,
-      pose.elev,
-      elapsedSeconds,
-      observation,
-    );
-    if (observation) this.notifyGroundingChange();
-    const groundedHeightM = this.grounding.displayedHeightM;
-    const markerPosition = Cesium.Cartesian3.fromDegrees(
+    const viewer = this.viewer;
+    if (!viewer || !this.marker || viewer.isDestroyed()) return;
+    const target = Cartesian3.fromDegrees(
       pose.lng,
       pose.lat,
-      groundedHeightM + SURFACE_VISUAL_OFFSET_M,
+      pose.elev + SURFACE_VISUAL_OFFSET_M,
     );
-    this.marker.position = markerPosition;
-
+    this.marker.position = new ConstantPositionProperty(target);
     if (this.cameraHeadingDeg === undefined) {
       this.cameraHeadingDeg = pose.cameraHeadingDeg;
     } else {
       const delta =
         ((pose.cameraHeadingDeg - this.cameraHeadingDeg + 540) % 360) - 180;
-      this.cameraHeadingDeg = (this.cameraHeadingDeg + delta * 0.08 + 360) % 360;
+      this.cameraHeadingDeg =
+        (this.cameraHeadingDeg + delta * 0.08 + 360) % 360;
     }
-    const heading = (this.cameraHeadingDeg * Math.PI) / 180;
-    const cameraRangeM = pose.cameraRangeM;
-    const cameraHeightM = cameraHeightAboveRouteM(cameraRangeM);
-    const cameraLat =
-      pose.lat - (Math.cos(heading) * cameraRangeM) / 111_320;
-    const cameraLng =
-      pose.lng -
-      (Math.sin(heading) * cameraRangeM) /
-        (111_320 * Math.max(0.2, Math.cos((pose.lat * Math.PI) / 180)));
-    this.viewer.camera.setView({
-      destination: Cesium.Cartesian3.fromDegrees(
-        cameraLng,
-        cameraLat,
-        groundedHeightM + SURFACE_VISUAL_OFFSET_M + cameraHeightM,
+    const pitch = pose.cameraRangeM <= 240 ? -0.34 : -0.62;
+    viewer.camera.lookAt(
+      target,
+      new HeadingPitchRange(
+        CesiumMath.toRadians(this.cameraHeadingDeg),
+        pitch,
+        pose.cameraRangeM,
       ),
-      orientation: {
-        heading,
-        pitch: -Math.atan2(cameraHeightM, cameraRangeM),
-        roll: 0,
-      },
-    });
-    this.requestSurfaceSample(pose, now);
+    );
   }
 
-  private requestSurfaceSample(pose: PlayableEarthPose, now: number) {
-    const Cesium = window.Cesium;
-    const scene = this.viewer?.scene;
-    if (
-      !Cesium?.Cartographic ||
-      !scene ||
-      this.surfaceSampleInFlight ||
-      now - this.lastSurfaceSampleMs < SURFACE_SAMPLE_INTERVAL_MS
-    ) {
-      return;
-    }
-    this.lastSurfaceSampleMs = now;
-    if (!scene.sampleHeightSupported || !scene.sampleHeightMostDetailed) {
-      this.pendingGroundingObservation = { kind: "missing" };
-      return;
-    }
-
-    const requestGeneration = this.generation;
-    const requestProgressM = pose.progressM;
-    const cartographic = Cesium.Cartographic.fromDegrees(pose.lng, pose.lat);
-    this.surfaceSampleInFlight = true;
-    void scene
-      .sampleHeightMostDetailed(
-        [cartographic],
-        [this.routeEntity, this.marker].filter(Boolean),
-        2,
-      )
-      .then((positions: Array<{ height?: number } | undefined>) => {
-        if (requestGeneration !== this.generation) return;
-        if (
-          Math.abs((this.latestPose?.progressM ?? requestProgressM) - requestProgressM) >
-          MAX_STALE_SAMPLE_DISTANCE_M
-        ) {
-          return;
-        }
-        const sampledHeightM = positions[0]?.height;
-        this.pendingGroundingObservation =
-          sampledHeightM !== undefined && Number.isFinite(sampledHeightM)
-            ? { kind: "sample", heightM: sampledHeightM }
-            : { kind: "missing" };
-      })
-      .catch(() => {
-        if (requestGeneration === this.generation) {
-          this.pendingGroundingObservation = { kind: "missing" };
-        }
-      })
-      .finally(() => {
-        if (requestGeneration === this.generation) {
-          this.surfaceSampleInFlight = false;
-        }
-      });
+  private async addModel(
+    pack: VerifiedWorldPack,
+    logicalPath: string,
+    modelMatrix: ReturnType<typeof Transforms.eastNorthUpToFixedFrame>,
+    color: Color,
+  ) {
+    const url = URL.createObjectURL(
+      new Blob([ownedBuffer(pack.artifact(logicalPath))], {
+        type: "model/gltf-binary",
+      }),
+    );
+    this.objectUrls.push(url);
+    const model = await Model.fromGltfAsync({
+      url,
+      modelMatrix,
+      upAxis: Axis.Z,
+      forwardAxis: Axis.X,
+      allowPicking: false,
+      asynchronous: false,
+      color,
+      colorBlendMode: ColorBlendMode.MIX,
+      colorBlendAmount: 0.75,
+      backFaceCulling: false,
+    });
+    this.viewer?.scene.primitives.add(model);
+    this.models.push(model);
+    return model;
   }
 
-  private notifyGroundingChange() {
-    if (!this.grounding) return;
-    this.onGroundingChange?.({
-      source: this.grounding.source,
-      reason: this.grounding.reason,
-      offsetM: this.grounding.stableOffsetM,
-    });
+  private async waitForModelsReady(generation: number) {
+    for (let frame = 0; frame < 120; frame += 1) {
+      if (generation !== this.generation) return;
+      if (this.models.every((model) => model.ready)) return;
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    }
+    throw new Error("Local World Pack models did not become render-ready.");
+  }
+
+  private destroyResources() {
+    if (this.viewer && !this.viewer.isDestroyed()) this.viewer.destroy();
+    this.viewer = undefined;
+    this.marker = undefined;
+    this.routeEntity = undefined;
+    this.pack = undefined;
+    this.models = [];
+    this.objectUrls.forEach((url) => URL.revokeObjectURL(url));
+    this.objectUrls = [];
+    this.cameraHeadingDeg = undefined;
   }
 
   destroy() {
     this.generation += 1;
-    if (this.viewer && !this.viewer.isDestroyed?.()) this.viewer.destroy();
-    this.viewer = undefined;
-    this.marker = undefined;
-    this.routeEntity = undefined;
-    this.cameraHeadingDeg = undefined;
-    this.grounding = undefined;
-    this.pendingGroundingObservation = undefined;
-    this.latestPose = undefined;
-    this.lastGroundingUpdateMs = undefined;
-    this.lastSurfaceSampleMs = Number.NEGATIVE_INFINITY;
-    this.surfaceSampleInFlight = false;
-    this.onGroundingChange = undefined;
+    this.abortController?.abort();
+    this.abortController = undefined;
+    this.destroyResources();
   }
 }
 
 export function createPlayableEarthViewer() {
-  return window.__GODIESEL_PLAYABLE_EARTH_FACTORY__?.() ?? new CesiumPlayableEarthViewer();
+  return (
+    window.__GODIESEL_PLAYABLE_EARTH_FACTORY__?.() ??
+    new CesiumPlayableEarthViewer()
+  );
 }
