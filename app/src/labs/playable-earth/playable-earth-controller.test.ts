@@ -6,12 +6,14 @@ import {
   PLAYABLE_EARTH_CAMERA_RANGES_M,
   advancePlayableEarthGrounding,
   advancePlayableEarth,
+  cyclePlayableEarthCameraMode,
   cyclePlayableEarthSpeed,
   initialPlayableEarthState,
   initialPlayableEarthGrounding,
   playableEarthPose,
   seekPlayableEarth,
   setPlayableEarthMode,
+  togglePlayableEarthGhost,
   zoomPlayableEarth,
 } from "@/labs/playable-earth/playable-earth-controller";
 
@@ -114,6 +116,38 @@ describe("Playable Earth controller", () => {
       wider = zoomPlayableEarth(wider, "out");
     }
     expect(wider.cameraRangeM).toBe(PLAYABLE_EARTH_CAMERA_RANGES_M.at(-1));
+  });
+
+  it("cycles route-follow, chase, and first-person camera modes", () => {
+    let state = initialPlayableEarthState();
+    expect(state.cameraMode).toBe("route-follow");
+    state = cyclePlayableEarthCameraMode(state);
+    expect(state.cameraMode).toBe("chase");
+    state = cyclePlayableEarthCameraMode(state);
+    expect(state.cameraMode).toBe("first-person");
+    state = cyclePlayableEarthCameraMode(state);
+    expect(state.cameraMode).toBe("route-follow");
+  });
+
+  it("advances a visible route ghost without moving a free-roam actor", () => {
+    const initial = {
+      ...togglePlayableEarthGhost(
+        setPlayableEarthMode(initialPlayableEarthState(), "free-roam"),
+      ),
+      playing: true,
+      progressM: 320,
+      ghostProgressM: 100,
+    };
+    const advanced = advancePlayableEarth(
+      initial,
+      0.1,
+      { steer: 0, look: 0 },
+      1_000,
+    );
+
+    expect(advanced.progressM).toBe(320);
+    expect(advanced.ghostProgressM).toBeGreaterThan(100);
+    expect(advanced.ghostVisible).toBe(true);
   });
 
   it("accepts plausible surface samples and smooths height changes", () => {

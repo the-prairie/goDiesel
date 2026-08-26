@@ -401,6 +401,37 @@ export function initialWorldPlayer(runtime: WorldPhysicsRuntime): WorldPlayerSta
   };
 }
 
+export function worldPlayerAtRouteProgress(
+  runtime: WorldPhysicsRuntime,
+  progressM: number,
+): WorldPlayerState {
+  const nodes = runtime.navigation.nodes;
+  const totalDistanceM = nodes.at(-1)!.distanceM;
+  const boundedProgressM = Math.min(totalDistanceM, Math.max(0, progressM));
+  let upper = nodes.findIndex((node) => node.distanceM >= boundedProgressM);
+  if (upper < 1) upper = 1;
+  const from = nodes[upper - 1];
+  const to = nodes[upper];
+  const distance = to.distanceM - from.distanceM;
+  const ratio = distance === 0 ? 0 : (boundedProgressM - from.distanceM) / distance;
+  const x = from.position[0] + (to.position[0] - from.position[0]) * ratio;
+  const y = from.position[1] + (to.position[1] - from.position[1]) * ratio;
+  const surface = actorSurface(runtime, x, y);
+  if (!surface) throw new Error("World Pack route position is outside collision terrain.");
+  return {
+    x,
+    y,
+    z: surface.heightM,
+    headingDeg: routeHeading(nodes, upper),
+    routeProgressM: boundedProgressM,
+    checkpointNodeId: checkpointForProgress(runtime.navigation, boundedProgressM),
+    tick: 0,
+    recoveryCount: 0,
+    blockedTickCount: 0,
+    grounded: true,
+  };
+}
+
 function routeHeading(nodes: readonly WorldNavigationNode[], nodeId: number) {
   const before = nodes[Math.max(0, nodeId - 1)];
   const after = nodes[Math.min(nodes.length - 1, nodeId + 1)];

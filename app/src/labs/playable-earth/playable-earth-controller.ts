@@ -8,8 +8,14 @@ import {
   type RouteGroundingSource,
   type RouteGroundingState,
 } from "@/surfaces/replay/scene/route-grounding";
+import {
+  worldPlayerGeodetic,
+  type WorldPhysicsRuntime,
+  type WorldPlayerState,
+} from "@/world-packs/world-physics";
 
-export type PlayableEarthMode = "replay" | "guided";
+export type PlayableEarthMode = "replay" | "guided" | "free-roam";
+export type PlayableEarthCameraMode = "route-follow" | "chase" | "first-person";
 
 export interface PlayableEarthControlState {
   mode: PlayableEarthMode;
@@ -19,11 +25,18 @@ export interface PlayableEarthControlState {
   lateralOffsetM: number;
   cameraYawDeg: number;
   cameraRangeM: number;
+  cameraMode: PlayableEarthCameraMode;
+  ghostProgressM: number;
+  ghostVisible: boolean;
 }
 
 export interface PlayableEarthInput {
   steer: -1 | 0 | 1;
   look: -1 | 0 | 1;
+  forward?: -1 | 0 | 1;
+  strafe?: -1 | 0 | 1;
+  turn?: -1 | 0 | 1;
+  run?: boolean;
 }
 
 export interface PlayableEarthPose {
@@ -36,6 +49,13 @@ export interface PlayableEarthPose {
   progressRatio: number;
   lateralOffsetM: number;
   cameraRangeM: number;
+  cameraMode: PlayableEarthCameraMode;
+  ghost?: {
+    lat: number;
+    lng: number;
+    elev: number;
+    visible: boolean;
+  };
 }
 
 export const PLAYABLE_EARTH_SPEEDS = [0.5, 1, 2, 4] as const;
@@ -55,6 +75,9 @@ export function initialPlayableEarthState(): PlayableEarthControlState {
     lateralOffsetM: 0,
     cameraYawDeg: 0,
     cameraRangeM: PLAYABLE_EARTH_DEFAULT_CAMERA_RANGE_M,
+    cameraMode: "route-follow",
+    ghostProgressM: 0,
+    ghostVisible: false,
   };
 }
 
@@ -75,16 +98,26 @@ export function advancePlayableEarth(
 ) {
   const elapsed = clamp(elapsedSeconds, 0, 0.1);
   const guided = state.mode === "guided";
+  const routeLocked = state.mode !== "free-roam";
   const progressDelta = state.playing
     ? (totalDistanceM / REPLAY_DURATION_SECONDS) * state.speed * elapsed
     : 0;
-  const progressM = Math.min(totalDistanceM, state.progressM + progressDelta);
-  const playing = state.playing && progressM < totalDistanceM;
+  const progressM = routeLocked
+    ? Math.min(totalDistanceM, state.progressM + progressDelta)
+    : state.progressM;
+  const ghostProgressM = Math.min(
+    totalDistanceM,
+    state.ghostProgressM + progressDelta,
+  );
+  const playing =
+    state.playing &&
+    (routeLocked ? progressM < totalDistanceM : ghostProgressM < totalDistanceM);
 
   return {
     ...state,
     playing,
     progressM,
+    ghostProgressM,
     lateralOffsetM: guided
       ? clamp(
           state.lateralOffsetM + input.steer * elapsed * 9,
@@ -103,6 +136,27 @@ export function setPlayableEarthMode(
   mode: PlayableEarthMode,
 ) {
   return { ...state, mode };
+}
+
+export function setPlayableEarthCameraMode(
+  state: PlayableEarthControlState,
+  cameraMode: PlayableEarthCameraMode,
+) {
+  return { ...state, cameraMode };
+}
+
+export function cyclePlayableEarthCameraMode(state: PlayableEarthControlState) {
+  const modes: PlayableEarthCameraMode[] = [
+    "route-follow",
+    "chase",
+    "first-person",
+  ];
+  const index = modes.indexOf(state.cameraMode);
+  return { ...state, cameraMode: modes[(index + 1) % modes.length] };
+}
+
+export function togglePlayableEarthGhost(state: PlayableEarthControlState) {
+  return { ...state, ghostVisible: !state.ghostVisible };
 }
 
 export function togglePlayableEarthPlayback(state: PlayableEarthControlState) {
@@ -149,6 +203,7 @@ export function seekPlayableEarth(
   return {
     ...state,
     progressM: clamp(progressM, 0, totalDistanceM),
+    ghostProgressM: clamp(progressM, 0, totalDistanceM),
     playing: progressM < totalDistanceM && state.playing,
   };
 }
@@ -168,6 +223,7 @@ export function playableEarthPose(
     routePose.lng +
     eastM /
       (111_320 * Math.max(0.2, Math.cos((routePose.lat * Math.PI) / 180)));
+  const ghostPose = routePathPose(route, state.ghostProgressM);
 
   return {
     lat,
@@ -179,6 +235,42 @@ export function playableEarthPose(
     progressRatio: routePose.progressM / totalDistanceM,
     lateralOffsetM: state.lateralOffsetM,
     cameraRangeM: state.cameraRangeM,
+    cameraMode: state.cameraMode,
+    ghost: {
+      lat: ghostPose.lat,
+      lng: ghostPose.lng,
+      elev: ghostPose.elev,
+      visible: state.ghostVisible,
+    },
+  };
+}
+
+export function playableEarthWorldPose(
+  route: QuestRoute,
+  runtime: WorldPhysicsRuntime,
+  player: WorldPlayerState,
+  state: PlayableEarthControlState,
+): PlayableEarthPose {
+  const position = worldPlayerGeodetic(runtime, player);
+  const ghostPose = routePathPose(route, state.ghostProgressM);
+  const totalDistanceM = routeDistanceM(route);
+  return {
+    lat: position.latitude,
+    lng: position.longitude,
+    elev: position.elevationM,
+    bearingDeg: player.headingDeg,
+    cameraHeadingDeg: player.headingDeg + state.cameraYawDeg,
+    progressM: player.routeProgressM,
+    progressRatio: player.routeProgressM / totalDistanceM,
+    lateralOffsetM: 0,
+    cameraRangeM: state.cameraRangeM,
+    cameraMode: state.cameraMode,
+    ghost: {
+      lat: ghostPose.lat,
+      lng: ghostPose.lng,
+      elev: ghostPose.elev,
+      visible: state.ghostVisible,
+    },
   };
 }
 

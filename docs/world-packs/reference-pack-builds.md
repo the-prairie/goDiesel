@@ -24,7 +24,8 @@ Repeated publication must produce the same three pack identities and the same by
 These are Core packs, not Detailed or Archival packs.
 They preserve exact route truth and provide deterministic procedural terrain, separate collision geometry, a traversable route ribbon, recovery anchors, a camera timeline, coverage cells, attribution, and retained build inputs.
 They explicitly declare structures, roads, paths, trails, reconstruction, annotations, and media unavailable where the compiler has admitted no retainable source.
-They do not yet satisfy the visual fidelity, collision traversal, free-roam, deterministic film, blind quality, or clean-room archive gates required for promotion beyond the Playable Earth lab.
+They now pass browser integrity, separate-mesh grounding, bounded Core free roam, checkpoint recovery, camera-mode, ghost, and rejoin proofs with all non-local requests blocked.
+They do not yet satisfy the visual fidelity, full-route repeated traversal, real-structure collision, deterministic film, blind quality, or clean-room archive gates required for promotion beyond the Playable Earth lab.
 
 ## Browser readiness
 

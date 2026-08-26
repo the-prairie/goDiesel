@@ -7,6 +7,7 @@ import {
   Entity,
   HeadingPitchRange,
   Math as CesiumMath,
+  Matrix4,
   Model,
   PolylineGlowMaterialProperty,
   Transforms,
@@ -18,6 +19,10 @@ import type { QuestRoute } from "@/domain/route";
 import { ROUTE_THREAD_STYLE } from "@/domain/geometry/route-thread-style";
 import type { PlayableEarthPose } from "@/labs/playable-earth/playable-earth-controller";
 import { loadWorldPackForRoute } from "@/world-packs/world-pack-loader";
+import {
+  createWorldPhysicsRuntime,
+  type WorldPhysicsRuntime,
+} from "@/world-packs/world-physics";
 import type {
   VerifiedWorldPack,
   WorldPackLoadPhase,
@@ -33,6 +38,7 @@ export interface PlayableEarthMountOptions {
   route: QuestRoute;
   onStatus: (status: PlayableEarthStatus) => void;
   onGroundingChange?: (debug: PlayableEarthGroundingDebug) => void;
+  onWorldReady?: (runtime: WorldPhysicsRuntime) => void;
 }
 
 export interface PlayableEarthGroundingDebug {
@@ -88,6 +94,7 @@ function ownedBuffer(bytes: Uint8Array): ArrayBuffer {
 class CesiumPlayableEarthViewer implements PlayableEarthViewer {
   private viewer?: Viewer;
   private marker?: Entity;
+  private ghostMarker?: Entity;
   private routeEntity?: Entity;
   private pack?: VerifiedWorldPack;
   private models: Model[] = [];
@@ -101,6 +108,7 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
     route,
     onStatus,
     onGroundingChange,
+    onWorldReady,
   }: PlayableEarthMountOptions) {
     const generation = ++this.generation;
     this.abortController = new AbortController();
@@ -195,6 +203,7 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
       if (generation !== this.generation) return;
       await this.waitForModelsReady(generation);
       if (generation !== this.generation) return;
+      const physicsRuntime = createWorldPhysicsRuntime(pack);
 
       const positions = pack.canonicalRoute.coordinates.map((point) =>
         Cartesian3.fromDegrees(
@@ -230,7 +239,24 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
           disableDepthTestDistance: 2_000,
         },
       });
+      this.ghostMarker = viewer.entities.add({
+        name: "Recorded route ghost",
+        show: false,
+        position: Cartesian3.fromDegrees(
+          start.longitude,
+          start.latitude,
+          start.elevationM + SURFACE_VISUAL_OFFSET_M,
+        ),
+        point: {
+          pixelSize: 9,
+          color: Color.fromCssColorString("#eef5ff").withAlpha(0.62),
+          outlineColor: Color.fromCssColorString("#3379df").withAlpha(0.8),
+          outlineWidth: 2,
+          disableDepthTestDistance: 2_000,
+        },
+      });
       viewer.canvas.dataset.worldPackState = "ready";
+      onWorldReady?.(physicsRuntime);
       onGroundingChange?.({ source: "sampled", reason: "sampled", offsetM: 0 });
       await new Promise<void>((resolve) =>
         requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
@@ -265,6 +291,17 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
       pose.elev + SURFACE_VISUAL_OFFSET_M,
     );
     this.marker.position = new ConstantPositionProperty(target);
+    this.marker.show = pose.cameraMode !== "first-person";
+    if (this.ghostMarker && pose.ghost) {
+      this.ghostMarker.position = new ConstantPositionProperty(
+        Cartesian3.fromDegrees(
+          pose.ghost.lng,
+          pose.ghost.lat,
+          pose.ghost.elev + SURFACE_VISUAL_OFFSET_M,
+        ),
+      );
+      this.ghostMarker.show = pose.ghost.visible;
+    }
     if (this.cameraHeadingDeg === undefined) {
       this.cameraHeadingDeg = pose.cameraHeadingDeg;
     } else {
@@ -273,14 +310,27 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
       this.cameraHeadingDeg =
         (this.cameraHeadingDeg + delta * 0.08 + 360) % 360;
     }
-    const pitch = pose.cameraRangeM <= 240 ? -0.34 : -0.62;
+    viewer.canvas.dataset.cameraMode = pose.cameraMode;
+    viewer.canvas.dataset.ghostVisible = String(pose.ghost?.visible ?? false);
+    const heading = CesiumMath.toRadians(this.cameraHeadingDeg);
+    if (pose.cameraMode === "first-person") {
+      viewer.camera.lookAtTransform(Matrix4.IDENTITY);
+      viewer.camera.setView({
+        destination: Cartesian3.fromDegrees(
+          pose.lng,
+          pose.lat,
+          pose.elev + 1.65,
+        ),
+        orientation: { heading, pitch: -0.08, roll: 0 },
+      });
+      return;
+    }
+    const chase = pose.cameraMode === "chase";
+    const range = chase ? 26 : pose.cameraRangeM;
+    const pitch = chase ? -0.24 : pose.cameraRangeM <= 240 ? -0.34 : -0.62;
     viewer.camera.lookAt(
       target,
-      new HeadingPitchRange(
-        CesiumMath.toRadians(this.cameraHeadingDeg),
-        pitch,
-        pose.cameraRangeM,
-      ),
+      new HeadingPitchRange((heading + Math.PI) % (Math.PI * 2), pitch, range),
     );
   }
 
@@ -326,6 +376,7 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
     if (this.viewer && !this.viewer.isDestroyed()) this.viewer.destroy();
     this.viewer = undefined;
     this.marker = undefined;
+    this.ghostMarker = undefined;
     this.routeEntity = undefined;
     this.pack = undefined;
     this.models = [];

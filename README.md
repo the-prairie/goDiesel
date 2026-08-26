@@ -100,6 +100,7 @@ Rebuild the three committed browser-readable reference packs from the fixed corp
 
 The publication command compiles in a temporary repository, independently verifies each sealed pack, and atomically replaces only `app/public/world-packs`.
 The browser verifies pack identity and every runtime-required artifact before enabling Playable Earth movement.
+Installed reference packs add fixed-step free roam, route rejoin, checkpoint recovery, route ghost comparison, and route-follow, chase, and first-person cameras inside the existing Playable Earth lab.
 
 ## Curate Routes
 
