@@ -1,0 +1,214 @@
+import fs from "node:fs";
+import path from "node:path";
+
+import { describe, expect, it } from "vitest";
+
+import {
+  collisionSurface,
+  createWorldPhysicsRuntime,
+  initialWorldPlayer,
+  parseCollisionHeightfield,
+  rejoinWorldRoute,
+  stepWorldPlayer,
+  type WorldPhysicsRuntime,
+} from "@/world-packs/world-physics";
+import type {
+  VerifiedWorldPack,
+  WorldNavigation,
+  WorldPackManifest,
+  WorldPackRuntime,
+} from "@/world-packs/world-pack-types";
+
+const PUBLIC_ROOT = path.resolve(import.meta.dirname, "../../public/world-packs");
+
+function referencePack(routeSlug: string): VerifiedWorldPack {
+  const index = JSON.parse(fs.readFileSync(path.join(PUBLIC_ROOT, "index.json"), "utf8"));
+  const entry = index.packs[routeSlug];
+  const packRoot = path.join(PUBLIC_ROOT, entry.worldId, entry.packId);
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(packRoot, "manifest.json"), "utf8"),
+  ) as WorldPackManifest;
+  const runtime = JSON.parse(
+    fs.readFileSync(path.join(packRoot, manifest.runtime.entrypoint), "utf8"),
+  ) as WorldPackRuntime;
+  const navigation = JSON.parse(
+    fs.readFileSync(path.join(packRoot, runtime.assets.navigation), "utf8"),
+  ) as WorldNavigation;
+  const collision = new Uint8Array(
+    fs.readFileSync(path.join(packRoot, runtime.assets.terrainCollision)),
+  );
+  const artifacts = new Map([[runtime.assets.terrainCollision, collision]]);
+  return {
+    entry,
+    baseUrl: new URL(`https://godiesel.test${entry.basePath}`),
+    manifest,
+    runtime,
+    navigation,
+    canonicalRoute: {} as VerifiedWorldPack["canonicalRoute"],
+    artifacts,
+    artifact(logicalPath) {
+      const bytes = artifacts.get(logicalPath);
+      if (!bytes) throw new Error(`missing fixture artifact: ${logicalPath}`);
+      return bytes;
+    },
+    artifactUrl(logicalPath) {
+      return new URL(logicalPath, `https://godiesel.test${entry.basePath}`);
+    },
+  };
+}
+
+describe("World Pack collision runtime", () => {
+  for (const routeSlug of ["17665674778", "15573295095", "6496900063"]) {
+    it(`parses and grounds the separate collision terrain for ${routeSlug}`, () => {
+      const pack = referencePack(routeSlug);
+      const heightfield = parseCollisionHeightfield(
+        pack.artifact(pack.runtime.assets.terrainCollision),
+      );
+      const runtime = createWorldPhysicsRuntime(pack);
+      const player = initialWorldPlayer(runtime);
+
+      expect(heightfield.xAxis.length).toBeGreaterThan(2);
+      expect(heightfield.yAxis.length).toBeGreaterThan(2);
+      expect(player.z).toBeCloseTo(
+        collisionSurface(heightfield, player.x, player.y)!.heightM,
+        8,
+      );
+      expect(player.grounded).toBe(true);
+    });
+  }
+
+  it("is byte-for-byte deterministic over a long mixed-input traversal", () => {
+    const runtime = createWorldPhysicsRuntime(referencePack("17665674778"));
+    const run = () => {
+      let state = initialWorldPlayer(runtime);
+      for (let tick = 0; tick < 12_000; tick += 1) {
+        state = stepWorldPlayer(runtime, state, {
+          forward: tick % 600 < 480 ? 1 : -1,
+          strafe: tick % 240 < 120 ? 1 : -1,
+          turn: tick % 360 < 180 ? 1 : -1,
+          run: tick % 5 === 0,
+        });
+        expect(Number.isFinite(state.z)).toBe(true);
+        expect(state.grounded).toBe(true);
+      }
+      return state;
+    };
+
+    expect(run()).toEqual(run());
+  });
+
+  it("cannot tunnel through a structure obstacle at an extreme test speed", () => {
+    const base = createWorldPhysicsRuntime(referencePack("17665674778"));
+    const runtime: WorldPhysicsRuntime = {
+      ...base,
+      walkSpeedMps: 60,
+      runSpeedMps: 60,
+      obstacles: [
+        {
+          minimumX: 0.6,
+          maximumX: 0.8,
+          minimumY: -2,
+          maximumY: 2,
+          minimumZ: -20,
+          maximumZ: 20,
+        },
+      ],
+    };
+    const start = { ...initialWorldPlayer(runtime), headingDeg: 90 };
+    const result = stepWorldPlayer(runtime, start, {
+      forward: 1,
+      strafe: 0,
+      turn: 0,
+      run: true,
+    });
+
+    expect(result.x).toBeLessThanOrEqual(0.6 - runtime.navigation.actor.radiusM);
+    expect(result.blockedTickCount).toBe(1);
+  });
+
+  it("blocks slopes beyond the actor contract", () => {
+    const base = createWorldPhysicsRuntime(referencePack("17665674778"));
+    const runtime: WorldPhysicsRuntime = {
+      ...base,
+      heightfield: {
+        xAxis: [-1, 1],
+        yAxis: [-1, 1],
+        heights: [
+          [-10, 10],
+          [-10, 10],
+        ],
+        minimumX: -1,
+        maximumX: 1,
+        minimumY: -1,
+        maximumY: 1,
+      },
+    };
+    const start = {
+      ...initialWorldPlayer(runtime),
+      x: 0,
+      y: 0,
+      z: 0,
+      headingDeg: 90,
+    };
+    const result = stepWorldPlayer(runtime, start, {
+      forward: 1,
+      strafe: 0,
+      turn: 0,
+      run: false,
+    });
+
+    expect(result.x).toBe(0);
+    expect(result.z).toBe(0);
+    expect(result.blockedTickCount).toBe(1);
+  });
+
+  it("recovers from a world edge to a declared checkpoint instead of a void", () => {
+    const runtime = createWorldPhysicsRuntime(referencePack("6496900063"));
+    const start = initialWorldPlayer(runtime);
+    const edgeY = (runtime.heightfield.minimumY + runtime.heightfield.maximumY) / 2;
+    const edgeSurface = collisionSurface(
+      runtime.heightfield,
+      runtime.heightfield.maximumX - 0.001,
+      edgeY,
+    )!;
+    const result = stepWorldPlayer(
+      runtime,
+      {
+        ...start,
+        x: runtime.heightfield.maximumX - 0.001,
+        y: edgeY,
+        z: edgeSurface.heightM,
+        headingDeg: 90,
+      },
+      { forward: 1, strafe: 0, turn: 0, run: true },
+    );
+
+    expect(result.recoveryCount).toBe(1);
+    expect(result.x).toBe(runtime.navigation.nodes[0].position[0]);
+    expect(result.y).toBe(runtime.navigation.nodes[0].position[1]);
+    expect(collisionSurface(runtime.heightfield, result.x, result.y)).toBeDefined();
+  });
+
+  it("rejoins exact route endpoints repeatedly without positional drift", () => {
+    const runtime = createWorldPhysicsRuntime(referencePack("15573295095"));
+    const first = runtime.navigation.nodes[0];
+    const last = runtime.navigation.nodes.at(-1)!;
+    let state = initialWorldPlayer(runtime);
+
+    for (let leg = 0; leg < 20; leg += 1) {
+      const target = leg % 2 === 0 ? last : first;
+      state = rejoinWorldRoute(runtime, {
+        ...state,
+        x: target.position[0],
+        y: target.position[1],
+        z: target.position[2],
+      });
+      expect(state.x).toBeCloseTo(target.position[0], 10);
+      expect(state.y).toBeCloseTo(target.position[1], 10);
+      expect(state.routeProgressM).toBeCloseTo(target.distanceM, 8);
+    }
+
+    expect(state.x).toBeCloseTo(first.position[0], 10);
+    expect(state.y).toBeCloseTo(first.position[1], 10);
+  });
+});

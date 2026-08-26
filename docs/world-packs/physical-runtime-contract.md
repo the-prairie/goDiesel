@@ -1,0 +1,49 @@
+# Physical Runtime Contract
+
+The World Pack runtime uses the separately compiled terrain collision GLB as physical authority.
+The visual terrain model never determines player grounding, collision, or recovery.
+
+## Readiness
+
+Movement remains disabled until the browser has verified the pack identity, checksum ledger, every runtime-required artifact, collision GLB grid topology, navigation graph, actor contract, and recovery anchors.
+A rendered frame without that physical neighbourhood is still loading, not ready.
+
+## Simulation
+
+The navigation document owns the fixed timestep and actor dimensions.
+Core v1 runs at 60 Hz with a 0.35 m actor radius, 1.75 m actor height, 0.35 m maximum upward step, and 35 degree maximum slope.
+The runtime consumes exactly one fixed timestep per simulation step.
+Display frame duration does not alter collision integration.
+
+Movement is divided into substeps no longer than 45 percent of the actor radius.
+Every substep samples the same triangle topology stored in the collision GLB.
+The actor footprint must remain inside the terrain mesh.
+An admitted structure obstacle is expanded by the actor radius and height before a move is accepted.
+These rules prevent a fast frame from tunnelling through a thin obstacle or crossing a world edge between collision samples.
+
+## Terrain
+
+The Core terrain collision GLB is a regular route-local ENU grid with explicit indexed triangles.
+The browser validates monotonically increasing axes, rectangular rows, finite float positions, index type, triangle count, and the exact compiler grid topology before constructing the heightfield.
+Height and slope are evaluated on the indexed triangle under the actor rather than interpolated from the visual model.
+
+## Route Relationship
+
+Free-roam position is projected onto the closest recorded route segment after every fixed step.
+The projection supplies route progress, checkpoint selection, ghost comparison, and a deterministic rejoin target without forcing the actor to remain on the route.
+Rejoin projects to the route and re-samples collision terrain at that point.
+It does not teleport to a visually inferred road or provider surface.
+
+## Failure And Recovery
+
+An invalid or missing collision sample fails closed.
+Crossing the collision boundary recovers the actor to the most recently passed declared recovery anchor.
+The recovery increments an inspectable counter and never places the actor in a void.
+A slope, upward step, or structure obstacle violation blocks horizontal movement and increments an inspectable blocked-tick counter.
+The actor remains grounded on the last accepted physical surface.
+
+## Current Evidence Limit
+
+The fixed reference Core packs contain procedural terrain collision and an empty, explicitly unavailable structures collision mesh.
+Automated synthetic obstacles prove the sweep and wall-penetration rule, but the Tokyo pack cannot claim real building collision until a retainable structure source is admitted and compiled.
+The physical runtime remains a Playable Earth lab capability until repeated real-pack traversal and owner-Mac visual review pass.
