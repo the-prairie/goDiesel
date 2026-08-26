@@ -1,0 +1,286 @@
+{
+  "declaration": {
+    "path": "docs/world-packs/reference-corpus.json",
+    "sha256": "47973ad5d9056ed267234a8508a7cd4aca90e776307b57a15c2f637a52be98aa"
+  },
+  "routes": [
+    {
+      "class": "dense-urban",
+      "id": "tokyo-urban",
+      "route": {
+        "activityType": "Run",
+        "annotationCount": 0,
+        "bounds": {
+          "east": 139.79267575778067,
+          "maximumRecordedElevationM": 29.0,
+          "minimumRecordedElevationM": -6.800000000000011,
+          "north": 35.69297444075346,
+          "south": 35.63041535206139,
+          "west": 139.7621503751725
+        },
+        "controls": [
+          {
+            "evidence": "recorded",
+            "pointIndex": 0,
+            "position": {
+              "d": 0.0,
+              "elapsedS": 30.0,
+              "elev": 11.199999999999989,
+              "lat": 35.69236423820257,
+              "lng": 139.77525648660958
+            },
+            "role": "start"
+          },
+          {
+            "evidence": "recorded",
+            "pointIndex": 188,
+            "position": {
+              "d": 11018.267970398258,
+              "elapsedS": 3879.0,
+              "elev": 13.0,
+              "lat": 35.63314961269498,
+              "lng": 139.78216141462326
+            },
+            "role": "midpoint"
+          },
+          {
+            "evidence": "recorded",
+            "pointIndex": 376,
+            "position": {
+              "d": 21847.48334992637,
+              "elapsedS": 8036.0,
+              "elev": 3.6000000000000227,
+              "lat": 35.69155236706138,
+              "lng": 139.77443363517523
+            },
+            "role": "end"
+          }
+        ],
+        "declaredDistanceKm": 21.8,
+        "declaredElevationGainM": 286,
+        "discontinuityCount": 2,
+        "distanceM": 21847.48334992637,
+        "name": "Tokyo, Japan",
+        "pointCount": 377,
+        "region": "Tokyo, Japan"
+      },
+      "slug": "17665674778",
+      "source": {
+        "byteSize": 51747,
+        "evidence": "derived",
+        "mediaType": "application/json",
+        "path": "app/public/data/routes/17665674778.json",
+        "sha256": "21e5254dd4b4249562acaf3b91b56b3bddf205a283882d75121bf8ff0a66ac3f",
+        "sourceKind": "strava-export"
+      },
+      "world": {
+        "corridorRadiusM": 1000,
+        "deliberateMissingCellOffsets": [
+          [
+            -3,
+            2
+          ],
+          [
+            3,
+            -2
+          ]
+        ],
+        "explorationRadiusM": 1600,
+        "qualityCellSizeM": 250,
+        "requiredCases": [
+          "dense-structures",
+          "road-alignment",
+          "crossings",
+          "route-discontinuities",
+          "world-edge-recovery"
+        ]
+      }
+    },
+    {
+      "class": "high-relief-mountain",
+      "id": "banff-mountain",
+      "route": {
+        "activityType": "Run",
+        "annotationCount": 0,
+        "bounds": {
+          "east": -115.55947001092136,
+          "maximumRecordedElevationM": 2233.0,
+          "minimumRecordedElevationM": 1386.2,
+          "north": 51.18255992420018,
+          "south": 51.14287077449262,
+          "west": -115.62099586240947
+        },
+        "controls": [
+          {
+            "evidence": "recorded",
+            "pointIndex": 0,
+            "position": {
+              "d": 0.0,
+              "elapsedS": 0.0,
+              "elev": 1386.2,
+              "lat": 51.18255992420018,
+              "lng": -115.57445107027888
+            },
+            "role": "start"
+          },
+          {
+            "evidence": "recorded",
+            "pointIndex": 198,
+            "position": {
+              "d": 10975.905042468868,
+              "elapsedS": 6301.0,
+              "elev": 2207.4,
+              "lat": 51.14655059762299,
+              "lng": -115.57926915585995
+            },
+            "role": "midpoint"
+          },
+          {
+            "evidence": "recorded",
+            "pointIndex": 396,
+            "position": {
+              "d": 22003.587423366378,
+              "elapsedS": 11536.0,
+              "elev": 1396.0,
+              "lat": 51.18131663650274,
+              "lng": -115.57631847448647
+            },
+            "role": "end"
+          }
+        ],
+        "declaredDistanceKm": 22.0,
+        "declaredElevationGainM": 965,
+        "discontinuityCount": 1,
+        "distanceM": 22003.587423366378,
+        "name": "Banff/Kananaskis",
+        "pointCount": 397,
+        "region": "Banff/Kananaskis"
+      },
+      "slug": "15573295095",
+      "source": {
+        "byteSize": 52331,
+        "evidence": "derived",
+        "mediaType": "application/json",
+        "path": "app/public/data/routes/15573295095.json",
+        "sha256": "666e7bcc2b7214ca24703ecd66470a963af1df1e11b5bc9fbc182258aba820f6",
+        "sourceKind": "strava-export"
+      },
+      "world": {
+        "corridorRadiusM": 1400,
+        "deliberateMissingCellOffsets": [
+          [
+            -4,
+            3
+          ],
+          [
+            4,
+            -3
+          ]
+        ],
+        "explorationRadiusM": 2200,
+        "qualityCellSizeM": 250,
+        "requiredCases": [
+          "steep-slopes",
+          "cliffs",
+          "trail-continuity",
+          "route-discontinuity",
+          "collision-recovery"
+        ]
+      }
+    },
+    {
+      "class": "remote-coastal",
+      "id": "ucluelet-coastal",
+      "route": {
+        "activityType": "Run",
+        "annotationCount": 0,
+        "bounds": {
+          "east": -125.5288903042674,
+          "maximumRecordedElevationM": 69.79999999999995,
+          "minimumRecordedElevationM": 31.0,
+          "north": 48.94600144587457,
+          "south": 48.93072542734444,
+          "west": -125.57018215768039
+        },
+        "controls": [
+          {
+            "evidence": "recorded",
+            "pointIndex": 0,
+            "position": {
+              "d": 0.0,
+              "elapsedS": 9.0,
+              "elev": 38.799999999999955,
+              "lat": 48.937473027035594,
+              "lng": -125.55584080517292
+            },
+            "role": "start"
+          },
+          {
+            "evidence": "recorded",
+            "pointIndex": 101,
+            "position": {
+              "d": 5669.166250271078,
+              "elapsedS": 2006.0,
+              "elev": 45.0,
+              "lat": 48.94364428706467,
+              "lng": -125.55002493783832
+            },
+            "role": "midpoint"
+          },
+          {
+            "evidence": "recorded",
+            "pointIndex": 202,
+            "position": {
+              "d": 11296.821251645908,
+              "elapsedS": 4220.0,
+              "elev": 36.200000000000045,
+              "lat": 48.93646485172212,
+              "lng": -125.55632326751947
+            },
+            "role": "end"
+          }
+        ],
+        "declaredDistanceKm": 11.3,
+        "declaredElevationGainM": 236,
+        "discontinuityCount": 0,
+        "distanceM": 11296.821251645908,
+        "name": "Ucluelet, BC",
+        "pointCount": 203,
+        "region": "Ucluelet, BC"
+      },
+      "slug": "6496900063",
+      "source": {
+        "byteSize": 28577,
+        "evidence": "derived",
+        "mediaType": "application/json",
+        "path": "app/public/data/routes/6496900063.json",
+        "sha256": "e3b686096040cc905228fe9cacce67d625ed1b68f06d7c27c5381175e586bf63",
+        "sourceKind": "strava-export"
+      },
+      "world": {
+        "corridorRadiusM": 1200,
+        "deliberateMissingCellOffsets": [
+          [
+            -3,
+            -3
+          ],
+          [
+            3,
+            3
+          ]
+        ],
+        "explorationRadiusM": 2000,
+        "qualityCellSizeM": 250,
+        "requiredCases": [
+          "coastline",
+          "water-boundary",
+          "forest",
+          "sparse-structures",
+          "trail-continuity"
+        ]
+      }
+    }
+  ],
+  "schemaVersion": 1,
+  "sourceCommit": "9d82ce0be05012a6a17e0f93bf06425158e926ed"
+}

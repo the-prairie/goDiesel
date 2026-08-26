@@ -10,6 +10,7 @@
       "corridorRadiusM": 1000,
       "explorationRadiusM": 1600,
       "qualityCellSizeM": 250,
+      "deliberateMissingCellOffsets": [[-3, 2], [3, -2]],
       "requiredCases": [
         "dense-structures",
         "road-alignment",
@@ -26,6 +27,7 @@
       "corridorRadiusM": 1400,
       "explorationRadiusM": 2200,
       "qualityCellSizeM": 250,
+      "deliberateMissingCellOffsets": [[-4, 3], [4, -3]],
       "requiredCases": [
         "steep-slopes",
         "cliffs",
@@ -42,6 +44,7 @@
       "corridorRadiusM": 1200,
       "explorationRadiusM": 2000,
       "qualityCellSizeM": 250,
+      "deliberateMissingCellOffsets": [[-3, -3], [3, 3]],
       "requiredCases": [
         "coastline",
         "water-boundary",
