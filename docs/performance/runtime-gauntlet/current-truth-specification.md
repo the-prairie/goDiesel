@@ -2,6 +2,14 @@
 
 This specification freezes the behavior and data contract against which runtime optimizations are judged.
 
+## Authority and exclusions
+
+The normative sources for this goal are the staged runtime-gauntlet contract, current user constraints, accepted ADRs, current production behavior and generated contracts, and the risk-based testing policy. `CONTEXT.md`, `README.md`, and `STRATEGY.md` remain descriptive only where the documentation reality check confirms that current code, tests, and newer decisions still support them.
+
+Superseded source paths, the claim that the repository has no CI, historical route totals, a stable Region taxonomy, a general-catalog Finder, and `quests.generated.json` as a runtime input are explicitly excluded from current truth.
+
+The native Google Replay route scorecard, renderer-duration differences, Region and Difficulty domain-modeling gaps, Route Studio, and private owner-route work remain unresolved and out of scope. Runtime-performance changes may preserve these boundaries but may not silently decide them.
+
 ## Current data set
 
 At the branch base:
