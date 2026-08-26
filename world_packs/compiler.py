@@ -839,6 +839,10 @@ class WorldPackCompiler:
         final = world_root / pack_id
         created = False
         if final.exists():
+            if not (final / "checksums.json").is_file():
+                raise IntegrityError(
+                    f"conflicting pack directory has no checksum inventory: {final}"
+                )
             if (final / "checksums.json").read_bytes() != (
                 staging / "checksums.json"
             ).read_bytes():
