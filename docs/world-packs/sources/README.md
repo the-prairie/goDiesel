@@ -28,3 +28,12 @@ python -m scripts.normalize_world_terrain \
   --vertical-datum CGVD2013 \
   --nodata-semantic water
 ```
+
+Banff uses a bounded `cog-window-v1` extraction from the 83.85 GB MRDEM DTM.
+The receipt records the parent object ETag and size, exact EPSG:3979 pixel window, WGS84 envelope, OGL-Canada evidence, and embedded Copernicus obligations.
+
+```sh
+python -m scripts.verify_world_source_receipt \
+  docs/world-packs/sources/banff-mrdem-2026.json \
+  world-packs-local/sources/banff/2026
+```

@@ -24,6 +24,7 @@
       "class": "high-relief-mountain",
       "slug": "15573295095",
       "routeDetail": "app/public/data/routes/15573295095.json",
+      "normalizedTerrain": "docs/world-packs/normalized/banff-mountain-terrain.json",
       "corridorRadiusM": 1400,
       "explorationRadiusM": 2200,
       "qualityCellSizeM": 250,

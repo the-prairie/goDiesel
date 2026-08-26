@@ -127,6 +127,14 @@ def test_source_receipt_admits_only_exact_cached_bytes(tmp_path: Path):
                         "sourceDate": "2019",
                         "adapter": "pinned-http",
                         "adapterVersion": "1",
+                        "lineage": {
+                            "method": "cog-window-v1",
+                            "remoteEtag": "etag-1",
+                            "remoteByteSize": 100000,
+                            "sourceCrs": "EPSG:3979",
+                            "sourceWindow": [10, 20, 30, 40],
+                            "boundsWgs84": [-116, 51, -115, 52],
+                        },
                     }
                 ],
             }
@@ -137,6 +145,12 @@ def test_source_receipt_admits_only_exact_cached_bytes(tmp_path: Path):
 
     assert [source.logical_name for source in admitted] == ["terrain-dem"]
     assert admitted[0].public_pack_metadata()["source_version"] == "1"
+    assert admitted[0].public_pack_metadata()["lineage"]["sourceWindow"] == [
+        10,
+        20,
+        30,
+        40,
+    ]
     assert verify_receipt(receipt, custody) == {
         "schemaVersion": 1,
         "status": "admitted",

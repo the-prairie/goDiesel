@@ -54,6 +54,7 @@ class AcquiredSource:
     decision_reason: str
     adapter: str
     adapter_version: str
+    lineage: dict[str, object] | None = None
 
     def __post_init__(self) -> None:
         if self.evidence_class not in EVIDENCE_CLASSES - {"unavailable"}:
@@ -110,6 +111,8 @@ class AcquiredSource:
     def metadata(self) -> dict[str, object]:
         result = asdict(self)
         del result["path"]
+        if result["lineage"] is None:
+            del result["lineage"]
         result["public_use_obligations"] = list(self.public_use_obligations)
         return result
 
@@ -259,6 +262,11 @@ def admit_source_receipt(
             adapter=_string(asset.get("adapter"), "asset adapter"),
             adapter_version=_string(
                 asset.get("adapterVersion"), "asset adapterVersion"
+            ),
+            lineage=(
+                dict(_record(asset.get("lineage"), "asset lineage"))
+                if asset.get("lineage") is not None
+                else None
             ),
         )
         source.public_pack_metadata()
