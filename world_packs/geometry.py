@@ -67,6 +67,7 @@ def build_glb(
     normals: Sequence[tuple[float, float, float]] | None = None,
     colors: Sequence[tuple[float, float, float, float]] | None = None,
     material: dict[str, object] | None = None,
+    extras: dict[str, object] | None = None,
 ) -> bytes:
     if not positions:
         raise ValueError("GLB needs at least one position")
@@ -180,6 +181,8 @@ def build_glb(
     }
     if material is not None:
         document["materials"] = [material]
+    if extras is not None:
+        document["extras"] = extras
     json_bytes = _padded(
         json.dumps(document, separators=(",", ":"), sort_keys=True).encode("utf-8"),
         b" ",

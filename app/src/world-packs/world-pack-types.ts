@@ -70,7 +70,7 @@ export interface WorldPackRuntime {
   physicalCapabilities: {
     terrainCollision: "heightfield";
     traversableSurfaces: "indexed-triangle-mesh";
-    structuresCollision: "unavailable";
+    structuresCollision: "unavailable" | "footprint-prisms";
   };
   modes: Array<"guided" | "free-roam">;
 }

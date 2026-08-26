@@ -81,7 +81,7 @@
       "properties": {
         "terrainCollision": { "const": "heightfield" },
         "traversableSurfaces": { "const": "indexed-triangle-mesh" },
-        "structuresCollision": { "const": "unavailable" }
+        "structuresCollision": { "enum": ["unavailable", "footprint-prisms"] }
       }
     },
     "modes": {

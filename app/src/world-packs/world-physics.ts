@@ -27,6 +27,7 @@ export interface WorldObstacle {
   maximumY: number;
   minimumZ: number;
   maximumZ: number;
+  footprint?: readonly (readonly [number, number])[];
 }
 
 export interface TraversableTriangle {
@@ -198,6 +199,77 @@ export function parseTraversableSurface(bytes: Uint8Array): TraversableTriangle[
       maximumX: Math.max(...xs),
       minimumY: Math.min(...ys),
       maximumY: Math.max(...ys),
+    };
+  });
+}
+
+export function parseStructureObstacles(bytes: Uint8Array): WorldObstacle[] {
+  const { document } = parseGlb(bytes);
+  const extras = document.extras;
+  assert(
+    extras && typeof extras === "object" && !Array.isArray(extras),
+    "structure extras are missing",
+  );
+  const collision = (extras as Record<string, unknown>)
+    .godieselStructureCollision;
+  assert(
+    collision && typeof collision === "object" && !Array.isArray(collision),
+    "structure collision declaration is missing",
+  );
+  const declaration = collision as Record<string, unknown>;
+  assert(declaration.schemaVersion === 1, "structure collision version is unsupported");
+  assert(
+    declaration.coordinateReference === "route-local-enu-v1",
+    "structure collision coordinates are unsupported",
+  );
+  const rawObstacles = typedArray<Record<string, unknown>>(
+    declaration.obstacles,
+    "structure collision obstacles",
+  );
+  assert(
+    rawObstacles.length > 0 && rawObstacles.length <= 100_000,
+    "structure collision obstacle count is invalid",
+  );
+  return rawObstacles.map((rawObstacle, obstacleIndex) => {
+    const rawFootprint = typedArray<unknown[]>(
+      rawObstacle.footprint,
+      `structure obstacle ${obstacleIndex} footprint`,
+    );
+    assert(
+      rawFootprint.length >= 3 && rawFootprint.length <= 1_000,
+      `structure obstacle ${obstacleIndex} footprint size is invalid`,
+    );
+    const footprint = rawFootprint.map((rawPoint, pointIndex) => {
+      assert(
+        Array.isArray(rawPoint) &&
+          rawPoint.length === 2 &&
+          rawPoint.every(
+            (value) => typeof value === "number" && Number.isFinite(value),
+          ),
+        `structure obstacle ${obstacleIndex} point ${pointIndex} is invalid`,
+      );
+      return [rawPoint[0], rawPoint[1]] as [number, number];
+    });
+    const minimumZ = rawObstacle.minimumZ;
+    const maximumZ = rawObstacle.maximumZ;
+    assert(
+      typeof minimumZ === "number" &&
+        Number.isFinite(minimumZ) &&
+        typeof maximumZ === "number" &&
+        Number.isFinite(maximumZ) &&
+        maximumZ > minimumZ,
+      `structure obstacle ${obstacleIndex} height is invalid`,
+    );
+    const xs = footprint.map((point) => point[0]);
+    const ys = footprint.map((point) => point[1]);
+    return {
+      minimumX: Math.min(...xs),
+      maximumX: Math.max(...xs),
+      minimumY: Math.min(...ys),
+      maximumY: Math.max(...ys),
+      minimumZ,
+      maximumZ,
+      footprint,
     };
   });
 }
@@ -439,15 +511,80 @@ function obstacleCollision(
   radiusM: number,
   heightM: number,
 ) {
-  return obstacles.some(
-    (obstacle) =>
-      x + radiusM > obstacle.minimumX &&
-      x - radiusM < obstacle.maximumX &&
-      y + radiusM > obstacle.minimumY &&
-      y - radiusM < obstacle.maximumY &&
-      z + heightM > obstacle.minimumZ &&
-      z < obstacle.maximumZ,
-  );
+  function pointInside(
+    footprint: readonly (readonly [number, number])[],
+    pointX: number,
+    pointY: number,
+  ) {
+    let inside = false;
+    for (
+      let index = 0, previous = footprint.length - 1;
+      index < footprint.length;
+      previous = index, index += 1
+    ) {
+      const [x0, y0] = footprint[index];
+      const [x1, y1] = footprint[previous];
+      if (
+        (y0 > pointY) !== (y1 > pointY) &&
+        pointX < ((x1 - x0) * (pointY - y0)) / (y1 - y0) + x0
+      ) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  }
+
+  function segmentDistanceSquared(
+    pointX: number,
+    pointY: number,
+    from: readonly [number, number],
+    to: readonly [number, number],
+  ) {
+    const dx = to[0] - from[0];
+    const dy = to[1] - from[1];
+    const lengthSquared = dx * dx + dy * dy;
+    const ratio =
+      lengthSquared === 0
+        ? 0
+        : Math.max(
+            0,
+            Math.min(
+              1,
+              ((pointX - from[0]) * dx + (pointY - from[1]) * dy) /
+                lengthSquared,
+            ),
+          );
+    const nearestX = from[0] + ratio * dx;
+    const nearestY = from[1] + ratio * dy;
+    return (pointX - nearestX) ** 2 + (pointY - nearestY) ** 2;
+  }
+
+  return obstacles.some((obstacle) => {
+    if (
+      x + radiusM <= obstacle.minimumX ||
+      x - radiusM >= obstacle.maximumX ||
+      y + radiusM <= obstacle.minimumY ||
+      y - radiusM >= obstacle.maximumY ||
+      z + heightM <= obstacle.minimumZ ||
+      z >= obstacle.maximumZ
+    ) {
+      return false;
+    }
+    if (!obstacle.footprint) return true;
+    return (
+      pointInside(obstacle.footprint, x, y) ||
+      obstacle.footprint.some((point, index) =>
+        segmentDistanceSquared(
+          x,
+          y,
+          point,
+          obstacle.footprint![
+            (index + 1) % obstacle.footprint!.length
+          ],
+        ) < radiusM ** 2,
+      )
+    );
+  });
 }
 
 function traversableSurface(
@@ -560,7 +697,12 @@ export function createWorldPhysicsRuntime(pack: VerifiedWorldPack): WorldPhysics
     traversableTriangles: parseTraversableSurface(
       pack.artifact(pack.runtime.assets.traversableSurfaces),
     ),
-    obstacles: [],
+    obstacles:
+      pack.runtime.physicalCapabilities.structuresCollision === "footprint-prisms"
+        ? parseStructureObstacles(
+            pack.artifact(pack.runtime.assets.structuresCollision),
+          )
+        : [],
     walkSpeedMps: 3.5,
     runSpeedMps: 6,
   };

@@ -54,6 +54,9 @@
         "structureInput": {
           "const": "plateau-lod1-subset-v1"
         },
+        "transportationInput": {
+          "const": "osm-overpass-json-v1"
+        },
         "deliberateMissingCellOffsets": {
           "type": "array",
           "uniqueItems": true,

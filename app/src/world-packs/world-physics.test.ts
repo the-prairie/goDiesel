@@ -8,6 +8,7 @@ import {
   createWorldPhysicsRuntime,
   initialWorldPlayer,
   parseCollisionHeightfield,
+  parseStructureObstacles,
   rejoinWorldRoute,
   stepWorldPlayer,
   worldPlayerAtRouteProgress,
@@ -21,6 +22,41 @@ import type {
 } from "@/world-packs/world-pack-types";
 
 const PUBLIC_ROOT = path.resolve(import.meta.dirname, "../../public/world-packs");
+
+function structureCollisionFixture() {
+  const document = new TextEncoder().encode(
+    JSON.stringify({
+      asset: { version: "2.0" },
+      extras: {
+        godieselStructureCollision: {
+          schemaVersion: 1,
+          coordinateReference: "route-local-enu-v1",
+          obstacles: [
+            {
+              footprint: [[0.6, -0.1], [0.8, 0.1], [0.6, 0.3], [0.4, 0.1]],
+              minimumZ: -20,
+              maximumZ: 20,
+            },
+          ],
+        },
+      },
+    }),
+  );
+  const jsonLength = Math.ceil(document.length / 4) * 4;
+  const binaryLength = 4;
+  const bytes = new Uint8Array(12 + 8 + jsonLength + 8 + binaryLength);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(0, 0x46546c67, true);
+  view.setUint32(4, 2, true);
+  view.setUint32(8, bytes.length, true);
+  view.setUint32(12, jsonLength, true);
+  view.setUint32(16, 0x4e4f534a, true);
+  bytes.fill(0x20, 20, 20 + jsonLength);
+  bytes.set(document, 20);
+  view.setUint32(20 + jsonLength, binaryLength, true);
+  view.setUint32(24 + jsonLength, 0x004e4942, true);
+  return bytes;
+}
 
 function referencePack(routeSlug: string): VerifiedWorldPack {
   const index = JSON.parse(fs.readFileSync(path.join(PUBLIC_ROOT, "index.json"), "utf8"));
@@ -73,6 +109,19 @@ function referencePack(routeSlug: string): VerifiedWorldPack {
 }
 
 describe("World Pack collision runtime", () => {
+  it("parses declared polygon-prism structure collision", () => {
+    const obstacles = parseStructureObstacles(structureCollisionFixture());
+
+    expect(obstacles).toHaveLength(1);
+    expect(obstacles[0]).toMatchObject({
+      minimumX: 0.4,
+      maximumX: 0.8,
+      minimumY: -0.1,
+      maximumY: 0.3,
+      minimumZ: -20,
+      maximumZ: 20,
+    });
+  });
   for (const routeSlug of ["17665674778", "15573295095", "6496900063"]) {
     it(`parses and grounds the separate collision terrain for ${routeSlug}`, () => {
       const pack = referencePack(routeSlug);

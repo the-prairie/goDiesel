@@ -20,6 +20,7 @@ from .geometry import (
     route_thread_glb,
     terrain_glb,
 )
+from .osm import OsmWorldData
 from .route import load_canonical_route
 from .schema import validate_document
 from .storage import ContentAddressedStore, ObjectRecord
@@ -50,6 +51,12 @@ class BuildConfiguration:
     structure_tileset_paths: tuple[Path, ...] = ()
     structure_licence: str | None = None
     structure_attribution: str | None = None
+    osm_network_path: Path | None = None
+    osm_network_paths: tuple[Path, ...] = ()
+    osm_source_uri: str | None = None
+    osm_source_uris: tuple[str, ...] = ()
+    osm_licence: str | None = None
+    osm_attribution: str | None = None
 
     def __post_init__(self) -> None:
         if not self.world_id or any(
@@ -73,6 +80,27 @@ class BuildConfiguration:
             raise ValidationError(
                 "structure tilesets require explicit licence and attribution"
             )
+        if self.osm_network_path is not None and self.osm_network_paths:
+            raise ValidationError("declare one OSM path or OSM source shards, not both")
+        osm_paths = (
+            (self.osm_network_path,)
+            if self.osm_network_path is not None
+            else self.osm_network_paths
+        )
+        osm_uris = (
+            (self.osm_source_uri,)
+            if self.osm_network_path is not None
+            else self.osm_source_uris
+        )
+        if osm_paths and (
+            len(osm_paths) != len(osm_uris)
+            or any(not uri for uri in osm_uris)
+            or not self.osm_licence
+            or not self.osm_attribution
+        ):
+            raise ValidationError(
+                "every OSM input requires an exact source URI, licence, and attribution"
+            )
 
     def manifest_configuration(self) -> dict[str, object]:
         return {
@@ -91,6 +119,11 @@ class BuildConfiguration:
             **(
                 {"structureInput": "plateau-lod1-subset-v1"}
                 if self.structure_tileset_paths
+                else {}
+            ),
+            **(
+                {"transportationInput": "osm-overpass-json-v1"}
+                if self.osm_network_path is not None or self.osm_network_paths
                 else {}
             ),
         }
@@ -213,6 +246,7 @@ def _coverage_document(
     source_sha256: str,
     terrain: NormalizedTerrain | None = None,
     structure_tilesets: tuple[StructureTileset, ...] = (),
+    osm_world: OsmWorldData | None = None,
     *,
     origin_latitude: float,
     origin_longitude: float,
@@ -252,6 +286,18 @@ def _coverage_document(
                 ),
                 None,
             )
+            osm_structure_source = (
+                osm_world.sha256
+                if osm_world is not None
+                and any(
+                    x_index * size <= x < (x_index + 1) * size
+                    and y_index * size <= y < (y_index + 1) * size
+                    for building in osm_world.buildings
+                    for x, y in building.footprint
+                )
+                else None
+            )
+            declared_structure_source = structure_source or osm_structure_source
             terrain_source_sha256 = (
                 str(terrain.document["source"]["sha256"])
                 if terrain is not None
@@ -286,18 +332,36 @@ def _coverage_document(
                         visual_reason,
                     ),
                     "structures": _evidence(
-                        "derived" if structure_source is not None else "unavailable",
-                        structure_source,
+                        "derived"
+                        if declared_structure_source is not None
+                        else "unavailable",
+                        declared_structure_source,
                         "Retained official PLATEAU LOD1 geometry covers this quality cell"
                         if structure_source is not None
+                        else "Recorded OSM building footprints cover this quality cell"
+                        if osm_structure_source is not None
                         else "No retainable structure source has been admitted"
-                        if not structure_tilesets
-                        else "No retained structure tile covers this quality cell",
+                        if not structure_tilesets and osm_world is None
+                        else "No retained structure evidence covers this quality cell",
                     ),
                     "collision": _evidence(
-                        "measured" if measured_terrain else "unavailable" if terrain else "procedural",
-                        terrain_source_sha256 if measured_terrain else source_sha256 if not terrain else None,
-                        "Collision heightfield is compiled from measured elevation"
+                        "derived"
+                        if osm_structure_source is not None
+                        else "measured"
+                        if measured_terrain
+                        else "unavailable"
+                        if terrain
+                        else "procedural",
+                        osm_structure_source
+                        if osm_structure_source is not None
+                        else terrain_source_sha256
+                        if measured_terrain
+                        else source_sha256
+                        if not terrain
+                        else None,
+                        "Structure collision is compiled from recorded OSM building footprints"
+                        if osm_structure_source is not None
+                        else "Collision heightfield is compiled from measured elevation"
                         if measured_terrain
                         else "No-data water cells are not declared traversable"
                         if terrain
@@ -453,6 +517,7 @@ class WorldPackCompiler:
                 f"route detail is not a regular source file: {route_detail_path}"
             )
         canonical_route = load_canonical_route(route_detail_path)
+        points = route_local_points(canonical_route)
         structure_tilesets = tuple(
             StructureTileset.load(path)
             for path in configuration.structure_tileset_paths
@@ -488,6 +553,29 @@ class WorldPackCompiler:
                 media_type="application/json",
                 format_version="godiesel-normalized-terrain-v1",
             )
+        route_origin = canonical_route["coordinates"][0]
+        assert isinstance(route_origin, dict)
+        osm_paths = (
+            (configuration.osm_network_path,)
+            if configuration.osm_network_path is not None
+            else configuration.osm_network_paths
+        )
+        osm_uris = (
+            (configuration.osm_source_uri,)
+            if configuration.osm_network_path is not None
+            else configuration.osm_source_uris
+        )
+        osm_world = (
+            OsmWorldData.load_many(
+                osm_paths,
+                points,
+                origin_latitude=float(route_origin["latitude"]),
+                origin_longitude=float(route_origin["longitude"]),
+                exploration_radius_m=configuration.exploration_radius_m,
+            )
+            if osm_paths
+            else None
+        )
         route_id = str(canonical_route["routeId"])
         source_bytes = route_detail_path.read_bytes()
         source_record = self.store.admit(
@@ -522,6 +610,37 @@ class WorldPackCompiler:
                     required_runtime=False,
                     kind="source",
                 )
+            osm_raw_source_artifacts = (
+                [
+                    assembler.add(
+                        f"sources/original/osm-overpass/{index:03d}.json",
+                        path.read_bytes(),
+                        media_type="application/json",
+                        format_version="osm-overpass-json-0.6",
+                        evidence_class="recorded",
+                        role="osm-overpass-source-shard",
+                        required_runtime=False,
+                        kind="source",
+                    )
+                    for index, path in enumerate(osm_paths)
+                ]
+                if osm_world is not None
+                else []
+            )
+            osm_source_artifact = (
+                assembler.add(
+                    "sources/derived/osm-route-world.json",
+                    osm_world.normalized_bytes,
+                    media_type="application/json",
+                    format_version="godiesel-osm-route-world-v1",
+                    evidence_class="derived",
+                    role="normalized-osm-world-source",
+                    required_runtime=False,
+                    kind="source",
+                )
+                if osm_world is not None
+                else None
+            )
             structure_source_artifacts = []
             for tileset in structure_tilesets:
                 structure_source_artifacts.append(
@@ -599,6 +718,47 @@ class WorldPackCompiler:
                         "adapterVersion": "1",
                     }
                     for tileset, artifact in structure_source_artifacts
+                ]
+                + (
+                    [
+                        {
+                            "logicalName": "osm-route-world",
+                            "logicalPath": osm_source_artifact.logicalPath,
+                            "sha256": osm_source_artifact.sha256,
+                            "byteSize": osm_source_artifact.byteSize,
+                            "mediaType": osm_source_artifact.mediaType,
+                            "formatVersion": osm_source_artifact.formatVersion,
+                            "evidenceClass": osm_source_artifact.evidenceClass,
+                            "sourceUri": "godiesel:normalized-osm-route-world-v1",
+                            "acquiredAt": configuration.acquired_at,
+                            "sourceDate": osm_world.source_date,
+                            "licence": configuration.osm_licence,
+                            "attribution": configuration.osm_attribution,
+                            "adapter": "godiesel-osm-route-world-normalizer",
+                            "adapterVersion": "1",
+                        }
+                    ]
+                    if osm_source_artifact is not None and osm_world is not None
+                    else []
+                )
+                + [
+                    {
+                        "logicalName": f"osm-overpass-shard-{index:03d}",
+                        "logicalPath": artifact.logicalPath,
+                        "sha256": artifact.sha256,
+                        "byteSize": artifact.byteSize,
+                        "mediaType": artifact.mediaType,
+                        "formatVersion": artifact.formatVersion,
+                        "evidenceClass": artifact.evidenceClass,
+                        "sourceUri": osm_uris[index],
+                        "acquiredAt": configuration.acquired_at,
+                        "sourceDate": osm_world.source_dates[index],
+                        "licence": configuration.osm_licence,
+                        "attribution": configuration.osm_attribution,
+                        "adapter": "overpass-json-route-shard",
+                        "adapterVersion": "1",
+                    }
+                    for index, artifact in enumerate(osm_raw_source_artifacts)
                 ],
             }
             validate_document("source-inventory", source_inventory)
@@ -611,7 +771,6 @@ class WorldPackCompiler:
                 required_runtime=False,
                 transform_name="assemble-source-inventory",
             )
-            points = route_local_points(canonical_route)
             disconnected_after = _disconnected_after(points, canonical_route)
             route_record = assembler.add_json(
                 "route/canonical-route.json",
@@ -724,13 +883,22 @@ class WorldPackCompiler:
             )
             structures_collision = assembler.add(
                 "physics/structures-collision.glb",
-                empty_glb("No admitted structures"),
+                osm_world.collision_glb(points, normalized_terrain)
+                if osm_world is not None
+                else empty_glb("No admitted structures"),
                 media_type="model/gltf-binary",
                 format_version="glTF-2.0",
-                evidence_class="unavailable",
+                evidence_class=(
+                    "derived" if osm_world is not None else "unavailable"
+                ),
                 role="structures-collision",
                 required_runtime=True,
-                transform_name="compile-empty-structures-collision",
+                transform_name=(
+                    "compile-osm-structure-collision"
+                    if osm_world is not None
+                    else "compile-empty-structures-collision"
+                ),
+                transform_inputs=(osm_world.sha256,) if osm_world is not None else None,
             )
             traversable = assembler.add(
                 "physics/traversable-surfaces.glb",
@@ -754,17 +922,26 @@ class WorldPackCompiler:
             )
             assembler.add_json(
                 "transportation/network.json",
-                {
+                osm_world.transportation_document()
+                if osm_world is not None
+                else {
                     "schemaVersion": 1,
                     "roads": {"class": "unavailable", "features": []},
                     "paths": {"class": "unavailable", "features": []},
                     "trails": {"class": "unavailable", "features": []},
                 },
                 format_version="1",
-                evidence_class="unavailable",
+                evidence_class=(
+                    "recorded" if osm_world is not None else "unavailable"
+                ),
                 role="transportation-network",
                 required_runtime=False,
-                transform_name="declare-unavailable-transportation",
+                transform_name=(
+                    "normalize-osm-transportation"
+                    if osm_world is not None
+                    else "declare-unavailable-transportation"
+                ),
+                transform_inputs=(osm_world.sha256,) if osm_world is not None else None,
             )
             structure_runtime_paths = []
             structure_runtime_descriptors = []
@@ -870,6 +1047,7 @@ class WorldPackCompiler:
                 source_record.sha256,
                 normalized_terrain,
                 structure_tilesets,
+                osm_world,
                 origin_latitude=float(coverage_origin["latitude"]),
                 origin_longitude=float(coverage_origin["longitude"]),
             )
@@ -967,7 +1145,18 @@ class WorldPackCompiler:
                             "attribution": configuration.structure_attribution,
                         }
                         for _, artifact in structure_source_artifacts
-                    ],
+                    ]
+                    + (
+                        [
+                            {
+                                "scope": osm_source_artifact.logicalPath,
+                                "licence": configuration.osm_licence,
+                                "attribution": configuration.osm_attribution,
+                            }
+                        ]
+                        if osm_source_artifact is not None
+                        else []
+                    ),
                 },
                 format_version="1",
                 evidence_class="derived",
@@ -1048,7 +1237,11 @@ class WorldPackCompiler:
                 "physicalCapabilities": {
                     "terrainCollision": "heightfield",
                     "traversableSurfaces": "indexed-triangle-mesh",
-                    "structuresCollision": "unavailable",
+                    "structuresCollision": (
+                        "footprint-prisms"
+                        if osm_world is not None
+                        else "unavailable"
+                    ),
                 },
                 "modes": ["guided", "free-roam"],
             }

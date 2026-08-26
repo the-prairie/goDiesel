@@ -277,7 +277,9 @@ function parseRuntime(value: unknown): WorldPackRuntime {
   if (
     physicalCapabilities.terrainCollision !== "heightfield" ||
     physicalCapabilities.traversableSurfaces !== "indexed-triangle-mesh" ||
-    physicalCapabilities.structuresCollision !== "unavailable"
+    !["unavailable", "footprint-prisms"].includes(
+      String(physicalCapabilities.structuresCollision),
+    )
   ) {
     throw new WorldPackLoadError(
       "World Pack declares unsupported physical capabilities",
@@ -317,7 +319,8 @@ function parseRuntime(value: unknown): WorldPackRuntime {
     physicalCapabilities: {
       terrainCollision: "heightfield",
       traversableSurfaces: "indexed-triangle-mesh",
-      structuresCollision: "unavailable",
+      structuresCollision:
+        physicalCapabilities.structuresCollision as WorldPackRuntime["physicalCapabilities"]["structuresCollision"],
     },
     modes: modes as Array<"guided" | "free-roam">,
   };
