@@ -75,6 +75,31 @@ function path(value: unknown, label: string): string {
   return result;
 }
 
+function structureTilesets(
+  value: unknown,
+): NonNullable<WorldPackRuntime["assets"]["structureTilesets"]> {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new WorldPackLoadError(
+      "structure tilesets must be a non-empty array",
+      "invalid",
+    );
+  }
+  const result = value.map((item, index) => {
+    const descriptor = record(item, `structure tileset ${index}`);
+    return {
+      path: path(descriptor.path, `structure tileset ${index} path`),
+      verticalAlignmentOffsetM: finite(
+        descriptor.verticalAlignmentOffsetM,
+        `structure tileset ${index} vertical alignment`,
+      ),
+    };
+  });
+  if (new Set(result.map((descriptor) => descriptor.path)).size !== result.length) {
+    throw new WorldPackLoadError("structure tilesets repeat a path", "invalid");
+  }
+  return result;
+}
+
 function parseJson(bytes: Uint8Array, label: string): unknown {
   try {
     return JSON.parse(decoder.decode(bytes));
@@ -278,6 +303,11 @@ function parseRuntime(value: unknown): WorldPackRuntime {
       ...(assets.terrainMask === undefined
         ? {}
         : { terrainMask: path(assets.terrainMask, "terrain mask asset") }),
+      ...(assets.structureTilesets === undefined
+        ? {}
+        : {
+            structureTilesets: structureTilesets(assets.structureTilesets),
+          }),
       structuresCollision: path(assets.structuresCollision, "structures collision asset"),
       traversableSurfaces: path(assets.traversableSurfaces, "traversable surfaces asset"),
       navigation: path(assets.navigation, "navigation asset"),
@@ -549,7 +579,12 @@ export async function loadWorldPackForRoute(
   if (runtime.worldId !== manifest.worldId || runtime.routeId !== manifest.routeId) {
     throw new WorldPackLoadError("World Pack runtime identity disagrees with its manifest", "integrity");
   }
-  for (const runtimePath of Object.values(runtime.assets)) {
+  const runtimePaths = Object.entries(runtime.assets).flatMap(([name, value]) =>
+    name === "structureTilesets" && Array.isArray(value)
+      ? value.map((descriptor) => descriptor.path)
+      : [value as string],
+  );
+  for (const runtimePath of runtimePaths) {
     if (!artifacts.has(runtimePath)) {
       throw new WorldPackLoadError(`Runtime asset was not verified: ${runtimePath}`, "integrity");
     }

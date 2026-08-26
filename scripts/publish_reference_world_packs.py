@@ -102,6 +102,11 @@ def publish() -> dict[str, object]:
                             if "normalizedTerrain" in route
                             else None
                         ),
+                        structure_tileset_paths=tuple(
+                            ROOT / path for path in route.get("structureTilesets", [])
+                        ),
+                        structure_licence=route.get("structureLicence"),
+                        structure_attribution=route.get("structureAttribution"),
                     ),
                 )
                 health = verify_pack(result.path)

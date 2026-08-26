@@ -29,6 +29,16 @@ test("all reference worlds open from verified local media with providers blocked
   page,
 }) => {
   const externalRequests: string[] = [];
+  const structureTileRequests = new Map<string, number>();
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.endsWith(".b3dm")) {
+      structureTileRequests.set(
+        url.pathname,
+        (structureTileRequests.get(url.pathname) ?? 0) + 1,
+      );
+    }
+  });
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
     if (url.origin === localOrigin) {
@@ -53,6 +63,12 @@ test("all reference worlds open from verified local media with providers blocked
       "verified",
     );
     await expectNonblankWorld(canvas);
+    if (reference.worldId === "tokyo-urban") {
+      expect(
+        [...structureTileRequests.values()].filter((requestCount) => requestCount >= 2)
+          .length,
+      ).toBeGreaterThan(0);
+    }
   }
 
   expect(externalRequests).toEqual([]);

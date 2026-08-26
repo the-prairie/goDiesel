@@ -273,13 +273,30 @@ def verify_pack(pack: Path, *, require_directory_name: bool = True) -> PackHealt
     if entrypoint != "runtime/world.json":
         raise IntegrityError(f"unexpected runtime entrypoint: {entrypoint}")
     assets = _object(runtime.get("assets"), "runtime assets")
-    for name, raw_path in assets.items():
-        relative_path = _safe_relative_path(raw_path, f"runtime asset {name}")
-        artifact = artifact_by_path.get(relative_path)
-        if artifact is None or artifact.get("requiredRuntime") is not True:
-            raise IntegrityError(
-                f"runtime asset is absent or not required: {relative_path}"
+    for name, raw_value in assets.items():
+        raw_paths = (
+            [
+                _object(item, f"runtime structure tileset {index}").get("path")
+                for index, item in enumerate(raw_value)
+            ]
+            if name == "structureTilesets" and isinstance(raw_value, list)
+            else raw_value
+            if isinstance(raw_value, list)
+            else [raw_value]
+        )
+        if not raw_paths:
+            raise IntegrityError(f"runtime asset {name} is an empty path array")
+        for index, raw_path in enumerate(raw_paths):
+            relative_path = _safe_relative_path(
+                raw_path,
+                f"runtime asset {name}"
+                + (f" item {index}" if isinstance(raw_value, list) else ""),
             )
+            artifact = artifact_by_path.get(relative_path)
+            if artifact is None or artifact.get("requiredRuntime") is not True:
+                raise IntegrityError(
+                    f"runtime asset is absent or not required: {relative_path}"
+                )
 
     required_runtime = [
         artifact for artifact in artifacts if artifact.get("requiredRuntime") is True

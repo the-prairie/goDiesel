@@ -1,6 +1,7 @@
 import {
   Axis,
   Cartesian3,
+  Cesium3DTileset,
   Color,
   ColorBlendMode,
   ConstantPositionProperty,
@@ -99,6 +100,7 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
   private routeEntity?: Entity;
   private pack?: VerifiedWorldPack;
   private models: Model[] = [];
+  private structureTilesets: Cesium3DTileset[] = [];
   private objectUrls: string[] = [];
   private abortController?: AbortController;
   private cameraHeadingDeg?: number;
@@ -211,8 +213,21 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
         Color.fromCssColorString("#b9ad82"),
         0.75,
       );
+      for (const descriptor of pack.runtime.assets.structureTilesets ?? []) {
+        const localUp = Cartesian3.normalize(origin, new Cartesian3());
+        const translation = Cartesian3.multiplyByScalar(
+          localUp,
+          -descriptor.verticalAlignmentOffsetM,
+          new Cartesian3(),
+        );
+        await this.addStructureTileset(
+          pack,
+          descriptor.path,
+          Matrix4.fromTranslation(translation),
+        );
+      }
       if (generation !== this.generation) return;
-      await this.waitForModelsReady(generation);
+      await this.waitForGeometryReady(generation);
       if (generation !== this.generation) return;
       const physicsRuntime = createWorldPhysicsRuntime(pack);
 
@@ -375,13 +390,36 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
     return model;
   }
 
-  private async waitForModelsReady(generation: number) {
-    for (let frame = 0; frame < 120; frame += 1) {
+  private async addStructureTileset(
+    pack: VerifiedWorldPack,
+    logicalPath: string,
+    modelMatrix: Matrix4,
+  ) {
+    const tileset = await Cesium3DTileset.fromUrl(
+      pack.artifactUrl(logicalPath).toString(),
+      {
+        maximumScreenSpaceError: 2,
+        preloadWhenHidden: true,
+      },
+    );
+    tileset.modelMatrix = modelMatrix;
+    this.viewer?.scene.primitives.add(tileset);
+    this.structureTilesets.push(tileset);
+    return tileset;
+  }
+
+  private async waitForGeometryReady(generation: number) {
+    for (let frame = 0; frame < 600; frame += 1) {
       if (generation !== this.generation) return;
-      if (this.models.every((model) => model.ready)) return;
+      if (
+        this.models.every((model) => model.ready) &&
+        this.structureTilesets.every((tileset) => tileset.tilesLoaded)
+      ) {
+        return;
+      }
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     }
-    throw new Error("Local World Pack models did not become render-ready.");
+    throw new Error("Local World Pack geometry did not become render-ready.");
   }
 
   private destroyResources() {
@@ -392,6 +430,7 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
     this.routeEntity = undefined;
     this.pack = undefined;
     this.models = [];
+    this.structureTilesets = [];
     this.objectUrls.forEach((url) => URL.revokeObjectURL(url));
     this.objectUrls = [];
     this.cameraHeadingDeg = undefined;

@@ -51,6 +51,9 @@
         "terrainInput": {
           "enum": ["procedural-route-v1", "normalized-measured-v1"]
         },
+        "structureInput": {
+          "const": "plateau-lod1-subset-v1"
+        },
         "deliberateMissingCellOffsets": {
           "type": "array",
           "uniqueItems": true,

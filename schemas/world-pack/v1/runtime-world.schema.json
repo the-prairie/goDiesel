@@ -50,6 +50,19 @@
         "terrain": { "$ref": "#/$defs/path" },
         "terrainCollision": { "$ref": "#/$defs/path" },
         "terrainMask": { "$ref": "#/$defs/path" },
+        "structureTilesets": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "verticalAlignmentOffsetM"],
+            "properties": {
+              "path": { "$ref": "#/$defs/path" },
+              "verticalAlignmentOffsetM": { "type": "number" }
+            }
+          }
+        },
         "structuresCollision": { "$ref": "#/$defs/path" },
         "traversableSurfaces": { "$ref": "#/$defs/path" },
         "navigation": { "$ref": "#/$defs/path" },

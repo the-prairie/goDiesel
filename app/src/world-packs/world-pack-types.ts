@@ -57,6 +57,10 @@ export interface WorldPackRuntime {
     terrain: string;
     terrainCollision: string;
     terrainMask?: string;
+    structureTilesets?: Array<{
+      path: string;
+      verticalAlignmentOffsetM: number;
+    }>;
     structuresCollision: string;
     traversableSurfaces: string;
     navigation: string;

@@ -37,3 +37,13 @@ python -m scripts.verify_world_source_receipt \
   docs/world-packs/sources/banff-mrdem-2026.json \
   world-packs-local/sources/banff/2026
 ```
+
+Tokyo uses 2025 official PLATEAU LOD1 3D Tiles for Chiyoda, Chuo, Minato, and Koto.
+The route-corridor adapter retains the source tileset hash and each selected source B3DM hash, removes only runtime-unused batch-property metadata, and emits a closed derived tileset.
+The committed receipt binds the 87 derived geometry tiles plus the catalog subset to the retained PLATEAU site policy.
+
+```sh
+python -m scripts.verify_world_source_receipt \
+  docs/world-packs/sources/tokyo-plateau-2025.json \
+  docs/world-packs/structures/tokyo
+```

@@ -23,6 +23,7 @@ from .geometry import (
 from .route import load_canonical_route
 from .schema import validate_document
 from .storage import ContentAddressedStore, ObjectRecord
+from .structures import StructureTileset
 from .terrain import NormalizedTerrain
 from .transformations import TransformationGraph, TransformationStep
 
@@ -46,6 +47,9 @@ class BuildConfiguration:
     attribution: str = "goDiesel route pipeline"
     deliberate_missing_cell_offsets: tuple[tuple[int, int], ...] = ()
     normalized_terrain_path: Path | None = None
+    structure_tileset_paths: tuple[Path, ...] = ()
+    structure_licence: str | None = None
+    structure_attribution: str | None = None
 
     def __post_init__(self) -> None:
         if not self.world_id or any(
@@ -63,6 +67,12 @@ class BuildConfiguration:
             raise ValidationError("exploration radius cannot be smaller than corridor radius")
         if self.quality_cell_size_m < 1:
             raise ValidationError("quality cell size must be positive")
+        if self.structure_tileset_paths and (
+            not self.structure_licence or not self.structure_attribution
+        ):
+            raise ValidationError(
+                "structure tilesets require explicit licence and attribution"
+            )
 
     def manifest_configuration(self) -> dict[str, object]:
         return {
@@ -77,6 +87,11 @@ class BuildConfiguration:
                 "normalized-measured-v1"
                 if self.normalized_terrain_path is not None
                 else "procedural-route-v1"
+            ),
+            **(
+                {"structureInput": "plateau-lod1-subset-v1"}
+                if self.structure_tileset_paths
+                else {}
             ),
         }
 
@@ -197,6 +212,10 @@ def _coverage_document(
     configuration: BuildConfiguration,
     source_sha256: str,
     terrain: NormalizedTerrain | None = None,
+    structure_tilesets: tuple[StructureTileset, ...] = (),
+    *,
+    origin_latitude: float,
+    origin_longitude: float,
 ) -> dict[str, object]:
     size = configuration.quality_cell_size_m
     radius = configuration.exploration_radius_m
@@ -219,6 +238,19 @@ def _coverage_document(
             deliberate_gap = (x_index, y_index) in deliberate
             measured_terrain = terrain is not None and terrain.is_measured_at(
                 center_x, center_y
+            )
+            structure_source = next(
+                (
+                    tileset.source_manifest_sha256
+                    for tileset in structure_tilesets
+                    if tileset.covers_local_point(
+                        center_x,
+                        center_y,
+                        origin_latitude,
+                        origin_longitude,
+                    )
+                ),
+                None,
             )
             terrain_source_sha256 = (
                 str(terrain.document["source"]["sha256"])
@@ -254,9 +286,13 @@ def _coverage_document(
                         visual_reason,
                     ),
                     "structures": _evidence(
-                        "unavailable",
-                        None,
-                        "No retainable structure source has been admitted",
+                        "derived" if structure_source is not None else "unavailable",
+                        structure_source,
+                        "Retained official PLATEAU LOD1 geometry covers this quality cell"
+                        if structure_source is not None
+                        else "No retainable structure source has been admitted"
+                        if not structure_tilesets
+                        else "No retained structure tile covers this quality cell",
                     ),
                     "collision": _evidence(
                         "measured" if measured_terrain else "unavailable" if terrain else "procedural",
@@ -417,6 +453,13 @@ class WorldPackCompiler:
                 f"route detail is not a regular source file: {route_detail_path}"
             )
         canonical_route = load_canonical_route(route_detail_path)
+        structure_tilesets = tuple(
+            StructureTileset.load(path)
+            for path in configuration.structure_tileset_paths
+        )
+        structure_dataset_ids = [tileset.dataset_id for tileset in structure_tilesets]
+        if len(set(structure_dataset_ids)) != len(structure_dataset_ids):
+            raise ValidationError("structure tileset dataset IDs must be unique")
         normalized_terrain: NormalizedTerrain | None = None
         normalized_terrain_bytes: bytes | None = None
         normalized_terrain_record: ObjectRecord | None = None
@@ -479,6 +522,23 @@ class WorldPackCompiler:
                     required_runtime=False,
                     kind="source",
                 )
+            structure_source_artifacts = []
+            for tileset in structure_tilesets:
+                structure_source_artifacts.append(
+                    (
+                        tileset,
+                        assembler.add(
+                            f"sources/derived/structures/{tileset.dataset_id}/source-manifest.json",
+                            (tileset.root / "source-manifest.json").read_bytes(),
+                            media_type="application/json",
+                            format_version="godiesel-plateau-subset-manifest-v1",
+                            evidence_class="derived",
+                            role="structure-source-manifest",
+                            required_runtime=False,
+                            kind="source",
+                        ),
+                    )
+                )
             source_inventory = {
                 "schemaVersion": 1,
                 "sources": [
@@ -520,7 +580,26 @@ class WorldPackCompiler:
                     ]
                     if terrain_source_artifact is not None and normalized_terrain is not None
                     else []
-                ),
+                )
+                + [
+                    {
+                        "logicalName": f"structure-source-{tileset.dataset_id}",
+                        "logicalPath": artifact.logicalPath,
+                        "sha256": artifact.sha256,
+                        "byteSize": artifact.byteSize,
+                        "mediaType": artifact.mediaType,
+                        "formatVersion": artifact.formatVersion,
+                        "evidenceClass": artifact.evidenceClass,
+                        "sourceUri": tileset.source_tileset_uri,
+                        "acquiredAt": configuration.acquired_at,
+                        "sourceDate": str(tileset.source_year),
+                        "licence": configuration.structure_licence,
+                        "attribution": configuration.structure_attribution,
+                        "adapter": "godiesel-plateau-subset",
+                        "adapterVersion": "1",
+                    }
+                    for tileset, artifact in structure_source_artifacts
+                ],
             }
             validate_document("source-inventory", source_inventory)
             inventory_record = assembler.add_json(
@@ -687,15 +766,70 @@ class WorldPackCompiler:
                 required_runtime=False,
                 transform_name="declare-unavailable-transportation",
             )
-            assembler.add_json(
-                "structures/tileset.json",
-                {"schemaVersion": 1, "class": "unavailable", "contents": []},
-                format_version="1",
-                evidence_class="unavailable",
-                role="structure-tileset",
-                required_runtime=False,
-                transform_name="declare-unavailable-structures",
-            )
+            structure_runtime_paths = []
+            structure_runtime_descriptors = []
+            structure_tileset_records = []
+            structure_source_hashes = {
+                tileset.dataset_id: artifact.sha256
+                for tileset, artifact in structure_source_artifacts
+            }
+            for tileset in structure_tilesets:
+                prefix = f"structures/tilesets/{tileset.dataset_id}"
+                tileset_record = assembler.add(
+                    f"{prefix}/tileset.json",
+                    (tileset.root / "tileset.json").read_bytes(),
+                    media_type="application/json",
+                    format_version="3d-tiles-1.0",
+                    evidence_class="derived",
+                    role="structure-tileset",
+                    required_runtime=True,
+                    transform_name="retain-plateau-structure-tileset",
+                    transform_inputs=(structure_source_hashes[tileset.dataset_id],),
+                )
+                structure_runtime_paths.append(tileset_record.logicalPath)
+                structure_runtime_descriptors.append(
+                    {
+                        "path": tileset_record.logicalPath,
+                        "verticalAlignmentOffsetM": tileset.vertical_alignment_offset_m,
+                    }
+                )
+                structure_tileset_records.append(tileset_record)
+                for content in tileset.contents:
+                    assembler.add(
+                        f"{prefix}/{content.uri}",
+                        (tileset.root / content.uri).read_bytes(),
+                        media_type="application/vnd.cesium.b3dm",
+                        format_version="3d-tiles-b3dm-1.0",
+                        evidence_class="derived",
+                        role="structure-content",
+                        required_runtime=True,
+                        transform_name="retain-stripped-plateau-b3dm",
+                        transform_inputs=(structure_source_hashes[tileset.dataset_id],),
+                    )
+            if structure_runtime_paths:
+                assembler.add_json(
+                    "structures/tileset.json",
+                    {
+                        "schemaVersion": 1,
+                        "class": "derived",
+                        "contents": structure_runtime_paths,
+                    },
+                    format_version="1",
+                    evidence_class="derived",
+                    role="structure-tileset-index",
+                    required_runtime=False,
+                    transform_name="index-retained-structures",
+                )
+            else:
+                assembler.add_json(
+                    "structures/tileset.json",
+                    {"schemaVersion": 1, "class": "unavailable", "contents": []},
+                    format_version="1",
+                    evidence_class="unavailable",
+                    role="structure-tileset",
+                    required_runtime=False,
+                    transform_name="declare-unavailable-structures",
+                )
             assembler.add_json(
                 "imagery/materials/procedural.json",
                 {
@@ -728,8 +862,16 @@ class WorldPackCompiler:
                 required_runtime=True,
                 transform_name="compile-core-lod-policy",
             )
+            coverage_origin = canonical_route["coordinates"][0]
+            assert isinstance(coverage_origin, dict)
             coverage = _coverage_document(
-                points, configuration, source_record.sha256, normalized_terrain
+                points,
+                configuration,
+                source_record.sha256,
+                normalized_terrain,
+                structure_tilesets,
+                origin_latitude=float(coverage_origin["latitude"]),
+                origin_longitude=float(coverage_origin["longitude"]),
             )
             coverage_record = assembler.add_json(
                 "provenance/coverage.json",
@@ -768,6 +910,22 @@ class WorldPackCompiler:
                         if terrain_alignment is not None
                         else {"class": "procedural", "declaredAccuracyM": None}
                     ),
+                    **(
+                        {
+                            "structures": [
+                                {
+                                    "datasetId": tileset.dataset_id,
+                                    "class": "derived",
+                                    "verticalAlignmentOffsetM": tileset.vertical_alignment_offset_m,
+                                    "verticalAlignmentResidualP95M": tileset.vertical_alignment_residual_p95_m,
+                                    "verticalAlignmentSampleCount": tileset.vertical_alignment_sample_count,
+                                }
+                                for tileset in structure_tilesets
+                            ]
+                        }
+                        if structure_tilesets
+                        else {}
+                    ),
                 },
                 format_version="1",
                 evidence_class="derived",
@@ -801,7 +959,15 @@ class WorldPackCompiler:
                         ]
                         if terrain_source_artifact is not None and normalized_terrain is not None
                         else []
-                    ),
+                    )
+                    + [
+                        {
+                            "scope": artifact.logicalPath,
+                            "licence": configuration.structure_licence,
+                            "attribution": configuration.structure_attribution,
+                        }
+                        for _, artifact in structure_source_artifacts
+                    ],
                 },
                 format_version="1",
                 evidence_class="derived",
@@ -868,6 +1034,11 @@ class WorldPackCompiler:
                         if terrain_mask is not None
                         else {}
                     ),
+                    **(
+                        {"structureTilesets": structure_runtime_descriptors}
+                        if structure_runtime_paths
+                        else {}
+                    ),
                     "structuresCollision": structures_collision.logicalPath,
                     "traversableSurfaces": traversable.logicalPath,
                     "navigation": navigation_record.logicalPath,
@@ -897,7 +1068,8 @@ class WorldPackCompiler:
                     navigation_record.sha256,
                     coverage_record.sha256,
                     camera_record.sha256,
-                ),
+                )
+                + tuple(record.sha256 for record in structure_tileset_records),
             )
             assembler.add_json(
                 "migrations/version.json",
