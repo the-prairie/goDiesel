@@ -35,4 +35,4 @@ The corrected run must produce and retain:
 - explicit hosted-CI live-provider unavailability;
 - a green typecheck and `git diff --check`.
 
-No production optimization begins until this corrected Stage 0 packet is green and committed.
+This corrected Stage 0 packet is a mergeable measurement foundation once its gates and independent review pass. It is not a statistical performance baseline or a completion claim. GitHub issue #113 owns the remaining statistical baseline, profiling, optimization, and final-exit work. No production optimization begins until a follow-up profiling pull request has added repeated desktop, mobile, and genuinely available live-provider distributions, the required profiles, and a ranked opportunity matrix.

@@ -1,9 +1,9 @@
 # goDiesel production runtime performance gauntlet
 
-**Status:** implementation contract
+**Status:** staged implementation contract
 **Base:** `main` at `0b8dd50836f4faaf1e66dc1dec41e5dd5a2cd60b` or later
-**Branch:** `perf/runtime-performance-gauntlet`
-**Merge policy:** draft PR only until every exit criterion is supported by reproducible evidence
+**Stage 0 branch:** `perf/runtime-performance-gauntlet`
+**Merge policy:** each stage remains draft until its stage-specific evidence and independent review pass; the overall goal is incomplete until every final exit criterion is supported by reproducible evidence
 
 ## Goal
 
@@ -12,6 +12,28 @@ Make the production goDiesel Atlas, Finder, Routes, route detail, and Replay ext
 The quality reference is the official CesiumJS Photorealistic 3D Tiles quickstart running on the same machine, browser, viewport, device scale factor, provider credentials, cache state, and network conditions. goDiesel must remain substantially more informative than the reference while feeling comparably fluid.
 
 This is a measured optimization gauntlet, not a speculative rewrite. Profile first. Implement one performance lever at a time. Keep only changes that produce material gains and satisfy their equivalence obligations.
+
+## Delivery sequence
+
+Deliver this goal as a linked series of reviewable pull requests rather than one permanently open branch.
+
+The Stage 0 foundation pull request may merge independently when it contains:
+
+- the Stage -1 documentation and current-truth artifacts;
+- isolated deterministic workloads for the required surfaces and corpus sizes;
+- a committed, checksummed single-run evidence packet that proves measurement integrity rather than statistical performance;
+- the twenty-transition lifecycle workload;
+- an explicit live-provider availability record;
+- green ticket and affected runtime gates; and
+- a fresh independent review with no stage-specific blocker.
+
+Merging the Stage 0 foundation does not claim that the performance goal, statistical baseline, live-provider gate, optimization stages, or final exit criteria are complete.
+
+Before any production optimization, a follow-up profiling pull request must run repeated desktop, mobile, and genuinely available live-provider workloads; report variance and p50, p95, and p99; capture the required profiles; and commit the ranked opportunity matrix. Later optimization pull requests must begin from current `main`, link their predecessor evidence, and preserve the one-lever, equivalence-proof, and regression-guardrail requirements below.
+
+Stages 1 through 3 and the numeric exit criteria remain mandatory. Staging changes review and integration boundaries only; it does not waive evidence, fidelity, accessibility, provider, or performance requirements.
+
+The durable continuation record is GitHub issue #113, `perf: profile and optimize runtime after Stage 0`. It owns the statistical baseline, profiling, optimization, and final-exit work after the Stage 0 foundation merges.
 
 ## Required reading and documentation reality check
 
@@ -154,7 +176,9 @@ G. Reduced-motion mode.
 H. Live-provider mode.
 I. Deterministic provider-disabled mode.
 
-For each relevant workload, record:
+The Stage 0 foundation records the available metrics for one integrity sample per isolated surface and the complete twenty-transition lifecycle workload. These samples prove that clocks, counters, corpora, readiness oracles, and lifecycle instrumentation are trustworthy; they are not a statistical performance claim.
+
+Before selecting or retaining an optimization, repeat each relevant workload and record:
 
 - p50, p95, and p99 latency;
 - frame-time and frame-rate distribution;
@@ -175,7 +199,7 @@ For each relevant workload, record:
 - provider-settlement time separated from local application time;
 - React commit count and expensive commit duration for affected surfaces.
 
-Commit benchmark commands, fixture-generation commands, machine/environment metadata, and machine-readable baseline results.
+Commit benchmark commands, fixture-generation commands, machine/environment metadata, and machine-readable results. The Stage 0 packet must identify single-run samples explicitly; the follow-up statistical baseline must include repetition counts, variance, and p50, p95, and p99.
 
 ## Stage 1 — Profile before proposing
 
@@ -393,9 +417,9 @@ Stop only when:
 
 ## Required delivery
 
-Keep the implementation in a draft pull request. Do not merge or enable auto-merge.
+Keep each implementation stage in a draft pull request until its stage-specific evidence and independent review pass. Do not enable auto-merge.
 
-The PR must contain:
+Across the linked pull-request series, the delivery must contain:
 
 - Documentation Reality Check;
 - Current Truth Specification;
@@ -413,4 +437,4 @@ The PR must contain:
 - remaining provider-bound costs;
 - residual risks.
 
-The PR must stay draft until a final independent review confirms the evidence and exit criteria.
+Each pull request must state its exact stage boundary, predecessor evidence, commands, results, residual risks, and follow-up issue. The Stage 0 foundation may leave draft only after an independent review confirms its measurement integrity and all Stage 0 merge requirements. The final pull request must stay draft until a final independent review confirms the complete evidence and exit criteria.
