@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-08
+last_updated: 2026-08-26
 status: canonical
 ---
 
@@ -83,6 +83,36 @@ which 67 are `approved`.
 
 Only `approved` routes with `visibility != "hidden"` are generated into the
 product.
+
+### World Pack
+
+A **World Pack** is one provider-independent, route-scoped preserved world.
+It is a separate versioned artifact attached to a route and never changes the route's identity, lifecycle, or evidence.
+A route may exist without a World Pack, and a World Pack may gain later sealed versions without changing its route.
+
+A **sealed version** is an immutable pack directory whose manifest identity, retained sources, derived artifacts, checksums, lineage, attribution, coverage, runtime references, and migration version all verify.
+A browser cache, provider response, screenshot, live URL, or partially populated directory is not a sealed version.
+
+A **quality cell** is the provenance grain of the preserved world corridor.
+Every quality cell separately declares terrain, visual, structure, and collision evidence, acquisition and source dates, transformation version, confidence, visual quality, and physics quality.
+An unavailable source or procedural completion is named rather than hidden.
+
+An **acquisition adapter** admits source evidence into content-addressed storage.
+The runtime never invokes an acquisition adapter and reads only the internal World Pack contract.
+
+A **transformation graph** is the deterministic lineage from retained source hashes to derived artifact hashes.
+Its steps are versioned and identity-addressed.
+
+The **visual world** contains renderable terrain, imagery, structures, materials, reconstruction, and route presentation.
+The **physical world** contains stable terrain collision, structure collision, traversable surfaces, navigation, actor constraints, and recovery anchors.
+Visual level of detail is never the sole physical collision source.
+
+World Pack geography uses the evidence classes `recorded`, `derived`, `measured`, `reconstructed`, `procedural`, and `unavailable`.
+These do not change the narrower route-value evidence labels in section 4 and never turn reconstructed geography into recorded route history.
+
+A **World Pack repair** is source reconstruction of a damaged sealed pack into the same deterministic pack identity.
+It is distinct from the route-level **repair** in section 4, which only presents a recorded discontinuity.
+World Pack repair verifies retained source evidence, rebuilds in isolation, preserves damaged bytes in quarantine, and swaps only after the rebuilt pack passes full verification.
 
 ## 3. Lifecycle
 
@@ -298,6 +328,10 @@ These hold across the whole system. Breaking one is a defect, not a tradeoff.
 10. A microsite bundle contains exactly one route's data.
 11. Production code never imports from `labs/`. `app/router.tsx` is the single
     exception, because it is the composition root that builds the route table.
+12. A sealed World Pack has no required network request, provider credential, signed URL, browser-cache dependency, or workstation path.
+13. Visual and physical World Pack artifacts remain separate, and movement waits for a verified physical neighbourhood.
+14. A World Pack build, import, migration, or repair never overwrites a conflicting sealed version.
+15. World Pack geography never changes canonical route coordinates, segment boundaries, elapsed time, discontinuities, lifecycle, or owner history.
 12. `domain/` imports no upward layer, and no surface imports another surface.
     Shared components live in `ui/`.
 

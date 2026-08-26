@@ -7,8 +7,7 @@ A World Pack is a versioned, route-scoped preserved representation of the world 
 A World Pack does not assert that the owner completed, recorded, or visited anything beyond the canonical route evidence.
 A World Pack may contain measured, reconstructed, derived, procedural, or unavailable geography only when that class is explicit at artifact and quality-cell grain.
 
-The phrase World Pack is established by the goal but is not yet present in `CONTEXT.md`.
-It remains a domain-modeling addition pending the architecture ADR and contract proof.
+World Pack and its supporting terms are established in `CONTEXT.md` and ADR-0015 after the integrity, deterministic-build, archive, and repair contract proof.
 
 ## Existing boundaries preserved
 

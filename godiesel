@@ -1,0 +1,7 @@
+#!/usr/bin/env python3
+"""goDiesel local operator command."""
+
+from world_packs.cli import main
+
+
+raise SystemExit(main())

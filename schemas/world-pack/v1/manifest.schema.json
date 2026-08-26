@@ -40,13 +40,23 @@
         "corridorRadiusM",
         "explorationRadiusM",
         "qualityCellSizeM",
-        "coordinateReference"
+        "coordinateReference",
+        "deliberateMissingCellOffsets"
       ],
       "properties": {
         "corridorRadiusM": { "type": "integer", "minimum": 1 },
         "explorationRadiusM": { "type": "integer", "minimum": 1 },
         "qualityCellSizeM": { "type": "integer", "minimum": 1 },
-        "coordinateReference": { "const": "route-local-enu-v1" }
+        "coordinateReference": { "const": "route-local-enu-v1" },
+        "deliberateMissingCellOffsets": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "array",
+            "prefixItems": [{ "type": "integer" }, { "type": "integer" }],
+            "items": false
+          }
+        }
       }
     },
     "sourceInventorySha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },

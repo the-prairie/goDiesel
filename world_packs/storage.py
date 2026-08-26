@@ -6,6 +6,7 @@ import hashlib
 import os
 import shutil
 import tempfile
+import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -115,6 +116,30 @@ class ContentAddressedStore:
     def verify(self, record: ObjectRecord) -> None:
         self._verify_path(
             self.object_path(record.sha256), record.sha256, record.byteSize
+        )
+
+    def repair_file(
+        self,
+        source: Path,
+        *,
+        media_type: str,
+        format_version: str,
+    ) -> ObjectRecord:
+        if not source.is_file() or source.is_symlink():
+            raise IntegrityError(f"repair source is not a regular file: {source}")
+        digest = sha256_file(source)
+        byte_size = source.stat().st_size
+        target = self.object_path(digest)
+        if target.exists():
+            try:
+                self._verify_path(target, digest, byte_size)
+                return ObjectRecord(digest, byte_size, media_type, format_version)
+            except IntegrityError:
+                quarantine = self.root / "quarantine" / f"{digest}.{uuid.uuid4().hex}"
+                quarantine.parent.mkdir(parents=True, exist_ok=True)
+                os.replace(target, quarantine)
+        return self.admit_file(
+            source, media_type=media_type, format_version=format_version
         )
 
     def read(self, record: ObjectRecord) -> bytes:

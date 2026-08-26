@@ -44,3 +44,4 @@ node_modules/
 # Local experiments and unrelated build output, not part of goDiesel
 /lottie-player/
 /target/
+/world-packs-local/

@@ -32,6 +32,7 @@ def valid_manifest() -> dict[str, object]:
             "explorationRadiusM": 1500,
             "qualityCellSizeM": 250,
             "coordinateReference": "route-local-enu-v1",
+            "deliberateMissingCellOffsets": [],
         },
         "sourceInventorySha256": SHA_A,
         "transformationGraphSha256": SHA_A,

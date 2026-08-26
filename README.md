@@ -57,6 +57,41 @@ Regenerate route summaries and full route records after changing `quests.json` o
 The generator stages React route artifacts and publishes them atomically.
 Completed routes feed Atlas and Replay, while planned routes remain separate.
 
+## Build and preserve a World Pack
+
+World Pack commands require the Python environment from Setup and write to ignored `world-packs-local/` unless `--repository` names another local repository.
+The compiler requires an explicit acquisition timestamp, licence, and attribution so a convenient default cannot invent source custody.
+
+```bash
+./godiesel world inspect app/public/data/routes/17665674778.json
+
+./godiesel world build app/public/data/routes/17665674778.json \
+  --quality core \
+  --world-id tokyo-urban \
+  --acquired-at 2026-08-26T00:00:00Z \
+  --source-date 2025-11-26 \
+  --licence owner-controlled-derived-route-data \
+  --attribution "goDiesel route pipeline"
+```
+
+Verify, repair, migrate, and export a sealed pack by its version directory:
+
+```bash
+./godiesel world verify <world-pack>
+./godiesel world repair <world-pack>
+./godiesel world migrate <world-pack>
+./godiesel world export <world-pack> --output adventure.worldpack.zip
+```
+
+Install and verify the deterministic archive in another local repository:
+
+```bash
+./godiesel world --repository /path/to/clean-repository import adventure.worldpack.zip
+```
+
+Core v1 preserves exact route truth, deterministic procedural terrain, separate visual and physical meshes, navigation, quality-cell provenance, camera plans, integrity, and custody metadata.
+Its unavailable source categories remain explicit, and this compiler foundation does not promote Playable Earth or replace production Replay.
+
 ## Curate Routes
 
 Launch the React app and local owner writer together:

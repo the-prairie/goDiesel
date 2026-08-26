@@ -68,6 +68,9 @@ class BuildConfiguration:
             "explorationRadiusM": self.exploration_radius_m,
             "qualityCellSizeM": self.quality_cell_size_m,
             "coordinateReference": COORDINATE_REFERENCE,
+            "deliberateMissingCellOffsets": [
+                list(offset) for offset in self.deliberate_missing_cell_offsets
+            ],
         }
 
 

@@ -51,6 +51,7 @@ not by recollection.
 | [0012](0012-risk-based-verification-with-a-no-skip-live-gate.md) | Risk-based verification with a no-skip live gate | accepted |
 | [0013](0013-earth-engine-enrichment-stays-out-of-the-runtime.md) | Earth Engine enrichment stays out of the runtime | accepted |
 | [0014](0014-app-src-is-organised-by-surface.md) | app/src is organised by surface, with labs separated | accepted |
+| [0015](0015-local-world-pack-is-the-canonical-saved-world.md) | A local World Pack is the canonical saved world | accepted |
 
 ## Renderer history
 
