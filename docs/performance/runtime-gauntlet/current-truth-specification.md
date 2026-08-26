@@ -4,7 +4,7 @@ This specification freezes the behavior and data contract against which runtime 
 
 ## Authority and exclusions
 
-The normative sources for this goal are the staged runtime-gauntlet contract, current user constraints, accepted ADRs, current production behavior and generated contracts, and the risk-based testing policy. `CONTEXT.md`, `README.md`, and `STRATEGY.md` remain descriptive only where the documentation reality check confirms that current code, tests, and newer decisions still support them.
+The normative sources for this goal are the staged runtime-gauntlet contract, current user constraints, `CONTEXT.md` for canonical domain vocabulary and invariants, accepted ADRs, current production behavior and generated contracts, and the risk-based testing policy. Time-sensitive descriptive facts in `CONTEXT.md`, `README.md`, and `STRATEGY.md` apply only where the documentation reality check confirms that current code, tests, and newer decisions still support them.
 
 Superseded source paths, the claim that the repository has no CI, historical route totals, a stable Region taxonomy, a general-catalog Finder, and `quests.generated.json` as a runtime input are explicitly excluded from current truth.
 
