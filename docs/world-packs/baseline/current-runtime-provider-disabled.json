@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "capturedOn": "2026-08-26",
+  "conditions": {
+    "browser": "desktop-chromium",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "liveGoogleProvidersDisabled": true,
+    "nonLocalNetworkRequests": "aborted",
+    "claim": "current-runtime-provider-dependency-baseline"
+  },
+  "routes": [
+    {
+      "id": "tokyo-urban",
+      "slug": "17665674778",
+      "playable": {
+        "state": "unavailable",
+        "message": "Map tiles unavailableA Google Map Tiles browser key is required for this lab.Return to route",
+        "externalRequests": [],
+        "localRouteDetailLoaded": true,
+        "canvasCount": 0
+      },
+      "replay": {
+        "state": "unavailable",
+        "message": "3D world unavailableA Google Maps JavaScript API browser key is required.Use Atlas replay",
+        "externalRequests": [],
+        "localRouteDetailLoaded": true,
+        "canvasCount": 0
+      },
+      "atlas": {
+        "state": "unavailable",
+        "message": "Atlas replay timed outThe fallback map did not become ready in time.Return to route guide",
+        "externalRequests": [
+          {
+            "method": "GET",
+            "origin": "https://tiles.openfreemap.org",
+            "pathname": "/styles/fiord",
+            "resourceType": "fetch"
+          }
+        ],
+        "localRouteDetailLoaded": true,
+        "canvasCount": 1
+      }
+    },
+    {
+      "id": "banff-mountain",
+      "slug": "15573295095",
+      "playable": {
+        "state": "unavailable",
+        "message": "Map tiles unavailableA Google Map Tiles browser key is required for this lab.Return to route",
+        "externalRequests": [],
+        "localRouteDetailLoaded": true,
+        "canvasCount": 0
+      },
+      "replay": {
+        "state": "unavailable",
+        "message": "3D world unavailableA Google Maps JavaScript API browser key is required.Use Atlas replay",
+        "externalRequests": [],
+        "localRouteDetailLoaded": true,
+        "canvasCount": 0
+      },
+      "atlas": {
+        "state": "unavailable",
+        "message": "Atlas replay timed outThe fallback map did not become ready in time.Return to route guide",
+        "externalRequests": [
+          {
+            "method": "GET",
+            "origin": "https://tiles.openfreemap.org",
+            "pathname": "/styles/fiord",
+            "resourceType": "fetch"
+          }
+        ],
+        "localRouteDetailLoaded": true,
+        "canvasCount": 1
+      }
+    },
+    {
+      "id": "ucluelet-coastal",
+      "slug": "6496900063",
+      "playable": {
+        "state": "unavailable",
+        "message": "Map tiles unavailableA Google Map Tiles browser key is required for this lab.Return to route",
+        "externalRequests": [],
+        "localRouteDetailLoaded": true,
+        "canvasCount": 0
+      },
+      "replay": {
+        "state": "unavailable",
+        "message": "3D world unavailableA Google Maps JavaScript API browser key is required.Use Atlas replay",
+        "externalRequests": [],
+        "localRouteDetailLoaded": true,
+        "canvasCount": 0
+      },
+      "atlas": {
+        "state": "unavailable",
+        "message": "Atlas replay timed outThe fallback map did not become ready in time.Return to route guide",
+        "externalRequests": [
+          {
+            "method": "GET",
+            "origin": "https://tiles.openfreemap.org",
+            "pathname": "/styles/fiord",
+            "resourceType": "fetch"
+          }
+        ],
+        "localRouteDetailLoaded": true,
+        "canvasCount": 1
+      }
+    }
+  ],
+  "conclusion": {
+    "playableEarthWorksOffline": false,
+    "defaultReplayWorksOffline": false,
+    "atlasReplayWorksOffline": false,
+    "reason": "Every current immersive path either requires a provider credential or attempts non-local map requests."
+  }
+}

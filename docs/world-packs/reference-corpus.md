@@ -59,10 +59,10 @@ Original owner GPX, FIT, photos, or videos remain in local restricted storage an
 - The Playable Earth reports establish known route-relative agency, provider-settle, grounding, control, and no-collision limitations.
 - The historical Earth scorecard provides broad live-provider reachability and a weak heuristic quality comparison for all three routes.
 - Atlas regional dogfood establishes provider-backed urban and mountain framing, not local World Pack durability.
+- `baseline/current-runtime-provider-disabled.json` proves that every current immersive path fails or attempts a non-local request for all three fixed routes when credentials and non-local network access are removed.
 
 ## Baseline evidence still required
 
-- A provider-disabled journey for all three selected routes with exact request inventory.
 - An owner-Mac trace for current Replay and Playable Earth on the three routes.
 - Ten-minute stability traces for current provider-backed comparison paths.
 - Current live-provider screenshots and recordings for the fixed routes.
