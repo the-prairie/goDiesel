@@ -7,8 +7,8 @@ The committed `index.json` is the machine-readable authority for route, world, p
 
 | Class | Route | World | Sealed pack |
 | --- | --- | --- | --- |
-| Dense urban | `17665674778` | `tokyo-urban` | `wp_d14982d9c6ea7014abe3b0ebfe9d6dfe0afebe66eb7c70a796790a5471740a85` |
-| High-relief mountain | `15573295095` | `banff-mountain` | `wp_254f384f95282e24b6b4bdff1d5a952962504426a4af494d682006c3962bb13e` |
+| Dense urban | `17665674778` | `tokyo-urban` | `wp_8a3397224b13173c3ea0eded9e59179a94b128c1f4946a85d3ccee997d2cb949` |
+| High-relief mountain | `15573295095` | `banff-mountain` | `wp_c6992e733b5e15187f7cbfd999a97b99632ede931aeb4e1db0dd6deab5099f91` |
 | Remote coastal | `6496900063` | `ucluelet-coastal` | `wp_ce46252091affe7c3f8f6de14fe6cf852b82b990716ba02b1f27ad391f7de68a` |
 
 ## Reproducibility
@@ -18,13 +18,15 @@ The publication source is the exact strict route detail at commit `9d82ce0be0501
 The acquisition timestamp is that source commit's committer timestamp, `2026-08-25T23:54:10-06:00`.
 The script uses no network adapter and admits the route details under `owner-controlled-derived-route-data` with attribution to the goDiesel route pipeline.
 Repeated publication must produce the same three pack identities and the same bytes.
+Publication is append-only: a new identity advances `index.json` atomically and does not remove an earlier sealed version.
 
 ## Current quality claim
 
 These are Core packs, not Detailed or Archival packs.
 They preserve exact route truth and provide deterministic procedural terrain, separate collision geometry, a traversable route ribbon, recovery anchors, a camera timeline, coverage cells, attribution, and retained build inputs.
 They explicitly declare structures, roads, paths, trails, reconstruction, annotations, and media unavailable where the compiler has admitted no retainable source.
-They now pass browser integrity, separate-mesh grounding, bounded Core free roam, checkpoint recovery, camera-mode, ghost, and rejoin proofs with all non-local requests blocked.
+They now pass browser integrity, separate collision-mesh loading, bounded Core free roam, checkpoint recovery, camera-mode, ghost, and rejoin proofs with all non-local requests blocked.
+Tokyo and Banff navigation, route-thread, and traversable-ribbon artifacts omit edges that cross recorded discontinuities; the browser also refuses to interpolate or rejoin across an absent edge.
 They do not yet satisfy the visual fidelity, full-route repeated traversal, real-structure collision, deterministic film, blind quality, or clean-room archive gates required for promotion beyond the Playable Earth lab.
 
 ## Browser readiness

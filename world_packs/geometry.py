@@ -162,16 +162,36 @@ def empty_glb(name: str) -> bytes:
     )
 
 
-def route_thread_glb(points: Sequence[LocalPoint], *, lift_m: float = 1.5) -> bytes:
+def route_thread_glb(
+    points: Sequence[LocalPoint],
+    *,
+    lift_m: float = 1.5,
+    disconnected_after: frozenset[int] = frozenset(),
+) -> bytes:
+    indices = None
+    mode = 3
+    if disconnected_after:
+        indices = [
+            endpoint
+            for index in range(len(points) - 1)
+            if index not in disconnected_after
+            for endpoint in (index, index + 1)
+        ]
+        mode = 1
     return build_glb(
         [(point.x, point.y, point.z + lift_m) for point in points],
-        indices=None,
-        mode=3,
+        indices=indices,
+        mode=mode,
         name="Recorded route thread",
     )
 
 
-def route_ribbon_glb(points: Sequence[LocalPoint], *, width_m: float = 4.0) -> bytes:
+def route_ribbon_glb(
+    points: Sequence[LocalPoint],
+    *,
+    width_m: float = 4.0,
+    disconnected_after: frozenset[int] = frozenset(),
+) -> bytes:
     if len(points) < 2:
         raise ValueError("route ribbon needs at least two points")
     half_width = width_m / 2.0
@@ -192,6 +212,8 @@ def route_ribbon_glb(points: Sequence[LocalPoint], *, width_m: float = 4.0) -> b
         )
     indices = []
     for index in range(len(points) - 1):
+        if index in disconnected_after:
+            continue
         left = index * 2
         next_left = left + 2
         indices.extend([left, left + 1, next_left, left + 1, next_left + 1, next_left])

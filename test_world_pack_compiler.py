@@ -6,6 +6,7 @@ import pytest
 from world_packs.canonical import canonical_json_bytes, sha256_bytes, strict_json_load
 from world_packs.compiler import BuildConfiguration, WorldPackCompiler
 from world_packs.errors import ValidationError
+from world_packs.geometry import glb_json
 
 
 ROOT = Path(__file__).resolve().parent
@@ -142,6 +143,27 @@ def test_coverage_names_deliberate_gaps_and_unavailable_structures(tmp_path: Pat
         for cell in coverage["cells"]
     )
     assert all(cell["collision"]["class"] == "procedural" for cell in coverage["cells"])
+
+
+def test_compiler_never_bridges_recorded_discontinuities(tmp_path: Path):
+    result = WorldPackCompiler(tmp_path / "repository").build_route(
+        TOKYO, configuration()
+    )
+    navigation = strict_json_load(result.path / "physics/world-navigation.json")
+    assert isinstance(navigation, dict)
+    edges = {(edge["from"], edge["to"]) for edge in navigation["edges"]}
+
+    assert (207, 208) not in edges
+    assert (274, 275) not in edges
+    assert len(edges) == 374
+
+    thread = glb_json((result.path / "route/route-thread.glb").read_bytes())
+    ribbon = glb_json(
+        (result.path / "physics/traversable-surfaces.glb").read_bytes()
+    )
+    assert thread["meshes"][0]["primitives"][0]["mode"] == 1
+    assert thread["accessors"][1]["count"] == 374 * 2
+    assert ribbon["accessors"][1]["count"] == 374 * 6
 
 
 def test_repeated_build_reuses_the_same_sealed_version(tmp_path: Path):

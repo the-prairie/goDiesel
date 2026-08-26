@@ -10,6 +10,7 @@ import {
   parseCollisionHeightfield,
   rejoinWorldRoute,
   stepWorldPlayer,
+  worldPlayerAtRouteProgress,
   type WorldPhysicsRuntime,
 } from "@/world-packs/world-physics";
 import type {
@@ -210,5 +211,29 @@ describe("World Pack collision runtime", () => {
 
     expect(state.x).toBeCloseTo(first.position[0], 10);
     expect(state.y).toBeCloseTo(first.position[1], 10);
+  });
+
+  it("snaps to recorded evidence instead of interpolating across a route gap", () => {
+    const base = createWorldPhysicsRuntime(referencePack("17665674778"));
+    const runtime: WorldPhysicsRuntime = {
+      ...base,
+      navigation: {
+        ...base.navigation,
+        edges: base.navigation.edges.filter(
+          (edge) =>
+            !(edge.from === 207 && edge.to === 208) &&
+            !(edge.from === 274 && edge.to === 275),
+        ),
+      },
+    };
+    const before = runtime.navigation.nodes[207];
+    const after = runtime.navigation.nodes[208];
+    const gapProgressM = (before.distanceM + after.distanceM) / 2;
+
+    const player = worldPlayerAtRouteProgress(runtime, gapProgressM);
+
+    expect(player.routeProgressM).toBe(before.distanceM);
+    expect(player.x).toBe(before.position[0]);
+    expect(player.y).toBe(before.position[1]);
   });
 });

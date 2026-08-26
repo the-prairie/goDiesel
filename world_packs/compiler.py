@@ -255,7 +255,35 @@ def _coverage_document(
     return document
 
 
-def _navigation_document(points: list[LocalPoint]) -> dict[str, object]:
+def _disconnected_after(
+    points: list[LocalPoint], canonical_route: dict[str, object]
+) -> frozenset[int]:
+    raw_discontinuities = canonical_route.get("discontinuities")
+    if not isinstance(raw_discontinuities, list):
+        raise ValidationError("canonical route discontinuities are invalid")
+    result: set[int] = set()
+    for discontinuity in raw_discontinuities:
+        if not isinstance(discontinuity, dict):
+            raise ValidationError("canonical route discontinuity is invalid")
+        start = float(discontinuity["startDistanceM"])
+        end = float(discontinuity["endDistanceM"])
+        candidates = [
+            index
+            for index in range(len(points) - 1)
+            if points[index].distance_m <= start
+            and points[index + 1].distance_m >= end
+        ]
+        if len(candidates) != 1:
+            raise ValidationError(
+                "recorded discontinuity does not map to exactly one route edge"
+            )
+        result.add(candidates[0])
+    return frozenset(result)
+
+
+def _navigation_document(
+    points: list[LocalPoint], disconnected_after: frozenset[int]
+) -> dict[str, object]:
     final_index = len(points) - 1
     checkpoints = {0, final_index // 2, final_index}
     nodes = [
@@ -277,6 +305,7 @@ def _navigation_document(points: list[LocalPoint]) -> dict[str, object]:
             "evidenceClass": "derived",
         }
         for index, point in enumerate(points[:-1])
+        if index not in disconnected_after
     ]
     document = {
         "schemaVersion": 1,
@@ -408,6 +437,7 @@ class WorldPackCompiler:
                 transform_name="assemble-source-inventory",
             )
             points = route_local_points(canonical_route)
+            disconnected_after = _disconnected_after(points, canonical_route)
             route_record = assembler.add_json(
                 "route/canonical-route.json",
                 canonical_route,
@@ -437,7 +467,7 @@ class WorldPackCompiler:
             )
             route_thread = assembler.add(
                 "route/route-thread.glb",
-                route_thread_glb(points),
+                route_thread_glb(points, disconnected_after=disconnected_after),
                 media_type="model/gltf-binary",
                 format_version="glTF-2.0",
                 evidence_class="derived",
@@ -487,7 +517,7 @@ class WorldPackCompiler:
             )
             traversable = assembler.add(
                 "physics/traversable-surfaces.glb",
-                route_ribbon_glb(points),
+                route_ribbon_glb(points, disconnected_after=disconnected_after),
                 media_type="model/gltf-binary",
                 format_version="glTF-2.0",
                 evidence_class="procedural",
@@ -495,7 +525,7 @@ class WorldPackCompiler:
                 required_runtime=True,
                 transform_name="compile-route-traversable-surface",
             )
-            navigation = _navigation_document(points)
+            navigation = _navigation_document(points, disconnected_after)
             navigation_record = assembler.add_json(
                 "physics/world-navigation.json",
                 navigation,

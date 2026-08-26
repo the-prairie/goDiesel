@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from scripts import publish_reference_world_packs
 from scripts.publish_reference_world_packs import CORPUS_PATH, ROOT
 
 
@@ -15,3 +16,19 @@ def test_reference_publication_script_has_no_network_adapter():
     assert "urllib" not in source
     assert "http://" not in source
     assert "https://" not in source
+
+
+def test_reference_publication_preserves_previous_sealed_versions(
+    tmp_path: Path, monkeypatch
+):
+    public_root = tmp_path / "world-packs"
+    legacy = public_root / "tokyo-urban/wp_previous-version"
+    legacy.mkdir(parents=True)
+    marker = legacy / "sealed-marker"
+    marker.write_bytes(b"previous sealed bytes")
+    monkeypatch.setattr(publish_reference_world_packs, "PUBLIC_ROOT", public_root)
+
+    publish_reference_world_packs.publish()
+
+    assert marker.read_bytes() == b"previous sealed bytes"
+    assert (public_root / "index.json").is_file()

@@ -33,13 +33,38 @@ def _make_writable(root: Path) -> None:
     root.chmod(root.stat().st_mode | stat.S_IWUSR)
 
 
-def _replace_tree(staging: Path, target: Path) -> None:
-    if target.is_symlink():
-        raise RuntimeError(f"refusing to replace symlinked publication root: {target}")
+def _install_pack(staging: Path, target: Path) -> None:
+    if target.is_symlink() or target.parent.is_symlink():
+        raise RuntimeError(f"refusing to publish through a symlink: {target}")
+    target.parent.mkdir(parents=True, exist_ok=True)
     if target.exists():
-        _make_writable(target)
-        shutil.rmtree(target)
+        verify_pack(target)
+        if (target / "checksums.json").read_bytes() != (
+            staging / "checksums.json"
+        ).read_bytes():
+            raise RuntimeError(f"published pack identity collision: {target}")
+        _make_writable(staging)
+        shutil.rmtree(staging)
+        return
+    staging.chmod(0o755)
     os.replace(staging, target)
+    WorldPackCompiler._seal(target)
+
+
+def _publish_index(staging: Path, target: Path) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=".index.", dir=target.parent
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as output:
+            output.write(staging.read_bytes())
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary, target)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def publish() -> dict[str, object]:
@@ -100,7 +125,17 @@ def publish() -> dict[str, object]:
                 }
             )
         )
-        _replace_tree(staging, PUBLIC_ROOT)
+        if PUBLIC_ROOT.is_symlink():
+            raise RuntimeError(
+                f"refusing to publish through a symlink: {PUBLIC_ROOT}"
+            )
+        PUBLIC_ROOT.mkdir(parents=True, exist_ok=True)
+        for world_root in sorted(
+            path for path in staging.iterdir() if path.is_dir()
+        ):
+            for pack in sorted(path for path in world_root.iterdir() if path.is_dir()):
+                _install_pack(pack, PUBLIC_ROOT / world_root.name / pack.name)
+        _publish_index(staging / "index.json", PUBLIC_ROOT / "index.json")
     except Exception:
         if staging.exists():
             _make_writable(staging)

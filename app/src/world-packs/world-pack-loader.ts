@@ -31,7 +31,6 @@ export class WorldPackLoadError extends Error {
     this.name = "WorldPackLoadError";
   }
 }
-
 interface LoadOptions {
   signal?: AbortSignal;
   fetcher?: typeof fetch;
@@ -271,7 +270,9 @@ function parseNavigation(value: unknown): WorldNavigation {
   const nodes = Array.isArray(navigation.nodes) ? navigation.nodes : [];
   const edges = Array.isArray(navigation.edges) ? navigation.edges : [];
   const recoveryAnchors = Array.isArray(navigation.recoveryAnchors)
-    ? navigation.recoveryAnchors.map((value) => integer(value, "recovery anchor"))
+    ? navigation.recoveryAnchors.map((value) =>
+        integer(value, "recovery anchor"),
+      )
     : [];
   if (
     navigation.schemaVersion !== 1 ||
@@ -280,12 +281,18 @@ function parseNavigation(value: unknown): WorldNavigation {
     edges.length < 1 ||
     recoveryAnchors.length < 2
   ) {
-    throw new WorldPackLoadError("World Pack navigation is incomplete", "invalid");
+    throw new WorldPackLoadError(
+      "World Pack navigation is incomplete",
+      "invalid",
+    );
   }
   const parsedNodes = nodes.map((value, index) => {
     const node = record(value, `navigation node ${index}`);
     if (!Array.isArray(node.position) || node.position.length !== 3) {
-      throw new WorldPackLoadError(`navigation node ${index} position is invalid`, "invalid");
+      throw new WorldPackLoadError(
+        `navigation node ${index} position is invalid`,
+        "invalid",
+      );
     }
     return {
       id: integer(node.id, `navigation node ${index} id`),
@@ -307,24 +314,57 @@ function parseNavigation(value: unknown): WorldNavigation {
       evidenceClass: "derived" as const,
     };
   });
+  const fixedTimestepHz = integer(navigation.fixedTimestepHz, "fixed timestep");
+  const radiusM = finite(actor.radiusM, "actor radius");
+  const heightM = finite(actor.heightM, "actor height");
+  const maximumStepM = finite(actor.maximumStepM, "actor maximum step");
+  const maximumSlopeDegrees = finite(
+    actor.maximumSlopeDegrees,
+    "actor maximum slope",
+  );
+  const edgeKeys = parsedEdges.map((edge) => `${edge.from}:${edge.to}`);
   if (
     parsedNodes.some((node, index) => node.id !== index) ||
-    parsedEdges.some(
-      (edge, index) => edge.from !== index || edge.to !== index + 1,
+    parsedNodes.some(
+      (node, index) =>
+        node.distanceM < 0 ||
+        (index > 0 && node.distanceM < parsedNodes[index - 1].distanceM),
     ) ||
+    parsedEdges.some(
+      (edge, index) =>
+        edge.from < 0 ||
+        edge.to !== edge.from + 1 ||
+        edge.to >= parsedNodes.length ||
+        edge.lengthM < 0 ||
+        Math.abs(
+          edge.lengthM -
+            (parsedNodes[edge.to].distanceM - parsedNodes[edge.from].distanceM),
+        ) > 1e-6 ||
+        (index > 0 && edge.from <= parsedEdges[index - 1].from),
+    ) ||
+    new Set(edgeKeys).size !== edgeKeys.length ||
+    fixedTimestepHz < 1 ||
+    radiusM <= 0 ||
+    heightM <= 0 ||
+    maximumStepM < 0 ||
+    maximumSlopeDegrees < 0 ||
+    maximumSlopeDegrees > 90 ||
     recoveryAnchors.some((anchor) => anchor < 0 || anchor >= parsedNodes.length)
   ) {
-    throw new WorldPackLoadError("World Pack navigation graph is inconsistent", "invalid");
+    throw new WorldPackLoadError(
+      "World Pack navigation graph is inconsistent",
+      "invalid",
+    );
   }
   return {
     schemaVersion: 1,
     coordinateReference: "route-local-enu-v1",
-    fixedTimestepHz: integer(navigation.fixedTimestepHz, "fixed timestep"),
+    fixedTimestepHz,
     actor: {
-      radiusM: finite(actor.radiusM, "actor radius"),
-      heightM: finite(actor.heightM, "actor height"),
-      maximumStepM: finite(actor.maximumStepM, "actor maximum step"),
-      maximumSlopeDegrees: finite(actor.maximumSlopeDegrees, "actor maximum slope"),
+      radiusM,
+      heightM,
+      maximumStepM,
+      maximumSlopeDegrees,
     },
     nodes: parsedNodes,
     edges: parsedEdges,

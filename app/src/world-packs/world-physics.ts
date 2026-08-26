@@ -1,7 +1,6 @@
 import type {
   VerifiedWorldPack,
   WorldNavigation,
-  WorldNavigationNode,
 } from "@/world-packs/world-pack-types";
 
 const GLB_MAGIC = 0x46546c67;
@@ -19,7 +18,6 @@ export interface CollisionHeightfield {
   minimumY: number;
   maximumY: number;
 }
-
 export interface WorldObstacle {
   minimumX: number;
   maximumX: number;
@@ -278,11 +276,8 @@ export function collisionSurface(
   };
 }
 
-function nearestRoutePoint(
-  nodes: readonly WorldNavigationNode[],
-  x: number,
-  y: number,
-) {
+function nearestRoutePoint(navigation: WorldNavigation, x: number, y: number) {
+  const nodes = navigation.nodes;
   let best = {
     distanceSquared: Number.POSITIVE_INFINITY,
     progressM: 0,
@@ -290,16 +285,23 @@ function nearestRoutePoint(
     y: nodes[0].position[1],
     z: nodes[0].position[2],
   };
-  for (let index = 0; index < nodes.length - 1; index += 1) {
-    const from = nodes[index];
-    const to = nodes[index + 1];
+  for (const edge of navigation.edges) {
+    const from = nodes[edge.from];
+    const to = nodes[edge.to];
     const dx = to.position[0] - from.position[0];
     const dy = to.position[1] - from.position[1];
     const lengthSquared = dx * dx + dy * dy;
     const ratio =
       lengthSquared === 0
         ? 0
-        : Math.min(1, Math.max(0, ((x - from.position[0]) * dx + (y - from.position[1]) * dy) / lengthSquared));
+        : Math.min(
+            1,
+            Math.max(
+              0,
+              ((x - from.position[0]) * dx + (y - from.position[1]) * dy) /
+                lengthSquared,
+            ),
+          );
     const projectedX = from.position[0] + dx * ratio;
     const projectedY = from.position[1] + dy * ratio;
     const distanceSquared = (x - projectedX) ** 2 + (y - projectedY) ** 2;
@@ -391,7 +393,7 @@ export function initialWorldPlayer(runtime: WorldPhysicsRuntime): WorldPlayerSta
     x: start.position[0],
     y: start.position[1],
     z: surface.heightM,
-    headingDeg: routeHeading(runtime.navigation.nodes, 0),
+    headingDeg: routeHeading(runtime.navigation, 0),
     routeProgressM: 0,
     checkpointNodeId: runtime.navigation.recoveryAnchors[0],
     tick: 0,
@@ -408,23 +410,39 @@ export function worldPlayerAtRouteProgress(
   const nodes = runtime.navigation.nodes;
   const totalDistanceM = nodes.at(-1)!.distanceM;
   const boundedProgressM = Math.min(totalDistanceM, Math.max(0, progressM));
-  let upper = nodes.findIndex((node) => node.distanceM >= boundedProgressM);
-  if (upper < 1) upper = 1;
-  const from = nodes[upper - 1];
-  const to = nodes[upper];
+  const edge = runtime.navigation.edges.find((candidate) => {
+    const from = nodes[candidate.from];
+    const to = nodes[candidate.to];
+    return (
+      from.distanceM <= boundedProgressM && to.distanceM >= boundedProgressM
+    );
+  });
+  const nearestNode = nodes.reduce((best, node) =>
+    Math.abs(node.distanceM - boundedProgressM) <
+    Math.abs(best.distanceM - boundedProgressM)
+      ? node
+      : best,
+  );
+  const from = edge ? nodes[edge.from] : nearestNode;
+  const to = edge ? nodes[edge.to] : nearestNode;
   const distance = to.distanceM - from.distanceM;
-  const ratio = distance === 0 ? 0 : (boundedProgressM - from.distanceM) / distance;
+  const ratio =
+    distance === 0 ? 0 : (boundedProgressM - from.distanceM) / distance;
   const x = from.position[0] + (to.position[0] - from.position[0]) * ratio;
   const y = from.position[1] + (to.position[1] - from.position[1]) * ratio;
   const surface = actorSurface(runtime, x, y);
-  if (!surface) throw new Error("World Pack route position is outside collision terrain.");
+  if (!surface)
+    throw new Error("World Pack route position is outside collision terrain.");
   return {
     x,
     y,
     z: surface.heightM,
-    headingDeg: routeHeading(nodes, upper),
-    routeProgressM: boundedProgressM,
-    checkpointNodeId: checkpointForProgress(runtime.navigation, boundedProgressM),
+    headingDeg: routeHeading(runtime.navigation, from.id),
+    routeProgressM: edge ? boundedProgressM : nearestNode.distanceM,
+    checkpointNodeId: checkpointForProgress(
+      runtime.navigation,
+      edge ? boundedProgressM : nearestNode.distanceM,
+    ),
     tick: 0,
     recoveryCount: 0,
     blockedTickCount: 0,
@@ -432,10 +450,23 @@ export function worldPlayerAtRouteProgress(
   };
 }
 
-function routeHeading(nodes: readonly WorldNavigationNode[], nodeId: number) {
-  const before = nodes[Math.max(0, nodeId - 1)];
-  const after = nodes[Math.min(nodes.length - 1, nodeId + 1)];
-  return ((Math.atan2(after.position[0] - before.position[0], after.position[1] - before.position[1]) * 180) / Math.PI + 360) % 360;
+function routeHeading(navigation: WorldNavigation, nodeId: number) {
+  const edge =
+    navigation.edges.find((candidate) => candidate.from === nodeId) ??
+    navigation.edges.find((candidate) => candidate.to === nodeId);
+  if (!edge) return 0;
+  const from = navigation.nodes[edge.from];
+  const to = navigation.nodes[edge.to];
+  return (
+    ((Math.atan2(
+      to.position[0] - from.position[0],
+      to.position[1] - from.position[1],
+    ) *
+      180) /
+      Math.PI +
+      360) %
+    360
+  );
 }
 
 export function recoverWorldPlayer(
@@ -450,7 +481,7 @@ export function recoverWorldPlayer(
     x: anchor.position[0],
     y: anchor.position[1],
     z: surface.heightM,
-    headingDeg: routeHeading(runtime.navigation.nodes, anchor.id),
+    headingDeg: routeHeading(runtime.navigation, anchor.id),
     routeProgressM: anchor.distanceM,
     tick: state.tick + 1,
     recoveryCount: state.recoveryCount + 1,
@@ -462,7 +493,7 @@ export function rejoinWorldRoute(
   runtime: WorldPhysicsRuntime,
   state: WorldPlayerState,
 ): WorldPlayerState {
-  const route = nearestRoutePoint(runtime.navigation.nodes, state.x, state.y);
+  const route = nearestRoutePoint(runtime.navigation, state.x, state.y);
   const surface = actorSurface(runtime, route.x, route.y);
   if (!surface) return recoverWorldPlayer(runtime, state);
   const nearestNode = runtime.navigation.nodes.reduce(
@@ -478,7 +509,7 @@ export function rejoinWorldRoute(
     x: route.x,
     y: route.y,
     z: surface.heightM,
-    headingDeg: routeHeading(runtime.navigation.nodes, nearestNode.id),
+    headingDeg: routeHeading(runtime.navigation, nearestNode.id),
     routeProgressM: route.progressM,
     checkpointNodeId: checkpointForProgress(runtime.navigation, route.progressM),
     tick: state.tick + 1,
@@ -533,7 +564,7 @@ export function stepWorldPlayer(
     y = nextY;
     z = nextSurface.heightM;
   }
-  const route = nearestRoutePoint(runtime.navigation.nodes, x, y);
+  const route = nearestRoutePoint(runtime.navigation, x, y);
   const checkpointNodeId = checkpointForProgress(
     runtime.navigation,
     route.progressM,
