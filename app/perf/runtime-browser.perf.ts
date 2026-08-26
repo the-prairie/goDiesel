@@ -573,6 +573,15 @@ async function readWebglSnapshot(page: Page) {
   return snapshot;
 }
 
+async function waitForRouteDetail(page: Page) {
+  await expect(
+    page.getByRole("region", { name: "Route briefing" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Route geography" }),
+  ).toHaveAttribute("data-map-status", /ready|unavailable/);
+}
+
 async function measureTransitions(
   browser: Browser,
   testInfo: TestInfo,
@@ -594,12 +603,7 @@ async function measureTransitions(
     for (let cycle = 1; cycle <= 20; cycle += 1) {
       const detailStarted = performance.now();
       await navigateHash(`#/routes/${ROUTE_SLUG}`);
-      await expect(
-        page.getByRole("region", { name: "Route briefing" }),
-      ).toBeVisible();
-      await expect(
-        page.getByRole("region", { name: "Route geography" }),
-      ).toHaveAttribute("data-map-status", /ready|unavailable/);
+      await waitForRouteDetail(page);
       const detailLatencyMs = performance.now() - detailStarted;
       const detailWebgl = await readWebglSnapshot(page);
 
@@ -702,7 +706,7 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
       await page.goto(`/#/routes/${ROUTE_SLUG}`, {
         waitUntil: "domcontentloaded",
       });
-      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      await waitForRouteDetail(page);
     }),
   );
   samples.push(
