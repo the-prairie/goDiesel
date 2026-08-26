@@ -80,10 +80,14 @@ def test_every_world_pack_schema_is_valid_and_manifest_is_closed():
         "canonical-route",
         "checksums",
         "coverage",
+        "camera-timelines",
+        "experience-manifest",
         "manifest",
         "migration-version",
         "source-inventory",
         "transformations",
+        "runtime-world",
+        "world-navigation",
     }
     for name in schema_names:
         assert load_schema(name)["$schema"] == (

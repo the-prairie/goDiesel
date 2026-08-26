@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://godiesel.world/schemas/world-pack/v1/runtime-world.schema.json",
+  "title": "World Pack local runtime descriptor",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "worldId",
+    "routeId",
+    "quality",
+    "coordinateReference",
+    "origin",
+    "explorationRadiusM",
+    "assets",
+    "modes"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "worldId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,79}$" },
+    "routeId": { "type": "string", "minLength": 1 },
+    "quality": { "enum": ["core", "detailed", "archival"] },
+    "coordinateReference": { "const": "route-local-enu-v1" },
+    "origin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["latitude", "longitude", "elevationM"],
+      "properties": {
+        "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+        "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
+        "elevationM": { "type": "number" }
+      }
+    },
+    "explorationRadiusM": { "type": "integer", "minimum": 1 },
+    "assets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "route",
+        "terrain",
+        "terrainCollision",
+        "structuresCollision",
+        "traversableSurfaces",
+        "navigation",
+        "coverage",
+        "cameraTimeline"
+      ],
+      "properties": {
+        "route": { "$ref": "#/$defs/path" },
+        "terrain": { "$ref": "#/$defs/path" },
+        "terrainCollision": { "$ref": "#/$defs/path" },
+        "structuresCollision": { "$ref": "#/$defs/path" },
+        "traversableSurfaces": { "$ref": "#/$defs/path" },
+        "navigation": { "$ref": "#/$defs/path" },
+        "coverage": { "$ref": "#/$defs/path" },
+        "cameraTimeline": { "$ref": "#/$defs/path" }
+      }
+    },
+    "modes": {
+      "type": "array",
+      "minItems": 2,
+      "uniqueItems": true,
+      "items": { "enum": ["guided", "free-roam"] }
+    }
+  },
+  "$defs": {
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]+$"
+    }
+  }
+}

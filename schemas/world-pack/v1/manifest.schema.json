@@ -50,7 +50,10 @@
       }
     },
     "sourceInventorySha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-    "transformationGraphSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "transformationGraphSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
     "coverageSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "artifacts": {
       "type": "array",

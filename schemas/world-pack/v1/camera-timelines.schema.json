@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://godiesel.world/schemas/world-pack/v1/camera-timelines.schema.json",
+  "title": "World Pack deterministic camera timeline",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "timelineId",
+    "durationFrames",
+    "framesPerSecond",
+    "evidenceClass",
+    "keyframes"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "timelineId": { "type": "string", "minLength": 1 },
+    "durationFrames": { "type": "integer", "minimum": 1 },
+    "framesPerSecond": { "const": 30 },
+    "evidenceClass": { "const": "derived" },
+    "keyframes": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["frame", "routePointIndex", "camera", "target"],
+        "properties": {
+          "frame": { "type": "integer", "minimum": 0 },
+          "routePointIndex": { "type": "integer", "minimum": 0 },
+          "camera": { "$ref": "#/$defs/position" },
+          "target": { "$ref": "#/$defs/position" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "position": {
+      "type": "array",
+      "prefixItems": [
+        { "type": "number" },
+        { "type": "number" },
+        { "type": "number" }
+      ],
+      "items": false
+    }
+  }
+}

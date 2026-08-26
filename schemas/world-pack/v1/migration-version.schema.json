@@ -4,7 +4,12 @@
   "title": "World Pack migration version",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "minimumReaderVersion", "createdByVersion", "migratedFrom"],
+  "required": [
+    "schemaVersion",
+    "minimumReaderVersion",
+    "createdByVersion",
+    "migratedFrom"
+  ],
   "properties": {
     "schemaVersion": { "const": 1 },
     "minimumReaderVersion": { "type": "string", "minLength": 1 },

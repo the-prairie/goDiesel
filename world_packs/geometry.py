@@ -140,6 +140,28 @@ def build_glb(
     )
 
 
+def empty_glb(name: str) -> bytes:
+    document = {
+        "asset": {"version": "2.0", "generator": "godiesel-world-compiler/1"},
+        "scene": 0,
+        "scenes": [{"nodes": []}],
+        "nodes": [],
+        "extras": {"name": name, "evidenceClass": "unavailable"},
+    }
+    json_bytes = _padded(
+        json.dumps(document, separators=(",", ":"), sort_keys=True).encode("utf-8"),
+        b" ",
+    )
+    total_length = 12 + 8 + len(json_bytes)
+    return b"".join(
+        [
+            struct.pack("<III", GLB_MAGIC, GLB_VERSION, total_length),
+            struct.pack("<II", len(json_bytes), JSON_CHUNK),
+            json_bytes,
+        ]
+    )
+
+
 def route_thread_glb(points: Sequence[LocalPoint], *, lift_m: float = 1.5) -> bytes:
     return build_glb(
         [(point.x, point.y, point.z + lift_m) for point in points],

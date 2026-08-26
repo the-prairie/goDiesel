@@ -21,13 +21,17 @@ class TransformationStep:
         return sha256_bytes(canonical_json_bytes(asdict(self)))
 
     def as_dict(self) -> dict[str, object]:
-        return {**asdict(self), "identity": self.identity}
+        value = asdict(self)
+        value["inputs"] = list(self.inputs)
+        value["outputs"] = list(self.outputs)
+        value["identity"] = self.identity
+        return value
 
 
 class TransformationGraph:
     def __init__(self) -> None:
         self._steps: dict[str, TransformationStep] = {}
-        self._output_owner: dict[str, str] = {}
+        self._output_owners: dict[str, set[str]] = {}
 
     def add(self, step: TransformationStep) -> str:
         if not step.name.strip() or not step.version.strip():
@@ -37,20 +41,18 @@ class TransformationGraph:
         identity = step.identity
         if identity in self._steps:
             raise ValidationError(f"duplicate transformation: {identity}")
-        collisions = [output for output in step.outputs if output in self._output_owner]
-        if collisions:
-            raise ValidationError(
-                f"transformation outputs already owned: {', '.join(collisions)}"
-            )
         self._steps[identity] = step
         for output in step.outputs:
-            self._output_owner[output] = identity
+            self._output_owners.setdefault(output, set()).add(identity)
         try:
             self._assert_acyclic()
         except ValidationError:
             del self._steps[identity]
             for output in step.outputs:
-                del self._output_owner[output]
+                owners = self._output_owners[output]
+                owners.remove(identity)
+                if not owners:
+                    del self._output_owners[output]
             raise
         return identity
 
@@ -67,9 +69,9 @@ class TransformationGraph:
         dependencies: dict[str, set[str]] = {}
         for identity, step in self._steps.items():
             dependencies[identity] = {
-                self._output_owner[input_digest]
+                owner
                 for input_digest in step.inputs
-                if input_digest in self._output_owner
+                for owner in self._output_owners.get(input_digest, set())
             }
         visiting: set[str] = set()
         visited: set[str] = set()

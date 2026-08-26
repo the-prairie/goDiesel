@@ -32,7 +32,13 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["latitude", "longitude", "elevationM", "distanceM", "elapsedS"],
+        "required": [
+          "latitude",
+          "longitude",
+          "elevationM",
+          "distanceM",
+          "elapsedS"
+        ],
         "properties": {
           "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
           "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
@@ -48,7 +54,14 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["kind", "source", "startDistanceM", "endDistanceM", "elapsedS", "missingRecordCount"],
+        "required": [
+          "kind",
+          "source",
+          "startDistanceM",
+          "endDistanceM",
+          "elapsedS",
+          "missingRecordCount"
+        ],
         "properties": {
           "kind": { "type": "string", "minLength": 1 },
           "source": { "type": "string", "minLength": 1 },

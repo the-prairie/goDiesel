@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://godiesel.world/schemas/world-pack/v1/experience-manifest.schema.json",
+  "title": "World Pack route experience binding",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "packId",
+    "worldId",
+    "routeId",
+    "quality",
+    "cameraTimelinePath",
+    "cameraTimelineSha256",
+    "geometrySha256",
+    "selectedMoments",
+    "media"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "packId": { "type": "string", "pattern": "^wp_[0-9a-f]{64}$" },
+    "worldId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,79}$" },
+    "routeId": { "type": "string", "minLength": 1 },
+    "quality": { "enum": ["core", "detailed", "archival"] },
+    "cameraTimelinePath": { "const": "cinematic/camera-timelines.json" },
+    "cameraTimelineSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "geometrySha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "selectedMoments": { "type": "array" },
+    "media": { "type": "array" }
+  }
+}

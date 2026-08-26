@@ -14,6 +14,10 @@ The schemas separate these concerns:
 - `transformations` records deterministic compiler steps and their input and output content identities.
 - `coverage` records visual and physical provenance for every declared quality cell, including explicit unavailability.
 - `canonical-route` preserves normalized route truth without inventing route history.
+- `runtime-world` resolves every required local runtime asset and declares no provider or network dependency.
+- `world-navigation` records fixed-timestep actor constraints, route nodes, edges, checkpoints, and recovery anchors.
+- `camera-timelines` fixes camera geometry, frame count, frame rate, and route-relative timing.
+- `experience-manifest` binds a sealed pack identity to its deterministic camera and geometry artifacts without making the self-reference part of pack identity.
 - `checksums` covers every sealed file except the checksum document itself.
 - `migration-version` declares reader compatibility and non-destructive migration ancestry.
 

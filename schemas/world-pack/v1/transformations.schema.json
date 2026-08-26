@@ -12,7 +12,14 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "version", "inputs", "outputs", "configuration", "identity"],
+        "required": [
+          "name",
+          "version",
+          "inputs",
+          "outputs",
+          "configuration",
+          "identity"
+        ],
         "properties": {
           "name": { "type": "string", "minLength": 1 },
           "version": { "type": "string", "minLength": 1 },

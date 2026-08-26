@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://godiesel.world/schemas/world-pack/v1/world-navigation.schema.json",
+  "title": "World Pack deterministic route navigation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "coordinateReference",
+    "fixedTimestepHz",
+    "actor",
+    "nodes",
+    "edges",
+    "recoveryAnchors"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "coordinateReference": { "const": "route-local-enu-v1" },
+    "fixedTimestepHz": { "type": "integer", "minimum": 1 },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["radiusM", "heightM", "maximumStepM", "maximumSlopeDegrees"],
+      "properties": {
+        "radiusM": { "type": "number", "exclusiveMinimum": 0 },
+        "heightM": { "type": "number", "exclusiveMinimum": 0 },
+        "maximumStepM": { "type": "number", "minimum": 0 },
+        "maximumSlopeDegrees": { "type": "number", "minimum": 0, "maximum": 90 }
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "position",
+          "distanceM",
+          "checkpoint",
+          "evidenceClass"
+        ],
+        "properties": {
+          "id": { "type": "integer", "minimum": 0 },
+          "position": { "$ref": "#/$defs/position" },
+          "distanceM": { "type": "number", "minimum": 0 },
+          "checkpoint": { "type": "boolean" },
+          "evidenceClass": { "const": "derived" }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "to", "lengthM", "surface", "evidenceClass"],
+        "properties": {
+          "from": { "type": "integer", "minimum": 0 },
+          "to": { "type": "integer", "minimum": 0 },
+          "lengthM": { "type": "number", "minimum": 0 },
+          "surface": { "const": "route-ribbon" },
+          "evidenceClass": { "const": "derived" }
+        }
+      }
+    },
+    "recoveryAnchors": {
+      "type": "array",
+      "minItems": 2,
+      "items": { "type": "integer", "minimum": 0 }
+    }
+  },
+  "$defs": {
+    "position": {
+      "type": "array",
+      "prefixItems": [
+        { "type": "number" },
+        { "type": "number" },
+        { "type": "number" }
+      ],
+      "items": false
+    }
+  }
+}
