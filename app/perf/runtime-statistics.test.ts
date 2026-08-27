@@ -7,14 +7,47 @@ import { describe, expect, test } from "vitest";
 
 import {
   aggregateRuntimeStatistics,
+  normalizeProfileUrl,
   summarizeDistribution,
 } from "../scripts/runtime-statistics.mjs";
 import {
+  assertNotCancelled,
+  resolveRunDirectories,
   signalProcessGroup,
+  sourceStateIsClean,
   validBrowserReportIndexes,
 } from "../scripts/run-runtime-statistics.mjs";
+import { completeFrameInterval } from "./runtime-frame-sampling";
 
 describe("runtime statistical evidence", () => {
+  test("keeps only complete frame intervals inside the phase window", () => {
+    expect(completeFrameInterval(90, 110, 100, 200)).toBeUndefined();
+    expect(completeFrameInterval(110, 126, 100, 200)).toBe(16);
+    expect(completeFrameInterval(190, 206, 100, 200)).toBeUndefined();
+  });
+
+  test("constrains run IDs to the runtime artifact root", () => {
+    const directories = resolveRunDirectories("issue113-safe", "/tmp/app");
+    expect(directories.rawDirectory).toBe(
+      "/tmp/app/artifacts/runtime-statistics/raw/issue113-safe",
+    );
+    expect(() => resolveRunDirectories("../escape", "/tmp/app")).toThrow(
+      "must be a 1-128 character slug",
+    );
+  });
+
+  test("treats untracked files and prior signals as source failures", () => {
+    expect(sourceStateIsClean("a", "a", "")).toBe(true);
+    expect(sourceStateIsClean("a", "a", "?? untracked.json")).toBe(false);
+    expect(() => assertNotCancelled("SIGTERM", "before phase")).toThrow(
+      "cancelled by SIGTERM before phase",
+    );
+  });
+
+  test("redacts absolute process arguments", () => {
+    expect(normalizeProfileUrl("/opt/local/bin/node")).toBe("<system>/node");
+  });
+
   test("marks quantiles unavailable until their sample minimum is met", () => {
     const summary = summarizeDistribution("latency", "ms", [4, 1, 3, 2]);
 
@@ -178,6 +211,44 @@ describe("runtime statistical evidence", () => {
         sourceCommit: "a".repeat(40),
       }),
     ).toThrow("do not match source commit");
+  });
+
+  test("uses live repetitions when aggregating a live-only packet", () => {
+    const temporaryRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), "godiesel-runtime-live-statistics-"),
+    );
+    const rawDirectory = path.join(temporaryRoot, "raw", "live");
+    fs.mkdirSync(rawDirectory, { recursive: true });
+    for (let repetitionIndex = 0; repetitionIndex < 2; repetitionIndex += 1) {
+      fs.writeFileSync(
+        path.join(
+          rawDirectory,
+          `runtime-live-provider-live-chromium-r00${repetitionIndex}.json`,
+        ),
+        JSON.stringify({
+          sourceCommit: "a".repeat(40),
+          status: "passed",
+          projectName: "live-chromium",
+          repetitionIndex,
+          globalReadyMs: 100 + repetitionIndex,
+          regionalSettlementMs: 50 + repetitionIndex,
+          localApplicationReadyMs: 25 + repetitionIndex,
+          globalProviderSettlementMs: 75,
+        }),
+      );
+    }
+
+    const report = aggregateRuntimeStatistics({
+      rawDirectory: path.join(temporaryRoot, "raw"),
+      outputDirectory: path.join(temporaryRoot, "evidence"),
+      sourceCommit: "a".repeat(40),
+    });
+
+    expect(report.protocol.measuredRepetitions).toBe(2);
+    expect(report.protocol.liveProvider).toEqual({
+      status: "measured",
+      repetitions: 2,
+    });
   });
 
   test("counts only atomic passed browser reports from the exact source", () => {

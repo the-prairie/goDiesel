@@ -50,18 +50,24 @@ def validate_runtime_evidence(
     missing: list[str] = []
     verified: list[str] = []
     artifact_root = artifact_root.resolve()
-    seen_paths: set[str] = set()
+    seen_paths: set[Path] = set()
     for artifact in evidence["artifacts"]:
         declared_path = artifact["path"]
-        if declared_path in seen_paths:
-            raise ValueError(f"Duplicate artifact path: {declared_path}")
-        seen_paths.add(declared_path)
         relative_path = Path(declared_path)
+        if (
+            relative_path.is_absolute()
+            or relative_path.as_posix() != declared_path
+            or any(part in {".", ".."} for part in relative_path.parts)
+        ):
+            raise ValueError(f"Artifact path is not canonical: {declared_path}")
         artifact_path = (artifact_root / relative_path).resolve()
-        if relative_path.is_absolute() or not artifact_path.is_relative_to(artifact_root):
+        if not artifact_path.is_relative_to(artifact_root):
             raise ValueError(
                 f"Artifact path escapes artifact root: {declared_path}"
             )
+        if artifact_path in seen_paths:
+            raise ValueError(f"Duplicate artifact target: {declared_path}")
+        seen_paths.add(artifact_path)
         if not artifact_path.is_file():
             missing.append(declared_path)
             continue

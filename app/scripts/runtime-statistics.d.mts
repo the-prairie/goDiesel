@@ -31,7 +31,9 @@ export function aggregateRuntimeStatistics(options: {
   sourceCommit: string;
   liveBlocker?: string;
 }): {
-  protocol: { liveProvider: unknown };
+  protocol: { measuredRepetitions: number; liveProvider: unknown };
   distributions: DistributionEvidence[];
   artifacts: Array<{ sha256: string }>;
 };
+
+export function normalizeProfileUrl(url?: string): string;

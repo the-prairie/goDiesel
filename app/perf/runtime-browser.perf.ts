@@ -12,6 +12,8 @@ import {
   type TestInfo,
 } from "@playwright/test";
 
+import { completeFrameInterval } from "./runtime-frame-sampling";
+
 const RUN_ID = process.env.GODIESEL_PERF_RUN_ID?.trim();
 const STATISTICAL_MODE = Boolean(RUN_ID);
 const WORKLOAD = process.env.GODIESEL_PERF_WORKLOAD ?? "all";
@@ -21,6 +23,8 @@ const REPETITION_OFFSET = Number.parseInt(
   10,
 );
 const CAPTURE_PROFILES = process.env.GODIESEL_PERF_CAPTURE_PROFILES === "1";
+const CAPTURE_LIFECYCLE_HEAP =
+  process.env.GODIESEL_PERF_CAPTURE_LIFECYCLE_HEAP === "1";
 const SOURCE_COMMIT = process.env.GODIESEL_PERF_SOURCE_COMMIT?.trim();
 const OUTPUT_DIR = path.resolve(
   process.cwd(),
@@ -138,6 +142,11 @@ interface TransitionSample {
   detailWebgl: WebglSnapshot;
   replayWebgl: WebglSnapshot;
   atlasWebgl: WebglSnapshot;
+}
+
+interface LifecycleHeapProfileArtifacts {
+  baseline: string;
+  final: string;
 }
 
 declare global {
@@ -332,9 +341,13 @@ async function installInstrumentation(context: BrowserContext) {
         requestAnimationFrame(sampleFrame);
         return;
       }
-      const interval =
-        Math.min(now, phaseDeadline) - Math.max(previousFrame, phaseStartedAt);
-      if (interval > 0 && interval < 1_000) {
+      const interval = completeFrameInterval(
+        previousFrame,
+        now,
+        phaseStartedAt,
+        phaseDeadline,
+      );
+      if (interval !== undefined) {
         phases[phase].frameIntervals.push(interval);
       }
       previousFrame = now;
@@ -795,6 +808,7 @@ async function writeProjectReport(
   samples: BrowserSample[],
   transitionSamples: TransitionSample[],
   lifecycleBaselineHeapBytes?: number,
+  lifecycleHeapProfileArtifacts?: LifecycleHeapProfileArtifacts,
 ) {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   const report = {
@@ -816,6 +830,8 @@ async function writeProjectReport(
         "A separate fixed window used for frame pacing, long tasks, React commits, and post-readiness CDP counter deltas.",
       resources:
         "The local document navigation is phase=navigation. Resource timing is cleared at each action or observation boundary, filtered to that in-page measurement interval, and labeled with phase and local, fixture, or provider origin.",
+      frameIntervals:
+        "Only complete requestAnimationFrame intervals whose two boundaries fall inside the phase window are retained. Statistical distributions use one p95 interval and derived p95 frame rate per repetition.",
       cdpWindowMs:
         "CDP counter deltas use their own Performance.Timestamp interval. This may exceed the fixed in-page observation window when main-thread work delays the protocol capture.",
       webgl:
@@ -823,6 +839,7 @@ async function writeProjectReport(
     },
     samples,
     lifecycleBaselineHeapBytes,
+    lifecycleHeapProfileArtifacts,
     transitionSamples,
   };
   const reportPath = path.join(
@@ -834,6 +851,35 @@ async function writeProjectReport(
   const temporaryPath = `${reportPath}.${process.pid}.tmp`;
   fs.writeFileSync(temporaryPath, `${JSON.stringify(report, null, 2)}\n`);
   fs.renameSync(temporaryPath, reportPath);
+}
+
+async function captureHeapSnapshot(
+  client: CDPSession,
+  destination: string,
+) {
+  fs.mkdirSync(path.dirname(destination), { recursive: true });
+  const temporaryPath = `${destination}.${process.pid}.tmp`;
+  const descriptor = fs.openSync(temporaryPath, "wx");
+  let descriptorOpen = true;
+  const writeChunk = ({ chunk }: { chunk: string }) => {
+    fs.writeSync(descriptor, chunk);
+  };
+  client.on("HeapProfiler.addHeapSnapshotChunk", writeChunk);
+  try {
+    await client.send("HeapProfiler.takeHeapSnapshot", {
+      reportProgress: false,
+      captureNumericValue: true,
+    });
+    fs.closeSync(descriptor);
+    descriptorOpen = false;
+    fs.renameSync(temporaryPath, destination);
+  } catch (error) {
+    if (descriptorOpen) fs.closeSync(descriptor);
+    fs.rmSync(temporaryPath, { force: true });
+    throw error;
+  } finally {
+    client.off("HeapProfiler.addHeapSnapshotChunk", writeChunk);
+  }
 }
 
 async function readWebglSnapshot(page: Page) {
@@ -860,6 +906,7 @@ async function measureTransitions(
 ): Promise<{
   baselineUsedHeapBytes: number;
   samples: TransitionSample[];
+  heapProfileArtifacts?: LifecycleHeapProfileArtifacts;
 }> {
   const { context, page } = await createMeasuredPage(browser, testInfo);
   try {
@@ -869,6 +916,19 @@ async function measureTransitions(
     await client.send("HeapProfiler.enable");
     await client.send("HeapProfiler.collectGarbage");
     const baselineHeap = await client.send("Runtime.getHeapUsage");
+    const profileDirectory = path.join(OUTPUT_DIR, "profiles");
+    const profileStem = `lifecycle-${testInfo.project.name}-r${String(repetitionIndex(testInfo)).padStart(3, "0")}`;
+    const baselineProfilePath = path.join(
+      profileDirectory,
+      `${profileStem}-baseline.heapsnapshot`,
+    );
+    const finalProfilePath = path.join(
+      profileDirectory,
+      `${profileStem}-final.heapsnapshot`,
+    );
+    if (CAPTURE_LIFECYCLE_HEAP) {
+      await captureHeapSnapshot(client, baselineProfilePath);
+    }
     const navigateHash = async (hash: string) => {
       await page.evaluate((nextHash) => {
         window.location.hash = nextHash;
@@ -911,8 +971,21 @@ async function measureTransitions(
         atlasWebgl,
       });
     }
+    if (CAPTURE_LIFECYCLE_HEAP) {
+      await client.send("HeapProfiler.collectGarbage");
+      await captureHeapSnapshot(client, finalProfilePath);
+    }
     await client.detach();
-    return { baselineUsedHeapBytes: baselineHeap.usedSize, samples };
+    return {
+      baselineUsedHeapBytes: baselineHeap.usedSize,
+      samples,
+      heapProfileArtifacts: CAPTURE_LIFECYCLE_HEAP
+        ? {
+            baseline: path.relative(process.cwd(), baselineProfilePath),
+            final: path.relative(process.cwd(), finalProfilePath),
+          }
+        : undefined,
+    };
   } finally {
     await context.close();
   }
@@ -1113,5 +1186,6 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
     samples,
     transitionSamples,
     lifecycleMeasurement?.baselineUsedHeapBytes,
+    lifecycleMeasurement?.heapProfileArtifacts,
   );
 });

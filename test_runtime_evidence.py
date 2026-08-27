@@ -81,7 +81,9 @@ def test_checksum_tampering_fails(tmp_path: Path):
         )
 
 
-@pytest.mark.parametrize("declared_path", ["../raw.json", "/tmp/raw.json"])
+@pytest.mark.parametrize(
+    "declared_path", ["../raw.json", "/tmp/raw.json", "./raw.json", "sub/../raw.json"]
+)
 def test_artifact_path_must_remain_inside_root(
     tmp_path: Path, declared_path: str
 ):
@@ -92,7 +94,7 @@ def test_artifact_path_must_remain_inside_root(
     report = tmp_path / "evidence.json"
     report.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(ValueError, match="escapes artifact root"):
+    with pytest.raises(ValueError, match="not canonical|escapes artifact root"):
         validate_runtime_evidence(report, artifact_root=tmp_path)
 
 
@@ -104,5 +106,5 @@ def test_duplicate_artifact_paths_fail(tmp_path: Path):
     report = tmp_path / "evidence.json"
     report.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(ValueError, match="Duplicate artifact path"):
+    with pytest.raises(ValueError, match="Duplicate artifact target"):
         validate_runtime_evidence(report, artifact_root=tmp_path)

@@ -15,8 +15,7 @@ const lifecycleRepetitions =
 const nodeSamples = process.env.GODIESEL_PERF_NODE_SAMPLES ?? "100";
 const profileRepetitions =
   process.env.GODIESEL_PERF_PROFILE_REPETITIONS ?? "20";
-const rawDirectory = path.resolve("artifacts/runtime-statistics/raw", runId);
-const outputDirectory = path.resolve("artifacts/runtime-statistics", runId);
+const { rawDirectory, outputDirectory } = resolveRunDirectories(runId);
 
 let activeChild;
 let receivedSignal;
@@ -26,13 +25,42 @@ function git(args) {
   return execFileSync("git", args, { encoding: "utf8" }).trim();
 }
 
+export function resolveRunDirectories(candidateRunId, cwd = process.cwd()) {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(candidateRunId)) {
+    throw new Error(
+      "GODIESEL_PERF_RUN_ID must be a 1-128 character slug containing only letters, numbers, dots, underscores, and hyphens",
+    );
+  }
+  const artifactRoot = path.resolve(cwd, "artifacts/runtime-statistics");
+  const rawRoot = path.join(artifactRoot, "raw");
+  const rawDirectory = path.resolve(rawRoot, candidateRunId);
+  const outputDirectory = path.resolve(artifactRoot, candidateRunId);
+  if (
+    !rawDirectory.startsWith(`${rawRoot}${path.sep}`) ||
+    !outputDirectory.startsWith(`${artifactRoot}${path.sep}`)
+  ) {
+    throw new Error("Runtime evidence directories must remain under the artifact root");
+  }
+  return { rawDirectory, outputDirectory };
+}
+
+export function sourceStateIsClean(expectedCommit, currentCommit, status) {
+  return currentCommit === expectedCommit && status.trim().length === 0;
+}
+
 export function assertSourceState(expectedCommit, stage) {
   const currentCommit = git(["rev-parse", "HEAD"]);
-  const trackedChanges = git(["status", "--porcelain", "--untracked-files=no"]);
-  if (currentCommit !== expectedCommit || trackedChanges) {
+  const changes = git(["status", "--porcelain", "--untracked-files=all"]);
+  if (!sourceStateIsClean(expectedCommit, currentCommit, changes)) {
     throw new Error(
-      `Runtime evidence source changed during ${stage}: expected clean ${expectedCommit}, received ${currentCommit}${trackedChanges ? ` with tracked changes:\n${trackedChanges}` : ""}`,
+      `Runtime evidence source changed during ${stage}: expected clean ${expectedCommit}, received ${currentCommit}${changes ? ` with changes:\n${changes}` : ""}`,
     );
+  }
+}
+
+export function assertNotCancelled(signal, stage) {
+  if (signal) {
+    throw new Error(`Runtime evidence run cancelled by ${signal} ${stage}`);
   }
 }
 
@@ -65,7 +93,9 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
 }
 
 async function run(command, args, overrides = {}, allowFailure = false) {
+  assertNotCancelled(receivedSignal, `before ${command}`);
   assertSourceState(sourceCommit, `before ${command}`);
+  assertNotCancelled(receivedSignal, `before spawning ${command}`);
   const status = await new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       stdio: "inherit",
@@ -89,13 +119,29 @@ async function run(command, args, overrides = {}, allowFailure = false) {
     });
   });
   assertSourceState(sourceCommit, `after ${command}`);
-  if (receivedSignal) {
-    throw new Error(`Runtime evidence run cancelled by ${receivedSignal}`);
-  }
+  assertNotCancelled(receivedSignal, `after ${command}`);
   if (status !== 0 && !allowFailure) {
     throw new Error(`${command} ${args.join(" ")} exited with ${status}`);
   }
   return status;
+}
+
+async function aggregateAndValidate(overrides = {}) {
+  await run(
+    "node",
+    ["scripts/runtime-statistics.mjs", rawDirectory, outputDirectory],
+    overrides,
+  );
+  await run(
+    "python3",
+    [
+      "../runtime_evidence.py",
+      path.join(outputDirectory, "statistical-summary.json"),
+      "--artifact-root",
+      ".",
+      "--require-artifacts",
+    ],
+  );
 }
 
 export function validBrowserReportIndexes(
@@ -277,14 +323,11 @@ async function runLiveProviderLane() {
     ],
     { GODIESEL_LIVE_PROVIDER_PERF: "1" },
   );
-  await run(
-    "node",
-    ["scripts/runtime-statistics.mjs", rawDirectory, outputDirectory],
-    { GODIESEL_PERF_BROWSER_WARMUPS: "0" },
-  );
+  await aggregateAndValidate({ GODIESEL_PERF_BROWSER_WARMUPS: "0" });
 }
 
 async function main() {
+  assertNotCancelled(receivedSignal, "before run start");
   assertSourceState(sourceCommit, "run start");
   fs.mkdirSync(rawDirectory, { recursive: true });
   if (process.argv.includes("--live")) {
@@ -340,6 +383,23 @@ async function main() {
         "test",
         "--config",
         "playwright.runtime-perf.config.ts",
+        "--repeat-each=1",
+      ],
+      {
+        GODIESEL_PERF_WORKLOAD: "lifecycle",
+        GODIESEL_PERF_PHASE: "profile",
+        GODIESEL_PERF_CAPTURE_LIFECYCLE_HEAP: "1",
+      },
+    );
+    await run(
+      "npm",
+      [
+        "exec",
+        "playwright",
+        "--",
+        "test",
+        "--config",
+        "playwright.runtime-perf.config.ts",
         `--repeat-each=${profileRepetitions}`,
       ],
       {
@@ -348,18 +408,16 @@ async function main() {
         GODIESEL_PERF_CAPTURE_PROFILES: "1",
       },
     );
-    await run(
-      "node",
-      ["scripts/runtime-statistics.mjs", rawDirectory, outputDirectory],
-      {
-        GODIESEL_PERF_BROWSER_WARMUPS: warmups,
-        GODIESEL_PERF_LIVE_BLOCKER:
-          process.env.GODIESEL_PERF_LIVE_BLOCKER ??
-          "owner-approved live-provider repetition count was not supplied",
-      },
-    );
+    await aggregateAndValidate({
+      GODIESEL_PERF_BROWSER_WARMUPS: warmups,
+      GODIESEL_PERF_LIVE_BLOCKER:
+        process.env.GODIESEL_PERF_LIVE_BLOCKER ??
+        "owner-approved live-provider repetition count was not supplied",
+    });
   }
+  assertNotCancelled(receivedSignal, "before run completion");
   assertSourceState(sourceCommit, "run completion");
+  assertNotCancelled(receivedSignal, "before successful completion");
   process.stdout.write(`${outputDirectory}\n`);
 }
 

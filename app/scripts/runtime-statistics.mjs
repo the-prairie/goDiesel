@@ -136,18 +136,14 @@ function browserDistributions(reports, profileReports = []) {
         samples.map((sample) => sample.peakObservedHeapBytes),
       ],
       [
-        "observation-frame-interval",
+        "observation-frame-p95-interval",
         "ms",
-        samples.flatMap((sample) => sample.observation.frameIntervalsMs),
+        samples.map((sample) => sample.observation.frameP95Ms),
       ],
       [
-        "observation-frame-rate",
+        "observation-frame-rate-at-p95",
         "fps",
-        samples.flatMap((sample) =>
-          sample.observation.frameIntervalsMs.map(
-            (interval) => 1_000 / interval,
-          ),
-        ),
+        samples.map((sample) => sample.observation.estimatedFpsP95),
       ],
       [
         "observation-long-task",
@@ -380,7 +376,7 @@ function topCpuFrames(profile, limit = 10) {
     .slice(0, limit);
 }
 
-function normalizeProfileUrl(url = "") {
+export function normalizeProfileUrl(url = "") {
   const decoded = decodeURIComponent(url);
   const appRoot = process.cwd();
   if (decoded.startsWith(`file://${appRoot}/`)) {
@@ -390,6 +386,12 @@ function normalizeProfileUrl(url = "") {
   const nodeModulesIndex = decoded.indexOf(nodeModulesMarker);
   if (nodeModulesIndex >= 0) {
     return `<node_modules>/${decoded.slice(nodeModulesIndex + nodeModulesMarker.length)}`;
+  }
+  if (decoded.startsWith("file://")) {
+    return `<system>/${path.basename(new URL(decoded).pathname)}`;
+  }
+  if (path.isAbsolute(decoded)) {
+    return `<system>/${path.basename(decoded)}`;
   }
   return decoded;
 }
@@ -409,6 +411,48 @@ function topAllocations(profile, limit = 10) {
   visit(profile.head);
   return rows
     .sort((left, right) => right.selfSize - left.selfSize)
+    .slice(0, limit);
+}
+
+function heapSnapshotGroups(filename) {
+  const profile = readJson(filename);
+  const fields = profile.snapshot?.meta?.node_fields ?? [];
+  const typeNames = profile.snapshot?.meta?.node_types?.[0] ?? [];
+  const typeIndex = fields.indexOf("type");
+  const nameIndex = fields.indexOf("name");
+  const selfSizeIndex = fields.indexOf("self_size");
+  if (typeIndex < 0 || nameIndex < 0 || selfSizeIndex < 0) {
+    throw new Error(`Heap snapshot lacks required node fields: ${filename}`);
+  }
+  const width = fields.length;
+  const groups = new Map();
+  for (let offset = 0; offset < profile.nodes.length; offset += width) {
+    const type = typeNames[profile.nodes[offset + typeIndex]] ?? "unknown";
+    const name = profile.strings[profile.nodes[offset + nameIndex]] ?? "";
+    const key = `${type}:${name}`;
+    const current = groups.get(key) ?? { type, name, count: 0, selfSize: 0 };
+    current.count += 1;
+    current.selfSize += profile.nodes[offset + selfSizeIndex] ?? 0;
+    groups.set(key, current);
+  }
+  return groups;
+}
+
+function topHeapGrowth(baselineFilename, finalFilename, limit = 20) {
+  const baseline = heapSnapshotGroups(baselineFilename);
+  const final = heapSnapshotGroups(finalFilename);
+  return [...final.entries()]
+    .map(([key, value]) => {
+      const before = baseline.get(key) ?? { count: 0, selfSize: 0 };
+      return {
+        type: value.type,
+        name: value.name,
+        countDelta: value.count - before.count,
+        selfSizeDelta: value.selfSize - before.selfSize,
+      };
+    })
+    .filter((row) => row.countDelta > 0 || row.selfSizeDelta > 0)
+    .sort((left, right) => right.selfSizeDelta - left.selfSizeDelta)
     .slice(0, limit);
 }
 
@@ -519,6 +563,30 @@ function profileSummary(files, measuredReports, nodeReports) {
       },
     });
   }
+  const lifecycleHeap = profileReports
+    .filter((report) => report.lifecycleHeapProfileArtifacts)
+    .map((report) => {
+      const baseline = path.resolve(
+        process.cwd(),
+        report.lifecycleHeapProfileArtifacts.baseline,
+      );
+      const final = path.resolve(
+        process.cwd(),
+        report.lifecycleHeapProfileArtifacts.final,
+      );
+      return {
+        projectName: report.projectName,
+        repetitionIndex: report.repetitionIndex,
+        baselineUsedHeapBytes: report.lifecycleBaselineHeapBytes,
+        finalUsedHeapBytes: report.transitionSamples?.at(-1)?.usedHeapBytes,
+        retainedHeapRatio:
+          report.transitionSamples?.at(-1)?.usedHeapBytes /
+          report.lifecycleBaselineHeapBytes,
+        baseline: path.relative(process.cwd(), baseline),
+        final: path.relative(process.cwd(), final),
+        topSelfSizeGrowth: topHeapGrowth(baseline, final),
+      };
+    });
   return {
     cpu,
     node: nodeReports.map((report) => ({
@@ -534,6 +602,7 @@ function profileSummary(files, measuredReports, nodeReports) {
       })),
     })),
     browser,
+    lifecycleHeap,
   };
 }
 
@@ -611,6 +680,38 @@ export function aggregateRuntimeStatistics({
     ...browserDistributions(browserReports, profileReports),
     ...liveDistributions(liveReports),
   ];
+  const browserSurfaceCounts = [
+    ...new Set(browserReports.map((report) => report.projectName)),
+  ].map(
+    (projectName) =>
+      new Set(
+        browserReports
+          .filter(
+            (report) =>
+              report.projectName === projectName &&
+              report.workload === "surfaces",
+          )
+          .map((report) => report.repetitionIndex),
+      ).size,
+  );
+  const liveCounts = [
+    ...new Set(liveReports.map((report) => report.projectName)),
+  ].map(
+    (projectName) =>
+      new Set(
+        liveReports
+          .filter((report) => report.projectName === projectName)
+          .map((report) => report.repetitionIndex),
+      ).size,
+  );
+  const measuredRepetitions = Math.max(
+    0,
+    ...browserSurfaceCounts,
+    ...liveCounts,
+  );
+  if (measuredRepetitions <= 0) {
+    throw new Error("Runtime evidence contains no measured repetitions");
+  }
   const cpu = os.cpus();
   const report = {
     schemaVersion: 1,
@@ -621,17 +722,7 @@ export function aggregateRuntimeStatistics({
         process.env.GODIESEL_PERF_BROWSER_WARMUPS ?? "3",
         10,
       ),
-      measuredRepetitions: Math.max(
-        0,
-        ...[...new Set(browserReports.map((report) => report.projectName))].map(
-          (projectName) =>
-            browserReports.filter(
-              (report) =>
-                report.projectName === projectName &&
-                report.workload === "surfaces",
-            ).length,
-        ),
-      ),
+      measuredRepetitions,
       quantileMethod: "nearest-rank",
       repetitionPlan: {
         nodeSamples: nodeReports[0]?.benchmarks?.[0]?.samplesMs?.length ?? 0,
@@ -673,6 +764,19 @@ export function aggregateRuntimeStatistics({
               projectName,
               profileReports.filter(
                 (report) => report.projectName === projectName,
+              ).filter((report) => report.workload === "surfaces").length,
+            ],
+          ),
+        ),
+        lifecycleHeapProfilesByProject: Object.fromEntries(
+          [...new Set(profileReports.map((report) => report.projectName))].map(
+            (projectName) => [
+              projectName,
+              profileReports.filter(
+                (report) =>
+                  report.projectName === projectName &&
+                  report.workload === "lifecycle" &&
+                  report.lifecycleHeapProfileArtifacts,
               ).length,
             ],
           ),
