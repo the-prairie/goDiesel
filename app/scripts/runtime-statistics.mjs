@@ -365,7 +365,10 @@ function profileSummary(files, measuredReports, nodeReports) {
   return {
     cpu,
     node: nodeReports.map((report) => ({
-      environment: report.environment,
+      environment: {
+        ...report.environment,
+        processArgs: report.environment?.processArgs?.map(normalizeProfileUrl),
+      },
       io: report.io,
       memory: (report.benchmarks ?? []).map((benchmark) => ({
         name: benchmark.name,
