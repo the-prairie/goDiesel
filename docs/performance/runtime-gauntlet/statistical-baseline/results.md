@@ -67,3 +67,10 @@ GODIESEL_PERF_RUN_ID=issue113-hermetic-2026-08-27 npm run perf:runtime:statistic
 
 The raw packet is 276 MB at `app/artifacts/runtime-statistics/raw/issue113-hermetic-2026-08-27` and is intentionally retained as a local artifact.
 The committed summaries carry its normalized paths, byte sizes, SHA-256 checksums, producing method, and source commit.
+
+## Merge verification
+
+`npm run verify:ticket` passed type checking, the production build, 40 Vitest files with 240 tests, and four required navigation Playwright tests.
+`npm run perf:runtime:baseline` passed two Vitest files with four tests and both desktop and mobile Playwright runtime scenarios.
+`python -m pytest test_runtime_evidence.py` passed both schema and checksum-integrity regressions.
+Strict local validation verified 979 retained artifacts, while clean-checkout validation accepted the schema and reported those same 979 artifacts as intentionally external.
