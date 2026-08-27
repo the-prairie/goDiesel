@@ -149,6 +149,7 @@ describe("runtime statistical evidence", () => {
       status: "unavailable",
       blocker: "quota approval missing",
     });
+    expect(report.environment.hostname).toBe("redacted-local-host");
     expect(report.artifacts).toHaveLength(3);
     expect(
       report.artifacts.every((artifact) => artifact.sha256.length === 64),

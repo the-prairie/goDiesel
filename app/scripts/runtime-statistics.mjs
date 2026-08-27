@@ -716,7 +716,7 @@ export function aggregateRuntimeStatistics({
           : { status: "unavailable", blocker: liveBlocker ?? "not-run" },
     },
     environment: {
-      hostname: os.hostname(),
+      hostname: "redacted-local-host",
       platform: os.platform(),
       release: os.release(),
       arch: os.arch(),
