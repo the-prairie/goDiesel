@@ -12,7 +12,17 @@ import {
   type TestInfo,
 } from "@playwright/test";
 
-const OUTPUT_DIR = path.resolve(process.cwd(), "artifacts/runtime-performance");
+const RUN_ID = process.env.GODIESEL_PERF_RUN_ID?.trim();
+const STATISTICAL_MODE = Boolean(RUN_ID);
+const WORKLOAD = process.env.GODIESEL_PERF_WORKLOAD ?? "all";
+const PHASE = process.env.GODIESEL_PERF_PHASE ?? "measured";
+const CAPTURE_PROFILES = process.env.GODIESEL_PERF_CAPTURE_PROFILES === "1";
+const OUTPUT_DIR = path.resolve(
+  process.cwd(),
+  STATISTICAL_MODE
+    ? `artifacts/runtime-statistics/raw/${RUN_ID}/browser/${PHASE}`
+    : "artifacts/runtime-performance",
+);
 const ROUTE_SLUG = "17654151284";
 const OBSERVATION_WINDOW_MS = 750;
 
@@ -22,6 +32,8 @@ interface RuntimePhaseSnapshot {
   longTasks: Array<{ startTime: number; duration: number }>;
   frameIntervals: number[];
   reactCommits: number;
+  reactActualDurationMs: number;
+  reactTreeBaseDurationMs: number;
 }
 
 interface WebglSnapshot {
@@ -40,6 +52,8 @@ interface PhaseMetrics {
   frameP99Ms: number;
   estimatedFpsP95: number;
   reactCommits: number;
+  reactActualDurationMs: number;
+  reactTreeBaseDurationMs: number;
   taskDurationDeltaMs: number;
   scriptDurationDeltaMs: number;
   layoutDurationDeltaMs: number;
@@ -50,6 +64,9 @@ interface PhaseMetrics {
     transferSize: number;
     decodedBodySize: number;
     duration: number;
+    startTime: number;
+    initiatorType: string;
+    origin: "local" | "provider";
   }>;
 }
 
@@ -68,6 +85,7 @@ interface BrowserSample {
   observation: PhaseMetrics;
   webgl: WebglSnapshot;
   navigation?: Record<string, number>;
+  profileArtifacts?: { cpu: string; allocation: string };
 }
 
 interface TransitionSample {
@@ -111,7 +129,9 @@ function browserContextOptions(
   const mobile = testInfo.project.name.includes("mobile");
   return {
     baseURL: "http://127.0.0.1:8794",
-    viewport: mobile ? { width: 430, height: 844 } : { width: 1440, height: 900 },
+    viewport: mobile
+      ? { width: 430, height: 844 }
+      : { width: 1440, height: 900 },
     deviceScaleFactor: mobile ? 2 : 1,
     isMobile: mobile,
     hasTouch: mobile,
@@ -128,6 +148,8 @@ async function installInstrumentation(context: BrowserContext) {
       longTasks: Array<{ startTime: number; duration: number }>;
       frameIntervals: number[];
       reactCommits: number;
+      reactActualDurationMs: number;
+      reactTreeBaseDurationMs: number;
     };
     type WebglRecord = {
       canvas: HTMLCanvasElement;
@@ -143,6 +165,8 @@ async function installInstrumentation(context: BrowserContext) {
         longTasks: [],
         frameIntervals: [],
         reactCommits: 0,
+        reactActualDurationMs: 0,
+        reactTreeBaseDurationMs: 0,
       },
       observation: {
         measurementStartedAtMs: initializedAt,
@@ -150,6 +174,8 @@ async function installInstrumentation(context: BrowserContext) {
         longTasks: [],
         frameIntervals: [],
         reactCommits: 0,
+        reactActualDurationMs: 0,
+        reactTreeBaseDurationMs: 0,
       },
     };
     let phase: Phase = "action";
@@ -185,6 +211,8 @@ async function installInstrumentation(context: BrowserContext) {
       phases[nextPhase].longTasks.length = 0;
       phases[nextPhase].frameIntervals.length = 0;
       phases[nextPhase].reactCommits = 0;
+      phases[nextPhase].reactActualDurationMs = 0;
+      phases[nextPhase].reactTreeBaseDurationMs = 0;
       phaseStartedAt = performance.now();
       phaseDeadline =
         durationMs === undefined
@@ -226,6 +254,8 @@ async function installInstrumentation(context: BrowserContext) {
           longTasks: [...phaseData.longTasks],
           frameIntervals: [...phaseData.frameIntervals],
           reactCommits: phaseData.reactCommits,
+          reactActualDurationMs: phaseData.reactActualDurationMs,
+          reactTreeBaseDurationMs: phaseData.reactTreeBaseDurationMs,
         });
         return {
           action: snapshotPhase(phases.action),
@@ -295,9 +325,18 @@ async function installInstrumentation(context: BrowserContext) {
         rendererId += 1;
         return rendererId;
       },
-      onCommitFiberRoot() {
+      onCommitFiberRoot(
+        _rendererId: number,
+        root: {
+          current?: { actualDuration?: number; treeBaseDuration?: number };
+        },
+      ) {
         if (performance.now() <= phaseDeadline) {
           phases[phase].reactCommits += 1;
+          phases[phase].reactActualDurationMs +=
+            root.current?.actualDuration ?? 0;
+          phases[phase].reactTreeBaseDurationMs +=
+            root.current?.treeBaseDuration ?? 0;
         }
       },
       onCommitFiberUnmount() {},
@@ -340,6 +379,11 @@ async function browserResources(
           transferSize: resource.transferSize,
           decodedBodySize: resource.decodedBodySize,
           duration: resource.duration,
+          startTime: resource.startTime,
+          initiatorType: resource.initiatorType,
+          origin: resource.name.startsWith(location.origin)
+            ? ("local" as const)
+            : ("provider" as const),
         })),
     { startedAt: measurementStartedAtMs, endedAt: measurementEndedAtMs },
   );
@@ -365,6 +409,8 @@ function phaseMetrics(
     frameP99Ms: p99,
     estimatedFpsP95: p95 > 0 ? 1_000 / p95 : 0,
     reactCommits: runtime.reactCommits,
+    reactActualDurationMs: runtime.reactActualDurationMs,
+    reactTreeBaseDurationMs: runtime.reactTreeBaseDurationMs,
     taskDurationDeltaMs: metricDelta(after, before, "TaskDuration", 1_000),
     scriptDurationDeltaMs: metricDelta(after, before, "ScriptDuration", 1_000),
     layoutDurationDeltaMs: metricDelta(after, before, "LayoutDuration", 1_000),
@@ -383,11 +429,11 @@ async function waitForAtlas(page: Page) {
 }
 
 async function waitForAtlasCorpus(page: Page) {
-  await expect(page.locator("[data-runtime-atlas-corpus='2500']")).toHaveAttribute(
-    "data-runtime-atlas-status",
-    /ready|unavailable/,
-    { timeout: 120_000 },
-  );
+  await expect(
+    page.locator("[data-runtime-atlas-corpus='2500']"),
+  ).toHaveAttribute("data-runtime-atlas-status", /ready|unavailable/, {
+    timeout: 120_000,
+  });
   await expect(page.locator("canvas[data-heat-lines='2500']")).toBeVisible({
     timeout: 120_000,
   });
@@ -403,6 +449,7 @@ async function waitForReplay(page: Page) {
 
 async function captureSample(
   page: Page,
+  testInfo: TestInfo,
   name: string,
   cacheState: "cold" | "warm",
   motionPreference: "no-preference" | "reduce",
@@ -410,6 +457,16 @@ async function captureSample(
 ): Promise<BrowserSample> {
   const client = await page.context().newCDPSession(page);
   await client.send("Performance.enable");
+  if (CAPTURE_PROFILES) {
+    await client.send("Profiler.enable");
+    await client.send("HeapProfiler.enable");
+    await client.send("Profiler.start");
+    await client.send("HeapProfiler.startSampling", {
+      samplingInterval: 32_768,
+      includeObjectsCollectedByMajorGC: true,
+      includeObjectsCollectedByMinorGC: true,
+    });
+  }
   const actionMetricsBefore = await readPerformanceMetrics(client);
   await page.evaluate(() => {
     performance.clearResourceTimings();
@@ -446,9 +503,8 @@ async function captureSample(
   const heap = await client.send("Runtime.getHeapUsage");
   const metricMap = observationMetricsAfter;
   const navigation = await page.evaluate(() => {
-    const entry = performance.getEntriesByType(
-      "navigation",
-    )[0] as PerformanceNavigationTiming | undefined;
+    const entry = performance.getEntriesByType("navigation")[0] as
+      PerformanceNavigationTiming | undefined;
     return entry
       ? {
           duration: entry.duration,
@@ -461,6 +517,33 @@ async function captureSample(
         }
       : undefined;
   });
+  let profileArtifacts: BrowserSample["profileArtifacts"];
+  if (CAPTURE_PROFILES) {
+    const [{ profile: cpuProfile }, { profile: allocationProfile }] =
+      await Promise.all([
+        client.send("Profiler.stop"),
+        client.send("HeapProfiler.stopSampling"),
+      ]);
+    const profileDir = path.join(OUTPUT_DIR, "profiles");
+    fs.mkdirSync(profileDir, { recursive: true });
+    const viewport = page.viewportSize();
+    const stem = [
+      name,
+      `r${String(testInfo.repeatEachIndex).padStart(3, "0")}`,
+      viewport ? `${viewport.width}x${viewport.height}` : "viewport-unknown",
+    ]
+      .join("-")
+      .replace(/[^a-z0-9-]+/gi, "-")
+      .toLowerCase();
+    const cpuPath = path.join(profileDir, `${stem}.cpuprofile`);
+    const allocationPath = path.join(profileDir, `${stem}.heapprofile`);
+    fs.writeFileSync(cpuPath, `${JSON.stringify(cpuProfile)}\n`);
+    fs.writeFileSync(allocationPath, `${JSON.stringify(allocationProfile)}\n`);
+    profileArtifacts = {
+      cpu: path.relative(process.cwd(), cpuPath),
+      allocation: path.relative(process.cwd(), allocationPath),
+    };
+  }
   await client.detach();
 
   if (!actionRuntime || !snapshot) {
@@ -492,6 +575,7 @@ async function captureSample(
     ),
     webgl: snapshot.webgl,
     navigation,
+    profileArtifacts,
   };
 }
 
@@ -523,6 +607,7 @@ async function freshSample(
   try {
     return await captureSample(
       page,
+      testInfo,
       name,
       "cold",
       reducedMotion,
@@ -534,7 +619,7 @@ async function freshSample(
 }
 
 async function writeProjectReport(
-  projectName: string,
+  testInfo: TestInfo,
   samples: BrowserSample[],
   transitionSamples: TransitionSample[],
 ) {
@@ -542,7 +627,12 @@ async function writeProjectReport(
   const report = {
     schemaVersion: 2,
     generatedAt: new Date().toISOString(),
-    projectName,
+    projectName: testInfo.project.name,
+    runId: RUN_ID,
+    repetitionIndex: testInfo.repeatEachIndex,
+    workload: WORKLOAD,
+    phase: PHASE,
+    captureProfiles: CAPTURE_PROFILES,
     liveProvidersDisabled: true,
     metricSemantics: {
       actionLatencyMs:
@@ -560,7 +650,12 @@ async function writeProjectReport(
     transitionSamples,
   };
   fs.writeFileSync(
-    path.join(OUTPUT_DIR, `runtime-baseline-browser-${projectName}.json`),
+    path.join(
+      OUTPUT_DIR,
+      STATISTICAL_MODE
+        ? `runtime-browser-${testInfo.project.name}-${WORKLOAD}-r${String(testInfo.repeatEachIndex).padStart(3, "0")}.json`
+        : `runtime-baseline-browser-${testInfo.project.name}.json`,
+    ),
     `${JSON.stringify(report, null, 2)}\n`,
   );
 }
@@ -569,7 +664,8 @@ async function readWebglSnapshot(page: Page) {
   const snapshot = await page.evaluate(
     () => window.__runtimePerf?.snapshot().webgl,
   );
-  if (!snapshot) throw new Error("WebGL lifecycle instrumentation is unavailable");
+  if (!snapshot)
+    throw new Error("WebGL lifecycle instrumentation is unavailable");
   return snapshot;
 }
 
@@ -644,124 +740,150 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
   browser,
 }, testInfo) => {
   const samples: BrowserSample[] = [];
-
-  const atlasContext = await createMeasuredPage(browser, testInfo);
-  try {
-    samples.push(
-      await captureSample(
-        atlasContext.page,
-        "atlas-cold",
-        "cold",
-        "no-preference",
-        async () => {
-          await atlasContext.page.goto("/#/atlas", {
+  const surfaceGroups: Array<() => Promise<BrowserSample[]>> = [
+    async () => {
+      const atlasContext = await createMeasuredPage(browser, testInfo);
+      try {
+        return [
+          await captureSample(
+            atlasContext.page,
+            testInfo,
+            "atlas-cold",
+            "cold",
+            "no-preference",
+            async () => {
+              await atlasContext.page.goto("/#/atlas", {
+                waitUntil: "domcontentloaded",
+              });
+              await waitForAtlas(atlasContext.page);
+            },
+          ),
+          await captureSample(
+            atlasContext.page,
+            testInfo,
+            "atlas-warm-reload",
+            "warm",
+            "no-preference",
+            async () => {
+              await atlasContext.page.reload({ waitUntil: "domcontentloaded" });
+              await waitForAtlas(atlasContext.page);
+            },
+          ),
+        ];
+      } finally {
+        await atlasContext.context.close();
+      }
+    },
+    async () => [
+      await freshSample(browser, testInfo, "routes-cold", async (page) => {
+        await page.goto("/#/routes", { waitUntil: "domcontentloaded" });
+        await expect(
+          page.getByRole("heading", {
+            level: 1,
+            name: "Your route library.",
+            exact: true,
+          }),
+        ).toBeVisible();
+      }),
+    ],
+    async () => [
+      await freshSample(browser, testInfo, "finder-cold", async (page) => {
+        await page.goto("/#/finder", { waitUntil: "domcontentloaded" });
+        await expect(
+          page.getByRole("heading", {
+            level: 1,
+            name: "Plan the next day.",
+            exact: true,
+          }),
+        ).toBeVisible();
+      }),
+    ],
+    async () => [
+      await freshSample(
+        browser,
+        testInfo,
+        "route-detail-cold",
+        async (page) => {
+          await page.goto(`/#/routes/${ROUTE_SLUG}`, {
             waitUntil: "domcontentloaded",
           });
-          await waitForAtlas(atlasContext.page);
+          await waitForRouteDetail(page);
         },
       ),
-    );
-    samples.push(
-      await captureSample(
-        atlasContext.page,
-        "atlas-warm-reload",
-        "warm",
-        "no-preference",
-        async () => {
-          await atlasContext.page.reload({ waitUntil: "domcontentloaded" });
-          await waitForAtlas(atlasContext.page);
+    ],
+    async () => [
+      await freshSample(
+        browser,
+        testInfo,
+        "replay-atlas-cold",
+        async (page) => {
+          await page.goto(`/#/replay/${ROUTE_SLUG}?renderer=atlas`, {
+            waitUntil: "domcontentloaded",
+          });
+          await waitForReplay(page);
         },
       ),
-    );
-  } finally {
-    await atlasContext.context.close();
+    ],
+    async () => [
+      await freshSample(
+        browser,
+        testInfo,
+        "atlas-reduced-motion-cold",
+        async (page) => {
+          await page.goto("/#/atlas", { waitUntil: "domcontentloaded" });
+          await waitForAtlas(page);
+        },
+        "reduce",
+      ),
+    ],
+    async () => [
+      await freshSample(
+        browser,
+        testInfo,
+        "replay-atlas-reduced-motion-cold",
+        async (page) => {
+          await page.goto(`/#/replay/${ROUTE_SLUG}?renderer=atlas`, {
+            waitUntil: "domcontentloaded",
+          });
+          await waitForReplay(page);
+        },
+        "reduce",
+      ),
+    ],
+    async () => [
+      await freshSample(
+        browser,
+        testInfo,
+        "atlas-2,500-source-backed-routes",
+        async (page) => {
+          await page.goto("/perf/atlas-corpus-harness.html", {
+            waitUntil: "domcontentloaded",
+          });
+          await waitForAtlasCorpus(page);
+        },
+      ),
+    ],
+  ];
+
+  if (WORKLOAD !== "lifecycle") {
+    const offset = testInfo.repeatEachIndex % surfaceGroups.length;
+    const orderedGroups = [
+      ...surfaceGroups.slice(offset),
+      ...surfaceGroups.slice(0, offset),
+    ];
+    for (const group of orderedGroups) samples.push(...(await group()));
   }
 
-  samples.push(
-    await freshSample(browser, testInfo, "routes-cold", async (page) => {
-      await page.goto("/#/routes", { waitUntil: "domcontentloaded" });
-      await expect(
-        page.getByRole("heading", {
-          level: 1,
-          name: "Your route library.",
-          exact: true,
-        }),
-      ).toBeVisible();
-    }),
-  );
-  samples.push(
-    await freshSample(browser, testInfo, "finder-cold", async (page) => {
-      await page.goto("/#/finder", { waitUntil: "domcontentloaded" });
-      await expect(
-        page.getByRole("heading", {
-          level: 1,
-          name: "Plan the next day.",
-          exact: true,
-        }),
-      ).toBeVisible();
-    }),
-  );
-  samples.push(
-    await freshSample(browser, testInfo, "route-detail-cold", async (page) => {
-      await page.goto(`/#/routes/${ROUTE_SLUG}`, {
-        waitUntil: "domcontentloaded",
-      });
-      await waitForRouteDetail(page);
-    }),
-  );
-  samples.push(
-    await freshSample(browser, testInfo, "replay-atlas-cold", async (page) => {
-      await page.goto(`/#/replay/${ROUTE_SLUG}?renderer=atlas`, {
-        waitUntil: "domcontentloaded",
-      });
-      await waitForReplay(page);
-    }),
-  );
-  samples.push(
-    await freshSample(
-      browser,
-      testInfo,
-      "atlas-reduced-motion-cold",
-      async (page) => {
-        await page.goto("/#/atlas", { waitUntil: "domcontentloaded" });
-        await waitForAtlas(page);
-      },
-      "reduce",
-    ),
-  );
-  samples.push(
-    await freshSample(
-      browser,
-      testInfo,
-      "replay-atlas-reduced-motion-cold",
-      async (page) => {
-        await page.goto(`/#/replay/${ROUTE_SLUG}?renderer=atlas`, {
-          waitUntil: "domcontentloaded",
-        });
-        await waitForReplay(page);
-      },
-      "reduce",
-    ),
-  );
-  samples.push(
-    await freshSample(
-      browser,
-      testInfo,
-      "atlas-2,500-source-backed-routes",
-      async (page) => {
-        await page.goto("/perf/atlas-corpus-harness.html", {
-          waitUntil: "domcontentloaded",
-        });
-        await waitForAtlasCorpus(page);
-      },
-    ),
-  );
+  const transitionSamples =
+    WORKLOAD === "surfaces" || CAPTURE_PROFILES
+      ? []
+      : await measureTransitions(browser, testInfo);
+  await writeProjectReport(testInfo, samples, transitionSamples);
 
-  const transitionSamples = await measureTransitions(browser, testInfo);
-  await writeProjectReport(testInfo.project.name, samples, transitionSamples);
-
-  expect(samples).toHaveLength(9);
-  expect(transitionSamples).toHaveLength(20);
+  expect(samples).toHaveLength(WORKLOAD === "lifecycle" ? 0 : 9);
+  expect(transitionSamples).toHaveLength(
+    WORKLOAD === "surfaces" || CAPTURE_PROFILES ? 0 : 20,
+  );
   expect(
     samples.every((sample) => sample.sampleWallMs >= sample.actionLatencyMs),
   ).toBe(true);

@@ -57,10 +57,10 @@ Quantiles use the nearest-rank method over finite observations sorted in ascendi
 The minimum independent sample counts are:
 
 | Quantile | Minimum observations |
-| --- | ---: |
-| p50 | 2 |
-| p95 | 20 |
-| p99 | 100 |
+| -------- | -------------------: |
+| p50      |                    2 |
+| p95      |                   20 |
+| p99      |                  100 |
 
 The summary reports count, minimum, maximum, arithmetic mean, sample standard deviation, coefficient of variation, median absolute deviation, p50, p95, and p99.
 A quantile whose minimum count is not met is `null` with status `insufficient-samples`.
@@ -70,20 +70,21 @@ Warm-ups, failed readiness oracles, unavailable-provider attempts, and retries a
 
 The profiling packet captures:
 
-| Profile | Required evidence |
-| --- | --- |
-| Node CPU | V8 CPU profile spanning generated-data parse, lookup, region build, filter, Finder, route pose, and scene-frame benchmarks. |
-| Node memory and I/O | Process memory before and after each benchmark plus manifest/detail read counts, bytes, and elapsed time. |
-| Browser CPU | CDP CPU profiles for Atlas cold, the 2,500-route Atlas, route detail, and Replay. |
-| Allocation | CDP sampling heap profiles for the same representative browser workloads. |
-| Heap | GC-normalized heap before and after each representative workload and after each twenty-transition lifecycle sequence. |
-| Network | Phase-bounded resource waterfalls with start time, duration, transfer size, decoded size, initiator type, and local versus provider classification. |
-| React | Commit count, actual duration, and tree base duration captured through the injected DevTools hook without production component changes. |
-| Renderer and WebGL | Connected, non-lost context counts and cumulative context creation diagnostics at every settled surface boundary. |
-| Live provider | Global readiness and regional settlement separated from local application time, plus the available CPU/network/heap evidence. |
+| Profile             | Required evidence                                                                                                                                   |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Node CPU            | V8 CPU profile spanning generated-data parse, lookup, region build, filter, Finder, route pose, and scene-frame benchmarks.                         |
+| Node memory and I/O | Process memory before and after each benchmark plus manifest/detail read counts, bytes, and elapsed time.                                           |
+| Browser CPU         | CDP CPU profiles for Atlas cold, the 2,500-route Atlas, route detail, and Replay.                                                                   |
+| Allocation          | CDP sampling heap profiles for the same representative browser workloads.                                                                           |
+| Heap                | GC-normalized heap before and after each representative workload and after each twenty-transition lifecycle sequence.                               |
+| Network             | Phase-bounded resource waterfalls with start time, duration, transfer size, decoded size, initiator type, and local versus provider classification. |
+| React               | Commit count, actual duration, and tree base duration captured through the injected DevTools hook without production component changes.             |
+| Renderer and WebGL  | Connected, non-lost context counts and cumulative context creation diagnostics at every settled surface boundary.                                   |
+| Live provider       | Global readiness and regional settlement separated from local application time, plus the available CPU/network/heap evidence.                       |
 
-Profiles use one representative measured repetition selected before inspecting its profile contents.
-The selection rule is the successful repetition nearest to the scenario's median action latency.
+Browser profiles use five measured profile repetitions after the unprofiled distribution is complete.
+The selection rule is the successful profile repetition nearest to the scenario's unprofiled median action latency.
+Profile contents are summarized only after that latency-only selection; every unselected raw profile remains checksummed.
 
 ## Opportunity matrix
 

@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import inspector from "node:inspector";
 import os from "node:os";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
@@ -6,11 +7,7 @@ import { performance } from "node:perf_hooks";
 import { expect, test } from "vitest";
 
 import { buildRouteRegions } from "@/data/route-regions";
-import {
-  completedRoutes,
-  findRouteBySlug,
-  routes,
-} from "@/data/routes";
+import { completedRoutes, findRouteBySlug, routes } from "@/data/routes";
 import {
   createRouteDiscoveryProvider,
   curatedDiscoveryCandidates,
@@ -24,7 +21,10 @@ import {
   type RoutePoint,
 } from "@/domain/route";
 import { routePathPose } from "@/domain/geometry/route-path";
-import { filterRoutes, type RouteFilters } from "@/surfaces/routes/route-filters";
+import {
+  filterRoutes,
+  type RouteFilters,
+} from "@/surfaces/routes/route-filters";
 import {
   createRouteSceneManifest,
   resolveRouteSceneFrame,
@@ -55,7 +55,18 @@ interface BenchmarkResult extends Distribution {
 }
 
 const APP_ROOT = process.cwd();
-const OUTPUT_DIR = path.resolve(APP_ROOT, "artifacts/runtime-performance");
+const RUN_ID = process.env.GODIESEL_PERF_RUN_ID?.trim();
+const STATISTICAL_SAMPLES = Number.parseInt(
+  process.env.GODIESEL_PERF_NODE_SAMPLES ?? "0",
+  10,
+);
+const CAPTURE_PROFILES = process.env.GODIESEL_PERF_CAPTURE_PROFILES === "1";
+const OUTPUT_DIR = path.resolve(
+  APP_ROOT,
+  RUN_ID
+    ? `artifacts/runtime-statistics/raw/${RUN_ID}/node`
+    : "artifacts/runtime-performance",
+);
 const MANIFEST_PATH = path.resolve(
   APP_ROOT,
   "src/data/generated/routes.manifest.json",
@@ -68,7 +79,10 @@ function percentile(values: readonly number[], quantile: number) {
   return sorted[rank] ?? 0;
 }
 
-function summarize(samplesMs: number[], operationsPerSample: number): Distribution {
+function summarize(
+  samplesMs: number[],
+  operationsPerSample: number,
+): Distribution {
   const p50Ms = percentile(samplesMs, 0.5);
   const p95Ms = percentile(samplesMs, 0.95);
   const p99Ms = percentile(samplesMs, 0.99);
@@ -102,11 +116,15 @@ function benchmark<T>(options: {
     digest,
   } = options;
 
-  for (let index = 0; index < warmups; index += 1) run();
+  const effectiveWarmups =
+    STATISTICAL_SAMPLES > 0 ? Math.max(5, warmups) : warmups;
+  const effectiveSamples =
+    STATISTICAL_SAMPLES > 0 ? Math.max(STATISTICAL_SAMPLES, samples) : samples;
+  for (let index = 0; index < effectiveWarmups; index += 1) run();
   const memoryBefore = process.memoryUsage();
   const samplesMs: number[] = [];
   let result!: T;
-  for (let index = 0; index < samples; index += 1) {
+  for (let index = 0; index < effectiveSamples; index += 1) {
     const started = performance.now();
     result = run();
     samplesMs.push(performance.now() - started);
@@ -123,13 +141,16 @@ function benchmark<T>(options: {
 
 function syntheticQuestRoute(pointCount: number): QuestRoute {
   const base = largestCurrentDetail();
-  const points: RoutePoint[] = Array.from({ length: pointCount }, (_, index) => ({
-    lat: 35 + index * 0.000_01,
-    lng: 135 + Math.sin(index / 300) * 0.01,
-    elev: 300 + Math.sin(index / 200) * 240,
-    d: index * 4,
-    elapsedS: index * 1.6,
-  }));
+  const points: RoutePoint[] = Array.from(
+    { length: pointCount },
+    (_, index) => ({
+      lat: 35 + index * 0.000_01,
+      lng: 135 + Math.sin(index / 300) * 0.01,
+      elev: 300 + Math.sin(index / 200) * 240,
+      d: index * 4,
+      elapsedS: index * 1.6,
+    }),
+  );
   return {
     ...base,
     slug: `synthetic-long-${pointCount}`,
@@ -152,6 +173,9 @@ function syntheticQuestRoute(pointCount: number): QuestRoute {
 }
 
 let cachedLargestDetail: QuestRoute | undefined;
+let largestDetailIo:
+  | { path: string; readCount: number; bytes: number; elapsedMs: number }
+  | undefined;
 function largestCurrentDetail() {
   if (cachedLargestDetail) return cachedLargestDetail;
   const detailPaths = fs
@@ -162,9 +186,15 @@ function largestCurrentDetail() {
     .map((filename) => ({ filename, size: fs.statSync(filename).size }))
     .sort((left, right) => right.size - left.size)[0];
   if (!largest) throw new Error("No route detail fixtures found");
-  cachedLargestDetail = parseRouteDetail(
-    JSON.parse(fs.readFileSync(largest.filename, "utf8")),
-  );
+  const readStarted = performance.now();
+  const detailText = fs.readFileSync(largest.filename, "utf8");
+  largestDetailIo = {
+    path: path.relative(APP_ROOT, largest.filename),
+    readCount: 1,
+    bytes: Buffer.byteLength(detailText),
+    elapsedMs: performance.now() - readStarted,
+  };
+  cachedLargestDetail = parseRouteDetail(JSON.parse(detailText));
   return cachedLargestDetail;
 }
 
@@ -192,9 +222,26 @@ function environmentMetadata() {
   };
 }
 
-test("records the deterministic production-runtime baseline", () => {
+function inspectorPost<T>(session: inspector.Session, method: string) {
+  return new Promise<T>((resolve, reject) => {
+    session.post(method, (error, result) => {
+      if (error) reject(error);
+      else resolve(result as T);
+    });
+  });
+}
+
+test("records the deterministic production-runtime baseline", async () => {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  const profileSession = CAPTURE_PROFILES ? new inspector.Session() : undefined;
+  if (profileSession) {
+    profileSession.connect();
+    await inspectorPost(profileSession, "Profiler.enable");
+    await inspectorPost(profileSession, "Profiler.start");
+  }
+  const manifestReadStarted = performance.now();
   const manifestText = fs.readFileSync(MANIFEST_PATH, "utf8");
+  const manifestReadMs = performance.now() - manifestReadStarted;
   const manifestValue = JSON.parse(manifestText) as { routes?: unknown[] };
   const generatedRoutes = manifestValue.routes ?? [];
   const routeCorpus = createSourceBackedRouteCorpus(routes, 2_500);
@@ -221,9 +268,7 @@ test("records the deterministic production-runtime baseline", () => {
   });
 
   const currentLookupQueries = Array.from({ length: 5_000 }, (_, index) =>
-    index % 7 === 0
-      ? `missing-${index}`
-      : routes[index % routes.length].slug,
+    index % 7 === 0 ? `missing-${index}` : routes[index % routes.length].slug,
   );
   const currentRouteLookupBenchmark = benchmark({
     name: "route-lookup-current-library",
@@ -233,7 +278,10 @@ test("records the deterministic production-runtime baseline", () => {
       currentLookupQueries.map(
         (slug) => findRouteBySlug(slug)?.slug ?? "missing",
       ),
-    digest: (result) => ({ count: result.length, digest: stableDigest(result) }),
+    digest: (result) => ({
+      count: result.length,
+      digest: stableDigest(result),
+    }),
   });
 
   const sourceBackedLookupQueries = Array.from({ length: 5_000 }, (_, index) =>
@@ -250,7 +298,10 @@ test("records the deterministic production-runtime baseline", () => {
         (slug) =>
           findRouteBySlugInCorpus(routeCorpus.routes, slug)?.slug ?? "missing",
       ),
-    digest: (result) => ({ count: result.length, digest: stableDigest(result) }),
+    digest: (result) => ({
+      count: result.length,
+      digest: stableDigest(result),
+    }),
   });
 
   const regionBenchmark = benchmark({
@@ -330,7 +381,9 @@ test("records the deterministic production-runtime baseline", () => {
     vibe: "",
   };
   expect(
-    createRouteDiscoveryProvider(curatedDiscoveryCandidates).search(finderIntent),
+    createRouteDiscoveryProvider(curatedDiscoveryCandidates).search(
+      finderIntent,
+    ),
   ).toEqual(curatedRouteDiscoveryProvider.search(finderIntent));
   const corpusDiscoveryProvider = createRouteDiscoveryProvider(
     candidateCorpus.candidates,
@@ -347,8 +400,9 @@ test("records the deterministic production-runtime baseline", () => {
     }),
   });
 
-  const poseQueries = Array.from({ length: 500 }, (_, index) =>
-    ((index * 7_919) % 50_000) * 4 + 1.25,
+  const poseQueries = Array.from(
+    { length: 500 },
+    (_, index) => ((index * 7_919) % 50_000) * 4 + 1.25,
   );
   const routePoseBenchmark = benchmark({
     name: "route-path-pose-50,000-points",
@@ -359,11 +413,15 @@ test("records the deterministic production-runtime baseline", () => {
         const pose = routePathPose(synthetic50_000PointRoute, distance);
         return `${pose.progressM.toFixed(2)}:${pose.lat.toFixed(6)}:${pose.lng.toFixed(6)}:${pose.elev.toFixed(3)}:${pose.bearingDeg.toFixed(3)}`;
       }),
-    digest: (result) => ({ count: result.length, digest: stableDigest(result) }),
+    digest: (result) => ({
+      count: result.length,
+      digest: stableDigest(result),
+    }),
   });
 
-  const frameQueries = Array.from({ length: 120 }, (_, index) =>
-    (sceneManifest.totalDistanceM * index) / 119,
+  const frameQueries = Array.from(
+    { length: 120 },
+    (_, index) => (sceneManifest.totalDistanceM * index) / 119,
   );
   const sceneFrameBenchmark = benchmark({
     name: "replay-scene-frame-current-largest-route",
@@ -414,15 +472,28 @@ test("records the deterministic production-runtime baseline", () => {
       sourceBackedTraceLengths: Array.from(
         new Set(routes.map((route) => route.trace.length)),
       ).sort((left, right) => left - right),
-      sourceBackedFinderCandidateReplicaCount: candidateCorpus.candidates.length,
-      sourceFinderCandidateCount: new Set(
-        candidateCorpus.sourceCandidateIds,
-      ).size,
+      sourceBackedFinderCandidateReplicaCount:
+        candidateCorpus.candidates.length,
+      sourceFinderCandidateCount: new Set(candidateCorpus.sourceCandidateIds)
+        .size,
       syntheticLongRoutePointCount: synthetic50_000PointRoute.route.length,
       largestCurrentDetailSlug: largestDetail.slug,
       largestCurrentDetailPointCount: largestDetail.route.length,
       methodology:
         "The 2,500-route corpus cycles through every real generated route and preserves each source route's geometry and attributes. Only route identity is replicated to exercise production cardinality.",
+    },
+    io: {
+      manifest: {
+        path: path.relative(APP_ROOT, MANIFEST_PATH),
+        readCount: 1,
+        bytes: Buffer.byteLength(manifestText),
+        elapsedMs: manifestReadMs,
+      },
+      routeDetails: {
+        directory: path.relative(APP_ROOT, DETAIL_DIR),
+        directoryEntryCount: fs.readdirSync(DETAIL_DIR).length,
+        selected: largestDetailIo,
+      },
     },
     benchmarks: [
       manifestBenchmark,
@@ -436,7 +507,21 @@ test("records the deterministic production-runtime baseline", () => {
     ],
   };
   fs.writeFileSync(
-    path.join(OUTPUT_DIR, "runtime-baseline-node.json"),
+    path.join(
+      OUTPUT_DIR,
+      RUN_ID ? "runtime-node.json" : "runtime-baseline-node.json",
+    ),
     `${JSON.stringify(report, null, 2)}\n`,
   );
+  if (profileSession) {
+    const { profile } = await inspectorPost<{ profile: unknown }>(
+      profileSession,
+      "Profiler.stop",
+    );
+    fs.writeFileSync(
+      path.join(OUTPUT_DIR, "runtime-node.cpuprofile"),
+      `${JSON.stringify(profile)}\n`,
+    );
+    profileSession.disconnect();
+  }
 });

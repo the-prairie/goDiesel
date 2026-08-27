@@ -5,7 +5,13 @@ import { performance } from "node:perf_hooks";
 
 import { expect, test } from "@playwright/test";
 
-const OUTPUT_DIR = path.resolve(process.cwd(), "artifacts/runtime-performance");
+const RUN_ID = process.env.GODIESEL_PERF_RUN_ID?.trim();
+const OUTPUT_DIR = path.resolve(
+  process.cwd(),
+  RUN_ID
+    ? `artifacts/runtime-statistics/raw/${RUN_ID}/live`
+    : "artifacts/runtime-performance",
+);
 const requested = process.env.GODIESEL_LIVE_PROVIDER_PERF === "1";
 
 function livePrerequisites() {
@@ -23,7 +29,7 @@ function livePrerequisites() {
   }
   const providerCredentialConfigured = Boolean(
     process.env.VITE_GOOGLE_MAPS_API_KEY?.trim() ||
-      process.env.GOOGLE_MAPS_API_KEY?.trim(),
+    process.env.GOOGLE_MAPS_API_KEY?.trim(),
   );
   if (!providerCredentialConfigured) {
     throw new Error("A real Google Maps provider credential is required");
@@ -31,7 +37,9 @@ function livePrerequisites() {
   return { actualHostname, expectedHostname, providerCredentialConfigured };
 }
 
-test("records fixed-host regional provider settlement", async ({ page }, testInfo) => {
+test("records fixed-host regional provider settlement", async ({
+  page,
+}, testInfo) => {
   test.skip(
     !requested,
     "Set GODIESEL_LIVE_PROVIDER_PERF=1 and GODIESEL_FIXED_GPU_HOSTNAME on the fixed GPU host with provider credentials.",
@@ -62,20 +70,26 @@ test("records fixed-host regional provider settlement", async ({ page }, testInf
   fs.writeFileSync(
     path.join(
       OUTPUT_DIR,
-      `runtime-live-provider-${testInfo.project.name}.json`,
+      RUN_ID
+        ? `runtime-live-provider-${testInfo.project.name}-r${String(testInfo.repeatEachIndex).padStart(3, "0")}.json`
+        : `runtime-live-provider-${testInfo.project.name}.json`,
     ),
     `${JSON.stringify(
       {
         schemaVersion: 1,
         generatedAt: new Date().toISOString(),
         projectName: testInfo.project.name,
+        runId: RUN_ID,
+        repetitionIndex: testInfo.repeatEachIndex,
         globalReadyMs,
         regionalSettlementMs,
         regionalStatus: status,
         prerequisites: {
-          fixedGpuHost: prerequisites.actualHostname === prerequisites.expectedHostname,
+          fixedGpuHost:
+            prerequisites.actualHostname === prerequisites.expectedHostname,
           fixedGpuHostname: prerequisites.actualHostname,
-          providerCredentialConfigured: prerequisites.providerCredentialConfigured,
+          providerCredentialConfigured:
+            prerequisites.providerCredentialConfigured,
           liveProvidersDisabled: false,
         },
       },
