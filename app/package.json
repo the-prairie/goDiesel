@@ -27,7 +27,7 @@
     "perf:runtime:baseline": "vitest run --config vitest.runtime-perf.config.ts && playwright test --config playwright.runtime-perf.config.ts",
     "perf:runtime:statistics": "node scripts/run-runtime-statistics.mjs",
     "perf:runtime:statistics:smoke": "GODIESEL_PERF_NODE_SAMPLES=5 GODIESEL_PERF_BROWSER_WARMUPS=1 GODIESEL_PERF_BROWSER_REPETITIONS=2 GODIESEL_PERF_LIFECYCLE_REPETITIONS=1 GODIESEL_PERF_PROFILE_REPETITIONS=1 node scripts/run-runtime-statistics.mjs",
-    "perf:runtime:live": "GODIESEL_LIVE_PROVIDER_PERF=1 playwright test --config playwright.runtime-live-perf.config.ts"
+    "perf:runtime:live": "node scripts/run-runtime-statistics.mjs --live"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",

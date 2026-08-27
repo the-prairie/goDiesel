@@ -101,37 +101,64 @@ test("records fixed-host regional provider settlement", async ({
   const performanceMetrics = await client.send("Performance.getMetrics");
   const heapAfter = await client.send("Runtime.getHeapUsage");
   const { profile } = await client.send("Profiler.stop");
-  const resources = await page.evaluate(() =>
-    (
-      performance.getEntriesByType("resource") as PerformanceResourceTiming[]
-    ).map((resource) => ({
-      name: resource.name.replace(location.origin, ""),
-      startTime: resource.startTime,
-      duration: resource.duration,
-      transferSize: resource.transferSize,
-      decodedBodySize: resource.decodedBodySize,
-      initiatorType: resource.initiatorType,
-      origin: resource.name.startsWith(location.origin) ? "local" : "provider",
-    })),
-  );
+  const resources = await page.evaluate(() => {
+    const navigation = performance.getEntriesByType("navigation")[0] as
+      | PerformanceNavigationTiming
+      | undefined;
+    return [
+      ...(navigation
+        ? [
+            {
+              name: navigation.name.replace(location.origin, ""),
+              startTime: navigation.startTime,
+              duration: navigation.duration,
+              transferSize: navigation.transferSize,
+              decodedBodySize: navigation.decodedBodySize,
+              initiatorType: "navigation",
+              origin: "local",
+              phase: "navigation",
+            },
+          ]
+        : []),
+      ...(
+        performance.getEntriesByType("resource") as PerformanceResourceTiming[]
+      ).map((resource) => ({
+        name: resource.name.replace(location.origin, ""),
+        startTime: resource.startTime,
+        duration: resource.duration,
+        transferSize: resource.transferSize,
+        decodedBodySize: resource.decodedBodySize,
+        initiatorType: resource.initiatorType,
+        origin: resource.name.startsWith(location.origin)
+          ? "local"
+          : "provider",
+        phase: "provider-settlement",
+      })),
+    ];
+  });
 
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   const profilePath = path.join(
     OUTPUT_DIR,
     `runtime-live-provider-${testInfo.project.name}-r${String(testInfo.repeatEachIndex).padStart(3, "0")}.cpuprofile`,
   );
-  fs.writeFileSync(profilePath, `${JSON.stringify(profile)}\n`);
+  const profileTemporaryPath = `${profilePath}.${process.pid}.tmp`;
+  fs.writeFileSync(profileTemporaryPath, `${JSON.stringify(profile)}\n`);
+  fs.renameSync(profileTemporaryPath, profilePath);
+  const reportPath = path.join(
+    OUTPUT_DIR,
+    RUN_ID
+      ? `runtime-live-provider-${testInfo.project.name}-r${String(testInfo.repeatEachIndex).padStart(3, "0")}.json`
+      : `runtime-live-provider-${testInfo.project.name}.json`,
+  );
+  const reportTemporaryPath = `${reportPath}.${process.pid}.tmp`;
   fs.writeFileSync(
-    path.join(
-      OUTPUT_DIR,
-      RUN_ID
-        ? `runtime-live-provider-${testInfo.project.name}-r${String(testInfo.repeatEachIndex).padStart(3, "0")}.json`
-        : `runtime-live-provider-${testInfo.project.name}.json`,
-    ),
+    reportTemporaryPath,
     `${JSON.stringify(
       {
         schemaVersion: 1,
         sourceCommit: SOURCE_COMMIT,
+        status: "passed",
         generatedAt: new Date().toISOString(),
         projectName: testInfo.project.name,
         runId: RUN_ID,
@@ -165,4 +192,5 @@ test("records fixed-host regional provider settlement", async ({
       2,
     )}\n`,
   );
+  fs.renameSync(reportTemporaryPath, reportPath);
 });

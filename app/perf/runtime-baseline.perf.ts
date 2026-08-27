@@ -54,6 +54,15 @@ interface BenchmarkResult extends Distribution {
   memoryAfter: NodeJS.MemoryUsage;
 }
 
+interface BenchmarkOptions<T> {
+  name: string;
+  warmups?: number;
+  samples?: number;
+  operationsPerSample: number;
+  run: () => T;
+  digest: (result: T) => unknown;
+}
+
 const APP_ROOT = process.cwd();
 const RUN_ID = process.env.GODIESEL_PERF_RUN_ID?.trim();
 const STATISTICAL_SAMPLES = Number.parseInt(
@@ -100,14 +109,7 @@ function summarize(
   };
 }
 
-function benchmark<T>(options: {
-  name: string;
-  warmups?: number;
-  samples?: number;
-  operationsPerSample: number;
-  run: () => T;
-  digest: (result: T) => unknown;
-}): BenchmarkResult {
+function benchmark<T>(options: BenchmarkOptions<T>): BenchmarkResult {
   const {
     name,
     warmups = 3,
@@ -138,6 +140,31 @@ function benchmark<T>(options: {
     memoryBefore,
     memoryAfter,
   };
+}
+
+async function profiledBenchmark<T>(
+  options: BenchmarkOptions<T>,
+): Promise<BenchmarkResult> {
+  if (!CAPTURE_PROFILES) return benchmark(options);
+  const profileSession = new inspector.Session();
+  profileSession.connect();
+  try {
+    await inspectorPost(profileSession, "Profiler.enable");
+    await inspectorPost(profileSession, "Profiler.start");
+    const result = benchmark(options);
+    const { profile } = await inspectorPost<{ profile: unknown }>(
+      profileSession,
+      "Profiler.stop",
+    );
+    const stem = options.name.replace(/[^a-z0-9-]+/gi, "-").toLowerCase();
+    const profilePath = path.join(OUTPUT_DIR, `runtime-node-${stem}.cpuprofile`);
+    const temporaryPath = `${profilePath}.${process.pid}.tmp`;
+    fs.writeFileSync(temporaryPath, `${JSON.stringify(profile)}\n`);
+    fs.renameSync(temporaryPath, profilePath);
+    return result;
+  } finally {
+    profileSession.disconnect();
+  }
 }
 
 function syntheticQuestRoute(pointCount: number): QuestRoute {
@@ -234,12 +261,6 @@ function inspectorPost<T>(session: inspector.Session, method: string) {
 
 test("records the deterministic production-runtime baseline", async () => {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-  const profileSession = CAPTURE_PROFILES ? new inspector.Session() : undefined;
-  if (profileSession) {
-    profileSession.connect();
-    await inspectorPost(profileSession, "Profiler.enable");
-    await inspectorPost(profileSession, "Profiler.start");
-  }
   const manifestReadStarted = performance.now();
   const manifestText = fs.readFileSync(MANIFEST_PATH, "utf8");
   const manifestReadMs = performance.now() - manifestReadStarted;
@@ -254,7 +275,7 @@ test("records the deterministic production-runtime baseline", async () => {
   const largestDetail = largestCurrentDetail();
   const sceneManifest = createRouteSceneManifest(largestDetail);
 
-  const manifestBenchmark = benchmark({
+  const manifestBenchmark = await profiledBenchmark({
     name: "manifest-json-and-summary-parse",
     operationsPerSample: generatedRoutes.length,
     samples: 20,
@@ -271,7 +292,7 @@ test("records the deterministic production-runtime baseline", async () => {
   const currentLookupQueries = Array.from({ length: 5_000 }, (_, index) =>
     index % 7 === 0 ? `missing-${index}` : routes[index % routes.length].slug,
   );
-  const currentRouteLookupBenchmark = benchmark({
+  const currentRouteLookupBenchmark = await profiledBenchmark({
     name: "route-lookup-current-library",
     operationsPerSample: currentLookupQueries.length,
     samples: 15,
@@ -290,7 +311,7 @@ test("records the deterministic production-runtime baseline", async () => {
       ? `missing-${index}`
       : routeCorpus.routes[index % routeCorpus.routes.length].slug,
   );
-  const routeLookupBenchmark = benchmark({
+  const routeLookupBenchmark = await profiledBenchmark({
     name: "route-lookup-2,500-source-backed-replicas",
     operationsPerSample: sourceBackedLookupQueries.length,
     samples: 15,
@@ -305,7 +326,7 @@ test("records the deterministic production-runtime baseline", async () => {
     }),
   });
 
-  const regionBenchmark = benchmark({
+  const regionBenchmark = await profiledBenchmark({
     name: "region-build-2,500-source-backed-replicas",
     operationsPerSample: routeCorpus.routes.length,
     samples: 20,
@@ -356,7 +377,7 @@ test("records the deterministic production-runtime baseline", async () => {
       vibe: "all",
     },
   ];
-  const routeFilterBenchmark = benchmark({
+  const routeFilterBenchmark = await profiledBenchmark({
     name: "routes-filter-matrix-2,500-source-backed-replicas",
     operationsPerSample: routeCorpus.routes.length * filterMatrix.length,
     samples: 25,
@@ -389,7 +410,7 @@ test("records the deterministic production-runtime baseline", async () => {
   const corpusDiscoveryProvider = createRouteDiscoveryProvider(
     candidateCorpus.candidates,
   );
-  const finderBenchmark = benchmark({
+  const finderBenchmark = await profiledBenchmark({
     name: "finder-search-10,000-source-backed-replicas",
     operationsPerSample: candidateCorpus.candidates.length,
     samples: 25,
@@ -405,7 +426,7 @@ test("records the deterministic production-runtime baseline", async () => {
     { length: 500 },
     (_, index) => ((index * 7_919) % 50_000) * 4 + 1.25,
   );
-  const routePoseBenchmark = benchmark({
+  const routePoseBenchmark = await profiledBenchmark({
     name: "route-path-pose-50,000-points",
     operationsPerSample: poseQueries.length,
     samples: 10,
@@ -424,7 +445,7 @@ test("records the deterministic production-runtime baseline", async () => {
     { length: 120 },
     (_, index) => (sceneManifest.totalDistanceM * index) / 119,
   );
-  const sceneFrameBenchmark = benchmark({
+  const sceneFrameBenchmark = await profiledBenchmark({
     name: "replay-scene-frame-current-largest-route",
     operationsPerSample: frameQueries.length,
     samples: 10,
@@ -461,6 +482,7 @@ test("records the deterministic production-runtime baseline", async () => {
   const report = {
     schemaVersion: 2,
     sourceCommit: SOURCE_COMMIT,
+    status: "passed",
     environment: environmentMetadata(),
     corpus: {
       currentManifestBytes: Buffer.byteLength(manifestText),
@@ -508,22 +530,11 @@ test("records the deterministic production-runtime baseline", async () => {
       sceneFrameBenchmark,
     ],
   };
-  fs.writeFileSync(
-    path.join(
-      OUTPUT_DIR,
-      RUN_ID ? "runtime-node.json" : "runtime-baseline-node.json",
-    ),
-    `${JSON.stringify(report, null, 2)}\n`,
+  const reportPath = path.join(
+    OUTPUT_DIR,
+    RUN_ID ? "runtime-node.json" : "runtime-baseline-node.json",
   );
-  if (profileSession) {
-    const { profile } = await inspectorPost<{ profile: unknown }>(
-      profileSession,
-      "Profiler.stop",
-    );
-    fs.writeFileSync(
-      path.join(OUTPUT_DIR, "runtime-node.cpuprofile"),
-      `${JSON.stringify(profile)}\n`,
-    );
-    profileSession.disconnect();
-  }
+  const temporaryPath = `${reportPath}.${process.pid}.tmp`;
+  fs.writeFileSync(temporaryPath, `${JSON.stringify(report, null, 2)}\n`);
+  fs.renameSync(temporaryPath, reportPath);
 });

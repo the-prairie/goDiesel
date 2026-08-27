@@ -89,7 +89,23 @@ interface PhaseMetrics {
     startTime: number;
     initiatorType: string;
     origin: "local" | "fixture" | "provider";
+    phase: "action" | "observation";
   }>;
+}
+
+interface NavigationTiming {
+  name: string;
+  transferSize: number;
+  decodedBodySize: number;
+  duration: number;
+  startTime: number;
+  initiatorType: "navigation";
+  origin: "local";
+  phase: "navigation";
+  domInteractive: number;
+  domContentLoadedEventEnd: number;
+  loadEventEnd: number;
+  responseEnd: number;
 }
 
 interface BrowserSample {
@@ -108,7 +124,7 @@ interface BrowserSample {
   action: PhaseMetrics;
   observation: PhaseMetrics;
   webgl: WebglSnapshot;
-  navigation?: Record<string, number>;
+  navigation?: NavigationTiming;
   profileArtifacts?: { cpu: string; allocation: string };
   blockedExternalRequests: string[];
 }
@@ -445,9 +461,10 @@ async function browserResources(
   page: Page,
   measurementStartedAtMs: number,
   measurementEndedAtMs: number,
+  phase: "action" | "observation",
 ) {
   return page.evaluate(
-    ({ startedAt, endedAt }) =>
+    ({ startedAt, endedAt, phase }) =>
       (performance.getEntriesByType("resource") as PerformanceResourceTiming[])
         .filter(
           (resource) =>
@@ -465,8 +482,9 @@ async function browserResources(
             : resource.name.startsWith("https://tiles.openfreemap.org/styles/")
               ? ("fixture" as const)
               : ("provider" as const),
+          phase,
         })),
-    { startedAt: measurementStartedAtMs, endedAt: measurementEndedAtMs },
+    { startedAt: measurementStartedAtMs, endedAt: measurementEndedAtMs, phase },
   );
 }
 
@@ -590,6 +608,7 @@ async function captureSample(
     page,
     actionRuntime.measurementStartedAtMs,
     actionRuntime.measurementEndedAtMs,
+    "action",
   );
 
   const observationMetricsBefore = await readPerformanceMetrics(client);
@@ -604,6 +623,7 @@ async function captureSample(
     page,
     snapshot?.observation.measurementStartedAtMs ?? 0,
     snapshot?.observation.measurementEndedAtMs ?? 0,
+    "observation",
   );
   await client.send("HeapProfiler.collectGarbage");
   const heap = await client.send("Runtime.getHeapUsage");
@@ -613,6 +633,8 @@ async function captureSample(
       PerformanceNavigationTiming | undefined;
     return entry
       ? {
+          name: entry.name.replace(location.origin, ""),
+          startTime: entry.startTime,
           duration: entry.duration,
           domInteractive: entry.domInteractive,
           domContentLoadedEventEnd: entry.domContentLoadedEventEnd,
@@ -620,6 +642,9 @@ async function captureSample(
           responseEnd: entry.responseEnd,
           transferSize: entry.transferSize,
           decodedBodySize: entry.decodedBodySize,
+          initiatorType: "navigation" as const,
+          origin: "local" as const,
+          phase: "navigation" as const,
         }
       : undefined;
   });
@@ -769,6 +794,7 @@ async function writeProjectReport(
   testInfo: TestInfo,
   samples: BrowserSample[],
   transitionSamples: TransitionSample[],
+  lifecycleBaselineHeapBytes?: number,
 ) {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   const report = {
@@ -782,30 +808,32 @@ async function writeProjectReport(
     phase: PHASE,
     captureProfiles: CAPTURE_PROFILES,
     liveProvidersDisabled: true,
+    status: "passed",
     metricSemantics: {
       actionLatencyMs:
         "Elapsed wall time from action start until the explicit readiness oracle passes; no artificial observation delay is included.",
       observationWindowMs:
         "A separate fixed window used for frame pacing, long tasks, React commits, and post-readiness CDP counter deltas.",
       resources:
-        "Resource timing is cleared at each phase boundary and filtered to entries whose startTime falls inside the in-page measurement bounds.",
+        "The local document navigation is phase=navigation. Resource timing is cleared at each action or observation boundary, filtered to that in-page measurement interval, and labeled with phase and local, fixture, or provider origin.",
       cdpWindowMs:
         "CDP counter deltas use their own Performance.Timestamp interval. This may exceed the fixed in-page observation window when main-thread work delays the protocol capture.",
       webgl:
         "activeContexts counts connected, non-lost WebGL contexts at observation end. totalContextsCreated is cumulative and is never used as the active-renderer assertion.",
     },
     samples,
+    lifecycleBaselineHeapBytes,
     transitionSamples,
   };
-  fs.writeFileSync(
-    path.join(
-      OUTPUT_DIR,
-      STATISTICAL_MODE
-        ? `runtime-browser-${testInfo.project.name}-${WORKLOAD}-r${String(repetitionIndex(testInfo)).padStart(3, "0")}.json`
-        : `runtime-baseline-browser-${testInfo.project.name}.json`,
-    ),
-    `${JSON.stringify(report, null, 2)}\n`,
+  const reportPath = path.join(
+    OUTPUT_DIR,
+    STATISTICAL_MODE
+      ? `runtime-browser-${testInfo.project.name}-${WORKLOAD}-r${String(repetitionIndex(testInfo)).padStart(3, "0")}.json`
+      : `runtime-baseline-browser-${testInfo.project.name}.json`,
   );
+  const temporaryPath = `${reportPath}.${process.pid}.tmp`;
+  fs.writeFileSync(temporaryPath, `${JSON.stringify(report, null, 2)}\n`);
+  fs.renameSync(temporaryPath, reportPath);
 }
 
 async function readWebglSnapshot(page: Page) {
@@ -829,11 +857,18 @@ async function waitForRouteDetail(page: Page) {
 async function measureTransitions(
   browser: Browser,
   testInfo: TestInfo,
-): Promise<TransitionSample[]> {
+): Promise<{
+  baselineUsedHeapBytes: number;
+  samples: TransitionSample[];
+}> {
   const { context, page } = await createMeasuredPage(browser, testInfo);
   try {
     await page.goto("/#/atlas", { waitUntil: "domcontentloaded" });
     await waitForAtlas(page);
+    const client = await context.newCDPSession(page);
+    await client.send("HeapProfiler.enable");
+    await client.send("HeapProfiler.collectGarbage");
+    const baselineHeap = await client.send("Runtime.getHeapUsage");
     const navigateHash = async (hash: string) => {
       await page.evaluate((nextHash) => {
         window.location.hash = nextHash;
@@ -863,10 +898,8 @@ async function measureTransitions(
       const atlasReturnLatencyMs = performance.now() - atlasStarted;
       const atlasWebgl = await readWebglSnapshot(page);
 
-      const client = await context.newCDPSession(page);
       await client.send("HeapProfiler.collectGarbage");
       const heap = await client.send("Runtime.getHeapUsage");
-      await client.detach();
       samples.push({
         cycle,
         detailLatencyMs,
@@ -878,7 +911,8 @@ async function measureTransitions(
         atlasWebgl,
       });
     }
-    return samples;
+    await client.detach();
+    return { baselineUsedHeapBytes: baselineHeap.usedSize, samples };
   } finally {
     await context.close();
   }
@@ -1027,11 +1061,11 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
     for (const group of orderedGroups) samples.push(...(await group()));
   }
 
-  const transitionSamples =
+  const lifecycleMeasurement =
     WORKLOAD === "surfaces" || CAPTURE_PROFILES
-      ? []
+      ? undefined
       : await measureTransitions(browser, testInfo);
-  await writeProjectReport(testInfo, samples, transitionSamples);
+  const transitionSamples = lifecycleMeasurement?.samples ?? [];
 
   expect(samples).toHaveLength(WORKLOAD === "lifecycle" ? 0 : 9);
   expect(transitionSamples).toHaveLength(
@@ -1070,4 +1104,14 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
         sample.atlasWebgl.activeContexts === 1,
     ),
   ).toBe(true);
+  if (lifecycleMeasurement) {
+    expect(lifecycleMeasurement.baselineUsedHeapBytes).toBeGreaterThan(0);
+    expect(transitionSamples.at(-1)?.usedHeapBytes).toBeGreaterThan(0);
+  }
+  await writeProjectReport(
+    testInfo,
+    samples,
+    transitionSamples,
+    lifecycleMeasurement?.baselineUsedHeapBytes,
+  );
 });

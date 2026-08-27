@@ -30,6 +30,7 @@ Every independent surface sample uses a fresh BrowserContext and document, excep
 Live-provider runs require all of the following:
 
 - `GODIESEL_LIVE_PROVIDER_PERF=1`;
+- `GODIESEL_PERF_LIVE_REPETITIONS` set to the owner-approved positive count;
 - `GODIESEL_FIXED_GPU_HOSTNAME` matching the executing host exactly;
 - a real Google Maps credential;
 - hardware acceleration;
@@ -46,6 +47,8 @@ Provider-disabled scenario order is deterministic and rotated between repetition
 Cold samples use fresh contexts and documents.
 Warm Atlas samples reload only the paired cold Atlas document.
 The lifecycle workload runs five independent twenty-transition sequences, producing 100 observations for each detail, Replay, and Atlas-return latency.
+Each sequence records a GC-normalized settled Atlas heap before cycle one and the GC-normalized heap after cycle twenty.
+Retention is reported as final heap, final-minus-baseline bytes, and final-to-baseline ratio over the five independent sequences.
 
 Node benchmarks use at least five warm-ups and 100 measured samples per benchmark in statistical mode.
 Browser surface workloads use at least three warm-ups and 100 measured observations per project and scenario for a final p99 claim.
@@ -72,12 +75,12 @@ The profiling packet captures:
 
 | Profile             | Required evidence                                                                                                                                   |
 | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Node CPU            | V8 CPU profile spanning generated-data parse, lookup, region build, filter, Finder, route pose, and scene-frame benchmarks.                         |
+| Node CPU            | One isolated V8 CPU profile per generated-data parse, lookup, region build, filter, Finder, route pose, and scene-frame benchmark.                 |
 | Node memory and I/O | Process memory before and after each benchmark plus manifest/detail read counts, bytes, and elapsed time.                                           |
 | Browser CPU         | CDP CPU profiles for Atlas cold, the 2,500-route Atlas, route detail, and Replay.                                                                   |
 | Allocation          | CDP sampling heap profiles for the same representative browser workloads.                                                                           |
 | Heap                | GC-normalized heap before and after each representative workload and after each twenty-transition lifecycle sequence.                               |
-| Network             | Phase-bounded resource waterfalls with start time, duration, transfer size, decoded size, initiator type, and local versus provider classification. |
+| Network             | Document navigation plus phase-bounded resource waterfalls with start time, duration, transfer size, decoded size, initiator type, phase, and origin. |
 | React               | Commit count, actual duration, and tree base duration captured through the injected DevTools hook without production component changes.             |
 | Renderer and WebGL  | Connected, non-lost context counts and cumulative context creation diagnostics at every settled surface boundary.                                   |
 | Live provider       | Global readiness and regional settlement separated from local application time, plus the available CPU/network/heap evidence.                       |
@@ -106,6 +109,7 @@ This stage is complete only when:
 - no production runtime behavior has changed;
 - every committed summary validates against the evidence schema;
 - every retained raw artifact checksum verifies;
+- the runner proves a clean unchanged source commit at every phase boundary and tears down its child process group on cancellation;
 - provider-disabled desktop and mobile distributions are complete;
 - live-provider evidence is complete or has an explicit prerequisite or quota blocker;
 - the opportunity matrix cites measured evidence;

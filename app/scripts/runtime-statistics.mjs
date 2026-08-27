@@ -93,10 +93,18 @@ function pushDistribution(distributions, name, unit, values) {
   }
 }
 
+function browserNetworkEntries(sample) {
+  return [
+    ...(sample.navigation ? [sample.navigation] : []),
+    ...(sample.action?.resources ?? []),
+    ...(sample.observation?.resources ?? []),
+  ];
+}
+
 function browserDistributions(reports, profileReports = []) {
   const distributions = [];
   const sampleGroups = new Map();
-  const transitions = new Map();
+  const lifecycleReports = new Map();
   for (const report of reports) {
     for (const sample of report.samples ?? []) {
       const key = `${report.projectName}/${sample.name}`;
@@ -104,17 +112,14 @@ function browserDistributions(reports, profileReports = []) {
       group.push(sample);
       sampleGroups.set(key, group);
     }
-    for (const transition of report.transitionSamples ?? []) {
-      const group = transitions.get(report.projectName) ?? [];
-      group.push(transition);
-      transitions.set(report.projectName, group);
+    if (report.workload === "lifecycle") {
+      const group = lifecycleReports.get(report.projectName) ?? [];
+      group.push(report);
+      lifecycleReports.set(report.projectName, group);
     }
   }
   for (const [key, samples] of sampleGroups) {
-    const resources = (sample) => [
-      ...sample.action.resources,
-      ...sample.observation.resources,
-    ];
+    const resources = browserNetworkEntries;
     const metrics = [
       ["action-latency", "ms", samples.map((sample) => sample.actionLatencyMs)],
       ["heap-used", "bytes", samples.map((sample) => sample.usedHeapBytes)],
@@ -231,14 +236,12 @@ function browserDistributions(reports, profileReports = []) {
       pushDistribution(distributions, `browser/${key}/${metric}`, unit, values);
     }
   }
-  for (const [project, samples] of transitions) {
+  for (const [project, projectReports] of lifecycleReports) {
+    const samples = projectReports.flatMap(
+      (report) => report.transitionSamples ?? [],
+    );
     const independentSequences = new Set(
-      reports
-        .filter(
-          (report) =>
-            report.projectName === project && report.workload === "lifecycle",
-        )
-        .map((report) => report.repetitionIndex),
+      projectReports.map((report) => report.repetitionIndex),
     ).size;
     const metrics = [
       ["detail-latency", "ms", samples.map((sample) => sample.detailLatencyMs)],
@@ -248,7 +251,6 @@ function browserDistributions(reports, profileReports = []) {
         "ms",
         samples.map((sample) => sample.atlasReturnLatencyMs),
       ],
-      ["heap-used", "bytes", samples.map((sample) => sample.usedHeapBytes)],
     ];
     for (const [metric, unit, values] of metrics) {
       const summary = summarizeDistribution(
@@ -267,6 +269,33 @@ function browserDistributions(reports, profileReports = []) {
           };
         }
       }
+      distributions.push(summary);
+    }
+    const finalHeapUsed = projectReports.map(
+      (report) => report.transitionSamples.at(-1).usedHeapBytes,
+    );
+    const finalHeapDelta = projectReports.map(
+      (report) =>
+        report.transitionSamples.at(-1).usedHeapBytes -
+        report.lifecycleBaselineHeapBytes,
+    );
+    const finalHeapRatio = projectReports.map(
+      (report) =>
+        report.transitionSamples.at(-1).usedHeapBytes /
+        report.lifecycleBaselineHeapBytes,
+    );
+    for (const [metric, unit, values] of [
+      ["final-heap-used", "bytes", finalHeapUsed],
+      ["final-heap-delta", "bytes", finalHeapDelta],
+      ["final-heap-ratio", "ratio", finalHeapRatio],
+    ]) {
+      const summary = summarizeDistribution(
+        `browser/${project}/lifecycle/${metric}`,
+        unit,
+        values,
+      );
+      summary.independentSequenceCount = independentSequences;
+      summary.observationsPerSequence = 1;
       distributions.push(summary);
     }
   }
@@ -385,8 +414,9 @@ function topAllocations(profile, limit = 10) {
 
 function profileSummary(files, measuredReports, nodeReports) {
   const cpu = files
-    .filter((filename) => filename.endsWith("runtime-node.cpuprofile"))
+    .filter((filename) => /runtime-node-.*\.cpuprofile$/.test(filename))
     .map((filename) => ({
+      benchmark: path.basename(filename).replace(/^runtime-node-|\.cpuprofile$/g, ""),
       path: path.relative(process.cwd(), filename),
       topFrames: topCpuFrames(readJson(filename)),
     }));
@@ -432,10 +462,7 @@ function profileSummary(files, measuredReports, nodeReports) {
       process.cwd(),
       selected.sample.profileArtifacts.allocation,
     );
-    const network = [
-      ...selected.sample.action.resources,
-      ...selected.sample.observation.resources,
-    ];
+    const network = browserNetworkEntries(selected.sample);
     browser.push({
       projectName: selected.report.projectName,
       name: selected.sample.name,
@@ -546,10 +573,30 @@ export function aggregateRuntimeStatistics({
       `${mismatchedSources.length} raw reports do not match source commit ${sourceCommit}`,
     );
   }
+  const nonPassingReports = sourceReports.filter(
+    (report) => report.status !== "passed",
+  );
+  if (nonPassingReports.length > 0) {
+    throw new Error(
+      `${nonPassingReports.length} raw reports are not atomic passed reports`,
+    );
+  }
+  const invalidLifecycleReports = browserReports.filter(
+    (report) =>
+      report.workload === "lifecycle" &&
+      (!Number.isFinite(report.lifecycleBaselineHeapBytes) ||
+        report.lifecycleBaselineHeapBytes <= 0 ||
+        report.transitionSamples?.length !== 20),
+  );
+  if (invalidLifecycleReports.length > 0) {
+    throw new Error(
+      `${invalidLifecycleReports.length} lifecycle reports lack a settled heap baseline or 20 transitions`,
+    );
+  }
   const providerResources = [...browserReports, ...profileReports].flatMap(
     (report) =>
       (report.samples ?? []).flatMap((sample) =>
-        [...sample.action.resources, ...sample.observation.resources].filter(
+        browserNetworkEntries(sample).filter(
           (resource) => resource.origin === "provider",
         ),
       ),
@@ -642,10 +689,9 @@ export function aggregateRuntimeStatistics({
             (report.samples ?? []).reduce(
               (sampleSum, sample) =>
                 sampleSum +
-                [
-                  ...sample.action.resources,
-                  ...sample.observation.resources,
-                ].filter((resource) => resource.origin === "fixture").length,
+                browserNetworkEntries(sample).filter(
+                  (resource) => resource.origin === "fixture",
+                ).length,
               0,
             ),
           0,
