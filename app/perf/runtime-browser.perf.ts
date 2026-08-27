@@ -326,11 +326,13 @@ async function installInstrumentation(context: BrowserContext) {
     } as typeof originalGetContext;
 
     let rendererId = 0;
+    const reactRenderers = new Map<number, unknown>();
     window.__REACT_DEVTOOLS_GLOBAL_HOOK__ = {
       supportsFiber: true,
-      renderers: new Map(),
-      inject() {
+      renderers: reactRenderers,
+      inject(renderer: unknown) {
         rendererId += 1;
+        reactRenderers.set(rendererId, renderer);
         return rendererId;
       },
       onCommitFiberRoot(
