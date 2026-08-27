@@ -81,4 +81,8 @@ The committed summaries carry normalized paths, byte sizes, SHA-256 checksums, p
 
 The source-consistent statistical run passed six warm-up scenarios, 200 surface repetitions, 10 lifecycle sequences, and 40 profile repetitions.
 Strict local validation verified 986 retained artifacts and no missing artifact.
-The final ticket, runtime-baseline, focused Vitest, Python, and clean-checkout gates are recorded in the pull request after the published evidence commit.
+Clean-checkout validation accepted the schema and reported all 986 raw artifacts as intentionally external.
+`npm run verify:ticket` passed type checking, the production build, 40 Vitest files with 240 tests, and four required navigation Playwright tests.
+`npm run perf:runtime:baseline` passed two Vitest files with six tests and both desktop and mobile Playwright runtime scenarios.
+The focused runtime-statistics Vitest file passed five tests.
+`python -m pytest test_runtime_evidence.py` passed five schema, path, and checksum-integrity regressions.
