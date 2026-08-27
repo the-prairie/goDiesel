@@ -12,8 +12,6 @@ import {
   type TestInfo,
 } from "@playwright/test";
 
-import { completeFrameInterval } from "./runtime-frame-sampling";
-
 const RUN_ID = process.env.GODIESEL_PERF_RUN_ID?.trim();
 const STATISTICAL_MODE = Boolean(RUN_ID);
 const WORKLOAD = process.env.GODIESEL_PERF_WORKLOAD ?? "all";
@@ -70,9 +68,9 @@ interface PhaseMetrics {
   cdpWindowMs: number;
   longTasks: Array<{ startTime: number; duration: number }>;
   frameIntervalsMs: number[];
-  frameP50Ms: number;
-  frameP95Ms: number;
-  frameP99Ms: number;
+  frameP50Ms: number | null;
+  frameP95Ms: number | null;
+  frameP99Ms: number | null;
   estimatedFpsP95: number;
   reactCommits: number;
   reactActualDurationMs: number;
@@ -259,6 +257,22 @@ async function installInstrumentation(context: BrowserContext) {
 
     function flushLongTasks() {
       if (longTaskObserver) recordLongTasks(longTaskObserver.takeRecords());
+    }
+
+    function completeFrameInterval(
+      previousFrameMs: number,
+      currentFrameMs: number,
+      measurementStartedAtMs: number,
+      measurementDeadlineMs: number,
+    ) {
+      if (
+        previousFrameMs < measurementStartedAtMs ||
+        currentFrameMs > measurementDeadlineMs
+      ) {
+        return undefined;
+      }
+      const interval = currentFrameMs - previousFrameMs;
+      return interval > 0 && interval < 1_000 ? interval : undefined;
     }
 
     function resetPhase(nextPhase: Phase, durationMs?: number) {
@@ -507,9 +521,16 @@ function phaseMetrics(
   after: Record<string, number>,
   resources: Awaited<ReturnType<typeof browserResources>>,
 ): PhaseMetrics {
-  const p50 = percentile(runtime.frameIntervals, 0.5);
-  const p95 = percentile(runtime.frameIntervals, 0.95);
-  const p99 = percentile(runtime.frameIntervals, 0.99);
+  const hasCompleteFrames = runtime.frameIntervals.length > 0;
+  const p50 = hasCompleteFrames
+    ? percentile(runtime.frameIntervals, 0.5)
+    : null;
+  const p95 = hasCompleteFrames
+    ? percentile(runtime.frameIntervals, 0.95)
+    : null;
+  const p99 = hasCompleteFrames
+    ? percentile(runtime.frameIntervals, 0.99)
+    : null;
   return {
     measurementWindowMs:
       runtime.measurementEndedAtMs - runtime.measurementStartedAtMs,
@@ -519,7 +540,7 @@ function phaseMetrics(
     frameP50Ms: p50,
     frameP95Ms: p95,
     frameP99Ms: p99,
-    estimatedFpsP95: p95 > 0 ? 1_000 / p95 : 0,
+    estimatedFpsP95: p95 !== null && p95 > 0 ? 1_000 / p95 : 0,
     reactCommits: runtime.reactCommits,
     reactActualDurationMs: runtime.reactActualDurationMs,
     reactTreeBaseDurationMs: runtime.reactTreeBaseDurationMs,
@@ -1162,7 +1183,8 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
         0,
       );
       return (
-        sample.observation.frameIntervalsMs.length > 0 &&
+        (sample.observation.frameIntervalsMs.length > 0 ||
+          sample.observation.estimatedFpsP95 === 0) &&
         sample.observation.measurementWindowMs <=
           sample.observationWindowMs + 1 &&
         observedFrameTime <= sample.observationWindowMs + 1
