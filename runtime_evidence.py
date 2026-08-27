@@ -49,20 +49,31 @@ def validate_runtime_evidence(
 
     missing: list[str] = []
     verified: list[str] = []
+    artifact_root = artifact_root.resolve()
+    seen_paths: set[str] = set()
     for artifact in evidence["artifacts"]:
-        artifact_path = artifact_root / artifact["path"]
+        declared_path = artifact["path"]
+        if declared_path in seen_paths:
+            raise ValueError(f"Duplicate artifact path: {declared_path}")
+        seen_paths.add(declared_path)
+        relative_path = Path(declared_path)
+        artifact_path = (artifact_root / relative_path).resolve()
+        if relative_path.is_absolute() or not artifact_path.is_relative_to(artifact_root):
+            raise ValueError(
+                f"Artifact path escapes artifact root: {declared_path}"
+            )
         if not artifact_path.is_file():
-            missing.append(artifact["path"])
+            missing.append(declared_path)
             continue
         actual_size = artifact_path.stat().st_size
         actual_sha256 = sha256(artifact_path)
         if actual_size != artifact["bytes"] or actual_sha256 != artifact["sha256"]:
             raise ValueError(
-                f"Artifact checksum mismatch: {artifact['path']} "
+                f"Artifact checksum mismatch: {declared_path} "
                 f"expected {artifact['bytes']} bytes/{artifact['sha256']}, "
                 f"received {actual_size} bytes/{actual_sha256}"
             )
-        verified.append(artifact["path"])
+        verified.append(declared_path)
 
     if require_artifacts and missing:
         raise ValueError("Required artifacts are missing:\n" + "\n".join(missing))

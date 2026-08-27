@@ -79,3 +79,30 @@ def test_checksum_tampering_fails(tmp_path: Path):
         validate_runtime_evidence(
             report, artifact_root=tmp_path, require_artifacts=True
         )
+
+
+@pytest.mark.parametrize("declared_path", ["../raw.json", "/tmp/raw.json"])
+def test_artifact_path_must_remain_inside_root(
+    tmp_path: Path, declared_path: str
+):
+    artifact = tmp_path / "raw.json"
+    artifact.write_text("{}\n", encoding="utf-8")
+    payload = evidence(artifact, digest=hashlib.sha256(artifact.read_bytes()).hexdigest())
+    payload["artifacts"][0]["path"] = declared_path
+    report = tmp_path / "evidence.json"
+    report.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="escapes artifact root"):
+        validate_runtime_evidence(report, artifact_root=tmp_path)
+
+
+def test_duplicate_artifact_paths_fail(tmp_path: Path):
+    artifact = tmp_path / "raw.json"
+    artifact.write_text("{}\n", encoding="utf-8")
+    payload = evidence(artifact, digest=hashlib.sha256(artifact.read_bytes()).hexdigest())
+    payload["artifacts"].append(payload["artifacts"][0].copy())
+    report = tmp_path / "evidence.json"
+    report.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Duplicate artifact path"):
+        validate_runtime_evidence(report, artifact_root=tmp_path)
