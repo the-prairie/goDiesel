@@ -61,6 +61,7 @@ const STATISTICAL_SAMPLES = Number.parseInt(
   10,
 );
 const CAPTURE_PROFILES = process.env.GODIESEL_PERF_CAPTURE_PROFILES === "1";
+const SOURCE_COMMIT = process.env.GODIESEL_PERF_SOURCE_COMMIT?.trim();
 const OUTPUT_DIR = path.resolve(
   APP_ROOT,
   RUN_ID
@@ -459,6 +460,7 @@ test("records the deterministic production-runtime baseline", async () => {
 
   const report = {
     schemaVersion: 2,
+    sourceCommit: SOURCE_COMMIT,
     environment: environmentMetadata(),
     corpus: {
       currentManifestBytes: Buffer.byteLength(manifestText),

@@ -93,7 +93,7 @@ function pushDistribution(distributions, name, unit, values) {
   }
 }
 
-function browserDistributions(reports) {
+function browserDistributions(reports, profileReports = []) {
   const distributions = [];
   const sampleGroups = new Map();
   const transitions = new Map();
@@ -111,19 +111,63 @@ function browserDistributions(reports) {
     }
   }
   for (const [key, samples] of sampleGroups) {
+    const resources = (sample) => [
+      ...sample.action.resources,
+      ...sample.observation.resources,
+    ];
     const metrics = [
       ["action-latency", "ms", samples.map((sample) => sample.actionLatencyMs)],
       ["heap-used", "bytes", samples.map((sample) => sample.usedHeapBytes)],
+      [
+        "heap-delta-after-gc",
+        "bytes",
+        samples.map(
+          (sample) => sample.usedHeapBytes - sample.heapBefore.usedBytes,
+        ),
+      ],
+      [
+        "peak-observed-heap",
+        "bytes",
+        samples.map((sample) => sample.peakObservedHeapBytes),
+      ],
       [
         "observation-frame-interval",
         "ms",
         samples.flatMap((sample) => sample.observation.frameIntervalsMs),
       ],
       [
+        "observation-frame-rate",
+        "fps",
+        samples.flatMap((sample) =>
+          sample.observation.frameIntervalsMs.map(
+            (interval) => 1_000 / interval,
+          ),
+        ),
+      ],
+      [
         "observation-long-task",
         "ms",
         samples.flatMap((sample) =>
           sample.observation.longTasks.map((task) => task.duration),
+        ),
+      ],
+      [
+        "long-task-count",
+        "count",
+        samples.map(
+          (sample) =>
+            sample.action.longTasks.length +
+            sample.observation.longTasks.length,
+        ),
+      ],
+      [
+        "long-task-total-duration",
+        "ms",
+        samples.map((sample) =>
+          [...sample.action.longTasks, ...sample.observation.longTasks].reduce(
+            (sum, task) => sum + task.duration,
+            0,
+          ),
         ),
       ],
       [
@@ -137,13 +181,49 @@ function browserDistributions(reports) {
         samples.map((sample) => sample.action.reactTreeBaseDurationMs),
       ],
       [
+        "script-execution-duration",
+        "ms",
+        samples.map(
+          (sample) =>
+            sample.action.scriptDurationDeltaMs +
+            sample.observation.scriptDurationDeltaMs,
+        ),
+      ],
+      [
+        "script-compile-duration",
+        "ms",
+        samples.map(
+          (sample) =>
+            sample.action.v8CompileDurationDeltaMs +
+            sample.observation.v8CompileDurationDeltaMs,
+        ),
+      ],
+      [
+        "network-request-count",
+        "count",
+        samples.map((sample) => resources(sample).length),
+      ],
+      [
         "network-transfer",
         "bytes",
         samples.map((sample) =>
-          [...sample.action.resources, ...sample.observation.resources].reduce(
+          resources(sample).reduce(
             (sum, resource) => sum + resource.transferSize,
             0,
           ),
+        ),
+      ],
+      [
+        "javascript-transfer",
+        "bytes",
+        samples.map((sample) =>
+          resources(sample)
+            .filter(
+              (resource) =>
+                resource.initiatorType === "script" ||
+                resource.name.endsWith(".js"),
+            )
+            .reduce((sum, resource) => sum + resource.transferSize, 0),
         ),
       ],
     ];
@@ -152,29 +232,59 @@ function browserDistributions(reports) {
     }
   }
   for (const [project, samples] of transitions) {
+    const independentSequences = new Set(
+      reports
+        .filter(
+          (report) =>
+            report.projectName === project && report.workload === "lifecycle",
+        )
+        .map((report) => report.repetitionIndex),
+    ).size;
+    const metrics = [
+      ["detail-latency", "ms", samples.map((sample) => sample.detailLatencyMs)],
+      ["replay-latency", "ms", samples.map((sample) => sample.replayLatencyMs)],
+      [
+        "atlas-return-latency",
+        "ms",
+        samples.map((sample) => sample.atlasReturnLatencyMs),
+      ],
+      ["heap-used", "bytes", samples.map((sample) => sample.usedHeapBytes)],
+    ];
+    for (const [metric, unit, values] of metrics) {
+      const summary = summarizeDistribution(
+        `browser/${project}/lifecycle/${metric}`,
+        unit,
+        values,
+      );
+      summary.independentSequenceCount = independentSequences;
+      summary.observationsPerSequence = samples.length / independentSequences;
+      for (const [label, , minimumSamples] of QUANTILES) {
+        if (independentSequences < minimumSamples) {
+          summary[label] = {
+            value: null,
+            status: "insufficient-samples",
+            minimumSamples,
+          };
+        }
+      }
+      distributions.push(summary);
+    }
+  }
+  const reactGroups = new Map();
+  for (const report of profileReports) {
+    for (const sample of report.samples ?? []) {
+      const key = `${report.projectName}/${sample.name}`;
+      const values = reactGroups.get(key) ?? [];
+      values.push(...sample.action.reactCommitDurationsMs);
+      reactGroups.set(key, values);
+    }
+  }
+  for (const [key, values] of reactGroups) {
     pushDistribution(
       distributions,
-      `browser/${project}/lifecycle/detail-latency`,
+      `browser-profile/${key}/react-expensive-commit-duration`,
       "ms",
-      samples.map((sample) => sample.detailLatencyMs),
-    );
-    pushDistribution(
-      distributions,
-      `browser/${project}/lifecycle/replay-latency`,
-      "ms",
-      samples.map((sample) => sample.replayLatencyMs),
-    );
-    pushDistribution(
-      distributions,
-      `browser/${project}/lifecycle/atlas-return-latency`,
-      "ms",
-      samples.map((sample) => sample.atlasReturnLatencyMs),
-    );
-    pushDistribution(
-      distributions,
-      `browser/${project}/lifecycle/heap-used`,
-      "bytes",
-      samples.map((sample) => sample.usedHeapBytes),
+      values,
     );
   }
   return distributions;
@@ -207,6 +317,18 @@ function liveDistributions(reports) {
     "live-provider/regional-settlement",
     "ms",
     reports.map((report) => report.regionalSettlementMs),
+  );
+  pushDistribution(
+    distributions,
+    "live-provider/local-application-ready",
+    "ms",
+    reports.map((report) => report.localApplicationReadyMs),
+  );
+  pushDistribution(
+    distributions,
+    "live-provider/global-provider-settlement",
+    "ms",
+    reports.map((report) => report.globalProviderSettlementMs),
   );
   return distributions;
 }
@@ -334,11 +456,16 @@ function profileSummary(files, measuredReports, nodeReports) {
         commits: selected.sample.action.reactCommits,
         actualDurationMs: selected.sample.action.reactActualDurationMs,
         treeBaseDurationMs: selected.sample.action.reactTreeBaseDurationMs,
+        commitProfiles: selected.sample.action.reactCommitProfiles,
       },
       webgl: selected.sample.webgl,
       heap: {
+        beforeUsedBytes: selected.sample.heapBefore.usedBytes,
         usedBytes: selected.sample.usedHeapBytes,
         totalBytes: selected.sample.totalHeapBytes,
+        deltaAfterGcBytes:
+          selected.sample.usedHeapBytes - selected.sample.heapBefore.usedBytes,
+        peakObservedBytes: selected.sample.peakObservedHeapBytes,
       },
       network: {
         resourceCount: network.length,
@@ -352,6 +479,9 @@ function profileSummary(files, measuredReports, nodeReports) {
         ),
         localResourceCount: network.filter(
           (resource) => resource.origin === "local",
+        ).length,
+        fixtureResourceCount: network.filter(
+          (resource) => resource.origin === "fixture",
         ).length,
         providerResourceCount: network.filter(
           (resource) => resource.origin === "provider",
@@ -392,15 +522,46 @@ export function aggregateRuntimeStatistics({
     .filter((filename) => /runtime-browser-.*\.json$/.test(filename))
     .map(readJson)
     .filter((report) => report.phase === "measured");
+  const profileReports = jsonFiles
+    .filter((filename) => /runtime-browser-.*\.json$/.test(filename))
+    .map(readJson)
+    .filter((report) => report.phase === "profile");
   const nodeReports = jsonFiles
     .filter((filename) => filename.endsWith("runtime-node.json"))
     .map(readJson);
   const liveReports = jsonFiles
     .filter((filename) => /runtime-live-provider-.*\.json$/.test(filename))
     .map(readJson);
+  const sourceReports = [
+    ...browserReports,
+    ...profileReports,
+    ...nodeReports,
+    ...liveReports,
+  ];
+  const mismatchedSources = sourceReports.filter(
+    (report) => report.sourceCommit !== sourceCommit,
+  );
+  if (mismatchedSources.length > 0) {
+    throw new Error(
+      `${mismatchedSources.length} raw reports do not match source commit ${sourceCommit}`,
+    );
+  }
+  const providerResources = [...browserReports, ...profileReports].flatMap(
+    (report) =>
+      (report.samples ?? []).flatMap((sample) =>
+        [...sample.action.resources, ...sample.observation.resources].filter(
+          (resource) => resource.origin === "provider",
+        ),
+      ),
+  );
+  if (providerResources.length > 0) {
+    throw new Error(
+      `Provider-disabled evidence contains ${providerResources.length} external resource timings`,
+    );
+  }
   const distributions = [
     ...nodeDistributions(nodeReports),
-    ...browserDistributions(browserReports),
+    ...browserDistributions(browserReports, profileReports),
     ...liveDistributions(liveReports),
   ];
   const cpu = os.cpus();
@@ -409,7 +570,10 @@ export function aggregateRuntimeStatistics({
     sourceCommit,
     generatedAt: new Date().toISOString(),
     protocol: {
-      warmups: 3,
+      warmups: Number.parseInt(
+        process.env.GODIESEL_PERF_BROWSER_WARMUPS ?? "3",
+        10,
+      ),
       measuredRepetitions: Math.max(
         0,
         ...[...new Set(browserReports.map((report) => report.projectName))].map(
@@ -455,6 +619,49 @@ export function aggregateRuntimeStatistics({
               ).size,
             ],
           ),
+        ),
+        profileRepetitionsByProject: Object.fromEntries(
+          [...new Set(profileReports.map((report) => report.projectName))].map(
+            (projectName) => [
+              projectName,
+              profileReports.filter(
+                (report) => report.projectName === projectName,
+              ).length,
+            ],
+          ),
+        ),
+      },
+      hermeticProviderDisabled: {
+        successfulExternalResourceCount: providerResources.length,
+        deterministicFixtureResourceCount: [
+          ...browserReports,
+          ...profileReports,
+        ].reduce(
+          (sum, report) =>
+            sum +
+            (report.samples ?? []).reduce(
+              (sampleSum, sample) =>
+                sampleSum +
+                [
+                  ...sample.action.resources,
+                  ...sample.observation.resources,
+                ].filter((resource) => resource.origin === "fixture").length,
+              0,
+            ),
+          0,
+        ),
+        blockedExternalRequestCount: [
+          ...browserReports,
+          ...profileReports,
+        ].reduce(
+          (sum, report) =>
+            sum +
+            (report.samples ?? []).reduce(
+              (sampleSum, sample) =>
+                sampleSum + sample.blockedExternalRequests.length,
+              0,
+            ),
+          0,
         ),
       },
       liveProvider:

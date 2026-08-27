@@ -38,6 +38,7 @@ describe("runtime statistical evidence", () => {
     fs.writeFileSync(
       path.join(rawDirectory, "runtime-node.json"),
       JSON.stringify({
+        sourceCommit: "a".repeat(40),
         benchmarks: [{ name: "parse", samplesMs: [1, 2, 3] }],
       }),
     );
@@ -45,26 +46,53 @@ describe("runtime statistical evidence", () => {
       path.join(rawDirectory, "runtime-browser-desktop-surfaces-r000.json"),
       JSON.stringify({
         projectName: "desktop",
+        sourceCommit: "a".repeat(40),
         phase: "measured",
+        workload: "surfaces",
         repetitionIndex: 0,
         samples: [
           {
             name: "atlas-cold",
             actionLatencyMs: 10,
             usedHeapBytes: 20,
+            heapBefore: { usedBytes: 10, totalBytes: 20 },
+            peakObservedHeapBytes: 24,
+            blockedExternalRequests: [],
             action: {
+              longTasks: [],
               reactActualDurationMs: 2,
               reactTreeBaseDurationMs: 3,
+              scriptDurationDeltaMs: 1,
+              v8CompileDurationDeltaMs: 0.5,
               resources: [],
             },
             observation: {
               frameIntervalsMs: [16, 17],
               longTasks: [],
+              scriptDurationDeltaMs: 1,
+              v8CompileDurationDeltaMs: 0.5,
               resources: [],
             },
           },
         ],
         transitionSamples: [],
+      }),
+    );
+    fs.writeFileSync(
+      path.join(rawDirectory, "runtime-browser-desktop-lifecycle-r000.json"),
+      JSON.stringify({
+        projectName: "desktop",
+        sourceCommit: "a".repeat(40),
+        phase: "measured",
+        workload: "lifecycle",
+        repetitionIndex: 0,
+        samples: [],
+        transitionSamples: Array.from({ length: 20 }, (_, cycle) => ({
+          detailLatencyMs: 100 + cycle,
+          replayLatencyMs: 50 + cycle,
+          atlasReturnLatencyMs: 25 + cycle,
+          usedHeapBytes: 1_000 + cycle,
+        })),
       }),
     );
 
@@ -78,13 +106,44 @@ describe("runtime statistical evidence", () => {
     expect(report.distributions.map((item) => item.name)).toContain(
       "browser/desktop/atlas-cold/action-latency",
     );
+    expect(report.distributions.map((item) => item.name)).toContain(
+      "browser/desktop/atlas-cold/network-request-count",
+    );
+    const lifecycle = report.distributions.find(
+      (item) => item.name === "browser/desktop/lifecycle/detail-latency",
+    );
+    expect(lifecycle?.p95.status).toBe("insufficient-samples");
+    expect(lifecycle?.p99.status).toBe("insufficient-samples");
     expect(report.protocol.liveProvider).toEqual({
       status: "unavailable",
       blocker: "quota approval missing",
     });
-    expect(report.artifacts).toHaveLength(2);
+    expect(report.artifacts).toHaveLength(3);
     expect(
       report.artifacts.every((artifact) => artifact.sha256.length === 64),
     ).toBe(true);
+  });
+
+  test("rejects raw reports from a different source commit", () => {
+    const temporaryRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), "godiesel-runtime-source-"),
+    );
+    const rawDirectory = path.join(temporaryRoot, "raw");
+    fs.mkdirSync(rawDirectory, { recursive: true });
+    fs.writeFileSync(
+      path.join(rawDirectory, "runtime-node.json"),
+      JSON.stringify({
+        sourceCommit: "b".repeat(40),
+        benchmarks: [{ name: "parse", samplesMs: [1, 2] }],
+      }),
+    );
+
+    expect(() =>
+      aggregateRuntimeStatistics({
+        rawDirectory,
+        outputDirectory: path.join(temporaryRoot, "evidence"),
+        sourceCommit: "a".repeat(40),
+      }),
+    ).toThrow("do not match source commit");
   });
 });

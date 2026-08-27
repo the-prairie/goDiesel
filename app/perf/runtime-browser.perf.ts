@@ -21,6 +21,7 @@ const REPETITION_OFFSET = Number.parseInt(
   10,
 );
 const CAPTURE_PROFILES = process.env.GODIESEL_PERF_CAPTURE_PROFILES === "1";
+const SOURCE_COMMIT = process.env.GODIESEL_PERF_SOURCE_COMMIT?.trim();
 const OUTPUT_DIR = path.resolve(
   process.cwd(),
   STATISTICAL_MODE
@@ -42,6 +43,16 @@ interface RuntimePhaseSnapshot {
   reactCommits: number;
   reactActualDurationMs: number;
   reactTreeBaseDurationMs: number;
+  reactCommitDurationsMs: number[];
+  reactCommitProfiles: Array<{
+    actualDurationMs: number;
+    treeBaseDurationMs: number;
+    topComponents: Array<{
+      name: string;
+      actualDurationMs: number;
+      treeBaseDurationMs: number;
+    }>;
+  }>;
 }
 
 interface WebglSnapshot {
@@ -62,8 +73,11 @@ interface PhaseMetrics {
   reactCommits: number;
   reactActualDurationMs: number;
   reactTreeBaseDurationMs: number;
+  reactCommitDurationsMs: number[];
+  reactCommitProfiles: RuntimePhaseSnapshot["reactCommitProfiles"];
   taskDurationDeltaMs: number;
   scriptDurationDeltaMs: number;
+  v8CompileDurationDeltaMs: number;
   layoutDurationDeltaMs: number;
   layoutCountDelta: number;
   recalcStyleCountDelta: number;
@@ -74,7 +88,7 @@ interface PhaseMetrics {
     duration: number;
     startTime: number;
     initiatorType: string;
-    origin: "local" | "provider";
+    origin: "local" | "fixture" | "provider";
   }>;
 }
 
@@ -87,6 +101,8 @@ interface BrowserSample {
   sampleWallMs: number;
   usedHeapBytes: number;
   totalHeapBytes: number;
+  heapBefore: { usedBytes: number; totalBytes: number };
+  peakObservedHeapBytes: number;
   jsHeapUsedSize?: number;
   domNodeCount?: number;
   action: PhaseMetrics;
@@ -94,6 +110,7 @@ interface BrowserSample {
   webgl: WebglSnapshot;
   navigation?: Record<string, number>;
   profileArtifacts?: { cpu: string; allocation: string };
+  blockedExternalRequests: string[];
 }
 
 interface TransitionSample {
@@ -158,6 +175,8 @@ async function installInstrumentation(context: BrowserContext) {
       reactCommits: number;
       reactActualDurationMs: number;
       reactTreeBaseDurationMs: number;
+      reactCommitDurationsMs: number[];
+      reactCommitProfiles: RuntimePhaseSnapshot["reactCommitProfiles"];
     };
     type WebglRecord = {
       canvas: HTMLCanvasElement;
@@ -175,6 +194,8 @@ async function installInstrumentation(context: BrowserContext) {
         reactCommits: 0,
         reactActualDurationMs: 0,
         reactTreeBaseDurationMs: 0,
+        reactCommitDurationsMs: [],
+        reactCommitProfiles: [],
       },
       observation: {
         measurementStartedAtMs: initializedAt,
@@ -184,6 +205,8 @@ async function installInstrumentation(context: BrowserContext) {
         reactCommits: 0,
         reactActualDurationMs: 0,
         reactTreeBaseDurationMs: 0,
+        reactCommitDurationsMs: [],
+        reactCommitProfiles: [],
       },
     };
     let phase: Phase = "action";
@@ -221,6 +244,8 @@ async function installInstrumentation(context: BrowserContext) {
       phases[nextPhase].reactCommits = 0;
       phases[nextPhase].reactActualDurationMs = 0;
       phases[nextPhase].reactTreeBaseDurationMs = 0;
+      phases[nextPhase].reactCommitDurationsMs.length = 0;
+      phases[nextPhase].reactCommitProfiles.length = 0;
       phaseStartedAt = performance.now();
       phaseDeadline =
         durationMs === undefined
@@ -264,6 +289,8 @@ async function installInstrumentation(context: BrowserContext) {
           reactCommits: phaseData.reactCommits,
           reactActualDurationMs: phaseData.reactActualDurationMs,
           reactTreeBaseDurationMs: phaseData.reactTreeBaseDurationMs,
+          reactCommitDurationsMs: [...phaseData.reactCommitDurationsMs],
+          reactCommitProfiles: [...phaseData.reactCommitProfiles],
         });
         return {
           action: snapshotPhase(phases.action),
@@ -342,11 +369,53 @@ async function installInstrumentation(context: BrowserContext) {
         },
       ) {
         if (performance.now() <= phaseDeadline) {
+          const actualDurationMs = root.current?.actualDuration ?? 0;
+          const treeBaseDurationMs = root.current?.treeBaseDuration ?? 0;
           phases[phase].reactCommits += 1;
-          phases[phase].reactActualDurationMs +=
-            root.current?.actualDuration ?? 0;
-          phases[phase].reactTreeBaseDurationMs +=
-            root.current?.treeBaseDuration ?? 0;
+          phases[phase].reactActualDurationMs += actualDurationMs;
+          phases[phase].reactTreeBaseDurationMs += treeBaseDurationMs;
+          phases[phase].reactCommitDurationsMs.push(actualDurationMs);
+          const components: RuntimePhaseSnapshot["reactCommitProfiles"][number]["topComponents"] =
+            [];
+          const visit = (
+            fiber:
+              | {
+                  child?: unknown;
+                  sibling?: unknown;
+                  actualDuration?: number;
+                  treeBaseDuration?: number;
+                  elementType?:
+                    { displayName?: string; name?: string } | string;
+                  type?: { displayName?: string; name?: string } | string;
+                }
+              | undefined,
+          ) => {
+            if (!fiber) return;
+            const candidate = fiber.elementType ?? fiber.type;
+            const name =
+              typeof candidate === "string"
+                ? candidate
+                : (candidate?.displayName ?? candidate?.name);
+            if (name && (fiber.actualDuration ?? 0) > 0) {
+              components.push({
+                name,
+                actualDurationMs: fiber.actualDuration ?? 0,
+                treeBaseDurationMs: fiber.treeBaseDuration ?? 0,
+              });
+            }
+            visit(fiber.child as typeof fiber);
+            visit(fiber.sibling as typeof fiber);
+          };
+          visit(root.current);
+          phases[phase].reactCommitProfiles.push({
+            actualDurationMs,
+            treeBaseDurationMs,
+            topComponents: components
+              .sort(
+                (left, right) => right.actualDurationMs - left.actualDurationMs,
+              )
+              .slice(0, 10),
+          });
         }
       },
       onCommitFiberUnmount() {},
@@ -393,7 +462,9 @@ async function browserResources(
           initiatorType: resource.initiatorType,
           origin: resource.name.startsWith(location.origin)
             ? ("local" as const)
-            : ("provider" as const),
+            : resource.name.startsWith("https://tiles.openfreemap.org/styles/")
+              ? ("fixture" as const)
+              : ("provider" as const),
         })),
     { startedAt: measurementStartedAtMs, endedAt: measurementEndedAtMs },
   );
@@ -421,8 +492,16 @@ function phaseMetrics(
     reactCommits: runtime.reactCommits,
     reactActualDurationMs: runtime.reactActualDurationMs,
     reactTreeBaseDurationMs: runtime.reactTreeBaseDurationMs,
+    reactCommitDurationsMs: runtime.reactCommitDurationsMs,
+    reactCommitProfiles: runtime.reactCommitProfiles,
     taskDurationDeltaMs: metricDelta(after, before, "TaskDuration", 1_000),
     scriptDurationDeltaMs: metricDelta(after, before, "ScriptDuration", 1_000),
+    v8CompileDurationDeltaMs: metricDelta(
+      after,
+      before,
+      "V8CompileDuration",
+      1_000,
+    ),
     layoutDurationDeltaMs: metricDelta(after, before, "LayoutDuration", 1_000),
     layoutCountDelta: metricDelta(after, before, "LayoutCount"),
     recalcStyleCountDelta: metricDelta(after, before, "RecalcStyleCount"),
@@ -466,10 +545,26 @@ async function captureSample(
   action: () => Promise<void>,
 ): Promise<BrowserSample> {
   const client = await page.context().newCDPSession(page);
+  const blockedExternalRequests: string[] = [];
+  const recordBlockedRequest = (
+    request: import("@playwright/test").Request,
+  ) => {
+    const url = new URL(request.url());
+    if (
+      url.protocol.startsWith("http") &&
+      url.hostname !== "127.0.0.1" &&
+      url.hostname !== "localhost"
+    ) {
+      blockedExternalRequests.push(request.url());
+    }
+  };
+  page.on("requestfailed", recordBlockedRequest);
   await client.send("Performance.enable");
+  await client.send("HeapProfiler.enable");
+  await client.send("HeapProfiler.collectGarbage");
+  const heapBefore = await client.send("Runtime.getHeapUsage");
   if (CAPTURE_PROFILES) {
     await client.send("Profiler.enable");
-    await client.send("HeapProfiler.enable");
     await client.send("Profiler.start");
     await client.send("HeapProfiler.startSampling", {
       samplingInterval: 32_768,
@@ -510,6 +605,7 @@ async function captureSample(
     snapshot?.observation.measurementStartedAtMs ?? 0,
     snapshot?.observation.measurementEndedAtMs ?? 0,
   );
+  await client.send("HeapProfiler.collectGarbage");
   const heap = await client.send("Runtime.getHeapUsage");
   const metricMap = observationMetricsAfter;
   const navigation = await page.evaluate(() => {
@@ -555,6 +651,7 @@ async function captureSample(
     };
   }
   await client.detach();
+  page.off("requestfailed", recordBlockedRequest);
 
   if (!actionRuntime || !snapshot) {
     throw new Error("Runtime instrumentation was not installed");
@@ -569,6 +666,16 @@ async function captureSample(
     sampleWallMs: performance.now() - sampleStarted,
     usedHeapBytes: heap.usedSize,
     totalHeapBytes: heap.totalSize,
+    heapBefore: {
+      usedBytes: heapBefore.usedSize,
+      totalBytes: heapBefore.totalSize,
+    },
+    peakObservedHeapBytes: Math.max(
+      heapBefore.usedSize,
+      actionMetricsAfter.JSHeapUsedSize ?? 0,
+      observationMetricsAfter.JSHeapUsedSize ?? 0,
+      heap.usedSize,
+    ),
     jsHeapUsedSize: metricMap.JSHeapUsedSize,
     domNodeCount: metricMap.Nodes,
     action: phaseMetrics(
@@ -586,6 +693,7 @@ async function captureSample(
     webgl: snapshot.webgl,
     navigation,
     profileArtifacts,
+    blockedExternalRequests,
   };
 }
 
@@ -597,6 +705,35 @@ async function createMeasuredPage(
   const context = await browser.newContext(
     browserContextOptions(testInfo, reducedMotion),
   );
+  if (STATISTICAL_MODE) {
+    await context.route(/^https?:\/\//, async (route) => {
+      const requestUrl = new URL(route.request().url());
+      const hostname = requestUrl.hostname;
+      if (hostname === "127.0.0.1" || hostname === "localhost") {
+        await route.continue();
+      } else if (
+        hostname === "tiles.openfreemap.org" &&
+        requestUrl.pathname.startsWith("/styles/")
+      ) {
+        await route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({
+            version: 8,
+            sources: {},
+            layers: [
+              {
+                id: "hermetic-background",
+                type: "background",
+                paint: { "background-color": "#071114" },
+              },
+            ],
+          }),
+        });
+      } else {
+        await route.abort("blockedbyclient");
+      }
+    });
+  }
   await installInstrumentation(context);
   const page = await context.newPage();
   return { context, page };
@@ -638,6 +775,7 @@ async function writeProjectReport(
     schemaVersion: 2,
     generatedAt: new Date().toISOString(),
     projectName: testInfo.project.name,
+    sourceCommit: SOURCE_COMMIT,
     runId: RUN_ID,
     repetitionIndex: repetitionIndex(testInfo),
     workload: WORKLOAD,
@@ -749,6 +887,11 @@ async function measureTransitions(
 test("records isolated surface, reduced-motion, scale, and lifecycle baselines", async ({
   browser,
 }, testInfo) => {
+  if (STATISTICAL_MODE && !SOURCE_COMMIT) {
+    throw new Error(
+      "GODIESEL_PERF_SOURCE_COMMIT is required in statistical mode",
+    );
+  }
   const samples: BrowserSample[] = [];
   const surfaceGroups: Array<() => Promise<BrowserSample[]>> = [
     async () => {

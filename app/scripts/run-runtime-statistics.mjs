@@ -1,24 +1,33 @@
 import fs from "node:fs";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 
 const runId =
   process.env.GODIESEL_PERF_RUN_ID ??
   new Date().toISOString().replace(/[:.]/g, "-");
+const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], {
+  encoding: "utf8",
+}).trim();
 const warmups = process.env.GODIESEL_PERF_BROWSER_WARMUPS ?? "3";
 const surfaceRepetitions =
   process.env.GODIESEL_PERF_BROWSER_REPETITIONS ?? "100";
 const lifecycleRepetitions =
   process.env.GODIESEL_PERF_LIFECYCLE_REPETITIONS ?? "5";
 const nodeSamples = process.env.GODIESEL_PERF_NODE_SAMPLES ?? "100";
-const profileRepetitions = process.env.GODIESEL_PERF_PROFILE_REPETITIONS ?? "5";
+const profileRepetitions =
+  process.env.GODIESEL_PERF_PROFILE_REPETITIONS ?? "20";
 const rawDirectory = path.resolve("artifacts/runtime-statistics/raw", runId);
 const outputDirectory = path.resolve("artifacts/runtime-statistics", runId);
 
 function run(command, args, overrides = {}, allowFailure = false) {
   const result = spawnSync(command, args, {
     stdio: "inherit",
-    env: { ...process.env, GODIESEL_PERF_RUN_ID: runId, ...overrides },
+    env: {
+      ...process.env,
+      GODIESEL_PERF_RUN_ID: runId,
+      GODIESEL_PERF_SOURCE_COMMIT: sourceCommit,
+      ...overrides,
+    },
   });
   if (result.status !== 0 && !allowFailure) {
     throw new Error(
@@ -198,6 +207,8 @@ run(
   },
 );
 run("node", ["scripts/runtime-statistics.mjs", rawDirectory, outputDirectory], {
+  GODIESEL_PERF_BROWSER_WARMUPS: warmups,
+  GODIESEL_PERF_SOURCE_COMMIT: sourceCommit,
   GODIESEL_PERF_LIVE_BLOCKER:
     process.env.GODIESEL_PERF_LIVE_BLOCKER ??
     "owner-approved live-provider repetition count was not supplied",

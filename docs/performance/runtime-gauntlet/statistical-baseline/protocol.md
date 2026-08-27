@@ -82,7 +82,7 @@ The profiling packet captures:
 | Renderer and WebGL  | Connected, non-lost context counts and cumulative context creation diagnostics at every settled surface boundary.                                   |
 | Live provider       | Global readiness and regional settlement separated from local application time, plus the available CPU/network/heap evidence.                       |
 
-Browser profiles use five measured profile repetitions after the unprofiled distribution is complete.
+Browser profiles use twenty measured profile repetitions after the unprofiled distribution is complete so surfaces with five commits per load can support a p99 expensive-commit distribution.
 The selection rule is the successful profile repetition nearest to the scenario's unprofiled median action latency.
 Profile contents are summarized only after that latency-only selection; every unselected raw profile remains checksummed.
 
