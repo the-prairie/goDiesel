@@ -220,13 +220,27 @@ function topCpuFrames(profile, limit = 10) {
       const frame = nodes.get(id)?.callFrame ?? {};
       return {
         functionName: frame.functionName || "(anonymous)",
-        url: frame.url || "",
+        url: normalizeProfileUrl(frame.url),
         lineNumber: frame.lineNumber,
         samples,
       };
     })
     .sort((left, right) => right.samples - left.samples)
     .slice(0, limit);
+}
+
+function normalizeProfileUrl(url = "") {
+  const decoded = decodeURIComponent(url);
+  const appRoot = process.cwd();
+  if (decoded.startsWith(`file://${appRoot}/`)) {
+    return `<app>/${decoded.slice(`file://${appRoot}/`.length)}`;
+  }
+  const nodeModulesMarker = "/node_modules/";
+  const nodeModulesIndex = decoded.indexOf(nodeModulesMarker);
+  if (nodeModulesIndex >= 0) {
+    return `<node_modules>/${decoded.slice(nodeModulesIndex + nodeModulesMarker.length)}`;
+  }
+  return decoded;
 }
 
 function topAllocations(profile, limit = 10) {
@@ -236,7 +250,7 @@ function topAllocations(profile, limit = 10) {
     const frame = node.callFrame ?? {};
     rows.push({
       functionName: frame.functionName || "(anonymous)",
-      url: frame.url || "",
+      url: normalizeProfileUrl(frame.url),
       selfSize: node.selfSize ?? 0,
     });
     for (const child of node.children ?? []) visit(child);
