@@ -375,7 +375,14 @@ export function aggregateRuntimeStatistics({
       warmups: 3,
       measuredRepetitions: Math.max(
         0,
-        ...browserReports.map((report) => report.repetitionIndex + 1),
+        ...[...new Set(browserReports.map((report) => report.projectName))].map(
+          (projectName) =>
+            browserReports.filter(
+              (report) =>
+                report.projectName === projectName &&
+                report.workload === "surfaces",
+            ).length,
+        ),
       ),
       quantileMethod: "nearest-rank",
       repetitionPlan: {
