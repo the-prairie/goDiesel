@@ -296,6 +296,10 @@ function profileSummary(files, measuredReports, nodeReports) {
       process.cwd(),
       selected.sample.profileArtifacts.allocation,
     );
+    const network = [
+      ...selected.sample.action.resources,
+      ...selected.sample.observation.resources,
+    ];
     browser.push({
       projectName: selected.report.projectName,
       name: selected.sample.name,
@@ -322,10 +326,26 @@ function profileSummary(files, measuredReports, nodeReports) {
         usedBytes: selected.sample.usedHeapBytes,
         totalBytes: selected.sample.totalHeapBytes,
       },
-      network: [
-        ...selected.sample.action.resources,
-        ...selected.sample.observation.resources,
-      ],
+      network: {
+        resourceCount: network.length,
+        transferBytes: network.reduce(
+          (sum, resource) => sum + resource.transferSize,
+          0,
+        ),
+        decodedBodyBytes: network.reduce(
+          (sum, resource) => sum + resource.decodedBodySize,
+          0,
+        ),
+        localResourceCount: network.filter(
+          (resource) => resource.origin === "local",
+        ).length,
+        providerResourceCount: network.filter(
+          (resource) => resource.origin === "provider",
+        ).length,
+        slowestResources: network
+          .sort((left, right) => right.duration - left.duration)
+          .slice(0, 10),
+      },
     });
   }
   return {
