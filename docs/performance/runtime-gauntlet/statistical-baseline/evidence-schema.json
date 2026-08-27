@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/the-prairie/goDiesel/runtime-statistical-evidence.schema.json",
+  "title": "goDiesel runtime statistical evidence",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "sourceCommit",
+    "generatedAt",
+    "protocol",
+    "environment",
+    "distributions",
+    "artifacts"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "sourceCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "protocol": {
+      "type": "object",
+      "required": ["warmups", "measuredRepetitions", "quantileMethod"],
+      "properties": {
+        "warmups": { "type": "integer", "minimum": 0 },
+        "measuredRepetitions": { "type": "integer", "minimum": 1 },
+        "quantileMethod": { "const": "nearest-rank" }
+      },
+      "additionalProperties": true
+    },
+    "environment": {
+      "type": "object",
+      "required": ["hostname", "platform", "arch", "cpuModel", "cpuCount"],
+      "additionalProperties": true
+    },
+    "distributions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/distribution" }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/artifact" }
+    }
+  },
+  "$defs": {
+    "quantile": {
+      "type": "object",
+      "required": ["value", "status", "minimumSamples"],
+      "properties": {
+        "value": { "type": ["number", "null"] },
+        "status": { "enum": ["available", "insufficient-samples"] },
+        "minimumSamples": { "enum": [2, 20, 100] }
+      },
+      "additionalProperties": false
+    },
+    "distribution": {
+      "type": "object",
+      "required": [
+        "name",
+        "unit",
+        "sampleCount",
+        "min",
+        "max",
+        "mean",
+        "sampleStdDev",
+        "coefficientOfVariation",
+        "medianAbsoluteDeviation",
+        "p50",
+        "p95",
+        "p99"
+      ],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "unit": { "type": "string", "minLength": 1 },
+        "sampleCount": { "type": "integer", "minimum": 1 },
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "mean": { "type": "number" },
+        "sampleStdDev": { "type": "number", "minimum": 0 },
+        "coefficientOfVariation": { "type": ["number", "null"] },
+        "medianAbsoluteDeviation": { "type": "number", "minimum": 0 },
+        "p50": { "$ref": "#/$defs/quantile" },
+        "p95": { "$ref": "#/$defs/quantile" },
+        "p99": { "$ref": "#/$defs/quantile" }
+      },
+      "additionalProperties": true
+    },
+    "artifact": {
+      "type": "object",
+      "required": ["kind", "path", "bytes", "sha256", "retention"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "retention": { "enum": ["committed", "workflow-artifact", "local-artifact"] }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}
