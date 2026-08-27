@@ -43,12 +43,14 @@ When any prerequisite is unavailable, the packet records the missing prerequisit
 
 Warm-up observations are recorded separately and excluded from distributions.
 Measured observations retain their execution order, monotonic start time, cache state, motion preference, viewport, and source run identifier.
+Run identifiers are conservative slugs and both raw and reduced directories must resolve beneath `artifacts/runtime-statistics`.
 Provider-disabled scenario order is deterministic and rotated between repetitions so thermal or background drift does not always affect the same surface.
 Cold samples use fresh contexts and documents.
 Warm Atlas samples reload only the paired cold Atlas document.
 The lifecycle workload runs five independent twenty-transition sequences, producing 100 observations for each detail, Replay, and Atlas-return latency.
 Each sequence records a GC-normalized settled Atlas heap before cycle one and the GC-normalized heap after cycle twenty.
 Retention is reported as final heap, final-minus-baseline bytes, and final-to-baseline ratio over the five independent sequences.
+A separate profile sequence per project captures GC-normalized baseline and final heap snapshots and summarizes object-type count and self-size growth.
 
 Node benchmarks use at least five warm-ups and 100 measured samples per benchmark in statistical mode.
 Browser surface workloads use at least three warm-ups and 100 measured observations per project and scenario for a final p99 claim.
@@ -68,6 +70,8 @@ The minimum independent sample counts are:
 The summary reports count, minimum, maximum, arithmetic mean, sample standard deviation, coefficient of variation, median absolute deviation, p50, p95, and p99.
 A quantile whose minimum count is not met is `null` with status `insufficient-samples`.
 Warm-ups, failed readiness oracles, unavailable-provider attempts, and retries are never silently mixed into successful distributions.
+Frame sampling excludes the partial interval at each phase boundary.
+Each browser repetition contributes one observation-window p95 frame interval and its derived frame rate, while a repetition with no complete interval contributes 0 FPS and no interval percentile.
 
 ## Profile inventory
 
@@ -79,7 +83,7 @@ The profiling packet captures:
 | Node memory and I/O | Process memory before and after each benchmark plus manifest/detail read counts, bytes, and elapsed time.                                           |
 | Browser CPU         | CDP CPU profiles for Atlas cold, the 2,500-route Atlas, route detail, and Replay.                                                                   |
 | Allocation          | CDP sampling heap profiles for the same representative browser workloads.                                                                           |
-| Heap                | GC-normalized heap before and after each representative workload and after each twenty-transition lifecycle sequence.                               |
+| Heap                | GC-normalized scalar heap before and after representative workloads, independent final retention distributions, and baseline/final lifecycle heap snapshots with object-growth summaries. |
 | Network             | Document navigation plus phase-bounded resource waterfalls with start time, duration, transfer size, decoded size, initiator type, phase, and origin. |
 | React               | Commit count, actual duration, and tree base duration captured through the injected DevTools hook without production component changes.             |
 | Renderer and WebGL  | Connected, non-lost context counts and cumulative context creation diagnostics at every settled surface boundary.                                   |
@@ -100,7 +104,7 @@ score = (expected impact x confidence) / implementation effort
 
 Impact, confidence, and effort use integer scales from 1 to 5.
 The matrix records the measured hotspot, share or latency contribution, proposed lever, expected metric movement, equivalence class, regression risk, golden oracle, and score.
-The matrix may recommend no production change when profiles do not support a material lever.
+The matrix ranks three to five candidates and may recommend no production change when profiles do not support a material lever.
 
 ## Merge gates
 
@@ -109,7 +113,9 @@ This stage is complete only when:
 - no production runtime behavior has changed;
 - every committed summary validates against the evidence schema;
 - every retained raw artifact checksum verifies;
-- the runner proves a clean unchanged source commit at every phase boundary and tears down its child process group on cancellation;
+- the runner proves a clean unchanged source commit, including non-ignored untracked inputs, at every phase boundary and tears down its child process group on cancellation;
+- the runner rejects cancellation before every phase spawn and before successful completion;
+- hermetic and live-only packets pass schema and checksum validation before the command exits successfully;
 - provider-disabled desktop and mobile distributions are complete;
 - live-provider evidence is complete or has an explicit prerequisite or quota blocker;
 - the opportunity matrix cites measured evidence;
