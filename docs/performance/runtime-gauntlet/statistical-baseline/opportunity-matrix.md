@@ -1,11 +1,17 @@
 # Runtime opportunity matrix
 
-**Status:** awaiting repeated evidence and profiles
+**Status:** ranked from run `issue113-2026-08-26`
 **Source issue:** #113
 
-No production optimization candidate is ranked yet.
-Populate this matrix only after the statistical summary and profile index are committed.
+The score is `(impact x confidence) / effort`, using integer inputs from 1 to 5.
+These are recommendations for later optimization issues; this profiling stage changes no production runtime behavior.
 
-| Rank | Measured hotspot | Evidence | Expected movement | Equivalence class | Impact | Confidence | Effort | Score | Regression risk | Golden oracle |
+| Rank | Measured hotspot | Evidence | Proposed lever and expected movement | Equivalence class | Impact | Confidence | Effort | Score | Regression risk | Golden oracle |
 | ---: | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- |
-| - | Awaiting evidence | - | - | - | - | - | - | - | - | - |
+| 1 | Mobile reduced-motion Replay readiness | 2 of 102 attempts settled to `unavailable`; successful p50/p95/p99 were 1,964/2,379/2,541 ms; selected Replay CPU/allocation profile and both failed traces are checksummed | Diagnose renderer initialization race and make settlement deterministic; target 0 failures without regressing successful latency | Same route, renderer, reduced-motion preference, camera contract, and ready oracle | 5 | 5 | 3 | 8.33 | A fallback may hide a real renderer fault or alter accessibility behavior | 102-attempt readiness ledger plus Replay visual and telemetry oracle |
+| 2 | 50,000-point route pose tail | Node p50/p95/p99 were 22.20/93.69/94.79 ms with CV 0.756; CPU leaders were `minimalLongitudeArc` (2,223 samples) and `pointAtDistance` (2,211) | Pre-index cumulative distance and longitude-arc data, then use bounded lookup; target p95 below 30 ms | Identical pose, bearing, progress, altitude, and dateline behavior for every query | 3 | 5 | 2 | 7.50 | Index invalidation or edge interpolation can change camera paths | Existing pose digest plus dense boundary/property comparisons |
+| 3 | Region construction at 2,500 routes | Node p50/p95/p99 were 42.00/45.18/71.44 ms; CPU profile includes `deriveGeographicBounds` and `minimalLongitudeArc` | Cache immutable per-route bounds and incrementally aggregate regions; target p95 below 25 ms | Identical region membership, ordering, counts, and geographic bounds | 3 | 4 | 2 | 6.00 | Stale bounds can misplace routes or break dateline regions | Existing region order digest plus dateline fixtures |
+| 4 | Route detail and Replay renderer startup | Desktop detail p50/p99 were 2,868/3,281 ms and Replay 2,167/2,445 ms; selected profiles show only 21.5/24.6 ms React actual duration while renderer `draw` work dominates | Reuse immutable decoded route and renderer bootstrap work; target 20-30% lower p50 without retaining a second WebGL context | Same route geometry, map framing, telemetry, camera, and one active context | 5 | 4 | 4 | 5.00 | Renderer reuse can leak state across routes or retain GPU memory | Route-detail and Replay screenshots, telemetry oracle, lifecycle heap and active-context assertions |
+| 5 | Atlas 2,500-route geometry allocation | Selected heap was 78.9 MB desktop and 93.1 MB mobile; profiles show typed-array work and roughly 16.7-17.8 MB in `fromDegrees` allocations; action p50 was 1,133 ms desktop and 854 ms mobile | Precompute or batch immutable coordinate buffers; target at least 25% lower peak heap and allocation volume | Same 2,500 source-backed traces, route count, heat lines, and viewport | 4 | 5 | 4 | 5.00 | Buffer sharing can corrupt geometry or precision | Corpus digest, canvas pixel oracle, route count, and heap/allocation profile |
+
+The lifecycle heap distributions were stable enough that no standalone leak optimization is recommended: CV was 0.044 desktop and 0.045 mobile, and every settled boundary retained exactly one connected, non-lost WebGL context.
