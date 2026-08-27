@@ -16,6 +16,10 @@ const RUN_ID = process.env.GODIESEL_PERF_RUN_ID?.trim();
 const STATISTICAL_MODE = Boolean(RUN_ID);
 const WORKLOAD = process.env.GODIESEL_PERF_WORKLOAD ?? "all";
 const PHASE = process.env.GODIESEL_PERF_PHASE ?? "measured";
+const REPETITION_OFFSET = Number.parseInt(
+  process.env.GODIESEL_PERF_REPETITION_OFFSET ?? "0",
+  10,
+);
 const CAPTURE_PROFILES = process.env.GODIESEL_PERF_CAPTURE_PROFILES === "1";
 const OUTPUT_DIR = path.resolve(
   process.cwd(),
@@ -25,6 +29,10 @@ const OUTPUT_DIR = path.resolve(
 );
 const ROUTE_SLUG = "17654151284";
 const OBSERVATION_WINDOW_MS = 750;
+
+function repetitionIndex(testInfo: TestInfo) {
+  return REPETITION_OFFSET + testInfo.repeatEachIndex;
+}
 
 interface RuntimePhaseSnapshot {
   measurementStartedAtMs: number;
@@ -529,7 +537,7 @@ async function captureSample(
     const viewport = page.viewportSize();
     const stem = [
       name,
-      `r${String(testInfo.repeatEachIndex).padStart(3, "0")}`,
+      `r${String(repetitionIndex(testInfo)).padStart(3, "0")}`,
       viewport ? `${viewport.width}x${viewport.height}` : "viewport-unknown",
     ]
       .join("-")
@@ -629,7 +637,7 @@ async function writeProjectReport(
     generatedAt: new Date().toISOString(),
     projectName: testInfo.project.name,
     runId: RUN_ID,
-    repetitionIndex: testInfo.repeatEachIndex,
+    repetitionIndex: repetitionIndex(testInfo),
     workload: WORKLOAD,
     phase: PHASE,
     captureProfiles: CAPTURE_PROFILES,
@@ -653,7 +661,7 @@ async function writeProjectReport(
     path.join(
       OUTPUT_DIR,
       STATISTICAL_MODE
-        ? `runtime-browser-${testInfo.project.name}-${WORKLOAD}-r${String(testInfo.repeatEachIndex).padStart(3, "0")}.json`
+        ? `runtime-browser-${testInfo.project.name}-${WORKLOAD}-r${String(repetitionIndex(testInfo)).padStart(3, "0")}.json`
         : `runtime-baseline-browser-${testInfo.project.name}.json`,
     ),
     `${JSON.stringify(report, null, 2)}\n`,
@@ -866,7 +874,7 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
   ];
 
   if (WORKLOAD !== "lifecycle") {
-    const offset = testInfo.repeatEachIndex % surfaceGroups.length;
+    const offset = repetitionIndex(testInfo) % surfaceGroups.length;
     const orderedGroups = [
       ...surfaceGroups.slice(offset),
       ...surfaceGroups.slice(0, offset),
