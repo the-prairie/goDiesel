@@ -438,6 +438,16 @@ function heapSnapshotGroups(filename) {
   return groups;
 }
 
+function compactHeapNodeName(type, name) {
+  if (name.length <= 120) return name;
+  const digest = crypto
+    .createHash("sha256")
+    .update(name)
+    .digest("hex")
+    .slice(0, 12);
+  return `<${type} length=${name.length} sha256=${digest}>`;
+}
+
 function topHeapGrowth(baselineFilename, finalFilename, limit = 20) {
   const baseline = heapSnapshotGroups(baselineFilename);
   const final = heapSnapshotGroups(finalFilename);
@@ -446,7 +456,7 @@ function topHeapGrowth(baselineFilename, finalFilename, limit = 20) {
       const before = baseline.get(key) ?? { count: 0, selfSize: 0 };
       return {
         type: value.type,
-        name: value.name,
+        name: compactHeapNodeName(value.type, value.name),
         countDelta: value.count - before.count,
         selfSizeDelta: value.selfSize - before.selfSize,
       };
