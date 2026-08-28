@@ -671,9 +671,15 @@ export function validateLifecycleProtocol(reports) {
     const cycles = report.lifecycleWarmupCycles;
     const heaps = report.lifecycleWarmupHeapBytes;
     const stability = report.lifecycleWarmupStability;
+    const protocol = report.lifecycleWarmupProtocol;
     if (
       !Number.isInteger(cycles) ||
-      cycles < 1 ||
+      !Number.isInteger(protocol?.minimumCycles) ||
+      !Number.isInteger(protocol?.maximumCycles) ||
+      protocol.minimumCycles < 1 ||
+      protocol.maximumCycles < protocol.minimumCycles ||
+      cycles < protocol.minimumCycles ||
+      cycles > protocol.maximumCycles ||
       !Array.isArray(heaps) ||
       heaps.length !== cycles ||
       heaps.some((value) => !Number.isFinite(value) || value <= 0) ||
@@ -690,6 +696,8 @@ export function validateLifecycleProtocol(reports) {
     const window = heaps.slice(-stability.window);
     const observedRangeRatio = Math.max(...window) / Math.min(...window);
     if (
+      stability.window !== protocol.stabilityWindow ||
+      stability.maximumRangeRatio !== protocol.maximumRangeRatio ||
       Math.abs(observedRangeRatio - stability.observedRangeRatio) > 1e-12 ||
       observedRangeRatio > stability.maximumRangeRatio
     ) {
@@ -697,15 +705,24 @@ export function validateLifecycleProtocol(reports) {
     }
     return {
       cycles,
-      stabilityWindow: stability.window,
-      maximumRangeRatio: stability.maximumRangeRatio,
+      protocol: {
+        minimumCycles: protocol.minimumCycles,
+        maximumCycles: protocol.maximumCycles,
+        stabilityWindow: protocol.stabilityWindow,
+        maximumRangeRatio: protocol.maximumRangeRatio,
+      },
     };
   });
-  const serialized = new Set(protocols.map((protocol) => JSON.stringify(protocol)));
+  const serialized = new Set(
+    protocols.map(({ protocol }) => JSON.stringify(protocol)),
+  );
   if (serialized.size !== 1) {
     throw new Error("Lifecycle reports use mixed warmup convergence protocols");
   }
-  return protocols[0];
+  return {
+    ...protocols[0].protocol,
+    observedCycles: protocols.map(({ cycles }) => cycles),
+  };
 }
 
 export function aggregateRuntimeStatistics({
@@ -864,7 +881,7 @@ export function aggregateRuntimeStatistics({
             ],
           ),
         ),
-        lifecycleWarmupCycles: lifecycleWarmup?.cycles ?? 0,
+        lifecycleWarmupCycles: lifecycleWarmup?.observedCycles ?? [],
         profileRepetitionsByProject: Object.fromEntries(
           [...new Set(profileReports.map((report) => report.projectName))].map(
             (projectName) => [

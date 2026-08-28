@@ -26,11 +26,16 @@
         "lifecycleWarmup": {
           "type": ["object", "null"],
           "properties": {
-            "cycles": { "type": "integer", "minimum": 1 },
+            "minimumCycles": { "type": "integer", "minimum": 1 },
+            "maximumCycles": { "type": "integer", "minimum": 1 },
             "stabilityWindow": { "type": "integer", "minimum": 2 },
-            "maximumRangeRatio": { "type": "number", "minimum": 1 }
+            "maximumRangeRatio": { "type": "number", "minimum": 1 },
+            "observedCycles": {
+              "type": "array",
+              "items": { "type": "integer", "minimum": 1 }
+            }
           },
-          "required": ["cycles", "stabilityWindow", "maximumRangeRatio"],
+          "required": ["minimumCycles", "maximumCycles", "stabilityWindow", "maximumRangeRatio", "observedCycles"],
           "additionalProperties": false
         }
       },

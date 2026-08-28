@@ -178,6 +178,12 @@ describe("runtime statistical evidence", () => {
         repetitionIndex: 0,
         lifecycleBaselineHeapBytes: 1_000,
         lifecycleWarmupCycles: 10,
+        lifecycleWarmupProtocol: {
+          minimumCycles: 10,
+          maximumCycles: 40,
+          stabilityWindow: 3,
+          maximumRangeRatio: 1.03,
+        },
         lifecycleWarmupHeapBytes: [
           900, 920, 940, 960, 970, 980, 985, 990, 995, 1_000,
         ],
@@ -231,11 +237,13 @@ describe("runtime statistical evidence", () => {
       blocker: "quota approval missing",
     });
     expect(report.protocol.lifecycleWarmup).toEqual({
-      cycles: 10,
+      minimumCycles: 10,
+      maximumCycles: 40,
       stabilityWindow: 3,
       maximumRangeRatio: 1.03,
+      observedCycles: [10],
     });
-    expect(report.protocol.repetitionPlan.lifecycleWarmupCycles).toBe(10);
+    expect(report.protocol.repetitionPlan.lifecycleWarmupCycles).toEqual([10]);
     expect(report.environment.hostname).toBe("redacted-local-host");
     expect(report.artifacts).toHaveLength(3);
     expect(
@@ -246,6 +254,12 @@ describe("runtime statistical evidence", () => {
   test("rejects missing and mixed lifecycle convergence protocols", () => {
     const report = (cycles: number) => ({
       lifecycleWarmupCycles: cycles,
+      lifecycleWarmupProtocol: {
+        minimumCycles: 9,
+        maximumCycles: 40,
+        stabilityWindow: 3,
+        maximumRangeRatio: 1.03,
+      },
       lifecycleWarmupHeapBytes: Array.from(
         { length: cycles },
         (_, index) => 1_000 + index,
@@ -262,7 +276,18 @@ describe("runtime statistical evidence", () => {
     expect(() => validateLifecycleProtocol([{}])).toThrow(
       "invalid warmup convergence protocol",
     );
-    expect(() => validateLifecycleProtocol([report(10), report(9)])).toThrow(
+    expect(() =>
+      validateLifecycleProtocol([
+        report(10),
+        {
+          ...report(9),
+          lifecycleWarmupProtocol: {
+            ...report(9).lifecycleWarmupProtocol,
+            maximumCycles: 39,
+          },
+        },
+      ]),
+    ).toThrow(
       "mixed warmup convergence protocols",
     );
   });

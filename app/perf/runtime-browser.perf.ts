@@ -32,7 +32,8 @@ const OUTPUT_DIR = path.resolve(
 );
 const ROUTE_SLUG = "17654151284";
 const OBSERVATION_WINDOW_MS = 750;
-const LIFECYCLE_WARMUP_CYCLES = 20;
+const LIFECYCLE_WARMUP_MIN_CYCLES = 10;
+const LIFECYCLE_WARMUP_MAX_CYCLES = 40;
 const LIFECYCLE_STABILITY_WINDOW = 3;
 const LIFECYCLE_STABILITY_MAX_RANGE_RATIO = 1.03;
 
@@ -878,8 +879,14 @@ async function writeProjectReport(
     },
     samples,
     lifecycleBaselineHeapBytes,
-    lifecycleWarmupCycles: lifecycleWarmupHeapBytes
-      ? LIFECYCLE_WARMUP_CYCLES
+    lifecycleWarmupCycles: lifecycleWarmupHeapBytes?.length,
+    lifecycleWarmupProtocol: lifecycleWarmupHeapBytes
+      ? {
+          minimumCycles: LIFECYCLE_WARMUP_MIN_CYCLES,
+          maximumCycles: LIFECYCLE_WARMUP_MAX_CYCLES,
+          stabilityWindow: LIFECYCLE_STABILITY_WINDOW,
+          maximumRangeRatio: LIFECYCLE_STABILITY_MAX_RANGE_RATIO,
+        }
       : undefined,
     lifecycleWarmupHeapBytes,
     lifecycleWarmupStability: lifecycleWarmupHeapBytes
@@ -977,7 +984,7 @@ async function measureTransitions(
     };
 
     const warmupUsedHeapBytes: number[] = [];
-    for (let cycle = 0; cycle < LIFECYCLE_WARMUP_CYCLES; cycle += 1) {
+    for (let cycle = 0; cycle < LIFECYCLE_WARMUP_MAX_CYCLES; cycle += 1) {
       await navigateHash(`#/routes/${ROUTE_SLUG}`);
       await waitForRouteDetail(page);
       await readWebglSnapshot(page);
@@ -990,6 +997,14 @@ async function measureTransitions(
       await client.send("HeapProfiler.collectGarbage");
       const warmupHeap = await client.send("Runtime.getHeapUsage");
       warmupUsedHeapBytes.push(warmupHeap.usedSize);
+      if (
+        warmupUsedHeapBytes.length >= LIFECYCLE_WARMUP_MIN_CYCLES &&
+        heapRangeRatio(
+          warmupUsedHeapBytes.slice(-LIFECYCLE_STABILITY_WINDOW),
+        ) <= LIFECYCLE_STABILITY_MAX_RANGE_RATIO
+      ) {
+        break;
+      }
     }
     const baselineUsedHeapBytes = warmupUsedHeapBytes.at(-1)!;
     const profileDirectory = path.join(OUTPUT_DIR, "profiles");
@@ -1250,8 +1265,11 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
     ),
   ).toBe(true);
   if (lifecycleMeasurement) {
-    expect(lifecycleMeasurement.warmupUsedHeapBytes).toHaveLength(
-      LIFECYCLE_WARMUP_CYCLES,
+    expect(lifecycleMeasurement.warmupUsedHeapBytes.length).toBeGreaterThanOrEqual(
+      LIFECYCLE_WARMUP_MIN_CYCLES,
+    );
+    expect(lifecycleMeasurement.warmupUsedHeapBytes.length).toBeLessThanOrEqual(
+      LIFECYCLE_WARMUP_MAX_CYCLES,
     );
     expect(
       heapRangeRatio(
