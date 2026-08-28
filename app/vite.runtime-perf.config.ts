@@ -10,6 +10,14 @@ export default defineConfig(async (environment) => {
       : await baseConfig;
 
   return mergeConfig(resolvedBase as UserConfig, {
+    resolve:
+      process.env.GODIESEL_PERF_CAPTURE_PROFILES === "1"
+        ? {
+            alias: {
+              "react-dom/client": "react-dom/profiling",
+            },
+          }
+        : undefined,
     build: {
       outDir: "dist-runtime-perf",
       rollupOptions: {

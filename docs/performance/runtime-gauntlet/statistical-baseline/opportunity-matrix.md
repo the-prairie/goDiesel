@@ -1,0 +1,20 @@
+# Runtime opportunity matrix
+
+**Status:** ranked from run `issue113-final-hardened-2026-08-27`
+**Source issue:** #113
+
+The score is `(impact x confidence) / effort`, using integer inputs from 1 to 5.
+These are recommendations for later optimization issues.
+This profiling stage changes no production runtime behavior.
+
+| Rank | Measured hotspot | Evidence | Proposed lever and expected movement | Equivalence class | Impact | Confidence | Effort | Score | Regression risk | Golden oracle |
+| ---: | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- |
+| 1 | 50,000-point route-pose tail | Node p50/p95/p99 were 21.43/93.58/96.41 ms with CV 0.772; its isolated CPU profile was led by `pointAtDistance` with 2,180 samples | Pre-index cumulative distance, then use bounded lookup; target p95 below 30 ms | Identical pose, bearing, progress, altitude, and dateline behavior for every query | 4 | 5 | 2 | 10.00 | Index invalidation or edge interpolation can change camera paths | Existing pose digest plus dense boundary and property comparisons |
+| 2 | Heap retained after 20 route transitions | Five independent sequences ended at 1.452-1.499x settled heap desktop and 1.336-1.386x mobile; snapshot pairs reproduce 1.328x/1.362x and are led by 4.14/3.93 MB `InstructionStream` growth plus retained renderer wrappers while one active context remains | Trace snapshot retainers through renderer teardown, wrapper reachability, and code-cache ownership, then release or reuse only proven retained state; target every final sequence within 1.10x baseline | Same route detail, Replay, Atlas state, camera, telemetry, and exactly one connected active context | 5 | 5 | 3 | 8.33 | Cleanup can discard reusable renderer state or introduce transition churn | Independent lifecycle ratio, baseline/final snapshots, visual/navigation oracles, and active-context assertions |
+| 3 | Atlas with 2,500 routes | Desktop/mobile p99 were 2,394/3,147 ms; peak-heap p99 was 128.4/116.2 MB; long-task-total p99 was 5,894/4,708 ms; profiles allocated 27.9/29.5 MB to route regions and 16.3/17.5 MB to `fromDegrees` | Precompute immutable region and coordinate buffers and batch geometry creation; target at least 30% lower p95 latency and peak heap | Same 2,500 source-backed traces, route count, heat lines, ordering, viewport, and renderer output | 5 | 5 | 4 | 6.25 | Buffer sharing can corrupt geometry, precision, ordering, or renderer ownership | Corpus digest, canvas pixel oracle, route count, selected-route behavior, and heap/allocation profile |
+| 4 | Route detail and Replay startup outside React | Selected wall latencies were 926-938 ms while CPU, allocation, and React profiles recorded only 19.2-24.8 ms of React actual duration; every selected renderer surface retained one active context | Reuse immutable decoded route and renderer bootstrap work; target 20-30% lower p50 without retaining a second WebGL context | Same route geometry, map framing, telemetry, camera, provenance, and one active context | 4 | 4 | 4 | 4.00 | Renderer reuse can leak state across routes or retain GPU memory | Route-detail and Replay screenshots, telemetry oracle, lifecycle heap, and active-context assertions |
+| 5 | Region construction at 2,500 routes | Node p50/p95/p99 were 41.91/43.98/44.76 ms with CV 0.023; its isolated CPU profile was led by `minimalLongitudeArc` with 2,251 samples | Cache immutable per-route bounds and incrementally aggregate regions; target p95 below 25 ms | Identical region membership, ordering, counts, and geographic bounds | 2 | 4 | 2 | 4.00 | Stale bounds can misplace routes or break dateline regions | Existing region-order digest plus dateline fixtures |
+
+Lifecycle retention is a measured optimization candidate, but the snapshots identify growth categories rather than a proven owning production module.
+The five independent sequences are sufficient to establish that every observed final boundary misses the 10% target, but not to claim p95 or p99 behavior.
+The first follow-up must inspect retaining paths and establish ownership before changing cleanup behavior.
