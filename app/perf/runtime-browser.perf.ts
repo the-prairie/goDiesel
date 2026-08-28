@@ -32,6 +32,8 @@ const CAPTURE_PROFILES = process.env.GODIESEL_PERF_CAPTURE_PROFILES === "1";
 const CAPTURE_LIFECYCLE_HEAP =
   process.env.GODIESEL_PERF_CAPTURE_LIFECYCLE_HEAP === "1";
 const SOURCE_COMMIT = process.env.GODIESEL_PERF_SOURCE_COMMIT?.trim();
+const PERF_PORT = Number.parseInt(process.env.GODIESEL_PERF_PORT ?? "8794", 10);
+const PERF_BASE_URL = `http://127.0.0.1:${PERF_PORT}`;
 const OUTPUT_DIR = path.resolve(
   process.cwd(),
   STATISTICAL_MODE
@@ -216,7 +218,7 @@ function browserContextOptions(
 ): BrowserContextOptions {
   const mobile = testInfo.project.name.includes("mobile");
   return {
-    baseURL: "http://127.0.0.1:8794",
+    baseURL: PERF_BASE_URL,
     viewport: mobile
       ? { width: 430, height: 844 }
       : { width: 1440, height: 900 },
