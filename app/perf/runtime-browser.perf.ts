@@ -1,5 +1,7 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 
 import {
   expect,
@@ -15,6 +17,7 @@ import {
   assessLifecycleHeapStability,
   LIFECYCLE_HEAP_STABILITY_PROTOCOL,
 } from "./runtime-lifecycle-stability";
+import { PNG } from "pngjs";
 
 const RUN_ID = process.env.GODIESEL_PERF_RUN_ID?.trim();
 const STATISTICAL_MODE = Boolean(RUN_ID);
@@ -135,6 +138,13 @@ interface BrowserSample {
   navigation?: NavigationTiming;
   profileArtifacts?: { cpu: string; allocation: string };
   blockedExternalRequests: string[];
+  atlasRouteVisuals?: AtlasRouteVisual[];
+}
+
+interface AtlasRouteVisual {
+  camera: "global" | "east" | "west";
+  routePixelCount: number;
+  occupiedCells: number[];
 }
 
 interface TransitionSample {
@@ -586,7 +596,7 @@ async function waitForAtlas(page: Page) {
 async function waitForAtlasCorpus(page: Page) {
   await expect(
     page.locator("[data-runtime-atlas-corpus='2500']"),
-  ).toHaveAttribute("data-runtime-atlas-status", /ready|unavailable/, {
+  ).toHaveAttribute("data-runtime-atlas-status", "ready", {
     timeout: 120_000,
   });
   const canvas = page.locator("canvas[data-heat-lines='2500']");
@@ -620,6 +630,74 @@ async function waitForAtlasCorpus(page: Page) {
       { timeout: 120_000 },
     )
     .toBeGreaterThan(0);
+}
+
+function atlasRouteVisual(buffer: Buffer, camera: AtlasRouteVisual["camera"]) {
+  const image = PNG.sync.read(buffer);
+  const columns = 24;
+  const rows = 12;
+  const occupiedCells = new Array<number>(columns * rows).fill(0);
+  let routePixelCount = 0;
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      const index = (y * image.width + x) * 4;
+      const red = image.data[index];
+      const green = image.data[index + 1];
+      const blue = image.data[index + 2];
+      if (blue < 175 || blue - green < 28 || green - red < 20) continue;
+      routePixelCount += 1;
+      const column = Math.min(columns - 1, Math.floor((x / image.width) * columns));
+      const row = Math.min(rows - 1, Math.floor((y / image.height) * rows));
+      occupiedCells[row * columns + column] += 1;
+    }
+  }
+  return { camera, routePixelCount, occupiedCells };
+}
+
+async function captureAtlasRouteVisuals(page: Page) {
+  const canvas = page.locator("canvas[data-heat-lines='2500']");
+  const capture = async (camera: AtlasRouteVisual["camera"]) => {
+    const visual = atlasRouteVisual(await canvas.screenshot(), camera);
+    expect(visual.routePixelCount).toBeGreaterThan(100);
+    return visual;
+  };
+  const visuals = [await capture("global")];
+  await canvas.focus();
+  for (let index = 0; index < 4; index += 1) await page.keyboard.press("ArrowRight");
+  await page.waitForTimeout(250);
+  visuals.push(await capture("east"));
+  for (let index = 0; index < 8; index += 1) await page.keyboard.press("ArrowLeft");
+  await page.waitForTimeout(250);
+  visuals.push(await capture("west"));
+  return visuals;
+}
+
+function measuredSourceState() {
+  const repository = path.resolve(process.cwd(), "..");
+  return {
+    head: execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: repository,
+      encoding: "utf8",
+    }).trim(),
+    status: execFileSync(
+      "git",
+      ["status", "--porcelain", "--untracked-files=all"],
+      { cwd: repository, encoding: "utf8" },
+    ).trim(),
+  };
+}
+
+function assertMeasuredSourceState() {
+  const state = measuredSourceState();
+  if (
+    STATISTICAL_MODE &&
+    (state.head !== SOURCE_COMMIT || state.status.length > 0)
+  ) {
+    throw new Error(
+      `Runtime evidence requires exact clean source ${SOURCE_COMMIT}; observed ${state.head} with status ${JSON.stringify(state.status)}`,
+    );
+  }
+  return state;
 }
 
 async function waitForReplay(page: Page) {
@@ -846,6 +924,7 @@ async function freshSample(
   name: string,
   action: (page: Page) => Promise<void>,
   reducedMotion: "no-preference" | "reduce" = "no-preference",
+  inspect?: (page: Page) => Promise<Pick<BrowserSample, "atlasRouteVisuals">>,
 ) {
   const { context, page } = await createMeasuredPage(
     browser,
@@ -853,7 +932,7 @@ async function freshSample(
     reducedMotion,
   );
   try {
-    return await captureSample(
+    const sample = await captureSample(
       page,
       testInfo,
       name,
@@ -861,6 +940,7 @@ async function freshSample(
       reducedMotion,
       () => action(page),
     );
+    return { ...sample, ...(inspect ? await inspect(page) : {}) };
   } finally {
     await context.close();
   }
@@ -873,6 +953,7 @@ async function writeProjectReport(
   lifecycleBaselineHeapBytes?: number,
   lifecycleWarmupHeapBytes?: number[],
   lifecycleHeapProfileArtifacts?: LifecycleHeapProfileArtifacts,
+  browserVersion?: string,
 ) {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   const lifecycleStability = lifecycleWarmupHeapBytes
@@ -881,11 +962,27 @@ async function writeProjectReport(
   const lifecycleFinalHeapRatio = lifecycleBaselineHeapBytes
     ? transitionSamples.at(-1)!.usedHeapBytes / lifecycleBaselineHeapBytes
     : undefined;
+  const sourceState = assertMeasuredSourceState();
+  const cesiumPackage = JSON.parse(
+    fs.readFileSync(path.resolve("node_modules/cesium/package.json"), "utf8"),
+  ) as { version: string };
   const report = {
     schemaVersion: 2,
     generatedAt: new Date().toISOString(),
     projectName: testInfo.project.name,
     sourceCommit: SOURCE_COMMIT,
+    sourceState,
+    environment: {
+      platform: os.platform(),
+      release: os.release(),
+      arch: os.arch(),
+      cpuModel: os.cpus()[0]?.model ?? "unknown",
+      cpuCount: os.cpus().length,
+      totalMemoryBytes: os.totalmem(),
+      nodeVersion: process.version,
+      browserVersion,
+      cesiumVersion: cesiumPackage.version,
+    },
     runId: RUN_ID,
     repetitionIndex: repetitionIndex(testInfo),
     workload: WORKLOAD,
@@ -1120,6 +1217,7 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
       "GODIESEL_PERF_SOURCE_COMMIT is required in statistical mode",
     );
   }
+  assertMeasuredSourceState();
   const samples: BrowserSample[] = [];
   const surfaceGroups: Array<() => Promise<BrowserSample[]>> = [
     async () => {
@@ -1242,6 +1340,10 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
           });
           await waitForAtlasCorpus(page);
         },
+        "no-preference",
+        async (page) => ({
+          atlasRouteVisuals: await captureAtlasRouteVisuals(page),
+        }),
       ),
     ],
   ];
@@ -1327,5 +1429,6 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
     lifecycleMeasurement?.baselineUsedHeapBytes,
     lifecycleMeasurement?.warmupUsedHeapBytes,
     lifecycleMeasurement?.heapProfileArtifacts,
+    browser.version(),
   );
 });
