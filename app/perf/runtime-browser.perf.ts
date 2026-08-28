@@ -10,6 +10,7 @@ import {
   type BrowserContext,
   type BrowserContextOptions,
   type CDPSession,
+  type Locator,
   type Page,
   type TestInfo,
 } from "@playwright/test";
@@ -631,6 +632,21 @@ async function waitForAtlasCorpus(page: Page) {
       { timeout: 120_000 },
     )
     .toBeGreaterThan(0);
+  await expect
+    .poll(
+      async () =>
+        atlasRouteVisual(await canvasPngBuffer(canvas), "global")
+          .routePixelCount,
+      { timeout: 120_000, intervals: [250] },
+    )
+    .toBeGreaterThan(100);
+}
+
+async function canvasPngBuffer(canvas: Locator) {
+  const dataUrl = await canvas.evaluate((element) =>
+    (element as HTMLCanvasElement).toDataURL("image/png"),
+  );
+  return Buffer.from(dataUrl.slice(dataUrl.indexOf(",") + 1), "base64");
 }
 
 function atlasRouteVisual(buffer: Buffer, camera: AtlasRouteVisual["camera"]) {
@@ -675,10 +691,7 @@ function atlasRouteVisual(buffer: Buffer, camera: AtlasRouteVisual["camera"]) {
 async function captureAtlasRouteVisuals(page: Page, testInfo: TestInfo) {
   const canvas = page.locator("canvas[data-heat-lines='2500']");
   const capture = async (camera: AtlasRouteVisual["camera"]) => {
-    const dataUrl = await canvas.evaluate((element) =>
-      (element as HTMLCanvasElement).toDataURL("image/png"),
-    );
-    const buffer = Buffer.from(dataUrl.slice(dataUrl.indexOf(",") + 1), "base64");
+    const buffer = await canvasPngBuffer(canvas);
     const screenshot = `atlas-route-${testInfo.project.name}-r${String(
       repetitionIndex(testInfo),
     ).padStart(3, "0")}-${camera}.png`;

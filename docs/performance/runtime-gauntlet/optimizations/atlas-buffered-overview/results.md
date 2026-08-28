@@ -11,6 +11,7 @@ The hardened comparison captures the WebGL canvas buffer directly at global, eas
 The route oracle isolates pixels within a squared RGB distance of 1,200 from the established `#62a7ff` route color, rejects the globe rim by requiring map imagery three pixels away in every cardinal direction, and records the remaining distribution in a 48 by 24 grid.
 For every project and camera, the optimized median route-pixel count must remain between 80% and 120% of control and the occupied-cell Jaccard overlap must be at least 0.80.
 The reference repetition for each project must contain more than 100 isolated route pixels per camera; the other timing and heap repetitions still enforce a ready 2,500-route canvas.
+Every timed repetition also requires more than 100 isolated global route pixels before the action window may close, so readiness latency is comparable across renderers.
 These limits were committed before the hardened control or optimized distributions were collected.
 
 ## Outcome
