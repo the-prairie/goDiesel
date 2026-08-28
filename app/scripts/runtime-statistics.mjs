@@ -665,6 +665,31 @@ function profileSummary(files, measuredReports, nodeReports, rawDirectory) {
   };
 }
 
+function assessLifecycleWarmup(heaps, windowSize) {
+  const values = heaps.slice(-windowSize);
+  const average = values.reduce((total, value) => total + value, 0) / values.length;
+  const center = (values.length - 1) / 2;
+  let covariance = 0;
+  let xVariance = 0;
+  values.forEach((value, index) => {
+    const centeredIndex = index - center;
+    covariance += centeredIndex * (value - average);
+    xVariance += centeredIndex ** 2;
+  });
+  const half = values.length / 2;
+  const halfMean = (halfValues) =>
+    halfValues.reduce((total, value) => total + value, 0) / halfValues.length;
+  const firstHalfMean = halfMean(values.slice(0, half));
+  const secondHalfMean = halfMean(values.slice(half));
+  return {
+    observedRangeRatio: Math.max(...values) / Math.min(...values),
+    normalizedSlopePerCycle: covariance / xVariance / average,
+    observedHalfDriftRatio:
+      Math.max(firstHalfMean, secondHalfMean) /
+      Math.min(firstHalfMean, secondHalfMean),
+  };
+}
+
 export function validateLifecycleProtocol(reports) {
   if (reports.length === 0) return undefined;
   const protocols = reports.map((report) => {
@@ -689,17 +714,37 @@ export function validateLifecycleProtocol(reports) {
       stability.window > cycles ||
       !Number.isFinite(stability?.maximumRangeRatio) ||
       stability.maximumRangeRatio < 1 ||
-      !Number.isFinite(stability?.observedRangeRatio)
+      !Number.isFinite(stability?.observedRangeRatio) ||
+      !Number.isFinite(protocol?.maximumNormalizedSlopePerCycle) ||
+      protocol.maximumNormalizedSlopePerCycle < 0 ||
+      !Number.isFinite(protocol?.maximumHalfDriftRatio) ||
+      protocol.maximumHalfDriftRatio < 1 ||
+      !Number.isFinite(stability?.normalizedSlopePerCycle) ||
+      !Number.isFinite(stability?.observedHalfDriftRatio) ||
+      stability?.stable !== true ||
+      stability?.sampleCount !== cycles ||
+      stability?.windowSampleCount !== stability?.window
     ) {
       throw new Error("Lifecycle report has an invalid warmup convergence protocol");
     }
-    const window = heaps.slice(-stability.window);
-    const observedRangeRatio = Math.max(...window) / Math.min(...window);
+    const assessment = assessLifecycleWarmup(heaps, stability.window);
     if (
       stability.window !== protocol.stabilityWindow ||
       stability.maximumRangeRatio !== protocol.maximumRangeRatio ||
-      Math.abs(observedRangeRatio - stability.observedRangeRatio) > 1e-12 ||
-      observedRangeRatio > stability.maximumRangeRatio
+      Math.abs(assessment.observedRangeRatio - stability.observedRangeRatio) >
+        1e-12 ||
+      Math.abs(
+        assessment.normalizedSlopePerCycle -
+          stability.normalizedSlopePerCycle,
+      ) > 1e-12 ||
+      Math.abs(
+        assessment.observedHalfDriftRatio -
+          stability.observedHalfDriftRatio,
+      ) > 1e-12 ||
+      assessment.observedRangeRatio > stability.maximumRangeRatio ||
+      Math.abs(assessment.normalizedSlopePerCycle) >
+        protocol.maximumNormalizedSlopePerCycle ||
+      assessment.observedHalfDriftRatio > protocol.maximumHalfDriftRatio
     ) {
       throw new Error("Lifecycle report warmup did not reach its stability rule");
     }
@@ -710,6 +755,9 @@ export function validateLifecycleProtocol(reports) {
         maximumCycles: protocol.maximumCycles,
         stabilityWindow: protocol.stabilityWindow,
         maximumRangeRatio: protocol.maximumRangeRatio,
+        maximumNormalizedSlopePerCycle:
+          protocol.maximumNormalizedSlopePerCycle,
+        maximumHalfDriftRatio: protocol.maximumHalfDriftRatio,
       },
     };
   });
@@ -776,7 +824,17 @@ export function aggregateRuntimeStatistics({
     (report) =>
       (!Number.isFinite(report.lifecycleBaselineHeapBytes) ||
         report.lifecycleBaselineHeapBytes <= 0 ||
-        report.transitionSamples?.length !== 20),
+        report.transitionSamples?.length !== 20 ||
+        !Number.isFinite(report.lifecycleFinalHeapRatio) ||
+        !Number.isFinite(report.lifecycleFinalHeapMaximumRatio) ||
+        report.lifecycleFinalHeapMaximumRatio <= 1 ||
+        Math.abs(
+          report.lifecycleFinalHeapRatio -
+            report.transitionSamples.at(-1)?.usedHeapBytes /
+              report.lifecycleBaselineHeapBytes,
+        ) > 1e-12 ||
+        report.lifecycleFinalHeapRatio >
+          report.lifecycleFinalHeapMaximumRatio),
   );
   if (invalidLifecycleReports.length > 0) {
     throw new Error(

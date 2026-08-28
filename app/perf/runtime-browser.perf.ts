@@ -11,6 +11,10 @@ import {
   type Page,
   type TestInfo,
 } from "@playwright/test";
+import {
+  assessLifecycleHeapStability,
+  LIFECYCLE_HEAP_STABILITY_PROTOCOL,
+} from "./runtime-lifecycle-stability";
 
 const RUN_ID = process.env.GODIESEL_PERF_RUN_ID?.trim();
 const STATISTICAL_MODE = Boolean(RUN_ID);
@@ -32,10 +36,7 @@ const OUTPUT_DIR = path.resolve(
 );
 const ROUTE_SLUG = "17654151284";
 const OBSERVATION_WINDOW_MS = 750;
-const LIFECYCLE_WARMUP_MIN_CYCLES = 10;
-const LIFECYCLE_WARMUP_MAX_CYCLES = 40;
-const LIFECYCLE_STABILITY_WINDOW = 3;
-const LIFECYCLE_STABILITY_MAX_RANGE_RATIO = 1.03;
+const LIFECYCLE_FINAL_HEAP_MAX_RATIO = 1.1;
 
 function repetitionIndex(testInfo: TestInfo) {
   return REPETITION_OFFSET + testInfo.repeatEachIndex;
@@ -173,11 +174,6 @@ function percentile(values: readonly number[], quantile: number) {
   const sorted = [...values].sort((left, right) => left - right);
   const rank = Math.max(0, Math.ceil(quantile * sorted.length) - 1);
   return sorted[rank] ?? 0;
-}
-
-function heapRangeRatio(values: readonly number[]) {
-  const minimum = Math.min(...values);
-  return minimum > 0 ? Math.max(...values) / minimum : Number.POSITIVE_INFINITY;
 }
 
 function browserContextOptions(
@@ -851,6 +847,12 @@ async function writeProjectReport(
   lifecycleHeapProfileArtifacts?: LifecycleHeapProfileArtifacts,
 ) {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  const lifecycleStability = lifecycleWarmupHeapBytes
+    ? assessLifecycleHeapStability(lifecycleWarmupHeapBytes)
+    : undefined;
+  const lifecycleFinalHeapRatio = lifecycleBaselineHeapBytes
+    ? transitionSamples.at(-1)!.usedHeapBytes / lifecycleBaselineHeapBytes
+    : undefined;
   const report = {
     schemaVersion: 2,
     generatedAt: new Date().toISOString(),
@@ -862,7 +864,11 @@ async function writeProjectReport(
     phase: PHASE,
     captureProfiles: CAPTURE_PROFILES,
     liveProvidersDisabled: true,
-    status: "passed",
+    status:
+      lifecycleFinalHeapRatio !== undefined &&
+      lifecycleFinalHeapRatio > LIFECYCLE_FINAL_HEAP_MAX_RATIO
+        ? "failed"
+        : "passed",
     metricSemantics: {
       actionLatencyMs:
         "Elapsed wall time from action start until the explicit readiness oracle passes; no artificial observation delay is included.",
@@ -882,21 +888,29 @@ async function writeProjectReport(
     lifecycleWarmupCycles: lifecycleWarmupHeapBytes?.length,
     lifecycleWarmupProtocol: lifecycleWarmupHeapBytes
       ? {
-          minimumCycles: LIFECYCLE_WARMUP_MIN_CYCLES,
-          maximumCycles: LIFECYCLE_WARMUP_MAX_CYCLES,
-          stabilityWindow: LIFECYCLE_STABILITY_WINDOW,
-          maximumRangeRatio: LIFECYCLE_STABILITY_MAX_RANGE_RATIO,
+          minimumCycles: LIFECYCLE_HEAP_STABILITY_PROTOCOL.minimumCycles,
+          maximumCycles: LIFECYCLE_HEAP_STABILITY_PROTOCOL.maximumCycles,
+          stabilityWindow: LIFECYCLE_HEAP_STABILITY_PROTOCOL.window,
+          maximumRangeRatio:
+            LIFECYCLE_HEAP_STABILITY_PROTOCOL.maximumRangeRatio,
+          maximumNormalizedSlopePerCycle:
+            LIFECYCLE_HEAP_STABILITY_PROTOCOL.maximumNormalizedSlopePerCycle,
+          maximumHalfDriftRatio:
+            LIFECYCLE_HEAP_STABILITY_PROTOCOL.maximumHalfDriftRatio,
         }
       : undefined,
     lifecycleWarmupHeapBytes,
-    lifecycleWarmupStability: lifecycleWarmupHeapBytes
+    lifecycleWarmupStability: lifecycleStability
       ? {
-          window: LIFECYCLE_STABILITY_WINDOW,
-          maximumRangeRatio: LIFECYCLE_STABILITY_MAX_RANGE_RATIO,
-          observedRangeRatio: heapRangeRatio(
-            lifecycleWarmupHeapBytes.slice(-LIFECYCLE_STABILITY_WINDOW),
-          ),
+          ...lifecycleStability,
+          window: LIFECYCLE_HEAP_STABILITY_PROTOCOL.window,
+          maximumRangeRatio:
+            LIFECYCLE_HEAP_STABILITY_PROTOCOL.maximumRangeRatio,
         }
+      : undefined,
+    lifecycleFinalHeapRatio,
+    lifecycleFinalHeapMaximumRatio: lifecycleWarmupHeapBytes
+      ? LIFECYCLE_FINAL_HEAP_MAX_RATIO
       : undefined,
     lifecycleHeapProfileArtifacts,
     transitionSamples,
@@ -984,7 +998,11 @@ async function measureTransitions(
     };
 
     const warmupUsedHeapBytes: number[] = [];
-    for (let cycle = 0; cycle < LIFECYCLE_WARMUP_MAX_CYCLES; cycle += 1) {
+    for (
+      let cycle = 0;
+      cycle < LIFECYCLE_HEAP_STABILITY_PROTOCOL.maximumCycles;
+      cycle += 1
+    ) {
       await navigateHash(`#/routes/${ROUTE_SLUG}`);
       await waitForRouteDetail(page);
       await readWebglSnapshot(page);
@@ -997,12 +1015,7 @@ async function measureTransitions(
       await client.send("HeapProfiler.collectGarbage");
       const warmupHeap = await client.send("Runtime.getHeapUsage");
       warmupUsedHeapBytes.push(warmupHeap.usedSize);
-      if (
-        warmupUsedHeapBytes.length >= LIFECYCLE_WARMUP_MIN_CYCLES &&
-        heapRangeRatio(
-          warmupUsedHeapBytes.slice(-LIFECYCLE_STABILITY_WINDOW),
-        ) <= LIFECYCLE_STABILITY_MAX_RANGE_RATIO
-      ) {
+      if (assessLifecycleHeapStability(warmupUsedHeapBytes).stable) {
         break;
       }
     }
@@ -1265,21 +1278,16 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
     ),
   ).toBe(true);
   if (lifecycleMeasurement) {
-    expect(lifecycleMeasurement.warmupUsedHeapBytes.length).toBeGreaterThanOrEqual(
-      LIFECYCLE_WARMUP_MIN_CYCLES,
-    );
-    expect(lifecycleMeasurement.warmupUsedHeapBytes.length).toBeLessThanOrEqual(
-      LIFECYCLE_WARMUP_MAX_CYCLES,
-    );
     expect(
-      heapRangeRatio(
-        lifecycleMeasurement.warmupUsedHeapBytes.slice(
-          -LIFECYCLE_STABILITY_WINDOW,
-        ),
-      ),
-    ).toBeLessThanOrEqual(LIFECYCLE_STABILITY_MAX_RANGE_RATIO);
+      assessLifecycleHeapStability(
+        lifecycleMeasurement.warmupUsedHeapBytes,
+      ).stable,
+    ).toBe(true);
     expect(lifecycleMeasurement.baselineUsedHeapBytes).toBeGreaterThan(0);
-    expect(transitionSamples.at(-1)?.usedHeapBytes).toBeGreaterThan(0);
+    expect(
+      transitionSamples.at(-1)!.usedHeapBytes /
+        lifecycleMeasurement.baselineUsedHeapBytes,
+    ).toBeLessThanOrEqual(LIFECYCLE_FINAL_HEAP_MAX_RATIO);
   }
   await writeProjectReport(
     testInfo,
