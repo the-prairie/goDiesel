@@ -237,6 +237,9 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
           return [{ regionName: region.name, route, entity }];
         }),
       );
+      viewer.canvas.dataset.submittedRouteGeometry = String(
+        this.routeEntities.length,
+      );
 
       this.installKeyboardControls(viewer);
       this.installRouteSelection(viewer);
