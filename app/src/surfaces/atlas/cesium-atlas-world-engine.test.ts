@@ -5,7 +5,7 @@ import {
   CesiumAtlasWorldEngine,
   globalPositionsForRoute,
   routeForPickedEntity,
-  sharedGlobalPositionSets,
+  globalPositionSets,
 } from "@/surfaces/atlas/cesium-atlas-world-engine";
 import { completedRoutes } from "@/data/routes";
 import { buildRouteRegions, type RouteRegion } from "@/data/route-regions";
@@ -115,7 +115,7 @@ describe("CesiumAtlasWorldEngine", () => {
     expect(globalPositionsForRoute({ ...source, trace: [] })).toEqual([]);
   });
 
-  it("shares identical geometry while retaining at most two glow passes", () => {
+  it("submits every overview route geometry in source order", () => {
     const source = completedRoutes[0];
     const replica = {
       ...source,
@@ -130,11 +130,12 @@ describe("CesiumAtlasWorldEngine", () => {
       ),
     };
 
-    const shared = sharedGlobalPositionSets([source, replica, replica]);
+    const positions = globalPositionSets([source, replica, replica]);
 
-    expect(shared).toHaveLength(2);
-    expect(shared[0]).toBe(shared[1]);
-    expect(sharedGlobalPositionSets([source, distinct])).toHaveLength(2);
+    expect(positions).toHaveLength(3);
+    expect(positions[0]).not.toBe(positions[1]);
+    expect(positions[0]).toEqual(positions[1]);
+    expect(globalPositionSets([source, distinct])).toHaveLength(2);
   });
 
   it("defers Entities to the selected region", () => {

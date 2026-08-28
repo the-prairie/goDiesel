@@ -10,15 +10,15 @@ import {
   ConstantProperty,
   Entity,
   GeometryInstance,
-  GroundPolylineGeometry,
-  GroundPolylinePrimitive,
   HeadingPitchRoll,
   HeadingPitchRange,
   ImageryLayer,
   Material,
   PerspectiveFrustum,
+  PolylineGeometry,
   PolylineGlowMaterialProperty,
   PolylineMaterialAppearance,
+  Primitive,
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
   SceneTransforms,
@@ -67,32 +67,11 @@ export function globalPositionsForRoute(route: RouteSummary) {
   );
 }
 
-export function sharedGlobalPositionSets(routes: readonly RouteSummary[]) {
-  const geometry = new Map<
-    string,
-    { positions: Cartesian3[]; occurrenceCount: number }
-  >();
-  routes.forEach((route) => {
-    const points = sampleGlobalRoutePoints(route);
-    if (points.length < 2) return;
-    const geometryKey = JSON.stringify(
-      points.map((point) => [point.lat, point.lng]),
-    );
-    const existing = geometry.get(geometryKey);
-    if (existing) {
-      existing.occurrenceCount += 1;
-      return;
-    }
-    geometry.set(geometryKey, {
-      positions: points.map((point) =>
-        Cartesian3.fromDegrees(point.lng, point.lat),
-      ),
-      occurrenceCount: 1,
-    });
+export function globalPositionSets(routes: readonly RouteSummary[]) {
+  return routes.flatMap((route) => {
+    const positions = globalPositionsForRoute(route);
+    return positions.length < 2 ? [] : [positions];
   });
-  return [...geometry.values()].flatMap(({ positions, occurrenceCount }) =>
-    Array.from({ length: Math.min(occurrenceCount, 2) }, () => positions),
-  );
 }
 
 export function routeForPickedEntity(
@@ -156,7 +135,8 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   private viewer?: Viewer;
   private regions: RouteRegion[] = [];
   private routeEntities: RegionRouteEntity[] = [];
-  private globalRoutePolylines?: GroundPolylinePrimitive;
+  private globalRoutePolylines?: Primitive;
+  private globalRouteGeometryCount = 0;
   private removeRenderErrorListener?: () => void;
   private removeCameraChangedListener?: () => void;
   private keyDownHandler?: (event: KeyboardEvent) => void;
@@ -256,6 +236,9 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
       this.baseImageryLayer = viewer.imageryLayers.addImageryProvider(imagery);
 
       this.globalRoutePolylines = this.createGlobalRouteCollection(regions);
+      viewer.canvas.dataset.submittedRouteGeometry = String(
+        this.globalRouteGeometryCount,
+      );
       viewer.scene.primitives.add(this.globalRoutePolylines);
 
       this.installKeyboardControls(viewer);
@@ -399,6 +382,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     this.regions = [];
     this.routeEntities = [];
     this.globalRoutePolylines = undefined;
+    this.globalRouteGeometryCount = 0;
     this.removeRenderErrorListener = undefined;
     this.removeCameraChangedListener = undefined;
     this.keyDownHandler = undefined;
@@ -580,15 +564,20 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   }
 
   private createGlobalRouteCollection(regions: readonly RouteRegion[]) {
-    const geometryInstances = sharedGlobalPositionSets(
+    const geometryInstances = globalPositionSets(
       regions.flatMap((region) => region.routes),
     ).map(
       (positions) =>
         new GeometryInstance({
-          geometry: new GroundPolylineGeometry({ positions, width: 4 }),
+          geometry: new PolylineGeometry({
+            positions,
+            width: 4,
+            vertexFormat: PolylineMaterialAppearance.VERTEX_FORMAT,
+          }),
         }),
     );
-    return new GroundPolylinePrimitive({
+    this.globalRouteGeometryCount = geometryInstances.length;
+    return new Primitive({
       geometryInstances,
       appearance: new PolylineMaterialAppearance({
         material: Material.fromType(Material.PolylineGlowType, {
@@ -599,13 +588,12 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
       }),
       allowPicking: false,
       asynchronous: true,
-      classificationType: ClassificationType.BOTH,
       releaseGeometryInstances: true,
     });
   }
 
   private waitForGlobalRoutePrimitive(
-    primitive: GroundPolylinePrimitive,
+    primitive: Primitive,
     generation: number,
   ) {
     const startedAt = performance.now();
