@@ -13,6 +13,7 @@ import {
 } from "./runtime-corpus";
 
 const CORPUS_SIZE = 2_500;
+const VISUAL_FIXTURE_TIME_ISO = "2026-03-20T12:00:00Z";
 
 function AtlasCorpusHarness() {
   const productionDistribution =
@@ -47,6 +48,7 @@ function AtlasCorpusHarness() {
     >
       <CesiumAtlasGlobe
         regions={regions}
+        illuminationTimeIso={VISUAL_FIXTURE_TIME_ISO}
         selectedRoute={selectedRoute}
         onSelectRegion={() => undefined}
         onSelectRoute={setSelectedRoute}
