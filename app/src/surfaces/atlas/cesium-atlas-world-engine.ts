@@ -570,8 +570,8 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     });
     const material = new BufferPolylineMaterial({
       color: ROUTE_COLOR.withAlpha(0.92),
-      outlineColor: ROUTE_COLOR.withAlpha(0.18),
-      outlineWidth: 2,
+      outlineColor: ROUTE_COLOR.withAlpha(0),
+      outlineWidth: 0,
       width: 4,
     });
     const polyline = new BufferPolyline();
