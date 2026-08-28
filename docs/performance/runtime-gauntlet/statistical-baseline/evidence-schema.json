@@ -22,7 +22,25 @@
       "properties": {
         "warmups": { "type": "integer", "minimum": 0 },
         "measuredRepetitions": { "type": "integer", "minimum": 1 },
-        "quantileMethod": { "const": "nearest-rank" }
+        "quantileMethod": { "const": "nearest-rank" },
+        "lifecycleWarmup": {
+          "type": ["object", "null"],
+          "properties": {
+            "minimumCycles": { "type": "integer", "minimum": 1 },
+            "maximumCycles": { "type": "integer", "minimum": 1 },
+            "stabilityWindow": { "type": "integer", "minimum": 2 },
+            "maximumRangeRatio": { "type": "number", "minimum": 1 },
+            "maximumNormalizedSlopePerCycle": { "type": "number", "minimum": 0 },
+            "maximumHalfDriftRatio": { "type": "number", "minimum": 1 },
+            "maximumFinalHeapRatio": { "const": 1.1 },
+            "observedCycles": {
+              "type": "array",
+              "items": { "type": "integer", "minimum": 1 }
+            }
+          },
+          "required": ["minimumCycles", "maximumCycles", "stabilityWindow", "maximumRangeRatio", "maximumNormalizedSlopePerCycle", "maximumHalfDriftRatio", "maximumFinalHeapRatio", "observedCycles"],
+          "additionalProperties": false
+        }
       },
       "additionalProperties": true
     },

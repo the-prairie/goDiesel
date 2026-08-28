@@ -10,6 +10,8 @@ import {
   normalizeProfileUrl,
   resolveInventoriedProfileArtifact,
   summarizeDistribution,
+  validateLifecycleProtocol,
+  validateLifecycleFinalHeap,
 } from "../scripts/runtime-statistics.mjs";
 import {
   assertNotCancelled,
@@ -19,8 +21,107 @@ import {
   validBrowserReportIndexes,
 } from "../scripts/run-runtime-statistics.mjs";
 import { completeFrameInterval } from "./runtime-frame-sampling";
+import {
+  assessLifecycleHeapStability,
+  LIFECYCLE_HEAP_STABILITY_PROTOCOL,
+} from "./runtime-lifecycle-stability";
 
 describe("runtime statistical evidence", () => {
+  test("accepts stable lifecycle heap noise", () => {
+    const assessment = assessLifecycleHeapStability([
+      100, 100.1, 99.9, 100.2, 100, 100.4, 99.8, 100.2, 100.1, 99.9, 100.3,
+      100,
+    ]);
+
+    expect(assessment.stable).toBe(true);
+  });
+
+  test("rejects slow monotonic lifecycle retention", () => {
+    const heaps = Array.from({ length: 40 }, (_, index) => 100 * 1.005 ** index);
+    const assessment = assessLifecycleHeapStability(heaps);
+
+    expect(assessment.stable).toBe(false);
+    expect(assessment.normalizedSlopePerCycle).toBeGreaterThan(
+      LIFECYCLE_HEAP_STABILITY_PROTOCOL.maximumNormalizedSlopePerCycle,
+    );
+  });
+
+  test("accepts a transient JIT spike only after a stable window", () => {
+    const unsettled = [100, 130, 118, 112, 110, 110.2, 109.9, 110.1];
+    const settled = [
+      ...unsettled,
+      110,
+      110.1,
+      109.9,
+      110,
+      110.2,
+      109.8,
+      110.1,
+      110,
+    ];
+
+    expect(assessLifecycleHeapStability(unsettled).stable).toBe(false);
+    expect(assessLifecycleHeapStability(settled).stable).toBe(true);
+  });
+
+  test("keeps a steady-growth sequence unresolved at the warmup maximum", () => {
+    const heaps = Array.from(
+      { length: LIFECYCLE_HEAP_STABILITY_PROTOCOL.maximumCycles },
+      (_, index) => 100 + index,
+    );
+
+    expect(assessLifecycleHeapStability(heaps)).toMatchObject({
+      stable: false,
+      sampleCount: LIFECYCLE_HEAP_STABILITY_PROTOCOL.maximumCycles,
+    });
+  });
+
+  test("enforces the canonical lifecycle final heap ceiling", () => {
+    const report = {
+      lifecycleBaselineHeapBytes: 1_000,
+      lifecycleFinalHeapRatio: 1.05,
+      lifecycleFinalHeapMaximumRatio: 1.1,
+      transitionSamples: Array.from({ length: 20 }, (_, index) => ({
+        usedHeapBytes: index === 19 ? 1_050 : 1_000,
+      })),
+    };
+
+    expect(() => validateLifecycleFinalHeap(report)).not.toThrow();
+    expect(() =>
+      validateLifecycleFinalHeap({
+        ...report,
+        lifecycleFinalHeapRatio: 1.4,
+        lifecycleFinalHeapMaximumRatio: 1.5,
+        transitionSamples: report.transitionSamples.map((sample, index) => ({
+          ...sample,
+          usedHeapBytes: index === 19 ? 1_400 : sample.usedHeapBytes,
+        })),
+      }),
+    ).toThrow("canonical 1.10 final heap ceiling");
+    expect(() =>
+      validateLifecycleFinalHeap({
+        ...report,
+        lifecycleFinalHeapRatio: 1.11,
+        transitionSamples: report.transitionSamples.map((sample, index) => ({
+          ...sample,
+          usedHeapBytes: index === 19 ? 1_110 : sample.usedHeapBytes,
+        })),
+      }),
+    ).toThrow("canonical 1.10 final heap ceiling");
+    for (const invalidFinalHeap of [undefined, Number.NaN, -1]) {
+      expect(() =>
+        validateLifecycleFinalHeap({
+          ...report,
+          transitionSamples: report.transitionSamples.map((sample, index) =>
+            index === 19
+              ? { usedHeapBytes: invalidFinalHeap }
+              : sample,
+          ),
+        }),
+      ).toThrow("canonical 1.10 final heap ceiling");
+    }
+  });
+
   test("keeps only complete frame intervals inside the phase window", () => {
     expect(completeFrameInterval(90, 110, 100, 200)).toBeUndefined();
     expect(completeFrameInterval(110, 126, 100, 200)).toBe(16);
@@ -111,6 +212,13 @@ describe("runtime statistical evidence", () => {
     const rawDirectory = path.join(temporaryRoot, "raw");
     const outputDirectory = path.join(temporaryRoot, "evidence");
     fs.mkdirSync(rawDirectory, { recursive: true });
+    const lifecycleWarmupHeapBytes = [
+      900, 930, 960, 990, 1_000, 1_001, 999, 1_000, 1_001, 1_000, 999,
+      1_000,
+    ];
+    const lifecycleWarmupStability = assessLifecycleHeapStability(
+      lifecycleWarmupHeapBytes,
+    );
     fs.writeFileSync(
       path.join(rawDirectory, "runtime-node.json"),
       JSON.stringify({
@@ -176,6 +284,23 @@ describe("runtime statistical evidence", () => {
         workload: "lifecycle",
         repetitionIndex: 0,
         lifecycleBaselineHeapBytes: 1_000,
+        lifecycleWarmupCycles: 12,
+        lifecycleWarmupProtocol: {
+          minimumCycles: 12,
+          maximumCycles: 40,
+          stabilityWindow: 8,
+          maximumRangeRatio: 1.04,
+          maximumNormalizedSlopePerCycle: 0.0025,
+          maximumHalfDriftRatio: 1.01,
+        },
+        lifecycleWarmupHeapBytes,
+        lifecycleWarmupStability: {
+          ...lifecycleWarmupStability,
+          window: 8,
+          maximumRangeRatio: 1.04,
+        },
+        lifecycleFinalHeapRatio: 1.029,
+        lifecycleFinalHeapMaximumRatio: 1.1,
         samples: [],
         transitionSamples: Array.from({ length: 20 }, (_, cycle) => ({
           detailLatencyMs: 100 + cycle,
@@ -220,11 +345,126 @@ describe("runtime statistical evidence", () => {
       status: "unavailable",
       blocker: "quota approval missing",
     });
+    expect(report.protocol.lifecycleWarmup).toEqual({
+      minimumCycles: 12,
+      maximumCycles: 40,
+      stabilityWindow: 8,
+      maximumRangeRatio: 1.04,
+      maximumNormalizedSlopePerCycle: 0.0025,
+      maximumHalfDriftRatio: 1.01,
+      maximumFinalHeapRatio: 1.1,
+      observedCycles: [12],
+    });
+    expect(report.protocol.repetitionPlan.lifecycleWarmupCycles).toEqual([12]);
     expect(report.environment.hostname).toBe("redacted-local-host");
     expect(report.artifacts).toHaveLength(3);
     expect(
       report.artifacts.every((artifact) => artifact.sha256.length === 64),
     ).toBe(true);
+  });
+
+  test("rejects missing and noncanonical lifecycle convergence protocols", () => {
+    const report = (cycles: number) => ({
+      lifecycleWarmupCycles: cycles,
+      lifecycleWarmupProtocol: {
+        minimumCycles: 12,
+        maximumCycles: 40,
+        stabilityWindow: 8,
+        maximumRangeRatio: 1.04,
+        maximumNormalizedSlopePerCycle: 0.0025,
+        maximumHalfDriftRatio: 1.01,
+      },
+      lifecycleWarmupHeapBytes: Array.from({ length: cycles }, () => 1_000),
+      lifecycleBaselineHeapBytes: 1_000,
+      lifecycleWarmupStability: {
+        stable: true,
+        sampleCount: cycles,
+        windowSampleCount: 8,
+        window: 8,
+        maximumRangeRatio: 1.04,
+        observedRangeRatio: 1,
+        normalizedSlopePerCycle: 0,
+        observedHalfDriftRatio: 1,
+      },
+    });
+
+    expect(() => validateLifecycleProtocol([{}])).toThrow(
+      "invalid warmup convergence protocol",
+    );
+    expect(() =>
+      validateLifecycleProtocol([
+        report(12),
+        {
+          ...report(13),
+          lifecycleWarmupProtocol: {
+            ...report(13).lifecycleWarmupProtocol,
+            maximumCycles: 39,
+          },
+        },
+      ]),
+    ).toThrow("canonical warmup convergence protocol");
+
+    const slowRetention = Array.from(
+      { length: 12 },
+      (_, index) => 1_000 * 1.005 ** index,
+    );
+    expect(() =>
+      validateLifecycleProtocol([
+        {
+          ...report(12),
+          lifecycleWarmupHeapBytes: slowRetention,
+          lifecycleBaselineHeapBytes: slowRetention.at(-1),
+        },
+      ]),
+    ).toThrow("did not reach its stability rule");
+  });
+
+  test.each([
+    ["minimum cycles", { minimumCycles: 2 }, {}],
+    ["maximum cycles", { maximumCycles: 41 }, {}],
+    [
+      "stability window",
+      { stabilityWindow: 6 },
+      { window: 6, windowSampleCount: 6 },
+    ],
+    [
+      "range threshold",
+      { maximumRangeRatio: 1.05 },
+      { maximumRangeRatio: 1.05 },
+    ],
+    ["slope threshold", { maximumNormalizedSlopePerCycle: 0.003 }, {}],
+    ["half-drift threshold", { maximumHalfDriftRatio: 1.02 }, {}],
+  ])("rejects a noncanonical lifecycle %s", (_, protocolChange, stabilityChange) => {
+    const cycles = 12;
+    const report = {
+      lifecycleWarmupCycles: cycles,
+      lifecycleWarmupProtocol: {
+        minimumCycles: 12,
+        maximumCycles: 40,
+        stabilityWindow: 8,
+        maximumRangeRatio: 1.04,
+        maximumNormalizedSlopePerCycle: 0.0025,
+        maximumHalfDriftRatio: 1.01,
+        ...protocolChange,
+      },
+      lifecycleWarmupHeapBytes: Array.from({ length: cycles }, () => 1_000),
+      lifecycleBaselineHeapBytes: 1_000,
+      lifecycleWarmupStability: {
+        stable: true,
+        sampleCount: cycles,
+        windowSampleCount: 8,
+        window: 8,
+        maximumRangeRatio: 1.04,
+        observedRangeRatio: 1,
+        normalizedSlopePerCycle: 0,
+        observedHalfDriftRatio: 1,
+        ...stabilityChange,
+      },
+    };
+
+    expect(() => validateLifecycleProtocol([report])).toThrow(
+      "canonical warmup convergence protocol",
+    );
   });
 
   test("rejects raw reports from a different source commit", () => {

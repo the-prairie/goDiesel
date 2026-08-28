@@ -665,6 +665,157 @@ function profileSummary(files, measuredReports, nodeReports, rawDirectory) {
   };
 }
 
+function assessLifecycleWarmup(heaps, windowSize) {
+  const values = heaps.slice(-windowSize);
+  const average = values.reduce((total, value) => total + value, 0) / values.length;
+  const center = (values.length - 1) / 2;
+  let covariance = 0;
+  let xVariance = 0;
+  values.forEach((value, index) => {
+    const centeredIndex = index - center;
+    covariance += centeredIndex * (value - average);
+    xVariance += centeredIndex ** 2;
+  });
+  const half = values.length / 2;
+  const halfMean = (halfValues) =>
+    halfValues.reduce((total, value) => total + value, 0) / halfValues.length;
+  const firstHalfMean = halfMean(values.slice(0, half));
+  const secondHalfMean = halfMean(values.slice(half));
+  return {
+    observedRangeRatio: Math.max(...values) / Math.min(...values),
+    normalizedSlopePerCycle: covariance / xVariance / average,
+    observedHalfDriftRatio:
+      Math.max(firstHalfMean, secondHalfMean) /
+      Math.min(firstHalfMean, secondHalfMean),
+  };
+}
+
+const LIFECYCLE_FINAL_HEAP_MAX_RATIO = 1.1;
+const CANONICAL_LIFECYCLE_WARMUP_PROTOCOL = Object.freeze({
+  minimumCycles: 12,
+  maximumCycles: 40,
+  stabilityWindow: 8,
+  maximumRangeRatio: 1.04,
+  maximumNormalizedSlopePerCycle: 0.0025,
+  maximumHalfDriftRatio: 1.01,
+});
+
+export function validateLifecycleFinalHeap(report) {
+  const finalUsedHeapBytes = report.transitionSamples?.at(-1)?.usedHeapBytes;
+  const observedRatio = finalUsedHeapBytes / report.lifecycleBaselineHeapBytes;
+  if (
+    !Number.isFinite(report.lifecycleBaselineHeapBytes) ||
+    report.lifecycleBaselineHeapBytes <= 0 ||
+    report.transitionSamples?.length !== 20 ||
+    !Number.isFinite(finalUsedHeapBytes) ||
+    finalUsedHeapBytes <= 0 ||
+    !Number.isFinite(observedRatio) ||
+    observedRatio <= 0 ||
+    !Number.isFinite(report.lifecycleFinalHeapRatio) ||
+    report.lifecycleFinalHeapMaximumRatio !==
+      LIFECYCLE_FINAL_HEAP_MAX_RATIO ||
+    Math.abs(report.lifecycleFinalHeapRatio - observedRatio) > 1e-12 ||
+    report.lifecycleFinalHeapRatio > LIFECYCLE_FINAL_HEAP_MAX_RATIO
+  ) {
+    throw new Error(
+      "Lifecycle report does not satisfy the canonical 1.10 final heap ceiling",
+    );
+  }
+}
+
+export function validateLifecycleProtocol(reports) {
+  if (reports.length === 0) return undefined;
+  const protocols = reports.map((report) => {
+    const cycles = report.lifecycleWarmupCycles;
+    const heaps = report.lifecycleWarmupHeapBytes;
+    const stability = report.lifecycleWarmupStability;
+    const protocol = report.lifecycleWarmupProtocol;
+    if (
+      !Number.isInteger(cycles) ||
+      !Number.isInteger(protocol?.minimumCycles) ||
+      !Number.isInteger(protocol?.maximumCycles) ||
+      protocol.minimumCycles < 1 ||
+      protocol.maximumCycles < protocol.minimumCycles ||
+      cycles < protocol.minimumCycles ||
+      cycles > protocol.maximumCycles ||
+      !Array.isArray(heaps) ||
+      heaps.length !== cycles ||
+      heaps.some((value) => !Number.isFinite(value) || value <= 0) ||
+      report.lifecycleBaselineHeapBytes !== heaps.at(-1) ||
+      !Number.isInteger(stability?.window) ||
+      stability.window < 2 ||
+      stability.window > cycles ||
+      !Number.isFinite(stability?.maximumRangeRatio) ||
+      stability.maximumRangeRatio < 1 ||
+      !Number.isFinite(stability?.observedRangeRatio) ||
+      !Number.isFinite(protocol?.maximumNormalizedSlopePerCycle) ||
+      protocol.maximumNormalizedSlopePerCycle < 0 ||
+      !Number.isFinite(protocol?.maximumHalfDriftRatio) ||
+      protocol.maximumHalfDriftRatio < 1 ||
+      !Number.isFinite(stability?.normalizedSlopePerCycle) ||
+      !Number.isFinite(stability?.observedHalfDriftRatio) ||
+      stability?.stable !== true ||
+      stability?.sampleCount !== cycles ||
+      stability?.windowSampleCount !== stability?.window
+    ) {
+      throw new Error("Lifecycle report has an invalid warmup convergence protocol");
+    }
+    if (
+      Object.entries(CANONICAL_LIFECYCLE_WARMUP_PROTOCOL).some(
+        ([field, expected]) => protocol[field] !== expected,
+      )
+    ) {
+      throw new Error(
+        "Lifecycle report does not use the canonical warmup convergence protocol",
+      );
+    }
+    const assessment = assessLifecycleWarmup(heaps, stability.window);
+    if (
+      stability.window !== protocol.stabilityWindow ||
+      stability.maximumRangeRatio !== protocol.maximumRangeRatio ||
+      Math.abs(assessment.observedRangeRatio - stability.observedRangeRatio) >
+        1e-12 ||
+      Math.abs(
+        assessment.normalizedSlopePerCycle -
+          stability.normalizedSlopePerCycle,
+      ) > 1e-12 ||
+      Math.abs(
+        assessment.observedHalfDriftRatio -
+          stability.observedHalfDriftRatio,
+      ) > 1e-12 ||
+      assessment.observedRangeRatio > stability.maximumRangeRatio ||
+      Math.abs(assessment.normalizedSlopePerCycle) >
+        protocol.maximumNormalizedSlopePerCycle ||
+      assessment.observedHalfDriftRatio > protocol.maximumHalfDriftRatio
+    ) {
+      throw new Error("Lifecycle report warmup did not reach its stability rule");
+    }
+    return {
+      cycles,
+      protocol: {
+        minimumCycles: protocol.minimumCycles,
+        maximumCycles: protocol.maximumCycles,
+        stabilityWindow: protocol.stabilityWindow,
+        maximumRangeRatio: protocol.maximumRangeRatio,
+        maximumNormalizedSlopePerCycle:
+          protocol.maximumNormalizedSlopePerCycle,
+        maximumHalfDriftRatio: protocol.maximumHalfDriftRatio,
+      },
+    };
+  });
+  const serialized = new Set(
+    protocols.map(({ protocol }) => JSON.stringify(protocol)),
+  );
+  if (serialized.size !== 1) {
+    throw new Error("Lifecycle reports use mixed warmup convergence protocols");
+  }
+  return {
+    ...protocols[0].protocol,
+    maximumFinalHeapRatio: LIFECYCLE_FINAL_HEAP_MAX_RATIO,
+    observedCycles: protocols.map(({ cycles }) => cycles),
+  };
+}
+
 export function aggregateRuntimeStatistics({
   rawDirectory,
   outputDirectory,
@@ -709,18 +860,11 @@ export function aggregateRuntimeStatistics({
       `${nonPassingReports.length} raw reports are not atomic passed reports`,
     );
   }
-  const invalidLifecycleReports = browserReports.filter(
-    (report) =>
-      report.workload === "lifecycle" &&
-      (!Number.isFinite(report.lifecycleBaselineHeapBytes) ||
-        report.lifecycleBaselineHeapBytes <= 0 ||
-        report.transitionSamples?.length !== 20),
+  const lifecycleReports = [...browserReports, ...profileReports].filter(
+    (report) => report.workload === "lifecycle",
   );
-  if (invalidLifecycleReports.length > 0) {
-    throw new Error(
-      `${invalidLifecycleReports.length} lifecycle reports lack a settled heap baseline or 20 transitions`,
-    );
-  }
+  lifecycleReports.forEach(validateLifecycleFinalHeap);
+  const lifecycleWarmup = validateLifecycleProtocol(lifecycleReports);
   const providerResources = [...browserReports, ...profileReports].flatMap(
     (report) =>
       (report.samples ?? []).flatMap((sample) =>
@@ -783,6 +927,7 @@ export function aggregateRuntimeStatistics({
       ),
       measuredRepetitions,
       quantileMethod: "nearest-rank",
+      lifecycleWarmup,
       repetitionPlan: {
         nodeSamples: nodeReports[0]?.benchmarks?.[0]?.samplesMs?.length ?? 0,
         browserSurfaceByProject: Object.fromEntries(
@@ -817,6 +962,7 @@ export function aggregateRuntimeStatistics({
             ],
           ),
         ),
+        lifecycleWarmupCycles: lifecycleWarmup?.observedCycles ?? [],
         profileRepetitionsByProject: Object.fromEntries(
           [...new Set(profileReports.map((report) => report.projectName))].map(
             (projectName) => [

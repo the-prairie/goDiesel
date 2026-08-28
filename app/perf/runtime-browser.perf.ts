@@ -11,6 +11,10 @@ import {
   type Page,
   type TestInfo,
 } from "@playwright/test";
+import {
+  assessLifecycleHeapStability,
+  LIFECYCLE_HEAP_STABILITY_PROTOCOL,
+} from "./runtime-lifecycle-stability";
 
 const RUN_ID = process.env.GODIESEL_PERF_RUN_ID?.trim();
 const STATISTICAL_MODE = Boolean(RUN_ID);
@@ -32,6 +36,7 @@ const OUTPUT_DIR = path.resolve(
 );
 const ROUTE_SLUG = "17654151284";
 const OBSERVATION_WINDOW_MS = 750;
+const LIFECYCLE_FINAL_HEAP_MAX_RATIO = 1.1;
 
 function repetitionIndex(testInfo: TestInfo) {
   return REPETITION_OFFSET + testInfo.repeatEachIndex;
@@ -60,6 +65,7 @@ interface RuntimePhaseSnapshot {
 interface WebglSnapshot {
   activeContexts: number;
   connectedCanvases: number;
+  retainedContextRecords: number;
   totalContextsCreated: number;
 }
 
@@ -298,8 +304,11 @@ async function installInstrumentation(context: BrowserContext) {
     function webglSnapshot(): WebglSnapshot {
       let activeContexts = 0;
       let connectedCanvases = 0;
-      for (const record of webglRecords.values()) {
-        if (!record.canvas.isConnected) continue;
+      for (const [canvas, record] of webglRecords) {
+        if (!canvas.isConnected) {
+          webglRecords.delete(canvas);
+          continue;
+        }
         connectedCanvases += 1;
         const contextLost =
           record.lost ||
@@ -307,7 +316,12 @@ async function installInstrumentation(context: BrowserContext) {
             record.context.isContextLost());
         if (!contextLost) activeContexts += 1;
       }
-      return { activeContexts, connectedCanvases, totalContextsCreated };
+      return {
+        activeContexts,
+        connectedCanvases,
+        retainedContextRecords: webglRecords.size,
+        totalContextsCreated,
+      };
     }
 
     window.__runtimePerf = {
@@ -829,9 +843,16 @@ async function writeProjectReport(
   samples: BrowserSample[],
   transitionSamples: TransitionSample[],
   lifecycleBaselineHeapBytes?: number,
+  lifecycleWarmupHeapBytes?: number[],
   lifecycleHeapProfileArtifacts?: LifecycleHeapProfileArtifacts,
 ) {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  const lifecycleStability = lifecycleWarmupHeapBytes
+    ? assessLifecycleHeapStability(lifecycleWarmupHeapBytes)
+    : undefined;
+  const lifecycleFinalHeapRatio = lifecycleBaselineHeapBytes
+    ? transitionSamples.at(-1)!.usedHeapBytes / lifecycleBaselineHeapBytes
+    : undefined;
   const report = {
     schemaVersion: 2,
     generatedAt: new Date().toISOString(),
@@ -843,7 +864,11 @@ async function writeProjectReport(
     phase: PHASE,
     captureProfiles: CAPTURE_PROFILES,
     liveProvidersDisabled: true,
-    status: "passed",
+    status:
+      lifecycleFinalHeapRatio !== undefined &&
+      lifecycleFinalHeapRatio > LIFECYCLE_FINAL_HEAP_MAX_RATIO
+        ? "failed"
+        : "passed",
     metricSemantics: {
       actionLatencyMs:
         "Elapsed wall time from action start until the explicit readiness oracle passes; no artificial observation delay is included.",
@@ -856,10 +881,37 @@ async function writeProjectReport(
       cdpWindowMs:
         "CDP counter deltas use their own Performance.Timestamp interval. This may exceed the fixed in-page observation window when main-thread work delays the protocol capture.",
       webgl:
-        "activeContexts counts connected, non-lost WebGL contexts at observation end. totalContextsCreated is cumulative and is never used as the active-renderer assertion.",
+        "activeContexts counts connected, non-lost WebGL contexts at observation end. retainedContextRecords counts instrumentation-owned strong records and must match connectedCanvases after settlement. totalContextsCreated is cumulative and is never used as the active-renderer assertion.",
     },
     samples,
     lifecycleBaselineHeapBytes,
+    lifecycleWarmupCycles: lifecycleWarmupHeapBytes?.length,
+    lifecycleWarmupProtocol: lifecycleWarmupHeapBytes
+      ? {
+          minimumCycles: LIFECYCLE_HEAP_STABILITY_PROTOCOL.minimumCycles,
+          maximumCycles: LIFECYCLE_HEAP_STABILITY_PROTOCOL.maximumCycles,
+          stabilityWindow: LIFECYCLE_HEAP_STABILITY_PROTOCOL.window,
+          maximumRangeRatio:
+            LIFECYCLE_HEAP_STABILITY_PROTOCOL.maximumRangeRatio,
+          maximumNormalizedSlopePerCycle:
+            LIFECYCLE_HEAP_STABILITY_PROTOCOL.maximumNormalizedSlopePerCycle,
+          maximumHalfDriftRatio:
+            LIFECYCLE_HEAP_STABILITY_PROTOCOL.maximumHalfDriftRatio,
+        }
+      : undefined,
+    lifecycleWarmupHeapBytes,
+    lifecycleWarmupStability: lifecycleStability
+      ? {
+          ...lifecycleStability,
+          window: LIFECYCLE_HEAP_STABILITY_PROTOCOL.window,
+          maximumRangeRatio:
+            LIFECYCLE_HEAP_STABILITY_PROTOCOL.maximumRangeRatio,
+        }
+      : undefined,
+    lifecycleFinalHeapRatio,
+    lifecycleFinalHeapMaximumRatio: lifecycleWarmupHeapBytes
+      ? LIFECYCLE_FINAL_HEAP_MAX_RATIO
+      : undefined,
     lifecycleHeapProfileArtifacts,
     transitionSamples,
   };
@@ -926,6 +978,7 @@ async function measureTransitions(
   testInfo: TestInfo,
 ): Promise<{
   baselineUsedHeapBytes: number;
+  warmupUsedHeapBytes: number[];
   samples: TransitionSample[];
   heapProfileArtifacts?: LifecycleHeapProfileArtifacts;
 }> {
@@ -935,8 +988,38 @@ async function measureTransitions(
     await waitForAtlas(page);
     const client = await context.newCDPSession(page);
     await client.send("HeapProfiler.enable");
-    await client.send("HeapProfiler.collectGarbage");
-    const baselineHeap = await client.send("Runtime.getHeapUsage");
+    const navigateHash = async (hash: string) => {
+      await page.evaluate((nextHash) => {
+        window.location.hash = nextHash;
+      }, hash);
+      await expect(page).toHaveURL(
+        new RegExp(hash.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+      );
+    };
+
+    const warmupUsedHeapBytes: number[] = [];
+    for (
+      let cycle = 0;
+      cycle < LIFECYCLE_HEAP_STABILITY_PROTOCOL.maximumCycles;
+      cycle += 1
+    ) {
+      await navigateHash(`#/routes/${ROUTE_SLUG}`);
+      await waitForRouteDetail(page);
+      await readWebglSnapshot(page);
+      await navigateHash(`#/replay/${ROUTE_SLUG}?renderer=atlas`);
+      await waitForReplay(page);
+      await readWebglSnapshot(page);
+      await navigateHash("#/atlas");
+      await waitForAtlas(page);
+      await readWebglSnapshot(page);
+      await client.send("HeapProfiler.collectGarbage");
+      const warmupHeap = await client.send("Runtime.getHeapUsage");
+      warmupUsedHeapBytes.push(warmupHeap.usedSize);
+      if (assessLifecycleHeapStability(warmupUsedHeapBytes).stable) {
+        break;
+      }
+    }
+    const baselineUsedHeapBytes = warmupUsedHeapBytes.at(-1)!;
     const profileDirectory = path.join(OUTPUT_DIR, "profiles");
     const profileStem = `lifecycle-${testInfo.project.name}-r${String(repetitionIndex(testInfo)).padStart(3, "0")}`;
     const baselineProfilePath = path.join(
@@ -950,15 +1033,6 @@ async function measureTransitions(
     if (CAPTURE_LIFECYCLE_HEAP) {
       await captureHeapSnapshot(client, baselineProfilePath);
     }
-    const navigateHash = async (hash: string) => {
-      await page.evaluate((nextHash) => {
-        window.location.hash = nextHash;
-      }, hash);
-      await expect(page).toHaveURL(
-        new RegExp(hash.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
-      );
-    };
-
     const samples: TransitionSample[] = [];
     for (let cycle = 1; cycle <= 20; cycle += 1) {
       const detailStarted = performance.now();
@@ -998,7 +1072,8 @@ async function measureTransitions(
     }
     await client.detach();
     return {
-      baselineUsedHeapBytes: baselineHeap.usedSize,
+      baselineUsedHeapBytes,
+      warmupUsedHeapBytes,
       samples,
       heapProfileArtifacts: CAPTURE_LIFECYCLE_HEAP
         ? {
@@ -1195,19 +1270,31 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
     transitionSamples.every(
       (sample) =>
         sample.detailWebgl.activeContexts === 1 &&
+        sample.detailWebgl.retainedContextRecords === 1 &&
         sample.replayWebgl.activeContexts === 1 &&
-        sample.atlasWebgl.activeContexts === 1,
+        sample.replayWebgl.retainedContextRecords === 1 &&
+        sample.atlasWebgl.activeContexts === 1 &&
+        sample.atlasWebgl.retainedContextRecords === 1,
     ),
   ).toBe(true);
   if (lifecycleMeasurement) {
+    expect(
+      assessLifecycleHeapStability(
+        lifecycleMeasurement.warmupUsedHeapBytes,
+      ).stable,
+    ).toBe(true);
     expect(lifecycleMeasurement.baselineUsedHeapBytes).toBeGreaterThan(0);
-    expect(transitionSamples.at(-1)?.usedHeapBytes).toBeGreaterThan(0);
+    expect(
+      transitionSamples.at(-1)!.usedHeapBytes /
+        lifecycleMeasurement.baselineUsedHeapBytes,
+    ).toBeLessThanOrEqual(LIFECYCLE_FINAL_HEAP_MAX_RATIO);
   }
   await writeProjectReport(
     testInfo,
     samples,
     transitionSamples,
     lifecycleMeasurement?.baselineUsedHeapBytes,
+    lifecycleMeasurement?.warmupUsedHeapBytes,
     lifecycleMeasurement?.heapProfileArtifacts,
   );
 });
