@@ -681,7 +681,7 @@ function atlasRouteVisual(buffer: Buffer, camera: AtlasRouteVisual["camera"]) {
   const occupiedCells = new Array<number>(columns * rows).fill(0);
   const routePixels: number[] = [];
   let routePixelCount = 0;
-  const interiorMargin = 3;
+  const interiorMargin = 12;
   const looksLikeGlobeInterior = (x: number, y: number) => {
     const index = (y * image.width + x) * 4;
     return (
