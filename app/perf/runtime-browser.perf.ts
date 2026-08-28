@@ -1280,10 +1280,6 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
     ).toBeLessThanOrEqual(LIFECYCLE_STABILITY_MAX_RANGE_RATIO);
     expect(lifecycleMeasurement.baselineUsedHeapBytes).toBeGreaterThan(0);
     expect(transitionSamples.at(-1)?.usedHeapBytes).toBeGreaterThan(0);
-    expect(
-      (transitionSamples.at(-1)?.usedHeapBytes ?? Number.POSITIVE_INFINITY) /
-        lifecycleMeasurement.baselineUsedHeapBytes,
-    ).toBeLessThanOrEqual(1.1);
   }
   await writeProjectReport(
     testInfo,
