@@ -1221,24 +1221,30 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
     ],
   ];
 
+  const measuredSurfaceGroups =
+    WORKLOAD === "atlas-scale" ? [surfaceGroups.at(-1)!] : surfaceGroups;
   if (WORKLOAD !== "lifecycle") {
-    const offset = repetitionIndex(testInfo) % surfaceGroups.length;
+    const offset = repetitionIndex(testInfo) % measuredSurfaceGroups.length;
     const orderedGroups = [
-      ...surfaceGroups.slice(offset),
-      ...surfaceGroups.slice(0, offset),
+      ...measuredSurfaceGroups.slice(offset),
+      ...measuredSurfaceGroups.slice(0, offset),
     ];
     for (const group of orderedGroups) samples.push(...(await group()));
   }
 
   const lifecycleMeasurement =
-    WORKLOAD === "surfaces" || CAPTURE_PROFILES
+    (WORKLOAD !== "all" && WORKLOAD !== "lifecycle") || CAPTURE_PROFILES
       ? undefined
       : await measureTransitions(browser, testInfo);
   const transitionSamples = lifecycleMeasurement?.samples ?? [];
 
-  expect(samples).toHaveLength(WORKLOAD === "lifecycle" ? 0 : 9);
+  expect(samples).toHaveLength(
+    WORKLOAD === "lifecycle" ? 0 : WORKLOAD === "atlas-scale" ? 1 : 9,
+  );
   expect(transitionSamples).toHaveLength(
-    WORKLOAD === "surfaces" || CAPTURE_PROFILES ? 0 : 20,
+    (WORKLOAD !== "all" && WORKLOAD !== "lifecycle") || CAPTURE_PROFILES
+      ? 0
+      : 20,
   );
   expect(
     samples.every((sample) => sample.sampleWallMs >= sample.actionLatencyMs),
