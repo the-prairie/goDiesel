@@ -2,9 +2,12 @@
   "schemaVersion": 1,
   "optimization": "lifecycle-measurement-ownership",
   "baselineSourceCommit": "47455d7d364ebe47b22d75a9fbe98abb25e2a22b",
-  "correctedSourceCommit": "b905237bfec28abe55da33fd10439697f9d66452",
+  "correctedSourceCommit": "9222a81d8ce6f7050508b2cf4469eef3151f7f23",
   "workload": {
-    "warmupCycles": 10,
+    "minimumWarmupCycles": 10,
+    "maximumWarmupCycles": 40,
+    "stabilityWindow": 3,
+    "maximumWarmupRangeRatio": 1.03,
     "measuredCycles": 20,
     "independentSequencesPerProject": 5
   },
@@ -22,35 +25,27 @@
     "mobileFinalRatioRange": [1.3363, 1.3861]
   },
   "after": {
-    "desktopFinalRatios": [
-      1.0544449034155634,
-      1.0559144402413672,
-      1.0566258328277511,
-      1.0588069633931065,
-      0.9971132807819529
-    ],
-    "mobileFinalRatios": [
-      1.0519596821443982,
-      1.0440516632184789,
-      1.0506260075651788,
-      1.0449113830405488,
-      1.044435123453685
-    ],
-    "worstFinalRatio": 1.0588069633931065,
+    "observedWarmupCycles": [10, 10, 10, 10, 10, 10, 10, 10, 10, 10],
+    "desktopFinalRatios": [1.052454677164987, 1.0544744515561455, 1.0511465816306502, 1.0526989098488566, 1.054693100324022],
+    "mobileFinalRatios": [1.077791403835881, 1.0566166811198734, 1.0587972892470519, 1.1617094059055222, 1.0766104519574704],
+    "worstFinalRatio": 1.1617094059055222,
+    "sequencesWithinTarget": 9,
+    "sequenceCount": 10,
+    "totalHeapTargetStatus": "unresolved",
     "finalActiveContexts": 1,
     "finalRetainedContextRecords": 1,
     "finalTotalContextsCreated": 122,
     "artifacts": [
-      { "file": "runtime-browser-desktop-chromium-lifecycle-r000.json", "bytes": 15707, "sha256": "d2bfc260783cab2ebac5a4e7aa460910cadeaca354a61547aceb649fcafa939d" },
-      { "file": "runtime-browser-desktop-chromium-lifecycle-r001.json", "bytes": 15710, "sha256": "16144a37885173d6a8e19820650097fd47c709fe6bb8299d93479394644a8af1" },
-      { "file": "runtime-browser-desktop-chromium-lifecycle-r002.json", "bytes": 15711, "sha256": "b95b7de51c1579702215b64c73e8faa32daa21e7b9afa4f3a65839fce1502d12" },
-      { "file": "runtime-browser-desktop-chromium-lifecycle-r003.json", "bytes": 15706, "sha256": "0e61c5a31cf214b7d16b9ea3eb15d8468ee0edbafe4e8de71d121d9039402cdd" },
-      { "file": "runtime-browser-desktop-chromium-lifecycle-r004.json", "bytes": 15708, "sha256": "7531ffe3ab66eba926336c0d758a8475293e83d50245c19c40c83791d2adecc9" },
-      { "file": "runtime-browser-mobile-chromium-lifecycle-r000.json", "bytes": 15693, "sha256": "ed97434abfccd0d41f537568f3ee093cf3acc9afded02a61b22cd4a98dbe0a99" },
-      { "file": "runtime-browser-mobile-chromium-lifecycle-r001.json", "bytes": 15696, "sha256": "e91523abf22413f41e3afc1c875707356d461b08d685f9ab9ca556e110b3f004" },
-      { "file": "runtime-browser-mobile-chromium-lifecycle-r002.json", "bytes": 15694, "sha256": "fd1fd3fd64d7e2e7c1c3162b6b7e4d68f575b85d37b278cbea7e4998da2c7f33" },
-      { "file": "runtime-browser-mobile-chromium-lifecycle-r003.json", "bytes": 15685, "sha256": "253a8a2bfc33ffc5de9f1a089fc5dbae3a2da1d97bb746c42b23f23968f573ad" },
-      { "file": "runtime-browser-mobile-chromium-lifecycle-r004.json", "bytes": 15699, "sha256": "c98667eddaf4097d221fdbbcfba29e976fa36c5caaf6944c0af41aa90a612f1d" }
+      { "file": "runtime-browser-desktop-chromium-lifecycle-r000.json", "bytes": 16169, "sha256": "390b0ffa0f6ebe89604ab40a3b36cc9067e7634537b1c21f748d0c65980796fb" },
+      { "file": "runtime-browser-desktop-chromium-lifecycle-r001.json", "bytes": 16168, "sha256": "9a725fd20c1f3baa28fb0c722a90a97d09b5b0ded4b7d75c90d9bda82d2487ee" },
+      { "file": "runtime-browser-desktop-chromium-lifecycle-r002.json", "bytes": 16168, "sha256": "478833ce3f6faa61f91626e98baf87ab8c8bf4b920986e1c00f07df5c7478860" },
+      { "file": "runtime-browser-desktop-chromium-lifecycle-r003.json", "bytes": 16170, "sha256": "e2a9a800405e417c21526c4ca51f03af3540812533ff60da0b079f1bdc9dd94f" },
+      { "file": "runtime-browser-desktop-chromium-lifecycle-r004.json", "bytes": 16163, "sha256": "f18662776c3b6a500c0ac57bfa4ad2dac185c9bd75d2f145282aa5c710bbf9c8" },
+      { "file": "runtime-browser-mobile-chromium-lifecycle-r000.json", "bytes": 16157, "sha256": "d39187dabde1524a401723b7d8a41e55af36a6e2093f41ae0c3e525b89e65212" },
+      { "file": "runtime-browser-mobile-chromium-lifecycle-r001.json", "bytes": 16151, "sha256": "cafdf3d1d704007fc6347f34596359a095c71dfd060dde1f1c3f11b84f9a56d7" },
+      { "file": "runtime-browser-mobile-chromium-lifecycle-r002.json", "bytes": 16141, "sha256": "327030a7b0a922a68dc8a92f0e41ddb80b62dcca08fc58931370bbc352b705d1" },
+      { "file": "runtime-browser-mobile-chromium-lifecycle-r003.json", "bytes": 16149, "sha256": "e545148a2116d945e232ff13756d9fe6b5b458acdb3b534102b055504a2f1826" },
+      { "file": "runtime-browser-mobile-chromium-lifecycle-r004.json", "bytes": 16143, "sha256": "99bcc223bfb094c37fa96becb8e176477ac71fc8d148417051d02f8a85a347c4" }
     ]
   },
   "equivalence": {
