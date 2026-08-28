@@ -66,8 +66,7 @@ function minimalLongitudeArc(longitudes: number[]): {
 
   for (let index = 0; index < sorted.length; index += 1) {
     const current = sorted[index];
-    const next =
-      sorted[(index + 1) % sorted.length] +
+    const next = sorted[(index + 1) % sorted.length] +
       (index === sorted.length - 1 ? 360 : 0);
     const gap = next - current;
 
@@ -78,8 +77,8 @@ function minimalLongitudeArc(longitudes: number[]): {
   }
 
   const arcStart = sorted[(largestGapIndex + 1) % sorted.length];
-  const arcEnd =
-    sorted[largestGapIndex] + (largestGapIndex < sorted.length - 1 ? 360 : 0);
+  const arcEnd = sorted[largestGapIndex] +
+    (largestGapIndex < sorted.length - 1 ? 360 : 0);
   const west = normalizeLongitude(arcStart);
 
   return { west, east: west + (arcEnd - arcStart) };
@@ -90,5 +89,5 @@ function normalizeLongitude360(longitude: number): number {
 }
 
 function normalizeLongitude(longitude: number): number {
-  return ((((longitude + 180) % 360) + 360) % 360) - 180;
+  return ((longitude + 180) % 360 + 360) % 360 - 180;
 }

@@ -71,12 +71,8 @@ describe("CesiumAtlasWorldEngine", () => {
   });
 
   it("resolves a picked terrain thread only within the selected region", () => {
-    const kyoto = completedRoutes.find(
-      (route) => route.region === "Kyoto, Japan",
-    )!;
-    const crete = completedRoutes.find(
-      (route) => route.region === "Crete, Greece",
-    )!;
+    const kyoto = completedRoutes.find((route) => route.region === "Kyoto, Japan")!;
+    const crete = completedRoutes.find((route) => route.region === "Crete, Greece")!;
     const kyotoEntity = {};
     const creteEntity = {};
     const entries = [
@@ -85,22 +81,12 @@ describe("CesiumAtlasWorldEngine", () => {
     ];
 
     expect(
-      routeForPickedEntity(
-        entries as never,
-        kyoto.region,
-        kyotoEntity as never,
-      ),
+      routeForPickedEntity(entries as never, kyoto.region, kyotoEntity as never),
     ).toBe(kyoto);
     expect(
-      routeForPickedEntity(
-        entries as never,
-        kyoto.region,
-        creteEntity as never,
-      ),
+      routeForPickedEntity(entries as never, kyoto.region, creteEntity as never),
     ).toBeUndefined();
-    expect(
-      routeForPickedEntity(entries as never, undefined, kyotoEntity as never),
-    ).toBeUndefined();
+    expect(routeForPickedEntity(entries as never, undefined, kyotoEntity as never)).toBeUndefined();
   });
 
   it("batches global positions without changing Cartesian values", () => {
@@ -131,9 +117,7 @@ describe("CesiumAtlasWorldEngine", () => {
       "globalPositionsForRoute",
     ) as (route: typeof source) => Cartesian3[];
 
-    expect(positionsForRoute.call(engine, { ...source, trace: [] })).toEqual(
-      [],
-    );
+    expect(positionsForRoute.call(engine, { ...source, trace: [] })).toEqual([]);
     expect(fromDegreesArray).not.toHaveBeenCalled();
   });
 });

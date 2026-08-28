@@ -1,4 +1,6 @@
-import type { DiscoveryCandidate } from "@/domain/planning";
+import type {
+  DiscoveryCandidate,
+} from "@/domain/planning";
 import type { RouteSummary } from "@/domain/route";
 
 export interface SourceBackedRouteCorpus {
