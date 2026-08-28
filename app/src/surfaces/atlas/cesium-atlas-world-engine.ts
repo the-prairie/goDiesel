@@ -54,6 +54,7 @@ const TILE_FAILURE_THRESHOLD = 8;
 const TERRAIN_READY_TIMEOUT_MS = 8_000;
 const TERRAIN_DIAGNOSTIC_INTERVAL_MS = 4_000;
 const REGIONAL_CAMERA_PITCH_RADIANS = -1.02;
+export const GLOBAL_OVERVIEW_ROUTE_HEIGHT_M = 10_000;
 
 interface RegionRouteEntity {
   regionName: string;
@@ -63,7 +64,11 @@ interface RegionRouteEntity {
 
 export function globalPositionsForRoute(route: RouteSummary) {
   return sampleGlobalRoutePoints(route).map((point) =>
-    Cartesian3.fromDegrees(point.lng, point.lat),
+    Cartesian3.fromDegrees(
+      point.lng,
+      point.lat,
+      GLOBAL_OVERVIEW_ROUTE_HEIGHT_M,
+    ),
   );
 }
 
@@ -580,11 +585,10 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     return new Primitive({
       geometryInstances,
       appearance: new PolylineMaterialAppearance({
-        material: Material.fromType(Material.PolylineGlowType, {
-          color: ROUTE_COLOR.withAlpha(0.92),
-          glowPower: 0.16,
-          taperPower: 1,
+        material: Material.fromType(Material.ColorType, {
+          color: ROUTE_COLOR.withAlpha(1),
         }),
+        translucent: false,
       }),
       allowPicking: false,
       asynchronous: true,

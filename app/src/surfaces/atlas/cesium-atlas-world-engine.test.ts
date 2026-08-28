@@ -3,6 +3,7 @@ import { Cartesian3 } from "cesium";
 
 import {
   CesiumAtlasWorldEngine,
+  GLOBAL_OVERVIEW_ROUTE_HEIGHT_M,
   globalPositionsForRoute,
   routeForPickedEntity,
   globalPositionSets,
@@ -92,11 +93,15 @@ describe("CesiumAtlasWorldEngine", () => {
     expect(routeForPickedEntity(entries as never, undefined, kyotoEntity as never)).toBeUndefined();
   });
 
-  it("preserves exact global Cartesian values for batched geometry", () => {
+  it("preserves exact horizontal vertices at the overview altitude", () => {
     const source = completedRoutes[0];
     const route = { ...source, trace: source.trace.slice(0, 3) };
     const expected = route.trace.flatMap((point) => {
-      const position = Cartesian3.fromDegrees(point.lng, point.lat);
+      const position = Cartesian3.fromDegrees(
+        point.lng,
+        point.lat,
+        GLOBAL_OVERVIEW_ROUTE_HEIGHT_M,
+      );
       return [position.x, position.y, position.z];
     });
 
