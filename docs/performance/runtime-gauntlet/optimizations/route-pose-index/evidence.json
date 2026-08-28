@@ -24,28 +24,28 @@
     }
   },
   "after": {
-    "sourceCommit": "b90398f320f0fc01ae42819f2bcffe45b6e6ca5e",
-    "p50Ms": 0.3114590000004682,
-    "p95Ms": 0.4668340000007447,
-    "p99Ms": 0.6820410000000265,
-    "meanMs": 0.34504706999996415,
+    "sourceCommit": "b9dc6cf53362afb95dc13bad725c0f08cdb4f417",
+    "p50Ms": 0.33791699999892444,
+    "p95Ms": 0.6026669999992009,
+    "p99Ms": 0.7596670000002632,
+    "meanMs": 0.3736903300000267,
     "resultDigest": "638c3244",
     "artifact": {
-      "path": "app/artifacts/runtime-statistics/raw/pr-route-pose-after-b90398f3/node/runtime-node.json",
-      "bytes": 30863,
-      "sha256": "97be0a31ade28c6d95e066c2dc4b46054e42dc834e6d1ebb721a089a5e2eb94e",
+      "path": "app/artifacts/runtime-statistics/raw/pr-route-pose-after-final-b9dc6cf5/node/runtime-node.json",
+      "bytes": 30935,
+      "sha256": "d81ecd3c0fe43d563d8390fea66e33c612ce832699bb52bdeb72a29c91e20205",
       "retention": "local-artifact"
     }
   },
   "improvementPercent": {
-    "p50": 98.60735355098954,
-    "p95": 99.59844654515364,
-    "p99": 99.57349701692227
+    "p50": 98.48905021171949,
+    "p95": 99.48160798919704,
+    "p99": 99.52495489032799
   },
   "equivalence": {
     "status": "exact",
     "goldenDigestBefore": "638c3244",
     "goldenDigestAfter": "638c3244",
-    "publicOracle": "boundary, duplicate-distance, interior, out-of-range, bearing, altitude, progress, and dateline interpolation remain unchanged"
+    "publicOracle": "every returned field matches the frozen pre-change linear algorithm across dense monotonic routes, duplicate distances, segment boundaries, clamping, single-point routes, dateline-crossing interiors, and summary-distance overshoot; lookups read the current route array without retained index state"
   }
 }
