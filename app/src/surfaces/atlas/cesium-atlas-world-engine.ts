@@ -10,15 +10,15 @@ import {
   ConstantProperty,
   Entity,
   GeometryInstance,
+  GroundPolylineGeometry,
+  GroundPolylinePrimitive,
   HeadingPitchRoll,
   HeadingPitchRange,
   ImageryLayer,
   Material,
   PerspectiveFrustum,
-  PolylineGeometry,
   PolylineGlowMaterialProperty,
   PolylineMaterialAppearance,
-  Primitive,
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
   SceneTransforms,
@@ -65,6 +65,24 @@ export function globalPositionsForRoute(route: RouteSummary) {
   return sampleGlobalRoutePoints(route).map((point) =>
     Cartesian3.fromDegrees(point.lng, point.lat),
   );
+}
+
+export function uniqueGlobalPositionSets(routes: readonly RouteSummary[]) {
+  const positionsByGeometry = new Map<string, Cartesian3[]>();
+  routes.forEach((route) => {
+    const points = sampleGlobalRoutePoints(route);
+    if (points.length < 2) return;
+    const geometryKey = JSON.stringify(
+      points.map((point) => [point.lat, point.lng]),
+    );
+    if (!positionsByGeometry.has(geometryKey)) {
+      positionsByGeometry.set(
+        geometryKey,
+        points.map((point) => Cartesian3.fromDegrees(point.lng, point.lat)),
+      );
+    }
+  });
+  return [...positionsByGeometry.values()];
 }
 
 export function routeForPickedEntity(
@@ -128,7 +146,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   private viewer?: Viewer;
   private regions: RouteRegion[] = [];
   private routeEntities: RegionRouteEntity[] = [];
-  private globalRoutePolylines?: Primitive;
+  private globalRoutePolylines?: GroundPolylinePrimitive;
   private removeRenderErrorListener?: () => void;
   private removeCameraChangedListener?: () => void;
   private keyDownHandler?: (event: KeyboardEvent) => void;
@@ -552,22 +570,15 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   }
 
   private createGlobalRouteCollection(regions: readonly RouteRegion[]) {
-    const geometryInstances = regions.flatMap((region) =>
-      region.routes
-        .map((route) => globalPositionsForRoute(route))
-        .filter((positions) => positions.length >= 2)
-        .map(
-          (positions) =>
-            new GeometryInstance({
-              geometry: new PolylineGeometry({
-                positions,
-                width: 4,
-                vertexFormat: PolylineMaterialAppearance.VERTEX_FORMAT,
-              }),
-            }),
-        ),
+    const geometryInstances = uniqueGlobalPositionSets(
+      regions.flatMap((region) => region.routes),
+    ).map(
+      (positions) =>
+        new GeometryInstance({
+          geometry: new GroundPolylineGeometry({ positions, width: 4 }),
+        }),
     );
-    return new Primitive({
+    return new GroundPolylinePrimitive({
       geometryInstances,
       appearance: new PolylineMaterialAppearance({
         material: Material.fromType(Material.PolylineGlowType, {
@@ -578,12 +589,15 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
       }),
       allowPicking: false,
       asynchronous: true,
+      classificationType: ClassificationType.BOTH,
       releaseGeometryInstances: true,
-      vertexCacheOptimize: true,
     });
   }
 
-  private waitForGlobalRoutePrimitive(primitive: Primitive, generation: number) {
+  private waitForGlobalRoutePrimitive(
+    primitive: GroundPolylinePrimitive,
+    generation: number,
+  ) {
     const startedAt = performance.now();
     return new Promise<void>((resolve, reject) => {
       const check = () => {

@@ -5,6 +5,7 @@ import {
   CesiumAtlasWorldEngine,
   globalPositionsForRoute,
   routeForPickedEntity,
+  uniqueGlobalPositionSets,
 } from "@/surfaces/atlas/cesium-atlas-world-engine";
 import { completedRoutes } from "@/data/routes";
 import { buildRouteRegions, type RouteRegion } from "@/data/route-regions";
@@ -112,6 +113,25 @@ describe("CesiumAtlasWorldEngine", () => {
     const source = completedRoutes[0];
 
     expect(globalPositionsForRoute({ ...source, trace: [] })).toEqual([]);
+  });
+
+  it("shares identical global geometry without sharing route records", () => {
+    const source = completedRoutes[0];
+    const replica = {
+      ...source,
+      slug: `${source.slug}-replica`,
+      trace: source.trace.map((point) => ({ ...point })),
+    };
+    const distinct = {
+      ...source,
+      slug: `${source.slug}-distinct`,
+      trace: source.trace.map((point, index) =>
+        index === 0 ? { ...point, lng: point.lng + 0.000001 } : { ...point },
+      ),
+    };
+
+    expect(uniqueGlobalPositionSets([source, replica])).toHaveLength(1);
+    expect(uniqueGlobalPositionSets([source, distinct])).toHaveLength(2);
   });
 
   it("defers Entities to the selected region", () => {
