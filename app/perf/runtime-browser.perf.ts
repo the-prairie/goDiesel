@@ -644,14 +644,27 @@ async function waitForAtlasCorpus(page: Page) {
       { timeout: 120_000 },
     )
     .toBeGreaterThan(0);
+  let previousRoutePixelCount: number | undefined;
+  let stableRoutePixelSamples = 0;
   await expect
     .poll(
-      async () =>
-        atlasRouteVisual(await canvasPngBuffer(canvas), "global")
-          .routePixelCount,
-      { timeout: 120_000, intervals: [250] },
+      async () => {
+        const count = atlasRouteVisual(
+          await canvasPngBuffer(canvas),
+          "global",
+        ).routePixelCount;
+        const tolerance = Math.max(2, Math.ceil(count * 0.01));
+        stableRoutePixelSamples =
+          previousRoutePixelCount !== undefined &&
+          Math.abs(count - previousRoutePixelCount) <= tolerance
+            ? stableRoutePixelSamples + 1
+            : 0;
+        previousRoutePixelCount = count;
+        return count > 100 && stableRoutePixelSamples >= 3;
+      },
+      { timeout: 180_000, intervals: [500] },
     )
-    .toBeGreaterThan(100);
+    .toBe(true);
 }
 
 async function canvasPngBuffer(canvas: Locator) {
