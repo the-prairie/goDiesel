@@ -1,43 +1,45 @@
 # Lifecycle measurement ownership correction
 
 **Baseline source commit:** `47455d7d364ebe47b22d75a9fbe98abb25e2a22b`
-**Corrected source commit:** `9222a81d8ce6f7050508b2cf4469eef3151f7f23`
-**Lever:** remove profiler-owned historical WebGL records and require a validated converged warmup protocol
+**Corrected source commit:** `a8972adbba136f76495194458c8479e8de178c16`
+**Lever:** release profiler-owned WebGL records, establish a trend-validated warmup baseline, and keep the final 1.10 heap target gating
 
 ## Outcome
 
-The profiler-owned WebGL retention is fixed, but the total-heap hotspot is not cleared.
-The original heap graph traces historical wrappers through `HTMLCanvasElement.getContext`, its `webglRecords` closure, the strong `Map` table, and retained context records.
+The original lifecycle-retention hotspot is cleared under a stricter measurement contract without changing production renderer code.
+All five desktop and five mobile processes converged independently and finished below the mandatory 1.10 final settled-heap ratio.
+Every measured route-detail, Replay, and Atlas boundary retained exactly one active WebGL context and one instrumentation record.
+
+| Project | Original final range | Corrected final range | Corrected median | Warmup cycles |
+| --- | ---: | ---: | ---: | ---: |
+| Desktop Chromium | 1.452x-1.499x | 1.034x-1.049x | 1.045x | 20-33 |
+| Mobile Chromium | 1.336x-1.386x | 1.039x-1.044x | 1.042x | 20-25 |
+
+The profiler originally retained every historical canvas and WebGL context in a strong `Map`.
+The captured heap graph traces those wrappers through `HTMLCanvasElement.getContext`, its `webglRecords` closure, the `Map` table, and retained context records.
 The corrected profiler deletes disconnected records at every settled snapshot while preserving cumulative context creation.
 
-All ten independent sequences ended with exactly one connected active context and one retained profiler record while cumulative creation reached 122.
-The original snapshot's 80 additional WebGL wrapper nodes can no longer be attributed to production renderer ownership.
+## Convergence contract
 
-The GC-normalized total-heap result remains diagnostic.
-All five desktop sequences returned within 1.10x, but one of five mobile sequences ended at 1.162x despite its pre-baseline heap satisfying the convergence rule.
-Production renderer cleanup is therefore still unproven, and the total-heap hotspot remains open.
+The earlier three-point range rule was rejected because it could accept slow monotonic growth.
+The permanent oracle now evaluates the last eight GC-normalized heap observations after at least 12 complete warmup cycles.
+It requires all three conditions: range ratio at most 1.04, absolute normalized linear slope at most 0.0025 per cycle, and first-half versus second-half drift at most 1.01.
+Warmup fails if convergence has not occurred by cycle 40.
 
-| Project | Original final range | Corrected final range | Corrected median | Sequences within 1.10x |
-| --- | ---: | ---: | ---: | ---: |
-| Desktop Chromium | 1.452x-1.499x | 1.051x-1.055x | 1.052x | 5/5 |
-| Mobile Chromium | 1.336x-1.386x | 1.057x-1.162x | 1.077x | 4/5 |
+Deterministic regressions cover stable noise, slow monotonic retention, a transient compilation spike followed by stability, and nonconvergence at the maximum cycle.
+The evidence aggregator independently recalculates all three statistics, rejects malformed or mixed protocols, rejects failed atomic reports, and verifies the final heap ratio against the reported baseline and 1.10 ceiling.
 
-## Protocol
+The strict evidence needed 20-33 warmup cycles, proving that the old fixed ten-cycle result was premature.
+The final 1.10 target remains an explicit Playwright assertion and an aggregation requirement.
 
-Every sequence performs at least ten complete unmeasured route-detail, Replay, and Atlas cycles.
-Warmup continues until the last three GC-normalized heap observations remain within a 1.03 max/min ratio, with a hard failure at 40 cycles.
-The aggregate validator rejects missing, invalid, non-converged, or mixed lifecycle protocols and emits the observed convergence cycles.
+No production renderer, camera, telemetry, route, Atlas, Replay, navigation, or provider behavior changes.
 
-The permanent Playwright oracle requires every detail, Replay, and Atlas boundary to have exactly one active context and one retained profiler record.
-The final total-heap ratio is retained as evidence rather than used as a pass/fail assertion because late JIT tiering can occur after a locally converged warmup.
-
-No production renderer, camera, telemetry, route, Atlas, Replay, or navigation behavior changes.
-
-## Command
+## Commands
 
 ```bash
 cd app
-GODIESEL_PERF_RUN_ID=pr-lifecycle-diagnostic-9222a81d GODIESEL_PERF_SOURCE_COMMIT=9222a81d8ce6f7050508b2cf4469eef3151f7f23 GODIESEL_PERF_WORKLOAD=lifecycle GODIESEL_PERF_PHASE=measured npx playwright test --config playwright.runtime-perf.config.ts --repeat-each=5
+GODIESEL_PERF_RUN_ID=pr-lifecycle-strict-a8972adb-v2 GODIESEL_PERF_SOURCE_COMMIT=a8972adbba136f76495194458c8479e8de178c16 GODIESEL_PERF_WORKLOAD=lifecycle GODIESEL_PERF_PHASE=measured npx playwright test --config playwright.runtime-perf.config.ts
+GODIESEL_PERF_RUN_ID=pr-lifecycle-strict-a8972adb-v2 GODIESEL_PERF_SOURCE_COMMIT=a8972adbba136f76495194458c8479e8de178c16 GODIESEL_PERF_WORKLOAD=lifecycle GODIESEL_PERF_PHASE=measured GODIESEL_PERF_REPETITION_OFFSET=1 npx playwright test --config playwright.runtime-perf.config.ts --repeat-each=4
 ```
 
-The ten raw reports remain local and are identified by exact byte size and SHA-256 in `evidence.json`.
+The ten ignored raw reports remain local and are identified by exact byte size and SHA-256 in `evidence.json`.
