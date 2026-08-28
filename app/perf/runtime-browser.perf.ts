@@ -1350,9 +1350,11 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
           await waitForAtlasCorpus(page);
         },
         "no-preference",
-        async (page) => ({
-          atlasRouteVisuals: await captureAtlasRouteVisuals(page, testInfo),
-        }),
+        repetitionIndex(testInfo) === 0
+          ? async (page) => ({
+              atlasRouteVisuals: await captureAtlasRouteVisuals(page, testInfo),
+            })
+          : undefined,
       ),
     ],
   ];
