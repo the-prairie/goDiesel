@@ -29,7 +29,7 @@ function pointAtDistance(points: RoutePoint[], progressM: number) {
       lower = midpoint + 1;
     }
   }
-  upper = lower;
+  upper = lower === points.length ? -1 : lower;
   if (upper <= 0) upper = 1;
   if (upper >= points.length) upper = points.length - 1;
   const start = points[upper - 1];
