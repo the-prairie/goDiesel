@@ -67,22 +67,32 @@ export function globalPositionsForRoute(route: RouteSummary) {
   );
 }
 
-export function uniqueGlobalPositionSets(routes: readonly RouteSummary[]) {
-  const positionsByGeometry = new Map<string, Cartesian3[]>();
+export function sharedGlobalPositionSets(routes: readonly RouteSummary[]) {
+  const geometry = new Map<
+    string,
+    { positions: Cartesian3[]; occurrenceCount: number }
+  >();
   routes.forEach((route) => {
     const points = sampleGlobalRoutePoints(route);
     if (points.length < 2) return;
     const geometryKey = JSON.stringify(
       points.map((point) => [point.lat, point.lng]),
     );
-    if (!positionsByGeometry.has(geometryKey)) {
-      positionsByGeometry.set(
-        geometryKey,
-        points.map((point) => Cartesian3.fromDegrees(point.lng, point.lat)),
-      );
+    const existing = geometry.get(geometryKey);
+    if (existing) {
+      existing.occurrenceCount += 1;
+      return;
     }
+    geometry.set(geometryKey, {
+      positions: points.map((point) =>
+        Cartesian3.fromDegrees(point.lng, point.lat),
+      ),
+      occurrenceCount: 1,
+    });
   });
-  return [...positionsByGeometry.values()];
+  return [...geometry.values()].flatMap(({ positions, occurrenceCount }) =>
+    Array.from({ length: Math.min(occurrenceCount, 2) }, () => positions),
+  );
 }
 
 export function routeForPickedEntity(
@@ -570,7 +580,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   }
 
   private createGlobalRouteCollection(regions: readonly RouteRegion[]) {
-    const geometryInstances = uniqueGlobalPositionSets(
+    const geometryInstances = sharedGlobalPositionSets(
       regions.flatMap((region) => region.routes),
     ).map(
       (positions) =>
