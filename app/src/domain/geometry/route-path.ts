@@ -19,9 +19,19 @@ export function routeDistanceM(route: QuestRoute) {
 
 function pointAtDistance(points: RoutePoint[], progressM: number) {
   if (points.length === 1) return { point: points[0], next: points[0] };
-  let upper = points.findIndex((point) => point.d >= progressM);
+  let lower = 0;
+  let upper = points.length;
+  while (lower < upper) {
+    const midpoint = lower + Math.floor((upper - lower) / 2);
+    if (points[midpoint].d >= progressM) {
+      upper = midpoint;
+    } else {
+      lower = midpoint + 1;
+    }
+  }
+  upper = lower === points.length ? -1 : lower;
   if (upper <= 0) upper = 1;
-  if (upper < 0) upper = points.length - 1;
+  if (upper >= points.length) upper = points.length - 1;
   const start = points[upper - 1];
   const end = points[upper];
   const span = Math.max(1, end.d - start.d);

@@ -477,6 +477,10 @@ test("records the deterministic production-runtime baseline", async () => {
   expect((finderBenchmark.resultDigest as { status: string }).status).toBe(
     "matches",
   );
+  expect(routePoseBenchmark.resultDigest).toEqual({
+    count: 500,
+    digest: "638c3244",
+  });
   expect(new Set(routeCorpus.sourceSlugs).size).toBe(routes.length);
 
   const report = {
