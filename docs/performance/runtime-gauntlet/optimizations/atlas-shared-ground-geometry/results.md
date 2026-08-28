@@ -49,6 +49,15 @@ Both distributions ran on macOS 25.6.0, Apple M1 Pro with 10 CPUs and 16 GiB mem
 Each side contains five desktop and five mobile browser contexts.
 Every raw report records its exact clean Git head and an empty worktree status.
 
+## Verification
+
+- `npm run verify:ticket` passed: typecheck, production build, 245 unit tests, and 4 navigation tests.
+- `npx playwright test e2e/atlas-cesium.spec.ts` passed 19 tests.
+- `npx playwright test e2e/atlas.spec.ts` passed 38 production-Cesium tests.
+- The final control distribution passed 10 tests in 16.1 minutes.
+- The final optimized distribution passed 10 tests in 3.8 minutes.
+- `GODIESEL_ATLAS_PREVIEW_URL=<preview-url> npm run test:e2e:atlas-live` was not run because neither checkout has a configured Google Maps API key or provider preview URL.
+
 ## Commands
 
 ```bash
