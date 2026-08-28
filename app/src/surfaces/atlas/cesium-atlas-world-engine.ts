@@ -12,6 +12,7 @@ import {
   HeadingPitchRoll,
   HeadingPitchRange,
   ImageryLayer,
+  JulianDate,
   PerspectiveFrustum,
   PolylineGlowMaterialProperty,
   ScreenSpaceEventHandler,
@@ -49,6 +50,16 @@ const TILE_FAILURE_THRESHOLD = 8;
 const TERRAIN_READY_TIMEOUT_MS = 8_000;
 const TERRAIN_DIAGNOSTIC_INTERVAL_MS = 4_000;
 const REGIONAL_CAMERA_PITCH_RADIANS = -1.02;
+
+export function configureAtlasIllumination(
+  viewer: Pick<Viewer, "canvas" | "clock">,
+  illuminationTimeIso?: string,
+) {
+  viewer.canvas.dataset.illuminationTime = illuminationTimeIso ?? "system";
+  if (!illuminationTimeIso) return;
+  viewer.clock.currentTime = JulianDate.fromIso8601(illuminationTimeIso);
+  viewer.clock.shouldAnimate = false;
+}
 
 interface RegionRouteEntity {
   regionName: string;
@@ -140,6 +151,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   async mount({
     container,
     regions,
+    illuminationTimeIso,
     onStatus,
     onSelectRoute,
   }: AtlasWorldEngineMountOptions) {
@@ -183,6 +195,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
       viewer.scene.globe.show = true;
       viewer.scene.globe.baseColor = Color.fromCssColorString("#28443a");
       viewer.scene.globe.enableLighting = true;
+      configureAtlasIllumination(viewer, illuminationTimeIso);
       viewer.scene.screenSpaceCameraController.enableCollisionDetection = true;
       viewer.canvas.setAttribute("aria-label", "Interactive route globe");
       viewer.canvas.setAttribute(

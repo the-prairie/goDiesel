@@ -649,6 +649,10 @@ async function waitForAtlasCorpus(
     "data-submitted-route-geometry",
     String(expectation.routeCount),
   );
+  await expect(canvas).toHaveAttribute(
+    "data-illumination-time",
+    "2026-03-20T12:00:00Z",
+  );
   await expect(canvas).toBeVisible({
     timeout: 120_000,
   });

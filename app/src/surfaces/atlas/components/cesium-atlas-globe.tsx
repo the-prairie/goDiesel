@@ -17,6 +17,7 @@ export const CesiumAtlasGlobe = forwardRef<
 >(function CesiumAtlasGlobe(
   {
     regions,
+    illuminationTimeIso,
     selectedRegion,
     selectedRoute,
     onSelectRegion,
@@ -58,6 +59,7 @@ export const CesiumAtlasGlobe = forwardRef<
       .mount({
         container,
         regions,
+        illuminationTimeIso,
         onSelectRoute: (route) => onSelectRouteRef.current?.(route),
         onStatus: (nextStatus) => {
           setStatus(nextStatus);
@@ -87,7 +89,7 @@ export const CesiumAtlasGlobe = forwardRef<
       engine.destroy();
       if (engineRef.current === engine) engineRef.current = undefined;
     };
-  }, [onRegionPresentationReady, onStatusChange, regions]);
+  }, [illuminationTimeIso, onRegionPresentationReady, onStatusChange, regions]);
 
   useEffect(() => {
     readyEngineRef.current?.setSelectedRegion(selectedRegion);

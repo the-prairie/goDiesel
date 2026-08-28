@@ -4,6 +4,7 @@ import type { RoutePoint, RouteSummary } from "@/domain/route";
 
 export interface AtlasGlobeProps {
   regions: RouteRegion[];
+  illuminationTimeIso?: string;
   selectedRegion?: RouteRegion;
   selectedRoute?: RouteSummary;
   onSelectRegion: (region: RouteRegion) => void;
@@ -37,6 +38,7 @@ export interface AtlasRegionProjection {
 export interface AtlasWorldEngineMountOptions {
   container: HTMLElement;
   regions: RouteRegion[];
+  illuminationTimeIso?: string;
   onStatus: (status: AtlasWorldStatus) => void;
   onSelectRoute?: (route: RouteSummary) => void;
 }

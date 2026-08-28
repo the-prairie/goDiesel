@@ -1,13 +1,44 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { Cartesian3, JulianDate } from "cesium";
 
 import {
   CesiumAtlasWorldEngine,
+  configureAtlasIllumination,
   routeForPickedEntity,
 } from "@/surfaces/atlas/cesium-atlas-world-engine";
 import { completedRoutes } from "@/data/routes";
 
 describe("CesiumAtlasWorldEngine", () => {
   afterEach(() => vi.useRealTimers());
+
+  it("freezes fixture illumination without changing production time", () => {
+    const fixtureTime = "2026-03-20T12:00:00Z";
+    const fixture = {
+      canvas: { dataset: {} },
+      clock: { currentTime: JulianDate.now(), shouldAnimate: true },
+    };
+    configureAtlasIllumination(fixture as never, fixtureTime);
+
+    expect(fixture.canvas.dataset).toEqual({ illuminationTime: fixtureTime });
+    expect(fixture.clock.shouldAnimate).toBe(false);
+    expect(
+      JulianDate.equals(
+        fixture.clock.currentTime,
+        JulianDate.fromIso8601(fixtureTime),
+      ),
+    ).toBe(true);
+
+    const productionTime = JulianDate.now();
+    const production = {
+      canvas: { dataset: {} },
+      clock: { currentTime: productionTime, shouldAnimate: true },
+    };
+    configureAtlasIllumination(production as never);
+
+    expect(production.canvas.dataset).toEqual({ illuminationTime: "system" });
+    expect(production.clock.currentTime).toBe(productionTime);
+    expect(production.clock.shouldAnimate).toBe(true);
+  });
 
   it("releases Cesium listeners, keyboard input, and the viewer", () => {
     const removeRenderErrorListener = vi.fn();
