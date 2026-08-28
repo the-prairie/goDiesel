@@ -32,7 +32,7 @@ const OUTPUT_DIR = path.resolve(
 );
 const ROUTE_SLUG = "17654151284";
 const OBSERVATION_WINDOW_MS = 750;
-const LIFECYCLE_WARMUP_CYCLES = 5;
+const LIFECYCLE_WARMUP_CYCLES = 10;
 
 function repetitionIndex(testInfo: TestInfo) {
   return REPETITION_OFFSET + testInfo.repeatEachIndex;
