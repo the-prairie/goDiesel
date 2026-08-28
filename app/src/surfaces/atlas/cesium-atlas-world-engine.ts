@@ -1,5 +1,8 @@
 import {
   BoundingSphere,
+  BufferPolyline,
+  BufferPolylineCollection,
+  BufferPolylineMaterial,
   buildModuleUrl,
   Cartesian3,
   Cesium3DTileset,
@@ -9,16 +12,11 @@ import {
   ColorMaterialProperty,
   ConstantProperty,
   Entity,
-  GeometryInstance,
-  GroundPolylineGeometry,
-  GroundPolylinePrimitive,
   HeadingPitchRoll,
   HeadingPitchRange,
   ImageryLayer,
-  Material,
   PerspectiveFrustum,
   PolylineGlowMaterialProperty,
-  PolylineMaterialAppearance,
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
   SceneTransforms,
@@ -61,10 +59,16 @@ interface RegionRouteEntity {
   entity: Entity;
 }
 
-export function globalPositionsForRoute(route: RouteSummary) {
-  return sampleGlobalRoutePoints(route).map((point) =>
-    Cartesian3.fromDegrees(point.lng, point.lat),
-  );
+export function globalPositionBufferForRoute(route: RouteSummary) {
+  const positions = sampleGlobalRoutePoints(route);
+  const buffer = new Float64Array(positions.length * 3);
+  positions.forEach((point, index) => {
+    const position = Cartesian3.fromDegrees(point.lng, point.lat);
+    buffer[index * 3] = position.x;
+    buffer[index * 3 + 1] = position.y;
+    buffer[index * 3 + 2] = position.z;
+  });
+  return buffer;
 }
 
 export function routeForPickedEntity(
@@ -128,7 +132,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   private viewer?: Viewer;
   private regions: RouteRegion[] = [];
   private routeEntities: RegionRouteEntity[] = [];
-  private globalRoutePolylines?: GroundPolylinePrimitive;
+  private globalRoutePolylines?: BufferPolylineCollection;
   private removeRenderErrorListener?: () => void;
   private removeCameraChangedListener?: () => void;
   private keyDownHandler?: (event: KeyboardEvent) => void;
@@ -551,31 +555,30 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   }
 
   private createGlobalRouteCollection(regions: readonly RouteRegion[]) {
-    const geometryInstances = regions.flatMap((region) =>
+    const buffers = regions.flatMap((region) =>
       region.routes
-        .map((route) => globalPositionsForRoute(route))
-        .filter((positions) => positions.length >= 2)
-        .map(
-          (positions) =>
-            new GeometryInstance({
-              geometry: new GroundPolylineGeometry({ positions, width: 4 }),
-            }),
-        ),
+        .map((route) => globalPositionBufferForRoute(route))
+        .filter((positions) => positions.length >= 6),
     );
-    return new GroundPolylinePrimitive({
-      geometryInstances,
-      appearance: new PolylineMaterialAppearance({
-        material: Material.fromType(Material.PolylineGlowType, {
-          color: ROUTE_COLOR.withAlpha(0.92),
-          glowPower: 0.16,
-          taperPower: 1,
-        }),
-      }),
+    const collection = new BufferPolylineCollection({
+      primitiveCountMax: buffers.length,
+      vertexCountMax: buffers.reduce(
+        (total, positions) => total + positions.length / 3,
+        0,
+      ),
       allowPicking: false,
-      asynchronous: true,
-      classificationType: ClassificationType.BOTH,
-      releaseGeometryInstances: true,
     });
+    const material = new BufferPolylineMaterial({
+      color: ROUTE_COLOR.withAlpha(0.92),
+      outlineColor: ROUTE_COLOR.withAlpha(0.18),
+      outlineWidth: 2,
+      width: 4,
+    });
+    const polyline = new BufferPolyline();
+    buffers.forEach((positions) => {
+      collection.add({ positions, material }, polyline);
+    });
+    return collection;
   }
 
   private styleRouteEntities() {

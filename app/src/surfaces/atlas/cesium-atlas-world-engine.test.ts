@@ -3,7 +3,7 @@ import { Cartesian3 } from "cesium";
 
 import {
   CesiumAtlasWorldEngine,
-  globalPositionsForRoute,
+  globalPositionBufferForRoute,
   routeForPickedEntity,
 } from "@/surfaces/atlas/cesium-atlas-world-engine";
 import { completedRoutes } from "@/data/routes";
@@ -91,7 +91,7 @@ describe("CesiumAtlasWorldEngine", () => {
     expect(routeForPickedEntity(entries as never, undefined, kyotoEntity as never)).toBeUndefined();
   });
 
-  it("preserves exact global Cartesian positions for batched geometry", () => {
+  it("packs exact global Cartesian values into a buffer", () => {
     const source = completedRoutes[0];
     const route = { ...source, trace: source.trace.slice(0, 3) };
     const expected = route.trace.flatMap((point) => {
@@ -99,19 +99,15 @@ describe("CesiumAtlasWorldEngine", () => {
       return [position.x, position.y, position.z];
     });
 
-    expect(
-      globalPositionsForRoute(route).flatMap((position) => [
-        position.x,
-        position.y,
-        position.z,
-      ]),
-    ).toEqual(expected);
+    expect([...globalPositionBufferForRoute(route)]).toEqual(expected);
   });
 
-  it("skips geometry-less routes before batched conversion", () => {
+  it("skips geometry-less routes before buffered conversion", () => {
     const source = completedRoutes[0];
 
-    expect(globalPositionsForRoute({ ...source, trace: [] })).toEqual([]);
+    expect(globalPositionBufferForRoute({ ...source, trace: [] })).toEqual(
+      new Float64Array(),
+    );
   });
 
   it("defers Entities to the selected region", () => {
