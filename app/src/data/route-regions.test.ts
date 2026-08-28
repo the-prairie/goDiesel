@@ -95,4 +95,40 @@ describe("buildRouteRegions", () => {
       centerLng: 0,
     });
   });
+
+  it("reads shared source geometry once across identity replicas", () => {
+    let indexedReads = 0;
+    const sourceTrace = [
+      point(10, 179),
+      point(11, -179),
+      point(12, -178),
+      point(13, -177),
+    ];
+    const observedTrace = new Proxy(sourceTrace, {
+      get(target, property, receiver) {
+        if (typeof property === "string" && /^\d+$/.test(property)) {
+          indexedReads += 1;
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const replicas = Array.from({ length: 100 }, (_, index) =>
+      route({
+        slug: `replica-${index}`,
+        activityId: `activity-${index}`,
+        trace: observedTrace,
+      }),
+    );
+
+    const regions = buildRouteRegions(replicas);
+
+    expect(regions[0].routes).toHaveLength(100);
+    expect(regions[0].bounds).toMatchObject({
+      south: 10,
+      north: 13,
+      west: 179,
+      east: 183,
+    });
+    expect(indexedReads).toBeLessThanOrEqual(sourceTrace.length + 1);
+  });
 });

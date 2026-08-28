@@ -34,7 +34,7 @@ import {
   atlasRegionTransitionDurationSeconds,
 } from "@/surfaces/atlas/atlas-region-camera";
 import type { RouteRegion } from "@/data/route-regions";
-import type { RouteSummary } from "@/domain/route";
+import type { RoutePoint, RouteSummary } from "@/domain/route";
 import { recordTileFailure, rgbaPixelsLookBlank } from "@/providers/render-health";
 import {
   CESIUM_GROUND_ROUTE_OPTIONS,
@@ -136,6 +136,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   private generation = 0;
   private surfaceNormal = new Cartesian3();
   private surfaceToCamera = new Cartesian3();
+  private globalPositionsByTrace = new WeakMap<RoutePoint[], Cartesian3[]>();
 
   async mount({
     container,
@@ -217,14 +218,12 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
 
       this.routeEntities = regions.flatMap((region) =>
         region.routes.flatMap((route) => {
-          const points = sampleGlobalRoutePoints(route);
-          if (points.length < 2) return [];
+          const positions = this.globalPositionsForRoute(route);
+          if (positions.length < 2) return [];
           const entity = viewer.entities.add({
             name: `${route.name} route thread`,
             polyline: {
-              positions: points.map((point) =>
-                Cartesian3.fromDegrees(point.lng, point.lat),
-              ),
+              positions,
               width: 4,
               ...CESIUM_GROUND_ROUTE_OPTIONS,
               classificationType: ClassificationType.BOTH,
@@ -385,6 +384,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     this.onSelectRoute = undefined;
     this.selectedRegionName = undefined;
     this.selectedRouteSlug = undefined;
+    this.globalPositionsByTrace = new WeakMap();
   }
 
   private async enterRegionalTerrain(
@@ -530,12 +530,24 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
       entity.show = true;
       if (!entity.polyline) return;
       entity.polyline.positions = new ConstantProperty(
-        sampleGlobalRoutePoints(route).map((point) =>
-          Cartesian3.fromDegrees(point.lng, point.lat),
-        ),
+        this.globalPositionsForRoute(route),
       );
     });
     this.styleRouteEntities();
+  }
+
+  private globalPositionsForRoute(route: RouteSummary) {
+    const cached = this.globalPositionsByTrace.get(route.trace);
+    if (cached) return cached;
+    const points = sampleGlobalRoutePoints(route);
+    const degrees = new Array<number>(points.length * 2);
+    points.forEach((point, index) => {
+      degrees[index * 2] = point.lng;
+      degrees[index * 2 + 1] = point.lat;
+    });
+    const positions = Cartesian3.fromDegreesArray(degrees);
+    this.globalPositionsByTrace.set(route.trace, positions);
+    return positions;
   }
 
   private styleRouteEntities() {

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { Cartesian3 } from "cesium";
 
 import {
   CesiumAtlasWorldEngine,
@@ -7,7 +8,10 @@ import {
 import { completedRoutes } from "@/data/routes";
 
 describe("CesiumAtlasWorldEngine", () => {
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
 
   it("releases Cesium listeners, keyboard input, and the viewer", () => {
     const removeRenderErrorListener = vi.fn();
@@ -83,5 +87,23 @@ describe("CesiumAtlasWorldEngine", () => {
       routeForPickedEntity(entries as never, kyoto.region, creteEntity as never),
     ).toBeUndefined();
     expect(routeForPickedEntity(entries as never, undefined, kyotoEntity as never)).toBeUndefined();
+  });
+
+  it("shares one batched global position buffer for source-identical traces", () => {
+    const source = completedRoutes[0];
+    const replica = { ...source, slug: `${source.slug}-replica` };
+    const fromDegreesArray = vi.spyOn(Cartesian3, "fromDegreesArray");
+    const engine = new CesiumAtlasWorldEngine();
+    const positionsForRoute = Reflect.get(
+      engine,
+      "globalPositionsForRoute",
+    ) as (route: typeof source) => Cartesian3[];
+
+    const sourcePositions = positionsForRoute.call(engine, source);
+    const replicaPositions = positionsForRoute.call(engine, replica);
+
+    expect(replica.trace).toBe(source.trace);
+    expect(replicaPositions).toBe(sourcePositions);
+    expect(fromDegreesArray).toHaveBeenCalledOnce();
   });
 });

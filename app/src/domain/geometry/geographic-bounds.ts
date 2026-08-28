@@ -16,9 +16,12 @@ export function deriveGeographicBounds(
 ): GeographicBounds | null {
   const latitudes: number[] = [];
   const longitudes: number[] = [];
+  const seenTraces = new Set<RouteSummary["trace"]>();
 
   for (const route of routes) {
     if (route.replay.geometryStatus !== "ready") continue;
+    if (seenTraces.has(route.trace)) continue;
+    seenTraces.add(route.trace);
 
     for (const point of route.trace) {
       if (!isValidCoordinate(point.lat, point.lng)) continue;
