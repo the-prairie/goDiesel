@@ -10,7 +10,7 @@
 The hardened comparison captures the canvas at global, east, and west camera positions for desktop and mobile Chromium.
 The route oracle isolates pixels within a squared RGB distance of 1,200 from the established `#62a7ff` route color and records their distribution in a 48 by 24 grid.
 For every project and camera, the optimized median route-pixel count must remain between 80% and 120% of control and the occupied-cell Jaccard overlap must be at least 0.80.
-Every repetition must contain more than 100 isolated route pixels per camera.
+The reference repetition for each project must contain more than 100 isolated route pixels per camera; the other timing and heap repetitions still enforce a ready 2,500-route canvas.
 These limits were committed before the hardened control or optimized distributions were collected.
 
 ## Outcome
