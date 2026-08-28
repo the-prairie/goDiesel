@@ -143,6 +143,7 @@ interface BrowserSample {
   atlasCorpus?: {
     routeCount: number;
     uniqueGeometryCount: number;
+    submittedGeometryCount: number;
   };
 }
 
@@ -612,6 +613,7 @@ async function waitForAtlasCorpus(page: Page) {
     "2500",
   );
   const canvas = page.locator("canvas[data-heat-lines='2500']");
+  await expect(canvas).toHaveAttribute("data-submitted-route-geometry", "2500");
   await expect(canvas).toBeVisible({
     timeout: 120_000,
   });
@@ -709,10 +711,14 @@ function atlasRouteVisual(buffer: Buffer, camera: AtlasRouteVisual["camera"]) {
 
 async function atlasCorpusMetadata(page: Page) {
   const harness = page.locator("[data-runtime-atlas-corpus='2500']");
+  const canvas = page.locator("canvas[data-heat-lines='2500']");
   return {
     routeCount: Number(await harness.getAttribute("data-runtime-atlas-corpus")),
     uniqueGeometryCount: Number(
       await harness.getAttribute("data-runtime-atlas-unique-geometry"),
+    ),
+    submittedGeometryCount: Number(
+      await canvas.getAttribute("data-submitted-route-geometry"),
     ),
   };
 }
