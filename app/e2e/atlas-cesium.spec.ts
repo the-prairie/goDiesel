@@ -378,6 +378,28 @@ test("regional terrain failure preserves URL state in a source-backed map", asyn
   expect(colors.size).toBeGreaterThan(2);
 });
 
+test("regional provider failure never blocks the route decision panel", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    window.__GODIESEL_ATLAS_REGION_OUTCOME__ = "fallback";
+  });
+  await page.route("**/styles/liberty", (route) => route.abort());
+  await installDeterministicCesiumAtlas(page);
+  await page.goto("/#/atlas?region=Kyoto%2C+Japan");
+
+  await expect(page.locator('div[data-atlas-engine="cesium"]')).toHaveAttribute(
+    "data-atlas-status",
+    "region-fallback",
+  );
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Kyoto, Japan" }),
+  ).toBeVisible({ timeout: 2_000 });
+  await expect(
+    page.getByRole("region", { name: "Kyoto, Japan recorded routes" }),
+  ).toBeVisible();
+});
+
 test("Cesium releases its renderer when Atlas unmounts", async ({ page }) => {
   await installDeterministicCesiumAtlas(page);
   await page.goto("/#/atlas");
