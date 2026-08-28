@@ -13,7 +13,7 @@
     "maximumHalfDriftRatio": 1.01,
     "maximumFinalHeapRatio": 1.1,
     "measuredCycles": 20,
-    "independentProcessesPerProject": 5
+    "independentSequencesPerProject": 5
   },
   "ownershipProof": {
     "retainerPath": "HTMLCanvasElement.getContext closure -> webglRecords -> Map table -> context record -> historical WebGL context",

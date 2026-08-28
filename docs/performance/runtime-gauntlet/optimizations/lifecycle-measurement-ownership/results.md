@@ -7,7 +7,7 @@
 ## Outcome
 
 The original lifecycle-retention hotspot is cleared under a stricter measurement contract without changing production renderer code.
-All five desktop and five mobile processes converged independently and finished below the mandatory 1.10 final settled-heap ratio.
+All five desktop and five mobile browser-context sequences converged independently and finished below the mandatory 1.10 final settled-heap ratio.
 Every measured route-detail, Replay, and Atlas boundary retained exactly one active WebGL context and one instrumentation record.
 
 | Project | Original final range | Corrected final range | Corrected median | Warmup cycles |
@@ -27,7 +27,7 @@ It requires all three conditions: range ratio at most 1.04, absolute normalized 
 Warmup fails if convergence has not occurred by cycle 40.
 
 Deterministic regressions cover stable noise, slow monotonic retention, a transient compilation spike followed by stability, and nonconvergence at the maximum cycle.
-The evidence aggregator independently recalculates all three statistics, rejects malformed or mixed protocols, rejects failed atomic reports, and verifies the final heap ratio against the reported baseline and 1.10 ceiling.
+The evidence aggregator independently recalculates all three statistics, rejects malformed or mixed protocols, rejects failed atomic reports, and enforces the canonical 1.10 final heap ceiling.
 
 The strict evidence needed 20-33 warmup cycles, proving that the old fixed ten-cycle result was premature.
 The final 1.10 target remains an explicit Playwright assertion and an aggregation requirement.

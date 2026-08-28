@@ -11,6 +11,7 @@ import {
   resolveInventoriedProfileArtifact,
   summarizeDistribution,
   validateLifecycleProtocol,
+  validateLifecycleFinalHeap,
 } from "../scripts/runtime-statistics.mjs";
 import {
   assertNotCancelled,
@@ -73,6 +74,40 @@ describe("runtime statistical evidence", () => {
       stable: false,
       sampleCount: LIFECYCLE_HEAP_STABILITY_PROTOCOL.maximumCycles,
     });
+  });
+
+  test("enforces the canonical lifecycle final heap ceiling", () => {
+    const report = {
+      lifecycleBaselineHeapBytes: 1_000,
+      lifecycleFinalHeapRatio: 1.05,
+      lifecycleFinalHeapMaximumRatio: 1.1,
+      transitionSamples: Array.from({ length: 20 }, (_, index) => ({
+        usedHeapBytes: index === 19 ? 1_050 : 1_000,
+      })),
+    };
+
+    expect(() => validateLifecycleFinalHeap(report)).not.toThrow();
+    expect(() =>
+      validateLifecycleFinalHeap({
+        ...report,
+        lifecycleFinalHeapRatio: 1.4,
+        lifecycleFinalHeapMaximumRatio: 1.5,
+        transitionSamples: report.transitionSamples.map((sample, index) => ({
+          ...sample,
+          usedHeapBytes: index === 19 ? 1_400 : sample.usedHeapBytes,
+        })),
+      }),
+    ).toThrow("canonical 1.10 final heap ceiling");
+    expect(() =>
+      validateLifecycleFinalHeap({
+        ...report,
+        lifecycleFinalHeapRatio: 1.11,
+        transitionSamples: report.transitionSamples.map((sample, index) => ({
+          ...sample,
+          usedHeapBytes: index === 19 ? 1_110 : sample.usedHeapBytes,
+        })),
+      }),
+    ).toThrow("canonical 1.10 final heap ceiling");
   });
 
   test("keeps only complete frame intervals inside the phase window", () => {
@@ -305,6 +340,7 @@ describe("runtime statistical evidence", () => {
       maximumRangeRatio: 1.04,
       maximumNormalizedSlopePerCycle: 0.0025,
       maximumHalfDriftRatio: 1.01,
+      maximumFinalHeapRatio: 1.1,
       observedCycles: [12],
     });
     expect(report.protocol.repetitionPlan.lifecycleWarmupCycles).toEqual([12]);

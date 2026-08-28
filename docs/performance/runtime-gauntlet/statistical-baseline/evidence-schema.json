@@ -32,12 +32,13 @@
             "maximumRangeRatio": { "type": "number", "minimum": 1 },
             "maximumNormalizedSlopePerCycle": { "type": "number", "minimum": 0 },
             "maximumHalfDriftRatio": { "type": "number", "minimum": 1 },
+            "maximumFinalHeapRatio": { "const": 1.1 },
             "observedCycles": {
               "type": "array",
               "items": { "type": "integer", "minimum": 1 }
             }
           },
-          "required": ["minimumCycles", "maximumCycles", "stabilityWindow", "maximumRangeRatio", "maximumNormalizedSlopePerCycle", "maximumHalfDriftRatio", "observedCycles"],
+          "required": ["minimumCycles", "maximumCycles", "stabilityWindow", "maximumRangeRatio", "maximumNormalizedSlopePerCycle", "maximumHalfDriftRatio", "maximumFinalHeapRatio", "observedCycles"],
           "additionalProperties": false
         }
       },

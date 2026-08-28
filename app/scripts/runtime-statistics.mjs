@@ -690,6 +690,27 @@ function assessLifecycleWarmup(heaps, windowSize) {
   };
 }
 
+const LIFECYCLE_FINAL_HEAP_MAX_RATIO = 1.1;
+
+export function validateLifecycleFinalHeap(report) {
+  const finalUsedHeapBytes = report.transitionSamples?.at(-1)?.usedHeapBytes;
+  const observedRatio = finalUsedHeapBytes / report.lifecycleBaselineHeapBytes;
+  if (
+    !Number.isFinite(report.lifecycleBaselineHeapBytes) ||
+    report.lifecycleBaselineHeapBytes <= 0 ||
+    report.transitionSamples?.length !== 20 ||
+    !Number.isFinite(report.lifecycleFinalHeapRatio) ||
+    report.lifecycleFinalHeapMaximumRatio !==
+      LIFECYCLE_FINAL_HEAP_MAX_RATIO ||
+    Math.abs(report.lifecycleFinalHeapRatio - observedRatio) > 1e-12 ||
+    report.lifecycleFinalHeapRatio > LIFECYCLE_FINAL_HEAP_MAX_RATIO
+  ) {
+    throw new Error(
+      "Lifecycle report does not satisfy the canonical 1.10 final heap ceiling",
+    );
+  }
+}
+
 export function validateLifecycleProtocol(reports) {
   if (reports.length === 0) return undefined;
   const protocols = reports.map((report) => {
@@ -769,6 +790,7 @@ export function validateLifecycleProtocol(reports) {
   }
   return {
     ...protocols[0].protocol,
+    maximumFinalHeapRatio: LIFECYCLE_FINAL_HEAP_MAX_RATIO,
     observedCycles: protocols.map(({ cycles }) => cycles),
   };
 }
@@ -820,27 +842,7 @@ export function aggregateRuntimeStatistics({
   const lifecycleReports = [...browserReports, ...profileReports].filter(
     (report) => report.workload === "lifecycle",
   );
-  const invalidLifecycleReports = lifecycleReports.filter(
-    (report) =>
-      (!Number.isFinite(report.lifecycleBaselineHeapBytes) ||
-        report.lifecycleBaselineHeapBytes <= 0 ||
-        report.transitionSamples?.length !== 20 ||
-        !Number.isFinite(report.lifecycleFinalHeapRatio) ||
-        !Number.isFinite(report.lifecycleFinalHeapMaximumRatio) ||
-        report.lifecycleFinalHeapMaximumRatio <= 1 ||
-        Math.abs(
-          report.lifecycleFinalHeapRatio -
-            report.transitionSamples.at(-1)?.usedHeapBytes /
-              report.lifecycleBaselineHeapBytes,
-        ) > 1e-12 ||
-        report.lifecycleFinalHeapRatio >
-          report.lifecycleFinalHeapMaximumRatio),
-  );
-  if (invalidLifecycleReports.length > 0) {
-    throw new Error(
-      `${invalidLifecycleReports.length} lifecycle reports lack a settled heap baseline or 20 transitions`,
-    );
-  }
+  lifecycleReports.forEach(validateLifecycleFinalHeap);
   const lifecycleWarmup = validateLifecycleProtocol(lifecycleReports);
   const providerResources = [...browserReports, ...profileReports].flatMap(
     (report) =>
