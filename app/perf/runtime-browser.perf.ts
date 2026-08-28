@@ -635,8 +635,8 @@ async function waitForAtlasCorpus(page: Page) {
 
 function atlasRouteVisual(buffer: Buffer, camera: AtlasRouteVisual["camera"]) {
   const image = PNG.sync.read(buffer);
-  const columns = 24;
-  const rows = 12;
+  const columns = 48;
+  const rows = 24;
   const occupiedCells = new Array<number>(columns * rows).fill(0);
   let routePixelCount = 0;
   for (let y = 0; y < image.height; y += 1) {
@@ -645,17 +645,9 @@ function atlasRouteVisual(buffer: Buffer, camera: AtlasRouteVisual["camera"]) {
       const red = image.data[index];
       const green = image.data[index + 1];
       const blue = image.data[index + 2];
-      if (
-        blue < 215 ||
-        red < 45 ||
-        red > 165 ||
-        green < 115 ||
-        green > 220 ||
-        blue - red < 75 ||
-        blue - green < 30
-      ) {
-        continue;
-      }
+      const cobaltDistanceSquared =
+        (red - 98) ** 2 + (green - 167) ** 2 + (blue - 255) ** 2;
+      if (cobaltDistanceSquared > 1_200) continue;
       routePixelCount += 1;
       const column = Math.min(columns - 1, Math.floor((x / image.width) * columns));
       const row = Math.min(rows - 1, Math.floor((y / image.height) * rows));
