@@ -143,6 +143,7 @@ interface BrowserSample {
 
 interface AtlasRouteVisual {
   camera: "global" | "east" | "west";
+  screenshot: string;
   routePixelCount: number;
   occupiedCells: number[];
 }
@@ -644,7 +645,17 @@ function atlasRouteVisual(buffer: Buffer, camera: AtlasRouteVisual["camera"]) {
       const red = image.data[index];
       const green = image.data[index + 1];
       const blue = image.data[index + 2];
-      if (blue < 175 || blue - green < 28 || green - red < 20) continue;
+      if (
+        blue < 215 ||
+        red < 45 ||
+        red > 165 ||
+        green < 115 ||
+        green > 220 ||
+        blue - red < 75 ||
+        blue - green < 30
+      ) {
+        continue;
+      }
       routePixelCount += 1;
       const column = Math.min(columns - 1, Math.floor((x / image.width) * columns));
       const row = Math.min(rows - 1, Math.floor((y / image.height) * rows));
@@ -654,10 +665,16 @@ function atlasRouteVisual(buffer: Buffer, camera: AtlasRouteVisual["camera"]) {
   return { camera, routePixelCount, occupiedCells };
 }
 
-async function captureAtlasRouteVisuals(page: Page) {
+async function captureAtlasRouteVisuals(page: Page, testInfo: TestInfo) {
   const canvas = page.locator("canvas[data-heat-lines='2500']");
   const capture = async (camera: AtlasRouteVisual["camera"]) => {
-    const visual = atlasRouteVisual(await canvas.screenshot(), camera);
+    const buffer = await canvas.screenshot();
+    const screenshot = `atlas-route-${testInfo.project.name}-r${String(
+      repetitionIndex(testInfo),
+    ).padStart(3, "0")}-${camera}.png`;
+    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+    fs.writeFileSync(path.join(OUTPUT_DIR, screenshot), buffer);
+    const visual = { ...atlasRouteVisual(buffer, camera), screenshot };
     expect(visual.routePixelCount).toBeGreaterThan(100);
     return visual;
   };
@@ -1342,7 +1359,7 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
         },
         "no-preference",
         async (page) => ({
-          atlasRouteVisuals: await captureAtlasRouteVisuals(page),
+          atlasRouteVisuals: await captureAtlasRouteVisuals(page, testInfo),
         }),
       ),
     ],
