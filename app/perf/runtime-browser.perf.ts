@@ -589,9 +589,37 @@ async function waitForAtlasCorpus(page: Page) {
   ).toHaveAttribute("data-runtime-atlas-status", /ready|unavailable/, {
     timeout: 120_000,
   });
-  await expect(page.locator("canvas[data-heat-lines='2500']")).toBeVisible({
+  const canvas = page.locator("canvas[data-heat-lines='2500']");
+  await expect(canvas).toBeVisible({
     timeout: 120_000,
   });
+  await expect
+    .poll(
+      () =>
+        canvas.evaluate((element) => {
+          const source = element as HTMLCanvasElement;
+          const gl =
+            source.getContext("webgl2") ??
+            (source.getContext("webgl") as WebGLRenderingContext | null);
+          if (!gl || source.width < 16 || source.height < 16) return 0;
+          const pixels = new Uint8Array(8 * 8 * 4);
+          gl.readPixels(
+            Math.floor(source.width / 2) - 4,
+            Math.floor(source.height / 2) - 4,
+            8,
+            8,
+            gl.RGBA,
+            gl.UNSIGNED_BYTE,
+            pixels,
+          );
+          return pixels.reduce(
+            (total, value, index) => (index % 4 === 3 ? total : total + value),
+            0,
+          );
+        }),
+      { timeout: 120_000 },
+    )
+    .toBeGreaterThan(0);
 }
 
 async function waitForReplay(page: Page) {
@@ -926,10 +954,7 @@ async function writeProjectReport(
   fs.renameSync(temporaryPath, reportPath);
 }
 
-async function captureHeapSnapshot(
-  client: CDPSession,
-  destination: string,
-) {
+async function captureHeapSnapshot(client: CDPSession, destination: string) {
   fs.mkdirSync(path.dirname(destination), { recursive: true });
   const temporaryPath = `${destination}.${process.pid}.tmp`;
   const descriptor = fs.openSync(temporaryPath, "wx");
