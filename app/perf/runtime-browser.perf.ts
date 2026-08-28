@@ -140,6 +140,10 @@ interface BrowserSample {
   profileArtifacts?: { cpu: string; allocation: string };
   blockedExternalRequests: string[];
   atlasRouteVisuals?: AtlasRouteVisual[];
+  atlasCorpus?: {
+    routeCount: number;
+    uniqueGeometryCount: number;
+  };
 }
 
 interface AtlasRouteVisual {
@@ -147,6 +151,9 @@ interface AtlasRouteVisual {
   screenshot: string;
   routePixelCount: number;
   occupiedCells: number[];
+  imageWidth: number;
+  imageHeight: number;
+  routePixels: number[];
 }
 
 interface TransitionSample {
@@ -596,11 +603,14 @@ async function waitForAtlas(page: Page) {
 }
 
 async function waitForAtlasCorpus(page: Page) {
-  await expect(
-    page.locator("[data-runtime-atlas-corpus='2500']"),
-  ).toHaveAttribute("data-runtime-atlas-status", "ready", {
+  const harness = page.locator("[data-runtime-atlas-corpus='2500']");
+  await expect(harness).toHaveAttribute("data-runtime-atlas-status", "ready", {
     timeout: 120_000,
   });
+  await expect(harness).toHaveAttribute(
+    "data-runtime-atlas-unique-geometry",
+    "2500",
+  );
   const canvas = page.locator("canvas[data-heat-lines='2500']");
   await expect(canvas).toBeVisible({
     timeout: 120_000,
@@ -654,6 +664,7 @@ function atlasRouteVisual(buffer: Buffer, camera: AtlasRouteVisual["camera"]) {
   const columns = 48;
   const rows = 24;
   const occupiedCells = new Array<number>(columns * rows).fill(0);
+  const routePixels: number[] = [];
   let routePixelCount = 0;
   const interiorMargin = 3;
   const looksLikeGlobeInterior = (x: number, y: number) => {
@@ -680,12 +691,30 @@ function atlasRouteVisual(buffer: Buffer, camera: AtlasRouteVisual["camera"]) {
         continue;
       }
       routePixelCount += 1;
+      routePixels.push(y * image.width + x);
       const column = Math.min(columns - 1, Math.floor((x / image.width) * columns));
       const row = Math.min(rows - 1, Math.floor((y / image.height) * rows));
       occupiedCells[row * columns + column] += 1;
     }
   }
-  return { camera, routePixelCount, occupiedCells };
+  return {
+    camera,
+    routePixelCount,
+    occupiedCells,
+    imageWidth: image.width,
+    imageHeight: image.height,
+    routePixels,
+  };
+}
+
+async function atlasCorpusMetadata(page: Page) {
+  const harness = page.locator("[data-runtime-atlas-corpus='2500']");
+  return {
+    routeCount: Number(await harness.getAttribute("data-runtime-atlas-corpus")),
+    uniqueGeometryCount: Number(
+      await harness.getAttribute("data-runtime-atlas-unique-geometry"),
+    ),
+  };
 }
 
 async function captureAtlasRouteVisuals(page: Page, testInfo: TestInfo) {
@@ -964,7 +993,9 @@ async function freshSample(
   name: string,
   action: (page: Page) => Promise<void>,
   reducedMotion: "no-preference" | "reduce" = "no-preference",
-  inspect?: (page: Page) => Promise<Pick<BrowserSample, "atlasRouteVisuals">>,
+  inspect?: (
+    page: Page,
+  ) => Promise<Pick<BrowserSample, "atlasRouteVisuals" | "atlasCorpus">>,
 ) {
   const { context, page } = await createMeasuredPage(
     browser,
@@ -1384,6 +1415,7 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
         repetitionIndex(testInfo) === 0
           ? async (page) => ({
               atlasRouteVisuals: await captureAtlasRouteVisuals(page, testInfo),
+              atlasCorpus: await atlasCorpusMetadata(page),
             })
           : undefined,
       ),

@@ -8,6 +8,11 @@ export interface SourceBackedRouteCorpus {
   sourceSlugs: string[];
 }
 
+export interface DistinctRouteCorpus extends SourceBackedRouteCorpus {
+  uniqueTraceCount: number;
+  translationStepDegrees: number;
+}
+
 export interface SourceBackedCandidateCorpus {
   candidates: DiscoveryCandidate[];
   sourceCandidateIds: string[];
@@ -40,6 +45,47 @@ export function createSourceBackedRouteCorpus(
   }
 
   return { routes, sourceSlugs };
+}
+
+export function createDistinctRouteCorpus(
+  sourceRoutes: readonly RouteSummary[],
+  count: number,
+): DistinctRouteCorpus {
+  if (sourceRoutes.length === 0) {
+    throw new Error("Runtime corpus requires at least one source-backed route");
+  }
+
+  const translationStepDegrees = 0.005;
+  const corpus = createSourceBackedRouteCorpus(sourceRoutes, count);
+  const routes = corpus.routes.map((route, index) => {
+    const sourceIndex = index % sourceRoutes.length;
+    const replica = Math.floor(index / sourceRoutes.length);
+    const column = replica % 7;
+    const row = Math.floor(replica / 7);
+    const latitudeOffset = (row - 2.5) * translationStepDegrees;
+    const longitudeOffset =
+      (column - 3) * translationStepDegrees + sourceIndex * 0.000001;
+    return {
+      ...route,
+      trace: route.trace.map((point) => ({
+        ...point,
+        lat: point.lat + latitudeOffset,
+        lng: point.lng + longitudeOffset,
+      })),
+    };
+  });
+  const uniqueTraceCount = new Set(
+    routes.map((route) =>
+      JSON.stringify(route.trace.map(({ lat, lng }) => [lat, lng])),
+    ),
+  ).size;
+
+  return {
+    ...corpus,
+    routes,
+    uniqueTraceCount,
+    translationStepDegrees,
+  };
 }
 
 export function createSourceBackedCandidateCorpus(
