@@ -1,8 +1,5 @@
 import {
   BoundingSphere,
-  BufferPolyline,
-  BufferPolylineCollection,
-  BufferPolylineMaterial,
   buildModuleUrl,
   Cartesian3,
   Cesium3DTileset,
@@ -12,11 +9,16 @@ import {
   ColorMaterialProperty,
   ConstantProperty,
   Entity,
+  GeometryInstance,
   HeadingPitchRoll,
   HeadingPitchRange,
   ImageryLayer,
+  Material,
   PerspectiveFrustum,
+  PolylineGeometry,
   PolylineGlowMaterialProperty,
+  PolylineMaterialAppearance,
+  Primitive,
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
   SceneTransforms,
@@ -59,16 +61,10 @@ interface RegionRouteEntity {
   entity: Entity;
 }
 
-export function globalPositionBufferForRoute(route: RouteSummary) {
-  const positions = sampleGlobalRoutePoints(route);
-  const buffer = new Float64Array(positions.length * 3);
-  positions.forEach((point, index) => {
-    const position = Cartesian3.fromDegrees(point.lng, point.lat);
-    buffer[index * 3] = position.x;
-    buffer[index * 3 + 1] = position.y;
-    buffer[index * 3 + 2] = position.z;
-  });
-  return buffer;
+export function globalPositionsForRoute(route: RouteSummary) {
+  return sampleGlobalRoutePoints(route).map((point) =>
+    Cartesian3.fromDegrees(point.lng, point.lat),
+  );
 }
 
 export function routeForPickedEntity(
@@ -132,7 +128,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   private viewer?: Viewer;
   private regions: RouteRegion[] = [];
   private routeEntities: RegionRouteEntity[] = [];
-  private globalRoutePolylines?: BufferPolylineCollection;
+  private globalRoutePolylines?: Primitive;
   private removeRenderErrorListener?: () => void;
   private removeCameraChangedListener?: () => void;
   private keyDownHandler?: (event: KeyboardEvent) => void;
@@ -251,8 +247,9 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
         });
       });
       this.resetView();
-      await new Promise<void>((resolve) =>
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      await this.waitForGlobalRoutePrimitive(
+        this.globalRoutePolylines,
+        generation,
       );
       if (generation !== this.generation) return;
       onStatus({ state: "ready", message: "Atlas world ready." });
@@ -555,30 +552,53 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   }
 
   private createGlobalRouteCollection(regions: readonly RouteRegion[]) {
-    const buffers = regions.flatMap((region) =>
+    const geometryInstances = regions.flatMap((region) =>
       region.routes
-        .map((route) => globalPositionBufferForRoute(route))
-        .filter((positions) => positions.length >= 6),
+        .map((route) => globalPositionsForRoute(route))
+        .filter((positions) => positions.length >= 2)
+        .map(
+          (positions) =>
+            new GeometryInstance({
+              geometry: new PolylineGeometry({
+                positions,
+                width: 4,
+                vertexFormat: PolylineMaterialAppearance.VERTEX_FORMAT,
+              }),
+            }),
+        ),
     );
-    const collection = new BufferPolylineCollection({
-      primitiveCountMax: buffers.length,
-      vertexCountMax: buffers.reduce(
-        (total, positions) => total + positions.length / 3,
-        0,
-      ),
+    return new Primitive({
+      geometryInstances,
+      appearance: new PolylineMaterialAppearance({
+        material: Material.fromType(Material.PolylineGlowType, {
+          color: ROUTE_COLOR.withAlpha(0.92),
+          glowPower: 0.16,
+          taperPower: 1,
+        }),
+      }),
       allowPicking: false,
+      asynchronous: true,
+      releaseGeometryInstances: true,
+      vertexCacheOptimize: true,
     });
-    const material = new BufferPolylineMaterial({
-      color: ROUTE_COLOR.withAlpha(0.92),
-      outlineColor: ROUTE_COLOR.withAlpha(0),
-      outlineWidth: 0,
-      width: 3.25,
+  }
+
+  private waitForGlobalRoutePrimitive(primitive: Primitive, generation: number) {
+    const startedAt = performance.now();
+    return new Promise<void>((resolve, reject) => {
+      const check = () => {
+        if (generation !== this.generation || primitive.ready) {
+          resolve();
+          return;
+        }
+        if (performance.now() - startedAt >= 120_000) {
+          reject(new Error("Atlas route overview timed out while rendering."));
+          return;
+        }
+        requestAnimationFrame(check);
+      };
+      check();
     });
-    const polyline = new BufferPolyline();
-    buffers.forEach((positions) => {
-      collection.add({ positions, material }, polyline);
-    });
-    return collection;
   }
 
   private styleRouteEntities() {
