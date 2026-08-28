@@ -71,8 +71,12 @@ describe("CesiumAtlasWorldEngine", () => {
   });
 
   it("resolves a picked terrain thread only within the selected region", () => {
-    const kyoto = completedRoutes.find((route) => route.region === "Kyoto, Japan")!;
-    const crete = completedRoutes.find((route) => route.region === "Crete, Greece")!;
+    const kyoto = completedRoutes.find(
+      (route) => route.region === "Kyoto, Japan",
+    )!;
+    const crete = completedRoutes.find(
+      (route) => route.region === "Crete, Greece",
+    )!;
     const kyotoEntity = {};
     const creteEntity = {};
     const entries = [
@@ -81,17 +85,27 @@ describe("CesiumAtlasWorldEngine", () => {
     ];
 
     expect(
-      routeForPickedEntity(entries as never, kyoto.region, kyotoEntity as never),
+      routeForPickedEntity(
+        entries as never,
+        kyoto.region,
+        kyotoEntity as never,
+      ),
     ).toBe(kyoto);
     expect(
-      routeForPickedEntity(entries as never, kyoto.region, creteEntity as never),
+      routeForPickedEntity(
+        entries as never,
+        kyoto.region,
+        creteEntity as never,
+      ),
     ).toBeUndefined();
-    expect(routeForPickedEntity(entries as never, undefined, kyotoEntity as never)).toBeUndefined();
+    expect(
+      routeForPickedEntity(entries as never, undefined, kyotoEntity as never),
+    ).toBeUndefined();
   });
 
-  it("shares one batched global position buffer for source-identical traces", () => {
+  it("batches global positions without changing Cartesian values", () => {
     const source = completedRoutes[0];
-    const replica = { ...source, slug: `${source.slug}-replica` };
+    const route = { ...source, trace: source.trace.slice(0, 3) };
     const fromDegreesArray = vi.spyOn(Cartesian3, "fromDegreesArray");
     const engine = new CesiumAtlasWorldEngine();
     const positionsForRoute = Reflect.get(
@@ -99,11 +113,27 @@ describe("CesiumAtlasWorldEngine", () => {
       "globalPositionsForRoute",
     ) as (route: typeof source) => Cartesian3[];
 
-    const sourcePositions = positionsForRoute.call(engine, source);
-    const replicaPositions = positionsForRoute.call(engine, replica);
+    const expected = route.trace.map((point) =>
+      Cartesian3.fromDegrees(point.lng, point.lat),
+    );
+    const sourcePositions = positionsForRoute.call(engine, route);
 
-    expect(replica.trace).toBe(source.trace);
-    expect(replicaPositions).toBe(sourcePositions);
+    expect(sourcePositions).toEqual(expected);
     expect(fromDegreesArray).toHaveBeenCalledOnce();
+  });
+
+  it("skips geometry-less routes before batched conversion", () => {
+    const source = completedRoutes[0];
+    const fromDegreesArray = vi.spyOn(Cartesian3, "fromDegreesArray");
+    const engine = new CesiumAtlasWorldEngine();
+    const positionsForRoute = Reflect.get(
+      engine,
+      "globalPositionsForRoute",
+    ) as (route: typeof source) => Cartesian3[];
+
+    expect(positionsForRoute.call(engine, { ...source, trace: [] })).toEqual(
+      [],
+    );
+    expect(fromDegreesArray).not.toHaveBeenCalled();
   });
 });
