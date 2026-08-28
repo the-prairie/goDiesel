@@ -7,13 +7,13 @@ import { routes } from "@/data/routes";
 import type { RouteSummary } from "@/domain/route";
 import { CesiumAtlasGlobe } from "@/surfaces/atlas/components/cesium-atlas-globe";
 import type { AtlasWorldStatus } from "@/surfaces/atlas/atlas-world";
-import { createSourceBackedRouteCorpus } from "./runtime-corpus";
+import { createDistinctRouteCorpus } from "./runtime-corpus";
 
 const CORPUS_SIZE = 2_500;
 
 function AtlasCorpusHarness() {
   const corpus = useMemo(
-    () => createSourceBackedRouteCorpus(routes, CORPUS_SIZE),
+    () => createDistinctRouteCorpus(routes, CORPUS_SIZE),
     [],
   );
   const regions = useMemo(() => buildRouteRegions(corpus.routes), [corpus.routes]);
@@ -26,6 +26,7 @@ function AtlasCorpusHarness() {
   return (
     <main
       data-runtime-atlas-corpus={CORPUS_SIZE}
+      data-runtime-atlas-unique-geometry={corpus.uniqueTraceCount}
       data-runtime-atlas-status={status.state}
       className="h-dvh w-dvw overflow-hidden bg-[#02070a]"
     >
