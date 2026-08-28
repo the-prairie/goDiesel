@@ -639,8 +639,15 @@ function atlasRouteVisual(buffer: Buffer, camera: AtlasRouteVisual["camera"]) {
   const rows = 24;
   const occupiedCells = new Array<number>(columns * rows).fill(0);
   let routePixelCount = 0;
-  for (let y = 0; y < image.height; y += 1) {
-    for (let x = 0; x < image.width; x += 1) {
+  const interiorMargin = 3;
+  const looksLikeGlobeInterior = (x: number, y: number) => {
+    const index = (y * image.width + x) * 4;
+    return (
+      image.data[index] + image.data[index + 1] + image.data[index + 2] > 180
+    );
+  };
+  for (let y = interiorMargin; y < image.height - interiorMargin; y += 1) {
+    for (let x = interiorMargin; x < image.width - interiorMargin; x += 1) {
       const index = (y * image.width + x) * 4;
       const red = image.data[index];
       const green = image.data[index + 1];
@@ -648,6 +655,14 @@ function atlasRouteVisual(buffer: Buffer, camera: AtlasRouteVisual["camera"]) {
       const cobaltDistanceSquared =
         (red - 98) ** 2 + (green - 167) ** 2 + (blue - 255) ** 2;
       if (cobaltDistanceSquared > 1_200) continue;
+      if (
+        !looksLikeGlobeInterior(x - interiorMargin, y) ||
+        !looksLikeGlobeInterior(x + interiorMargin, y) ||
+        !looksLikeGlobeInterior(x, y - interiorMargin) ||
+        !looksLikeGlobeInterior(x, y + interiorMargin)
+      ) {
+        continue;
+      }
       routePixelCount += 1;
       const column = Math.min(columns - 1, Math.floor((x / image.width) * columns));
       const row = Math.min(rows - 1, Math.floor((y / image.height) * rows));
