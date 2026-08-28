@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "optimization": "atlas-buffered-overview",
+  "workload": "atlas-2,500-source-backed-routes",
+  "protocol": {
+    "productionBaselineCommit": "d84cb2d38133d800aa850ab4962f1c5f48ec299e",
+    "controlHarnessCommit": "54aa6be92fb5c828619099279c4fb1fb7f1f5718",
+    "optimizedCommit": "31e28b4be1c9814fdad61ea77538c531330ef451",
+    "independentProcessesPerProject": 5,
+    "liveProvidersDisabled": true
+  },
+  "desktop": {
+    "before": {
+      "actionLatencyMs": [3482.258167, 3507.881, 3579.491084, 3607.546375, 3747.761667],
+      "usedHeapBytes": [93918680, 93928804, 93933720, 93952480, 93954024],
+      "peakObservedHeapBytes": [101576600, 112035724, 112706992, 113157368, 118565036],
+      "sampleWallMs": [31338.809208, 31816.685334, 35120.427375, 36562.149334, 38702.633041]
+    },
+    "after": {
+      "actionLatencyMs": [3515.307459, 3524.036333, 3530.116083, 3549.10725, 3605.095333],
+      "usedHeapBytes": [38927724, 38934236, 38971272, 38973364, 38990012],
+      "peakObservedHeapBytes": [46352108, 46894208, 47128576, 47302000, 68251368],
+      "sampleWallMs": [9930.644208, 9936.324, 9953.269667, 9980.010708, 10093.248167]
+    }
+  },
+  "mobile": {
+    "before": {
+      "actionLatencyMs": [2937.23, 2941.659459, 3215.286042, 3227.460709, 3244.092292],
+      "usedHeapBytes": [93663608, 93708256, 93716808, 93717660, 93722904],
+      "peakObservedHeapBytes": [111498180, 111850096, 111850128, 111926924, 114212004],
+      "sampleWallMs": [25225.8465, 25330.729084, 25627.85525, 29056.7015, 29259.781292]
+    },
+    "after": {
+      "actionLatencyMs": [2834.0135, 2836.32975, 2838.347625, 2841.448666, 2861.598458],
+      "usedHeapBytes": [38520288, 38522180, 38524080, 38557884, 38568688],
+      "peakObservedHeapBytes": [64227224, 64795020, 65764440, 66367716, 66828108],
+      "sampleWallMs": [7529.788542, 7538.016417, 7545.648875, 7550.633083, 7604.680042]
+    }
+  },
+  "medianImprovementPercent": {
+    "desktopUsedHeap": 58.51194650866589,
+    "desktopPeakHeap": 58.18486931139108,
+    "desktopSampleWall": 71.65959980861423,
+    "mobileUsedHeap": 58.893094182209026,
+    "mobilePeakHeap": 41.20307130985134,
+    "mobileSampleWall": 70.55684605132925
+  },
+  "equivalence": {
+    "status": "passed",
+    "oracles": [
+      "2,500 independently owned source-backed traces",
+      "ready Cesium canvas with 2,500 heat lines",
+      "nonzero WebGL pixel readback",
+      "exact packed Cartesian components",
+      "19 Atlas interaction tests"
+    ]
+  },
+  "artifacts": {
+    "before": [
+      {"file":"runtime-browser-desktop-chromium-atlas-scale-r000.json","bytes":88987,"sha256":"ee6d8a5ca9a9a30511eb3a73147af64cbc0a4c3c96ec6d36ddb9e88cb395d032"},
+      {"file":"runtime-browser-desktop-chromium-atlas-scale-r001.json","bytes":89434,"sha256":"e3054736e904a28cc6be5e1b7f4080127929afb9e5c4a74a99f8cd9fefd20c76"},
+      {"file":"runtime-browser-desktop-chromium-atlas-scale-r002.json","bytes":88988,"sha256":"5899764adf529e4d282892df33f2970c7b41ca88158c3839fdb0479030043d17"},
+      {"file":"runtime-browser-desktop-chromium-atlas-scale-r003.json","bytes":89051,"sha256":"0d9967e594f08f68dd5fcb1c65a2f95167b6447f5e3818cbb9c559529aef73df"},
+      {"file":"runtime-browser-desktop-chromium-atlas-scale-r004.json","bytes":89088,"sha256":"1d936596e9703b2a9f641a0abb3e19365219ce93d9ba381f4e6859185026633b"},
+      {"file":"runtime-browser-mobile-chromium-atlas-scale-r000.json","bytes":93727,"sha256":"668b55ca1c13d1627fa037de0f4a4857be731ebe169423833d3e5f1d60a88d98"},
+      {"file":"runtime-browser-mobile-chromium-atlas-scale-r001.json","bytes":93424,"sha256":"b76f958c6e43ce75597794e06f729dc96873c43ae1247ebd0022e4b7a4be1578"},
+      {"file":"runtime-browser-mobile-chromium-atlas-scale-r002.json","bytes":93312,"sha256":"0996c91b361ab8113b59e4afe23c3d40b49674b5cf2b4ab6cca5c8228024ec6a"},
+      {"file":"runtime-browser-mobile-chromium-atlas-scale-r003.json","bytes":93477,"sha256":"0aa739c37c691b607072b03bce58309f3eca81ebdb2803af0b7c956da6b13aec"},
+      {"file":"runtime-browser-mobile-chromium-atlas-scale-r004.json","bytes":93265,"sha256":"daa744540b52ba0c8c92b1994c63124e800d6daa5f1b17181a26687ee9739545"}
+    ],
+    "after": [
+      {"file":"runtime-browser-desktop-chromium-atlas-scale-r000.json","bytes":29938,"sha256":"2b626dc307acc21536c272cfcb40e81d41608e6678a6807abbfb73c6b0a7735c"},
+      {"file":"runtime-browser-desktop-chromium-atlas-scale-r001.json","bytes":29992,"sha256":"d0ff5ef6fbddecc6aacfe5b6bb121b98c3533443674c65def955259c21d48f86"},
+      {"file":"runtime-browser-desktop-chromium-atlas-scale-r002.json","bytes":29930,"sha256":"a1bdfbe90bcbd72dd613feaacb0263bbe72fa30805b79aecc446777a2eeb746f"},
+      {"file":"runtime-browser-desktop-chromium-atlas-scale-r003.json","bytes":29919,"sha256":"a16214314a1ab3eebc906ec8f55ba7a91049afc9d2057c2ac412e4aa87ef9d3a"},
+      {"file":"runtime-browser-desktop-chromium-atlas-scale-r004.json","bytes":29982,"sha256":"c98a512fefa601b19287ffba69abeb2f80adb41d5bb2808780846f27253ab0f9"},
+      {"file":"runtime-browser-mobile-chromium-atlas-scale-r000.json","bytes":31230,"sha256":"930706371c7a34c99a7382471422276871af63fe295356c4a10a4471466f818f"},
+      {"file":"runtime-browser-mobile-chromium-atlas-scale-r001.json","bytes":31366,"sha256":"73b6ebca7e7984291449e576690f2bde8637afa7d27890a97bf51d94c935a556"},
+      {"file":"runtime-browser-mobile-chromium-atlas-scale-r002.json","bytes":31288,"sha256":"5a6bf36a047e5e84c87a5548f39d3302cd9c4061c64bf09cf3410c675278ecac"},
+      {"file":"runtime-browser-mobile-chromium-atlas-scale-r003.json","bytes":31264,"sha256":"12ea20785f50fb106c6379455394a6fdf6a8d6d4019f941a1c35bf2c209674e3"},
+      {"file":"runtime-browser-mobile-chromium-atlas-scale-r004.json","bytes":31121,"sha256":"79dec1d07a48a355e59ba602f0001cf817fac870ac249eac4985191c9c94ff88"}
+    ]
+  }
+}
