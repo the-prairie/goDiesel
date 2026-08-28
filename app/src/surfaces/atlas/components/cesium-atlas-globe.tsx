@@ -72,6 +72,8 @@ export const CesiumAtlasGlobe = forwardRef<
             nextStatus.state === "ready"
           ) {
             onRegionPresentationReady?.(false);
+          } else if (nextStatus.state === "region-fallback") {
+            onRegionPresentationReady?.(true);
           } else if (nextStatus.state === "unavailable") {
             onRegionPresentationReady?.(Boolean(selectedRegionRef.current));
           }
