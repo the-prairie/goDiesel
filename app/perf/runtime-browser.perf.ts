@@ -660,7 +660,10 @@ function atlasRouteVisual(buffer: Buffer, camera: AtlasRouteVisual["camera"]) {
 async function captureAtlasRouteVisuals(page: Page, testInfo: TestInfo) {
   const canvas = page.locator("canvas[data-heat-lines='2500']");
   const capture = async (camera: AtlasRouteVisual["camera"]) => {
-    const buffer = await canvas.screenshot();
+    const dataUrl = await canvas.evaluate((element) =>
+      (element as HTMLCanvasElement).toDataURL("image/png"),
+    );
+    const buffer = Buffer.from(dataUrl.slice(dataUrl.indexOf(",") + 1), "base64");
     const screenshot = `atlas-route-${testInfo.project.name}-r${String(
       repetitionIndex(testInfo),
     ).padStart(3, "0")}-${camera}.png`;

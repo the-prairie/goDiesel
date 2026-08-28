@@ -7,7 +7,7 @@
 
 ## Predeclared visual acceptance
 
-The hardened comparison captures the canvas at global, east, and west camera positions for desktop and mobile Chromium.
+The hardened comparison captures the WebGL canvas buffer directly at global, east, and west camera positions for desktop and mobile Chromium, excluding DOM labels and other overlays.
 The route oracle isolates pixels within a squared RGB distance of 1,200 from the established `#62a7ff` route color and records their distribution in a 48 by 24 grid.
 For every project and camera, the optimized median route-pixel count must remain between 80% and 120% of control and the occupied-cell Jaccard overlap must be at least 0.80.
 The reference repetition for each project must contain more than 100 isolated route pixels per camera; the other timing and heap repetitions still enforce a ready 2,500-route canvas.
