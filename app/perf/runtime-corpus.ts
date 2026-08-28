@@ -18,6 +18,14 @@ export interface SourceBackedCandidateCorpus {
   sourceCandidateIds: string[];
 }
 
+export function countUniqueRouteTraces(routes: readonly RouteSummary[]) {
+  return new Set(
+    routes.map((route) =>
+      JSON.stringify(route.trace.map(({ lat, lng }) => [lat, lng])),
+    ),
+  ).size;
+}
+
 export function createSourceBackedRouteCorpus(
   sourceRoutes: readonly RouteSummary[],
   count: number,
@@ -74,11 +82,7 @@ export function createDistinctRouteCorpus(
       })),
     };
   });
-  const uniqueTraceCount = new Set(
-    routes.map((route) =>
-      JSON.stringify(route.trace.map(({ lat, lng }) => [lat, lng])),
-    ),
-  ).size;
+  const uniqueTraceCount = countUniqueRouteTraces(routes);
 
   return {
     ...corpus,

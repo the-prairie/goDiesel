@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { RouteSummary } from "@/domain/route";
-import { createDistinctRouteCorpus } from "../perf/runtime-corpus";
+import {
+  countUniqueRouteTraces,
+  createDistinctRouteCorpus,
+} from "../perf/runtime-corpus";
 
 const route = {
   slug: "source",
@@ -16,6 +19,15 @@ const route = {
 } as RouteSummary;
 
 describe("createDistinctRouteCorpus", () => {
+  it("counts unique coordinate values instead of array identity", () => {
+    expect(
+      countUniqueRouteTraces([
+        route,
+        { ...route, trace: route.trace.map((point) => ({ ...point })) },
+      ]),
+    ).toBe(1);
+  });
+
   it("retains every distinct geometry at the requested scale", () => {
     const corpus = createDistinctRouteCorpus([route], 2_500);
 
