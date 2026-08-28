@@ -5,6 +5,14 @@
 **Optimized commit:** `31e28b4be1c9814fdad61ea77538c531330ef451`
 **Lever:** render the global overview with Cesium's buffer-backed polyline collection and create ground-clamped Entities only for the selected region
 
+## Predeclared visual acceptance
+
+The hardened comparison captures the canvas at global, east, and west camera positions for desktop and mobile Chromium.
+The route oracle isolates pixels within a squared RGB distance of 1,200 from the established `#62a7ff` route color and records their distribution in a 48 by 24 grid.
+For every project and camera, the optimized median route-pixel count must remain between 80% and 120% of control and the occupied-cell Jaccard overlap must be at least 0.80.
+Every repetition must contain more than 100 isolated route pixels per camera.
+These limits were committed before the hardened control or optimized distributions were collected.
+
 ## Outcome
 
 At 2,500 independently owned source-backed routes, median settled heap fell 58.51% on desktop and 58.89% on mobile.
