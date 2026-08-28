@@ -94,5 +94,5 @@ Strict local validation verified 992 retained artifacts and no missing artifact.
 Clean-checkout validation accepted the schema and reported all 992 raw artifacts as intentionally external.
 `npm run verify:ticket` passed type checking, the production build, 40 Vitest files with 240 tests, and four required navigation Playwright tests.
 `npm run perf:runtime:baseline` passed two Vitest files with 11 tests and both desktop and mobile Playwright runtime scenarios.
-The focused runtime-statistics Vitest file passed 10 tests.
+The focused runtime-statistics Vitest file passed 11 tests.
 `python -m pytest test_runtime_evidence.py` passed seven schema, canonical-path, traversal, alias, and checksum-integrity regressions.
