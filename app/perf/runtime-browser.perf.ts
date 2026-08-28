@@ -33,6 +33,8 @@ const OUTPUT_DIR = path.resolve(
 const ROUTE_SLUG = "17654151284";
 const OBSERVATION_WINDOW_MS = 750;
 const LIFECYCLE_WARMUP_CYCLES = 10;
+const LIFECYCLE_STABILITY_WINDOW = 3;
+const LIFECYCLE_STABILITY_MAX_RANGE_RATIO = 1.03;
 
 function repetitionIndex(testInfo: TestInfo) {
   return REPETITION_OFFSET + testInfo.repeatEachIndex;
@@ -170,6 +172,11 @@ function percentile(values: readonly number[], quantile: number) {
   const sorted = [...values].sort((left, right) => left - right);
   const rank = Math.max(0, Math.ceil(quantile * sorted.length) - 1);
   return sorted[rank] ?? 0;
+}
+
+function heapRangeRatio(values: readonly number[]) {
+  const minimum = Math.min(...values);
+  return minimum > 0 ? Math.max(...values) / minimum : Number.POSITIVE_INFINITY;
 }
 
 function browserContextOptions(
@@ -839,6 +846,7 @@ async function writeProjectReport(
   samples: BrowserSample[],
   transitionSamples: TransitionSample[],
   lifecycleBaselineHeapBytes?: number,
+  lifecycleWarmupHeapBytes?: number[],
   lifecycleHeapProfileArtifacts?: LifecycleHeapProfileArtifacts,
 ) {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
@@ -870,7 +878,19 @@ async function writeProjectReport(
     },
     samples,
     lifecycleBaselineHeapBytes,
-    lifecycleWarmupCycles: LIFECYCLE_WARMUP_CYCLES,
+    lifecycleWarmupCycles: lifecycleWarmupHeapBytes
+      ? LIFECYCLE_WARMUP_CYCLES
+      : undefined,
+    lifecycleWarmupHeapBytes,
+    lifecycleWarmupStability: lifecycleWarmupHeapBytes
+      ? {
+          window: LIFECYCLE_STABILITY_WINDOW,
+          maximumRangeRatio: LIFECYCLE_STABILITY_MAX_RANGE_RATIO,
+          observedRangeRatio: heapRangeRatio(
+            lifecycleWarmupHeapBytes.slice(-LIFECYCLE_STABILITY_WINDOW),
+          ),
+        }
+      : undefined,
     lifecycleHeapProfileArtifacts,
     transitionSamples,
   };
@@ -937,6 +957,7 @@ async function measureTransitions(
   testInfo: TestInfo,
 ): Promise<{
   baselineUsedHeapBytes: number;
+  warmupUsedHeapBytes: number[];
   samples: TransitionSample[];
   heapProfileArtifacts?: LifecycleHeapProfileArtifacts;
 }> {
@@ -955,6 +976,7 @@ async function measureTransitions(
       );
     };
 
+    const warmupUsedHeapBytes: number[] = [];
     for (let cycle = 0; cycle < LIFECYCLE_WARMUP_CYCLES; cycle += 1) {
       await navigateHash(`#/routes/${ROUTE_SLUG}`);
       await waitForRouteDetail(page);
@@ -965,9 +987,11 @@ async function measureTransitions(
       await navigateHash("#/atlas");
       await waitForAtlas(page);
       await readWebglSnapshot(page);
+      await client.send("HeapProfiler.collectGarbage");
+      const warmupHeap = await client.send("Runtime.getHeapUsage");
+      warmupUsedHeapBytes.push(warmupHeap.usedSize);
     }
-    await client.send("HeapProfiler.collectGarbage");
-    const baselineHeap = await client.send("Runtime.getHeapUsage");
+    const baselineUsedHeapBytes = warmupUsedHeapBytes.at(-1)!;
     const profileDirectory = path.join(OUTPUT_DIR, "profiles");
     const profileStem = `lifecycle-${testInfo.project.name}-r${String(repetitionIndex(testInfo)).padStart(3, "0")}`;
     const baselineProfilePath = path.join(
@@ -1020,7 +1044,8 @@ async function measureTransitions(
     }
     await client.detach();
     return {
-      baselineUsedHeapBytes: baselineHeap.usedSize,
+      baselineUsedHeapBytes,
+      warmupUsedHeapBytes,
       samples,
       heapProfileArtifacts: CAPTURE_LIFECYCLE_HEAP
         ? {
@@ -1225,6 +1250,16 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
     ),
   ).toBe(true);
   if (lifecycleMeasurement) {
+    expect(lifecycleMeasurement.warmupUsedHeapBytes).toHaveLength(
+      LIFECYCLE_WARMUP_CYCLES,
+    );
+    expect(
+      heapRangeRatio(
+        lifecycleMeasurement.warmupUsedHeapBytes.slice(
+          -LIFECYCLE_STABILITY_WINDOW,
+        ),
+      ),
+    ).toBeLessThanOrEqual(LIFECYCLE_STABILITY_MAX_RANGE_RATIO);
     expect(lifecycleMeasurement.baselineUsedHeapBytes).toBeGreaterThan(0);
     expect(transitionSamples.at(-1)?.usedHeapBytes).toBeGreaterThan(0);
     expect(
@@ -1237,6 +1272,7 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
     samples,
     transitionSamples,
     lifecycleMeasurement?.baselineUsedHeapBytes,
+    lifecycleMeasurement?.warmupUsedHeapBytes,
     lifecycleMeasurement?.heapProfileArtifacts,
   );
 });

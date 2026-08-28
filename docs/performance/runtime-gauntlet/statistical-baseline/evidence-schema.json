@@ -22,7 +22,17 @@
       "properties": {
         "warmups": { "type": "integer", "minimum": 0 },
         "measuredRepetitions": { "type": "integer", "minimum": 1 },
-        "quantileMethod": { "const": "nearest-rank" }
+        "quantileMethod": { "const": "nearest-rank" },
+        "lifecycleWarmup": {
+          "type": ["object", "null"],
+          "properties": {
+            "cycles": { "type": "integer", "minimum": 1 },
+            "stabilityWindow": { "type": "integer", "minimum": 2 },
+            "maximumRangeRatio": { "type": "number", "minimum": 1 }
+          },
+          "required": ["cycles", "stabilityWindow", "maximumRangeRatio"],
+          "additionalProperties": false
+        }
       },
       "additionalProperties": true
     },

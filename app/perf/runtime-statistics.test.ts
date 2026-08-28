@@ -10,6 +10,7 @@ import {
   normalizeProfileUrl,
   resolveInventoriedProfileArtifact,
   summarizeDistribution,
+  validateLifecycleProtocol,
 } from "../scripts/runtime-statistics.mjs";
 import {
   assertNotCancelled,
@@ -176,6 +177,15 @@ describe("runtime statistical evidence", () => {
         workload: "lifecycle",
         repetitionIndex: 0,
         lifecycleBaselineHeapBytes: 1_000,
+        lifecycleWarmupCycles: 10,
+        lifecycleWarmupHeapBytes: [
+          900, 920, 940, 960, 970, 980, 985, 990, 995, 1_000,
+        ],
+        lifecycleWarmupStability: {
+          window: 3,
+          maximumRangeRatio: 1.03,
+          observedRangeRatio: 1_000 / 990,
+        },
         samples: [],
         transitionSamples: Array.from({ length: 20 }, (_, cycle) => ({
           detailLatencyMs: 100 + cycle,
@@ -220,11 +230,41 @@ describe("runtime statistical evidence", () => {
       status: "unavailable",
       blocker: "quota approval missing",
     });
+    expect(report.protocol.lifecycleWarmup).toEqual({
+      cycles: 10,
+      stabilityWindow: 3,
+      maximumRangeRatio: 1.03,
+    });
+    expect(report.protocol.repetitionPlan.lifecycleWarmupCycles).toBe(10);
     expect(report.environment.hostname).toBe("redacted-local-host");
     expect(report.artifacts).toHaveLength(3);
     expect(
       report.artifacts.every((artifact) => artifact.sha256.length === 64),
     ).toBe(true);
+  });
+
+  test("rejects missing and mixed lifecycle convergence protocols", () => {
+    const report = (cycles: number) => ({
+      lifecycleWarmupCycles: cycles,
+      lifecycleWarmupHeapBytes: Array.from(
+        { length: cycles },
+        (_, index) => 1_000 + index,
+      ),
+      lifecycleBaselineHeapBytes: 1_000 + cycles - 1,
+      lifecycleWarmupStability: {
+        window: 3,
+        maximumRangeRatio: 1.03,
+        observedRangeRatio:
+          (1_000 + cycles - 1) / (1_000 + cycles - 3),
+      },
+    });
+
+    expect(() => validateLifecycleProtocol([{}])).toThrow(
+      "invalid warmup convergence protocol",
+    );
+    expect(() => validateLifecycleProtocol([report(10), report(9)])).toThrow(
+      "mixed warmup convergence protocols",
+    );
   });
 
   test("rejects raw reports from a different source commit", () => {

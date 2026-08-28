@@ -665,6 +665,49 @@ function profileSummary(files, measuredReports, nodeReports, rawDirectory) {
   };
 }
 
+export function validateLifecycleProtocol(reports) {
+  if (reports.length === 0) return undefined;
+  const protocols = reports.map((report) => {
+    const cycles = report.lifecycleWarmupCycles;
+    const heaps = report.lifecycleWarmupHeapBytes;
+    const stability = report.lifecycleWarmupStability;
+    if (
+      !Number.isInteger(cycles) ||
+      cycles < 1 ||
+      !Array.isArray(heaps) ||
+      heaps.length !== cycles ||
+      heaps.some((value) => !Number.isFinite(value) || value <= 0) ||
+      report.lifecycleBaselineHeapBytes !== heaps.at(-1) ||
+      !Number.isInteger(stability?.window) ||
+      stability.window < 2 ||
+      stability.window > cycles ||
+      !Number.isFinite(stability?.maximumRangeRatio) ||
+      stability.maximumRangeRatio < 1 ||
+      !Number.isFinite(stability?.observedRangeRatio)
+    ) {
+      throw new Error("Lifecycle report has an invalid warmup convergence protocol");
+    }
+    const window = heaps.slice(-stability.window);
+    const observedRangeRatio = Math.max(...window) / Math.min(...window);
+    if (
+      Math.abs(observedRangeRatio - stability.observedRangeRatio) > 1e-12 ||
+      observedRangeRatio > stability.maximumRangeRatio
+    ) {
+      throw new Error("Lifecycle report warmup did not reach its stability rule");
+    }
+    return {
+      cycles,
+      stabilityWindow: stability.window,
+      maximumRangeRatio: stability.maximumRangeRatio,
+    };
+  });
+  const serialized = new Set(protocols.map((protocol) => JSON.stringify(protocol)));
+  if (serialized.size !== 1) {
+    throw new Error("Lifecycle reports use mixed warmup convergence protocols");
+  }
+  return protocols[0];
+}
+
 export function aggregateRuntimeStatistics({
   rawDirectory,
   outputDirectory,
@@ -709,9 +752,11 @@ export function aggregateRuntimeStatistics({
       `${nonPassingReports.length} raw reports are not atomic passed reports`,
     );
   }
-  const invalidLifecycleReports = browserReports.filter(
+  const lifecycleReports = [...browserReports, ...profileReports].filter(
+    (report) => report.workload === "lifecycle",
+  );
+  const invalidLifecycleReports = lifecycleReports.filter(
     (report) =>
-      report.workload === "lifecycle" &&
       (!Number.isFinite(report.lifecycleBaselineHeapBytes) ||
         report.lifecycleBaselineHeapBytes <= 0 ||
         report.transitionSamples?.length !== 20),
@@ -721,6 +766,7 @@ export function aggregateRuntimeStatistics({
       `${invalidLifecycleReports.length} lifecycle reports lack a settled heap baseline or 20 transitions`,
     );
   }
+  const lifecycleWarmup = validateLifecycleProtocol(lifecycleReports);
   const providerResources = [...browserReports, ...profileReports].flatMap(
     (report) =>
       (report.samples ?? []).flatMap((sample) =>
@@ -783,6 +829,7 @@ export function aggregateRuntimeStatistics({
       ),
       measuredRepetitions,
       quantileMethod: "nearest-rank",
+      lifecycleWarmup,
       repetitionPlan: {
         nodeSamples: nodeReports[0]?.benchmarks?.[0]?.samplesMs?.length ?? 0,
         browserSurfaceByProject: Object.fromEntries(
@@ -817,6 +864,7 @@ export function aggregateRuntimeStatistics({
             ],
           ),
         ),
+        lifecycleWarmupCycles: lifecycleWarmup?.cycles ?? 0,
         profileRepetitionsByProject: Object.fromEntries(
           [...new Set(profileReports.map((report) => report.projectName))].map(
             (projectName) => [
