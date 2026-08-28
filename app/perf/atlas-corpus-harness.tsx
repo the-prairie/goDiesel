@@ -3,18 +3,31 @@ import { createRoot } from "react-dom/client";
 
 import "@/index.css";
 import { buildRouteRegions } from "@/data/route-regions";
-import { routes } from "@/data/routes";
+import { completedRoutes, routes } from "@/data/routes";
 import type { RouteSummary } from "@/domain/route";
 import { CesiumAtlasGlobe } from "@/surfaces/atlas/components/cesium-atlas-globe";
 import type { AtlasWorldStatus } from "@/surfaces/atlas/atlas-world";
-import { createSourceBackedRouteCorpus } from "./runtime-corpus";
+import {
+  countUniqueRouteTraces,
+  createDistinctRouteCorpus,
+} from "./runtime-corpus";
 
 const CORPUS_SIZE = 2_500;
+const VISUAL_FIXTURE_TIME_ISO = "2026-03-20T12:00:00Z";
 
 function AtlasCorpusHarness() {
+  const productionDistribution =
+    new URLSearchParams(window.location.search).get("distribution") ===
+    "production";
   const corpus = useMemo(
-    () => createSourceBackedRouteCorpus(routes, CORPUS_SIZE),
-    [],
+    () =>
+      productionDistribution
+        ? {
+            routes: completedRoutes,
+            uniqueTraceCount: countUniqueRouteTraces(completedRoutes),
+          }
+        : createDistinctRouteCorpus(routes, CORPUS_SIZE),
+    [productionDistribution],
   );
   const regions = useMemo(() => buildRouteRegions(corpus.routes), [corpus.routes]);
   const [status, setStatus] = useState<AtlasWorldStatus>({
@@ -25,12 +38,17 @@ function AtlasCorpusHarness() {
 
   return (
     <main
-      data-runtime-atlas-corpus={CORPUS_SIZE}
+      data-runtime-atlas-corpus={corpus.routes.length}
+      data-runtime-atlas-distribution={
+        productionDistribution ? "production" : "scale"
+      }
+      data-runtime-atlas-unique-geometry={corpus.uniqueTraceCount}
       data-runtime-atlas-status={status.state}
       className="h-dvh w-dvw overflow-hidden bg-[#02070a]"
     >
       <CesiumAtlasGlobe
         regions={regions}
+        illuminationTimeIso={VISUAL_FIXTURE_TIME_ISO}
         selectedRoute={selectedRoute}
         onSelectRegion={() => undefined}
         onSelectRoute={setSelectedRoute}

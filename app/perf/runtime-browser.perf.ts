@@ -1,5 +1,7 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 
 import {
   expect,
@@ -8,6 +10,7 @@ import {
   type BrowserContext,
   type BrowserContextOptions,
   type CDPSession,
+  type Locator,
   type Page,
   type TestInfo,
 } from "@playwright/test";
@@ -15,6 +18,7 @@ import {
   assessLifecycleHeapStability,
   LIFECYCLE_HEAP_STABILITY_PROTOCOL,
 } from "./runtime-lifecycle-stability";
+import { PNG } from "pngjs";
 
 const RUN_ID = process.env.GODIESEL_PERF_RUN_ID?.trim();
 const STATISTICAL_MODE = Boolean(RUN_ID);
@@ -28,6 +32,8 @@ const CAPTURE_PROFILES = process.env.GODIESEL_PERF_CAPTURE_PROFILES === "1";
 const CAPTURE_LIFECYCLE_HEAP =
   process.env.GODIESEL_PERF_CAPTURE_LIFECYCLE_HEAP === "1";
 const SOURCE_COMMIT = process.env.GODIESEL_PERF_SOURCE_COMMIT?.trim();
+const PERF_PORT = Number.parseInt(process.env.GODIESEL_PERF_PORT ?? "8794", 10);
+const PERF_BASE_URL = `http://127.0.0.1:${PERF_PORT}`;
 const OUTPUT_DIR = path.resolve(
   process.cwd(),
   STATISTICAL_MODE
@@ -37,6 +43,18 @@ const OUTPUT_DIR = path.resolve(
 const ROUTE_SLUG = "17654151284";
 const OBSERVATION_WINDOW_MS = 750;
 const LIFECYCLE_FINAL_HEAP_MAX_RATIO = 1.1;
+const PRODUCTION_ATLAS_CORPUS: AtlasCorpusExpectation = {
+  distribution: "production",
+  routeCount: 66,
+  uniqueGeometryCount: 66,
+  minimumRoutePixels: 100,
+};
+const SCALE_ATLAS_CORPUS: AtlasCorpusExpectation = {
+  distribution: "scale",
+  routeCount: 2_500,
+  uniqueGeometryCount: 2_500,
+  minimumRoutePixels: 100,
+};
 
 function repetitionIndex(testInfo: TestInfo) {
   return REPETITION_OFFSET + testInfo.repeatEachIndex;
@@ -135,6 +153,24 @@ interface BrowserSample {
   navigation?: NavigationTiming;
   profileArtifacts?: { cpu: string; allocation: string };
   blockedExternalRequests: string[];
+  atlasRouteVisuals?: AtlasRouteVisual[];
+  atlasCorpus?: {
+    routeCount: number;
+    uniqueGeometryCount: number;
+    submittedGeometryCount: number;
+  };
+}
+
+interface AtlasRouteVisual {
+  camera: "global" | "east" | "west";
+  screenshot: string;
+  routePixelCount: number;
+  occupiedCells: number[];
+  imageWidth: number;
+  imageHeight: number;
+  routePixels: number[];
+  routeAdjacentNearBlackPixels: number;
+  routeAdjacentNearWhitePixels: number;
 }
 
 interface TransitionSample {
@@ -182,7 +218,7 @@ function browserContextOptions(
 ): BrowserContextOptions {
   const mobile = testInfo.project.name.includes("mobile");
   return {
-    baseURL: "http://127.0.0.1:8794",
+    baseURL: PERF_BASE_URL,
     viewport: mobile
       ? { width: 430, height: 844 }
       : { width: 1440, height: 900 },
@@ -583,15 +619,281 @@ async function waitForAtlas(page: Page) {
   );
 }
 
-async function waitForAtlasCorpus(page: Page) {
-  await expect(
-    page.locator("[data-runtime-atlas-corpus='2500']"),
-  ).toHaveAttribute("data-runtime-atlas-status", /ready|unavailable/, {
+interface AtlasCorpusExpectation {
+  distribution: "production" | "scale";
+  routeCount: number;
+  uniqueGeometryCount: number;
+  minimumRoutePixels: number;
+}
+
+async function waitForAtlasCorpus(
+  page: Page,
+  expectation: AtlasCorpusExpectation,
+) {
+  const harness = page.locator(
+    `[data-runtime-atlas-distribution='${expectation.distribution}']`,
+  );
+  await expect(harness).toHaveAttribute("data-runtime-atlas-status", "ready", {
     timeout: 120_000,
   });
-  await expect(page.locator("canvas[data-heat-lines='2500']")).toBeVisible({
+  await expect(harness).toHaveAttribute(
+    "data-runtime-atlas-corpus",
+    String(expectation.routeCount),
+  );
+  await expect(harness).toHaveAttribute(
+    "data-runtime-atlas-unique-geometry",
+    String(expectation.uniqueGeometryCount),
+  );
+  const canvas = page.locator(
+    `canvas[data-heat-lines='${expectation.routeCount}']`,
+  );
+  await expect(canvas).toHaveAttribute(
+    "data-submitted-route-geometry",
+    String(expectation.routeCount),
+  );
+  await expect(canvas).toHaveAttribute(
+    "data-illumination-time",
+    "2026-03-20T12:00:00Z",
+  );
+  await expect(canvas).toBeVisible({
     timeout: 120_000,
   });
+  await expect
+    .poll(
+      () =>
+        canvas.evaluate((element) => {
+          const source = element as HTMLCanvasElement;
+          const gl =
+            source.getContext("webgl2") ??
+            (source.getContext("webgl") as WebGLRenderingContext | null);
+          if (!gl || source.width < 16 || source.height < 16) return 0;
+          const pixels = new Uint8Array(8 * 8 * 4);
+          gl.readPixels(
+            Math.floor(source.width / 2) - 4,
+            Math.floor(source.height / 2) - 4,
+            8,
+            8,
+            gl.RGBA,
+            gl.UNSIGNED_BYTE,
+            pixels,
+          );
+          return pixels.reduce(
+            (total, value, index) => (index % 4 === 3 ? total : total + value),
+            0,
+          );
+        }),
+      { timeout: 120_000 },
+    )
+    .toBeGreaterThan(0);
+  let previousRoutePixelCount: number | undefined;
+  let stableRoutePixelSamples = 0;
+  await expect
+    .poll(
+      async () => {
+        const count = atlasRouteVisual(
+          await canvasPngBuffer(canvas),
+          "global",
+        ).routePixelCount;
+        const tolerance = Math.max(2, Math.ceil(count * 0.01));
+        stableRoutePixelSamples =
+          previousRoutePixelCount !== undefined &&
+          Math.abs(count - previousRoutePixelCount) <= tolerance
+            ? stableRoutePixelSamples + 1
+            : 0;
+        previousRoutePixelCount = count;
+        return (
+          count > expectation.minimumRoutePixels && stableRoutePixelSamples >= 3
+        );
+      },
+      { timeout: 180_000, intervals: [500] },
+    )
+    .toBe(true);
+}
+
+async function canvasPngBuffer(canvas: Locator) {
+  const dataUrl = await canvas.evaluate((element) =>
+    (element as HTMLCanvasElement).toDataURL("image/png"),
+  );
+  return Buffer.from(dataUrl.slice(dataUrl.indexOf(",") + 1), "base64");
+}
+
+function atlasRouteVisual(buffer: Buffer, camera: AtlasRouteVisual["camera"]) {
+  const image = PNG.sync.read(buffer);
+  const columns = 48;
+  const rows = 24;
+  const occupiedCells = new Array<number>(columns * rows).fill(0);
+  const routePixels: number[] = [];
+  let routePixelCount = 0;
+  const interiorMargin = 12;
+  const looksLikeGlobeInterior = (x: number, y: number) => {
+    const index = (y * image.width + x) * 4;
+    return (
+      image.data[index] + image.data[index + 1] + image.data[index + 2] > 180
+    );
+  };
+  for (let y = interiorMargin; y < image.height - interiorMargin; y += 1) {
+    for (let x = interiorMargin; x < image.width - interiorMargin; x += 1) {
+      const index = (y * image.width + x) * 4;
+      const red = image.data[index];
+      const green = image.data[index + 1];
+      const blue = image.data[index + 2];
+      const cobaltDistanceSquared =
+        (red - 98) ** 2 + (green - 167) ** 2 + (blue - 255) ** 2;
+      if (cobaltDistanceSquared > 1_200) continue;
+      if (
+        !looksLikeGlobeInterior(x - interiorMargin, y) ||
+        !looksLikeGlobeInterior(x + interiorMargin, y) ||
+        !looksLikeGlobeInterior(x, y - interiorMargin) ||
+        !looksLikeGlobeInterior(x, y + interiorMargin)
+      ) {
+        continue;
+      }
+      routePixelCount += 1;
+      routePixels.push(y * image.width + x);
+      const column = Math.min(columns - 1, Math.floor((x / image.width) * columns));
+      const row = Math.min(rows - 1, Math.floor((y / image.height) * rows));
+      occupiedCells[row * columns + column] += 1;
+    }
+  }
+  const routePixelSet = new Set(routePixels);
+  const adjacentPixelSet = new Set<number>();
+  for (const pixel of routePixels) {
+    const x = pixel % image.width;
+    const y = Math.floor(pixel / image.width);
+    for (let deltaY = -6; deltaY <= 6; deltaY += 1) {
+      for (let deltaX = -6; deltaX <= 6; deltaX += 1) {
+        if (deltaX ** 2 + deltaY ** 2 > 36) continue;
+        const nextX = x + deltaX;
+        const nextY = y + deltaY;
+        if (
+          nextX < 0 ||
+          nextX >= image.width ||
+          nextY < 0 ||
+          nextY >= image.height
+        ) {
+          continue;
+        }
+        const adjacentPixel = nextY * image.width + nextX;
+        if (!routePixelSet.has(adjacentPixel)) adjacentPixelSet.add(adjacentPixel);
+      }
+    }
+  }
+  let routeAdjacentNearBlackPixels = 0;
+  let routeAdjacentNearWhitePixels = 0;
+  for (const pixel of adjacentPixelSet) {
+    const index = pixel * 4;
+    const red = image.data[index];
+    const green = image.data[index + 1];
+    const blue = image.data[index + 2];
+    if (red <= 20 && green <= 20 && blue <= 20) {
+      routeAdjacentNearBlackPixels += 1;
+    }
+    const x = pixel % image.width;
+    const y = Math.floor(pixel / image.width);
+    const enclosedByRoute = [1, 2, 3].some(
+      (distance) =>
+        (routePixelSet.has(y * image.width + x - distance) &&
+          routePixelSet.has(y * image.width + x + distance)) ||
+        (routePixelSet.has((y - distance) * image.width + x) &&
+          routePixelSet.has((y + distance) * image.width + x)),
+    );
+    if (red >= 245 && green >= 245 && blue >= 245 && enclosedByRoute) {
+      routeAdjacentNearWhitePixels += 1;
+    }
+  }
+  return {
+    camera,
+    routePixelCount,
+    occupiedCells,
+    imageWidth: image.width,
+    imageHeight: image.height,
+    routePixels,
+    routeAdjacentNearBlackPixels,
+    routeAdjacentNearWhitePixels,
+  };
+}
+
+async function atlasCorpusMetadata(
+  page: Page,
+  expectation: AtlasCorpusExpectation,
+) {
+  const harness = page.locator(
+    `[data-runtime-atlas-distribution='${expectation.distribution}']`,
+  );
+  const canvas = page.locator(
+    `canvas[data-heat-lines='${expectation.routeCount}']`,
+  );
+  return {
+    routeCount: Number(await harness.getAttribute("data-runtime-atlas-corpus")),
+    uniqueGeometryCount: Number(
+      await harness.getAttribute("data-runtime-atlas-unique-geometry"),
+    ),
+    submittedGeometryCount: Number(
+      await canvas.getAttribute("data-submitted-route-geometry"),
+    ),
+  };
+}
+
+async function captureAtlasRouteVisuals(
+  page: Page,
+  testInfo: TestInfo,
+  expectation: AtlasCorpusExpectation,
+) {
+  const canvas = page.locator(
+    `canvas[data-heat-lines='${expectation.routeCount}']`,
+  );
+  const capture = async (camera: AtlasRouteVisual["camera"]) => {
+    const buffer = await canvasPngBuffer(canvas);
+    const screenshot = `atlas-${expectation.distribution}-route-${testInfo.project.name}-r${String(
+      repetitionIndex(testInfo),
+    ).padStart(3, "0")}-${camera}.png`;
+    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+    fs.writeFileSync(path.join(OUTPUT_DIR, screenshot), buffer);
+    const visual = { ...atlasRouteVisual(buffer, camera), screenshot };
+    expect(visual.routePixelCount).toBeGreaterThan(
+      expectation.minimumRoutePixels,
+    );
+    expect(visual.routeAdjacentNearBlackPixels).toBeLessThanOrEqual(5);
+    expect(visual.routeAdjacentNearWhitePixels).toBeLessThanOrEqual(5);
+    return visual;
+  };
+  const visuals = [await capture("global")];
+  await canvas.focus();
+  for (let index = 0; index < 4; index += 1) await page.keyboard.press("ArrowRight");
+  await page.waitForTimeout(250);
+  visuals.push(await capture("east"));
+  for (let index = 0; index < 8; index += 1) await page.keyboard.press("ArrowLeft");
+  await page.waitForTimeout(250);
+  visuals.push(await capture("west"));
+  return visuals;
+}
+
+function measuredSourceState() {
+  const repository = path.resolve(process.cwd(), "..");
+  return {
+    head: execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: repository,
+      encoding: "utf8",
+    }).trim(),
+    status: execFileSync(
+      "git",
+      ["status", "--porcelain", "--untracked-files=all"],
+      { cwd: repository, encoding: "utf8" },
+    ).trim(),
+  };
+}
+
+function assertMeasuredSourceState() {
+  const state = measuredSourceState();
+  if (
+    STATISTICAL_MODE &&
+    (state.head !== SOURCE_COMMIT || state.status.length > 0)
+  ) {
+    throw new Error(
+      `Runtime evidence requires exact clean source ${SOURCE_COMMIT}; observed ${state.head} with status ${JSON.stringify(state.status)}`,
+    );
+  }
+  return state;
 }
 
 async function waitForReplay(page: Page) {
@@ -818,6 +1120,9 @@ async function freshSample(
   name: string,
   action: (page: Page) => Promise<void>,
   reducedMotion: "no-preference" | "reduce" = "no-preference",
+  inspect?: (
+    page: Page,
+  ) => Promise<Pick<BrowserSample, "atlasRouteVisuals" | "atlasCorpus">>,
 ) {
   const { context, page } = await createMeasuredPage(
     browser,
@@ -825,7 +1130,7 @@ async function freshSample(
     reducedMotion,
   );
   try {
-    return await captureSample(
+    const sample = await captureSample(
       page,
       testInfo,
       name,
@@ -833,6 +1138,7 @@ async function freshSample(
       reducedMotion,
       () => action(page),
     );
+    return { ...sample, ...(inspect ? await inspect(page) : {}) };
   } finally {
     await context.close();
   }
@@ -845,6 +1151,7 @@ async function writeProjectReport(
   lifecycleBaselineHeapBytes?: number,
   lifecycleWarmupHeapBytes?: number[],
   lifecycleHeapProfileArtifacts?: LifecycleHeapProfileArtifacts,
+  browserVersion?: string,
 ) {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   const lifecycleStability = lifecycleWarmupHeapBytes
@@ -853,11 +1160,27 @@ async function writeProjectReport(
   const lifecycleFinalHeapRatio = lifecycleBaselineHeapBytes
     ? transitionSamples.at(-1)!.usedHeapBytes / lifecycleBaselineHeapBytes
     : undefined;
+  const sourceState = assertMeasuredSourceState();
+  const cesiumPackage = JSON.parse(
+    fs.readFileSync(path.resolve("node_modules/cesium/package.json"), "utf8"),
+  ) as { version: string };
   const report = {
     schemaVersion: 2,
     generatedAt: new Date().toISOString(),
     projectName: testInfo.project.name,
     sourceCommit: SOURCE_COMMIT,
+    sourceState,
+    environment: {
+      platform: os.platform(),
+      release: os.release(),
+      arch: os.arch(),
+      cpuModel: os.cpus()[0]?.model ?? "unknown",
+      cpuCount: os.cpus().length,
+      totalMemoryBytes: os.totalmem(),
+      nodeVersion: process.version,
+      browserVersion,
+      cesiumVersion: cesiumPackage.version,
+    },
     runId: RUN_ID,
     repetitionIndex: repetitionIndex(testInfo),
     workload: WORKLOAD,
@@ -926,10 +1249,7 @@ async function writeProjectReport(
   fs.renameSync(temporaryPath, reportPath);
 }
 
-async function captureHeapSnapshot(
-  client: CDPSession,
-  destination: string,
-) {
+async function captureHeapSnapshot(client: CDPSession, destination: string) {
   fs.mkdirSync(path.dirname(destination), { recursive: true });
   const temporaryPath = `${destination}.${process.pid}.tmp`;
   const descriptor = fs.openSync(temporaryPath, "wx");
@@ -1095,6 +1415,7 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
       "GODIESEL_PERF_SOURCE_COMMIT is required in statistical mode",
     );
   }
+  assertMeasuredSourceState();
   const samples: BrowserSample[] = [];
   const surfaceGroups: Array<() => Promise<BrowserSample[]>> = [
     async () => {
@@ -1206,39 +1527,71 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
         "reduce",
       ),
     ],
-    async () => [
-      await freshSample(
-        browser,
-        testInfo,
-        "atlas-2,500-source-backed-routes",
-        async (page) => {
-          await page.goto("/perf/atlas-corpus-harness.html", {
-            waitUntil: "domcontentloaded",
-          });
-          await waitForAtlasCorpus(page);
-        },
-      ),
-    ],
+    async () => {
+      const atlasSample = async (
+        name: string,
+        expectation: AtlasCorpusExpectation,
+      ) =>
+        freshSample(
+          browser,
+          testInfo,
+          name,
+          async (page) => {
+            const query =
+              expectation.distribution === "production"
+                ? "?distribution=production"
+                : "";
+            await page.goto(`/perf/atlas-corpus-harness.html${query}`, {
+              waitUntil: "domcontentloaded",
+            });
+            await waitForAtlasCorpus(page, expectation);
+          },
+          "no-preference",
+          repetitionIndex(testInfo) === 0
+            ? async (page) => ({
+                atlasRouteVisuals: await captureAtlasRouteVisuals(
+                  page,
+                  testInfo,
+                  expectation,
+                ),
+                atlasCorpus: await atlasCorpusMetadata(page, expectation),
+              })
+            : undefined,
+        );
+      return [
+        await atlasSample("atlas-66-production-routes", PRODUCTION_ATLAS_CORPUS),
+        await atlasSample(
+          "atlas-2,500-distinct-source-derived-routes",
+          SCALE_ATLAS_CORPUS,
+        ),
+      ];
+    },
   ];
 
+  const measuredSurfaceGroups =
+    WORKLOAD === "atlas-scale" ? [surfaceGroups.at(-1)!] : surfaceGroups;
   if (WORKLOAD !== "lifecycle") {
-    const offset = repetitionIndex(testInfo) % surfaceGroups.length;
+    const offset = repetitionIndex(testInfo) % measuredSurfaceGroups.length;
     const orderedGroups = [
-      ...surfaceGroups.slice(offset),
-      ...surfaceGroups.slice(0, offset),
+      ...measuredSurfaceGroups.slice(offset),
+      ...measuredSurfaceGroups.slice(0, offset),
     ];
     for (const group of orderedGroups) samples.push(...(await group()));
   }
 
   const lifecycleMeasurement =
-    WORKLOAD === "surfaces" || CAPTURE_PROFILES
+    (WORKLOAD !== "all" && WORKLOAD !== "lifecycle") || CAPTURE_PROFILES
       ? undefined
       : await measureTransitions(browser, testInfo);
   const transitionSamples = lifecycleMeasurement?.samples ?? [];
 
-  expect(samples).toHaveLength(WORKLOAD === "lifecycle" ? 0 : 9);
+  expect(samples).toHaveLength(
+    WORKLOAD === "lifecycle" ? 0 : WORKLOAD === "atlas-scale" ? 2 : 10,
+  );
   expect(transitionSamples).toHaveLength(
-    WORKLOAD === "surfaces" || CAPTURE_PROFILES ? 0 : 20,
+    (WORKLOAD !== "all" && WORKLOAD !== "lifecycle") || CAPTURE_PROFILES
+      ? 0
+      : 20,
   );
   expect(
     samples.every((sample) => sample.sampleWallMs >= sample.actionLatencyMs),
@@ -1296,5 +1649,6 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
     lifecycleMeasurement?.baselineUsedHeapBytes,
     lifecycleMeasurement?.warmupUsedHeapBytes,
     lifecycleMeasurement?.heapProfileArtifacts,
+    browser.version(),
   );
 });

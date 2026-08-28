@@ -1,0 +1,2155 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "1ac9b58d1643313b060c610928e00402e65f98dd",
+  "generatedAt": "2026-08-28T21:15:54.401Z",
+  "optimization": "atlas-overview-primitive",
+  "workload": "atlas-2,500-distinct-source-derived-routes",
+  "protocol": {
+    "warmups": 1,
+    "measuredRepetitions": 5,
+    "quantileMethod": "nearest-rank",
+    "controlCommit": "f32ac6a3b631c915bd0e0ffde287c27848eabd75",
+    "optimizedCommit": "1ac9b58d1643313b060c610928e00402e65f98dd",
+    "projects": [
+      "desktop-chromium",
+      "mobile-chromium"
+    ],
+    "readinessRequirement": "ready state, exact corpus route/unique/submitted counts, nonblank WebGL, and four stable route-mask samples",
+    "illuminationTimeIso": "2026-03-20T12:00:00Z",
+    "warmupRunIds": {
+      "before": "pr-atlas-rebased-warmup-before-f32ac6a3",
+      "after": "pr-atlas-rebased-warmup-after-1ac9b58d"
+    },
+    "measuredRunIds": {
+      "before": "pr-atlas-rebased-final-before-f32ac6a3",
+      "after": "pr-atlas-rebased-final-after-1ac9b58d"
+    }
+  },
+  "environment": {
+    "hostname": "redacted-local-host",
+    "platform": "darwin",
+    "release": "25.6.0",
+    "arch": "arm64",
+    "cpuModel": "Apple M1 Pro",
+    "cpuCount": 10,
+    "totalMemoryBytes": 17179869184,
+    "nodeVersion": "v26.7.0",
+    "browserVersion": "149.0.7827.55",
+    "cesiumVersion": "1.143.0"
+  },
+  "corpus": {
+    "production": {
+      "routeCount": 66,
+      "uniqueGeometryCount": 66,
+      "submittedGeometryCount": 66
+    },
+    "scale": {
+      "routeCount": 2500,
+      "uniqueGeometryCount": 2500,
+      "submittedGeometryCount": 2500
+    },
+    "generatedSummaryCount": 67,
+    "methodology": "Production uses all 66 completed generated routes. Scale replicas preserve all 67 source summary trace shapes and point order under deterministic rigid translation; all 2,500 sampled geometry keys are unique."
+  },
+  "distributions": [
+    {
+      "name": "desktop-chromium-before-actionLatencyMs",
+      "unit": "ms",
+      "sampleCount": 5,
+      "min": 60459.372375,
+      "max": 71328.301833,
+      "mean": 66743.98944979999,
+      "sampleStdDev": 4568.102397165757,
+      "coefficientOfVariation": 0.06844215389014997,
+      "medianAbsoluteDeviation": 5013.029541999997,
+      "p50": {
+        "value": 65472.401916999996,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "desktop-chromium-after-actionLatencyMs",
+      "unit": "ms",
+      "sampleCount": 5,
+      "min": 29741.632749999997,
+      "max": 37290.162458,
+      "mean": 32216.5790668,
+      "sampleStdDev": 3112.265008604839,
+      "coefficientOfVariation": 0.09660445332049879,
+      "medianAbsoluteDeviation": 803.0714589999989,
+      "p50": {
+        "value": 30544.704208999996,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "desktop-chromium-before-usedHeapBytes",
+      "unit": "bytes",
+      "sampleCount": 5,
+      "min": 93322104,
+      "max": 93376548,
+      "mean": 93345360.8,
+      "sampleStdDev": 25582.035790765363,
+      "coefficientOfVariation": 0.0002740579239452183,
+      "medianAbsoluteDeviation": 9044,
+      "p50": {
+        "value": 93331148,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "desktop-chromium-after-usedHeapBytes",
+      "unit": "bytes",
+      "sampleCount": 5,
+      "min": 40070788,
+      "max": 40131076,
+      "mean": 40106965.6,
+      "sampleStdDev": 22774.098023851573,
+      "coefficientOfVariation": 0.0005678339830289124,
+      "medianAbsoluteDeviation": 13548,
+      "p50": {
+        "value": 40115048,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "desktop-chromium-before-peakObservedHeapBytes",
+      "unit": "bytes",
+      "sampleCount": 5,
+      "min": 93902756,
+      "max": 94377136,
+      "mean": 94099515.2,
+      "sampleStdDev": 216303.32904326738,
+      "coefficientOfVariation": 0.00229866571133267,
+      "medianAbsoluteDeviation": 107216,
+      "p50": {
+        "value": 94009972,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "desktop-chromium-after-peakObservedHeapBytes",
+      "unit": "bytes",
+      "sampleCount": 5,
+      "min": 40408928,
+      "max": 70807880,
+      "mean": 46710864,
+      "sampleStdDev": 13471607.108625757,
+      "coefficientOfVariation": 0.2884041517327908,
+      "medianAbsoluteDeviation": 25444,
+      "p50": {
+        "value": 40778924,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "desktop-chromium-before-sampleWallMs",
+      "unit": "ms",
+      "sampleCount": 5,
+      "min": 105806.947042,
+      "max": 114623.95787500001,
+      "mean": 109616.7050084,
+      "sampleStdDev": 3824.560844467586,
+      "coefficientOfVariation": 0.03489031023304803,
+      "medianAbsoluteDeviation": 3097.7880840000144,
+      "p50": {
+        "value": 109176.739833,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "desktop-chromium-after-sampleWallMs",
+      "unit": "ms",
+      "sampleCount": 5,
+      "min": 40889.532917000004,
+      "max": 49064.030958,
+      "mean": 44700.4513498,
+      "sampleStdDev": 4007.779621933971,
+      "coefficientOfVariation": 0.08965859406141997,
+      "medianAbsoluteDeviation": 1717.4664159999957,
+      "p50": {
+        "value": 42606.999333,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "desktop-chromium-before-post-readiness-taskDurationDeltaMs",
+      "unit": "ms",
+      "sampleCount": 5,
+      "min": 13127.24399999999,
+      "max": 16166.08699999999,
+      "mean": 14019.956599999994,
+      "sampleStdDev": 1247.3893937483172,
+      "coefficientOfVariation": 0.08897241477540078,
+      "medianAbsoluteDeviation": 321.04200000000674,
+      "p50": {
+        "value": 13448.285999999996,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "desktop-chromium-after-post-readiness-taskDurationDeltaMs",
+      "unit": "ms",
+      "sampleCount": 5,
+      "min": 3960.9200000000014,
+      "max": 5393.198999999996,
+      "mean": 4407.241800000001,
+      "sampleStdDev": 586.3892354905547,
+      "coefficientOfVariation": 0.13305129650262315,
+      "medianAbsoluteDeviation": 222.95399999999472,
+      "p50": {
+        "value": 4183.873999999996,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "desktop-chromium-after-post-readiness-frameP95Ms",
+      "unit": "ms",
+      "sampleCount": 5,
+      "min": 384.39999999404245,
+      "max": 542.2999999940366,
+      "mean": 424.4800000011921,
+      "sampleStdDev": 66.74145637824589,
+      "coefficientOfVariation": 0.15723109776210528,
+      "medianAbsoluteDeviation": 11.900000017878483,
+      "p50": {
+        "value": 396.30000001192093,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "desktop-chromium-before-post-readiness-estimatedFpsP95",
+      "unit": "fps",
+      "sampleCount": 5,
+      "min": 0,
+      "max": 0,
+      "mean": 0,
+      "sampleStdDev": 0,
+      "coefficientOfVariation": null,
+      "medianAbsoluteDeviation": 0,
+      "p50": {
+        "value": 0,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "desktop-chromium-after-post-readiness-estimatedFpsP95",
+      "unit": "fps",
+      "sampleCount": 5,
+      "min": 1.8439977872229327,
+      "max": 2.601456815857176,
+      "mean": 2.395473757568774,
+      "sampleStdDev": 0.3156964883779749,
+      "coefficientOfVariation": 0.13178874841792595,
+      "medianAbsoluteDeviation": 0.0781159125770361,
+      "p50": {
+        "value": 2.5233409032801397,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "desktop-chromium-before-post-readiness-longTaskCount",
+      "unit": "count",
+      "sampleCount": 5,
+      "min": 1,
+      "max": 1,
+      "mean": 1,
+      "sampleStdDev": 0,
+      "coefficientOfVariation": 0,
+      "medianAbsoluteDeviation": 0,
+      "p50": {
+        "value": 1,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "desktop-chromium-after-post-readiness-longTaskCount",
+      "unit": "count",
+      "sampleCount": 5,
+      "min": 2,
+      "max": 2,
+      "mean": 2,
+      "sampleStdDev": 0,
+      "coefficientOfVariation": 0,
+      "medianAbsoluteDeviation": 0,
+      "p50": {
+        "value": 2,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "desktop-chromium-before-post-readiness-longTaskDurationMs",
+      "unit": "ms",
+      "sampleCount": 5,
+      "min": 1442,
+      "max": 1529,
+      "mean": 1477.8,
+      "sampleStdDev": 33.35715815233666,
+      "coefficientOfVariation": 0.022572173604233765,
+      "medianAbsoluteDeviation": 23,
+      "p50": {
+        "value": 1467,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "desktop-chromium-after-post-readiness-longTaskDurationMs",
+      "unit": "ms",
+      "sampleCount": 5,
+      "min": 777,
+      "max": 1032,
+      "mean": 844.8,
+      "sampleStdDev": 106.6241060923842,
+      "coefficientOfVariation": 0.12621224679496235,
+      "medianAbsoluteDeviation": 29,
+      "p50": {
+        "value": 809,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "mobile-chromium-before-actionLatencyMs",
+      "unit": "ms",
+      "sampleCount": 5,
+      "min": 44826.087041000006,
+      "max": 59580.710792000005,
+      "mean": 52496.549783200004,
+      "sampleStdDev": 6785.9571498450105,
+      "coefficientOfVariation": 0.12926482174294546,
+      "medianAbsoluteDeviation": 3643.8988750000135,
+      "p50": {
+        "value": 55936.81191699999,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "mobile-chromium-after-actionLatencyMs",
+      "unit": "ms",
+      "sampleCount": 5,
+      "min": 22082.129541000002,
+      "max": 25656.081791999997,
+      "mean": 24194.230349999998,
+      "sampleStdDev": 1464.8699758272207,
+      "coefficientOfVariation": 0.060546252335206885,
+      "medianAbsoluteDeviation": 1062.5274999999965,
+      "p50": {
+        "value": 24593.554292,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "mobile-chromium-before-usedHeapBytes",
+      "unit": "bytes",
+      "sampleCount": 5,
+      "min": 93219768,
+      "max": 93336476,
+      "mean": 93302932,
+      "sampleStdDev": 47209.66485795043,
+      "coefficientOfVariation": 0.0005059826507697575,
+      "medianAbsoluteDeviation": 5636,
+      "p50": {
+        "value": 93319136,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "mobile-chromium-after-usedHeapBytes",
+      "unit": "bytes",
+      "sampleCount": 5,
+      "min": 39894708,
+      "max": 39952360,
+      "mean": 39924955.2,
+      "sampleStdDev": 27824.227054852756,
+      "coefficientOfVariation": 0.0006969131691061422,
+      "medianAbsoluteDeviation": 11692,
+      "p50": {
+        "value": 39940668,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "mobile-chromium-before-peakObservedHeapBytes",
+      "unit": "bytes",
+      "sampleCount": 5,
+      "min": 93951060,
+      "max": 94440008,
+      "mean": 94162400,
+      "sampleStdDev": 182546.91296212052,
+      "coefficientOfVariation": 0.001938639127317491,
+      "medianAbsoluteDeviation": 78888,
+      "p50": {
+        "value": 94134992,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "mobile-chromium-after-peakObservedHeapBytes",
+      "unit": "bytes",
+      "sampleCount": 5,
+      "min": 67897676,
+      "max": 72064040,
+      "mean": 70471955.2,
+      "sampleStdDev": 2104041.320585506,
+      "coefficientOfVariation": 0.029856434586130312,
+      "medianAbsoluteDeviation": 190072,
+      "p50": {
+        "value": 71873968,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "mobile-chromium-before-sampleWallMs",
+      "unit": "ms",
+      "sampleCount": 5,
+      "min": 81321.87525,
+      "max": 98769.30725,
+      "mean": 92422.89928320001,
+      "sampleStdDev": 7323.693352884396,
+      "coefficientOfVariation": 0.0792411124265136,
+      "medianAbsoluteDeviation": 3918.294584000003,
+      "p50": {
+        "value": 94851.012666,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "mobile-chromium-after-sampleWallMs",
+      "unit": "ms",
+      "sampleCount": 5,
+      "min": 31963.346874999996,
+      "max": 35717.395917,
+      "mean": 33904.026674999994,
+      "sampleStdDev": 1562.9941088100682,
+      "coefficientOfVariation": 0.04610054504123494,
+      "medianAbsoluteDeviation": 1366.5168750000012,
+      "p50": {
+        "value": 34350.879042,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "mobile-chromium-before-post-readiness-taskDurationDeltaMs",
+      "unit": "ms",
+      "sampleCount": 5,
+      "min": 12071.012999999994,
+      "max": 14644.897,
+      "mean": 13079.853799999997,
+      "sampleStdDev": 959.2394365627412,
+      "coefficientOfVariation": 0.07333716807773046,
+      "medianAbsoluteDeviation": 371.3220000000056,
+      "p50": {
+        "value": 12791.838999999996,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "mobile-chromium-after-post-readiness-taskDurationDeltaMs",
+      "unit": "ms",
+      "sampleCount": 5,
+      "min": 3489.875999999999,
+      "max": 4108.866000000003,
+      "mean": 3729.5436,
+      "sampleStdDev": 276.534410080012,
+      "coefficientOfVariation": 0.07414698411891793,
+      "medianAbsoluteDeviation": 94.54900000000407,
+      "p50": {
+        "value": 3584.425000000003,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "mobile-chromium-after-post-readiness-frameP95Ms",
+      "unit": "ms",
+      "sampleCount": 5,
+      "min": 309.1999999761574,
+      "max": 333.2999999999993,
+      "mean": 323.5999999952313,
+      "sampleStdDev": 10.400240390089694,
+      "coefficientOfVariation": 0.032139185383939915,
+      "medianAbsoluteDeviation": 7.499999999996362,
+      "p50": {
+        "value": 325.8000000000029,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "mobile-chromium-before-post-readiness-estimatedFpsP95",
+      "unit": "fps",
+      "sampleCount": 5,
+      "min": 0,
+      "max": 0,
+      "mean": 0,
+      "sampleStdDev": 0,
+      "coefficientOfVariation": null,
+      "medianAbsoluteDeviation": 0,
+      "p50": {
+        "value": 0,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "mobile-chromium-after-post-readiness-estimatedFpsP95",
+      "unit": "fps",
+      "sampleCount": 5,
+      "min": 3.000300030003007,
+      "max": 3.234152652254562,
+      "mean": 3.092821075123508,
+      "sampleStdDev": 0.10060622510117999,
+      "coefficientOfVariation": 0.03252895096660656,
+      "medianAbsoluteDeviation": 0.06906768024865384,
+      "p50": {
+        "value": 3.0693677102516608,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "mobile-chromium-before-post-readiness-longTaskCount",
+      "unit": "count",
+      "sampleCount": 5,
+      "min": 1,
+      "max": 1,
+      "mean": 1,
+      "sampleStdDev": 0,
+      "coefficientOfVariation": 0,
+      "medianAbsoluteDeviation": 0,
+      "p50": {
+        "value": 1,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "mobile-chromium-after-post-readiness-longTaskCount",
+      "unit": "count",
+      "sampleCount": 5,
+      "min": 3,
+      "max": 3,
+      "mean": 3,
+      "sampleStdDev": 0,
+      "coefficientOfVariation": 0,
+      "medianAbsoluteDeviation": 0,
+      "p50": {
+        "value": 3,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "mobile-chromium-before-post-readiness-longTaskDurationMs",
+      "unit": "ms",
+      "sampleCount": 5,
+      "min": 1353,
+      "max": 1609,
+      "mean": 1474.8,
+      "sampleStdDev": 101.35432896526918,
+      "coefficientOfVariation": 0.06872411782293815,
+      "medianAbsoluteDeviation": 66,
+      "p50": {
+        "value": 1472,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    },
+    {
+      "name": "mobile-chromium-after-post-readiness-longTaskDurationMs",
+      "unit": "ms",
+      "sampleCount": 5,
+      "min": 936,
+      "max": 977,
+      "mean": 957,
+      "sampleStdDev": 17.74823934929885,
+      "coefficientOfVariation": 0.018545704649215098,
+      "medianAbsoluteDeviation": 14,
+      "p50": {
+        "value": 950,
+        "status": "available",
+        "minimumSamples": 2
+      },
+      "p95": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 20
+      },
+      "p99": {
+        "value": null,
+        "status": "insufficient-samples",
+        "minimumSamples": 100
+      }
+    }
+  ],
+  "metrics": {
+    "desktop-chromium": {
+      "actionLatencyMs": {
+        "before": [
+          60459.372375,
+          65320.906541,
+          65472.401916999996,
+          71328.301833,
+          71138.96458300001
+        ],
+        "after": [
+          30401.614332999998,
+          29741.632749999997,
+          30544.704208999996,
+          33104.781584000004,
+          37290.162458
+        ],
+        "beforeMedian": 65472.401916999996,
+        "afterMedian": 30544.704208999996,
+        "improvementPercent": 53.347206892269185
+      },
+      "usedHeapBytes": {
+        "before": [
+          93322104,
+          93327496,
+          93331148,
+          93376548,
+          93369508
+        ],
+        "after": [
+          40116416,
+          40070788,
+          40131076,
+          40101500,
+          40115048
+        ],
+        "beforeMedian": 93331148,
+        "afterMedian": 40115048,
+        "improvementPercent": 57.01858504944137
+      },
+      "peakObservedHeapBytes": {
+        "before": [
+          94009972,
+          93902756,
+          93925944,
+          94377136,
+          94281768
+        ],
+        "after": [
+          40754220,
+          70807880,
+          40778924,
+          40804368,
+          40408928
+        ],
+        "beforeMedian": 94009972,
+        "afterMedian": 40778924,
+        "improvementPercent": 56.622767635756766
+      },
+      "sampleWallMs": {
+        "before": [
+          109176.739833,
+          106201.35237499999,
+          105806.947042,
+          114623.95787500001,
+          112274.52791700001
+        ],
+        "after": [
+          41927.140791000005,
+          40889.532917000004,
+          42606.999333,
+          49064.030958,
+          49014.55275
+        ],
+        "beforeMedian": 109176.739833,
+        "afterMedian": 42606.999333,
+        "improvementPercent": 60.97428866425858
+      }
+    },
+    "mobile-chromium": {
+      "actionLatencyMs": {
+        "before": [
+          59580.710792000005,
+          56513.261957999996,
+          44826.087041000006,
+          45625.877208000005,
+          55936.81191699999
+        ],
+        "after": [
+          25656.081791999997,
+          25266.914083,
+          23372.472042,
+          22082.129541000002,
+          24593.554292
+        ],
+        "beforeMedian": 55936.81191699999,
+        "afterMedian": 24593.554292,
+        "improvementPercent": 56.033328591389264
+      },
+      "usedHeapBytes": {
+        "before": [
+          93336476,
+          93324772,
+          93219768,
+          93314508,
+          93319136
+        ],
+        "after": [
+          39952360,
+          39941984,
+          39940668,
+          39894708,
+          39895056
+        ],
+        "beforeMedian": 93319136,
+        "afterMedian": 39940668,
+        "improvementPercent": 57.199916638748135
+      },
+      "peakObservedHeapBytes": {
+        "before": [
+          93951060,
+          94213880,
+          94134992,
+          94440008,
+          94072060
+        ],
+        "after": [
+          67897676,
+          68460304,
+          71873968,
+          72064040,
+          72063788
+        ],
+        "beforeMedian": 94134992,
+        "afterMedian": 71873968,
+        "improvementPercent": 23.64797991378169
+      },
+      "sampleWallMs": {
+        "before": [
+          98192.35658400001,
+          94851.012666,
+          81321.87525,
+          88979.944666,
+          98769.30725
+        ],
+        "after": [
+          35717.395917,
+          34854.779458,
+          32633.732082999995,
+          31963.346874999996,
+          34350.879042
+        ],
+        "beforeMedian": 94851.012666,
+        "afterMedian": 34350.879042,
+        "improvementPercent": 63.784383448851344
+      }
+    }
+  },
+  "postReadiness": {
+    "desktop-chromium": {
+      "taskDurationDeltaMs": {
+        "before": [
+          16166.08699999999,
+          13317.204000000003,
+          13127.24399999999,
+          13448.285999999996,
+          14040.961999999994
+        ],
+        "after": [
+          4020.866000000005,
+          3960.9200000000014,
+          4477.350000000001,
+          5393.198999999996,
+          4183.873999999996
+        ],
+        "beforeMedian": 13448.285999999996,
+        "afterMedian": 4183.873999999996,
+        "improvementPercent": 68.88916550406499
+      },
+      "frameP95Ms": {
+        "before": [
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "after": [
+          384.39999999404245,
+          387.3000000059619,
+          412.09999999999854,
+          542.2999999940366,
+          396.30000001192093
+        ],
+        "beforeMedian": null,
+        "afterMedian": 396.30000001192093,
+        "improvementPercent": null
+      },
+      "estimatedFpsP95": {
+        "before": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "after": [
+          2.601456815857176,
+          2.5819777949512175,
+          2.4265954865324035,
+          1.8439977872229327,
+          2.5233409032801397
+        ],
+        "beforeMedian": 0,
+        "afterMedian": 2.5233409032801397,
+        "improvementPercent": null
+      },
+      "longTaskCount": {
+        "before": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "after": [
+          2,
+          2,
+          2,
+          2,
+          2
+        ],
+        "beforeMedian": 1,
+        "afterMedian": 2,
+        "improvementPercent": -100
+      },
+      "longTaskDurationMs": {
+        "before": [
+          1529,
+          1461,
+          1442,
+          1467,
+          1490
+        ],
+        "after": [
+          777,
+          780,
+          826,
+          1032,
+          809
+        ],
+        "beforeMedian": 1467,
+        "afterMedian": 809,
+        "improvementPercent": 44.85344239945467
+      }
+    },
+    "mobile-chromium": {
+      "taskDurationDeltaMs": {
+        "before": [
+          12728.358999999997,
+          12791.838999999996,
+          12071.012999999994,
+          13163.161000000002,
+          14644.897
+        ],
+        "after": [
+          4108.866000000003,
+          3584.425000000003,
+          3527.9659999999994,
+          3936.5849999999973,
+          3489.875999999999
+        ],
+        "beforeMedian": 12791.838999999996,
+        "afterMedian": 3584.425000000003,
+        "improvementPercent": 71.97881399226488
+      },
+      "frameP95Ms": {
+        "before": [
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "after": [
+          332.6999999999971,
+          317,
+          333.2999999999993,
+          325.8000000000029,
+          309.1999999761574
+        ],
+        "beforeMedian": null,
+        "afterMedian": 325.8000000000029,
+        "improvementPercent": null
+      },
+      "estimatedFpsP95": {
+        "before": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "after": [
+          3.005710850616197,
+          3.1545741324921135,
+          3.000300030003007,
+          3.0693677102516608,
+          3.234152652254562
+        ],
+        "beforeMedian": 0,
+        "afterMedian": 3.0693677102516608,
+        "improvementPercent": null
+      },
+      "longTaskCount": {
+        "before": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "after": [
+          3,
+          3,
+          3,
+          3,
+          3
+        ],
+        "beforeMedian": 1,
+        "afterMedian": 3,
+        "improvementPercent": -200
+      },
+      "longTaskDurationMs": {
+        "before": [
+          1534,
+          1472,
+          1353,
+          1406,
+          1609
+        ],
+        "after": [
+          948,
+          950,
+          974,
+          977,
+          936
+        ],
+        "beforeMedian": 1472,
+        "afterMedian": 950,
+        "improvementPercent": 35.46195652173913
+      }
+    }
+  },
+  "visualEquivalence": {
+    "budgets": {
+      "routePixelRatio": [
+        0.8,
+        1.2
+      ],
+      "minimumOccupiedCellJaccard": 0.8,
+      "occupiedCellDilation": 1,
+      "maximumHausdorffPx": 6,
+      "minimumRoutePixels": 100,
+      "maximumCandidateNearBlackPixels": 5,
+      "maximumCandidateEnclosedNearWhitePixels": 5,
+      "routeColor": "opaque cobalt",
+      "overviewHeightMeters": 10000
+    },
+    "passed": true,
+    "results": [
+      {
+        "distribution": "production",
+        "project": "desktop-chromium",
+        "camera": "global",
+        "beforeRoutePixels": 286,
+        "afterRoutePixels": 267,
+        "routePixelRatio": 0.9335664335664335,
+        "rawOccupiedCellJaccard": 0.8461538461538461,
+        "occupiedCellJaccard": 0.9574468085106383,
+        "hausdorffPx": 2.23606797749979,
+        "beforeNearBlackPixels": 0,
+        "afterNearBlackPixels": 0,
+        "beforeEnclosedNearWhitePixels": 0,
+        "afterEnclosedNearWhitePixels": 0,
+        "passed": true
+      },
+      {
+        "distribution": "production",
+        "project": "desktop-chromium",
+        "camera": "east",
+        "beforeRoutePixels": 243,
+        "afterRoutePixels": 263,
+        "routePixelRatio": 1.0823045267489713,
+        "rawOccupiedCellJaccard": 0.8181818181818182,
+        "occupiedCellJaccard": 0.9047619047619048,
+        "hausdorffPx": 3,
+        "beforeNearBlackPixels": 0,
+        "afterNearBlackPixels": 0,
+        "beforeEnclosedNearWhitePixels": 0,
+        "afterEnclosedNearWhitePixels": 0,
+        "passed": true
+      },
+      {
+        "distribution": "production",
+        "project": "desktop-chromium",
+        "camera": "west",
+        "beforeRoutePixels": 269,
+        "afterRoutePixels": 266,
+        "routePixelRatio": 0.9888475836431226,
+        "rawOccupiedCellJaccard": 1,
+        "occupiedCellJaccard": 1,
+        "hausdorffPx": 3,
+        "beforeNearBlackPixels": 0,
+        "afterNearBlackPixels": 0,
+        "beforeEnclosedNearWhitePixels": 0,
+        "afterEnclosedNearWhitePixels": 0,
+        "passed": true
+      },
+      {
+        "distribution": "production",
+        "project": "mobile-chromium",
+        "camera": "global",
+        "beforeRoutePixels": 241,
+        "afterRoutePixels": 236,
+        "routePixelRatio": 0.979253112033195,
+        "rawOccupiedCellJaccard": 1,
+        "occupiedCellJaccard": 1,
+        "hausdorffPx": 3,
+        "beforeNearBlackPixels": 0,
+        "afterNearBlackPixels": 0,
+        "beforeEnclosedNearWhitePixels": 0,
+        "afterEnclosedNearWhitePixels": 0,
+        "passed": true
+      },
+      {
+        "distribution": "production",
+        "project": "mobile-chromium",
+        "camera": "east",
+        "beforeRoutePixels": 207,
+        "afterRoutePixels": 234,
+        "routePixelRatio": 1.1304347826086956,
+        "rawOccupiedCellJaccard": 0.8333333333333334,
+        "occupiedCellJaccard": 0.8909090909090909,
+        "hausdorffPx": 4,
+        "beforeNearBlackPixels": 0,
+        "afterNearBlackPixels": 0,
+        "beforeEnclosedNearWhitePixels": 0,
+        "afterEnclosedNearWhitePixels": 0,
+        "passed": true
+      },
+      {
+        "distribution": "production",
+        "project": "mobile-chromium",
+        "camera": "west",
+        "beforeRoutePixels": 236,
+        "afterRoutePixels": 254,
+        "routePixelRatio": 1.076271186440678,
+        "rawOccupiedCellJaccard": 0.8571428571428571,
+        "occupiedCellJaccard": 0.9565217391304348,
+        "hausdorffPx": 2.8284271247461903,
+        "beforeNearBlackPixels": 0,
+        "afterNearBlackPixels": 0,
+        "beforeEnclosedNearWhitePixels": 0,
+        "afterEnclosedNearWhitePixels": 0,
+        "passed": true
+      },
+      {
+        "distribution": "scale",
+        "project": "desktop-chromium",
+        "camera": "global",
+        "beforeRoutePixels": 312,
+        "afterRoutePixels": 319,
+        "routePixelRatio": 1.0224358974358974,
+        "rawOccupiedCellJaccard": 0.8461538461538461,
+        "occupiedCellJaccard": 0.9574468085106383,
+        "hausdorffPx": 2.8284271247461903,
+        "beforeNearBlackPixels": 0,
+        "afterNearBlackPixels": 0,
+        "beforeEnclosedNearWhitePixels": 0,
+        "afterEnclosedNearWhitePixels": 0,
+        "passed": true
+      },
+      {
+        "distribution": "scale",
+        "project": "desktop-chromium",
+        "camera": "east",
+        "beforeRoutePixels": 273,
+        "afterRoutePixels": 323,
+        "routePixelRatio": 1.1831501831501832,
+        "rawOccupiedCellJaccard": 0.8181818181818182,
+        "occupiedCellJaccard": 0.9047619047619048,
+        "hausdorffPx": 3,
+        "beforeNearBlackPixels": 0,
+        "afterNearBlackPixels": 0,
+        "beforeEnclosedNearWhitePixels": 0,
+        "afterEnclosedNearWhitePixels": 0,
+        "passed": true
+      },
+      {
+        "distribution": "scale",
+        "project": "desktop-chromium",
+        "camera": "west",
+        "beforeRoutePixels": 294,
+        "afterRoutePixels": 317,
+        "routePixelRatio": 1.0782312925170068,
+        "rawOccupiedCellJaccard": 1,
+        "occupiedCellJaccard": 1,
+        "hausdorffPx": 3,
+        "beforeNearBlackPixels": 0,
+        "afterNearBlackPixels": 0,
+        "beforeEnclosedNearWhitePixels": 0,
+        "afterEnclosedNearWhitePixels": 0,
+        "passed": true
+      },
+      {
+        "distribution": "scale",
+        "project": "mobile-chromium",
+        "camera": "global",
+        "beforeRoutePixels": 259,
+        "afterRoutePixels": 269,
+        "routePixelRatio": 1.0386100386100385,
+        "rawOccupiedCellJaccard": 1,
+        "occupiedCellJaccard": 1,
+        "hausdorffPx": 2.8284271247461903,
+        "beforeNearBlackPixels": 0,
+        "afterNearBlackPixels": 0,
+        "beforeEnclosedNearWhitePixels": 0,
+        "afterEnclosedNearWhitePixels": 0,
+        "passed": true
+      },
+      {
+        "distribution": "scale",
+        "project": "mobile-chromium",
+        "camera": "east",
+        "beforeRoutePixels": 224,
+        "afterRoutePixels": 265,
+        "routePixelRatio": 1.1830357142857142,
+        "rawOccupiedCellJaccard": 0.8333333333333334,
+        "occupiedCellJaccard": 0.8909090909090909,
+        "hausdorffPx": 3.6055512754639896,
+        "beforeNearBlackPixels": 0,
+        "afterNearBlackPixels": 0,
+        "beforeEnclosedNearWhitePixels": 0,
+        "afterEnclosedNearWhitePixels": 0,
+        "passed": true
+      },
+      {
+        "distribution": "scale",
+        "project": "mobile-chromium",
+        "camera": "west",
+        "beforeRoutePixels": 253,
+        "afterRoutePixels": 285,
+        "routePixelRatio": 1.1264822134387351,
+        "rawOccupiedCellJaccard": 0.8125,
+        "occupiedCellJaccard": 0.88,
+        "hausdorffPx": 2.8284271247461903,
+        "beforeNearBlackPixels": 0,
+        "afterNearBlackPixels": 0,
+        "beforeEnclosedNearWhitePixels": 0,
+        "afterEnclosedNearWhitePixels": 0,
+        "passed": true
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-before-f32ac6a3/browser/warmup/atlas-production-route-desktop-chromium-r000-east.png",
+      "bytes": 1673892,
+      "sha256": "44534e153d56ba69e73211ed19c0f403206abcd9219e7722f76912c5a351165f",
+      "retention": "local-artifact",
+      "group": "beforeWarmup",
+      "side": "before"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-before-f32ac6a3/browser/warmup/atlas-production-route-desktop-chromium-r000-global.png",
+      "bytes": 1639336,
+      "sha256": "17e973348e7604af63ec2a03301dfea6531b8a458f298083fb794108546a7bf4",
+      "retention": "local-artifact",
+      "group": "beforeWarmup",
+      "side": "before"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-before-f32ac6a3/browser/warmup/atlas-production-route-desktop-chromium-r000-west.png",
+      "bytes": 1696793,
+      "sha256": "38b54a93bf9751bf2cc3eb736ab3ad9596165542d8cfa95de26fce214ab91095",
+      "retention": "local-artifact",
+      "group": "beforeWarmup",
+      "side": "before"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-before-f32ac6a3/browser/warmup/atlas-production-route-mobile-chromium-r000-east.png",
+      "bytes": 572650,
+      "sha256": "fd2cf56b4babf8e90803926ad3c4ef382959bcb432556b9740bc64becbefea34",
+      "retention": "local-artifact",
+      "group": "beforeWarmup",
+      "side": "before"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-before-f32ac6a3/browser/warmup/atlas-production-route-mobile-chromium-r000-global.png",
+      "bytes": 536955,
+      "sha256": "091822f4e8590ec73399953fcb28ffe581837d667548dd313c27d2a353785f50",
+      "retention": "local-artifact",
+      "group": "beforeWarmup",
+      "side": "before"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-before-f32ac6a3/browser/warmup/atlas-production-route-mobile-chromium-r000-west.png",
+      "bytes": 548908,
+      "sha256": "07009c13574ac6db879f45aedf7340d5cc0f36f4c2a7d1134793d80cad35b187",
+      "retention": "local-artifact",
+      "group": "beforeWarmup",
+      "side": "before"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-before-f32ac6a3/browser/warmup/atlas-scale-route-desktop-chromium-r000-east.png",
+      "bytes": 1673737,
+      "sha256": "ff5470199a7e3e625559b9ed35818d29b656b69f11ced28139149befe9bb9d11",
+      "retention": "local-artifact",
+      "group": "beforeWarmup",
+      "side": "before"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-before-f32ac6a3/browser/warmup/atlas-scale-route-desktop-chromium-r000-global.png",
+      "bytes": 1639066,
+      "sha256": "dc3a7e128cc2e3d8b42209aa5eb7bcb13f147cf42e78a050a27cf1273bf6e118",
+      "retention": "local-artifact",
+      "group": "beforeWarmup",
+      "side": "before"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-before-f32ac6a3/browser/warmup/atlas-scale-route-desktop-chromium-r000-west.png",
+      "bytes": 1697066,
+      "sha256": "c5c1eb37cdf90e31639d1ca7dc59f13a6ca13f8fb1b374ba54e62509e689ce12",
+      "retention": "local-artifact",
+      "group": "beforeWarmup",
+      "side": "before"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-before-f32ac6a3/browser/warmup/atlas-scale-route-mobile-chromium-r000-east.png",
+      "bytes": 572581,
+      "sha256": "18345cdb37f6e2d744a2ac5fed0b375edcb1a42d40dfeae785e9202077791bfd",
+      "retention": "local-artifact",
+      "group": "beforeWarmup",
+      "side": "before"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-before-f32ac6a3/browser/warmup/atlas-scale-route-mobile-chromium-r000-global.png",
+      "bytes": 537068,
+      "sha256": "4ae3ed72dc64b3d6df5d819ab71c8c18d283e4c4b622c2b699ef5a10a1fb09e5",
+      "retention": "local-artifact",
+      "group": "beforeWarmup",
+      "side": "before"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-before-f32ac6a3/browser/warmup/atlas-scale-route-mobile-chromium-r000-west.png",
+      "bytes": 548910,
+      "sha256": "91ba01a12819098452dfce40ce36f811339eb5c0ebdf465e6512be067918f4c1",
+      "retention": "local-artifact",
+      "group": "beforeWarmup",
+      "side": "before"
+    },
+    {
+      "kind": "json",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-before-f32ac6a3/browser/warmup/runtime-browser-desktop-chromium-atlas-scale-r000.json",
+      "bytes": 327189,
+      "sha256": "62faf818d21dd6a9a6f6bbae530fda63c0cd8b87c78a97d504918687c56d074d",
+      "retention": "local-artifact",
+      "group": "beforeWarmup",
+      "side": "before"
+    },
+    {
+      "kind": "json",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-before-f32ac6a3/browser/warmup/runtime-browser-mobile-chromium-atlas-scale-r000.json",
+      "bytes": 331192,
+      "sha256": "35bfb623b81362df7869bc48df32e31fe5cdf13b85af6de1cad42d957bf3a2a0",
+      "retention": "local-artifact",
+      "group": "beforeWarmup",
+      "side": "before"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-after-1ac9b58d/browser/warmup/atlas-production-route-desktop-chromium-r000-east.png",
+      "bytes": 1674236,
+      "sha256": "c9bcc3b22ef4d4d3171c71755f28d779e8dd7d6fc34f4f5cb80bd793fdf7ae59",
+      "retention": "local-artifact",
+      "group": "afterWarmup",
+      "side": "after"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-after-1ac9b58d/browser/warmup/atlas-production-route-desktop-chromium-r000-global.png",
+      "bytes": 1639590,
+      "sha256": "1d8edfbe4b84bc9d0cc292f7c0cca39016b4fbc104eb476a73d91d86572b5038",
+      "retention": "local-artifact",
+      "group": "afterWarmup",
+      "side": "after"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-after-1ac9b58d/browser/warmup/atlas-production-route-desktop-chromium-r000-west.png",
+      "bytes": 1697531,
+      "sha256": "a9edac914087d78f63166165788716139e4889c4e20eda0ba1a557eb8d49eac7",
+      "retention": "local-artifact",
+      "group": "afterWarmup",
+      "side": "after"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-after-1ac9b58d/browser/warmup/atlas-production-route-mobile-chromium-r000-east.png",
+      "bytes": 572855,
+      "sha256": "703e2d7f4a52ed5366b2dd7a9cdbf27c8f193e72a6ea8f9e156c48a401bf27d9",
+      "retention": "local-artifact",
+      "group": "afterWarmup",
+      "side": "after"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-after-1ac9b58d/browser/warmup/atlas-production-route-mobile-chromium-r000-global.png",
+      "bytes": 537328,
+      "sha256": "ca787b0f9e35c2d764527adb638331fd690c210e404f569306481b0cc134a8e4",
+      "retention": "local-artifact",
+      "group": "afterWarmup",
+      "side": "after"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-after-1ac9b58d/browser/warmup/atlas-production-route-mobile-chromium-r000-west.png",
+      "bytes": 549150,
+      "sha256": "cb134b024324bc2753072fa936267ff42bf8d58ec89b22d50dd6505a6adbcd41",
+      "retention": "local-artifact",
+      "group": "afterWarmup",
+      "side": "after"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-after-1ac9b58d/browser/warmup/atlas-scale-route-desktop-chromium-r000-east.png",
+      "bytes": 1674617,
+      "sha256": "109a564fb7046e88c37d360ba077b7429f9c210291ebe66d1837c97a48378c32",
+      "retention": "local-artifact",
+      "group": "afterWarmup",
+      "side": "after"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-after-1ac9b58d/browser/warmup/atlas-scale-route-desktop-chromium-r000-global.png",
+      "bytes": 1639513,
+      "sha256": "ff7358c3ac8d304375bed7d6ec1982b6ddc8f76402c90da909fde5d0a9a8ab6f",
+      "retention": "local-artifact",
+      "group": "afterWarmup",
+      "side": "after"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-after-1ac9b58d/browser/warmup/atlas-scale-route-desktop-chromium-r000-west.png",
+      "bytes": 1697747,
+      "sha256": "31bc33c2fc63b8a3254aaef2b3f5944346ab75e3e05951f156b92b92a74f1828",
+      "retention": "local-artifact",
+      "group": "afterWarmup",
+      "side": "after"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-after-1ac9b58d/browser/warmup/atlas-scale-route-mobile-chromium-r000-east.png",
+      "bytes": 572792,
+      "sha256": "6eaf83d8a9e611a10389d391f3314f81af454eaf3d14003190659f551d66c021",
+      "retention": "local-artifact",
+      "group": "afterWarmup",
+      "side": "after"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-after-1ac9b58d/browser/warmup/atlas-scale-route-mobile-chromium-r000-global.png",
+      "bytes": 537309,
+      "sha256": "9ad018e912f115a6e63a1b1109b3be1d83de256d5ebdcb9bfc2a8d6c12e23176",
+      "retention": "local-artifact",
+      "group": "afterWarmup",
+      "side": "after"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-after-1ac9b58d/browser/warmup/atlas-scale-route-mobile-chromium-r000-west.png",
+      "bytes": 549100,
+      "sha256": "849744225f5a4a5a1a0820982674b98baea8562cfc5942bc889c3855a42132fb",
+      "retention": "local-artifact",
+      "group": "afterWarmup",
+      "side": "after"
+    },
+    {
+      "kind": "json",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-after-1ac9b58d/browser/warmup/runtime-browser-desktop-chromium-atlas-scale-r000.json",
+      "bytes": 333626,
+      "sha256": "3e35ceee1cee6ddc4e69fc3a21cc578637a3d546db0a52adeaef88482c1a2b46",
+      "retention": "local-artifact",
+      "group": "afterWarmup",
+      "side": "after"
+    },
+    {
+      "kind": "json",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-warmup-after-1ac9b58d/browser/warmup/runtime-browser-mobile-chromium-atlas-scale-r000.json",
+      "bytes": 339410,
+      "sha256": "4c2d1a74d7e26b393ac937f9f4e1694a56ff69119cad170940fbe8bf3a22fe01",
+      "retention": "local-artifact",
+      "group": "afterWarmup",
+      "side": "after"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-before-f32ac6a3/browser/baseline/atlas-production-route-desktop-chromium-r000-east.png",
+      "bytes": 1673892,
+      "sha256": "44534e153d56ba69e73211ed19c0f403206abcd9219e7722f76912c5a351165f",
+      "retention": "local-artifact",
+      "group": "before",
+      "side": "before"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-before-f32ac6a3/browser/baseline/atlas-production-route-desktop-chromium-r000-global.png",
+      "bytes": 1639336,
+      "sha256": "17e973348e7604af63ec2a03301dfea6531b8a458f298083fb794108546a7bf4",
+      "retention": "local-artifact",
+      "group": "before",
+      "side": "before"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-before-f32ac6a3/browser/baseline/atlas-production-route-desktop-chromium-r000-west.png",
+      "bytes": 1696793,
+      "sha256": "38b54a93bf9751bf2cc3eb736ab3ad9596165542d8cfa95de26fce214ab91095",
+      "retention": "local-artifact",
+      "group": "before",
+      "side": "before"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-before-f32ac6a3/browser/baseline/atlas-production-route-mobile-chromium-r000-east.png",
+      "bytes": 572650,
+      "sha256": "fd2cf56b4babf8e90803926ad3c4ef382959bcb432556b9740bc64becbefea34",
+      "retention": "local-artifact",
+      "group": "before",
+      "side": "before"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-before-f32ac6a3/browser/baseline/atlas-production-route-mobile-chromium-r000-global.png",
+      "bytes": 536955,
+      "sha256": "091822f4e8590ec73399953fcb28ffe581837d667548dd313c27d2a353785f50",
+      "retention": "local-artifact",
+      "group": "before",
+      "side": "before"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-before-f32ac6a3/browser/baseline/atlas-production-route-mobile-chromium-r000-west.png",
+      "bytes": 548908,
+      "sha256": "07009c13574ac6db879f45aedf7340d5cc0f36f4c2a7d1134793d80cad35b187",
+      "retention": "local-artifact",
+      "group": "before",
+      "side": "before"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-before-f32ac6a3/browser/baseline/atlas-scale-route-desktop-chromium-r000-east.png",
+      "bytes": 1673737,
+      "sha256": "ff5470199a7e3e625559b9ed35818d29b656b69f11ced28139149befe9bb9d11",
+      "retention": "local-artifact",
+      "group": "before",
+      "side": "before"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-before-f32ac6a3/browser/baseline/atlas-scale-route-desktop-chromium-r000-global.png",
+      "bytes": 1639066,
+      "sha256": "dc3a7e128cc2e3d8b42209aa5eb7bcb13f147cf42e78a050a27cf1273bf6e118",
+      "retention": "local-artifact",
+      "group": "before",
+      "side": "before"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-before-f32ac6a3/browser/baseline/atlas-scale-route-desktop-chromium-r000-west.png",
+      "bytes": 1697066,
+      "sha256": "c5c1eb37cdf90e31639d1ca7dc59f13a6ca13f8fb1b374ba54e62509e689ce12",
+      "retention": "local-artifact",
+      "group": "before",
+      "side": "before"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-before-f32ac6a3/browser/baseline/atlas-scale-route-mobile-chromium-r000-east.png",
+      "bytes": 572581,
+      "sha256": "18345cdb37f6e2d744a2ac5fed0b375edcb1a42d40dfeae785e9202077791bfd",
+      "retention": "local-artifact",
+      "group": "before",
+      "side": "before"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-before-f32ac6a3/browser/baseline/atlas-scale-route-mobile-chromium-r000-global.png",
+      "bytes": 537068,
+      "sha256": "4ae3ed72dc64b3d6df5d819ab71c8c18d283e4c4b622c2b699ef5a10a1fb09e5",
+      "retention": "local-artifact",
+      "group": "before",
+      "side": "before"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-before-f32ac6a3/browser/baseline/atlas-scale-route-mobile-chromium-r000-west.png",
+      "bytes": 548910,
+      "sha256": "91ba01a12819098452dfce40ce36f811339eb5c0ebdf465e6512be067918f4c1",
+      "retention": "local-artifact",
+      "group": "before",
+      "side": "before"
+    },
+    {
+      "kind": "json",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-before-f32ac6a3/browser/baseline/runtime-browser-desktop-chromium-atlas-scale-r000.json",
+      "bytes": 327578,
+      "sha256": "0806dfb76aa167eab11b371073182fae870c981cfdf928ce83d9684ec73f3d53",
+      "retention": "local-artifact",
+      "group": "before",
+      "side": "before"
+    },
+    {
+      "kind": "json",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-before-f32ac6a3/browser/baseline/runtime-browser-desktop-chromium-atlas-scale-r001.json",
+      "bytes": 187408,
+      "sha256": "ff198a2cb81ea1b0fb5ee6b7d31bc20fd662ccb50b60714ed3613d0dd78037e4",
+      "retention": "local-artifact",
+      "group": "before",
+      "side": "before"
+    },
+    {
+      "kind": "json",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-before-f32ac6a3/browser/baseline/runtime-browser-desktop-chromium-atlas-scale-r002.json",
+      "bytes": 187715,
+      "sha256": "ebf1025d3edf5f7b4cf9365c8f2621a04b53f17935e32b157214d825176c4340",
+      "retention": "local-artifact",
+      "group": "before",
+      "side": "before"
+    },
+    {
+      "kind": "json",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-before-f32ac6a3/browser/baseline/runtime-browser-desktop-chromium-atlas-scale-r003.json",
+      "bytes": 187778,
+      "sha256": "8abee428cedadcadf8f4ac827d65bb5d6befaf1124ac4c531d7692f4b72f5b5b",
+      "retention": "local-artifact",
+      "group": "before",
+      "side": "before"
+    },
+    {
+      "kind": "json",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-before-f32ac6a3/browser/baseline/runtime-browser-desktop-chromium-atlas-scale-r004.json",
+      "bytes": 187929,
+      "sha256": "d286dc0925fa52619403a437dfccada012fc233e10bbfb10bfedb466a4b2c0b0",
+      "retention": "local-artifact",
+      "group": "before",
+      "side": "before"
+    },
+    {
+      "kind": "json",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-before-f32ac6a3/browser/baseline/runtime-browser-mobile-chromium-atlas-scale-r000.json",
+      "bytes": 332248,
+      "sha256": "2af04b730874045b6bf8bf061e77c632db36e12075533d670a6ae01a0b1acc87",
+      "retention": "local-artifact",
+      "group": "before",
+      "side": "before"
+    },
+    {
+      "kind": "json",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-before-f32ac6a3/browser/baseline/runtime-browser-mobile-chromium-atlas-scale-r001.json",
+      "bytes": 197021,
+      "sha256": "c1a4fe20cad28f3b5d13d600b74a44751d84da31077734d94d1ab1685b63a55c",
+      "retention": "local-artifact",
+      "group": "before",
+      "side": "before"
+    },
+    {
+      "kind": "json",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-before-f32ac6a3/browser/baseline/runtime-browser-mobile-chromium-atlas-scale-r002.json",
+      "bytes": 196702,
+      "sha256": "84943ef4334b82b461c11aefc874825f7f536424dd5dc02dd9ceeed41a1212e7",
+      "retention": "local-artifact",
+      "group": "before",
+      "side": "before"
+    },
+    {
+      "kind": "json",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-before-f32ac6a3/browser/baseline/runtime-browser-mobile-chromium-atlas-scale-r003.json",
+      "bytes": 195964,
+      "sha256": "79ceaaa7a7b8886c13d53e866aad8edfa208bea922a7a243e4ebb127d7c516d8",
+      "retention": "local-artifact",
+      "group": "before",
+      "side": "before"
+    },
+    {
+      "kind": "json",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-before-f32ac6a3/browser/baseline/runtime-browser-mobile-chromium-atlas-scale-r004.json",
+      "bytes": 198356,
+      "sha256": "28f35626b0db4627260f119c754c639d4dbec629963417eb2e6c117bad1744e2",
+      "retention": "local-artifact",
+      "group": "before",
+      "side": "before"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-after-1ac9b58d/browser/measured/atlas-production-route-desktop-chromium-r000-east.png",
+      "bytes": 1674236,
+      "sha256": "c9bcc3b22ef4d4d3171c71755f28d779e8dd7d6fc34f4f5cb80bd793fdf7ae59",
+      "retention": "local-artifact",
+      "group": "after",
+      "side": "after"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-after-1ac9b58d/browser/measured/atlas-production-route-desktop-chromium-r000-global.png",
+      "bytes": 1639590,
+      "sha256": "1d8edfbe4b84bc9d0cc292f7c0cca39016b4fbc104eb476a73d91d86572b5038",
+      "retention": "local-artifact",
+      "group": "after",
+      "side": "after"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-after-1ac9b58d/browser/measured/atlas-production-route-desktop-chromium-r000-west.png",
+      "bytes": 1697531,
+      "sha256": "a9edac914087d78f63166165788716139e4889c4e20eda0ba1a557eb8d49eac7",
+      "retention": "local-artifact",
+      "group": "after",
+      "side": "after"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-after-1ac9b58d/browser/measured/atlas-production-route-mobile-chromium-r000-east.png",
+      "bytes": 572855,
+      "sha256": "703e2d7f4a52ed5366b2dd7a9cdbf27c8f193e72a6ea8f9e156c48a401bf27d9",
+      "retention": "local-artifact",
+      "group": "after",
+      "side": "after"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-after-1ac9b58d/browser/measured/atlas-production-route-mobile-chromium-r000-global.png",
+      "bytes": 537328,
+      "sha256": "ca787b0f9e35c2d764527adb638331fd690c210e404f569306481b0cc134a8e4",
+      "retention": "local-artifact",
+      "group": "after",
+      "side": "after"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-after-1ac9b58d/browser/measured/atlas-production-route-mobile-chromium-r000-west.png",
+      "bytes": 549150,
+      "sha256": "cb134b024324bc2753072fa936267ff42bf8d58ec89b22d50dd6505a6adbcd41",
+      "retention": "local-artifact",
+      "group": "after",
+      "side": "after"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-after-1ac9b58d/browser/measured/atlas-scale-route-desktop-chromium-r000-east.png",
+      "bytes": 1674617,
+      "sha256": "109a564fb7046e88c37d360ba077b7429f9c210291ebe66d1837c97a48378c32",
+      "retention": "local-artifact",
+      "group": "after",
+      "side": "after"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-after-1ac9b58d/browser/measured/atlas-scale-route-desktop-chromium-r000-global.png",
+      "bytes": 1639513,
+      "sha256": "ff7358c3ac8d304375bed7d6ec1982b6ddc8f76402c90da909fde5d0a9a8ab6f",
+      "retention": "local-artifact",
+      "group": "after",
+      "side": "after"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-after-1ac9b58d/browser/measured/atlas-scale-route-desktop-chromium-r000-west.png",
+      "bytes": 1697747,
+      "sha256": "31bc33c2fc63b8a3254aaef2b3f5944346ab75e3e05951f156b92b92a74f1828",
+      "retention": "local-artifact",
+      "group": "after",
+      "side": "after"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-after-1ac9b58d/browser/measured/atlas-scale-route-mobile-chromium-r000-east.png",
+      "bytes": 572792,
+      "sha256": "6eaf83d8a9e611a10389d391f3314f81af454eaf3d14003190659f551d66c021",
+      "retention": "local-artifact",
+      "group": "after",
+      "side": "after"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-after-1ac9b58d/browser/measured/atlas-scale-route-mobile-chromium-r000-global.png",
+      "bytes": 537309,
+      "sha256": "9ad018e912f115a6e63a1b1109b3be1d83de256d5ebdcb9bfc2a8d6c12e23176",
+      "retention": "local-artifact",
+      "group": "after",
+      "side": "after"
+    },
+    {
+      "kind": "png",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-after-1ac9b58d/browser/measured/atlas-scale-route-mobile-chromium-r000-west.png",
+      "bytes": 549100,
+      "sha256": "849744225f5a4a5a1a0820982674b98baea8562cfc5942bc889c3855a42132fb",
+      "retention": "local-artifact",
+      "group": "after",
+      "side": "after"
+    },
+    {
+      "kind": "json",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-after-1ac9b58d/browser/measured/runtime-browser-desktop-chromium-atlas-scale-r000.json",
+      "bytes": 333682,
+      "sha256": "4157b956602231b244672c9e4fccada80d61d6d16ce9508aea5a8529bdff02fa",
+      "retention": "local-artifact",
+      "group": "after",
+      "side": "after"
+    },
+    {
+      "kind": "json",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-after-1ac9b58d/browser/measured/runtime-browser-desktop-chromium-atlas-scale-r001.json",
+      "bytes": 191820,
+      "sha256": "436b4a65748706565b66d0bc8dadb0d962e58ceb249f9c8a9b894cb713ef1f0f",
+      "retention": "local-artifact",
+      "group": "after",
+      "side": "after"
+    },
+    {
+      "kind": "json",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-after-1ac9b58d/browser/measured/runtime-browser-desktop-chromium-atlas-scale-r002.json",
+      "bytes": 191261,
+      "sha256": "9f5007194c7f8c59eb1a0615fba4511d5f15e14ff7a39fb5d6bd2c8f306c129c",
+      "retention": "local-artifact",
+      "group": "after",
+      "side": "after"
+    },
+    {
+      "kind": "json",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-after-1ac9b58d/browser/measured/runtime-browser-desktop-chromium-atlas-scale-r003.json",
+      "bytes": 189858,
+      "sha256": "5989b4e1ea01a61bfc0e310f85faece9794e0a6449a9b70434b8803c2f0bbd3e",
+      "retention": "local-artifact",
+      "group": "after",
+      "side": "after"
+    },
+    {
+      "kind": "json",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-after-1ac9b58d/browser/measured/runtime-browser-desktop-chromium-atlas-scale-r004.json",
+      "bytes": 191843,
+      "sha256": "45f55cebf6ee34a1916566c3f242a5a485ba93703b55c5fc7077b2424adba4f7",
+      "retention": "local-artifact",
+      "group": "after",
+      "side": "after"
+    },
+    {
+      "kind": "json",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-after-1ac9b58d/browser/measured/runtime-browser-mobile-chromium-atlas-scale-r000.json",
+      "bytes": 339757,
+      "sha256": "eed61cc8e65f3a3b4ffde837756c7150397aa9ccf5a592fb5547fd0dbb986319",
+      "retention": "local-artifact",
+      "group": "after",
+      "side": "after"
+    },
+    {
+      "kind": "json",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-after-1ac9b58d/browser/measured/runtime-browser-mobile-chromium-atlas-scale-r001.json",
+      "bytes": 202821,
+      "sha256": "71c0b008a1a99c7a738be4c6133ba1143c54f524776aa3c8e7b61c29a8dc8657",
+      "retention": "local-artifact",
+      "group": "after",
+      "side": "after"
+    },
+    {
+      "kind": "json",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-after-1ac9b58d/browser/measured/runtime-browser-mobile-chromium-atlas-scale-r002.json",
+      "bytes": 202970,
+      "sha256": "3d083665fcffc1c385eb1842992dec3230bd12959c2d8d009583e98b8b41a6c6",
+      "retention": "local-artifact",
+      "group": "after",
+      "side": "after"
+    },
+    {
+      "kind": "json",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-after-1ac9b58d/browser/measured/runtime-browser-mobile-chromium-atlas-scale-r003.json",
+      "bytes": 201773,
+      "sha256": "434ccbc68c6b5da1bdf3fe83658fa5e37581c7c4cad3c17fec239f80bab5fcbc",
+      "retention": "local-artifact",
+      "group": "after",
+      "side": "after"
+    },
+    {
+      "kind": "json",
+      "path": "artifacts/runtime-statistics/raw/pr-atlas-rebased-final-after-1ac9b58d/browser/measured/runtime-browser-mobile-chromium-atlas-scale-r004.json",
+      "bytes": 202731,
+      "sha256": "5d9185996dae27ada9c3c9fc6262f8beba1ec86bfd91a63153ab92cf25c183a3",
+      "retention": "local-artifact",
+      "group": "after",
+      "side": "after"
+    }
+  ]
+}

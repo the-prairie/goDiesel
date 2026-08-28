@@ -8,9 +8,22 @@ export interface SourceBackedRouteCorpus {
   sourceSlugs: string[];
 }
 
+export interface DistinctRouteCorpus extends SourceBackedRouteCorpus {
+  uniqueTraceCount: number;
+  translationStepDegrees: number;
+}
+
 export interface SourceBackedCandidateCorpus {
   candidates: DiscoveryCandidate[];
   sourceCandidateIds: string[];
+}
+
+export function countUniqueRouteTraces(routes: readonly RouteSummary[]) {
+  return new Set(
+    routes.map((route) =>
+      JSON.stringify(route.trace.map(({ lat, lng }) => [lat, lng])),
+    ),
+  ).size;
 }
 
 export function createSourceBackedRouteCorpus(
@@ -32,14 +45,51 @@ export function createSourceBackedRouteCorpus(
       activityId: `perf-${source.activityId}-${replica.toString().padStart(3, "0")}`,
       replay: { ...source.replay },
       guide: { ...source.guide },
-      // Geometry and measured/editorial attributes remain source-backed. Only
-      // fixture identity changes to exercise production cardinality.
-      trace: source.trace,
+      // Coordinate values remain source-backed while every replica owns its
+      // array and points, matching independent production route geometry.
+      trace: source.trace.map((point) => ({ ...point })),
     });
     sourceSlugs.push(source.slug);
   }
 
   return { routes, sourceSlugs };
+}
+
+export function createDistinctRouteCorpus(
+  sourceRoutes: readonly RouteSummary[],
+  count: number,
+): DistinctRouteCorpus {
+  if (sourceRoutes.length === 0) {
+    throw new Error("Runtime corpus requires at least one source-backed route");
+  }
+
+  const translationStepDegrees = 0.005;
+  const corpus = createSourceBackedRouteCorpus(sourceRoutes, count);
+  const routes = corpus.routes.map((route, index) => {
+    const sourceIndex = index % sourceRoutes.length;
+    const replica = Math.floor(index / sourceRoutes.length);
+    const column = replica % 7;
+    const row = Math.floor(replica / 7);
+    const latitudeOffset = (row - 2.5) * translationStepDegrees;
+    const longitudeOffset =
+      (column - 3) * translationStepDegrees + sourceIndex * 0.000001;
+    return {
+      ...route,
+      trace: route.trace.map((point) => ({
+        ...point,
+        lat: point.lat + latitudeOffset,
+        lng: point.lng + longitudeOffset,
+      })),
+    };
+  });
+  const uniqueTraceCount = countUniqueRouteTraces(routes);
+
+  return {
+    ...corpus,
+    routes,
+    uniqueTraceCount,
+    translationStepDegrees,
+  };
 }
 
 export function createSourceBackedCandidateCorpus(

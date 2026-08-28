@@ -1,13 +1,51 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { Cartesian3, JulianDate } from "cesium";
 
 import {
   CesiumAtlasWorldEngine,
+  configureAtlasIllumination,
+  GLOBAL_OVERVIEW_ROUTE_HEIGHT_M,
+  globalPositionsForRoute,
   routeForPickedEntity,
+  globalPositionSets,
 } from "@/surfaces/atlas/cesium-atlas-world-engine";
 import { completedRoutes } from "@/data/routes";
+import { buildRouteRegions, type RouteRegion } from "@/data/route-regions";
 
 describe("CesiumAtlasWorldEngine", () => {
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("freezes fixture illumination without changing production time", () => {
+    const fixtureTime = "2026-03-20T12:00:00Z";
+    const fixture = {
+      canvas: { dataset: {} },
+      clock: { currentTime: JulianDate.now(), shouldAnimate: true },
+    };
+    configureAtlasIllumination(fixture as never, fixtureTime);
+
+    expect(fixture.canvas.dataset).toEqual({ illuminationTime: fixtureTime });
+    expect(fixture.clock.shouldAnimate).toBe(false);
+    expect(
+      JulianDate.equals(
+        fixture.clock.currentTime,
+        JulianDate.fromIso8601(fixtureTime),
+      ),
+    ).toBe(true);
+
+    const productionTime = JulianDate.now();
+    const production = {
+      canvas: { dataset: {} },
+      clock: { currentTime: productionTime, shouldAnimate: true },
+    };
+    configureAtlasIllumination(production as never);
+
+    expect(production.canvas.dataset).toEqual({ illuminationTime: "system" });
+    expect(production.clock.currentTime).toBe(productionTime);
+    expect(production.clock.shouldAnimate).toBe(true);
+  });
 
   it("releases Cesium listeners, keyboard input, and the viewer", () => {
     const removeRenderErrorListener = vi.fn();
@@ -83,5 +121,135 @@ describe("CesiumAtlasWorldEngine", () => {
       routeForPickedEntity(entries as never, kyoto.region, creteEntity as never),
     ).toBeUndefined();
     expect(routeForPickedEntity(entries as never, undefined, kyotoEntity as never)).toBeUndefined();
+  });
+
+  it("preserves exact horizontal vertices at the overview altitude", () => {
+    const source = completedRoutes[0];
+    const route = { ...source, trace: source.trace.slice(0, 3) };
+    const expected = route.trace.flatMap((point) => {
+      const position = Cartesian3.fromDegrees(
+        point.lng,
+        point.lat,
+        GLOBAL_OVERVIEW_ROUTE_HEIGHT_M,
+      );
+      return [position.x, position.y, position.z];
+    });
+
+    expect(
+      globalPositionsForRoute(route).flatMap((position) => [
+        position.x,
+        position.y,
+        position.z,
+      ]),
+    ).toEqual(expected);
+  });
+
+  it("skips geometry-less routes before batched conversion", () => {
+    const source = completedRoutes[0];
+
+    expect(globalPositionsForRoute({ ...source, trace: [] })).toEqual([]);
+  });
+
+  it("submits every overview route geometry in source order", () => {
+    const source = completedRoutes[0];
+    const replica = {
+      ...source,
+      slug: `${source.slug}-replica`,
+      trace: source.trace.map((point) => ({ ...point })),
+    };
+    const distinct = {
+      ...source,
+      slug: `${source.slug}-distinct`,
+      trace: source.trace.map((point, index) =>
+        index === 0 ? { ...point, lng: point.lng + 0.000001 } : { ...point },
+      ),
+    };
+
+    const positions = globalPositionSets([source, replica, replica]);
+
+    expect(positions).toHaveLength(3);
+    expect(positions[0]).not.toBe(positions[1]);
+    expect(positions[0]).toEqual(positions[1]);
+    expect(globalPositionSets([source, distinct])).toHaveLength(2);
+  });
+
+  it("defers Entities to the selected region", () => {
+    const region = buildRouteRegions(
+      completedRoutes.filter((route) => route.region === completedRoutes[0].region),
+    )[0];
+    const oldEntity = { polyline: {} };
+    const add = vi.fn(() => ({ polyline: {} }));
+    const remove = vi.fn();
+    const suspendEvents = vi.fn();
+    const resumeEvents = vi.fn();
+    const globalRoutePolylines = { show: true };
+    const engine = new CesiumAtlasWorldEngine();
+    Object.assign(engine, {
+      viewer: {
+        isDestroyed: () => false,
+        entities: { add, remove, suspendEvents, resumeEvents },
+      },
+      globalRoutePolylines,
+      routeEntities: [
+        { regionName: "old", route: completedRoutes[0], entity: oldEntity },
+      ],
+    });
+    const showRegionalRouteGeometry = Reflect.get(
+      engine,
+      "showRegionalRouteGeometry",
+    ) as (region: RouteRegion) => void;
+
+    showRegionalRouteGeometry.call(engine, region);
+
+    expect(globalRoutePolylines.show).toBe(false);
+    expect(remove).toHaveBeenCalledWith(oldEntity);
+    expect(suspendEvents).toHaveBeenCalledOnce();
+    expect(resumeEvents).toHaveBeenCalledOnce();
+    expect(add).toHaveBeenCalledTimes(region.routes.length);
+    expect(
+      (Reflect.get(engine, "routeEntities") as Array<{ regionName: string }>).every(
+        (entry) => entry.regionName === region.name,
+      ),
+    ).toBe(true);
+  });
+
+  it("restores the global buffer when regional Entity creation fails", () => {
+    const region = buildRouteRegions(
+      completedRoutes.filter((route) => route.region === completedRoutes[0].region),
+    )[0];
+    const stagedEntity = { polyline: {} };
+    const add = vi
+      .fn()
+      .mockReturnValueOnce(stagedEntity)
+      .mockImplementationOnce(() => {
+        throw new Error("entity add failed");
+      });
+    const remove = vi.fn();
+    const globalRoutePolylines = { show: true };
+    const engine = new CesiumAtlasWorldEngine();
+    Object.assign(engine, {
+      viewer: {
+        isDestroyed: () => false,
+        entities: {
+          add,
+          remove,
+          suspendEvents: vi.fn(),
+          resumeEvents: vi.fn(),
+        },
+      },
+      globalRoutePolylines,
+      routeEntities: [],
+    });
+    const showRegionalRouteGeometry = Reflect.get(
+      engine,
+      "showRegionalRouteGeometry",
+    ) as (region: RouteRegion) => void;
+
+    expect(() => showRegionalRouteGeometry.call(engine, region)).toThrow(
+      "entity add failed",
+    );
+    expect(remove).toHaveBeenCalledWith(stagedEntity);
+    expect(globalRoutePolylines.show).toBe(true);
+    expect(Reflect.get(engine, "routeEntities")).toEqual([]);
   });
 });

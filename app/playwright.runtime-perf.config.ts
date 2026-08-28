@@ -1,5 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const port = Number.parseInt(process.env.GODIESEL_PERF_PORT ?? "8794", 10);
+const baseURL = `http://127.0.0.1:${port}`;
+
 export default defineConfig({
   testDir: "./perf",
   testMatch: /runtime-browser\.perf\.ts/,
@@ -7,17 +10,17 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   reporter: "list",
-  timeout: 600_000,
+  timeout: 1_200_000,
   expect: { timeout: 60_000 },
   use: {
-    baseURL: "http://127.0.0.1:8794",
+    baseURL,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },
   webServer: {
     command:
-      "GODIESEL_DISABLE_LIVE_PROVIDERS=1 npm run typecheck && npx vite build --config vite.runtime-perf.config.ts && npx vite preview --config vite.runtime-perf.config.ts --host 0.0.0.0 --port 8794",
-    url: "http://127.0.0.1:8794",
+      `GODIESEL_DISABLE_LIVE_PROVIDERS=1 npm run typecheck && npx vite build --config vite.runtime-perf.config.ts && npx vite preview --config vite.runtime-perf.config.ts --host 0.0.0.0 --port ${port}`,
+    url: baseURL,
     reuseExistingServer: false,
     timeout: 240_000,
   },
