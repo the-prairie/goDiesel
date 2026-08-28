@@ -1,9 +1,9 @@
 # Atlas overview primitive optimization
 
-**Production baseline:** `d84cb2d38133d800aa850ab4962f1c5f48ec299e`
-**Control commit:** `924d74221202f420952272b2f9b4acb61c9dbc11`
-**Optimized behavior commit:** `bb6cfecd5f555785f61c97752700681b46cd106d`
-**Measured candidate commit:** `68e67e9fed4d019c259223ac11ae05f611f6dbc2`
+**Production baseline:** `e50820ddef1bfa4f35f2e5c53c9e4633cf6900f5`
+**Control commit:** `f32ac6a3b631c915bd0e0ffde287c27848eabd75`
+**Optimized behavior commit:** `7bd7b060`
+**Measured candidate commit:** `1ac9b58d1643313b060c610928e00402e65f98dd`
 **Lever:** replace the global Atlas overview's per-route Entities with one stable Cesium Primitive that retains one geometry instance per renderable route.
 
 ## Outcome
@@ -15,35 +15,35 @@ No exact-coordinate deduplication or coincident-trace suppression remains.
 
 | Project | Metric | Control median | Primitive median | Improvement |
 | --- | --- | ---: | ---: | ---: |
-| Desktop Chromium | Complete route-ready latency | 57,546.60 ms | 28,004.42 ms | 51.34% |
-| Desktop Chromium | Settled heap | 93.33 MB | 40.10 MB | 57.03% |
-| Desktop Chromium | Peak heap | 94.15 MB | 70.84 MB | 24.76% |
-| Desktop Chromium | Sample wall time | 96,376.72 ms | 38,847.74 ms | 59.69% |
-| Mobile Chromium | Complete route-ready latency | 51,982.54 ms | 24,044.07 ms | 53.75% |
-| Mobile Chromium | Settled heap | 93.27 MB | 39.96 MB | 57.15% |
-| Mobile Chromium | Peak heap | 93.85 MB | 71.61 MB | 23.70% |
-| Mobile Chromium | Sample wall time | 85,179.95 ms | 33,673.67 ms | 60.47% |
+| Desktop Chromium | Complete route-ready latency | 65,472.40 ms | 30,544.70 ms | 53.35% |
+| Desktop Chromium | Settled heap | 93.33 MB | 40.12 MB | 57.02% |
+| Desktop Chromium | Peak heap | 94.01 MB | 40.78 MB | 56.62% |
+| Desktop Chromium | Sample wall time | 109,176.74 ms | 42,607.00 ms | 60.97% |
+| Mobile Chromium | Complete route-ready latency | 55,936.81 ms | 24,593.55 ms | 56.03% |
+| Mobile Chromium | Settled heap | 93.32 MB | 39.94 MB | 57.20% |
+| Mobile Chromium | Peak heap | 94.13 MB | 71.87 MB | 23.65% |
+| Mobile Chromium | Sample wall time | 94,851.01 ms | 34,350.88 ms | 63.78% |
 
-The control warmup passed 2 tests in 11.5 minutes.
-The candidate warmup passed 2 tests in 3.7 minutes.
-The control measured distribution passed 10 tests in 24.8 minutes.
-The candidate measured distribution passed 10 tests in 11.9 minutes.
+The control warmup passed 2 tests in 9.3 minutes.
+The candidate warmup passed 2 tests in 3.8 minutes.
+The control measured distribution passed 10 tests in 26.6 minutes.
+The candidate measured distribution passed 10 tests in 12.1 minutes.
 Each measured side used five fresh desktop contexts and five fresh mobile contexts after its explicit warmup.
 
 ## Post-readiness work
 
 | Project | Metric | Control median | Primitive median | Change |
 | --- | --- | ---: | ---: | ---: |
-| Desktop Chromium | Task duration | 13,123.87 ms | 3,991.28 ms | 69.59% lower |
-| Desktop Chromium | Frame p95 | unavailable | 408.20 ms | not comparable |
-| Desktop Chromium | Estimated p95 FPS | 0.00 | 2.45 | not comparable |
+| Desktop Chromium | Task duration | 13,448.29 ms | 4,183.87 ms | 68.89% lower |
+| Desktop Chromium | Frame p95 | unavailable | 396.30 ms | not comparable |
+| Desktop Chromium | Estimated p95 FPS | 0.00 | 2.52 | not comparable |
 | Desktop Chromium | Long-task count | 1 | 2 | 1 more |
-| Desktop Chromium | Long-task duration | 1,448 ms | 815 ms | 43.72% lower |
-| Mobile Chromium | Task duration | 12,244.85 ms | 3,391.51 ms | 72.30% lower |
-| Mobile Chromium | Frame p95 | unavailable | 307.20 ms | not comparable |
-| Mobile Chromium | Estimated p95 FPS | 0.00 | 3.26 | not comparable |
+| Desktop Chromium | Long-task duration | 1,467 ms | 809 ms | 44.85% lower |
+| Mobile Chromium | Task duration | 12,791.84 ms | 3,584.43 ms | 71.98% lower |
+| Mobile Chromium | Frame p95 | unavailable | 325.80 ms | not comparable |
+| Mobile Chromium | Estimated p95 FPS | 0.00 | 3.07 | not comparable |
 | Mobile Chromium | Long-task count | 1 | 3 | 2 more |
-| Mobile Chromium | Long-task duration | 1,358 ms | 917 ms | 32.47% lower |
+| Mobile Chromium | Long-task duration | 1,472 ms | 950 ms | 35.46% lower |
 
 The control produced no frame intervals in the fixed observation window, so its frame p95 is recorded as unavailable rather than converted to zero.
 The Primitive makes observable progress and sharply reduces total task cost, but its frame p95 remains far above the runtime gauntlet's eventual target.
@@ -93,23 +93,24 @@ The schema-valid evidence manifest records byte size and SHA-256 for all 72 reta
 
 ## Verification
 
-- `npm run verify:ticket` passed: typecheck, production build, 249 unit tests, and 4 navigation tests.
-- `npx playwright test e2e/atlas-cesium.spec.ts` passed 19 tests in 45.4 seconds.
-- `npx playwright test e2e/atlas.spec.ts` passed 38 tests in 4.9 minutes.
+- `npm run verify:ticket` passed: typecheck, production build, 252 unit tests, and 4 navigation tests.
+- `npx playwright test e2e/atlas-cesium.spec.ts` passed 19 tests in 43.9 seconds.
+- `npx playwright test e2e/atlas.spec.ts` passed 38 tests in 4.7 minutes.
 - `UV_CACHE_DIR=<temporary-directory> uv run --with 'pytest>=8.0' --with 'jsonschema>=4.0' pytest -q test_runtime_evidence.py` passed 7 tests.
 - `python3 runtime_evidence.py docs/performance/runtime-gauntlet/optimizations/atlas-overview-primitive/evidence.json --require-artifacts` passed and verified all 72 artifacts.
-- `GODIESEL_ATLAS_PREVIEW_URL=<preview-url> npm run test:e2e:atlas-live` remains blocked because no Google Maps API key, provider preview URL, or local env file is configured.
+- `GODIESEL_ATLAS_PREVIEW_URL=http://127.0.0.1:8791 npm run test:e2e:atlas-live` passed all 6 live-provider scenarios in 36.4 seconds against the rebased candidate.
 
-The pull request must remain draft until the live-provider Atlas suite passes against a configured preview.
+The initial headless live run reproduced a software-rendered WebGL false negative at 5.77 FPS, while the same candidate passed the 30 FPS camera-motion gate in headed Chromium.
+The live-provider configuration now requires headed Chromium, matching the repository's hardware-rendered live-pipeline contract.
 
 ## Commands
 
 ```bash
 cd app
-GODIESEL_PERF_RUN_ID=pr-atlas-lit-warmup-before-924d7422 GODIESEL_PERF_SOURCE_COMMIT=924d74221202f420952272b2f9b4acb61c9dbc11 GODIESEL_PERF_WORKLOAD=atlas-scale GODIESEL_PERF_PHASE=warmup npm exec playwright -- test --config playwright.runtime-perf.config.ts --repeat-each=1
-GODIESEL_PERF_RUN_ID=pr-atlas-lit-final-before-924d7422 GODIESEL_PERF_SOURCE_COMMIT=924d74221202f420952272b2f9b4acb61c9dbc11 GODIESEL_PERF_WORKLOAD=atlas-scale GODIESEL_PERF_PHASE=baseline npm exec playwright -- test --config playwright.runtime-perf.config.ts --repeat-each=5
-GODIESEL_PERF_RUN_ID=pr-atlas-lit-warmup-after-68e67e9f-final GODIESEL_PERF_SOURCE_COMMIT=68e67e9fed4d019c259223ac11ae05f611f6dbc2 GODIESEL_PERF_WORKLOAD=atlas-scale GODIESEL_PERF_PHASE=warmup npm exec playwright -- test --config playwright.runtime-perf.config.ts --repeat-each=1
-GODIESEL_PERF_RUN_ID=pr-atlas-lit-final-after-68e67e9f GODIESEL_PERF_SOURCE_COMMIT=68e67e9fed4d019c259223ac11ae05f611f6dbc2 GODIESEL_PERF_WORKLOAD=atlas-scale GODIESEL_PERF_PHASE=measured npm exec playwright -- test --config playwright.runtime-perf.config.ts --repeat-each=5
+GODIESEL_PERF_RUN_ID=pr-atlas-rebased-warmup-before-f32ac6a3 GODIESEL_PERF_SOURCE_COMMIT=f32ac6a3b631c915bd0e0ffde287c27848eabd75 GODIESEL_PERF_WORKLOAD=atlas-scale GODIESEL_PERF_PHASE=warmup npm exec playwright -- test --config playwright.runtime-perf.config.ts --repeat-each=1
+GODIESEL_PERF_RUN_ID=pr-atlas-rebased-final-before-f32ac6a3 GODIESEL_PERF_SOURCE_COMMIT=f32ac6a3b631c915bd0e0ffde287c27848eabd75 GODIESEL_PERF_WORKLOAD=atlas-scale GODIESEL_PERF_PHASE=baseline npm exec playwright -- test --config playwright.runtime-perf.config.ts --repeat-each=5
+GODIESEL_PERF_RUN_ID=pr-atlas-rebased-warmup-after-1ac9b58d GODIESEL_PERF_SOURCE_COMMIT=1ac9b58d1643313b060c610928e00402e65f98dd GODIESEL_PERF_WORKLOAD=atlas-scale GODIESEL_PERF_PHASE=warmup npm exec playwright -- test --config playwright.runtime-perf.config.ts --repeat-each=1
+GODIESEL_PERF_RUN_ID=pr-atlas-rebased-final-after-1ac9b58d GODIESEL_PERF_SOURCE_COMMIT=1ac9b58d1643313b060c610928e00402e65f98dd GODIESEL_PERF_WORKLOAD=atlas-scale GODIESEL_PERF_PHASE=measured npm exec playwright -- test --config playwright.runtime-perf.config.ts --repeat-each=5
 ```
 
 The ignored raw JSON and PNG artifacts remain local at the paths and checksums declared in `evidence.json`.
