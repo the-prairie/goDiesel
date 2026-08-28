@@ -3,6 +3,7 @@ import { Cartesian3 } from "cesium";
 
 import {
   CesiumAtlasWorldEngine,
+  globalPositionBufferForRoute,
   routeForPickedEntity,
 } from "@/surfaces/atlas/cesium-atlas-world-engine";
 import { completedRoutes } from "@/data/routes";
@@ -89,35 +90,22 @@ describe("CesiumAtlasWorldEngine", () => {
     expect(routeForPickedEntity(entries as never, undefined, kyotoEntity as never)).toBeUndefined();
   });
 
-  it("batches global positions without changing Cartesian values", () => {
+  it("packs exact global Cartesian values into a buffer", () => {
     const source = completedRoutes[0];
     const route = { ...source, trace: source.trace.slice(0, 3) };
-    const fromDegreesArray = vi.spyOn(Cartesian3, "fromDegreesArray");
-    const engine = new CesiumAtlasWorldEngine();
-    const positionsForRoute = Reflect.get(
-      engine,
-      "globalPositionsForRoute",
-    ) as (route: typeof source) => Cartesian3[];
+    const expected = route.trace.flatMap((point) => {
+      const position = Cartesian3.fromDegrees(point.lng, point.lat);
+      return [position.x, position.y, position.z];
+    });
 
-    const expected = route.trace.map((point) =>
-      Cartesian3.fromDegrees(point.lng, point.lat),
-    );
-    const sourcePositions = positionsForRoute.call(engine, route);
-
-    expect(sourcePositions).toEqual(expected);
-    expect(fromDegreesArray).toHaveBeenCalledOnce();
+    expect([...globalPositionBufferForRoute(route)]).toEqual(expected);
   });
 
-  it("skips geometry-less routes before batched conversion", () => {
+  it("skips geometry-less routes before buffered conversion", () => {
     const source = completedRoutes[0];
-    const fromDegreesArray = vi.spyOn(Cartesian3, "fromDegreesArray");
-    const engine = new CesiumAtlasWorldEngine();
-    const positionsForRoute = Reflect.get(
-      engine,
-      "globalPositionsForRoute",
-    ) as (route: typeof source) => Cartesian3[];
 
-    expect(positionsForRoute.call(engine, { ...source, trace: [] })).toEqual([]);
-    expect(fromDegreesArray).not.toHaveBeenCalled();
+    expect(globalPositionBufferForRoute({ ...source, trace: [] })).toEqual(
+      new Float64Array(),
+    );
   });
 });

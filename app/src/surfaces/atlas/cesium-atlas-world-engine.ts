@@ -1,5 +1,8 @@
 import {
   BoundingSphere,
+  BufferPolyline,
+  BufferPolylineCollection,
+  BufferPolylineMaterial,
   buildModuleUrl,
   Cartesian3,
   Cesium3DTileset,
@@ -54,6 +57,18 @@ interface RegionRouteEntity {
   regionName: string;
   route: RouteSummary;
   entity: Entity;
+}
+
+export function globalPositionBufferForRoute(route: RouteSummary) {
+  const positions = sampleGlobalRoutePoints(route);
+  const buffer = new Float64Array(positions.length * 3);
+  positions.forEach((point, index) => {
+    const position = Cartesian3.fromDegrees(point.lng, point.lat);
+    buffer[index * 3] = position.x;
+    buffer[index * 3 + 1] = position.y;
+    buffer[index * 3 + 2] = position.z;
+  });
+  return buffer;
 }
 
 export function routeForPickedEntity(
@@ -117,6 +132,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   private viewer?: Viewer;
   private regions: RouteRegion[] = [];
   private routeEntities: RegionRouteEntity[] = [];
+  private globalRoutePolylines?: BufferPolylineCollection;
   private removeRenderErrorListener?: () => void;
   private removeCameraChangedListener?: () => void;
   private keyDownHandler?: (event: KeyboardEvent) => void;
@@ -215,31 +231,8 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
       if (generation !== this.generation) return;
       this.baseImageryLayer = viewer.imageryLayers.addImageryProvider(imagery);
 
-      viewer.entities.suspendEvents();
-      try {
-        this.routeEntities = regions.flatMap((region) =>
-          region.routes.flatMap((route) => {
-          const positions = this.globalPositionsForRoute(route);
-          if (positions.length < 2) return [];
-          const entity = viewer.entities.add({
-            name: `${route.name} route thread`,
-            polyline: {
-              positions,
-              width: 4,
-              ...CESIUM_GROUND_ROUTE_OPTIONS,
-              classificationType: ClassificationType.BOTH,
-              material: new PolylineGlowMaterialProperty({
-                color: ROUTE_COLOR.withAlpha(0.92),
-                glowPower: 0.16,
-              }),
-            },
-          });
-          return [{ regionName: region.name, route, entity }];
-          }),
-        );
-      } finally {
-        viewer.entities.resumeEvents();
-      }
+      this.globalRoutePolylines = this.createGlobalRouteCollection(regions);
+      viewer.scene.primitives.add(this.globalRoutePolylines);
 
       this.installKeyboardControls(viewer);
       this.installRouteSelection(viewer);
@@ -380,6 +373,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     this.viewer = undefined;
     this.regions = [];
     this.routeEntities = [];
+    this.globalRoutePolylines = undefined;
     this.removeRenderErrorListener = undefined;
     this.removeCameraChangedListener = undefined;
     this.keyDownHandler = undefined;
@@ -516,38 +510,68 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   }
 
   private showRegionalRouteGeometry(region: RouteRegion) {
-    this.routeEntities.forEach(({ regionName, route, entity }) => {
-      entity.show = regionName === region.name;
-      if (!entity.polyline || regionName !== region.name) return;
-      entity.polyline.positions = new ConstantProperty(
-        sampleRegionalRoutePoints(route).map((point) =>
+    const viewer = this.viewer;
+    if (!viewer || viewer.isDestroyed()) return;
+    if (this.globalRoutePolylines) this.globalRoutePolylines.show = false;
+    this.routeEntities.forEach(({ entity }) => viewer.entities.remove(entity));
+    viewer.entities.suspendEvents();
+    try {
+      this.routeEntities = region.routes.flatMap((route) => {
+        const positions = sampleRegionalRoutePoints(route).map((point) =>
           Cartesian3.fromDegrees(point.lng, point.lat),
-        ),
-      );
-    });
+        );
+        if (positions.length < 2) return [];
+        const entity = viewer.entities.add({
+          name: `${route.name} route thread`,
+          polyline: {
+            positions,
+            width: 5,
+            ...CESIUM_GROUND_ROUTE_OPTIONS,
+            classificationType: ClassificationType.BOTH,
+            material: new ColorMaterialProperty(ROUTE_COLOR.withAlpha(0.48)),
+          },
+        });
+        return [{ regionName: region.name, route, entity }];
+      });
+    } finally {
+      viewer.entities.resumeEvents();
+    }
     this.styleRouteEntities();
   }
 
   private restoreGlobalRouteGeometry() {
-    this.routeEntities.forEach(({ route, entity }) => {
-      entity.show = true;
-      if (!entity.polyline) return;
-      entity.polyline.positions = new ConstantProperty(
-        this.globalPositionsForRoute(route),
-      );
-    });
-    this.styleRouteEntities();
+    const viewer = this.viewer;
+    if (!viewer || viewer.isDestroyed()) return;
+    this.routeEntities.forEach(({ entity }) => viewer.entities.remove(entity));
+    this.routeEntities = [];
+    if (this.globalRoutePolylines) this.globalRoutePolylines.show = true;
   }
 
-  private globalPositionsForRoute(route: RouteSummary) {
-    const points = sampleGlobalRoutePoints(route);
-    if (points.length < 2) return [];
-    const degrees = new Array<number>(points.length * 2);
-    points.forEach((point, index) => {
-      degrees[index * 2] = point.lng;
-      degrees[index * 2 + 1] = point.lat;
+  private createGlobalRouteCollection(regions: readonly RouteRegion[]) {
+    const buffers = regions.flatMap((region) =>
+      region.routes
+        .map((route) => globalPositionBufferForRoute(route))
+        .filter((positions) => positions.length >= 6),
+    );
+    const collection = new BufferPolylineCollection({
+      primitiveCountMax: buffers.length,
+      vertexCountMax: buffers.reduce(
+        (total, positions) => total + positions.length / 3,
+        0,
+      ),
+      allowPicking: false,
     });
-    return Cartesian3.fromDegreesArray(degrees);
+    const material = new BufferPolylineMaterial({
+      color: ROUTE_COLOR.withAlpha(0.92),
+      outlineColor: ROUTE_COLOR.withAlpha(0.18),
+      outlineWidth: 2,
+      width: 4,
+    });
+    const polyline = new BufferPolyline();
+    buffers.forEach((positions) => {
+      collection.add({ positions, material }, polyline);
+    });
+    return collection;
   }
 
   private styleRouteEntities() {
