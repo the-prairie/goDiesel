@@ -699,6 +699,10 @@ export function validateLifecycleFinalHeap(report) {
     !Number.isFinite(report.lifecycleBaselineHeapBytes) ||
     report.lifecycleBaselineHeapBytes <= 0 ||
     report.transitionSamples?.length !== 20 ||
+    !Number.isFinite(finalUsedHeapBytes) ||
+    finalUsedHeapBytes <= 0 ||
+    !Number.isFinite(observedRatio) ||
+    observedRatio <= 0 ||
     !Number.isFinite(report.lifecycleFinalHeapRatio) ||
     report.lifecycleFinalHeapMaximumRatio !==
       LIFECYCLE_FINAL_HEAP_MAX_RATIO ||

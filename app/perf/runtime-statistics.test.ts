@@ -108,6 +108,18 @@ describe("runtime statistical evidence", () => {
         })),
       }),
     ).toThrow("canonical 1.10 final heap ceiling");
+    for (const invalidFinalHeap of [undefined, Number.NaN, -1]) {
+      expect(() =>
+        validateLifecycleFinalHeap({
+          ...report,
+          transitionSamples: report.transitionSamples.map((sample, index) =>
+            index === 19
+              ? { usedHeapBytes: invalidFinalHeap }
+              : sample,
+          ),
+        }),
+      ).toThrow("canonical 1.10 final heap ceiling");
+    }
   });
 
   test("keeps only complete frame intervals inside the phase window", () => {
