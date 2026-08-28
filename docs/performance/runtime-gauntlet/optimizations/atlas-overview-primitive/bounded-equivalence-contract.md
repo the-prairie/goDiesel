@@ -29,7 +29,8 @@ It changes only the locator's vertical presentation; longitude, latitude, point 
 
 ## Visual budgets
 
-The deterministic fixture captures the direct WebGL canvas at global, east, and west camera positions on desktop and mobile for both distributions.
+The deterministic fixture freezes Cesium illumination at `2026-03-20T12:00:00Z` and captures the direct WebGL canvas at global, east, and west camera positions on desktop and mobile for both distributions.
+Readiness rejects a canvas that does not expose that exact fixture timestamp.
 Route masks use the production cobalt route color.
 The candidate material is opaque to avoid overlap saturation.
 
