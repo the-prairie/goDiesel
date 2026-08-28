@@ -10,6 +10,7 @@ export default defineConfig({
   reporter: "list",
   use: {
     baseURL: previewUrl ?? "http://127.0.0.1:8787",
+    headless: false,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },
