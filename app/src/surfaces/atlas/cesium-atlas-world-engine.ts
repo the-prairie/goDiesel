@@ -571,7 +571,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
         new GeometryInstance({
           geometry: new PolylineGeometry({
             positions,
-            width: 4,
+            width: 2.8,
             vertexFormat: PolylineMaterialAppearance.VERTEX_FORMAT,
           }),
         }),
