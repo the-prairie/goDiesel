@@ -37,3 +37,11 @@ export function aggregateRuntimeStatistics(options: {
 };
 
 export function normalizeProfileUrl(url?: string): string;
+
+export function resolveInventoriedProfileArtifact(options: {
+  claimedPath: string;
+  rawDirectory: string;
+  inventoriedFiles: string[];
+  referencedFiles: Set<string>;
+  label: string;
+}): string;

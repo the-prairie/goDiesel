@@ -8,6 +8,7 @@ import { describe, expect, test } from "vitest";
 import {
   aggregateRuntimeStatistics,
   normalizeProfileUrl,
+  resolveInventoriedProfileArtifact,
   summarizeDistribution,
 } from "../scripts/runtime-statistics.mjs";
 import {
@@ -46,6 +47,43 @@ describe("runtime statistical evidence", () => {
 
   test("redacts absolute process arguments", () => {
     expect(normalizeProfileUrl("/opt/local/bin/node")).toBe("<system>/node");
+  });
+
+  test("confines profile claims to unique inventoried raw artifacts", () => {
+    const temporaryRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), "godiesel-runtime-profile-paths-"),
+    );
+    const rawDirectory = path.join(temporaryRoot, "raw");
+    const inventoried = path.join(rawDirectory, "profile.cpuprofile");
+    const uninventoried = path.join(rawDirectory, "untracked.cpuprofile");
+    const outside = path.join(temporaryRoot, "outside.cpuprofile");
+    fs.mkdirSync(rawDirectory, { recursive: true });
+    for (const filename of [inventoried, uninventoried, outside]) {
+      fs.writeFileSync(filename, "{}");
+    }
+    const claimedPath = path.relative(process.cwd(), inventoried);
+    const referencedFiles = new Set<string>();
+    const resolve = (candidate: string) =>
+      resolveInventoriedProfileArtifact({
+        claimedPath: candidate,
+        rawDirectory,
+        inventoriedFiles: [inventoried],
+        referencedFiles,
+        label: "test CPU",
+      });
+
+    expect(resolve(claimedPath)).toBe(fs.realpathSync(inventoried));
+    expect(() => resolve(claimedPath)).toThrow("referenced more than once");
+    expect(() => resolve(path.resolve(inventoried))).toThrow("must be relative");
+    expect(() =>
+      resolve(path.relative(process.cwd(), outside)),
+    ).toThrow("escapes the raw directory");
+    expect(() =>
+      resolve(path.relative(process.cwd(), uninventoried)),
+    ).toThrow("not in the raw inventory");
+    expect(() => resolve(`.${path.sep}${claimedPath}`)).toThrow(
+      "must be canonical",
+    );
   });
 
   test("marks quantiles unavailable until their sample minimum is met", () => {

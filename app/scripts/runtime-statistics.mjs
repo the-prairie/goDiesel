@@ -87,6 +87,46 @@ function artifactRecord(filename, root, retention = "local-artifact") {
   };
 }
 
+export function resolveInventoriedProfileArtifact({
+  claimedPath,
+  rawDirectory,
+  inventoriedFiles,
+  referencedFiles,
+  label,
+}) {
+  if (typeof claimedPath !== "string" || claimedPath.length === 0) {
+    throw new Error(`${label} profile artifact path is required`);
+  }
+  if (path.isAbsolute(claimedPath)) {
+    throw new Error(`${label} profile artifact path must be relative`);
+  }
+  if (path.normalize(claimedPath) !== claimedPath) {
+    throw new Error(`${label} profile artifact path must be canonical`);
+  }
+  const rawRoot = fs.realpathSync(rawDirectory);
+  const resolved = fs.realpathSync(path.resolve(process.cwd(), claimedPath));
+  const relative = path.relative(rawRoot, resolved);
+  if (
+    relative === "" ||
+    relative === ".." ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative)
+  ) {
+    throw new Error(`${label} profile artifact escapes the raw directory`);
+  }
+  const inventory = new Set(
+    inventoriedFiles.map((filename) => fs.realpathSync(filename)),
+  );
+  if (!inventory.has(resolved)) {
+    throw new Error(`${label} profile artifact is not in the raw inventory`);
+  }
+  if (referencedFiles.has(resolved)) {
+    throw new Error(`${label} profile artifact is referenced more than once`);
+  }
+  referencedFiles.add(resolved);
+  return resolved;
+}
+
 function pushDistribution(distributions, name, unit, values) {
   if (finite(values).length > 0) {
     distributions.push(summarizeDistribution(name, unit, values));
@@ -466,7 +506,16 @@ function topHeapGrowth(baselineFilename, finalFilename, limit = 20) {
     .slice(0, limit);
 }
 
-function profileSummary(files, measuredReports, nodeReports) {
+function profileSummary(files, measuredReports, nodeReports, rawDirectory) {
+  const referencedFiles = new Set();
+  const resolveProfileArtifact = (claimedPath, label) =>
+    resolveInventoriedProfileArtifact({
+      claimedPath,
+      rawDirectory,
+      inventoriedFiles: files,
+      referencedFiles,
+      label,
+    });
   const cpu = files
     .filter((filename) => /runtime-node-.*\.cpuprofile$/.test(filename))
     .map((filename) => ({
@@ -508,13 +557,13 @@ function profileSummary(files, measuredReports, nodeReports) {
         Math.abs(left.sample.actionLatencyMs - targetMedianMs) -
         Math.abs(right.sample.actionLatencyMs - targetMedianMs),
     )[0];
-    const cpuPath = path.resolve(
-      process.cwd(),
+    const cpuPath = resolveProfileArtifact(
       selected.sample.profileArtifacts.cpu,
+      `${key} CPU`,
     );
-    const allocationPath = path.resolve(
-      process.cwd(),
+    const allocationPath = resolveProfileArtifact(
       selected.sample.profileArtifacts.allocation,
+      `${key} allocation`,
     );
     const network = browserNetworkEntries(selected.sample);
     browser.push({
@@ -576,13 +625,13 @@ function profileSummary(files, measuredReports, nodeReports) {
   const lifecycleHeap = profileReports
     .filter((report) => report.lifecycleHeapProfileArtifacts)
     .map((report) => {
-      const baseline = path.resolve(
-        process.cwd(),
+      const baseline = resolveProfileArtifact(
         report.lifecycleHeapProfileArtifacts.baseline,
+        `${report.projectName} lifecycle baseline`,
       );
-      const final = path.resolve(
-        process.cwd(),
+      const final = resolveProfileArtifact(
         report.lifecycleHeapProfileArtifacts.final,
+        `${report.projectName} lifecycle final`,
       );
       return {
         projectName: report.projectName,
@@ -849,7 +898,11 @@ export function aggregateRuntimeStatistics({
   );
   fs.writeFileSync(
     path.join(outputDirectory, "profile-summary.json"),
-    `${JSON.stringify(profileSummary(files, browserReports, nodeReports), null, 2)}\n`,
+    `${JSON.stringify(
+      profileSummary(files, browserReports, nodeReports, rawDirectory),
+      null,
+      2,
+    )}\n`,
   );
   fs.writeFileSync(
     path.join(outputDirectory, "live-provider-status.json"),
