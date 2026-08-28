@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "optimization": "lifecycle-measurement-ownership",
+  "baselineSourceCommit": "47455d7d364ebe47b22d75a9fbe98abb25e2a22b",
+  "correctedSourceCommit": "b905237bfec28abe55da33fd10439697f9d66452",
+  "workload": {
+    "warmupCycles": 10,
+    "measuredCycles": 20,
+    "independentSequencesPerProject": 5
+  },
+  "ownershipProof": {
+    "retainerPath": "HTMLCanvasElement.getContext closure -> webglRecords -> Map table -> context record -> historical WebGL context",
+    "originalDesktopFinalSnapshot": {
+      "path": "app/artifacts/runtime-statistics/raw/issue113-final-hardened-2026-08-27/browser/profile/profiles/lifecycle-desktop-chromium-r000-final.heapsnapshot",
+      "bytes": 49857336,
+      "sha256": "11523bd2792cde0087c9d2e8b1f95c86968554315ff14d9d83063b7edffe8e8f",
+      "retention": "local-artifact"
+    }
+  },
+  "before": {
+    "desktopFinalRatioRange": [1.4516, 1.4993],
+    "mobileFinalRatioRange": [1.3363, 1.3861]
+  },
+  "after": {
+    "desktopFinalRatios": [
+      1.0544449034155634,
+      1.0559144402413672,
+      1.0566258328277511,
+      1.0588069633931065,
+      0.9971132807819529
+    ],
+    "mobileFinalRatios": [
+      1.0519596821443982,
+      1.0440516632184789,
+      1.0506260075651788,
+      1.0449113830405488,
+      1.044435123453685
+    ],
+    "worstFinalRatio": 1.0588069633931065,
+    "finalActiveContexts": 1,
+    "finalRetainedContextRecords": 1,
+    "finalTotalContextsCreated": 122,
+    "artifacts": [
+      { "file": "runtime-browser-desktop-chromium-lifecycle-r000.json", "bytes": 15707, "sha256": "d2bfc260783cab2ebac5a4e7aa460910cadeaca354a61547aceb649fcafa939d" },
+      { "file": "runtime-browser-desktop-chromium-lifecycle-r001.json", "bytes": 15710, "sha256": "16144a37885173d6a8e19820650097fd47c709fe6bb8299d93479394644a8af1" },
+      { "file": "runtime-browser-desktop-chromium-lifecycle-r002.json", "bytes": 15711, "sha256": "b95b7de51c1579702215b64c73e8faa32daa21e7b9afa4f3a65839fce1502d12" },
+      { "file": "runtime-browser-desktop-chromium-lifecycle-r003.json", "bytes": 15706, "sha256": "0e61c5a31cf214b7d16b9ea3eb15d8468ee0edbafe4e8de71d121d9039402cdd" },
+      { "file": "runtime-browser-desktop-chromium-lifecycle-r004.json", "bytes": 15708, "sha256": "7531ffe3ab66eba926336c0d758a8475293e83d50245c19c40c83791d2adecc9" },
+      { "file": "runtime-browser-mobile-chromium-lifecycle-r000.json", "bytes": 15693, "sha256": "ed97434abfccd0d41f537568f3ee093cf3acc9afded02a61b22cd4a98dbe0a99" },
+      { "file": "runtime-browser-mobile-chromium-lifecycle-r001.json", "bytes": 15696, "sha256": "e91523abf22413f41e3afc1c875707356d461b08d685f9ab9ca556e110b3f004" },
+      { "file": "runtime-browser-mobile-chromium-lifecycle-r002.json", "bytes": 15694, "sha256": "fd1fd3fd64d7e2e7c1c3162b6b7e4d68f575b85d37b278cbea7e4998da2c7f33" },
+      { "file": "runtime-browser-mobile-chromium-lifecycle-r003.json", "bytes": 15685, "sha256": "253a8a2bfc33ffc5de9f1a089fc5dbae3a2da1d97bb746c42b23f23968f573ad" },
+      { "file": "runtime-browser-mobile-chromium-lifecycle-r004.json", "bytes": 15699, "sha256": "c98667eddaf4097d221fdbbcfba29e976fa36c5caaf6944c0af41aa90a612f1d" }
+    ]
+  },
+  "equivalence": {
+    "status": "exact",
+    "oracle": "same 20 measured surface cycles, route detail, Replay, Atlas state, navigation readiness, one active connected context, and cumulative context creation"
+  }
+}
