@@ -691,6 +691,14 @@ function assessLifecycleWarmup(heaps, windowSize) {
 }
 
 const LIFECYCLE_FINAL_HEAP_MAX_RATIO = 1.1;
+const CANONICAL_LIFECYCLE_WARMUP_PROTOCOL = Object.freeze({
+  minimumCycles: 12,
+  maximumCycles: 40,
+  stabilityWindow: 8,
+  maximumRangeRatio: 1.04,
+  maximumNormalizedSlopePerCycle: 0.0025,
+  maximumHalfDriftRatio: 1.01,
+});
 
 export function validateLifecycleFinalHeap(report) {
   const finalUsedHeapBytes = report.transitionSamples?.at(-1)?.usedHeapBytes;
@@ -751,6 +759,15 @@ export function validateLifecycleProtocol(reports) {
       stability?.windowSampleCount !== stability?.window
     ) {
       throw new Error("Lifecycle report has an invalid warmup convergence protocol");
+    }
+    if (
+      Object.entries(CANONICAL_LIFECYCLE_WARMUP_PROTOCOL).some(
+        ([field, expected]) => protocol[field] !== expected,
+      )
+    ) {
+      throw new Error(
+        "Lifecycle report does not use the canonical warmup convergence protocol",
+      );
     }
     const assessment = assessLifecycleWarmup(heaps, stability.window);
     if (

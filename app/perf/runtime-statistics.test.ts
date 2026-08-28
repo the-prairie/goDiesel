@@ -363,11 +363,11 @@ describe("runtime statistical evidence", () => {
     ).toBe(true);
   });
 
-  test("rejects missing and mixed lifecycle convergence protocols", () => {
+  test("rejects missing and noncanonical lifecycle convergence protocols", () => {
     const report = (cycles: number) => ({
       lifecycleWarmupCycles: cycles,
       lifecycleWarmupProtocol: {
-        minimumCycles: 9,
+        minimumCycles: 12,
         maximumCycles: 40,
         stabilityWindow: 8,
         maximumRangeRatio: 1.04,
@@ -393,18 +393,16 @@ describe("runtime statistical evidence", () => {
     );
     expect(() =>
       validateLifecycleProtocol([
-        report(10),
+        report(12),
         {
-          ...report(9),
+          ...report(13),
           lifecycleWarmupProtocol: {
-            ...report(9).lifecycleWarmupProtocol,
+            ...report(13).lifecycleWarmupProtocol,
             maximumCycles: 39,
           },
         },
       ]),
-    ).toThrow(
-      "mixed warmup convergence protocols",
-    );
+    ).toThrow("canonical warmup convergence protocol");
 
     const slowRetention = Array.from(
       { length: 12 },
@@ -419,6 +417,54 @@ describe("runtime statistical evidence", () => {
         },
       ]),
     ).toThrow("did not reach its stability rule");
+  });
+
+  test.each([
+    ["minimum cycles", { minimumCycles: 2 }, {}],
+    ["maximum cycles", { maximumCycles: 41 }, {}],
+    [
+      "stability window",
+      { stabilityWindow: 6 },
+      { window: 6, windowSampleCount: 6 },
+    ],
+    [
+      "range threshold",
+      { maximumRangeRatio: 1.05 },
+      { maximumRangeRatio: 1.05 },
+    ],
+    ["slope threshold", { maximumNormalizedSlopePerCycle: 0.003 }, {}],
+    ["half-drift threshold", { maximumHalfDriftRatio: 1.02 }, {}],
+  ])("rejects a noncanonical lifecycle %s", (_, protocolChange, stabilityChange) => {
+    const cycles = 12;
+    const report = {
+      lifecycleWarmupCycles: cycles,
+      lifecycleWarmupProtocol: {
+        minimumCycles: 12,
+        maximumCycles: 40,
+        stabilityWindow: 8,
+        maximumRangeRatio: 1.04,
+        maximumNormalizedSlopePerCycle: 0.0025,
+        maximumHalfDriftRatio: 1.01,
+        ...protocolChange,
+      },
+      lifecycleWarmupHeapBytes: Array.from({ length: cycles }, () => 1_000),
+      lifecycleBaselineHeapBytes: 1_000,
+      lifecycleWarmupStability: {
+        stable: true,
+        sampleCount: cycles,
+        windowSampleCount: 8,
+        window: 8,
+        maximumRangeRatio: 1.04,
+        observedRangeRatio: 1,
+        normalizedSlopePerCycle: 0,
+        observedHalfDriftRatio: 1,
+        ...stabilityChange,
+      },
+    };
+
+    expect(() => validateLifecycleProtocol([report])).toThrow(
+      "canonical warmup convergence protocol",
+    );
   });
 
   test("rejects raw reports from a different source commit", () => {
