@@ -93,9 +93,9 @@ The schema-valid evidence manifest records byte size and SHA-256 for all 72 reta
 
 ## Verification
 
-- `npm run verify:ticket` passed: typecheck, production build, 248 unit tests, and 4 navigation tests.
-- `npx playwright test e2e/atlas-cesium.spec.ts` passed 19 tests in 44.8 seconds.
-- `npx playwright test e2e/atlas.spec.ts` passed 38 tests in 4.6 minutes.
+- `npm run verify:ticket` passed: typecheck, production build, 249 unit tests, and 4 navigation tests.
+- `npx playwright test e2e/atlas-cesium.spec.ts` passed 19 tests in 45.4 seconds.
+- `npx playwright test e2e/atlas.spec.ts` passed 38 tests in 4.9 minutes.
 - `UV_CACHE_DIR=<temporary-directory> uv run --with 'pytest>=8.0' --with 'jsonschema>=4.0' pytest -q test_runtime_evidence.py` passed 7 tests.
 - `python3 runtime_evidence.py docs/performance/runtime-gauntlet/optimizations/atlas-overview-primitive/evidence.json --require-artifacts` passed and verified all 72 artifacts.
 - `GODIESEL_ATLAS_PREVIEW_URL=<preview-url> npm run test:e2e:atlas-live` remains blocked because no Google Maps API key, provider preview URL, or local env file is configured.
