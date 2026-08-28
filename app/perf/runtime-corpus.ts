@@ -32,9 +32,9 @@ export function createSourceBackedRouteCorpus(
       activityId: `perf-${source.activityId}-${replica.toString().padStart(3, "0")}`,
       replay: { ...source.replay },
       guide: { ...source.guide },
-      // Geometry and measured/editorial attributes remain source-backed. Only
-      // fixture identity changes to exercise production cardinality.
-      trace: source.trace,
+      // Coordinate values remain source-backed while every replica owns its
+      // array and points, matching independent production route geometry.
+      trace: source.trace.map((point) => ({ ...point })),
     });
     sourceSlugs.push(source.slug);
   }
