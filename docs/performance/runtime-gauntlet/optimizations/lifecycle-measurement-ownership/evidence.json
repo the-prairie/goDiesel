@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "optimization": "lifecycle-measurement-ownership",
   "baselineSourceCommit": "47455d7d364ebe47b22d75a9fbe98abb25e2a22b",
-  "correctedSourceCommit": "a8972adbba136f76495194458c8479e8de178c16",
+  "correctedSourceCommit": "51c98c5424a15da15873e8c4bf82cce11520011d",
   "status": "passed",
   "workload": {
     "minimumWarmupCycles": 12,
@@ -29,30 +29,35 @@
     "mobileFinalRatioRange": [1.3363, 1.3861]
   },
   "after": {
-    "desktopWarmupCycles": [30, 25, 33, 24, 20],
-    "mobileWarmupCycles": [20, 24, 24, 25, 24],
-    "desktopFinalRatios": [1.0378295247220617, 1.045095161030964, 1.0335602946734992, 1.0449668376519994, 1.0489605681712078],
-    "mobileFinalRatios": [1.0388158674307693, 1.0391560844305179, 1.042888899497311, 1.042072063887973, 1.044222244632135],
-    "worstFinalRatio": 1.0489605681712078,
+    "desktopWarmupCycles": [25, 27, 26, 25, 25],
+    "mobileWarmupCycles": [23, 22, 26, 28, 17],
+    "desktopFinalRatios": [1.0425782930194405, 1.040013136536452, 1.040718673660825, 1.0425265051812056, 1.0428037368603247],
+    "mobileFinalRatios": [1.0306775681698142, 1.0410716261423019, 1.0416072415012787, 1.0411299746258207, 1.0487646983038643],
+    "worstFinalRatio": 1.0487646983038643,
     "sequencesWithinTarget": 10,
     "sequenceCount": 10,
     "finalActiveContexts": 1,
     "finalRetainedContextRecords": 1,
     "artifacts": [
-      { "file": "runtime-browser-desktop-chromium-lifecycle-r000.json", "bytes": 16838, "sha256": "e3f7aa816a4c77218b1fa01627e36bf442f9cf541bfe4bed9ed85c7b51cfb63f" },
-      { "file": "runtime-browser-desktop-chromium-lifecycle-r001.json", "bytes": 16757, "sha256": "d8b834360eeed75af28305c0940d461459c3d7615c3de770596807782a242cf7" },
-      { "file": "runtime-browser-desktop-chromium-lifecycle-r002.json", "bytes": 16882, "sha256": "c51dcda1fb3e387550a4f46c237e6f31bca6a3bf96014a51ac1624c799c2a890" },
-      { "file": "runtime-browser-desktop-chromium-lifecycle-r003.json", "bytes": 16757, "sha256": "8f6c05e282a4579ef18940a237378600a2f775750359266cd14f0e6104aa7103" },
-      { "file": "runtime-browser-desktop-chromium-lifecycle-r004.json", "bytes": 16678, "sha256": "4b3167dfbd4fd56f06876aa3ac982af9b2b032abb27231f5767d87af0386d986" },
-      { "file": "runtime-browser-mobile-chromium-lifecycle-r000.json", "bytes": 16669, "sha256": "ac587517e3607bf3a230915801842ebcd61a5338eefbac352451759465847acc" },
-      { "file": "runtime-browser-mobile-chromium-lifecycle-r001.json", "bytes": 16736, "sha256": "d222fe40597450ded7a08332c6e7fec400a1520421aefaa0a9057035c521f227" },
-      { "file": "runtime-browser-mobile-chromium-lifecycle-r002.json", "bytes": 16733, "sha256": "9ac487c7da19b17a5b7ea1f60b12db6c1d94fca413a493b4c9dfeb685861e30d" },
-      { "file": "runtime-browser-mobile-chromium-lifecycle-r003.json", "bytes": 16745, "sha256": "b09778c923164e6806197bf093db11f7c3e0c934ad6d83b58fd1d662e95967d8" },
-      { "file": "runtime-browser-mobile-chromium-lifecycle-r004.json", "bytes": 16718, "sha256": "5732d7b60aa327c5bd07e49deb9449219308d48c41c46a1a5a0dccf4e2e7f8c4" }
+      { "file": "runtime-browser-desktop-chromium-lifecycle-r000.json", "bytes": 16765, "sha256": "169e6ec262ecf3b4def142c757bf877becfc927476b45311338edbce9d198366" },
+      { "file": "runtime-browser-desktop-chromium-lifecycle-r001.json", "bytes": 16794, "sha256": "b3fc52d7ffe15d9898bf1f4a40faa78e5b05bf6c86561faeda0c250cd46f774d" },
+      { "file": "runtime-browser-desktop-chromium-lifecycle-r002.json", "bytes": 16769, "sha256": "a56dc5b36b30e108bf976bdb6a945ba3b862b7da467afe66bce8de280101db1c" },
+      { "file": "runtime-browser-desktop-chromium-lifecycle-r003.json", "bytes": 16766, "sha256": "d41ed01561a6ddafd7d1346d659f63624df052d60ed044a103816e70266768d3" },
+      { "file": "runtime-browser-desktop-chromium-lifecycle-r004.json", "bytes": 16756, "sha256": "9390aefe9b0059e72179e22968db3974ba681ec2c114d885b834c97a7a20fa3d" },
+      { "file": "runtime-browser-mobile-chromium-lifecycle-r000.json", "bytes": 16716, "sha256": "69a31df61caada88330049b3c813c7ec731fa3ccffa021921db5ad44b1129730" },
+      { "file": "runtime-browser-mobile-chromium-lifecycle-r001.json", "bytes": 16704, "sha256": "ede3ea2621008d759327ff25b383b29842c28202bbcec721a2be2f723848d17f" },
+      { "file": "runtime-browser-mobile-chromium-lifecycle-r002.json", "bytes": 16764, "sha256": "2479cb6d7d1f3d106269697dbd5d88a7d15fa4b36ef04aec102ed00d05f3e8e2" },
+      { "file": "runtime-browser-mobile-chromium-lifecycle-r003.json", "bytes": 16791, "sha256": "da911c6ce402ec1f0aed4c1971cd4b24236564d4c278f6ff9e0ee914be2e3e61" },
+      { "file": "runtime-browser-mobile-chromium-lifecycle-r004.json", "bytes": 16620, "sha256": "50920a02e98b3bace4d31d9042e0cb04c6b29feb6b82965d31135179d891c1b3" }
     ]
   },
   "equivalence": {
     "status": "exact",
-    "oracle": "same 20 measured route-detail, Replay, and Atlas cycles; exact navigation readiness; one active connected context and one retained profiler record at every surface boundary"
+    "equivalentInputs": "The historical control and corrected measurements use the same generated route corpus, deterministic provider fixtures, desktop/mobile projects, and canonical route-detail, Replay, and Atlas lifecycle sequence.",
+    "identicalOutputs": "The slice changes only performance instrumentation and evidence validation; production renderer, route, camera, telemetry, provider, navigation, and accessibility output code is unchanged.",
+    "ordering": "Every measured cycle preserves route detail -> Replay -> Atlas ordering and the same exact navigation-readiness barriers.",
+    "lifecycleAndProvenance": "Disconnected profiler-owned WebGL records are released only at settled snapshots; cumulative context creation remains recorded, and every surface boundary reports one active connected context and one retained record.",
+    "invalidationCorrectness": "There is no product cache or route index in this slice; the instrumentation record is invalidated only when its canvas is disconnected, while connected canvases remain observable.",
+    "goldenOracle": "Five independent sequences per desktop/mobile project, 20 measured cycles per sequence, exact readiness assertions, canonical warmup validation, the 1.10 final heap ceiling, one active/retained context at every boundary, and SHA-256-addressed raw reports."
   }
 }
