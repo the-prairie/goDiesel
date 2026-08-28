@@ -7,6 +7,7 @@ import {
   routeForPickedEntity,
 } from "@/surfaces/atlas/cesium-atlas-world-engine";
 import { completedRoutes } from "@/data/routes";
+import { buildRouteRegions, type RouteRegion } from "@/data/route-regions";
 
 describe("CesiumAtlasWorldEngine", () => {
   afterEach(() => {
@@ -107,5 +108,45 @@ describe("CesiumAtlasWorldEngine", () => {
     expect(globalPositionBufferForRoute({ ...source, trace: [] })).toEqual(
       new Float64Array(),
     );
+  });
+
+  it("defers Entities to the selected region", () => {
+    const region = buildRouteRegions(
+      completedRoutes.filter((route) => route.region === completedRoutes[0].region),
+    )[0];
+    const oldEntity = { polyline: {} };
+    const add = vi.fn(() => ({ polyline: {} }));
+    const remove = vi.fn();
+    const suspendEvents = vi.fn();
+    const resumeEvents = vi.fn();
+    const globalRoutePolylines = { show: true };
+    const engine = new CesiumAtlasWorldEngine();
+    Object.assign(engine, {
+      viewer: {
+        isDestroyed: () => false,
+        entities: { add, remove, suspendEvents, resumeEvents },
+      },
+      globalRoutePolylines,
+      routeEntities: [
+        { regionName: "old", route: completedRoutes[0], entity: oldEntity },
+      ],
+    });
+    const showRegionalRouteGeometry = Reflect.get(
+      engine,
+      "showRegionalRouteGeometry",
+    ) as (region: RouteRegion) => void;
+
+    showRegionalRouteGeometry.call(engine, region);
+
+    expect(globalRoutePolylines.show).toBe(false);
+    expect(remove).toHaveBeenCalledWith(oldEntity);
+    expect(suspendEvents).toHaveBeenCalledOnce();
+    expect(resumeEvents).toHaveBeenCalledOnce();
+    expect(add).toHaveBeenCalledTimes(region.routes.length);
+    expect(
+      (Reflect.get(engine, "routeEntities") as Array<{ regionName: string }>).every(
+        (entry) => entry.regionName === region.name,
+      ),
+    ).toBe(true);
   });
 });
