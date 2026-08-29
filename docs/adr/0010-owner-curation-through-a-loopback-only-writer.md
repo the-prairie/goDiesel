@@ -45,8 +45,8 @@ ADR-0003.
 - Cost: a save remains a synchronous local write, but touches only the two
   generated tiers that carry owner-authored curation (ADR-0003).
 - Known gap: the two generated-tier replacements are individually atomic but not
-  transactional as a pair; a process crash between them requires another
-  publication or a full rebuild to restore agreement.
+  transactional as a pair; a process crash between them requires curation to be
+  republished for the affected route or a full rebuild to restore agreement.
 - Known gap: routes absent from `activities.csv` are dropped from the Admin
   summary, so an imported-GPX route cannot be curated in the UI.
 - Known gap: the origin check admits a literal `Origin: None`.

@@ -76,8 +76,8 @@ def publish_curation(checkout_root, activity_id, curation):
 
     Every file is staged before any file is replaced, and each replacement is
     atomic. The pair is not a transaction: a process crash between replacements
-    can temporarily split the detail and manifest until the next publication or
-    full rebuild.
+    can temporarily split the detail and manifest until curation is republished
+    for that route or a full rebuild runs.
     """
     activity_id = str(activity_id)
     normalized = build_route_curation(curation or {})

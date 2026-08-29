@@ -54,8 +54,8 @@ backup with `ready` is fully restored.
   replaced. Equality tests prove that a completed publication matches a full
   rebuild, and fault injection proves the rollback path.
 - The two incremental replacements are not one transaction. A process crash
-  between them can temporarily split detail and summary until the next
-  publication or full rebuild.
+  between them can temporarily split detail and summary until curation is
+  republished for the affected route or a full rebuild runs.
 - Geometry and other source-derived changes still require a complete rebuild;
   curation and annotation edits use the bounded incremental publisher.
 - `build.py` is a module-level script with no `main()`; importing it executes the
