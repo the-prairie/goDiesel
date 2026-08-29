@@ -22,6 +22,10 @@ class CurationPublishError(RuntimeError):
     """A generated artifact could not be patched for this route."""
 
 
+class CurationRecoveryError(CurationPublishError):
+    """Publication failed and at least one prior artifact needs recovery."""
+
+
 def generated_paths(checkout_root):
     """The tracked artifacts that carry curation, in write order."""
     root = Path(checkout_root)
@@ -206,7 +210,7 @@ def _publish_staged_with_rollback(staged):
             recovery_paths = ", ".join(
                 str(backup) for backup, _, _ in rollback_failures
             )
-            raise CurationPublishError(
+            raise CurationRecoveryError(
                 f"generated publication failed: {publication_error}; "
                 f"rollback failed: {failure_details}; "
                 f"recovery copies: {recovery_paths}"

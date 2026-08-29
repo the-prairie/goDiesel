@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 
+from curation_publish import CurationPublishError, CurationRecoveryError
 from quest_meta import (
     CURATION_LIST_FIELDS,
     CURATION_TEXT_FIELDS,
@@ -12,6 +13,16 @@ from quest_meta import (
 )
 
 REQUIRED_CURATION_FIELDS = (*CURATION_TEXT_FIELDS, *CURATION_LIST_FIELDS)
+
+
+def publish_curation_or_rebuild(publish, full_rebuild):
+    """Use a full rebuild only when incremental publication is safely recoverable."""
+    try:
+        publish()
+    except CurationRecoveryError:
+        raise
+    except CurationPublishError:
+        full_rebuild()
 
 
 def curation_readiness(value):

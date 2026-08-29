@@ -28,12 +28,18 @@ from urllib.parse import urlparse
 import gpxpy
 import pandas as pd
 
-from admin_curation import curation_readiness, save_curation_and_rebuild, write_atomic
+from admin_curation import (
+    curation_readiness,
+    publish_curation_or_rebuild,
+    save_curation_and_rebuild,
+    write_atomic,
+)
 import hashlib
 import tempfile
 
 from curation_publish import (
     CurationPublishError,
+    CurationRecoveryError,
     publish_annotations,
     publish_curation,
 )
@@ -797,9 +803,7 @@ class Handler(BaseHTTPRequestHandler):
                     # artifacts that carry curation. test_curation_publish.py
                     # asserts this equals a full rebuild byte for byte. A route
                     # with no generated record yet still needs the full path.
-                    try:
-                        publish_curation(QUESTS, activity_id, curation)
-                    except CurationPublishError:
+                    def full_rebuild():
                         subprocess.run(
                             [sys.executable, str(QUESTS / 'build.py')],
                             cwd=str(QUESTS),
@@ -808,11 +812,26 @@ class Handler(BaseHTTPRequestHandler):
                             text=True,
                         )
 
+                    publish_curation_or_rebuild(
+                        lambda: publish_curation(QUESTS, activity_id, curation),
+                        full_rebuild,
+                    )
+
                 route = save_curation_and_rebuild(
                     QUESTS / 'quests.json', activity_id, curation, rebuild
                 )
             except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
                 self._send(400, {'error': str(error)})
+                return
+            except CurationRecoveryError as error:
+                self._send(500, {
+                    'error': (
+                        'Route publication could not be recovered. The curation '
+                        'source was rolled back, but generated artifacts require '
+                        'manual recovery.'
+                    ),
+                    'detail': str(error),
+                })
                 return
             except subprocess.CalledProcessError as error:
                 self._send(500, {
@@ -853,6 +872,15 @@ class Handler(BaseHTTPRequestHandler):
                 write_atomic(config_path, json.dumps(config, indent=2) + '\n')
             except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
                 self._send(400, {'error': str(error)})
+                return
+            except CurationRecoveryError as error:
+                self._send(500, {
+                    'error': (
+                        'Annotation publication could not be recovered. '
+                        'Generated artifacts require manual recovery.'
+                    ),
+                    'detail': str(error),
+                })
                 return
             except CurationPublishError as error:
                 self._send(409, {'error': str(error)})

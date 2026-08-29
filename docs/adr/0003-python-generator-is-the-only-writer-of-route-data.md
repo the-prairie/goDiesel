@@ -56,6 +56,10 @@ backup with `ready` is fully restored.
   a completed publication into a reported failure. Equality tests prove that a
   completed publication matches a full rebuild, and fault injection proves the
   failure matrix.
+- Admin falls back to a full rebuild for an ordinary incremental publication
+  failure. It does not start that fallback after an incomplete rollback; it
+  restores the curation source, reports the recovery paths, and leaves the
+  preserved copies available for deliberate repair.
 - The two incremental replacements are not one transaction. A process crash
   between them can temporarily split detail and summary until curation is
   republished for the affected route or a full rebuild runs.

@@ -30,6 +30,9 @@ It restores any generated file already replaced, and restores the original
 rollback preserves its recovery copy and reports its path to the operator.
 Cleanup after a completed publication is best-effort and does not change the
 successful API result.
+An incomplete generated-file rollback returns 500 and never starts the automatic
+full-rebuild fallback. The source is restored, while the response identifies the
+preserved files needed to repair the browser artifacts deliberately.
 Source-derived route changes still use the complete generator described in
 ADR-0003.
 
