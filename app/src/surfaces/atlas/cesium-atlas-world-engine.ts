@@ -174,6 +174,10 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   private routeDisplayMode: "standard" | "density" | "terrain" = "standard";
   private regionGeneration = 0;
   private generation = 0;
+  private detachedCanvas?: {
+    parent: Node;
+    nextSibling: ChildNode | null;
+  };
   private surfaceNormal = new Cartesian3();
   private surfaceToCamera = new Cartesian3();
 
@@ -794,6 +798,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     viewer.canvas.dataset.atlasState = "region-fallback";
     viewer.canvas.dataset.cameraState = "settled";
     viewer.canvas.dataset.terrainState = "fallback";
+    this.detachCanvasForFallback(viewer.canvas);
     this.onStatus?.({
       state: "region-fallback",
       regionName: region.name,
@@ -813,10 +818,31 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     this.clearRegionalTiles();
     const viewer = this.viewer;
     if (!viewer || viewer.isDestroyed()) return;
+    this.restoreCanvasAfterFallback(viewer.canvas);
     viewer.useDefaultRenderLoop = true;
     viewer.scene.globe.show = true;
     if (this.baseImageryLayer) this.baseImageryLayer.show = true;
     this.resetFrustumOffsets();
+  }
+
+  private detachCanvasForFallback(canvas: HTMLCanvasElement) {
+    if (this.detachedCanvas || !canvas.parentNode) return;
+    this.detachedCanvas = {
+      parent: canvas.parentNode,
+      nextSibling: canvas.nextSibling,
+    };
+    canvas.remove();
+  }
+
+  private restoreCanvasAfterFallback(canvas: HTMLCanvasElement) {
+    const detached = this.detachedCanvas;
+    if (!detached) return;
+    const before =
+      detached.nextSibling?.parentNode === detached.parent
+        ? detached.nextSibling
+        : null;
+    detached.parent.insertBefore(canvas, before);
+    this.detachedCanvas = undefined;
   }
 
   private clearRegionalTiles() {

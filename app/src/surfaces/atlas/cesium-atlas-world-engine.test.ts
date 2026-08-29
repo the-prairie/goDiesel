@@ -81,6 +81,59 @@ describe("CesiumAtlasWorldEngine", () => {
     expect(destroyViewer).toHaveBeenCalledOnce();
   });
 
+  it("detaches Cesium while regional fallback owns the WebGL viewport", () => {
+    const nextSibling = {} as ChildNode;
+    const insertBefore = vi.fn();
+    const parent = { insertBefore } as unknown as Node;
+    const canvas: {
+      dataset: Record<string, string>;
+      parentNode: Node | null;
+      nextSibling: ChildNode | null;
+      remove: ReturnType<typeof vi.fn>;
+    } = {
+      dataset: {},
+      parentNode: parent,
+      nextSibling,
+      remove: vi.fn(() => {
+        canvas.parentNode = null;
+      }),
+    };
+    const viewer = {
+      canvas,
+      camera: { frustum: {} },
+      scene: { globe: { show: false } },
+      useDefaultRenderLoop: true,
+      isDestroyed: () => false,
+    };
+    const engine = new CesiumAtlasWorldEngine();
+    Object.assign(engine, {
+      viewer,
+      selectedRegionName: "Kyoto, Japan",
+      regionGeneration: 1,
+    });
+    const reportRegionalFallback = Reflect.get(
+      engine,
+      "reportRegionalFallback",
+    ) as (region: RouteRegion, generation: number) => void;
+    const leaveRegionalTerrain = Reflect.get(
+      engine,
+      "leaveRegionalTerrain",
+    ) as () => void;
+    const region = buildRouteRegions(
+      completedRoutes.filter((route) => route.region === "Kyoto, Japan"),
+    )[0];
+
+    reportRegionalFallback.call(engine, region, 1);
+
+    expect(canvas.remove).toHaveBeenCalledOnce();
+    expect(viewer.useDefaultRenderLoop).toBe(false);
+
+    leaveRegionalTerrain.call(engine);
+
+    expect(insertBefore).toHaveBeenCalledWith(canvas, null);
+    expect(viewer.useDefaultRenderLoop).toBe(true);
+  });
+
   it("does not treat a terrain readiness timeout as loaded tiles", async () => {
     vi.useFakeTimers();
     const removeLoadedListener = vi.fn();
