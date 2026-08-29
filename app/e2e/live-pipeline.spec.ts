@@ -9,6 +9,7 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
+import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -203,6 +204,42 @@ async function waitForAdmin() {
   );
 }
 
+async function oversizedRequestStatus() {
+  return new Promise<number>((resolve, reject) => {
+    const socket = connect(adminPort, "127.0.0.1");
+    let response = "";
+    let settled = false;
+    const finish = (error?: Error, status?: number) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      if (error) reject(error);
+      else resolve(status!);
+    };
+    socket.setTimeout(5_000, () => finish(new Error("oversized request timed out")));
+    socket.on("error", (error) => finish(error));
+    socket.on("connect", () => {
+      socket.write([
+        "POST /api/rebuild HTTP/1.1",
+        `Host: 127.0.0.1:${adminPort}`,
+        "Origin: http://127.0.0.1:8787",
+        "Content-Length: 1048577",
+        "Connection: close",
+        "",
+        "",
+      ].join("\r\n"));
+    });
+    socket.on("data", (chunk) => {
+      response += String(chunk);
+      const status = /^HTTP\/1\.[01] (\d{3})/.exec(response)?.[1];
+      if (status) finish(undefined, Number(status));
+    });
+    socket.on("end", () => {
+      if (!settled) finish(new Error(`invalid oversized response: ${response}`));
+    });
+  });
+}
+
 let adminProcess: ChildProcess | undefined;
 let adminWorkspace: string | undefined;
 let adminExit: Promise<void> | undefined;
@@ -341,12 +378,7 @@ test.describe("real source to live provider pipeline", () => {
       headers: { Origin: "https://attacker.invalid" },
     });
     expect(crossOriginResponse.status).toBe(403);
-    const oversizedResponse = await fetch(`${adminOrigin}/api/rebuild`, {
-      method: "POST",
-      headers: { Origin: "http://127.0.0.1:8787" },
-      body: "x".repeat(1_048_577),
-    });
-    expect(oversizedResponse.status).toBe(413);
+    expect(await oversizedRequestStatus()).toBe(413);
     const malformedResponse = await fetch(`${adminOrigin}/api/save`, {
       method: "POST",
       headers: {
