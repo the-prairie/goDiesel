@@ -21,6 +21,9 @@ SENTINEL_2 = "COPERNICUS/S2_SR_HARMONIZED"
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 THUMBNAIL_ATTEMPTS = 5
 RETRYABLE_HTTP_STATUSES = frozenset({408, 429, 500, 502, 503, 504})
+SCENE_COMPOSITE_PARALLEL_SCALE = 4
+SCENE_COMPOSITE_IMAGE_LIMIT = 12
+TRUE_COLOR_BANDS = ["B4", "B3", "B2"]
 
 
 def parse_args() -> argparse.Namespace:
@@ -81,11 +84,20 @@ def composite_or_fallback(
     primary: ee.ImageCollection,
     fallback: ee.ImageCollection,
 ) -> ee.Image:
+    def median(collection: ee.ImageCollection) -> ee.Image:
+        bounded = collection.sort("CLOUDY_PIXEL_PERCENTAGE").limit(
+            SCENE_COMPOSITE_IMAGE_LIMIT
+        )
+        return bounded.reduce(
+            ee.Reducer.median(),
+            SCENE_COMPOSITE_PARALLEL_SCALE,
+        ).rename(TRUE_COLOR_BANDS)
+
     return ee.Image(
         ee.Algorithms.If(
             primary.size().gt(0),
-            primary.median(),
-            fallback.median(),
+            median(primary),
+            median(fallback),
         )
     )
 
