@@ -2,11 +2,12 @@ import { defineConfig, devices } from "@playwright/test";
 
 const legacyPinchTest = /mobile globe supports two-finger pinch without losing region state/;
 const stablePinchFile = /atlas-pinch-stable\.spec\.ts/;
+const liveProviderFiles = "**/*-live.spec.ts";
 const runningOnLinux = process.platform === "linux";
 
 export default defineConfig({
   testDir: "./e2e",
-  testIgnore: ["**/live-pipeline.spec.ts", "**/*-live.spec.ts"],
+  testIgnore: ["**/live-pipeline.spec.ts", liveProviderFiles],
   fullyParallel: false,
   workers: 1,
   retries: 0,
@@ -41,7 +42,7 @@ export default defineConfig({
     {
       name: "chromium",
       grepInvert: legacyPinchTest,
-      testIgnore: ["**/live-pipeline.spec.ts", stablePinchFile],
+      testIgnore: ["**/live-pipeline.spec.ts", liveProviderFiles, stablePinchFile],
       use: { ...devices["Desktop Chrome"] },
     },
     {
