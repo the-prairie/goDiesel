@@ -103,12 +103,19 @@ test("mobile route story keeps chapters, geography, and Replay accessible", asyn
 
   await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Story chapters" })).toBeVisible();
-  await expect(
-    page.getByRole("region", { name: "Route story", exact: true }).getByRole("link", {
+  const story = page.getByRole("region", { name: "Route story", exact: true });
+  const replayLink = story.getByRole("link", {
       name: "Replay",
       exact: true,
-    }),
-  ).toBeVisible();
+    });
+  await expect(replayLink).toBeVisible();
+  for (const control of [
+    story.getByRole("link", { name: "Routes", exact: true }),
+    replayLink,
+    story.getByRole("button", { name: /Begin the story/ }),
+  ]) {
+    expect((await control.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
+  }
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(391);
 
   const finalChapter = page.getByRole("heading", {

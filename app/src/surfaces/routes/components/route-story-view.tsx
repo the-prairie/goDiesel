@@ -103,7 +103,7 @@ export function RouteStoryView({
         {singleRouteMicrosite ? (
           <span className="text-control font-semibold">goDiesel field story</span>
         ) : (
-          <Button asChild variant="ghost" className="text-white hover:bg-white/12 hover:text-white">
+          <Button asChild variant="ghost" className="h-11 text-white hover:bg-white/12 hover:text-white">
             <Link to={routesPath}>
               <ArrowLeft aria-hidden="true" />
               <span className="hidden sm:inline">Route collection</span>
@@ -116,7 +116,7 @@ export function RouteStoryView({
           <p className="max-w-[42vw] truncate font-editorial text-lg leading-none">{title}</p>
         </div>
         {route.replay.replayEligible ? (
-          <Button asChild className="bg-forest text-white hover:bg-forest/90">
+          <Button asChild className="h-11 bg-forest text-white hover:bg-forest/90">
             <Link to={replayHref}>
               <Play aria-hidden="true" />
               <span className="hidden sm:inline">Cinematic replay</span>
@@ -124,7 +124,7 @@ export function RouteStoryView({
             </Link>
           </Button>
         ) : (
-          <Button disabled>
+          <Button disabled className="h-11">
             <Play aria-hidden="true" /> Replay
           </Button>
         )}
@@ -177,7 +177,7 @@ export function RouteStoryView({
           <Button
             type="button"
             variant="outline"
-            className="mt-8 border-white/55 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+            className="mt-8 h-11 border-white/55 bg-white/10 text-white hover:bg-white/20 hover:text-white"
             onClick={() => document.getElementById("route-story-intro")?.scrollIntoView()}
           >
             <BookOpen aria-hidden="true" /> Begin the story <ChevronDown aria-hidden="true" />
@@ -288,13 +288,13 @@ export function RouteStoryView({
           </p>
         </div>
         {route.replay.replayEligible ? (
-          <Button asChild size="lg" className="bg-forest text-white hover:bg-forest/90">
+          <Button asChild size="lg" className="h-11 bg-forest text-white hover:bg-forest/90">
             <Link to={replayHref}>
               <Compass aria-hidden="true" /> Enter cinematic replay <ArrowRight aria-hidden="true" />
             </Link>
           </Button>
         ) : (
-          <Button disabled size="lg">
+          <Button disabled size="lg" className="h-11">
             <Compass aria-hidden="true" /> Replay unavailable
           </Button>
         )}

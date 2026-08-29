@@ -130,9 +130,9 @@ test("presents production Replay as an immersive Story Flight", async ({
   await expect
     .poll(async () => Number((await progress.textContent())?.split(" ")[0]))
     .toBeGreaterThan(0);
-  await expect(
-    page.getByRole("button", { name: "Play route" }),
-  ).toBeVisible();
+  const playControl = page.getByRole("button", { name: "Play route" });
+  await expect(playControl).toBeVisible();
+  expect((await playControl.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
   await expect(
     page.getByRole("button", { name: "Change route" }),
   ).toBeVisible();

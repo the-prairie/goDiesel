@@ -224,6 +224,13 @@ for (const viewport of [
     await expect(canvas).toHaveAttribute("data-camera-target", "28000");
     await expect(canvas).toHaveAttribute("data-terrain-state", "ready");
 
+    if (viewport.name === "mobile") {
+      for (const name of ["Show routes", "Explore terrain"]) {
+        const lensControl = page.getByRole("button", { name });
+        expect((await lensControl.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
+      }
+    }
+
     await canvas.focus();
     await page.keyboard.press("ArrowRight");
     await expect(canvas).toHaveAttribute("data-camera-target", "28010");

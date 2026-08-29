@@ -257,6 +257,9 @@ test("Finder filter chips never collide with the edit control", async ({ page })
   expect(editBox).not.toBeNull();
   expect(editBox?.width).toBeGreaterThanOrEqual(44);
   expect(editBox?.height).toBeGreaterThanOrEqual(44);
+  for (const chip of await chipTray.getByRole("button").all()) {
+    expect((await chip.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
+  }
   expect((trayBox?.x ?? 0) + (trayBox?.width ?? 0)).toBeLessThanOrEqual(
     (editBox?.x ?? 0) - 4,
   );

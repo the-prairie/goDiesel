@@ -287,7 +287,7 @@ export function RegionRouteCarousel({
       </header>
 
       <div className="flex px-3 pb-2 sm:hidden">
-        <div className="grid w-full grid-cols-2 rounded-sm border border-white/25 p-0.5" aria-label="Region lens">
+        <div className="grid w-full grid-cols-2 rounded-md border border-white/25 p-0.5" aria-label="Region lens">
           <Button
             type="button"
             variant="ghost"
@@ -295,7 +295,7 @@ export function RegionRouteCarousel({
             aria-label="Show routes"
             aria-pressed={lens === "routes"}
             onClick={() => onLensChange("routes")}
-            className="rounded-sm text-white hover:bg-white/10 hover:text-white aria-pressed:bg-[#f6f2e8] aria-pressed:text-[#24322d]"
+            className="h-11 rounded-md text-white hover:bg-white/10 hover:text-white aria-pressed:bg-[#f6f2e8] aria-pressed:text-[#24322d]"
           >
             <Route aria-hidden="true" /> Routes
           </Button>
@@ -306,7 +306,7 @@ export function RegionRouteCarousel({
             aria-label="Explore terrain"
             aria-pressed={lens === "terrain"}
             onClick={() => onLensChange("terrain")}
-            className="rounded-sm text-white hover:bg-white/10 hover:text-white aria-pressed:bg-[#f6f2e8] aria-pressed:text-[#24322d]"
+            className="h-11 rounded-md text-white hover:bg-white/10 hover:text-white aria-pressed:bg-[#f6f2e8] aria-pressed:text-[#24322d]"
           >
             <Mountain aria-hidden="true" /> Terrain
           </Button>
@@ -457,7 +457,7 @@ function RegionalRouteCard({
         <Link
           to={replayPath}
           onClick={(event) => event.stopPropagation()}
-          className="relative z-20 inline-flex min-h-11 items-center gap-1.5 self-center whitespace-nowrap px-2 text-sm font-medium text-[#ff8065] outline-none hover:text-[#ff9a83] focus-visible:ring-2 focus-visible:ring-[#63d6cf]"
+          className="relative z-20 inline-flex min-h-11 items-center gap-1.5 self-center whitespace-nowrap px-2 text-sm font-medium text-[#9be7e1] outline-none hover:text-white focus-visible:ring-2 focus-visible:ring-[#63d6cf]"
         >
           Open route
           <ArrowRight className="size-4" aria-hidden="true" />

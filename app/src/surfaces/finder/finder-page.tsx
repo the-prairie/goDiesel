@@ -264,7 +264,7 @@ function ActiveFilterChips({ intent, onRemove }: { intent: FinderIntent; onRemov
   return (
     <div aria-label="Active Finder filters" className="flex min-w-0 flex-1 flex-wrap gap-1.5 pr-1 sm:flex-nowrap sm:overflow-x-auto sm:[scrollbar-width:none] sm:[&::-webkit-scrollbar]:hidden">
       {chips.map((chip) => (
-        <Button key={chip.key} type="button" variant="outline" size="sm" className="h-8 shrink-0 border-white/25 bg-white/10 px-2 capitalize text-white hover:bg-white/18 hover:text-white" aria-label={chip.aria} onClick={() => onRemove(chip.key)}>
+        <Button key={chip.key} type="button" variant="outline" size="sm" className="h-11 shrink-0 border-white/25 bg-white/10 px-2 capitalize text-white hover:bg-white/18 hover:text-white" aria-label={chip.aria} onClick={() => onRemove(chip.key)}>
           {chip.label}<X aria-hidden="true" />
         </Button>
       ))}

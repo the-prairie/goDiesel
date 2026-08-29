@@ -99,7 +99,7 @@ export function StoryFlightReplayHud({
       >
         <Button
           aria-label={control.playing ? "Pause route" : "Play route"}
-          className="rounded-md border border-[#ffcfb3] bg-[#ffdfca] text-[#1d2946] hover:bg-[#ffd2b5]"
+          className="size-11 rounded-md border border-[#ffcfb3] bg-[#ffdfca] text-[#1d2946] hover:bg-[#ffd2b5]"
           disabled={disabled}
           onClick={onTogglePlayback}
           size="icon"
