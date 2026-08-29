@@ -1,5 +1,6 @@
 import type { PlannedRoute } from "@/domain/planning";
 import type { RouteSummary } from "@/domain/route";
+import { placesOverlap } from "@/domain/place-match";
 
 const MAX_SAMPLE_POINTS = 48;
 const NEARBY_TRACE_KM = 1.5;
@@ -19,7 +20,6 @@ export function findRecordedPlanMatches(
   const plannedDate = plan.planning.createdAt.slice(0, 10);
   const targetDistanceKm = plan.planning.intent.distanceKm;
   const distanceToleranceKm = Math.max(3, targetDistanceKm * 0.3);
-  const planPlace = normalized(plan.planning.intent.place);
 
   return candidates
     .flatMap((route): RecordedPlanMatch[] => {
@@ -28,7 +28,7 @@ export function findRecordedPlanMatches(
         route.slug === plan.planning.sourceRouteSlug ||
         route.type !== plan.planning.intent.activity ||
         route.date <= plannedDate ||
-        !placeMatches(normalized(route.region), planPlace) ||
+        !placesOverlap(route.region, plan.planning.intent.place) ||
         Math.abs(route.distanceKm - targetDistanceKm) > distanceToleranceKm ||
         plan.trace.length < 2 ||
         route.trace.length < 2
@@ -100,16 +100,4 @@ function distanceKm(
 
 function radians(value: number) {
   return value * Math.PI / 180;
-}
-
-function normalized(value: string) {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-}
-
-function placeMatches(routeRegion: string, plannedPlace: string) {
-  return Boolean(plannedPlace) && (
-    routeRegion === plannedPlace ||
-    routeRegion.includes(plannedPlace) ||
-    plannedPlace.includes(routeRegion)
-  );
 }

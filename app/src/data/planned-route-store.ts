@@ -5,6 +5,7 @@ import type {
   FinderIntent,
   PlannedRoute,
 } from "@/domain/planning";
+import { placesOverlap } from "@/domain/place-match";
 
 export const PLANNED_ROUTE_STORAGE_KEY = "godiesel.planned-routes.v1";
 const STORE_VERSION = 1 as const;
@@ -303,17 +304,10 @@ function routeMatchesIntent(
   route: DiscoveryCandidate["route"],
   intent: FinderIntent,
 ) {
-  const sourcePlace = normalized(route.region);
-  const intentPlace = normalized(intent.place);
   return (
     route.type === intent.activity &&
-    Boolean(intentPlace) &&
-    (sourcePlace === intentPlace || sourcePlace.includes(intentPlace) || intentPlace.includes(sourcePlace))
+    placesOverlap(route.region, intent.place)
   );
-}
-
-function normalized(value: string) {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 function finiteNumber(value: unknown): value is number {
