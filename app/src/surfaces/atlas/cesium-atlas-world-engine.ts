@@ -49,7 +49,6 @@ import {
 } from "@/providers/cesium-render-quality";
 
 const DEFAULT_VIEW = { lat: 24, lng: 12, heightM: 18_500_000 };
-const GLOBAL_SELECTION_HEIGHT_M = DEFAULT_VIEW.heightM;
 const ROUTE_COLOR = Color.fromCssColorString("#62a7ff");
 const SELECTED_ROUTE_COLOR = Color.fromCssColorString("#df674b");
 const PREVIEWED_ROUTE_COLOR = Color.fromCssColorString("#63d6cf");
