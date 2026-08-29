@@ -21,7 +21,10 @@ import type {
   WorldPackRuntime,
 } from "@/world-packs/world-pack-types";
 
-const PUBLIC_ROOT = path.resolve(import.meta.dirname, "../../public/world-packs");
+const PUBLIC_ROOT = path.resolve(
+  import.meta.dirname,
+  "../../public/world-packs",
+);
 
 function structureCollisionFixture() {
   const document = new TextEncoder().encode(
@@ -33,7 +36,12 @@ function structureCollisionFixture() {
           coordinateReference: "route-local-enu-v1",
           obstacles: [
             {
-              footprint: [[0.6, -0.1], [0.8, 0.1], [0.6, 0.3], [0.4, 0.1]],
+              footprint: [
+                [0.6, -0.1],
+                [0.8, 0.1],
+                [0.6, 0.3],
+                [0.4, 0.1],
+              ],
               minimumZ: -20,
               maximumZ: 20,
             },
@@ -59,7 +67,9 @@ function structureCollisionFixture() {
 }
 
 function referencePack(routeSlug: string): VerifiedWorldPack {
-  const index = JSON.parse(fs.readFileSync(path.join(PUBLIC_ROOT, "index.json"), "utf8"));
+  const index = JSON.parse(
+    fs.readFileSync(path.join(PUBLIC_ROOT, "index.json"), "utf8"),
+  );
   const entry = index.packs[routeSlug];
   const packRoot = path.join(PUBLIC_ROOT, entry.worldId, entry.packId);
   const manifest = JSON.parse(
@@ -188,8 +198,12 @@ describe("World Pack collision runtime", () => {
     expect(
       collisionSurface(
         runtime.heightfield,
-        runtime.heightfield.xAxis[Math.min(column, runtime.heightfield.xAxis.length - 2)],
-        runtime.heightfield.yAxis[Math.min(row, runtime.heightfield.yAxis.length - 2)],
+        runtime.heightfield.xAxis[
+          Math.min(column, runtime.heightfield.xAxis.length - 2)
+        ],
+        runtime.heightfield.yAxis[
+          Math.min(row, runtime.heightfield.yAxis.length - 2)
+        ],
       ),
     ).toBeUndefined();
   });
@@ -219,7 +233,9 @@ describe("World Pack collision runtime", () => {
       run: true,
     });
 
-    expect(result.x).toBeLessThanOrEqual(0.6 - runtime.navigation.actor.radiusM);
+    expect(result.x).toBeLessThanOrEqual(
+      0.6 - runtime.navigation.actor.radiusM,
+    );
     expect(result.blockedTickCount).toBe(1);
   });
 
@@ -311,10 +327,52 @@ describe("World Pack collision runtime", () => {
     expect(result.blockedTickCount).toBe(1);
   });
 
-  it("recovers from a world edge to a declared checkpoint instead of a void", () => {
+  it("blocks a valid move into declared no-data without recovering", () => {
+    const base = createWorldPhysicsRuntime(referencePack("6496900063"));
+    const runtime: WorldPhysicsRuntime = {
+      ...base,
+      heightfield: {
+        xAxis: [-2, 0, 2],
+        yAxis: [-2, 2],
+        heights: [
+          [0, 0, 0],
+          [0, 0, 0],
+        ],
+        minimumX: -2,
+        maximumX: 2,
+        minimumY: -2,
+        maximumY: 2,
+        measuredVertices: [true, true, false, true, true, false],
+      },
+      traversableTriangles: [],
+      obstacles: [],
+    };
+    let state = {
+      ...initialWorldPlayer(base),
+      x: -1,
+      y: 0,
+      z: 0,
+      headingDeg: 90,
+    };
+    while (state.blockedTickCount === 0) {
+      state = stepWorldPlayer(runtime, state, {
+        forward: 1,
+        strafe: 0,
+        turn: 0,
+        run: true,
+      });
+    }
+
+    expect(state.recoveryCount).toBe(0);
+    expect(state.blockedTickCount).toBe(1);
+    expect(state.x).toBeLessThan(0);
+  });
+
+  it("recovers an already invalid world-edge state to a checkpoint", () => {
     const runtime = createWorldPhysicsRuntime(referencePack("6496900063"));
     const start = initialWorldPlayer(runtime);
-    const edgeY = (runtime.heightfield.minimumY + runtime.heightfield.maximumY) / 2;
+    const edgeY =
+      (runtime.heightfield.minimumY + runtime.heightfield.maximumY) / 2;
     const edgeSurface = collisionSurface(
       runtime.heightfield,
       runtime.heightfield.maximumX - 0.001,
@@ -335,7 +393,9 @@ describe("World Pack collision runtime", () => {
     expect(result.recoveryCount).toBe(1);
     expect(result.x).toBe(runtime.navigation.nodes[0].position[0]);
     expect(result.y).toBe(runtime.navigation.nodes[0].position[1]);
-    expect(collisionSurface(runtime.heightfield, result.x, result.y)).toBeDefined();
+    expect(
+      collisionSurface(runtime.heightfield, result.x, result.y),
+    ).toBeDefined();
   });
 
   it("rejoins exact route endpoints repeatedly without positional drift", () => {
