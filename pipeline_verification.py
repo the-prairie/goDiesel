@@ -31,7 +31,6 @@ OUTPUT_REQUIRED_FIELDS = frozenset(
     {
         "activity_id",
         "activity_name",
-        "baseline_photos",
         "center_lat",
         "center_lng",
         "completion_rule",
@@ -44,16 +43,13 @@ OUTPUT_REQUIRED_FIELDS = frozenset(
         "mid_idx",
         "name",
         "provenance",
-        "quest_blurb",
         "region",
         "replay",
         "route",
         "slug",
         "subtitle",
-        "svg",
         "theme",
         "type",
-        "visual_source",
         "xp",
     }
 )
@@ -237,7 +233,6 @@ def compare_regeneration(root: Path, python: Path) -> dict[str, Any]:
         for relative in build_files():
             shutil.copy2(root / relative, workspace / relative)
         shutil.copytree(root / "route_sources", workspace / "route_sources")
-        (workspace / "cards").mkdir()
         (workspace / "app/src/data/generated").mkdir(parents=True)
         (workspace / "app/public/data/routes").mkdir(parents=True)
 
@@ -282,33 +277,11 @@ def compare_regeneration(root: Path, python: Path) -> dict[str, Any]:
                 + ", ".join(mismatches[:20])
             )
 
-        cards = sorted((workspace / "cards").glob("*.png"))
-        if len(cards) != len(expected_names):
-            raise VerificationError(
-                f"real-source build generated {len(cards)} share cards for "
-                f"{len(expected_names)} routes"
-            )
-        invalid_cards: list[str] = []
-        for card in cards:
-            with Image.open(card) as image:
-                extrema = image.convert("RGB").getextrema()
-                if (
-                    image.size != (1200, 630)
-                    or image.format != "PNG"
-                    or all(low == high for low, high in extrema)
-                ):
-                    invalid_cards.append(card.name)
-        if invalid_cards:
-            raise VerificationError("invalid generated share cards: " + ", ".join(invalid_cards))
-
         return {
             "workspace_kind": "isolated-temporary-copy",
             "build_exit_code": result.returncode,
             "compared_artifacts": [*compared, "app/public/data/routes/*.json"],
             "detail_files": len(expected_names),
-            "share_cards": len(cards),
-            "share_card_dimensions": [1200, 630],
-            "legacy_index_bytes": (workspace / "index.html").stat().st_size,
         }
 
 

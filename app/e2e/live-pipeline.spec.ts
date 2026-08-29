@@ -272,7 +272,6 @@ test.describe("real source to live provider pipeline", () => {
     await cp(path.join(repositoryRoot, "route_sources"), path.join(adminWorkspace, "route_sources"), {
       recursive: true,
     });
-    await mkdir(path.join(adminWorkspace, "cards"));
     await mkdir(path.join(adminWorkspace, "app/src/data/generated"), { recursive: true });
     await mkdir(path.join(adminWorkspace, "app/public/data/routes"), { recursive: true });
     await cp(

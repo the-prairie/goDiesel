@@ -81,6 +81,8 @@ def test_build_pipeline_emits_react_route_artifact():
     assert "'replay': build_replay_metadata(" in build
     assert "if route.get('lifecycle', 'completed') == 'completed'" in build
     assert "react_route_payload" in build
+    assert "render_share_card" not in build
+    assert "template_html" not in build
 
 
 def test_representative_route_has_generated_reviewed_curation():
