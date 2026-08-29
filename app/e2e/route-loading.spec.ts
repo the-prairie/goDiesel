@@ -59,6 +59,10 @@ test("imported Strava route opens as a discovered guide with replay", async ({ p
   await expect(page.getByText("28.5 km", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("247 m", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Story chapters" })).toBeVisible();
+  await expect(page.getByText("The imported route", { exact: true })).toBeVisible();
+  await expect(page.getByText("The route memory", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Explore the imported route in motion." })).toBeVisible();
+  await expect(page.getByText(/The activity ends/)).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Cinematic replay", exact: true })).toHaveAttribute(
     "href",
     `#/replay/${importedRouteSlug}?from=${encodeURIComponent(`/routes/${importedRouteSlug}`)}`,

@@ -100,4 +100,15 @@ describe("route story chapters", () => {
   it("does not present start or finish chapters without recorded GPS geometry", () => {
     expect(routeStoryChapters(route({ route: [] }))).toEqual([]);
   });
+
+  it("describes imported geometry without inventing a completed activity", () => {
+    const chapters = routeStoryChapters(route({ lifecycle: "discovered" }));
+
+    expect(chapters[0]?.body).toBe(
+      "The imported run route begins in Kyoto, Japan on August 13, 2026.",
+    );
+    expect(chapters.at(-1)?.body).toBe(
+      "The imported route closes after 10.0 km and 420 m of source-recorded climbing.",
+    );
+  });
 });

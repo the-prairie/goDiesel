@@ -57,6 +57,7 @@ export function RouteStoryView({
   const title = routeStoryTitle(route);
   const premise = routeStoryPremise(route);
   const summit = highestPoint(route);
+  const isCompleted = route.lifecycle === "completed";
   const satelliteRoute = useMemo<RouteSummary>(() => ({
     ...route,
     trace: route.route,
@@ -115,7 +116,7 @@ export function RouteStoryView({
           <p className="max-w-[42vw] truncate font-editorial text-lg leading-none">{title}</p>
         </div>
         {route.replay.replayEligible ? (
-          <Button asChild className="bg-coral text-white hover:bg-coral-hover">
+          <Button asChild className="bg-forest text-white hover:bg-forest/90">
             <Link to={replayHref}>
               <Play aria-hidden="true" />
               <span className="hidden sm:inline">Cinematic replay</span>
@@ -159,10 +160,10 @@ export function RouteStoryView({
           <h1 className="mt-3 max-w-5xl font-editorial text-5xl font-medium leading-[0.92] sm:text-6xl lg:text-7xl">
             {title}
           </h1>
-          <p className="mt-5 text-micro font-semibold uppercase text-[#ffd8e8]">
+          <p className="mt-5 text-micro font-semibold uppercase text-white/70">
             Editorial premise
           </p>
-          <p className="mt-2 max-w-2xl font-editorial text-xl italic leading-7 text-[#ffd8e8] sm:text-2xl">
+          <p className="mt-2 max-w-2xl font-editorial text-xl italic leading-7 text-white/85 sm:text-2xl">
             {premise}
           </p>
           <dl className="mt-7 flex flex-wrap gap-x-7 gap-y-3 text-control font-semibold">
@@ -189,12 +190,14 @@ export function RouteStoryView({
         className="grid gap-8 border-b border-line px-5 py-14 sm:px-10 lg:grid-cols-[minmax(0,1.25fr)_minmax(22rem,0.75fr)] lg:gap-16 lg:px-[max(4rem,calc((100vw-72rem)/2))] lg:py-20"
       >
         <div>
-          <p className="text-caption font-semibold uppercase text-coral">The route memory</p>
+          <p className="text-caption font-semibold uppercase text-forest">
+            {isCompleted ? "The route memory" : "The imported route"}
+          </p>
           <blockquote className="mt-4 max-w-3xl font-editorial text-3xl leading-tight text-ink sm:text-4xl">
             {route.curation.editorialNote || premise}
           </blockquote>
           <p className="mt-4 text-caption text-ink-muted">
-            Editorial context
+            {isCompleted ? "Editorial context" : "Source context"}
           </p>
         </div>
         <dl className="grid grid-cols-3 self-center border-y border-line">
@@ -274,14 +277,18 @@ export function RouteStoryView({
 
       <section className="grid items-center gap-8 bg-[#163b36] px-5 py-16 text-white sm:px-10 lg:grid-cols-[minmax(0,1fr)_auto] lg:px-[max(4rem,calc((100vw-72rem)/2))] lg:py-24">
         <div>
-          <p className="text-caption font-semibold uppercase text-[#ffd0e3]">Leave the page behind</p>
-          <h2 className="mt-3 font-editorial text-4xl sm:text-5xl">Fly the route as it happened.</h2>
+          <p className="text-caption font-semibold uppercase text-white/70">Leave the page behind</p>
+          <h2 className="mt-3 font-editorial text-4xl sm:text-5xl">
+            {isCompleted ? "Fly the route as it happened." : "Explore the imported route in motion."}
+          </h2>
           <p className="mt-4 max-w-2xl text-body leading-7 text-white/70">
-            Follow the recorded line through terrain, time, elevation, and the chapters of the day.
+            {isCompleted
+              ? "Follow the recorded line through terrain, time, elevation, and the chapters of the day."
+              : "Follow the imported line through terrain, elevation, and its source-backed chapters."}
           </p>
         </div>
         {route.replay.replayEligible ? (
-          <Button asChild size="lg" className="bg-coral text-white hover:bg-coral-hover">
+          <Button asChild size="lg" className="bg-forest text-white hover:bg-forest/90">
             <Link to={replayHref}>
               <Compass aria-hidden="true" /> Enter cinematic replay <ArrowRight aria-hidden="true" />
             </Link>

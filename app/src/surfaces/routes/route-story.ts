@@ -30,13 +30,16 @@ export function routeStoryChapters(route: QuestRoute): RouteStoryChapter[] {
   const start = points[0];
   const finish = points.at(-1);
   const totalDistanceM = Math.max(route.distanceKm * 1_000, finish?.d ?? 0);
+  const isCompleted = route.lifecycle === "completed";
   const chapters: RouteStoryChapter[] = [];
   if (start) {
     chapters.push({
       id: "recorded-start",
       kind: "start",
       title: "The line begins",
-      body: `The recorded ${route.type.toLowerCase()} starts in ${route.region}${route.date ? ` on ${formatRouteDate(route.date)}` : ""}.`,
+      body: isCompleted
+        ? `The recorded ${route.type.toLowerCase()} starts in ${route.region}${route.date ? ` on ${formatRouteDate(route.date)}` : ""}.`
+        : `The imported ${route.type.toLowerCase()} route begins in ${route.region}${route.date ? ` on ${formatRouteDate(route.date)}` : ""}.`,
       evidence: "recorded",
       distanceM: 0,
       elevationM: start?.elev,
@@ -81,7 +84,9 @@ export function routeStoryChapters(route: QuestRoute): RouteStoryChapter[] {
       id: "recorded-finish",
       kind: "finish",
       title: "The recording closes",
-      body: `The activity ends after ${route.distanceKm.toFixed(1)} km and ${route.elevationGainM.toLocaleString()} m of recorded climbing.`,
+      body: isCompleted
+        ? `The activity ends after ${route.distanceKm.toFixed(1)} km and ${route.elevationGainM.toLocaleString()} m of recorded climbing.`
+        : `The imported route closes after ${route.distanceKm.toFixed(1)} km and ${route.elevationGainM.toLocaleString()} m of source-recorded climbing.`,
       evidence: "recorded",
       distanceM: totalDistanceM,
       elevationM: finish.elev,
