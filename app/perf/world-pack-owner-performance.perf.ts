@@ -263,6 +263,8 @@ test("meets the Core World Pack owner-Mac performance gate", async ({ browser })
     const externalRequests = await blockProviders(page);
     const startedAt = performance.now();
     const { canvas } = await waitForWorld(page, route.routeSlug);
+    const packId = await canvas.getAttribute("data-world-pack-id");
+    expect(packId).toMatch(/^wp_[a-f0-9]{64}$/);
     const readyWallMs = performance.now() - startedAt;
     const snapshot = await runtimeSnapshot(page);
     const navigation = await page.evaluate(() =>
@@ -290,6 +292,7 @@ test("meets the Core World Pack owner-Mac performance gate", async ({ browser })
     expect(externalRequests).toEqual([]);
     worlds.push({
       ...route,
+      packId,
       firstMeaningfulMs,
       physicalReadyMs,
       quantizedColorBins: colorBins,

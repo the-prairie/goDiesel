@@ -29,16 +29,17 @@
     {
       "routeSlug": "17665674778",
       "worldId": "tokyo-urban",
-      "firstMeaningfulMs": 702.0999999940395,
-      "physicalReadyMs": 1953.699999988079,
-      "quantizedColorBins": 140,
+      "packId": "wp_82e3f27f51154a24a7000bf1a1b4ace6efed81a5312b83dac96744c14724d4a3",
+      "firstMeaningfulMs": 571.0999999940395,
+      "physicalReadyMs": 1547.5999999940395,
+      "quantizedColorBins": 144,
       "webglRenderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
       "frames": {
         "sampleDurationMs": 8000,
         "frameCount": 961,
         "p50Ms": 8.300000000000182,
         "p95Ms": 10,
-        "p99Ms": 10.299999999999272,
+        "p99Ms": 10.199999999999818,
         "maximumMs": 10.400000000000546,
         "over33Ms": 0
       },
@@ -52,18 +53,19 @@
     {
       "routeSlug": "15573295095",
       "worldId": "banff-mountain",
-      "firstMeaningfulMs": 676.7000000178814,
-      "physicalReadyMs": 970,
-      "quantizedColorBins": 142,
+      "packId": "wp_c342858c2e11f9c4d82a1853f76117b2b092e6a57b706a59eb3355684098f4f5",
+      "firstMeaningfulMs": 481.69999998807907,
+      "physicalReadyMs": 742.0999999940395,
+      "quantizedColorBins": 144,
       "webglRenderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
       "frames": {
         "sampleDurationMs": 8000,
-        "frameCount": 957,
+        "frameCount": 961,
         "p50Ms": 8.300000000000182,
-        "p95Ms": 10,
-        "p99Ms": 10.300000000000182,
-        "maximumMs": 33.09999999999991,
-        "over33Ms": 1
+        "p95Ms": 9.900000000000091,
+        "p99Ms": 10.299999999999727,
+        "maximumMs": 10.400000000000091,
+        "over33Ms": 0
       },
       "webgl": {
         "activeContexts": 1,
@@ -75,17 +77,18 @@
     {
       "routeSlug": "6496900063",
       "worldId": "ucluelet-coastal",
-      "firstMeaningfulMs": 651.5999999940395,
-      "physicalReadyMs": 950.3999999761581,
-      "quantizedColorBins": 108,
+      "packId": "wp_4815261602b01da51ca56651ed886fadf7fcf989c8ab6485469515417b8d1eac",
+      "firstMeaningfulMs": 502.10000002384186,
+      "physicalReadyMs": 788.9000000059605,
+      "quantizedColorBins": 150,
       "webglRenderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
       "frames": {
         "sampleDurationMs": 8000,
         "frameCount": 961,
         "p50Ms": 8.300000000000182,
-        "p95Ms": 10.199999999999818,
-        "p99Ms": 10.399999999999636,
-        "maximumMs": 10.400000000000546,
+        "p95Ms": 9.399999999999636,
+        "p99Ms": 10,
+        "maximumMs": 10.399999999999636,
         "over33Ms": 0
       },
       "webgl": {
@@ -100,14 +103,14 @@
     "warmupWorldEntries": 3,
     "measuredCycles": 3,
     "worldEntriesPerCycle": 3,
-    "baselineUsedBytes": 29492932,
+    "baselineUsedBytes": 29992916,
     "cycleSettledUsedBytes": [
-      30684068,
-      31652708,
-      32091008
+      30876728,
+      31798348,
+      32440512
     ],
-    "settledUsedBytes": 32091008,
-    "settledGrowthRatio": 0.08809147900249456,
+    "settledUsedBytes": 32440512,
+    "settledGrowthRatio": 0.08160580318365844,
     "providerRequests": 0
   }
 }

@@ -20,7 +20,7 @@
     {
       "routeSlug": "17665674778",
       "worldId": "tokyo-urban",
-      "packId": "wp_553ad1d779cb13cf0d1e6d0dc85f2b8cdf17f37963aa58edef9acbcd4f3dc306",
+      "packId": "wp_82e3f27f51154a24a7000bf1a1b4ace6efed81a5312b83dac96744c14724d4a3",
       "timelineId": "route-teaser-45s-v1",
       "durationSeconds": 45,
       "framesPerSecond": 24,
@@ -30,35 +30,35 @@
       "samples": [
         {
           "seconds": 0,
-          "sha256": "ccfc25ca5666524d5d8c4c2e1249a1b6b67ed077bbf8a424bd0c742b886ef990",
-          "quantizedColorBins": 92
+          "sha256": "c43f9e335e39732576a795bd1201e1d2f82f2a003c96891744b934d88ce99125",
+          "quantizedColorBins": 93
         },
         {
           "seconds": 11.25,
-          "sha256": "6fe925be7b87ffeaaef575815dcb792a39e368d0c2df76bfb711c26eb959cbd7",
-          "quantizedColorBins": 85
+          "sha256": "5d2528a3a02c21a2161a5e151ea7a3813dcdda7d356a66f418cfe643d3d3c72a",
+          "quantizedColorBins": 86
         },
         {
           "seconds": 22.5,
-          "sha256": "cfd167adfd23016e20cba6420e9d1b40e25adb056532465b5a09cd220857b5fe",
+          "sha256": "ad097281bbe0b28692f764997ed387ebefb12bb39b11dcc0084a5298b21aafdd",
           "quantizedColorBins": 87
         },
         {
           "seconds": 33.75,
-          "sha256": "978ef12a5b4bd511e340dac95150cddbcdc0329da8c1a04dd3d6bfa00bef2717",
-          "quantizedColorBins": 85
+          "sha256": "04a1173fcc2d6a594b728e1f8b7c6a2e0b39e3c2e834f4ce7e058b512fd022c1",
+          "quantizedColorBins": 88
         },
         {
           "seconds": 44.958333,
-          "sha256": "9b4471c4f2ceb67376c9bc241d98edfd5ac880be5f6ef5fbfb0490f4f42a5b76",
-          "quantizedColorBins": 89
+          "sha256": "362529ca8247c656c0c08331ccf6a37d332876f08d2e52c6bf737c0f7eccf3e8",
+          "quantizedColorBins": 91
         }
       ],
       "outputs": [
         {
           "name": "full-route-film.mp4",
-          "byteSize": 53690159,
-          "sha256": "cb43249b07b8dc2b5b9d80a53e674e332f5be2709a8d06c058b0d19f7d42d93d",
+          "byteSize": 54029492,
+          "sha256": "2ed6b9e8952528eb801f125aa0120a65c0549ee481373ed8944cacc05e4a00a4",
           "media": {
             "durationSeconds": 45,
             "videoCodec": "h264",
@@ -70,8 +70,8 @@
         },
         {
           "name": "landscape-teaser.mp4",
-          "byteSize": 22162938,
-          "sha256": "5ec8b07e61069e27de577ca7cef4a40005fff95e93f43a7975a64b39f55595ea",
+          "byteSize": 22351542,
+          "sha256": "5ae89b9706cfa8c2687a8b5e694f17049f6a33a7feb93858f8dc17cecc56fa3a",
           "media": {
             "durationSeconds": 15,
             "videoCodec": "h264",
@@ -83,8 +83,8 @@
         },
         {
           "name": "vertical-teaser.mp4",
-          "byteSize": 21683585,
-          "sha256": "13b757516c63657b9f69ae47e9aff019fa773a8253aceb8ae19c18afee147cdf",
+          "byteSize": 21908578,
+          "sha256": "4fb4ee80b6591a702a6653ee8973be762667fc0c18ded58c0e00baff333e4a56",
           "media": {
             "durationSeconds": 15,
             "videoCodec": "h264",
@@ -96,25 +96,25 @@
         },
         {
           "name": "poster-1.png",
-          "byteSize": 351449,
-          "sha256": "ccfc25ca5666524d5d8c4c2e1249a1b6b67ed077bbf8a424bd0c742b886ef990"
+          "byteSize": 340371,
+          "sha256": "c43f9e335e39732576a795bd1201e1d2f82f2a003c96891744b934d88ce99125"
         },
         {
           "name": "poster-2.png",
-          "byteSize": 309687,
-          "sha256": "cfd167adfd23016e20cba6420e9d1b40e25adb056532465b5a09cd220857b5fe"
+          "byteSize": 297585,
+          "sha256": "ad097281bbe0b28692f764997ed387ebefb12bb39b11dcc0084a5298b21aafdd"
         },
         {
           "name": "poster-3.png",
-          "byteSize": 1082635,
-          "sha256": "8e3947a6d2a3044d2c78a37cc81987bf61bc7b46fbd1ecbd090c6902ed3bd349"
+          "byteSize": 1079394,
+          "sha256": "14a94c9a58422f156f6394e8ccc6e6e71af7b1609c7a11d4c3258fb251beebfe"
         }
       ]
     },
     {
       "routeSlug": "15573295095",
       "worldId": "banff-mountain",
-      "packId": "wp_2736597e3e58b61260ff12282510d4ed2e76b3445845f2171d0f5b8baabf284c",
+      "packId": "wp_c342858c2e11f9c4d82a1853f76117b2b092e6a57b706a59eb3355684098f4f5",
       "timelineId": "route-teaser-45s-v1",
       "durationSeconds": 45,
       "framesPerSecond": 24,
@@ -124,35 +124,35 @@
       "samples": [
         {
           "seconds": 0,
-          "sha256": "c67444de3a86747a3e74c44cfbc64e0478afb4ce6fe43018d68d3379651b6180",
-          "quantizedColorBins": 101
+          "sha256": "4fa0fda76b5fc8f207bfbb69eff78b76c419fa01affb526b55b5f62becf69c90",
+          "quantizedColorBins": 86
         },
         {
           "seconds": 11.25,
-          "sha256": "f96416292f3e4a8c12243d66eb24a770f423fd34a404a942bff5ee696c8a958c",
-          "quantizedColorBins": 91
+          "sha256": "24000ec1583d1fe7d73bcc43eb3876227dc42739d8244f836cac5dc127784149",
+          "quantizedColorBins": 95
         },
         {
           "seconds": 22.5,
-          "sha256": "b2c2e9341eed7436e9db7829ceb44695c17625fa783eab9e0af3ea902fa862ea",
-          "quantizedColorBins": 81
+          "sha256": "61bee1c73c49f70006a24df5bbd04cb820007f83d2a0ae9b859e00f5a7cb6597",
+          "quantizedColorBins": 74
         },
         {
           "seconds": 33.75,
-          "sha256": "b8d340e2394b6f46e794bd391fc00d2221d286a74643b7b2920d58b1978d0514",
-          "quantizedColorBins": 82
+          "sha256": "1e20f743437d3bfdfdeb297e7bf36b7fa20b129146ab77736d5079458db6f249",
+          "quantizedColorBins": 79
         },
         {
           "seconds": 44.958333,
-          "sha256": "872d50463fb7a5b3de2ff53fe3e7b7970d2dbc5b413451b163894f60e5b033d3",
-          "quantizedColorBins": 87
+          "sha256": "5fa92bf697cea04aa73170a0a9261bf7c5240d98c5476b98dfce07e6d7406703",
+          "quantizedColorBins": 82
         }
       ],
       "outputs": [
         {
           "name": "full-route-film.mp4",
-          "byteSize": 44551058,
-          "sha256": "ec96d6a59eb7faa75ab92cd2a12aaa33ae1d3925196a38da02d94c08e11e16f1",
+          "byteSize": 29168874,
+          "sha256": "d39b332ecd4ab777d0ae9955bbaa946d204643c61e06dccad10f2e90aecc03d3",
           "media": {
             "durationSeconds": 45,
             "videoCodec": "h264",
@@ -164,8 +164,8 @@
         },
         {
           "name": "landscape-teaser.mp4",
-          "byteSize": 18528423,
-          "sha256": "d3706dfe05914c6b79896f3fdfe4b27496a31546112201d1e08fda7128f20fe1",
+          "byteSize": 12867034,
+          "sha256": "63f0edba81ffa124ab37b331f85823c931a8feb09335cb7e6ab06ca0857a99ba",
           "media": {
             "durationSeconds": 15,
             "videoCodec": "h264",
@@ -177,8 +177,8 @@
         },
         {
           "name": "vertical-teaser.mp4",
-          "byteSize": 17020764,
-          "sha256": "166489db3bfa32288ca427127d804e4964aa698cee67a0445a1450f18dcdeb7f",
+          "byteSize": 11794761,
+          "sha256": "a9382fd06aa672909572acc19b4be01389679b38b5175a0786ae8d1ab7a77e32",
           "media": {
             "durationSeconds": 15,
             "videoCodec": "h264",
@@ -190,25 +190,25 @@
         },
         {
           "name": "poster-1.png",
-          "byteSize": 1192295,
-          "sha256": "c67444de3a86747a3e74c44cfbc64e0478afb4ce6fe43018d68d3379651b6180"
+          "byteSize": 847844,
+          "sha256": "4fa0fda76b5fc8f207bfbb69eff78b76c419fa01affb526b55b5f62becf69c90"
         },
         {
           "name": "poster-2.png",
-          "byteSize": 939657,
-          "sha256": "b2c2e9341eed7436e9db7829ceb44695c17625fa783eab9e0af3ea902fa862ea"
+          "byteSize": 742141,
+          "sha256": "61bee1c73c49f70006a24df5bbd04cb820007f83d2a0ae9b859e00f5a7cb6597"
         },
         {
           "name": "poster-3.png",
-          "byteSize": 880520,
-          "sha256": "4037250b2502336aa6a9f93459564ed674c5f34579af45b9676f8a62b7ef65fb"
+          "byteSize": 661160,
+          "sha256": "c7e1c0ed0f353180b1c47b6919f89cef303c07b0d425be5389d0df79e2df0039"
         }
       ]
     },
     {
       "routeSlug": "6496900063",
       "worldId": "ucluelet-coastal",
-      "packId": "wp_b1bfebd08222ec878f781bb6e1eeac7b021ce91b5e7efcc274cea5f0be7c191e",
+      "packId": "wp_4815261602b01da51ca56651ed886fadf7fcf989c8ab6485469515417b8d1eac",
       "timelineId": "route-teaser-45s-v1",
       "durationSeconds": 45,
       "framesPerSecond": 24,
@@ -218,35 +218,35 @@
       "samples": [
         {
           "seconds": 0,
-          "sha256": "130dcc4224aa6b6aaeb8b067809deae0691dd7b5f94e5c67522971c11e7e3c0e",
-          "quantizedColorBins": 123
+          "sha256": "41a4a79b4de5bf4ef7bd94ba012d3a774dbd9c289b3db5fde75657c0d4aee681",
+          "quantizedColorBins": 118
         },
         {
           "seconds": 11.25,
-          "sha256": "01bdeac1d7cb592803a27cef234fadc28b62ce63aef6967e5fe1c2afdd9db964",
-          "quantizedColorBins": 110
+          "sha256": "0e04a233af236b16866c35e3c08a6ab96abab99fb984e09aaab5302f419ed9e6",
+          "quantizedColorBins": 106
         },
         {
           "seconds": 22.5,
-          "sha256": "8863853209256247adf59c1b0767638542cf34d5e24792e3658aa478ee13f634",
+          "sha256": "0d6e9e09e525cf8fb5779ceb438d9c056c93fec9e21b47239e825970fb4bce2a",
           "quantizedColorBins": 114
         },
         {
           "seconds": 33.75,
-          "sha256": "e517f2ea79a4abfa6f0ff9a5b19e5d30e31eec3907b0158a7d7de31467112c56",
-          "quantizedColorBins": 104
+          "sha256": "7ab329b274a40c61556cc20f14daab9a09d61f6d06e444aee45567196ea5aa08",
+          "quantizedColorBins": 100
         },
         {
           "seconds": 44.958333,
-          "sha256": "26630b763ae7a1e2a15c2d2375d1214fe570573a80b311fb1204eb95971e2a93",
-          "quantizedColorBins": 110
+          "sha256": "e8480cd4b30c49525d2bddcaac5e6fbf970549997ce2e3eebac58837a234ec90",
+          "quantizedColorBins": 108
         }
       ],
       "outputs": [
         {
           "name": "full-route-film.mp4",
-          "byteSize": 31420405,
-          "sha256": "0b7d2f9f21b20e39457e3e6b4f12f1f9349dfae31590169ae7d99ab3ced8606b",
+          "byteSize": 40804378,
+          "sha256": "af3c13f5321e38fc15f9e76433dbe13a4fa50c843d625e8a10ac6b94edce983c",
           "media": {
             "durationSeconds": 45,
             "videoCodec": "h264",
@@ -258,8 +258,8 @@
         },
         {
           "name": "landscape-teaser.mp4",
-          "byteSize": 13298045,
-          "sha256": "6172e7d36fef3a1cf3d68eed484beb9824e4fcd88c51c21323b1e44c12b09cad",
+          "byteSize": 19028633,
+          "sha256": "b28ca6e976b512f9cbcc598c702ae163b7d4655a1214750e4d60a60cb3c1de7c",
           "media": {
             "durationSeconds": 15,
             "videoCodec": "h264",
@@ -271,8 +271,8 @@
         },
         {
           "name": "vertical-teaser.mp4",
-          "byteSize": 13470038,
-          "sha256": "c082f1f9c1d3c1b5049ce4c7481d3eb2f4df508a34bec2dc1b23ccc81c1b6ea2",
+          "byteSize": 18508389,
+          "sha256": "a7b7d5f438c7f502e873d38dd39dd159215d70a5208df3fc2ee9baecfa3a72ec",
           "media": {
             "durationSeconds": 15,
             "videoCodec": "h264",
@@ -284,18 +284,18 @@
         },
         {
           "name": "poster-1.png",
-          "byteSize": 904701,
-          "sha256": "130dcc4224aa6b6aaeb8b067809deae0691dd7b5f94e5c67522971c11e7e3c0e"
+          "byteSize": 643990,
+          "sha256": "41a4a79b4de5bf4ef7bd94ba012d3a774dbd9c289b3db5fde75657c0d4aee681"
         },
         {
           "name": "poster-2.png",
-          "byteSize": 658573,
-          "sha256": "8863853209256247adf59c1b0767638542cf34d5e24792e3658aa478ee13f634"
+          "byteSize": 549404,
+          "sha256": "0d6e9e09e525cf8fb5779ceb438d9c056c93fec9e21b47239e825970fb4bce2a"
         },
         {
           "name": "poster-3.png",
-          "byteSize": 707123,
-          "sha256": "11cf0ffb43d2bf42c67b0204dd078b1ac8cb3bea25198ae7b172995498b293b4"
+          "byteSize": 582730,
+          "sha256": "c18c2098e8b9414d87388ba56b179d63b8fe019d8e0121c96af2a017bf5c187b"
         }
       ]
     }
