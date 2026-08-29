@@ -63,6 +63,67 @@ def _source_bytes(
         ) from error
 
 
+def _replace_pack(
+    pack: Path,
+    rebuilt: Path,
+    repository: Path,
+    world_id: str,
+    pack_id: str,
+) -> Path:
+    quarantine = repository / "quarantine" / world_id / f"{pack_id}.{uuid.uuid4().hex}"
+    quarantine.parent.mkdir(parents=True, exist_ok=True)
+    pack.chmod(0o755)
+    os.replace(pack, quarantine)
+    try:
+        rebuilt.chmod(0o755)
+        os.replace(rebuilt, pack)
+        WorldPackCompiler._seal(pack)
+        verify_pack(pack)
+    except Exception:
+        if pack.exists():
+            WorldPackCompiler._make_writable(pack)
+            shutil.rmtree(pack)
+        os.replace(quarantine, pack)
+        raise
+    return quarantine
+
+
+def _restore_from_content_store(
+    pack: Path,
+    repository: Path,
+    work_root: Path,
+    manifest: dict[str, object],
+) -> Path:
+    raw_artifacts = manifest.get("artifacts")
+    if not isinstance(raw_artifacts, list) or not raw_artifacts:
+        raise IntegrityError("repair manifest artifact inventory is incomplete")
+    restored = work_root / "content-inventory-restore"
+    restored.mkdir(parents=True)
+    shutil.copyfile(pack / "manifest.json", restored / "manifest.json")
+    shutil.copyfile(pack / "checksums.json", restored / "checksums.json")
+    (restored / "manifest.json").chmod(0o444)
+    (restored / "checksums.json").chmod(0o444)
+    store = ContentAddressedStore(repository / "objects")
+    for raw_artifact in raw_artifacts:
+        artifact = _object(raw_artifact, "manifest artifact")
+        logical_path = artifact.get("logicalPath")
+        digest = artifact.get("sha256")
+        byte_size = artifact.get("byteSize")
+        media_type = artifact.get("mediaType")
+        format_version = artifact.get("formatVersion")
+        if not all(
+            isinstance(value, str)
+            for value in (logical_path, digest, media_type, format_version)
+        ) or not isinstance(byte_size, int):
+            raise IntegrityError("repair manifest artifact record is incomplete")
+        store.materialize(
+            ObjectRecord(digest, byte_size, media_type, format_version),
+            restored / logical_path,
+        )
+    verify_pack(restored, require_directory_name=False)
+    return restored
+
+
 def repair_pack(pack: Path, repository: Path) -> RepairResult:
     try:
         health = verify_pack(pack)
@@ -75,18 +136,7 @@ def repair_pack(pack: Path, repository: Path) -> RepairResult:
     pack = pack.resolve()
     repository = repository.resolve()
     manifest = _object(strict_json_load(pack / "manifest.json"), "manifest")
-    source_inventory = _object(
-        strict_json_load(pack / "sources/inventory.json"), "source inventory"
-    )
     validate_document("manifest", manifest)
-    validate_document("source-inventory", source_inventory)
-    raw_sources = source_inventory.get("sources")
-    if not isinstance(raw_sources, list) or len(raw_sources) != 1:
-        raise IntegrityError(
-            "foundation repair requires exactly one retained strict route source"
-        )
-    source = _object(raw_sources[0], "retained source")
-    route_source = _source_bytes(pack, repository, source)
     pack_id = manifest.get("packId")
     world_id = manifest.get("worldId")
     quality = manifest.get("quality")
@@ -97,37 +147,68 @@ def repair_pack(pack: Path, repository: Path) -> RepairResult:
         raise IntegrityError("repair manifest identity is invalid")
     if pack.name != pack_id:
         raise IntegrityError("repair refuses a pack outside its identity path")
-    offsets = manifest_configuration.get("deliberateMissingCellOffsets")
-    if not isinstance(offsets, list) or any(
-        not isinstance(offset, list)
-        or len(offset) != 2
-        or any(isinstance(value, bool) or not isinstance(value, int) for value in offset)
-        for offset in offsets
-    ):
-        raise IntegrityError("repair configuration has invalid missing-cell offsets")
-    configuration = BuildConfiguration(
-        world_id=world_id,
-        acquired_at=str(source.get("acquiredAt")),
-        quality=str(quality),
-        corridor_radius_m=int(manifest_configuration["corridorRadiusM"]),
-        exploration_radius_m=int(manifest_configuration["explorationRadiusM"]),
-        quality_cell_size_m=int(manifest_configuration["qualityCellSizeM"]),
-        source_uri=str(source.get("sourceUri")),
-        source_date=(
-            str(source["sourceDate"]) if source.get("sourceDate") is not None else None
-        ),
-        licence=str(source.get("licence")),
-        attribution=str(source.get("attribution")),
-        deliberate_missing_cell_offsets=tuple(
-            (int(offset[0]), int(offset[1])) for offset in offsets
-        ),
-    )
-
     work_root = repository / ".repair" / uuid.uuid4().hex
-    source_path = work_root / "retained-route-detail.json"
-    source_path.parent.mkdir(parents=True)
-    source_path.write_bytes(route_source)
+    work_root.mkdir(parents=True)
     try:
+        try:
+            restored = _restore_from_content_store(
+                pack, repository, work_root, manifest
+            )
+        except IntegrityError as content_error:
+            source_inventory = _object(
+                strict_json_load(pack / "sources/inventory.json"),
+                "source inventory",
+            )
+            validate_document("source-inventory", source_inventory)
+            raw_sources = source_inventory.get("sources")
+            if not isinstance(raw_sources, list) or len(raw_sources) != 1:
+                raise IntegrityError(
+                    "repair is blocked because retained content objects are damaged and this pack has no single-source deterministic rebuild path"
+                ) from content_error
+        else:
+            quarantine = _replace_pack(
+                pack, restored, repository, world_id, pack_id
+            )
+            return RepairResult(pack_id, pack, True, quarantine)
+
+        source = _object(raw_sources[0], "retained source")
+        route_source = _source_bytes(pack, repository, source)
+        source_path = work_root / "retained-route-detail.json"
+        source_path.write_bytes(route_source)
+        source_path.chmod(0o444)
+        offsets = manifest_configuration.get("deliberateMissingCellOffsets")
+        if not isinstance(offsets, list) or any(
+            not isinstance(offset, list)
+            or len(offset) != 2
+            or any(
+                isinstance(value, bool) or not isinstance(value, int)
+                for value in offset
+            )
+            for offset in offsets
+        ):
+            raise IntegrityError(
+                "repair configuration has invalid missing-cell offsets"
+            )
+        configuration = BuildConfiguration(
+            world_id=world_id,
+            acquired_at=str(source.get("acquiredAt")),
+            quality=str(quality),
+            corridor_radius_m=int(manifest_configuration["corridorRadiusM"]),
+            exploration_radius_m=int(manifest_configuration["explorationRadiusM"]),
+            quality_cell_size_m=int(manifest_configuration["qualityCellSizeM"]),
+            source_uri=str(source.get("sourceUri")),
+            source_date=(
+                str(source["sourceDate"])
+                if source.get("sourceDate") is not None
+                else None
+            ),
+            licence=str(source.get("licence")),
+            attribution=str(source.get("attribution")),
+            deliberate_missing_cell_offsets=tuple(
+                (int(offset[0]), int(offset[1])) for offset in offsets
+            ),
+        )
+
         rebuilt = WorldPackCompiler(work_root / "repository").build_route(
             source_path, configuration
         )
@@ -149,21 +230,9 @@ def repair_pack(pack: Path, repository: Path) -> RepairResult:
                     format_version="repair-v1",
                 )
 
-        quarantine = repository / "quarantine" / world_id / f"{pack_id}.{uuid.uuid4().hex}"
-        quarantine.parent.mkdir(parents=True, exist_ok=True)
-        pack.chmod(0o755)
-        os.replace(pack, quarantine)
-        try:
-            rebuilt.path.chmod(0o755)
-            os.replace(rebuilt.path, pack)
-            WorldPackCompiler._seal(pack)
-            verify_pack(pack)
-        except Exception:
-            if pack.exists():
-                WorldPackCompiler._make_writable(pack)
-                shutil.rmtree(pack)
-            os.replace(quarantine, pack)
-            raise
+        quarantine = _replace_pack(
+            pack, rebuilt.path, repository, world_id, pack_id
+        )
         return RepairResult(pack_id, pack, True, quarantine)
     finally:
         if work_root.exists():

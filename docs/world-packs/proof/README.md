@@ -4,3 +4,6 @@
 The command loads the active sealed packs, repeats every retained navigation edge three times at no more than 2 m sample spacing, and simulates 600 seconds of fixed-timestep free roam in each world.
 It fails on route grounding error above 1 cm, undeclared jumps, structure intersections, missing endpoints, excessive step transitions, ten seconds of persistent blocking, or failure to leave the guided corridor.
 The committed trace hashes make a changed physical result visible even when aggregate counts still pass.
+
+`durability-proof.json` is the checked result of `python -m scripts.prove_world_pack_durability`.
+The command removes provider credentials, blocks socket connections, exports each pack twice, imports it into a temporary clean repository, verifies current and previous schema versions without mutation, tampers with terrain collision, repairs from the imported content inventory, and verifies the original identity again.

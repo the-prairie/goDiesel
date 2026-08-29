@@ -1,0 +1,67 @@
+{
+  "networkDisabled": true,
+  "providerCredentialsRemoved": [
+    "CESIUM_ION_ACCESS_TOKEN",
+    "GOOGLE_MAPS_API_KEY",
+    "MAPBOX_ACCESS_TOKEN",
+    "MAPBOX_TOKEN",
+    "VITE_GOOGLE_MAPS_API_KEY"
+  ],
+  "schemaVersion": 1,
+  "worlds": [
+    {
+      "archiveByteSize": 185408089,
+      "archiveExportsByteIdentical": true,
+      "archiveSha256": "67e75e5555a62ff39e9da03033be9233cb76715392d5ba2d62d5262342427a06",
+      "cleanRoomImportedPackId": "wp_ca9a3553696099dfbae8d8ae74a19a21d99bcda2cfd9fd4981fd3d0acf26500e",
+      "currentMigrationChanged": false,
+      "packId": "wp_ca9a3553696099dfbae8d8ae74a19a21d99bcda2cfd9fd4981fd3d0acf26500e",
+      "previousMigrationChanged": false,
+      "previousReadablePackId": "wp_3a23cbaa71d49c450d8f1b079f888a225d206656bea9641656991f74a59d0f3b",
+      "providerRequests": 0,
+      "repairQuarantinedDamage": true,
+      "repairedPackId": "wp_ca9a3553696099dfbae8d8ae74a19a21d99bcda2cfd9fd4981fd3d0acf26500e",
+      "requiredRuntimeArtifactCount": 105,
+      "requiredRuntimeRequestsLocal": true,
+      "routeSlug": "17665674778",
+      "status": "complete",
+      "worldId": "tokyo-urban"
+    },
+    {
+      "archiveByteSize": 18613769,
+      "archiveExportsByteIdentical": true,
+      "archiveSha256": "94c8faf6427fb7f7bf552323ebd5fd921afd0ff2e59847d988344692925fad98",
+      "cleanRoomImportedPackId": "wp_2a0bfd9ec61d9bdaee6cc3cab5e3879e71a18da8a3d7e8e2147422cb983a0f48",
+      "currentMigrationChanged": false,
+      "packId": "wp_2a0bfd9ec61d9bdaee6cc3cab5e3879e71a18da8a3d7e8e2147422cb983a0f48",
+      "previousMigrationChanged": false,
+      "previousReadablePackId": "wp_2c02563ef8f3674ca08b88141e493290fcea12a80dea07678f6bd39fe24cf2b1",
+      "providerRequests": 0,
+      "repairQuarantinedDamage": true,
+      "repairedPackId": "wp_2a0bfd9ec61d9bdaee6cc3cab5e3879e71a18da8a3d7e8e2147422cb983a0f48",
+      "requiredRuntimeArtifactCount": 15,
+      "requiredRuntimeRequestsLocal": true,
+      "routeSlug": "15573295095",
+      "status": "complete",
+      "worldId": "banff-mountain"
+    },
+    {
+      "archiveByteSize": 9142780,
+      "archiveExportsByteIdentical": true,
+      "archiveSha256": "d5e629ead2174303229e9fade06c24461e707ebcb50c82a8ef06483384547c75",
+      "cleanRoomImportedPackId": "wp_c94d61b8bd53a3928ccd539370565169bd94d5f962c3bb4d3e21c1b81c032fb0",
+      "currentMigrationChanged": false,
+      "packId": "wp_c94d61b8bd53a3928ccd539370565169bd94d5f962c3bb4d3e21c1b81c032fb0",
+      "previousMigrationChanged": false,
+      "previousReadablePackId": "wp_465bc298bd0f525d2b73430b12b978e92cef9ae71d40b2c38ceb85d01117f326",
+      "providerRequests": 0,
+      "repairQuarantinedDamage": true,
+      "repairedPackId": "wp_c94d61b8bd53a3928ccd539370565169bd94d5f962c3bb4d3e21c1b81c032fb0",
+      "requiredRuntimeArtifactCount": 15,
+      "requiredRuntimeRequestsLocal": true,
+      "routeSlug": "6496900063",
+      "status": "complete",
+      "worldId": "ucluelet-coastal"
+    }
+  ]
+}

@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from world_packs.archive import export_pack, import_pack
 from world_packs.canonical import strict_json_load
 from world_packs.compiler import BuildConfiguration, WorldPackCompiler
 from world_packs.errors import IntegrityError, MigrationError
@@ -13,6 +14,7 @@ from world_packs.verification import verify_pack
 
 ROOT = Path(__file__).resolve().parent
 BANFF = ROOT / "app/public/data/routes/15573295095.json"
+WORLD_PACK_INDEX = ROOT / "app/public/world-packs/index.json"
 
 
 def build_pack(repository: Path):
@@ -130,6 +132,36 @@ def test_repair_is_a_noop_for_valid_pack(tmp_path: Path):
     assert result.repaired is False
     assert result.quarantined_path is None
     assert tree_bytes(built.path) == before
+
+
+def test_clean_room_import_repairs_multi_source_reference_pack(tmp_path: Path):
+    index = strict_json_load(WORLD_PACK_INDEX)
+    assert isinstance(index, dict)
+    entry = index["packs"]["15573295095"]
+    reference = (
+        ROOT
+        / "app/public/world-packs"
+        / entry["worldId"]
+        / entry["packId"]
+    )
+    archive = export_pack(reference, tmp_path / "banff.worldpack.zip")
+    repository = tmp_path / "clean-room-repository"
+    imported = import_pack(archive.path, repository)
+    inventory = strict_json_load(imported.path / "sources/inventory.json")
+    assert isinstance(inventory, dict)
+    assert len(inventory["sources"]) > 1
+    target = imported.path / "physics/terrain-collision.glb"
+    tamper(target)
+
+    repaired = repair_pack(imported.path, repository)
+
+    assert repaired.repaired is True
+    assert repaired.pack_id == entry["packId"]
+    assert repaired.quarantined_path is not None
+    assert (
+        repaired.quarantined_path / "physics/terrain-collision.glb"
+    ).read_bytes() == b"tampered"
+    assert verify_pack(repaired.path).packId == entry["packId"]
 
 
 def test_migration_registry_is_ordered_and_non_mutating():
