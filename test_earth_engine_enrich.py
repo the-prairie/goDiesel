@@ -1,3 +1,13 @@
+import sys
+from types import ModuleType, SimpleNamespace
+
+
+fake_ee = ModuleType("ee")
+fake_ee.Algorithms = SimpleNamespace()
+fake_ee.Image = None
+fake_ee.Reducer = SimpleNamespace(median=None)
+sys.modules["ee"] = fake_ee
+
 from scripts.route_intelligence import earth_engine_enrich
 
 
