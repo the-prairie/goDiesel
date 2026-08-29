@@ -67,16 +67,17 @@ def publish_annotations(checkout_root, activity_id, annotations):
     manifest["generated_at"] = generated_at
     staged.append((paths["manifest"], json.dumps(manifest, ensure_ascii=False)))
 
-    _write_all_atomic(staged)
+    _publish_staged_with_rollback(staged)
     return normalized
 
 
 def publish_curation(checkout_root, activity_id, curation):
     """Rewrite the generated artifacts for one route's curation.
 
-    Every file is staged before any file is replaced, so a failure part way
-    through cannot leave the manifest describing a guide the detail record does
-    not have.
+    Every file is staged before any file is replaced, and each replacement is
+    atomic. The pair is not a transaction: a process crash between replacements
+    can temporarily split the detail and manifest until the next publication or
+    full rebuild.
     """
     activity_id = str(activity_id)
     normalized = build_route_curation(curation or {})
@@ -109,7 +110,7 @@ def publish_curation(checkout_root, activity_id, curation):
     )
     staged.append((paths["manifest"], json.dumps(manifest, ensure_ascii=False)))
 
-    _write_all_atomic(staged)
+    _publish_staged_with_rollback(staged)
     return normalized
 
 
@@ -159,8 +160,8 @@ def _replace_route(routes, activity_id, apply_change, artifact):
     apply_change(matching[0])
 
 
-def _write_all_atomic(staged):
-    """Stage every file, then replace every file.
+def _publish_staged_with_rollback(staged):
+    """Stage every file and roll back completed replacements on failure.
 
     Replacement is the only step that mutates a published artifact, and each
     replace is atomic. Staging first keeps the failure window to the replace
@@ -177,5 +178,33 @@ def _write_all_atomic(staged):
             temporary.unlink(missing_ok=True)
         raise
 
-    for temporary, path in temporaries:
-        os.replace(temporary, path)
+    backups = []
+    replaced = []
+    try:
+        for _, path in temporaries:
+            backup = path.with_name(f".{path.name}.rollback")
+            backup.write_bytes(path.read_bytes())
+            backups.append((backup, path))
+
+        for temporary, path in temporaries:
+            os.replace(temporary, path)
+            replaced.append(path)
+    except Exception as publication_error:
+        rollback_error = None
+        for backup, path in reversed(backups):
+            if path not in replaced:
+                continue
+            try:
+                os.replace(backup, path)
+            except Exception as error:
+                rollback_error = error
+        if rollback_error is not None:
+            raise CurationPublishError(
+                "generated publication failed and could not be fully rolled back"
+            ) from publication_error
+        raise
+    finally:
+        for temporary, _ in temporaries:
+            temporary.unlink(missing_ok=True)
+        for backup, _ in backups:
+            backup.unlink(missing_ok=True)

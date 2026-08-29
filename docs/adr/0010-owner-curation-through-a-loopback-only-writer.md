@@ -24,9 +24,11 @@ to `mode: "read-only"` and renders curation from the bundled data. `admin.sh`
 starts the writer and the dev server together.
 
 A save validates the closed curation contract, writes `quests.json` atomically,
-and incrementally publishes the route's detail plus manifest preview. It restores
-the original `quests.json` if publication fails. Source-derived route changes
-still use the complete generator described in ADR-0003.
+then stages and individually replaces the route's detail plus manifest preview.
+It restores any generated file already replaced, and restores the original
+`quests.json`, if publication raises an error.
+Source-derived route changes still use the complete generator described in
+ADR-0003.
 
 ## Consequences
 
@@ -42,6 +44,9 @@ still use the complete generator described in ADR-0003.
   (400) requests against an isolated real-data workspace.
 - Cost: a save remains a synchronous local write, but touches only the two
   generated tiers that carry owner-authored curation (ADR-0003).
+- Known gap: the two generated-tier replacements are individually atomic but not
+  transactional as a pair; a process crash between them requires another
+  publication or a full rebuild to restore agreement.
 - Known gap: routes absent from `activities.csv` are dropped from the Admin
   summary, so an imported-GPX route cannot be curated in the UI.
 - Known gap: the origin check admits a literal `Origin: None`.

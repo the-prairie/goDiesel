@@ -49,8 +49,13 @@ backup with `ready` is fully restored.
   `pipeline_verification.py --rebuild` proves it by regenerating into a temporary
   workspace and byte-comparing every artifact.
 - The owner writer (`admin.py`) validates and saves source curation, then uses
-  `curation_publish.py` to atomically update the affected detail and summary
-  tiers. Its equality tests prove that this matches a full rebuild.
+  `curation_publish.py` to stage the affected detail and summary tiers before
+  replacing each file atomically. A failed replacement restores files already
+  replaced. Equality tests prove that a completed publication matches a full
+  rebuild, and fault injection proves the rollback path.
+- The two incremental replacements are not one transaction. A process crash
+  between them can temporarily split detail and summary until the next
+  publication or full rebuild.
 - Geometry and other source-derived changes still require a complete rebuild;
   curation and annotation edits use the bounded incremental publisher.
 - `build.py` is a module-level script with no `main()`; importing it executes the

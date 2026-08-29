@@ -7,6 +7,9 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
+
+import curation_publish
 
 from curation_publish import (
     CurationPublishError,
@@ -110,6 +113,35 @@ class CurationPublishTest(unittest.TestCase):
                 )
 
             self.assertEqual(_artifact_text(workspace), before)
+
+    def test_a_failed_second_replace_restores_every_artifact(self):
+        slug = _first_generated_slug()
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory) / "checkout"
+            _copy_workspace(workspace)
+            before = _artifact_text(workspace)
+            real_replace = curation_publish.os.replace
+            publication_replaces = 0
+
+            def fail_second_publication(source, destination):
+                nonlocal publication_replaces
+                if Path(source).name.endswith(".tmp"):
+                    publication_replaces += 1
+                    if publication_replaces == 2:
+                        raise OSError("injected second-replace failure")
+                return real_replace(source, destination)
+
+            with mock.patch.object(
+                curation_publish.os,
+                "replace",
+                side_effect=fail_second_publication,
+            ):
+                with self.assertRaisesRegex(OSError, "injected second-replace"):
+                    publish_curation(workspace, slug, REVIEWED_CURATION)
+
+            self.assertEqual(_artifact_text(workspace), before)
+            self.assertFalse(list(workspace.rglob("*.rollback")))
+            self.assertFalse(list(workspace.rglob("*.tmp")))
 
 
 class AnnotationPublishTest(unittest.TestCase):
