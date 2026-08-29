@@ -18,6 +18,7 @@ interface FilmPalette {
   terrainHigh: [number, number, number];
   terrainLow: [number, number, number];
   text: string;
+  water: string;
 }
 
 const PALETTES: Record<string, FilmPalette> = {
@@ -31,6 +32,7 @@ const PALETTES: Record<string, FilmPalette> = {
     terrainHigh: [181, 190, 148],
     terrainLow: [50, 90, 78],
     text: "#f5f1df",
+    water: "#285568",
   },
   "tokyo-urban": {
     background: "#17242b",
@@ -42,6 +44,7 @@ const PALETTES: Record<string, FilmPalette> = {
     terrainHigh: [137, 157, 143],
     terrainLow: [56, 83, 81],
     text: "#f6f3e8",
+    water: "#345f6d",
   },
   "ucluelet-coastal": {
     background: "#10272d",
@@ -53,6 +56,7 @@ const PALETTES: Record<string, FilmPalette> = {
     terrainHigh: [145, 171, 130],
     terrainLow: [37, 91, 78],
     text: "#f1f0df",
+    water: "#1e5f78",
   },
 };
 
@@ -67,6 +71,10 @@ interface Projection {
   scale: number;
   targetX: number;
   targetY: number;
+  targetZ: number;
+  upX: number;
+  upY: number;
+  upZ: number;
   width: number;
 }
 
@@ -76,21 +84,27 @@ function mixChannel(low: number, high: number, ratio: number) {
 
 function terrainColor(palette: FilmPalette, ratio: number, variation: number) {
   const value = Math.max(0, Math.min(1, ratio * 0.82 + variation * 0.18));
-  return `rgb(${palette.terrainLow.map((low, index) =>
-    mixChannel(low, palette.terrainHigh[index], value),
-  ).join(",")})`;
+  return `rgb(${palette.terrainLow
+    .map((low, index) => mixChannel(low, palette.terrainHigh[index], value))
+    .join(",")})`;
 }
 
-function project(projection: Projection, x: number, y: number) {
+function project(
+  projection: Projection,
+  x: number,
+  y: number,
+  z = projection.targetZ,
+) {
   const dx = x - projection.targetX;
   const dy = y - projection.targetY;
+  const dz = z - projection.targetZ;
   return {
     x:
       projection.centreX +
       (dx * projection.rightX + dy * projection.rightY) * projection.scale,
     y:
       projection.centreY -
-      (dx * projection.directionX + dy * projection.directionY) *
+      (dx * projection.upX + dy * projection.upY + dz * projection.upZ) *
         projection.scale,
   };
 }
@@ -108,7 +122,8 @@ function polygon(
 }
 
 function obstacleVisible(obstacle: WorldObstacle, projection: Projection) {
-  const radiusM = Math.max(projection.width, projection.height) / projection.scale;
+  const radiusM =
+    Math.max(projection.width, projection.height) / projection.scale;
   return !(
     obstacle.maximumX < projection.targetX - radiusM ||
     obstacle.minimumX > projection.targetX + radiusM ||
@@ -128,7 +143,8 @@ export class WorldPackFilmRenderer {
     private readonly timeline: WorldPackCameraTimeline,
   ) {
     const context = canvas.getContext("2d", { alpha: false });
-    if (!context) throw new Error("The deterministic film canvas is unavailable.");
+    if (!context)
+      throw new Error("The deterministic film canvas is unavailable.");
     this.context = context;
     this.palette = PALETTES[runtime.worldId] ?? PALETTES["banff-mountain"];
     canvas.dataset.worldPackState = "ready";
@@ -154,17 +170,28 @@ export class WorldPackFilmRenderer {
     const horizontalX = frame.target[0] - frame.camera[0];
     const horizontalY = frame.target[1] - frame.camera[1];
     const horizontalRange = Math.max(1, Math.hypot(horizontalX, horizontalY));
+    const verticalRange = frame.target[2] - frame.camera[2];
+    const viewRange = Math.hypot(horizontalRange, verticalRange);
+    const directionX = horizontalX / viewRange;
+    const directionY = horizontalY / viewRange;
+    const directionZ = verticalRange / viewRange;
+    const rightX = horizontalY / horizontalRange;
+    const rightY = -horizontalX / horizontalRange;
     const projection: Projection = {
       centreX: width * 0.5,
       centreY: height * 0.53,
-      directionX: horizontalX / horizontalRange,
-      directionY: horizontalY / horizontalRange,
+      directionX,
+      directionY,
       height,
-      rightX: horizontalY / horizontalRange,
-      rightY: -horizontalX / horizontalRange,
+      rightX,
+      rightY,
       scale: Math.min(width, height) / (horizontalRange * 2.15),
       targetX: frame.target[0],
       targetY: frame.target[1],
+      targetZ: frame.target[2],
+      upX: rightY * directionZ,
+      upY: -rightX * directionZ,
+      upZ: rightX * directionY - rightY * directionX,
       width,
     };
     this.drawBackground(width, height, frame.frame);
@@ -201,14 +228,30 @@ export class WorldPackFilmRenderer {
     for (let row = 0; row < terrain.yAxis.length - 1; row += 1) {
       for (let column = 0; column < terrain.xAxis.length - 1; column += 1) {
         const corners = [
-          project(projection, terrain.xAxis[column], terrain.yAxis[row]),
-          project(projection, terrain.xAxis[column + 1], terrain.yAxis[row]),
+          project(
+            projection,
+            terrain.xAxis[column],
+            terrain.yAxis[row],
+            terrain.heights[row][column],
+          ),
+          project(
+            projection,
+            terrain.xAxis[column + 1],
+            terrain.yAxis[row],
+            terrain.heights[row][column + 1],
+          ),
           project(
             projection,
             terrain.xAxis[column + 1],
             terrain.yAxis[row + 1],
+            terrain.heights[row + 1][column + 1],
           ),
-          project(projection, terrain.xAxis[column], terrain.yAxis[row + 1]),
+          project(
+            projection,
+            terrain.xAxis[column],
+            terrain.yAxis[row + 1],
+            terrain.heights[row + 1][column],
+          ),
         ];
         const cellHeights = [
           terrain.heights[row][column],
@@ -220,13 +263,21 @@ export class WorldPackFilmRenderer {
         const variation =
           Math.max(...cellHeights) - Math.min(...cellHeights) > range * 0.015
             ? 0.9
-            : (row + column) % 4 / 8;
+            : ((row + column) % 4) / 8;
         polygon(context, corners);
-        context.fillStyle = terrainColor(
-          this.palette,
-          (mean - minimum) / range,
-          variation,
-        );
+        const rowWidth = terrain.xAxis.length;
+        const measured = terrain.measuredVertices;
+        const measuredCell =
+          measured === undefined ||
+          [
+            row * rowWidth + column,
+            row * rowWidth + column + 1,
+            (row + 1) * rowWidth + column + 1,
+            (row + 1) * rowWidth + column,
+          ].every((index) => measured[index]);
+        context.fillStyle = measuredCell
+          ? terrainColor(this.palette, (mean - minimum) / range, variation)
+          : this.palette.water;
         context.fill();
         context.strokeStyle = "rgba(230,238,220,0.11)";
         context.stroke();
@@ -237,8 +288,11 @@ export class WorldPackFilmRenderer {
   private drawStructures(projection: Projection) {
     const context = this.context;
     for (const obstacle of this.runtime.obstacles) {
-      if (!obstacle.footprint || !obstacleVisible(obstacle, projection)) continue;
-      const roof = obstacle.footprint.map(([x, y]) => project(projection, x, y));
+      if (!obstacle.footprint || !obstacleVisible(obstacle, projection))
+        continue;
+      const roof = obstacle.footprint.map(([x, y]) =>
+        project(projection, x, y, obstacle.maximumZ),
+      );
       if (
         roof.every(
           (point) =>
@@ -247,18 +301,17 @@ export class WorldPackFilmRenderer {
             point.y < -20 ||
             point.y > projection.height + 20,
         )
-      ) continue;
-      const extrusion = Math.max(
-        2,
-        Math.min(18, (obstacle.maximumZ - obstacle.minimumZ) * projection.scale * 0.16),
+      )
+        continue;
+      const base = obstacle.footprint.map(([x, y]) =>
+        project(projection, x, y, obstacle.minimumZ),
       );
-      const shadow = roof.map((point) => ({
-        x: point.x - extrusion * 0.55,
-        y: point.y + extrusion,
-      }));
-      polygon(context, shadow);
-      context.fillStyle = this.palette.buildingShadow;
-      context.fill();
+      for (let index = 0; index < roof.length; index += 1) {
+        const next = (index + 1) % roof.length;
+        polygon(context, [base[index], base[next], roof[next], roof[index]]);
+        context.fillStyle = this.palette.buildingShadow;
+        context.fill();
+      }
       polygon(context, roof);
       context.fillStyle = this.palette.building;
       context.fill();
@@ -290,12 +343,29 @@ export class WorldPackFilmRenderer {
   private drawRoute(projection: Projection, activeIndex: number) {
     const context = this.context;
     const nodes = this.runtime.navigation.nodes;
+    const disconnectedAfter = new Set(
+      this.route.provenance.discontinuities.flatMap((gap) => {
+        const index = nodes.findIndex(
+          (node, nodeIndex) =>
+            nodeIndex < nodes.length - 1 &&
+            node.distanceM <= gap.startD &&
+            nodes[nodeIndex + 1].distanceM >= gap.endD,
+        );
+        return index >= 0 ? [index] : [];
+      }),
+    );
     const draw = (endIndex: number) => {
       context.beginPath();
       nodes.slice(0, endIndex + 1).forEach((node, index) => {
-        const point = project(projection, node.position[0], node.position[1]);
-        if (index === 0) context.moveTo(point.x, point.y);
-        else context.lineTo(point.x, point.y);
+        const point = project(
+          projection,
+          node.position[0],
+          node.position[1],
+          node.position[2],
+        );
+        if (index === 0 || disconnectedAfter.has(index - 1)) {
+          context.moveTo(point.x, point.y);
+        } else context.lineTo(point.x, point.y);
       });
     };
     draw(nodes.length - 1);
@@ -309,10 +379,32 @@ export class WorldPackFilmRenderer {
     context.strokeStyle = this.palette.route;
     context.lineWidth = 3.5;
     context.stroke();
+    context.save();
+    context.setLineDash([5, 7]);
+    context.strokeStyle = "rgba(255,218,147,0.9)";
+    context.lineWidth = 2.4;
+    for (const index of disconnectedAfter) {
+      const start = project(projection, ...nodes[index].position);
+      const end = project(projection, ...nodes[index + 1].position);
+      context.beginPath();
+      context.moveTo(start.x, start.y);
+      context.lineTo(end.x, end.y);
+      context.stroke();
+    }
+    context.restore();
+    const start = project(projection, ...nodes[0].position);
+    const finish = project(projection, ...nodes[nodes.length - 1].position);
+    context.fillStyle = this.palette.routeHalo;
+    context.beginPath();
+    context.arc(start.x, start.y, 5, 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = this.palette.route;
+    context.fillRect(finish.x - 4.5, finish.y - 4.5, 9, 9);
     const current = project(
       projection,
       nodes[Math.min(nodes.length - 1, activeIndex)].position[0],
       nodes[Math.min(nodes.length - 1, activeIndex)].position[1],
+      nodes[Math.min(nodes.length - 1, activeIndex)].position[2],
     );
     context.beginPath();
     context.arc(current.x, current.y, 5.5, 0, Math.PI * 2);
@@ -331,21 +423,40 @@ export class WorldPackFilmRenderer {
     routePointIndex: number,
   ) {
     const context = this.context;
-    const progress = routePointIndex / Math.max(1, this.runtime.navigation.nodes.length - 1);
+    const progress =
+      routePointIndex / Math.max(1, this.runtime.navigation.nodes.length - 1);
     context.shadowColor = "rgba(5,14,18,0.92)";
     context.shadowBlur = 5;
     context.shadowOffsetX = 0;
     context.shadowOffsetY = 1;
     context.fillStyle = this.palette.text;
-    context.font = "600 15px Inter, sans-serif";
-    context.fillText(this.route.name.toUpperCase(), 28, 31);
+    context.font =
+      seconds < 5 ? "700 22px Inter, sans-serif" : "600 15px Inter, sans-serif";
+    context.fillText(this.route.name.toUpperCase(), 28, seconds < 5 ? 38 : 31);
     context.fillStyle = "rgba(244,242,226,0.64)";
     context.font = "500 10px Inter, sans-serif";
     context.fillText(
       `${this.runtime.worldId.toUpperCase()}  /  SEALED WORLD PACK`,
       28,
-      51,
+      seconds < 5 ? 61 : 51,
     );
+    if (seconds < 5) {
+      const gapCount = this.route.provenance.discontinuities.length;
+      context.fillStyle = "rgba(244,242,226,0.86)";
+      context.font = "600 12px Inter, sans-serif";
+      context.fillText(
+        `${this.route.distanceKm.toFixed(1)} KM  /  ${Math.round(this.route.elevationGainM)} M CLIMB  /  ${gapCount === 0 ? "CONTINUOUS RECORDING" : `${gapCount} RECORDED GAP${gapCount === 1 ? "" : "S"}`}`,
+        28,
+        82,
+      );
+      context.fillStyle = "rgba(244,242,226,0.62)";
+      context.font = "500 11px Inter, sans-serif";
+      context.fillText(
+        "CIRCLE START  /  SQUARE FINISH  /  DASHED SOURCE GAPS",
+        28,
+        102,
+      );
+    }
     const right = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(
       Math.floor(seconds % 60),
     ).padStart(2, "0")}  /  ${Math.round(progress * 100)}%`;

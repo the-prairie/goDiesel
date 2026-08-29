@@ -225,7 +225,9 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
         ),
       ) as WorldPackCameraTimeline;
       const physicsRuntime = createWorldPhysicsRuntime(pack);
-      this.cinematicSeekListener = ((event: CustomEvent<{ seconds?: number }>) => {
+      this.cinematicSeekListener = ((
+        event: CustomEvent<{ seconds?: number }>,
+      ) => {
         this.seekCinematic(Number(event.detail?.seconds ?? 0));
       }) as EventListener;
       window.addEventListener(
@@ -234,7 +236,10 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
       );
       if (cinematicRender) {
         const canvas = document.createElement("canvas");
-        canvas.setAttribute("aria-label", "Deterministic local World Pack film");
+        canvas.setAttribute(
+          "aria-label",
+          "Deterministic local World Pack film",
+        );
         canvas.className = "absolute inset-0 size-full";
         container.append(canvas);
         this.filmRenderer = new WorldPackFilmRenderer(
@@ -245,7 +250,11 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
         );
         this.filmRenderer.render(0);
         onWorldReady?.(physicsRuntime);
-        onGroundingChange?.({ source: "sampled", reason: "sampled", offsetM: 0 });
+        onGroundingChange?.({
+          source: "sampled",
+          reason: "sampled",
+          offsetM: 0,
+        });
         onStatus({
           state: "ready",
           title: "Deterministic local film ready",
@@ -275,10 +284,14 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
         return;
       }
       this.viewer = viewer;
-      const palette = WORLD_PALETTES[pack.manifest.worldId] ?? WORLD_PALETTES["banff-mountain"];
+      const palette =
+        WORLD_PALETTES[pack.manifest.worldId] ??
+        WORLD_PALETTES["banff-mountain"];
       viewer.scene.globe.show = false;
       if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = false;
-      viewer.scene.backgroundColor = Color.fromCssColorString(palette.background);
+      viewer.scene.backgroundColor = Color.fromCssColorString(
+        palette.background,
+      );
       viewer.scene.light = new DirectionalLight({
         direction: Cartesian3.normalize(
           new Cartesian3(-0.55, -0.35, -0.76),
@@ -302,6 +315,7 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
       );
       const modelMatrix = Transforms.eastNorthUpToFixedFrame(origin);
       this.modelMatrix = modelMatrix;
+      const measuredTerrain = pack.runtime.assets.terrainMask !== undefined;
       viewer.canvas.dataset.cinematicDuration = String(
         worldPackCameraDurationSeconds(this.cameraTimeline),
       );
@@ -310,9 +324,13 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
         pack,
         pack.runtime.assets.terrain,
         modelMatrix,
-        Color.fromCssColorString(palette.terrain),
-        0.82,
-        terrainCustomShader(Color.fromCssColorString(palette.terrain)),
+        measuredTerrain
+          ? Color.WHITE
+          : Color.fromCssColorString(palette.terrain),
+        measuredTerrain ? 0.04 : 0.82,
+        measuredTerrain
+          ? undefined
+          : terrainCustomShader(Color.fromCssColorString(palette.terrain)),
       );
       await this.addModel(
         pack,
@@ -351,7 +369,9 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
           positions,
           width: 7,
           material: new PolylineGlowMaterialProperty({
-            color: Color.fromCssColorString(ROUTE_THREAD_STYLE.color).withAlpha(0.98),
+            color: Color.fromCssColorString(ROUTE_THREAD_STYLE.color).withAlpha(
+              0.98,
+            ),
             glowPower: 0.16,
           }),
         },
@@ -398,10 +418,15 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
       onStatus({
         state: "ready",
         title: "Local World Pack ready",
-        message: "Terrain, collision, route truth, and navigation are verified.",
+        message:
+          "Terrain, collision, route truth, and navigation are verified.",
       });
     } catch (error) {
-      if (generation !== this.generation || this.abortController?.signal.aborted) return;
+      if (
+        generation !== this.generation ||
+        this.abortController?.signal.aborted
+      )
+        return;
       console.warn("Playable Earth World Pack unavailable", error);
       this.destroyResources();
       onStatus({
@@ -577,7 +602,9 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
       ) {
         return;
       }
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => resolve()),
+      );
     }
     throw new Error("Local World Pack geometry did not become render-ready.");
   }
