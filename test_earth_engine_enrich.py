@@ -14,11 +14,20 @@ def earth_engine_module(monkeypatch):
     monkeypatch.setitem(sys.modules, "ee", fake_ee)
     monkeypatch.setitem(sys.modules, "requests", ModuleType("requests"))
 
+    parent = importlib.import_module("scripts.route_intelligence")
+    had_parent_module = hasattr(parent, "earth_engine_enrich")
+    previous_parent_module = getattr(parent, "earth_engine_enrich", None)
     module_name = "scripts.route_intelligence.earth_engine_enrich"
     monkeypatch.delitem(sys.modules, module_name, raising=False)
     module = importlib.import_module(module_name)
-    yield module
-    sys.modules.pop(module_name, None)
+    try:
+        yield module
+    finally:
+        sys.modules.pop(module_name, None)
+        if had_parent_module:
+            parent.earth_engine_enrich = previous_parent_module
+        else:
+            del parent.earth_engine_enrich
 
 
 class FakeSize:
