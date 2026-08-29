@@ -33,6 +33,10 @@ successful API result.
 An incomplete generated-file rollback returns 500 and never starts the automatic
 full-rebuild fallback. The source is restored, while the response identifies the
 preserved files needed to repair the browser artifacts deliberately.
+The writer creates a source recovery copy before changing `quests.json`. If
+source restoration itself fails, that copy is preserved and the 500 response
+reports both failures and every recovery path instead of claiming rollback
+succeeded.
 Source-derived route changes still use the complete generator described in
 ADR-0003.
 

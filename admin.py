@@ -29,6 +29,7 @@ import gpxpy
 import pandas as pd
 
 from admin_curation import (
+    SourceRollbackError,
     curation_readiness,
     publish_curation_or_rebuild,
     save_curation_and_rebuild,
@@ -822,6 +823,15 @@ class Handler(BaseHTTPRequestHandler):
                 )
             except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
                 self._send(400, {'error': str(error)})
+                return
+            except SourceRollbackError as error:
+                self._send(500, {
+                    'error': (
+                        'Route publication and curation source rollback both '
+                        'failed. Manual recovery is required.'
+                    ),
+                    'detail': str(error),
+                })
                 return
             except CurationRecoveryError as error:
                 self._send(500, {

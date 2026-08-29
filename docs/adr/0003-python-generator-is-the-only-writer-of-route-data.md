@@ -59,7 +59,9 @@ backup with `ready` is fully restored.
 - Admin falls back to a full rebuild for an ordinary incremental publication
   failure. It does not start that fallback after an incomplete rollback; it
   restores the curation source, reports the recovery paths, and leaves the
-  preserved copies available for deliberate repair.
+  preserved copies available for deliberate repair. A source recovery copy is
+  created before mutation; if source restoration also fails, that copy and both
+  failure details are preserved for the operator.
 - The two incremental replacements are not one transaction. A process crash
   between them can temporarily split detail and summary until curation is
   republished for the affected route or a full rebuild runs.

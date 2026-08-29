@@ -2,8 +2,12 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
+
+import admin_curation
 
 from admin_curation import (
+    SourceRollbackError,
     curation_readiness,
     publish_curation_or_rebuild,
     save_curation_and_rebuild,
@@ -161,6 +165,44 @@ class AdminCurationTests(unittest.TestCase):
         publish_curation_or_rebuild(publish, full_rebuild)
 
         self.assertTrue(full_rebuild_started)
+
+    def test_failed_source_rollback_preserves_and_reports_its_recovery_copy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config_path = root / "quests.json"
+            recovery_path = root / ".quests.json.rollback"
+            original = {"routes": [{"activity_id": "one", "status": "approved"}]}
+            config_path.write_text(json.dumps(original), encoding="utf-8")
+            real_replace = admin_curation.os.replace
+
+            def fail_source_restore(source, destination):
+                if Path(source) == recovery_path:
+                    raise OSError("injected source rollback failure")
+                return real_replace(source, destination)
+
+            def fail_publication():
+                raise CurationRecoveryError("injected generated recovery failure")
+
+            with mock.patch.object(
+                admin_curation.os,
+                "replace",
+                side_effect=fail_source_restore,
+            ):
+                with self.assertRaises(SourceRollbackError) as caught:
+                    save_curation_and_rebuild(
+                        config_path,
+                        "one",
+                        COMPLETE_CURATION,
+                        fail_publication,
+                    )
+
+            message = str(caught.exception)
+            self.assertIn("injected generated recovery failure", message)
+            self.assertIn("injected source rollback failure", message)
+            self.assertIn(str(recovery_path), message)
+            self.assertEqual(json.loads(recovery_path.read_text()), original)
+            current = json.loads(config_path.read_text())
+            self.assertEqual(current["routes"][0]["curation"], COMPLETE_CURATION)
 
 
 if __name__ == "__main__":
