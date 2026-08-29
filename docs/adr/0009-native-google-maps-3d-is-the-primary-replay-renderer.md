@@ -45,10 +45,9 @@ diagnostic fallback, and chase as the most legible default camera.
   cinematic work needs them.
 - Cesium is now legacy for replay but still production for the Atlas regional
   world (ADR-0006), so both stacks remain in the bundle.
-- `CesiumCinematicRenderer` — with its custom grade shader, depth of field,
-  bloom, and fog — is now imported type-only. The `CinematicLook` grading
-  vocabulary is effectively dead on the shipping path. Either port the grading to
-  the native renderer or delete it.
+- The uninstantiated `CesiumCinematicRenderer` was deleted on 2026-08-29.
+  Cinematic rendering uses the native Google engine; this does not change the
+  separate Cesium Atlas or diagnostic Replay responsibilities.
 - Replay duration is 180 seconds in `replay-controller.ts` and
   `playable-earth-controller.ts` but 210 seconds in
   `google-route-navigator-controller.ts`. The primary path disagrees with the

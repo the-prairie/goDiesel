@@ -1,9 +1,9 @@
 import type { QuestRoute } from "@/domain/route";
-import type { CinematicRendererStatus } from "@/surfaces/replay/cinematic/cesium-cinematic-renderer";
 import type { CinematicFrame } from "@/surfaces/replay/cinematic/route-cinematic-director";
 import {
   createGoogleRouteNavigatorEngine,
   type GoogleRouteNavigatorEngine,
+  type GoogleRouteNavigatorStatus,
 } from "@/surfaces/replay/renderers/google-route-navigator-engine";
 import type { GoogleRouteCameraPose } from "@/surfaces/replay/playback/route-navigator-controller";
 import { routeDistanceM } from "@/domain/geometry/route-path";
@@ -12,7 +12,7 @@ import { stabilizeRouteCamera } from "@/surfaces/replay/scene/route-camera-stabi
 interface MountOptions {
   container: HTMLElement;
   frame: CinematicFrame;
-  onStatus: (status: CinematicRendererStatus) => void;
+  onStatus: (status: GoogleRouteNavigatorStatus) => void;
   route: QuestRoute;
 }
 
