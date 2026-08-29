@@ -20,7 +20,7 @@
     "test:e2e:atlas-live": "node -e \"if (!process.env.GODIESEL_ATLAS_PREVIEW_URL) throw new Error('Set GODIESEL_ATLAS_PREVIEW_URL to a deployed Pages preview.')\" && playwright test --config playwright.live.config.ts atlas-region-live.spec.ts",
     "test:e2e:live-pipeline": "playwright test --config playwright.pipeline.config.ts e2e/live-pipeline.spec.ts",
     "test:bundle": "node scripts/check-bundle-budget.mjs",
-    "verify:ticket": "npm run typecheck && npm run build && npm run test:unit && playwright test e2e/navigation.spec.ts --grep \"root opens Atlas|compact Atlas navigation|every product surface|mobile bottom spine\"",
+    "verify:ticket": "npm run typecheck && npm run build && npm run test:unit",
     "verify": "npm run typecheck && npm run test:unit && npm run build && npm run test:bundle && npm run test:e2e",
     "verify:live-pipeline": "../scripts/verify-live-pipeline.sh",
     "perf:runtime:baseline": "vitest run --config vitest.runtime-perf.config.ts && playwright test --config playwright.runtime-perf.config.ts",
