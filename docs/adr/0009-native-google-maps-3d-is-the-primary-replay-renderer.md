@@ -103,5 +103,5 @@ experience quality, and no equivalent exists for Google.
 
 - `docs/spikes/2026-07-22-native-google-3d-route-navigation.md`
 - `3ed3afc8` (PR #100)
-- `app/src/replay/google/google-route-navigator-engine.ts`,
-  `app/src/pages/replay-page.tsx`
+- `app/src/surfaces/replay/renderers/google-route-navigator-engine.ts`,
+  `app/src/surfaces/replay/replay-page.tsx`

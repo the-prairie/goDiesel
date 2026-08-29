@@ -27,8 +27,8 @@ Generate two artifacts from one source of truth.
 - **Summaries** — `routes.manifest.json`, bundled and imported eagerly. Geometry
   is simplified to at most 96 tuple points per route, enough to draw a
   recognisable thread. Curation is reduced to a `guide_preview`.
-- **Details** — `app/public/data/routes/<slug>.json`, fetched lazily per route
-  and byte-identical to its element of the generated set.
+- **Details** — `app/public/data/routes/<slug>.json`, fetched lazily per route.
+  Each file is the canonical full generated record for that route.
 
 Parse the two tiers with deliberately different strictness:
 
@@ -55,7 +55,7 @@ Parse the two tiers with deliberately different strictness:
 
 ## Evidence
 
-- `app/src/domain/routes.ts`, `app/src/data/route-repository.ts`,
+- `app/src/domain/route/`, `app/src/data/route-repository.ts`,
   `app/src/data/use-route-detail.ts`
 - `app/scripts/check-bundle-budget.mjs`
 - `build.py` (`react_route_manifest_record`, `simplify_route_for_manifest`)
