@@ -14,6 +14,7 @@ export function PlayableEarthLabPage() {
   const summary = decodedSlug ? findRouteBySlug(decodedSlug) : undefined;
   const detail = useRouteDetail(summary?.slug);
   const returnToReplay = searchParams.get("from") === "replay";
+  const cinematicRender = searchParams.get("render") === "film";
 
   if (!summary) return <RouteNotFound />;
   const exitPath = returnToReplay
@@ -49,7 +50,13 @@ export function PlayableEarthLabPage() {
     );
   }
 
-  return <PlayableEarthStage route={detail.route} exitPath={exitPath} />;
+  return (
+    <PlayableEarthStage
+      route={detail.route}
+      exitPath={exitPath}
+      cinematicRender={cinematicRender}
+    />
+  );
 }
 
 function PlayableEarthUnavailable({

@@ -2,12 +2,15 @@ import {
   Axis,
   Cartesian3,
   Cesium3DTileset,
+  Cesium3DTileStyle,
   Color,
   ColorBlendMode,
   ConstantPositionProperty,
+  CustomShader,
   DirectionalLight,
   Entity,
   HeadingPitchRange,
+  LightingModel,
   Math as CesiumMath,
   Matrix4,
   Model,
@@ -21,6 +24,12 @@ import type { QuestRoute } from "@/domain/route";
 import { ROUTE_THREAD_STYLE } from "@/domain/geometry/route-thread-style";
 import type { PlayableEarthPose } from "@/labs/playable-earth/playable-earth-controller";
 import { loadWorldPackForRoute } from "@/world-packs/world-pack-loader";
+import {
+  worldPackCameraDurationSeconds,
+  worldPackCameraFrame,
+  type WorldPackCameraTimeline,
+} from "@/world-packs/world-pack-cinematic";
+import { WorldPackFilmRenderer } from "@/world-packs/world-pack-film-renderer";
 import {
   createWorldPhysicsRuntime,
   type WorldPhysicsRuntime,
@@ -36,6 +45,7 @@ export type PlayableEarthStatus =
   | { state: "unavailable"; title: string; message: string };
 
 export interface PlayableEarthMountOptions {
+  cinematicRender?: boolean;
   container: HTMLElement;
   route: QuestRoute;
   onStatus: (status: PlayableEarthStatus) => void;
@@ -52,6 +62,7 @@ export interface PlayableEarthGroundingDebug {
 export interface PlayableEarthViewer {
   mount(options: PlayableEarthMountOptions): Promise<void>;
   setPose(pose: PlayableEarthPose): void;
+  seekCinematic(seconds: number): void;
   destroy(): void;
 }
 
@@ -62,6 +73,30 @@ declare global {
 }
 
 const SURFACE_VISUAL_OFFSET_M = 2.2;
+
+const WORLD_PALETTES: Record<
+  string,
+  { background: string; structures: string; surfaces: string; terrain: string }
+> = {
+  "banff-mountain": {
+    background: "#a9c4cb",
+    structures: "#b5b3a9",
+    surfaces: "#c7a778",
+    terrain: "#6e815d",
+  },
+  "tokyo-urban": {
+    background: "#abc4c9",
+    structures: "#abb2b5",
+    surfaces: "#c8a174",
+    terrain: "#66746c",
+  },
+  "ucluelet-coastal": {
+    background: "#9fc2c9",
+    structures: "#aeb4ae",
+    surfaces: "#c3a678",
+    terrain: "#4f7868",
+  },
+};
 
 function webglAvailable() {
   try {
@@ -93,6 +128,33 @@ function ownedBuffer(bytes: Uint8Array): ArrayBuffer {
   return owned.buffer;
 }
 
+function terrainCustomShader(color: Color) {
+  const low = [color.red * 0.72, color.green * 0.72, color.blue * 0.72];
+  const high = [
+    Math.min(1, color.red * 1.28),
+    Math.min(1, color.green * 1.28),
+    Math.min(1, color.blue * 1.28),
+  ];
+  return new CustomShader({
+    lightingModel: LightingModel.PBR,
+    fragmentShaderText: `
+      void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+        vec3 position = fsInput.attributes.positionMC;
+        float broadRelief = 0.5 + 0.5 * sin(position.z * 0.035);
+        float fineRelief = 0.5 + 0.5 * sin(position.z * 0.19);
+        float northing = 0.5 + 0.5 * sin(position.y * 0.006);
+        float mixAmount = clamp(0.16 + broadRelief * 0.54 + fineRelief * 0.12 + northing * 0.18, 0.0, 1.0);
+        material.diffuse = mix(
+          vec3(${low.map((value) => value.toFixed(6)).join(", ")}),
+          vec3(${high.map((value) => value.toFixed(6)).join(", ")}),
+          mixAmount
+        );
+        material.roughness = 0.88;
+      }
+    `,
+  });
+}
+
 class CesiumPlayableEarthViewer implements PlayableEarthViewer {
   private viewer?: Viewer;
   private marker?: Entity;
@@ -104,6 +166,10 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
   private objectUrls: string[] = [];
   private abortController?: AbortController;
   private cameraHeadingDeg?: number;
+  private cameraTimeline?: WorldPackCameraTimeline;
+  private modelMatrix?: Matrix4;
+  private cinematicSeekListener?: EventListener;
+  private filmRenderer?: WorldPackFilmRenderer;
   private generation = 0;
 
   async mount({
@@ -112,6 +178,7 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
     onStatus,
     onGroundingChange,
     onWorldReady,
+    cinematicRender = false,
   }: PlayableEarthMountOptions) {
     const generation = ++this.generation;
     this.abortController = new AbortController();
@@ -152,6 +219,40 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
       });
       if (generation !== this.generation) return;
       this.pack = pack;
+      this.cameraTimeline = JSON.parse(
+        new TextDecoder("utf-8", { fatal: true }).decode(
+          pack.artifact(pack.runtime.assets.cameraTimeline),
+        ),
+      ) as WorldPackCameraTimeline;
+      const physicsRuntime = createWorldPhysicsRuntime(pack);
+      this.cinematicSeekListener = ((event: CustomEvent<{ seconds?: number }>) => {
+        this.seekCinematic(Number(event.detail?.seconds ?? 0));
+      }) as EventListener;
+      window.addEventListener(
+        "godiesel:world-pack-film-seek",
+        this.cinematicSeekListener,
+      );
+      if (cinematicRender) {
+        const canvas = document.createElement("canvas");
+        canvas.setAttribute("aria-label", "Deterministic local World Pack film");
+        canvas.className = "absolute inset-0 size-full";
+        container.append(canvas);
+        this.filmRenderer = new WorldPackFilmRenderer(
+          canvas,
+          route,
+          physicsRuntime,
+          this.cameraTimeline,
+        );
+        this.filmRenderer.render(0);
+        onWorldReady?.(physicsRuntime);
+        onGroundingChange?.({ source: "sampled", reason: "sampled", offsetM: 0 });
+        onStatus({
+          state: "ready",
+          title: "Deterministic local film ready",
+          message: "The sealed World Pack camera and geometry are ready.",
+        });
+        return;
+      }
 
       const viewer = new Viewer(container, {
         animation: false,
@@ -174,9 +275,10 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
         return;
       }
       this.viewer = viewer;
+      const palette = WORLD_PALETTES[pack.manifest.worldId] ?? WORLD_PALETTES["banff-mountain"];
       viewer.scene.globe.show = false;
       if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = false;
-      viewer.scene.backgroundColor = Color.fromCssColorString("#17231f");
+      viewer.scene.backgroundColor = Color.fromCssColorString(palette.background);
       viewer.scene.light = new DirectionalLight({
         direction: Cartesian3.normalize(
           new Cartesian3(-0.55, -0.35, -0.76),
@@ -199,19 +301,25 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
         pack.runtime.origin.elevationM,
       );
       const modelMatrix = Transforms.eastNorthUpToFixedFrame(origin);
+      this.modelMatrix = modelMatrix;
+      viewer.canvas.dataset.cinematicDuration = String(
+        worldPackCameraDurationSeconds(this.cameraTimeline),
+      );
+      viewer.canvas.dataset.cinematicTimeline = this.cameraTimeline.timelineId;
       await this.addModel(
         pack,
         pack.runtime.assets.terrain,
         modelMatrix,
-        Color.WHITE,
-        0.04,
+        Color.fromCssColorString(palette.terrain),
+        0.82,
+        terrainCustomShader(Color.fromCssColorString(palette.terrain)),
       );
       await this.addModel(
         pack,
         pack.runtime.assets.traversableSurfaces,
         modelMatrix,
-        Color.fromCssColorString("#b9ad82"),
-        0.75,
+        Color.fromCssColorString(palette.surfaces),
+        0.82,
       );
       for (const descriptor of pack.runtime.assets.structureTilesets ?? []) {
         const localUp = Cartesian3.normalize(origin, new Cartesian3());
@@ -224,13 +332,12 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
           pack,
           descriptor.path,
           Matrix4.fromTranslation(translation),
+          palette.structures,
         );
       }
       if (generation !== this.generation) return;
       await this.waitForGeometryReady(generation);
       if (generation !== this.generation) return;
-      const physicsRuntime = createWorldPhysicsRuntime(pack);
-
       const positions = pack.canonicalRoute.coordinates.map((point) =>
         Cartesian3.fromDegrees(
           point.longitude,
@@ -360,12 +467,62 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
     );
   }
 
+  seekCinematic(seconds: number) {
+    if (this.filmRenderer) {
+      this.filmRenderer.render(seconds);
+      return;
+    }
+    const viewer = this.viewer;
+    const timeline = this.cameraTimeline;
+    const modelMatrix = this.modelMatrix;
+    if (!viewer || !timeline || !modelMatrix || viewer.isDestroyed()) return;
+    const frame = worldPackCameraFrame(timeline, seconds);
+    const camera = Matrix4.multiplyByPoint(
+      modelMatrix,
+      Cartesian3.fromArray(frame.camera),
+      new Cartesian3(),
+    );
+    const target = Matrix4.multiplyByPoint(
+      modelMatrix,
+      Cartesian3.fromArray(frame.target),
+      new Cartesian3(),
+    );
+    const direction = Cartesian3.normalize(
+      Cartesian3.subtract(target, camera, new Cartesian3()),
+      new Cartesian3(),
+    );
+    const localUp = Matrix4.multiplyByPointAsVector(
+      modelMatrix,
+      Cartesian3.UNIT_Z,
+      new Cartesian3(),
+    );
+    const right = Cartesian3.normalize(
+      Cartesian3.cross(direction, localUp, new Cartesian3()),
+      new Cartesian3(),
+    );
+    const up = Cartesian3.normalize(
+      Cartesian3.cross(right, direction, new Cartesian3()),
+      new Cartesian3(),
+    );
+    if (this.marker) this.marker.show = false;
+    if (this.ghostMarker) this.ghostMarker.show = false;
+    viewer.camera.lookAtTransform(Matrix4.IDENTITY);
+    viewer.camera.setView({
+      destination: camera,
+      orientation: { direction, up },
+    });
+    viewer.canvas.dataset.cinematicFrame = frame.frame.toFixed(6);
+    viewer.canvas.dataset.cinematicSeconds = seconds.toFixed(6);
+    viewer.scene.requestRender();
+  }
+
   private async addModel(
     pack: VerifiedWorldPack,
     logicalPath: string,
     modelMatrix: ReturnType<typeof Transforms.eastNorthUpToFixedFrame>,
     color: Color,
     colorBlendAmount: number,
+    customShader?: CustomShader,
   ) {
     const url = URL.createObjectURL(
       new Blob([ownedBuffer(pack.artifact(logicalPath))], {
@@ -383,6 +540,7 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
       color,
       colorBlendMode: ColorBlendMode.MIX,
       colorBlendAmount,
+      customShader,
       backFaceCulling: false,
     });
     this.viewer?.scene.primitives.add(model);
@@ -394,6 +552,7 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
     pack: VerifiedWorldPack,
     logicalPath: string,
     modelMatrix: Matrix4,
+    color: string,
   ) {
     const tileset = await Cesium3DTileset.fromUrl(
       pack.artifactUrl(logicalPath).toString(),
@@ -403,6 +562,7 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
       },
     );
     tileset.modelMatrix = modelMatrix;
+    tileset.style = new Cesium3DTileStyle({ color: `color('${color}')` });
     this.viewer?.scene.primitives.add(tileset);
     this.structureTilesets.push(tileset);
     return tileset;
@@ -423,6 +583,13 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
   }
 
   private destroyResources() {
+    this.filmRenderer?.destroy();
+    if (this.cinematicSeekListener) {
+      window.removeEventListener(
+        "godiesel:world-pack-film-seek",
+        this.cinematicSeekListener,
+      );
+    }
     if (this.viewer && !this.viewer.isDestroyed()) this.viewer.destroy();
     this.viewer = undefined;
     this.marker = undefined;
@@ -434,6 +601,10 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
     this.objectUrls.forEach((url) => URL.revokeObjectURL(url));
     this.objectUrls = [];
     this.cameraHeadingDeg = undefined;
+    this.cameraTimeline = undefined;
+    this.modelMatrix = undefined;
+    this.cinematicSeekListener = undefined;
+    this.filmRenderer = undefined;
   }
 
   destroy() {

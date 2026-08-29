@@ -1,0 +1,303 @@
+{
+  "schemaVersion": 1,
+  "renderer": "deterministic-topographic-v1",
+  "providerCredentialsRemoved": [
+    "CESIUM_ION_ACCESS_TOKEN",
+    "GOOGLE_MAPS_API_KEY",
+    "MAPBOX_ACCESS_TOKEN",
+    "MAPBOX_TOKEN",
+    "VITE_GOOGLE_MAPS_API_KEY"
+  ],
+  "deterministicSampleRepeats": 2,
+  "sampleSeconds": [
+    0,
+    11.25,
+    22.5,
+    33.75,
+    44.958333
+  ],
+  "worlds": [
+    {
+      "routeSlug": "17665674778",
+      "worldId": "tokyo-urban",
+      "packId": "wp_db41d4a21168071bd09e67553dea9d755d8b03a49945ab658652218fefdcdfa9",
+      "timelineId": "route-teaser-45s-v1",
+      "durationSeconds": 45,
+      "framesPerSecond": 24,
+      "providerRequests": 0,
+      "providerCredentialsRequired": false,
+      "pixelExactAcrossRepeats": true,
+      "samples": [
+        {
+          "seconds": 0,
+          "sha256": "cf1580c79b250fc955ca44bf05db134ad4a9a84654d9f51d6646253a66fb90b6",
+          "quantizedColorBins": 75
+        },
+        {
+          "seconds": 11.25,
+          "sha256": "116d28e857a96fe84e10ccb127380dd8f72b737159c3d4442c1da4325fe65d36",
+          "quantizedColorBins": 80
+        },
+        {
+          "seconds": 22.5,
+          "sha256": "b40e3d46611f682bd8daf644a5aa069d2a4ef06b1fff9a53bd947d5462cd26d6",
+          "quantizedColorBins": 76
+        },
+        {
+          "seconds": 33.75,
+          "sha256": "cbdbea86c2c151fb11f0debf377d7a74094d53efc217e3badb1bc206ace16546",
+          "quantizedColorBins": 79
+        },
+        {
+          "seconds": 44.958333,
+          "sha256": "2deba597187729ca27c119e39377604beca4cd986992c071b489834e28e31e71",
+          "quantizedColorBins": 83
+        }
+      ],
+      "outputs": [
+        {
+          "name": "full-route-film.mp4",
+          "byteSize": 53650207,
+          "sha256": "96193c1eaecba39f86ce76404f5f00aa96e9aaf08a211e10ebb87def0f65c882",
+          "media": {
+            "durationSeconds": 45,
+            "videoCodec": "h264",
+            "audioCodec": "aac",
+            "width": 1280,
+            "height": 720,
+            "framesPerSecond": "24/1"
+          }
+        },
+        {
+          "name": "landscape-teaser.mp4",
+          "byteSize": 22237757,
+          "sha256": "a19abd5212f97438c238e9c21914ee4fb741b487b05b916186c08639c63ad4a4",
+          "media": {
+            "durationSeconds": 15,
+            "videoCodec": "h264",
+            "audioCodec": "aac",
+            "width": 1280,
+            "height": 720,
+            "framesPerSecond": "24/1"
+          }
+        },
+        {
+          "name": "vertical-teaser.mp4",
+          "byteSize": 21597057,
+          "sha256": "68d3a85bcd6499d94e0c4a050725992886afc295f3e93e03e6b3fb5e2a2265b4",
+          "media": {
+            "durationSeconds": 15,
+            "videoCodec": "h264",
+            "audioCodec": "aac",
+            "width": 720,
+            "height": 1280,
+            "framesPerSecond": "24/1"
+          }
+        },
+        {
+          "name": "poster-1.png",
+          "byteSize": 1186139,
+          "sha256": "cf1580c79b250fc955ca44bf05db134ad4a9a84654d9f51d6646253a66fb90b6"
+        },
+        {
+          "name": "poster-2.png",
+          "byteSize": 237580,
+          "sha256": "b40e3d46611f682bd8daf644a5aa069d2a4ef06b1fff9a53bd947d5462cd26d6"
+        },
+        {
+          "name": "poster-3.png",
+          "byteSize": 1037643,
+          "sha256": "f43129abef7d574061f1044bfb0eb9e3d04a06144dbdd2dfdc237667f3404d4d"
+        }
+      ]
+    },
+    {
+      "routeSlug": "15573295095",
+      "worldId": "banff-mountain",
+      "packId": "wp_05202b59d818c60bf93a5b7def1b16c840d77faba87c0f1aa8c36ee5eacdcffe",
+      "timelineId": "route-teaser-45s-v1",
+      "durationSeconds": 45,
+      "framesPerSecond": 24,
+      "providerRequests": 0,
+      "providerCredentialsRequired": false,
+      "pixelExactAcrossRepeats": true,
+      "samples": [
+        {
+          "seconds": 0,
+          "sha256": "faa9c23108b21aa8e4c8fd2c06487be98ac4fa51fcf26b27ea9fabc545141f77",
+          "quantizedColorBins": 65
+        },
+        {
+          "seconds": 11.25,
+          "sha256": "1ce42f85a8ef8924f5e2325c363b57e219f2db7b100acb078eebab7c68ea5fc1",
+          "quantizedColorBins": 65
+        },
+        {
+          "seconds": 22.5,
+          "sha256": "2c83a65e33bc5e12354e03330dcc4ad9edd8996fa883fa4f855f58c747379aee",
+          "quantizedColorBins": 71
+        },
+        {
+          "seconds": 33.75,
+          "sha256": "ee2d45705474350ae862978b2c0daf7fee4cf582e2265e1e4ba00b3d2e03ce80",
+          "quantizedColorBins": 79
+        },
+        {
+          "seconds": 44.958333,
+          "sha256": "6ad01b14d2b7ec7ca1571e0cd91eb405afc55db6fd5bdc4e149cf0cfc6c2518b",
+          "quantizedColorBins": 92
+        }
+      ],
+      "outputs": [
+        {
+          "name": "full-route-film.mp4",
+          "byteSize": 44140089,
+          "sha256": "fc9fd6ca5b2a26fee81c607e901e28c2382c095c3072f0b339f2cbca82e0b1ba",
+          "media": {
+            "durationSeconds": 45,
+            "videoCodec": "h264",
+            "audioCodec": "aac",
+            "width": 1280,
+            "height": 720,
+            "framesPerSecond": "24/1"
+          }
+        },
+        {
+          "name": "landscape-teaser.mp4",
+          "byteSize": 17734719,
+          "sha256": "7a96a7b6e851a4435ab265471e309e556159f325948da305f13b395559d170f2",
+          "media": {
+            "durationSeconds": 15,
+            "videoCodec": "h264",
+            "audioCodec": "aac",
+            "width": 1280,
+            "height": 720,
+            "framesPerSecond": "24/1"
+          }
+        },
+        {
+          "name": "vertical-teaser.mp4",
+          "byteSize": 18457547,
+          "sha256": "c948e76a73595e4aa15a31d17c44e03b1f76b6abfd72be68b617b1509eae9051",
+          "media": {
+            "durationSeconds": 15,
+            "videoCodec": "h264",
+            "audioCodec": "aac",
+            "width": 720,
+            "height": 1280,
+            "framesPerSecond": "24/1"
+          }
+        },
+        {
+          "name": "poster-1.png",
+          "byteSize": 635844,
+          "sha256": "faa9c23108b21aa8e4c8fd2c06487be98ac4fa51fcf26b27ea9fabc545141f77"
+        },
+        {
+          "name": "poster-2.png",
+          "byteSize": 660638,
+          "sha256": "2c83a65e33bc5e12354e03330dcc4ad9edd8996fa883fa4f855f58c747379aee"
+        },
+        {
+          "name": "poster-3.png",
+          "byteSize": 782923,
+          "sha256": "83a985b984ad01bf53ca1eba29f565f80a69b11399688ab5838f845a9085e240"
+        }
+      ]
+    },
+    {
+      "routeSlug": "6496900063",
+      "worldId": "ucluelet-coastal",
+      "packId": "wp_c26dca2c4573447722b90223b037cda5681ea248605765bbbe588353bb41b90c",
+      "timelineId": "route-teaser-45s-v1",
+      "durationSeconds": 45,
+      "framesPerSecond": 24,
+      "providerRequests": 0,
+      "providerCredentialsRequired": false,
+      "pixelExactAcrossRepeats": true,
+      "samples": [
+        {
+          "seconds": 0,
+          "sha256": "4b52f80db93edaf1ea6f9eb5e00823165919025b062b12cc04e2796e7f566953",
+          "quantizedColorBins": 69
+        },
+        {
+          "seconds": 11.25,
+          "sha256": "0deda89a4e176ce8ea43dd3872d52ca9e55800b0cb542fe4db8bbfde976e4c51",
+          "quantizedColorBins": 75
+        },
+        {
+          "seconds": 22.5,
+          "sha256": "a4cf5c67b54ce5679c2ddd373ce8b59420cee9f80e6d9af36e1abf7be33293db",
+          "quantizedColorBins": 75
+        },
+        {
+          "seconds": 33.75,
+          "sha256": "072e1b4c95508096efcc1a43595d4607b60ca63b20f0c0b73026c06a34a2f8d7",
+          "quantizedColorBins": 77
+        },
+        {
+          "seconds": 44.958333,
+          "sha256": "a6922e374ff2e360e656ec9aab6ed1d277fd9aabf6e447c94f71705d91a3affb",
+          "quantizedColorBins": 74
+        }
+      ],
+      "outputs": [
+        {
+          "name": "full-route-film.mp4",
+          "byteSize": 26790039,
+          "sha256": "febb958d1346c8cb2de2f1248889af09d56f395ccf4ef04b72625096d01aebac",
+          "media": {
+            "durationSeconds": 45,
+            "videoCodec": "h264",
+            "audioCodec": "aac",
+            "width": 1280,
+            "height": 720,
+            "framesPerSecond": "24/1"
+          }
+        },
+        {
+          "name": "landscape-teaser.mp4",
+          "byteSize": 10615397,
+          "sha256": "04112bb4f9a7e5a8cf7982dd4e8e6b5aeed0663d550012e562cac74fe82eac92",
+          "media": {
+            "durationSeconds": 15,
+            "videoCodec": "h264",
+            "audioCodec": "aac",
+            "width": 1280,
+            "height": 720,
+            "framesPerSecond": "24/1"
+          }
+        },
+        {
+          "name": "vertical-teaser.mp4",
+          "byteSize": 11177460,
+          "sha256": "5f5a41a5da0b31fbd4ce78001684f2c7fa48b5b49032cf4b17bdbe4bb5c7bc91",
+          "media": {
+            "durationSeconds": 15,
+            "videoCodec": "h264",
+            "audioCodec": "aac",
+            "width": 720,
+            "height": 1280,
+            "framesPerSecond": "24/1"
+          }
+        },
+        {
+          "name": "poster-1.png",
+          "byteSize": 465565,
+          "sha256": "4b52f80db93edaf1ea6f9eb5e00823165919025b062b12cc04e2796e7f566953"
+        },
+        {
+          "name": "poster-2.png",
+          "byteSize": 398986,
+          "sha256": "a4cf5c67b54ce5679c2ddd373ce8b59420cee9f80e6d9af36e1abf7be33293db"
+        },
+        {
+          "name": "poster-3.png",
+          "byteSize": 461879,
+          "sha256": "ae010104253c4f54f46f677dc4774f117229b8576d1ce70e4beaeccc5c8e374a"
+        }
+      ]
+    }
+  ]
+}

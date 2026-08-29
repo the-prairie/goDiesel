@@ -18,6 +18,8 @@
     "render:route-film": "node scripts/render-route-film.mjs",
     "render:route-film:4k": "node scripts/render-route-film.mjs --width=3840 --height=2160 --fps=24",
     "render:route-film:review": "node scripts/render-route-film-review.mjs",
+    "render:world-pack-film": "node scripts/render-world-pack-film.mjs",
+    "prove:world-packs:films": "node scripts/prove-world-pack-films.mjs",
     "test:e2e:atlas-live": "playwright test --config playwright.live.config.ts atlas-region-live.spec.ts",
     "test:e2e:live-pipeline": "playwright test --config playwright.pipeline.config.ts e2e/live-pipeline.spec.ts",
     "test:bundle": "node scripts/check-bundle-budget.mjs",

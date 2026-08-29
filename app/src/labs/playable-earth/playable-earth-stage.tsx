@@ -115,9 +115,11 @@ function combineInput(
 export function PlayableEarthStage({
   route,
   exitPath,
+  cinematicRender = false,
 }: {
   route: QuestRoute;
   exitPath: string;
+  cinematicRender?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<PlayableEarthViewer | undefined>(undefined);
@@ -233,6 +235,7 @@ export function PlayableEarthStage({
     physicsRef.current = undefined;
     playerRef.current = undefined;
     void viewer.mount({
+      cinematicRender,
       container,
       route,
       onGroundingChange: setGrounding,
@@ -247,7 +250,7 @@ export function PlayableEarthStage({
       onStatus: (nextStatus) => {
         setStatus(nextStatus);
         if (nextStatus.state === "ready") {
-          viewer.setPose(poseForControl(controlRef.current));
+          if (!cinematicRender) viewer.setPose(poseForControl(controlRef.current));
         }
       },
     });
@@ -257,10 +260,10 @@ export function PlayableEarthStage({
       playerRef.current = undefined;
       if (viewerRef.current === viewer) viewerRef.current = undefined;
     };
-  }, [poseForControl, route]);
+  }, [cinematicRender, poseForControl, route]);
 
   useEffect(() => {
-    if (status.state !== "ready") return;
+    if (status.state !== "ready" || cinematicRender) return;
     let frame = 0;
     let previous = performance.now();
     let lastUiUpdate = previous;
@@ -300,7 +303,7 @@ export function PlayableEarthStage({
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [poseForControl, status.state, totalDistanceM]);
+  }, [cinematicRender, poseForControl, status.state, totalDistanceM]);
 
   useEffect(() => {
     setContextState(isMobile ? "compact" : "preview");
@@ -436,7 +439,12 @@ export function PlayableEarthStage({
       data-grounding-source={grounding.source}
       data-grounding-reason={grounding.reason}
       data-grounding-offset={grounding.offsetM?.toFixed(2) ?? ""}
-      className="relative h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 overflow-hidden bg-[#02070a] md:h-dvh md:min-h-[36rem]"
+      data-cinematic-render={cinematicRender}
+      className={
+        cinematicRender
+          ? "fixed inset-0 z-[100] h-dvh w-dvw overflow-hidden bg-[#02070a]"
+          : "relative h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 overflow-hidden bg-[#02070a] md:h-dvh md:min-h-[36rem]"
+      }
     >
       <div
         ref={containerRef}
@@ -444,7 +452,13 @@ export function PlayableEarthStage({
         className="absolute inset-0"
       />
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start p-3 sm:p-5">
+      <div
+        className={
+          cinematicRender
+            ? "hidden"
+            : "pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start p-3 sm:p-5"
+        }
+      >
         <RouteContextHud
           route={route}
           label="Playable Earth"
@@ -486,7 +500,13 @@ export function PlayableEarthStage({
         </div>
       ) : null}
 
-      <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex justify-center sm:inset-x-6 sm:bottom-6">
+      <div
+        className={
+          cinematicRender
+            ? "hidden"
+            : "pointer-events-none absolute inset-x-3 bottom-3 z-20 flex justify-center sm:inset-x-6 sm:bottom-6"
+        }
+      >
         <div
           data-testid="playable-controls"
           className="pointer-events-auto w-full max-w-5xl rounded-md border border-border bg-background/92 p-2 shadow-2xl backdrop-blur sm:flex sm:flex-wrap sm:items-center sm:gap-2 sm:px-3 sm:py-3"
