@@ -48,6 +48,7 @@ class BuildConfiguration:
     attribution: str = "goDiesel route pipeline"
     terrain_acquired_at: str | None = None
     terrain_receipt_path: Path | None = None
+    terrain_licence_evidence_path: Path | None = None
     deliberate_missing_cell_offsets: tuple[tuple[int, int], ...] = ()
     normalized_terrain_path: Path | None = None
     structure_tileset_paths: tuple[Path, ...] = ()
@@ -55,6 +56,7 @@ class BuildConfiguration:
     structure_attribution: str | None = None
     structure_acquired_at: str | None = None
     structure_receipt_path: Path | None = None
+    structure_licence_evidence_path: Path | None = None
     osm_network_path: Path | None = None
     osm_network_paths: tuple[Path, ...] = ()
     osm_source_uri: str | None = None
@@ -63,6 +65,7 @@ class BuildConfiguration:
     osm_attribution: str | None = None
     osm_acquired_at: str | None = None
     osm_receipt_path: Path | None = None
+    osm_licence_evidence_path: Path | None = None
 
     def __post_init__(self) -> None:
         if not self.world_id or any(
@@ -538,6 +541,7 @@ def _route_annotations(
 def _receipt_attribution_entries(
     receipts: dict[str, dict[str, object]],
     artifacts: dict[str, ArtifactRecord],
+    evidence_artifacts: dict[str, ArtifactRecord],
 ) -> list[dict[str, object]]:
     entries = []
     for name in sorted(receipts):
@@ -552,11 +556,27 @@ def _receipt_attribution_entries(
                 "licenceUri": licence["uri"],
                 "attribution": licence["attribution"],
                 "evidenceSha256": licence["evidenceSha256"],
+                "evidenceLogicalPath": evidence_artifacts[name].logicalPath,
                 "publicUseObligations": licence["publicUseObligations"],
                 "thirdPartyRights": licence["thirdPartyRights"],
             }
         )
     return entries
+
+
+def _receipt_source_date(
+    receipt: dict[str, object] | None, logical_name: object
+) -> str | None:
+    if receipt is None or not isinstance(logical_name, str):
+        return None
+    assets = receipt.get("assets")
+    if not isinstance(assets, list):
+        return None
+    for asset in assets:
+        if isinstance(asset, dict) and asset.get("logicalName") == logical_name:
+            source_date = asset.get("sourceDate")
+            return str(source_date) if source_date is not None else None
+    return None
 
 
 def _camera_document(
@@ -824,11 +844,24 @@ class WorldPackCompiler:
                     )
                 )
             receipt_artifacts: dict[str, ArtifactRecord] = {}
+            evidence_artifacts: dict[str, ArtifactRecord] = {}
             receipt_documents: dict[str, dict[str, object]] = {}
-            for receipt_name, receipt_path in (
-                ("terrain", configuration.terrain_receipt_path),
-                ("structures", configuration.structure_receipt_path),
-                ("osm", configuration.osm_receipt_path),
+            for receipt_name, receipt_path, evidence_path in (
+                (
+                    "terrain",
+                    configuration.terrain_receipt_path,
+                    configuration.terrain_licence_evidence_path,
+                ),
+                (
+                    "structures",
+                    configuration.structure_receipt_path,
+                    configuration.structure_licence_evidence_path,
+                ),
+                (
+                    "osm",
+                    configuration.osm_receipt_path,
+                    configuration.osm_licence_evidence_path,
+                ),
             ):
                 if receipt_path is None:
                     continue
@@ -848,6 +881,41 @@ class WorldPackCompiler:
                     format_version="godiesel-source-receipt-v1",
                     evidence_class="recorded",
                     role="source-receipt",
+                    required_runtime=False,
+                    kind="source",
+                )
+                licence = receipt_document.get("licence")
+                if not isinstance(licence, dict):
+                    raise ValidationError("source receipt licence must be an object")
+                evidence_filename = licence.get("evidenceFilename")
+                evidence_sha256 = licence.get("evidenceSha256")
+                if (
+                    evidence_path is None
+                    or not isinstance(evidence_filename, str)
+                    or not isinstance(evidence_sha256, str)
+                    or Path(evidence_filename).is_absolute()
+                    or ".." in Path(evidence_filename).parts
+                    or not evidence_path.is_file()
+                    or evidence_path.is_symlink()
+                ):
+                    raise ValidationError(
+                        f"source receipt licence evidence is incomplete: {receipt_path}"
+                    )
+                if sha256_file(evidence_path) != evidence_sha256:
+                    raise ValidationError(
+                        f"source receipt licence evidence checksum differs: {evidence_path}"
+                    )
+                evidence_artifacts[receipt_name] = assembler.add(
+                    f"sources/original/receipts/{evidence_filename}",
+                    evidence_path.read_bytes(),
+                    media_type=(
+                        "application/pdf"
+                        if evidence_path.suffix.lower() == ".pdf"
+                        else "text/html"
+                    ),
+                    format_version="source-licence-evidence-v1",
+                    evidence_class="recorded",
+                    role="source-licence-evidence",
                     required_runtime=False,
                     kind="source",
                 )
@@ -888,7 +956,11 @@ class WorldPackCompiler:
                                 if "terrain" in receipt_artifacts
                                 else {}
                             ),
-                            "sourceDate": configuration.source_date,
+                            "sourceDate": _receipt_source_date(
+                                receipt_documents.get("terrain"),
+                                normalized_terrain.document["source"].get("logicalName"),
+                            )
+                            or configuration.source_date,
                             "licence": normalized_terrain.document["source"]["licence"],
                             "attribution": normalized_terrain.document["source"]["attribution"],
                             "adapter": "godiesel-raster-normalizer",
@@ -1375,7 +1447,7 @@ class WorldPackCompiler:
                         else []
                     )
                     + _receipt_attribution_entries(
-                        receipt_documents, receipt_artifacts
+                        receipt_documents, receipt_artifacts, evidence_artifacts
                     ),
                 },
                 format_version="1",

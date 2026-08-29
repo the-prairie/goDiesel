@@ -14,6 +14,7 @@
       "routeDetail": "app/public/data/routes/17665674778.json",
       "structureAcquiredAt": "2026-08-26T11:52:19Z",
       "structureReceipt": "docs/world-packs/sources/tokyo-plateau-2025.json",
+      "structureLicenceEvidence": "docs/world-packs/structures/tokyo/evidence/plateau-site-policy.html",
       "structureTilesets": [
         "docs/world-packs/structures/tokyo/chiyoda",
         "docs/world-packs/structures/tokyo/chuo",
@@ -24,6 +25,7 @@
       "structureAttribution": "Source: Project PLATEAU, Ministry of Land, Infrastructure, Transport and Tourism, 2025 3D city models for Chiyoda, Chuo, Minato, and Koto, copyright the respective local governments. Modified by goDiesel through route-corridor selection and removal of batch-property metadata.",
       "osmAcquiredAt": "2026-08-26T13:00:00Z",
       "osmReceipt": "docs/world-packs/sources/tokyo-osm-2026.json",
+      "osmLicenceEvidence": "world-packs-local/sources/osm/2026/odbl-1.0.html",
       "osmSources": [
         {
           "path": "world-packs-local/sources/osm/2026/tokyo-building-south.json",
@@ -74,8 +76,10 @@
       "normalizedTerrain": "docs/world-packs/normalized/banff-mountain-terrain.json",
       "terrainAcquiredAt": "2026-08-26T11:28:32Z",
       "terrainReceipt": "docs/world-packs/sources/banff-mrdem-2026.json",
+      "terrainLicenceEvidence": "world-packs-local/sources/banff/2026/open-government-licence-canada.html",
       "osmAcquiredAt": "2026-08-26T13:00:00Z",
       "osmReceipt": "docs/world-packs/sources/banff-osm-2026.json",
+      "osmLicenceEvidence": "world-packs-local/sources/osm/2026/odbl-1.0.html",
       "osmSources": [
         {
           "path": "world-packs-local/sources/osm/2026/banff-building.json",
@@ -106,8 +110,10 @@
       "normalizedTerrain": "docs/world-packs/normalized/ucluelet-coastal-terrain.json",
       "terrainAcquiredAt": "2026-08-26T10:52:26Z",
       "terrainReceipt": "docs/world-packs/sources/ucluelet-lidarbc-2019.json",
+      "terrainLicenceEvidence": "world-packs-local/sources/ucluelet/2019/OGL-vbc2.0.pdf",
       "osmAcquiredAt": "2026-08-26T13:00:00Z",
       "osmReceipt": "docs/world-packs/sources/ucluelet-osm-2026.json",
+      "osmLicenceEvidence": "world-packs-local/sources/osm/2026/odbl-1.0.html",
       "osmSources": [
         {
           "path": "world-packs-local/sources/osm/2026/ucluelet-building.json",

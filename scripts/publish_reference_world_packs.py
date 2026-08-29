@@ -101,6 +101,11 @@ def publish() -> dict[str, object]:
                             if "terrainReceipt" in route
                             else None
                         ),
+                        terrain_licence_evidence_path=(
+                            ROOT / route["terrainLicenceEvidence"]
+                            if "terrainLicenceEvidence" in route
+                            else None
+                        ),
                         deliberate_missing_cell_offsets=tuple(
                             tuple(offset)
                             for offset in route["deliberateMissingCellOffsets"]
@@ -121,6 +126,11 @@ def publish() -> dict[str, object]:
                             if "structureReceipt" in route
                             else None
                         ),
+                        structure_licence_evidence_path=(
+                            ROOT / route["structureLicenceEvidence"]
+                            if "structureLicenceEvidence" in route
+                            else None
+                        ),
                         osm_network_paths=tuple(
                             ROOT / source["path"]
                             for source in route.get("osmSources", [])
@@ -135,6 +145,11 @@ def publish() -> dict[str, object]:
                         osm_receipt_path=(
                             ROOT / route["osmReceipt"]
                             if "osmReceipt" in route
+                            else None
+                        ),
+                        osm_licence_evidence_path=(
+                            ROOT / route["osmLicenceEvidence"]
+                            if "osmLicenceEvidence" in route
                             else None
                         ),
                     ),

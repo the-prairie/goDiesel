@@ -7,9 +7,9 @@ The committed `index.json` is the machine-readable authority for route, world, p
 
 | Class | Route | World | Sealed pack |
 | --- | --- | --- | --- |
-| Dense urban | `17665674778` | `tokyo-urban` | `wp_553ad1d779cb13cf0d1e6d0dc85f2b8cdf17f37963aa58edef9acbcd4f3dc306` |
-| High-relief mountain | `15573295095` | `banff-mountain` | `wp_2736597e3e58b61260ff12282510d4ed2e76b3445845f2171d0f5b8baabf284c` |
-| Remote coastal | `6496900063` | `ucluelet-coastal` | `wp_b1bfebd08222ec878f781bb6e1eeac7b021ce91b5e7efcc274cea5f0be7c191e` |
+| Dense urban | `17665674778` | `tokyo-urban` | `wp_82e3f27f51154a24a7000bf1a1b4ace6efed81a5312b83dac96744c14724d4a3` |
+| High-relief mountain | `15573295095` | `banff-mountain` | `wp_c342858c2e11f9c4d82a1853f76117b2b092e6a57b706a59eb3355684098f4f5` |
+| Remote coastal | `6496900063` | `ucluelet-coastal` | `wp_4815261602b01da51ca56651ed886fadf7fcf989c8ab6485469515417b8d1eac` |
 
 ## Reproducibility
 
@@ -17,7 +17,7 @@ Run `.venv/bin/python -m scripts.publish_reference_world_packs` from the reposit
 The publication source is the exact strict route detail at commit `9d82ce0be05012a6a17e0f93bf06425158e926ed`.
 The route acquisition timestamp is that source commit's committer timestamp, `2026-08-25T23:54:10-06:00`.
 Terrain, structure, and OSM inputs retain their own receipt-backed acquisition timestamps from 2026-08-26.
-Those receipts are sealed into the pack with licence URI, evidence checksum, public-use obligations, and third-party-rights terms.
+Those receipts and their checksum-verified licence evidence bytes are sealed into the pack with licence URI, public-use obligations, and third-party-rights terms.
 The script uses no network adapter and admits the route details under `owner-controlled-derived-route-data` with attribution to the goDiesel route pipeline.
 It compiles only committed normalized terrain and retained PLATEAU and OpenStreetMap inputs whose public-source receipts have already passed admission.
 Repeated publication must produce the same three pack identities and the same bytes.
