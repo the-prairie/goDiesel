@@ -77,6 +77,9 @@ function referencePack(routeSlug: string): VerifiedWorldPack {
   const traversable = new Uint8Array(
     fs.readFileSync(path.join(packRoot, runtime.assets.traversableSurfaces)),
   );
+  const structuresCollision = new Uint8Array(
+    fs.readFileSync(path.join(packRoot, runtime.assets.structuresCollision)),
+  );
   const terrainMask = runtime.assets.terrainMask
     ? new Uint8Array(
         fs.readFileSync(path.join(packRoot, runtime.assets.terrainMask)),
@@ -85,6 +88,7 @@ function referencePack(routeSlug: string): VerifiedWorldPack {
   const artifacts = new Map([
     [runtime.assets.terrainCollision, collision],
     [runtime.assets.traversableSurfaces, traversable],
+    [runtime.assets.structuresCollision, structuresCollision],
     ...(terrainMask && runtime.assets.terrainMask
       ? ([[runtime.assets.terrainMask, terrainMask]] as const)
       : []),
@@ -153,6 +157,7 @@ describe("World Pack collision runtime", () => {
 
   it("is byte-for-byte deterministic over a long mixed-input traversal", () => {
     const runtime = createWorldPhysicsRuntime(referencePack("17665674778"));
+    expect(runtime.obstacleSpatialIndex?.cells.size).toBeGreaterThan(1);
     const run = () => {
       let state = initialWorldPlayer(runtime);
       for (let tick = 0; tick < 12_000; tick += 1) {

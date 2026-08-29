@@ -30,6 +30,12 @@ export interface WorldObstacle {
   footprint?: readonly (readonly [number, number])[];
 }
 
+interface WorldObstacleSpatialIndex {
+  cellSizeM: number;
+  cells: ReadonlyMap<string, readonly number[]>;
+  obstacles: readonly WorldObstacle[];
+}
+
 export interface TraversableTriangle {
   positions: readonly [
     readonly [number, number, number],
@@ -54,6 +60,7 @@ export interface WorldPhysicsRuntime {
   heightfield: CollisionHeightfield;
   traversableTriangles: readonly TraversableTriangle[];
   obstacles: readonly WorldObstacle[];
+  obstacleSpatialIndex?: WorldObstacleSpatialIndex;
   walkSpeedMps: number;
   runSpeedMps: number;
 }
@@ -503,8 +510,59 @@ function checkpointForProgress(navigation: WorldNavigation, progressM: number) {
   return checkpoint;
 }
 
-function obstacleCollision(
+const OBSTACLE_CELL_SIZE_M = 64;
+
+function obstacleCellKey(cellX: number, cellY: number) {
+  return `${cellX}:${cellY}`;
+}
+
+function createObstacleSpatialIndex(
   obstacles: readonly WorldObstacle[],
+): WorldObstacleSpatialIndex {
+  const cells = new Map<string, number[]>();
+  obstacles.forEach((obstacle, obstacleIndex) => {
+    const minimumCellX = Math.floor(obstacle.minimumX / OBSTACLE_CELL_SIZE_M);
+    const maximumCellX = Math.floor(obstacle.maximumX / OBSTACLE_CELL_SIZE_M);
+    const minimumCellY = Math.floor(obstacle.minimumY / OBSTACLE_CELL_SIZE_M);
+    const maximumCellY = Math.floor(obstacle.maximumY / OBSTACLE_CELL_SIZE_M);
+    for (let cellY = minimumCellY; cellY <= maximumCellY; cellY += 1) {
+      for (let cellX = minimumCellX; cellX <= maximumCellX; cellX += 1) {
+        const key = obstacleCellKey(cellX, cellY);
+        const entries = cells.get(key);
+        if (entries) entries.push(obstacleIndex);
+        else cells.set(key, [obstacleIndex]);
+      }
+    }
+  });
+  return { cellSizeM: OBSTACLE_CELL_SIZE_M, cells, obstacles };
+}
+
+function obstacleCandidates(
+  runtime: WorldPhysicsRuntime,
+  x: number,
+  y: number,
+  radiusM: number,
+) {
+  const index = runtime.obstacleSpatialIndex;
+  if (!index || index.obstacles !== runtime.obstacles) return runtime.obstacles;
+  const obstacleIndices = new Set<number>();
+  const minimumCellX = Math.floor((x - radiusM) / index.cellSizeM);
+  const maximumCellX = Math.floor((x + radiusM) / index.cellSizeM);
+  const minimumCellY = Math.floor((y - radiusM) / index.cellSizeM);
+  const maximumCellY = Math.floor((y + radiusM) / index.cellSizeM);
+  for (let cellY = minimumCellY; cellY <= maximumCellY; cellY += 1) {
+    for (let cellX = minimumCellX; cellX <= maximumCellX; cellX += 1) {
+      for (const obstacleIndex of
+        index.cells.get(obstacleCellKey(cellX, cellY)) ?? []) {
+        obstacleIndices.add(obstacleIndex);
+      }
+    }
+  }
+  return Array.from(obstacleIndices, (obstacleIndex) => runtime.obstacles[obstacleIndex]);
+}
+
+function obstacleCollision(
+  runtime: WorldPhysicsRuntime,
   x: number,
   y: number,
   z: number,
@@ -559,7 +617,7 @@ function obstacleCollision(
     return (pointX - nearestX) ** 2 + (pointY - nearestY) ** 2;
   }
 
-  return obstacles.some((obstacle) => {
+  return obstacleCandidates(runtime, x, y, radiusM).some((obstacle) => {
     if (
       x + radiusM <= obstacle.minimumX ||
       x - radiusM >= obstacle.maximumX ||
@@ -683,6 +741,12 @@ function actorSurface(
 }
 
 export function createWorldPhysicsRuntime(pack: VerifiedWorldPack): WorldPhysicsRuntime {
+  const obstacles =
+    pack.runtime.physicalCapabilities.structuresCollision === "footprint-prisms"
+      ? parseStructureObstacles(
+          pack.artifact(pack.runtime.assets.structuresCollision),
+        )
+      : [];
   return {
     packId: pack.manifest.packId,
     worldId: pack.manifest.worldId,
@@ -697,12 +761,8 @@ export function createWorldPhysicsRuntime(pack: VerifiedWorldPack): WorldPhysics
     traversableTriangles: parseTraversableSurface(
       pack.artifact(pack.runtime.assets.traversableSurfaces),
     ),
-    obstacles:
-      pack.runtime.physicalCapabilities.structuresCollision === "footprint-prisms"
-        ? parseStructureObstacles(
-            pack.artifact(pack.runtime.assets.structuresCollision),
-          )
-        : [],
+    obstacles,
+    obstacleSpatialIndex: createObstacleSpatialIndex(obstacles),
     walkSpeedMps: 3.5,
     runSpeedMps: 6,
   };
@@ -883,7 +943,7 @@ export function stepWorldPlayer(
       stepHeight > runtime.navigation.actor.maximumStepM ||
       nextSurface.slopeDegrees > runtime.navigation.actor.maximumSlopeDegrees ||
       obstacleCollision(
-        runtime.obstacles,
+        runtime,
         nextX,
         nextY,
         nextSurface.heightM,
