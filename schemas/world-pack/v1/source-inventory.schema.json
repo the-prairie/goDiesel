@@ -49,6 +49,10 @@
             ]
           },
           "sourceUri": { "type": "string", "minLength": 1 },
+          "receiptLogicalPath": {
+            "type": "string",
+            "pattern": "^sources/original/receipts/[A-Za-z0-9._-]+\\.json$"
+          },
           "acquiredAt": { "type": "string", "format": "date-time" },
           "sourceDate": { "type": ["string", "null"] },
           "licence": { "type": "string", "minLength": 1 },

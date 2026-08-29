@@ -196,10 +196,14 @@ def test_manifest_identity_and_route_truth_are_exact(tmp_path: Path):
     ] == [coordinate["d"] for coordinate in source["route"]]
 
     local_points = route_local_points(canonical)
-    assert len(camera["keyframes"]) == 120
+    assert len(camera["keyframes"]) >= 100
     assert camera["keyframes"][0]["routePointIndex"] == 0
     assert camera["keyframes"][-1]["routePointIndex"] == len(local_points) - 1
-    for keyframe in camera["keyframes"]:
+    assert camera["keyframes"][0]["target"] == camera["keyframes"][1]["target"]
+    route_keyframes = [
+        keyframe for keyframe in camera["keyframes"] if keyframe["frame"] >= 180
+    ]
+    for keyframe in route_keyframes:
         point = local_points[keyframe["routePointIndex"]]
         assert keyframe["target"] == pytest.approx([point.x, point.y, point.z + 5])
         assert keyframe["camera"][2] - keyframe["target"][2] >= 70

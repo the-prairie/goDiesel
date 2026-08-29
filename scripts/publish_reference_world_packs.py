@@ -95,6 +95,12 @@ def publish() -> dict[str, object]:
                         ),
                         licence=LICENCE,
                         attribution=ATTRIBUTION,
+                        terrain_acquired_at=route.get("terrainAcquiredAt"),
+                        terrain_receipt_path=(
+                            ROOT / route["terrainReceipt"]
+                            if "terrainReceipt" in route
+                            else None
+                        ),
                         deliberate_missing_cell_offsets=tuple(
                             tuple(offset)
                             for offset in route["deliberateMissingCellOffsets"]
@@ -109,6 +115,12 @@ def publish() -> dict[str, object]:
                         ),
                         structure_licence=route.get("structureLicence"),
                         structure_attribution=route.get("structureAttribution"),
+                        structure_acquired_at=route.get("structureAcquiredAt"),
+                        structure_receipt_path=(
+                            ROOT / route["structureReceipt"]
+                            if "structureReceipt" in route
+                            else None
+                        ),
                         osm_network_paths=tuple(
                             ROOT / source["path"]
                             for source in route.get("osmSources", [])
@@ -119,6 +131,12 @@ def publish() -> dict[str, object]:
                         ),
                         osm_licence=osm_policy["licence"],
                         osm_attribution=osm_policy["attribution"],
+                        osm_acquired_at=route.get("osmAcquiredAt"),
+                        osm_receipt_path=(
+                            ROOT / route["osmReceipt"]
+                            if "osmReceipt" in route
+                            else None
+                        ),
                     ),
                 )
                 health = verify_pack(result.path)

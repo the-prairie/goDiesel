@@ -10,7 +10,7 @@ import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from .canonical import canonical_json_bytes, canonical_json_document, sha256_file
+from .canonical import canonical_json_bytes, canonical_json_document, sha256_file, strict_json_load
 from .errors import IntegrityError, ValidationError
 from .geometry import (
     LocalPoint,
@@ -46,17 +46,23 @@ class BuildConfiguration:
     source_date: str | None = None
     licence: str = "owner-controlled-derived-route-data"
     attribution: str = "goDiesel route pipeline"
+    terrain_acquired_at: str | None = None
+    terrain_receipt_path: Path | None = None
     deliberate_missing_cell_offsets: tuple[tuple[int, int], ...] = ()
     normalized_terrain_path: Path | None = None
     structure_tileset_paths: tuple[Path, ...] = ()
     structure_licence: str | None = None
     structure_attribution: str | None = None
+    structure_acquired_at: str | None = None
+    structure_receipt_path: Path | None = None
     osm_network_path: Path | None = None
     osm_network_paths: tuple[Path, ...] = ()
     osm_source_uri: str | None = None
     osm_source_uris: tuple[str, ...] = ()
     osm_licence: str | None = None
     osm_attribution: str | None = None
+    osm_acquired_at: str | None = None
+    osm_receipt_path: Path | None = None
 
     def __post_init__(self) -> None:
         if not self.world_id or any(
@@ -127,6 +133,19 @@ class BuildConfiguration:
                 else {}
             ),
         }
+
+    @property
+    def latest_acquired_at(self) -> str:
+        return max(
+            value
+            for value in (
+                self.acquired_at,
+                self.terrain_acquired_at,
+                self.structure_acquired_at,
+                self.osm_acquired_at,
+            )
+            if value is not None
+        )
 
 
 @dataclass(frozen=True)
@@ -367,12 +386,26 @@ def _coverage_document(
                         if terrain
                         else "Stable collision is compiled separately from the procedural terrain",
                     ),
-                    "acquisitionDate": configuration.acquired_at,
+                    "acquisitionDate": configuration.latest_acquired_at,
                     "sourceDate": configuration.source_date,
                     "transformationVersion": COMPILER_VERSION,
-                    "accuracyM": None,
+                    "accuracyM": (
+                        terrain.document["verticalAlignment"]["residualP95M"]
+                        if measured_terrain and terrain is not None
+                        else None
+                    ),
                     "confidence": (
-                        0.9 if measured_terrain else 0.55 if terrain else 0.25 if deliberate_gap else 0.4
+                        0.7
+                        if measured_terrain
+                        and terrain is not None
+                        and float(terrain.document["verticalAlignment"]["residualP95M"]) > 25
+                        else 0.9
+                        if measured_terrain
+                        else 0.55
+                        if terrain
+                        else 0.25
+                        if deliberate_gap
+                        else 0.4
                     ),
                     "visualQuality": "core",
                     "physicsQuality": "core",
@@ -459,6 +492,73 @@ def _navigation_document(
     return document
 
 
+def _route_annotations(
+    route_detail: object, canonical_route: dict[str, object]
+) -> dict[str, object]:
+    if not isinstance(route_detail, dict):
+        raise ValidationError("route detail must be an object")
+    items: list[dict[str, object]] = []
+    subtitle = route_detail.get("subtitle")
+    description = route_detail.get("description")
+    overview_parts = [
+        value.strip()
+        for value in (subtitle, description)
+        if isinstance(value, str) and value.strip()
+    ]
+    if overview_parts:
+        items.append(
+            {
+                "kind": "route-overview",
+                "distanceM": 0,
+                "body": " ".join(overview_parts),
+                "evidenceClass": "recorded",
+                "source": "strict-route-detail",
+            }
+        )
+    discontinuities = canonical_route.get("discontinuities")
+    if not isinstance(discontinuities, list):
+        raise ValidationError("canonical route discontinuities are invalid")
+    for index, discontinuity in enumerate(discontinuities):
+        if not isinstance(discontinuity, dict):
+            raise ValidationError("canonical route discontinuity is invalid")
+        items.append(
+            {
+                "kind": "recording-gap",
+                "startDistanceM": discontinuity["startDistanceM"],
+                "endDistanceM": discontinuity["endDistanceM"],
+                "body": "Recorded route evidence is absent across this interval; the pack does not claim continuous travel.",
+                "evidenceClass": "recorded",
+                "source": discontinuity["source"],
+                "sourceIndex": index,
+            }
+        )
+    return {"schemaVersion": 1, "items": items}
+
+
+def _receipt_attribution_entries(
+    receipts: dict[str, dict[str, object]],
+    artifacts: dict[str, ArtifactRecord],
+) -> list[dict[str, object]]:
+    entries = []
+    for name in sorted(receipts):
+        receipt = receipts[name]
+        licence = receipt.get("licence")
+        if not isinstance(licence, dict):
+            raise ValidationError("source receipt licence must be an object")
+        entries.append(
+            {
+                "scope": artifacts[name].logicalPath,
+                "licence": licence["id"],
+                "licenceUri": licence["uri"],
+                "attribution": licence["attribution"],
+                "evidenceSha256": licence["evidenceSha256"],
+                "publicUseObligations": licence["publicUseObligations"],
+                "thirdPartyRights": licence["thirdPartyRights"],
+            }
+        )
+    return entries
+
+
 def _camera_document(
     points: list[LocalPoint],
     *,
@@ -478,21 +578,59 @@ def _camera_document(
         camera_height_m = max(75.0, maximum_structure_height_m + 45.0)
         camera_range_m = 300.0
         lateral_range_m = 90.0
-    sample_count = min(120, len(points))
+    sample_count = min(112, len(points))
     indices = sorted(
         {
             round(sample_index * (len(points) - 1) / (sample_count - 1))
             for sample_index in range(sample_count)
         }
     )
-    keyframes = []
+    minimum_x = min(point.x for point in points)
+    maximum_x = max(point.x for point in points)
+    minimum_y = min(point.y for point in points)
+    maximum_y = max(point.y for point in points)
+    centre_x = (minimum_x + maximum_x) / 2
+    centre_y = (minimum_y + maximum_y) / 2
+    centre_z = (min(point.z for point in points) + max(point.z for point in points)) / 2
+    overview_range = max(maximum_x - minimum_x, maximum_y - minimum_y)
+    overview_height = max(900.0, overview_range * 0.95)
+    keyframes = [
+        {
+            "frame": 0,
+            "routePointIndex": 0,
+            "camera": [centre_x, centre_y - overview_range * 0.72, centre_z + overview_height],
+            "target": [centre_x, centre_y, centre_z],
+        },
+        {
+            "frame": 120,
+            "routePointIndex": 0,
+            "camera": [centre_x, centre_y - overview_range * 0.72, centre_z + overview_height],
+            "target": [centre_x, centre_y, centre_z],
+        },
+    ]
+    previous_heading: float | None = None
     for keyframe_index, point_index in enumerate(indices):
         point = points[point_index]
-        before = points[max(0, point_index - 1)]
-        after = points[min(len(points) - 1, point_index + 1)]
+        tangent_window = max(2, len(points) // 180)
+        before = points[max(0, point_index - tangent_window)]
+        after = points[min(len(points) - 1, point_index + tangent_window)]
         dx = after.x - before.x
         dy = after.y - before.y
-        magnitude = math.hypot(dx, dy) or 1.0
+        desired_heading = math.atan2(dy, dx)
+        if previous_heading is not None:
+            while desired_heading - previous_heading > math.pi:
+                desired_heading -= math.pi * 2
+            while desired_heading - previous_heading < -math.pi:
+                desired_heading += math.pi * 2
+            maximum_turn = math.radians(10)
+            desired_heading = max(
+                previous_heading - maximum_turn,
+                min(previous_heading + maximum_turn, desired_heading),
+            )
+        previous_heading = desired_heading
+        dx = math.cos(desired_heading)
+        dy = math.sin(desired_heading)
+        magnitude = 1.0
         lateral_phase = math.sin(
             keyframe_index * math.pi * 2 / max(1, len(indices) - 1)
         )
@@ -500,8 +638,8 @@ def _camera_document(
         normal_y = dx / magnitude
         keyframes.append(
             {
-                "frame": round(
-                    keyframe_index * (duration_frames - 1) / (len(indices) - 1)
+                "frame": 180 + round(
+                    keyframe_index * (duration_frames - 181) / (len(indices) - 1)
                 ),
                 "routePointIndex": point_index,
                 "camera": [
@@ -542,6 +680,7 @@ class WorldPackCompiler:
             raise ValidationError(
                 f"route detail is not a regular source file: {route_detail_path}"
             )
+        route_detail = strict_json_load(route_detail_path)
         canonical_route = load_canonical_route(route_detail_path)
         points = route_local_points(canonical_route)
         structure_tilesets = tuple(
@@ -684,6 +823,34 @@ class WorldPackCompiler:
                         ),
                     )
                 )
+            receipt_artifacts: dict[str, ArtifactRecord] = {}
+            receipt_documents: dict[str, dict[str, object]] = {}
+            for receipt_name, receipt_path in (
+                ("terrain", configuration.terrain_receipt_path),
+                ("structures", configuration.structure_receipt_path),
+                ("osm", configuration.osm_receipt_path),
+            ):
+                if receipt_path is None:
+                    continue
+                if not receipt_path.is_file() or receipt_path.is_symlink():
+                    raise ValidationError(
+                        f"source receipt is not a regular file: {receipt_path}"
+                    )
+                receipt_document = strict_json_load(receipt_path)
+                if not isinstance(receipt_document, dict):
+                    raise ValidationError("source receipt must be an object")
+                validate_document("source-receipt", receipt_document)
+                receipt_documents[receipt_name] = receipt_document
+                receipt_artifacts[receipt_name] = assembler.add(
+                    f"sources/original/receipts/{receipt_name}.json",
+                    receipt_path.read_bytes(),
+                    media_type="application/json",
+                    format_version="godiesel-source-receipt-v1",
+                    evidence_class="recorded",
+                    role="source-receipt",
+                    required_runtime=False,
+                    kind="source",
+                )
             source_inventory = {
                 "schemaVersion": 1,
                 "sources": [
@@ -715,7 +882,12 @@ class WorldPackCompiler:
                             "formatVersion": terrain_source_artifact.formatVersion,
                             "evidenceClass": terrain_source_artifact.evidenceClass,
                             "sourceUri": normalized_terrain.document["source"]["sourceUri"],
-                            "acquiredAt": configuration.acquired_at,
+                            "acquiredAt": configuration.terrain_acquired_at or configuration.acquired_at,
+                            **(
+                                {"receiptLogicalPath": receipt_artifacts["terrain"].logicalPath}
+                                if "terrain" in receipt_artifacts
+                                else {}
+                            ),
                             "sourceDate": configuration.source_date,
                             "licence": normalized_terrain.document["source"]["licence"],
                             "attribution": normalized_terrain.document["source"]["attribution"],
@@ -736,7 +908,12 @@ class WorldPackCompiler:
                         "formatVersion": artifact.formatVersion,
                         "evidenceClass": artifact.evidenceClass,
                         "sourceUri": tileset.source_tileset_uri,
-                        "acquiredAt": configuration.acquired_at,
+                        "acquiredAt": configuration.structure_acquired_at or configuration.acquired_at,
+                        **(
+                            {"receiptLogicalPath": receipt_artifacts["structures"].logicalPath}
+                            if "structures" in receipt_artifacts
+                            else {}
+                        ),
                         "sourceDate": str(tileset.source_year),
                         "licence": configuration.structure_licence,
                         "attribution": configuration.structure_attribution,
@@ -756,7 +933,12 @@ class WorldPackCompiler:
                             "formatVersion": osm_source_artifact.formatVersion,
                             "evidenceClass": osm_source_artifact.evidenceClass,
                             "sourceUri": "godiesel:normalized-osm-route-world-v1",
-                            "acquiredAt": configuration.acquired_at,
+                            "acquiredAt": configuration.osm_acquired_at or configuration.acquired_at,
+                            **(
+                                {"receiptLogicalPath": receipt_artifacts["osm"].logicalPath}
+                                if "osm" in receipt_artifacts
+                                else {}
+                            ),
                             "sourceDate": osm_world.source_date,
                             "licence": configuration.osm_licence,
                             "attribution": configuration.osm_attribution,
@@ -777,7 +959,12 @@ class WorldPackCompiler:
                         "formatVersion": artifact.formatVersion,
                         "evidenceClass": artifact.evidenceClass,
                         "sourceUri": osm_uris[index],
-                        "acquiredAt": configuration.acquired_at,
+                        "acquiredAt": configuration.osm_acquired_at or configuration.acquired_at,
+                        **(
+                            {"receiptLogicalPath": receipt_artifacts["osm"].logicalPath}
+                            if "osm" in receipt_artifacts
+                            else {}
+                        ),
                         "sourceDate": osm_world.source_dates[index],
                         "licence": configuration.osm_licence,
                         "attribution": configuration.osm_attribution,
@@ -809,9 +996,9 @@ class WorldPackCompiler:
             )
             assembler.add_json(
                 "route/annotations.json",
-                {"schemaVersion": 1, "items": []},
+                _route_annotations(route_detail, canonical_route),
                 format_version="1",
-                evidence_class="unavailable",
+                evidence_class="recorded",
                 role="route-annotations",
                 required_runtime=False,
                 transform_name="index-route-annotations",
@@ -1186,6 +1373,9 @@ class WorldPackCompiler:
                         ]
                         if osm_source_artifact is not None
                         else []
+                    )
+                    + _receipt_attribution_entries(
+                        receipt_documents, receipt_artifacts
                     ),
                 },
                 format_version="1",

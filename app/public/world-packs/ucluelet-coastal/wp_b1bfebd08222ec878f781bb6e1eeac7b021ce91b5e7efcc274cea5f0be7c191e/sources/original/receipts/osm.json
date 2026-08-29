@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "worldId": "ucluelet-coastal",
+  "acquiredAt": "2026-08-26T13:00:00Z",
+  "licence": {
+    "id": "ODbL-1.0",
+    "uri": "https://opendatacommons.org/licenses/odbl/1-0/",
+    "evidenceFilename": "odbl-1.0.html",
+    "evidenceSha256": "b8d8aebb21bf405f93f6e21bbf0d8f0a749844f9812ec58692f189add6402b47",
+    "attribution": "Copyright OpenStreetMap contributors. Data available under the Open Database License 1.0.",
+    "retentionAllowed": true,
+    "derivativesAllowed": true,
+    "redistribution": "allowed",
+    "publicUseObligations": ["attribute-OpenStreetMap-contributors", "link-to-ODbL-1.0", "offer-derived-database-under-ODbL-1.0", "keep-technical-measures-from-restricting-parallel-access"],
+    "thirdPartyRights": "OpenStreetMap contributors retain rights in contributed contents; the OpenStreetMap Foundation licenses the database under ODbL 1.0, which does not itself license independent rights in individual contents.",
+    "decision": "admit",
+    "decisionReason": "ODbL 1.0 permits retention, adaptation, and public redistribution when attribution, notice, and share-alike obligations are preserved. The compiled World Pack retains exact queries and source responses and declares the ODbL obligations."
+  },
+  "assets": [
+    {
+      "logicalName": "osm-ucluelet-buildings",
+      "filename": "ucluelet-building.json",
+      "sourceUri": "https://overpass-api.de/api/interpreter?data=%5Bout%3Ajson%5D%5Btimeout%3A180%5D%3Bway%5Bbuilding%5D%2848.9125%2C-125.5980%2C48.9645%2C-125.5010%29%3Bout%20geom%2848.9125%2C-125.5980%2C48.9645%2C-125.5010%29%20qt%3B",
+      "sourceVersion": "osm-base:2026-08-26T12:58:03Z;query-sha256:8e557b673a6614ba3d1610661e12a5d8103adaab55b317e805de264c12575569",
+      "sha256": "1ee0bfdf84f82c91b1952050bb44afb75293124eaff828553e83acf28b2d7594",
+      "byteSize": 284978,
+      "mediaType": "application/json",
+      "formatVersion": "Overpass-JSON-0.6",
+      "evidenceClass": "recorded",
+      "sourceDate": "2026-08-26T12:58:03Z",
+      "adapter": "overpass-query",
+      "adapterVersion": "1"
+    },
+    {
+      "logicalName": "osm-ucluelet-highways",
+      "filename": "ucluelet-highway.json",
+      "sourceUri": "https://overpass-api.de/api/interpreter?data=%5Bout%3Ajson%5D%5Btimeout%3A180%5D%3Bway%5Bhighway%5D%2848.9125%2C-125.5980%2C48.9645%2C-125.5010%29%3Bout%20body%3B%3E%3Bout%20skel%20qt%3B",
+      "sourceVersion": "osm-base:2026-08-26T12:59:05Z;query-sha256:a48b70128fcec617c49de16fb83a1331882630978d2e586c5d418facc1d7b254",
+      "sha256": "aa94c0ce834ad91f60d68067c066a7ced878d64031ba23519a402a5e5f17d7eb",
+      "byteSize": 485131,
+      "mediaType": "application/json",
+      "formatVersion": "Overpass-JSON-0.6",
+      "evidenceClass": "recorded",
+      "sourceDate": "2026-08-26T12:59:05Z",
+      "adapter": "overpass-query",
+      "adapterVersion": "1"
+    }
+  ]
+}

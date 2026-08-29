@@ -45,7 +45,7 @@ Each route fixture must retain:
 - a normalized canonical route with exact coordinates, distances, elevations, elapsed time where recorded, segment boundaries, annotations, and provenance;
 - start, midpoint, and end control points derived from recorded geometry;
 - a declared route corridor and exploration boundary;
-- deliberately unavailable quality cells used to prove honest gaps and repair behavior;
+- deliberately source-absent quality cells resolved only through explicitly labelled derived or procedural fallback, used to prove honest gap handling and repair behavior;
 - synthetic or source-cleared media fixtures that never imply owner capture;
 - cases for structures, crossings, slopes, paths, and world edges when source evidence supports them;
 - expected artifact, archive, tamper, repair, and deterministic-build results.

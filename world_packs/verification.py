@@ -306,7 +306,11 @@ def verify_pack(pack: Path, *, require_directory_name: bool = True) -> PackHealt
         path = pack / relative_path
         if artifact.get("mediaType") == "application/json":
             value = _validate_canonical_json(pack, relative_path)
-            external = list(_external_strings(value))
+            external = (
+                []
+                if relative_path == "provenance/attribution.json"
+                else list(_external_strings(value))
+            )
             if external:
                 raise IntegrityError(
                     f"required runtime JSON contains external references in {relative_path}: {external}"

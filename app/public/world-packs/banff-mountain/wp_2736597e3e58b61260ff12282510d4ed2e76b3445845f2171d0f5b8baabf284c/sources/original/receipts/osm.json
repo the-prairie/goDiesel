@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "worldId": "banff-mountain",
+  "acquiredAt": "2026-08-26T13:00:00Z",
+  "licence": {
+    "id": "ODbL-1.0",
+    "uri": "https://opendatacommons.org/licenses/odbl/1-0/",
+    "evidenceFilename": "odbl-1.0.html",
+    "evidenceSha256": "b8d8aebb21bf405f93f6e21bbf0d8f0a749844f9812ec58692f189add6402b47",
+    "attribution": "Copyright OpenStreetMap contributors. Data available under the Open Database License 1.0.",
+    "retentionAllowed": true,
+    "derivativesAllowed": true,
+    "redistribution": "allowed",
+    "publicUseObligations": ["attribute-OpenStreetMap-contributors", "link-to-ODbL-1.0", "offer-derived-database-under-ODbL-1.0", "keep-technical-measures-from-restricting-parallel-access"],
+    "thirdPartyRights": "OpenStreetMap contributors retain rights in contributed contents; the OpenStreetMap Foundation licenses the database under ODbL 1.0, which does not itself license independent rights in individual contents.",
+    "decision": "admit",
+    "decisionReason": "ODbL 1.0 permits retention, adaptation, and public redistribution when attribution, notice, and share-alike obligations are preserved. The compiled World Pack retains exact queries and source responses and declares the ODbL obligations."
+  },
+  "assets": [
+    {
+      "logicalName": "osm-banff-buildings",
+      "filename": "banff-building.json",
+      "sourceUri": "https://overpass-api.de/api/interpreter?data=%5Bout%3Ajson%5D%5Btimeout%3A180%5D%3Bway%5Bbuilding%5D%2851.123%2C-115.653%2C51.203%2C-115.527%29%3Bout%20geom%20qt%3B",
+      "sourceVersion": "osm-base:2026-08-26T12:37:35Z;query-sha256:cecb009985510a03bf053894bc67d242c1c4e7ee4beb7b518f5c573d2a2cdfc4",
+      "sha256": "f46c517bc56784b98da978dbe494ee445b7dbad9b82bd4e369c5ee4390f55052",
+      "byteSize": 1818392,
+      "mediaType": "application/json",
+      "formatVersion": "Overpass-JSON-0.6",
+      "evidenceClass": "recorded",
+      "sourceDate": "2026-08-26T12:37:35Z",
+      "adapter": "overpass-query",
+      "adapterVersion": "1"
+    },
+    {
+      "logicalName": "osm-banff-highways",
+      "filename": "banff-highway.json",
+      "sourceUri": "https://overpass-api.de/api/interpreter?data=%5Bout%3Ajson%5D%5Btimeout%3A180%5D%3Bway%5Bhighway%5D%2851.123%2C-115.653%2C51.203%2C-115.527%29%3Bout%20geom%2851.123%2C-115.653%2C51.203%2C-115.527%29%20qt%3B",
+      "sourceVersion": "osm-base:2026-08-26T12:47:51Z;query-sha256:0c498acebc1b18b7f0ebe8a0a93e86555a8f0c75408298f006c94a8ab9d97f75",
+      "sha256": "d7550333c11928d84c2e2d5411eaf7bb0aa51e5f6cc422d28ba6a0d943500609",
+      "byteSize": 2014318,
+      "mediaType": "application/json",
+      "formatVersion": "Overpass-JSON-0.6",
+      "evidenceClass": "recorded",
+      "sourceDate": "2026-08-26T12:47:51Z",
+      "adapter": "overpass-query",
+      "adapterVersion": "1"
+    }
+  ]
+}

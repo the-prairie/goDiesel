@@ -6,7 +6,8 @@ It fails on route grounding error above 1 cm, undeclared jumps, structure inters
 The committed trace hashes make a changed physical result visible even when aggregate counts still pass.
 
 `durability-proof.json` is the checked result of `.venv/bin/python -m scripts.prove_world_pack_durability`.
-The command removes provider credentials, blocks socket connections, exports each pack twice, imports it into a temporary clean repository, verifies current and previous schema versions without mutation, tampers with terrain collision, repairs from the imported content inventory, and verifies the original identity again.
+The command removes provider credentials, blocks socket connections, exports each pack twice, imports it into a temporary clean repository, verifies current and previous pack identities as schema-v1 no-ops, tampers with terrain collision, repairs from the imported content inventory, and verifies the original identity again.
+No sealed pre-v1 pack exists, so real schema N-1 migration remains unproven.
 
 `film-proof.json` is the checked result of `npm run prove:world-packs:films` from `app` while the local preview is available at port 8796.
 The command removes provider credentials, blocks provider requests, recomputes every delivered MP4 and poster checksum, inspects H.264/AAC streams and dimensions, and renders five timeline positions twice in fresh pages.
