@@ -940,7 +940,7 @@ export function stepWorldPlayer(
     if (!nextSurface) return recoverWorldPlayer(runtime, { ...state, headingDeg });
     const stepHeight = nextSurface.heightM - z;
     if (
-      stepHeight > runtime.navigation.actor.maximumStepM ||
+      Math.abs(stepHeight) > runtime.navigation.actor.maximumStepM ||
       nextSurface.slopeDegrees > runtime.navigation.actor.maximumSlopeDegrees ||
       obstacleCollision(
         runtime,
@@ -989,4 +989,27 @@ export function worldPlayerGeodetic(
     longitude: runtime.origin.longitude + state.x / longitudeScale,
     elevationM: runtime.origin.elevationM + state.z,
   };
+}
+
+export function worldPlayerRouteDistanceM(
+  runtime: WorldPhysicsRuntime,
+  state: WorldPlayerState,
+) {
+  return Math.sqrt(
+    nearestRoutePoint(runtime.navigation, state.x, state.y).distanceSquared,
+  );
+}
+
+export function worldPlayerIntersectsObstacle(
+  runtime: WorldPhysicsRuntime,
+  state: WorldPlayerState,
+) {
+  return obstacleCollision(
+    runtime,
+    state.x,
+    state.y,
+    state.z,
+    runtime.navigation.actor.radiusM,
+    runtime.navigation.actor.heightM,
+  );
 }

@@ -260,6 +260,57 @@ describe("World Pack collision runtime", () => {
     expect(result.blockedTickCount).toBe(1);
   });
 
+  it("blocks downward support-layer snaps beyond the actor step contract", () => {
+    const base = createWorldPhysicsRuntime(referencePack("17665674778"));
+    const runtime: WorldPhysicsRuntime = {
+      ...base,
+      heightfield: {
+        xAxis: [-10, 10],
+        yAxis: [-10, 10],
+        heights: [
+          [0, 0],
+          [0, 0],
+        ],
+        minimumX: -10,
+        maximumX: 10,
+        minimumY: -10,
+        maximumY: 10,
+      },
+      traversableTriangles: [
+        {
+          positions: [
+            [-10, -10, -2],
+            [10, -10, -2],
+            [0, 10, -2],
+          ],
+          minimumX: -10,
+          maximumX: 10,
+          minimumY: -10,
+          maximumY: 10,
+        },
+      ],
+      obstacles: [],
+    };
+    const start = {
+      ...initialWorldPlayer(base),
+      x: 0,
+      y: 0,
+      z: 0,
+      headingDeg: 90,
+    };
+
+    const result = stepWorldPlayer(runtime, start, {
+      forward: 1,
+      strafe: 0,
+      turn: 0,
+      run: false,
+    });
+
+    expect(result.x).toBe(0);
+    expect(result.z).toBe(0);
+    expect(result.blockedTickCount).toBe(1);
+  });
+
   it("recovers from a world edge to a declared checkpoint instead of a void", () => {
     const runtime = createWorldPhysicsRuntime(referencePack("6496900063"));
     const start = initialWorldPlayer(runtime);

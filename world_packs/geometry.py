@@ -256,68 +256,36 @@ def route_ribbon_glb(
         raise ValueError("route ribbon needs at least two points")
     half_width = width_m / 2.0
     positions: list[tuple[float, float, float]] = []
-    for index, point in enumerate(points):
-        before = points[max(0, index - 1)]
-        after = points[min(len(points) - 1, index + 1)]
-        direction_x = after.x - before.x
-        direction_y = after.y - before.y
-        magnitude = math.hypot(direction_x, direction_y) or 1.0
-        perpendicular_x = -direction_y / magnitude * half_width
-        perpendicular_y = direction_x / magnitude * half_width
-        positions.extend(
-            [
-                (point.x + perpendicular_x, point.y + perpendicular_y, point.z),
-                (point.x - perpendicular_x, point.y - perpendicular_y, point.z),
-            ]
-        )
     indices = []
     for index in range(len(points) - 1):
         if index in disconnected_after:
             continue
-        left = index * 2
-        next_left = left + 2
-        indices.extend([left, left + 1, next_left, left + 1, next_left + 1, next_left])
-    component_starts = [0, *(index + 1 for index in sorted(disconnected_after))]
-    component_ends = [*sorted(disconnected_after), len(points) - 1]
-    for start, end in zip(component_starts, component_ends):
-        if end <= start:
-            continue
-        for point_index, direction in ((start, -1.0), (end, 1.0)):
-            neighbour_index = point_index + 1 if point_index == start else point_index - 1
-            point = points[point_index]
-            neighbour = points[neighbour_index]
-            tangent_x = point.x - neighbour.x
-            tangent_y = point.y - neighbour.y
-            if point_index == start:
-                tangent_x *= -1
-                tangent_y *= -1
-            magnitude = math.hypot(tangent_x, tangent_y) or 1.0
-            extension_x = tangent_x / magnitude * half_width * direction
-            extension_y = tangent_y / magnitude * half_width * direction
-            cap_left = len(positions)
-            positions.extend(
-                [
-                    (
-                        positions[point_index * 2][0] + extension_x,
-                        positions[point_index * 2][1] + extension_y,
-                        point.z,
-                    ),
-                    (
-                        positions[point_index * 2 + 1][0] + extension_x,
-                        positions[point_index * 2 + 1][1] + extension_y,
-                        point.z,
-                    ),
-                ]
-            )
-            route_left = point_index * 2
-            if point_index == start:
-                indices.extend(
-                    [cap_left, cap_left + 1, route_left, cap_left + 1, route_left + 1, route_left]
-                )
-            else:
-                indices.extend(
-                    [route_left, route_left + 1, cap_left, route_left + 1, cap_left + 1, cap_left]
-                )
+        start = points[index]
+        end = points[index + 1]
+        direction_x = end.x - start.x
+        direction_y = end.y - start.y
+        magnitude = math.hypot(direction_x, direction_y) or 1.0
+        tangent_x = direction_x / magnitude * half_width
+        tangent_y = direction_y / magnitude * half_width
+        perpendicular_x = -direction_y / magnitude * half_width
+        perpendicular_y = direction_x / magnitude * half_width
+        elevation_extension = (end.z - start.z) * half_width / magnitude
+        start_x = start.x - tangent_x
+        start_y = start.y - tangent_y
+        end_x = end.x + tangent_x
+        end_y = end.y + tangent_y
+        start_z = start.z - elevation_extension
+        end_z = end.z + elevation_extension
+        base = len(positions)
+        positions.extend(
+            [
+                (start_x + perpendicular_x, start_y + perpendicular_y, start_z),
+                (start_x - perpendicular_x, start_y - perpendicular_y, start_z),
+                (end_x + perpendicular_x, end_y + perpendicular_y, end_z),
+                (end_x - perpendicular_x, end_y - perpendicular_y, end_z),
+            ]
+        )
+        indices.extend([base, base + 1, base + 2, base + 1, base + 3, base + 2])
     return build_glb(
         positions,
         indices=indices,

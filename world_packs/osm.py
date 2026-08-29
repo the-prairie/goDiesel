@@ -326,7 +326,10 @@ class OsmWorldData:
         terrain: NormalizedTerrain | None,
         *,
         disconnected_after: frozenset[int] = frozenset(),
+        route_clearance_m: float = 0.35,
     ) -> bytes:
+        if route_clearance_m < 0:
+            raise ValidationError("route collision clearance cannot be negative")
         positions: list[tuple[float, float, float]] = []
         indices: list[int] = []
         obstacles: list[dict[str, object]] = []
@@ -385,6 +388,33 @@ class OsmWorldData:
             second_b = orientation(second_start, second_end, first_end)
             return first_a * first_b <= 0 and second_a * second_b <= 0
 
+        def point_segment_distance_squared(
+            point: tuple[float, float],
+            segment_start: tuple[float, float],
+            segment_end: tuple[float, float],
+        ) -> float:
+            delta_x = segment_end[0] - segment_start[0]
+            delta_y = segment_end[1] - segment_start[1]
+            length_squared = delta_x**2 + delta_y**2
+            ratio = (
+                0.0
+                if length_squared == 0
+                else max(
+                    0.0,
+                    min(
+                        1.0,
+                        (
+                            (point[0] - segment_start[0]) * delta_x
+                            + (point[1] - segment_start[1]) * delta_y
+                        )
+                        / length_squared,
+                    ),
+                )
+            )
+            nearest_x = segment_start[0] + ratio * delta_x
+            nearest_y = segment_start[1] + ratio * delta_y
+            return (point[0] - nearest_x) ** 2 + (point[1] - nearest_y) ** 2
+
         def conflicts_with_route(building: OsmBuilding) -> bool:
             minimum_x = min(point[0] for point in building.footprint)
             maximum_x = max(point[0] for point in building.footprint)
@@ -402,28 +432,49 @@ class OsmWorldData:
                     continue
                 route_end = route_points[route_index + 1]
                 if (
-                    max(route_start.x, route_end.x) < minimum_x
-                    or min(route_start.x, route_end.x) > maximum_x
-                    or max(route_start.y, route_end.y) < minimum_y
-                    or min(route_start.y, route_end.y) > maximum_y
+                    max(route_start.x, route_end.x)
+                    < minimum_x - route_clearance_m
+                    or min(route_start.x, route_end.x)
+                    > maximum_x + route_clearance_m
+                    or max(route_start.y, route_end.y)
+                    < minimum_y - route_clearance_m
+                    or min(route_start.y, route_end.y)
+                    > maximum_y + route_clearance_m
                 ):
                     continue
                 route_segment_start = (route_start.x, route_start.y)
                 route_segment_end = (route_end.x, route_end.y)
-                if any(
-                    segments_cross(
+                clearance_squared = route_clearance_m**2
+                for footprint_index, footprint_start in enumerate(
+                    building.footprint
+                ):
+                    footprint_end = building.footprint[
+                        (footprint_index + 1) % len(building.footprint)
+                    ]
+                    if segments_cross(
                         route_segment_start,
                         route_segment_end,
                         footprint_start,
-                        building.footprint[
-                            (footprint_index + 1) % len(building.footprint)
-                        ],
-                    )
-                    for footprint_index, footprint_start in enumerate(
-                        building.footprint
-                    )
-                ):
-                    return True
+                        footprint_end,
+                    ):
+                        return True
+                    if min(
+                        point_segment_distance_squared(
+                            route_segment_start, footprint_start, footprint_end
+                        ),
+                        point_segment_distance_squared(
+                            route_segment_end, footprint_start, footprint_end
+                        ),
+                        point_segment_distance_squared(
+                            footprint_start,
+                            route_segment_start,
+                            route_segment_end,
+                        ),
+                        point_segment_distance_squared(
+                            footprint_end, route_segment_start, route_segment_end
+                        ),
+                    ) <= clearance_squared:
+                        return True
             return False
 
         def ground_height(x: float, y: float) -> float:

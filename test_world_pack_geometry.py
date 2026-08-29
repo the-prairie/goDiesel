@@ -10,6 +10,7 @@ from world_packs.geometry import (
     BINARY_CHUNK,
     GLB_MAGIC,
     JSON_CHUNK,
+    LocalPoint,
     glb_json,
     route_local_points,
     route_ribbon_glb,
@@ -87,3 +88,16 @@ def test_route_and_physical_glbs_are_deterministic_and_valid():
     assert_valid_glb(terrain, 4)
     assert len(glb_json(ribbon)["accessors"]) == 2
     assert len(glb_json(terrain)["accessors"]) == 2
+
+
+def test_route_ribbon_uses_closed_segment_quads_at_sharp_turns():
+    points = [
+        LocalPoint(x=0, y=0, z=0, distance_m=0),
+        LocalPoint(x=100, y=0, z=1, distance_m=100),
+        LocalPoint(x=100, y=100, z=2, distance_m=200),
+    ]
+
+    document = glb_json(route_ribbon_glb(points, width_m=4))
+
+    assert document["accessors"][0]["count"] == 8
+    assert document["accessors"][1]["count"] == 12

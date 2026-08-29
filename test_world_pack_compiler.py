@@ -230,7 +230,7 @@ def test_compiler_never_bridges_recorded_discontinuities(tmp_path: Path):
     )
     assert thread["meshes"][0]["primitives"][0]["mode"] == 1
     assert thread["accessors"][1]["count"] == 374 * 2
-    assert ribbon["accessors"][1]["count"] == (374 + 6) * 6
+    assert ribbon["accessors"][1]["count"] == 374 * 6
 
 
 def test_repeated_build_reuses_the_same_sealed_version(tmp_path: Path):

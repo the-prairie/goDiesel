@@ -7,9 +7,9 @@ The committed `index.json` is the machine-readable authority for route, world, p
 
 | Class | Route | World | Sealed pack |
 | --- | --- | --- | --- |
-| Dense urban | `17665674778` | `tokyo-urban` | `wp_3a23cbaa71d49c450d8f1b079f888a225d206656bea9641656991f74a59d0f3b` |
-| High-relief mountain | `15573295095` | `banff-mountain` | `wp_2c02563ef8f3674ca08b88141e493290fcea12a80dea07678f6bd39fe24cf2b1` |
-| Remote coastal | `6496900063` | `ucluelet-coastal` | `wp_465bc298bd0f525d2b73430b12b978e92cef9ae71d40b2c38ceb85d01117f326` |
+| Dense urban | `17665674778` | `tokyo-urban` | `wp_ca9a3553696099dfbae8d8ae74a19a21d99bcda2cfd9fd4981fd3d0acf26500e` |
+| High-relief mountain | `15573295095` | `banff-mountain` | `wp_2a0bfd9ec61d9bdaee6cc3cab5e3879e71a18da8a3d7e8e2147422cb983a0f48` |
+| Remote coastal | `6496900063` | `ucluelet-coastal` | `wp_c94d61b8bd53a3928ccd539370565169bd94d5f962c3bb4d3e21c1b81c032fb0` |
 
 ## Reproducibility
 
@@ -30,14 +30,15 @@ Tokyo retains 87 route-corridor PLATEAU 2025 LOD1 tiles across Chiyoda, Chuo, Mi
 Each Tokyo ward declares its route-to-region vertical alignment offset, sample count, and residual P95; the current residual P95 range is 11.04-15.65 m.
 The runtime applies those offsets without changing recorded route elevation or source geometry.
 All three packs retain exact OSM query responses and a normalized transportation network.
-They compile 49,884 Tokyo, 2,064 Banff, and 429 Ucluelet route-safe OSM building footprints into polygon-prism collision, with 161, 5, and 1 source footprints respectively excluded and recorded because they conflict with canonical route traversal.
+They compile 49,873 Tokyo, 2,062 Banff, and 429 Ucluelet route-safe OSM building footprints into polygon-prism collision, with 172, 7, and 1 source footprints respectively excluded and recorded because they conflict with the canonical route actor clearance.
 The browser uses a deterministic 64 m spatial index for collision candidates, so structure density does not create a per-tick linear scan.
 They explicitly declare reconstruction, annotations, and media unavailable where the compiler has admitted no retainable source.
 They now pass browser integrity, separate collision-mesh loading, bounded Core free roam, checkpoint recovery, camera-mode, ghost, and rejoin proofs with all non-local requests blocked.
 Tokyo and Banff navigation, route-thread, and traversable-ribbon artifacts omit edges that cross recorded discontinuities; the browser also refuses to interpolate or rejoin across an absent edge.
-The browser parses the sealed indexed traversable surface as a layered physical support and proves every recorded route node is supported within 1 cm without replacing recorded elevation with the procedural heightfield.
+The browser parses the sealed indexed traversable surface as a layered physical support and proves every retained edge three times at 2 m or finer spacing without replacing recorded elevation with the procedural heightfield.
+The maximum observed route grounding error is below 0.09 mm, and each pack has a deterministic 600-second free-roam trace with no structure entry or unexplained teleportation.
 The provider-blocked browser gate requires Cesium to refine into retained Tokyo B3DM content after loader verification, which prevents a verified-but-invisible structure hierarchy from passing.
-They do not yet satisfy full-route repeated traversal, deterministic film, blind quality, or clean-room archive gates required for promotion beyond the Playable Earth lab.
+They do not yet satisfy deterministic film, blind quality, or clean-room archive gates required for promotion beyond the Playable Earth lab.
 
 ## Browser readiness
 

@@ -2,7 +2,7 @@ from pathlib import Path
 
 from world_packs.canonical import canonical_json_document
 from world_packs.geometry import LocalPoint, glb_json
-from world_packs.osm import OsmWorldData
+from world_packs.osm import OsmBuilding, OsmWorldData
 from world_packs.compiler import BuildConfiguration, WorldPackCompiler
 from world_packs.canonical import strict_json_load
 
@@ -102,6 +102,41 @@ def test_osm_normalizer_is_byte_deterministic(tmp_path: Path):
 
     assert first.transportation_document() == second.transportation_document()
     assert first.collision_glb(route, None) == second.collision_glb(route, None)
+
+
+def test_collision_excludes_buildings_inside_actor_route_clearance():
+    data = OsmWorldData(
+        paths=(),
+        source_sha256s=(),
+        source_dates=(),
+        normalized_bytes=b"{}",
+        sha256="0" * 64,
+        source_date="2026-08-26T12:00:00Z",
+        buildings=(
+            OsmBuilding(
+                feature_id="way/near-route",
+                footprint=((0.3, -1), (1.3, -1), (1.3, 1), (0.3, 1)),
+                height_m=6,
+                height_source="explicit-test",
+            ),
+            OsmBuilding(
+                feature_id="way/retained",
+                footprint=((5, -1), (6, -1), (6, 1), (5, 1)),
+                height_m=6,
+                height_source="explicit-test",
+            ),
+        ),
+        transport=(),
+    )
+    route = [LocalPoint(0, -2, 0, 0), LocalPoint(0, 2, 0, 4)]
+
+    collision = glb_json(data.collision_glb(route, None))
+    evidence = collision["extras"]["godieselStructureCollision"]
+
+    assert evidence["excludedRouteConflictFeatureIds"] == ["way/near-route"]
+    assert [obstacle["featureId"] for obstacle in evidence["obstacles"]] == [
+        "way/retained"
+    ]
 
 
 def test_compiler_retains_osm_and_publishes_physical_capabilities(tmp_path: Path):
