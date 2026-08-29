@@ -459,9 +459,26 @@ def _navigation_document(
     return document
 
 
-def _camera_document(points: list[LocalPoint]) -> dict[str, object]:
+def _camera_document(
+    points: list[LocalPoint],
+    *,
+    maximum_structure_height_m: float = 0,
+) -> dict[str, object]:
     duration_frames = 45 * 30
-    sample_count = min(24, len(points))
+    relief_m = max(point.z for point in points) - min(point.z for point in points)
+    if relief_m >= 300:
+        camera_height_m = max(140.0, min(320.0, relief_m * 0.22))
+        camera_range_m = 620.0
+        lateral_range_m = 170.0
+    elif maximum_structure_height_m >= 45:
+        camera_height_m = min(320.0, maximum_structure_height_m + 55.0)
+        camera_range_m = 460.0
+        lateral_range_m = 150.0
+    else:
+        camera_height_m = max(75.0, maximum_structure_height_m + 45.0)
+        camera_range_m = 300.0
+        lateral_range_m = 90.0
+    sample_count = min(120, len(points))
     indices = sorted(
         {
             round(sample_index * (len(points) - 1) / (sample_count - 1))
@@ -476,6 +493,11 @@ def _camera_document(points: list[LocalPoint]) -> dict[str, object]:
         dx = after.x - before.x
         dy = after.y - before.y
         magnitude = math.hypot(dx, dy) or 1.0
+        lateral_phase = math.sin(
+            keyframe_index * math.pi * 2 / max(1, len(indices) - 1)
+        )
+        normal_x = -dy / magnitude
+        normal_y = dx / magnitude
         keyframes.append(
             {
                 "frame": round(
@@ -483,11 +505,15 @@ def _camera_document(points: list[LocalPoint]) -> dict[str, object]:
                 ),
                 "routePointIndex": point_index,
                 "camera": [
-                    point.x - dx / magnitude * 24,
-                    point.y - dy / magnitude * 24,
-                    point.z + 12,
+                    point.x
+                    - dx / magnitude * camera_range_m
+                    + normal_x * lateral_range_m * lateral_phase,
+                    point.y
+                    - dy / magnitude * camera_range_m
+                    + normal_y * lateral_range_m * lateral_phase,
+                    point.z + camera_height_m,
                 ],
-                "target": [point.x, point.y, point.z + 1.5],
+                "target": [point.x, point.y, point.z + 5.0],
             }
         )
     document = {
@@ -1168,7 +1194,15 @@ class WorldPackCompiler:
                 required_runtime=True,
                 transform_name="assemble-attribution",
             )
-            camera = _camera_document(points)
+            camera = _camera_document(
+                points,
+                maximum_structure_height_m=max(
+                    (building.height_m for building in osm_world.buildings),
+                    default=0,
+                )
+                if osm_world is not None
+                else 0,
+            )
             camera_record = assembler.add_json(
                 "cinematic/camera-timelines.json",
                 camera,

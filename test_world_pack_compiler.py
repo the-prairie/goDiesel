@@ -158,10 +158,12 @@ def test_manifest_identity_and_route_truth_are_exact(tmp_path: Path):
     experience = strict_json_load(
         result.path / "cinematic/experience-manifest.json"
     )
+    camera = strict_json_load(result.path / "cinematic/camera-timelines.json")
     canonical = strict_json_load(result.path / "route/canonical-route.json")
     source = strict_json_load(TOKYO)
     assert isinstance(manifest, dict)
     assert isinstance(experience, dict)
+    assert isinstance(camera, dict)
     assert isinstance(canonical, dict)
     assert isinstance(source, dict)
 
@@ -192,6 +194,15 @@ def test_manifest_identity_and_route_truth_are_exact(tmp_path: Path):
     assert [
         coordinate["distanceM"] for coordinate in canonical["coordinates"]
     ] == [coordinate["d"] for coordinate in source["route"]]
+
+    local_points = route_local_points(canonical)
+    assert len(camera["keyframes"]) == 120
+    assert camera["keyframes"][0]["routePointIndex"] == 0
+    assert camera["keyframes"][-1]["routePointIndex"] == len(local_points) - 1
+    for keyframe in camera["keyframes"]:
+        point = local_points[keyframe["routePointIndex"]]
+        assert keyframe["target"] == pytest.approx([point.x, point.y, point.z + 5])
+        assert keyframe["camera"][2] - keyframe["target"][2] >= 70
 
 
 def test_coverage_names_deliberate_gaps_and_unavailable_structures(tmp_path: Path):

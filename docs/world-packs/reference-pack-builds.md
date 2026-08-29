@@ -7,9 +7,9 @@ The committed `index.json` is the machine-readable authority for route, world, p
 
 | Class | Route | World | Sealed pack |
 | --- | --- | --- | --- |
-| Dense urban | `17665674778` | `tokyo-urban` | `wp_ca9a3553696099dfbae8d8ae74a19a21d99bcda2cfd9fd4981fd3d0acf26500e` |
-| High-relief mountain | `15573295095` | `banff-mountain` | `wp_2a0bfd9ec61d9bdaee6cc3cab5e3879e71a18da8a3d7e8e2147422cb983a0f48` |
-| Remote coastal | `6496900063` | `ucluelet-coastal` | `wp_c94d61b8bd53a3928ccd539370565169bd94d5f962c3bb4d3e21c1b81c032fb0` |
+| Dense urban | `17665674778` | `tokyo-urban` | `wp_db41d4a21168071bd09e67553dea9d755d8b03a49945ab658652218fefdcdfa9` |
+| High-relief mountain | `15573295095` | `banff-mountain` | `wp_05202b59d818c60bf93a5b7def1b16c840d77faba87c0f1aa8c36ee5eacdcffe` |
+| Remote coastal | `6496900063` | `ucluelet-coastal` | `wp_c26dca2c4573447722b90223b037cda5681ea248605765bbbe588353bb41b90c` |
 
 ## Reproducibility
 

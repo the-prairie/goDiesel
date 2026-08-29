@@ -1,3 +1,4 @@
+import ast
 from pathlib import Path
 
 from scripts import publish_reference_world_packs
@@ -13,8 +14,25 @@ def test_reference_publication_inputs_are_fixed_inside_the_repository():
 
 def test_reference_publication_script_has_no_network_adapter():
     source = (ROOT / "scripts/publish_reference_world_packs.py").read_text()
-    assert "requests" not in source
-    assert "urllib" not in source
+    tree = ast.parse(source)
+    imported_modules = {
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    } | {
+        node.module
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module is not None
+    }
+    assert not imported_modules & {
+        "aiohttp",
+        "http.client",
+        "httpx",
+        "requests",
+        "socket",
+        "urllib.request",
+    }
     assert "http://" not in source
     assert "https://" not in source
 
