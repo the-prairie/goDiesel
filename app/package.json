@@ -28,6 +28,7 @@
     "verify:live-pipeline": "../scripts/verify-live-pipeline.sh",
     "perf:runtime:baseline": "vitest run --config vitest.runtime-perf.config.ts && playwright test --config playwright.runtime-perf.config.ts",
     "perf:runtime:live": "GODIESEL_LIVE_PROVIDER_PERF=1 playwright test --config playwright.runtime-live-perf.config.ts",
+    "perf:world-packs": "playwright test --config playwright.world-pack-performance.config.ts",
     "prove:world-packs:traversal": "node --experimental-strip-types scripts/prove-world-pack-traversal.ts"
   },
   "dependencies": {

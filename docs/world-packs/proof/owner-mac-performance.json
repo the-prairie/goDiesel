@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "capturedOn": "2026-08-29",
+  "conditions": {
+    "browser": "Chromium 149.0.7827.55",
+    "cpu": "Apple M1 Pro",
+    "logicalCpuCount": 10,
+    "totalMemoryBytes": 17179869184,
+    "platform": "darwin arm64 25.6.0",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "qualityTier": "core",
+    "network": "all non-local requests blocked",
+    "source": "local production build and sealed World Packs",
+    "webglRenderers": [
+      "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)"
+    ]
+  },
+  "thresholds": {
+    "firstMeaningfulMs": 3000,
+    "physicalReadyMs": 8000,
+    "frameP95Ms": 33,
+    "activeWebglContexts": 1,
+    "settledMemoryGrowthRatio": 0.1
+  },
+  "worlds": [
+    {
+      "routeSlug": "17665674778",
+      "worldId": "tokyo-urban",
+      "firstMeaningfulMs": 656.9000000059605,
+      "physicalReadyMs": 1871.9000000059605,
+      "quantizedColorBins": 140,
+      "webglRenderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+      "frames": {
+        "sampleDurationMs": 8000,
+        "frameCount": 481,
+        "p50Ms": 16.699999999999818,
+        "p95Ms": 17.400000000000546,
+        "p99Ms": 17.600000000000364,
+        "maximumMs": 17.700000000000728,
+        "over33Ms": 0
+      },
+      "webgl": {
+        "activeContexts": 1,
+        "connectedCanvases": 1,
+        "totalContextsCreated": 2
+      },
+      "providerRequests": 0
+    },
+    {
+      "routeSlug": "15573295095",
+      "worldId": "banff-mountain",
+      "firstMeaningfulMs": 527.7999999821186,
+      "physicalReadyMs": 827.5999999940395,
+      "quantizedColorBins": 133,
+      "webglRenderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+      "frames": {
+        "sampleDurationMs": 8000,
+        "frameCount": 481,
+        "p50Ms": 16.699999999999818,
+        "p95Ms": 17,
+        "p99Ms": 17.40000000000009,
+        "maximumMs": 17.600000000000364,
+        "over33Ms": 0
+      },
+      "webgl": {
+        "activeContexts": 1,
+        "connectedCanvases": 1,
+        "totalContextsCreated": 2
+      },
+      "providerRequests": 0
+    },
+    {
+      "routeSlug": "6496900063",
+      "worldId": "ucluelet-coastal",
+      "firstMeaningfulMs": 513.5999999940395,
+      "physicalReadyMs": 751.2999999821186,
+      "quantizedColorBins": 132,
+      "webglRenderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+      "frames": {
+        "sampleDurationMs": 8000,
+        "frameCount": 481,
+        "p50Ms": 16.699999999999818,
+        "p95Ms": 17.199999999999818,
+        "p99Ms": 17.5,
+        "maximumMs": 17.700000000000273,
+        "over33Ms": 0
+      },
+      "webgl": {
+        "activeContexts": 1,
+        "connectedCanvases": 1,
+        "totalContextsCreated": 2
+      },
+      "providerRequests": 0
+    }
+  ],
+  "memory": {
+    "warmupWorldEntries": 3,
+    "measuredCycles": 3,
+    "worldEntriesPerCycle": 3,
+    "baselineUsedBytes": 29653308,
+    "cycleSettledUsedBytes": [
+      30208084,
+      31472840,
+      32135616
+    ],
+    "settledUsedBytes": 32135616,
+    "settledGrowthRatio": 0.08371099777468335,
+    "providerRequests": 0
+  }
+}

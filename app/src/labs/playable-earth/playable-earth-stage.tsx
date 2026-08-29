@@ -51,6 +51,7 @@ import {
   type PlayableEarthStatus,
   type PlayableEarthViewer,
 } from "@/labs/playable-earth/playable-earth-viewer";
+import { PlayableEarthOpeningPreview } from "@/labs/playable-earth/playable-earth-opening-preview";
 import {
   initialWorldPlayer,
   recoverWorldPlayer,
@@ -451,6 +452,9 @@ export function PlayableEarthStage({
         aria-label="Playable Earth world"
         className="absolute inset-0"
       />
+      {status.state === "loading" && !cinematicRender ? (
+        <PlayableEarthOpeningPreview route={route} />
+      ) : null}
 
       <div
         className={
