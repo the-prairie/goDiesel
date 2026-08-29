@@ -1,14 +1,24 @@
+import importlib
 import sys
 from types import ModuleType, SimpleNamespace
 
+import pytest
 
-fake_ee = ModuleType("ee")
-fake_ee.Algorithms = SimpleNamespace()
-fake_ee.Image = None
-fake_ee.Reducer = SimpleNamespace(median=None)
-sys.modules["ee"] = fake_ee
 
-from scripts.route_intelligence import earth_engine_enrich
+@pytest.fixture
+def earth_engine_module(monkeypatch):
+    fake_ee = ModuleType("ee")
+    fake_ee.Algorithms = SimpleNamespace()
+    fake_ee.Image = None
+    fake_ee.Reducer = SimpleNamespace(median=None)
+    monkeypatch.setitem(sys.modules, "ee", fake_ee)
+    monkeypatch.setitem(sys.modules, "requests", ModuleType("requests"))
+
+    module_name = "scripts.route_intelligence.earth_engine_enrich"
+    monkeypatch.delitem(sys.modules, module_name, raising=False)
+    module = importlib.import_module(module_name)
+    yield module
+    sys.modules.pop(module_name, None)
 
 
 class FakeSize:
@@ -50,20 +60,23 @@ class FakeCollection:
         return image
 
 
-def test_scene_composites_bound_earth_engine_memory_and_preserve_bands(monkeypatch):
+def test_scene_composites_bound_earth_engine_memory_and_preserve_bands(
+    monkeypatch,
+    earth_engine_module,
+):
     primary = FakeCollection("primary")
     fallback = FakeCollection("fallback")
     median = object()
-    monkeypatch.setattr(earth_engine_enrich.ee.Reducer, "median", lambda: median)
+    monkeypatch.setattr(earth_engine_module.ee.Reducer, "median", lambda: median)
     monkeypatch.setattr(
-        earth_engine_enrich.ee.Algorithms,
+        earth_engine_module.ee.Algorithms,
         "If",
         lambda condition, primary_image, fallback_image: primary_image,
         raising=False,
     )
-    monkeypatch.setattr(earth_engine_enrich.ee, "Image", lambda image: image)
+    monkeypatch.setattr(earth_engine_module.ee, "Image", lambda image: image)
 
-    composite = earth_engine_enrich.composite_or_fallback(primary, fallback)
+    composite = earth_engine_module.composite_or_fallback(primary, fallback)
 
     assert primary.reductions[0][:2] == (median, 4)
     assert fallback.reductions[0][:2] == (median, 4)
