@@ -317,11 +317,16 @@ function StoryChapter({
   return (
     <section
       id={`story-${chapter.id}`}
+      data-testid="route-story-chapter"
+      data-kind={chapter.kind}
+      data-evidence={chapter.evidence}
+      data-at-distance-m={chapter.distanceM}
       className="grid scroll-mt-36 items-center gap-8 lg:grid-cols-[minmax(0,1.12fr)_minmax(20rem,0.88fr)] lg:gap-16"
     >
       <figure className={cn("relative overflow-hidden border border-line bg-surface-muted shadow-panel", reverse && "lg:order-2")}>
         {chapter.media ? (
           <img
+            data-testid="route-story-chapter-media"
             src={chapter.media.url}
             alt={chapter.title}
             width={chapter.media.width}

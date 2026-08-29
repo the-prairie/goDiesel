@@ -15,7 +15,7 @@ test("mobile globe pinches after the global camera settles", async ({ browser })
   const page = await context.newPage();
 
   try {
-    await page.goto("/#/atlas");
+    await page.goto("/#/atlas?view=world");
     const canvas = page.getByLabel("Interactive route globe");
     await expect(page.locator('div[data-atlas-engine="cesium"]')).toHaveAttribute(
       "data-atlas-status",

@@ -28,17 +28,13 @@ const annotations = (
   }
 ).annotations ?? [];
 
-const written = annotations.filter((item) => item.kind !== "image");
-const editorial = written.filter((item) => item.evidence === "hypothesis");
+const editorial = annotations.filter((item) => item.evidence === "hypothesis");
 
-test("route annotations appear in the margin, in route order", async ({ page }) => {
+test("route annotations become field-story chapters in route order", async ({ page }) => {
   await page.goto(`/#/routes/${ROUTE}`);
 
-  const list = page.getByTestId("route-annotations");
-  await expect(list).toBeVisible();
-
-  const items = page.getByTestId("route-annotation");
-  await expect(items).toHaveCount(written.length);
+  const items = page.locator('[data-testid="route-story-chapter"][data-kind="annotation"]');
+  await expect(items).toHaveCount(annotations.length);
 
   const distances = await items.evaluateAll((nodes) =>
     nodes.map((node) => Number(node.getAttribute("data-at-distance-m"))),
@@ -48,7 +44,7 @@ test("route annotations appear in the margin, in route order", async ({ page }) 
   // The rendered order must match the recorded order, whatever has been
   // authored. Naming specific titles made this assert the author's memory
   // rather than the contract.
-  const expectedOrder = [...written].sort(
+  const expectedOrder = [...annotations].sort(
     (left, right) => left.at_distance_m - right.at_distance_m,
   );
   expect(distances).toEqual(expectedOrder.map((item) => item.at_distance_m));
@@ -62,14 +58,14 @@ test("an editorial annotation is marked, never presented as recorded", async ({
 }) => {
   await page.goto(`/#/routes/${ROUTE}`);
 
-  const marked = page.locator('[data-testid="route-annotation"][data-evidence="hypothesis"]');
+  const marked = page.locator('[data-testid="route-story-chapter"][data-kind="annotation"][data-evidence="hypothesis"]');
   await expect(marked).toHaveCount(editorial.length);
   for (const item of await marked.all()) {
     await expect(item).toContainText("Editorial");
   }
 });
 
-test("a route without annotations shows no annotation section", async ({ page }) => {
+test("a route without annotations creates no annotation chapters", async ({ page }) => {
   await page.goto("/#/routes/17665674778");
-  await expect(page.getByTestId("route-annotations")).toHaveCount(0);
+  await expect(page.locator('[data-testid="route-story-chapter"][data-kind="annotation"]')).toHaveCount(0);
 });
