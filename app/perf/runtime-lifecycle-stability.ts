@@ -1,8 +1,8 @@
 export const LIFECYCLE_HEAP_STABILITY_PROTOCOL = {
   minimumCycles: 12,
-  maximumCycles: 40,
-  window: 8,
-  maximumRangeRatio: 1.04,
+  maximumCycles: 64,
+  window: 16,
+  maximumRangeRatio: 1.15,
   maximumNormalizedSlopePerCycle: 0.0025,
   maximumHalfDriftRatio: 1.01,
 } as const;

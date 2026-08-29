@@ -1631,11 +1631,16 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
     ),
   ).toBe(true);
   if (lifecycleMeasurement) {
+    const warmupAssessment = assessLifecycleHeapStability(
+      lifecycleMeasurement.warmupUsedHeapBytes,
+    );
     expect(
-      assessLifecycleHeapStability(
-        lifecycleMeasurement.warmupUsedHeapBytes,
-      ).stable,
-    ).toBe(true);
+      warmupAssessment,
+      `Lifecycle warmup did not settle: ${JSON.stringify({
+        assessment: warmupAssessment,
+        heapBytes: lifecycleMeasurement.warmupUsedHeapBytes,
+      })}`,
+    ).toMatchObject({ stable: true });
     expect(lifecycleMeasurement.baselineUsedHeapBytes).toBeGreaterThan(0);
     expect(
       transitionSamples.at(-1)!.usedHeapBytes /

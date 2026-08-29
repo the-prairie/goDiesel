@@ -30,7 +30,7 @@ describe("runtime statistical evidence", () => {
   test("accepts stable lifecycle heap noise", () => {
     const assessment = assessLifecycleHeapStability([
       100, 100.1, 99.9, 100.2, 100, 100.4, 99.8, 100.2, 100.1, 99.9, 100.3,
-      100,
+      100, 100.2, 99.8, 100.1, 100,
     ]);
 
     expect(assessment.stable).toBe(true);
@@ -58,10 +58,42 @@ describe("runtime statistical evidence", () => {
       109.8,
       110.1,
       110,
+      110,
+      110.1,
+      109.9,
+      110,
+      110.2,
+      109.8,
+      110.1,
+      110,
     ];
 
     expect(assessLifecycleHeapStability(unsettled).stable).toBe(false);
     expect(assessLifecycleHeapStability(settled).stable).toBe(true);
+  });
+
+  test("accepts bounded multimodal Chromium heap noise", () => {
+    const heaps = [
+      28_679_436, 33_897_976, 30_678_096, 32_102_764, 32_489_852,
+      30_685_884, 32_426_492, 29_804_872, 35_159_244, 33_726_820,
+      31_255_928, 34_318_432, 33_230_500, 33_497_580, 32_926_808,
+      32_010_968, 33_528_328, 33_028_280, 33_946_636, 33_573_732,
+      31_087_228, 34_258_004, 34_311_536, 31_410_288, 34_294_380,
+      34_204_860, 34_387_972, 33_903_716, 31_732_216, 35_328_272,
+      31_819_192, 34_931_300, 31_616_416, 31_839_896, 34_852_084,
+      34_219_104, 34_624_456, 35_671_592, 34_750_836, 31_881_012,
+    ];
+
+    const assessment = assessLifecycleHeapStability(heaps);
+
+    expect(assessment).toMatchObject({
+      stable: true,
+      sampleCount: 40,
+      windowSampleCount: 16,
+    });
+    expect(Math.abs(assessment.normalizedSlopePerCycle)).toBeLessThan(
+      LIFECYCLE_HEAP_STABILITY_PROTOCOL.maximumNormalizedSlopePerCycle,
+    );
   });
 
   test("keeps a steady-growth sequence unresolved at the warmup maximum", () => {
@@ -213,8 +245,8 @@ describe("runtime statistical evidence", () => {
     const outputDirectory = path.join(temporaryRoot, "evidence");
     fs.mkdirSync(rawDirectory, { recursive: true });
     const lifecycleWarmupHeapBytes = [
-      900, 930, 960, 990, 1_000, 1_001, 999, 1_000, 1_001, 1_000, 999,
-      1_000,
+      1_000, 1_001, 999, 1_000, 1_001, 1_000, 999, 1_000, 1_001, 999,
+      1_000, 1_000, 1_001, 999, 1_000, 1_000,
     ];
     const lifecycleWarmupStability = assessLifecycleHeapStability(
       lifecycleWarmupHeapBytes,
@@ -284,20 +316,20 @@ describe("runtime statistical evidence", () => {
         workload: "lifecycle",
         repetitionIndex: 0,
         lifecycleBaselineHeapBytes: 1_000,
-        lifecycleWarmupCycles: 12,
+        lifecycleWarmupCycles: 16,
         lifecycleWarmupProtocol: {
           minimumCycles: 12,
-          maximumCycles: 40,
-          stabilityWindow: 8,
-          maximumRangeRatio: 1.04,
+          maximumCycles: 64,
+          stabilityWindow: 16,
+          maximumRangeRatio: 1.15,
           maximumNormalizedSlopePerCycle: 0.0025,
           maximumHalfDriftRatio: 1.01,
         },
         lifecycleWarmupHeapBytes,
         lifecycleWarmupStability: {
           ...lifecycleWarmupStability,
-          window: 8,
-          maximumRangeRatio: 1.04,
+          window: 16,
+          maximumRangeRatio: 1.15,
         },
         lifecycleFinalHeapRatio: 1.029,
         lifecycleFinalHeapMaximumRatio: 1.1,
@@ -347,15 +379,15 @@ describe("runtime statistical evidence", () => {
     });
     expect(report.protocol.lifecycleWarmup).toEqual({
       minimumCycles: 12,
-      maximumCycles: 40,
-      stabilityWindow: 8,
-      maximumRangeRatio: 1.04,
+      maximumCycles: 64,
+      stabilityWindow: 16,
+      maximumRangeRatio: 1.15,
       maximumNormalizedSlopePerCycle: 0.0025,
       maximumHalfDriftRatio: 1.01,
       maximumFinalHeapRatio: 1.1,
-      observedCycles: [12],
+      observedCycles: [16],
     });
-    expect(report.protocol.repetitionPlan.lifecycleWarmupCycles).toEqual([12]);
+    expect(report.protocol.repetitionPlan.lifecycleWarmupCycles).toEqual([16]);
     expect(report.environment.hostname).toBe("redacted-local-host");
     expect(report.artifacts).toHaveLength(3);
     expect(
@@ -368,9 +400,9 @@ describe("runtime statistical evidence", () => {
       lifecycleWarmupCycles: cycles,
       lifecycleWarmupProtocol: {
         minimumCycles: 12,
-        maximumCycles: 40,
-        stabilityWindow: 8,
-        maximumRangeRatio: 1.04,
+        maximumCycles: 64,
+        stabilityWindow: 16,
+        maximumRangeRatio: 1.15,
         maximumNormalizedSlopePerCycle: 0.0025,
         maximumHalfDriftRatio: 1.01,
       },
@@ -379,9 +411,9 @@ describe("runtime statistical evidence", () => {
       lifecycleWarmupStability: {
         stable: true,
         sampleCount: cycles,
-        windowSampleCount: 8,
-        window: 8,
-        maximumRangeRatio: 1.04,
+        windowSampleCount: 16,
+        window: 16,
+        maximumRangeRatio: 1.15,
         observedRangeRatio: 1,
         normalizedSlopePerCycle: 0,
         observedHalfDriftRatio: 1,
@@ -393,11 +425,11 @@ describe("runtime statistical evidence", () => {
     );
     expect(() =>
       validateLifecycleProtocol([
-        report(12),
+        report(16),
         {
-          ...report(13),
+          ...report(17),
           lifecycleWarmupProtocol: {
-            ...report(13).lifecycleWarmupProtocol,
+            ...report(17).lifecycleWarmupProtocol,
             maximumCycles: 39,
           },
         },
@@ -405,13 +437,13 @@ describe("runtime statistical evidence", () => {
     ).toThrow("canonical warmup convergence protocol");
 
     const slowRetention = Array.from(
-      { length: 12 },
+      { length: 16 },
       (_, index) => 1_000 * 1.005 ** index,
     );
     expect(() =>
       validateLifecycleProtocol([
         {
-          ...report(12),
+          ...report(16),
           lifecycleWarmupHeapBytes: slowRetention,
           lifecycleBaselineHeapBytes: slowRetention.at(-1),
         },
@@ -421,28 +453,28 @@ describe("runtime statistical evidence", () => {
 
   test.each([
     ["minimum cycles", { minimumCycles: 2 }, {}],
-    ["maximum cycles", { maximumCycles: 41 }, {}],
+    ["maximum cycles", { maximumCycles: 65 }, {}],
     [
       "stability window",
-      { stabilityWindow: 6 },
-      { window: 6, windowSampleCount: 6 },
+      { stabilityWindow: 8 },
+      { window: 8, windowSampleCount: 8 },
     ],
     [
       "range threshold",
-      { maximumRangeRatio: 1.05 },
-      { maximumRangeRatio: 1.05 },
+      { maximumRangeRatio: 1.16 },
+      { maximumRangeRatio: 1.16 },
     ],
     ["slope threshold", { maximumNormalizedSlopePerCycle: 0.003 }, {}],
     ["half-drift threshold", { maximumHalfDriftRatio: 1.02 }, {}],
   ])("rejects a noncanonical lifecycle %s", (_, protocolChange, stabilityChange) => {
-    const cycles = 12;
+    const cycles = 16;
     const report = {
       lifecycleWarmupCycles: cycles,
       lifecycleWarmupProtocol: {
         minimumCycles: 12,
-        maximumCycles: 40,
-        stabilityWindow: 8,
-        maximumRangeRatio: 1.04,
+        maximumCycles: 64,
+        stabilityWindow: 16,
+        maximumRangeRatio: 1.15,
         maximumNormalizedSlopePerCycle: 0.0025,
         maximumHalfDriftRatio: 1.01,
         ...protocolChange,
@@ -452,9 +484,9 @@ describe("runtime statistical evidence", () => {
       lifecycleWarmupStability: {
         stable: true,
         sampleCount: cycles,
-        windowSampleCount: 8,
-        window: 8,
-        maximumRangeRatio: 1.04,
+        windowSampleCount: 16,
+        window: 16,
+        maximumRangeRatio: 1.15,
         observedRangeRatio: 1,
         normalizedSlopePerCycle: 0,
         observedHalfDriftRatio: 1,

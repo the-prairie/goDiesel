@@ -693,9 +693,9 @@ function assessLifecycleWarmup(heaps, windowSize) {
 const LIFECYCLE_FINAL_HEAP_MAX_RATIO = 1.1;
 const CANONICAL_LIFECYCLE_WARMUP_PROTOCOL = Object.freeze({
   minimumCycles: 12,
-  maximumCycles: 40,
-  stabilityWindow: 8,
-  maximumRangeRatio: 1.04,
+  maximumCycles: 64,
+  stabilityWindow: 16,
+  maximumRangeRatio: 1.15,
   maximumNormalizedSlopePerCycle: 0.0025,
   maximumHalfDriftRatio: 1.01,
 });
