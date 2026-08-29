@@ -1286,7 +1286,7 @@ async function readWebglSnapshot(page: Page) {
 
 async function waitForRouteDetail(page: Page) {
   await expect(
-    page.getByRole("region", { name: "Route briefing" }),
+    page.getByRole("region", { name: "Route story", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("region", { name: "Route geography" }),
@@ -1457,7 +1457,7 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
         await expect(
           page.getByRole("heading", {
             level: 1,
-            name: "Your route library.",
+            name: "The routes that made the map.",
             exact: true,
           }),
         ).toBeVisible();
