@@ -142,6 +142,19 @@ export function PlayableEarthStage({
   const [mobileControlsExpanded, setMobileControlsExpanded] = useState(false);
   const isMobile = useIsMobile();
   const totalDistanceM = routeDistanceM(route);
+  const gapCount = route.provenance.discontinuities.length;
+  const start = route.route[0];
+  const finish = route.route.at(-1)!;
+  const endpointDistanceM = Math.hypot(
+    (finish.lat - start.lat) * 111_320,
+    (finish.lng - start.lng) *
+      111_320 *
+      Math.cos((route.centerLat * Math.PI) / 180),
+  );
+  const routeShape =
+    endpointDistanceM <= Math.max(300, totalDistanceM * 0.05)
+      ? "Loop"
+      : "Point to point";
 
   const poseForControl = useCallback(
     (next: PlayableEarthControlState) => {
@@ -200,7 +213,10 @@ export function PlayableEarthStage({
           lateralOffsetM: 0,
         };
       }
-      playerRef.current = worldPlayerAtRouteProgress(runtime, current.progressM);
+      playerRef.current = worldPlayerAtRouteProgress(
+        runtime,
+        current.progressM,
+      );
       return {
         ...setPlayableEarthMode(current, "free-roam"),
         playing: false,
@@ -251,7 +267,8 @@ export function PlayableEarthStage({
       onStatus: (nextStatus) => {
         setStatus(nextStatus);
         if (nextStatus.state === "ready") {
-          if (!cinematicRender) viewer.setPose(poseForControl(controlRef.current));
+          if (!cinematicRender)
+            viewer.setPose(poseForControl(controlRef.current));
         }
       },
     });
@@ -281,7 +298,8 @@ export function PlayableEarthStage({
         if (next.mode === "free-roam" && runtime) {
           const player = stepWorldPlayer(
             runtime,
-            playerRef.current ?? worldPlayerAtRouteProgress(runtime, next.progressM),
+            playerRef.current ??
+              worldPlayerAtRouteProgress(runtime, next.progressM),
             {
               forward: input.forward ?? 0,
               strafe: input.strafe ?? 0,
@@ -392,18 +410,32 @@ export function PlayableEarthStage({
     };
     const keyUp = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
-      if (key === "a" && inputRef.current.strafe === -1) inputRef.current.strafe = 0;
-      if (key === "d" && inputRef.current.strafe === 1) inputRef.current.strafe = 0;
-      if (key === "arrowleft" && inputRef.current.turn === -1) inputRef.current.turn = 0;
-      if (key === "arrowright" && inputRef.current.turn === 1) inputRef.current.turn = 0;
-      if ((key === "a" || key === "arrowleft") && inputRef.current.steer === -1) inputRef.current.steer = 0;
-      if ((key === "d" || key === "arrowright") && inputRef.current.steer === 1) inputRef.current.steer = 0;
-      if (key === "q" && inputRef.current.look === -1) inputRef.current.look = 0;
+      if (key === "a" && inputRef.current.strafe === -1)
+        inputRef.current.strafe = 0;
+      if (key === "d" && inputRef.current.strafe === 1)
+        inputRef.current.strafe = 0;
+      if (key === "arrowleft" && inputRef.current.turn === -1)
+        inputRef.current.turn = 0;
+      if (key === "arrowright" && inputRef.current.turn === 1)
+        inputRef.current.turn = 0;
+      if ((key === "a" || key === "arrowleft") && inputRef.current.steer === -1)
+        inputRef.current.steer = 0;
+      if ((key === "d" || key === "arrowright") && inputRef.current.steer === 1)
+        inputRef.current.steer = 0;
+      if (key === "q" && inputRef.current.look === -1)
+        inputRef.current.look = 0;
       if (key === "e" && inputRef.current.look === 1) inputRef.current.look = 0;
-      if ((key === "q" || key === "arrowleft") && inputRef.current.turn === -1) inputRef.current.turn = 0;
-      if ((key === "e" || key === "arrowright") && inputRef.current.turn === 1) inputRef.current.turn = 0;
-      if ((key === "w" || key === "arrowup") && inputRef.current.forward === 1) inputRef.current.forward = 0;
-      if ((key === "s" || key === "arrowdown") && inputRef.current.forward === -1) inputRef.current.forward = 0;
+      if ((key === "q" || key === "arrowleft") && inputRef.current.turn === -1)
+        inputRef.current.turn = 0;
+      if ((key === "e" || key === "arrowright") && inputRef.current.turn === 1)
+        inputRef.current.turn = 0;
+      if ((key === "w" || key === "arrowup") && inputRef.current.forward === 1)
+        inputRef.current.forward = 0;
+      if (
+        (key === "s" || key === "arrowdown") &&
+        inputRef.current.forward === -1
+      )
+        inputRef.current.forward = 0;
       if (key === "shift") inputRef.current.run = false;
     };
     window.addEventListener("keydown", keyDown);
@@ -474,14 +506,29 @@ export function PlayableEarthStage({
           icon={<Gamepad2 className="size-4 shrink-0" aria-hidden="true" />}
           onStateChange={setContextState}
           summary={
-            new URLSearchParams(window.location.search).get("debugGrounding") === "1" ? (
-              <div className="mt-3 text-xs font-semibold uppercase text-primary">
-                Grounding: {grounding.source}
-                {grounding.offsetM === undefined
-                  ? ""
-                  : ` · ${grounding.offsetM >= 0 ? "+" : ""}${grounding.offsetM.toFixed(1)} m`}
-              </div>
-            ) : null
+            <div className="mt-3 space-y-2 text-xs text-ink-secondary">
+              <p className="text-sm text-ink">{route.subtitle}</p>
+              {route.description ? <p>{route.description}</p> : null}
+              <p className="font-semibold uppercase text-primary">
+                {route.type} / {routeShape} /{" "}
+                {gapCount === 0
+                  ? "continuous recording"
+                  : `${gapCount} recorded gap${gapCount === 1 ? "" : "s"}`}
+              </p>
+              <p>
+                Surface and access are not reviewed. Recording gaps are dashed.
+              </p>
+              {new URLSearchParams(window.location.search).get(
+                "debugGrounding",
+              ) === "1" ? (
+                <p className="font-semibold uppercase text-primary">
+                  Grounding: {grounding.source}
+                  {grounding.offsetM === undefined
+                    ? ""
+                    : ` · ${grounding.offsetM >= 0 ? "+" : ""}${grounding.offsetM.toFixed(1)} m`}
+                </p>
+              ) : null}
+            </div>
           }
         />
       </div>
@@ -494,7 +541,9 @@ export function PlayableEarthStage({
             className="max-w-md rounded-md border border-border bg-card p-6 text-center shadow-2xl"
           >
             <div className="text-sm font-semibold">{status.title}</div>
-            <p className="mt-2 text-sm text-muted-foreground">{status.message}</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {status.message}
+            </p>
             {status.state === "unavailable" ? (
               <Button asChild className="mt-5">
                 <Link to={exitPath}>Return to route</Link>
@@ -518,9 +567,13 @@ export function PlayableEarthStage({
           {isMobile ? (
             <div className="grid gap-2">
               <div className="flex items-center gap-2">
-                <Route className="size-4 shrink-0 text-primary" aria-hidden="true" />
+                <Route
+                  className="size-4 shrink-0 text-primary"
+                  aria-hidden="true"
+                />
                 <div className="min-w-0 flex-1 text-sm text-muted-foreground">
-                  {(control.progressM / 1_000).toFixed(2)} / {route.distanceKm.toFixed(1)} km
+                  {(control.progressM / 1_000).toFixed(2)} /{" "}
+                  {route.distanceKm.toFixed(1)} km
                 </div>
                 <Button
                   type="button"
@@ -528,10 +581,14 @@ export function PlayableEarthStage({
                   variant="ghost"
                   className="size-11"
                   aria-label={
-                    mobileControlsExpanded ? "Hide more controls" : "Show more controls"
+                    mobileControlsExpanded
+                      ? "Hide more controls"
+                      : "Show more controls"
                   }
                   aria-expanded={mobileControlsExpanded}
-                  onClick={() => setMobileControlsExpanded((expanded) => !expanded)}
+                  onClick={() =>
+                    setMobileControlsExpanded((expanded) => !expanded)
+                  }
                 >
                   <Settings2 aria-hidden="true" />
                 </Button>
@@ -543,7 +600,9 @@ export function PlayableEarthStage({
                 max={totalDistanceM}
                 step={1}
                 value={control.progressM}
-                disabled={status.state !== "ready" || control.mode === "free-roam"}
+                disabled={
+                  status.state !== "ready" || control.mode === "free-roam"
+                }
                 onChange={(event) => seekTo(Number(event.target.value))}
                 className="h-11 w-full accent-primary"
               />
@@ -553,11 +612,18 @@ export function PlayableEarthStage({
                   className="flex flex-wrap items-center gap-2 border-t border-border pt-2"
                 >
                   <ControlIcon
-                    label={control.mode === "free-roam" ? "Strafe left" : "Steer left"}
+                    label={
+                      control.mode === "free-roam"
+                        ? "Strafe left"
+                        : "Steer left"
+                    }
                     className="size-11"
-                    disabled={status.state !== "ready" || control.mode === "replay"}
+                    disabled={
+                      status.state !== "ready" || control.mode === "replay"
+                    }
                     onPress={() => {
-                      if (control.mode === "free-roam") inputRef.current.strafe = -1;
+                      if (control.mode === "free-roam")
+                        inputRef.current.strafe = -1;
                       else inputRef.current.steer = -1;
                     }}
                     onRelease={() => {
@@ -568,11 +634,18 @@ export function PlayableEarthStage({
                     <ChevronLeft aria-hidden="true" />
                   </ControlIcon>
                   <ControlIcon
-                    label={control.mode === "free-roam" ? "Strafe right" : "Steer right"}
+                    label={
+                      control.mode === "free-roam"
+                        ? "Strafe right"
+                        : "Steer right"
+                    }
                     className="size-11"
-                    disabled={status.state !== "ready" || control.mode === "replay"}
+                    disabled={
+                      status.state !== "ready" || control.mode === "replay"
+                    }
                     onPress={() => {
-                      if (control.mode === "free-roam") inputRef.current.strafe = 1;
+                      if (control.mode === "free-roam")
+                        inputRef.current.strafe = 1;
                       else inputRef.current.steer = 1;
                     }}
                     onRelease={() => {
@@ -583,11 +656,16 @@ export function PlayableEarthStage({
                     <ChevronRight aria-hidden="true" />
                   </ControlIcon>
                   <ControlIcon
-                    label={control.mode === "free-roam" ? "Turn left" : "Look left"}
+                    label={
+                      control.mode === "free-roam" ? "Turn left" : "Look left"
+                    }
                     className="size-11"
-                    disabled={status.state !== "ready" || control.mode === "replay"}
+                    disabled={
+                      status.state !== "ready" || control.mode === "replay"
+                    }
                     onPress={() => {
-                      if (control.mode === "free-roam") inputRef.current.turn = -1;
+                      if (control.mode === "free-roam")
+                        inputRef.current.turn = -1;
                       else inputRef.current.look = -1;
                     }}
                     onRelease={() => {
@@ -598,11 +676,16 @@ export function PlayableEarthStage({
                     <RotateCcw aria-hidden="true" />
                   </ControlIcon>
                   <ControlIcon
-                    label={control.mode === "free-roam" ? "Turn right" : "Look right"}
+                    label={
+                      control.mode === "free-roam" ? "Turn right" : "Look right"
+                    }
                     className="size-11"
-                    disabled={status.state !== "ready" || control.mode === "replay"}
+                    disabled={
+                      status.state !== "ready" || control.mode === "replay"
+                    }
                     onPress={() => {
-                      if (control.mode === "free-roam") inputRef.current.turn = 1;
+                      if (control.mode === "free-roam")
+                        inputRef.current.turn = 1;
                       else inputRef.current.look = 1;
                     }}
                     onRelease={() => {
@@ -624,7 +707,9 @@ export function PlayableEarthStage({
                     }
                     aria-label="Zoom in to route"
                     onClick={() =>
-                      commitControl((current) => zoomPlayableEarth(current, "in"))
+                      commitControl((current) =>
+                        zoomPlayableEarth(current, "in"),
+                      )
                     }
                   >
                     <ZoomIn aria-hidden="true" />
@@ -637,11 +722,14 @@ export function PlayableEarthStage({
                     disabled={
                       status.state !== "ready" ||
                       control.cameraMode !== "route-follow" ||
-                      control.cameraRangeM === PLAYABLE_EARTH_CAMERA_RANGES_M.at(-1)
+                      control.cameraRangeM ===
+                        PLAYABLE_EARTH_CAMERA_RANGES_M.at(-1)
                     }
                     aria-label="Zoom out from route"
                     onClick={() =>
-                      commitControl((current) => zoomPlayableEarth(current, "out"))
+                      commitControl((current) =>
+                        zoomPlayableEarth(current, "out"),
+                      )
                     }
                   >
                     <ZoomOut aria-hidden="true" />
@@ -653,7 +741,9 @@ export function PlayableEarthStage({
                     disabled={status.state !== "ready"}
                     aria-label={`Playback speed ${control.speed}x`}
                     onClick={() =>
-                      commitControl((current) => cyclePlayableEarthSpeed(current, 1))
+                      commitControl((current) =>
+                        cyclePlayableEarthSpeed(current, 1),
+                      )
                     }
                   >
                     <Gauge aria-hidden="true" />
@@ -665,8 +755,12 @@ export function PlayableEarthStage({
                       control={control}
                       onToggleFreeRoam={toggleFreeRoam}
                       onReturnToCheckpoint={returnToCheckpoint}
-                      onCycleCamera={() => commitControl(cyclePlayableEarthCameraMode)}
-                      onToggleGhost={() => commitControl(togglePlayableEarthGhost)}
+                      onCycleCamera={() =>
+                        commitControl(cyclePlayableEarthCameraMode)
+                      }
+                      onToggleGhost={() =>
+                        commitControl(togglePlayableEarthGhost)
+                      }
                     />
                   ) : null}
                 </div>
@@ -676,7 +770,9 @@ export function PlayableEarthStage({
                   type="button"
                   size="icon"
                   className="size-11"
-                  disabled={status.state !== "ready" || control.mode === "free-roam"}
+                  disabled={
+                    status.state !== "ready" || control.mode === "free-roam"
+                  }
                   aria-label={control.playing ? "Pause route" : "Play route"}
                   onClick={() => commitControl(togglePlayableEarthPlayback)}
                 >
@@ -720,7 +816,9 @@ export function PlayableEarthStage({
                   type="button"
                   variant={control.mode === "guided" ? "default" : "outline"}
                   className="h-11 flex-1"
-                  disabled={status.state !== "ready" || control.mode === "free-roam"}
+                  disabled={
+                    status.state !== "ready" || control.mode === "free-roam"
+                  }
                   aria-label={
                     control.mode === "free-roam"
                       ? "Free roam active"
@@ -754,215 +852,247 @@ export function PlayableEarthStage({
             </div>
           ) : (
             <>
-          <Route className="size-4 shrink-0 text-primary" aria-hidden="true" />
-          <div className="min-w-28 flex-1">
-            <div className="text-xs font-semibold uppercase text-primary">
-              {status.state === "ready" ? "Route thread ready" : "Route world loading"}
-            </div>
-            <div aria-live="off" className="truncate text-sm text-muted-foreground">
-              {(control.progressM / 1000).toFixed(2)} / {route.distanceKm.toFixed(1)} km
-            </div>
-          </div>
-          <input
-            aria-label="Route progress"
-            type="range"
-            min={0}
-            max={totalDistanceM}
-            step={1}
-            value={control.progressM}
-            disabled={status.state !== "ready" || control.mode === "free-roam"}
-            onChange={(event) => seekTo(Number(event.target.value))}
-            className="h-8 min-w-36 flex-[2] accent-primary"
-          />
-          <Button
-            type="button"
-            size="icon"
-            variant="outline"
-            disabled={status.state !== "ready" || control.mode === "free-roam"}
-            aria-label={control.playing ? "Pause route" : "Play route"}
-            title={control.playing ? "Pause route" : "Play route"}
-            onClick={() => commitControl(togglePlayableEarthPlayback)}
-          >
-            {control.playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
-          </Button>
-          <Button
-            type="button"
-            variant={control.mode === "guided" ? "default" : "outline"}
-            disabled={status.state !== "ready" || control.mode === "free-roam"}
-            aria-label={
-              control.mode === "free-roam"
-                ? "Free roam active"
-                : control.mode === "guided"
-                  ? "Resume automatic replay"
-                  : "Take control"
-            }
-            title={
-              control.mode === "free-roam"
-                ? "Free roam active"
-                : control.mode === "guided"
-                  ? "Resume automatic replay"
-                  : "Take control"
-            }
-            onClick={() =>
-              commitControl((current) =>
-                setPlayableEarthMode(
-                  current,
-                  current.mode === "replay" ? "guided" : "replay",
-                ),
-              )
-            }
-          >
-            {control.mode === "free-roam" ? (
-              <Footprints aria-hidden="true" />
-            ) : control.mode === "guided" ? (
-              <Clapperboard aria-hidden="true" />
-            ) : (
-              <Gamepad2 aria-hidden="true" />
-            )}
-            {control.mode === "free-roam"
-              ? "Free roam"
-              : control.mode === "guided"
-                ? "Resume replay"
-                : "Take control"}
-          </Button>
-          <ControlIcon
-            label={control.mode === "free-roam" ? "Strafe left" : "Steer left"}
-            disabled={status.state !== "ready" || control.mode === "replay"}
-            onPress={() => {
-              if (control.mode === "free-roam") inputRef.current.strafe = -1;
-              else inputRef.current.steer = -1;
-            }}
-            onRelease={() => {
-              inputRef.current.steer = 0;
-              inputRef.current.strafe = 0;
-            }}
-          >
-            <ChevronLeft aria-hidden="true" />
-          </ControlIcon>
-          <ControlIcon
-            label={control.mode === "free-roam" ? "Strafe right" : "Steer right"}
-            disabled={status.state !== "ready" || control.mode === "replay"}
-            onPress={() => {
-              if (control.mode === "free-roam") inputRef.current.strafe = 1;
-              else inputRef.current.steer = 1;
-            }}
-            onRelease={() => {
-              inputRef.current.steer = 0;
-              inputRef.current.strafe = 0;
-            }}
-          >
-            <ChevronRight aria-hidden="true" />
-          </ControlIcon>
-          <ControlIcon
-            label={control.mode === "free-roam" ? "Turn left" : "Look left"}
-            disabled={status.state !== "ready" || control.mode === "replay"}
-            onPress={() => {
-              if (control.mode === "free-roam") inputRef.current.turn = -1;
-              else inputRef.current.look = -1;
-            }}
-            onRelease={() => {
-              inputRef.current.look = 0;
-              inputRef.current.turn = 0;
-            }}
-          >
-            <RotateCcw aria-hidden="true" />
-          </ControlIcon>
-          <ControlIcon
-            label={control.mode === "free-roam" ? "Turn right" : "Look right"}
-            disabled={status.state !== "ready" || control.mode === "replay"}
-            onPress={() => {
-              if (control.mode === "free-roam") inputRef.current.turn = 1;
-              else inputRef.current.look = 1;
-            }}
-            onRelease={() => {
-              inputRef.current.look = 0;
-              inputRef.current.turn = 0;
-            }}
-          >
-            <RotateCw aria-hidden="true" />
-          </ControlIcon>
-          <Button
-            type="button"
-            size="icon"
-            variant="outline"
-            disabled={
-              status.state !== "ready" ||
-              control.cameraMode !== "route-follow" ||
-              control.cameraRangeM === PLAYABLE_EARTH_CAMERA_RANGES_M[0]
-            }
-            aria-label="Zoom in to route"
-            title="Zoom in to route"
-            onClick={() =>
-              commitControl((current) => zoomPlayableEarth(current, "in"))
-            }
-          >
-            <ZoomIn aria-hidden="true" />
-          </Button>
-          <Button
-            type="button"
-            size="icon"
-            variant="outline"
-            disabled={
-              status.state !== "ready" ||
-              control.cameraMode !== "route-follow" ||
-              control.cameraRangeM === PLAYABLE_EARTH_CAMERA_RANGES_M.at(-1)
-            }
-            aria-label="Zoom out from route"
-            title="Zoom out from route"
-            onClick={() =>
-              commitControl((current) => zoomPlayableEarth(current, "out"))
-            }
-          >
-            <ZoomOut aria-hidden="true" />
-          </Button>
-          {physicalReady ? (
-            <PhysicalWorldControls
-              control={control}
-              onToggleFreeRoam={toggleFreeRoam}
-              onReturnToCheckpoint={returnToCheckpoint}
-              onCycleCamera={() => commitControl(cyclePlayableEarthCameraMode)}
-              onToggleGhost={() => commitControl(togglePlayableEarthGhost)}
-            />
-          ) : null}
-          {physicalReady && control.mode === "free-roam" ? (
-            <>
+              <Route
+                className="size-4 shrink-0 text-primary"
+                aria-hidden="true"
+              />
+              <div className="min-w-28 flex-1">
+                <div className="text-xs font-semibold uppercase text-primary">
+                  {status.state === "ready"
+                    ? "Route thread ready"
+                    : "Route world loading"}
+                </div>
+                <div
+                  aria-live="off"
+                  className="truncate text-sm text-muted-foreground"
+                >
+                  {(control.progressM / 1000).toFixed(2)} /{" "}
+                  {route.distanceKm.toFixed(1)} km
+                </div>
+              </div>
+              <input
+                aria-label="Route progress"
+                type="range"
+                min={0}
+                max={totalDistanceM}
+                step={1}
+                value={control.progressM}
+                disabled={
+                  status.state !== "ready" || control.mode === "free-roam"
+                }
+                onChange={(event) => seekTo(Number(event.target.value))}
+                className="h-8 min-w-36 flex-[2] accent-primary"
+              />
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                disabled={
+                  status.state !== "ready" || control.mode === "free-roam"
+                }
+                aria-label={control.playing ? "Pause route" : "Play route"}
+                title={control.playing ? "Pause route" : "Play route"}
+                onClick={() => commitControl(togglePlayableEarthPlayback)}
+              >
+                {control.playing ? (
+                  <Pause aria-hidden="true" />
+                ) : (
+                  <Play aria-hidden="true" />
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant={control.mode === "guided" ? "default" : "outline"}
+                disabled={
+                  status.state !== "ready" || control.mode === "free-roam"
+                }
+                aria-label={
+                  control.mode === "free-roam"
+                    ? "Free roam active"
+                    : control.mode === "guided"
+                      ? "Resume automatic replay"
+                      : "Take control"
+                }
+                title={
+                  control.mode === "free-roam"
+                    ? "Free roam active"
+                    : control.mode === "guided"
+                      ? "Resume automatic replay"
+                      : "Take control"
+                }
+                onClick={() =>
+                  commitControl((current) =>
+                    setPlayableEarthMode(
+                      current,
+                      current.mode === "replay" ? "guided" : "replay",
+                    ),
+                  )
+                }
+              >
+                {control.mode === "free-roam" ? (
+                  <Footprints aria-hidden="true" />
+                ) : control.mode === "guided" ? (
+                  <Clapperboard aria-hidden="true" />
+                ) : (
+                  <Gamepad2 aria-hidden="true" />
+                )}
+                {control.mode === "free-roam"
+                  ? "Free roam"
+                  : control.mode === "guided"
+                    ? "Resume replay"
+                    : "Take control"}
+              </Button>
               <ControlIcon
-                label="Move forward"
-                disabled={status.state !== "ready"}
+                label={
+                  control.mode === "free-roam" ? "Strafe left" : "Steer left"
+                }
+                disabled={status.state !== "ready" || control.mode === "replay"}
                 onPress={() => {
-                  inputRef.current.forward = 1;
+                  if (control.mode === "free-roam")
+                    inputRef.current.strafe = -1;
+                  else inputRef.current.steer = -1;
                 }}
                 onRelease={() => {
-                  inputRef.current.forward = 0;
+                  inputRef.current.steer = 0;
+                  inputRef.current.strafe = 0;
                 }}
               >
-                <ChevronRight className="-rotate-90" aria-hidden="true" />
+                <ChevronLeft aria-hidden="true" />
               </ControlIcon>
               <ControlIcon
-                label="Move backward"
-                disabled={status.state !== "ready"}
+                label={
+                  control.mode === "free-roam" ? "Strafe right" : "Steer right"
+                }
+                disabled={status.state !== "ready" || control.mode === "replay"}
                 onPress={() => {
-                  inputRef.current.forward = -1;
+                  if (control.mode === "free-roam") inputRef.current.strafe = 1;
+                  else inputRef.current.steer = 1;
                 }}
                 onRelease={() => {
-                  inputRef.current.forward = 0;
+                  inputRef.current.steer = 0;
+                  inputRef.current.strafe = 0;
                 }}
               >
-                <ChevronRight className="rotate-90" aria-hidden="true" />
+                <ChevronRight aria-hidden="true" />
               </ControlIcon>
-            </>
-          ) : null}
-          <Button
-            type="button"
-            variant="outline"
-            disabled={status.state !== "ready"}
-            aria-label={`Playback speed ${control.speed}x`}
-            title="Change playback speed"
-            onClick={() => commitControl((current) => cyclePlayableEarthSpeed(current, 1))}
-          >
-            <Gauge aria-hidden="true" />
-            {control.speed}x
-          </Button>
+              <ControlIcon
+                label={control.mode === "free-roam" ? "Turn left" : "Look left"}
+                disabled={status.state !== "ready" || control.mode === "replay"}
+                onPress={() => {
+                  if (control.mode === "free-roam") inputRef.current.turn = -1;
+                  else inputRef.current.look = -1;
+                }}
+                onRelease={() => {
+                  inputRef.current.look = 0;
+                  inputRef.current.turn = 0;
+                }}
+              >
+                <RotateCcw aria-hidden="true" />
+              </ControlIcon>
+              <ControlIcon
+                label={
+                  control.mode === "free-roam" ? "Turn right" : "Look right"
+                }
+                disabled={status.state !== "ready" || control.mode === "replay"}
+                onPress={() => {
+                  if (control.mode === "free-roam") inputRef.current.turn = 1;
+                  else inputRef.current.look = 1;
+                }}
+                onRelease={() => {
+                  inputRef.current.look = 0;
+                  inputRef.current.turn = 0;
+                }}
+              >
+                <RotateCw aria-hidden="true" />
+              </ControlIcon>
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                disabled={
+                  status.state !== "ready" ||
+                  control.cameraMode !== "route-follow" ||
+                  control.cameraRangeM === PLAYABLE_EARTH_CAMERA_RANGES_M[0]
+                }
+                aria-label="Zoom in to route"
+                title="Zoom in to route"
+                onClick={() =>
+                  commitControl((current) => zoomPlayableEarth(current, "in"))
+                }
+              >
+                <ZoomIn aria-hidden="true" />
+              </Button>
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                disabled={
+                  status.state !== "ready" ||
+                  control.cameraMode !== "route-follow" ||
+                  control.cameraRangeM === PLAYABLE_EARTH_CAMERA_RANGES_M.at(-1)
+                }
+                aria-label="Zoom out from route"
+                title="Zoom out from route"
+                onClick={() =>
+                  commitControl((current) => zoomPlayableEarth(current, "out"))
+                }
+              >
+                <ZoomOut aria-hidden="true" />
+              </Button>
+              {physicalReady ? (
+                <PhysicalWorldControls
+                  control={control}
+                  onToggleFreeRoam={toggleFreeRoam}
+                  onReturnToCheckpoint={returnToCheckpoint}
+                  onCycleCamera={() =>
+                    commitControl(cyclePlayableEarthCameraMode)
+                  }
+                  onToggleGhost={() => commitControl(togglePlayableEarthGhost)}
+                />
+              ) : null}
+              {physicalReady && control.mode === "free-roam" ? (
+                <>
+                  <ControlIcon
+                    label="Move forward"
+                    disabled={status.state !== "ready"}
+                    onPress={() => {
+                      inputRef.current.forward = 1;
+                    }}
+                    onRelease={() => {
+                      inputRef.current.forward = 0;
+                    }}
+                  >
+                    <ChevronRight className="-rotate-90" aria-hidden="true" />
+                  </ControlIcon>
+                  <ControlIcon
+                    label="Move backward"
+                    disabled={status.state !== "ready"}
+                    onPress={() => {
+                      inputRef.current.forward = -1;
+                    }}
+                    onRelease={() => {
+                      inputRef.current.forward = 0;
+                    }}
+                  >
+                    <ChevronRight className="rotate-90" aria-hidden="true" />
+                  </ControlIcon>
+                </>
+              ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                disabled={status.state !== "ready"}
+                aria-label={`Playback speed ${control.speed}x`}
+                title="Change playback speed"
+                onClick={() =>
+                  commitControl((current) =>
+                    cyclePlayableEarthSpeed(current, 1),
+                  )
+                }
+              >
+                <Gauge aria-hidden="true" />
+                {control.speed}x
+              </Button>
             </>
           )}
         </div>
@@ -999,7 +1129,11 @@ function PhysicalWorldControls({
         title={freeRoam ? "Rejoin route" : "Enter free roam"}
         onClick={onToggleFreeRoam}
       >
-        {freeRoam ? <LocateFixed aria-hidden="true" /> : <Footprints aria-hidden="true" />}
+        {freeRoam ? (
+          <LocateFixed aria-hidden="true" />
+        ) : (
+          <Footprints aria-hidden="true" />
+        )}
       </Button>
       <Button
         type="button"
@@ -1029,7 +1163,9 @@ function PhysicalWorldControls({
         size="icon"
         variant={control.ghostVisible ? "default" : "outline"}
         className={className}
-        aria-label={control.ghostVisible ? "Hide route ghost" : "Show route ghost"}
+        aria-label={
+          control.ghostVisible ? "Hide route ghost" : "Show route ghost"
+        }
         aria-pressed={control.ghostVisible}
         title={control.ghostVisible ? "Hide route ghost" : "Show route ghost"}
         onClick={onToggleGhost}

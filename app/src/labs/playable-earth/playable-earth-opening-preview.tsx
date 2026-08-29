@@ -36,6 +36,17 @@ export function PlayableEarthOpeningPreview({ route }: { route: QuestRoute }) {
       x: (point.lng - route.centerLng) * latitudeScale,
       y: point.lat - route.centerLat,
     }));
+    const disconnectedAfter = new Set(
+      route.provenance.discontinuities.flatMap((gap) => {
+        const index = route.route.findIndex(
+          (point, pointIndex) =>
+            pointIndex < route.route.length - 1 &&
+            point.d <= gap.startD &&
+            route.route[pointIndex + 1].d >= gap.endD,
+        );
+        return index >= 0 ? [index] : [];
+      }),
+    );
     const minimumX = Math.min(...points.map((point) => point.x));
     const maximumX = Math.max(...points.map((point) => point.x));
     const minimumY = Math.min(...points.map((point) => point.y));
@@ -96,8 +107,9 @@ export function PlayableEarthOpeningPreview({ route }: { route: QuestRoute }) {
         context.beginPath();
         points.forEach((point, index) => {
           const projected = project(point);
-          if (index === 0) context.moveTo(projected.x, projected.y);
-          else context.lineTo(projected.x, projected.y);
+          if (index === 0 || disconnectedAfter.has(index - 1)) {
+            context.moveTo(projected.x, projected.y);
+          } else context.lineTo(projected.x, projected.y);
         });
       };
       trace();
@@ -109,18 +121,28 @@ export function PlayableEarthOpeningPreview({ route }: { route: QuestRoute }) {
       context.lineWidth = 3.5;
       context.stroke();
 
+      context.save();
+      context.setLineDash([5, 7]);
+      context.strokeStyle = "rgba(255,218,147,0.9)";
+      context.lineWidth = 2.5;
+      for (const index of disconnectedAfter) {
+        const start = project(points[index]);
+        const end = project(points[index + 1]);
+        context.beginPath();
+        context.moveTo(start.x, start.y);
+        context.lineTo(end.x, end.y);
+        context.stroke();
+      }
+      context.restore();
+
       const start = project(points[0]);
       const finish = project(points.at(-1)!);
-      for (const marker of [start, finish]) {
-        context.beginPath();
-        context.arc(marker.x, marker.y, 5, 0, Math.PI * 2);
-        context.fillStyle = "#fff8e8";
-        context.fill();
-        context.beginPath();
-        context.arc(marker.x, marker.y, 2.5, 0, Math.PI * 2);
-        context.fillStyle = "#ff9e68";
-        context.fill();
-      }
+      context.beginPath();
+      context.arc(start.x, start.y, 5, 0, Math.PI * 2);
+      context.fillStyle = "#fff8e8";
+      context.fill();
+      context.fillStyle = "#ff9e68";
+      context.fillRect(finish.x - 4.5, finish.y - 4.5, 9, 9);
       canvas.dataset.worldPackMeaningfulView = "true";
     };
 
