@@ -916,6 +916,9 @@ export function stepWorldPlayer(
   state: WorldPlayerState,
   input: WorldMovementInput,
 ): WorldPlayerState {
+  if (!actorSurface(runtime, state.x, state.y, state.z)) {
+    return recoverWorldPlayer(runtime, state);
+  }
   const timestep = 1 / runtime.navigation.fixedTimestepHz;
   const headingDeg =
     (state.headingDeg + input.turn * 100 * timestep + 360) % 360;
@@ -937,7 +940,10 @@ export function stepWorldPlayer(
     const nextX = x + totalX / substeps;
     const nextY = y + totalY / substeps;
     const nextSurface = actorSurface(runtime, nextX, nextY, z);
-    if (!nextSurface) return recoverWorldPlayer(runtime, { ...state, headingDeg });
+    if (!nextSurface) {
+      blocked = true;
+      break;
+    }
     const stepHeight = nextSurface.heightM - z;
     if (
       Math.abs(stepHeight) > runtime.navigation.actor.maximumStepM ||

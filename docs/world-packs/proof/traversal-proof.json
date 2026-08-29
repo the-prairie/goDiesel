@@ -10,7 +10,7 @@
     {
       "routeSlug": "17665674778",
       "worldId": "tokyo-urban",
-      "packId": "wp_db41d4a21168071bd09e67553dea9d755d8b03a49945ab658652218fefdcdfa9",
+      "packId": "wp_553ad1d779cb13cf0d1e6d0dc85f2b8cdf17f37963aa58edef9acbcd4f3dc306",
       "fixedTimestepHz": 60,
       "guided": {
         "repetitions": 3,
@@ -27,19 +27,23 @@
         "entryHeadingOffsetDeg": 90,
         "durationSeconds": 600,
         "ticks": 36000,
-        "maximumRouteDistanceM": 41.439,
-        "visited25mCells": 15,
+        "maximumRouteDistanceM": 127.932,
+        "visited25mCells": 25,
         "classifiedRecoveries": 0,
-        "longestBlockedRunTicks": 73,
+        "totalBlockedTicks": 148,
+        "blockedSeconds": 2.467,
+        "longestBlockedRunTicks": 1,
+        "acceptedHorizontalTravelM": 1730.708,
+        "maximumRecoveryDistanceM": 0,
         "obstacleIntersections": 0,
         "unexplainedTeleportations": 0,
-        "traceSha256": "ddfabe6237f90b3fd5db7d2eb31566f87715e134bc53c5aeb0b96202382acb5d"
+        "traceSha256": "3c9a57f779217b48c61074ec2f413800920bf62f440dec81a4d21c4f995ac619"
       }
     },
     {
       "routeSlug": "15573295095",
       "worldId": "banff-mountain",
-      "packId": "wp_05202b59d818c60bf93a5b7def1b16c840d77faba87c0f1aa8c36ee5eacdcffe",
+      "packId": "wp_2736597e3e58b61260ff12282510d4ed2e76b3445845f2171d0f5b8baabf284c",
       "fixedTimestepHz": 60,
       "guided": {
         "repetitions": 3,
@@ -59,7 +63,11 @@
         "maximumRouteDistanceM": 397.156,
         "visited25mCells": 60,
         "classifiedRecoveries": 0,
+        "totalBlockedTicks": 0,
+        "blockedSeconds": 0,
         "longestBlockedRunTicks": 0,
+        "acceptedHorizontalTravelM": 2236.375,
+        "maximumRecoveryDistanceM": 0,
         "obstacleIntersections": 0,
         "unexplainedTeleportations": 0,
         "traceSha256": "222223fa8d2eec1d5da0952e8664e310b621794267ac435781e0a61931c65df4"
@@ -68,7 +76,7 @@
     {
       "routeSlug": "6496900063",
       "worldId": "ucluelet-coastal",
-      "packId": "wp_c26dca2c4573447722b90223b037cda5681ea248605765bbbe588353bb41b90c",
+      "packId": "wp_b1bfebd08222ec878f781bb6e1eeac7b021ce91b5e7efcc274cea5f0be7c191e",
       "fixedTimestepHz": 60,
       "guided": {
         "repetitions": 3,
@@ -86,12 +94,16 @@
         "durationSeconds": 600,
         "ticks": 36000,
         "maximumRouteDistanceM": 395.746,
-        "visited25mCells": 38,
-        "classifiedRecoveries": 1,
-        "longestBlockedRunTicks": 17,
+        "visited25mCells": 41,
+        "classifiedRecoveries": 0,
+        "totalBlockedTicks": 6,
+        "blockedSeconds": 0.1,
+        "longestBlockedRunTicks": 1,
+        "acceptedHorizontalTravelM": 2215.875,
+        "maximumRecoveryDistanceM": 0,
         "obstacleIntersections": 0,
         "unexplainedTeleportations": 0,
-        "traceSha256": "8cfe3fb00536f110c0a3826bb4e445da3bba2a5a070a2cba2a760a5ca7a92f66"
+        "traceSha256": "e567c09150903f5f247f0b37d5600ada055b51c9b2f8a8ed1bb967feee905536"
       }
     }
   ]

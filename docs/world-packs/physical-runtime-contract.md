@@ -30,7 +30,7 @@ Height and slope are evaluated on the indexed triangle under the actor rather th
 The traversable-surface GLB is a separately checksummed indexed triangle mesh.
 It preserves the recorded route elevation and can represent more than one support elevation at the same horizontal coordinate.
 The runtime selects the layer nearest the actor's current or recorded elevation, so a route crossing does not collapse onto a single-valued terrain heightfield.
-Current packs declare `heightfield` terrain, `indexed-triangle-mesh` traversable surfaces, and explicitly `unavailable` structure collision.
+Current packs declare `heightfield` terrain, `indexed-triangle-mesh` traversable surfaces, and `footprint-prisms` structure collision.
 
 ## Route Relationship
 
@@ -43,13 +43,14 @@ It does not teleport to a visually inferred road or provider surface.
 ## Failure And Recovery
 
 An invalid or missing collision sample fails closed.
-Crossing the collision boundary recovers the actor to the most recently passed declared recovery anchor.
+An attempted move across the collision boundary is blocked in place.
+An actor state that is already outside valid support recovers to the most recently passed declared recovery anchor.
 The recovery increments an inspectable counter and never places the actor in a void.
 A slope, upward step, or structure obstacle violation blocks horizontal movement and increments an inspectable blocked-tick counter.
 The actor remains grounded on the last accepted physical surface.
 
 ## Current Evidence Limit
 
-The fixed reference Core packs contain procedural terrain collision and an empty, explicitly unavailable structures collision mesh.
-Automated synthetic obstacles prove the sweep and wall-penetration rule, but the Tokyo pack cannot claim real building collision until a retainable structure source is admitted and compiled.
-The physical runtime remains a Playable Earth lab capability until repeated real-pack traversal and owner-Mac visual review pass.
+Tokyo contains procedural route-derived terrain collision, while Banff and Ucluelet contain admitted measured terrain with declared no-data behavior.
+All three packs compile retained OSM building footprints into route-cleared obstacle prisms.
+Repeated real-pack traversal and owner-Mac performance evidence are recorded under `docs/world-packs/proof`; blind experiential quality remains a separate promotion gate.

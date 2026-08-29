@@ -186,7 +186,7 @@ function guidedProof(runtime: WorldPhysicsRuntime) {
 
 function freeRoamInput(tick: number, evasiveTicks: number) {
   if (evasiveTicks > 0) {
-    return { forward: 1 as const, strafe: 1 as const, turn: 1 as const, run: false };
+    return { forward: 0 as const, strafe: 0 as const, turn: 1 as const, run: false };
   }
   const phase = Math.floor(tick / 300) % 8;
   return {
@@ -249,14 +249,23 @@ function freeRoamProof(runtime: WorldPhysicsRuntime) {
   const traceCheckpoints: number[][] = [];
   let maximumRouteDistanceM = 0;
   let classifiedRecoveries = 0;
+  let maximumRecoveryDistanceM = 0;
+  let acceptedHorizontalTravelM = 0;
   let longestBlockedRunTicks = 0;
   let blockedRunTicks = 0;
   let evasiveTicks = 0;
   for (let tick = 0; tick < ticks; tick += 1) {
     const next = stepWorldPlayer(runtime, state, freeRoamInput(tick, evasiveTicks));
     const recovered = next.recoveryCount > state.recoveryCount;
-    if (recovered) classifiedRecoveries += 1;
+    if (recovered) {
+      classifiedRecoveries += 1;
+      maximumRecoveryDistanceM = Math.max(
+        maximumRecoveryDistanceM,
+        Math.hypot(next.x - state.x, next.y - state.y),
+      );
+    }
     const horizontalMovementM = Math.hypot(next.x - state.x, next.y - state.y);
+    if (!recovered) acceptedHorizontalTravelM += horizontalMovementM;
     const verticalMovementM = Math.abs(next.z - state.z);
     if (
       !recovered &&
@@ -274,7 +283,7 @@ function freeRoamProof(runtime: WorldPhysicsRuntime) {
     const blocked = next.blockedTickCount > state.blockedTickCount;
     blockedRunTicks = blocked ? blockedRunTicks + 1 : 0;
     longestBlockedRunTicks = Math.max(longestBlockedRunTicks, blockedRunTicks);
-    evasiveTicks = blocked ? 120 : Math.max(0, evasiveTicks - 1);
+    evasiveTicks = blocked ? 54 : Math.max(0, evasiveTicks - 1);
     const routeDistanceM = worldPlayerRouteDistanceM(runtime, next);
     maximumRouteDistanceM = Math.max(maximumRouteDistanceM, routeDistanceM);
     visitedCells.add(`${Math.floor(next.x / 25)}:${Math.floor(next.y / 25)}`);
@@ -306,7 +315,14 @@ function freeRoamProof(runtime: WorldPhysicsRuntime) {
     maximumRouteDistanceM: rounded(maximumRouteDistanceM, 3),
     visited25mCells: visitedCells.size,
     classifiedRecoveries,
+    totalBlockedTicks: state.blockedTickCount,
+    blockedSeconds: rounded(
+      state.blockedTickCount / runtime.navigation.fixedTimestepHz,
+      3,
+    ),
     longestBlockedRunTicks,
+    acceptedHorizontalTravelM: rounded(acceptedHorizontalTravelM, 3),
+    maximumRecoveryDistanceM: rounded(maximumRecoveryDistanceM, 3),
     obstacleIntersections: 0,
     unexplainedTeleportations: 0,
     traceSha256: sha256(traceCheckpoints),
