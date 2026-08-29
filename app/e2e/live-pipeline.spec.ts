@@ -431,9 +431,6 @@ test.describe("real source to live provider pipeline", () => {
     ) as { curation: { vibe: string }; route: unknown[] };
     expect(generated.curation.vibe).toBe(realValue);
     expect(generated.route.length).toBeGreaterThan(100);
-    expect((await readFile(path.join(adminWorkspace!, "app/src/data/quests.generated.json"))).length).toBeGreaterThan(
-      1_000_000,
-    );
 
     const evidence = await network.finish(testInfo);
     expect(new Set(evidence.observations.map((entry) => entry.category))).toContain(

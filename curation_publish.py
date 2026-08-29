@@ -1,7 +1,7 @@
 """Incremental publication of one route's curation.
 
 A curation edit changes no geometry, so nothing here re-reads a GPX or FIT file,
-re-geocodes, or re-renders route art. Only the three tracked artifacts that
+re-geocodes, or re-renders route art. Only the two tracked artifact tiers that
 carry curation are rewritten, and the result must equal what a full `build.py`
 run would produce. `test_curation_publish.py` asserts that equality.
 
@@ -28,7 +28,6 @@ def generated_paths(checkout_root):
     return {
         "detail": root / "app" / "public" / "data" / "routes",
         "manifest": root / "app" / "src" / "data" / "generated" / "routes.manifest.json",
-        "payload": root / "app" / "src" / "data" / "quests.generated.json",
     }
 
 
@@ -62,18 +61,8 @@ def publish_annotations(checkout_root, activity_id, annotations):
         )
     ]
 
-    payload = json.loads(paths["payload"].read_text(encoding="utf-8"))
-    payload["generated_at"] = generated_at
-    _replace_in_place(
-        payload.get("routes", []),
-        activity_id,
-        lambda record: _with_annotations(record, normalized),
-        "quests.generated.json",
-    )
-    staged.append((paths["payload"], json.dumps(payload, ensure_ascii=False)))
-
     # The manifest is the summary tier and carries no annotations (ADR-0004),
-    # but its generated_at must stay in step with the payload.
+    # but its timestamp stays in step with the detail tier.
     manifest = json.loads(paths["manifest"].read_text(encoding="utf-8"))
     manifest["generated_at"] = generated_at
     staged.append((paths["manifest"], json.dumps(manifest, ensure_ascii=False)))
@@ -107,8 +96,7 @@ def publish_curation(checkout_root, activity_id, curation):
         (detail_path, json.dumps(_with_curation(detail, normalized), ensure_ascii=False))
     )
 
-    # A rebuild stamps both artifacts with one timestamp. Match that, so the
-    # manifest and the payload never disagree about when they were generated.
+    # A rebuild stamps both tiers with one timestamp. Match that here.
     generated_at = _now()
 
     manifest = json.loads(paths["manifest"].read_text(encoding="utf-8"))
@@ -120,16 +108,6 @@ def publish_curation(checkout_root, activity_id, curation):
         "routes.manifest.json",
     )
     staged.append((paths["manifest"], json.dumps(manifest, ensure_ascii=False)))
-
-    payload = json.loads(paths["payload"].read_text(encoding="utf-8"))
-    payload["generated_at"] = generated_at
-    _replace_in_place(
-        payload.get("routes", []),
-        activity_id,
-        lambda route: _with_curation(route, normalized),
-        "quests.generated.json",
-    )
-    staged.append((paths["payload"], json.dumps(payload, ensure_ascii=False)))
 
     _write_all_atomic(staged)
     return normalized
@@ -179,20 +157,6 @@ def _replace_route(routes, activity_id, apply_change, artifact):
     if len(matching) > 1:
         raise CurationPublishError(f"route {activity_id} is duplicated in {artifact}")
     apply_change(matching[0])
-
-
-def _replace_in_place(routes, activity_id, transform, artifact):
-    """Swap one route for a transformed copy, keeping its position in the list."""
-    indexes = [
-        index
-        for index, route in enumerate(routes)
-        if str(route.get("slug")) == activity_id
-    ]
-    if not indexes:
-        raise CurationPublishError(f"route {activity_id} is missing from {artifact}")
-    if len(indexes) > 1:
-        raise CurationPublishError(f"route {activity_id} is duplicated in {artifact}")
-    routes[indexes[0]] = transform(routes[indexes[0]])
 
 
 def _write_all_atomic(staged):

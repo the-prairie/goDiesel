@@ -71,7 +71,6 @@ def test_build_pipeline_emits_react_route_artifact():
     build = (ROOT / "build.py").read_text()
 
     assert "QUESTS = Path(__file__).resolve().parent" in build
-    assert "quests.generated.json" in build
     assert "routes.manifest.json" in build
     assert "REACT_ROUTE_DETAILS" in build
     assert "simplify_route_for_manifest" in build
@@ -80,7 +79,6 @@ def test_build_pipeline_emits_react_route_artifact():
     assert "'lifecycle': lifecycle" in build
     assert "'replay': build_replay_metadata(" in build
     assert "if route.get('lifecycle', 'completed') == 'completed'" in build
-    assert "react_route_payload" in build
     assert "render_share_card" not in build
     assert "template_html" not in build
 
@@ -91,17 +89,10 @@ def test_representative_route_has_generated_reviewed_curation():
         route for route in source_routes if str(route["activity_id"]) == "17654151284"
     )
     detail = json.loads((ROUTE_DETAILS / "17654151284.json").read_text())
-    generated_routes = json.loads(
-        (APP / "src/data/quests.generated.json").read_text()
-    )["routes"]
-    generated_route = next(
-        route for route in generated_routes if route["slug"] == "17654151284"
-    )
     curation = detail["curation"]
 
     expected_curation = build_route_curation(source["curation"])
     assert curation == expected_curation
-    assert generated_route["curation"] == expected_curation
 
     assert curation["review_status"] == "reviewed"
     assert set(curation) == {
@@ -123,32 +114,29 @@ def test_representative_route_has_generated_reviewed_curation():
 
 
 def test_generated_manifest_and_lazy_route_records_preserve_source_data():
-    generated = json.loads((APP / "src/data/quests.generated.json").read_text())
     manifest = json.loads(MANIFEST.read_text())
 
-    assert len(manifest["routes"]) == len(generated["routes"])
     assert all("route" not in route for route in manifest["routes"])
     assert all(1 < len(route["trace"]) <= 96 for route in manifest["routes"])
     assert all(len(point) == 4 for route in manifest["routes"] for point in route["trace"])
 
     detail_files = sorted(ROUTE_DETAILS.glob("*.json"))
-    assert len(detail_files) == len(generated["routes"])
+    assert len(detail_files) == len(manifest["routes"])
 
-    representative = generated["routes"][0]
+    representative = manifest["routes"][0]
     detail = json.loads((ROUTE_DETAILS / f'{representative["slug"]}.json').read_text())
     assert detail["slug"] == representative["slug"]
-    assert detail["route"] == representative["route"]
     assert detail["replay"] == representative["replay"]
-    assert detail["provenance"] == representative["provenance"]
     assert detail["provenance"]["temporal"]["status"] in {"recorded", "unavailable"}
     assert detail["provenance"]["track"]["segment_count"] >= 1
     assert isinstance(detail["provenance"]["discontinuities"], list)
 
     stats = json.loads((APP / "src/data/generated/route-stats.json").read_text())
-    assert stats["route_count"] == len(generated["routes"])
+    details = [json.loads(path.read_text()) for path in detail_files]
+    assert stats["route_count"] == len(details)
     assert stats["completed_km"] == round(sum(
         route["distance_km"]
-        for route in generated["routes"]
+        for route in details
         if route.get("lifecycle", "completed") == "completed"
     ), 1)
 

@@ -198,10 +198,6 @@ def _copy_workspace(workspace):
         "app/src/data/generated",
     ):
         shutil.copytree(ROOT / relative, workspace / relative)
-    shutil.copy2(
-        ROOT / "app/src/data/quests.generated.json",
-        workspace / "app/src/data/quests.generated.json",
-    )
 
 
 def _artifact_text(workspace):
@@ -213,7 +209,6 @@ def _artifact_text(workspace):
     paths = generated_paths(workspace)
     text = {
         "routes.manifest.json": _without_timestamp(paths["manifest"]),
-        "quests.generated.json": _without_timestamp(paths["payload"]),
     }
     for detail in sorted(paths["detail"].glob("*.json")):
         text[f"routes/{detail.name}"] = detail.read_text(encoding="utf-8")

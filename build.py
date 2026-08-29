@@ -24,7 +24,6 @@ REACT_DATA = QUESTS / 'app' / 'src' / 'data'
 REACT_GENERATED_DATA = REACT_DATA / 'generated'
 REACT_ROUTE_DETAILS = QUESTS / 'app' / 'public' / 'data' / 'routes'
 REACT_GENERATED_FILES = (
-    REACT_DATA / 'quests.generated.json',
     REACT_GENERATED_DATA / 'routes.manifest.json',
     REACT_GENERATED_DATA / 'route-stats.json',
 )
@@ -261,7 +260,7 @@ def react_route_manifest_record(route):
     }
 
 generated_at = datetime.now(UTC).isoformat(timespec='seconds').replace('+00:00', 'Z')
-react_route_payload = {
+react_manifest_payload = {
     'schema_version': 1,
     'generated_at': generated_at,
     'stats': {
@@ -270,12 +269,6 @@ react_route_payload = {
         'rejected': rejected_n,
         'total': len(all_routes),
     },
-    'routes': [react_route_record(route) for route in routes_data],
-}
-react_manifest_payload = {
-    'schema_version': 1,
-    'generated_at': react_route_payload['generated_at'],
-    'stats': react_route_payload['stats'],
     'routes': [react_route_manifest_record(route) for route in routes_data],
 }
 route_stats_payload = {
@@ -299,7 +292,6 @@ REACT_DATA.mkdir(parents=True, exist_ok=True)
 REACT_GENERATED_DATA.mkdir(parents=True, exist_ok=True)
 REACT_ROUTE_DETAILS.parent.mkdir(parents=True, exist_ok=True)
 generated_files = {
-    REACT_DATA / 'quests.generated.json': json.dumps(react_route_payload, ensure_ascii=False),
     REACT_GENERATED_DATA / 'routes.manifest.json': json.dumps(
         react_manifest_payload, ensure_ascii=False
     ),

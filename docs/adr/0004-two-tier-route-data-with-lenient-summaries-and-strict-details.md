@@ -50,9 +50,8 @@ Parse the two tiers with deliberately different strictness:
   monotonic distance and time, `kind`/`source` agreement, `bestInEarth` implying
   `earth`, closed curation schema, valid IANA timezones.
 - Cost: the bundled manifest is about 496 KiB against a 500 KiB shell budget, so
-  the budget is nearly exhausted by data. Additionally, a 4.3 MB
-  `quests.generated.json` is committed under `app/src/data/` and is not imported
-  by the application.
+  the budget is nearly exhausted by data. The generator publishes no third,
+  complete aggregate; full records exist only in the lazy detail tier.
 
 ## Evidence
 
