@@ -5,5 +5,9 @@ The command loads the active sealed packs, repeats every retained navigation edg
 It fails on route grounding error above 1 cm, undeclared jumps, structure intersections, missing endpoints, excessive step transitions, ten seconds of persistent blocking, or failure to leave the guided corridor.
 The committed trace hashes make a changed physical result visible even when aggregate counts still pass.
 
-`durability-proof.json` is the checked result of `python -m scripts.prove_world_pack_durability`.
+`durability-proof.json` is the checked result of `.venv/bin/python -m scripts.prove_world_pack_durability`.
 The command removes provider credentials, blocks socket connections, exports each pack twice, imports it into a temporary clean repository, verifies current and previous schema versions without mutation, tampers with terrain collision, repairs from the imported content inventory, and verifies the original identity again.
+
+`film-proof.json` is the checked result of `npm run prove:world-packs:films` from `app` while the local preview is available at port 8796.
+The command removes provider credentials, blocks provider requests, recomputes every delivered MP4 and poster checksum, inspects H.264/AAC streams and dimensions, and renders five timeline positions twice in fresh pages.
+It fails unless the two passes are pixel-exact, visibly nonblank, and bound to the active pack and cinematic timeline identities.

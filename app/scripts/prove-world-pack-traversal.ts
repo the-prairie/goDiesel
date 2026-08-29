@@ -339,7 +339,10 @@ function buildProof() {
 
 const proof = buildProof();
 const serialized = `${JSON.stringify(proof, null, 2)}\n`;
-if (process.argv.includes("--print")) {
+if (process.argv.includes("--update")) {
+  fs.writeFileSync(EXPECTED_PROOF, serialized);
+  process.stdout.write(`Updated ${EXPECTED_PROOF}.\n`);
+} else if (process.argv.includes("--print")) {
   process.stdout.write(serialized);
 } else {
   const expected = fs.readFileSync(EXPECTED_PROOF, "utf8");

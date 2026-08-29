@@ -135,6 +135,10 @@ def build_proof() -> dict[str, object]:
 def main() -> int:
     proof = build_proof()
     value = canonical_json_document(proof)
+    if "--update" in os.sys.argv:
+        EXPECTED.write_text(json.dumps(proof, indent=2, sort_keys=True) + "\n")
+        print(f"Updated {EXPECTED}.")
+        return 0
     if "--print" in os.sys.argv:
         os.sys.stdout.buffer.write(value)
         return 0
