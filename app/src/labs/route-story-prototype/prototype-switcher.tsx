@@ -47,4 +47,3 @@ export function PrototypeSwitcher({ current }: { current: PrototypeVariantId }) 
     </aside>
   );
 }
-
