@@ -40,12 +40,7 @@ const lifecycleOptions = [
   ["discovered", "Discovered routes"],
 ] as const;
 
-const collectionTabs = [
-  ["all", "All routes"],
-  ["completed", "Memories"],
-  ["planned", "Plans"],
-  ["discovered", "Discovered"],
-] as const;
+const collectionTabs = lifecycleOptions;
 
 const routesPerPage = 24;
 
@@ -154,7 +149,7 @@ export function RoutesPage() {
             <div
               role="group"
               aria-label="Route collections"
-              className="flex min-w-0 gap-1 overflow-x-auto border-b border-line pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              className="grid min-w-0 grid-cols-2 gap-1 border-b border-line pb-4 sm:flex sm:overflow-x-auto sm:[scrollbar-width:none] sm:[&::-webkit-scrollbar]:hidden"
             >
               {collectionTabs.map(([value, label]) => (
                 <button
@@ -163,8 +158,8 @@ export function RoutesPage() {
                   aria-pressed={filters.lifecycle === value}
                   className={
                     filters.lifecycle === value
-                      ? "min-h-10 shrink-0 bg-forest px-2 text-control font-semibold text-white outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-4"
-                      : "min-h-10 shrink-0 px-2 text-control font-medium text-ink-secondary outline-none hover:bg-surface-muted hover:text-ink focus-visible:ring-2 focus-visible:ring-ring sm:px-4"
+                      ? "min-h-11 shrink-0 bg-forest px-2 text-control font-semibold text-white outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-4"
+                      : "min-h-11 shrink-0 px-2 text-control font-medium text-ink-secondary outline-none hover:bg-surface-muted hover:text-ink focus-visible:ring-2 focus-visible:ring-ring sm:px-4"
                   }
                   onClick={() => updateFilter("lifecycle", value)}
                 >
@@ -184,14 +179,14 @@ export function RoutesPage() {
                   aria-label="Search routes"
                   value={filters.query}
                   placeholder="Search routes"
-                  className="pl-9"
+                  className="pl-9 pr-12"
                   onChange={(event) => updateFilter("query", event.target.value)}
                 />
                 {filters.query ? (
                   <button
                     type="button"
                     aria-label="Clear route search"
-                    className="absolute right-1 top-1/2 grid size-8 -translate-y-1/2 place-items-center text-ink-muted outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-ring"
+                    className="absolute right-0 top-1/2 grid size-11 -translate-y-1/2 place-items-center text-ink-muted outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-ring"
                     onClick={() => updateFilter("query", "")}
                   >
                     <X className="size-4" aria-hidden="true" />
@@ -269,7 +264,7 @@ export function RoutesPage() {
                     key={filter.key}
                     type="button"
                     aria-label={`Remove ${filter.label} filter`}
-                    className="inline-flex min-h-8 items-center gap-2 border border-line bg-surface-muted px-2.5 text-caption text-ink outline-none hover:border-line-strong focus-visible:ring-2 focus-visible:ring-ring"
+                    className="inline-flex min-h-11 items-center gap-2 border border-line bg-surface-muted px-2.5 text-caption text-ink outline-none hover:border-line-strong focus-visible:ring-2 focus-visible:ring-ring"
                     onClick={() => updateFilter(filter.key, DEFAULT_ROUTE_FILTERS[filter.key])}
                   >
                     <span className="text-ink-muted">{filter.label}</span>
@@ -383,7 +378,7 @@ function FilterSelect({
       {label}
       <select
         value={value}
-        className="h-10 min-w-0 rounded-md border border-border bg-card px-3 text-sm text-foreground outline-none transition-colors hover:border-primary/50 focus-visible:ring-2 focus-visible:ring-ring"
+        className="h-11 min-w-0 rounded-md border border-border bg-card px-3 text-sm text-foreground outline-none transition-colors hover:border-primary/50 focus-visible:ring-2 focus-visible:ring-ring"
         onChange={(event) => onChange(event.target.value)}
       >
         {options.map(([optionValue, optionLabel]) => (

@@ -113,6 +113,7 @@ test("Finder previews a candidate spatially before committing it to the URL", as
   await candidate.getByRole("button", { name: "Choose Kyoto, Japan" }).click();
   await expect(page).toHaveURL(/candidate=17654151284/);
   await expect(map).toHaveAttribute("data-selected-route", "17654151284");
+  await expect(map).toHaveAttribute("data-selected-route-color", "#315fb4");
 });
 
 test("Finder explains source limits instead of fabricating an unsupported result", async ({
@@ -254,6 +255,8 @@ test("Finder filter chips never collide with the edit control", async ({ page })
 
   expect(trayBox).not.toBeNull();
   expect(editBox).not.toBeNull();
+  expect(editBox?.width).toBeGreaterThanOrEqual(44);
+  expect(editBox?.height).toBeGreaterThanOrEqual(44);
   expect((trayBox?.x ?? 0) + (trayBox?.width ?? 0)).toBeLessThanOrEqual(
     (editBox?.x ?? 0) - 4,
   );

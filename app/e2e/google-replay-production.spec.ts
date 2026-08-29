@@ -219,6 +219,7 @@ for (const viewport of [
       await expect(control).toBeVisible();
       const controlBox = await control.boundingBox();
       expect(controlBox).not.toBeNull();
+      expect(controlBox?.height).toBeGreaterThanOrEqual(44);
       expect(controlBox?.x ?? -1).toBeGreaterThanOrEqual(panelBox?.x ?? 0);
       expect(
         (controlBox?.x ?? 0) + (controlBox?.width ?? 0),

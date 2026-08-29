@@ -691,8 +691,12 @@ for (const viewport of [
       name: "Crete, Greece recorded routes",
     });
     await expect(carousel).toBeVisible();
-    await page.getByRole("button", { name: "Next route" }).click();
-    await page.getByRole("button", { name: "Next route" }).click();
+    const nextRoute = page.getByRole("button", { name: "Next route" });
+    const nextRouteBox = await nextRoute.boundingBox();
+    expect(nextRouteBox?.width).toBeGreaterThanOrEqual(44);
+    expect(nextRouteBox?.height).toBeGreaterThanOrEqual(44);
+    await nextRoute.click();
+    await nextRoute.click();
     const card = carousel.locator("article[data-route-slug]").first();
     const [carouselBox, cardBox] = await Promise.all([
       carousel.boundingBox(),

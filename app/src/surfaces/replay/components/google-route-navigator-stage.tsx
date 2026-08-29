@@ -996,7 +996,7 @@ function ReplaySettings({
         <SettingGroup icon={Gauge} label="Lens range">
           <Button
             aria-label="Zoom in"
-            className="flex-1 border-white/20 bg-transparent text-white hover:bg-white/10"
+            className="h-11 flex-1 border-white/20 bg-transparent text-white hover:bg-white/10"
             onClick={() =>
               onCommit((current) => zoomGoogleRouteNavigator(current, "in"))
             }
@@ -1009,7 +1009,7 @@ function ReplaySettings({
           </Button>
           <Button
             aria-label="Zoom out"
-            className="flex-1 border-white/20 bg-transparent text-white hover:bg-white/10"
+            className="h-11 flex-1 border-white/20 bg-transparent text-white hover:bg-white/10"
             onClick={() =>
               onCommit((current) => zoomGoogleRouteNavigator(current, "out"))
             }
@@ -1089,7 +1089,7 @@ function SettingButton({
       aria-label={label === "Locked" ? "Resume following" : label}
       aria-pressed={active}
       className={cn(
-        "min-h-7 flex-1 px-1.5 text-[11px] font-medium capitalize sm:px-2.5",
+        "min-h-11 flex-1 px-1.5 text-[11px] font-medium capitalize sm:px-2.5",
         active ? "bg-white text-black" : "text-white/58 hover:bg-white/10",
       )}
       onClick={onClick}

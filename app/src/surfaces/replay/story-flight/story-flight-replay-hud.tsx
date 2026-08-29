@@ -94,12 +94,12 @@ export function StoryFlightReplayHud({
       </div>
 
       <div
-        className="pointer-events-auto grid min-h-[6.75rem] grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-white/60 bg-[#f5f7fb]/94 p-2 text-[#1d2946] shadow-2xl backdrop-blur-xl sm:grid-cols-[3.5rem_minmax(0,1fr)_auto] sm:gap-3 sm:p-3"
+        className="pointer-events-auto grid min-h-[6.75rem] grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-white/60 bg-[#f5f7fb]/94 p-2 text-[#1d2946] shadow-2xl backdrop-blur-xl sm:grid-cols-[3.5rem_minmax(0,1fr)_auto] sm:gap-3 sm:p-3"
         data-testid="story-flight-controls"
       >
         <Button
           aria-label={control.playing ? "Pause route" : "Play route"}
-          className="rounded-full border border-[#ffcfb3] bg-[#ffdfca] text-[#1d2946] hover:bg-[#ffd2b5]"
+          className="rounded-md border border-[#ffcfb3] bg-[#ffdfca] text-[#1d2946] hover:bg-[#ffd2b5]"
           disabled={disabled}
           onClick={onTogglePlayback}
           size="icon"

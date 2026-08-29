@@ -136,7 +136,7 @@ export function FinderPage() {
           {submittedIntent ? (
             <div className="mt-2 flex min-w-0 items-start gap-2 border-t border-white/15 pt-2 md:mt-3 md:items-center md:pt-3">
               <ActiveFilterChips intent={submittedIntent} onRemove={removeFilter} />
-              <Button type="button" variant="ghost" size="icon" className="size-9 shrink-0 text-white hover:bg-white/12 hover:text-white" aria-label="Edit filters" title="Edit filters" onClick={(event) => openFilters(event.currentTarget)}>
+              <Button type="button" variant="ghost" size="icon" className="size-11 shrink-0 text-white hover:bg-white/12 hover:text-white" aria-label="Edit filters" title="Edit filters" onClick={(event) => openFilters(event.currentTarget)}>
                 <SlidersHorizontal aria-hidden="true" />
               </Button>
             </div>
@@ -167,7 +167,7 @@ export function FinderPage() {
             filterReturnFocusRef.current?.focus();
           }}
           className={isMobile
-            ? "max-h-[88dvh] overflow-y-auto rounded-t-2xl border-white/70 bg-surface p-0"
+            ? "max-h-[88dvh] overflow-y-auto rounded-t-[22px] border-white/70 bg-surface p-0"
             : "w-[25rem] max-w-[25rem] overflow-y-auto border-white/70 bg-surface p-0"}
         >
           <SheetHeader className="border-b border-line px-5 pb-4 pt-5 text-left">

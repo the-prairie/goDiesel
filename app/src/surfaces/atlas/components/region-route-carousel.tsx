@@ -228,7 +228,7 @@ export function RegionRouteCarousel({
               aria-label="Show routes"
               aria-pressed={lens === "routes"}
               onClick={() => onLensChange("routes")}
-              className="h-9 rounded-sm px-2 text-white hover:bg-white/10 hover:text-white aria-pressed:bg-[#f6f2e8] aria-pressed:text-[#24322d]"
+              className="h-11 rounded-md px-2 text-white hover:bg-white/10 hover:text-white aria-pressed:bg-[#f6f2e8] aria-pressed:text-[#24322d]"
             >
               <Route aria-hidden="true" /> Routes
             </Button>
@@ -239,7 +239,7 @@ export function RegionRouteCarousel({
               aria-label="Explore terrain"
               aria-pressed={lens === "terrain"}
               onClick={() => onLensChange("terrain")}
-              className="h-9 rounded-sm px-2 text-white hover:bg-white/10 hover:text-white aria-pressed:bg-[#f6f2e8] aria-pressed:text-[#24322d]"
+              className="h-11 rounded-md px-2 text-white hover:bg-white/10 hover:text-white aria-pressed:bg-[#f6f2e8] aria-pressed:text-[#24322d]"
             >
               <Mountain aria-hidden="true" /> Terrain
             </Button>
@@ -255,7 +255,7 @@ export function RegionRouteCarousel({
             title="Previous route"
             disabled={!canSelectPrevious}
             onClick={() => selectRouteAt(selectedIndex - 1)}
-            className="size-10 rounded-full border border-white/35 text-white hover:bg-white/10 hover:text-white disabled:opacity-35"
+            className="size-11 rounded-md border border-white/35 text-white hover:bg-white/10 hover:text-white disabled:opacity-35"
           >
             <ChevronLeft aria-hidden="true" />
           </Button>
@@ -267,7 +267,7 @@ export function RegionRouteCarousel({
             title="Next route"
             disabled={!canSelectNext}
             onClick={() => selectRouteAt(selectedIndex + 1)}
-            className="size-10 rounded-full border border-white/35 text-white hover:bg-white/10 hover:text-white disabled:opacity-35"
+            className="size-11 rounded-md border border-white/35 text-white hover:bg-white/10 hover:text-white disabled:opacity-35"
           >
             <ChevronRight aria-hidden="true" />
           </Button>
@@ -278,7 +278,7 @@ export function RegionRouteCarousel({
             aria-label="All places"
             title="Return to all places"
             onClick={onClear}
-            className="h-10 rounded-sm border border-white/25 px-2 text-white hover:bg-white/10 hover:text-white"
+            className="h-11 rounded-md border border-white/25 px-2 text-white hover:bg-white/10 hover:text-white"
           >
             <Globe2 aria-hidden="true" />
             <span className="hidden md:inline">All places</span>
@@ -408,7 +408,7 @@ function RegionalRouteCard({
         }
       }}
       className={cn(
-        "relative grid h-[17rem] min-w-0 grid-rows-[7rem_minmax(0,1fr)_3.75rem] overflow-hidden rounded-[8px] border bg-[#0b2029] text-white shadow-sm transition-[border-color,opacity] [@media(max-height:500px)]:h-[9rem] [@media(max-height:500px)]:grid-rows-[3rem_minmax(0,1fr)_2.5rem]",
+        "relative grid h-[17rem] min-w-0 grid-rows-[7rem_minmax(0,1fr)_3.75rem] overflow-hidden rounded-md border bg-[#0b2029] text-white shadow-sm transition-[border-color,opacity] [@media(max-height:500px)]:h-[9rem] [@media(max-height:500px)]:grid-rows-[3rem_minmax(0,1fr)_2.5rem]",
         selected
           ? "border-[#ff6b4a] before:absolute before:inset-x-0 before:top-0 before:z-10 before:h-1 before:bg-[#ff6b4a]"
           : "border-white/20 opacity-75 hover:opacity-100",
@@ -457,7 +457,7 @@ function RegionalRouteCard({
         <Link
           to={replayPath}
           onClick={(event) => event.stopPropagation()}
-          className="relative z-20 inline-flex min-h-10 items-center gap-1.5 self-center whitespace-nowrap px-2 text-sm font-medium text-[#ff8065] outline-none hover:text-[#ff9a83] focus-visible:ring-2 focus-visible:ring-[#63d6cf]"
+          className="relative z-20 inline-flex min-h-11 items-center gap-1.5 self-center whitespace-nowrap px-2 text-sm font-medium text-[#ff8065] outline-none hover:text-[#ff9a83] focus-visible:ring-2 focus-visible:ring-[#63d6cf]"
         >
           Open route
           <ArrowRight className="size-4" aria-hidden="true" />

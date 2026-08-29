@@ -127,6 +127,7 @@ export function FinderRouteMap({
       aria-label="Finder route map"
       data-map-status={status}
       data-selected-route={selectedSlug ?? ""}
+      data-selected-route-color="#315fb4"
       data-previewed-route={previewedSlug ?? ""}
       data-route-count={candidates.length}
       data-map-style="fiord"
@@ -168,21 +169,10 @@ function addRouteLayers(map: MapLibreMap) {
     source: SOURCE_ID,
     layout: { "line-cap": "round", "line-join": "round" },
     paint: {
-      "line-color": ["case", ["boolean", ["get", "active"], false], "#ff8065", "#63d6cf"],
-      "line-width": ["case", ["boolean", ["get", "active"], false], 18, 9],
-      "line-blur": ["case", ["boolean", ["get", "active"], false], 8, 5],
-      "line-opacity": ["case", ["boolean", ["get", "active"], false], 0.42, 0.22],
-    },
-  });
-  map.addLayer({
-    id: "finder-route-casing",
-    type: "line",
-    source: SOURCE_ID,
-    layout: { "line-cap": "round", "line-join": "round" },
-    paint: {
-      "line-color": "#07151c",
-      "line-width": ["case", ["boolean", ["get", "active"], false], 9, 6],
-      "line-opacity": ["case", ["boolean", ["get", "dimmed"], false], 0.42, 0.78],
+      "line-color": ["case", ["boolean", ["get", "active"], false], "#f6f2e8", "#315fb4"],
+      "line-width": ["case", ["boolean", ["get", "active"], false], 8, 2],
+      "line-blur": 0,
+      "line-opacity": ["case", ["boolean", ["get", "active"], false], 0.82, 0.42],
     },
   });
   map.addLayer({
@@ -191,9 +181,9 @@ function addRouteLayers(map: MapLibreMap) {
     source: SOURCE_ID,
     layout: { "line-cap": "round", "line-join": "round" },
     paint: {
-      "line-color": ["case", ["boolean", ["get", "active"], false], "#ff8065", "#63d6cf"],
-      "line-width": ["case", ["boolean", ["get", "active"], false], 5, 3],
-      "line-opacity": ["case", ["boolean", ["get", "dimmed"], false], 0.34, 1],
+      "line-color": "#315fb4",
+      "line-width": ["case", ["boolean", ["get", "active"], false], 4, 2],
+      "line-opacity": ["case", ["boolean", ["get", "dimmed"], false], 0.18, 1],
     },
   });
   map.addLayer({

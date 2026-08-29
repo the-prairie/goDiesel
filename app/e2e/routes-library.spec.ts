@@ -104,6 +104,13 @@ test("Routes presents comparable memory cards on desktop and mobile", async ({
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/#/routes?q=exploratory");
 
+  for (const label of ["Atlas routes", "Memories", "Planned routes", "Discovered routes"]) {
+    const collection = page.getByRole("button", { name: label, exact: true });
+    await expect(collection).toBeVisible();
+    const box = await collection.boundingBox();
+    expect(box?.height).toBeGreaterThanOrEqual(44);
+  }
+
   const library = page.getByTestId("route-memory-grid");
   await expect(library).toBeVisible();
   const desktopRow = routeCards(page).first();
@@ -366,6 +373,10 @@ for (const viewport of [
     expect(filterBox).not.toBeNull();
     expect(resultsBox).not.toBeNull();
     expect(boxesOverlap(filterBox!, resultsBox!)).toBe(false);
+    for (const select of await filters.getByRole("combobox").all()) {
+      const box = await select.boundingBox();
+      expect(box?.height).toBeGreaterThanOrEqual(44);
+    }
 
     const layout = await page.evaluate(() => ({
       documentWidth: document.documentElement.scrollWidth,
