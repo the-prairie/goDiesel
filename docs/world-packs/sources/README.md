@@ -14,6 +14,15 @@ Validate the Ucluelet custody set with:
 Receipt admission fails closed when retention, derivatives, or redistribution are not allowed, when the legal decision is not `admit`, when a filename escapes custody, or when any retained byte differs.
 The receipt does not claim full exploration-envelope coverage; the compiler must still run an exact coverage-union gate before promotion.
 
+OpenStreetMap building and transportation inputs use exact Overpass queries, retained responses, database timestamps, and query digests.
+All three OSM receipts share the retained ODbL 1.0 evidence file under `world-packs-local/sources/osm/2026`:
+
+```sh
+python -m scripts.verify_world_source_receipt docs/world-packs/sources/tokyo-osm-2026.json world-packs-local/sources/osm/2026
+python -m scripts.verify_world_source_receipt docs/world-packs/sources/banff-osm-2026.json world-packs-local/sources/osm/2026
+python -m scripts.verify_world_source_receipt docs/world-packs/sources/ucluelet-osm-2026.json world-packs-local/sources/osm/2026
+```
+
 Normalize the admitted Ucluelet DEM with the pinned acquisition environment:
 
 ```sh
