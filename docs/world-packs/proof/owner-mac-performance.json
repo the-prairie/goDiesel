@@ -29,17 +29,17 @@
     {
       "routeSlug": "17665674778",
       "worldId": "tokyo-urban",
-      "firstMeaningfulMs": 656.9000000059605,
-      "physicalReadyMs": 1871.9000000059605,
+      "firstMeaningfulMs": 702.0999999940395,
+      "physicalReadyMs": 1953.699999988079,
       "quantizedColorBins": 140,
       "webglRenderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
       "frames": {
         "sampleDurationMs": 8000,
-        "frameCount": 481,
-        "p50Ms": 16.699999999999818,
-        "p95Ms": 17.400000000000546,
-        "p99Ms": 17.600000000000364,
-        "maximumMs": 17.700000000000728,
+        "frameCount": 961,
+        "p50Ms": 8.300000000000182,
+        "p95Ms": 10,
+        "p99Ms": 10.299999999999272,
+        "maximumMs": 10.400000000000546,
         "over33Ms": 0
       },
       "webgl": {
@@ -52,18 +52,18 @@
     {
       "routeSlug": "15573295095",
       "worldId": "banff-mountain",
-      "firstMeaningfulMs": 527.7999999821186,
-      "physicalReadyMs": 827.5999999940395,
-      "quantizedColorBins": 133,
+      "firstMeaningfulMs": 676.7000000178814,
+      "physicalReadyMs": 970,
+      "quantizedColorBins": 142,
       "webglRenderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
       "frames": {
         "sampleDurationMs": 8000,
-        "frameCount": 481,
-        "p50Ms": 16.699999999999818,
-        "p95Ms": 17,
-        "p99Ms": 17.40000000000009,
-        "maximumMs": 17.600000000000364,
-        "over33Ms": 0
+        "frameCount": 957,
+        "p50Ms": 8.300000000000182,
+        "p95Ms": 10,
+        "p99Ms": 10.300000000000182,
+        "maximumMs": 33.09999999999991,
+        "over33Ms": 1
       },
       "webgl": {
         "activeContexts": 1,
@@ -75,17 +75,17 @@
     {
       "routeSlug": "6496900063",
       "worldId": "ucluelet-coastal",
-      "firstMeaningfulMs": 513.5999999940395,
-      "physicalReadyMs": 751.2999999821186,
-      "quantizedColorBins": 132,
+      "firstMeaningfulMs": 651.5999999940395,
+      "physicalReadyMs": 950.3999999761581,
+      "quantizedColorBins": 108,
       "webglRenderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
       "frames": {
         "sampleDurationMs": 8000,
-        "frameCount": 481,
-        "p50Ms": 16.699999999999818,
-        "p95Ms": 17.199999999999818,
-        "p99Ms": 17.5,
-        "maximumMs": 17.700000000000273,
+        "frameCount": 961,
+        "p50Ms": 8.300000000000182,
+        "p95Ms": 10.199999999999818,
+        "p99Ms": 10.399999999999636,
+        "maximumMs": 10.400000000000546,
         "over33Ms": 0
       },
       "webgl": {
@@ -100,14 +100,14 @@
     "warmupWorldEntries": 3,
     "measuredCycles": 3,
     "worldEntriesPerCycle": 3,
-    "baselineUsedBytes": 29653308,
+    "baselineUsedBytes": 29492932,
     "cycleSettledUsedBytes": [
-      30208084,
-      31472840,
-      32135616
+      30684068,
+      31652708,
+      32091008
     ],
-    "settledUsedBytes": 32135616,
-    "settledGrowthRatio": 0.08371099777468335,
+    "settledUsedBytes": 32091008,
+    "settledGrowthRatio": 0.08809147900249456,
     "providerRequests": 0
   }
 }
