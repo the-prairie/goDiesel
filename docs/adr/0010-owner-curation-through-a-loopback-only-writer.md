@@ -26,7 +26,10 @@ starts the writer and the dev server together.
 A save validates the closed curation contract, writes `quests.json` atomically,
 then stages and individually replaces the route's detail plus manifest preview.
 It restores any generated file already replaced, and restores the original
-`quests.json`, if publication raises an error.
+`quests.json`, if publication raises an error. An incomplete generated-file
+rollback preserves its recovery copy and reports its path to the operator.
+Cleanup after a completed publication is best-effort and does not change the
+successful API result.
 Source-derived route changes still use the complete generator described in
 ADR-0003.
 

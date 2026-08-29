@@ -51,8 +51,11 @@ backup with `ready` is fully restored.
 - The owner writer (`admin.py`) validates and saves source curation, then uses
   `curation_publish.py` to stage the affected detail and summary tiers before
   replacing each file atomically. A failed replacement restores files already
-  replaced. Equality tests prove that a completed publication matches a full
-  rebuild, and fault injection proves the rollback path.
+  replaced. If restoration fails, the publisher reports both failures and
+  preserves the surviving recovery copy. Cleanup is best-effort and cannot turn
+  a completed publication into a reported failure. Equality tests prove that a
+  completed publication matches a full rebuild, and fault injection proves the
+  failure matrix.
 - The two incremental replacements are not one transaction. A process crash
   between them can temporarily split detail and summary until curation is
   republished for the affected route or a full rebuild runs.

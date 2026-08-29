@@ -171,40 +171,60 @@ def _publish_staged_with_rollback(staged):
     try:
         for path, content in staged:
             temporary = path.with_name(f".{path.name}.tmp")
-            temporary.write_text(content, encoding="utf-8")
             temporaries.append((temporary, path))
+            temporary.write_text(content, encoding="utf-8")
     except Exception:
-        for temporary, _ in temporaries:
-            temporary.unlink(missing_ok=True)
+        _cleanup_files([temporary for temporary, _ in temporaries])
         raise
 
     backups = []
     replaced = []
+    preserved_backups = set()
     try:
         for _, path in temporaries:
             backup = path.with_name(f".{path.name}.rollback")
-            backup.write_bytes(path.read_bytes())
             backups.append((backup, path))
+            backup.write_bytes(path.read_bytes())
 
         for temporary, path in temporaries:
             os.replace(temporary, path)
             replaced.append(path)
     except Exception as publication_error:
-        rollback_error = None
+        rollback_failures = []
         for backup, path in reversed(backups):
             if path not in replaced:
                 continue
             try:
                 os.replace(backup, path)
             except Exception as error:
-                rollback_error = error
-        if rollback_error is not None:
+                rollback_failures.append((backup, path, error))
+                preserved_backups.add(backup)
+        if rollback_failures:
+            failure_details = "; ".join(
+                f"{path}: {error}" for _, path, error in rollback_failures
+            )
+            recovery_paths = ", ".join(
+                str(backup) for backup, _, _ in rollback_failures
+            )
             raise CurationPublishError(
-                "generated publication failed and could not be fully rolled back"
-            ) from publication_error
+                f"generated publication failed: {publication_error}; "
+                f"rollback failed: {failure_details}; "
+                f"recovery copies: {recovery_paths}"
+            ) from rollback_failures[0][2]
         raise
     finally:
-        for temporary, _ in temporaries:
-            temporary.unlink(missing_ok=True)
-        for backup, _ in backups:
-            backup.unlink(missing_ok=True)
+        _cleanup_files(
+            [temporary for temporary, _ in temporaries]
+            + [backup for backup, _ in backups if backup not in preserved_backups]
+        )
+
+
+def _cleanup_files(paths):
+    """Remove every disposable file without changing publication outcome."""
+    for path in paths:
+        try:
+            path.unlink(missing_ok=True)
+        except Exception:
+            # Cleanup cannot turn a committed publication into a reported
+            # failure or hide the exception that triggered rollback.
+            continue

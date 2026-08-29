@@ -8,6 +8,12 @@ It does not treat popularity as architectural evidence.
 
 It uses only the projects' official repositories, architecture documents, and source trees, pinned to the reviewed revisions.
 
+The projects are deliberately heterogeneous. Their source trees support narrow
+analogies about responsibility boundaries and deletion discipline; they do not
+validate goDiesel's manifest/detail data contract, deployment model, or product
+architecture. Those choices must stand on goDiesel's own requirements and
+verification evidence.
+
 ## Executive conclusion
 
 goDiesel is already aligned with the most transferable pattern in the comparison: route truth is prepared outside presentation, parsed into a domain model, and handed to renderers through narrow boundaries.
@@ -292,7 +298,9 @@ The removal sequence should preserve behaviour by deleting one obsolete responsi
 
 ## Final position
 
-The comparison supports a smaller goDiesel, not a more generalized one.
+The comparison is consistent with a smaller goDiesel, not a more generalized
+one. The local import graph, product contracts, and verification results are the
+evidence for the actual deletions in this change.
 
 The architecture to preserve is the existing pure route model, offline writer, two-tier read path, surface folders, and narrow renderer ports.
 
