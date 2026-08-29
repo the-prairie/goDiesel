@@ -47,7 +47,7 @@ test.describe("live regional Atlas terrain", () => {
   }, testInfo) => {
     test.setTimeout(240_000);
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto(`${previewUrl}/#/atlas`);
+    await page.goto(`${previewUrl}/#/atlas?view=world`);
 
     const world = page.locator('div[data-atlas-engine="cesium"]');
     const canvas = page.getByLabel("Interactive route globe");
