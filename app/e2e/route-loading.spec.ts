@@ -142,7 +142,7 @@ test("route detail announces loading and retries a transient request failure", a
   await page.route(`**/data/routes/${routeSlug}.json`, async (route) => {
     requestCount += 1;
     if (requestCount === 1) {
-      await new Promise((resolve) => setTimeout(resolve, 400));
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
       await route.fulfill({ status: 500, body: "temporary failure" });
       return;
     }
