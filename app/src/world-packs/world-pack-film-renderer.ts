@@ -23,7 +23,7 @@ interface FilmPalette {
 
 const PALETTES: Record<string, FilmPalette> = {
   "banff-mountain": {
-    background: "#142129",
+    background: "#31594d",
     building: "#bec4b6",
     buildingShadow: "#263c39",
     contour: "#d8d5b4",
@@ -83,7 +83,7 @@ function mixChannel(low: number, high: number, ratio: number) {
 }
 
 function terrainColor(palette: FilmPalette, ratio: number, variation: number) {
-  const value = Math.max(0, Math.min(1, ratio * 0.82 + variation * 0.18));
+  const value = Math.max(0, Math.min(1, ratio * 0.92 + variation * 0.08));
   return `rgb(${palette.terrainLow
     .map((low, index) => mixChannel(low, palette.terrainHigh[index], value))
     .join(",")})`;
@@ -260,10 +260,10 @@ export class WorldPackFilmRenderer {
           terrain.heights[row + 1][column],
         ];
         const mean = cellHeights.reduce((total, value) => total + value, 0) / 4;
-        const variation =
-          Math.max(...cellHeights) - Math.min(...cellHeights) > range * 0.015
-            ? 0.9
-            : ((row + column) % 4) / 8;
+        const variation = Math.min(
+          1,
+          ((Math.max(...cellHeights) - Math.min(...cellHeights)) / range) * 12,
+        );
         polygon(context, corners);
         const rowWidth = terrain.xAxis.length;
         const measured = terrain.measuredVertices;
@@ -279,8 +279,10 @@ export class WorldPackFilmRenderer {
           ? terrainColor(this.palette, (mean - minimum) / range, variation)
           : this.palette.water;
         context.fill();
-        context.strokeStyle = "rgba(230,238,220,0.11)";
-        context.stroke();
+        if (!measuredCell) {
+          context.strokeStyle = "rgba(185,213,194,0.035)";
+          context.stroke();
+        }
       }
     }
   }
