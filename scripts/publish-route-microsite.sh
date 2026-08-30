@@ -48,12 +48,18 @@ done
 
 BRANCH="share-${SHARE_NAME}"
 PUBLIC_URL="https://${BRANCH}.godiesel.pages.dev/"
+REQUIRE_PROVIDER_KEY=1
+if [[ "$DRY_RUN" == "true" ]]; then
+  REQUIRE_PROVIDER_KEY=0
+fi
 
 echo "1/4 Validating route source"
 node scripts/validate-route-microsite.mjs "$ROUTE_SLUG" source
 
 echo "2/4 Building route-only bundle"
-GODIESEL_SINGLE_ROUTE_SLUG="$ROUTE_SLUG" ./make-dist.sh
+GODIESEL_REQUIRE_PROVIDER_KEY="$REQUIRE_PROVIDER_KEY" \
+  GODIESEL_SINGLE_ROUTE_SLUG="$ROUTE_SLUG" \
+  ./make-dist.sh
 node scripts/validate-route-microsite.mjs "$ROUTE_SLUG" dist
 
 echo "3/4 Running focused microsite journey"
