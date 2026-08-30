@@ -280,38 +280,32 @@
 }
 
 .godiesel-route-playhead {
+  box-sizing: border-box;
   position: relative;
-  width: 16px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
+  border: 3px solid #fffaf2;
+  border-radius: 50%;
+  background: var(--coral);
+  box-shadow:
+    0 1px 2px rgb(18 29 51 / 46%),
+    0 4px 9px rgb(18 29 51 / 30%);
   transform: rotate(var(--route-playhead-bearing, 0deg));
   transform-origin: 50% 50%;
-  filter: drop-shadow(0 1px 2px rgba(18, 29, 51, 0.76));
-  transition:
-    transform 160ms cubic-bezier(0.22, 1, 0.36, 1),
-    filter 160ms ease;
+  transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
 }
 
-.godiesel-route-playhead::before,
 .godiesel-route-playhead::after {
   position: absolute;
-  content: "";
-  clip-path: polygon(50% 0%, 100% 72%, 50% 100%, 0% 72%);
-}
-
-.godiesel-route-playhead::before {
-  inset: 0;
+  top: 2px;
+  left: 50%;
+  width: 2px;
+  height: 4px;
+  border-radius: 1px;
   background: #fffaf2;
-}
-
-.godiesel-route-playhead::after {
-  inset: 3px 4px 5px;
-  background: #f06b50;
-}
-
-.godiesel-route-playhead[data-moving="true"] {
-  filter:
-    drop-shadow(0 1px 2px rgba(18, 29, 51, 0.76))
-    drop-shadow(0 0 3px rgba(255, 217, 200, 0.42));
+  content: "";
+  transform: translateX(-50%);
 }
 
 @media (prefers-reduced-motion: reduce) {
