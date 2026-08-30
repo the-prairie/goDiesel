@@ -11303,6 +11303,28 @@
       "activity_id": "4427049787",
       "status": "pending",
       "region": null
+    },
+    {
+      "activity_id": "gpx-gm-legends-delphi",
+      "status": "approved",
+      "source_gpx": "route_sources/imported/gpx-gm-legends-delphi.gpx",
+      "source_sha256": "3f60a82db987cfe56d3c6005acdbdd0065bdf1a148a7305e9aa051a847336c3a",
+      "activity_name": "GM LEGENDS",
+      "activity_type": "Run",
+      "date": "2024-12-12",
+      "region": "Municipal Unit of Delphi, Greece",
+      "title": "GM LEGENDS",
+      "lifecycle": "completed",
+      "description": "Owner-recorded Strava activity 13101847801 supplied through its authenticated GPX export.",
+      "curation": {
+        "review_status": "draft"
+      },
+      "lifecycle_evidence": {
+        "kind": "owner_recorded",
+        "description": "Lauren Zary's Strava activity 13101847801, recorded on December 12, 2024."
+      },
+      "route_share_proposal_id": "646d849549ee422180a9ff84d2cc8f7e",
+      "route_share_contract_sha256": "5197f4f7b1be1248533c167ea190b444b4dc3a5be31457391a069f2b681b7caa"
     }
   ]
 }
