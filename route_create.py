@@ -144,6 +144,12 @@ def _canonical_sha256(value: object) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def _route_contract_sha256(route_spec: dict[str, object]) -> str:
+    contract = copy.deepcopy(route_spec)
+    contract.pop("route_share_contract_sha256", None)
+    return _canonical_sha256(contract)
+
+
 def _file_sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as source:
@@ -363,6 +369,25 @@ def _validate_lifecycle(
     return lifecycle, copy.deepcopy(evidence) if isinstance(evidence, dict) else None
 
 
+def _existing_route_distance(root: Path, slug: str) -> float:
+    detail_path = root / "app" / "public" / "data" / "routes" / f"{slug}.json"
+    try:
+        detail = json.loads(detail_path.read_text(encoding="utf-8"))
+        points = detail["route"]
+        distance_m = float(points[-1]["d"])
+    except (OSError, ValueError, KeyError, IndexError, TypeError, json.JSONDecodeError) as error:
+        raise RouteCreateError(
+            "route.distance_unavailable",
+            f"generated route distance is unavailable for {slug}",
+        ) from error
+    if distance_m <= 0:
+        raise RouteCreateError(
+            "route.distance_unavailable",
+            f"generated route distance is unavailable for {slug}",
+        )
+    return distance_m
+
+
 def propose_request(request: object, root: str | Path) -> dict[str, object]:
     """Normalize one request into a redacted, reviewable proposal."""
     root = Path(root).resolve()
@@ -380,7 +405,13 @@ def propose_request(request: object, root: str | Path) -> dict[str, object]:
             merged_curation.update(copy.deepcopy(request["curation"]))
             route_spec["curation"] = _curation(merged_curation)
         if "annotations" in request:
-            route_spec["annotations"] = copy.deepcopy(request["annotations"])
+            try:
+                route_spec["annotations"] = build_route_annotations(
+                    copy.deepcopy(request["annotations"]),
+                    _existing_route_distance(root, slug),
+                )
+            except ValueError as error:
+                raise RouteCreateError("request.invalid_annotations", str(error)) from error
         if "replay_mode" in request:
             route_spec["replay_mode"] = request["replay_mode"]
         proposal_id = uuid.uuid4().hex
@@ -605,7 +636,74 @@ def _route_spec_with_registered_media(
     if registered:
         route_spec["source_media"] = registered
     route_spec["route_share_proposal_id"] = proposal["proposal_id"]
+    route_spec["route_share_contract_sha256"] = _route_contract_sha256(route_spec)
     return route_spec
+
+
+def _validate_proposal_semantics(
+    proposal: dict[str, object],
+    existing: dict[str, object] | None,
+) -> None:
+    operation = proposal["operation"]
+    source = proposal["source"]
+    route_spec = proposal["route_spec"]
+    slug = str(route_spec["activity_id"])
+
+    if operation == "create":
+        if source.get("mode") != "gpx" or existing is not None:
+            raise RouteCreateError("proposal.semantic_mismatch", "create proposal source is inconsistent")
+        if not IMPORTED_SLUG.fullmatch(slug):
+            raise RouteCreateError("proposal.semantic_mismatch", "created route id must use the gpx- contract")
+        expected_durable = f"route_sources/imported/{slug}.gpx"
+        expected_staged = f".route-share/staging/{proposal['proposal_id']}.gpx"
+        if (
+            route_spec.get("status") != "approved"
+            or route_spec.get("source_gpx") != expected_durable
+            or source.get("durable_path") != expected_durable
+            or route_spec.get("source_sha256") != source.get("sha256")
+            or source.get("staged_path") != expected_staged
+        ):
+            raise RouteCreateError("proposal.semantic_mismatch", "created route source contract changed after approval")
+        lifecycle = route_spec.get("lifecycle")
+        activity_date = _activity_date(route_spec.get("date"))
+        evidence = route_spec.get("lifecycle_evidence")
+        if lifecycle == "completed":
+            if (
+                not activity_date
+                or not isinstance(evidence, dict)
+                or evidence.get("kind") != "owner_recorded"
+                or not str(evidence.get("description") or "").strip()
+            ):
+                raise RouteCreateError(
+                    "proposal.semantic_mismatch",
+                    "completed route requires a date and owner-recorded evidence",
+                )
+        elif lifecycle == "discovered":
+            if evidence is not None:
+                raise RouteCreateError(
+                    "proposal.semantic_mismatch",
+                    "discovered route cannot carry completion evidence",
+                )
+        else:
+            raise RouteCreateError(
+                "proposal.semantic_mismatch",
+                "created route lifecycle must be completed or discovered",
+            )
+        return
+
+    if source.get("mode") != "existing-route" or existing is None:
+        raise RouteCreateError("proposal.semantic_mismatch", "update proposal source is inconsistent")
+    if source.get("existing_slug") != slug or not proposal.get("base_route_sha256"):
+        raise RouteCreateError("proposal.semantic_mismatch", "updated route identity changed after approval")
+    editable_fields = {"annotations", "curation", "replay_mode"}
+    for field in set(existing) | set(route_spec):
+        if field in editable_fields:
+            continue
+        if existing.get(field) != route_spec.get(field):
+            raise RouteCreateError(
+                "proposal.semantic_mismatch",
+                f"updated route field {field} changed outside the approved edit surface",
+            )
 
 
 def _default_rebuild(root: Path, slug: str) -> dict[str, object]:
@@ -678,8 +776,27 @@ def apply_proposal(
     rebuild_callback = rebuild or (lambda: _default_rebuild(root, slug))
     if existing is not None and existing.get("route_share_proposal_id") == proposal.get("proposal_id"):
         if operation == "create":
+            _validate_proposal_semantics(proposal, None)
             _register_source(proposal, root)
-        _route_spec_with_registered_media(proposal, root)
+        elif (
+            operation != "update"
+            or proposal.get("source", {}).get("mode") != "existing-route"
+            or proposal.get("source", {}).get("existing_slug") != slug
+        ):
+            raise RouteCreateError(
+                "proposal.semantic_mismatch",
+                "update proposal source is inconsistent",
+            )
+        expected_route_spec = _route_spec_with_registered_media(proposal, root)
+        expected_contract = expected_route_spec["route_share_contract_sha256"]
+        if (
+            existing.get("route_share_contract_sha256") != expected_contract
+            or _route_contract_sha256(existing) != expected_contract
+        ):
+            raise RouteCreateError(
+                "route.changed_since_apply",
+                f"route {slug} differs from the approved proposal",
+            )
         validation = _run_rebuild_validation(
             proposal,
             root,
@@ -696,6 +813,8 @@ def apply_proposal(
             raise RouteCreateError("route.changed_since_proposal", f"route {slug} changed after proposal")
     elif operation != "create":
         raise RouteCreateError("proposal.invalid", "proposal operation must be create or update")
+
+    _validate_proposal_semantics(proposal, existing)
 
     if operation == "create":
         _register_source(proposal, root)
@@ -744,7 +863,11 @@ def _read_json(path: str | Path, code: str) -> object:
     try:
         return json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
-        raise RouteCreateError(code, f"could not read JSON input: {error}") from error
+        safe_name = Path(path).name or "JSON input"
+        raise RouteCreateError(
+            code,
+            f"could not read {safe_name}: {error.__class__.__name__}",
+        ) from error
 
 
 def main(argv: list[str] | None = None) -> int:

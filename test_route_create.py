@@ -1,12 +1,14 @@
 import hashlib
+import io
 import json
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
 
 from PIL import Image
 
-from route_create import RouteCreateError, apply_proposal, propose_request
+from route_create import RouteCreateError, apply_proposal, main, propose_request
 
 
 TIMED_GPX = """<?xml version="1.0" encoding="UTF-8"?>
@@ -181,6 +183,43 @@ class RouteCreateTest(unittest.TestCase):
         self.assertEqual(proposal["route_spec"]["curation"]["vibe"], "A quiet coastal line.")
         self.assertEqual(proposal["route_spec"]["curation"]["review_status"], "draft")
 
+    def test_existing_route_annotations_are_bounded_before_canonical_writes(self):
+        existing = {"activity_id": "123", "status": "approved", "region": "Crete"}
+        (self.root / "quests.json").write_text(
+            json.dumps({"routes": [existing]}, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        detail = self.root / "app/public/data/routes/123.json"
+        detail.parent.mkdir(parents=True)
+        detail.write_text(
+            json.dumps({"route": [{"d": 0}, {"d": 1_000}]}),
+            encoding="utf-8",
+        )
+
+        with self.assertRaises(RouteCreateError) as raised:
+            propose_request(
+                {
+                    "schema_version": 1,
+                    "existing_slug": "123",
+                    "annotations": [
+                        {
+                            "id": "outside",
+                            "at_distance_m": 99_999,
+                            "kind": "warning",
+                            "evidence": "hypothesis",
+                            "body": "Outside the route.",
+                        }
+                    ],
+                },
+                self.root,
+            )
+
+        self.assertEqual(raised.exception.code, "request.invalid_annotations")
+        self.assertEqual(
+            json.loads((self.root / "quests.json").read_text())["routes"],
+            [existing],
+        )
+
     def test_explicit_identity_collision_is_rejected(self):
         (self.root / "quests.json").write_text(
             json.dumps({"routes": [{"activity_id": "gpx-fixed", "status": "approved"}]}) + "\n",
@@ -225,6 +264,35 @@ class RouteCreateTest(unittest.TestCase):
         self.assertEqual(retried["validation"], validation)
         recovery = self.root / ".route-share" / "recovery" / f"{proposal['proposal_id']}.json"
         self.assertFalse(recovery.exists())
+
+    def test_apply_rejects_semantically_tampered_create_proposals(self):
+        mutations = (
+            lambda proposal: proposal["route_spec"].update(activity_id="123456789"),
+            lambda proposal: proposal["route_spec"].update(source_sha256="0" * 64),
+            lambda proposal: proposal["route_spec"].update(
+                lifecycle="completed",
+                date="2026-08-30",
+            ),
+        )
+        for mutation in mutations:
+            proposal = propose_request(self.request(), self.root)
+            mutation(proposal)
+            with self.subTest(mutation=mutation), self.assertRaises(RouteCreateError) as raised:
+                apply_proposal(proposal, self.root, rebuild=lambda: None)
+            self.assertEqual(raised.exception.code, "proposal.semantic_mismatch")
+            self.assertEqual(json.loads((self.root / "quests.json").read_text())["routes"], [])
+
+    def test_idempotent_retry_detects_canonical_route_drift(self):
+        proposal = propose_request(self.request(), self.root)
+        apply_proposal(proposal, self.root, rebuild=lambda: None)
+        config = json.loads((self.root / "quests.json").read_text())
+        config["routes"][0]["activity_name"] = "Unapproved name"
+        (self.root / "quests.json").write_text(json.dumps(config) + "\n")
+
+        with self.assertRaises(RouteCreateError) as raised:
+            apply_proposal(proposal, self.root, rebuild=lambda: None)
+
+        self.assertEqual(raised.exception.code, "route.changed_since_apply")
 
     def test_proposal_contract_rejects_unknown_fields_before_writes(self):
         proposal = propose_request(self.request(), self.root)
@@ -345,6 +413,18 @@ class RouteCreateTest(unittest.TestCase):
             {record["sha256"] for record in route["source_media"]},
             {first["media"][0]["sha256"], second["media"][0]["sha256"]},
         )
+
+    def test_unreadable_request_report_does_not_expose_absolute_paths(self):
+        private_path = self.root / "private-owner-folder" / "missing-request.json"
+        stderr = io.StringIO()
+
+        with redirect_stderr(stderr):
+            result = main(["propose", "--request", str(private_path)])
+
+        self.assertEqual(result, 1)
+        report = stderr.getvalue()
+        self.assertIn("missing-request.json", report)
+        self.assertNotIn(str(self.root), report)
 
 
 if __name__ == "__main__":
