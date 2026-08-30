@@ -8,7 +8,7 @@ usage() {
 Usage: ./scripts/route-preview.sh <route-slug> [--detach]
 
 Validates and builds the single-route bundle before starting a loopback-only
-Vite server. --detach writes the process id and log under .route-share/.
+static server. --detach writes the process id and log under .route-share/.
 EOF
 }
 
@@ -53,8 +53,7 @@ echo "Local Replay: ${REPLAY_URL}"
 
 if [[ "$MODE" != "--detach" ]]; then
   echo "Preview remains active until this process is stopped."
-  exec npm --prefix app exec vite -- preview \
-    --host 127.0.0.1 --port "$PORT" --strictPort --outDir dist
+  exec node scripts/serve-route-preview.mjs dist 127.0.0.1 "$PORT"
 fi
 
 STATE_ROOT=".route-share"
@@ -69,8 +68,7 @@ if [[ -f "$PID_FILE" ]]; then
   fi
 fi
 
-nohup npm --prefix app exec vite -- preview \
-  --host 127.0.0.1 --port "$PORT" --strictPort --outDir dist \
+nohup node scripts/serve-route-preview.mjs dist 127.0.0.1 "$PORT" \
   >"$LOG_FILE" 2>&1 &
 PREVIEW_PID=$!
 echo "$PREVIEW_PID" > "$PID_FILE"

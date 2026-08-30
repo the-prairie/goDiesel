@@ -42,7 +42,7 @@ def test_route_cli_proposes_an_existing_route_as_json(tmp_path: Path):
     assert proposal["proposed_share_name"] == "appian-way-review"
 
 
-def test_preview_runs_the_route_only_dry_run_before_starting_vite(tmp_path: Path):
+def test_preview_runs_the_route_only_dry_run_before_starting_static_server(tmp_path: Path):
     scripts = tmp_path / "scripts"
     scripts.mkdir()
     shutil.copyfile(ROOT / "scripts/route-preview.sh", scripts / "route-preview.sh")
@@ -55,10 +55,7 @@ def test_preview_runs_the_route_only_dry_run_before_starting_vite(tmp_path: Path
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     executable(bin_dir / "python3", "#!/bin/bash\nexit 0\n")
-    executable(
-        bin_dir / "npm",
-        f"#!/bin/bash\nprintf 'npm args=%s\\n' \"$*\" >> {calls}\n",
-    )
+    executable(bin_dir / "node", f"#!/bin/bash\nprintf 'node args=%s\\n' \"$*\" >> {calls}\n")
     environment = os.environ.copy()
     environment["PATH"] = f"{bin_dir}:{environment['PATH']}"
 
@@ -73,8 +70,7 @@ def test_preview_runs_the_route_only_dry_run_before_starting_vite(tmp_path: Path
 
     recorded = calls.read_text(encoding="utf-8")
     assert "publish gpx-preview check-only --dry-run" in recorded
-    assert "npm args=--prefix app exec vite -- preview" in recorded
-    assert "--outDir dist" in recorded
+    assert "node args=scripts/serve-route-preview.mjs dist 127.0.0.1" in recorded
     assert "wrangler" not in recorded
     assert "#/routes/gpx-preview" in completed.stdout
     assert "#/replay/gpx-preview" in completed.stdout
@@ -90,7 +86,7 @@ def test_preview_refuses_blocked_source_health_before_starting_server(tmp_path: 
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     executable(bin_dir / "python3", "#!/bin/bash\nexit 1\n")
-    executable(bin_dir / "npm", f"#!/bin/bash\nprintf 'npm called\\n' >> {calls}\n")
+    executable(bin_dir / "node", f"#!/bin/bash\nprintf 'node called\\n' >> {calls}\n")
     environment = os.environ.copy()
     environment["PATH"] = f"{bin_dir}:{environment['PATH']}"
 
@@ -255,8 +251,8 @@ def test_prompt_to_preview_workflow_is_repeatable_and_never_publishes(tmp_path: 
     bin_dir.mkdir()
     executable(bin_dir / "python3", "#!/bin/bash\nexit 0\n")
     executable(
-        bin_dir / "npm",
-        f"#!/bin/bash\nprintf 'npm %s\\n' \"$*\" >> {calls}\n",
+        bin_dir / "node",
+        f"#!/bin/bash\nprintf 'node %s\\n' \"$*\" >> {calls}\n",
     )
     environment = os.environ.copy()
     environment["PATH"] = f"{bin_dir}:{environment['PATH']}"
