@@ -29,6 +29,17 @@ PYTHON="python3"
 if [[ -x ".venv/bin/python" ]]; then
   PYTHON=".venv/bin/python"
 fi
+if ! "$PYTHON" - "$ROUTE_SLUG" <<'PY'
+import sys
+from pathlib import Path
+from route_status import route_status
+status = route_status(Path('.'), sys.argv[1])
+sys.exit(0 if status['publishable'] else 1)
+PY
+then
+  echo "Refusing to preview: durable source or generated route health is blocked." >&2
+  exit 1
+fi
 PORT=$("$PYTHON" -c 'import socket
 with socket.socket() as server:
     server.bind(("127.0.0.1", 0))
@@ -42,8 +53,8 @@ echo "Local Replay: ${REPLAY_URL}"
 
 if [[ "$MODE" != "--detach" ]]; then
   echo "Preview remains active until this process is stopped."
-  exec env VITE_SINGLE_ROUTE_SLUG="$ROUTE_SLUG" \
-    npm --prefix app run dev -- --host 127.0.0.1 --port "$PORT" --strictPort
+  exec npm --prefix app exec vite -- preview \
+    --host 127.0.0.1 --port "$PORT" --strictPort --outDir dist
 fi
 
 STATE_ROOT=".route-share"
@@ -58,8 +69,8 @@ if [[ -f "$PID_FILE" ]]; then
   fi
 fi
 
-nohup env VITE_SINGLE_ROUTE_SLUG="$ROUTE_SLUG" \
-  npm --prefix app run dev -- --host 127.0.0.1 --port "$PORT" --strictPort \
+nohup npm --prefix app exec vite -- preview \
+  --host 127.0.0.1 --port "$PORT" --strictPort --outDir dist \
   >"$LOG_FILE" 2>&1 &
 PREVIEW_PID=$!
 echo "$PREVIEW_PID" > "$PID_FILE"

@@ -64,19 +64,22 @@ echo "3/4 Running focused microsite journey"
 
 if [[ "$DRY_RUN" == "true" ]]; then
   echo "4/4 Dry run complete"
-  echo "Review locally: VITE_SINGLE_ROUTE_SLUG=$ROUTE_SLUG npm --prefix app run dev"
+  echo "Review locally: ./scripts/route.sh preview $ROUTE_SLUG"
   echo "Publish: ./scripts/publish-route-microsite.sh $ROUTE_SLUG $SHARE_NAME"
   exit 0
 fi
 
-DEPLOYMENTS_JSON=$(npx wrangler pages deployment list \
-  --project-name=godiesel --environment preview --json)
-if node -e '
-const fs = require("node:fs");
-const branch = process.argv[1];
-const deployments = JSON.parse(fs.readFileSync(0, "utf8"));
-process.exit(deployments.some((deployment) => deployment.Branch === branch) ? 0 : 1);
-' "$BRANCH" <<<"$DEPLOYMENTS_JSON"; then
+if ! PUBLIC_STATUS=$(curl --silent --show-error --location \
+  --output /dev/null --write-out '%{http_code}' \
+  --connect-timeout 10 --max-time 30 "$PUBLIC_URL"); then
+  echo "Could not verify whether ${PUBLIC_URL} already exists; refusing to publish." >&2
+  exit 1
+fi
+if [[ "$PUBLIC_STATUS" != "404" && ! "$PUBLIC_STATUS" =~ ^(2|3)[0-9][0-9]$ && "$PUBLIC_STATUS" != "401" && "$PUBLIC_STATUS" != "403" ]]; then
+  echo "Share-name collision check returned HTTP ${PUBLIC_STATUS}; refusing to publish." >&2
+  exit 1
+fi
+if [[ "$PUBLIC_STATUS" != "404" ]]; then
   if [[ "$REPLACE_EXISTING" != "true" ]]; then
     echo "Refusing to replace existing share ${BRANCH}." >&2
     echo "Repeat with --replace-existing only after explicit owner approval." >&2

@@ -54,9 +54,10 @@ def test_preview_runs_the_route_only_dry_run_before_starting_vite(tmp_path: Path
     )
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
+    executable(bin_dir / "python3", "#!/bin/bash\nexit 0\n")
     executable(
         bin_dir / "npm",
-        f"#!/bin/bash\nprintf 'npm slug=%s args=%s\\n' \"$VITE_SINGLE_ROUTE_SLUG\" \"$*\" >> {calls}\n",
+        f"#!/bin/bash\nprintf 'npm args=%s\\n' \"$*\" >> {calls}\n",
     )
     environment = os.environ.copy()
     environment["PATH"] = f"{bin_dir}:{environment['PATH']}"
@@ -72,10 +73,38 @@ def test_preview_runs_the_route_only_dry_run_before_starting_vite(tmp_path: Path
 
     recorded = calls.read_text(encoding="utf-8")
     assert "publish gpx-preview check-only --dry-run" in recorded
-    assert "npm slug=gpx-preview" in recorded
+    assert "npm args=--prefix app exec vite -- preview" in recorded
+    assert "--outDir dist" in recorded
     assert "wrangler" not in recorded
     assert "#/routes/gpx-preview" in completed.stdout
     assert "#/replay/gpx-preview" in completed.stdout
+
+
+def test_preview_refuses_blocked_source_health_before_starting_server(tmp_path: Path):
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    shutil.copyfile(ROOT / "scripts/route-preview.sh", scripts / "route-preview.sh")
+    (scripts / "route-preview.sh").chmod(0o755)
+    executable(scripts / "publish-route-microsite.sh", "#!/bin/bash\nexit 0\n")
+    calls = tmp_path / "calls.log"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    executable(bin_dir / "python3", "#!/bin/bash\nexit 1\n")
+    executable(bin_dir / "npm", f"#!/bin/bash\nprintf 'npm called\\n' >> {calls}\n")
+    environment = os.environ.copy()
+    environment["PATH"] = f"{bin_dir}:{environment['PATH']}"
+
+    completed = subprocess.run(
+        [str(scripts / "route-preview.sh"), "gpx-preview"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+
+    assert completed.returncode != 0
+    assert "durable source or generated route health is blocked" in completed.stderr
+    assert not calls.exists()
 
 
 def test_publish_refuses_an_existing_share_without_explicit_replacement(tmp_path: Path):
@@ -92,6 +121,7 @@ def test_publish_refuses_an_existing_share_without_explicit_replacement(tmp_path
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     executable(bin_dir / "node", "#!/bin/bash\nexit 0\n")
+    executable(bin_dir / "curl", "#!/bin/bash\nprintf '200'\n")
     executable(
         bin_dir / "npx",
         f"""#!/bin/bash
@@ -116,6 +146,19 @@ exit 0
     assert completed.returncode != 0
     assert "Refusing to replace existing share" in completed.stderr
     assert "wrangler pages deploy dist" not in calls.read_text(encoding="utf-8")
+
+
+def test_microsite_validator_redacts_checkout_paths():
+    completed = subprocess.run(
+        ["node", "scripts/validate-route-microsite.mjs", "gpx-not-present", "source"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode != 0
+    assert "gpx-not-present.json" in completed.stderr
+    assert str(ROOT) not in completed.stderr
 
 
 def test_route_microsite_scoping_keeps_only_referenced_media(tmp_path: Path):
@@ -210,6 +253,7 @@ def test_prompt_to_preview_workflow_is_repeatable_and_never_publishes(tmp_path: 
     )
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
+    executable(bin_dir / "python3", "#!/bin/bash\nexit 0\n")
     executable(
         bin_dir / "npm",
         f"#!/bin/bash\nprintf 'npm %s\\n' \"$*\" >> {calls}\n",
