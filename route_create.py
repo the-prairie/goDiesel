@@ -278,7 +278,12 @@ def _stage_file(
     staged_name: str,
     expected_sha256: str,
 ) -> str:
-    staging = root / ".route-share" / "staging"
+    staging = _controlled_path(
+        root,
+        Path(".route-share/staging"),
+        "source.unsafe_staging",
+        "staging must stay inside the repository",
+    )
     staging.mkdir(parents=True, exist_ok=True)
     destination = staging / staged_name
     if destination.exists():
@@ -292,6 +297,19 @@ def _stage_file(
         raise RouteCreateError("source.checksum_mismatch", "staged GPX checksum does not match")
     os.replace(temporary, destination)
     return destination.relative_to(root).as_posix()
+
+
+def _controlled_path(
+    root: Path,
+    relative: Path,
+    code: str,
+    message: str,
+) -> Path:
+    repository_root = root.resolve()
+    candidate = (repository_root / relative).resolve()
+    if not candidate.is_relative_to(repository_root):
+        raise RouteCreateError(code, message)
+    return candidate
 
 
 def _stage_source(source: Path, root: Path, proposal_id: str, expected_sha256: str) -> str:
@@ -689,7 +707,12 @@ def _validated_source_path(
     source = proposal["source"]
     relative = source["durable_path" if durable else "staged_path"]
     candidate = (root / relative).resolve()
-    allowed_root = (root / ("route_sources" if durable else ".route-share/staging")).resolve()
+    allowed_root = _controlled_path(
+        root,
+        Path("route_sources" if durable else ".route-share/staging"),
+        "source.unsafe_destination" if durable else "source.unsafe_staging",
+        "approved GPX path must stay inside the repository",
+    )
     if not candidate.is_relative_to(allowed_root) or not candidate.is_file():
         code = "source.missing_durable" if durable else "source.missing_staged"
         label = "durable" if durable else "staged"
@@ -712,7 +735,12 @@ def _validated_staged_media(
     root: Path,
     annotation_ids: set[str],
 ) -> None:
-    staging_root = (root / ".route-share" / "staging").resolve()
+    staging_root = _controlled_path(
+        root,
+        Path(".route-share/staging"),
+        "source.unsafe_staging",
+        "staging must stay inside the repository",
+    )
     slug = str(proposal["route_spec"]["activity_id"])
     for index, item in enumerate(proposal.get("media", [])):
         association = item["association"]
@@ -780,7 +808,12 @@ def _register_source(proposal: dict[str, object], root: Path) -> Path:
     staged = _validated_source_path(proposal, root, durable=False)
     expected = source["sha256"]
     durable = (root / source["durable_path"]).resolve()
-    durable_root = (root / "route_sources").resolve()
+    durable_root = _controlled_path(
+        root,
+        Path("route_sources"),
+        "source.unsafe_destination",
+        "durable source must stay inside the repository",
+    )
     if not durable.is_relative_to(durable_root):
         raise RouteCreateError("source.unsafe_destination", "durable source must stay inside route_sources")
     durable.parent.mkdir(parents=True, exist_ok=True)
@@ -818,6 +851,22 @@ def _copy_verified_source(
     os.replace(temporary, durable)
 
 
+def _media_destination_roots(root: Path, slug: str) -> tuple[Path, Path]:
+    durable = _controlled_path(
+        root,
+        Path("route_sources") / "media" / slug,
+        "media.unsafe_destination",
+        "durable media must stay inside the repository",
+    )
+    public = _controlled_path(
+        root,
+        Path("app/public") / "media" / slug,
+        "media.unsafe_destination",
+        "public media must stay inside the repository",
+    )
+    return durable, public
+
+
 def _route_spec_with_registered_media(
     proposal: dict[str, object],
     root: Path,
@@ -825,7 +874,13 @@ def _route_spec_with_registered_media(
     route_spec = copy.deepcopy(proposal["route_spec"])
     slug = str(route_spec["activity_id"])
     registered = copy.deepcopy(route_spec.get("source_media", []))
-    staging_root = (root / ".route-share" / "staging").resolve()
+    staging_root = _controlled_path(
+        root,
+        Path(".route-share/staging"),
+        "source.unsafe_staging",
+        "staging must stay inside the repository",
+    )
+    durable_media_root, public_media_root = _media_destination_roots(root, slug)
     for item in proposal.get("media", []):
         staged = (root / item["staged_path"]).resolve()
         if not staged.is_relative_to(staging_root) or not staged.is_file():
@@ -835,6 +890,11 @@ def _route_spec_with_registered_media(
         extension = staged.suffix.lower()
         durable_relative = Path("route_sources") / "media" / slug / f"{item['sha256']}{extension}"
         durable = (root / durable_relative).resolve()
+        if not durable.is_relative_to(durable_media_root):
+            raise RouteCreateError(
+                "media.unsafe_destination",
+                "durable media must stay inside the route media directory",
+            )
         _copy_verified_source(staged, durable, item["sha256"])
         record = {
             "path": durable_relative.as_posix(),
@@ -866,7 +926,7 @@ def _route_spec_with_registered_media(
             )
         annotation["media"] = publish_photo(
             durable,
-            root / "app" / "public" / "media" / slug,
+            public_media_root,
             slug,
             item["sha256"][:16],
         )
@@ -901,7 +961,7 @@ def _validate_applied_files(
         _validated_source_path(proposal, root, durable=True)
     registered = existing.get("source_media", [])
     slug = str(existing["activity_id"])
-    media_root = (root / "route_sources" / "media" / slug).resolve()
+    media_root, public_media_root = _media_destination_roots(root, slug)
     annotation_ids = {
         str(annotation.get("id"))
         for annotation in existing.get("annotations", [])
@@ -991,8 +1051,10 @@ def _validate_applied_files(
         for field in ("url", "thumb_url"):
             relative = str(media.get(field) or "")
             published = (root / "app" / "public" / relative).resolve()
-            media_root = (root / "app" / "public" / "media" / slug).resolve()
-            if not published.is_relative_to(media_root) or not published.is_file():
+            if (
+                not published.is_relative_to(public_media_root)
+                or not published.is_file()
+            ):
                 raise RouteCreateError(
                     "media.missing_derivative",
                     "registered public media derivative is unavailable",
@@ -1010,6 +1072,8 @@ def _validate_proposal_semantics(
     source = proposal["source"]
     route_spec = proposal["route_spec"]
     slug = str(route_spec["activity_id"])
+    if proposal.get("media"):
+        _media_destination_roots(root, slug)
 
     if operation == "create":
         if source.get("mode") != "gpx" or existing is not None:

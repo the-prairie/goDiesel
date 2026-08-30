@@ -187,6 +187,29 @@ class RouteCreateTest(unittest.TestCase):
         self.assertEqual(raised.exception.code, "request.missing_activity_date")
         self.assertEqual(json.loads((self.root / "quests.json").read_text())["routes"], [])
 
+    def test_completed_route_evidence_rejects_unapproved_fields_before_writes(self):
+        proposal = propose_request(
+            self.request(
+                lifecycle="completed",
+                activity_date="2026-08-20",
+                completion_evidence={
+                    "kind": "owner_recorded",
+                    "description": "Recorded by the owner.",
+                },
+            ),
+            self.root,
+        )
+        proposal["route_spec"]["lifecycle_evidence"]["private_absolute_path"] = (
+            "/private/owner.gpx"
+        )
+
+        with self.assertRaises(RouteCreateError) as raised:
+            apply_proposal(proposal, self.root, rebuild=lambda: None)
+
+        self.assertEqual(raised.exception.code, "proposal.schema")
+        self.assertEqual(json.loads((self.root / "quests.json").read_text())["routes"], [])
+        self.assertFalse((self.root / "route_sources").exists())
+
     def test_source_symlink_escape_is_rejected(self):
         link = self.root / "route.gpx"
         link.symlink_to(self.source)
@@ -494,6 +517,35 @@ class RouteCreateTest(unittest.TestCase):
 
         self.assertEqual(raised.exception.code, "proposal.semantic_mismatch")
         self.assertEqual(json.loads((self.root / "quests.json").read_text())["routes"], [])
+
+    def test_media_destination_symlinks_cannot_escape_the_repository(self):
+        photo = self.root / "owner-files" / "escape.jpg"
+        Image.new("RGB", (16, 16), color=(10, 20, 30)).save(photo, "JPEG")
+        for label, relative, desired_route_id in (
+            ("durable", Path("route_sources/media"), "gpx-durable-symlink"),
+            ("public", Path("app/public/media"), "gpx-public-symlink"),
+        ):
+            proposal = propose_request(
+                self.request(
+                    desired_route_id=desired_route_id,
+                    media=[{"path": str(photo), "association": {"kind": "route"}}],
+                ),
+                self.root,
+            )
+            external = self.root.parent / f"{self.root.name}-{label}-escape"
+            external.mkdir()
+            link = self.root / relative / desired_route_id
+            link.parent.mkdir(parents=True, exist_ok=True)
+            link.symlink_to(external, target_is_directory=True)
+
+            with self.subTest(label=label), self.assertRaises(RouteCreateError) as raised:
+                apply_proposal(proposal, self.root, rebuild=lambda: None)
+
+            self.assertEqual(raised.exception.code, "media.unsafe_destination")
+            self.assertEqual(list(external.iterdir()), [])
+            self.assertFalse((self.root / "route_sources/imported").exists())
+            link.unlink()
+            external.rmdir()
 
     def test_one_image_can_be_registered_for_two_annotations_and_retried(self):
         photo = self.root / "owner-files" / "shared.jpg"
