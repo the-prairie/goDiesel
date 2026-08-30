@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-14
+last_updated: 2026-08-30
 status: canonical
 ---
 
@@ -39,9 +39,12 @@ sub-contexts and no translation layers between them.
 The central entity. A **route** is a real, specific path through the world,
 grounded in recorded activity data and enriched with owner curation.
 
-A route is identified by a **slug**, which is currently always its Strava
-**activity id** (for example `17665674778`). The slug is the stable public
-identifier and appears in every canonical URL.
+A route is identified by a **slug**.
+A Strava-backed route keeps its Strava **activity id** (for example `17665674778`).
+An imported GPX route receives one opaque `gpx-<id>` slug when its creation proposal is made.
+That imported slug is never derived from a mutable title, region, filename, checksum, or public share name.
+The slug is the stable public identifier and appears in every canonical URL.
+See ADR-0015.
 
 A route is **not** a segment, a plan, a workout, or a performance. Metrics exist
 to describe the experience, not to score it.
@@ -54,9 +57,10 @@ the pointer to its original **source file**.
 
 ### Source file
 
-The original recorded geometry: a GPX or FIT file under `route_sources/`. Source
-files are the ground truth for geometry, elevation, and time. Nothing downstream
-may contradict them.
+The original recorded geometry: a GPX or FIT file under `route_sources/`.
+Source files are the ground truth for geometry, elevation, and time.
+An imported source carries a stored SHA-256 digest that is revalidated whenever the route is read or built.
+Nothing downstream may contradict a source file.
 
 ### Source kind
 
@@ -127,6 +131,21 @@ Every value the product presents is one of:
 `provenance.temporal.status` is exactly `recorded` or `unavailable`. There is no
 guessed timestamp and no third state. When time is unavailable, the product says
 so rather than estimating.
+
+Supplied timestamps on a `discovered` route remain in its durable source file, but are not published as owner elapsed time or pace.
+The public route has unavailable temporal provenance until owner-recorded completion evidence exists.
+
+### Elevation provenance
+
+`elevation_status` and `provenance.elevation.status` are exactly `recorded` or `unavailable`.
+A GPX with missing elevation stores `null` at the generated source boundary and uses provider-relative terrain internally for rendering.
+It never turns missing altitude into a recorded zero, a zero-metre climb, or a zero-metre high point.
+
+### Route date
+
+An imported `discovered` route may use the empty string as the canonical unknown-date representation.
+The interface renders it as `Date not recorded`.
+A `completed` route still requires a valid `YYYY-MM-DD` activity date.
 
 ### Discontinuity
 

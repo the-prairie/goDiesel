@@ -18,6 +18,11 @@ See `docs/agents/triage-labels.md`.
 This is a single-context repository using root `CONTEXT.md` and system-wide ADRs under `docs/adr/`.
 See `docs/agents/domain.md`.
 
+### Route shares
+
+Use the proposal, owner-approval, creation, local-preview, and publication state machine in `docs/agents/route-share.md`.
+Never infer route geometry or treat creation approval as publication approval.
+
 ### Testing
 
 Use risk-based verification.
