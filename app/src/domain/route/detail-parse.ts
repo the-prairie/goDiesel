@@ -304,7 +304,10 @@ function validatedDetailFields(
     region: requiredStringField(input, "region", false),
     date: requiredStringField(input, "date"),
     distanceKm: requiredNumberField(input, "distance_km", { min: 0 }),
-    elevationGainM: requiredNumberField(input, "elevation_gain_m", { min: 0 }),
+    elevationGainM:
+      elevationStatus === "unavailable"
+        ? null
+        : requiredNumberField(input, "elevation_gain_m", { min: 0 }),
     elevationStatus,
     type: requiredStringField(input, "type", false),
     description: requiredStringField(input, "description"),

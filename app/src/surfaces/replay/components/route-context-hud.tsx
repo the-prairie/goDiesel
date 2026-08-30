@@ -104,7 +104,7 @@ export function RouteContextHud({
           {route.distanceKm.toFixed(1)} km ·{" "}
           {route.elevationStatus === "unavailable"
             ? "Elevation unavailable"
-            : `${route.elevationGainM.toLocaleString()} m up`}
+            : `${route.elevationGainM!.toLocaleString()} m up`}
         </p>
         {summary}
         {actions ? (

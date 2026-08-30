@@ -83,7 +83,8 @@ function commonRouteFields(
     region: stringValue(input.region, "Unknown region"),
     date: stringValue(input.date),
     distanceKm: numberValue(input.distance_km),
-    elevationGainM: numberValue(input.elevation_gain_m),
+    elevationGainM:
+      elevationStatus === "unavailable" ? null : numberValue(input.elevation_gain_m),
     elevationStatus,
     type: stringValue(input.type, "Run"),
     description: stringValue(input.description),

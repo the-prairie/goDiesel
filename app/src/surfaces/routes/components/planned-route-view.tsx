@@ -372,7 +372,7 @@ function RecordedMatch({
           {route.activityName || route.name}
         </h3>
         <p className="mt-1 text-caption text-ink-secondary">
-          {formatRouteDate(route.date)} · {route.distanceKm.toFixed(1)} km · {route.elevationGainM.toLocaleString()} m up
+          {formatRouteDate(route.date)} · {route.distanceKm.toFixed(1)} km · {route.elevationStatus === "unavailable" ? "Elevation unavailable" : `${route.elevationGainM!.toLocaleString()} m up`}
         </p>
         <p className="mt-2 text-caption text-ink-muted">
           At least {Math.round(match.overlapRatio * 100)}% of sampled points align within 1.5 km in both route directions.

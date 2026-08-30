@@ -119,7 +119,7 @@ export function RouteCard({
               <MemoryFact label="Climb">
                 {route.elevationStatus === "unavailable"
                   ? "Unavailable"
-                  : `${route.elevationGainM.toLocaleString()} m up`}
+                  : `${route.elevationGainM!.toLocaleString()} m up`}
               </MemoryFact>
             )}
           </dl>

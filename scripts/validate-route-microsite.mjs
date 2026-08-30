@@ -65,6 +65,13 @@ function validateRoute(route, expectedSlug) {
   if (!Number.isFinite(route.distance_km) || route.distance_km <= 0) {
     fail("distance_km must be a positive number");
   }
+  if (
+    route.elevation_status === "unavailable"
+      ? route.elevation_gain_m !== null
+      : !Number.isFinite(route.elevation_gain_m) || route.elevation_gain_m < 0
+  ) {
+    fail("elevation_gain_m must agree with elevation availability");
+  }
   if (!Array.isArray(route.route) || route.route.length < 2) {
     fail("route geometry must contain at least two points");
   }

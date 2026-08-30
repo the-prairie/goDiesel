@@ -87,8 +87,8 @@ export function routeStoryChapters(route: QuestRoute): RouteStoryChapter[] {
       body: route.elevationStatus === "unavailable"
         ? `${isCompleted ? "The activity" : "The imported route"} closes after ${route.distanceKm.toFixed(1)} km. Elevation is unavailable.`
         : isCompleted
-          ? `The activity ends after ${route.distanceKm.toFixed(1)} km and ${route.elevationGainM.toLocaleString()} m of recorded climbing.`
-          : `The imported route closes after ${route.distanceKm.toFixed(1)} km and ${route.elevationGainM.toLocaleString()} m of source-recorded climbing.`,
+          ? `The activity ends after ${route.distanceKm.toFixed(1)} km and ${route.elevationGainM!.toLocaleString()} m of recorded climbing.`
+          : `The imported route closes after ${route.distanceKm.toFixed(1)} km and ${route.elevationGainM!.toLocaleString()} m of source-recorded climbing.`,
       evidence: "recorded",
       distanceM: totalDistanceM,
       elevationM: route.elevationStatus === "recorded" ? finish.elev : undefined,

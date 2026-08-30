@@ -34,7 +34,7 @@ export function buildRouteRegions(routes: RouteSummary[]): RouteRegion[] {
 
       current.routes.push(route);
       current.totalKm += route.distanceKm;
-      current.totalClimbM += route.elevationGainM;
+      current.totalClimbM += route.elevationGainM ?? 0;
 
       return regions;
     }, {}),

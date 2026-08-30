@@ -68,7 +68,7 @@ function routeMatchesDistance(distanceKm: number, filter: RouteFilters["distance
 
 function routeMatchesClimb(route: RouteSummary, filter: RouteFilters["climb"]) {
   if (filter === "all") return true;
-  if (route.elevationStatus === "unavailable") return false;
+  if (route.elevationStatus === "unavailable" || route.elevationGainM === null) return false;
 
   const elevationGainM = route.elevationGainM;
   switch (filter) {

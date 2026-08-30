@@ -215,7 +215,9 @@ export function RegionRouteCarousel({
             <span>{region.routes.length} routes · {region.totalKm.toFixed(0)} km</span>
             <span>
               <span className="hidden sm:inline">· </span>
-              {Math.round(region.totalClimbM).toLocaleString()} m climbed
+              {region.routes.some((route) => route.elevationStatus !== "unavailable")
+                ? `${Math.round(region.totalClimbM).toLocaleString()} m climbed`
+                : "Elevation unavailable"}
             </span>
           </p>
         </div>
@@ -433,7 +435,7 @@ function RegionalRouteCard({
         <h3 className="truncate font-editorial text-xl font-semibold leading-6 [@media(max-height:500px)]:text-base [@media(max-height:500px)]:leading-5">{route.name}</h3>
         <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-white/72">
           <span>{route.distanceKm.toFixed(1)} km</span>
-          <span>{route.elevationStatus === "unavailable" ? "Elevation unavailable" : `${route.elevationGainM.toLocaleString()} m climb`}</span>
+          <span>{route.elevationStatus === "unavailable" ? "Elevation unavailable" : `${route.elevationGainM!.toLocaleString()} m climb`}</span>
           <span className="inline-flex items-center gap-1">
             {route.type === "Ride" ? <Bike className="size-3.5" aria-hidden="true" /> : <Footprints className="size-3.5" aria-hidden="true" />}
             {route.type}

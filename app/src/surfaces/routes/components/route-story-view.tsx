@@ -173,7 +173,7 @@ export function RouteStoryView({
               value={
                 route.elevationStatus === "unavailable"
                   ? "Unavailable"
-                  : `${route.elevationGainM.toLocaleString()} m`
+                  : `${route.elevationGainM!.toLocaleString()} m`
               }
             />
           <HeroMetric

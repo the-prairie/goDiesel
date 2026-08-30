@@ -215,7 +215,7 @@ function isPersistedPlannedRoute(value: unknown): value is PlannedRoute {
     typeof route.region === "string" &&
     typeof route.date === "string" &&
     finiteNumber(route.distanceKm) &&
-    finiteNumber(route.elevationGainM) &&
+    validElevationMetric(route.elevationGainM, route.elevationStatus) &&
     typeof route.type === "string" &&
     typeof route.description === "string" &&
     typeof route.completionRule === "string" &&
@@ -277,7 +277,7 @@ function isPersistedRouteSnapshot(value: unknown): value is DiscoveryCandidate["
     typeof route.region === "string" &&
     typeof route.date === "string" &&
     finiteNumber(route.distanceKm) &&
-    finiteNumber(route.elevationGainM) &&
+    validElevationMetric(route.elevationGainM, route.elevationStatus) &&
     (route.type === "Run" || route.type === "Ride") &&
     typeof route.description === "string" &&
     typeof route.completionRule === "string" &&
@@ -308,6 +308,10 @@ function routeMatchesIntent(
     route.type === intent.activity &&
     placesOverlap(route.region, intent.place)
   );
+}
+
+function validElevationMetric(value: unknown, status: unknown) {
+  return status === "unavailable" ? value === null : finiteNumber(value);
 }
 
 function finiteNumber(value: unknown): value is number {

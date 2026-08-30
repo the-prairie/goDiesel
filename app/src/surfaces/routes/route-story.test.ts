@@ -118,7 +118,7 @@ describe("route story chapters", () => {
     const unavailable = route({
       lifecycle: "discovered",
       elevationStatus: "unavailable",
-      elevationGainM: 0,
+      elevationGainM: null,
       route: [
         { lat: 27.98, lng: 86.9, elev: 0, d: 0 },
         { lat: 27.99, lng: 86.91, elev: 0, d: 1_500 },

@@ -152,7 +152,7 @@ def build_quest_meta(activity_type, distance_km, elevation_gain, region_label, a
         "difficulty": difficulty,
         "theme": theme,
         "xp": xp,
-        "elevation_gain_m": int(scoring_elevation),
+        "elevation_gain_m": int(elevation_gain) if recorded_elevation else None,
         "completion_rule": completion_rule,
     }
 

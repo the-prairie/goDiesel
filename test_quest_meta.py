@@ -128,7 +128,7 @@ class QuestMetaTests(unittest.TestCase):
             activity_name="Imported line",
         )
 
-        self.assertEqual(meta["elevation_gain_m"], 0)
+        self.assertIsNone(meta["elevation_gain_m"])
         self.assertEqual(
             meta["completion_rule"],
             "Complete a 12.4 km run in High Plateau.",

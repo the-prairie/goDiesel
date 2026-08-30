@@ -30,7 +30,7 @@ export interface RouteSceneManifest {
   center: { lat: number; lng: number };
   totalDistanceM: number;
   elevationGainM: number;
-  altitudeSource: "recorded-activity";
+  altitudeSource: "recorded-activity" | "mesh-relative";
   path: RouteScenePoint[];
   sourceRoute: QuestRoute;
 }
@@ -125,8 +125,9 @@ export function createRouteSceneManifest(route: QuestRoute): RouteSceneManifest 
     activityType: route.type,
     center: { lat: route.centerLat, lng: route.centerLng },
     totalDistanceM: routeDistanceM(route),
-    elevationGainM: route.elevationGainM,
-    altitudeSource: "recorded-activity",
+    elevationGainM: route.elevationGainM ?? 0,
+    altitudeSource:
+      route.elevationStatus === "unavailable" ? "mesh-relative" : "recorded-activity",
     path: route.route.map((point) => ({
       lat: point.lat,
       lng: point.lng,

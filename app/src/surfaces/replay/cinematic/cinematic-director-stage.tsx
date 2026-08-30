@@ -48,8 +48,8 @@ function routeLogline(route: QuestRoute) {
       ? route.curation.vibe || route.curation.editorialNote
       : undefined;
   if (curated) return curated;
-  if (profile.character === "mountain") {
-    return `${route.region} does not give this one away: ${route.distanceKm.toFixed(1)} kilometres, ${route.elevationGainM.toLocaleString()} metres of ascent, and a line that keeps climbing into the horizon.`;
+  if (profile.character === "mountain" && route.elevationStatus !== "unavailable") {
+    return `${route.region} does not give this one away: ${route.distanceKm.toFixed(1)} kilometres, ${route.elevationGainM!.toLocaleString()} metres of ascent, and a line that keeps climbing into the horizon.`;
   }
   if (profile.character === "rolling") {
     return `A restless line through ${route.region}, where ${route.distanceKm.toFixed(1)} kilometres of bends and rises never quite settle into a rhythm.`;
@@ -345,7 +345,7 @@ export function CinematicDirectorStage({
                 </p>
                 <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-xs uppercase tracking-[0.12em] text-white/58">
                   <span>{route.distanceKm.toFixed(1)} km</span>
-                  <span>{route.elevationGainM.toLocaleString()} m up</span>
+                  <span>{route.elevationStatus === "unavailable" ? "Elevation unavailable" : `${route.elevationGainM!.toLocaleString()} m up`}</span>
                   <span>{route.type}</span>
                   <span>{route.date}</span>
                 </div>
@@ -431,8 +431,10 @@ export function CinematicDirectorStage({
               </h1>
               <p className="mt-4 max-w-2xl text-sm leading-relaxed text-white/62">
                 You have seen the shape of {route.name}. Now meet the real
-                terrain: {route.distanceKm.toFixed(1)} km and{" "}
-                {route.elevationGainM.toLocaleString()} m up.
+                terrain: {route.distanceKm.toFixed(1)} km
+                {route.elevationStatus === "unavailable"
+                  ? ". Elevation is unavailable."
+                  : ` and ${route.elevationGainM!.toLocaleString()} m up.`}
               </p>
             </div>
             {!renderMode ? (

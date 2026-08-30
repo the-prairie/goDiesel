@@ -584,7 +584,7 @@ export function GoogleRouteNavigatorStage({
                 {route.distanceKm.toFixed(1)} km ·{" "}
                 {route.elevationStatus === "unavailable"
                   ? "Elevation unavailable"
-                  : `${Math.round(route.elevationGainM)} m up`} · {route.type}
+                  : `${Math.round(route.elevationGainM!)} m up`} · {route.type}
               </div>
             </div>
           ) : null}

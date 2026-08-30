@@ -118,7 +118,7 @@ export interface RouteSummary {
   region: string;
   date: string;
   distanceKm: number;
-  elevationGainM: number;
+  elevationGainM: number | null;
   elevationStatus?: RouteElevationStatus;
   type: RouteActivityType;
   description: string;

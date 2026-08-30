@@ -225,7 +225,7 @@ export function buildRouteGenome(route: QuestRoute): RouteGenome {
   const gradeVolatility =
     bins.slice(1).reduce((sum, bin, index) => sum + Math.abs(bin.gradePct - bins[index].gradePct), 0) /
     Math.max(1, bins.length - 1);
-  const climbDensity = route.elevationGainM / route.distanceKm;
+  const climbDensity = (route.elevationGainM ?? 0) / route.distanceKm;
   const environmental = environmentalPriors[route.activityId] ?? [null, null, null, null, null];
   const environmentalLabels = [
     ["built", "Built texture"],

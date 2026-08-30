@@ -159,7 +159,7 @@ describe("parseRouteDetail", () => {
     const route = parseRouteDetail(validRouteDetail({
       lifecycle: "discovered",
       elevation_status: "unavailable",
-      elevation_gain_m: 0,
+      elevation_gain_m: null,
       route: [
         { lat: 27.98, lng: 86.9, elev: null, d: 0 },
         { lat: 27.99, lng: 86.91, elev: null, d: 1_500 },
@@ -173,6 +173,7 @@ describe("parseRouteDetail", () => {
     }));
 
     expect(route.elevationStatus).toBe("unavailable");
+    expect(route.elevationGainM).toBeNull();
     expect(route.route.map((point) => point.elev)).toEqual([0, 0]);
     expect(route.provenance.elevation).toEqual({ status: "unavailable" });
   });

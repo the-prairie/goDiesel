@@ -41,7 +41,7 @@ export function atlasLensFromSearchParams(searchParams: URLSearchParams): AtlasL
 
 export function deriveTerrainReading(region: RouteRegion): TerrainReading | null {
   const elevations = region.routes.flatMap((route) =>
-    route.trace
+    route.elevationStatus === "unavailable" ? [] : route.trace
       .map((point) => point.elev)
       .filter((elevation) => Number.isFinite(elevation)),
   );
@@ -60,6 +60,7 @@ export function deriveTerrainReading(region: RouteRegion): TerrainReading | null
 export function deriveRouteTerrainDistinction(
   route: RouteRegion["routes"][number],
 ): RouteTerrainDistinction | null {
+  if (route.elevationStatus === "unavailable") return null;
   const elevations = route.trace
     .map((point) => point.elev)
     .filter((elevation) => Number.isFinite(elevation));
