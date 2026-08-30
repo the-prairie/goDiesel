@@ -54,6 +54,19 @@
         }
       }
     },
+    "intakeAnnotation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "at_distance_m", "kind", "evidence", "body"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "at_distance_m": { "type": "number", "minimum": 0 },
+        "kind": { "enum": ["note", "landmark", "warning", "image"] },
+        "evidence": { "enum": ["recorded", "derived", "measured", "hypothesis"] },
+        "body": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 }
+      }
+    },
     "media": {
       "type": "object",
       "additionalProperties": false,
@@ -247,7 +260,7 @@
         "curation": { "$ref": "#/$defs/curation" },
         "annotations": {
           "type": "array",
-          "items": { "$ref": "#/$defs/annotation" }
+          "items": { "$ref": "#/$defs/intakeAnnotation" }
         },
         "media": {
           "type": "array",

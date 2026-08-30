@@ -33,7 +33,7 @@ let route;
 try {
   route = JSON.parse(fs.readFileSync(routePath, "utf8"));
 } catch (error) {
-  fail(`could not read ${routePath} (${error.message})`);
+  fail(`could not read ${path.basename(routePath)} (${error.name})`);
 }
 
 const expected = collectMediaReferences(route);

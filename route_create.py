@@ -12,10 +12,12 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import uuid
 
 import gpxpy
 from jsonschema import Draft202012Validator
+from PIL import Image
 
 from quest_meta import build_route_curation
 from route_annotations import build_route_annotations
@@ -41,6 +43,17 @@ REQUEST_FIELDS = frozenset(
         "desired_route_id",
         "lifecycle",
         "completion_evidence",
+        "curation",
+        "annotations",
+        "media",
+        "replay_mode",
+        "proposed_share_name",
+    )
+)
+EXISTING_REQUEST_FIELDS = frozenset(
+    (
+        "schema_version",
+        "existing_slug",
         "curation",
         "annotations",
         "media",
@@ -101,6 +114,13 @@ def _validate_request(request: object, root: Path) -> dict[str, object]:
         location = ".".join(str(part) for part in error.absolute_path)
         prefix = f"{location}: " if location else ""
         raise RouteCreateError(code, prefix + error.message)
+    if request.get("existing_slug"):
+        incompatible = sorted(set(request) - EXISTING_REQUEST_FIELDS)
+        if incompatible:
+            raise RouteCreateError(
+                "request.mode_field",
+                f"existing-route request cannot use fields: {', '.join(incompatible)}",
+            )
     return copy.deepcopy(request)
 
 
@@ -123,7 +143,10 @@ def _load_config(root: Path) -> dict[str, object]:
     try:
         config = json.loads((root / "quests.json").read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
-        raise RouteCreateError("repository.invalid_routes", f"quests.json is unavailable: {error}") from error
+        raise RouteCreateError(
+            "repository.invalid_routes",
+            f"quests.json is unavailable: {error.__class__.__name__}",
+        ) from error
     if not isinstance(config, dict) or not isinstance(config.get("routes"), list):
         raise RouteCreateError("repository.invalid_routes", "quests.json must contain a routes list")
     return config
@@ -210,7 +233,10 @@ def _inspect_gpx(path: Path) -> tuple[dict[str, object], float]:
         with path.open(encoding="utf-8") as source:
             gpx = gpxpy.parse(source)
     except Exception as error:
-        raise RouteCreateError("source.invalid_gpx", f"GPX could not be parsed: {error}") from error
+        raise RouteCreateError(
+            "source.invalid_gpx",
+            f"GPX could not be parsed: {error.__class__.__name__}",
+        ) from error
     if len(parsed.route) < 2 or parsed.route[-1]["d"] <= 0:
         raise RouteCreateError("source.empty_geometry", "GPX must contain at least two distinct route points")
     source_points = [
@@ -309,6 +335,18 @@ def _stage_media(
                 "request.video_annotation_unsupported",
                 "video may be associated with the route; select a still before attaching it to an annotation",
             )
+        if media_type == "image":
+            try:
+                with Image.open(source) as image:
+                    image.verify()
+            except Exception:
+                warnings.append(
+                    {
+                        "code": "media.invalid_image_omitted",
+                        "message": f"Unreadable image {source.name} was omitted from the proposal.",
+                    }
+                )
+                continue
         digest = _file_sha256(source)
         staged_path = _stage_file(
             source,
@@ -389,6 +427,39 @@ def _existing_route_distance(root: Path, slug: str) -> float:
     return distance_m
 
 
+def _existing_route_observations(root: Path, slug: str) -> dict[str, object]:
+    detail_path = root / "app" / "public" / "data" / "routes" / f"{slug}.json"
+    try:
+        detail = json.loads(detail_path.read_text(encoding="utf-8"))
+        points = detail["route"]
+        distance_m = float(points[-1]["d"])
+    except (OSError, ValueError, KeyError, IndexError, TypeError, json.JSONDecodeError) as error:
+        raise RouteCreateError(
+            "route.observations_unavailable",
+            f"generated route observations are unavailable for {slug}",
+        ) from error
+    elevation_status = str(detail.get("elevation_status") or "recorded")
+    elevations = [
+        float(point["elev"])
+        for point in points
+        if isinstance(point, dict) and isinstance(point.get("elev"), (int, float))
+    ]
+    temporal = (detail.get("provenance") or {}).get("temporal") or {}
+    temporal_status = str(temporal.get("status") or "unavailable")
+    observations: dict[str, object] = {
+        "distance_m": round(distance_m, 3),
+        "temporal": {"status": temporal_status},
+        "elevation": {"status": elevation_status},
+    }
+    if elevation_status == "recorded" and elevations:
+        observations["elevation"] = {
+            "status": "recorded",
+            "minimum_m": min(elevations),
+            "maximum_m": max(elevations),
+        }
+    return observations
+
+
 def propose_request(request: object, root: str | Path) -> dict[str, object]:
     """Normalize one request into a redacted, reviewable proposal."""
     root = Path(root).resolve()
@@ -410,6 +481,7 @@ def propose_request(request: object, root: str | Path) -> dict[str, object]:
                 route_spec["annotations"] = build_route_annotations(
                     copy.deepcopy(request["annotations"]),
                     _existing_route_distance(root, slug),
+                    allow_unpublished_image=True,
                 )
             except ValueError as error:
                 raise RouteCreateError("request.invalid_annotations", str(error)) from error
@@ -422,6 +494,29 @@ def propose_request(request: object, root: str | Path) -> dict[str, object]:
             proposal_id,
             {str(item.get("id")) for item in route_spec.get("annotations", [])},
         )
+        staged_image_annotations = {
+            str(item["association"].get("annotation_id"))
+            for item in staged_media
+            if item["kind"] == "image" and item["association"]["kind"] == "annotation"
+        }
+        filtered_annotations = [
+            annotation
+            for annotation in route_spec.get("annotations", [])
+            if annotation["kind"] != "image"
+            or annotation.get("media") is not None
+            or annotation["id"] in staged_image_annotations
+        ]
+        if len(filtered_annotations) != len(route_spec.get("annotations", [])):
+            if filtered_annotations:
+                route_spec["annotations"] = filtered_annotations
+            else:
+                route_spec.pop("annotations", None)
+            media_warnings.append(
+                {
+                    "code": "annotation.image_omitted",
+                    "message": "Image annotations without usable staged images were omitted.",
+                }
+            )
         proposal_core = {
             "schema_version": SCHEMA_VERSION,
             "document_type": "route-share-proposal",
@@ -429,7 +524,7 @@ def propose_request(request: object, root: str | Path) -> dict[str, object]:
             "source": {"mode": "existing-route", "existing_slug": slug},
             "base_route_sha256": _canonical_sha256(existing),
             "route_spec": route_spec,
-            "observations": {},
+            "observations": _existing_route_observations(root, slug),
             "media": staged_media,
             "proposed_share_name": request.get("proposed_share_name"),
             "warnings": media_warnings,
@@ -439,7 +534,13 @@ def propose_request(request: object, root: str | Path) -> dict[str, object]:
         return proposal_core
 
     source = _safe_source_path(request.get("gpx_path"))
-    source_sha256 = _file_sha256(source)
+    try:
+        source_sha256 = _file_sha256(source)
+    except OSError as error:
+        raise RouteCreateError(
+            "source.unreadable",
+            f"GPX source is unreadable: {error.__class__.__name__}",
+        ) from error
     observations, distance_m = _inspect_gpx(source)
     activity_date = _activity_date(request.get("activity_date"))
     lifecycle, evidence = _validate_lifecycle(request, activity_date)
@@ -450,6 +551,12 @@ def propose_request(request: object, root: str | Path) -> dict[str, object]:
     if _route_by_slug(config, slug) is not None:
         raise RouteCreateError("route.identity_conflict", f"route id {slug} already exists")
 
+    route_name = str(request["route_name"]).strip()
+    region = str(request["region"]).strip()
+    if not route_name:
+        raise RouteCreateError("request.missing_route_name", "route_name must contain visible text")
+    if not region:
+        raise RouteCreateError("request.missing_region", "region must contain visible text")
     curation = _curation(request.get("curation"))
     description = str(request.get("source_description") or "").strip()
     if not description and not curation.get("vibe"):
@@ -459,7 +566,11 @@ def propose_request(request: object, root: str | Path) -> dict[str, object]:
         )
     annotations = copy.deepcopy(request.get("annotations", []))
     try:
-        annotations = build_route_annotations(annotations, distance_m)
+        annotations = build_route_annotations(
+            annotations,
+            distance_m,
+            allow_unpublished_image=True,
+        )
     except ValueError as error:
         raise RouteCreateError("request.invalid_annotations", str(error)) from error
 
@@ -468,11 +579,11 @@ def propose_request(request: object, root: str | Path) -> dict[str, object]:
         "status": "approved",
         "source_gpx": f"route_sources/imported/{slug}.gpx",
         "source_sha256": source_sha256,
-        "activity_name": str(request["route_name"]).strip(),
+        "activity_name": route_name,
         "activity_type": request["activity_type"],
         "date": activity_date,
-        "region": str(request["region"]).strip(),
-        "title": str(request["route_name"]).strip(),
+        "region": region,
+        "title": route_name,
         "lifecycle": lifecycle,
         "description": description,
         "curation": curation,
@@ -508,6 +619,29 @@ def propose_request(request: object, root: str | Path) -> dict[str, object]:
         {str(item["id"]) for item in annotations},
     )
     warnings.extend(media_warnings)
+    staged_image_annotations = {
+        str(item["association"].get("annotation_id"))
+        for item in staged_media
+        if item["kind"] == "image" and item["association"]["kind"] == "annotation"
+    }
+    omitted_image_annotations = [
+        annotation
+        for annotation in annotations
+        if annotation["kind"] == "image" and annotation["id"] not in staged_image_annotations
+    ]
+    if omitted_image_annotations:
+        omitted_ids = {annotation["id"] for annotation in omitted_image_annotations}
+        annotations = [annotation for annotation in annotations if annotation["id"] not in omitted_ids]
+        if annotations:
+            route_spec["annotations"] = annotations
+        else:
+            route_spec.pop("annotations", None)
+        warnings.append(
+            {
+                "code": "annotation.image_omitted",
+                "message": "Image annotations without usable staged images were omitted.",
+            }
+        )
     return {
         "schema_version": SCHEMA_VERSION,
         "document_type": "route-share-proposal",
@@ -535,15 +669,80 @@ def _write_atomic(path: Path, content: str) -> None:
     os.replace(temporary, path)
 
 
+def _validated_source_path(
+    proposal: dict[str, object],
+    root: Path,
+    *,
+    durable: bool,
+) -> Path:
+    source = proposal["source"]
+    relative = source["durable_path" if durable else "staged_path"]
+    candidate = (root / relative).resolve()
+    allowed_root = (root / ("route_sources" if durable else ".route-share/staging")).resolve()
+    if not candidate.is_relative_to(allowed_root) or not candidate.is_file():
+        code = "source.missing_durable" if durable else "source.missing_staged"
+        label = "durable" if durable else "staged"
+        raise RouteCreateError(code, f"approved proposal's {label} GPX is unavailable")
+    try:
+        actual = _file_sha256(candidate)
+    except OSError as error:
+        raise RouteCreateError(
+            "source.unreadable",
+            f"approved GPX is unreadable: {error.__class__.__name__}",
+        ) from error
+    if actual != source["sha256"]:
+        code = "source.durable_checksum_mismatch" if durable else "source.checksum_mismatch"
+        raise RouteCreateError(code, f"{('durable' if durable else 'staged')} GPX checksum changed")
+    return candidate
+
+
+def _validated_staged_media(
+    proposal: dict[str, object],
+    root: Path,
+    annotation_ids: set[str],
+) -> None:
+    staging_root = (root / ".route-share" / "staging").resolve()
+    slug = str(proposal["route_spec"]["activity_id"])
+    for item in proposal.get("media", []):
+        association = item["association"]
+        annotation_id = association.get("annotation_id")
+        if association["kind"] == "annotation" and annotation_id not in annotation_ids:
+            raise RouteCreateError(
+                "media.association_missing",
+                f"annotation {annotation_id} no longer exists in the proposal",
+            )
+        staged = (root / item["staged_path"]).resolve()
+        if not staged.is_relative_to(staging_root) or not staged.is_file():
+            raise RouteCreateError("media.missing_staged", "approved proposal media is unavailable")
+        try:
+            actual = _file_sha256(staged)
+        except OSError as error:
+            raise RouteCreateError(
+                "media.unreadable",
+                f"approved media is unreadable: {error.__class__.__name__}",
+            ) from error
+        if actual != item["sha256"]:
+            raise RouteCreateError("media.checksum_mismatch", "staged media changed after proposal")
+        if item["kind"] == "image":
+            try:
+                with tempfile.TemporaryDirectory() as directory:
+                    publish_photo(
+                        staged,
+                        Path(directory),
+                        slug,
+                        item["sha256"][:16],
+                    )
+            except Exception as error:
+                raise RouteCreateError(
+                    "media.invalid_image",
+                    f"approved image cannot produce a public derivative: {error.__class__.__name__}",
+                ) from error
+
+
 def _register_source(proposal: dict[str, object], root: Path) -> Path:
     source = proposal["source"]
-    staged = (root / source["staged_path"]).resolve()
-    staging_root = (root / ".route-share" / "staging").resolve()
-    if not staged.is_relative_to(staging_root) or not staged.is_file():
-        raise RouteCreateError("source.missing_staged", "approved proposal's staged GPX is unavailable")
+    staged = _validated_source_path(proposal, root, durable=False)
     expected = source["sha256"]
-    if _file_sha256(staged) != expected:
-        raise RouteCreateError("source.checksum_mismatch", "staged GPX checksum changed after proposal")
     durable = (root / source["durable_path"]).resolve()
     durable_root = (root / "route_sources").resolve()
     if not durable.is_relative_to(durable_root):
@@ -641,9 +840,71 @@ def _route_spec_with_registered_media(
     return route_spec
 
 
+def _without_applied_media(route_spec: dict[str, object]) -> dict[str, object]:
+    normalized = copy.deepcopy(route_spec)
+    normalized.pop("source_media", None)
+    normalized.pop("route_share_proposal_id", None)
+    normalized.pop("route_share_contract_sha256", None)
+    for annotation in normalized.get("annotations", []):
+        annotation.pop("media", None)
+    return normalized
+
+
+def _validate_applied_files(
+    proposal: dict[str, object],
+    existing: dict[str, object],
+    root: Path,
+) -> None:
+    if _without_applied_media(existing) != _without_applied_media(proposal["route_spec"]):
+        raise RouteCreateError(
+            "route.changed_since_apply",
+            "canonical route differs from the approved proposal",
+        )
+    if proposal["operation"] == "create":
+        _validated_source_path(proposal, root, durable=True)
+    registered = existing.get("source_media", [])
+    slug = str(existing["activity_id"])
+    for item in proposal.get("media", []):
+        extension = Path(item["staged_path"]).suffix.lower()
+        expected_path = f"route_sources/media/{slug}/{item['sha256']}{extension}"
+        record = next(
+            (
+                candidate
+                for candidate in registered
+                if candidate.get("path") == expected_path
+                and candidate.get("sha256") == item["sha256"]
+                and candidate.get("kind") == item["kind"]
+                and candidate.get("association") == item["association"]
+            ),
+            None,
+        )
+        durable = (root / expected_path).resolve()
+        if record is None or not durable.is_file() or _file_sha256(durable) != item["sha256"]:
+            raise RouteCreateError(
+                "media.missing_durable",
+                "registered route media is unavailable or changed",
+            )
+    for annotation in existing.get("annotations", []):
+        media = annotation.get("media")
+        if not isinstance(media, dict):
+            continue
+        for field in ("url", "thumb_url"):
+            relative = str(media.get(field) or "")
+            published = (root / "app" / "public" / relative).resolve()
+            media_root = (root / "app" / "public" / "media" / slug).resolve()
+            if not published.is_relative_to(media_root) or not published.is_file():
+                raise RouteCreateError(
+                    "media.missing_derivative",
+                    "registered public media derivative is unavailable",
+                )
+
+
 def _validate_proposal_semantics(
     proposal: dict[str, object],
     existing: dict[str, object] | None,
+    root: Path,
+    *,
+    require_staging: bool = True,
 ) -> None:
     operation = proposal["operation"]
     source = proposal["source"]
@@ -665,8 +926,91 @@ def _validate_proposal_semantics(
             or source.get("staged_path") != expected_staged
         ):
             raise RouteCreateError("proposal.semantic_mismatch", "created route source contract changed after approval")
+        source_path = _validated_source_path(proposal, root, durable=not require_staging)
+        observed, distance_m = _inspect_gpx(source_path)
+        if proposal.get("observations") != observed:
+            raise RouteCreateError(
+                "proposal.semantic_mismatch",
+                "source observations changed after approval",
+            )
+        required_text = ("activity_name", "region", "title")
+        if any(not str(route_spec.get(field) or "").strip() for field in required_text):
+            raise RouteCreateError(
+                "proposal.semantic_mismatch",
+                "created route name, title, and region must contain visible text",
+            )
+        if route_spec.get("activity_name") != route_spec.get("title"):
+            raise RouteCreateError(
+                "proposal.semantic_mismatch",
+                "created route title must match the approved route name",
+            )
+        if route_spec.get("activity_type") not in {"Run", "Ride"}:
+            raise RouteCreateError(
+                "proposal.semantic_mismatch",
+                "created route activity type must be Run or Ride",
+            )
+        try:
+            normalized_curation = _curation(route_spec.get("curation"))
+        except RouteCreateError as error:
+            raise RouteCreateError("proposal.semantic_mismatch", str(error)) from error
+        if normalized_curation != route_spec.get("curation"):
+            raise RouteCreateError(
+                "proposal.semantic_mismatch",
+                "created route curation is not normalized",
+            )
+        if not (
+            str(route_spec.get("description") or "").strip()
+            or str(normalized_curation.get("vibe") or "").strip()
+        ):
+            raise RouteCreateError(
+                "proposal.semantic_mismatch",
+                "created route needs a description or curated vibe",
+            )
+        raw_annotations = route_spec.get("annotations", [])
+        if any(annotation.get("media") is not None for annotation in raw_annotations):
+            raise RouteCreateError(
+                "proposal.semantic_mismatch",
+                "public annotation media must come from staged proposal media",
+            )
+        try:
+            normalized_annotations = build_route_annotations(
+                raw_annotations,
+                distance_m,
+                allow_unpublished_image=True,
+            )
+        except ValueError as error:
+            raise RouteCreateError("proposal.semantic_mismatch", str(error)) from error
+        if normalized_annotations != raw_annotations:
+            raise RouteCreateError(
+                "proposal.semantic_mismatch",
+                "created route annotations are not normalized",
+            )
+        annotation_ids = {str(annotation["id"]) for annotation in normalized_annotations}
+        image_associations = {
+            str(item["association"].get("annotation_id"))
+            for item in proposal.get("media", [])
+            if item.get("kind") == "image" and item.get("association", {}).get("kind") == "annotation"
+        }
+        if any(
+            annotation["kind"] == "image" and annotation["id"] not in image_associations
+            for annotation in normalized_annotations
+        ):
+            raise RouteCreateError(
+                "proposal.semantic_mismatch",
+                "image annotations require staged image media",
+            )
+        if route_spec.get("source_media") or route_spec.get("route_share_proposal_id"):
+            raise RouteCreateError(
+                "proposal.semantic_mismatch",
+                "created proposal cannot contain already-published route media",
+            )
+        if require_staging:
+            _validated_staged_media(proposal, root, annotation_ids)
         lifecycle = route_spec.get("lifecycle")
-        activity_date = _activity_date(route_spec.get("date"))
+        try:
+            activity_date = _activity_date(route_spec.get("date"))
+        except RouteCreateError as error:
+            raise RouteCreateError("proposal.semantic_mismatch", str(error)) from error
         evidence = route_spec.get("lifecycle_evidence")
         if lifecycle == "completed":
             if (
@@ -696,6 +1040,52 @@ def _validate_proposal_semantics(
         raise RouteCreateError("proposal.semantic_mismatch", "update proposal source is inconsistent")
     if source.get("existing_slug") != slug or not proposal.get("base_route_sha256"):
         raise RouteCreateError("proposal.semantic_mismatch", "updated route identity changed after approval")
+    expected_observations = _existing_route_observations(root, slug)
+    if proposal.get("observations") != expected_observations:
+        raise RouteCreateError(
+            "proposal.semantic_mismatch",
+            "existing-route observations changed after approval",
+        )
+    distance_m = float(expected_observations["distance_m"])
+    raw_annotations = route_spec.get("annotations", [])
+    try:
+        normalized_annotations = build_route_annotations(raw_annotations, distance_m)
+    except ValueError as error:
+        raise RouteCreateError("proposal.semantic_mismatch", str(error)) from error
+    if normalized_annotations != raw_annotations:
+        raise RouteCreateError(
+            "proposal.semantic_mismatch",
+            "updated route annotations are not normalized",
+        )
+    existing_media = {
+        str(annotation.get("id")): annotation.get("media")
+        for annotation in existing.get("annotations", [])
+        if isinstance(annotation, dict) and annotation.get("media") is not None
+    }
+    for annotation in normalized_annotations:
+        if annotation.get("media") is not None and annotation.get("media") != existing_media.get(
+            str(annotation["id"])
+        ):
+            raise RouteCreateError(
+                "proposal.semantic_mismatch",
+                "updated annotation media must come from registered proposal media",
+            )
+    if "curation" in route_spec:
+        try:
+            normalized_curation = _curation(route_spec.get("curation"))
+        except RouteCreateError as error:
+            raise RouteCreateError("proposal.semantic_mismatch", str(error)) from error
+        if normalized_curation != route_spec.get("curation"):
+            raise RouteCreateError(
+                "proposal.semantic_mismatch",
+                "updated route curation is not normalized",
+            )
+    if require_staging:
+        _validated_staged_media(
+            proposal,
+            root,
+            {str(annotation["id"]) for annotation in normalized_annotations},
+        )
     editable_fields = {"annotations", "curation", "replay_mode"}
     for field in set(existing) | set(route_spec):
         if field in editable_fields:
@@ -748,7 +1138,7 @@ def _run_rebuild_validation(
             "proposal_id": proposal.get("proposal_id"),
             "slug": slug,
             "status": "canonical_writes_complete_validation_failed",
-            "error": str(error),
+            "error_type": error.__class__.__name__,
         }
         _write_atomic(recovery_report, json.dumps(report, indent=2) + "\n")
         raise RouteCreateError(
@@ -783,8 +1173,12 @@ def apply_proposal(
     rebuild_callback = rebuild or (lambda: _default_rebuild(root, slug))
     if existing is not None and existing.get("route_share_proposal_id") == proposal.get("proposal_id"):
         if operation == "create":
-            _validate_proposal_semantics(proposal, None)
-            _register_source(proposal, root)
+            _validate_proposal_semantics(
+                proposal,
+                None,
+                root,
+                require_staging=False,
+            )
         elif (
             operation != "update"
             or proposal.get("source", {}).get("mode") != "existing-route"
@@ -794,16 +1188,13 @@ def apply_proposal(
                 "proposal.semantic_mismatch",
                 "update proposal source is inconsistent",
             )
-        expected_route_spec = _route_spec_with_registered_media(proposal, root)
-        expected_contract = expected_route_spec["route_share_contract_sha256"]
-        if (
-            existing.get("route_share_contract_sha256") != expected_contract
-            or _route_contract_sha256(existing) != expected_contract
-        ):
+        expected_contract = existing.get("route_share_contract_sha256")
+        if not expected_contract or _route_contract_sha256(existing) != expected_contract:
             raise RouteCreateError(
                 "route.changed_since_apply",
                 f"route {slug} differs from the approved proposal",
             )
+        _validate_applied_files(proposal, existing, root)
         validation = _run_rebuild_validation(
             proposal,
             root,
@@ -821,7 +1212,7 @@ def apply_proposal(
     elif operation != "create":
         raise RouteCreateError("proposal.invalid", "proposal operation must be create or update")
 
-    _validate_proposal_semantics(proposal, existing)
+    _validate_proposal_semantics(proposal, existing, root)
 
     if operation == "create":
         _register_source(proposal, root)
@@ -895,6 +1286,13 @@ def main(argv: list[str] | None = None) -> int:
             report = apply_proposal(_read_json(args.proposal, "proposal.unreadable"), root)
     except RouteCreateError as error:
         print(json.dumps(error.as_report(), indent=2), file=__import__("sys").stderr)
+        return 1
+    except Exception as error:
+        report = RouteCreateError(
+            "workflow.unexpected",
+            f"route workflow failed: {error.__class__.__name__}",
+        )
+        print(json.dumps(report.as_report(), indent=2), file=__import__("sys").stderr)
         return 1
     print(json.dumps(report, indent=2, ensure_ascii=False))
     return 0

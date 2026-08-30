@@ -39,7 +39,12 @@ def imported_route_from_spec(spec: dict[str, object], checkout_root: Path) -> Im
     if expected_sha256 is not None:
         if not isinstance(expected_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", expected_sha256):
             raise ValueError("source_sha256 must be a lowercase SHA-256 digest")
-        actual_sha256 = hashlib.sha256(source_path.read_bytes()).hexdigest()
+        try:
+            actual_sha256 = hashlib.sha256(source_path.read_bytes()).hexdigest()
+        except OSError as error:
+            raise ValueError(
+                f"source_gpx is unreadable: {error.__class__.__name__}"
+            ) from error
         if actual_sha256 != expected_sha256:
             raise ValueError("source_gpx checksum does not match source_sha256")
 

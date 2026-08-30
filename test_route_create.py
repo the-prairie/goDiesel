@@ -69,6 +69,31 @@ class RouteCreateTest(unittest.TestCase):
         request.update(overrides)
         return request
 
+    def write_generated_detail(
+        self,
+        slug,
+        *,
+        distance_m=1_500,
+        elevation_status="recorded",
+        temporal_status="unavailable",
+    ):
+        detail = self.root / "app/public/data/routes" / f"{slug}.json"
+        detail.parent.mkdir(parents=True, exist_ok=True)
+        elevations = (1_450, 1_510) if elevation_status == "recorded" else (None, None)
+        detail.write_text(
+            json.dumps(
+                {
+                    "route": [
+                        {"d": 0, "elev": elevations[0]},
+                        {"d": distance_m, "elev": elevations[1]},
+                    ],
+                    "elevation_status": elevation_status,
+                    "provenance": {"temporal": {"status": temporal_status}},
+                }
+            ),
+            encoding="utf-8",
+        )
+
     def test_new_gpx_request_normalizes_to_a_redacted_closed_proposal(self):
         proposal = propose_request(self.request(), self.root)
 
@@ -120,6 +145,25 @@ class RouteCreateTest(unittest.TestCase):
                 propose_request(request, self.root)
             self.assertEqual(raised.exception.code, code)
 
+    def test_whitespace_identity_fields_are_rejected_before_staging(self):
+        for field in ("route_name", "region"):
+            with self.subTest(field=field), self.assertRaises(RouteCreateError) as raised:
+                propose_request(self.request(**{field: "   "}), self.root)
+            self.assertEqual(raised.exception.code, f"request.missing_{field}")
+        self.assertFalse((self.root / ".route-share/staging").exists())
+
+    def test_existing_route_rejects_mode_inapplicable_fields(self):
+        (self.root / "quests.json").write_text(
+            json.dumps({"routes": [{"activity_id": "123", "status": "approved"}]}),
+            encoding="utf-8",
+        )
+        with self.assertRaises(RouteCreateError) as raised:
+            propose_request(
+                {"schema_version": 1, "existing_slug": "123", "lifecycle": "completed"},
+                self.root,
+            )
+        self.assertEqual(raised.exception.code, "request.mode_field")
+
     def test_completed_route_requires_owner_recorded_evidence(self):
         with self.assertRaises(RouteCreateError) as raised:
             propose_request(self.request(lifecycle="completed"), self.root)
@@ -166,6 +210,7 @@ class RouteCreateTest(unittest.TestCase):
             json.dumps({"routes": [existing]}, indent=2) + "\n",
             encoding="utf-8",
         )
+        self.write_generated_detail("123")
 
         proposal = propose_request(
             {
@@ -282,6 +327,65 @@ class RouteCreateTest(unittest.TestCase):
             self.assertEqual(raised.exception.code, "proposal.semantic_mismatch")
             self.assertEqual(json.loads((self.root / "quests.json").read_text())["routes"], [])
 
+    def test_apply_revalidates_observations_and_annotation_bounds_before_writes(self):
+        proposal = propose_request(
+            self.request(
+                annotations=[
+                    {
+                        "id": "ridge-note",
+                        "at_distance_m": 100,
+                        "kind": "warning",
+                        "evidence": "hypothesis",
+                        "body": "Stay on the supplied line.",
+                    }
+                ]
+            ),
+            self.root,
+        )
+        proposal["route_spec"]["annotations"][0]["at_distance_m"] = 999_999
+
+        with self.assertRaises(RouteCreateError) as raised:
+            apply_proposal(proposal, self.root, rebuild=lambda: None)
+
+        self.assertEqual(raised.exception.code, "proposal.semantic_mismatch")
+        self.assertEqual(json.loads((self.root / "quests.json").read_text())["routes"], [])
+        self.assertFalse((self.root / "route_sources").exists())
+
+    def test_request_annotations_cannot_supply_public_media_paths(self):
+        with self.assertRaises(RouteCreateError) as raised:
+            propose_request(
+                self.request(
+                    annotations=[
+                        {
+                            "id": "bypass",
+                            "at_distance_m": 100,
+                            "kind": "image",
+                            "evidence": "recorded",
+                            "body": "Unregistered media.",
+                            "media": {
+                                "url": "media/gpx-bypass/original.jpg",
+                                "thumb_url": "media/gpx-bypass/thumb.jpg",
+                                "width": 10,
+                                "height": 10,
+                            },
+                        }
+                    ]
+                ),
+                self.root,
+            )
+        self.assertEqual(raised.exception.code, "request.schema")
+
+    def test_retry_uses_durable_source_when_staging_is_absent(self):
+        proposal = propose_request(self.request(), self.root)
+        apply_proposal(proposal, self.root, rebuild=lambda: None)
+        staged = self.root / proposal["source"]["staged_path"]
+        staged.unlink()
+
+        retried = apply_proposal(proposal, self.root, rebuild=lambda: {"publishable": True})
+
+        self.assertEqual(retried["result"], "already_applied")
+        self.assertTrue(retried["validation"]["publishable"])
+
     def test_idempotent_retry_detects_canonical_route_drift(self):
         proposal = propose_request(self.request(), self.root)
         apply_proposal(proposal, self.root, rebuild=lambda: None)
@@ -343,6 +447,12 @@ class RouteCreateTest(unittest.TestCase):
         self.assertTrue(published.is_file())
         self.assertFalse(unrelated.exists())
 
+        (self.root / proposal["source"]["staged_path"]).unlink()
+        for item in proposal["media"]:
+            (self.root / item["staged_path"]).unlink()
+        retried = apply_proposal(proposal, self.root, rebuild=lambda: {"publishable": True})
+        self.assertEqual(retried["result"], "already_applied")
+
     def test_media_annotation_association_must_name_a_supplied_annotation(self):
         photo = self.root / "owner-files" / "ridge.jpg"
         Image.new("RGB", (8, 8)).save(photo, "JPEG")
@@ -364,6 +474,43 @@ class RouteCreateTest(unittest.TestCase):
             )
 
         self.assertEqual(raised.exception.code, "request.media_association_missing")
+
+    def test_invalid_optional_image_is_omitted_without_blocking_creation(self):
+        invalid = self.root / "owner-files" / "not-an-image.jpg"
+        invalid.write_text("not an image", encoding="utf-8")
+        proposal = propose_request(
+            self.request(
+                annotations=[
+                    {
+                        "id": "invalid-photo",
+                        "at_distance_m": 100,
+                        "kind": "image",
+                        "evidence": "recorded",
+                        "body": "This annotation depends on the unreadable image.",
+                    }
+                ],
+                media=[
+                    {
+                        "path": str(invalid),
+                        "association": {
+                            "kind": "annotation",
+                            "annotation_id": "invalid-photo",
+                        },
+                    }
+                ],
+            ),
+            self.root,
+        )
+
+        self.assertEqual(proposal["media"], [])
+        self.assertNotIn("annotations", proposal["route_spec"])
+        self.assertEqual(
+            [warning["code"] for warning in proposal["warnings"][-2:]],
+            ["media.invalid_image_omitted", "annotation.image_omitted"],
+        )
+        result = apply_proposal(proposal, self.root, rebuild=lambda: None)
+        self.assertEqual(result["result"], "created")
+        self.assertFalse((self.root / "route_sources/media").exists())
 
     def test_existing_route_media_update_preserves_prior_source_provenance(self):
         first_photo = self.root / "owner-files" / "first.jpg"
@@ -391,6 +538,11 @@ class RouteCreateTest(unittest.TestCase):
         )
         apply_proposal(first, self.root, rebuild=lambda: None)
         slug = first["route_spec"]["activity_id"]
+        self.write_generated_detail(
+            slug,
+            distance_m=first["observations"]["distance_m"],
+            temporal_status=first["observations"]["temporal"]["status"],
+        )
 
         second = propose_request(
             {
@@ -425,6 +577,24 @@ class RouteCreateTest(unittest.TestCase):
         report = stderr.getvalue()
         self.assertIn("missing-request.json", report)
         self.assertNotIn(str(self.root), report)
+
+    def test_repository_and_recovery_reports_redact_absolute_paths(self):
+        missing_root = self.root / "private-owner-root"
+        with self.assertRaises(RouteCreateError) as raised:
+            propose_request(self.request(), missing_root)
+        self.assertEqual(raised.exception.code, "repository.invalid_routes")
+        self.assertNotIn(str(missing_root), str(raised.exception))
+
+        proposal = propose_request(self.request(), self.root)
+        private_path = self.root / "owner-files" / "secret.gpx"
+        with self.assertRaises(RouteCreateError):
+            apply_proposal(
+                proposal,
+                self.root,
+                rebuild=lambda: (_ for _ in ()).throw(RuntimeError(str(private_path))),
+            )
+        recovery = self.root / ".route-share/recovery" / f"{proposal['proposal_id']}.json"
+        self.assertNotIn(str(self.root), recovery.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

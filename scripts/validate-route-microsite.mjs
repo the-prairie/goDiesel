@@ -15,7 +15,7 @@ function readJson(filePath) {
   try {
     return JSON.parse(fs.readFileSync(filePath, "utf8"));
   } catch (error) {
-    fail(`${filePath} is not valid JSON (${error.message})`);
+    fail(`${path.basename(filePath)} is not valid JSON (${error.name})`);
   }
 }
 
@@ -187,7 +187,7 @@ if (!new Set(["source", "dist"]).has(mode)) {
 }
 
 const sourcePath = path.join(root, "app/public/data/routes", `${routeSlug}.json`);
-if (!fs.existsSync(sourcePath)) fail(`missing source route ${sourcePath}`);
+if (!fs.existsSync(sourcePath)) fail(`missing source route ${routeSlug}.json`);
 validateRoute(readJson(sourcePath), routeSlug);
 
 if (mode === "dist") {
