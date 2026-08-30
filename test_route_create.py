@@ -521,9 +521,31 @@ class RouteCreateTest(unittest.TestCase):
     def test_media_destination_symlinks_cannot_escape_the_repository(self):
         photo = self.root / "owner-files" / "escape.jpg"
         Image.new("RGB", (16, 16), color=(10, 20, 30)).save(photo, "JPEG")
-        for label, relative, desired_route_id in (
-            ("durable", Path("route_sources/media"), "gpx-durable-symlink"),
-            ("public", Path("app/public/media"), "gpx-public-symlink"),
+        for label, relative, target_relative, desired_route_id in (
+            (
+                "durable-external",
+                Path("route_sources/media"),
+                None,
+                "gpx-durable-external",
+            ),
+            (
+                "public-external",
+                Path("app/public/media"),
+                None,
+                "gpx-public-external",
+            ),
+            (
+                "durable-to-public",
+                Path("route_sources/media"),
+                Path("app/public/durable-cross-root"),
+                "gpx-durable-cross-root",
+            ),
+            (
+                "public-to-durable",
+                Path("app/public/media"),
+                Path("route_sources/public-cross-root"),
+                "gpx-public-cross-root",
+            ),
         ):
             proposal = propose_request(
                 self.request(
@@ -532,20 +554,24 @@ class RouteCreateTest(unittest.TestCase):
                 ),
                 self.root,
             )
-            external = self.root.parent / f"{self.root.name}-{label}-escape"
-            external.mkdir()
+            target = (
+                self.root / target_relative
+                if target_relative is not None
+                else self.root.parent / f"{self.root.name}-{label}-escape"
+            )
+            target.mkdir(parents=True)
             link = self.root / relative / desired_route_id
             link.parent.mkdir(parents=True, exist_ok=True)
-            link.symlink_to(external, target_is_directory=True)
+            link.symlink_to(target, target_is_directory=True)
 
             with self.subTest(label=label), self.assertRaises(RouteCreateError) as raised:
                 apply_proposal(proposal, self.root, rebuild=lambda: None)
 
             self.assertEqual(raised.exception.code, "media.unsafe_destination")
-            self.assertEqual(list(external.iterdir()), [])
+            self.assertEqual(list(target.iterdir()), [])
             self.assertFalse((self.root / "route_sources/imported").exists())
             link.unlink()
-            external.rmdir()
+            target.rmdir()
 
     def test_one_image_can_be_registered_for_two_annotations_and_retried(self):
         photo = self.root / "owner-files" / "shared.jpg"

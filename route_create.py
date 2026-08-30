@@ -304,10 +304,18 @@ def _controlled_path(
     relative: Path,
     code: str,
     message: str,
+    *,
+    owner_relative: Path | None = None,
 ) -> Path:
     repository_root = root.resolve()
+    ownership_path = repository_root / (owner_relative or relative)
+    ownership_root = ownership_path.resolve()
     candidate = (repository_root / relative).resolve()
-    if not candidate.is_relative_to(repository_root):
+    if (
+        ownership_root != ownership_path
+        or not ownership_root.is_relative_to(repository_root)
+        or not candidate.is_relative_to(ownership_root)
+    ):
         raise RouteCreateError(code, message)
     return candidate
 
@@ -709,7 +717,7 @@ def _validated_source_path(
     candidate = (root / relative).resolve()
     allowed_root = _controlled_path(
         root,
-        Path("route_sources" if durable else ".route-share/staging"),
+        Path("route_sources/imported" if durable else ".route-share/staging"),
         "source.unsafe_destination" if durable else "source.unsafe_staging",
         "approved GPX path must stay inside the repository",
     )
@@ -810,7 +818,7 @@ def _register_source(proposal: dict[str, object], root: Path) -> Path:
     durable = (root / source["durable_path"]).resolve()
     durable_root = _controlled_path(
         root,
-        Path("route_sources"),
+        Path("route_sources/imported"),
         "source.unsafe_destination",
         "durable source must stay inside the repository",
     )
@@ -857,12 +865,14 @@ def _media_destination_roots(root: Path, slug: str) -> tuple[Path, Path]:
         Path("route_sources") / "media" / slug,
         "media.unsafe_destination",
         "durable media must stay inside the repository",
+        owner_relative=Path("route_sources/media"),
     )
     public = _controlled_path(
         root,
         Path("app/public") / "media" / slug,
         "media.unsafe_destination",
         "public media must stay inside the repository",
+        owner_relative=Path("app/public/media"),
     )
     return durable, public
 
