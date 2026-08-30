@@ -42,7 +42,7 @@ export function routeStoryChapters(route: QuestRoute): RouteStoryChapter[] {
         : `The imported ${route.type.toLowerCase()} route begins in ${route.region}${route.date ? ` on ${formatRouteDate(route.date)}` : ""}.`,
       evidence: "recorded",
       distanceM: 0,
-      elevationM: start?.elev,
+      elevationM: route.elevationStatus !== "unavailable" ? start.elev : undefined,
     });
   }
 
@@ -84,12 +84,14 @@ export function routeStoryChapters(route: QuestRoute): RouteStoryChapter[] {
       id: "recorded-finish",
       kind: "finish",
       title: "The recording closes",
-      body: isCompleted
-        ? `The activity ends after ${route.distanceKm.toFixed(1)} km and ${route.elevationGainM.toLocaleString()} m of recorded climbing.`
-        : `The imported route closes after ${route.distanceKm.toFixed(1)} km and ${route.elevationGainM.toLocaleString()} m of source-recorded climbing.`,
+      body: route.elevationStatus === "unavailable"
+        ? `${isCompleted ? "The activity" : "The imported route"} closes after ${route.distanceKm.toFixed(1)} km. Elevation is unavailable.`
+        : isCompleted
+          ? `The activity ends after ${route.distanceKm.toFixed(1)} km and ${route.elevationGainM.toLocaleString()} m of recorded climbing.`
+          : `The imported route closes after ${route.distanceKm.toFixed(1)} km and ${route.elevationGainM.toLocaleString()} m of source-recorded climbing.`,
       evidence: "recorded",
       distanceM: totalDistanceM,
-      elevationM: finish.elev,
+      elevationM: route.elevationStatus === "recorded" ? finish.elev : undefined,
     });
   }
 
@@ -97,7 +99,7 @@ export function routeStoryChapters(route: QuestRoute): RouteStoryChapter[] {
 }
 
 export function highestPoint(route: QuestRoute) {
-  if (route.route.length === 0) return undefined;
+  if (route.route.length === 0 || route.elevationStatus === "unavailable") return undefined;
   const point = route.route.reduce((highest, candidate) =>
     candidate.elev > highest.elev ? candidate : highest,
   );
@@ -105,7 +107,7 @@ export function highestPoint(route: QuestRoute) {
 }
 
 export function elevationAtDistance(route: QuestRoute, distanceM: number) {
-  if (route.route.length === 0) return undefined;
+  if (route.route.length === 0 || route.elevationStatus === "unavailable") return undefined;
   return route.route.reduce((closest, point) =>
     Math.abs(point.d - distanceM) < Math.abs(closest.d - distanceM) ? point : closest,
   ).elev;

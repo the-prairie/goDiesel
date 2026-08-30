@@ -132,7 +132,10 @@ for spec in quest_specs:
     if fp is None:
         print(f'    ✗ {aid}: no .gpx/.fit file'); continue
     route_provenance = build_route_provenance(load_source_route_points(fp))
-    route_js = route_provenance.route
+    lifecycle = spec.get('lifecycle', 'completed')
+    if lifecycle not in ('completed', 'planned', 'discovered'):
+        raise ValueError(f'Invalid lifecycle for {aid}: {lifecycle!r}')
+    route_js = [dict(point) for point in route_provenance.route]
     if not route_js:
         print(f'    ✗ {aid}: empty polyline'); continue
     distance_km = route_js[-1]['d'] / 1000
@@ -140,6 +143,20 @@ for spec in quest_specs:
     # Auto-detect region if not specified
     region_label = spec.get('region') or region(route_js[0]['lat'], route_js[0]['lng'])
     temporal_provenance = dict(route_provenance.temporal)
+    discontinuities = [dict(item) for item in route_provenance.discontinuities]
+    # Supplied timestamps on a discovered route are source provenance, not
+    # evidence that the owner completed it. Keep them in the durable GPX but do
+    # not publish elapsed time or pace as owner experience.
+    if lifecycle == 'discovered':
+        temporal_provenance = {'status': 'unavailable'}
+        route_js = [
+            {key: value for key, value in point.items() if key != 'elapsed_s'}
+            for point in route_js
+        ]
+        discontinuities = [
+            {key: value for key, value in item.items() if key != 'elapsed_time_s'}
+            for item in discontinuities
+        ]
     time_zone = route_time_zone(region_label)
     if temporal_provenance.get('status') == 'recorded' and time_zone:
         temporal_provenance['time_zone'] = time_zone
@@ -165,10 +182,6 @@ for spec in quest_specs:
             quest_meta[_target] = str(spec[_field]).strip()
 
     subtitle = str(spec.get('title') or name).strip()
-    lifecycle = spec.get('lifecycle', 'completed')
-    if lifecycle not in ('completed', 'planned', 'discovered'):
-        raise ValueError(f'Invalid lifecycle for {aid}: {lifecycle!r}')
-
     quest = {
         'slug': slug,
         'activity_id': aid,
@@ -179,13 +192,15 @@ for spec in quest_specs:
         'region': region_label,
         'date': date,
         'distance_km': round(distance_km, 1),
+        'elevation_status': route_provenance.elevation['status'],
         'type': typ,
         'description': desc,
         'route': route_js,
         'provenance': {
             'temporal': temporal_provenance,
+            'elevation': route_provenance.elevation,
             'track': route_provenance.track,
-            'discontinuities': route_provenance.discontinuities,
+            'discontinuities': discontinuities,
         },
         'center_lat': cx, 'center_lng': cy,
         'mid_idx': len(route_js) // 2,
@@ -197,6 +212,8 @@ for spec in quest_specs:
         quest['annotations'] = build_route_annotations(
             spec['annotations'], route_js[-1]['d']
         )
+    if spec.get('replay_mode') is not None:
+        quest['replay_mode'] = spec['replay_mode']
     quest['lifecycle'] = lifecycle
     routes_data.append(quest)
     print(f'    ✓ {region_label:28s} {typ:5s} {distance_km:.1f}km')
@@ -216,6 +233,7 @@ def react_route_record(route):
             point_count,
             BEST_IN_EARTH_IDS,
             lifecycle,
+            record.get('replay_mode'),
         ),
     }
 
@@ -227,7 +245,7 @@ def simplify_route_for_manifest(points, max_points=96):
         indices = [round(index * last / (max_points - 1)) for index in range(max_points)]
         simplified = [points[index] for index in indices]
     return [
-        [point['lat'], point['lng'], point.get('elev', 0), point.get('d', 0)]
+        [point['lat'], point['lng'], point.get('elev'), point.get('d', 0)]
         for point in simplified
     ]
 
@@ -246,6 +264,7 @@ def react_route_manifest_record(route):
         'date': record['date'],
         'distance_km': record['distance_km'],
         'elevation_gain_m': record['elevation_gain_m'],
+        'elevation_status': record['elevation_status'],
         'type': record['type'],
         'description': record['description'],
         'completion_rule': record['completion_rule'],

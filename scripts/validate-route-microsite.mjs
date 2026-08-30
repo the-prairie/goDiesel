@@ -25,7 +25,7 @@ function validateRoute(route, expectedSlug) {
   }
   if (route.slug !== expectedSlug) fail(`route slug must equal ${expectedSlug}`);
 
-  for (const field of ["name", "region", "date", "type"]) {
+  for (const field of ["name", "region", "type"]) {
     if (typeof route[field] !== "string" || !route[field].trim()) {
       fail(`${field} is required`);
     }
@@ -50,13 +50,17 @@ function validateRoute(route, expectedSlug) {
   ) {
     fail("subtitle or activity_name is required for the public route title");
   }
-  const date = new Date(`${route.date}T00:00:00Z`);
-  if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(route.date) ||
-    Number.isNaN(date.valueOf()) ||
-    date.toISOString().slice(0, 10) !== route.date
-  ) {
-    fail("date must use a valid YYYY-MM-DD value");
+  if (route.date !== "") {
+    const date = new Date(`${route.date}T00:00:00Z`);
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(route.date) ||
+      Number.isNaN(date.valueOf()) ||
+      date.toISOString().slice(0, 10) !== route.date
+    ) {
+      fail("date must use a valid YYYY-MM-DD value");
+    }
+  } else if (route.lifecycle !== "discovered") {
+    fail("only a discovered route may have an unavailable date");
   }
   if (!Number.isFinite(route.distance_km) || route.distance_km <= 0) {
     fail("distance_km must be a positive number");
@@ -71,8 +75,14 @@ function validateRoute(route, expectedSlug) {
     if (!point || typeof point !== "object" || Array.isArray(point)) {
       fail(`route point ${index} must be an object`);
     }
-    if (![point.lat, point.lng, point.elev, point.d].every(Number.isFinite)) {
-      fail(`route point ${index} must contain finite lat, lng, elev, and d values`);
+    const elevationRecorded = route.elevation_status !== "unavailable";
+    if (
+      ![point.lat, point.lng, point.d].every(Number.isFinite) ||
+      (elevationRecorded ? !Number.isFinite(point.elev) : point.elev !== null)
+    ) {
+      fail(
+        `route point ${index} must contain valid lat, lng, elevation, and distance values`,
+      );
     }
     if (point.lat < -90 || point.lat > 90) {
       fail(`route point ${index} latitude is outside -90 to 90`);

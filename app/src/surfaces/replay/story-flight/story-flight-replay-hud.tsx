@@ -56,6 +56,9 @@ export function StoryFlightReplayHud({
   totalDistanceM,
 }: StoryFlightReplayHudProps) {
   const repairCount = routeRepairs(route, totalDistanceM).length;
+  const elevationAvailable = route.elevationStatus !== "unavailable";
+  const ownerTimeAvailable =
+    route.lifecycle === "completed" && route.provenance.temporal.status === "recorded";
   const activeChapter = chapters[activeChapterIndex];
   const seekChapter = (index: number) => {
     const chapter = chapters[index];
@@ -74,22 +77,33 @@ export function StoryFlightReplayHud({
           testId="google-route-progress"
           value={`${(control.progressM / 1_000).toFixed(2)} / ${route.distanceKm.toFixed(1)} km`}
         />
-        <StoryMetric label="Elevation" value={`${Math.round(telemetry.elevationM)} m`} />
+        <StoryMetric
+          label="Elevation"
+          value={elevationAvailable ? `${Math.round(telemetry.elevationM)} m` : "Unavailable"}
+        />
         <StoryMetric
           label="Climb"
-          value={`+${Math.round(replayClimbM(route, control.progressM))} m`}
+          value={
+            elevationAvailable
+              ? `+${Math.round(replayClimbM(route, control.progressM))} m`
+              : "Unavailable"
+          }
         />
         <StoryMetric
           label="Grade"
-          value={`${telemetry.gradePercent >= 0 ? "+" : ""}${telemetry.gradePercent.toFixed(1)}%`}
+          value={
+            elevationAvailable
+              ? `${telemetry.gradePercent >= 0 ? "+" : ""}${telemetry.gradePercent.toFixed(1)}%`
+              : "Unavailable"
+          }
         />
         <StoryMetric
           label={route.type.toLowerCase().includes("ride") ? "Speed" : "Pace"}
-          value={formatReplayPace(telemetry.paceSPerKm, route.type)}
+          value={ownerTimeAvailable ? formatReplayPace(telemetry.paceSPerKm, route.type) : "Unavailable"}
         />
         <StoryMetric
           label="Elapsed"
-          value={formatReplayDuration(telemetry.elapsedS)}
+          value={ownerTimeAvailable ? formatReplayDuration(telemetry.elapsedS) : "Unavailable"}
         />
       </div>
 

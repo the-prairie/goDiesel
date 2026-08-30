@@ -168,7 +168,14 @@ export function RouteStoryView({
           </p>
           <dl className="mt-7 flex flex-wrap gap-x-7 gap-y-3 text-control font-semibold">
             <HeroMetric label="Distance" value={`${route.distanceKm.toFixed(1)} km`} />
-            <HeroMetric label="Climb" value={`${route.elevationGainM.toLocaleString()} m`} />
+            <HeroMetric
+              label="Climb"
+              value={
+                route.elevationStatus === "unavailable"
+                  ? "Unavailable"
+                  : `${route.elevationGainM.toLocaleString()} m`
+              }
+            />
           <HeroMetric
             label="Story"
             value={chapters.length ? `${chapters.length} chapters` : "No GPS chapters"}
@@ -201,7 +208,16 @@ export function RouteStoryView({
           </p>
         </div>
         <dl className="grid grid-cols-3 self-center border-y border-line">
-          <StoryMetric label="High point" value={summit ? `${Math.round(summit.elevationM)} m` : "Unknown"} />
+          <StoryMetric
+            label="High point"
+            value={
+              route.elevationStatus === "unavailable"
+                ? "Unavailable"
+                : summit
+                  ? `${Math.round(summit.elevationM)} m`
+                  : "Unknown"
+            }
+          />
           <StoryMetric label="Activity" value={route.type} />
           <StoryMetric label="Guide" value={reviewLabel(route.curation.reviewStatus)} />
         </dl>
@@ -258,13 +274,13 @@ export function RouteStoryView({
           <aside aria-label="Factual route briefing" className="min-w-0 border-t border-line p-5 lg:max-h-[42rem] lg:overflow-y-auto lg:border-l lg:border-t-0 lg:p-7">
             <div className="border-b border-line pb-6">
               <p className="text-caption font-semibold uppercase text-cobalt">Terrain profile</p>
-              {route.route.length > 1 ? (
+              {route.route.length > 1 && route.elevationStatus !== "unavailable" ? (
                 <div className="mt-3 overflow-hidden border border-line bg-surface-muted">
                   <ElevationProfile route={route} />
                 </div>
               ) : (
                 <p role="status" className="mt-3 text-control text-ink-muted">
-                  Elevation profile unavailable. Climb distribution needs recorded route points.
+                  Elevation profile unavailable. Replay follows provider-relative terrain without claiming recorded altitude.
                 </p>
               )}
             </div>

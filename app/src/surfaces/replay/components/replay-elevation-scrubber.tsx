@@ -132,6 +132,17 @@ export const ReplayElevationScrubber = forwardRef<
         } as React.CSSProperties
       }
     >
+      {route.elevationStatus === "unavailable" ? (
+        <p
+          data-testid="replay-elevation-unavailable"
+          className={cn(
+            "pointer-events-none absolute inset-x-3 top-2 z-10 text-[10px] font-semibold uppercase",
+            tone === "intelligence" ? "text-white/70" : "text-ink-muted",
+          )}
+        >
+          Elevation unavailable · provider-relative terrain
+        </p>
+      ) : null}
       <svg
         viewBox={`0 0 ${PROFILE_WIDTH} ${PROFILE_HEIGHT}`}
         aria-hidden="true"

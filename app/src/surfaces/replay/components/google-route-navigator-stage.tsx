@@ -582,7 +582,9 @@ export function GoogleRouteNavigatorStage({
               <h1 className="truncate text-sm font-semibold">{route.region}</h1>
               <div className="truncate text-[11px] text-white/58">
                 {route.distanceKm.toFixed(1)} km ·{" "}
-                {Math.round(route.elevationGainM)} m up · {route.type}
+                {route.elevationStatus === "unavailable"
+                  ? "Elevation unavailable"
+                  : `${Math.round(route.elevationGainM)} m up`} · {route.type}
               </div>
             </div>
           ) : null}

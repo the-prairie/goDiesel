@@ -61,18 +61,21 @@ def build_replay_metadata(
     point_count,
     best_in_earth_ids,
     lifecycle="completed",
+    preferred_mode=None,
 ):
     """Build replay metadata without contradicting validated route geometry."""
     if not isinstance(point_count, int) or point_count < 0:
         raise ValueError("replay point_count must be a non-negative integer")
     if lifecycle not in ("completed", "planned", "discovered"):
         raise ValueError("replay lifecycle must be completed, planned, or discovered")
+    if preferred_mode not in (None, "atlas", "earth"):
+        raise ValueError("replay preferred mode must be atlas or earth")
 
     geometry_ready = point_count > 1
     replay_eligible = geometry_ready and lifecycle in ("completed", "discovered")
     best_in_earth = replay_eligible and str(activity_id) in best_in_earth_ids
     return {
-        "mode": "earth" if best_in_earth else "atlas",
+        "mode": preferred_mode or ("earth" if best_in_earth else "atlas"),
         "replay_eligible": replay_eligible,
         "best_in_earth": best_in_earth,
         "geometry_status": "ready" if geometry_ready else "missing",
