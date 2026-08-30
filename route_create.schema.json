@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://godiesel.local/schemas/route-create.schema.json",
+  "title": "goDiesel route share intake",
+  "$defs": {
+    "curation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "vibe": { "type": "string", "minLength": 1 },
+        "ideal_use": { "type": "string", "minLength": 1 },
+        "terrain": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "difficulty": { "type": "string", "minLength": 1 },
+        "highlights": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "caveats": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "seasonality": { "type": "string", "minLength": 1 },
+        "editorial_note": { "type": "string", "minLength": 1 },
+        "review_status": { "enum": ["draft", "reviewed", "published"] }
+      }
+    },
+    "annotation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "at_distance_m", "kind", "evidence", "body"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "at_distance_m": { "type": "number", "minimum": 0 },
+        "kind": { "enum": ["note", "landmark", "warning"] },
+        "evidence": { "enum": ["recorded", "derived", "measured", "hypothesis"] },
+        "body": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 }
+      }
+    },
+    "media": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "association"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "association": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind"],
+              "properties": { "kind": { "const": "route" } }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "annotation_id"],
+              "properties": {
+                "kind": { "const": "annotation" },
+                "annotation_id": { "type": "string", "minLength": 1 }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "existing_slug": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" },
+        "gpx_path": { "type": "string", "minLength": 1 },
+        "activity_type": { "enum": ["Run", "Ride"] },
+        "route_name": { "type": "string", "minLength": 1 },
+        "region": { "type": "string", "minLength": 1 },
+        "source_description": { "type": "string", "minLength": 1 },
+        "activity_date": { "type": "string" },
+        "desired_route_id": {
+          "type": "string",
+          "pattern": "^gpx-[a-z0-9][a-z0-9-]{2,59}[a-z0-9]$"
+        },
+        "lifecycle": { "enum": ["discovered", "completed"] },
+        "completion_evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "description"],
+          "properties": {
+            "kind": { "const": "owner_recorded" },
+            "description": { "type": "string", "minLength": 1 }
+          }
+        },
+        "curation": { "$ref": "#/$defs/curation" },
+        "annotations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/annotation" }
+        },
+        "media": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/media" }
+        },
+        "replay_mode": { "enum": ["atlas", "earth"] },
+        "proposed_share_name": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:[a-z0-9-]*[a-z0-9])?$",
+          "maxLength": 57
+        }
+      },
+      "oneOf": [
+        {
+          "required": ["existing_slug"],
+          "not": { "required": ["gpx_path"] }
+        },
+        {
+          "required": [
+            "gpx_path",
+            "activity_type",
+            "route_name",
+            "region"
+          ],
+          "not": { "required": ["existing_slug"] }
+        }
+      ]
+    }
+  },
+  "$ref": "#/$defs/request"
+}

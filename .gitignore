@@ -33,6 +33,7 @@ venv/
 # Temporary files
 tmp/
 *.tmp
+.route-share/
 
 # Node dependencies (app/ has its own ignore; this covers the repository root)
 node_modules/
