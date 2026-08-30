@@ -1,22 +1,25 @@
-import { Database, SlidersHorizontal, SearchX, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Database, SearchX, SlidersHorizontal, Sparkles, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import { CandidateRoute } from "@/surfaces/finder/components/candidate-route";
-import { FinderForm } from "@/surfaces/finder/components/finder-form";
-import { FinderRouteMap } from "@/surfaces/finder/components/finder-route-map";
-import { Button } from "@/ui/button";
 import { curatedRouteDiscoveryProvider } from "@/data/discovery-provider";
+import { savePlannedRoute, usePlannedRoutes } from "@/data/planned-route-store";
 import {
-  savePlannedRoute,
-  usePlannedRoutes,
-} from "@/data/planned-route-store";
-import { useRouteDetail } from "@/data/use-route-detail";
+  finderIntentFromSearchParams,
+  finderSearchParamsForIntent,
+} from "@/domain/finder-intent-url";
 import type {
   DiscoveryCandidate,
   DiscoveryResult,
   FinderIntent,
+  PlannedRoute,
 } from "@/domain/planning";
+import { CandidateRoute } from "@/surfaces/finder/components/candidate-route";
+import { FinderForm } from "@/surfaces/finder/components/finder-form";
+import { FinderRouteMap } from "@/surfaces/finder/components/finder-route-map";
+import { Button } from "@/ui/button";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/ui/sheet";
+import { useIsMobile } from "@/ui/use-mobile";
 
 const initialIntent: FinderIntent = {
   place: "",
@@ -29,42 +32,66 @@ const initialIntent: FinderIntent = {
 export function FinderPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const submittedIntent = useMemo(
-    () => intentFromSearchParams(searchParams),
+    () => finderIntentFromSearchParams(searchParams),
     [searchParams],
   );
   const [intent, setIntent] = useState(submittedIntent ?? initialIntent);
-  const [filtersOpen, setFiltersOpen] = useState(!submittedIntent);
-  const result = useMemo(
-    () =>
-      submittedIntent
-        ? curatedRouteDiscoveryProvider.search(submittedIntent)
-        : null,
-    [submittedIntent],
-  );
-  const [selectedCandidateId, setSelectedCandidateId] = useState<string>();
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filterReturnFocusRef = useRef<HTMLButtonElement | null>(null);
+  const [previewedSlug, setPreviewedSlug] = useState<string>();
+  const isMobile = useIsMobile();
   const plannedRoutes = usePlannedRoutes();
-  const selectedCandidate = result?.candidates.find(
-    (candidate) => candidate.id === selectedCandidateId,
-  ) ?? result?.candidates[0];
-  const selectedDetail = useRouteDetail(selectedCandidate?.sourceRouteSlug);
+  const requestedSlug = searchParams.get("candidate") ?? undefined;
+  const result = useMemo(
+    () => {
+      if (!submittedIntent) return null;
+      const discovered = curatedRouteDiscoveryProvider.search(submittedIntent);
+      const sourceAlreadyPresent = discovered.candidates.some(
+        (candidate) => candidate.sourceRouteSlug === requestedSlug,
+      );
+      const savedPlan = requestedSlug && !sourceAlreadyPresent
+        ? plannedRoutes.find((route) => route.planning.sourceRouteSlug === requestedSlug)
+        : undefined;
+      if (!savedPlan) return discovered;
+      const restored = savedPlanAsCandidate(savedPlan);
+      if (!restored) return discovered;
+      return {
+        status: "matches" as const,
+        candidates: [...discovered.candidates, restored],
+        message: "Saved planning source reopened from its durable route snapshot.",
+      };
+    },
+    [plannedRoutes, requestedSlug, submittedIntent],
+  );
+  const candidates = result?.status === "matches" ? result.candidates : [];
+  const selectedCandidate =
+    candidates.find((candidate) => candidate.sourceRouteSlug === requestedSlug) ?? candidates[0];
 
   useEffect(() => {
     setIntent(submittedIntent ?? initialIntent);
   }, [submittedIntent]);
 
-  useEffect(() => {
-    if (!result || result.status !== "matches") {
-      setSelectedCandidateId(undefined);
-      return;
-    }
-    if (!result.candidates.some((candidate) => candidate.id === selectedCandidateId)) {
-      setSelectedCandidateId(result.candidates[0]?.id);
-    }
-  }, [result, selectedCandidateId]);
-
   function search() {
-    setSearchParams(paramsForIntent(intent));
+    setSearchParams(finderSearchParamsForIntent(intent));
     setFiltersOpen(false);
+    setPreviewedSlug(undefined);
+  }
+
+  function openFilters(trigger: HTMLButtonElement) {
+    filterReturnFocusRef.current = trigger;
+    setFiltersOpen(true);
+  }
+
+  function selectCandidate(candidate: DiscoveryCandidate) {
+    const next = new URLSearchParams(searchParams);
+    next.set("candidate", candidate.sourceRouteSlug);
+    setSearchParams(next);
+    setPreviewedSlug(undefined);
+  }
+
+  function selectSlug(slug: string) {
+    const candidate = candidates.find((item) => item.sourceRouteSlug === slug);
+    if (candidate) selectCandidate(candidate);
   }
 
   function removeFilter(filter: "place" | "distance" | "terrain" | "vibe") {
@@ -77,52 +104,81 @@ export function FinderPage() {
       ...(filter === "vibe" ? { vibe: "" } : {}),
     };
     setIntent(next);
-    setSearchParams(next.place ? paramsForIntent(next) : new URLSearchParams());
+    setSearchParams(next.place ? finderSearchParamsForIntent(next) : new URLSearchParams());
   }
 
-  const mapRoute = selectedDetail.status === "ready" ? selectedDetail.route : undefined;
-
   return (
-    <section className="flex h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 flex-col overflow-hidden bg-canvas md:h-dvh">
-      <header className="z-20 border-b border-line bg-surface/97 px-4 py-3 shadow-sm sm:px-5">
-        <div className="mb-3 flex flex-wrap items-baseline gap-x-5 gap-y-1">
-          <h1 className="font-editorial text-3xl font-semibold text-ink">Plan the next day.</h1>
-          <p className="text-control text-ink-secondary">
-            Choose what kind of run or ride you want.
-          </p>
+    <section className="relative h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 overflow-hidden bg-[#102b33] md:h-dvh">
+      <FinderRouteMap
+        candidates={candidates}
+        selectedSlug={selectedCandidate?.sourceRouteSlug}
+        committedSlug={requestedSlug}
+        previewedSlug={previewedSlug}
+        onSelect={selectSlug}
+        onPreview={setPreviewedSlug}
+        showEmptyPrompt={!submittedIntent}
+      />
+
+      <header data-testid="finder-header" className="pointer-events-none absolute inset-x-0 top-0 z-20 p-3 md:inset-x-auto md:left-5 md:top-[5.75rem] md:w-[28rem] md:p-0 [@media(max-height:640px)]:left-3 [@media(max-height:640px)]:top-[5rem] [@media(max-height:640px)]:w-[min(30rem,calc(100%-1.5rem))]">
+        <div className="pointer-events-auto border border-white/30 bg-[#07151c]/90 p-3 text-white shadow-panel backdrop-blur-xl md:p-5 [@media(max-height:640px)]:p-3">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="mb-0.5 flex items-center gap-1.5 text-[0.68rem] font-semibold uppercase text-[#9be7e1] md:mb-1 md:text-xs">
+                <Sparkles className="size-3.5" aria-hidden="true" /> Daydream Finder
+              </div>
+              <h1 className="font-editorial text-[1.45rem] font-semibold text-white md:text-3xl">Plan the next day.</h1>
+              <p className="mt-1 hidden text-control text-white/68 sm:block [@media(max-height:640px)]:hidden">
+                Name the feeling. Finder brings the recorded possibilities into view.
+              </p>
+            </div>
+          </div>
+
+          {submittedIntent ? (
+            <div className="mt-2 flex min-w-0 items-start gap-2 border-t border-white/15 pt-2 md:mt-3 md:items-center md:pt-3">
+              <ActiveFilterChips intent={submittedIntent} onRemove={removeFilter} />
+              <Button type="button" variant="ghost" size="icon" className="size-11 shrink-0 text-white hover:bg-white/12 hover:text-white" aria-label="Edit filters" title="Edit filters" onClick={(event) => openFilters(event.currentTarget)}>
+                <SlidersHorizontal aria-hidden="true" />
+              </Button>
+            </div>
+          ) : (
+            <Button type="button" className="mt-4 w-full" onClick={(event) => openFilters(event.currentTarget)}>
+              <SlidersHorizontal aria-hidden="true" /> Shape the day
+            </Button>
+          )}
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="mb-3 w-full lg:hidden"
-          aria-expanded={filtersOpen}
-          onClick={() => setFiltersOpen((open) => !open)}
-        >
-          <SlidersHorizontal aria-hidden="true" />
-          {filtersOpen ? "Hide filters" : "Edit filters"}
-        </Button>
-        <div className={filtersOpen ? "block" : "hidden lg:block"}>
-          <FinderForm intent={intent} onChange={setIntent} onSubmit={search} />
-        </div>
-        {submittedIntent ? (
-          <ActiveFilterChips intent={submittedIntent} onRemove={removeFilter} />
-        ) : null}
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-rows-[minmax(14rem,0.9fr)_minmax(16rem,1.1fr)] lg:grid-cols-[minmax(0,2fr)_minmax(22rem,1fr)] lg:grid-rows-1">
-        <FinderRouteMap
-          route={mapRoute}
-          selectedSlug={selectedCandidate?.sourceRouteSlug}
-        />
-        <FinderResults
-          result={result}
-          submittedIntent={submittedIntent}
-          selectedCandidate={selectedCandidate}
-          plannedRoutes={plannedRoutes}
-          onSelect={(candidate) => setSelectedCandidateId(candidate.id)}
-        />
-      </div>
+      <FinderResults
+        result={result}
+        submittedIntent={submittedIntent}
+        selectedCandidate={selectedCandidate}
+        plannedRoutes={plannedRoutes}
+        onEditSearch={openFilters}
+        onSelect={selectCandidate}
+        onPreview={setPreviewedSlug}
+      />
+
+      <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+        <SheetContent
+          side={isMobile ? "bottom" : "right"}
+          aria-label="Edit route plan"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            filterReturnFocusRef.current?.focus();
+          }}
+          className={isMobile
+            ? "max-h-[88dvh] overflow-y-auto rounded-t-[22px] border-white/70 bg-surface p-0"
+            : "w-[25rem] max-w-[25rem] overflow-y-auto border-white/70 bg-surface p-0"}
+        >
+          <SheetHeader className="border-b border-line px-5 pb-4 pt-5 text-left">
+            <SheetTitle className="font-editorial text-2xl">Shape the next day</SheetTitle>
+            <SheetDescription>Filter the recorded route shelf by place, effort, surface, and mood.</SheetDescription>
+          </SheetHeader>
+          <div className="px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-4">
+            <FinderForm intent={intent} onChange={setIntent} onSubmit={search} />
+          </div>
+        </SheetContent>
+      </Sheet>
     </section>
   );
 }
@@ -132,106 +188,84 @@ function FinderResults({
   submittedIntent,
   selectedCandidate,
   plannedRoutes,
+  onEditSearch,
   onSelect,
+  onPreview,
 }: {
   result: DiscoveryResult | null;
   submittedIntent: FinderIntent | null;
   selectedCandidate?: DiscoveryCandidate;
   plannedRoutes: ReturnType<typeof usePlannedRoutes>;
+  onEditSearch: (trigger: HTMLButtonElement) => void;
   onSelect: (candidate: DiscoveryCandidate) => void;
+  onPreview: (slug?: string) => void;
 }) {
+  const [searchParams] = useSearchParams();
   return (
     <section
       aria-label="Finder results"
-      className="min-h-0 overflow-y-auto border-t border-line bg-surface lg:border-l lg:border-t-0"
+      data-testid="finder-results"
+      className="absolute inset-x-0 bottom-0 z-20 border-t border-white/15 bg-[#07151c]/92 pb-2 pt-3 text-white shadow-[0_-8px_24px_rgba(3,12,18,0.32)] backdrop-blur-xl md:pb-4 md:pt-4"
     >
-      <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-line bg-surface/96 px-4 py-3 backdrop-blur sm:px-5">
-        <div>
-          <h2 className="font-editorial text-2xl font-semibold text-ink">
+      <div className="mb-2 flex items-center justify-between gap-4 px-4 md:px-5">
+        <div className="min-w-0">
+          <h2 className="font-editorial text-lg font-semibold text-white md:text-xl">
             {result?.status === "matches"
-              ? `${result.candidates.length} candidate ${result.candidates.length === 1 ? "route" : "routes"}`
-              : "Candidate routes"}
+              ? `${result.candidates.length} recorded ${result.candidates.length === 1 ? "possibility" : "possibilities"}`
+              : "Recorded possibilities"}
           </h2>
-          <p aria-live="polite" className="mt-0.5 text-caption text-ink-muted">
-            {result?.message ?? "Based on your filters"}
+          <p aria-live="polite" className="truncate text-xs text-white/58">
+            {result?.message ?? "Search the curated shelf to reveal routes on the map."}
           </p>
         </div>
-        <Database className="mt-1 size-5 shrink-0 text-forest" aria-hidden="true" />
+        <div className="hidden items-center gap-2 text-xs text-white/58 sm:flex">
+          <Database className="size-4 text-[#9be7e1]" aria-hidden="true" />
+          <span><strong className="font-semibold text-white">Finder does not generate routes.</strong> Recorded GPX only.</span>
+        </div>
       </div>
 
-      <div className="grid gap-3 p-3 sm:p-4">
-        {result === null ? (
-          <FinderState
-            title="Set the kind of day you want"
-            copy="Search the curated route shelf by place, effort, surface, and feeling."
-          />
-        ) : result.status === "unsupported" ? (
-          <FinderState title="No curated match" copy={result.message} role="status" />
-        ) : (
-          result.candidates.map((candidate) => (
+      {result?.status === "matches" ? (
+        <div className="flex snap-x gap-3 overflow-x-auto px-4 pb-1 md:px-5">
+          {result.candidates.map((candidate) => (
             <CandidateRoute
               key={candidate.id}
               candidate={candidate}
-              compact
               selected={candidate.id === selectedCandidate?.id}
+              committed={candidate.sourceRouteSlug === searchParams.get("candidate")}
               matchReason={matchReason(candidate, submittedIntent!)}
-              plannedRoute={plannedRoutes.find(
-                (route) => route.planning.candidateId === candidate.id,
-              )}
+              plannedRoute={plannedRoutes.find((route) => route.planning.candidateId === candidate.id)}
               onSelect={() => onSelect(candidate)}
-              onSave={() => savePlannedRoute(candidate, submittedIntent!).route}
+              onPreview={(previewing) => onPreview(previewing ? candidate.sourceRouteSlug : undefined)}
+              onSave={() => savePlannedRoute(candidate, submittedIntent!).persisted}
             />
-          ))
-        )}
-
-        <div className="flex gap-3 border-t border-line pt-4 text-caption leading-5 text-ink-muted">
-          <Database className="mt-0.5 size-4 shrink-0 text-forest" aria-hidden="true" />
-          <p>
-            <strong className="font-semibold text-ink">Finder does not generate routes.</strong>{" "}
-            Every result comes from an owner-curated or imported GPX record.
-          </p>
+          ))}
         </div>
-      </div>
+      ) : (
+        <FinderState
+          title={result?.status === "unsupported" ? "No curated match" : "The map is waiting"}
+          copy={result?.message ?? "Open the planner and describe the route you want to remember next."}
+          action={result?.status === "unsupported"
+            ? { label: "Edit search", onTrigger: onEditSearch }
+            : undefined}
+          role={result?.status === "unsupported" ? "status" : undefined}
+        />
+      )}
     </section>
   );
 }
 
-function ActiveFilterChips({
-  intent,
-  onRemove,
-}: {
-  intent: FinderIntent;
-  onRemove: (filter: "place" | "distance" | "terrain" | "vibe") => void;
-}) {
+function ActiveFilterChips({ intent, onRemove }: { intent: FinderIntent; onRemove: (filter: "place" | "distance" | "terrain" | "vibe") => void }) {
   const chips = [
     { key: "place" as const, label: intent.place, aria: "Clear location filter" },
-    {
-      key: "distance" as const,
-      label: `${intent.distanceKm} km`,
-      aria: "Remove distance filter",
-    },
-    ...(intent.terrain !== "any"
-      ? [{ key: "terrain" as const, label: intent.terrain, aria: "Remove terrain filter" }]
-      : []),
-    ...(intent.vibe
-      ? [{ key: "vibe" as const, label: intent.vibe, aria: "Remove vibe filter" }]
-      : []),
+    { key: "distance" as const, label: `${intent.distanceKm} km`, aria: "Remove distance filter" },
+    ...(intent.terrain !== "any" ? [{ key: "terrain" as const, label: intent.terrain, aria: "Remove terrain filter" }] : []),
+    ...(intent.vibe ? [{ key: "vibe" as const, label: intent.vibe, aria: "Remove vibe filter" }] : []),
   ];
-
   return (
-    <div aria-label="Active Finder filters" className="mt-3 flex gap-2 overflow-x-auto pb-1 lg:hidden">
+    <div aria-label="Active Finder filters" className="flex min-w-0 flex-1 flex-wrap gap-1.5 pr-1 sm:flex-nowrap sm:overflow-x-auto sm:[scrollbar-width:none] sm:[&::-webkit-scrollbar]:hidden">
       {chips.map((chip) => (
-        <Button
-          key={chip.key}
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-9 shrink-0 bg-surface-raised capitalize"
-          aria-label={chip.aria}
-          onClick={() => onRemove(chip.key)}
-        >
-          {chip.label}
-          <X aria-hidden="true" />
+        <Button key={chip.key} type="button" variant="outline" size="sm" className="h-11 shrink-0 border-white/25 bg-white/10 px-2 capitalize text-white hover:bg-white/18 hover:text-white" aria-label={chip.aria} onClick={() => onRemove(chip.key)}>
+          {chip.label}<X aria-hidden="true" />
         </Button>
       ))}
     </div>
@@ -241,18 +275,33 @@ function ActiveFilterChips({
 function FinderState({
   title,
   copy,
+  action,
   role,
 }: {
   title: string;
   copy: string;
+  action?: {
+    label: string;
+    onTrigger: (trigger: HTMLButtonElement) => void;
+  };
   role?: "status";
 }) {
   return (
-    <div role={role} className="grid min-h-48 place-items-center border-y border-line p-6 text-center">
-      <div className="grid max-w-sm justify-items-center gap-3">
-        <SearchX className="size-6 text-forest" aria-hidden="true" />
-        <h3 className="font-editorial text-xl font-semibold text-ink">{title}</h3>
-        <p className="text-control leading-6 text-ink-secondary">{copy}</p>
+    <div role={role} className="grid min-h-28 place-items-center px-6 py-4 text-center">
+      <div className="grid max-w-md justify-items-center gap-2">
+        <SearchX className="size-5 text-[#9be7e1]" aria-hidden="true" />
+        <h3 className="font-editorial text-lg font-semibold text-white">{title}</h3>
+        <p className="text-control text-white/66">{copy}</p>
+        {action ? (
+          <Button
+            className="mt-1 min-h-11"
+            onClick={(event) => action.onTrigger(event.currentTarget)}
+            type="button"
+          >
+            <SlidersHorizontal aria-hidden="true" />
+            {action.label}
+          </Button>
+        ) : null}
       </div>
     </div>
   );
@@ -268,33 +317,18 @@ function matchReason(candidate: DiscoveryCandidate, intent: FinderIntent) {
   return `${parts.filter(Boolean).join(", ")}.`;
 }
 
-function intentFromSearchParams(params: URLSearchParams): FinderIntent | null {
-  const place = params.get("place")?.trim() ?? "";
-  if (!place) return null;
-  const activity = params.get("activity") === "Ride" ? "Ride" : "Run";
-  const distance = Number(params.get("distance"));
-  const terrainValue = params.get("terrain");
-  const terrain = ["road", "trail", "mixed", "mountain"].includes(
-    terrainValue ?? "",
-  )
-    ? (terrainValue as FinderIntent["terrain"])
-    : "any";
+function savedPlanAsCandidate(plan: PlannedRoute): DiscoveryCandidate | undefined {
+  const sourceSnapshot = plan.planning.sourceSnapshot;
+  if (!sourceSnapshot) return undefined;
+  const terrain: DiscoveryCandidate["terrain"] = plan.planning.intent.terrain === "any"
+    ? []
+    : [plan.planning.intent.terrain];
   return {
-    place,
-    activity,
-    distanceKm: Number.isFinite(distance) && distance > 0 ? distance : 20,
+    id: plan.planning.candidateId,
+    sourceRouteSlug: plan.planning.sourceRouteSlug,
+    sourceLabel: plan.planning.sourceLabel,
     terrain,
-    vibe: params.get("vibe")?.trim() ?? "",
+    vibes: plan.planning.intent.vibe ? [plan.planning.intent.vibe] : [],
+    route: sourceSnapshot,
   };
-}
-
-function paramsForIntent(intent: FinderIntent) {
-  const params = new URLSearchParams({
-    place: intent.place.trim(),
-    activity: intent.activity,
-    distance: String(intent.distanceKm),
-  });
-  if (intent.terrain !== "any") params.set("terrain", intent.terrain);
-  if (intent.vibe.trim()) params.set("vibe", intent.vibe.trim());
-  return params;
 }

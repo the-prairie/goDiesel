@@ -272,7 +272,6 @@ test.describe("real source to live provider pipeline", () => {
     await cp(path.join(repositoryRoot, "route_sources"), path.join(adminWorkspace, "route_sources"), {
       recursive: true,
     });
-    await mkdir(path.join(adminWorkspace, "cards"));
     await mkdir(path.join(adminWorkspace, "app/src/data/generated"), { recursive: true });
     await mkdir(path.join(adminWorkspace, "app/public/data/routes"), { recursive: true });
     await cp(
@@ -324,9 +323,10 @@ test.describe("real source to live provider pipeline", () => {
       const heading = route.lifecycle === "discovered" ? route.activity_name : route.name;
       await expect(page.getByRole("heading", { name: heading, level: 1 })).toBeVisible();
       const geography = page.getByRole("region", { name: "Route geography" });
+      await geography.scrollIntoViewIfNeeded();
       await expect(geography).toHaveAttribute("data-map-status", "ready");
       await expect(geography).toHaveAttribute("data-geometry-points", String(route.route.length));
-      await expect(page.getByRole("link", { name: "Open replay" })).toBeVisible();
+      await expect(page.getByRole("link", { name: "Cinematic replay" })).toBeAttached();
     }
 
     for (const slug of ["17654151284", "9934715694", "14736711660"]) {
@@ -431,9 +431,6 @@ test.describe("real source to live provider pipeline", () => {
     ) as { curation: { vibe: string }; route: unknown[] };
     expect(generated.curation.vibe).toBe(realValue);
     expect(generated.route.length).toBeGreaterThan(100);
-    expect((await readFile(path.join(adminWorkspace!, "app/src/data/quests.generated.json"))).length).toBeGreaterThan(
-      1_000_000,
-    );
 
     const evidence = await network.finish(testInfo);
     expect(new Set(evidence.observations.map((entry) => entry.category))).toContain(

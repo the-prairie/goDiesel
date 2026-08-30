@@ -1,10 +1,11 @@
 ---
 status: accepted
 date: 2026-07-12
+amended: 2026-08-29
 deciders: owner
 ---
 
-# ADR-0003: The Python generator is the only writer of route data
+# ADR-0003: Python owns generated route publication
 
 ## Context
 
@@ -21,8 +22,10 @@ records.
 
 ## Decision
 
-`build.py` is the single writer of generated route data. The application reads
-that data and never writes it.
+Python is the only writer boundary for generated route data. The browser reads
+that data and never writes it. `build.py` publishes the complete catalogue;
+`curation_publish.py` is the narrow incremental publisher for owner-authored
+curation and annotations, which do not change source-derived geometry.
 
 Publish route data atomically:
 
@@ -45,10 +48,25 @@ backup with `ready` is fully restored.
 - Generated data is reproducible by construction, and
   `pipeline_verification.py --rebuild` proves it by regenerating into a temporary
   workspace and byte-comparing every artifact.
-- The owner writer (`admin.py`) reuses this path rather than editing generated
-  output directly, and restores `quests.json` if a rebuild fails.
-- Cost: there is no incremental build. A one-field curation edit pays a full
-  re-parse, re-render, and full backup copy synchronously inside an HTTP request.
+- The owner writer (`admin.py`) validates and saves source curation, then uses
+  `curation_publish.py` to stage the affected detail and summary tiers before
+  replacing each file atomically. A failed replacement restores files already
+  replaced. If restoration fails, the publisher reports both failures and
+  preserves the surviving recovery copy. Cleanup is best-effort and cannot turn
+  a completed publication into a reported failure. Equality tests prove that a
+  completed publication matches a full rebuild, and fault injection proves the
+  failure matrix.
+- Admin falls back to a full rebuild for an ordinary incremental publication
+  failure. It does not start that fallback after an incomplete rollback; it
+  restores the curation source, reports the recovery paths, and leaves the
+  preserved copies available for deliberate repair. A source recovery copy is
+  created before mutation; if source restoration also fails, that copy and both
+  failure details are preserved for the operator.
+- The two incremental replacements are not one transaction. A process crash
+  between them can temporarily split detail and summary until curation is
+  republished for the affected route or a full rebuild runs.
+- Geometry and other source-derived changes still require a complete rebuild;
+  curation and annotation edits use the bounded incremental publisher.
 - `build.py` is a module-level script with no `main()`; importing it executes the
   entire pipeline. This makes it awkward to test or reuse, and is why the
   testable logic was extracted into `route_provenance.py`, `route_imports.py`,
@@ -57,6 +75,7 @@ backup with `ready` is fully restored.
 ## Evidence
 
 - `build.py` (`recover_interrupted_route_publication`, `write_text_atomic`,
-  the staging block), `admin.py` (`save_curation_and_rebuild`)
-- `pipeline_verification.py`, `test_pipeline_verification.py`
+  the staging block), `curation_publish.py`, `admin.py`
+- `pipeline_verification.py`, `test_pipeline_verification.py`,
+  `test_curation_publish.py`
 - `6b071504`, `9bc514a7`

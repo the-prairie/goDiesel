@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { Suspense, useRef } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 
 import { AtlasSpine } from "@/surfaces/atlas/components/atlas-spine";
@@ -6,36 +6,51 @@ import { AtlasImmersiveNavigation } from "@/surfaces/atlas/components/atlas-imme
 import { singleRouteMicrosite } from "@/app/single-route-microsite";
 import { APP_PATHS } from "@/app/route-paths";
 import { appSectionForPath } from "@/app/app-sections";
+import { useNavigationContinuity } from "@/app/navigation-continuity";
 import { cn } from "@/ui/utils";
 
 export function AppShell() {
   const location = useLocation();
+  const mainRef = useRef<HTMLElement>(null);
+  useNavigationContinuity(mainRef);
   const section = appSectionForPath(location.pathname);
   const isAtlas = location.pathname === APP_PATHS.atlas;
+  const isFinder = location.pathname === APP_PATHS.finder;
   const isReplayLab = location.pathname.startsWith("/lab/");
   const isRouteDetail = /^\/routes\/[^/]+$/.test(location.pathname);
   const isRoutesLibrary = section.id === "routes" && !isRouteDetail;
-  const isWideUtility = isRoutesLibrary || section.id === "admin";
+  const isReplay = section.id === "replay";
+  const isWideUtility = section.id === "admin";
   const isImmersive =
     isAtlas ||
     isReplayLab ||
     isRouteDetail ||
     section.id === "finder" ||
     section.id === "replay";
-  const isUtility =
-    isRoutesLibrary || section.id === "admin";
+  const isUtility = section.id === "admin";
 
   return (
     <div className="weathered-atlas field-guide-theme relative flex min-h-dvh bg-background text-foreground">
-      {singleRouteMicrosite ? null : <AtlasSpine hideDesktop={isAtlas} />}
-      {isAtlas && !singleRouteMicrosite ? <AtlasImmersiveNavigation /> : null}
+      {singleRouteMicrosite || isReplay ? null : (
+        <AtlasSpine hideDesktop={isAtlas || isFinder || isRoutesLibrary || isRouteDetail} />
+      )}
+      {(isAtlas || isFinder || isRoutesLibrary) && !singleRouteMicrosite ? (
+        <AtlasImmersiveNavigation
+          activeMode={isFinder ? "finder" : isRoutesLibrary ? "routes" : "atlas"}
+        />
+      ) : null}
       <div
         className={cn(
           "flex min-h-dvh min-w-0 flex-1 flex-col",
           !singleRouteMicrosite &&
+            !isReplay &&
             "pb-[var(--mobile-navigation-height)] md:pb-0",
-          !singleRouteMicrosite &&
+            !singleRouteMicrosite &&
             !isAtlas &&
+            !isFinder &&
+            !isRoutesLibrary &&
+            !isRouteDetail &&
+            !isReplay &&
             "md:pl-[var(--spine-rail-width)] lg:pl-[var(--spine-width)]",
         )}
       >
@@ -61,11 +76,15 @@ export function AppShell() {
           </header>
         ) : null}
         <main
+          ref={mainRef}
+          tabIndex={-1}
           className={cn(
-            "w-full flex-1",
+            "w-full flex-1 focus:outline-none",
             isImmersive
               ? "min-h-0 overflow-hidden"
-              : isWideUtility
+              : isRoutesLibrary
+                ? "min-h-0"
+                : isWideUtility
                 ? "grid gap-6 p-4 sm:p-6"
                 : "mx-auto grid max-w-7xl gap-6 p-4 sm:p-6",
           )}

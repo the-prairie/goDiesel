@@ -32,18 +32,18 @@ TypeScript, Vite, Tailwind, and shadcn/ui. Retain `build.py` as a data generator
 only (see ADR-0003).
 
 Port the existing Earth Replay behaviour before inventing new replay ideas. Keep
-the static application deployable as a fallback until parity is reached.
+the static application deployable as a fallback until parity is reached. That
+temporary fallback period ended after the 2026-07-14 production cutover.
 
 ## Consequences
 
 - The React application is the canonical product and opens directly into Atlas.
 - Presentation, state, and data generation are separated for the first time.
-- The static application is frozen at the annotated tag
-  `static-fallback-2026-07-14` and retained for one release. `README.md`
-  documents how to rebuild that exact fallback from a worktree.
-- `build.py` still contains roughly 4,000 lines of the superseded static HTML
-  template, which it regenerates on every run. This is dead weight retained past
-  its stated purpose and is the largest available deletion in the repository.
+- The static application remains available only as repository history at the
+  annotated tag `static-fallback-2026-07-14`; it is not a current deployable.
+- Since 2026-08-29, `build.py` is a data-only generator. The superseded static
+  HTML, CSS, JavaScript, route SVG, and share-card generation paths were removed
+  after the fallback period expired.
 
 ## Evidence
 

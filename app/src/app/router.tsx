@@ -60,7 +60,6 @@ const CinematicDirectorLabPage = lazy(() =>
     default: module.CinematicDirectorLabPage,
   })),
 );
-
 canonicalizeLegacyQuestHash();
 window.addEventListener("hashchange", canonicalizeLegacyQuestHash);
 

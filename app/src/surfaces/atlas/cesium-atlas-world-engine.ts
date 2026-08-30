@@ -38,6 +38,7 @@ import {
 import {
   atlasCameraFrame,
   atlasRegionTransitionDurationSeconds,
+  atlasRouteTransitionDurationSeconds,
 } from "@/surfaces/atlas/atlas-region-camera";
 import type { RouteRegion } from "@/data/route-regions";
 import type { RouteSummary } from "@/domain/route";
@@ -48,9 +49,9 @@ import {
 } from "@/providers/cesium-render-quality";
 
 const DEFAULT_VIEW = { lat: 24, lng: 12, heightM: 18_500_000 };
-const GLOBAL_SELECTION_HEIGHT_M = DEFAULT_VIEW.heightM;
 const ROUTE_COLOR = Color.fromCssColorString("#62a7ff");
 const SELECTED_ROUTE_COLOR = Color.fromCssColorString("#df674b");
+const PREVIEWED_ROUTE_COLOR = Color.fromCssColorString("#63d6cf");
 const TILE_FAILURE_THRESHOLD = 8;
 const TERRAIN_READY_TIMEOUT_MS = 8_000;
 const TERRAIN_DIAGNOSTIC_INTERVAL_MS = 4_000;
@@ -168,8 +169,14 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   private blankFrameCount = 0;
   private selectedRegionName?: string;
   private selectedRouteSlug?: string;
+  private previewedRouteSlug?: string;
+  private routeDisplayMode: "standard" | "density" | "terrain" = "standard";
   private regionGeneration = 0;
   private generation = 0;
+  private detachedCanvas?: {
+    parent: Node;
+    nextSibling: ChildNode | null;
+  };
   private surfaceNormal = new Cartesian3();
   private surfaceToCamera = new Cartesian3();
 
@@ -179,11 +186,13 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     illuminationTimeIso,
     onStatus,
     onSelectRoute,
+    routeDisplayMode = "standard",
   }: AtlasWorldEngineMountOptions) {
     const generation = ++this.generation;
     this.regions = regions;
     this.onStatus = onStatus;
     this.onSelectRoute = onSelectRoute;
+    this.routeDisplayMode = routeDisplayMode;
     onStatus({ state: "loading", message: "Opening the Atlas world." });
 
     if (!webglAvailable()) {
@@ -324,6 +333,71 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     this.styleRouteEntities();
   }
 
+  setPreviewedRoute(route?: RouteSummary) {
+    this.previewedRouteSlug = route?.slug;
+    if (this.viewer && !this.viewer.isDestroyed()) {
+      this.viewer.canvas.dataset.previewedRoute = route?.slug ?? "";
+    }
+    this.styleRouteEntities();
+  }
+
+  frameRoute(route?: RouteSummary) {
+    const viewer = this.viewer;
+    if (!viewer || viewer.isDestroyed()) return;
+    const region = this.regions.find(({ name }) => name === this.selectedRegionName);
+    const routes = route ? [route] : (region?.routes ?? []);
+    const positions = routes.flatMap((candidate) => sampleRegionalRoutePoints(candidate).map((point) =>
+      Cartesian3.fromDegrees(
+        point.lng,
+        point.lat,
+        Number.isFinite(point.elev) ? Math.max(0, point.elev) : 0,
+      ),
+    ));
+    if (positions.length < 2) return;
+
+    const sphere = BoundingSphere.fromPoints(positions);
+    const frustum = viewer.camera.frustum;
+    const verticalFov =
+      frustum instanceof PerspectiveFrustum
+        ? (frustum.fovy ?? CesiumMath.toRadians(60))
+        : CesiumMath.toRadians(60);
+    const frame = atlasCameraFrame(
+      sphere.radius,
+      {
+        width: Math.max(1, viewer.canvas.clientWidth),
+        height: Math.max(1, viewer.canvas.clientHeight),
+      },
+      verticalFov,
+    );
+    this.applyFrustumOffsets(frame.horizontalOffsetRatio, frame.verticalOffsetRatio);
+    const duration = atlasRouteTransitionDurationSeconds(
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    );
+    viewer.canvas.dataset.cameraRoute = route?.slug ?? "";
+    viewer.canvas.dataset.cameraState = "transitioning";
+    viewer.canvas.dataset.cameraDurationMs = String(Math.round(duration * 1_000));
+    viewer.canvas.dataset.cameraTarget = frame.rangeM.toFixed(0);
+    viewer.camera.flyToBoundingSphere(sphere, {
+      duration,
+      offset: new HeadingPitchRange(
+        viewer.camera.heading,
+        REGIONAL_CAMERA_PITCH_RADIANS,
+        frame.rangeM,
+      ),
+      complete: () => {
+        if (!viewer.isDestroyed()) viewer.canvas.dataset.cameraState = "settled";
+      },
+      cancel: () => {
+        if (!viewer.isDestroyed()) viewer.canvas.dataset.cameraState = "settled";
+      },
+    });
+  }
+
+  setRouteDisplayMode(mode: "standard" | "density" | "terrain") {
+    this.routeDisplayMode = mode;
+    this.styleRouteEntities();
+  }
+
   projectRegions(): AtlasRegionProjection[] {
     const viewer = this.viewer;
     if (!viewer || viewer.isDestroyed()) return [];
@@ -409,6 +483,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     this.onSelectRoute = undefined;
     this.selectedRegionName = undefined;
     this.selectedRouteSlug = undefined;
+    this.previewedRouteSlug = undefined;
   }
 
   private async enterRegionalTerrain(
@@ -635,18 +710,35 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
       if (!entity.polyline) return;
       const inSelectedRegion = regionName === this.selectedRegionName;
       const active =
-        inSelectedRegion && route.slug === this.selectedRouteSlug;
-      entity.polyline.width = new ConstantProperty(active ? 8 : inSelectedRegion ? 5 : 4);
+        inSelectedRegion &&
+        route.slug === (this.previewedRouteSlug ?? this.selectedRouteSlug);
+      const previewed =
+        inSelectedRegion && route.slug === this.previewedRouteSlug;
+      const regionalWidth = this.routeDisplayMode === "density" ? 9 : this.routeDisplayMode === "terrain" ? 2 : 5;
+      entity.polyline.width = new ConstantProperty(active ? 9 : inSelectedRegion ? regionalWidth : 4);
       entity.polyline.material = active
         ? new PolylineGlowMaterialProperty({
-            color: SELECTED_ROUTE_COLOR.withAlpha(1),
+            color: (previewed ? PREVIEWED_ROUTE_COLOR : SELECTED_ROUTE_COLOR).withAlpha(1),
             glowPower: 0.24,
           })
-        : new ColorMaterialProperty(
-            ROUTE_COLOR.withAlpha(
-              this.selectedRegionName ? (inSelectedRegion ? 0.48 : 0.2) : 0.92,
-            ),
-          );
+        : this.routeDisplayMode === "density" && inSelectedRegion
+          ? new PolylineGlowMaterialProperty({
+              color: Color.fromCssColorString("#f29bc2").withAlpha(0.74),
+              glowPower: 0.42,
+            })
+          : new ColorMaterialProperty(
+              ROUTE_COLOR.withAlpha(
+                this.previewedRouteSlug
+                  ? inSelectedRegion
+                    ? 0.12
+                    : 0.08
+                  : this.selectedRegionName
+                  ? inSelectedRegion
+                    ? this.routeDisplayMode === "terrain" ? 0.18 : 0.48
+                    : 0.2
+                  : 0.92,
+              ),
+            );
     });
   }
 
@@ -705,6 +797,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     viewer.canvas.dataset.atlasState = "region-fallback";
     viewer.canvas.dataset.cameraState = "settled";
     viewer.canvas.dataset.terrainState = "fallback";
+    this.detachCanvasForFallback(viewer.canvas);
     this.onStatus?.({
       state: "region-fallback",
       regionName: region.name,
@@ -724,10 +817,31 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     this.clearRegionalTiles();
     const viewer = this.viewer;
     if (!viewer || viewer.isDestroyed()) return;
+    this.restoreCanvasAfterFallback(viewer.canvas);
     viewer.useDefaultRenderLoop = true;
     viewer.scene.globe.show = true;
     if (this.baseImageryLayer) this.baseImageryLayer.show = true;
     this.resetFrustumOffsets();
+  }
+
+  private detachCanvasForFallback(canvas: HTMLCanvasElement) {
+    if (this.detachedCanvas || !canvas.parentNode) return;
+    this.detachedCanvas = {
+      parent: canvas.parentNode,
+      nextSibling: canvas.nextSibling,
+    };
+    canvas.remove();
+  }
+
+  private restoreCanvasAfterFallback(canvas: HTMLCanvasElement) {
+    const detached = this.detachedCanvas;
+    if (!detached) return;
+    const before =
+      detached.nextSibling?.parentNode === detached.parent
+        ? detached.nextSibling
+        : null;
+    detached.parent.insertBefore(canvas, before);
+    this.detachedCanvas = undefined;
   }
 
   private clearRegionalTiles() {

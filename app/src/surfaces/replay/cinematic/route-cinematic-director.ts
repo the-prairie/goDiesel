@@ -409,11 +409,13 @@ export function cinematicMoments(route: QuestRoute): CinematicMoment[] {
   let summit = points[0];
   let steepest = { point: points[1], score: Number.NEGATIVE_INFINITY };
   let sharpest = { point: points[1], score: Number.NEGATIVE_INFINITY };
+  for (const point of points.slice(1)) {
+    if (point.elev > summit.elev) summit = point;
+  }
   for (let index = 1; index < points.length - 1; index += 1) {
     const previous = points[index - 1];
     const point = points[index];
     const next = points[index + 1];
-    if (point.elev > summit.elev) summit = point;
 
     const spanM = Math.max(1, next.d - previous.d);
     const grade = ((next.elev - previous.elev) / spanM) * 100;
@@ -426,26 +428,35 @@ export function cinematicMoments(route: QuestRoute): CinematicMoment[] {
   }
 
   const ratio = (distanceM: number) => clamp(distanceM / totalDistanceM);
+  const summitRatio = ratio(summit.d);
   return [
     { kind: "origin", label: "Origin", progressRatio: 0, score: 1 },
-    {
-      kind: "climb",
-      label: "Hardest rise",
-      progressRatio: ratio(steepest.point.d),
-      score: Math.max(0, steepest.score),
-    },
+    ...(steepest.score > 0
+      ? [
+          {
+            kind: "climb" as const,
+            label: "Hardest rise",
+            progressRatio: ratio(steepest.point.d),
+            score: steepest.score,
+          },
+        ]
+      : []),
     {
       kind: "turn",
       label: "Sharpest turn",
       progressRatio: ratio(sharpest.point.d),
       score: sharpest.score,
     },
-    {
-      kind: "summit",
-      label: "High point",
-      progressRatio: ratio(summit.d),
-      score: summit.elev,
-    },
+    ...(summitRatio > 0 && summitRatio < 1
+      ? [
+          {
+            kind: "summit" as const,
+            label: "High point",
+            progressRatio: summitRatio,
+            score: summit.elev,
+          },
+        ]
+      : []),
     { kind: "arrival", label: "Arrival", progressRatio: 1, score: 1 },
   ];
 }

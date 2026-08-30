@@ -31,7 +31,7 @@ export function AtlasControls({
     <>
       <div className={cn(
         "atlas-region-select absolute left-3 top-3 z-20 flex h-[54px] items-center gap-2 rounded-sm border border-white/45 bg-[#f6f2e8]/94 p-1 text-[#24322d] shadow-lg backdrop-blur sm:left-4 sm:top-4 md:left-5 md:top-[5.25rem] xl:left-[12.25rem] xl:top-5 xl:w-[220px]",
-        selectedRegion && "[@media(max-height:500px)]:hidden",
+        selectedRegion && "[@media(max-height:600px)]:hidden",
       )}>
         <Map className="ml-1 size-4 shrink-0 text-[#315fb4]" aria-hidden="true" />
         <label className="sr-only" htmlFor="atlas-region-select">
@@ -60,7 +60,7 @@ export function AtlasControls({
 
       <div className={cn(
         "atlas-mobile-activity absolute right-3 top-3 z-20 flex rounded-sm border border-white/35 bg-[#f6f2e8]/92 p-1 shadow-lg backdrop-blur sm:hidden",
-        selectedRegion && "[@media(max-height:500px)]:hidden",
+        selectedRegion && "[@media(max-height:600px)]:hidden",
       )} aria-label="Activity filter">
         {(["all", "runs", "rides"] as const).map((value) => (
           <Button
@@ -80,7 +80,7 @@ export function AtlasControls({
 
       <div className={cn(
         "atlas-desktop-activity absolute left-[48.25rem] top-5 z-20 hidden h-[54px] rounded-sm border border-white/45 bg-[#f6f2e8]/94 p-1 shadow-lg backdrop-blur xl:flex",
-        selectedRegion && "[@media(max-height:500px)]:hidden",
+        selectedRegion && "[@media(max-height:600px)]:hidden",
       )} aria-label="Activity filter">
         {(["all", "runs", "rides"] as const).map((value) => (
           <Button
@@ -100,7 +100,7 @@ export function AtlasControls({
 
       <div className={cn(
         "atlas-mobile-activity absolute right-4 top-4 z-20 hidden h-[54px] rounded-sm border border-white/45 bg-[#f6f2e8]/94 p-1 shadow-lg backdrop-blur sm:flex md:left-1/2 md:right-auto md:top-5 md:-translate-x-1/2 xl:hidden",
-        selectedRegion && "[@media(max-height:500px)]:hidden",
+        selectedRegion && "[@media(max-height:600px)]:hidden",
       )} aria-label="Activity filter">
         {(["all", "runs", "rides"] as const).map((value) => (
           <Button
@@ -122,7 +122,7 @@ export function AtlasControls({
         className={cn(
           "atlas-mobile-map-tools absolute right-3 top-[9.75rem] z-40 flex gap-1 rounded-sm border border-white/35 bg-[#f6f2e8]/92 p-1 shadow-lg backdrop-blur md:left-5 md:right-auto md:top-auto",
           selectedRegion
-            ? "md:bottom-[23rem] [@media(max-height:500px)]:hidden"
+            ? "md:bottom-[23rem] [@media(max-height:600px)]:hidden"
             : "md:bottom-5",
         )}
       >

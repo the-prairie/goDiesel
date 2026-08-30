@@ -218,6 +218,52 @@
   font-family: var(--font-editorial);
 }
 
+@keyframes planned-route-camera-drift {
+  0%,
+  100% {
+    transform: scale(1.04) translate3d(-0.6%, -0.4%, 0);
+  }
+  50% {
+    transform: scale(1.11) translate3d(1.2%, 0.8%, 0);
+  }
+}
+
+@keyframes planned-route-progress {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: -1;
+  }
+}
+
+.planned-route-preview-camera {
+  animation: planned-route-camera-drift 18s var(--ease-interface) infinite;
+  will-change: transform;
+}
+
+.planned-route-preview-progress {
+  animation: planned-route-progress 9s linear infinite;
+  stroke-dasharray: 0.22 0.78;
+  stroke-dashoffset: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .planned-route-preview-camera,
+  .planned-route-preview-progress {
+    animation: none;
+  }
+
+  .planned-route-preview-camera {
+    transform: scale(1.04);
+  }
+
+  .planned-route-preview-progress {
+    stroke-dasharray: 0.32 0.68;
+    stroke-dashoffset: 0;
+  }
+}
+
 @keyframes route-genome-draw {
   from {
     stroke-dashoffset: 1;
@@ -233,10 +279,49 @@
   stroke-dashoffset: 1;
 }
 
+.godiesel-route-playhead {
+  position: relative;
+  width: 16px;
+  height: 20px;
+  transform: rotate(var(--route-playhead-bearing, 0deg));
+  transform-origin: 50% 50%;
+  filter: drop-shadow(0 1px 2px rgba(18, 29, 51, 0.76));
+  transition:
+    transform 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 160ms ease;
+}
+
+.godiesel-route-playhead::before,
+.godiesel-route-playhead::after {
+  position: absolute;
+  content: "";
+  clip-path: polygon(50% 0%, 100% 72%, 50% 100%, 0% 72%);
+}
+
+.godiesel-route-playhead::before {
+  inset: 0;
+  background: #fffaf2;
+}
+
+.godiesel-route-playhead::after {
+  inset: 3px 4px 5px;
+  background: #f06b50;
+}
+
+.godiesel-route-playhead[data-moving="true"] {
+  filter:
+    drop-shadow(0 1px 2px rgba(18, 29, 51, 0.76))
+    drop-shadow(0 0 3px rgba(255, 217, 200, 0.42));
+}
+
 @media (prefers-reduced-motion: reduce) {
   .route-genome-draw {
     animation: none;
     stroke-dashoffset: 0;
+  }
+
+  .godiesel-route-playhead {
+    transition: none;
   }
 }
 
@@ -297,11 +382,6 @@
     display: none;
   }
 
-  .atlas-region-inspector:not([data-snap]) {
-    inset: 5rem 0.75rem 0.75rem 5rem;
-    width: auto;
-    max-height: none;
-  }
 }
 
 .atlas-spine {
@@ -413,30 +493,7 @@ a {
   font: inherit;
 }
 
-@media (max-width: 639px) {
-  .atlas-region-inspector:not([data-snap]) {
-    max-height: clamp(6rem, calc(100dvh - 24rem), 44dvh);
-  }
-
-  .atlas-region-inspector[data-snap] {
-    max-height: none;
-  }
-}
-
 @media (max-height: 576px), (max-width: 639px) and (max-height: 658px) {
-  .atlas-intro {
-    max-width: calc(100% - 26rem);
-  }
-
-  .atlas-intro h1 {
-    font-size: 1.5rem;
-    line-height: 1.75rem;
-  }
-
-  .atlas-intro p {
-    display: none;
-  }
-
   .atlas-search-panel {
     right: 1.25rem;
     left: auto;
@@ -455,60 +512,11 @@ a {
     margin-top: 0;
   }
 
-  .atlas-region-inspector:not([data-snap]) {
-    right: 1.25rem;
-    bottom: 5rem;
-    top: auto;
-    max-height: 4rem;
-    flex-direction: row;
-  }
-
-  .atlas-region-inspector:not([data-snap]) > div:first-child {
-    width: 9rem;
-    flex: 0 0 9rem;
-    padding: 0.5rem;
-    border-right: 1px solid var(--border);
-    border-bottom: 0;
-  }
-
-  .atlas-region-inspector:not([data-snap]) p {
-    display: none;
-  }
-
-  .atlas-region-inspector:not([data-snap]) > div:first-child > div > div:first-child {
-    display: none;
-  }
-
-  .atlas-region-inspector:not([data-snap]) h2 {
-    margin-top: 0;
-    font-size: 0.875rem;
-    line-height: 1.25rem;
-  }
-
-  .atlas-region-inspector:not([data-snap]) > div:last-child {
-    display: flex;
-    overflow-x: auto;
-    overflow-y: hidden;
-  }
-
-  .atlas-region-inspector:not([data-snap]) > div:last-child > button {
-    min-height: 0;
-    flex: 0 0 12rem;
-    padding: 0.5rem 0.75rem;
-  }
 }
 
 @media (max-width: 639px) and (max-height: 658px) {
-  .atlas-intro {
-    display: none;
-  }
-
   .atlas-mobile-map-tools {
     top: 5rem;
-  }
-
-  .atlas-region-inspector[data-snap="peek"] {
-    height: 6rem;
   }
 
   .atlas-search-panel {
@@ -554,7 +562,4 @@ a {
     display: none;
   }
 
-  .atlas-region-inspector:not([data-snap]) {
-    top: 5.5rem;
-  }
 }

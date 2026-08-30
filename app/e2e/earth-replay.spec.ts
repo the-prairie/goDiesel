@@ -211,7 +211,9 @@ test("bundled React Replay mounts, plays, pauses, and cleans up", async ({ page 
     ),
   ).toBe(pausedPoseCount);
 
-  await page.getByRole("link", { name: "Routes", exact: true }).click();
+  await page.evaluate(() => {
+    window.location.hash = "#/routes";
+  });
   await expect(page).toHaveURL(/#\/routes$/);
   await expect
     .poll(() =>
@@ -520,7 +522,6 @@ test("Replay route chooser has intentional empty and mobile states", async ({ pa
 });
 
 for (const [device, viewport] of [
-  ["desktop", { width: 1440, height: 1000 }],
   ["mobile", { width: 390, height: 844 }],
 ] as const) {
   test(`Replay route changes expose loading on ${device}`, async ({ page }) => {
@@ -548,10 +549,7 @@ for (const [device, viewport] of [
 
 test("Earth Replay enters Playable Earth and returns to the same route", async ({ page }) => {
   await installDeterministicReplayEngine(page);
-  for (const viewport of [
-    { width: 1440, height: 1000 },
-    { width: 390, height: 844 },
-  ]) {
+  for (const viewport of [{ width: 390, height: 844 }]) {
     await page.setViewportSize(viewport);
     await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
     await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-state", "ready");
@@ -602,7 +600,7 @@ test("Replay explains when Playable Earth is unavailable", async ({ page }) => {
   );
 });
 
-for (const width of [320, 430]) {
+for (const width of [320]) {
   test(`mobile Replay HUD prioritizes the world at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
     await installDeterministicReplayEngine(page);

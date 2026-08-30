@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-08
+last_updated: 2026-08-14
 status: canonical
 ---
 
@@ -92,7 +92,7 @@ product.
 | --- | --- |
 | `completed` | The owner recorded this route by doing it. It is a memory. |
 | `discovered` | The route's geometry is real and imported, but the owner has not recorded doing it. |
-| `planned` | An intention. It has no recorded geometry and is never replay-eligible. |
+| `planned` | An intention. It has no owner-recorded completion geometry and is never replay-eligible. It may reference visibly labelled planning-source geometry. |
 
 Current data: 66 `completed`, 1 `discovered`, 0 `planned` generated.
 
@@ -170,14 +170,17 @@ The schema is closed. Unknown fields are rejected rather than ignored.
 
 | Value | Meaning |
 | --- | --- |
-| `draft` | Partial curation is allowed. Presented as not yet reviewed. |
+| `draft` | Partial curation is allowed. Admin presents it as not yet reviewed. |
 | `reviewed` | The owner has approved it. All eight fields are required. |
 | `published` | Same completeness requirement as `reviewed`. |
 
 Current data: 66 `draft`, 1 `reviewed`.
 
-An unreviewed route shows the neutral label "Guide not yet reviewed". It must
-never be given invented claims to fill the space.
+Admin and factual guide surfaces show an unreviewed route with the neutral label
+"Guide not yet reviewed".
+The Routes memory library omits guide review status and never uses draft guide
+copy as route context.
+An unreviewed route must never be given invented claims to fill the space.
 
 ## 6. Surfaces
 
@@ -194,6 +197,36 @@ routing, and tests.
 
 The root redirects to Atlas. Atlas is the home of the product; the card gallery
 is not.
+
+Routes uses `Collection` as the consumer-facing label for filtering by
+`lifecycle` without exposing curation workflow language.
+Its values map exactly as follows: `Atlas routes` includes `completed` and
+`discovered`, `Memories` is `completed`, `Discovered routes` is `discovered`,
+and `Planned routes` is `planned`.
+The default route library excludes `planned` routes; they appear only when the
+owner explicitly selects `Planned routes`, remain visibly labelled as plans,
+and open a source-honest plan detail that can return to Finder.
+Plan detail may edit future intent or remove the plan, but it never changes the
+planning source into recorded evidence.
+Changing place, activity, or source rebinds the plan atomically to a selected
+recorded source, resets the completion-time baseline, and updates its canonical
+plan identity.
+A saved plan may retain an immutable completed-source snapshot so Finder can
+reopen that source after catalog changes without treating the plan itself as a
+recorded activity.
+It may offer a `derived` completion candidate only when an independently
+recorded activity is later than the plan, matches its activity, region, and
+distance tolerance, and has recorded geometry near the planning trace.
+The planning source itself is never a completion candidate.
+The owner must compare and explicitly confirm a recorded candidate before the
+plan is removed and the existing recorded route opens as the memory.
+Route cards label source activity descriptions as `Recorded note`, approved
+guide interpretation as `Editorial hypothesis`, and missing source copy as
+`Recorded note unavailable`.
+Discovered routes do not promote an unproven description; they state that owner
+experience is unavailable.
+Card source labels are `Recorded activity`, `Imported geometry`, and `Planning
+intent` rather than lifecycle or guide-review workflow states.
 
 ### Related surface terms
 
@@ -250,7 +283,6 @@ prototype and survives only in:
 
 - `quests.json` (the master routes list)
 - the `QuestRoute` TypeScript type
-- `quests.generated.json`
 - the legacy `#quest/<slug>` hash, which is canonicalized to `#/routes/<slug>`
 
 Do not add new "quest" naming. Do not rename existing occurrences opportunistically

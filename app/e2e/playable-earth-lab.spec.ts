@@ -130,10 +130,7 @@ test("canonical completed route opens the isolated lab and exits cleanly", async
   await expect(
     page.locator('canvas[aria-label="Deterministic photorealistic world"]'),
   ).toHaveAttribute("data-route-slug", routeSlug);
-  await expect(page.getByRole("link", { name: "Replay", exact: true })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
+  await expect(page.getByRole("link", { name: "Replay", exact: true })).toHaveCount(0);
 
   await page.getByRole("link", { name: "Exit lab" }).click();
   await expect(page).toHaveURL(new RegExp(`#\/routes\/${routeSlug}$`));

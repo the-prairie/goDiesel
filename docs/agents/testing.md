@@ -19,7 +19,7 @@ A successful gate remains valid unless subsequent edits touch behavior covered b
 | Tier | When | Required verification |
 | --- | --- | --- |
 | Focused | During implementation | Run affected unit tests and focused Playwright scenarios for the behavior being changed. Add a targeted visual or interaction check for user-facing work. |
-| Ticket | Once before merging a ticket | Run `npm run verify:ticket`, then run every affected Playwright spec separately. Add a targeted smoke and visual check. Run live-provider tests only when the ticket changes providers, terrain, imagery, or camera behavior. |
+| Ticket | Once before merging a ticket | Run `npm run verify:ticket`, then run every affected Playwright spec separately. Add a targeted visual check for user-facing work. Run live-provider tests only for provider, terrain, imagery, or camera changes. |
 | Release | Before production cutover, or after shared application infrastructure changes | Run `npm run verify`, the applicable live-provider suites, the required viewport and visual evidence matrix, and any release-specific performance or accessibility gates. |
 
 ## Commands
@@ -32,7 +32,8 @@ The ticket gate is:
 npm run verify:ticket
 ```
 
-It covers typechecking, a production build, all unit tests, and core navigation smoke tests.
+It covers a production build, which includes typechecking, and all unit tests.
+There is no unrelated fixed browser subset; the affected browser spec is the ticket's browser proof.
 
 Affected browser scenarios remain explicit so ticket evidence names the behavior that was exercised:
 
@@ -45,6 +46,11 @@ The complete release gate is:
 ```sh
 npm run verify
 ```
+
+It runs the production-critical browser journeys rather than every diagnostic,
+lab, gallery, and breakpoint scenario in the repository.
+Run `npm run test:e2e:extended` only when a change crosses those secondary
+surfaces or when diagnosing a broader regression.
 
 The real-data, no-interception pipeline acceptance gate is:
 
@@ -73,6 +79,19 @@ Live Earth Replay provider verification is:
 ```sh
 GODIESEL_ATLAS_PREVIEW_URL=<preview-url> npm run test:e2e:earth
 ```
+
+Local Google 3D cinematic verification is:
+
+```sh
+npm run test:e2e:google-live
+```
+
+Every explicit live-provider command fails when its required configuration or
+provider is unavailable. Missing evidence must never appear as a skipped green run.
+
+Local native Google 3D verification must use `http://localhost:8787` rather
+than `http://127.0.0.1:8787`. The configured browser key authorizes the
+`localhost` origin, and Google treats the loopback IP as a different referrer.
 
 ## Gate Validity
 

@@ -174,11 +174,15 @@ export function googleRouteThreadTreatment(
   const totalDistanceM = Math.max(1, routeDistanceM(route));
   const focusRatio = clamp(state.progressM / totalDistanceM, 0, 1);
   if (focusRatio >= 0.995) {
+    const camera = googleRouteCameraPose(route, state);
+    const telemetry = googleRouteTelemetry(route, state.progressM);
     return {
+      bearingDeg: telemetry.headingDeg,
+      cameraHeadingDeg: camera.headingDeg,
       endRatio: 1,
       focusRatio: 1,
       motionIntensity: 0.18,
-      rangeM: googleRouteCameraPose(route, state).rangeM,
+      rangeM: camera.rangeM,
       shotKind: "release",
       startRatio: 0,
     };
@@ -190,8 +194,8 @@ export function googleRouteThreadTreatment(
   const overviewWeight = state.cameraMode === "auto" ? camera.overviewWeight : 0;
   const trackingWindow =
     directedMode === "runner"
-      ? { aheadM: 90, behindM: 24 }
-      : { aheadM: 480, behindM: 900 };
+      ? { aheadM: 120, behindM: 42 }
+      : { aheadM: 360, behindM: 260 };
   const window =
     directedMode === "overview" || overviewWeight > 0
       ? {
@@ -210,11 +214,16 @@ export function googleRouteThreadTreatment(
   const grade = Math.abs(telemetry.gradePercent);
 
   return {
+    bearingDeg: telemetry.headingDeg,
+    cameraHeadingDeg: camera.headingDeg,
     endRatio: clamp((state.progressM + window.aheadM) / totalDistanceM, 0, 1),
     focusRatio,
     motionIntensity: state.playing ? clamp(0.68 + grade / 45, 0, 1) : 0.34,
     rangeM: camera.rangeM,
-    shotKind: "tracking",
+    shotKind:
+      directedMode === "overview" || overviewWeight >= 0.55
+        ? "establishing"
+        : "tracking",
     startRatio: clamp((state.progressM - window.behindM) / totalDistanceM, 0, 1),
   };
 }

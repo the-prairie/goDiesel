@@ -22,8 +22,8 @@ const route = routeSlug
 // leads with the place. Assuming one or the other made this spec pass only for
 // the discovered route it was written against.
 const routeTitle =
-  route?.lifecycle === "discovered"
-    ? route?.activity_name || route?.name
+  route?.activity_name && /[a-z0-9]/i.test(route.activity_name)
+    ? route.activity_name
     : route?.name;
 
 // Any route that is not the shared one, so the redirect assertion is real.
@@ -56,7 +56,7 @@ test.describe("single-route microsite", () => {
     await page.goto(`/#/routes/${otherSlug}`);
     await expect(page).toHaveURL(new RegExp(`#\/routes\/${routeSlug}$`));
 
-    await page.getByRole("link", { name: "Open replay" }).click();
+    await page.getByRole("link", { name: "Cinematic replay", exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`#\/replay\/${routeSlug}$`));
     await expect(page.getByText("Change route", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Route guide" })).toBeVisible();

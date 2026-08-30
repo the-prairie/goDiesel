@@ -1,10 +1,19 @@
-import { ArrowRight, Bike, ChevronLeft, ChevronRight, Footprints, X } from "lucide-react";
+import {
+  ArrowRight,
+  Bike,
+  ChevronLeft,
+  ChevronRight,
+  Footprints,
+  Globe2,
+  Mountain,
+  Route,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useEmblaCarousel from "embla-carousel-react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/ui/button";
-import { RouteSatelliteThumbnail } from "@/surfaces/atlas/components/route-satellite-thumbnail";
+import { RouteSatelliteThumbnail } from "@/ui/route-satellite-thumbnail";
 import type { RouteRegion } from "@/data/route-regions";
 import type { RoutePoint, RouteSummary } from "@/domain/route";
 import {
@@ -14,6 +23,8 @@ import {
   sampleRoutePoints,
 } from "@/domain/geometry/route-visualization";
 import { cn } from "@/ui/utils";
+import type { AtlasLens } from "@/surfaces/atlas/atlas-regional-view";
+import { deriveRouteTerrainDistinction } from "@/surfaces/atlas/atlas-regional-view";
 
 export const ROUTE_CAROUSEL_SLIDE_CLASS =
   "min-w-0 flex-[0_0_84%] pl-3 sm:basis-[44%] sm:pl-4 xl:basis-[calc((100%-2rem)/3)]";
@@ -22,9 +33,12 @@ interface RegionRouteCarouselProps {
   region: RouteRegion;
   selectedRoute?: RouteSummary;
   onSelectRoute: (route: RouteSummary) => void;
+  onPreviewRoute: (route?: RouteSummary) => void;
   onClear: () => void;
   replayPathForRoute: (route: RouteSummary) => string;
   presentationReady: boolean;
+  lens: AtlasLens;
+  onLensChange: (lens: AtlasLens) => void;
 }
 
 const traceWidth = 360;
@@ -36,9 +50,12 @@ export function RegionRouteCarousel({
   region,
   selectedRoute,
   onSelectRoute,
+  onPreviewRoute,
   onClear,
   replayPathForRoute,
   presentationReady,
+  lens,
+  onLensChange,
 }: RegionRouteCarouselProps) {
   const effectiveSelectedRoute = selectedRoute ?? region.routes[0];
   const selectedIndex = Math.max(
@@ -59,6 +76,8 @@ export function RegionRouteCarousel({
   const [thumbnailIndexes, setThumbnailIndexes] = useState(() =>
     thumbnailIndexesForSlidesInView([selectedIndex], region.routes.length),
   );
+  const [hoveredRoute, setHoveredRoute] = useState<RouteSummary>();
+  const [focusedRoute, setFocusedRoute] = useState<RouteSummary>();
   const programmaticSelectionRef = useRef<string | undefined>(undefined);
   const commitCenteredRoute = useCallback(() => {
     if (!emblaApi) return;
@@ -105,6 +124,15 @@ export function RegionRouteCarousel({
     if (index >= 0 && index !== emblaApi.selectedScrollSnap()) emblaApi.scrollTo(index);
   }, [effectiveSelectedRoute, emblaApi, region.routes]);
 
+  useEffect(() => {
+    onPreviewRoute(hoveredRoute ?? focusedRoute);
+  }, [focusedRoute, hoveredRoute, onPreviewRoute]);
+
+  useEffect(
+    () => () => onPreviewRoute(undefined),
+    [onPreviewRoute],
+  );
+
   const selectRoute = useCallback(
     (route: RouteSummary, index: number) => {
       programmaticSelectionRef.current = route.slug;
@@ -147,12 +175,22 @@ export function RegionRouteCarousel({
     return (
       <section
         aria-label={`${region.name} routes`}
-        className="min-h-[23rem] border-t border-white/15 bg-[#07151c]/92 text-white backdrop-blur-sm sm:min-h-[22rem] [@media(max-height:500px)]:min-h-[13rem]"
+        className="min-h-[9rem] border-t border-white/15 bg-[#07151c]/92 text-white backdrop-blur-sm"
       >
-        <div className="grid min-h-[23rem] place-items-center sm:min-h-[22rem] [@media(max-height:500px)]:min-h-[13rem]">
-          <p role="status" aria-live="polite" className="text-sm text-white/70">
-            Loading {region.name} terrain
-          </p>
+        <div className="mx-auto flex min-h-[9rem] max-w-[96rem] items-center gap-4 px-4 sm:px-5">
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-editorial text-xl font-semibold uppercase sm:text-2xl">
+              {region.name}
+            </p>
+            <p role="status" aria-live="polite" className="mt-1 text-sm text-white/65">
+              Fitting recorded routes to the terrain
+            </p>
+          </div>
+          <div className="hidden w-[min(34rem,45vw)] grid-cols-3 gap-2 sm:grid" aria-hidden="true">
+            <span className="h-16 animate-pulse rounded-sm bg-white/10" />
+            <span className="h-16 animate-pulse rounded-sm bg-white/10" />
+            <span className="h-16 animate-pulse rounded-sm bg-white/10" />
+          </div>
         </div>
       </section>
     );
@@ -182,6 +220,30 @@ export function RegionRouteCarousel({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          <div className="mr-1 hidden items-center rounded-sm border border-white/25 p-0.5 sm:flex" aria-label="Region lens">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-label="Show routes"
+              aria-pressed={lens === "routes"}
+              onClick={() => onLensChange("routes")}
+              className="h-11 rounded-md px-2 text-white hover:bg-white/10 hover:text-white aria-pressed:bg-[#f6f2e8] aria-pressed:text-[#24322d]"
+            >
+              <Route aria-hidden="true" /> Routes
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-label="Explore terrain"
+              aria-pressed={lens === "terrain"}
+              onClick={() => onLensChange("terrain")}
+              className="h-11 rounded-md px-2 text-white hover:bg-white/10 hover:text-white aria-pressed:bg-[#f6f2e8] aria-pressed:text-[#24322d]"
+            >
+              <Mountain aria-hidden="true" /> Terrain
+            </Button>
+          </div>
           <span className="mr-1 min-w-12 text-right text-xs tabular-nums text-white/65" aria-live="polite">
             {currentPosition} of {region.routes.length}
           </span>
@@ -193,7 +255,7 @@ export function RegionRouteCarousel({
             title="Previous route"
             disabled={!canSelectPrevious}
             onClick={() => selectRouteAt(selectedIndex - 1)}
-            className="size-10 rounded-full border border-white/35 text-white hover:bg-white/10 hover:text-white disabled:opacity-35"
+            className="size-11 rounded-md border border-white/35 text-white hover:bg-white/10 hover:text-white disabled:opacity-35"
           >
             <ChevronLeft aria-hidden="true" />
           </Button>
@@ -205,23 +267,51 @@ export function RegionRouteCarousel({
             title="Next route"
             disabled={!canSelectNext}
             onClick={() => selectRouteAt(selectedIndex + 1)}
-            className="size-10 rounded-full border border-white/35 text-white hover:bg-white/10 hover:text-white disabled:opacity-35"
+            className="size-11 rounded-md border border-white/35 text-white hover:bg-white/10 hover:text-white disabled:opacity-35"
           >
             <ChevronRight aria-hidden="true" />
           </Button>
           <Button
             type="button"
             variant="ghost"
-            size="icon"
-            aria-label={`Close ${region.name} routes`}
-            title="Close region"
+            size="sm"
+            aria-label="All places"
+            title="Return to all places"
             onClick={onClear}
-            className="size-10 text-white hover:bg-white/10 hover:text-white"
+            className="h-11 rounded-md border border-white/25 px-2 text-white hover:bg-white/10 hover:text-white"
           >
-            <X aria-hidden="true" />
+            <Globe2 aria-hidden="true" />
+            <span className="hidden md:inline">All places</span>
           </Button>
         </div>
       </header>
+
+      <div className="flex px-3 pb-2 sm:hidden">
+        <div className="grid w-full grid-cols-2 rounded-md border border-white/25 p-0.5" aria-label="Region lens">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label="Show routes"
+            aria-pressed={lens === "routes"}
+            onClick={() => onLensChange("routes")}
+            className="h-11 rounded-md text-white hover:bg-white/10 hover:text-white aria-pressed:bg-[#f6f2e8] aria-pressed:text-[#24322d]"
+          >
+            <Route aria-hidden="true" /> Routes
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label="Explore terrain"
+            aria-pressed={lens === "terrain"}
+            onClick={() => onLensChange("terrain")}
+            className="h-11 rounded-md text-white hover:bg-white/10 hover:text-white aria-pressed:bg-[#f6f2e8] aria-pressed:text-[#24322d]"
+          >
+            <Mountain aria-hidden="true" /> Terrain
+          </Button>
+        </div>
+      </div>
 
       {region.routes.length === 0 ? (
         <div className="grid min-h-[17rem] place-items-center px-5 text-sm text-white/65" role="status">
@@ -248,6 +338,8 @@ export function RegionRouteCarousel({
                   replayPath={replayPathForRoute(route)}
                   loadThumbnail={thumbnailIndexes.has(index)}
                   onSelect={() => selectRoute(route, index)}
+                  onHover={(previewed) => setHoveredRoute(previewed ? route : undefined)}
+                  onFocus={(focused) => setFocusedRoute(focused ? route : undefined)}
                 />
               </div>
             ))}
@@ -279,6 +371,8 @@ function RegionalRouteCard({
   replayPath,
   loadThumbnail,
   onSelect,
+  onHover,
+  onFocus,
 }: {
   route: RouteSummary;
   selected: boolean;
@@ -287,11 +381,17 @@ function RegionalRouteCard({
   replayPath: string;
   loadThumbnail: boolean;
   onSelect: () => void;
+  onHover: (hovered: boolean) => void;
+  onFocus: (focused: boolean) => void;
 }) {
   const reviewed =
     route.guide.reviewStatus === "reviewed" || route.guide.reviewStatus === "published";
   const trace = useMemo(() => routeTracePolyline(route.trace), [route.trace]);
   const profile = useMemo(() => elevationProfileGeometry(route.trace), [route.trace]);
+  const terrainDistinction = useMemo(
+    () => deriveRouteTerrainDistinction(route),
+    [route],
+  );
 
   return (
     <article
@@ -299,8 +399,16 @@ function RegionalRouteCard({
       aria-current={selected ? "true" : undefined}
       data-route-slug={route.slug}
       data-selected={selected}
+      onMouseEnter={() => onHover(true)}
+      onMouseLeave={() => onHover(false)}
+      onFocusCapture={() => onFocus(true)}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          onFocus(false);
+        }
+      }}
       className={cn(
-        "relative grid h-[17rem] min-w-0 grid-rows-[7rem_minmax(0,1fr)_3.75rem] overflow-hidden rounded-[8px] border bg-[#0b2029] text-white shadow-sm transition-[border-color,opacity] [@media(max-height:500px)]:h-[9rem] [@media(max-height:500px)]:grid-rows-[3rem_minmax(0,1fr)_2.5rem]",
+        "relative grid h-[17rem] min-w-0 grid-rows-[7rem_minmax(0,1fr)_3.75rem] overflow-hidden rounded-md border bg-[#0b2029] text-white shadow-sm transition-[border-color,opacity] [@media(max-height:500px)]:h-[9rem] [@media(max-height:500px)]:grid-rows-[3rem_minmax(0,1fr)_2.5rem]",
         selected
           ? "border-[#ff6b4a] before:absolute before:inset-x-0 before:top-0 before:z-10 before:h-1 before:bg-[#ff6b4a]"
           : "border-white/20 opacity-75 hover:opacity-100",
@@ -332,6 +440,15 @@ function RegionalRouteCard({
           </span>
         </p>
         <p className="mt-2 line-clamp-2 text-xs leading-4 text-white/65 [@media(max-height:500px)]:hidden">
+          {terrainDistinction ? (
+            <span
+              className="mr-2 inline-flex items-center gap-1 font-medium text-[#9be7e1]"
+              title="Derived from recorded elevation samples"
+            >
+              <Mountain className="size-3.5" aria-hidden="true" />
+              {Math.round(terrainDistinction.valueM).toLocaleString()} m {terrainDistinction.label.toLowerCase()}
+            </span>
+          ) : null}
           {reviewed && route.guide.vibe ? route.guide.vibe : "Guide not yet reviewed"}
         </p>
       </div>
@@ -340,7 +457,7 @@ function RegionalRouteCard({
         <Link
           to={replayPath}
           onClick={(event) => event.stopPropagation()}
-          className="relative z-20 inline-flex min-h-10 items-center gap-1.5 self-center whitespace-nowrap px-2 text-sm font-medium text-[#ff8065] outline-none hover:text-[#ff9a83] focus-visible:ring-2 focus-visible:ring-[#63d6cf]"
+          className="relative z-20 inline-flex min-h-11 items-center gap-1.5 self-center whitespace-nowrap px-2 text-sm font-medium text-[#9be7e1] outline-none hover:text-white focus-visible:ring-2 focus-visible:ring-[#63d6cf]"
         >
           Open route
           <ArrowRight className="size-4" aria-hidden="true" />

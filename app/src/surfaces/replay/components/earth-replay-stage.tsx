@@ -221,7 +221,7 @@ export function EarthReplayStage({
       data-light-phase={recordedLight.phase}
       onPointerMove={() => setChromeVisible(true)}
       onFocusCapture={() => setChromeVisible(true)}
-      className="relative h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 overflow-hidden bg-[#02070a] md:h-dvh md:min-h-[36rem]"
+      className="relative h-dvh min-h-0 overflow-hidden bg-[#02070a] md:min-h-[36rem]"
     >
       <div
         ref={containerRef}

@@ -6,9 +6,10 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import type { RouteSummary } from "@/domain/route";
+import { formatRouteDate, type RouteSummary } from "@/domain/route";
 import { isPlannedRoute } from "@/domain/planning";
-import { APP_PATHS, routeDetailPath } from "@/app/route-paths";
+import { routeDetailPath } from "@/app/route-paths";
+import { RouteSatelliteThumbnail } from "@/ui/route-satellite-thumbnail";
 import { cn } from "@/ui/utils";
 
 export function RouteCard({
@@ -19,120 +20,117 @@ export function RouteCard({
   onOpen?: () => void;
 }) {
   const planned = isPlannedRoute(route);
-  const reviewed =
-    route.guide.reviewStatus === "reviewed" || route.guide.reviewStatus === "published";
-  const destination = planned ? APP_PATHS.finder : routeDetailPath(route.slug);
+  const guideReviewed =
+    route.guide.reviewStatus === "reviewed" ||
+    route.guide.reviewStatus === "published";
+  const destination = routeDetailPath(route.slug);
+  const displayRegion = planned
+    ? route.planning.intent.place.trim() || route.region
+    : route.region;
+  const displayActivity = planned ? route.planning.intent.activity : route.type;
+  const displayDistanceKm = planned
+    ? route.planning.intent.distanceKm
+    : route.distanceKm;
+  const personalTitle = planned
+    ? displayRegion
+    : route.activityName.trim() || route.subtitle.trim() || route.name;
+  const context = planned
+    ? {
+        label: "Planning source",
+        text: `${route.name} - ${route.planning.sourceLabel}`,
+      }
+    : route.lifecycle === "discovered"
+      ? {
+          label: "Owner experience unavailable",
+          text: "This imported route has not been recorded by the owner.",
+        }
+      : route.description.trim()
+      ? { label: "Recorded note", text: route.description }
+      : guideReviewed && route.guide.vibe
+        ? { label: "Editorial hypothesis", text: route.guide.vibe }
+        : { label: "Recorded note unavailable", text: "No recorded activity note." };
+  const sourceLabel = planned
+    ? "Planning intent"
+    : route.lifecycle === "discovered"
+      ? "Imported geometry"
+      : "Recorded activity";
   const accessibleLabel = planned
-    ? `Edit planned ${route.name} route in Finder`
+    ? `Open planned ${displayRegion} route`
     : `Open ${route.name} route from ${route.date || "an unknown date"}, ${route.distanceKm.toFixed(1)} km`;
 
   return (
     <article
-      aria-label={planned ? `Planned route ${route.region}` : undefined}
-      className="min-w-0 border-b border-line bg-surface transition-colors hover:bg-surface-raised"
+      aria-label={planned ? `Planned route ${displayRegion}` : undefined}
+      className="group min-w-0 overflow-hidden border border-line bg-surface transition-colors duration-[var(--duration-standard)] hover:border-coral focus-within:border-coral"
     >
       <Link
         to={destination}
-        onClick={planned ? undefined : onOpen}
+        onClick={onOpen}
         aria-label={accessibleLabel}
-        className="group grid min-w-0 gap-0 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:grid-cols-[minmax(20rem,2.2fr)_7rem_5.5rem_6rem_6.5rem_minmax(9rem,1fr)_7.5rem_4.5rem]"
+        className="flex h-full min-w-0 flex-col text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:grid sm:grid-cols-[minmax(12.5rem,0.82fr)_minmax(0,1.18fr)]"
       >
-        <div className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] border-line md:grid-cols-[9.5rem_minmax(0,1fr)] md:border-r">
-          <RouteThread
-            route={route}
-            className="h-full min-h-28 border-b-0 border-r md:min-h-32"
-          />
-          <div className="grid min-w-0 content-center gap-1.5 px-3 py-3 md:px-4">
-            <p className="truncate text-micro font-semibold uppercase text-ink-muted">
-              {route.region}
+        <RouteThread
+          route={route}
+          imagery
+          className="h-44 shrink-0 border-b sm:h-full sm:min-h-[21rem] sm:border-b-0 sm:border-r"
+        />
+
+        <div className="flex min-w-0 flex-1 flex-col px-4 pb-4 pt-4 sm:px-5 sm:pb-5">
+          <div className="flex min-w-0 items-start justify-between gap-4">
+            <p className="min-w-0 truncate text-micro font-semibold uppercase text-coral">
+              {displayRegion}
             </p>
-            <h2 className="truncate font-editorial text-xl font-semibold leading-tight text-ink md:text-2xl">
-              {route.name}
-            </h2>
-            {route.subtitle ? (
-              <p className="line-clamp-2 text-caption italic text-ink-secondary">
-                {route.subtitle}
-              </p>
-            ) : null}
-            <span className="mt-1 w-fit border border-line bg-surface-muted px-1.5 py-0.5 text-micro uppercase text-ink-secondary">
-              {route.theme}
-            </span>
-            {planned ? (
-              <span className="line-clamp-1 text-micro text-ink-muted">
-                {route.planning.sourceLabel}
-              </span>
-            ) : null}
+            <time
+              dateTime={route.date || undefined}
+              className="shrink-0 text-micro font-semibold uppercase text-ink-muted"
+            >
+              {formatRouteDate(route.date)}
+            </time>
           </div>
-        </div>
+          <h2 className="mt-2 line-clamp-2 font-editorial text-2xl font-semibold leading-7 text-ink sm:text-[1.7rem] sm:leading-8">
+            {personalTitle}
+          </h2>
+          <div className="mt-3 min-h-[4.5rem]">
+            <p className="text-micro font-semibold uppercase text-ink-muted">
+              {context.label}
+            </p>
+            <p className="mt-1 line-clamp-2 text-caption leading-6 text-ink-secondary">
+              {context.text}
+            </p>
+          </div>
 
-        <LedgerCell label="Date" className="hidden md:flex">
-          {route.date || "Unknown"}
-        </LedgerCell>
-        <LedgerCell label="Activity" className="hidden md:flex">
-          <span className="inline-flex items-center gap-2">
-            {route.type === "Ride" ? (
-              <Bike className="size-4 text-route" aria-hidden="true" />
-            ) : (
-              <Footprints className="size-4 text-route" aria-hidden="true" />
-            )}
-            {route.type}
-          </span>
-        </LedgerCell>
-        <LedgerCell label="Distance" className="hidden md:flex">
-          {route.distanceKm.toFixed(1)} km
-        </LedgerCell>
-        <LedgerCell label="Climb" className="hidden md:flex">
-          {route.elevationGainM.toLocaleString()} m up
-        </LedgerCell>
-        <LedgerCell label="Vibe" className="hidden md:flex">
-          <span className="line-clamp-3 italic">
-            {reviewed && route.guide.vibe
-              ? route.guide.vibe
-              : "Editorial vibe awaiting review"}
-          </span>
-        </LedgerCell>
-        <LedgerCell label="Lifecycle" className="hidden md:flex">
-          <span className="grid gap-1">
-            <span className="inline-flex items-center gap-2">
-              <span
-                aria-hidden="true"
-                className={cn(
-                  "size-1.5 rounded-full",
-                  planned ? "bg-warning" : "bg-route",
+          <dl className="mt-5 grid grid-cols-3 border-y border-line">
+            <MemoryFact label="Activity">
+              <span className="inline-flex items-center gap-1.5">
+                {displayActivity === "Ride" ? (
+                  <Bike className="size-4 text-route" aria-hidden="true" />
+                ) : (
+                  <Footprints className="size-4 text-route" aria-hidden="true" />
                 )}
-              />
-              {capitalize(route.lifecycle)}
-            </span>
-            <span className="text-micro text-ink-muted">
-              {planned ? "Future route" : reviewed ? "Reviewed guide" : "Draft guide"}
-            </span>
-          </span>
-        </LedgerCell>
-        <div className="hidden items-center justify-center text-sm font-medium text-forest md:flex">
-          <span className="sr-only">Action</span>
-          <ArrowRight
-            className="size-4 transition-transform group-hover:translate-x-1"
-            aria-hidden="true"
-          />
-        </div>
+                {displayActivity}
+              </span>
+            </MemoryFact>
+            <MemoryFact label="Distance">{displayDistanceKm.toFixed(1)} km</MemoryFact>
+            {planned ? (
+              <MemoryFact label="Terrain">
+                {formatTerrain(route.planning.intent.terrain)}
+              </MemoryFact>
+            ) : (
+              <MemoryFact label="Climb">{route.elevationGainM.toLocaleString()} m up</MemoryFact>
+            )}
+          </dl>
 
-        <div className="grid grid-cols-2 gap-x-4 gap-y-2 border-t border-line px-3 py-3 text-caption md:hidden">
-          <MobileFact label="Activity" value={route.type} />
-          <MobileFact label="Distance" value={`${route.distanceKm.toFixed(1)} km`} />
-          <MobileFact label="Climb" value={`${route.elevationGainM.toLocaleString()} m up`} />
-          <MobileFact
-            label="Lifecycle"
-            value={`${capitalize(route.lifecycle)} · ${planned ? "Future route" : reviewed ? "Reviewed guide" : "Draft guide"}`}
-          />
-          <div className="col-span-2 flex items-start justify-between gap-4 border-t border-line pt-2">
-            <span className="line-clamp-2 italic text-ink-secondary">
-              {reviewed && route.guide.vibe
-                ? route.guide.vibe
-                : planned
-                  ? "Saved for a future day"
-                  : "Editorial vibe awaiting review"}
+          <div className="mt-4 grid min-w-0 gap-2 border-t border-line pt-3">
+            <span className="justify-self-start border border-line bg-surface-muted px-2 py-1 text-micro uppercase text-ink-secondary">
+              {sourceLabel}
             </span>
-            <ArrowRight className="mt-0.5 size-4 shrink-0 text-forest" aria-hidden="true" />
+            <span className="inline-flex items-center gap-2 justify-self-end text-caption font-semibold text-forest">
+              {planned ? "Open route plan" : "Open field story"}
+              <ArrowRight
+                className="size-4 transition-transform group-hover:translate-x-1"
+                aria-hidden="true"
+              />
+            </span>
           </div>
         </div>
       </Link>
@@ -140,79 +138,109 @@ export function RouteCard({
   );
 }
 
-function LedgerCell({
+function formatTerrain(terrain: string) {
+  return terrain === "any"
+    ? "Any terrain"
+    : `${terrain.charAt(0).toUpperCase()}${terrain.slice(1)}`;
+}
+
+function MemoryFact({
   label,
-  className,
   children,
 }: {
   label: string;
-  className?: string;
   children: React.ReactNode;
 }) {
   return (
-    <div
-      className={cn(
-        "min-w-0 items-center border-r border-line px-3 py-4 text-caption text-ink-secondary",
-        className,
-      )}
-    >
-      <span className="sr-only">{label}: </span>
-      {children}
+    <div className="min-w-0 border-r border-line px-2 py-3 last:border-r-0 sm:px-3">
+      <dt className="text-micro uppercase text-ink-muted">{label}</dt>
+      <dd className="mt-1 truncate text-caption font-semibold text-ink">{children}</dd>
     </div>
-  );
-}
-
-function MobileFact({ label, value }: { label: string; value: string }) {
-  return (
-    <span className="min-w-0">
-      <span className="text-micro uppercase text-ink-muted">{label}</span>
-      <span className="mt-0.5 block truncate font-medium text-ink">{value}</span>
-    </span>
   );
 }
 
 export function RouteThread({
   route,
+  imagery = false,
   className,
 }: {
   route: RouteSummary;
+  imagery?: boolean;
   className?: string;
 }) {
-  const points = normalizedTrace(route);
+  const trace = normalizedTrace(route);
+  const planned = isPlannedRoute(route);
 
   return (
     <div
       className={cn(
-        "relative h-32 overflow-hidden border-b border-line bg-surface-muted",
+        "relative h-32 overflow-hidden border-b border-line bg-[#102b33]",
         className,
       )}
     >
-      <div className="absolute inset-0 opacity-45 [background-image:linear-gradient(var(--line)_1px,transparent_1px),linear-gradient(90deg,var(--line)_1px,transparent_1px)] [background-size:24px_24px]" />
-      {points ? (
+      {imagery ? (
+        <>
+          <RouteSatelliteThumbnail
+            route={route}
+            enabled
+            cinematic
+            showRoute={false}
+            imageClassName="saturate-[0.72] contrast-[1.08] brightness-[0.68] transition-transform duration-500 ease-out group-hover:scale-[1.025] motion-reduce:transform-none"
+          />
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 z-[2] bg-[linear-gradient(180deg,rgba(5,20,27,0.12),rgba(5,20,27,0.52))]"
+          />
+          <span className="absolute left-3 top-3 z-[4] bg-[#07151c]/84 px-2 py-1 text-micro font-semibold uppercase text-white backdrop-blur">
+            {planned ? "Planning source" : "Recorded geography"}
+          </span>
+        </>
+      ) : (
+        <div className="absolute inset-0 bg-surface-muted" aria-hidden="true" />
+      )}
+      {trace ? (
         <svg
           viewBox="0 0 320 128"
           role="img"
           aria-label={`${route.name} route trace`}
-          className="absolute inset-0 size-full"
+          className="absolute inset-0 z-[3] size-full"
           preserveAspectRatio="xMidYMid meet"
         >
           <polyline
-            points={points}
+            points={trace.polyline}
             fill="none"
-            stroke="var(--route-halo)"
+            stroke="rgb(3 15 20 / 76%)"
+            strokeWidth="10"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+          <polyline
+            points={trace.polyline}
+            fill="none"
+            stroke="rgb(255 250 242 / 94%)"
             strokeWidth="6"
             strokeLinecap="round"
             strokeLinejoin="round"
             vectorEffect="non-scaling-stroke"
           />
           <polyline
-            points={points}
+            points={trace.polyline}
             fill="none"
-            stroke="var(--route)"
+            stroke={planned ? "var(--warning)" : "#ff8065"}
             strokeWidth="2.5"
+            strokeDasharray={planned ? "7 5" : undefined}
             strokeLinecap="round"
             strokeLinejoin="round"
             vectorEffect="non-scaling-stroke"
+          />
+          <circle
+            cx={trace.start.x}
+            cy={trace.start.y}
+            r="5"
+            fill={planned ? "var(--warning)" : "#ff8065"}
+            stroke="white"
+            strokeWidth="2.5"
           />
         </svg>
       ) : (
@@ -220,7 +248,7 @@ export function RouteThread({
           Route trace unavailable
         </div>
       )}
-      {isPlannedRoute(route) ? (
+      {planned && !imagery ? (
         <CalendarClock
           className="absolute bottom-2 right-2 size-4 text-warning"
           aria-label="Planned"
@@ -246,15 +274,15 @@ function normalizedTrace(route: RouteSummary) {
   const offsetX = (320 - renderedWidth) / 2;
   const offsetY = (128 - renderedHeight) / 2;
 
-  return route.trace
-    .map((point) => {
+  const points = route.trace.map((point) => {
       const x = offsetX + (point.lng - minLng) * scale;
       const y = offsetY + (maxLat - point.lat) * scale;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
-}
+      return { x, y };
+    });
 
-function capitalize(value: string) {
-  return value.charAt(0).toUpperCase() + value.slice(1);
+  return {
+    points,
+    start: points[0],
+    polyline: points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" "),
+  };
 }

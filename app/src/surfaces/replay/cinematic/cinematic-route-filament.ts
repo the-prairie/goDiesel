@@ -1,6 +1,12 @@
-export type CinematicFilamentRole = "guide" | "future" | "thread" | "glint";
+export type CinematicFilamentRole =
+  | "context"
+  | "future"
+  | "traveled"
+  | "lead";
 
 export interface CinematicRouteTreatment {
+  bearingDeg?: number;
+  cameraHeadingDeg?: number;
   endRatio: number;
   focusRatio: number;
   motionIntensity: number;
@@ -27,60 +33,66 @@ export function buildCinematicThreadStyles(
   const start = clamp(treatment.startRatio);
   const end = clamp(treatment.endRatio);
   const focus = clamp(treatment.focusRatio, start, end);
-  const rangeScale = clamp(
-    Math.log10(Math.max(350, treatment.rangeM) / 350) / 1.65,
+  const continuousRangeScale = clamp(
+    Math.log2(Math.max(350, treatment.rangeM) / 350) / 4.2,
   );
-  const shotScale =
-    treatment.shotKind === "release"
-      ? 0.82
-      : treatment.shotKind === "tracking"
-        ? 0.94
+  const rangeScale =
+    continuousRangeScale < 0.28
+      ? 0
+      : continuousRangeScale < 0.72
+        ? 0.5
         : 1;
-  const baseWidth = (3 + rangeScale * 0.9) * shotScale;
-  const glintSpan = clamp(180 / Math.max(1, totalDistanceM), 0.0012, 0.012);
+  const shotScale = treatment.shotKind === "release" ? 0.84 : 1;
+  const threadWidth = (2.25 + rangeScale * 0.28) * shotScale;
+  const leadSpan = clamp(110 / Math.max(1, totalDistanceM), 0.0012, 0.01);
+  const farOverlap = clamp(12 / Math.max(1, totalDistanceM), 0.0002, 0.0015);
   const isRelease = treatment.shotKind === "release";
+  const isOverview =
+    treatment.shotKind === "establishing" ||
+    treatment.shotKind === "reveal" ||
+    isRelease;
   const hasTreatment = end > start;
-  const motionLift = 0.9 + clamp(treatment.motionIntensity) * 0.1;
+  const motionLift = 0.98 + clamp(treatment.motionIntensity) * 0.04;
   return [
     {
-      color: "#f2e8db",
+      color: "#f4efe7",
       endRatio: isRelease ? 1 : end,
-      opacity: hasTreatment ? (isRelease ? 0.26 : 0.44) : 0,
-      outerColor: "#211b17",
-      outerWidth: 0.12,
-      role: "guide",
+      opacity: hasTreatment && isOverview ? (isRelease ? 0.24 : 0.32) : 0,
+      outerColor: "rgba(28, 45, 75, 0.62)",
+      outerWidth: 0.1,
+      role: "context",
       startRatio: isRelease ? 0 : start,
-      width: Math.max(1.6, baseWidth * 0.56),
+      width: threadWidth * 0.9,
     },
     {
-      color: "#d6b8a8",
+      color: "#fffaf2",
       endRatio: end,
-      opacity: hasTreatment ? (isRelease ? 0.18 : 0.3) : 0,
-      outerColor: "#211b17",
+      opacity: hasTreatment && !isOverview ? 0.5 : 0,
+      outerColor: "rgba(28, 45, 75, 0.56)",
       outerWidth: 0.1,
       role: "future",
-      startRatio: focus,
-      width: Math.max(1.4, baseWidth * 0.54),
+      startRatio: Math.max(focus, focus + leadSpan - farOverlap),
+      width: threadWidth * 0.62,
     },
     {
       color: "#f06b50",
       endRatio: focus,
-      opacity: hasTreatment ? (isRelease ? 0.68 : 0.92) : 0,
-      outerColor: "#35221c",
-      outerWidth: 0.14,
-      role: "thread",
-      startRatio: start,
-      width: baseWidth * motionLift,
-    },
-    {
-      color: "#fffdf1",
-      endRatio: Math.min(end, focus + glintSpan * 0.35),
-      opacity: hasTreatment ? (isRelease ? 0.38 : 0.68) : 0,
+      opacity: hasTreatment && !isOverview ? 0.94 : 0,
       outerColor: "transparent",
       outerWidth: 0,
-      role: "glint",
-      startRatio: Math.max(start, focus - glintSpan),
-      width: Math.max(1.8, baseWidth * 0.72),
+      role: "traveled",
+      startRatio: start,
+      width: threadWidth * motionLift,
+    },
+    {
+      color: "#ffd9c8",
+      endRatio: Math.min(end, focus + leadSpan),
+      opacity: hasTreatment && !isOverview ? 0.84 : 0,
+      outerColor: "transparent",
+      outerWidth: 0,
+      role: "lead",
+      startRatio: focus,
+      width: threadWidth + 0.2,
     },
   ];
 }
@@ -108,6 +120,81 @@ export function slicePathByRatio<T extends { lat: number; lng: number }>(
   }
   points.push(interpolatePathPoint(path, endPosition));
   return points;
+}
+
+export function conditionCinematicPath<T extends { lat: number; lng: number }>(
+  path: T[],
+  rangeM: number,
+): Array<{ lat: number; lng: number }> {
+  if (path.length < 3 || rangeM <= 800) return path;
+  const toleranceM =
+    rangeM <= 2_500 ? 2 : rangeM <= 6_000 ? 5 : 10;
+  const retained = new Set<number>([0, path.length - 1]);
+  const segments: Array<[number, number]> = [[0, path.length - 1]];
+  while (segments.length > 0) {
+    const [startIndex, endIndex] = segments.pop() ?? [0, 0];
+    const detailIndex = mostDetailedPoint(
+      path,
+      startIndex,
+      endIndex,
+      toleranceM,
+    );
+    if (detailIndex < 0) continue;
+    retained.add(detailIndex);
+    segments.push([startIndex, detailIndex], [detailIndex, endIndex]);
+  }
+  return [...retained]
+    .sort((a, b) => a - b)
+    .map((index) => ({ lat: path[index].lat, lng: path[index].lng }));
+}
+
+function mostDetailedPoint<T extends { lat: number; lng: number }>(
+  path: T[],
+  startIndex: number,
+  endIndex: number,
+  toleranceM: number,
+) {
+  let detailIndex = -1;
+  let greatestDistanceM = 0;
+  for (let index = startIndex + 1; index < endIndex; index += 1) {
+    const distanceM = pointToSegmentDistanceM(
+      path[index],
+      path[startIndex],
+      path[endIndex],
+    );
+    if (distanceM > greatestDistanceM) {
+      detailIndex = index;
+      greatestDistanceM = distanceM;
+    }
+  }
+  return greatestDistanceM > toleranceM ? detailIndex : -1;
+}
+
+function pointToSegmentDistanceM(
+  point: { lat: number; lng: number },
+  start: { lat: number; lng: number },
+  end: { lat: number; lng: number },
+) {
+  const latitudeRadians = (point.lat * Math.PI) / 180;
+  const xScale = 111_320 * Math.cos(latitudeRadians);
+  const pointX = point.lng * xScale;
+  const pointY = point.lat * 111_320;
+  const startX = start.lng * xScale;
+  const startY = start.lat * 111_320;
+  const endX = end.lng * xScale;
+  const endY = end.lat * 111_320;
+  const segmentX = endX - startX;
+  const segmentY = endY - startY;
+  const lengthSquared = segmentX * segmentX + segmentY * segmentY;
+  if (lengthSquared === 0) return Math.hypot(pointX - startX, pointY - startY);
+  const amount = clamp(
+    ((pointX - startX) * segmentX + (pointY - startY) * segmentY) /
+      lengthSquared,
+  );
+  return Math.hypot(
+    pointX - (startX + segmentX * amount),
+    pointY - (startY + segmentY * amount),
+  );
 }
 
 function interpolatePathPoint<T extends { lat: number; lng: number }>(

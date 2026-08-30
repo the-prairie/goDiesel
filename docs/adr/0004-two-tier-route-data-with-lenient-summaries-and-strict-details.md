@@ -27,8 +27,8 @@ Generate two artifacts from one source of truth.
 - **Summaries** — `routes.manifest.json`, bundled and imported eagerly. Geometry
   is simplified to at most 96 tuple points per route, enough to draw a
   recognisable thread. Curation is reduced to a `guide_preview`.
-- **Details** — `app/public/data/routes/<slug>.json`, fetched lazily per route
-  and byte-identical to its element of the generated set.
+- **Details** — `app/public/data/routes/<slug>.json`, fetched lazily per route.
+  Each file is the canonical full generated record for that route.
 
 Parse the two tiers with deliberately different strictness:
 
@@ -50,13 +50,12 @@ Parse the two tiers with deliberately different strictness:
   monotonic distance and time, `kind`/`source` agreement, `bestInEarth` implying
   `earth`, closed curation schema, valid IANA timezones.
 - Cost: the bundled manifest is about 496 KiB against a 500 KiB shell budget, so
-  the budget is nearly exhausted by data. Additionally, a 4.3 MB
-  `quests.generated.json` is committed under `app/src/data/` and is not imported
-  by the application.
+  the budget is nearly exhausted by data. The generator publishes no third,
+  complete aggregate; full records exist only in the lazy detail tier.
 
 ## Evidence
 
-- `app/src/domain/routes.ts`, `app/src/data/route-repository.ts`,
+- `app/src/domain/route/`, `app/src/data/route-repository.ts`,
   `app/src/data/use-route-detail.ts`
 - `app/scripts/check-bundle-budget.mjs`
 - `build.py` (`react_route_manifest_record`, `simplify_route_for_manifest`)

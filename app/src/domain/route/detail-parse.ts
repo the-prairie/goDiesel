@@ -2,7 +2,7 @@
 
 import type { RouteLifecycle } from "@/domain/route/lifecycle";
 import type { RouteAnnotation, RouteAnnotationMedia, GeneratedQuestRoute, QuestRoute, ReplayMetadata, RouteCuration, RouteGeometryStatus, RoutePoint, RouteProvenance, RouteDiscontinuityKind, RouteDiscontinuitySource, RouteTemporalProvenance } from "@/domain/route/contract";
-import { curationFieldSet, curationFields, generatedRoute, numberValue, optionalCurationList, optionalCurationText, parsedRoutePoints, requiredSlug, stringValue, validTimeZone } from "@/domain/route/parse-shared";
+import { curationFieldSet, curationFields, generatedRoute, optionalCurationList, optionalCurationText, parsedRoutePoints, requiredSlug, validTimeZone } from "@/domain/route/parse-shared";
 
 function validatedCuration(value: unknown): RouteCuration {
   if (value === undefined) return { reviewStatus: "draft" };

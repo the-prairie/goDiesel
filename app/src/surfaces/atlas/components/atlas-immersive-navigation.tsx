@@ -1,6 +1,6 @@
 import { Menu } from "lucide-react";
-import { useRef } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 
 import { Button } from "@/ui/button";
 import {
@@ -18,8 +18,18 @@ import { cn } from "@/ui/utils";
 import { APP_PATHS } from "@/app/route-paths";
 import { APP_SECTIONS } from "@/app/app-sections";
 
-export function AtlasImmersiveNavigation() {
+export function AtlasImmersiveNavigation({
+  activeMode = "atlas",
+}: {
+  activeMode?: "atlas" | "finder" | "routes";
+}) {
   const firstDestinationRef = useRef<HTMLAnchorElement>(null);
+  const location = useLocation();
+  const [navigationOpen, setNavigationOpen] = useState(false);
+
+  useEffect(() => {
+    setNavigationOpen(false);
+  }, [location.pathname]);
 
   return (
     <>
@@ -28,7 +38,7 @@ export function AtlasImmersiveNavigation() {
         className="fixed left-5 top-5 z-[var(--z-navigation)] hidden h-[54px] items-center border border-white/40 bg-[#07151c]/94 text-white shadow-lg backdrop-blur-md md:flex"
       >
         <Link
-          to={APP_PATHS.atlas}
+          to={`${APP_PATHS.atlas}?view=world`}
           aria-label="Return to global Atlas"
           className="flex h-full items-center gap-2.5 px-3 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#63d6cf]"
         >
@@ -36,7 +46,7 @@ export function AtlasImmersiveNavigation() {
           <span className="font-editorial text-lg font-semibold">goDiesel</span>
         </Link>
 
-        <Sheet>
+        <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}>
           <SheetTrigger asChild>
             <Button
               type="button"
@@ -72,13 +82,13 @@ export function AtlasImmersiveNavigation() {
                 return (
                   <SheetClose key={section.path} asChild>
                     <Link
-                      ref={section.id === "atlas" ? firstDestinationRef : undefined}
+                      ref={section.id === activeMode ? firstDestinationRef : undefined}
                       to={section.path}
-                      aria-current={section.id === "atlas" ? "page" : undefined}
+                      aria-current={section.id === activeMode ? "page" : undefined}
                       className={cn(
                         "flex min-h-12 items-center gap-3 rounded-[var(--radius-control)] px-3 text-control outline-none transition-colors",
                         "focus-visible:ring-2 focus-visible:ring-ring",
-                        section.id === "atlas"
+                        section.id === activeMode
                           ? "bg-forest-soft text-forest"
                           : "text-ink-secondary hover:bg-surface-muted hover:text-ink",
                       )}
@@ -109,14 +119,37 @@ export function AtlasImmersiveNavigation() {
       >
         <Link
           to={APP_PATHS.atlas}
-          aria-current="page"
-          className="inline-flex h-11 items-center bg-white px-4 text-sm font-semibold text-[#15221e] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#63d6cf]"
+          aria-current={activeMode === "atlas" ? "page" : undefined}
+          className={cn(
+            "inline-flex h-11 items-center px-4 text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#63d6cf]",
+            activeMode === "atlas"
+              ? "bg-white font-semibold text-[#15221e]"
+              : "text-white/78 hover:bg-white/10 hover:text-white",
+          )}
         >
           Memories
         </Link>
         <Link
+          to={APP_PATHS.routes}
+          aria-current={activeMode === "routes" ? "page" : undefined}
+          className={cn(
+            "inline-flex h-11 items-center px-4 text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#63d6cf]",
+            activeMode === "routes"
+              ? "bg-white font-semibold text-[#15221e]"
+              : "text-white/78 hover:bg-white/10 hover:text-white",
+          )}
+        >
+          Routes
+        </Link>
+        <Link
           to={APP_PATHS.finder}
-          className="inline-flex h-11 items-center px-4 text-sm text-white/78 outline-none hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#63d6cf]"
+          aria-current={activeMode === "finder" ? "page" : undefined}
+          className={cn(
+            "inline-flex h-11 items-center px-4 text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#63d6cf]",
+            activeMode === "finder"
+              ? "bg-white font-semibold text-[#15221e]"
+              : "text-white/78 hover:bg-white/10 hover:text-white",
+          )}
         >
           Plan
         </Link>

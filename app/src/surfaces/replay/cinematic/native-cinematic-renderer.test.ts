@@ -8,6 +8,7 @@ import {
 import { stabilizeCamera } from "@/surfaces/replay/cinematic/native-cinematic-renderer";
 import {
   buildCinematicThreadStyles,
+  conditionCinematicPath,
   slicePathByRatio,
 } from "@/surfaces/replay/cinematic/cinematic-route-filament";
 
@@ -81,7 +82,7 @@ describe("native cinematic camera stabilizer", () => {
 });
 
 describe("cinematic route filament", () => {
-  it("builds a legible guide, warm thread, and luminous focus", () => {
+  it("builds a quiet context trace, pearl future, coral history, and a short lead", () => {
     const styles = buildCinematicThreadStyles(
       {
         endRatio: 0.68,
@@ -94,21 +95,32 @@ describe("cinematic route filament", () => {
       21_500,
     );
     expect(styles).toHaveLength(4);
-    const guide = styles.find(({ role }) => role === "guide");
-    const thread = styles.find(({ role }) => role === "thread");
+    const context = styles.find(({ role }) => role === "context");
+    const traveled = styles.find(({ role }) => role === "traveled");
     const future = styles.find(({ role }) => role === "future");
-    const glint = styles.find(({ role }) => role === "glint");
-    expect(guide?.startRatio).toBe(0.31);
-    expect(guide?.endRatio).toBe(0.68);
-    expect(guide?.opacity ?? 0).toBeGreaterThan(0.4);
-    expect(thread?.endRatio).toBe(0.61);
-    expect(thread?.startRatio).toBe(0.31);
-    expect(thread?.width ?? 0).toBeGreaterThan(2.4);
-    expect(thread?.width ?? 0).toBeLessThanOrEqual(4.2);
-    expect(thread?.outerWidth ?? 1).toBeLessThanOrEqual(0.2);
-    expect(future?.opacity ?? 1).toBeLessThan(thread?.opacity ?? 0);
-    expect(glint?.color).toBe("#fffdf1");
-    expect(glint?.width ?? 0).toBeLessThanOrEqual(thread?.width ?? 0);
+    const lead = styles.find(({ role }) => role === "lead");
+    expect(context?.startRatio).toBe(0.31);
+    expect(context?.endRatio).toBe(0.68);
+    expect(context?.color).toBe("#f4efe7");
+    expect(context?.opacity).toBe(0);
+    expect(context?.outerWidth).toBeCloseTo(0.1);
+    expect(traveled?.endRatio).toBe(0.61);
+    expect(traveled?.startRatio).toBe(0.31);
+    expect(traveled?.color).toBe("#f06b50");
+    expect(traveled?.width ?? 0).toBeGreaterThan(2.2);
+    expect(traveled?.width ?? 0).toBeLessThan(2.8);
+    expect(traveled?.outerWidth).toBe(0);
+    expect(future?.opacity ?? 1).toBeLessThan(traveled?.opacity ?? 0);
+    expect(future?.color).toBe("#fffaf2");
+    expect(future?.width ?? 99).toBeLessThan(traveled?.width ?? 0);
+    expect(future?.startRatio ?? 0).toBeGreaterThan(lead?.startRatio ?? 1);
+    expect(lead?.color).toBe("#ffd9c8");
+    expect(lead?.outerWidth).toBe(0);
+    expect(lead?.startRatio).toBe(0.61);
+    expect(((lead?.endRatio ?? 0) - (lead?.startRatio ?? 0)) * 21_500).toBeCloseTo(
+      110,
+    );
+    expect((lead?.endRatio ?? 0) - (lead?.startRatio ?? 1)).toBeLessThan(0.008);
   });
 
   it("keeps the active route legible at chase-camera distance", () => {
@@ -123,10 +135,41 @@ describe("cinematic route filament", () => {
       },
       28_500,
     );
-    const guide = styles.find(({ role }) => role === "guide");
-    const thread = styles.find(({ role }) => role === "thread");
-    expect(guide?.width ?? 0).toBeGreaterThan(1.4);
-    expect(thread?.width ?? 0).toBeGreaterThan(2.4);
+    const traveled = styles.find(({ role }) => role === "traveled");
+    const lead = styles.find(({ role }) => role === "lead");
+    expect(traveled?.width ?? 0).toBeGreaterThan(2.2);
+    expect(lead?.width ?? 0).toBeGreaterThan(traveled?.width ?? 0);
+  });
+
+  it("keeps the terrain thread legible in distant overview shots", () => {
+    const close = buildCinematicThreadStyles(
+      {
+        endRatio: 0.48,
+        focusRatio: 0.42,
+        motionIntensity: 0.8,
+        rangeM: 350,
+        shotKind: "tracking",
+        startRatio: 0.37,
+      },
+      28_500,
+    );
+    const overview = buildCinematicThreadStyles(
+      {
+        endRatio: 0.8,
+        focusRatio: 0.42,
+        motionIntensity: 0.8,
+        rangeM: 6_000,
+        shotKind: "establishing",
+        startRatio: 0.08,
+      },
+      28_500,
+    );
+    const width = (styles: typeof close, role: string) =>
+      styles.find((style) => style.role === role)?.width ?? 0;
+
+    expect(width(overview, "context")).toBeGreaterThan(width(close, "context"));
+    expect(width(overview, "future")).toBeGreaterThan(width(close, "future"));
+    expect(width(overview, "traveled")).toBeGreaterThan(width(close, "traveled"));
   });
 
   it("makes the complete route quieter for the release shot", () => {
@@ -154,8 +197,8 @@ describe("cinematic route filament", () => {
     );
     const opacity = (styles: typeof tracking, role: string) =>
       styles.find((style) => style.role === role)?.opacity ?? 0;
-    expect(opacity(release, "thread")).toBeLessThan(
-      opacity(tracking, "thread"),
+    expect(opacity(release, "traveled")).toBeLessThan(
+      opacity(tracking, "traveled"),
     );
   });
 
@@ -170,5 +213,25 @@ describe("cinematic route filament", () => {
       { lat: 10, lng: 10 },
       { lat: 15, lng: 15 },
     ]);
+  });
+
+  it("removes redundant wide-view points while preserving endpoints and turns", () => {
+    const path = [
+      { lat: 37, lng: 23 },
+      { lat: 37.000_01, lng: 23.000_01 },
+      { lat: 37.000_02, lng: 23.000_02 },
+      { lat: 37.000_3, lng: 23.000_02 },
+      { lat: 37.000_04, lng: 23.000_51 },
+    ];
+
+    const close = conditionCinematicPath(path, 600);
+    const overview = conditionCinematicPath(path, 8_000);
+
+    expect(close[0]).toEqual(path[0]);
+    expect(close.at(-1)).toEqual(path.at(-1));
+    expect(overview[0]).toEqual(path[0]);
+    expect(overview.at(-1)).toEqual(path.at(-1));
+    expect(overview).toContainEqual(path[3]);
+    expect(overview.length).toBeLessThan(close.length);
   });
 });

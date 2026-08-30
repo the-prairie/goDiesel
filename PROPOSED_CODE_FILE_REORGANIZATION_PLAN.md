@@ -1,10 +1,15 @@
 ---
-status: proposed
+status: historical
 date: 2026-08-08
 scope: app/src only
 ---
 
 # Proposed Code File Reorganization Plan
+
+This is a historical design snapshot, not an executable current plan. Later
+changes reorganized the application and removed artifacts named below, including
+`app/src/data/quests.generated.json`. Re-audit the current tree before using any
+recommendation or measurement from this document.
 
 This plan proposes a new folder structure for `app/src`. **Nothing has been
 changed.** Every recommendation below is reviewable and independently

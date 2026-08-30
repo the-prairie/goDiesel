@@ -64,3 +64,7 @@ export function atlasCameraFrame(
 export function atlasRegionTransitionDurationSeconds(reducedMotion: boolean) {
   return reducedMotion ? 0.12 : 1.15;
 }
+
+export function atlasRouteTransitionDurationSeconds(reducedMotion: boolean) {
+  return reducedMotion ? 0.12 : 0.65;
+}

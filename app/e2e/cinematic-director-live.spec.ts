@@ -88,7 +88,7 @@ for (const route of ROUTES) {
       timeout: 30_000,
     });
     await expect(page.locator("gmp-map-3d")).toBeVisible();
-    // The filament renders four roles: guide, future, thread and glint.
+    // The filament renders overview context plus three temporal tracking roles.
     await expect(page.locator("gmp-polyline-3d")).toHaveCount(4);
     await expect(page.getByTestId("cinematic-preroll")).toBeVisible();
     await expect(director).toHaveAttribute("data-cut", "feature");
@@ -124,7 +124,7 @@ for (const route of ROUTES) {
       body: visual,
       contentType: "image/png",
     });
-    await expect(page.locator('[data-thread-layer="thread"]')).toHaveAttribute(
+    await expect(page.locator('[data-thread-layer="context"]')).toHaveAttribute(
       "data-route-visible",
       "false",
     );
@@ -141,7 +141,7 @@ for (const route of ROUTES) {
     await page.keyboard.press("End");
     await expect(page.getByTestId("cinematic-decision")).toBeVisible();
     await expect(director).toHaveAttribute("data-shot-kind", "release");
-    await expect(page.locator('[data-thread-layer="thread"]')).toHaveAttribute(
+    await expect(page.locator('[data-thread-layer="context"]')).toHaveAttribute(
       "data-route-visible",
       "true",
     );
@@ -150,11 +150,11 @@ for (const route of ROUTES) {
     ).toHaveAttribute("href", `#/lab/google-route-navigator/${route.slug}`);
 
     const routeColor = await page
-      .locator('[data-thread-layer="glint"]')
+      .locator('[data-thread-layer="context"]')
       .evaluate((element) => {
         return (element as HTMLElement & { strokeColor?: string }).strokeColor;
       });
-    expect(routeColor?.toLowerCase()).toBe("#fffdf1");
+    expect(routeColor?.toLowerCase()).toBe("#f4efe7");
   });
 }
 

@@ -382,7 +382,9 @@ The Google Maps browser key remains browser-restricted and is supplied through `
 - Start with explicit owner-curated candidates and imported GPX files rather than synthetic route claims.
 - Save planned routes in a versioned local store.
 - Show planned routes in Routes under a separate lifecycle filter and visual treatment.
-- Define the future promotion contract from planned to completed without implementing Strava OAuth.
+- Give saved plans a durable detail where intent can be edited or removed.
+- Implement the local promotion contract without Strava OAuth: compare only later recorded
+  activities, require explicit confirmation, remove the plan, and open the existing recorded route.
 
 **Primary files:**
 
@@ -399,6 +401,8 @@ The Google Maps browser key remains browser-restricted and is supplied through `
 - Saving a candidate creates a planned route only.
 - Planned routes never appear in completed Atlas heat or completed totals.
 - Reloading the app preserves planned routes locally.
+- A plan is never promoted from its planning source or from an unrecorded claim.
+- Confirming completion requires a later recorded activity and opens that activity's existing memory.
 - Unsupported searches explain the current source limitation without inventing results.
 
 ### U7. Build the Owner Curation Surface

@@ -5,6 +5,7 @@ import {
   regionalFitBounds,
   regionalMapPadding,
   regionalRouteCollection,
+  regionalRouteFitBounds,
   type RegionalRouteBounds,
   unwrapLongitudeAroundCenter,
 } from "@/surfaces/atlas/components/atlas-regional-fallback";
@@ -124,6 +125,13 @@ describe("AtlasRegionalFallback geography", () => {
     expect(regionalFitBounds(region([route()]))).toEqual([
       [170, 8],
       [190, 12],
+    ]);
+  });
+
+  it("frames one selected route without losing antimeridian continuity", () => {
+    expect(regionalRouteFitBounds(route(), 180)).toEqual([
+      [179, 10],
+      [181, 10.2],
     ]);
   });
 
