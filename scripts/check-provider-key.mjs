@@ -35,6 +35,9 @@ async function configuredKey() {
 
 const key = await configuredKey();
 if (!key) {
+  if (process.env.GODIESEL_REQUIRE_PROVIDER_KEY === "1") {
+    fail("a Google Maps key is required for a public deployment.");
+  }
   console.log("Provider key check skipped: no Google Maps key is configured.");
   process.exit(0);
 }
