@@ -52,7 +52,8 @@ export function routeStoryChapters(route: QuestRoute): RouteStoryChapter[] {
     chapters.push({
       id: annotation.id,
       kind: "annotation",
-      title: annotation.title || annotationKindTitle(annotation.kind),
+      title:
+        annotation.title || annotationKindTitle(annotation.kind, annotation.evidence),
       body: annotation.body,
       evidence: annotation.evidence,
       distanceM: annotation.atDistanceM,
@@ -119,9 +120,14 @@ export function distanceLabel(distanceM: number) {
     : `${(distanceM / 1_000).toFixed(1)} km`;
 }
 
-function annotationKindTitle(kind: QuestRoute["annotations"][number]["kind"]) {
+function annotationKindTitle(
+  kind: QuestRoute["annotations"][number]["kind"],
+  evidence: RouteAnnotationEvidence,
+) {
   if (kind === "warning") return "Watch this section";
-  if (kind === "landmark") return "A recorded landmark";
+  if (kind === "landmark") {
+    return evidence === "hypothesis" ? "Possible landmark" : "A recorded landmark";
+  }
   if (kind === "image") return "A photographed moment";
   return "Field note";
 }

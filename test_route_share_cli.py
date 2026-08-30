@@ -103,7 +103,7 @@ def test_preview_refuses_blocked_source_health_before_starting_server(tmp_path: 
     assert not calls.exists()
 
 
-def test_publish_refuses_an_existing_share_without_explicit_replacement(tmp_path: Path):
+def test_publish_treats_an_initial_redirect_as_an_existing_share(tmp_path: Path):
     scripts = tmp_path / "scripts"
     scripts.mkdir()
     shutil.copyfile(
@@ -114,10 +114,14 @@ def test_publish_refuses_an_existing_share_without_explicit_replacement(tmp_path
     executable(tmp_path / "make-dist.sh", "#!/bin/bash\nexit 0\n")
     (tmp_path / "app").mkdir()
     calls = tmp_path / "calls.log"
+    curl_calls = tmp_path / "curl-calls.log"
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     executable(bin_dir / "node", "#!/bin/bash\nexit 0\n")
-    executable(bin_dir / "curl", "#!/bin/bash\nprintf '200'\n")
+    executable(
+        bin_dir / "curl",
+        f"#!/bin/bash\nprintf '%s\\n' \"$*\" >> {curl_calls}\nprintf '302'\n",
+    )
     executable(
         bin_dir / "npx",
         f"""#!/bin/bash
@@ -142,6 +146,7 @@ exit 0
     assert completed.returncode != 0
     assert "Refusing to replace existing share" in completed.stderr
     assert "wrangler pages deploy dist" not in calls.read_text(encoding="utf-8")
+    assert "--location" not in curl_calls.read_text(encoding="utf-8")
 
 
 def test_microsite_validator_redacts_checkout_paths():

@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
+from unittest.mock import patch
 
 from PIL import Image
 
@@ -360,7 +361,7 @@ class RouteCreateTest(unittest.TestCase):
                             "id": "bypass",
                             "at_distance_m": 100,
                             "kind": "image",
-                            "evidence": "recorded",
+                            "evidence": "hypothesis",
                             "body": "Unregistered media.",
                             "media": {
                                 "url": "media/gpx-bypass/original.jpg",
@@ -373,6 +374,25 @@ class RouteCreateTest(unittest.TestCase):
                 ),
                 self.root,
             )
+        self.assertEqual(raised.exception.code, "request.schema")
+
+    def test_prompt_annotations_cannot_claim_unsupported_evidence(self):
+        with self.assertRaises(RouteCreateError) as raised:
+            propose_request(
+                self.request(
+                    annotations=[
+                        {
+                            "id": "unsupported-water-claim",
+                            "at_distance_m": 100,
+                            "kind": "landmark",
+                            "evidence": "recorded",
+                            "body": "Drinking water is guaranteed year-round.",
+                        }
+                    ]
+                ),
+                self.root,
+            )
+
         self.assertEqual(raised.exception.code, "request.schema")
 
     def test_retry_uses_durable_source_when_staging_is_absent(self):
@@ -453,6 +473,70 @@ class RouteCreateTest(unittest.TestCase):
         retried = apply_proposal(proposal, self.root, rebuild=lambda: {"publishable": True})
         self.assertEqual(retried["result"], "already_applied")
 
+    def test_apply_rejects_media_from_another_proposal(self):
+        first_photo = self.root / "owner-files" / "first.jpg"
+        second_photo = self.root / "owner-files" / "second.jpg"
+        Image.new("RGB", (16, 16), color=(10, 20, 30)).save(first_photo, "JPEG")
+        Image.new("RGB", (16, 16), color=(40, 50, 60)).save(second_photo, "JPEG")
+        media = lambda path: [{"path": str(path), "association": {"kind": "route"}}]
+        first = propose_request(
+            self.request(desired_route_id="gpx-first-media", media=media(first_photo)),
+            self.root,
+        )
+        second = propose_request(
+            self.request(desired_route_id="gpx-second-media", media=media(second_photo)),
+            self.root,
+        )
+        first["media"] = second["media"]
+
+        with self.assertRaises(RouteCreateError) as raised:
+            apply_proposal(first, self.root, rebuild=lambda: None)
+
+        self.assertEqual(raised.exception.code, "proposal.semantic_mismatch")
+        self.assertEqual(json.loads((self.root / "quests.json").read_text())["routes"], [])
+
+    def test_one_image_can_be_registered_for_two_annotations_and_retried(self):
+        photo = self.root / "owner-files" / "shared.jpg"
+        Image.new("RGB", (24, 16), color=(30, 90, 120)).save(photo, "JPEG")
+        annotations = [
+            {
+                "id": annotation_id,
+                "at_distance_m": distance,
+                "kind": "warning",
+                "evidence": "hypothesis",
+                "body": body,
+            }
+            for annotation_id, distance, body in (
+                ("first-view", 100, "First review point."),
+                ("second-view", 200, "Second review point."),
+            )
+        ]
+        proposal = propose_request(
+            self.request(
+                annotations=annotations,
+                media=[
+                    {
+                        "path": str(photo),
+                        "association": {"kind": "annotation", "annotation_id": annotation["id"]},
+                    }
+                    for annotation in annotations
+                ],
+            ),
+            self.root,
+        )
+
+        apply_proposal(proposal, self.root, rebuild=lambda: None)
+        route = json.loads((self.root / "quests.json").read_text())["routes"][0]
+        self.assertEqual(len(route["source_media"]), 2)
+        self.assertEqual(
+            {item["association"]["annotation_id"] for item in route["source_media"]},
+            {"first-view", "second-view"},
+        )
+        for item in proposal["media"]:
+            (self.root / item["staged_path"]).unlink()
+        retried = apply_proposal(proposal, self.root, rebuild=lambda: {"publishable": True})
+        self.assertEqual(retried["result"], "already_applied")
+
     def test_media_annotation_association_must_name_a_supplied_annotation(self):
         photo = self.root / "owner-files" / "ridge.jpg"
         Image.new("RGB", (8, 8)).save(photo, "JPEG")
@@ -485,7 +569,7 @@ class RouteCreateTest(unittest.TestCase):
                         "id": "invalid-photo",
                         "at_distance_m": 100,
                         "kind": "image",
-                        "evidence": "recorded",
+                        "evidence": "hypothesis",
                         "body": "This annotation depends on the unreadable image.",
                     }
                 ],
@@ -521,7 +605,7 @@ class RouteCreateTest(unittest.TestCase):
             "id": "ridge-view",
             "at_distance_m": 100,
             "kind": "warning",
-            "evidence": "recorded",
+            "evidence": "hypothesis",
             "body": "The ridge view.",
         }
         first = propose_request(
@@ -565,6 +649,131 @@ class RouteCreateTest(unittest.TestCase):
             {record["sha256"] for record in route["source_media"]},
             {first["media"][0]["sha256"], second["media"][0]["sha256"]},
         )
+
+    def test_existing_route_can_add_a_new_image_annotation(self):
+        first = propose_request(self.request(), self.root)
+        apply_proposal(first, self.root, rebuild=lambda: None)
+        slug = first["route_spec"]["activity_id"]
+        self.write_generated_detail(
+            slug,
+            distance_m=first["observations"]["distance_m"],
+            temporal_status=first["observations"]["temporal"]["status"],
+        )
+        photo = self.root / "owner-files" / "new-annotation.jpg"
+        Image.new("RGB", (16, 12), color=(70, 80, 90)).save(photo, "JPEG")
+        update = propose_request(
+            {
+                "schema_version": 1,
+                "existing_slug": slug,
+                "annotations": [
+                    {
+                        "id": "new-image",
+                        "at_distance_m": 100,
+                        "kind": "image",
+                        "evidence": "hypothesis",
+                        "body": "Owner-selected image for this point.",
+                    }
+                ],
+                "media": [
+                    {
+                        "path": str(photo),
+                        "association": {"kind": "annotation", "annotation_id": "new-image"},
+                    }
+                ],
+            },
+            self.root,
+        )
+
+        apply_proposal(update, self.root, rebuild=lambda: None)
+        route = json.loads((self.root / "quests.json").read_text())["routes"][0]
+        self.assertTrue(route["annotations"][0]["media"]["url"].startswith(f"media/{slug}/"))
+
+    def test_update_retry_validates_media_inherited_from_an_earlier_proposal(self):
+        photo = self.root / "owner-files" / "route.jpg"
+        Image.new("RGB", (16, 12), color=(20, 30, 40)).save(photo, "JPEG")
+        first = propose_request(
+            self.request(media=[{"path": str(photo), "association": {"kind": "route"}}]),
+            self.root,
+        )
+        apply_proposal(first, self.root, rebuild=lambda: None)
+        slug = first["route_spec"]["activity_id"]
+        self.write_generated_detail(
+            slug,
+            distance_m=first["observations"]["distance_m"],
+            temporal_status=first["observations"]["temporal"]["status"],
+        )
+        update = propose_request(
+            {
+                "schema_version": 1,
+                "existing_slug": slug,
+                "curation": {"vibe": "A revised route premise."},
+            },
+            self.root,
+        )
+        apply_proposal(update, self.root, rebuild=lambda: None)
+        route = json.loads((self.root / "quests.json").read_text())["routes"][0]
+        (self.root / route["source_media"][0]["path"]).unlink()
+
+        with self.assertRaises(RouteCreateError) as raised:
+            apply_proposal(update, self.root, rebuild=lambda: {"publishable": True})
+
+        self.assertEqual(raised.exception.code, "media.missing_durable")
+
+    def test_apply_rejects_tampered_capture_metadata(self):
+        photo = self.root / "owner-files" / "metadata.jpg"
+        Image.new("RGB", (16, 12), color=(20, 30, 40)).save(photo, "JPEG")
+        proposal = propose_request(
+            self.request(media=[{"path": str(photo), "association": {"kind": "route"}}]),
+            self.root,
+        )
+        proposal["media"][0]["capture_metadata"] = {"status": "invented"}
+
+        with self.assertRaises(RouteCreateError) as raised:
+            apply_proposal(proposal, self.root, rebuild=lambda: None)
+
+        self.assertEqual(raised.exception.code, "proposal.semantic_mismatch")
+
+    def test_rebuild_failure_preserves_exit_code_without_streaming_private_paths(self):
+        proposal = propose_request(self.request(), self.root)
+        private_path = self.root / "owner-files" / "secret.gpx"
+        rebuild = self.root / "rebuild.sh"
+        rebuild.write_text(
+            f"#!/bin/bash\nprintf '%s\\n' '{private_path}' >&2\nexit 7\n",
+            encoding="utf-8",
+        )
+        rebuild.chmod(0o755)
+        stderr = io.StringIO()
+
+        with redirect_stderr(stderr), self.assertRaises(RouteCreateError) as raised:
+            apply_proposal(proposal, self.root)
+
+        self.assertEqual(raised.exception.exit_code, 7)
+        self.assertEqual(stderr.getvalue(), "")
+        recovery = self.root / ".route-share/recovery" / f"{proposal['proposal_id']}.json"
+        report = json.loads(recovery.read_text(encoding="utf-8"))
+        self.assertEqual(report["downstream_exit_code"], 7)
+        self.assertNotIn(str(self.root), json.dumps(report))
+
+    def test_cli_returns_the_downstream_validation_exit_code(self):
+        proposal_path = self.root / "proposal.json"
+        proposal_path.write_text("{}\n", encoding="utf-8")
+        stderr = io.StringIO()
+
+        with (
+            patch(
+                "route_create.apply_proposal",
+                side_effect=RouteCreateError(
+                    "create.validation_failed",
+                    "validation failed",
+                    exit_code=7,
+                ),
+            ),
+            redirect_stderr(stderr),
+        ):
+            result = main(["create", "--proposal", str(proposal_path)])
+
+        self.assertEqual(result, 7)
+        self.assertEqual(json.loads(stderr.getvalue())["error"]["code"], "create.validation_failed")
 
     def test_unreadable_request_report_does_not_expose_absolute_paths(self):
         private_path = self.root / "private-owner-folder" / "missing-request.json"

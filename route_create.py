@@ -11,7 +11,6 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
 import uuid
 
@@ -66,9 +65,10 @@ EXISTING_REQUEST_FIELDS = frozenset(
 class RouteCreateError(ValueError):
     """A stable, machine-readable route creation failure."""
 
-    def __init__(self, code: str, message: str):
+    def __init__(self, code: str, message: str, *, exit_code: int = 1):
         super().__init__(message)
         self.code = code
+        self.exit_code = exit_code
 
     def as_report(self) -> dict[str, object]:
         return {"ok": False, "error": {"code": self.code, "message": str(self)}}
@@ -311,6 +311,16 @@ def _json_capture_metadata(value: dict[str, object]) -> dict[str, object]:
     }
 
 
+def _derived_capture_metadata(source: Path, kind: str) -> dict[str, object]:
+    try:
+        metadata = (
+            read_photo_metadata(source) if kind == "image" else read_video_metadata(source)
+        )
+        return _json_capture_metadata(metadata)
+    except Exception:
+        return {"status": "unavailable"}
+
+
 def _stage_media(
     media_requests: object,
     root: Path,
@@ -348,10 +358,11 @@ def _stage_media(
                 )
                 continue
         digest = _file_sha256(source)
+        staged_index = len(staged_media)
         staged_path = _stage_file(
             source,
             root,
-            f"{proposal_id}-media-{index}{source.suffix.lower()}",
+            f"{proposal_id}-media-{staged_index}{source.suffix.lower()}",
             digest,
         )
         try:
@@ -703,7 +714,7 @@ def _validated_staged_media(
 ) -> None:
     staging_root = (root / ".route-share" / "staging").resolve()
     slug = str(proposal["route_spec"]["activity_id"])
-    for item in proposal.get("media", []):
+    for index, item in enumerate(proposal.get("media", [])):
         association = item["association"]
         annotation_id = association.get("annotation_id")
         if association["kind"] == "annotation" and annotation_id not in annotation_ids:
@@ -711,7 +722,26 @@ def _validated_staged_media(
                 "media.association_missing",
                 f"annotation {annotation_id} no longer exists in the proposal",
             )
-        staged = (root / item["staged_path"]).resolve()
+        extension = Path(str(item["filename"])).suffix.lower()
+        expected_kind = (
+            "image"
+            if extension in IMAGE_EXTENSIONS
+            else "video"
+            if extension in VIDEO_EXTENSIONS
+            else None
+        )
+        expected_staged = f".route-share/staging/{proposal['proposal_id']}-media-{index}{extension}"
+        if (
+            Path(str(item["filename"])).name != item["filename"]
+            or expected_kind is None
+            or item["kind"] != expected_kind
+            or item["staged_path"] != expected_staged
+        ):
+            raise RouteCreateError(
+                "proposal.semantic_mismatch",
+                "proposal media identity changed after approval",
+            )
+        staged = (root / expected_staged).resolve()
         if not staged.is_relative_to(staging_root) or not staged.is_file():
             raise RouteCreateError("media.missing_staged", "approved proposal media is unavailable")
         try:
@@ -723,6 +753,12 @@ def _validated_staged_media(
             ) from error
         if actual != item["sha256"]:
             raise RouteCreateError("media.checksum_mismatch", "staged media changed after proposal")
+        derived_metadata = _derived_capture_metadata(staged, item["kind"])
+        if item["capture_metadata"] != derived_metadata:
+            raise RouteCreateError(
+                "proposal.semantic_mismatch",
+                "proposal media capture metadata changed after approval",
+            )
         if item["kind"] == "image":
             try:
                 with tempfile.TemporaryDirectory() as directory:
@@ -810,6 +846,7 @@ def _route_spec_with_registered_media(
         if not any(
             existing.get("path") == record["path"]
             and existing.get("sha256") == record["sha256"]
+            and existing.get("association") == record["association"]
             for existing in registered
         ):
             registered.append(record)
@@ -864,6 +901,69 @@ def _validate_applied_files(
         _validated_source_path(proposal, root, durable=True)
     registered = existing.get("source_media", [])
     slug = str(existing["activity_id"])
+    media_root = (root / "route_sources" / "media" / slug).resolve()
+    annotation_ids = {
+        str(annotation.get("id"))
+        for annotation in existing.get("annotations", [])
+        if isinstance(annotation, dict)
+    }
+    if not isinstance(registered, list):
+        raise RouteCreateError("media.invalid_durable", "registered route media is invalid")
+    for record in registered:
+        if not isinstance(record, dict):
+            raise RouteCreateError("media.invalid_durable", "registered route media is invalid")
+        relative = str(record.get("path") or "")
+        sha256 = str(record.get("sha256") or "")
+        kind = record.get("kind")
+        association = record.get("association")
+        extension = Path(relative).suffix.lower()
+        expected_kind = (
+            "image"
+            if extension in IMAGE_EXTENSIONS
+            else "video"
+            if extension in VIDEO_EXTENSIONS
+            else None
+        )
+        expected_path = f"route_sources/media/{slug}/{sha256}{extension}"
+        route_association = (
+            isinstance(association, dict)
+            and set(association) == {"kind"}
+            and association.get("kind") == "route"
+        )
+        annotation_association = (
+            isinstance(association, dict)
+            and set(association) == {"kind", "annotation_id"}
+            and association.get("kind") == "annotation"
+            and str(association.get("annotation_id")) in annotation_ids
+        )
+        durable = (root / relative).resolve()
+        if (
+            not re.fullmatch(r"[0-9a-f]{64}", sha256)
+            or kind != expected_kind
+            or relative != expected_path
+            or not (route_association or annotation_association)
+            or not durable.is_relative_to(media_root)
+            or not durable.is_file()
+        ):
+            raise RouteCreateError(
+                "media.missing_durable",
+                "registered route media is unavailable or invalid",
+            )
+        try:
+            actual_sha256 = _file_sha256(durable)
+        except OSError as error:
+            raise RouteCreateError(
+                "media.unreadable",
+                f"registered route media is unreadable: {error.__class__.__name__}",
+            ) from error
+        if (
+            actual_sha256 != sha256
+            or record.get("capture_metadata") != _derived_capture_metadata(durable, kind)
+        ):
+            raise RouteCreateError(
+                "media.missing_durable",
+                "registered route media is unavailable or changed",
+            )
     for item in proposal.get("media", []):
         extension = Path(item["staged_path"]).suffix.lower()
         expected_path = f"route_sources/media/{slug}/{item['sha256']}{extension}"
@@ -1049,7 +1149,11 @@ def _validate_proposal_semantics(
     distance_m = float(expected_observations["distance_m"])
     raw_annotations = route_spec.get("annotations", [])
     try:
-        normalized_annotations = build_route_annotations(raw_annotations, distance_m)
+        normalized_annotations = build_route_annotations(
+            raw_annotations,
+            distance_m,
+            allow_unpublished_image=True,
+        )
     except ValueError as error:
         raise RouteCreateError("proposal.semantic_mismatch", str(error)) from error
     if normalized_annotations != raw_annotations:
@@ -1062,6 +1166,11 @@ def _validate_proposal_semantics(
         for annotation in existing.get("annotations", [])
         if isinstance(annotation, dict) and annotation.get("media") is not None
     }
+    staged_image_annotations = {
+        str(item["association"].get("annotation_id"))
+        for item in proposal.get("media", [])
+        if item.get("kind") == "image" and item.get("association", {}).get("kind") == "annotation"
+    }
     for annotation in normalized_annotations:
         if annotation.get("media") is not None and annotation.get("media") != existing_media.get(
             str(annotation["id"])
@@ -1069,6 +1178,15 @@ def _validate_proposal_semantics(
             raise RouteCreateError(
                 "proposal.semantic_mismatch",
                 "updated annotation media must come from registered proposal media",
+            )
+        if (
+            annotation["kind"] == "image"
+            and annotation.get("media") is None
+            and annotation["id"] not in staged_image_annotations
+        ):
+            raise RouteCreateError(
+                "proposal.semantic_mismatch",
+                "image annotations require staged image media",
             )
     if "curation" in route_spec:
         try:
@@ -1102,13 +1220,15 @@ def _default_rebuild(root: Path, slug: str) -> dict[str, object]:
         [str(root / "rebuild.sh")],
         cwd=root,
         check=True,
-        stdout=sys.stderr,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
     subprocess.run(
         ["node", "scripts/validate-route-microsite.mjs", slug, "source"],
         cwd=root,
         check=True,
-        stdout=sys.stderr,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
     from route_status import route_status
 
@@ -1140,10 +1260,18 @@ def _run_rebuild_validation(
             "status": "canonical_writes_complete_validation_failed",
             "error_type": error.__class__.__name__,
         }
+        if isinstance(error, subprocess.CalledProcessError):
+            report["downstream_exit_code"] = error.returncode
         _write_atomic(recovery_report, json.dumps(report, indent=2) + "\n")
         raise RouteCreateError(
             "create.validation_failed",
             "canonical route and source were written, but rebuild validation failed; see .route-share/recovery",
+            exit_code=(
+                error.returncode
+                if isinstance(error, subprocess.CalledProcessError)
+                and 1 <= error.returncode <= 255
+                else 1
+            ),
         ) from error
     recovery_report.unlink(missing_ok=True)
     return validation
@@ -1286,7 +1414,7 @@ def main(argv: list[str] | None = None) -> int:
             report = apply_proposal(_read_json(args.proposal, "proposal.unreadable"), root)
     except RouteCreateError as error:
         print(json.dumps(error.as_report(), indent=2), file=__import__("sys").stderr)
-        return 1
+        return error.exit_code
     except Exception as error:
         report = RouteCreateError(
             "workflow.unexpected",

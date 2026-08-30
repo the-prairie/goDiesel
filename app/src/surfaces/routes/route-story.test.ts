@@ -103,6 +103,26 @@ describe("route story chapters", () => {
     expect(routeStoryChapters(route({ route: [] }))).toEqual([]);
   });
 
+  it("does not title a hypothetical landmark as recorded", () => {
+    const chapters = routeStoryChapters(
+      route({
+        annotations: [
+          {
+            id: "possible-water",
+            atDistanceM: 2_000,
+            kind: "landmark",
+            evidence: "hypothesis",
+            body: "Water may be available here.",
+          },
+        ],
+      }),
+    );
+
+    expect(chapters.find(({ id }) => id === "possible-water")?.title).toBe(
+      "Possible landmark",
+    );
+  });
+
   it("describes imported geometry without inventing a completed activity", () => {
     const chapters = routeStoryChapters(route({ lifecycle: "discovered" }));
 

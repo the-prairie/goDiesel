@@ -69,11 +69,6 @@ import {
 } from "@/surfaces/replay/story-flight/replay-camera-framing";
 import { ReplayPerformanceMonitor } from "@/surfaces/replay/story-flight/replay-performance";
 
-const FIELD_TEST_ROUTES = [
-  { slug: "14736711660", label: "San Francisco" },
-  { slug: "14023448720", label: "Crete" },
-] as const;
-
 const INITIAL_STATUS: GoogleRouteNavigatorStatus = {
   state: "loading",
   message: "Preparing the native Google 3D route world.",
@@ -86,6 +81,7 @@ interface GoogleRouteNavigatorStageProps {
   backPath?: string;
   backLabel?: string;
   onUseAtlas?: () => void;
+  fieldTestRoutes?: ReadonlyArray<{ slug: string; label: string }>;
 }
 
 export function GoogleRouteNavigatorStage({
@@ -95,6 +91,7 @@ export function GoogleRouteNavigatorStage({
   backPath = "/lab/route-intelligence",
   backLabel = "Back to route intelligence",
   onUseAtlas,
+  fieldTestRoutes = [],
 }: GoogleRouteNavigatorStageProps) {
   const navigate = useNavigate();
   const productionReplay = variant === "replay";
@@ -708,7 +705,7 @@ export function GoogleRouteNavigatorStage({
           onCommit={commitControl}
           onSelectCamera={selectCamera}
           route={route}
-          showFieldRoutes={!productionReplay}
+          fieldTestRoutes={productionReplay ? [] : fieldTestRoutes}
         />
       ) : null}
 
@@ -894,11 +891,19 @@ function ExpandedReplayHud({
             />
             <Metric
               label="Elevation"
-              value={`${Math.round(telemetry.elevationM)} m`}
+              value={
+                route.elevationStatus === "unavailable"
+                  ? "Unavailable"
+                  : `${Math.round(telemetry.elevationM)} m`
+              }
             />
             <Metric
               label="Grade"
-              value={`${telemetry.gradePercent >= 0 ? "+" : ""}${telemetry.gradePercent.toFixed(1)}%`}
+              value={
+                route.elevationStatus === "unavailable"
+                  ? "Unavailable"
+                  : `${telemetry.gradePercent >= 0 ? "+" : ""}${telemetry.gradePercent.toFixed(1)}%`
+              }
             />
           </div>
           <div className="flex items-center gap-2">
@@ -932,13 +937,13 @@ function ReplaySettings({
   onCommit,
   onSelectCamera,
   route,
-  showFieldRoutes,
+  fieldTestRoutes,
 }: {
   control: GoogleRouteNavigatorState;
   onCommit: ReplayHudProps["onCommit"];
   onSelectCamera: ReplayHudProps["onSelectCamera"];
   route: QuestRoute;
-  showFieldRoutes: boolean;
+  fieldTestRoutes: ReadonlyArray<{ slug: string; label: string }>;
 }) {
   return (
     <aside
@@ -1026,13 +1031,13 @@ function ReplaySettings({
           </Button>
         </SettingGroup>
 
-        {showFieldRoutes ? (
+        {fieldTestRoutes.length > 0 ? (
           <div className="border-t border-white/12 pt-3">
             <div className="text-[9px] font-semibold uppercase text-white/42">
               Field routes
             </div>
             <div className="mt-2 flex gap-2">
-              {FIELD_TEST_ROUTES.map((candidate) => (
+              {fieldTestRoutes.map((candidate) => (
                 <Button
                   asChild
                   className={cn(

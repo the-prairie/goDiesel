@@ -69,7 +69,7 @@ if [[ "$DRY_RUN" == "true" ]]; then
   exit 0
 fi
 
-if ! PUBLIC_STATUS=$(curl --silent --show-error --location \
+if ! PUBLIC_STATUS=$(curl --silent --show-error \
   --output /dev/null --write-out '%{http_code}' \
   --connect-timeout 10 --max-time 30 "$PUBLIC_URL"); then
   echo "Could not verify whether ${PUBLIC_URL} already exists; refusing to publish." >&2

@@ -216,6 +216,42 @@ if (mode === "dist") {
     fail("built bundle media must contain only files referenced by the shared route");
   }
 
+  const assetDir = path.join(root, "dist/assets");
+  const assetFiles = listFiles(assetDir).sort();
+  const forbiddenProductChunks = [
+    "admin-page",
+    "atlas-page",
+    "finder-page",
+    "routes-page",
+    "playable-earth-lab-page",
+    "design-system-lab-page",
+    "route-intelligence-lab-page",
+    "google-route-navigator-lab-page",
+    "cinematic-route-trailer-lab-page",
+    "cinematic-director-lab-page",
+  ];
+  const productChunk = assetFiles.find((file) =>
+    forbiddenProductChunks.some((name) => file.includes(name)),
+  );
+  if (productChunk) {
+    fail(`built bundle includes unrelated product chunk ${productChunk}`);
+  }
+
+  const compiledText = assetFiles
+    .filter((file) => /\.(?:css|js)$/.test(file))
+    .map((file) => fs.readFileSync(path.join(assetDir, file), "utf8"))
+    .join("\n");
+  const routeConfig = readJson(path.join(root, "quests.json"));
+  const unrelatedRouteId = (routeConfig.routes ?? [])
+    .map((route) => String(route?.activity_id ?? ""))
+    .find(
+      (activityId) =>
+        activityId && activityId !== routeSlug && compiledText.includes(activityId),
+    );
+  if (unrelatedRouteId) {
+    fail(`built assets include unrelated route identifier ${unrelatedRouteId}`);
+  }
+
   const robots = fs.readFileSync(path.join(root, "dist/robots.txt"), "utf8");
   if (!robots.includes("Disallow: /")) {
     fail("single-route bundle must be excluded from search indexing");

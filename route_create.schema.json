@@ -62,7 +62,7 @@
         "id": { "type": "string", "minLength": 1 },
         "at_distance_m": { "type": "number", "minimum": 0 },
         "kind": { "enum": ["note", "landmark", "warning", "image"] },
-        "evidence": { "enum": ["recorded", "derived", "measured", "hypothesis"] },
+        "evidence": { "const": "hypothesis" },
         "body": { "type": "string", "minLength": 1 },
         "title": { "type": "string", "minLength": 1 }
       }
