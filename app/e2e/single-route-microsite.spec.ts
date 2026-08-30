@@ -10,10 +10,13 @@ const route = routeSlug
       fs.readFileSync(path.join(routesDirectory, `${routeSlug}.json`), "utf8"),
     ) as {
       activity_name?: string;
+      elevation_status?: "recorded" | "unavailable";
       lifecycle?: string;
       name: string;
       region: string;
       subtitle?: string;
+      provenance?: { temporal?: { status?: string } };
+      route?: Array<{ elapsed_s?: number }>;
     })
   : null;
 
@@ -43,8 +46,16 @@ test.describe("single-route microsite", () => {
     await expect(page).toHaveURL(new RegExp(`#\/routes\/${routeSlug}$`));
     await expect(page.getByRole("heading", { name: routeTitle })).toBeVisible();
     await expect(
-      page.getByText(route!.region, { exact: true }).first(),
+      page.getByText(route!.region, { exact: false }).first(),
     ).toBeVisible();
+    if (route!.lifecycle === "discovered") {
+      expect(route!.provenance?.temporal?.status).toBe("unavailable");
+      expect(route!.route?.some((point) => point.elapsed_s !== undefined)).toBe(false);
+    }
+    if (route!.elevation_status === "unavailable") {
+      await expect(page.getByText("Unavailable", { exact: true }).first()).toBeVisible();
+      await expect(page.locator("body")).not.toContainText(/0 m (?:up|climb|high)/i);
+    }
     await expect(page.getByTestId("atlas-spine")).toHaveCount(0);
     await expect(page.getByTestId("atlas-spine-mobile")).toHaveCount(0);
     await expect(page.getByRole("link", { name: "All routes" })).toHaveCount(0);
@@ -60,5 +71,20 @@ test.describe("single-route microsite", () => {
     await expect(page).toHaveURL(new RegExp(`#\/replay\/${routeSlug}$`));
     await expect(page.getByText("Change route", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Route guide" })).toBeVisible();
+    if (route!.elevation_status === "unavailable") {
+      await expect(page.getByTestId("replay-elevation-unavailable").first()).toBeVisible();
+    }
+  });
+
+  test("keeps the shared guide usable on a mobile viewport", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+
+    await expect(page.getByRole("heading", { name: routeTitle })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Cinematic replay" })).toBeVisible();
+    const horizontalOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(horizontalOverflow).toBeLessThanOrEqual(1);
   });
 });

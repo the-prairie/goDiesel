@@ -28,21 +28,22 @@ const candidateDefinitions = [
   },
 ] as const;
 
-export const curatedDiscoveryCandidates: DiscoveryCandidate[] = candidateDefinitions.map(
+export const curatedDiscoveryCandidates: DiscoveryCandidate[] = candidateDefinitions.flatMap(
   (definition) => {
     const route = findRouteBySlug(definition.slug);
-    if (!route) {
-      throw new Error(`Curated Finder candidate ${definition.slug} is missing`);
-    }
+    // A single-route microsite replaces the manifest at build time. Finder is
+    // not part of that route table, so unrelated curated candidates are absent
+    // by design rather than an application error.
+    if (!route) return [];
 
-    return {
+    return [{
       id: `owner-route-${route.slug}`,
       sourceRouteSlug: route.slug,
       sourceLabel: "Owner-curated from recorded GPX",
       terrain: [...definition.terrain],
       vibes: [...definition.vibes],
       route,
-    };
+    }];
   },
 );
 
