@@ -121,6 +121,9 @@ function chapterSubtitle(
     return `The line turns hard. The ${noun} finds another way through.`;
   }
   if (shot.chapter === "The landscape sets the terms") {
+    if (route.elevationStatus === "unavailable") {
+      return "Provider-relative terrain shapes the line without claiming recorded altitude.";
+    }
     return `${relief} metres from low point to high. Scale is part of the bargain.`;
   }
 
@@ -128,8 +131,13 @@ function chapterSubtitle(
     case "establishing":
       return `${place}. ${distance} kilometres waiting beyond the horizon.`;
     case "reveal":
-      return `One recorded ${noun}. A line through the world that exists nowhere else.`;
+      return route.lifecycle === "discovered"
+        ? `One supplied ${noun} route. A line ready for careful review.`
+        : `One recorded ${noun}. A line through the world that exists nowhere else.`;
     case "tracking":
+      if (route.elevationStatus === "unavailable") {
+        return "Provider-relative terrain rises and falls without claiming recorded climbing.";
+      }
       return `${gain} metres of climbing turns distance into consequence.`;
     case "summit":
       return profile.character === "mountain"

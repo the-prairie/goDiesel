@@ -293,6 +293,9 @@ function validatedDetailFields(
   }
   const lifecycle = lifecycleValue as RouteLifecycle;
   const elevationStatus = validatedElevationStatus(input.elevation_status);
+  if (elevationStatus === "unavailable" && input.elevation_gain_m !== null) {
+    throw new Error("unavailable elevation requires a null elevation_gain_m");
+  }
 
   return {
     slug,
@@ -463,6 +466,17 @@ export function parseRouteDetail(value: unknown): QuestRoute {
   const input = generatedRoute(value, "Route detail");
   const slug = requiredSlug(input, "Route detail");
   const elevationStatus = validatedElevationStatus(input.elevation_status);
+  if (
+    elevationStatus === "unavailable" &&
+    Array.isArray(input.route) &&
+    input.route.some((point) => {
+      if (Array.isArray(point)) return point[2] !== null;
+      return Boolean(point && typeof point === "object") &&
+        (point as Record<string, unknown>).elev !== null;
+    })
+  ) {
+    throw new Error("unavailable elevation requires null point elevations");
+  }
   const parsedRoute = parsedRoutePoints(input.route, elevationStatus);
   const route = parsedRoute.points;
   const geometryStatus = parsedRoute.status;

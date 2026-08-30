@@ -12,6 +12,8 @@ const route = routeSlug
       activity_name?: string;
       elevation_status?: "recorded" | "unavailable";
       lifecycle?: string;
+      curation?: { vibe?: string };
+      annotations?: Array<{ body?: string }>;
       name: string;
       region: string;
       subtitle?: string;
@@ -48,9 +50,16 @@ test.describe("single-route microsite", () => {
     await expect(
       page.getByText(route!.region, { exact: false }).first(),
     ).toBeVisible();
+    if (route!.curation?.vibe) {
+      await expect(page.getByText(route!.curation.vibe, { exact: true }).first()).toBeVisible();
+    }
+    if (route!.annotations?.[0]?.body) {
+      await expect(page.getByText(route!.annotations[0].body, { exact: true }).first()).toBeVisible();
+    }
     if (route!.lifecycle === "discovered") {
       expect(route!.provenance?.temporal?.status).toBe("unavailable");
       expect(route!.route?.some((point) => point.elapsed_s !== undefined)).toBe(false);
+      await expect(page.locator("body")).not.toContainText(/\b\d+:\d{2}\s*\/km\b/);
     }
     if (route!.elevation_status === "unavailable") {
       await expect(page.getByText("Unavailable", { exact: true }).first()).toBeVisible();
@@ -73,6 +82,9 @@ test.describe("single-route microsite", () => {
     await expect(page.getByRole("button", { name: "Route guide" })).toBeVisible();
     if (route!.elevation_status === "unavailable") {
       await expect(page.getByTestId("replay-elevation-unavailable").first()).toBeVisible();
+      await expect(page.getByTestId("replay-active-chapter")).toContainText(
+        "Elevation unavailable",
+      );
     }
   });
 

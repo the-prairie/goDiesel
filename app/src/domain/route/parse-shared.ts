@@ -69,6 +69,9 @@ export function parsedRoutePoints(
         : undefined;
     const lat = source ? numberValue(source.lat, Number.NaN) : Number.NaN;
     const lng = source ? numberValue(source.lng, Number.NaN) : Number.NaN;
+    if (elevationStatus === "unavailable" && source?.elev !== null) {
+      return { points: [] as RoutePoint[], status: "invalid" as const };
+    }
     const elev = source?.elev === null && elevationStatus === "unavailable"
       ? 0
       : source ? numberValue(source.elev, Number.NaN) : Number.NaN;

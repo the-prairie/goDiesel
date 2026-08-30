@@ -695,7 +695,9 @@ export function GoogleRouteNavigatorStage({
           </h2>
           <p className="mt-3 font-editorial text-lg italic text-[#ffd6e9] sm:text-2xl">
             {(control.progressM / 1_000).toFixed(1)} km ·{" "}
-            {Math.round(telemetry.elevationM)} m
+            {route.elevationStatus === "unavailable"
+              ? "Elevation unavailable"
+              : `${Math.round(telemetry.elevationM)} m`}
           </p>
         </div>
       ) : null}

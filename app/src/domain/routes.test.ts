@@ -178,6 +178,26 @@ describe("parseRouteDetail", () => {
     expect(route.provenance.elevation).toEqual({ status: "unavailable" });
   });
 
+  it("rejects contradictory unavailable elevation metrics and points", () => {
+    expect(() => parseRouteDetail(validRouteDetail({
+      elevation_status: "unavailable",
+      elevation_gain_m: 0,
+      route: [
+        { lat: 27.98, lng: 86.9, elev: null, d: 0 },
+        { lat: 27.99, lng: 86.91, elev: null, d: 1_500 },
+      ],
+    }))).toThrow(/null elevation_gain_m/);
+
+    expect(() => parseRouteDetail(validRouteDetail({
+      elevation_status: "unavailable",
+      elevation_gain_m: null,
+      route: [
+        { lat: 27.98, lng: 86.9, elev: 0, d: 0 },
+        { lat: 27.99, lng: 86.91, elev: null, d: 1_500 },
+      ],
+    }))).toThrow(/null point elevations/);
+  });
+
   it("rejects discontinuities outside recorded route distance", () => {
     expect(() => parseRouteDetail(validRouteDetail({
       provenance: {
