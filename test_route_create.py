@@ -4,6 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from PIL import Image
+
 from route_create import RouteCreateError, apply_proposal, propose_request
 
 
@@ -162,6 +164,77 @@ class RouteCreateTest(unittest.TestCase):
         self.assertEqual(config["routes"][0]["source_sha256"], proposal["source"]["sha256"])
         self.assertEqual(first["result"], "created")
         self.assertEqual(second["result"], "already_applied")
+
+    def test_proposal_contract_rejects_unknown_fields_before_writes(self):
+        proposal = propose_request(self.request(), self.root)
+        proposal["invented_approval"] = True
+
+        with self.assertRaises(RouteCreateError) as raised:
+            apply_proposal(proposal, self.root, rebuild=lambda: None)
+
+        self.assertEqual(raised.exception.code, "proposal.schema")
+        self.assertEqual(json.loads((self.root / "quests.json").read_text())["routes"], [])
+
+    def test_media_is_redacted_registered_and_published_only_for_its_annotation(self):
+        photo = self.root / "owner-files" / "ridge.jpg"
+        Image.new("RGB", (32, 24), color=(30, 90, 120)).save(photo, "JPEG")
+        proposal = propose_request(
+            self.request(
+                annotations=[
+                    {
+                        "id": "ridge-warning",
+                        "at_distance_m": 100,
+                        "kind": "warning",
+                        "evidence": "hypothesis",
+                        "body": "The return is exposed.",
+                    }
+                ],
+                media=[
+                    {
+                        "path": str(photo),
+                        "association": {
+                            "kind": "annotation",
+                            "annotation_id": "ridge-warning",
+                        },
+                    }
+                ],
+            ),
+            self.root,
+        )
+
+        self.assertNotIn(str(self.root), json.dumps(proposal))
+        self.assertEqual(proposal["media"][0]["kind"], "image")
+        apply_proposal(proposal, self.root, rebuild=lambda: None)
+        route = json.loads((self.root / "quests.json").read_text())["routes"][0]
+
+        durable = self.root / route["source_media"][0]["path"]
+        published = self.root / "app" / "public" / route["annotations"][0]["media"]["url"]
+        unrelated = self.root / "app" / "public" / "media" / "unrelated"
+        self.assertTrue(durable.is_file())
+        self.assertTrue(published.is_file())
+        self.assertFalse(unrelated.exists())
+
+    def test_media_annotation_association_must_name_a_supplied_annotation(self):
+        photo = self.root / "owner-files" / "ridge.jpg"
+        Image.new("RGB", (8, 8)).save(photo, "JPEG")
+
+        with self.assertRaises(RouteCreateError) as raised:
+            propose_request(
+                self.request(
+                    media=[
+                        {
+                            "path": str(photo),
+                            "association": {
+                                "kind": "annotation",
+                                "annotation_id": "missing",
+                            },
+                        }
+                    ]
+                ),
+                self.root,
+            )
+
+        self.assertEqual(raised.exception.code, "request.media_association_missing")
 
 
 if __name__ == "__main__":

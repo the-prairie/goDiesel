@@ -18,12 +18,15 @@ from jsonschema import Draft202012Validator
 
 from quest_meta import build_route_curation
 from route_annotations import build_route_annotations
+from route_media import publish_photo, read_photo_metadata, read_video_metadata
 from route_provenance import build_route_provenance, load_source_route_points
 
 
 SCHEMA_VERSION = 1
 SAFE_SLUG = re.compile(r"^[A-Za-z0-9._-]+$")
 IMPORTED_SLUG = re.compile(r"^gpx-[a-z0-9][a-z0-9-]{2,59}[a-z0-9]$")
+IMAGE_EXTENSIONS = frozenset((".heic", ".heif", ".jpeg", ".jpg", ".png", ".webp"))
+VIDEO_EXTENSIONS = frozenset((".mov", ".mp4", ".m4v"))
 REQUEST_FIELDS = frozenset(
     (
         "schema_version",
@@ -64,6 +67,17 @@ def _schema(root: Path) -> dict[str, object]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _definition_validator(root: Path, definition: str) -> Draft202012Validator:
+    schema = _schema(root)
+    return Draft202012Validator(
+        {
+            "$schema": schema["$schema"],
+            "$defs": schema["$defs"],
+            "$ref": f"#/$defs/{definition}",
+        }
+    )
+
+
 def _validate_request(request: object, root: Path) -> dict[str, object]:
     if not isinstance(request, dict):
         raise RouteCreateError("request.invalid", "request must be a JSON object")
@@ -74,7 +88,7 @@ def _validate_request(request: object, root: Path) -> dict[str, object]:
             f"request has unknown fields: {', '.join(unknown)}",
         )
     errors = sorted(
-        Draft202012Validator(_schema(root)).iter_errors(request),
+        _definition_validator(root, "request").iter_errors(request),
         key=lambda error: list(error.absolute_path),
     )
     if errors:
@@ -87,6 +101,21 @@ def _validate_request(request: object, root: Path) -> dict[str, object]:
         prefix = f"{location}: " if location else ""
         raise RouteCreateError(code, prefix + error.message)
     return copy.deepcopy(request)
+
+
+def _validate_proposal(proposal: object, root: Path) -> dict[str, object]:
+    if not isinstance(proposal, dict):
+        raise RouteCreateError("proposal.invalid", "proposal must be a JSON object")
+    errors = sorted(
+        _definition_validator(root, "proposal").iter_errors(proposal),
+        key=lambda error: list(error.absolute_path),
+    )
+    if errors:
+        error = errors[0]
+        location = ".".join(str(part) for part in error.absolute_path)
+        prefix = f"{location}: " if location else ""
+        raise RouteCreateError("proposal.schema", prefix + error.message)
+    return copy.deepcopy(proposal)
 
 
 def _load_config(root: Path) -> dict[str, object]:
@@ -123,22 +152,26 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _safe_source_path(raw_path: object) -> Path:
+def _safe_local_file(raw_path: object, *, extensions: frozenset[str], label: str) -> Path:
     if not isinstance(raw_path, str) or not raw_path.strip():
-        raise RouteCreateError("request.missing_source", "gpx_path must identify a GPX file")
+        raise RouteCreateError(f"request.missing_{label}", f"{label} path must identify a file")
     candidate = Path(raw_path).expanduser()
     # macOS exposes /var as a system symlink, so rejecting every symlinked
     # ancestor would reject ordinary temporary files. The supplied file itself
     # must be a regular, directly addressed source rather than an indirection.
     if candidate.is_symlink():
-        raise RouteCreateError("request.unsafe_path", "gpx_path must not traverse a symbolic link")
+        raise RouteCreateError("request.unsafe_path", f"{label} path must not traverse a symbolic link")
     try:
         resolved = candidate.resolve(strict=True)
     except OSError as error:
-        raise RouteCreateError("request.missing_source", "gpx_path does not identify a readable file") from error
-    if resolved.suffix.lower() != ".gpx" or not resolved.is_file():
-        raise RouteCreateError("request.invalid_source", "gpx_path must identify a GPX file")
+        raise RouteCreateError(f"request.missing_{label}", f"{label} path is not readable") from error
+    if resolved.suffix.lower() not in extensions or not resolved.is_file():
+        raise RouteCreateError(f"request.invalid_{label}", f"{label} path has an unsupported file type")
     return resolved
+
+
+def _safe_source_path(raw_path: object) -> Path:
+    return _safe_local_file(raw_path, extensions=frozenset((".gpx",)), label="source")
 
 
 def _activity_date(value: object) -> str:
@@ -200,10 +233,15 @@ def _inspect_gpx(path: Path) -> tuple[dict[str, object], float]:
     return observations, parsed.route[-1]["d"]
 
 
-def _stage_source(source: Path, root: Path, proposal_id: str, expected_sha256: str) -> str:
+def _stage_file(
+    source: Path,
+    root: Path,
+    staged_name: str,
+    expected_sha256: str,
+) -> str:
     staging = root / ".route-share" / "staging"
     staging.mkdir(parents=True, exist_ok=True)
-    destination = staging / f"{proposal_id}.gpx"
+    destination = staging / staged_name
     if destination.exists():
         if _file_sha256(destination) != expected_sha256:
             raise RouteCreateError("source.staging_conflict", "staged GPX checksum does not match")
@@ -215,6 +253,82 @@ def _stage_source(source: Path, root: Path, proposal_id: str, expected_sha256: s
         raise RouteCreateError("source.checksum_mismatch", "staged GPX checksum does not match")
     os.replace(temporary, destination)
     return destination.relative_to(root).as_posix()
+
+
+def _stage_source(source: Path, root: Path, proposal_id: str, expected_sha256: str) -> str:
+    return _stage_file(source, root, f"{proposal_id}.gpx", expected_sha256)
+
+
+def _json_capture_metadata(value: dict[str, object]) -> dict[str, object]:
+    return {
+        key: (
+            item.isoformat().replace("+00:00", "Z")
+            if hasattr(item, "isoformat")
+            else list(item)
+            if isinstance(item, tuple)
+            else item
+        )
+        for key, item in value.items()
+    }
+
+
+def _stage_media(
+    media_requests: object,
+    root: Path,
+    proposal_id: str,
+    annotation_ids: set[str],
+) -> tuple[list[dict[str, object]], list[dict[str, str]]]:
+    staged_media = []
+    warnings = []
+    for index, item in enumerate(media_requests or []):
+        association = item["association"]
+        annotation_id = association.get("annotation_id")
+        if association["kind"] == "annotation" and annotation_id not in annotation_ids:
+            raise RouteCreateError(
+                "request.media_association_missing",
+                f"media {index} references unknown annotation {annotation_id}",
+            )
+        extensions = IMAGE_EXTENSIONS | VIDEO_EXTENSIONS
+        source = _safe_local_file(item["path"], extensions=extensions, label="media")
+        media_type = "image" if source.suffix.lower() in IMAGE_EXTENSIONS else "video"
+        if media_type == "video" and association["kind"] == "annotation":
+            raise RouteCreateError(
+                "request.video_annotation_unsupported",
+                "video may be associated with the route; select a still before attaching it to an annotation",
+            )
+        digest = _file_sha256(source)
+        staged_path = _stage_file(
+            source,
+            root,
+            f"{proposal_id}-media-{index}{source.suffix.lower()}",
+            digest,
+        )
+        try:
+            metadata = (
+                read_photo_metadata(source)
+                if media_type == "image"
+                else read_video_metadata(source)
+            )
+            capture_metadata = _json_capture_metadata(metadata)
+        except Exception:
+            capture_metadata = {"status": "unavailable"}
+            warnings.append(
+                {
+                    "code": "media.capture_metadata_unavailable",
+                    "message": f"Capture metadata is unavailable for {source.name}.",
+                }
+            )
+        staged_media.append(
+            {
+                "filename": source.name,
+                "kind": media_type,
+                "sha256": digest,
+                "staged_path": staged_path,
+                "association": copy.deepcopy(association),
+                "capture_metadata": capture_metadata,
+            }
+        )
+    return staged_media, warnings
 
 
 def _validate_lifecycle(request: dict[str, object]) -> tuple[str, dict[str, object] | None]:
@@ -253,6 +367,13 @@ def propose_request(request: object, root: str | Path) -> dict[str, object]:
             route_spec["annotations"] = copy.deepcopy(request["annotations"])
         if "replay_mode" in request:
             route_spec["replay_mode"] = request["replay_mode"]
+        proposal_id = uuid.uuid4().hex
+        staged_media, media_warnings = _stage_media(
+            request.get("media", []),
+            root,
+            proposal_id,
+            {str(item.get("id")) for item in route_spec.get("annotations", [])},
+        )
         proposal_core = {
             "schema_version": SCHEMA_VERSION,
             "document_type": "route-share-proposal",
@@ -261,12 +382,12 @@ def propose_request(request: object, root: str | Path) -> dict[str, object]:
             "base_route_sha256": _canonical_sha256(existing),
             "route_spec": route_spec,
             "observations": {},
-            "media": copy.deepcopy(request.get("media", [])),
+            "media": staged_media,
             "proposed_share_name": request.get("proposed_share_name"),
-            "warnings": [],
+            "warnings": media_warnings,
             "blocking_errors": [],
         }
-        proposal_core["proposal_id"] = _canonical_sha256(proposal_core)[:32]
+        proposal_core["proposal_id"] = proposal_id
         return proposal_core
 
     source = _safe_source_path(request.get("gpx_path"))
@@ -331,6 +452,13 @@ def propose_request(request: object, root: str | Path) -> dict[str, object]:
                 "message": "Elevation will remain unavailable and use mesh-relative rendering.",
             }
         )
+    staged_media, media_warnings = _stage_media(
+        request.get("media", []),
+        root,
+        proposal_id,
+        {str(item["id"]) for item in annotations},
+    )
+    warnings.extend(media_warnings)
     return {
         "schema_version": SCHEMA_VERSION,
         "document_type": "route-share-proposal",
@@ -345,7 +473,7 @@ def propose_request(request: object, root: str | Path) -> dict[str, object]:
         },
         "route_spec": route_spec,
         "observations": observations,
-        "media": copy.deepcopy(request.get("media", [])),
+        "media": staged_media,
         "proposed_share_name": request.get("proposed_share_name"),
         "warnings": warnings,
         "blocking_errors": [],
@@ -385,8 +513,92 @@ def _register_source(proposal: dict[str, object], root: Path) -> Path:
     return durable
 
 
-def _default_rebuild(root: Path) -> None:
+def _copy_verified_source(
+    staged: Path,
+    durable: Path,
+    expected_sha256: str,
+) -> None:
+    if durable.exists():
+        if _file_sha256(durable) != expected_sha256:
+            raise RouteCreateError(
+                "media.destination_conflict",
+                "durable media exists with a different checksum",
+            )
+        return
+    durable.parent.mkdir(parents=True, exist_ok=True)
+    temporary = durable.with_suffix(durable.suffix + ".tmp")
+    shutil.copyfile(staged, temporary)
+    if _file_sha256(temporary) != expected_sha256:
+        temporary.unlink(missing_ok=True)
+        raise RouteCreateError("media.checksum_mismatch", "durable media checksum does not match")
+    os.replace(temporary, durable)
+
+
+def _route_spec_with_registered_media(
+    proposal: dict[str, object],
+    root: Path,
+) -> dict[str, object]:
+    route_spec = copy.deepcopy(proposal["route_spec"])
+    slug = str(route_spec["activity_id"])
+    registered = []
+    staging_root = (root / ".route-share" / "staging").resolve()
+    for item in proposal.get("media", []):
+        staged = (root / item["staged_path"]).resolve()
+        if not staged.is_relative_to(staging_root) or not staged.is_file():
+            raise RouteCreateError("media.missing_staged", "approved proposal media is unavailable")
+        if _file_sha256(staged) != item["sha256"]:
+            raise RouteCreateError("media.checksum_mismatch", "staged media changed after proposal")
+        extension = staged.suffix.lower()
+        durable_relative = Path("route_sources") / "media" / slug / f"{item['sha256']}{extension}"
+        durable = (root / durable_relative).resolve()
+        _copy_verified_source(staged, durable, item["sha256"])
+        record = {
+            "path": durable_relative.as_posix(),
+            "sha256": item["sha256"],
+            "kind": item["kind"],
+            "association": copy.deepcopy(item["association"]),
+            "capture_metadata": copy.deepcopy(item["capture_metadata"]),
+        }
+        registered.append(record)
+
+        if item["kind"] != "image" or item["association"]["kind"] != "annotation":
+            continue
+        annotation_id = item["association"]["annotation_id"]
+        annotations = route_spec.get("annotations", [])
+        annotation = next(
+            (candidate for candidate in annotations if candidate.get("id") == annotation_id),
+            None,
+        )
+        if annotation is None:
+            raise RouteCreateError(
+                "media.association_missing",
+                f"annotation {annotation_id} no longer exists in the proposal",
+            )
+        annotation["media"] = publish_photo(
+            durable,
+            root / "app" / "public" / "media" / slug,
+            slug,
+            item["sha256"][:16],
+        )
+    if registered:
+        route_spec["source_media"] = registered
+    route_spec["route_share_proposal_id"] = proposal["proposal_id"]
+    return route_spec
+
+
+def _default_rebuild(root: Path, slug: str) -> dict[str, object]:
     subprocess.run([str(root / "rebuild.sh")], cwd=root, check=True)
+    subprocess.run(
+        ["node", "scripts/validate-route-microsite.mjs", slug, "source"],
+        cwd=root,
+        check=True,
+    )
+    from route_status import route_status
+
+    status = route_status(root, slug)
+    if not status["publishable"]:
+        raise RuntimeError("route status is blocked: " + "; ".join(status["problems"]))
+    return status
 
 
 def apply_proposal(
@@ -397,25 +609,23 @@ def apply_proposal(
 ) -> dict[str, object]:
     """Apply an approved proposal without duplicating or partially writing a route."""
     root = Path(root).resolve()
-    if not isinstance(proposal, dict) or proposal.get("document_type") != "route-share-proposal":
-        raise RouteCreateError("proposal.invalid", "proposal must be a route-share-proposal object")
-    if proposal.get("schema_version") != SCHEMA_VERSION:
-        raise RouteCreateError("proposal.invalid", "proposal schema_version is not supported")
+    proposal = _validate_proposal(proposal, root)
     if proposal.get("blocking_errors"):
         raise RouteCreateError("proposal.blocked", "proposal contains blocking errors")
-    route_spec = proposal.get("route_spec")
-    if not isinstance(route_spec, dict):
+    proposal_route_spec = proposal.get("route_spec")
+    if not isinstance(proposal_route_spec, dict):
         raise RouteCreateError("proposal.invalid", "proposal route_spec must be an object")
-    slug = str(route_spec.get("activity_id") or "")
+    slug = str(proposal_route_spec.get("activity_id") or "")
     if not SAFE_SLUG.fullmatch(slug):
         raise RouteCreateError("proposal.invalid", "proposal route identity is unsafe")
 
     config = _load_config(root)
     existing = _route_by_slug(config, slug)
     operation = proposal.get("operation")
-    if existing == route_spec:
+    if existing is not None and existing.get("route_share_proposal_id") == proposal.get("proposal_id"):
         if operation == "create":
             _register_source(proposal, root)
+        _route_spec_with_registered_media(proposal, root)
         return _creation_report(proposal, "already_applied")
     if operation == "create" and existing is not None:
         raise RouteCreateError("route.identity_conflict", f"route id {slug} now has different content")
@@ -429,18 +639,20 @@ def apply_proposal(
 
     if operation == "create":
         _register_source(proposal, root)
-        config["routes"].append(copy.deepcopy(route_spec))
+        route_spec = _route_spec_with_registered_media(proposal, root)
+        config["routes"].append(route_spec)
         result = "created"
     else:
+        route_spec = _route_spec_with_registered_media(proposal, root)
         index = config["routes"].index(existing)
-        config["routes"][index] = copy.deepcopy(route_spec)
+        config["routes"][index] = route_spec
         result = "updated"
 
     serialized = json.dumps(config, indent=2, ensure_ascii=False) + "\n"
     _write_atomic(root / "quests.json", serialized)
-    rebuild_callback = rebuild or (lambda: _default_rebuild(root))
+    rebuild_callback = rebuild or (lambda: _default_rebuild(root, slug))
     try:
-        rebuild_callback()
+        validation = rebuild_callback()
     except Exception as error:
         recovery = root / ".route-share" / "recovery"
         recovery.mkdir(parents=True, exist_ok=True)
@@ -455,10 +667,14 @@ def apply_proposal(
             "create.validation_failed",
             "canonical route and source were written, but rebuild validation failed; see .route-share/recovery",
         ) from error
-    return _creation_report(proposal, result)
+    return _creation_report(proposal, result, validation)
 
 
-def _creation_report(proposal: dict[str, object], result: str) -> dict[str, object]:
+def _creation_report(
+    proposal: dict[str, object],
+    result: str,
+    validation: object = None,
+) -> dict[str, object]:
     slug = proposal["route_spec"]["activity_id"]
     return {
         "ok": True,
@@ -470,6 +686,7 @@ def _creation_report(proposal: dict[str, object], result: str) -> dict[str, obje
             "sha256": proposal.get("source", {}).get("sha256"),
             "durable_path": proposal.get("source", {}).get("durable_path"),
         },
+        "validation": validation,
         "next_command": f"./scripts/route.sh preview {slug}",
     }
 

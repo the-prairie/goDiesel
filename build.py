@@ -233,7 +233,7 @@ def react_route_record(route):
             point_count,
             BEST_IN_EARTH_IDS,
             lifecycle,
-            record.get('replay_mode'),
+            route.get('replay_mode'),
         ),
     }
 

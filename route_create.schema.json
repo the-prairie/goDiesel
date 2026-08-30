@@ -37,10 +37,21 @@
       "properties": {
         "id": { "type": "string", "minLength": 1 },
         "at_distance_m": { "type": "number", "minimum": 0 },
-        "kind": { "enum": ["note", "landmark", "warning"] },
+        "kind": { "enum": ["note", "landmark", "warning", "image"] },
         "evidence": { "enum": ["recorded", "derived", "measured", "hypothesis"] },
         "body": { "type": "string", "minLength": 1 },
-        "title": { "type": "string", "minLength": 1 }
+        "title": { "type": "string", "minLength": 1 },
+        "media": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["url", "thumb_url", "width", "height"],
+          "properties": {
+            "url": { "type": "string", "pattern": "^media/" },
+            "thumb_url": { "type": "string", "pattern": "^media/" },
+            "width": { "type": "integer", "minimum": 1 },
+            "height": { "type": "integer", "minimum": 1 }
+          }
+        }
       }
     },
     "media": {
@@ -68,6 +79,141 @@
             }
           ]
         }
+      }
+    },
+    "proposalMedia": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "filename",
+        "kind",
+        "sha256",
+        "staged_path",
+        "association",
+        "capture_metadata"
+      ],
+      "properties": {
+        "filename": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["image", "video"] },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "staged_path": { "type": "string", "pattern": "^\\.route-share/staging/" },
+        "association": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind"],
+              "properties": { "kind": { "const": "route" } }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "annotation_id"],
+              "properties": {
+                "kind": { "const": "annotation" },
+                "annotation_id": { "type": "string", "minLength": 1 }
+              }
+            }
+          ]
+        },
+        "capture_metadata": { "type": "object" }
+      }
+    },
+    "routeSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["activity_id", "status"],
+      "properties": {
+        "activity_id": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" },
+        "status": { "enum": ["approved", "pending", "rejected", "archived"] },
+        "source_gpx": { "type": "string", "pattern": "^route_sources/" },
+        "source_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "activity_name": { "type": "string" },
+        "activity_type": { "enum": ["Run", "Ride"] },
+        "date": { "type": "string" },
+        "region": { "type": "string" },
+        "title": { "type": "string" },
+        "lifecycle": { "enum": ["completed", "discovered", "planned"] },
+        "lifecycle_evidence": { "type": "object" },
+        "description": { "type": "string" },
+        "theme": { "type": "string" },
+        "difficulty": { "type": "string" },
+        "completion_rule": { "type": "string" },
+        "blurb": { "type": "string" },
+        "visibility": { "enum": ["public", "hidden"] },
+        "curation": { "$ref": "#/$defs/curation" },
+        "annotations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/annotation" }
+        },
+        "replay_mode": { "enum": ["atlas", "earth"] },
+        "source_media": { "type": "array", "items": { "type": "object" } },
+        "route_share_proposal_id": { "type": "string" }
+      }
+    },
+    "proposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "document_type",
+        "proposal_id",
+        "operation",
+        "source",
+        "route_spec",
+        "observations",
+        "media",
+        "warnings",
+        "blocking_errors"
+      ],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "document_type": { "const": "route-share-proposal" },
+        "proposal_id": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+        "operation": { "enum": ["create", "update"] },
+        "source": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["mode", "existing_slug"],
+              "properties": {
+                "mode": { "const": "existing-route" },
+                "existing_slug": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["mode", "filename", "sha256", "staged_path", "durable_path"],
+              "properties": {
+                "mode": { "const": "gpx" },
+                "filename": { "type": "string", "minLength": 1 },
+                "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                "staged_path": { "type": "string", "pattern": "^\\.route-share/staging/" },
+                "durable_path": { "type": "string", "pattern": "^route_sources/" }
+              }
+            }
+          ]
+        },
+        "base_route_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "route_spec": { "$ref": "#/$defs/routeSpec" },
+        "observations": { "type": "object" },
+        "media": { "type": "array", "items": { "$ref": "#/$defs/proposalMedia" } },
+        "proposed_share_name": { "type": ["string", "null"] },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code", "message"],
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" }
+            }
+          }
+        },
+        "blocking_errors": { "type": "array" }
       }
     },
     "request": {
@@ -130,5 +276,8 @@
       ]
     }
   },
-  "$ref": "#/$defs/request"
+  "oneOf": [
+    { "$ref": "#/$defs/request" },
+    { "$ref": "#/$defs/proposal" }
+  ]
 }
