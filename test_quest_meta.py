@@ -119,6 +119,21 @@ class QuestMetaTests(unittest.TestCase):
         self.assertEqual(meta["xp"], 1240)
         self.assertIn("1,240 m of climbing", meta["completion_rule"])
 
+    def test_unavailable_elevation_does_not_create_a_zero_climb_claim(self):
+        meta = build_quest_meta(
+            activity_type="Run",
+            distance_km=12.4,
+            elevation_gain=None,
+            region_label="High Plateau",
+            activity_name="Imported line",
+        )
+
+        self.assertEqual(meta["elevation_gain_m"], 0)
+        self.assertEqual(
+            meta["completion_rule"],
+            "Complete a 12.4 km run in High Plateau.",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -210,7 +210,7 @@ def build_route_provenance(
         route_point: dict[str, float | None] = {
             "lat": float(point.lat),
             "lng": float(point.lng),
-            "elev": point.elevation,
+            "elev": point.elevation if elevation["status"] == "recorded" else None,
             "d": distance,
         }
         if start_time is not None and point.timestamp is not None:

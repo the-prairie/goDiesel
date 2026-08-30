@@ -212,7 +212,13 @@ def _inspect_gpx(path: Path) -> tuple[dict[str, object], float]:
         for segment in track.segments
         for point in segment.points
     ]
-    recorded_elevations = [point.elevation for point in source_points if point.elevation is not None]
+    source_elevations = [point.elevation for point in source_points]
+    recorded_elevations = [value for value in source_elevations if value is not None]
+    if recorded_elevations and len(recorded_elevations) != len(source_elevations):
+        raise RouteCreateError(
+            "source.partial_elevation",
+            "GPX elevation must be present for every positioned point or omitted entirely",
+        )
     observations: dict[str, object] = {
         "distance_m": round(parsed.route[-1]["d"], 3),
         "temporal": {
@@ -331,7 +337,10 @@ def _stage_media(
     return staged_media, warnings
 
 
-def _validate_lifecycle(request: dict[str, object]) -> tuple[str, dict[str, object] | None]:
+def _validate_lifecycle(
+    request: dict[str, object],
+    activity_date: str,
+) -> tuple[str, dict[str, object] | None]:
     lifecycle = str(request.get("lifecycle") or "discovered")
     evidence = request.get("completion_evidence")
     if lifecycle == "completed" and (
@@ -340,6 +349,11 @@ def _validate_lifecycle(request: dict[str, object]) -> tuple[str, dict[str, obje
         raise RouteCreateError(
             "request.lifecycle_contradiction",
             "completed lifecycle requires owner-recorded completion evidence",
+        )
+    if lifecycle == "completed" and not activity_date:
+        raise RouteCreateError(
+            "request.missing_activity_date",
+            "completed lifecycle requires activity_date",
         )
     if lifecycle == "discovered" and evidence is not None:
         raise RouteCreateError(
@@ -362,7 +376,9 @@ def propose_request(request: object, root: str | Path) -> dict[str, object]:
             raise RouteCreateError("route.not_found", f"existing route {slug} was not found")
         route_spec = copy.deepcopy(existing)
         if "curation" in request:
-            route_spec["curation"] = _curation(request["curation"])
+            merged_curation = copy.deepcopy(existing.get("curation", {}))
+            merged_curation.update(copy.deepcopy(request["curation"]))
+            route_spec["curation"] = _curation(merged_curation)
         if "annotations" in request:
             route_spec["annotations"] = copy.deepcopy(request["annotations"])
         if "replay_mode" in request:
@@ -393,7 +409,8 @@ def propose_request(request: object, root: str | Path) -> dict[str, object]:
     source = _safe_source_path(request.get("gpx_path"))
     source_sha256 = _file_sha256(source)
     observations, distance_m = _inspect_gpx(source)
-    lifecycle, evidence = _validate_lifecycle(request)
+    activity_date = _activity_date(request.get("activity_date"))
+    lifecycle, evidence = _validate_lifecycle(request, activity_date)
     requested_id = request.get("desired_route_id")
     slug = str(requested_id or f"gpx-{uuid.uuid4().hex}")
     if not IMPORTED_SLUG.fullmatch(slug):
@@ -421,7 +438,7 @@ def propose_request(request: object, root: str | Path) -> dict[str, object]:
         "source_sha256": source_sha256,
         "activity_name": str(request["route_name"]).strip(),
         "activity_type": request["activity_type"],
-        "date": _activity_date(request.get("activity_date")),
+        "date": activity_date,
         "region": str(request["region"]).strip(),
         "title": str(request["route_name"]).strip(),
         "lifecycle": lifecycle,
@@ -540,7 +557,7 @@ def _route_spec_with_registered_media(
 ) -> dict[str, object]:
     route_spec = copy.deepcopy(proposal["route_spec"])
     slug = str(route_spec["activity_id"])
-    registered = []
+    registered = copy.deepcopy(route_spec.get("source_media", []))
     staging_root = (root / ".route-share" / "staging").resolve()
     for item in proposal.get("media", []):
         staged = (root / item["staged_path"]).resolve()
@@ -559,7 +576,12 @@ def _route_spec_with_registered_media(
             "association": copy.deepcopy(item["association"]),
             "capture_metadata": copy.deepcopy(item["capture_metadata"]),
         }
-        registered.append(record)
+        if not any(
+            existing.get("path") == record["path"]
+            and existing.get("sha256") == record["sha256"]
+            for existing in registered
+        ):
+            registered.append(record)
 
         if item["kind"] != "image" or item["association"]["kind"] != "annotation":
             continue
@@ -601,6 +623,37 @@ def _default_rebuild(root: Path, slug: str) -> dict[str, object]:
     return status
 
 
+def _run_rebuild_validation(
+    proposal: dict[str, object],
+    root: Path,
+    slug: str,
+    rebuild_callback,
+) -> object:
+    recovery_report = (
+        root
+        / ".route-share"
+        / "recovery"
+        / f"{proposal.get('proposal_id', slug)}.json"
+    )
+    try:
+        validation = rebuild_callback()
+    except Exception as error:
+        recovery_report.parent.mkdir(parents=True, exist_ok=True)
+        report = {
+            "proposal_id": proposal.get("proposal_id"),
+            "slug": slug,
+            "status": "canonical_writes_complete_validation_failed",
+            "error": str(error),
+        }
+        _write_atomic(recovery_report, json.dumps(report, indent=2) + "\n")
+        raise RouteCreateError(
+            "create.validation_failed",
+            "canonical route and source were written, but rebuild validation failed; see .route-share/recovery",
+        ) from error
+    recovery_report.unlink(missing_ok=True)
+    return validation
+
+
 def apply_proposal(
     proposal: object,
     root: str | Path,
@@ -622,11 +675,18 @@ def apply_proposal(
     config = _load_config(root)
     existing = _route_by_slug(config, slug)
     operation = proposal.get("operation")
+    rebuild_callback = rebuild or (lambda: _default_rebuild(root, slug))
     if existing is not None and existing.get("route_share_proposal_id") == proposal.get("proposal_id"):
         if operation == "create":
             _register_source(proposal, root)
         _route_spec_with_registered_media(proposal, root)
-        return _creation_report(proposal, "already_applied")
+        validation = _run_rebuild_validation(
+            proposal,
+            root,
+            slug,
+            rebuild_callback,
+        )
+        return _creation_report(proposal, "already_applied", validation)
     if operation == "create" and existing is not None:
         raise RouteCreateError("route.identity_conflict", f"route id {slug} now has different content")
     if operation == "update":
@@ -650,23 +710,12 @@ def apply_proposal(
 
     serialized = json.dumps(config, indent=2, ensure_ascii=False) + "\n"
     _write_atomic(root / "quests.json", serialized)
-    rebuild_callback = rebuild or (lambda: _default_rebuild(root, slug))
-    try:
-        validation = rebuild_callback()
-    except Exception as error:
-        recovery = root / ".route-share" / "recovery"
-        recovery.mkdir(parents=True, exist_ok=True)
-        report = {
-            "proposal_id": proposal.get("proposal_id"),
-            "slug": slug,
-            "status": "canonical_writes_complete_validation_failed",
-            "error": str(error),
-        }
-        _write_atomic(recovery / f"{proposal.get('proposal_id', slug)}.json", json.dumps(report, indent=2) + "\n")
-        raise RouteCreateError(
-            "create.validation_failed",
-            "canonical route and source were written, but rebuild validation failed; see .route-share/recovery",
-        ) from error
+    validation = _run_rebuild_validation(
+        proposal,
+        root,
+        slug,
+        rebuild_callback,
+    )
     return _creation_report(proposal, result, validation)
 
 

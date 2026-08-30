@@ -1,11 +1,19 @@
+import { singleRouteMicrosite } from "@/app/single-route-microsite";
 import { findRouteBySlug } from "@/data/routes";
 import type {
   DiscoveryCandidate,
   FinderIntent,
+  FinderTerrain,
   RouteDiscoveryProvider,
 } from "@/domain/planning";
 
-const candidateDefinitions = [
+interface CandidateDefinition {
+  slug: string;
+  terrain: Exclude<FinderTerrain, "any">[];
+  vibes: string[];
+}
+
+const candidateDefinitions: CandidateDefinition[] = import.meta.env.VITE_SINGLE_ROUTE_SLUG ? [] : [
   {
     slug: "17654151284",
     terrain: ["mixed", "mountain"],
@@ -26,15 +34,19 @@ const candidateDefinitions = [
     terrain: ["road", "mixed"],
     vibes: ["touring", "farm roads", "long ride", "big day"],
   },
-] as const;
+] as CandidateDefinition[];
 
-export const curatedDiscoveryCandidates: DiscoveryCandidate[] = candidateDefinitions.flatMap(
-  (definition) => {
-    const route = findRouteBySlug(definition.slug);
-    // A single-route microsite replaces the manifest at build time. Finder is
-    // not part of that route table, so unrelated curated candidates are absent
-    // by design rather than an application error.
-    if (!route) return [];
+export function buildCuratedDiscoveryCandidates(
+  definitions: readonly CandidateDefinition[],
+  routeLookup: typeof findRouteBySlug,
+  allowMissing: boolean,
+): DiscoveryCandidate[] {
+  return definitions.flatMap((definition) => {
+    const route = routeLookup(definition.slug);
+    if (!route) {
+      if (allowMissing) return [];
+      throw new Error(`Curated discovery route ${definition.slug} is missing`);
+    }
 
     return [{
       id: `owner-route-${route.slug}`,
@@ -44,7 +56,13 @@ export const curatedDiscoveryCandidates: DiscoveryCandidate[] = candidateDefinit
       vibes: [...definition.vibes],
       route,
     }];
-  },
+  });
+}
+
+export const curatedDiscoveryCandidates = buildCuratedDiscoveryCandidates(
+  candidateDefinitions,
+  findRouteBySlug,
+  Boolean(singleRouteMicrosite),
 );
 
 const unsupportedMessage =

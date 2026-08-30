@@ -15,7 +15,8 @@ Deriving an imported slug from a title, region, filename, share name, or checksu
 ## Decision
 
 Keep the Strava activity id for every Strava-backed route.
-Allocate one opaque `gpx-<32 hex>` identifier when a new GPX proposal is created.
+Allocate one opaque `gpx-<32 hex>` identifier when a new GPX proposal is created by default.
+An owner may explicitly supply a safe `gpx-...` identifier when a durable external naming contract already exists; that exception is recorded in the approved proposal and receives the same collision checks.
 Store that identifier in `quests.json` and reuse it for every retry of the approved proposal.
 Reject an explicit or generated identity collision instead of selecting a different identity silently.
 Keep the public share name independent from route identity.

@@ -86,13 +86,14 @@ case "$command" in
     # A publishable route is one whose geometry and generated record are sound.
     # A draft guide is not a blocker: publishing a scouted route with an
     # unfinished guide is a legitimate choice, and the page says which it is.
-    if ! "${PYTHON}" -c "
+    if ! "${PYTHON}" - "$slug" <<'PY'
 import sys
 from pathlib import Path
 from route_status import route_status
-status = route_status(Path('.'), '$slug')
+status = route_status(Path('.'), sys.argv[1])
 sys.exit(0 if status['publishable'] else 1)
-"; then
+PY
+    then
       echo "Refusing to publish: the route is blocked above." >&2
       exit 1
     fi

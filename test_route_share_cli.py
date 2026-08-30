@@ -4,6 +4,8 @@ from pathlib import Path
 import shutil
 import subprocess
 
+from route_create import apply_proposal, propose_request
+
 
 ROOT = Path(__file__).parent
 
@@ -114,3 +116,120 @@ exit 0
     assert completed.returncode != 0
     assert "Refusing to replace existing share" in completed.stderr
     assert "wrangler pages deploy dist" not in calls.read_text(encoding="utf-8")
+
+
+def test_route_microsite_scoping_keeps_only_referenced_media(tmp_path: Path):
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    shutil.copyfile(
+        ROOT / "scripts/scope-route-microsite.mjs",
+        scripts / "scope-route-microsite.mjs",
+    )
+    route_file = tmp_path / "dist/data/routes/gpx-preview.json"
+    route_file.parent.mkdir(parents=True)
+    route_file.write_text(
+        json.dumps(
+            {
+                "slug": "gpx-preview",
+                "annotations": [
+                    {
+                        "media": {
+                            "url": "media/gpx-preview/keep.jpg",
+                            "thumb_url": "media/gpx-preview/keep-thumb.jpg",
+                        }
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    for relative in (
+        "media/gpx-preview/keep.jpg",
+        "media/gpx-preview/keep-thumb.jpg",
+        "media/unrelated/private.jpg",
+    ):
+        app_file = tmp_path / "app/dist" / relative
+        app_file.parent.mkdir(parents=True, exist_ok=True)
+        app_file.write_bytes(relative.encode())
+        dist_file = tmp_path / "dist" / relative
+        dist_file.parent.mkdir(parents=True, exist_ok=True)
+        dist_file.write_bytes(relative.encode())
+
+    subprocess.run(
+        ["node", str(scripts / "scope-route-microsite.mjs"), "gpx-preview"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    built_media = sorted(
+        path.relative_to(tmp_path / "dist").as_posix()
+        for path in (tmp_path / "dist/media").rglob("*")
+        if path.is_file()
+    )
+    assert built_media == [
+        "media/gpx-preview/keep-thumb.jpg",
+        "media/gpx-preview/keep.jpg",
+    ]
+
+
+def test_prompt_to_preview_workflow_is_repeatable_and_never_publishes(tmp_path: Path):
+    (tmp_path / "quests.json").write_text('{"routes": []}\n', encoding="utf-8")
+    proposal = propose_request(
+        {
+            "schema_version": 1,
+            "gpx_path": str(ROOT / "tests/fixtures/routes/timed-ridge.gpx"),
+            "activity_type": "Run",
+            "route_name": "Acceptance Ridge",
+            "region": "Kananaskis, Alberta",
+            "source_description": "A route fixture for the complete workflow.",
+            "desired_route_id": "gpx-acceptance-ridge",
+        },
+        tmp_path,
+    )
+    first = apply_proposal(
+        proposal,
+        tmp_path,
+        rebuild=lambda: {"publishable": True},
+    )
+    second = apply_proposal(
+        proposal,
+        tmp_path,
+        rebuild=lambda: {"publishable": True},
+    )
+
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    shutil.copyfile(ROOT / "scripts/route-preview.sh", scripts / "route-preview.sh")
+    (scripts / "route-preview.sh").chmod(0o755)
+    calls = tmp_path / "calls.log"
+    executable(
+        scripts / "publish-route-microsite.sh",
+        f"#!/bin/bash\nprintf 'publish %s\\n' \"$*\" >> {calls}\n",
+    )
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    executable(
+        bin_dir / "npm",
+        f"#!/bin/bash\nprintf 'npm %s\\n' \"$*\" >> {calls}\n",
+    )
+    environment = os.environ.copy()
+    environment["PATH"] = f"{bin_dir}:{environment['PATH']}"
+    preview = subprocess.run(
+        [str(scripts / "route-preview.sh"), "gpx-acceptance-ridge"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+
+    config = json.loads((tmp_path / "quests.json").read_text(encoding="utf-8"))
+    recorded = calls.read_text(encoding="utf-8")
+    assert first["result"] == "created"
+    assert second["result"] == "already_applied"
+    assert len(config["routes"]) == 1
+    assert "publish gpx-acceptance-ridge check-only --dry-run" in recorded
+    assert "wrangler" not in recorded
+    assert "#/routes/gpx-acceptance-ridge" in preview.stdout

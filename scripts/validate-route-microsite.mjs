@@ -150,12 +150,26 @@ function validateRoute(route, expectedSlug) {
 }
 
 function listFiles(directory, prefix = "") {
+  if (!fs.existsSync(directory)) return [];
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const relativePath = path.posix.join(prefix, entry.name);
     return entry.isDirectory()
       ? listFiles(path.join(directory, entry.name), relativePath)
       : [relativePath];
   });
+}
+
+function collectMediaReferences(value, references = new Set()) {
+  if (typeof value === "string" && value.startsWith("media/")) {
+    references.add(value);
+    return references;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectMediaReferences(item, references);
+  } else if (value && typeof value === "object") {
+    for (const item of Object.values(value)) collectMediaReferences(item, references);
+  }
+  return references;
 }
 
 if (!routeSlug || !/^[A-Za-z0-9._-]+$/.test(routeSlug)) {
@@ -176,7 +190,24 @@ if (mode === "dist") {
   if (dataFiles.length !== 1 || dataFiles[0] !== expectedRoutePath) {
     fail(`built bundle data must contain only ${expectedRoutePath}`);
   }
-  validateRoute(readJson(path.join(dataDir, expectedRoutePath)), routeSlug);
+  const builtRoute = readJson(path.join(dataDir, expectedRoutePath));
+  validateRoute(builtRoute, routeSlug);
+
+  const expectedMedia = [...collectMediaReferences(builtRoute)].sort();
+  for (const reference of expectedMedia) {
+    if (
+      path.posix.normalize(reference) !== reference ||
+      !reference.startsWith(`media/${routeSlug}/`)
+    ) {
+      fail(`route media reference is outside media/${routeSlug}: ${reference}`);
+    }
+  }
+  const builtMedia = listFiles(path.join(root, "dist/media"))
+    .map((file) => `media/${file}`)
+    .sort();
+  if (JSON.stringify(builtMedia) !== JSON.stringify(expectedMedia)) {
+    fail("built bundle media must contain only files referenced by the shared route");
+  }
 
   const robots = fs.readFileSync(path.join(root, "dist/robots.txt"), "utf8");
   if (!robots.includes("Disallow: /")) {

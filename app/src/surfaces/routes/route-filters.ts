@@ -33,7 +33,7 @@ export function filterRoutes(
     if (filters.activity !== "all" && route.type !== filters.activity) return false;
     if (filters.region !== "all" && route.region !== filters.region) return false;
     if (!routeMatchesDistance(route.distanceKm, filters.distance)) return false;
-    if (!routeMatchesClimb(route.elevationGainM, filters.climb)) return false;
+    if (!routeMatchesClimb(route, filters.climb)) return false;
     if (filters.vibe !== "all" && route.theme !== filters.vibe) return false;
     return true;
   });
@@ -66,10 +66,12 @@ function routeMatchesDistance(distanceKm: number, filter: RouteFilters["distance
   }
 }
 
-function routeMatchesClimb(elevationGainM: number, filter: RouteFilters["climb"]) {
+function routeMatchesClimb(route: RouteSummary, filter: RouteFilters["climb"]) {
+  if (filter === "all") return true;
+  if (route.elevationStatus === "unavailable") return false;
+
+  const elevationGainM = route.elevationGainM;
   switch (filter) {
-    case "all":
-      return true;
     case "under-250":
       return elevationGainM < 250;
     case "250-750":

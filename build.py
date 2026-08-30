@@ -169,7 +169,11 @@ for spec in quest_specs:
     quest_meta = build_quest_meta(
         activity_type=typ,
         distance_km=round(distance_km, 1),
-        elevation_gain=elevation_gain_m(route_js),
+        elevation_gain=(
+            elevation_gain_m(route_js)
+            if route_provenance.elevation['status'] == 'recorded'
+            else None
+        ),
         region_label=region_label,
         activity_name=name,
     )

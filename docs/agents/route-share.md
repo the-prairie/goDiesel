@@ -73,6 +73,7 @@ Run:
 
 `propose` may write an ignored, checksum-verified staging copy under `.route-share/`.
 It does not modify `quests.json`, `route_sources/`, generated data, or a public deployment.
+Partial curation in an existing-route request is merged over the route's current curation; omitted reviewed fields are preserved.
 Do not edit fields outside the closed proposal schema.
 
 Present the proposal in plain language before creation:
@@ -106,6 +107,7 @@ The same approved proposal may be applied again and returns `already_applied`.
 If post-write validation fails, report the recoverable state under `.route-share/recovery/` and do not publish.
 
 `preview` runs the existing route-only dry-run before it starts a loopback-only server on an available port.
+That bundle contains only the shared route's generated record and public media referenced by that record.
 Use `--detach` only when a background preview is useful; it writes a PID and log under `.route-share/`.
 Report the exact validation outcome, local guide URL, and local Replay URL.
 
