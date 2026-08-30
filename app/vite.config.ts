@@ -94,12 +94,10 @@ export default defineConfig(({ mode }) => {
           ),
         },
         {
-          find: "@/app/build-routes",
+          find: "@/app/router",
           replacement: path.resolve(
             __dirname,
-            singleRouteSlug
-              ? "./src/app/build-routes.single.tsx"
-              : "./src/app/build-routes.tsx",
+            singleRouteSlug ? "./src/app/router.single.tsx" : "./src/app/router.tsx",
           ),
         },
         { find: "@", replacement: path.resolve(__dirname, "./src") },
