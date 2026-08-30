@@ -58,14 +58,26 @@ export function RouteStoryView({
   const premise = routeStoryPremise(route);
   const summit = highestPoint(route);
   const isCompleted = route.lifecycle === "completed";
-  const satelliteRoute = useMemo<RouteSummary>(() => ({
-    ...route,
-    trace: route.route,
-    guide: {
-      vibe: route.curation.vibe,
-      reviewStatus: route.curation.reviewStatus,
-    },
-  }), [route]);
+  const hasCuratedPremise = Boolean(
+    route.curation.editorialNote?.trim() || route.curation.vibe?.trim(),
+  );
+  const showStoryIntro = !isCompleted || hasCuratedPremise;
+  const storyStartId = showStoryIntro
+    ? "route-story-intro"
+    : chapters.length
+      ? "route-story-chapters"
+      : "recorded-line-heading";
+  const satelliteRoute = useMemo<RouteSummary>(
+    () => ({
+      ...route,
+      trace: route.route,
+      guide: {
+        vibe: route.curation.vibe,
+        reviewStatus: route.curation.reviewStatus,
+      },
+    }),
+    [route],
+  );
   const replayHref = singleRouteMicrosite
     ? replayPath(route.slug)
     : replayPath(route.slug, routeDetailPath(route.slug));
@@ -82,7 +94,9 @@ export function RouteStoryView({
       (entries) => {
         const visible = entries
           .filter((entry) => entry.isIntersecting)
-          .sort((left, right) => right.intersectionRatio - left.intersectionRatio)[0];
+          .sort(
+            (left, right) => right.intersectionRatio - left.intersectionRatio,
+          )[0];
         if (visible) setActiveChapter(visible.target.id.replace("story-", ""));
       },
       { threshold: [0.3, 0.55], rootMargin: "-20% 0px -45%" },
@@ -99,11 +113,17 @@ export function RouteStoryView({
       aria-label="Route story"
       className="h-full overflow-y-auto bg-canvas text-ink motion-safe:scroll-smooth"
     >
-      <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-3 border-b border-white/20 bg-[#163b36]/95 px-3 text-white backdrop-blur-md sm:px-5">
+      <header className="sticky top-0 z-40 grid min-h-16 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 border-b border-white/12 bg-[#152345]/92 px-3 py-2 text-white backdrop-blur-md sm:px-5">
         {singleRouteMicrosite ? (
-          <span className="text-control font-semibold">goDiesel field story</span>
+          <span className="justify-self-start text-control font-semibold">
+            goDiesel
+          </span>
         ) : (
-          <Button asChild variant="ghost" className="h-11 text-white hover:bg-white/12 hover:text-white">
+          <Button
+            asChild
+            variant="outline"
+            className="h-10 justify-self-start border-white/20 bg-black/20 text-white hover:bg-white/10 hover:text-white"
+          >
             <Link to={routesPath}>
               <ArrowLeft aria-hidden="true" />
               <span className="hidden sm:inline">Route collection</span>
@@ -111,12 +131,20 @@ export function RouteStoryView({
             </Link>
           </Button>
         )}
-        <div className="min-w-0 text-center">
-          <p className="text-micro font-semibold uppercase text-white/60">Field story</p>
-          <p className="max-w-[42vw] truncate font-editorial text-lg leading-none">{title}</p>
+        <div className="min-w-0 max-w-[42vw] text-center">
+          <p className="text-[9px] font-semibold uppercase text-white/58">
+            Field story
+          </p>
+          <p className="truncate font-editorial text-lg font-semibold leading-none">
+            {title}
+          </p>
         </div>
         {route.replay.replayEligible ? (
-          <Button asChild className="h-11 bg-forest text-white hover:bg-forest/90">
+          <Button
+            asChild
+            variant="outline"
+            className="h-10 justify-self-end border-white/20 bg-black/20 text-white hover:bg-white/10 hover:text-white"
+          >
             <Link to={replayHref}>
               <Play aria-hidden="true" />
               <span className="hidden sm:inline">Cinematic replay</span>
@@ -130,7 +158,7 @@ export function RouteStoryView({
         )}
       </header>
 
-      <section className="relative flex min-h-[calc(100dvh-10rem)] items-end overflow-hidden bg-[#244f49] text-white md:min-h-[min(46rem,calc(100dvh-6rem))]">
+      <section className="relative flex min-h-[min(42rem,calc(100dvh-7rem))] items-end overflow-hidden bg-[#182238] text-white">
         {heroChapter?.media ? (
           <img
             src={heroChapter.media.url}
@@ -141,33 +169,36 @@ export function RouteStoryView({
             fetchPriority="high"
           />
         ) : (
-          <div data-testid="route-story-satellite-preview" className="absolute inset-0 overflow-hidden bg-[#163b36]">
+          <div
+            data-testid="route-story-satellite-preview"
+            className="absolute inset-0 overflow-hidden bg-[#163b36]"
+          >
             <RouteSatelliteThumbnail
               route={satelliteRoute}
               enabled
               cinematic
               showRoute={false}
-              imageClassName="planned-route-preview-camera saturate-[0.78] contrast-[1.08] brightness-[0.72]"
+              imageClassName="planned-route-preview-camera saturate-[0.82] contrast-[1.06] brightness-[0.82]"
             />
-            <RouteStoryTrace route={route} distanceM={route.distanceKm * 620} hero overlay />
+            <RouteStoryTrace route={route} hero overlay />
           </div>
         )}
-        <div className="absolute inset-0 bg-[#102c29]/58" aria-hidden="true" />
-        <div className="relative z-10 w-full px-5 pb-16 pt-20 sm:px-10 lg:px-[max(4rem,calc((100vw-76rem)/2))]">
-          <p className="text-caption font-semibold uppercase text-white/75">
-            {route.region} · {formatRouteDate(route.date)}
-          </p>
-          <h1 className="mt-3 max-w-5xl font-editorial text-5xl font-medium leading-[0.92] sm:text-6xl lg:text-7xl">
+        <div className="absolute inset-0 bg-[#111a2a]/44" aria-hidden="true" />
+        <div className="relative z-10 mx-auto w-full max-w-7xl px-5 pb-12 pt-24 sm:px-10 sm:pb-14 lg:px-16">
+          <h1 className="max-w-5xl font-editorial text-5xl font-medium leading-[0.92] sm:text-6xl lg:text-7xl">
             {title}
           </h1>
-          <p className="mt-5 text-micro font-semibold uppercase text-white/70">
-            Editorial premise
+          <p className="mt-4 text-caption font-semibold uppercase text-white/72">
+            {route.region} · {formatRouteDate(route.date)}
           </p>
-          <p className="mt-2 max-w-2xl font-editorial text-xl italic leading-7 text-white/85 sm:text-2xl">
+          <p className="mt-4 max-w-2xl text-body leading-7 text-white/82 sm:text-lg">
             {premise}
           </p>
-          <dl className="mt-7 flex flex-wrap gap-x-7 gap-y-3 text-control font-semibold">
-            <HeroMetric label="Distance" value={`${route.distanceKm.toFixed(1)} km`} />
+          <dl className="mt-6 flex flex-wrap gap-x-7 gap-y-3 border-t border-white/18 pt-4 text-control font-semibold">
+            <HeroMetric
+              label="Distance"
+              value={`${route.distanceKm.toFixed(1)} km`}
+            />
             <HeroMetric
               label="Climb"
               value={
@@ -176,52 +207,64 @@ export function RouteStoryView({
                   : `${route.elevationGainM!.toLocaleString()} m`
               }
             />
-          <HeroMetric
-            label="Story"
-            value={chapters.length ? `${chapters.length} chapters` : "No GPS chapters"}
-          />
+            <HeroMetric
+              label="Story"
+              value={
+                chapters.length
+                  ? `${chapters.length} chapters`
+                  : "No GPS chapters"
+              }
+            />
           </dl>
           <Button
             type="button"
             variant="outline"
-            className="mt-8 h-11 border-white/55 bg-white/10 text-white hover:bg-white/20 hover:text-white"
-            onClick={() => document.getElementById("route-story-intro")?.scrollIntoView()}
+            className="mt-7 h-11 border-white/35 bg-black/20 text-white hover:bg-white/12 hover:text-white"
+            onClick={() =>
+              document.getElementById(storyStartId)?.scrollIntoView()
+            }
           >
-            <BookOpen aria-hidden="true" /> Begin the story <ChevronDown aria-hidden="true" />
+            <BookOpen aria-hidden="true" /> Begin the story{" "}
+            <ChevronDown aria-hidden="true" />
           </Button>
         </div>
       </section>
 
-      <section
-        id="route-story-intro"
-        className="grid gap-8 border-b border-line px-5 py-14 sm:px-10 lg:grid-cols-[minmax(0,1.25fr)_minmax(22rem,0.75fr)] lg:gap-16 lg:px-[max(4rem,calc((100vw-72rem)/2))] lg:py-20"
-      >
-        <div>
-          <p className="text-caption font-semibold uppercase text-forest">
-            {isCompleted ? "The route memory" : "The imported route"}
-          </p>
-          <blockquote className="mt-4 max-w-3xl font-editorial text-3xl leading-tight text-ink sm:text-4xl">
-            {route.curation.editorialNote || premise}
-          </blockquote>
-          <p className="mt-4 text-caption text-ink-muted">
-            {isCompleted ? "Editorial context" : "Source context"}
-          </p>
-        </div>
-        <dl className="grid grid-cols-3 self-center border-y border-line">
-          <StoryMetric
-            label="High point"
-            value={
-              route.elevationStatus === "unavailable"
-                ? "Unavailable"
-                : summit
-                  ? `${Math.round(summit.elevationM)} m`
-                  : "Unknown"
-            }
-          />
-          <StoryMetric label="Activity" value={route.type} />
-          <StoryMetric label="Guide" value={reviewLabel(route.curation.reviewStatus)} />
-        </dl>
-      </section>
+      {showStoryIntro ? (
+        <section
+          id="route-story-intro"
+          className="grid gap-8 border-b border-line px-5 py-14 sm:px-10 lg:grid-cols-[minmax(0,1.25fr)_minmax(22rem,0.75fr)] lg:gap-16 lg:px-[max(4rem,calc((100vw-72rem)/2))] lg:py-20"
+        >
+          <div>
+            <p className="text-caption font-semibold uppercase text-forest">
+              {isCompleted ? "The route memory" : "The imported route"}
+            </p>
+            <blockquote className="mt-4 max-w-3xl font-editorial text-3xl leading-tight text-ink sm:text-4xl">
+              {route.curation.editorialNote || premise}
+            </blockquote>
+            <p className="mt-4 text-caption text-ink-muted">
+              {hasCuratedPremise ? "Owner context" : "Route summary"}
+            </p>
+          </div>
+          <dl className="grid grid-cols-3 self-center border-y border-line">
+            <StoryMetric
+              label="High point"
+              value={
+                route.elevationStatus === "unavailable"
+                  ? "Unavailable"
+                  : summit
+                    ? `${Math.round(summit.elevationM)} m`
+                    : "Unknown"
+              }
+            />
+            <StoryMetric label="Activity" value={route.type} />
+            <StoryMetric
+              label="Guide"
+              value={reviewLabel(route.curation.reviewStatus)}
+            />
+          </dl>
+        </section>
+      ) : null}
 
       {chapters.length ? (
         <>
@@ -237,7 +280,10 @@ export function RouteStoryView({
             }}
           />
 
-          <section aria-label="Route story chapters" className="mx-auto grid max-w-7xl gap-24 px-5 py-20 sm:px-10 lg:gap-32 lg:py-28">
+          <section
+            aria-label="Route story chapters"
+            className="mx-auto grid max-w-7xl gap-24 px-5 py-20 sm:px-10 lg:gap-32 lg:py-28"
+          >
             {chapters.map((chapter, index) => (
               <StoryChapter
                 key={chapter.id}
@@ -250,37 +296,60 @@ export function RouteStoryView({
           </section>
         </>
       ) : (
-        <section aria-label="Route story chapters" className="mx-auto max-w-3xl px-5 py-16 sm:px-10">
-          <p role="status" className="border-y border-line py-8 font-editorial text-2xl text-ink-secondary">
-            Story chapters need recorded GPS geometry. The activity summary and factual guide remain available below.
+        <section
+          aria-label="Route story chapters"
+          className="mx-auto max-w-3xl px-5 py-16 sm:px-10"
+        >
+          <p
+            role="status"
+            className="border-y border-line py-8 font-editorial text-2xl text-ink-secondary"
+          >
+            Story chapters need recorded GPS geometry. The activity summary and
+            factual guide remain available below.
           </p>
         </section>
       )}
 
-      <section aria-labelledby="recorded-line-heading" className="bg-[#dfe9e4] px-5 py-16 sm:px-10 lg:px-[max(4rem,calc((100vw-78rem)/2))] lg:py-24">
+      <section
+        aria-labelledby="recorded-line-heading"
+        className="bg-[#dfe9e4] px-5 py-16 sm:px-10 lg:px-[max(4rem,calc((100vw-78rem)/2))] lg:py-24"
+      >
         <div className="mb-8 max-w-2xl">
-          <p className="text-caption font-semibold uppercase text-forest">Recorded geography</p>
-          <h2 id="recorded-line-heading" className="mt-2 font-editorial text-4xl sm:text-5xl">
+          <p className="text-caption font-semibold uppercase text-forest">
+            Recorded geography
+          </p>
+          <h2
+            id="recorded-line-heading"
+            className="mt-2 font-editorial text-4xl sm:text-5xl"
+          >
             The line underneath the story.
           </h2>
           <p className="mt-3 text-body leading-7 text-ink-secondary">
-            Explore the actual route, then open the factual briefing for terrain, guidance, and conditions.
+            Explore the actual route, then open the factual briefing for
+            terrain, guidance, and conditions.
           </p>
         </div>
         <div className="grid overflow-hidden border border-line bg-surface shadow-panel lg:grid-cols-[minmax(0,1.25fr)_minmax(22rem,0.75fr)]">
           <div className="h-[28rem] min-h-0 lg:h-[42rem] [&>section]:h-full">
             <RouteLeafMap route={route} />
           </div>
-          <aside aria-label="Factual route briefing" className="min-w-0 border-t border-line p-5 lg:max-h-[42rem] lg:overflow-y-auto lg:border-l lg:border-t-0 lg:p-7">
+          <aside
+            aria-label="Factual route briefing"
+            className="min-w-0 border-t border-line p-5 lg:max-h-[42rem] lg:overflow-y-auto lg:border-l lg:border-t-0 lg:p-7"
+          >
             <div className="border-b border-line pb-6">
-              <p className="text-caption font-semibold uppercase text-cobalt">Terrain profile</p>
-              {route.route.length > 1 && route.elevationStatus !== "unavailable" ? (
+              <p className="text-caption font-semibold uppercase text-cobalt">
+                Terrain profile
+              </p>
+              {route.route.length > 1 &&
+              route.elevationStatus !== "unavailable" ? (
                 <div className="mt-3 overflow-hidden border border-line bg-surface-muted">
                   <ElevationProfile route={route} />
                 </div>
               ) : (
                 <p role="status" className="mt-3 text-control text-ink-muted">
-                  Elevation profile unavailable. Replay follows provider-relative terrain without claiming recorded altitude.
+                  Elevation profile unavailable. Replay follows
+                  provider-relative terrain without claiming recorded altitude.
                 </p>
               )}
             </div>
@@ -293,9 +362,13 @@ export function RouteStoryView({
 
       <section className="grid items-center gap-8 bg-[#163b36] px-5 py-16 text-white sm:px-10 lg:grid-cols-[minmax(0,1fr)_auto] lg:px-[max(4rem,calc((100vw-72rem)/2))] lg:py-24">
         <div>
-          <p className="text-caption font-semibold uppercase text-white/70">Leave the page behind</p>
+          <p className="text-caption font-semibold uppercase text-white/70">
+            Leave the page behind
+          </p>
           <h2 className="mt-3 font-editorial text-4xl sm:text-5xl">
-            {isCompleted ? "Fly the route as it happened." : "Explore the imported route in motion."}
+            {isCompleted
+              ? "Fly the route as it happened."
+              : "Explore the imported route in motion."}
           </h2>
           <p className="mt-4 max-w-2xl text-body leading-7 text-white/70">
             {isCompleted
@@ -304,9 +377,14 @@ export function RouteStoryView({
           </p>
         </div>
         {route.replay.replayEligible ? (
-          <Button asChild size="lg" className="h-11 bg-forest text-white hover:bg-forest/90">
+          <Button
+            asChild
+            size="lg"
+            className="h-11 bg-forest text-white hover:bg-forest/90"
+          >
             <Link to={replayHref}>
-              <Compass aria-hidden="true" /> Enter cinematic replay <ArrowRight aria-hidden="true" />
+              <Compass aria-hidden="true" /> Enter cinematic replay{" "}
+              <ArrowRight aria-hidden="true" />
             </Link>
           </Button>
         ) : (
@@ -339,7 +417,12 @@ function StoryChapter({
       data-at-distance-m={chapter.distanceM}
       className="grid scroll-mt-36 items-center gap-8 lg:grid-cols-[minmax(0,1.12fr)_minmax(20rem,0.88fr)] lg:gap-16"
     >
-      <figure className={cn("relative overflow-hidden border border-line bg-surface-muted shadow-panel", reverse && "lg:order-2")}>
+      <figure
+        className={cn(
+          "relative overflow-hidden border border-line bg-surface-muted shadow-panel",
+          reverse && "lg:order-2",
+        )}
+      >
         {chapter.media ? (
           <img
             data-testid="route-story-chapter-media"
@@ -359,10 +442,15 @@ function StoryChapter({
       </figure>
       <div className="max-w-xl">
         <p className="text-caption font-semibold uppercase text-coral">
-          {String(index + 1).padStart(2, "0")} · {EVIDENCE_LABEL[chapter.evidence]}
+          {String(index + 1).padStart(2, "0")} ·{" "}
+          {EVIDENCE_LABEL[chapter.evidence]}
         </p>
-        <h2 className="mt-3 font-editorial text-4xl leading-none sm:text-5xl">{chapter.title}</h2>
-        <p className="mt-5 font-editorial text-xl leading-8 text-ink-secondary">{chapter.body}</p>
+        <h2 className="mt-3 font-editorial text-4xl leading-none sm:text-5xl">
+          {chapter.title}
+        </h2>
+        <p className="mt-5 font-editorial text-xl leading-8 text-ink-secondary">
+          {chapter.body}
+        </p>
         <div className="mt-6 flex flex-wrap gap-5 border-t border-line pt-4 text-control font-semibold text-ink">
           <span className="inline-flex items-center gap-2">
             <MapPinned className="size-4 text-cobalt" aria-hidden="true" />
@@ -392,17 +480,27 @@ function StoryChapterRail({
   const railRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const active = railRef.current?.querySelector<HTMLElement>('[aria-current="step"]');
-    active?.scrollIntoView({
+    const active = railRef.current?.querySelector<HTMLElement>(
+      '[aria-current="step"]',
+    );
+    const rail = railRef.current;
+    if (!active || !rail) return;
+    rail.scrollTo({
       behavior: prefersReducedMotion() ? "auto" : "smooth",
-      block: "nearest",
-      inline: "center",
+      left: active.offsetLeft - (rail.clientWidth - active.offsetWidth) / 2,
     });
   }, [activeChapter]);
 
   return (
-    <nav aria-label="Story chapters" className="sticky top-14 z-30 border-b border-line bg-surface/96 backdrop-blur-md">
-      <div ref={railRef} className="mx-auto flex max-w-7xl items-stretch overflow-x-auto px-3 sm:px-6">
+    <nav
+      id="route-story-chapters"
+      aria-label="Story chapters"
+      className="sticky top-16 z-30 border-b border-line bg-surface/96 backdrop-blur-md"
+    >
+      <div
+        ref={railRef}
+        className="mx-auto flex max-w-7xl items-stretch overflow-x-auto px-3 sm:px-6"
+      >
         {chapters.map((chapter, index) => (
           <button
             key={chapter.id}
@@ -451,7 +549,7 @@ function RouteStoryTrace({
   overlay = false,
 }: {
   route: QuestRoute;
-  distanceM: number;
+  distanceM?: number;
   hero?: boolean;
   overlay?: boolean;
 }) {
@@ -463,28 +561,79 @@ function RouteStoryTrace({
       </div>
     );
   }
-  const point = trace.points.reduce((closest, candidate) =>
-    Math.abs(candidate.distanceM - distanceM) < Math.abs(closest.distanceM - distanceM)
-      ? candidate
-      : closest,
-  );
+  const point =
+    distanceM === undefined
+      ? undefined
+      : trace.points.reduce((closest, candidate) =>
+          Math.abs(candidate.distanceM - distanceM) <
+          Math.abs(closest.distanceM - distanceM)
+            ? candidate
+            : closest,
+        );
 
   return (
     <svg
       viewBox="0 0 800 600"
       role="img"
-      aria-label={`${route.name} route trace at ${distanceLabel(distanceM)}`}
+      aria-label={
+        distanceM === undefined
+          ? `${route.name} route overview`
+          : `${route.name} route trace at ${distanceLabel(distanceM)}`
+      }
       className={cn(
         "aspect-[4/3] size-full",
-        hero ? "text-white" : "text-cobalt",
+        hero ? "text-[#fffaf2]" : "text-cobalt",
         overlay && "absolute inset-0 z-[2]",
       )}
+      data-testid={hero ? "route-story-hero-trace" : undefined}
       preserveAspectRatio="xMidYMid meet"
+      style={
+        hero
+          ? {
+              maskImage:
+                "linear-gradient(to bottom, black 0%, black 42%, transparent 72%)",
+              WebkitMaskImage:
+                "linear-gradient(to bottom, black 0%, black 42%, transparent 72%)",
+            }
+          : undefined
+      }
     >
-      <rect width="800" height="600" fill={overlay ? "transparent" : hero ? "#244f49" : "#e7ece8"} />
-      <path d={trace.path} fill="none" stroke={hero ? "rgb(255 255 255 / 38%)" : "#ffffff"} strokeWidth="16" strokeLinecap="round" strokeLinejoin="round" />
-      <path d={trace.path} fill="none" stroke="currentColor" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={point.x} cy={point.y} r="17" fill="#d95737" stroke="#fff" strokeWidth="7" />
+      <rect
+        width="800"
+        height="600"
+        fill={overlay ? "transparent" : hero ? "#244f49" : "#e7ece8"}
+      />
+      <path
+        d={trace.path}
+        data-testid={hero ? "route-story-hero-halo" : undefined}
+        fill="none"
+        stroke={hero ? "rgb(10 18 32 / 58%)" : "rgb(255 250 242 / 92%)"}
+        strokeWidth={hero ? 6 : 8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      <path
+        d={trace.path}
+        data-testid={hero ? "route-story-hero-thread" : undefined}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={hero ? 2.5 : 4}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      {point ? (
+        <circle
+          cx={point.x}
+          cy={point.y}
+          r="9"
+          fill="#d95737"
+          stroke="#fffaf2"
+          strokeWidth="3"
+          vectorEffect="non-scaling-stroke"
+        />
+      ) : null}
     </svg>
   );
 }
@@ -509,7 +658,12 @@ function routeTrace(route: QuestRoute) {
   }));
   return {
     points,
-    path: points.map((point, index) => `${index === 0 ? "M" : "L"}${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" "),
+    path: points
+      .map(
+        (point, index) =>
+          `${index === 0 ? "M" : "L"}${point.x.toFixed(1)} ${point.y.toFixed(1)}`,
+      )
+      .join(" "),
   };
 }
 

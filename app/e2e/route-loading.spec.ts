@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 const routeSlug = "17654151284";
 const importedRouteSlug = "3519505225411091950";
+const sourceOnlyRouteSlug = "gpx-gm-legends-delphi";
 
 test("Atlas does not fetch full route records before selection", async ({ page }) => {
   const detailRequests: string[] = [];
@@ -90,9 +91,29 @@ test("route story opens as an immersive editorial journey with recorded geograph
     timeout: 15_000,
   });
   await expect(geography).toHaveAttribute("data-geometry-points", /[1-9][0-9]+/);
-  await expect(geography).toHaveAttribute("data-route-color", "#315fb4");
-  await expect(geography).toHaveAttribute("data-route-halo", "#f6f2e8");
+  await expect(geography).toHaveAttribute("data-route-color", "#3379df");
+  await expect(geography).toHaveAttribute("data-route-halo", "#fffaf2");
+  await expect(geography).toHaveAttribute("data-route-width", "4");
+  await expect(geography).toHaveAttribute("data-route-halo-width", "8");
   await expect(page.getByRole("complementary", { name: "Factual route briefing" })).toBeVisible();
+});
+
+test("source-only route hero uses a restrained overview trace", async ({ page }) => {
+  await page.goto(`/#/routes/${sourceOnlyRouteSlug}`);
+
+  const heroTrace = page.getByTestId("route-story-hero-trace");
+  await expect(heroTrace.getByTestId("route-story-hero-thread")).toHaveAttribute(
+    "stroke-width",
+    "2.5",
+  );
+  await expect(heroTrace.locator("circle")).toHaveCount(0);
+  await expect(
+    page.getByText(
+      "A recorded 26.1 km run through Municipal Unit of Delphi, Greece with 983 m of climbing.",
+      { exact: true },
+    ).first(),
+  ).toBeVisible();
+  await expect(page.getByText(/Owner-recorded Strava activity/i)).toHaveCount(0);
 });
 
 test("mobile route story keeps chapters, geography, and Replay accessible", async ({

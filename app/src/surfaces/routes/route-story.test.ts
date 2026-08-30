@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { QuestRoute } from "@/domain/route";
-import { highestPoint, routeStoryChapters, routeStoryTitle } from "@/surfaces/routes/route-story";
+import {
+  highestPoint,
+  routeStoryChapters,
+  routeStoryPremise,
+  routeStoryTitle,
+} from "@/surfaces/routes/route-story";
 
 function route(overrides: Partial<QuestRoute> = {}): QuestRoute {
   return {
@@ -97,6 +102,27 @@ describe("route story chapters", () => {
 
   it("uses the place name when the recorded activity title has no words", () => {
     expect(routeStoryTitle(route({ activityName: "🍑🍑🍑" }))).toBe("Kyoto, Japan");
+  });
+
+  it("uses a factual route summary instead of source-ingestion metadata", () => {
+    expect(
+      routeStoryPremise(
+        route({
+          description:
+            "Owner-recorded Strava activity 123 supplied through its authenticated GPX export.",
+        }),
+      ),
+    ).toBe("A recorded 10.0 km run through Kyoto, Japan with 420 m of climbing.");
+  });
+
+  it("preserves an owner-curated route premise", () => {
+    expect(
+      routeStoryPremise(
+        route({
+          curation: { reviewStatus: "reviewed", vibe: "A long day above the city." },
+        }),
+      ),
+    ).toBe("A long day above the city.");
   });
 
   it("does not present start or finish chapters without recorded GPS geometry", () => {

@@ -22,7 +22,24 @@ export function routeStoryTitle(route: QuestRoute) {
 }
 
 export function routeStoryPremise(route: QuestRoute) {
-  return route.curation.vibe || route.description || route.completionRule;
+  const curatedPremise = route.curation.vibe?.trim();
+  if (curatedPremise) return curatedPremise;
+
+  const description = route.description.trim();
+  if (description && !isSourceMetadata(description)) return description;
+
+  const provenance = route.lifecycle === "completed" ? "recorded" : "imported";
+  const climb =
+    route.elevationStatus === "recorded" && route.elevationGainM !== null
+      ? ` with ${route.elevationGainM.toLocaleString()} m of climbing`
+      : "";
+  return `A ${provenance} ${route.distanceKm.toFixed(1)} km ${route.type.toLowerCase()} through ${route.region}${climb}.`;
+}
+
+function isSourceMetadata(description: string) {
+  return /(?:authenticated (?:gpx|fit) export|owner-recorded strava activity|source (?:file|export))/i.test(
+    description,
+  );
 }
 
 export function routeStoryChapters(route: QuestRoute): RouteStoryChapter[] {
