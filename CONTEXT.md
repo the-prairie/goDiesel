@@ -283,7 +283,6 @@ prototype and survives only in:
 
 - `quests.json` (the master routes list)
 - the `QuestRoute` TypeScript type
-- `quests.generated.json`
 - the legacy `#quest/<slug>` hash, which is canonicalized to `#/routes/<slug>`
 
 Do not add new "quest" naming. Do not rename existing occurrences opportunistically

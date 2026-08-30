@@ -1,6 +1,5 @@
 import type { QuestRoute } from "@/domain/route";
 import {
-  routeDistanceM,
   routePathPose,
   type RoutePathPose,
 } from "@/domain/geometry/route-path";

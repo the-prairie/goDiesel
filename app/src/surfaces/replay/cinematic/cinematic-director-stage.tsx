@@ -18,10 +18,8 @@ import { RecordedLightLayer } from "@/surfaces/replay/components/recorded-light-
 import { recordedLightAt } from "@/domain/geometry/recorded-light";
 import type { QuestRoute } from "@/domain/route";
 import { CinematicSoundscape } from "@/surfaces/replay/cinematic/cinematic-soundscape";
-import {
-  type CinematicRendererStatus,
-} from "@/surfaces/replay/cinematic/cesium-cinematic-renderer";
 import { NativeCinematicRenderer } from "@/surfaces/replay/cinematic/native-cinematic-renderer";
+import type { GoogleRouteNavigatorStatus } from "@/surfaces/replay/renderers/google-route-navigator-engine";
 import {
   CINEMATIC_CUT_LABELS,
   cinematicFrame,
@@ -37,7 +35,7 @@ const CUT_DESCRIPTIONS: Record<CinematicCut, string> = {
   intimate: "Closer to the ground, with the effort left in the frame.",
 };
 
-const INITIAL_STATUS: CinematicRendererStatus = {
+const INITIAL_STATUS: GoogleRouteNavigatorStatus = {
   state: "loading",
   message: "Scouting the route.",
 };
@@ -104,7 +102,7 @@ export function CinematicDirectorStage({
   const [playing, setPlaying] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [status, setStatus] =
-    useState<CinematicRendererStatus>(INITIAL_STATUS);
+    useState<GoogleRouteNavigatorStatus>(INITIAL_STATUS);
 
   const commitFrame = (nextFrame: typeof frame) => {
     elapsedRef.current = nextFrame.elapsedSeconds;

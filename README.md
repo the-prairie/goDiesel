@@ -145,7 +145,7 @@ Hash routing keeps direct Atlas, route, and Replay links compatible with static 
 
 ## Static Fallback
 
-The previous static application is retained for one release at the annotated Git tag `static-fallback-2026-07-14`.
+The previous static application remains available as repository history at the annotated Git tag `static-fallback-2026-07-14`; it is no longer generated or deployed from the current branch.
 To rebuild that exact fallback without changing the current branch:
 
 ```bash

@@ -18,6 +18,7 @@ import { routeDistanceM } from "@/domain/geometry/route-path";
 export type GoogleRouteNavigatorStatus =
   | { state: "loading"; message: string }
   | { state: "ready"; message: string }
+  | { state: "partial"; message: string }
   | { state: "unavailable"; message: string };
 
 interface MountOptions {

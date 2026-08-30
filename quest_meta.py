@@ -147,10 +147,6 @@ def build_quest_meta(activity_type, distance_km, elevation_gain, region_label, a
             f"Complete a {distance_km:.1f} km {verb} in {region_label} "
             f"with about {climbing}."
         ),
-        "quest_blurb": (
-            f"A {difficulty.lower()} {theme.lower()} quest built from Lauren's "
-            f"{activity_name or region_label} route."
-        ),
     }
 
 

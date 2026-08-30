@@ -14,6 +14,51 @@ interface Box {
   height: number;
 }
 
+async function installAtlasReplayJourneyEngine(page: Page) {
+  await page.addInitScript(() => {
+    const replayWindow = window as typeof window & {
+      __atlasReplayModes?: string[];
+      __atlasReplayDestroyCount?: number;
+      __GODIESEL_REPLAY_ENGINE_FACTORY__?: (mode: "earth" | "atlas") => {
+        mount(options: {
+          onStatus(status: {
+            state: "ready" | "partial";
+            title: string;
+            message: string;
+          }): void;
+        }): Promise<void>;
+        setPose(): void;
+        destroy(): void;
+      };
+    };
+    replayWindow.__atlasReplayModes = [];
+    replayWindow.__atlasReplayDestroyCount = 0;
+    replayWindow.__GODIESEL_REPLAY_ENGINE_FACTORY__ = (mode) => ({
+      async mount(options) {
+        replayWindow.__atlasReplayModes?.push(mode);
+        options.onStatus(
+          mode === "earth"
+            ? {
+                state: "partial",
+                title: "3D tiles partially unavailable",
+                message: "Atlas remains available for this route.",
+              }
+            : {
+                state: "ready",
+                title: "Atlas replay ready",
+                message: "The cartographic route is ready.",
+              },
+        );
+      },
+      setPose() {},
+      destroy() {
+        replayWindow.__atlasReplayDestroyCount =
+          (replayWindow.__atlasReplayDestroyCount ?? 0) + 1;
+      },
+    });
+  });
+}
+
 function boxesOverlap(first: Box, second: Box) {
   return (
     first.x < second.x + second.width &&
@@ -470,6 +515,53 @@ test("Replay back control restores the originating Atlas selection", async ({ pa
   await expect(page).toHaveURL(/#\/replay\//);
   await page.getByRole("button", { name: "Back to Atlas" }).click();
   await expect(page).toHaveURL(atlasUrl);
+});
+
+test("browser Back restores Atlas selection after Replay fallback", async ({ page }) => {
+  await installAtlasReplayJourneyEngine(page);
+  await page.goto("/#/atlas?q=kyoto&region=Kyoto%2C+Japan");
+
+  const carousel = page.getByRole("region", {
+    name: "Kyoto, Japan recorded routes",
+    exact: true,
+  });
+  const route = carousel
+    .getByRole("article")
+    .filter({ hasText: "A long, exploratory Kyoto run" });
+  await route.getByRole("button", { name: /Select / }).click();
+  await expect(route).toHaveAttribute("data-selected", "true");
+  const selectedAtlasUrl = page.url();
+
+  const replayPath = await route
+    .getByRole("link", { name: "Open route" })
+    .getAttribute("href");
+  expect(replayPath).not.toBeNull();
+  expect(replayPath).toContain("from=");
+  await page.goto(`${replayPath}&renderer=cesium`);
+
+  const stage = page.getByTestId("replay-stage");
+  await expect(stage).toHaveAttribute("data-state", "partial");
+  await page.getByRole("button", { name: "Use Atlas replay" }).click();
+  await expect(stage).toHaveAttribute("data-engine", "maplibre-atlas");
+  await expect(stage).toHaveAttribute("data-state", "ready");
+  await expect
+    .poll(() =>
+      page.evaluate(() => ({
+        modes: (window as typeof window & { __atlasReplayModes?: string[] })
+          .__atlasReplayModes,
+        destroyCount: (
+          window as typeof window & { __atlasReplayDestroyCount?: number }
+        ).__atlasReplayDestroyCount,
+      })),
+    )
+    .toEqual({ modes: ["earth", "atlas"], destroyCount: 1 });
+
+  await page.goBack();
+  await expect(page).toHaveURL(selectedAtlasUrl);
+  await expect(route).toHaveAttribute("data-selected", "true");
+  await expect(page.getByRole("textbox", { name: "Search this place" })).toHaveValue(
+    "kyoto",
+  );
 });
 
 test("mobile Atlas carousel preserves map context and exposes a route peek", async ({ page }) => {

@@ -382,11 +382,6 @@
     display: none;
   }
 
-  .atlas-region-inspector:not([data-snap]) {
-    inset: 5rem 0.75rem 0.75rem 5rem;
-    width: auto;
-    max-height: none;
-  }
 }
 
 .atlas-spine {
@@ -498,30 +493,7 @@ a {
   font: inherit;
 }
 
-@media (max-width: 639px) {
-  .atlas-region-inspector:not([data-snap]) {
-    max-height: clamp(6rem, calc(100dvh - 24rem), 44dvh);
-  }
-
-  .atlas-region-inspector[data-snap] {
-    max-height: none;
-  }
-}
-
 @media (max-height: 576px), (max-width: 639px) and (max-height: 658px) {
-  .atlas-intro {
-    max-width: calc(100% - 26rem);
-  }
-
-  .atlas-intro h1 {
-    font-size: 1.5rem;
-    line-height: 1.75rem;
-  }
-
-  .atlas-intro p {
-    display: none;
-  }
-
   .atlas-search-panel {
     right: 1.25rem;
     left: auto;
@@ -540,60 +512,11 @@ a {
     margin-top: 0;
   }
 
-  .atlas-region-inspector:not([data-snap]) {
-    right: 1.25rem;
-    bottom: 5rem;
-    top: auto;
-    max-height: 4rem;
-    flex-direction: row;
-  }
-
-  .atlas-region-inspector:not([data-snap]) > div:first-child {
-    width: 9rem;
-    flex: 0 0 9rem;
-    padding: 0.5rem;
-    border-right: 1px solid var(--border);
-    border-bottom: 0;
-  }
-
-  .atlas-region-inspector:not([data-snap]) p {
-    display: none;
-  }
-
-  .atlas-region-inspector:not([data-snap]) > div:first-child > div > div:first-child {
-    display: none;
-  }
-
-  .atlas-region-inspector:not([data-snap]) h2 {
-    margin-top: 0;
-    font-size: 0.875rem;
-    line-height: 1.25rem;
-  }
-
-  .atlas-region-inspector:not([data-snap]) > div:last-child {
-    display: flex;
-    overflow-x: auto;
-    overflow-y: hidden;
-  }
-
-  .atlas-region-inspector:not([data-snap]) > div:last-child > button {
-    min-height: 0;
-    flex: 0 0 12rem;
-    padding: 0.5rem 0.75rem;
-  }
 }
 
 @media (max-width: 639px) and (max-height: 658px) {
-  .atlas-intro {
-    display: none;
-  }
-
   .atlas-mobile-map-tools {
     top: 5rem;
-  }
-
-  .atlas-region-inspector[data-snap="peek"] {
-    height: 6rem;
   }
 
   .atlas-search-panel {
@@ -639,7 +562,4 @@ a {
     display: none;
   }
 
-  .atlas-region-inspector:not([data-snap]) {
-    top: 5.5rem;
-  }
 }

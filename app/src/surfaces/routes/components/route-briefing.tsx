@@ -1,122 +1,11 @@
-import { Flag, Mountain, Route as RouteIcon } from "lucide-react";
-
 import type { QuestRoute } from "@/domain/route";
 import {
   elevationRange,
-  projectRouteGeometry,
   sampleElevationProfile,
-  sampleRoutePoints,
 } from "@/domain/geometry/route-visualization";
 
-const traceWidth = 640;
-const traceHeight = 280;
 const profileWidth = 640;
 const profileHeight = 180;
-
-export function RouteBriefing({ route }: { route: QuestRoute }) {
-  const hasGeometry = route.route.length > 1;
-
-  return (
-    <section
-      aria-label="Route briefing"
-      className="grid min-w-0 gap-5 border-y border-border py-6"
-    >
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase text-primary">
-            Route briefing
-          </p>
-          <h2 className="mt-1 text-xl font-semibold">
-            Read the route before you replay it.
-          </h2>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {route.route.length.toLocaleString()} recorded points
-        </p>
-      </header>
-
-      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-        <figure className="grid min-w-0 grid-rows-[auto_1fr] overflow-hidden rounded-md border border-border bg-card">
-          <figcaption className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-            <span className="inline-flex items-center gap-2 text-sm font-semibold">
-              <RouteIcon className="size-4 text-primary" aria-hidden="true" />
-              Recorded path
-            </span>
-            <span className="text-xs text-muted-foreground">
-              Start to finish
-            </span>
-          </figcaption>
-          {hasGeometry ? (
-            <RouteTrace route={route} />
-          ) : (
-            <BriefingUnavailable
-              title="Recorded path unavailable"
-              copy="This route has no usable GPS geometry to preview."
-            />
-          )}
-        </figure>
-
-        <figure className="grid min-w-0 grid-rows-[auto_1fr] overflow-hidden rounded-md border border-border bg-card">
-          <figcaption className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-            <span className="inline-flex items-center gap-2 text-sm font-semibold">
-              <Mountain className="size-4 text-primary" aria-hidden="true" />
-              Elevation character
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {route.elevationGainM.toLocaleString()} m total climb
-            </span>
-          </figcaption>
-          {hasGeometry ? (
-            <ElevationProfile route={route} />
-          ) : (
-            <BriefingUnavailable
-              title="Elevation profile unavailable"
-              copy="Climb distribution needs recorded route points."
-            />
-          )}
-        </figure>
-      </div>
-    </section>
-  );
-}
-
-function RouteTrace({ route }: { route: QuestRoute }) {
-  const points = normalizeTrace(sampleRoutePoints(route.route));
-  const first = points[0];
-  const last = points.at(-1)!;
-
-  return (
-    <div className="relative h-48 overflow-hidden bg-accent/25 sm:aspect-[16/7] sm:h-auto">
-      <div className="absolute inset-0 opacity-40 [background-image:linear-gradient(var(--border)_1px,transparent_1px),linear-gradient(90deg,var(--border)_1px,transparent_1px)] [background-size:32px_32px]" />
-      <svg
-        viewBox={`0 0 ${traceWidth} ${traceHeight}`}
-        role="img"
-        aria-label={`${route.name} recorded path from start to finish`}
-        className="absolute inset-0 size-full"
-        preserveAspectRatio="xMidYMid meet"
-      >
-        <polyline
-          points={points.map(({ x, y }) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ")}
-          fill="none"
-          stroke="var(--primary)"
-          strokeWidth="4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          vectorEffect="non-scaling-stroke"
-        />
-        <circle cx={first.x} cy={first.y} r="7" fill="var(--primary)" />
-        <circle cx={last.x} cy={last.y} r="7" fill="#f5c451" />
-      </svg>
-      <div className="absolute inset-x-4 bottom-3 flex items-center justify-between text-xs font-medium">
-        <span className="text-primary">Start</span>
-        <span className="inline-flex items-center gap-1 text-[#f5c451]">
-          <Flag className="size-3.5" aria-hidden="true" />
-          Finish
-        </span>
-      </div>
-    </div>
-  );
-}
 
 export function ElevationProfile({ route }: { route: QuestRoute }) {
   const points = sampleElevationProfile(route.route);
@@ -171,42 +60,4 @@ export function ElevationProfile({ route }: { route: QuestRoute }) {
       </div>
     </div>
   );
-}
-
-function BriefingUnavailable({ title, copy }: { title: string; copy: string }) {
-  return (
-    <div className="grid min-h-48 place-items-center px-6 text-center" role="status">
-      <div className="grid max-w-xs gap-1">
-        <p className="text-sm font-medium">{title}</p>
-        <p className="text-sm text-muted-foreground">{copy}</p>
-      </div>
-    </div>
-  );
-}
-
-function normalizeTrace(points: QuestRoute["route"]) {
-  const projected = projectRouteGeometry(points);
-  const xs = projected.map((point) => point.x);
-  const ys = projected.map((point) => point.y);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-  const width = Math.max(maxX - minX, 0.00001);
-  const height = Math.max(maxY - minY, 0.00001);
-  const paddingX = 46;
-  const paddingY = 34;
-  const scale = Math.min(
-    (traceWidth - paddingX * 2) / width,
-    (traceHeight - paddingY * 2) / height,
-  );
-  const renderedWidth = width * scale;
-  const renderedHeight = height * scale;
-  const offsetX = (traceWidth - renderedWidth) / 2;
-  const offsetY = (traceHeight - renderedHeight) / 2;
-
-  return projected.map((point) => ({
-    x: offsetX + (point.x - minX) * scale,
-    y: offsetY + (maxY - point.y) * scale,
-  }));
 }

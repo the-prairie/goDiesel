@@ -24,8 +24,21 @@ to `mode: "read-only"` and renders curation from the bundled data. `admin.sh`
 starts the writer and the dev server together.
 
 A save validates the closed curation contract, writes `quests.json` atomically,
-runs the generator synchronously, and restores the original `quests.json` if the
-rebuild fails.
+then stages and individually replaces the route's detail plus manifest preview.
+It restores any generated file already replaced, and restores the original
+`quests.json`, if publication raises an error. An incomplete generated-file
+rollback preserves its recovery copy and reports its path to the operator.
+Cleanup after a completed publication is best-effort and does not change the
+successful API result.
+An incomplete generated-file rollback returns 500 and never starts the automatic
+full-rebuild fallback. The source is restored, while the response identifies the
+preserved files needed to repair the browser artifacts deliberately.
+The writer creates a source recovery copy before changing `quests.json`. If
+source restoration itself fails, that copy is preserved and the 500 response
+reports both failures and every recovery path instead of claiming rollback
+succeeded.
+Source-derived route changes still use the complete generator described in
+ADR-0003.
 
 ## Consequences
 
@@ -39,7 +52,11 @@ rebuild fails.
 - A single mutation lock returns 409 on contention, and the live pipeline gate
   security-tests the writer for cross-origin (403), oversize (413), and malformed
   (400) requests against an isolated real-data workspace.
-- Cost: a save blocks on a full rebuild inside the HTTP request (ADR-0003).
+- Cost: a save remains a synchronous local write, but touches only the two
+  generated tiers that carry owner-authored curation (ADR-0003).
+- Known gap: the two generated-tier replacements are individually atomic but not
+  transactional as a pair; a process crash between them requires curation to be
+  republished for the affected route or a full rebuild to restore agreement.
 - Known gap: routes absent from `activities.csv` are dropped from the Admin
   summary, so an imported-GPX route cannot be curated in the UI.
 - Known gap: the origin check admits a literal `Origin: None`.
@@ -47,7 +64,7 @@ rebuild fails.
 ## Evidence
 
 - `admin.py`, `admin_curation.py`, `admin.sh`
-- `app/src/data/admin-repository.ts`, `app/src/pages/admin-page.tsx`
+- `app/src/data/admin-repository.ts`, `app/src/surfaces/admin/admin-page.tsx`
 - `app/e2e/live-pipeline.spec.ts` (writer security assertions)
 - `README.md`: "The deployed Admin is read-only because the loopback writer is
   not available there."
