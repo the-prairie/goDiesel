@@ -6,7 +6,8 @@ on:
       - main
     paths:
       - ".github/workflows/runtime-gauntlet-baseline.yml"
-      - "app/e2e/atlas-pinch-stable.spec.ts"
+      - "app/e2e/atlas.spec.ts"
+      - "app/src/surfaces/atlas/cesium-atlas-world-engine.ts"
       - "app/package-lock.json"
       - "app/package.json"
       - "app/perf/**"
@@ -16,7 +17,8 @@ on:
       - main
     paths:
       - ".github/workflows/runtime-gauntlet-baseline.yml"
-      - "app/e2e/atlas-pinch-stable.spec.ts"
+      - "app/e2e/atlas.spec.ts"
+      - "app/src/surfaces/atlas/cesium-atlas-world-engine.ts"
       - "app/package-lock.json"
       - "app/package.json"
       - "app/perf/**"

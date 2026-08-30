@@ -607,7 +607,11 @@ test("mobile globe supports two-finger pinch without losing region state", async
       "data-atlas-status",
       "ready",
     );
-    const before = Number(await canvas.getAttribute("data-camera-target"));
+    await expect(canvas).toHaveAttribute("data-camera-state", "settled");
+    const readyTarget = Number(await canvas.getAttribute("data-camera-target"));
+    expect(Math.abs(readyTarget - 18_500_000)).toBeLessThan(25_000);
+
+    const before = readyTarget;
     const box = (await canvas.boundingBox())!;
     const centerX = box.x + box.width / 2;
     const centerY = box.y + box.height / 2;

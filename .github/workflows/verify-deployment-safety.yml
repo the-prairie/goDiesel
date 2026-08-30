@@ -57,12 +57,13 @@ jobs:
       - name: Deployment command regression
         run: .venv/bin/python -m pytest -q test_deployment_command.py
 
-      - name: Stress the stable Atlas pinch contract
+      - name: Stress the Atlas readiness and pinch contract
         run: >-
           cd app &&
-          npx playwright test e2e/atlas-pinch-stable.spec.ts
-          --project=chromium-pinch
-          --repeat-each=5
+          npx playwright test e2e/atlas.spec.ts
+          --project=chromium
+          --grep="mobile globe supports two-finger pinch"
+          --repeat-each=20
 
       - name: JavaScript release gate
         run: npm --prefix app run verify
