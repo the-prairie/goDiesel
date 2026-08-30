@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import uuid
 
 import gpxpy
@@ -707,11 +708,17 @@ def _validate_proposal_semantics(
 
 
 def _default_rebuild(root: Path, slug: str) -> dict[str, object]:
-    subprocess.run([str(root / "rebuild.sh")], cwd=root, check=True)
+    subprocess.run(
+        [str(root / "rebuild.sh")],
+        cwd=root,
+        check=True,
+        stdout=sys.stderr,
+    )
     subprocess.run(
         ["node", "scripts/validate-route-microsite.mjs", slug, "source"],
         cwd=root,
         check=True,
+        stdout=sys.stderr,
     )
     from route_status import route_status
 
