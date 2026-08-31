@@ -7,7 +7,7 @@ They do not override `CONTEXT.md`, accepted ADRs, executable contracts, or live 
 
 | Plan | Status | Next decision |
 | --- | --- | --- |
-| [Agent Operating System](2026-08-31-agent-operating-system-plan.md) | Ready | Approve or revise the Phase 1 read-only experiment; keep ADR-0016 proposed until the interface proves leverage |
+| [Agent Operating System](2026-08-31-agent-operating-system-plan.md) | In progress | Implement the Phase 2 route-share adapter while keeping ADR-0016 proposed until two real adapters prove leverage |
 
 ## Reference plans
 

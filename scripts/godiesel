@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+REPOSITORY_ROOT=$(dirname -- "$SCRIPT_DIR")
+
+if [ -x "$REPOSITORY_ROOT/.venv/bin/python" ]; then
+  PYTHON="$REPOSITORY_ROOT/.venv/bin/python"
+else
+  PYTHON=$(command -v python3)
+fi
+
+exec "$PYTHON" "$REPOSITORY_ROOT/godiesel_control.py" "$@"

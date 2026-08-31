@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: partially-implemented
 last_updated: 2026-08-31
 decision: ADR-0016
 ---
@@ -32,13 +32,14 @@ It is not a second domain model, a generic agent framework, or a reason to move 
 | Domain model, writer ownership, provenance, generated data tiers, and risk-based verification | Implemented |
 | Route inspect, proposal, creation, preview, publication, and public smoke workflow | Implemented through `scripts/route.sh` |
 | Five-verb operator vocabulary used by agent guidance | Documented operating model |
-| Machine-readable capability manifest | Proposed |
-| Unified `scripts/godiesel` interface | Proposed |
-| Shared result envelope and evidence receipts | Proposed |
+| Machine-readable capability manifest | Implemented in `system/capabilities.json` |
+| Unified `scripts/godiesel` interface | Read-only `inspect system` and `doctor` implemented; mutation verbs proposed |
+| Shared result envelope and evidence receipts | Read-only result envelope implemented; evidence receipts proposed |
 | Impact-directed proof selection and reuse | Proposed |
 
-Do not invoke a proposed interface or claim that a proposed receipt exists.
-Use the current commands named in focused workflows until a plan phase proves and lands its replacement.
+Use `./scripts/godiesel inspect system --json` and `./scripts/godiesel doctor --json` for current read-only control-plane inspection.
+Do not invoke a proposed mutation interface or claim that a proposed receipt exists.
+Use the current commands named in focused workflows for plan, apply, verify, and release operations until a later phase proves and lands their adapters.
 
 ## 2. Design objective
 
@@ -65,8 +66,8 @@ An upper layer may depend on the interface of a lower layer, but it must not dup
 | 1. Owner intent | Desired outcome and explicit authority for durable or external effects | Owner request |
 | 2. Product semantics | Domain language, provenance, lifecycle, and product invariants | `CONTEXT.md`, `PRODUCT.md`, `STRATEGY.md` |
 | 3. Architecture policy | Durable decisions about writers, data tiers, renderers, privacy, and verification | Accepted ADRs |
-| 4. Capability model | What the system can inspect or change, required inputs, effects, gates, and artifacts | Target capability manifest |
-| 5. Control interface | The small set of verbs an operator learns | Target `inspect`, `plan`, `apply`, `verify`, `release` interface |
+| 4. Capability model | What the system can inspect or change, required inputs, effects, gates, and artifacts | `system/capabilities.json` |
+| 5. Control interface | The small set of verbs an operator learns | Current read-only inspection plus target `inspect`, `plan`, `apply`, `verify`, `release` interface |
 | 6. Capability modules | Deep implementations for route intake, curation, generation, preview, replay, and publication | Existing Python, TypeScript, shell, and Node modules |
 | 7. Adapters | Filesystem, Strava export, browser, Google, MapLibre, Earth Engine, and Cloudflare integrations | Existing provider and command adapters |
 | 8. State and evidence | Canonical source, generated projections, runtime state, external state, and run receipts | Existing state plus target receipts |
@@ -104,7 +105,8 @@ During migration, the unified control interface delegates to existing modules an
 
 ## 5. Capability manifest
 
-The target system has one machine-readable capability manifest.
+The system has one machine-readable capability manifest whose closed contract is published in `system/capabilities.schema.json`.
+The dependency-free runtime enforces the same fields, enums, and per-verb relationships before exposing capability data.
 The manifest describes operator knowledge, not domain truth.
 It points to domain modules and commands rather than restating their rules.
 
@@ -157,8 +159,8 @@ An illustrative entry is:
 }
 ```
 
-This example is not yet an accepted schema.
-The implementation plan must first define and test the manifest contract.
+This is an abbreviated example of the implemented schema.
+The checked-in manifest is descriptive and cannot invoke its declared write or release commands.
 
 The manifest should generate or validate task indexes, command help, and verification routing.
 It must never generate `CONTEXT.md` or ADR decisions.
@@ -187,7 +189,7 @@ Every capability verb declares one authority class before execution.
 
 | Class | Meaning | Default behavior |
 | --- | --- | --- |
-| `observe` | Read local or external state without changing it | Proceed when in scope |
+| `read-only` | Read local or external state without changing it | Proceed when in scope |
 | `ephemeral-local` | Write ignored staging, caches, previews, or test artifacts | Proceed and report cleanup or persistence |
 | `canonical-local` | Change tracked source, owner state, or generated projections | Requires a user request that clearly authorizes the change |
 | `external-durable` | Publish, deploy, send, or mutate a remote system | Requires explicit authorization for the exact target and effect |
@@ -322,17 +324,15 @@ goDiesel already contains several deep modules and strong system properties:
 
 ### Operator friction
 
-The remaining friction is mostly in the control and knowledge layers:
+The remaining friction is mostly in the mutation, proof, and release layers:
 
-- An agent must assemble orientation from `AGENTS.md`, `CONTEXT.md`, ADRs, workflow guides, script help, and test policy without one system map.
+- The read-only inspector now provides one capability map, but an agent still needs focused domain guidance before changing a capability.
 - Route sharing has a coherent control interface, while curation, generation, deployment, provider checks, and evidence use separate entry points.
 - Commands return a mixture of prose, JSON, logs, URLs, and generated files without one result envelope.
 - Verification impact selection is documented but manually reconstructed from changed paths.
 - Gate validity is a prose rule rather than a fingerprinted proof.
-- There is no read-only system doctor that reports environment, writer ownership, source health, generated drift, provider configuration presence, and safe next actions.
-- Architecture and plan indexes can drift from the files they index.
-- Historical plans are not clearly separated from current plans.
-- Dynamic counts have been embedded in domain prose, where they can become stale.
+- The read-only doctor proves route identity inventory and configuration presence, but it deliberately does not re-derive generated content or contact providers.
+- The doctor checks architecture and plan indexes mechanically, but semantic contradictions between documents still require review.
 - External deployments have good smoke tests but no shared receipt contract across release types.
 
 These are leverage problems at the operator interface.

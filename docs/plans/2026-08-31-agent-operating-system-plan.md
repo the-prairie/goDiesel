@@ -1,5 +1,5 @@
 ---
-status: ready
+status: in-progress
 last_updated: 2026-08-31
 architecture: docs/architecture/agent-operating-system.md
 decision: docs/adr/0016-agent-control-plane-is-manifest-driven.md
@@ -74,8 +74,8 @@ This plan does not introduce:
 | Phase | Status | Dependency |
 | --- | --- | --- |
 | 0. Knowledge topology | Complete in this documentation branch | None |
-| 1. Manifest and doctor | Ready for owner approval | Phase 0 |
-| 2. Route-share adapter | Pending | Phase 1 manifest accuracy |
+| 1. Manifest and doctor | Complete | Phase 0 |
+| 2. Route-share adapter | Ready | Phase 1 manifest accuracy |
 | 3. Proof receipts and impact graph | Pending | Phase 2 result envelope |
 | 4. Canonical local adapters | Pending | Phase 3 verification contract |
 | 5. Release adapters | Pending | Phase 4 ownership coverage |
@@ -109,6 +109,12 @@ This plan does not introduce:
 
 ## Phase 1: Add a read-only capability manifest and system doctor
 
+Status: complete on 2026-08-31.
+
+The landed interface is deliberately read-only.
+It describes four existing capabilities, reports their authority boundaries and current commands, diagnoses local readiness, checks generated route identity inventory, and emits stable redacted JSON envelopes.
+It does not execute manifest commands or contact providers.
+
 ### Work
 
 - Define `system/capabilities.schema.json`.
@@ -140,6 +146,8 @@ It must not add a generic execution engine in this phase.
 - Unit tests for manifest schema, redaction, state classification, and error envelopes.
 - Fixture tests for clean, dirty, stale-generated, missing-config, and missing-dependency repositories.
 - One CLI acceptance test that parses standard output as JSON.
+
+Implemented by `test_godiesel_control.py` and the focused commands documented in the repository README.
 
 ## Phase 2: Generalize the route-share vertical slice
 

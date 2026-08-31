@@ -17,7 +17,7 @@ Query dynamic state and preserve unrelated work.
 
 ## Operator loop
 
-Use this loop even while the unified interface in ADR-0016 remains proposed:
+Use this loop while the unified mutation interface in ADR-0016 remains proposed:
 
 ```text
 orient -> inspect -> plan -> apply -> verify -> release -> learn
@@ -35,6 +35,8 @@ orient -> inspect -> plan -> apply -> verify -> release -> learn
 
 | Task | Start with | Owning interface today |
 | --- | --- | --- |
+| Orient to repository and capability health | `./scripts/godiesel inspect system --json` | Read-only capability manifest and doctor |
+| Diagnose local agent readiness | `./scripts/godiesel doctor --json` | Read-only capability manifest and doctor |
 | Understand product language or invariants | `CONTEXT.md`, relevant ADR | Domain modules and tests |
 | Inspect route or atlas readiness | `docs/agents/route-share.md` | `./scripts/route.sh status [slug]` |
 | Create, update, preview, or publish a route share | `docs/agents/route-share.md` | `./scripts/route.sh` |
@@ -46,7 +48,7 @@ orient -> inspect -> plan -> apply -> verify -> release -> learn
 | Change deployment or public artifact scoping | ADR-0011 and ADR-0012 | `make-dist.sh`, scoped publisher, smoke tests |
 | Select verification | `docs/agents/testing.md` | Focused, ticket, release, or live gate |
 | Triage repository work | `docs/agents/issue-tracker.md` | `the-prairie/goDiesel` issues |
-| Change the agent operating model | `docs/architecture/agent-operating-system.md` | Proposed ADR-0016 and current plan |
+| Change the agent operating model | `docs/architecture/agent-operating-system.md` | Read-only control module, proposed ADR-0016, and current plan |
 
 ## Authority
 

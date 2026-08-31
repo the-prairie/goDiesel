@@ -53,15 +53,20 @@ Start with `AGENTS.md`, root `CONTEXT.md`, and the [architecture map](docs/archi
 Inspect the atlas or one route without changing state:
 
 ```bash
+./scripts/godiesel inspect system --json
+./scripts/godiesel doctor --json
 ./scripts/route.sh status
 ./scripts/route.sh status <slug>
 ```
 
+The system inspection reports Git state, the capability inventory, authority classes, blockers, and available transitions.
+The doctor additionally checks runtimes, configuration presence, owning writers, command and documentation references, and generated route inventory without invoking a writer or provider.
+
 The current route workflow composes proposal, creation, preview, verification, and publication behind `./scripts/route.sh`.
 See `docs/agents/route-share.md` before using a write or publication command.
 
-The broader manifest-driven agent operating model is proposed in `docs/architecture/agent-operating-system.md` and sequenced in `docs/plans/2026-08-31-agent-operating-system-plan.md`.
-Do not invoke planned commands until their phase is implemented and verified.
+The read-only manifest and doctor are the first implemented phase of the broader agent operating model in `docs/architecture/agent-operating-system.md`.
+Unified plan, apply, verify, release, and evidence-receipt behavior remains proposed and is sequenced in `docs/plans/2026-08-31-agent-operating-system-plan.md`.
 
 ## Generate Route Data
 

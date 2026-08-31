@@ -58,6 +58,10 @@ The control plane records and enforces the authority required for a plan or targ
 - `scripts/route.sh`
 - `route_create.py`
 - `route_create.schema.json`
+- `system/capabilities.schema.json`
+- `system/capabilities.json`
+- `godiesel_control.py`
+- `test_godiesel_control.py`
 - `docs/agents/route-share.md`
 - `docs/agents/testing.md`
 - ADR-0003, ADR-0010, ADR-0011, ADR-0012, and ADR-0015
