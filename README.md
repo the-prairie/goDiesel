@@ -46,6 +46,23 @@ The root redirects to `#/atlas`, and the sidebar links to Finder, Routes, Replay
 
 The Playable Earth route experience is available at `#/lab/playable-earth/<route-id>` as the immersive reference for production Replay.
 
+## Agent workflow
+
+Start with `AGENTS.md`, root `CONTEXT.md`, and the [architecture map](docs/architecture/README.md).
+
+Inspect the atlas or one route without changing state:
+
+```bash
+./scripts/route.sh status
+./scripts/route.sh status <slug>
+```
+
+The current route workflow composes proposal, creation, preview, verification, and publication behind `./scripts/route.sh`.
+See `docs/agents/route-share.md` before using a write or publication command.
+
+The broader manifest-driven agent operating model is proposed in `docs/architecture/agent-operating-system.md` and sequenced in `docs/plans/2026-08-31-agent-operating-system-plan.md`.
+Do not invoke planned commands until their phase is implemented and verified.
+
 ## Generate Route Data
 
 Regenerate route summaries and full route records after changing `quests.json` or refreshing the Strava export:

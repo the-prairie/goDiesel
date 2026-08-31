@@ -1,7 +1,23 @@
 # Route Share Workflow
 
 This protocol turns structured agent intake into one locally reviewable route share.
-Creation and public publication are separate owner-authority boundaries.
+Creation and public publication are separate owner-authority checkpoints.
+
+This is the first implemented vertical slice of the operator model in `docs/architecture/agent-operating-system.md`.
+Use the commands documented here today; the broader unified interface remains proposed in ADR-0016.
+
+## Operator contract
+
+| Operator verb | Current command | Authority | Primary result |
+| --- | --- | --- | --- |
+| Inspect | `./scripts/route.sh status [slug]` | Observe | Current route readiness |
+| Plan | `./scripts/route.sh propose --request <file>` | Ephemeral local | Fingerprinted proposal JSON |
+| Apply | `./scripts/route.sh create --proposal <file>` | Canonical local | Creation report JSON |
+| Verify | `./scripts/route.sh check <slug>` or `preview <slug>` | Ephemeral local | Validation, focused journey, and optional local URLs |
+| Release | `./scripts/route.sh publish <slug> <name>` | External durable | Deployment, stable URLs, and public smoke result |
+
+Standard output from `propose` and `create` is machine-readable JSON.
+Treat their reports as the result authority rather than parsing terminal narration.
 
 ## State Machine
 
@@ -12,6 +28,9 @@ intake -> proposal -> owner approval -> create -> validate -> local preview
 
 Do not skip a state.
 The original request to make a route page does not by itself authorize a durable public URL.
+
+The approved proposal is the durable plan.
+If canonical route state, source content, media content, or proposal semantics change after approval, produce a new proposal rather than repairing the old one by hand.
 
 ## Intake
 
@@ -93,6 +112,9 @@ Warnings: <none or exact codes>
 
 Stop for missing geometry, lifecycle contradictions, unsafe paths, identity conflicts, unresolved annotation placement, or a choice that materially changes public meaning.
 
+Record the proposal id and digest-bearing source observations in the handoff.
+Do not expose absolute private source paths or full checksums in public release notes.
+
 ## Creation And Preview
 
 After explicit approval to create, run:
@@ -111,6 +133,22 @@ That bundle contains only the shared route's generated record and public media r
 Use `--detach` only when a background preview is useful; it writes a PID and log under `.route-share/`.
 Report the exact validation outcome, local guide URL, and local Replay URL.
 
+## Evidence artifacts
+
+| Artifact | State class | Purpose |
+| --- | --- | --- |
+| Request JSON | Agent input | Structured owner intent; not approved state |
+| Proposal JSON | Ignored evidence and plan | Reviewable normalized transition with source observations |
+| Staged source and media | Ignored ephemeral local state | Checksum-verified inputs used by an approved proposal |
+| Creation report JSON | Evidence result | Applied or already-applied result and validation |
+| `quests.json` and durable source files | Canonical authored state | Durable route identity, metadata, curation, and source |
+| Generated route records | Generated projection | Build output; never hand edited |
+| Local preview | Runtime evidence | Owner review without public effect |
+| Cloudflare deployment | External durable state | Public route-scoped artifact |
+
+Evidence does not replace state inspection.
+Recheck canonical and remote state before retrying after an ambiguous failure.
+
 ## Publication
 
 Stop after local preview until the owner explicitly authorizes publication and confirms the stable share name.
@@ -126,3 +164,15 @@ Use `--replace-existing` only when the owner explicitly approves replacement of 
 
 Report the public guide URL, public Replay URL, and smoke-test result.
 Google 3D or terrain promises still require the live-provider review described in `docs/agents/testing.md`.
+
+Report both the immutable deployment URL and the stable alias when Wrangler provides them.
+State explicitly when hardware-accelerated Google 3D remains unverified by headless smoke testing.
+
+## Failure handling
+
+- Invalid request or source observations require a corrected request and new proposal.
+- A source or canonical-state conflict after approval requires reinspection and a new proposal.
+- A failed canonical write must report whether state is unchanged or recoverable under `.route-share/recovery/`.
+- A failed focused journey blocks publication.
+- An ambiguous remote failure requires remote inspection before retrying.
+- A successful upload without a public smoke test is not a completed publication.
