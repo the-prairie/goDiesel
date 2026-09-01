@@ -63,9 +63,10 @@
     "release_target": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["stable_alias", "replacement_authorized"],
+      "required": ["stable_alias", "authorized_share_name", "replacement_authorized"],
       "properties": {
         "stable_alias": { "type": "string", "format": "uri" },
+        "authorized_share_name": { "type": "string", "minLength": 1 },
         "immutable_deployment_url": { "type": "string", "format": "uri" },
         "guide_url": { "type": "string", "format": "uri" },
         "replay_url": { "type": "string", "format": "uri" },
@@ -104,6 +105,7 @@
           "release_target": {
             "required": [
               "stable_alias",
+              "authorized_share_name",
               "immutable_deployment_url",
               "guide_url",
               "replay_url",

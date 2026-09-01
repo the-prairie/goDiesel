@@ -125,6 +125,35 @@ def _receipt_records(receipt_root: Path) -> list[tuple[Path, dict[str, Any]]]:
     )
 
 
+def _release_lineage_ready(receipt_root: Path, route_slug: str | None) -> bool:
+    if route_slug is None:
+        return False
+    expected = ("plan", "apply", "verify")
+    records = [
+        value
+        for _, value in _receipt_records(receipt_root)
+        if value.get("route_slug") == route_slug
+        and value.get("outcome") == "passed"
+        and isinstance(value.get("proposal_sha256"), str)
+    ]
+    for proposal_digest in reversed(
+        [
+            value["proposal_sha256"]
+            for value in records
+            if value.get("verb") == "verify"
+        ]
+    ):
+        position = 0
+        for value in records:
+            if value.get("proposal_sha256") != proposal_digest:
+                continue
+            if value.get("verb") == expected[position]:
+                position += 1
+                if position == len(expected):
+                    return True
+    return False
+
+
 def _lineage_context(
     root: Path,
     receipt_root: Path,
@@ -341,6 +370,28 @@ def _result_contract(verb: str, domain_result: object) -> str:
     return f"scripts/route.sh#{verb}-transcript"
 
 
+def _blocked_result(
+    verb: str,
+    authority: str,
+    issue: Mapping[str, str],
+) -> dict[str, Any]:
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "document_type": "godiesel-capability-result",
+        "capability": "route-share",
+        "verb": verb,
+        "status": "blocked",
+        "authority": authority,
+        "authorized": False,
+        "exit_code": 2,
+        "result": None,
+        "result_contract": "none",
+        "blockers": [dict(issue)],
+        "warnings": [],
+        "receipt": None,
+    }
+
+
 def execute_route_share(
     root: Path | str,
     verb: str,
@@ -353,6 +404,7 @@ def execute_route_share(
     detach: bool = False,
     replace_existing: bool = False,
     authority: str | None = None,
+    target_authority: str | None = None,
     replacement_authority: str | None = None,
     environ: Mapping[str, str] | None = None,
     runner: Runner = subprocess.run,
@@ -373,42 +425,31 @@ def execute_route_share(
             f"{verb} requires explicit {required_authority} authority for route-share.",
             f"Review the exact effect, then repeat with --authorize {required_authority}.",
         )
-        return {
-            "schema_version": SCHEMA_VERSION,
-            "document_type": "godiesel-capability-result",
-            "capability": "route-share",
-            "verb": verb,
-            "status": "blocked",
-            "authority": required_authority,
-            "authorized": False,
-            "exit_code": 2,
-            "result": None,
-            "result_contract": "none",
-            "blockers": [blocker],
-            "warnings": [],
-            "receipt": None,
-        }
+        return _blocked_result(verb, required_authority, blocker)
+    if verb == "release" and target_authority != share_name:
+        blocker = _issue(
+            "GODIESEL_RELEASE_TARGET_AUTHORITY_REQUIRED",
+            f"Releasing share-{share_name} requires authority for that exact stable alias.",
+            f"Review the named target, then repeat with --authorize-target {share_name}.",
+        )
+        return _blocked_result(verb, required_authority, blocker)
     if verb == "release" and replace_existing and replacement_authority != share_name:
         blocker = _issue(
             "GODIESEL_REPLACEMENT_AUTHORITY_REQUIRED",
             f"Replacing share-{share_name} requires authority for that exact stable alias.",
             f"Review the existing target, then repeat with --authorize-replacement {share_name}.",
         )
-        return {
-            "schema_version": SCHEMA_VERSION,
-            "document_type": "godiesel-capability-result",
-            "capability": "route-share",
-            "verb": verb,
-            "status": "blocked",
-            "authority": required_authority,
-            "authorized": False,
-            "exit_code": 2,
-            "result": None,
-            "result_contract": "none",
-            "blockers": [blocker],
-            "warnings": [],
-            "receipt": None,
-        }
+        return _blocked_result(verb, required_authority, blocker)
+    if verb == "release" and not _release_lineage_ready(
+        root / ".route-share" / "runs",
+        slug,
+    ):
+        blocker = _issue(
+            "GODIESEL_RELEASE_LINEAGE_REQUIRED",
+            "Release requires a passed plan, apply, and verify chain for this route and proposal.",
+            "Complete the unified plan, apply, and verify transitions before authorizing release.",
+        )
+        return _blocked_result(verb, required_authority, blocker)
 
     command = _command(
         root,
@@ -447,6 +488,7 @@ def execute_route_share(
         )
         blockers.extend(release_blockers)
         if release_target is not None:
+            release_target["authorized_share_name"] = target_authority
             release_target["replacement_authorized"] = replace_existing
 
     proposal = (

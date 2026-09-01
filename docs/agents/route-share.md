@@ -15,12 +15,14 @@ The existing `scripts/route.sh` interface remains available as a compatibility a
 | Plan | `./scripts/godiesel plan route-share --request <file> --json` | Ephemeral local | Fingerprinted proposal in a result envelope and ignored proposal file |
 | Apply | `./scripts/godiesel apply route-share --proposal <file> --authorize canonical-local --json` | Canonical local | Creation report in a result envelope |
 | Verify | `./scripts/godiesel verify route-share <slug> --json` or `--preview` | Ephemeral local | Validation, focused journey, and optional loopback URLs |
-| Release | `./scripts/godiesel release route-share <slug> <name> --authorize external-durable --json` | External durable | Deployment, stable URLs, public smoke result, and receipt |
+| Release | `./scripts/godiesel release route-share <slug> <name> --authorize external-durable --authorize-target <name> --json` | External durable | Deployment, stable URLs, public smoke result, and receipt |
 
 Standard output is a `system/result.schema.json` result envelope.
 The unchanged domain result is under `result`.
 Treat that value as the domain authority rather than parsing terminal narration.
-Plan, apply, verify, and release also write ignored receipts under `.route-share/runs/` and their digest-verifiable results under `.route-share/results/`.
+Plan, apply, verify, and release also write ignored route-transition receipts under `.route-share/runs/` and their digest-verifiable results under `.route-share/results/`.
+These Phase 2 receipts prove route workflow lineage only.
+The repository fingerprint, gate attribution, configuration presence, and other system-wide evidence fields remain part of the Phase 3 proof-receipt contract.
 
 ## State Machine
 
@@ -144,7 +146,7 @@ Report the exact validation outcome, local guide URL, and local Replay URL.
 | Request JSON | Agent input | Structured owner intent; not approved state |
 | Proposal JSON | Ignored evidence and plan | Reviewable normalized transition with source observations |
 | Capability result | Runtime evidence | Stable envelope around the unchanged domain result, authority, issues, and receipt pointer |
-| Run receipt and result artifact | Ignored evidence | Digest-linked transition outcome, exact local result, and proposal-specific lineage |
+| Route-transition receipt and result artifact | Ignored evidence | Digest-linked transition outcome, exact local result, and proposal-specific lineage |
 | Staged source and media | Ignored ephemeral local state | Checksum-verified inputs used by an approved proposal |
 | Creation report JSON | Evidence result | Applied or already-applied result and validation |
 | `quests.json` and durable source files | Canonical authored state | Durable route identity, metadata, curation, and source |
@@ -161,14 +163,17 @@ Stop after local preview until the owner explicitly authorizes publication and c
 Then run:
 
 ```sh
-./scripts/godiesel release route-share <slug> <share-name> --authorize external-durable --json
+./scripts/godiesel release route-share <slug> <share-name> --authorize external-durable --authorize-target <share-name> --json
 ```
 
 The command reuses the existing route-only build, Playwright journey, Cloudflare Pages deployment, and public smoke test.
 It refuses an existing `share-<name>` branch.
 Use `--replace-existing` only when the owner explicitly approves replacement of that durable URL.
-The release authority flag authorizes the named external transition; it does not imply replacement authority.
+The release authority class and `--authorize-target` value must both be present.
+The target value must exactly match the requested stable share name and does not imply replacement authority.
 An approved replacement also requires `--authorize-replacement <share-name>` for that exact alias.
+The unified release path also requires passed, digest-matched plan, apply, and verify receipts for the same route.
+Use the compatibility adapter only for an explicitly reviewed legacy workflow, not to bypass this state machine.
 
 Report the public guide URL, public Replay URL, and smoke-test result.
 Google 3D or terrain promises still require the live-provider review described in `docs/agents/testing.md`.

@@ -39,6 +39,53 @@ def completed(
     return subprocess.CompletedProcess(command, returncode, stdout, stderr)
 
 
+def establish_route_lineage(
+    tmp_path: Path,
+    runner: RecordingRunner,
+    *,
+    route_slug: str = "route-1",
+) -> None:
+    proposal = {
+        "document_type": "route-share-proposal",
+        "proposal_id": "proposal-1",
+        "route_spec": {"activity_id": route_slug},
+    }
+    creation = {
+        "document_type": "route-share-creation-report",
+        "proposal_id": "proposal-1",
+        "slug": route_slug,
+        "result": "created",
+    }
+    runner.results.extend(
+        [
+            completed([], stdout=json.dumps(proposal)),
+            completed([], stdout=json.dumps(creation)),
+            completed([], stdout="verified\n"),
+        ]
+    )
+    request_path = tmp_path / "request.json"
+    request_path.write_text("{}\n", encoding="utf-8")
+    planned = execute_route_share(
+        tmp_path,
+        "plan",
+        request_path=request_path,
+        runner=runner,
+    )
+    execute_route_share(
+        tmp_path,
+        "apply",
+        proposal_path=tmp_path / planned["receipt"]["result_path"],
+        authority="canonical-local",
+        runner=runner,
+    )
+    execute_route_share(
+        tmp_path,
+        "verify",
+        slug=route_slug,
+        runner=runner,
+    )
+
+
 def test_result_and_receipt_schemas_are_valid():
     result_schema = json.loads((ROOT / "system/result.schema.json").read_text())
     receipt_schema = json.loads(
@@ -194,6 +241,33 @@ def test_release_requires_exact_authority_and_preserves_replacement_guard(tmp_pa
     assert refused["status"] == "blocked"
     assert runner.calls == []
 
+    target_refused = execute_route_share(
+        tmp_path,
+        "release",
+        slug="route-1",
+        share_name="ridge",
+        authority="external-durable",
+        runner=runner,
+    )
+    assert target_refused["blockers"][0]["code"] == (
+        "GODIESEL_RELEASE_TARGET_AUTHORITY_REQUIRED"
+    )
+    assert runner.calls == []
+
+    mismatched_target_refused = execute_route_share(
+        tmp_path,
+        "release",
+        slug="route-1",
+        share_name="ridge",
+        authority="external-durable",
+        target_authority="summit",
+        runner=runner,
+    )
+    assert mismatched_target_refused["blockers"][0]["code"] == (
+        "GODIESEL_RELEASE_TARGET_AUTHORITY_REQUIRED"
+    )
+    assert runner.calls == []
+
     output = "\n".join(
         [
             "4/4 Publishing https://share-ridge.godiesel.pages.dev/",
@@ -208,6 +282,7 @@ def test_release_requires_exact_authority_and_preserves_replacement_guard(tmp_pa
         share_name="ridge",
         replace_existing=True,
         authority="external-durable",
+        target_authority="ridge",
         runner=runner,
     )
     assert replacement_refused["blockers"][0]["code"] == (
@@ -216,6 +291,7 @@ def test_release_requires_exact_authority_and_preserves_replacement_guard(tmp_pa
     assert_valid_result(replacement_refused)
     assert runner.calls == []
 
+    establish_route_lineage(tmp_path, runner)
     runner.results.append(completed([], stdout=output + "\n"))
     released = execute_route_share(
         tmp_path,
@@ -224,11 +300,32 @@ def test_release_requires_exact_authority_and_preserves_replacement_guard(tmp_pa
         share_name="ridge",
         replace_existing=True,
         authority="external-durable",
+        target_authority="ridge",
         replacement_authority="ridge",
         runner=runner,
     )
 
+    assert runner.calls[-1] == [
+        str(tmp_path / "scripts/route.sh"),
+        "publish",
+        "route-1",
+        "ridge",
+        "--replace-existing",
+    ]
     assert runner.calls == [
+        [
+            str(tmp_path / "scripts/route.sh"),
+            "propose",
+            "--request",
+            str(tmp_path / "request.json"),
+        ],
+        [
+            str(tmp_path / "scripts/route.sh"),
+            "create",
+            "--proposal",
+            str(tmp_path / ".route-share/proposals/proposal-1.json"),
+        ],
+        [str(tmp_path / "scripts/route.sh"), "check", "route-1"],
         [
             str(tmp_path / "scripts/route.sh"),
             "publish",
@@ -243,6 +340,7 @@ def test_release_requires_exact_authority_and_preserves_replacement_guard(tmp_pa
         "stable_alias": "https://share-ridge.godiesel.pages.dev/",
         "guide_url": "https://share-ridge.godiesel.pages.dev/#/routes/route-1",
         "replay_url": "https://share-ridge.godiesel.pages.dev/#/replay/route-1",
+        "authorized_share_name": "ridge",
         "replacement_authorized": True,
         "smoke_status": "passed",
     }
@@ -273,7 +371,9 @@ def test_failed_domain_json_is_preserved_in_blocked_envelope(tmp_path: Path):
 
 
 def test_release_without_immutable_url_is_incomplete_and_blocks_handoff(tmp_path: Path):
-    runner = RecordingRunner(completed([], stdout="Published route guide\n"))
+    runner = RecordingRunner()
+    establish_route_lineage(tmp_path, runner)
+    runner.results.append(completed([], stdout="Published route guide\n"))
 
     result = execute_route_share(
         tmp_path,
@@ -281,6 +381,7 @@ def test_release_without_immutable_url_is_incomplete_and_blocks_handoff(tmp_path
         slug="route-1",
         share_name="ridge",
         authority="external-durable",
+        target_authority="ridge",
         runner=runner,
     )
 
@@ -290,6 +391,26 @@ def test_release_without_immutable_url_is_incomplete_and_blocks_handoff(tmp_path
     receipt = json.loads((tmp_path / result["receipt"]["path"]).read_text())
     assert receipt["outcome"] == "incomplete"
     assert "immutable_deployment_url" not in receipt["release_target"]
+    assert_valid_result(result)
+
+
+def test_release_requires_complete_passed_route_transition_lineage(tmp_path: Path):
+    runner = RecordingRunner()
+
+    result = execute_route_share(
+        tmp_path,
+        "release",
+        slug="route-1",
+        share_name="ridge",
+        authority="external-durable",
+        target_authority="ridge",
+        runner=runner,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_RELEASE_LINEAGE_REQUIRED"
+    assert result["receipt"] is None
+    assert runner.calls == []
     assert_valid_result(result)
 
 
@@ -341,6 +462,7 @@ def test_release_receipt_links_the_complete_route_transition_lineage(tmp_path: P
         slug="route-1",
         share_name="ridge",
         authority="external-durable",
+        target_authority="ridge",
         runner=runner,
     )
 

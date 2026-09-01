@@ -34,7 +34,7 @@
         "plan": [{ "command": "./scripts/godiesel plan route-share --request <request-json> --json", "cwd": "." }],
         "apply": [{ "command": "./scripts/godiesel apply route-share --proposal <proposal-path> --authorize canonical-local --json", "cwd": "." }],
         "verify": [{ "command": "./scripts/godiesel verify route-share <slug> --json", "cwd": "." }],
-        "release": [{ "command": "./scripts/godiesel release route-share <slug> <share-name> --authorize external-durable --json", "cwd": "." }]
+        "release": [{ "command": "./scripts/godiesel release route-share <slug> <share-name> --authorize external-durable --authorize-target <share-name> --json", "cwd": "." }]
       },
       "preconditions": [
         "supplied source is locally readable or available through the authenticated export",

@@ -226,6 +226,8 @@ A result states what happened in the command's own domain.
 
 Every multi-step run may additionally produce an evidence receipt.
 A receipt composes results without becoming a new source of product truth.
+Phase 2 implements narrower route-transition receipts for proposal-specific lineage and release evidence.
+The complete system-wide evidence receipt described below, including repository fingerprints and executed-gate attribution, remains Phase 3 work.
 
 A receipt records:
 

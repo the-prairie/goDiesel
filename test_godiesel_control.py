@@ -6,7 +6,7 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
-from godiesel_control import doctor_system, inspect_system
+from godiesel_control import doctor_system, inspect_system, main
 
 
 ROOT = Path(__file__).resolve().parent
@@ -113,6 +113,10 @@ def test_capability_manifest_is_valid_and_declares_the_system_boundaries():
     assert capabilities["route-share"]["authority"]["inspect"] == "read-only"
     assert capabilities["route-share"]["authority"]["apply"] == "canonical-local"
     assert capabilities["route-share"]["authority"]["release"] == "external-durable"
+    assert capabilities["route-share"]["commands"]["release"][0]["command"] == (
+        "./scripts/godiesel release route-share <slug> <share-name> "
+        "--authorize external-durable --authorize-target <share-name> --json"
+    )
     assert capabilities["application-release"]["commands"]["release"][0]["command"] == (
         "npx wrangler pages deploy dist --project-name=godiesel --branch=production"
     )
@@ -126,6 +130,39 @@ def test_capability_manifest_is_valid_and_declares_the_system_boundaries():
         assert set(capability["inputs"]) == verbs
         assert set(capability["idempotency"]) == verbs
         assert set(capability["recovery"]) == verbs
+
+
+def test_release_cli_forwards_exact_target_authority(monkeypatch, capsys):
+    captured: dict[str, object] = {}
+
+    def fake_execute(root: Path, verb: str, **kwargs: object) -> dict[str, object]:
+        captured.update({"root": root, "verb": verb, **kwargs})
+        return {
+            "status": "passed",
+            "exit_code": 0,
+        }
+
+    monkeypatch.setattr("godiesel_control.execute_route_share", fake_execute)
+
+    exit_code = main(
+        [
+            "release",
+            "route-share",
+            "route-1",
+            "ridge",
+            "--authorize",
+            "external-durable",
+            "--authorize-target",
+            "ridge",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    assert captured["verb"] == "release"
+    assert captured["authority"] == "external-durable"
+    assert captured["target_authority"] == "ridge"
+    assert json.loads(capsys.readouterr().out)["status"] == "passed"
 
 
 def test_inspect_system_returns_a_redacted_operator_view():

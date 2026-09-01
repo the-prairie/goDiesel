@@ -1052,6 +1052,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--detach", action="store_true")
     parser.add_argument("--replace-existing", action="store_true")
     parser.add_argument("--authorize")
+    parser.add_argument("--authorize-target")
     parser.add_argument("--authorize-replacement")
     parser.add_argument("--json", action="store_true", dest="as_json")
     args = parser.parse_args(argv)
@@ -1087,6 +1088,7 @@ def main(argv: list[str] | None = None) -> int:
                 detach=args.detach,
                 replace_existing=args.replace_existing,
                 authority=args.authorize,
+                target_authority=args.authorize_target,
                 replacement_authority=args.authorize_replacement,
             )
         else:
