@@ -378,8 +378,9 @@ Invariants 11 and 12 are enforced by `app/src/structure.test.ts`.
 | System architecture and operator model | `docs/architecture/` |
 | Focused operating procedures | `docs/agents/` |
 | Current and historical plans | `docs/plans/README.md` |
-| Route control interface | `scripts/route.sh` |
-| Ignored route-share staging and recovery evidence | `.route-share/` |
+| Agent control interface | `scripts/godiesel` |
+| Route compatibility interface | `scripts/route.sh` |
+| Ignored route-share proposals, result artifacts, receipts, staging, and recovery evidence | `.route-share/` |
 
 ## 11. Domain-modeling gaps
 

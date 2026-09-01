@@ -20,21 +20,21 @@
         "plan": ["normalized request JSON", "optional owner choices"],
         "apply": ["approved proposal path"],
         "verify": ["route slug"],
-        "release": ["route slug", "stable share name", "exact target authority"]
+        "release": ["route slug", "stable share name", "exact target authority", "exact replacement authority when replacing an alias"]
       },
       "reads": ["quests.json", "route_sources/**", ".route-share/**"],
       "writes": [".route-share/**", "quests.json", "route_sources/imported/**", "route_sources/media/**", "app/public/media/**", "app/src/data/generated/**", "app/public/data/routes/**", "dist/**"],
       "external_effects": ["cloudflare-pages-route-branch"],
-      "required_files": ["scripts/route.sh", "route_create.py", "route_create.schema.json", "docs/agents/route-share.md"],
+      "required_files": ["scripts/godiesel", "godiesel_route_share.py", "scripts/route.sh", "route_create.py", "route_create.schema.json", "system/result.schema.json", "system/route-share-receipt.schema.json", "docs/agents/route-share.md"],
       "configuration": [
         { "name": "GOOGLE_MAPS_API_KEY", "required_for": ["release"], "sensitive": true }
       ],
       "commands": {
-        "inspect": [{ "command": "./scripts/route.sh status", "cwd": "." }],
-        "plan": [{ "command": "./scripts/route.sh propose --request <request-json>", "cwd": "." }],
-        "apply": [{ "command": "./scripts/route.sh create --proposal <proposal-path>", "cwd": "." }],
-        "verify": [{ "command": "./scripts/route.sh check <slug>", "cwd": "." }],
-        "release": [{ "command": "./scripts/route.sh publish <slug> <share-name>", "cwd": "." }]
+        "inspect": [{ "command": "./scripts/godiesel inspect route-share --json", "cwd": "." }],
+        "plan": [{ "command": "./scripts/godiesel plan route-share --request <request-json> --json", "cwd": "." }],
+        "apply": [{ "command": "./scripts/godiesel apply route-share --proposal <proposal-path> --authorize canonical-local --json", "cwd": "." }],
+        "verify": [{ "command": "./scripts/godiesel verify route-share <slug> --json", "cwd": "." }],
+        "release": [{ "command": "./scripts/godiesel release route-share <slug> <share-name> --authorize external-durable --json", "cwd": "." }]
       },
       "preconditions": [
         "supplied source is locally readable or available through the authenticated export",
@@ -57,7 +57,10 @@
         "release": "Re-inspect the named Cloudflare target after any ambiguous remote result before retrying."
       },
       "artifacts": [
-        { "kind": "route-share-proposal", "location": "command result or .route-share/**", "persistence": "ignored-local", "schema": "route_create.schema.json#/$defs/proposal" },
+        { "kind": "route-share-proposal", "location": "command result and .route-share/proposals/**", "persistence": "ignored-local", "schema": "route_create.schema.json#/$defs/proposal" },
+        { "kind": "capability-result", "location": "command result", "persistence": "runtime", "schema": "system/result.schema.json" },
+        { "kind": "route-share-run-receipt", "location": ".route-share/runs/**", "persistence": "ignored-local", "schema": "system/route-share-receipt.schema.json" },
+        { "kind": "route-share-result-artifact", "location": ".route-share/results/**", "persistence": "ignored-local" },
         { "kind": "route-share-creation-report", "location": "command result", "persistence": "ignored-local", "schema": "route-share-creation-report" },
         { "kind": "route-source-staging", "location": ".route-share/staging/**", "persistence": "ignored-local" },
         { "kind": "route-write-recovery", "location": ".route-share/recovery/**", "persistence": "ignored-local" },
@@ -68,7 +71,7 @@
       ],
       "invariants": ["source-truth", "stable-route-identity", "single-route-microsite"],
       "verification": {
-        "focused": [{ "command": "python -m pytest -q test_route_create.py test_route_share_cli.py", "cwd": "." }],
+        "focused": [{ "command": "python -m pytest -q test_godiesel_route_share.py test_route_create.py test_route_share_cli.py", "cwd": "." }],
         "ticket": [{ "command": "./scripts/test-route-share-acceptance.sh", "cwd": "." }],
         "live": [{ "command": "node app/scripts/smoke-single-route-microsite.mjs <public-url> <slug>", "cwd": "." }]
       },

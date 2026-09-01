@@ -4,20 +4,23 @@ This protocol turns structured agent intake into one locally reviewable route sh
 Creation and public publication are separate owner-authority checkpoints.
 
 This is the first implemented vertical slice of the operator model in `docs/architecture/agent-operating-system.md`.
-Use the commands documented here today; the broader unified interface remains proposed in ADR-0016.
+The five-verb `scripts/godiesel` interface is authoritative for agent operation.
+The existing `scripts/route.sh` interface remains available as a compatibility adapter while parity is measured.
 
 ## Operator contract
 
-| Operator verb | Current command | Authority | Primary result |
+| Operator verb | Unified command | Authority | Primary result |
 | --- | --- | --- | --- |
-| Inspect | `./scripts/route.sh status [slug]` | Observe | Current route readiness |
-| Plan | `./scripts/route.sh propose --request <file>` | Ephemeral local | Fingerprinted proposal JSON |
-| Apply | `./scripts/route.sh create --proposal <file>` | Canonical local | Creation report JSON |
-| Verify | `./scripts/route.sh check <slug>` or `preview <slug>` | Ephemeral local | Validation, focused journey, and optional local URLs |
-| Release | `./scripts/route.sh publish <slug> <name>` | External durable | Deployment, stable URLs, and public smoke result |
+| Inspect | `./scripts/godiesel inspect route-share [slug] --json` | Read only | Current route readiness |
+| Plan | `./scripts/godiesel plan route-share --request <file> --json` | Ephemeral local | Fingerprinted proposal in a result envelope and ignored proposal file |
+| Apply | `./scripts/godiesel apply route-share --proposal <file> --authorize canonical-local --json` | Canonical local | Creation report in a result envelope |
+| Verify | `./scripts/godiesel verify route-share <slug> --json` or `--preview` | Ephemeral local | Validation, focused journey, and optional loopback URLs |
+| Release | `./scripts/godiesel release route-share <slug> <name> --authorize external-durable --json` | External durable | Deployment, stable URLs, public smoke result, and receipt |
 
-Standard output from `propose` and `create` is machine-readable JSON.
-Treat their reports as the result authority rather than parsing terminal narration.
+Standard output is a `system/result.schema.json` result envelope.
+The unchanged domain result is under `result`.
+Treat that value as the domain authority rather than parsing terminal narration.
+Plan, apply, verify, and release also write ignored receipts under `.route-share/runs/` and their digest-verifiable results under `.route-share/results/`.
 
 ## State Machine
 
@@ -87,10 +90,11 @@ Example existing-route request:
 Run:
 
 ```sh
-./scripts/route.sh propose --request request.json > proposal.json
+./scripts/godiesel plan route-share --request request.json --json
 ```
 
 `propose` may write an ignored, checksum-verified staging copy under `.route-share/`.
+The result envelope's `receipt.result_path` points to the exact proposal under `.route-share/proposals/` for the apply transition.
 It does not modify `quests.json`, `route_sources/`, generated data, or a public deployment.
 Partial curation in an existing-route request is merged over the route's current curation; omitted reviewed fields are preserved.
 Do not edit fields outside the closed proposal schema.
@@ -120,8 +124,8 @@ Do not expose absolute private source paths or full checksums in public release 
 After explicit approval to create, run:
 
 ```sh
-./scripts/route.sh create --proposal proposal.json
-./scripts/route.sh preview <slug>
+./scripts/godiesel apply route-share --proposal .route-share/proposals/<proposal-id>.json --authorize canonical-local --json
+./scripts/godiesel verify route-share <slug> --preview --json
 ```
 
 `create` registers durable sources, atomically updates `quests.json`, rebuilds generated data, validates source health and the microsite source record, and emits a JSON creation report.
@@ -139,6 +143,8 @@ Report the exact validation outcome, local guide URL, and local Replay URL.
 | --- | --- | --- |
 | Request JSON | Agent input | Structured owner intent; not approved state |
 | Proposal JSON | Ignored evidence and plan | Reviewable normalized transition with source observations |
+| Capability result | Runtime evidence | Stable envelope around the unchanged domain result, authority, issues, and receipt pointer |
+| Run receipt and result artifact | Ignored evidence | Digest-linked transition outcome, exact local result, and proposal-specific lineage |
 | Staged source and media | Ignored ephemeral local state | Checksum-verified inputs used by an approved proposal |
 | Creation report JSON | Evidence result | Applied or already-applied result and validation |
 | `quests.json` and durable source files | Canonical authored state | Durable route identity, metadata, curation, and source |
@@ -155,12 +161,14 @@ Stop after local preview until the owner explicitly authorizes publication and c
 Then run:
 
 ```sh
-./scripts/route.sh publish <slug> <share-name>
+./scripts/godiesel release route-share <slug> <share-name> --authorize external-durable --json
 ```
 
 The command reuses the existing route-only build, Playwright journey, Cloudflare Pages deployment, and public smoke test.
 It refuses an existing `share-<name>` branch.
 Use `--replace-existing` only when the owner explicitly approves replacement of that durable URL.
+The release authority flag authorizes the named external transition; it does not imply replacement authority.
+An approved replacement also requires `--authorize-replacement <share-name>` for that exact alias.
 
 Report the public guide URL, public Replay URL, and smoke-test result.
 Google 3D or terrain promises still require the live-provider review described in `docs/agents/testing.md`.

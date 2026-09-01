@@ -30,16 +30,16 @@ It is not a second domain model, a generic agent framework, or a reason to move 
 | Capability | Status |
 | --- | --- |
 | Domain model, writer ownership, provenance, generated data tiers, and risk-based verification | Implemented |
-| Route inspect, proposal, creation, preview, publication, and public smoke workflow | Implemented through `scripts/route.sh` |
-| Five-verb operator vocabulary used by agent guidance | Documented operating model |
+| Route inspect, proposal, creation, preview, publication, and public smoke workflow | Implemented through `scripts/godiesel`; `scripts/route.sh` remains compatible |
+| Five-verb operator vocabulary used by agent guidance | Implemented for route share; other adapters remain proposed |
 | Machine-readable capability manifest | Implemented in `system/capabilities.json` |
-| Unified `scripts/godiesel` interface | Read-only `inspect system` and `doctor` implemented; mutation verbs proposed |
-| Shared result envelope and evidence receipts | Read-only result envelope implemented; evidence receipts proposed |
+| Unified `scripts/godiesel` interface | System inspection, doctor, and the full route-share capability implemented |
+| Shared result envelope and evidence receipts | Route-share results and ignored digest-linked receipts implemented; general proof receipts proposed |
 | Impact-directed proof selection and reuse | Proposed |
 
 Use `./scripts/godiesel inspect system --json` and `./scripts/godiesel doctor --json` for current read-only control-plane inspection.
-Do not invoke a proposed mutation interface or claim that a proposed receipt exists.
-Use the current commands named in focused workflows for plan, apply, verify, and release operations until a later phase proves and lands their adapters.
+Use the route-share commands in `docs/agents/route-share.md` for that implemented capability.
+Do not invoke mutation verbs for another capability or claim that Phase 3 proof selection and reuse exist.
 
 ## 2. Design objective
 

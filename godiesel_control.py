@@ -13,6 +13,9 @@ import sys
 from pathlib import Path
 from typing import Any, Mapping
 
+from godiesel_route_share import AUTHORITY as ROUTE_SHARE_AUTHORITY
+from godiesel_route_share import execute_route_share
+
 
 SCHEMA_VERSION = 1
 MANIFEST_PATH = Path("system/capabilities.json")
@@ -231,6 +234,7 @@ def _is_artifacts(value: Any) -> bool:
         if not all(_is_string(item[key]) for key in item):
             return False
         if item["persistence"] not in {
+            "runtime",
             "ignored-local",
             "tracked-local",
             "generated-local",
@@ -992,6 +996,25 @@ def doctor_system(
 
 
 def _render_human(result: Mapping[str, Any]) -> str:
+    if result["document_type"] == "godiesel-capability-result":
+        lines = [
+            f"{result['status'].upper()}: {result['capability']} {result['verb']}",
+            f"Authority: {result['authority']}",
+        ]
+        receipt = result.get("receipt")
+        if receipt:
+            lines.append(f"Receipt: {receipt['path']}")
+        for issue in result.get("blockers", []) + result.get("warnings", []):
+            lines.append(f"- {issue['code']}: {issue['message']}")
+        domain_result = result.get("result")
+        if isinstance(domain_result, dict) and set(domain_result) == {"stdout", "stderr"}:
+            if domain_result["stdout"]:
+                lines.append(domain_result["stdout"].rstrip())
+            if domain_result["stderr"]:
+                lines.append(domain_result["stderr"].rstrip())
+        else:
+            lines.append(json.dumps(domain_result, indent=2, ensure_ascii=False))
+        return "\n".join(lines)
     title = result["document_type"].replace("godiesel-", "").replace("-", " ")
     repository = result.get("repository", {})
     lines = [f"{result['status'].upper()}: {title}"]
@@ -1016,38 +1039,105 @@ def _render_human(result: Mapping[str, Any]) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="godiesel")
-    parser.add_argument("verb", choices=("inspect", "doctor"))
-    parser.add_argument("target", choices=("system",), nargs="?", default="system")
+    parser.add_argument(
+        "verb",
+        choices=("inspect", "plan", "apply", "verify", "release", "doctor"),
+    )
+    parser.add_argument("target", nargs="?", default="system")
+    parser.add_argument("slug", nargs="?")
+    parser.add_argument("share_name", nargs="?")
+    parser.add_argument("--request")
+    parser.add_argument("--proposal")
+    parser.add_argument("--preview", action="store_true")
+    parser.add_argument("--detach", action="store_true")
+    parser.add_argument("--replace-existing", action="store_true")
+    parser.add_argument("--authorize")
+    parser.add_argument("--authorize-replacement")
     parser.add_argument("--json", action="store_true", dest="as_json")
     args = parser.parse_args(argv)
     root = Path(__file__).resolve().parent
     try:
-        result = inspect_system(root) if args.verb == "inspect" else doctor_system(root)
+        if args.verb == "doctor":
+            if args.target != "system":
+                parser.error("doctor only supports the system target")
+            result = doctor_system(root)
+        elif args.target == "system":
+            if args.verb != "inspect":
+                parser.error("system currently supports inspect and doctor")
+            result = inspect_system(root)
+        elif args.target == "route-share":
+            if args.verb == "plan" and args.request is None:
+                parser.error("plan route-share requires --request")
+            if args.verb == "apply" and args.proposal is None:
+                parser.error("apply route-share requires --proposal")
+            if args.verb in {"verify", "release"} and args.slug is None:
+                parser.error(f"{args.verb} route-share requires a route slug")
+            if args.verb == "release" and args.share_name is None:
+                parser.error("release route-share requires a share name")
+            if args.detach and not args.preview:
+                parser.error("--detach requires --preview")
+            result = execute_route_share(
+                root,
+                args.verb,
+                request_path=args.request,
+                proposal_path=args.proposal,
+                slug=args.slug,
+                share_name=args.share_name,
+                preview=args.preview,
+                detach=args.detach,
+                replace_existing=args.replace_existing,
+                authority=args.authorize,
+                replacement_authority=args.authorize_replacement,
+            )
+        else:
+            parser.error(f"unknown target: {args.target}")
     except Exception:
-        issue = _issue(
-            "GODIESEL_CONTROL_INTERNAL_ERROR",
-            "The read-only control inspection could not complete.",
-            "Run the focused control-plane tests and inspect the local repository state.",
-        )
-        result = {
-            "schema_version": SCHEMA_VERSION,
-            "document_type": "godiesel-control-error",
-            "status": "blocked",
-            "repository": {
-                "commit": None,
-                "branch": None,
-                "worktree": {"clean": False, "changed_paths": []},
-            },
-            "capabilities": [],
-            "blockers": [issue],
-            "warnings": [],
-            "next_transitions": [],
-        }
+        if args.target == "route-share" and args.verb in ROUTE_SHARE_AUTHORITY:
+            issue = _issue(
+                "GODIESEL_CONTROL_INTERNAL_ERROR",
+                "The route-share transition could not produce a complete result.",
+                "Run the focused route-share adapter tests and inspect ignored local receipts before retrying.",
+            )
+            result = {
+                "schema_version": SCHEMA_VERSION,
+                "document_type": "godiesel-capability-result",
+                "capability": "route-share",
+                "verb": args.verb,
+                "status": "blocked",
+                "authority": ROUTE_SHARE_AUTHORITY[args.verb],
+                "authorized": False,
+                "exit_code": 2,
+                "result": None,
+                "result_contract": "none",
+                "blockers": [issue],
+                "warnings": [],
+                "receipt": None,
+            }
+        else:
+            issue = _issue(
+                "GODIESEL_CONTROL_INTERNAL_ERROR",
+                "The read-only control inspection could not complete.",
+                "Run the focused control-plane tests and inspect the local repository state.",
+            )
+            result = {
+                "schema_version": SCHEMA_VERSION,
+                "document_type": "godiesel-control-error",
+                "status": "blocked",
+                "repository": {
+                    "commit": None,
+                    "branch": None,
+                    "worktree": {"clean": False, "changed_paths": []},
+                },
+                "capabilities": [],
+                "blockers": [issue],
+                "warnings": [],
+                "next_transitions": [],
+            }
     if args.as_json:
         print(json.dumps(result, sort_keys=True, separators=(",", ":")))
     else:
         print(_render_human(result))
-    return 2 if result["status"] == "blocked" else 0
+    return int(result.get("exit_code", 2 if result["status"] == "blocked" else 0))
 
 
 if __name__ == "__main__":

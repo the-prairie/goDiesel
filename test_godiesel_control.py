@@ -148,7 +148,7 @@ def test_inspect_system_returns_a_redacted_operator_view():
     assert route_share["next_transitions"][0] == {
         "verb": "inspect",
         "authority": "read-only",
-        "command": "./scripts/route.sh status",
+        "command": "./scripts/godiesel inspect route-share --json",
     }
     assert result["next_transitions"] == [
         {

@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://godiesel.local/system/result.schema.json",
+  "title": "goDiesel capability result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "document_type",
+    "capability",
+    "verb",
+    "status",
+    "authority",
+    "authorized",
+    "exit_code",
+    "result",
+    "result_contract",
+    "blockers",
+    "warnings",
+    "receipt"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "document_type": { "const": "godiesel-capability-result" },
+    "capability": { "type": "string", "minLength": 1 },
+    "verb": { "enum": ["inspect", "plan", "apply", "verify", "release"] },
+    "status": { "enum": ["passed", "warning", "blocked"] },
+    "authority": {
+      "enum": ["read-only", "ephemeral-local", "canonical-local", "external-durable", "destructive"]
+    },
+    "authorized": { "type": "boolean" },
+    "exit_code": { "type": "integer", "minimum": 0 },
+    "result": true,
+    "result_contract": { "type": "string", "minLength": 1 },
+    "blockers": { "$ref": "#/$defs/issues" },
+    "warnings": { "$ref": "#/$defs/issues" },
+    "receipt": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "path", "result_sha256"],
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "path": { "type": "string", "pattern": "^\\.route-share/runs/.+\\.json$" },
+            "result_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "result_path": { "type": "string", "pattern": "^\\.route-share/proposals/.+\\.json$" },
+            "evidence_path": { "type": "string", "pattern": "^\\.route-share/results/.+\\.json$" }
+          }
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message", "remediation"],
+        "properties": {
+          "code": { "type": "string", "pattern": "^GODIESEL_[A-Z0-9_]+$" },
+          "message": { "type": "string", "minLength": 1 },
+          "remediation": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

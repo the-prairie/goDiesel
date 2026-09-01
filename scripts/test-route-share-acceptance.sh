@@ -94,16 +94,22 @@ NODE
 ./scripts/route.sh create \
   --proposal .route-share/plateau-proposal.json \
   > .route-share/plateau-create.json
-./scripts/route.sh propose \
-  --request .route-share/owner-request.json \
-  > .route-share/owner-proposal.json
+./scripts/godiesel plan route-share \
+  --request .route-share/owner-request.json --json \
+  > .route-share/owner-plan-envelope.json
+OWNER_PROPOSAL=$(node -e 'const value=require("./.route-share/owner-plan-envelope.json"); process.stdout.write(value.receipt.result_path)')
+./scripts/godiesel apply route-share \
+  --proposal "$OWNER_PROPOSAL" --authorize canonical-local --json \
+  > .route-share/owner-create-envelope.json
 ./scripts/route.sh create \
-  --proposal .route-share/owner-proposal.json \
-  > .route-share/owner-create.json
-./scripts/route.sh create \
-  --proposal .route-share/owner-proposal.json \
-  > .route-share/owner-retry.json
-./scripts/route.sh preview gpx-acceptance-owner-adventure --detach \
+  --proposal "$OWNER_PROPOSAL" \
+  > .route-share/owner-compatibility-retry.json
+./scripts/godiesel apply route-share \
+  --proposal "$OWNER_PROPOSAL" --authorize canonical-local --json \
+  > .route-share/owner-retry-envelope.json
+./scripts/godiesel verify route-share gpx-acceptance-owner-adventure \
+  --preview --detach --json > .route-share/preview-envelope.json
+node -e 'const value=require("./.route-share/preview-envelope.json"); process.stdout.write(value.result.stdout)' \
   > .route-share/acceptance-preview.txt
 PREVIEW_PID=$(tr -cd '0-9' < .route-share/preview-gpx-acceptance-owner-adventure.pid)
 GUIDE_URL=$(awk '/Local route guide:/ {print $4}' .route-share/acceptance-preview.txt)
@@ -126,10 +132,15 @@ const route = JSON.parse(fs.readFileSync(
   "app/public/data/routes/gpx-acceptance-owner-adventure.json",
   "utf8",
 ));
-const retry = JSON.parse(fs.readFileSync(
-  ".route-share/owner-retry.json",
+const retryEnvelope = JSON.parse(fs.readFileSync(
+  ".route-share/owner-retry-envelope.json",
   "utf8",
 ));
+const compatibilityRetry = JSON.parse(fs.readFileSync(
+  ".route-share/owner-compatibility-retry.json",
+  "utf8",
+));
+const retry = retryEnvelope.result;
 if (route.lifecycle !== "discovered" || route.date !== "") {
   throw new Error("acceptance route lifecycle/date provenance changed");
 }
@@ -150,6 +161,9 @@ if (route.annotations?.[0]?.body !== "Review major crossings and local access be
 }
 if (retry.result !== "already_applied" || !retry.validation?.publishable) {
   throw new Error("acceptance retry did not revalidate canonical state");
+}
+if (JSON.stringify(retry) !== JSON.stringify(compatibilityRetry)) {
+  throw new Error("unified and compatibility retries produced different domain results");
 }
 const dataFiles = fs.readdirSync("dist/data/routes");
 if (dataFiles.length !== 1 || dataFiles[0] !== "gpx-acceptance-owner-adventure.json") {
