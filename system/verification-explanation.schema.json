@@ -44,11 +44,16 @@
     "classification": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["path", "capabilities", "categories", "rules"],
+      "required": ["path", "capabilities", "categories", "invariants", "rules"],
       "properties": {
         "path": { "type": "string", "minLength": 1 },
         "capabilities": { "$ref": "#/$defs/identifiers" },
         "categories": { "$ref": "#/$defs/categories" },
+        "invariants": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/invariant" },
+          "uniqueItems": true
+        },
         "rules": { "$ref": "#/$defs/identifiers" }
       }
     },
@@ -66,7 +71,7 @@
       ],
       "properties": {
         "capability": { "type": "string", "pattern": "^[a-z][a-z0-9-]+$" },
-        "tier": { "enum": ["focused", "ticket", "live"] },
+        "tier": { "enum": ["focused", "ticket", "release", "live"] },
         "command": { "type": "string", "minLength": 1 },
         "cwd": { "type": "string", "minLength": 1 },
         "provider": { "enum": ["deterministic-local", "live-provider"] },
@@ -82,6 +87,15 @@
       "type": "array",
       "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]+$" },
       "uniqueItems": true
+    },
+    "invariant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capability", "id"],
+      "properties": {
+        "capability": { "type": "string", "pattern": "^[a-z][a-z0-9-]+$" },
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]+$" }
+      }
     },
     "categories": {
       "type": "array",

@@ -158,7 +158,12 @@ Escalate to the release tier when a defect indicates a cross-application regress
 
 A proof's covered inputs include implementation, contracts, schemas, fixtures, test code, build and runtime configuration, canonical data fingerprints when applicable, and the external provider or deployment target for live proof.
 The manifest-owned fingerprint aggregates every matching file per impact pattern, records absent patterns, records configuration presence without secret values, and digests non-sensitive provider targets.
+Each observed file also contributes its file type, executable mode, and symlink target when applicable.
 Changing any covered input invalidates that proof.
+
+Each impact rule names the capability invariants that justify its selected gates.
+Focused route-share evidence records the exact manifest-declared route check that ran; its fingerprint covers the route-only application source, browser journey, build and scoping scripts, dependency and test configuration, route data, and public route media consumed by that check.
+Live proof requires an explicit provider or deployment target even when no additional credential is required.
 
 Documentation, evidence packaging, or unrelated edits do not invalidate a proof unless they change an executable command, contract, or claimed behavior.
 

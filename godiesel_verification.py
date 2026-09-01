@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fnmatch
 import json
+import stat
 import subprocess
 from hashlib import sha256
 from pathlib import Path, PurePosixPath
@@ -18,6 +19,7 @@ SCHEMA_VERSION = 1
 MANIFEST_PATH = Path("system/capabilities.json")
 EVIDENCE_SCHEMA_PATH = Path("system/evidence-receipt.schema.json")
 EVIDENCE_ROOT = Path(".godiesel/evidence")
+VERIFICATION_TIERS = {"focused", "ticket", "release", "live"}
 
 
 def _issue(code: str, message: str, remediation: str) -> dict[str, str]:
@@ -145,13 +147,18 @@ def _pattern_input(
             f"The covered input pattern {normalized} could not be read.",
             "Repair the repository input and rerun verification before reuse.",
         )
-    observed = [
-        {
+    observed = []
+    for path in candidates:
+        metadata = path.lstat()
+        entry = {
             "path": path.relative_to(root).as_posix(),
+            "kind": "symlink" if path.is_symlink() else "file",
+            "mode": format(stat.S_IMODE(metadata.st_mode), "04o"),
             "sha256": _file_digest(path),
         }
-        for path in candidates
-    ]
+        if path.is_symlink():
+            entry["target"] = path.readlink().as_posix()
+        observed.append(entry)
     return (
         {
             "category": category,
@@ -181,6 +188,8 @@ def build_proof_snapshot(
             "status": "blocked",
             "covered_inputs": [],
             "configuration": [],
+            "impact_rules": [],
+            "gates": [],
             "proof_fingerprint": canonical_digest([]),
             "blockers": blockers,
         }
@@ -204,10 +213,34 @@ def build_proof_snapshot(
             "status": "blocked",
             "covered_inputs": [],
             "configuration": [],
+            "impact_rules": [],
+            "gates": [],
             "proof_fingerprint": canonical_digest([]),
             "blockers": blockers,
         }
     selected_tiers = sorted(set(tiers))
+    unknown_tiers = sorted(set(selected_tiers) - VERIFICATION_TIERS)
+    unavailable_tiers = sorted(
+        tier for tier in selected_tiers if tier not in capability.get("verification", {})
+    )
+    if unknown_tiers or unavailable_tiers:
+        named = ", ".join(unknown_tiers or unavailable_tiers)
+        blockers.append(
+            _issue(
+                "GODIESEL_VERIFICATION_TIER_UNKNOWN",
+                f"The verification tier selection contains unsupported tier(s): {named}.",
+                "Select focused, ticket, release, or live proof declared by the capability manifest.",
+            )
+        )
+        return {
+            "status": "blocked",
+            "covered_inputs": [],
+            "configuration": [],
+            "impact_rules": [],
+            "gates": [],
+            "proof_fingerprint": canonical_digest([]),
+            "blockers": blockers,
+        }
     gate_refs = {(capability_id, tier) for tier in selected_tiers}
     patterns = sorted(
         {
@@ -240,7 +273,14 @@ def build_proof_snapshot(
 
     configuration: list[dict[str, Any]] = []
     requirements = {
-        "verify:live" if tier == "live" else "verify" for tier in selected_tiers
+        (
+            "verify:live"
+            if tier == "live"
+            else "release"
+            if tier == "release"
+            else "verify"
+        )
+        for tier in selected_tiers
     }
     for item in capability.get("configuration", []):
         if not requirements.intersection(item["required_for"]):
@@ -289,17 +329,28 @@ def build_proof_snapshot(
                 "sha256": canonical_digest(provider_target),
             }
         )
+    elif "live" in selected_tiers:
+        blockers.append(
+            _issue(
+                "GODIESEL_LIVE_TARGET_MISSING",
+                "Live verification requires the exact provider or deployment target.",
+                "Pass the named public URL or provider target so the live proof is target-bound.",
+            )
+        )
     covered_inputs = sorted(
         covered_inputs,
         key=lambda item: (item["category"], item["name"], item["state"]),
     )
-    gates = sorted(
-        {
-            (tier, command["command"], command["cwd"])
-            for tier in selected_tiers
-            for command in capability["verification"][tier]
-        }
-    )
+    gates = [
+        {"tier": tier, "command": command, "cwd": cwd}
+        for tier, command, cwd in sorted(
+            {
+                (tier, item["command"], item["cwd"])
+                for tier in selected_tiers
+                for item in capability["verification"][tier]
+            }
+        )
+    ]
     proof_fingerprint = canonical_digest(
         {
             "capability": capability_id,
@@ -312,6 +363,7 @@ def build_proof_snapshot(
         "covered_inputs": covered_inputs,
         "configuration": configuration,
         "impact_rules": impact_rule_ids,
+        "gates": gates,
         "proof_fingerprint": proof_fingerprint,
         "blockers": blockers,
     }
@@ -620,9 +672,20 @@ def explain_verification(
                         {item for rule in matching for item in rule["capabilities"]}
                     ),
                     "categories": sorted({rule["category"] for rule in matching}),
+                    "invariants": sorted(
+                        {
+                            (invariant["capability"], invariant["id"])
+                            for rule in matching
+                            for invariant in rule["invariants"]
+                        }
+                    ),
                     "rules": [rule["id"] for rule in matching],
                 }
             )
+            classifications[-1]["invariants"] = [
+                {"capability": capability, "id": invariant}
+                for capability, invariant in classifications[-1]["invariants"]
+            ]
     if unclassified:
         blockers.append(
             _issue(

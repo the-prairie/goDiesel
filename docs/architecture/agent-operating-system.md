@@ -265,6 +265,8 @@ changed paths
 ```
 
 The capability manifest owns this mapping.
+Each impact rule links paths to capability-owned invariant identifiers as well as to focused, ticket, release, or live gates.
+The gate command recorded in evidence and the gate command included in the reusable fingerprint come from that same declaration.
 The existing risk tiers in `docs/agents/testing.md` remain the policy.
 
 A proof is reusable only while all covered inputs remain unchanged:
@@ -273,6 +275,7 @@ A proof is reusable only while all covered inputs remain unchanged:
 - contract and schema paths;
 - fixture and test paths;
 - build and runtime configuration;
+- file type, executable mode, and symlink target for covered files;
 - provider target when the proof is live;
 - canonical data fingerprints when the proof covers real data.
 

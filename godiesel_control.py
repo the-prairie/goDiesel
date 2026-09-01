@@ -22,6 +22,7 @@ SCHEMA_VERSION = 1
 MANIFEST_PATH = Path("system/capabilities.json")
 MANIFEST_SCHEMA_PATH = Path("system/capabilities.schema.json")
 VERBS = {"inspect", "plan", "apply", "verify", "release"}
+VERIFICATION_TIERS = {"focused", "ticket", "release", "live"}
 AUTHORITY_CLASSES = {
     "read-only",
     "ephemeral-local",
@@ -295,7 +296,7 @@ def _is_capability(value: Any) -> bool:
     verification = value["verification"]
     return (
         isinstance(verification, dict)
-        and set(verification) == {"focused", "ticket", "live"}
+        and set(verification) == VERIFICATION_TIERS
         and all(_is_command_list(commands) for commands in verification.values())
     )
 
@@ -332,6 +333,7 @@ def _is_manifest(value: Any) -> bool:
             "capabilities",
             "category",
             "gates",
+            "invariants",
             "reason",
         }:
             return False
@@ -361,8 +363,20 @@ def _is_manifest(value: Any) -> bool:
             isinstance(gate, dict)
             and set(gate) == {"capability", "tier"}
             and gate["capability"] in ids
-            and gate["tier"] in {"focused", "ticket", "live"}
+            and gate["tier"] in VERIFICATION_TIERS
             for gate in rule["gates"]
+        ):
+            return False
+        capability_invariants = {
+            capability["id"]: set(capability["invariants"])
+            for capability in capabilities
+        }
+        if not isinstance(rule["invariants"], list) or not all(
+            isinstance(invariant, dict)
+            and set(invariant) == {"capability", "id"}
+            and invariant["capability"] in rule["capabilities"]
+            and invariant["id"] in capability_invariants[invariant["capability"]]
+            for invariant in rule["invariants"]
         ):
             return False
         if not _is_string(rule["reason"]):

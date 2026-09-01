@@ -75,8 +75,9 @@
       ],
       "invariants": ["source-truth", "stable-route-identity", "single-route-microsite"],
       "verification": {
-        "focused": [{ "command": "python -m pytest -q test_godiesel_route_share.py test_route_create.py test_route_share_cli.py", "cwd": "." }],
+        "focused": [{ "command": "./scripts/route.sh check <slug>", "cwd": "." }],
         "ticket": [{ "command": "./scripts/test-route-share-acceptance.sh", "cwd": "." }],
+        "release": [{ "command": "npm --prefix app run verify", "cwd": "." }],
         "live": [{ "command": "node app/scripts/smoke-single-route-microsite.mjs <public-url> <slug>", "cwd": "." }]
       },
       "documents": ["CONTEXT.md", "docs/agents/route-share.md", "docs/adr/0011-single-route-microsites-are-build-time-scoped.md", "docs/adr/0012-risk-based-verification-with-a-no-skip-live-gate.md", "docs/adr/0015-imported-route-identity-is-allocated-once.md"]
@@ -130,6 +131,7 @@
       "verification": {
         "focused": [{ "command": "python -m pytest -q test_react_app.py", "cwd": "." }],
         "ticket": [{ "command": "npm --prefix app run verify:ticket", "cwd": "." }],
+        "release": [{ "command": "npm --prefix app run verify", "cwd": "." }],
         "live": []
       },
       "documents": ["CONTEXT.md", "docs/adr/0003-python-generator-is-the-only-writer-of-route-data.md", "docs/adr/0004-two-tier-route-data-with-lenient-summaries-and-strict-details.md"]
@@ -181,6 +183,7 @@
       "verification": {
         "focused": [{ "command": "python -m pytest -q test_admin_curation.py test_curation_publish.py", "cwd": "." }],
         "ticket": [{ "command": "npm --prefix app run verify:ticket", "cwd": "." }],
+        "release": [{ "command": "npm --prefix app run verify", "cwd": "." }],
         "live": []
       },
       "documents": ["CONTEXT.md", "docs/adr/0010-owner-curation-through-a-loopback-only-writer.md", "docs/agents/testing.md"]
@@ -238,6 +241,7 @@
       "verification": {
         "focused": [{ "command": "npm --prefix app run verify:ticket", "cwd": "." }],
         "ticket": [{ "command": "npm --prefix app run verify", "cwd": "." }],
+        "release": [{ "command": "npm --prefix app run verify", "cwd": "." }],
         "live": [{ "command": "npm --prefix app run verify:live-pipeline", "cwd": "." }]
       },
       "documents": ["CONTEXT.md", "docs/agents/testing.md", "docs/adr/0007-named-degradation-instead-of-silent-failure.md", "docs/adr/0012-risk-based-verification-with-a-no-skip-live-gate.md"]
@@ -250,6 +254,7 @@
       "capabilities": ["route-share"],
       "category": "implementation",
       "gates": [{ "capability": "route-share", "tier": "focused" }],
+      "invariants": [{ "capability": "route-share", "id": "source-truth" }, { "capability": "route-share", "id": "stable-route-identity" }, { "capability": "route-share", "id": "single-route-microsite" }],
       "reason": "The shared operator implementation can change route-share behavior or evidence."
     },
     {
@@ -258,6 +263,7 @@
       "capabilities": ["route-share"],
       "category": "contract",
       "gates": [{ "capability": "route-share", "tier": "focused" }],
+      "invariants": [{ "capability": "route-share", "id": "source-truth" }, { "capability": "route-share", "id": "stable-route-identity" }, { "capability": "route-share", "id": "single-route-microsite" }],
       "reason": "A machine-readable control contract changed."
     },
     {
@@ -266,6 +272,7 @@
       "capabilities": ["route-share"],
       "category": "fixture",
       "gates": [{ "capability": "route-share", "tier": "focused" }],
+      "invariants": [{ "capability": "route-share", "id": "single-route-microsite" }],
       "reason": "A test or acceptance fixture that defines route-share proof changed."
     },
     {
@@ -274,14 +281,16 @@
       "capabilities": ["route-share"],
       "category": "configuration",
       "gates": [{ "capability": "route-share", "tier": "focused" }],
+      "invariants": [{ "capability": "route-share", "id": "source-truth" }],
       "reason": "Ignored evidence persistence or dirty-state classification changed."
     },
     {
       "id": "route-share-implementation",
-      "paths": ["route_create.py", "route_create.schema.json", "route_status.py", "scripts/route.sh", "scripts/route-preview.sh", "scripts/publish-route-microsite.sh", "app/scripts/smoke-single-route-microsite.mjs"],
+      "paths": ["route_create.py", "route_create.schema.json", "route_status.py", "admin_curation.py", "curation_publish.py", "quest_meta.py", "route_annotations.py", "route_imports.py", "requirements.txt", "scripts/route.sh", "scripts/route-preview.sh", "scripts/publish-route-microsite.sh", "app/scripts/smoke-single-route-microsite.mjs"],
       "capabilities": ["route-share"],
       "category": "implementation",
       "gates": [{ "capability": "route-share", "tier": "focused" }, { "capability": "route-share", "tier": "ticket" }],
+      "invariants": [{ "capability": "route-share", "id": "source-truth" }, { "capability": "route-share", "id": "stable-route-identity" }, { "capability": "route-share", "id": "single-route-microsite" }],
       "reason": "The route-share state machine, writer, preview, or publication path changed."
     },
     {
@@ -290,6 +299,7 @@
       "capabilities": ["route-share", "route-generation"],
       "category": "data",
       "gates": [{ "capability": "route-share", "tier": "focused" }, { "capability": "route-generation", "tier": "focused" }],
+      "invariants": [{ "capability": "route-share", "id": "source-truth" }, { "capability": "route-share", "id": "stable-route-identity" }, { "capability": "route-share", "id": "single-route-microsite" }, { "capability": "route-generation", "id": "single-writer" }, { "capability": "route-generation", "id": "two-tier-route-data" }, { "capability": "route-generation", "id": "atomic-publication" }],
       "reason": "Canonical or generated route data changed."
     },
     {
@@ -298,6 +308,7 @@
       "capabilities": ["route-generation"],
       "category": "implementation",
       "gates": [{ "capability": "route-generation", "tier": "focused" }],
+      "invariants": [{ "capability": "route-generation", "id": "single-writer" }, { "capability": "route-generation", "id": "two-tier-route-data" }, { "capability": "route-generation", "id": "atomic-publication" }],
       "reason": "The only route-data writer or its projection contract changed."
     },
     {
@@ -306,7 +317,35 @@
       "capabilities": ["owner-curation"],
       "category": "implementation",
       "gates": [{ "capability": "owner-curation", "tier": "focused" }],
+      "invariants": [{ "capability": "owner-curation", "id": "loopback-only-writer" }, { "capability": "owner-curation", "id": "owner-authored-provenance" }, { "capability": "owner-curation", "id": "recoverable-publication" }],
       "reason": "The loopback owner-curation writer or recovery contract changed."
+    },
+    {
+      "id": "route-microsite-runtime",
+      "paths": ["app/src/**", "app/e2e/single-route-microsite.spec.ts", "app/index.html"],
+      "capabilities": ["route-share", "application-release"],
+      "category": "implementation",
+      "gates": [{ "capability": "route-share", "tier": "focused" }, { "capability": "application-release", "tier": "focused" }],
+      "invariants": [{ "capability": "route-share", "id": "single-route-microsite" }, { "capability": "application-release", "id": "exact-artifact-release" }],
+      "reason": "Route application source and its focused browser journey define the route-only artifact."
+    },
+    {
+      "id": "route-microsite-build",
+      "paths": ["app/package.json", "app/package-lock.json", "app/*config.*", "app/scripts/check-bundle-budget.mjs", "make-dist.sh", "scripts/check-provider-key.mjs", "scripts/scope-route-microsite.mjs", "scripts/validate-route-microsite.mjs"],
+      "capabilities": ["route-share", "application-release"],
+      "category": "configuration",
+      "gates": [{ "capability": "route-share", "tier": "focused" }, { "capability": "route-share", "tier": "release" }, { "capability": "application-release", "tier": "release" }],
+      "invariants": [{ "capability": "route-share", "id": "single-route-microsite" }, { "capability": "application-release", "id": "exact-artifact-release" }],
+      "reason": "The route-only build, scoping, dependency, or test configuration changed."
+    },
+    {
+      "id": "route-microsite-public-assets",
+      "paths": ["app/public/media/**", "app/public/favicon.svg"],
+      "capabilities": ["route-share"],
+      "category": "data",
+      "gates": [{ "capability": "route-share", "tier": "focused" }],
+      "invariants": [{ "capability": "route-share", "id": "source-truth" }, { "capability": "route-share", "id": "single-route-microsite" }],
+      "reason": "A public asset copied into the route-only artifact changed."
     },
     {
       "id": "application-runtime",
@@ -314,14 +353,16 @@
       "capabilities": ["application-release"],
       "category": "implementation",
       "gates": [{ "capability": "application-release", "tier": "focused" }],
+      "invariants": [{ "capability": "application-release", "id": "exact-artifact-release" }, { "capability": "application-release", "id": "named-degradation" }, { "capability": "application-release", "id": "provider-proof-honesty" }],
       "reason": "Application runtime behavior or its browser contract changed."
     },
     {
       "id": "application-configuration",
-      "paths": ["app/package.json", "app/package-lock.json", "app/*config.*", "make-dist.sh", ".github/workflows/**"],
+      "paths": [".github/workflows/**"],
       "capabilities": ["application-release"],
       "category": "configuration",
-      "gates": [{ "capability": "application-release", "tier": "ticket" }],
+      "gates": [{ "capability": "application-release", "tier": "release" }],
+      "invariants": [{ "capability": "application-release", "id": "exact-artifact-release" }],
       "reason": "Build, test, routing, or release configuration changed."
     },
     {
@@ -330,6 +371,7 @@
       "capabilities": ["application-release"],
       "category": "provider",
       "gates": [{ "capability": "application-release", "tier": "live" }],
+      "invariants": [{ "capability": "application-release", "id": "provider-proof-honesty" }, { "capability": "application-release", "id": "named-degradation" }],
       "reason": "Provider-dependent behavior changed and still requires live proof."
     },
     {
@@ -338,6 +380,7 @@
       "capabilities": ["route-share", "route-generation", "owner-curation", "application-release"],
       "category": "documentation",
       "gates": [],
+      "invariants": [{ "capability": "route-share", "id": "source-truth" }, { "capability": "route-generation", "id": "single-writer" }, { "capability": "owner-curation", "id": "owner-authored-provenance" }, { "capability": "application-release", "id": "provider-proof-honesty" }],
       "reason": "Documentation changed without changing an executable runtime input."
     }
   ]

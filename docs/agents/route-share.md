@@ -14,7 +14,7 @@ The existing `scripts/route.sh` interface remains available as a compatibility a
 | Inspect | `./scripts/godiesel inspect route-share [slug] --json` | Read only | Current route readiness |
 | Plan | `./scripts/godiesel plan route-share --request <file> --json` | Ephemeral local | Fingerprinted proposal in a result envelope and ignored proposal file |
 | Apply | `./scripts/godiesel apply route-share --proposal <file> --authorize canonical-local --json` | Canonical local | Creation report in a result envelope |
-| Verify | `./scripts/godiesel verify route-share <slug> --json` or `--preview` | Ephemeral local | Validation, focused journey, and optional loopback URLs |
+| Verify | `./scripts/godiesel verify route-share <slug> --json` or `--preview` | Ephemeral local | Focused proof from normal verification, or loopback runtime review from preview |
 | Release | `./scripts/godiesel release route-share <slug> <name> --authorize external-durable --authorize-target <name> --json` | External durable | Deployment, stable URLs, public smoke result, and receipt |
 
 Standard output is a `system/result.schema.json` result envelope.
@@ -22,7 +22,8 @@ The unchanged domain result is under `result`.
 Treat that value as the domain authority rather than parsing terminal narration.
 Plan, apply, verify, and release also write ignored route-transition receipts under `.route-share/runs/` and their digest-verifiable results under `.route-share/results/`.
 These Phase 2 receipts prove route workflow lineage only.
-Route verification additionally writes a general proof receipt under `.godiesel/evidence/` with repository state, gate attribution, digested inputs and outputs, and redacted configuration presence.
+Normal, non-preview route verification additionally writes a general proof receipt under `.godiesel/evidence/` with repository state, gate attribution, digested inputs and outputs, and redacted configuration presence.
+Preview writes only its route-transition receipt because it starts a loopback runtime instead of executing the manifest-declared focused proof gate.
 Impact-directed gate selection and guarded proof reuse are implemented for route verification.
 
 ## State Machine
@@ -128,6 +129,7 @@ After explicit approval to create, run:
 
 ```sh
 ./scripts/godiesel apply route-share --proposal .route-share/proposals/<proposal-id>.json --authorize canonical-local --json
+./scripts/godiesel verify route-share <slug> --json
 ./scripts/godiesel verify route-share <slug> --preview --json
 ./scripts/godiesel verify route-share <slug> --reuse --json
 ```
@@ -141,7 +143,7 @@ That bundle contains only the shared route's generated record and public media r
 Use `--detach` only when a background preview is useful; it writes a PID and log under `.route-share/`.
 Report the exact validation outcome, local guide URL, and local Replay URL.
 
-Use `--reuse` only after a normal passed verification.
+Use `--reuse` only after the normal, non-preview verification has passed and written general evidence.
 It re-hashes every manifest-covered implementation, contract, fixture, configuration, data, and provider input for the focused route-share gate.
 It does not execute the gate and blocks when any covered input or selected command changed.
 Documentation-only edits remain outside the runtime proof fingerprint.

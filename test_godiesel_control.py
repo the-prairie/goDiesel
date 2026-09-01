@@ -43,7 +43,7 @@ def _make_repository_fixture(root: Path, *, generated_ids: list[str] | None = No
         "recovery": {"inspect": "No recovery is required."},
         "artifacts": [],
         "invariants": ["single-writer"],
-        "verification": {"focused": [], "ticket": [], "live": []},
+        "verification": {"focused": [], "ticket": [], "release": [], "live": []},
         "documents": [],
     }
     _write_json(
@@ -68,6 +68,9 @@ def _make_repository_fixture(root: Path, *, generated_ids: list[str] | None = No
                     "category": "implementation",
                     "gates": [
                         {"capability": "route-generation", "tier": "focused"}
+                    ],
+                    "invariants": [
+                        {"capability": "route-generation", "id": "single-writer"}
                     ],
                     "reason": "Exercise the fixture capability through its public seam."
                 }

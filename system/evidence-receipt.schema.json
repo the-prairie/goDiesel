@@ -148,7 +148,7 @@
         "tiers": {
           "type": "array",
           "minItems": 1,
-          "items": { "enum": ["focused", "ticket", "live"] },
+          "items": { "enum": ["focused", "ticket", "release", "live"] },
           "uniqueItems": true
         },
         "impact_rules": {

@@ -1,4 +1,5 @@
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -22,7 +23,7 @@ class RecordingRunner:
 
     def __call__(self, command: list[str], **kwargs: object):
         self.calls.append(command)
-        return __import__("subprocess").CompletedProcess(
+        return subprocess.CompletedProcess(
             command,
             0,
             "verified\n",
@@ -39,6 +40,7 @@ def _write_reuse_fixture(root: Path) -> None:
         )
     capability = {
         "id": "route-share",
+        "invariants": ["source-truth", "single-route-microsite"],
         "configuration": [
             {
                 "name": "PROVIDER_PROJECT",
@@ -49,6 +51,7 @@ def _write_reuse_fixture(root: Path) -> None:
         "verification": {
             "focused": [{"command": "verify-focused", "cwd": "."}],
             "ticket": [],
+            "release": [{"command": "verify-release", "cwd": "."}],
             "live": [{"command": "verify-live", "cwd": "."}],
         },
     }
@@ -67,6 +70,9 @@ def _write_reuse_fixture(root: Path) -> None:
             "capabilities": ["route-share"],
             "category": category,
             "gates": [{"capability": "route-share", "tier": "focused"}],
+            "invariants": [
+                {"capability": "route-share", "id": "single-route-microsite"}
+            ],
             "reason": f"Fixture {category} input.",
         }
         for category, path in categories.items()
@@ -74,11 +80,56 @@ def _write_reuse_fixture(root: Path) -> None:
     impact_rules.extend(
         [
             {
+                "id": "fixture-route-microsite-runtime",
+                "paths": [
+                    "app/src/Route.tsx",
+                    "app/e2e/single-route-microsite.spec.ts",
+                    "admin_curation.py",
+                ],
+                "capabilities": ["route-share"],
+                "category": "implementation",
+                "gates": [{"capability": "route-share", "tier": "focused"}],
+                "invariants": [
+                    {"capability": "route-share", "id": "single-route-microsite"}
+                ],
+                "reason": "Fixture route runtime input.",
+            },
+            {
+                "id": "fixture-route-microsite-build",
+                "paths": [
+                    "app/package.json",
+                    "app/scripts/check-bundle-budget.mjs",
+                    "make-dist.sh",
+                    "scripts/scope-route-microsite.mjs",
+                ],
+                "capabilities": ["route-share"],
+                "category": "configuration",
+                "gates": [{"capability": "route-share", "tier": "focused"}],
+                "invariants": [
+                    {"capability": "route-share", "id": "single-route-microsite"}
+                ],
+                "reason": "Fixture route build input.",
+            },
+            {
+                "id": "fixture-route-microsite-media",
+                "paths": ["app/public/media/route-1/photo.jpg"],
+                "capabilities": ["route-share"],
+                "category": "data",
+                "gates": [{"capability": "route-share", "tier": "focused"}],
+                "invariants": [
+                    {"capability": "route-share", "id": "source-truth"}
+                ],
+                "reason": "Fixture public route media input.",
+            },
+            {
                 "id": "fixture-live-provider",
                 "paths": ["provider.json"],
                 "capabilities": ["route-share"],
                 "category": "provider",
                 "gates": [{"capability": "route-share", "tier": "live"}],
+                "invariants": [
+                    {"capability": "route-share", "id": "single-route-microsite"}
+                ],
                 "reason": "Fixture live provider input.",
             },
             {
@@ -87,6 +138,9 @@ def _write_reuse_fixture(root: Path) -> None:
                 "capabilities": ["route-share"],
                 "category": "documentation",
                 "gates": [],
+                "invariants": [
+                    {"capability": "route-share", "id": "source-truth"}
+                ],
                 "reason": "Fixture documentation input.",
             },
         ]
@@ -111,19 +165,32 @@ def _write_reuse_fixture(root: Path) -> None:
             else f"{path}\n",
             encoding="utf-8",
         )
+    for path in (
+        "app/src/Route.tsx",
+        "app/e2e/single-route-microsite.spec.ts",
+        "app/package.json",
+        "app/scripts/check-bundle-budget.mjs",
+        "make-dist.sh",
+        "scripts/scope-route-microsite.mjs",
+        "app/public/media/route-1/photo.jpg",
+        "admin_curation.py",
+    ):
+        destination = root / path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(f"{path}\n", encoding="utf-8")
     (root / "docs").mkdir()
     (root / "docs/guide.md").write_text("guide\n", encoding="utf-8")
-    __import__("subprocess").run(["git", "init", "-q"], cwd=root, check=True)
-    __import__("subprocess").run(
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(
         ["git", "config", "user.email", "fixture@example.test"],
         cwd=root,
         check=True,
     )
-    __import__("subprocess").run(
+    subprocess.run(
         ["git", "config", "user.name", "Fixture"], cwd=root, check=True
     )
-    __import__("subprocess").run(["git", "add", "."], cwd=root, check=True)
-    __import__("subprocess").run(
+    subprocess.run(["git", "add", "."], cwd=root, check=True)
+    subprocess.run(
         ["git", "commit", "-qm", "fixture"], cwd=root, check=True
     )
 
@@ -154,17 +221,31 @@ def test_verification_explanation_schema_is_valid():
 
 
 @pytest.mark.parametrize(
-    ("changed_path", "capability", "category", "required_tier"),
+    ("changed_path", "capability", "category", "required_tier", "invariant"),
     [
-        ("godiesel_control.py", "route-share", "implementation", "focused"),
-        ("system/result.schema.json", "route-share", "contract", "focused"),
-        ("test_godiesel_route_share.py", "route-share", "fixture", "focused"),
-        (".gitignore", "route-share", "configuration", "focused"),
+        (
+            "godiesel_control.py",
+            "route-share",
+            "implementation",
+            "focused",
+            "single-route-microsite",
+        ),
+        ("system/result.schema.json", "route-share", "contract", "focused", "source-truth"),
+        (
+            "test_godiesel_route_share.py",
+            "route-share",
+            "fixture",
+            "focused",
+            "single-route-microsite",
+        ),
+        (".gitignore", "route-share", "configuration", "focused", "source-truth"),
+        ("make-dist.sh", "route-share", "configuration", "release", "single-route-microsite"),
         (
             "app/src/services/google-maps-loader.ts",
             "application-release",
             "provider",
             "live",
+            "provider-proof-honesty",
         ),
     ],
 )
@@ -173,6 +254,7 @@ def test_explain_maps_paths_to_capabilities_and_required_gates(
     capability: str,
     category: str,
     required_tier: str,
+    invariant: str,
 ):
     result = explain_verification(ROOT, changed_paths=[changed_path])
 
@@ -182,6 +264,10 @@ def test_explain_maps_paths_to_capabilities_and_required_gates(
     assert classification["path"] == changed_path
     assert capability in classification["capabilities"]
     assert category in classification["categories"]
+    assert {
+        "capability": capability,
+        "id": invariant,
+    } in classification["invariants"]
     assert required_tier in {gate["tier"] for gate in explanation["selected_gates"]}
     Draft202012Validator(
         json.loads(
@@ -345,6 +431,135 @@ def test_missing_live_configuration_is_blocked_not_passed(tmp_path: Path):
 
     assert snapshot["status"] == "blocked"
     assert snapshot["blockers"][0]["code"] == "GODIESEL_LIVE_CONFIGURATION_MISSING"
+
+
+def test_missing_live_target_is_blocked_not_passed(tmp_path: Path):
+    _write_reuse_fixture(tmp_path)
+
+    snapshot = build_proof_snapshot(
+        tmp_path,
+        "route-share",
+        tiers=["live"],
+        environ={"PROVIDER_PROJECT": "target-a"},
+    )
+
+    assert snapshot["status"] == "blocked"
+    assert snapshot["blockers"][0]["code"] == "GODIESEL_LIVE_TARGET_MISSING"
+
+
+def test_release_tier_is_fingerprinted_and_unknown_tiers_block(tmp_path: Path):
+    _write_reuse_fixture(tmp_path)
+
+    release = build_proof_snapshot(
+        tmp_path,
+        "route-share",
+        tiers=["release"],
+        environ={},
+    )
+    unknown = build_proof_snapshot(
+        tmp_path,
+        "route-share",
+        tiers=["imaginary"],
+        environ={},
+    )
+
+    assert release["status"] == "passed"
+    assert release["gates"] == [
+        {"tier": "release", "command": "verify-release", "cwd": "."}
+    ]
+    assert unknown["status"] == "blocked"
+    assert unknown["blockers"][0]["code"] == "GODIESEL_VERIFICATION_TIER_UNKNOWN"
+
+
+def test_route_share_focused_proof_covers_the_executed_microsite_gate():
+    snapshot = build_proof_snapshot(
+        ROOT,
+        "route-share",
+        tiers=["focused"],
+        environ={},
+    )
+
+    assert snapshot["status"] == "passed"
+    assert snapshot["gates"] == [
+        {
+            "tier": "focused",
+            "command": "./scripts/route.sh check <slug>",
+            "cwd": ".",
+        }
+    ]
+    covered_names = {item["name"] for item in snapshot["covered_inputs"]}
+    assert {
+        "app/src/**",
+        "app/e2e/single-route-microsite.spec.ts",
+        "app/public/media/**",
+        "app/package.json",
+        "app/package-lock.json",
+        "app/*config.*",
+        "admin_curation.py",
+        "curation_publish.py",
+        "make-dist.sh",
+        "quest_meta.py",
+        "requirements.txt",
+        "route_annotations.py",
+        "route_imports.py",
+        "app/scripts/check-bundle-budget.mjs",
+        "scripts/check-provider-key.mjs",
+        "scripts/scope-route-microsite.mjs",
+        "scripts/validate-route-microsite.mjs",
+    }.issubset(covered_names)
+
+
+def test_executable_mode_change_invalidates_reuse(tmp_path: Path):
+    _write_reuse_fixture(tmp_path)
+    executable = tmp_path / "implementation.py"
+    executable.chmod(0o755)
+    _record_proof(tmp_path)
+    executable.chmod(0o644)
+
+    reused = reuse_verification(
+        tmp_path,
+        "route-share",
+        slug="route-1",
+        environ={},
+    )
+
+    assert reused["status"] == "blocked"
+    assert reused["blockers"][0]["code"] == "GODIESEL_PROOF_INVALIDATED"
+    assert {item["category"] for item in reused["result"]["invalidated_inputs"]} == {
+        "implementation"
+    }
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "app/src/Route.tsx",
+        "app/e2e/single-route-microsite.spec.ts",
+        "app/package.json",
+        "admin_curation.py",
+        "app/scripts/check-bundle-budget.mjs",
+        "scripts/scope-route-microsite.mjs",
+        "app/public/media/route-1/photo.jpg",
+    ],
+)
+def test_route_microsite_dependency_change_invalidates_reuse(
+    tmp_path: Path,
+    path: str,
+):
+    _write_reuse_fixture(tmp_path)
+    _record_proof(tmp_path)
+    with (tmp_path / path).open("a", encoding="utf-8") as destination:
+        destination.write("changed\n")
+
+    reused = reuse_verification(
+        tmp_path,
+        "route-share",
+        slug="route-1",
+        environ={},
+    )
+
+    assert reused["status"] == "blocked"
+    assert reused["blockers"][0]["code"] == "GODIESEL_PROOF_INVALIDATED"
 
 
 def test_cli_verify_reuse_dispatches_without_running_route_verification(

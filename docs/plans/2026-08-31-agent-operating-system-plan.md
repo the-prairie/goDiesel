@@ -181,7 +181,9 @@ Implemented by `test_godiesel_control.py` and the focused commands documented in
 
 Status: complete on 2026-09-01.
 
-The implementation emits closed evidence receipts for route verification, explains manifest-owned path impacts without executing gates, fingerprints every covered input category, blocks unavailable live prerequisites, and reuses proof only when the complete fingerprint remains valid.
+The implementation emits closed evidence receipts for route verification, explains manifest-owned path and invariant impacts without executing gates, and represents focused, ticket, release, and live tiers explicitly.
+The route-share receipt and proof fingerprint are derived from the same manifest-declared route check and its complete build, test, data, and runtime dependency set.
+Fingerprints include file content, file type, executable mode, configuration presence, and target identity; unavailable live targets or proof contracts block rather than fall through.
 Route release validates that reusable proof before any external effect.
 
 ### Work

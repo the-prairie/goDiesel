@@ -153,10 +153,11 @@
         "verification": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["focused", "ticket", "live"],
+          "required": ["focused", "ticket", "release", "live"],
           "properties": {
             "focused": { "$ref": "#/$defs/commandList" },
             "ticket": { "$ref": "#/$defs/commandList" },
+            "release": { "$ref": "#/$defs/commandList" },
             "live": { "$ref": "#/$defs/commandList" }
           }
         },
@@ -227,13 +228,22 @@
       "required": ["capability", "tier"],
       "properties": {
         "capability": { "type": "string", "pattern": "^[a-z][a-z0-9-]+$" },
-        "tier": { "enum": ["focused", "ticket", "live"] }
+        "tier": { "enum": ["focused", "ticket", "release", "live"] }
+      }
+    },
+    "impactInvariant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capability", "id"],
+      "properties": {
+        "capability": { "type": "string", "pattern": "^[a-z][a-z0-9-]+$" },
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]+$" }
       }
     },
     "impactRule": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "paths", "capabilities", "category", "gates", "reason"],
+      "required": ["id", "paths", "capabilities", "category", "gates", "invariants", "reason"],
       "properties": {
         "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]+$" },
         "paths": {
@@ -254,6 +264,12 @@
         "gates": {
           "type": "array",
           "items": { "$ref": "#/$defs/impactGate" }
+        },
+        "invariants": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/impactInvariant" },
+          "uniqueItems": true
         },
         "reason": { "type": "string", "minLength": 1 }
       }
