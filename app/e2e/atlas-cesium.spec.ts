@@ -196,7 +196,7 @@ for (const viewport of [
     const world = page.locator('[data-atlas-engine="cesium"][data-atlas-status]');
     const canvas = page.getByLabel("Interactive route globe");
     await expect(world).toHaveAttribute("data-atlas-status", "ready");
-    await expect(canvas).toHaveAttribute("data-heat-lines", "66");
+    await expect(canvas).toHaveAttribute("data-heat-lines", "67");
     const nonBackgroundPixels = await canvas.evaluate((element) => {
       const canvas = element as HTMLCanvasElement;
       const pixels = canvas

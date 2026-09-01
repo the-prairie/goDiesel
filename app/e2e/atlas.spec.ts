@@ -148,7 +148,7 @@ for (const viewport of [
     await page.goto("/#/atlas?view=world");
     const canvas = page.getByLabel("Interactive route globe");
     await expect(canvas).toBeVisible({ timeout: 15_000 });
-    await expect(canvas).toHaveAttribute("data-heat-lines", "66", { timeout: 15_000 });
+    await expect(canvas).toHaveAttribute("data-heat-lines", "67", { timeout: 15_000 });
     const initialPixels = await canvasStats(page);
     expect(initialPixels.nonBackground).toBeGreaterThan(500);
     if (viewport.name === "desktop") {
@@ -833,7 +833,7 @@ test("globe supports pointer, wheel, and keyboard exploration", async ({ page })
   test.setTimeout(90_000);
   await page.goto("/#/atlas?view=world");
   const canvas = page.getByLabel("Interactive route globe");
-  await expect(canvas).toHaveAttribute("data-heat-lines", "66", { timeout: 15_000 });
+  await expect(canvas).toHaveAttribute("data-heat-lines", "67", { timeout: 15_000 });
   const bounds = await canvas.boundingBox();
   expect(bounds).not.toBeNull();
   if (!bounds) return;

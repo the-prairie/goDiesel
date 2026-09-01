@@ -45,8 +45,8 @@ const OBSERVATION_WINDOW_MS = 750;
 const LIFECYCLE_FINAL_HEAP_MAX_RATIO = 1.1;
 const PRODUCTION_ATLAS_CORPUS: AtlasCorpusExpectation = {
   distribution: "production",
-  routeCount: 66,
-  uniqueGeometryCount: 66,
+  routeCount: 67,
+  uniqueGeometryCount: 67,
   minimumRoutePixels: 100,
 };
 const SCALE_ATLAS_CORPUS: AtlasCorpusExpectation = {
@@ -1559,7 +1559,7 @@ test("records isolated surface, reduced-motion, scale, and lifecycle baselines",
             : undefined,
         );
       return [
-        await atlasSample("atlas-66-production-routes", PRODUCTION_ATLAS_CORPUS),
+        await atlasSample("atlas-67-production-routes", PRODUCTION_ATLAS_CORPUS),
         await atlasSample(
           "atlas-2,500-distinct-source-derived-routes",
           SCALE_ATLAS_CORPUS,
