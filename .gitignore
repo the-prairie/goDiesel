@@ -35,6 +35,7 @@ venv/
 tmp/
 *.tmp
 .route-share/
+.godiesel/
 
 # Node dependencies (app/ has its own ignore; this covers the repository root)
 node_modules/

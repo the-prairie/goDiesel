@@ -64,6 +64,7 @@ The doctor additionally checks runtimes, configuration presence, owning writers,
 
 The route-share capability composes proposal, creation, preview, verification, and publication behind the five `scripts/godiesel` verbs.
 Machine-readable results retain the existing domain payload and point to ignored digest-linked receipts under `.route-share/`.
+Route verification also writes a privacy-safe proof receipt under `.godiesel/evidence/`.
 `scripts/route.sh` remains available as the compatibility path.
 See `docs/agents/route-share.md` before using a write or publication command.
 

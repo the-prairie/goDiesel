@@ -25,7 +25,7 @@
       "reads": ["quests.json", "route_sources/**", ".route-share/**"],
       "writes": [".route-share/**", "quests.json", "route_sources/imported/**", "route_sources/media/**", "app/public/media/**", "app/src/data/generated/**", "app/public/data/routes/**", "dist/**"],
       "external_effects": ["cloudflare-pages-route-branch"],
-      "required_files": ["scripts/godiesel", "godiesel_route_share.py", "scripts/route.sh", "route_create.py", "route_create.schema.json", "system/result.schema.json", "system/route-share-receipt.schema.json", "docs/agents/route-share.md"],
+      "required_files": ["scripts/godiesel", "godiesel_route_share.py", "godiesel_evidence.py", "scripts/route.sh", "route_create.py", "route_create.schema.json", "system/result.schema.json", "system/route-share-receipt.schema.json", "system/evidence-receipt.schema.json", "docs/agents/route-share.md"],
       "configuration": [
         { "name": "GOOGLE_MAPS_API_KEY", "required_for": ["release"], "sensitive": true }
       ],
@@ -61,6 +61,7 @@
         { "kind": "capability-result", "location": "command result", "persistence": "runtime", "schema": "system/result.schema.json" },
         { "kind": "route-share-run-receipt", "location": ".route-share/runs/**", "persistence": "ignored-local", "schema": "system/route-share-receipt.schema.json" },
         { "kind": "route-share-result-artifact", "location": ".route-share/results/**", "persistence": "ignored-local" },
+        { "kind": "verification-evidence-receipt", "location": ".godiesel/evidence/**", "persistence": "ignored-local", "schema": "system/evidence-receipt.schema.json" },
         { "kind": "route-share-creation-report", "location": "command result", "persistence": "ignored-local", "schema": "route-share-creation-report" },
         { "kind": "route-source-staging", "location": ".route-share/staging/**", "persistence": "ignored-local" },
         { "kind": "route-write-recovery", "location": ".route-share/recovery/**", "persistence": "ignored-local" },

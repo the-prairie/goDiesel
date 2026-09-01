@@ -99,9 +99,84 @@ def test_result_and_receipt_schemas_are_valid():
     receipt_schema = json.loads(
         (ROOT / "system/route-share-receipt.schema.json").read_text()
     )
+    evidence_schema = json.loads(
+        (ROOT / "system/evidence-receipt.schema.json").read_text()
+    )
 
     Draft202012Validator.check_schema(result_schema)
     Draft202012Validator.check_schema(receipt_schema)
+    Draft202012Validator.check_schema(evidence_schema)
+
+
+def test_verify_writes_a_general_redacted_evidence_receipt(tmp_path: Path):
+    (tmp_path / "system").mkdir()
+    (tmp_path / "system/evidence-receipt.schema.json").write_text(
+        (ROOT / "system/evidence-receipt.schema.json").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (tmp_path / ".gitignore").write_text(
+        ".godiesel/\n.route-share/\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "fixture@example.test"],
+        cwd=tmp_path,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Fixture"],
+        cwd=tmp_path,
+        check=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-qm", "fixture"], cwd=tmp_path, check=True)
+    secret = "never-write-this-provider-key"
+    runner = RecordingRunner(completed([], stdout="verified\n"))
+
+    result = execute_route_share(
+        tmp_path,
+        "verify",
+        slug="route-1",
+        environ={"GOOGLE_MAPS_API_KEY": secret},
+        runner=runner,
+    )
+
+    assert result["status"] == "passed"
+    assert result["evidence"]["path"].startswith(".godiesel/evidence/")
+    evidence_path = tmp_path / result["evidence"]["path"]
+    receipt = json.loads(evidence_path.read_text(encoding="utf-8"))
+    Draft202012Validator(
+        json.loads((ROOT / "system/evidence-receipt.schema.json").read_text())
+    ).validate(receipt)
+    assert receipt["capability"] == "route-share"
+    assert receipt["verb"] == "verify"
+    assert receipt["status"] == "passed"
+    assert len(receipt["repository"]["commit"]) == 40
+    assert receipt["repository"]["dirty_state"]["clean"] is True
+    assert len(receipt["repository"]["dirty_state"]["sha256"]) == 64
+    assert receipt["gates"] == [
+        {
+            "command": "./scripts/godiesel verify route-share <slug> --json",
+            "cwd": ".",
+            "exit_code": 0,
+            "finished_at": receipt["finished_at"],
+            "id": "route-share-check",
+            "output_sha256": result["receipt"]["result_sha256"],
+            "provider": "deterministic-local",
+            "started_at": receipt["started_at"],
+            "status": "passed",
+            "tier": "focused",
+        }
+    ]
+    assert {item["name"] for item in receipt["inputs"]} == {
+        "route-slug",
+        "verification-result",
+    }
+    assert receipt["configuration"] == []
+    assert secret not in evidence_path.read_text(encoding="utf-8")
+    assert_valid_result(result)
 
 
 def test_plan_wraps_the_unchanged_proposal_and_writes_a_digest_receipt(tmp_path: Path):

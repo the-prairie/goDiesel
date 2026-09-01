@@ -34,7 +34,7 @@ It is not a second domain model, a generic agent framework, or a reason to move 
 | Five-verb operator vocabulary used by agent guidance | Implemented for route share; other adapters remain proposed |
 | Machine-readable capability manifest | Implemented in `system/capabilities.json` |
 | Unified `scripts/godiesel` interface | System inspection, doctor, and the full route-share capability implemented |
-| Shared result envelope and evidence receipts | Route-share results and ignored digest-linked receipts implemented; general proof receipts proposed |
+| Shared result envelope and evidence receipts | Route-share results, lineage receipts, and general route verification proof receipts implemented |
 | Impact-directed proof selection and reuse | Proposed |
 
 Use `./scripts/godiesel inspect system --json` and `./scripts/godiesel doctor --json` for current read-only control-plane inspection.
@@ -227,7 +227,8 @@ A result states what happened in the command's own domain.
 Every multi-step run may additionally produce an evidence receipt.
 A receipt composes results without becoming a new source of product truth.
 Phase 2 implements narrower route-transition receipts for proposal-specific lineage and release evidence.
-The complete system-wide evidence receipt described below, including repository fingerprints and executed-gate attribution, remains Phase 3 work.
+The first Phase 3 slice adds the system-wide receipt contract and emits repository-bound receipts for route verification.
+Impact-directed selection, complete covered-input fingerprints, and proof reuse remain later Phase 3 work.
 
 A receipt records:
 

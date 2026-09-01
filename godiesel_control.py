@@ -1114,6 +1114,7 @@ def main(argv: list[str] | None = None) -> int:
                 "blockers": [issue],
                 "warnings": [],
                 "receipt": None,
+                "evidence": None,
             }
         else:
             issue = _issue(

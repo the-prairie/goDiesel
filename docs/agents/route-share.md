@@ -22,7 +22,8 @@ The unchanged domain result is under `result`.
 Treat that value as the domain authority rather than parsing terminal narration.
 Plan, apply, verify, and release also write ignored route-transition receipts under `.route-share/runs/` and their digest-verifiable results under `.route-share/results/`.
 These Phase 2 receipts prove route workflow lineage only.
-The repository fingerprint, gate attribution, configuration presence, and other system-wide evidence fields remain part of the Phase 3 proof-receipt contract.
+Route verification additionally writes a general proof receipt under `.godiesel/evidence/` with repository state, gate attribution, digested inputs and outputs, and redacted configuration presence.
+Impact-directed gate selection and proof reuse remain later Phase 3 slices.
 
 ## State Machine
 
@@ -147,6 +148,7 @@ Report the exact validation outcome, local guide URL, and local Replay URL.
 | Proposal JSON | Ignored evidence and plan | Reviewable normalized transition with source observations |
 | Capability result | Runtime evidence | Stable envelope around the unchanged domain result, authority, issues, and receipt pointer |
 | Route-transition receipt and result artifact | Ignored evidence | Digest-linked transition outcome, exact local result, and proposal-specific lineage |
+| Verification evidence receipt | Ignored evidence | Repository-bound focused gate result under the general evidence schema |
 | Staged source and media | Ignored ephemeral local state | Checksum-verified inputs used by an approved proposal |
 | Creation report JSON | Evidence result | Applied or already-applied result and validation |
 | `quests.json` and durable source files | Canonical authored state | Durable route identity, metadata, curation, and source |

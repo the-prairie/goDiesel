@@ -381,6 +381,7 @@ Invariants 11 and 12 are enforced by `app/src/structure.test.ts`.
 | Agent control interface | `scripts/godiesel` |
 | Route compatibility interface | `scripts/route.sh` |
 | Ignored route-share proposals, result artifacts, receipts, staging, and recovery evidence | `.route-share/` |
+| Ignored capability verification evidence receipts | `.godiesel/evidence/` |
 
 ## 11. Domain-modeling gaps
 

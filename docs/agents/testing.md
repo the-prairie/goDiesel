@@ -39,7 +39,8 @@ After running it, report:
 Never report a missing live dependency as skipped success.
 Use `blocked` and name the missing credential, acceleration, quota, source, or provider without exposing its value.
 
-Until the evidence receipt in ADR-0016 is implemented, record this proof contract in the pull request or final task report.
+Route-share verification records this contract under `.godiesel/evidence/`.
+Until every capability uses the general receipt, record the same proof contract in the pull request or final task report for uncovered capabilities.
 
 ## Impact selection
 

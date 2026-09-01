@@ -76,7 +76,7 @@ This plan does not introduce:
 | 0. Knowledge topology | Complete in this documentation branch | None |
 | 1. Manifest and doctor | Complete | Phase 0 |
 | 2. Route-share adapter | Complete | Phase 1 manifest accuracy |
-| 3. Proof receipts and impact graph | Pending | Phase 2 result envelope |
+| 3. Proof receipts and impact graph | In progress: receipt contract implemented | Phase 2 result envelope |
 | 4. Canonical local adapters | Pending | Phase 3 verification contract |
 | 5. Release adapters | Pending | Phase 4 ownership coverage |
 | 6. Mechanical accretion | Pending | Stable manifest and receipts |
