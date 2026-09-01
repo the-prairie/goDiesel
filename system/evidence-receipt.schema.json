@@ -16,6 +16,9 @@
     "status",
     "repository",
     "inputs",
+    "covered_inputs",
+    "proof_fingerprint",
+    "selection",
     "gates",
     "configuration",
     "warnings",
@@ -42,6 +45,12 @@
       "type": "array",
       "items": { "$ref": "#/$defs/digest" }
     },
+    "covered_inputs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/coveredInput" }
+    },
+    "proof_fingerprint": { "$ref": "#/$defs/sha256" },
+    "selection": { "$ref": "#/$defs/selection" },
     "gates": {
       "type": "array",
       "items": { "$ref": "#/$defs/gate" }
@@ -115,6 +124,38 @@
         "kind": { "enum": ["input", "plan", "output", "data", "configuration", "provider"] },
         "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]+$" },
         "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "coveredInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["category", "name", "state", "sha256"],
+      "properties": {
+        "category": {
+          "enum": ["implementation", "contract", "fixture", "configuration", "data", "provider"]
+        },
+        "name": { "type": "string", "minLength": 1 },
+        "state": { "enum": ["matched", "absent", "present", "missing", "target"] },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "tiers", "impact_rules"],
+      "properties": {
+        "mode": { "enum": ["explicit", "manifest"] },
+        "tiers": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "enum": ["focused", "ticket", "live"] },
+          "uniqueItems": true
+        },
+        "impact_rules": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]+$" },
+          "uniqueItems": true
+        }
       }
     },
     "gate": {

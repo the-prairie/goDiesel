@@ -25,7 +25,7 @@
       "reads": ["quests.json", "route_sources/**", ".route-share/**"],
       "writes": [".route-share/**", "quests.json", "route_sources/imported/**", "route_sources/media/**", "app/public/media/**", "app/src/data/generated/**", "app/public/data/routes/**", "dist/**"],
       "external_effects": ["cloudflare-pages-route-branch"],
-      "required_files": ["scripts/godiesel", "godiesel_route_share.py", "godiesel_evidence.py", "scripts/route.sh", "route_create.py", "route_create.schema.json", "system/result.schema.json", "system/route-share-receipt.schema.json", "system/evidence-receipt.schema.json", "docs/agents/route-share.md"],
+      "required_files": ["scripts/godiesel", "godiesel_route_share.py", "godiesel_evidence.py", "godiesel_verification.py", "scripts/route.sh", "route_create.py", "route_create.schema.json", "system/result.schema.json", "system/route-share-receipt.schema.json", "system/evidence-receipt.schema.json", "system/verification-explanation.schema.json", "system/verification-reuse.schema.json", "docs/agents/route-share.md"],
       "configuration": [
         { "name": "GOOGLE_MAPS_API_KEY", "required_for": ["release"], "sensitive": true }
       ],
@@ -33,7 +33,10 @@
         "inspect": [{ "command": "./scripts/godiesel inspect route-share --json", "cwd": "." }],
         "plan": [{ "command": "./scripts/godiesel plan route-share --request <request-json> --json", "cwd": "." }],
         "apply": [{ "command": "./scripts/godiesel apply route-share --proposal <proposal-path> --authorize canonical-local --json", "cwd": "." }],
-        "verify": [{ "command": "./scripts/godiesel verify route-share <slug> --json", "cwd": "." }],
+        "verify": [
+          { "command": "./scripts/godiesel verify route-share <slug> --json", "cwd": "." },
+          { "command": "./scripts/godiesel verify route-share <slug> --reuse --json", "cwd": ".", "description": "Reuse only a schema-valid passed proof whose complete covered-input fingerprint is unchanged." }
+        ],
         "release": [{ "command": "./scripts/godiesel release route-share <slug> <share-name> --authorize external-durable --authorize-target <share-name> --json", "cwd": "." }]
       },
       "preconditions": [

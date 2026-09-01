@@ -5,12 +5,19 @@ from __future__ import annotations
 import fnmatch
 import json
 import subprocess
+from hashlib import sha256
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping, Sequence
+
+from jsonschema import Draft202012Validator
+
+from godiesel_evidence import canonical_digest
 
 
 SCHEMA_VERSION = 1
 MANIFEST_PATH = Path("system/capabilities.json")
+EVIDENCE_SCHEMA_PATH = Path("system/evidence-receipt.schema.json")
+EVIDENCE_ROOT = Path(".godiesel/evidence")
 
 
 def _issue(code: str, message: str, remediation: str) -> dict[str, str]:
@@ -103,6 +110,421 @@ def _load_manifest(root: Path) -> tuple[dict[str, Any] | None, list[dict[str, st
 
 def _matches(path: str, patterns: Iterable[str]) -> bool:
     return any(fnmatch.fnmatchcase(path, pattern) for pattern in patterns)
+
+
+def _file_digest(path: Path) -> str:
+    digest = sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _pattern_input(
+    root: Path,
+    *,
+    category: str,
+    pattern: str,
+) -> tuple[dict[str, str] | None, dict[str, str] | None]:
+    normalized = _normalized_path(pattern)
+    if normalized is None:
+        return None, _issue(
+            "GODIESEL_IMPACT_PATTERN_INVALID",
+            "An impact pattern is absolute, empty, or escapes the repository.",
+            "Repair the named pattern in system/capabilities.json.",
+        )
+    try:
+        candidates = sorted(
+            path
+            for path in root.glob(normalized)
+            if path.is_file() and path.resolve().is_relative_to(root)
+        )
+    except (OSError, ValueError):
+        return None, _issue(
+            "GODIESEL_COVERED_INPUT_UNAVAILABLE",
+            f"The covered input pattern {normalized} could not be read.",
+            "Repair the repository input and rerun verification before reuse.",
+        )
+    observed = [
+        {
+            "path": path.relative_to(root).as_posix(),
+            "sha256": _file_digest(path),
+        }
+        for path in candidates
+    ]
+    return (
+        {
+            "category": category,
+            "name": normalized,
+            "state": "matched" if observed else "absent",
+            "sha256": canonical_digest(observed),
+        },
+        None,
+    )
+
+
+def build_proof_snapshot(
+    root: Path | str,
+    capability_id: str,
+    *,
+    tiers: Sequence[str],
+    environ: Mapping[str, str] | None = None,
+    provider_target: str | None = None,
+) -> dict[str, Any]:
+    """Fingerprint every manifest input covered by the selected capability gates."""
+
+    root = Path(root).resolve()
+    environ = {} if environ is None else environ
+    manifest, blockers = _load_manifest(root)
+    if manifest is None:
+        return {
+            "status": "blocked",
+            "covered_inputs": [],
+            "configuration": [],
+            "proof_fingerprint": canonical_digest([]),
+            "blockers": blockers,
+        }
+    capability = next(
+        (
+            value
+            for value in manifest["capabilities"]
+            if value.get("id") == capability_id
+        ),
+        None,
+    )
+    if capability is None:
+        blockers.append(
+            _issue(
+                "GODIESEL_CAPABILITY_UNKNOWN",
+                f"The capability {capability_id} is not in the manifest.",
+                "Inspect the system capability inventory and select a named capability.",
+            )
+        )
+        return {
+            "status": "blocked",
+            "covered_inputs": [],
+            "configuration": [],
+            "proof_fingerprint": canonical_digest([]),
+            "blockers": blockers,
+        }
+    selected_tiers = sorted(set(tiers))
+    gate_refs = {(capability_id, tier) for tier in selected_tiers}
+    patterns = sorted(
+        {
+            (rule["category"], pattern)
+            for rule in manifest["impact_rules"]
+            if any(
+                (gate["capability"], gate["tier"]) in gate_refs
+                for gate in rule["gates"]
+            )
+            for pattern in rule["paths"]
+        }
+    )
+    impact_rule_ids = sorted(
+        {
+            rule["id"]
+            for rule in manifest["impact_rules"]
+            if any(
+                (gate["capability"], gate["tier"]) in gate_refs
+                for gate in rule["gates"]
+            )
+        }
+    )
+    covered_inputs: list[dict[str, str]] = []
+    for category, pattern in patterns:
+        covered, issue = _pattern_input(root, category=category, pattern=pattern)
+        if issue is not None:
+            blockers.append(issue)
+        elif covered is not None:
+            covered_inputs.append(covered)
+
+    configuration: list[dict[str, Any]] = []
+    requirements = {
+        "verify:live" if tier == "live" else "verify" for tier in selected_tiers
+    }
+    for item in capability.get("configuration", []):
+        if not requirements.intersection(item["required_for"]):
+            continue
+        name = item["name"]
+        present = bool(environ.get(name))
+        required_for = sorted(requirements.intersection(item["required_for"]))
+        configuration.append(
+            {"name": name, "present": present, "required_for": required_for}
+        )
+        covered_inputs.append(
+            {
+                "category": "configuration",
+                "name": name,
+                "state": "present" if present else "missing",
+                "sha256": canonical_digest({"name": name, "present": present}),
+            }
+        )
+        if not present:
+            blockers.append(
+                _issue(
+                    (
+                        "GODIESEL_LIVE_CONFIGURATION_MISSING"
+                        if "verify:live" in required_for
+                        else "GODIESEL_VERIFICATION_CONFIGURATION_MISSING"
+                    ),
+                    f"Required verification configuration {name} is unavailable.",
+                    "Provide the named configuration without exposing its value, then rerun verification.",
+                )
+            )
+        elif not item["sensitive"]:
+            covered_inputs.append(
+                {
+                    "category": "provider",
+                    "name": f"target:{name}",
+                    "state": "target",
+                    "sha256": canonical_digest(environ[name]),
+                }
+            )
+    if provider_target is not None:
+        covered_inputs.append(
+            {
+                "category": "provider",
+                "name": "explicit-provider-target",
+                "state": "target",
+                "sha256": canonical_digest(provider_target),
+            }
+        )
+    covered_inputs = sorted(
+        covered_inputs,
+        key=lambda item: (item["category"], item["name"], item["state"]),
+    )
+    gates = sorted(
+        {
+            (tier, command["command"], command["cwd"])
+            for tier in selected_tiers
+            for command in capability["verification"][tier]
+        }
+    )
+    proof_fingerprint = canonical_digest(
+        {
+            "capability": capability_id,
+            "gates": gates,
+            "covered_inputs": covered_inputs,
+        }
+    )
+    return {
+        "status": "blocked" if blockers else "passed",
+        "covered_inputs": covered_inputs,
+        "configuration": configuration,
+        "impact_rules": impact_rule_ids,
+        "proof_fingerprint": proof_fingerprint,
+        "blockers": blockers,
+    }
+
+
+def _reuse_result(
+    capability_id: str,
+    *,
+    status: str,
+    explanation: Mapping[str, Any],
+    blockers: Sequence[Mapping[str, str]],
+    evidence: Mapping[str, str] | None,
+) -> dict[str, Any]:
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "document_type": "godiesel-capability-result",
+        "capability": capability_id,
+        "verb": "verify",
+        "status": status,
+        "authority": "ephemeral-local",
+        "authorized": True,
+        "exit_code": 2 if status == "blocked" else 0,
+        "result": dict(explanation),
+        "result_contract": "system/verification-reuse.schema.json",
+        "blockers": [dict(item) for item in blockers],
+        "warnings": [],
+        "receipt": None,
+        "evidence": dict(evidence) if evidence else None,
+    }
+
+
+def _covered_input_changes(
+    previous: Sequence[Mapping[str, str]],
+    current: Sequence[Mapping[str, str]],
+) -> list[dict[str, str]]:
+    previous_map = {
+        (item["category"], item["name"]): (item["state"], item["sha256"])
+        for item in previous
+    }
+    current_map = {
+        (item["category"], item["name"]): (item["state"], item["sha256"])
+        for item in current
+    }
+    return [
+        {"category": category, "name": name}
+        for category, name in sorted(set(previous_map) | set(current_map))
+        if previous_map.get((category, name)) != current_map.get((category, name))
+    ]
+
+
+def reuse_verification(
+    root: Path | str,
+    capability_id: str,
+    *,
+    slug: str,
+    environ: Mapping[str, str] | None = None,
+    provider_target: str | None = None,
+) -> dict[str, Any]:
+    """Reuse the newest valid passed proof whose complete fingerprint still matches."""
+
+    root = Path(root).resolve()
+    schema_path = root / EVIDENCE_SCHEMA_PATH
+    try:
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        Draft202012Validator.check_schema(schema)
+        validator = Draft202012Validator(schema)
+    except Exception:
+        blocker = _issue(
+            "GODIESEL_EVIDENCE_SCHEMA_UNAVAILABLE",
+            "The evidence receipt schema could not be validated.",
+            "Restore system/evidence-receipt.schema.json before attempting proof reuse.",
+        )
+        explanation = {
+            "schema_version": SCHEMA_VERSION,
+            "document_type": "godiesel-verification-reuse",
+            "reused": False,
+            "source_receipt": None,
+            "proof_fingerprint": canonical_digest([]),
+            "source_proof_fingerprint": None,
+            "covered_inputs": [],
+            "invalidated_inputs": [],
+            "reason": blocker["message"],
+        }
+        return _reuse_result(
+            capability_id,
+            status="blocked",
+            explanation=explanation,
+            blockers=[blocker],
+            evidence=None,
+        )
+
+    route_digest = canonical_digest(slug)
+    candidates: list[tuple[Path, dict[str, Any]]] = []
+    for path in sorted((root / EVIDENCE_ROOT).glob("*.json"), reverse=True):
+        try:
+            receipt = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not validator.is_valid(receipt):
+            continue
+        if (
+            receipt.get("capability") == capability_id
+            and receipt.get("verb") == "verify"
+            and receipt.get("status") == "passed"
+            and any(
+                item.get("name") == "route-slug"
+                and item.get("sha256") == route_digest
+                for item in receipt.get("inputs", [])
+            )
+        ):
+            candidates.append((path, receipt))
+
+    latest_invalidated: tuple[Path, dict[str, Any], dict[str, Any]] | None = None
+    for path, receipt in candidates:
+        tiers = sorted({gate["tier"] for gate in receipt["gates"]})
+        snapshot = build_proof_snapshot(
+            root,
+            capability_id,
+            tiers=tiers,
+            environ=environ,
+            provider_target=provider_target,
+        )
+        relative_path = path.relative_to(root).as_posix()
+        explanation = {
+            "schema_version": SCHEMA_VERSION,
+            "document_type": "godiesel-verification-reuse",
+            "reused": snapshot["proof_fingerprint"] == receipt["proof_fingerprint"],
+            "source_receipt": relative_path,
+            "proof_fingerprint": snapshot["proof_fingerprint"],
+            "source_proof_fingerprint": receipt["proof_fingerprint"],
+            "covered_inputs": snapshot["covered_inputs"],
+            "invalidated_inputs": _covered_input_changes(
+                receipt["covered_inputs"], snapshot["covered_inputs"]
+            ),
+            "reason": (
+                "Every covered input and selected gate remains unchanged."
+                if snapshot["proof_fingerprint"] == receipt["proof_fingerprint"]
+                else "One or more covered inputs or selected gates changed."
+            ),
+        }
+        evidence = {
+            "id": receipt["receipt_id"],
+            "path": relative_path,
+            "sha256": _file_digest(path),
+        }
+        if snapshot["status"] == "blocked":
+            return _reuse_result(
+                capability_id,
+                status="blocked",
+                explanation=explanation,
+                blockers=snapshot["blockers"],
+                evidence=evidence,
+            )
+        if explanation["reused"]:
+            return _reuse_result(
+                capability_id,
+                status="passed",
+                explanation=explanation,
+                blockers=[],
+                evidence=evidence,
+            )
+        if latest_invalidated is None:
+            latest_invalidated = (path, receipt, explanation)
+
+    if latest_invalidated is not None:
+        path, receipt, explanation = latest_invalidated
+        blocker = _issue(
+            "GODIESEL_PROOF_INVALIDATED",
+            "The available verification proof no longer covers the current inputs.",
+            "Run the selected verification gate and record a new evidence receipt.",
+        )
+        return _reuse_result(
+            capability_id,
+            status="blocked",
+            explanation=explanation,
+            blockers=[blocker],
+            evidence={
+                "id": receipt["receipt_id"],
+                "path": path.relative_to(root).as_posix(),
+                "sha256": _file_digest(path),
+            },
+        )
+
+    snapshot = build_proof_snapshot(
+        root,
+        capability_id,
+        tiers=["focused"],
+        environ=environ,
+        provider_target=provider_target,
+    )
+    blocker = _issue(
+        "GODIESEL_REUSABLE_PROOF_NOT_FOUND",
+        "No schema-valid passed evidence receipt exists for this capability input.",
+        "Run verification normally before requesting proof reuse.",
+    )
+    explanation = {
+        "schema_version": SCHEMA_VERSION,
+        "document_type": "godiesel-verification-reuse",
+        "reused": False,
+        "source_receipt": None,
+        "proof_fingerprint": snapshot["proof_fingerprint"],
+        "source_proof_fingerprint": None,
+        "covered_inputs": snapshot["covered_inputs"],
+        "invalidated_inputs": [],
+        "reason": blocker["message"],
+    }
+    return _reuse_result(
+        capability_id,
+        status="blocked",
+        explanation=explanation,
+        blockers=[*snapshot["blockers"], blocker],
+        evidence=None,
+    )
 
 
 def _selected_gates(

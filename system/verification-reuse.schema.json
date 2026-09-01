@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://godiesel.local/system/verification-reuse.schema.json",
+  "title": "goDiesel verification proof reuse result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "document_type",
+    "reused",
+    "source_receipt",
+    "proof_fingerprint",
+    "source_proof_fingerprint",
+    "covered_inputs",
+    "invalidated_inputs",
+    "reason"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "document_type": { "const": "godiesel-verification-reuse" },
+    "reused": { "type": "boolean" },
+    "source_receipt": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^\\.godiesel/evidence/.+\\.json$" }
+      ]
+    },
+    "proof_fingerprint": { "$ref": "#/$defs/sha256" },
+    "source_proof_fingerprint": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/sha256" }
+      ]
+    },
+    "covered_inputs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/coveredInput" }
+    },
+    "invalidated_inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["category", "name"],
+        "properties": {
+          "category": { "$ref": "#/$defs/category" },
+          "name": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "reason": { "type": "string", "minLength": 1 }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "category": {
+      "enum": ["implementation", "contract", "fixture", "configuration", "data", "provider"]
+    },
+    "coveredInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["category", "name", "state", "sha256"],
+      "properties": {
+        "category": { "$ref": "#/$defs/category" },
+        "name": { "type": "string", "minLength": 1 },
+        "state": { "enum": ["matched", "absent", "present", "missing", "target"] },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  }
+}

@@ -66,6 +66,15 @@ Inspect the manifest-owned impact decision without running a gate:
 Pass one or more `--changed-path <repository-relative-path>` values for a bounded explanation.
 Without explicit paths, the command compares the worktree with the merge base of `origin/main`.
 
+Reuse a route-share proof without executing its gate only when every covered input remains valid:
+
+```sh
+./scripts/godiesel verify route-share <slug> --reuse --json
+```
+
+The reuse result names invalidated input categories and blocks when no valid proof remains.
+Route release performs the same reuse validation before any external effect.
+
 ## Commands
 
 Run commands from `app/`.
@@ -148,6 +157,7 @@ Rerun the smallest affected tier when a subsequent edit touches behavior covered
 Escalate to the release tier when a defect indicates a cross-application regression or when shared routing, build, test, rendering, or application-shell infrastructure changes.
 
 A proof's covered inputs include implementation, contracts, schemas, fixtures, test code, build and runtime configuration, canonical data fingerprints when applicable, and the external provider or deployment target for live proof.
+The manifest-owned fingerprint aggregates every matching file per impact pattern, records absent patterns, records configuration presence without secret values, and digests non-sensitive provider targets.
 Changing any covered input invalidates that proof.
 
 Documentation, evidence packaging, or unrelated edits do not invalidate a proof unless they change an executable command, contract, or claimed behavior.

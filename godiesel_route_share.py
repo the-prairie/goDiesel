@@ -15,6 +15,7 @@ from typing import Any, Callable, Mapping
 from jsonschema import Draft202012Validator
 
 from godiesel_evidence import canonical_digest, write_evidence_receipt
+from godiesel_verification import build_proof_snapshot, reuse_verification
 
 
 SCHEMA_VERSION = 1
@@ -613,6 +614,32 @@ def execute_route_share(
                 )
             )
             return _blocked_result(verb, required_authority, blocker)
+        if (root / "system/evidence-receipt.schema.json").is_file():
+            proof = reuse_verification(
+                root,
+                "route-share",
+                slug=str(slug),
+                environ=dict(os.environ if environ is None else environ),
+            )
+            if proof["status"] != "passed":
+                proof_codes = {
+                    issue["code"] for issue in proof.get("blockers", [])
+                }
+                invalidated = "GODIESEL_PROOF_INVALIDATED" in proof_codes
+                blocker = _issue(
+                    (
+                        "GODIESEL_RELEASE_PROOF_INVALIDATED"
+                        if invalidated
+                        else "GODIESEL_RELEASE_PROOF_REQUIRED"
+                    ),
+                    (
+                        "The route verification proof no longer covers the release inputs."
+                        if invalidated
+                        else "Release requires a reusable passed route verification proof."
+                    ),
+                    "Run route-share verification normally and review its new evidence receipt before release.",
+                )
+                return _blocked_result(verb, required_authority, blocker)
 
     command = _command(
         root,
@@ -661,6 +688,15 @@ def execute_route_share(
         if verb == "plan" and isinstance(domain_result, dict)
         else _read_mapping(proposal_file)
     )
+    proof_snapshot = None
+    if verb == "verify" and (root / "system/evidence-receipt.schema.json").is_file():
+        proof_snapshot = build_proof_snapshot(
+            root,
+            "route-share",
+            tiers=["focused"],
+            environ=dict(os.environ if environ is None else environ),
+        )
+        blockers.extend(proof_snapshot["blockers"])
     receipt = None
     if verb != "inspect":
         outcome = (
@@ -692,8 +728,9 @@ def execute_route_share(
     status = "blocked" if blockers else "warning" if warnings else "passed"
     exit_code = 2 if blockers and completed.returncode == 0 else completed.returncode
     evidence = None
-    if verb == "verify" and receipt is not None:
-        evidence_status = "passed" if not blockers else "failed"
+    if verb == "verify" and receipt is not None and proof_snapshot is not None:
+        gate_status = "passed" if completed.returncode == 0 else "failed"
+        evidence_status = "blocked" if proof_snapshot["blockers"] else gate_status
         evidence = write_evidence_receipt(
             root,
             capability="route-share",
@@ -714,6 +751,13 @@ def execute_route_share(
                     "sha256": receipt["result_sha256"],
                 },
             ],
+            covered_inputs=proof_snapshot["covered_inputs"],
+            proof_fingerprint=proof_snapshot["proof_fingerprint"],
+            selection={
+                "mode": "explicit",
+                "tiers": ["focused"],
+                "impact_rules": proof_snapshot["impact_rules"],
+            },
             gates=[
                 {
                     "id": "route-share-check",
@@ -723,12 +767,12 @@ def execute_route_share(
                     "provider": "deterministic-local",
                     "started_at": started_at,
                     "finished_at": finished_at,
-                    "status": evidence_status,
+                    "status": gate_status,
                     "exit_code": completed.returncode,
                     "output_sha256": receipt["result_sha256"],
                 }
             ],
-            configuration=[],
+            configuration=proof_snapshot["configuration"],
             warnings=warnings,
             recovery_paths=[],
             safe_next_actions=[issue["remediation"] for issue in blockers],

@@ -58,6 +58,7 @@ Inspect the atlas or one route without changing state:
 ./scripts/godiesel inspect route-share --json
 ./scripts/godiesel inspect route-share <slug> --json
 ./scripts/godiesel verify --explain --json
+./scripts/godiesel verify route-share <slug> --reuse --json
 ```
 
 The system inspection reports Git state, the capability inventory, authority classes, blockers, and available transitions.
@@ -71,8 +72,11 @@ See `docs/agents/route-share.md` before using a write or publication command.
 
 The verification explanation classifies changed paths against the manifest, names the affected capabilities and exact gates, preserves live-provider requirements, and blocks unclassified paths without executing a gate.
 
-The manifest, doctor, first full capability adapter, proof receipt, and impact explanation implement Phases 1, 2, and the first two slices of Phase 3 in `docs/architecture/agent-operating-system.md`.
-Proof reuse and additional adapters remain sequenced in `docs/plans/2026-08-31-agent-operating-system-plan.md`.
+Proof reuse succeeds only when the latest schema-valid passed receipt has the same manifest-selected gates and complete covered-input fingerprint.
+It blocks without executing a gate when implementation, contracts, fixtures, configuration, data, or provider targets changed.
+
+The manifest, doctor, first full capability adapter, proof receipts, impact explanation, and guarded route-share proof reuse implement Phases 1 through 3 in `docs/architecture/agent-operating-system.md`.
+Additional capability adapters remain sequenced in `docs/plans/2026-08-31-agent-operating-system-plan.md`.
 
 ## Generate Route Data
 

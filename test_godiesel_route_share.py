@@ -114,6 +114,10 @@ def test_verify_writes_a_general_redacted_evidence_receipt(tmp_path: Path):
         (ROOT / "system/evidence-receipt.schema.json").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
+    (tmp_path / "system/capabilities.json").write_text(
+        (ROOT / "system/capabilities.json").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
     (tmp_path / ".gitignore").write_text(
         ".godiesel/\n.route-share/\n",
         encoding="utf-8",
@@ -175,6 +179,13 @@ def test_verify_writes_a_general_redacted_evidence_receipt(tmp_path: Path):
         "verification-result",
     }
     assert receipt["configuration"] == []
+    assert len(receipt["proof_fingerprint"]) == 64
+    assert receipt["selection"]["mode"] == "explicit"
+    assert receipt["selection"]["tiers"] == ["focused"]
+    assert receipt["selection"]["impact_rules"]
+    assert {
+        item["category"] for item in receipt["covered_inputs"]
+    }.issuperset({"implementation", "contract", "fixture", "configuration", "data"})
     assert secret not in evidence_path.read_text(encoding="utf-8")
     assert_valid_result(result)
 
@@ -494,6 +505,37 @@ def test_release_requires_complete_passed_route_transition_lineage(tmp_path: Pat
     assert result["blockers"][0]["code"] == "GODIESEL_RELEASE_LINEAGE_REQUIRED"
     assert result["receipt"] is None
     assert runner.calls == []
+    assert_valid_result(result)
+
+
+def test_release_blocks_when_the_verification_proof_is_invalidated(tmp_path: Path):
+    system = tmp_path / "system"
+    system.mkdir()
+    for name in ("evidence-receipt.schema.json", "capabilities.json"):
+        (system / name).write_text(
+            (ROOT / "system" / name).read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+    runner = RecordingRunner()
+    establish_route_lineage(tmp_path, runner)
+    (tmp_path / "godiesel_control.py").write_text(
+        "# changed after verification\n",
+        encoding="utf-8",
+    )
+
+    result = execute_route_share(
+        tmp_path,
+        "release",
+        slug="route-1",
+        share_name="ridge",
+        authority="external-durable",
+        target_authority="ridge",
+        runner=runner,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_RELEASE_PROOF_INVALIDATED"
+    assert len(runner.calls) == 3
     assert_valid_result(result)
 
 

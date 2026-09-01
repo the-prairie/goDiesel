@@ -15,7 +15,7 @@ from typing import Any, Mapping
 
 from godiesel_route_share import AUTHORITY as ROUTE_SHARE_AUTHORITY
 from godiesel_route_share import execute_route_share
-from godiesel_verification import explain_verification
+from godiesel_verification import explain_verification, reuse_verification
 
 
 SCHEMA_VERSION = 1
@@ -1105,10 +1105,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--authorize-target")
     parser.add_argument("--authorize-replacement")
     parser.add_argument("--explain", action="store_true")
+    parser.add_argument("--reuse", action="store_true")
     parser.add_argument("--base", default="origin/main")
     parser.add_argument("--changed-path", action="append")
     parser.add_argument("--json", action="store_true", dest="as_json")
     args = parser.parse_args(argv)
+    if args.explain and args.reuse:
+        parser.error("--explain and --reuse are mutually exclusive")
     root = Path(__file__).resolve().parent
     try:
         if args.verb == "doctor":
@@ -1137,20 +1140,29 @@ def main(argv: list[str] | None = None) -> int:
                 parser.error("release route-share requires a share name")
             if args.detach and not args.preview:
                 parser.error("--detach requires --preview")
-            result = execute_route_share(
-                root,
-                args.verb,
-                request_path=args.request,
-                proposal_path=args.proposal,
-                slug=args.slug,
-                share_name=args.share_name,
-                preview=args.preview,
-                detach=args.detach,
-                replace_existing=args.replace_existing,
-                authority=args.authorize,
-                target_authority=args.authorize_target,
-                replacement_authority=args.authorize_replacement,
-            )
+            if args.reuse:
+                if args.verb != "verify":
+                    parser.error("--reuse only supports verification")
+                result = reuse_verification(
+                    root,
+                    "route-share",
+                    slug=args.slug,
+                )
+            else:
+                result = execute_route_share(
+                    root,
+                    args.verb,
+                    request_path=args.request,
+                    proposal_path=args.proposal,
+                    slug=args.slug,
+                    share_name=args.share_name,
+                    preview=args.preview,
+                    detach=args.detach,
+                    replace_existing=args.replace_existing,
+                    authority=args.authorize,
+                    target_authority=args.authorize_target,
+                    replacement_authority=args.authorize_replacement,
+                )
         else:
             parser.error(f"unknown target: {args.target}")
     except Exception:

@@ -1,6 +1,6 @@
 ---
 status: partially-implemented
-last_updated: 2026-08-31
+last_updated: 2026-09-01
 decision: ADR-0016
 ---
 
@@ -35,11 +35,11 @@ It is not a second domain model, a generic agent framework, or a reason to move 
 | Machine-readable capability manifest | Implemented in `system/capabilities.json` |
 | Unified `scripts/godiesel` interface | System inspection, doctor, and the full route-share capability implemented |
 | Shared result envelope and evidence receipts | Route-share results, lineage receipts, and general route verification proof receipts implemented |
-| Impact-directed proof selection and reuse | Manifest-owned selection and `verify --explain` implemented; fingerprinted reuse proposed |
+| Impact-directed proof selection and reuse | Manifest-owned selection, `verify --explain`, complete input fingerprints, and guarded route-share reuse implemented |
 
 Use `./scripts/godiesel inspect system --json` and `./scripts/godiesel doctor --json` for current read-only control-plane inspection.
 Use the route-share commands in `docs/agents/route-share.md` for that implemented capability.
-Do not invoke mutation verbs for another capability or claim that Phase 3 proof reuse exists.
+Do not invoke mutation verbs for another capability or claim that proof reuse exists beyond route-share verification.
 
 ## 2. Design objective
 
@@ -227,8 +227,8 @@ A result states what happened in the command's own domain.
 Every multi-step run may additionally produce an evidence receipt.
 A receipt composes results without becoming a new source of product truth.
 Phase 2 implements narrower route-transition receipts for proposal-specific lineage and release evidence.
-The first Phase 3 slice adds the system-wide receipt contract and emits repository-bound receipts for route verification.
-Impact-directed selection, complete covered-input fingerprints, and proof reuse remain later Phase 3 work.
+Phase 3 adds the system-wide receipt contract, manifest-owned impact selection, complete covered-input fingerprints, and guarded route verification reuse.
+Other capabilities begin emitting and reusing these receipts only when their canonical adapters are implemented.
 
 A receipt records:
 
