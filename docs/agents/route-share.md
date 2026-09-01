@@ -173,6 +173,8 @@ The release authority class and `--authorize-target` value must both be present.
 The target value must exactly match the requested stable share name and does not imply replacement authority.
 An approved replacement also requires `--authorize-replacement <share-name>` for that exact alias.
 The unified release path also requires passed, digest-matched plan, apply, and verify receipts for the same route.
+Before publication, it validates those receipts, confines every linked path to the ignored evidence directories, and re-hashes the proposal and result artifacts.
+This detects accidental corruption and incomplete or fabricated local evidence, but it is not a signature against a hostile actor who can rewrite the repository and all local evidence.
 Use the compatibility adapter only for an explicitly reviewed legacy workflow, not to bypass this state machine.
 
 Report the public guide URL, public Replay URL, and smoke-test result.

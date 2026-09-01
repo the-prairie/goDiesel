@@ -12,6 +12,8 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+from jsonschema import Draft202012Validator
+
 
 SCHEMA_VERSION = 1
 AUTHORITY = {
@@ -62,6 +64,13 @@ def _read_mapping(path: Path | None) -> dict[str, Any]:
     except (OSError, json.JSONDecodeError):
         return {}
     return value if isinstance(value, dict) else {}
+
+
+def _read_json_file(path: Path) -> tuple[bool, object]:
+    try:
+        return True, json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False, None
 
 
 def _proposal_metadata(value: Mapping[str, Any]) -> tuple[str | None, str | None]:
@@ -125,33 +134,179 @@ def _receipt_records(receipt_root: Path) -> list[tuple[Path, dict[str, Any]]]:
     )
 
 
-def _release_lineage_ready(receipt_root: Path, route_slug: str | None) -> bool:
-    if route_slug is None:
+def _contained_artifact_path(
+    root: Path,
+    relative_path: object,
+    expected_directory: Path,
+) -> Path | None:
+    if not isinstance(relative_path, str):
+        return None
+    candidate = (root / relative_path).resolve()
+    directory = (root / expected_directory).resolve()
+    try:
+        candidate.relative_to(directory)
+    except ValueError:
+        return None
+    return candidate
+
+
+def _receipt_integrity_valid(
+    root: Path,
+    path: Path,
+    receipt: Mapping[str, Any],
+    records_by_path: Mapping[str, Mapping[str, Any]],
+    validator: Draft202012Validator,
+) -> bool:
+    if not validator.is_valid(receipt):
         return False
-    expected = ("plan", "apply", "verify")
-    records = [
-        value
-        for _, value in _receipt_records(receipt_root)
-        if value.get("route_slug") == route_slug
-        and value.get("outcome") == "passed"
-        and isinstance(value.get("proposal_sha256"), str)
-    ]
-    for proposal_digest in reversed(
-        [
-            value["proposal_sha256"]
-            for value in records
-            if value.get("verb") == "verify"
-        ]
-    ):
-        position = 0
-        for value in records:
-            if value.get("proposal_sha256") != proposal_digest:
+    result_artifact = receipt.get("result_artifact")
+    if not isinstance(result_artifact, dict):
+        return False
+    result_path = _contained_artifact_path(
+        root,
+        result_artifact.get("path"),
+        Path(".route-share/results"),
+    )
+    if result_path is None:
+        return False
+    result_readable, domain_result = _read_json_file(result_path)
+    if not result_readable:
+        return False
+    result_digest = _canonical_digest(domain_result)
+    if result_digest != receipt.get("result_sha256"):
+        return False
+    if result_digest != result_artifact.get("sha256"):
+        return False
+
+    if receipt.get("verb") == "plan":
+        proposal = receipt.get("proposal")
+        if not isinstance(proposal, dict):
+            return False
+        proposal_path = _contained_artifact_path(
+            root,
+            proposal.get("path"),
+            Path(".route-share/proposals"),
+        )
+        if proposal_path is None:
+            return False
+        proposal_readable, proposal_value = _read_json_file(proposal_path)
+        if not proposal_readable or not isinstance(proposal_value, dict):
+            return False
+        proposal_digest = _canonical_digest(proposal_value)
+        if proposal_digest != proposal.get("sha256"):
+            return False
+        if proposal_digest != receipt.get("proposal_sha256"):
+            return False
+        proposal_id, proposal_slug = _proposal_metadata(proposal_value)
+        if proposal_id != proposal.get("id"):
+            return False
+        if proposal_slug != receipt.get("route_slug"):
+            return False
+
+    for link in receipt.get("lineage", []):
+        linked = records_by_path.get(link.get("path"))
+        if linked is None:
+            return False
+        if any(
+            link.get(key) != linked.get(key)
+            for key in ("receipt_id", "verb", "outcome", "result_sha256")
+        ):
+            return False
+
+    try:
+        path.relative_to(root / ".route-share" / "runs")
+    except ValueError:
+        return False
+    return True
+
+
+def _lineage_paths(receipt: Mapping[str, Any]) -> set[str]:
+    return {
+        str(link["path"])
+        for link in receipt.get("lineage", [])
+        if isinstance(link, dict) and isinstance(link.get("path"), str)
+    }
+
+
+def _release_lineage_state(
+    root: Path,
+    receipt_root: Path,
+    route_slug: str | None,
+) -> str:
+    if route_slug is None:
+        return "missing"
+    records = _receipt_records(receipt_root)
+    records_by_path = {
+        path.relative_to(root).as_posix(): value for path, value in records
+    }
+    schema = _read_mapping(root / "system" / "route-share-receipt.schema.json")
+    try:
+        Draft202012Validator.check_schema(schema)
+        validator = Draft202012Validator(schema)
+    except Exception:
+        return "invalid" if records else "missing"
+
+    def matches(value: Mapping[str, Any], verb: str, digest: object) -> bool:
+        return (
+            value.get("verb") == verb
+            and value.get("route_slug") == route_slug
+            and value.get("outcome") == "passed"
+            and value.get("proposal_sha256") == digest
+            and isinstance(digest, str)
+        )
+
+    structural_chain_found = False
+    for verify_index in range(len(records) - 1, -1, -1):
+        verify_path, verify_receipt = records[verify_index]
+        digest = verify_receipt.get("proposal_sha256")
+        if not matches(verify_receipt, "verify", digest):
+            continue
+        for apply_index in range(verify_index - 1, -1, -1):
+            apply_path, apply_receipt = records[apply_index]
+            if not matches(apply_receipt, "apply", digest):
                 continue
-            if value.get("verb") == expected[position]:
-                position += 1
-                if position == len(expected):
-                    return True
-    return False
+            for plan_index in range(apply_index - 1, -1, -1):
+                plan_path, plan_receipt = records[plan_index]
+                if not matches(plan_receipt, "plan", digest):
+                    continue
+                structural_chain_found = True
+                chain = (
+                    (plan_path, plan_receipt),
+                    (apply_path, apply_receipt),
+                    (verify_path, verify_receipt),
+                )
+                if not all(
+                    _receipt_integrity_valid(
+                        root,
+                        receipt_path,
+                        receipt,
+                        records_by_path,
+                        validator,
+                    )
+                    for receipt_path, receipt in chain
+                ):
+                    continue
+                plan_relative = plan_path.relative_to(root).as_posix()
+                apply_relative = apply_path.relative_to(root).as_posix()
+                if plan_relative not in _lineage_paths(apply_receipt):
+                    continue
+                if not {plan_relative, apply_relative}.issubset(
+                    _lineage_paths(verify_receipt)
+                ):
+                    continue
+                plan_proposal = plan_receipt.get("proposal")
+                apply_proposal = apply_receipt.get("proposal")
+                if not isinstance(plan_proposal, dict) or not isinstance(
+                    apply_proposal,
+                    dict,
+                ):
+                    continue
+                if apply_proposal.get("id") != plan_proposal.get("id"):
+                    continue
+                if apply_proposal.get("sha256") != digest:
+                    continue
+                return "ready"
+    return "invalid" if structural_chain_found else "missing"
 
 
 def _lineage_context(
@@ -440,16 +595,27 @@ def execute_route_share(
             f"Review the existing target, then repeat with --authorize-replacement {share_name}.",
         )
         return _blocked_result(verb, required_authority, blocker)
-    if verb == "release" and not _release_lineage_ready(
-        root / ".route-share" / "runs",
-        slug,
-    ):
-        blocker = _issue(
-            "GODIESEL_RELEASE_LINEAGE_REQUIRED",
-            "Release requires a passed plan, apply, and verify chain for this route and proposal.",
-            "Complete the unified plan, apply, and verify transitions before authorizing release.",
+    if verb == "release":
+        lineage_state = _release_lineage_state(
+            root,
+            root / ".route-share" / "runs",
+            slug,
         )
-        return _blocked_result(verb, required_authority, blocker)
+        if lineage_state != "ready":
+            blocker = (
+                _issue(
+                    "GODIESEL_RELEASE_LINEAGE_INVALID",
+                    "The route transition lineage or one of its linked artifacts failed integrity checks.",
+                    "Discard the invalid ignored receipts and repeat plan, apply, and verify before release.",
+                )
+                if lineage_state == "invalid"
+                else _issue(
+                    "GODIESEL_RELEASE_LINEAGE_REQUIRED",
+                    "Release requires a passed plan, apply, and verify chain for this route and proposal.",
+                    "Complete the unified plan, apply, and verify transitions before authorizing release.",
+                )
+            )
+            return _blocked_result(verb, required_authority, blocker)
 
     command = _command(
         root,

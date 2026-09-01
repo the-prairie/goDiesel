@@ -45,6 +45,14 @@ def establish_route_lineage(
     *,
     route_slug: str = "route-1",
 ) -> None:
+    schema_destination = tmp_path / "system" / "route-share-receipt.schema.json"
+    schema_destination.parent.mkdir(parents=True, exist_ok=True)
+    schema_destination.write_text(
+        (ROOT / "system" / "route-share-receipt.schema.json").read_text(
+            encoding="utf-8"
+        ),
+        encoding="utf-8",
+    )
     proposal = {
         "document_type": "route-share-proposal",
         "proposal_id": "proposal-1",
@@ -410,6 +418,115 @@ def test_release_requires_complete_passed_route_transition_lineage(tmp_path: Pat
     assert result["status"] == "blocked"
     assert result["blockers"][0]["code"] == "GODIESEL_RELEASE_LINEAGE_REQUIRED"
     assert result["receipt"] is None
+    assert runner.calls == []
+    assert_valid_result(result)
+
+
+def test_release_rejects_corrupted_lineage_result_artifact(tmp_path: Path):
+    runner = RecordingRunner()
+    establish_route_lineage(tmp_path, runner)
+    verify_receipt_path = sorted((tmp_path / ".route-share/runs").glob("*.json"))[-1]
+    verify_receipt = json.loads(verify_receipt_path.read_text(encoding="utf-8"))
+    (tmp_path / verify_receipt["result_artifact"]["path"]).write_text(
+        json.dumps({"stdout": "changed after verification", "stderr": ""}),
+        encoding="utf-8",
+    )
+
+    result = execute_route_share(
+        tmp_path,
+        "release",
+        slug="route-1",
+        share_name="ridge",
+        authority="external-durable",
+        target_authority="ridge",
+        runner=runner,
+    )
+
+    assert result["blockers"][0]["code"] == "GODIESEL_RELEASE_LINEAGE_INVALID"
+    assert len(runner.calls) == 3
+    assert_valid_result(result)
+
+
+def test_release_rejects_corrupted_plan_proposal_artifact(tmp_path: Path):
+    runner = RecordingRunner()
+    establish_route_lineage(tmp_path, runner)
+    proposal_path = tmp_path / ".route-share/proposals/proposal-1.json"
+    proposal = json.loads(proposal_path.read_text(encoding="utf-8"))
+    proposal["route_spec"]["activity_id"] = "different-route"
+    proposal_path.write_text(
+        json.dumps(proposal, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    result = execute_route_share(
+        tmp_path,
+        "release",
+        slug="route-1",
+        share_name="ridge",
+        authority="external-durable",
+        target_authority="ridge",
+        runner=runner,
+    )
+
+    assert result["blockers"][0]["code"] == "GODIESEL_RELEASE_LINEAGE_INVALID"
+    assert len(runner.calls) == 3
+    assert_valid_result(result)
+
+
+def test_release_rejects_lineage_link_that_does_not_match_its_receipt(tmp_path: Path):
+    runner = RecordingRunner()
+    establish_route_lineage(tmp_path, runner)
+    verify_receipt_path = sorted((tmp_path / ".route-share/runs").glob("*.json"))[-1]
+    verify_receipt = json.loads(verify_receipt_path.read_text(encoding="utf-8"))
+    verify_receipt["lineage"][0]["result_sha256"] = "0" * 64
+    verify_receipt_path.write_text(
+        json.dumps(verify_receipt, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    result = execute_route_share(
+        tmp_path,
+        "release",
+        slug="route-1",
+        share_name="ridge",
+        authority="external-durable",
+        target_authority="ridge",
+        runner=runner,
+    )
+
+    assert result["blockers"][0]["code"] == "GODIESEL_RELEASE_LINEAGE_INVALID"
+    assert len(runner.calls) == 3
+    assert_valid_result(result)
+
+
+def test_release_rejects_fabricated_receipts_without_linked_artifacts(tmp_path: Path):
+    receipt_root = tmp_path / ".route-share" / "runs"
+    receipt_root.mkdir(parents=True)
+    for index, verb in enumerate(("plan", "apply", "verify")):
+        (receipt_root / f"{index}-{verb}.json").write_text(
+            json.dumps(
+                {
+                    "verb": verb,
+                    "route_slug": "route-1",
+                    "outcome": "passed",
+                    "proposal_sha256": "a" * 64,
+                }
+            ),
+            encoding="utf-8",
+        )
+    runner = RecordingRunner()
+
+    result = execute_route_share(
+        tmp_path,
+        "release",
+        slug="route-1",
+        share_name="ridge",
+        authority="external-durable",
+        target_authority="ridge",
+        runner=runner,
+    )
+
+    assert result["blockers"][0]["code"] == "GODIESEL_RELEASE_LINEAGE_INVALID"
     assert runner.calls == []
     assert_valid_result(result)
 
