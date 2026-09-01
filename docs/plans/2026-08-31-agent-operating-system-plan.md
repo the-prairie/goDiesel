@@ -179,6 +179,8 @@ Implemented by `test_godiesel_control.py` and the focused commands documented in
 
 ## Phase 3: Add proof receipts and impact-directed verification
 
+Status: evidence receipt and impact-explanation slices complete; fingerprinted reuse pending.
+
 ### Work
 
 - Define a versioned evidence receipt schema.

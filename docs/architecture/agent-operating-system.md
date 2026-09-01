@@ -35,11 +35,11 @@ It is not a second domain model, a generic agent framework, or a reason to move 
 | Machine-readable capability manifest | Implemented in `system/capabilities.json` |
 | Unified `scripts/godiesel` interface | System inspection, doctor, and the full route-share capability implemented |
 | Shared result envelope and evidence receipts | Route-share results, lineage receipts, and general route verification proof receipts implemented |
-| Impact-directed proof selection and reuse | Proposed |
+| Impact-directed proof selection and reuse | Manifest-owned selection and `verify --explain` implemented; fingerprinted reuse proposed |
 
 Use `./scripts/godiesel inspect system --json` and `./scripts/godiesel doctor --json` for current read-only control-plane inspection.
 Use the route-share commands in `docs/agents/route-share.md` for that implemented capability.
-Do not invoke mutation verbs for another capability or claim that Phase 3 proof selection and reuse exist.
+Do not invoke mutation verbs for another capability or claim that Phase 3 proof reuse exists.
 
 ## 2. Design objective
 

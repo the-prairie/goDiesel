@@ -4,7 +4,7 @@
   "title": "goDiesel capability manifest",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "document_type", "capabilities"],
+  "required": ["schema_version", "document_type", "capabilities", "impact_rules"],
   "properties": {
     "$schema": { "type": "string", "minLength": 1 },
     "schema_version": { "const": 1 },
@@ -13,6 +13,11 @@
       "type": "array",
       "minItems": 1,
       "items": { "$ref": "#/$defs/capability" }
+    },
+    "impact_rules": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/impactRule" }
     }
   },
   "$defs": {
@@ -214,6 +219,43 @@
           "enum": ["runtime", "ignored-local", "tracked-local", "generated-local", "external"]
         },
         "schema": { "type": "string", "minLength": 1 }
+      }
+    },
+    "impactGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capability", "tier"],
+      "properties": {
+        "capability": { "type": "string", "pattern": "^[a-z][a-z0-9-]+$" },
+        "tier": { "enum": ["focused", "ticket", "live"] }
+      }
+    },
+    "impactRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "paths", "capabilities", "category", "gates", "reason"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]+$" },
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]+$" },
+          "uniqueItems": true
+        },
+        "category": {
+          "enum": ["implementation", "contract", "fixture", "configuration", "data", "provider", "documentation"]
+        },
+        "gates": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/impactGate" }
+        },
+        "reason": { "type": "string", "minLength": 1 }
       }
     }
   }

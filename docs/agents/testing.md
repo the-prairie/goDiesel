@@ -57,6 +57,15 @@ Classify the change before choosing commands:
 An affected path that cannot be assigned to an owning module or invariant is an architecture gap.
 Do not silently choose a small gate for an unclassified change.
 
+Inspect the manifest-owned impact decision without running a gate:
+
+```sh
+./scripts/godiesel verify --explain --json
+```
+
+Pass one or more `--changed-path <repository-relative-path>` values for a bounded explanation.
+Without explicit paths, the command compares the worktree with the merge base of `origin/main`.
+
 ## Commands
 
 Run commands from `app/`.

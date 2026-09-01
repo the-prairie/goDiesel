@@ -57,6 +57,7 @@ Inspect the atlas or one route without changing state:
 ./scripts/godiesel doctor --json
 ./scripts/godiesel inspect route-share --json
 ./scripts/godiesel inspect route-share <slug> --json
+./scripts/godiesel verify --explain --json
 ```
 
 The system inspection reports Git state, the capability inventory, authority classes, blockers, and available transitions.
@@ -68,8 +69,10 @@ Route verification also writes a privacy-safe proof receipt under `.godiesel/evi
 `scripts/route.sh` remains available as the compatibility path.
 See `docs/agents/route-share.md` before using a write or publication command.
 
-The manifest, doctor, and first full capability adapter implement Phases 1 and 2 of the broader agent operating model in `docs/architecture/agent-operating-system.md`.
-Impact-directed proof and additional adapters remain sequenced in `docs/plans/2026-08-31-agent-operating-system-plan.md`.
+The verification explanation classifies changed paths against the manifest, names the affected capabilities and exact gates, preserves live-provider requirements, and blocks unclassified paths without executing a gate.
+
+The manifest, doctor, first full capability adapter, proof receipt, and impact explanation implement Phases 1, 2, and the first two slices of Phase 3 in `docs/architecture/agent-operating-system.md`.
+Proof reuse and additional adapters remain sequenced in `docs/plans/2026-08-31-agent-operating-system-plan.md`.
 
 ## Generate Route Data
 

@@ -60,6 +60,18 @@ def _make_repository_fixture(root: Path, *, generated_ids: list[str] | None = No
             "schema_version": 1,
             "document_type": "godiesel-capability-manifest",
             "capabilities": [capability],
+            "impact_rules": [
+                {
+                    "id": "fixture-implementation",
+                    "paths": ["build.py"],
+                    "capabilities": ["route-generation"],
+                    "category": "implementation",
+                    "gates": [
+                        {"capability": "route-generation", "tier": "focused"}
+                    ],
+                    "reason": "Exercise the fixture capability through its public seam."
+                }
+            ],
         },
     )
     _write_json(

@@ -239,5 +239,103 @@
       },
       "documents": ["CONTEXT.md", "docs/agents/testing.md", "docs/adr/0007-named-degradation-instead-of-silent-failure.md", "docs/adr/0012-risk-based-verification-with-a-no-skip-live-gate.md"]
     }
+  ],
+  "impact_rules": [
+    {
+      "id": "control-plane-implementation",
+      "paths": ["godiesel_control.py", "godiesel_evidence.py", "godiesel_route_share.py", "godiesel_verification.py", "scripts/godiesel"],
+      "capabilities": ["route-share"],
+      "category": "implementation",
+      "gates": [{ "capability": "route-share", "tier": "focused" }],
+      "reason": "The shared operator implementation can change route-share behavior or evidence."
+    },
+    {
+      "id": "control-plane-contracts",
+      "paths": ["system/**"],
+      "capabilities": ["route-share"],
+      "category": "contract",
+      "gates": [{ "capability": "route-share", "tier": "focused" }],
+      "reason": "A machine-readable control contract changed."
+    },
+    {
+      "id": "control-plane-fixtures",
+      "paths": ["test_godiesel_control.py", "test_godiesel_route_share.py", "test_godiesel_verification.py", "test_route_share_cli.py", "scripts/test-route-share-acceptance.sh"],
+      "capabilities": ["route-share"],
+      "category": "fixture",
+      "gates": [{ "capability": "route-share", "tier": "focused" }],
+      "reason": "A test or acceptance fixture that defines route-share proof changed."
+    },
+    {
+      "id": "repository-evidence-configuration",
+      "paths": [".gitignore"],
+      "capabilities": ["route-share"],
+      "category": "configuration",
+      "gates": [{ "capability": "route-share", "tier": "focused" }],
+      "reason": "Ignored evidence persistence or dirty-state classification changed."
+    },
+    {
+      "id": "route-share-implementation",
+      "paths": ["route_create.py", "route_create.schema.json", "route_status.py", "scripts/route.sh", "scripts/route-preview.sh", "scripts/publish-route-microsite.sh", "app/scripts/smoke-single-route-microsite.mjs"],
+      "capabilities": ["route-share"],
+      "category": "implementation",
+      "gates": [{ "capability": "route-share", "tier": "focused" }, { "capability": "route-share", "tier": "ticket" }],
+      "reason": "The route-share state machine, writer, preview, or publication path changed."
+    },
+    {
+      "id": "route-data",
+      "paths": ["quests.json", "route_sources/**", "app/src/data/generated/**", "app/public/data/routes/**"],
+      "capabilities": ["route-share", "route-generation"],
+      "category": "data",
+      "gates": [{ "capability": "route-share", "tier": "focused" }, { "capability": "route-generation", "tier": "focused" }],
+      "reason": "Canonical or generated route data changed."
+    },
+    {
+      "id": "route-generation-implementation",
+      "paths": ["build.py", "quest_meta.py", "rebuild.sh", "test_react_app.py"],
+      "capabilities": ["route-generation"],
+      "category": "implementation",
+      "gates": [{ "capability": "route-generation", "tier": "focused" }],
+      "reason": "The only route-data writer or its projection contract changed."
+    },
+    {
+      "id": "owner-curation-implementation",
+      "paths": ["admin.py", "admin.sh", "curation_publish.py", "test_admin_curation.py", "test_curation_publish.py"],
+      "capabilities": ["owner-curation"],
+      "category": "implementation",
+      "gates": [{ "capability": "owner-curation", "tier": "focused" }],
+      "reason": "The loopback owner-curation writer or recovery contract changed."
+    },
+    {
+      "id": "application-runtime",
+      "paths": ["app/src/**", "app/e2e/**"],
+      "capabilities": ["application-release"],
+      "category": "implementation",
+      "gates": [{ "capability": "application-release", "tier": "focused" }],
+      "reason": "Application runtime behavior or its browser contract changed."
+    },
+    {
+      "id": "application-configuration",
+      "paths": ["app/package.json", "app/package-lock.json", "app/*config.*", "make-dist.sh", ".github/workflows/**"],
+      "capabilities": ["application-release"],
+      "category": "configuration",
+      "gates": [{ "capability": "application-release", "tier": "ticket" }],
+      "reason": "Build, test, routing, or release configuration changed."
+    },
+    {
+      "id": "live-provider-runtime",
+      "paths": ["app/src/services/google*", "app/src/**/google*", "app/e2e/*live*", "app/e2e/earth-*", "scripts/verify-live-pipeline.sh"],
+      "capabilities": ["application-release"],
+      "category": "provider",
+      "gates": [{ "capability": "application-release", "tier": "live" }],
+      "reason": "Provider-dependent behavior changed and still requires live proof."
+    },
+    {
+      "id": "canonical-documentation",
+      "paths": ["AGENTS.md", "CONTEXT.md", "PRODUCT.md", "STRATEGY.md", "README.md", "docs/**"],
+      "capabilities": ["route-share", "route-generation", "owner-curation", "application-release"],
+      "category": "documentation",
+      "gates": [],
+      "reason": "Documentation changed without changing an executable runtime input."
+    }
   ]
 }
