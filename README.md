@@ -46,6 +46,30 @@ The root redirects to `#/atlas`, and the sidebar links to Finder, Routes, Replay
 
 The Playable Earth route experience is available at `#/lab/playable-earth/<route-id>` as the immersive reference for production Replay.
 
+## Agent workflow
+
+Start with `AGENTS.md`, root `CONTEXT.md`, and the [architecture map](docs/architecture/README.md).
+
+Inspect the atlas or one route without changing state:
+
+```bash
+./scripts/godiesel inspect system --json
+./scripts/godiesel doctor --json
+./scripts/godiesel inspect route-share --json
+./scripts/godiesel inspect route-share <slug> --json
+```
+
+The system inspection reports Git state, the capability inventory, authority classes, blockers, and available transitions.
+The doctor additionally checks runtimes, configuration presence, owning writers, command and documentation references, and generated route inventory without invoking a writer or provider.
+
+The route-share capability composes proposal, creation, preview, verification, and publication behind the five `scripts/godiesel` verbs.
+Machine-readable results retain the existing domain payload and point to ignored digest-linked receipts under `.route-share/`.
+`scripts/route.sh` remains available as the compatibility path.
+See `docs/agents/route-share.md` before using a write or publication command.
+
+The manifest, doctor, and first full capability adapter implement Phases 1 and 2 of the broader agent operating model in `docs/architecture/agent-operating-system.md`.
+Impact-directed proof and additional adapters remain sequenced in `docs/plans/2026-08-31-agent-operating-system-plan.md`.
+
 ## Generate Route Data
 
 Regenerate route summaries and full route records after changing `quests.json` or refreshing the Strava export:

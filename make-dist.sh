@@ -31,6 +31,7 @@ if [[ -n "$SINGLE_ROUTE_SLUG" ]]; then
   fi
   find dist/data -mindepth 1 -maxdepth 1 ! -name routes -exec rm -rf -- {} +
   find "$ROUTES_DIR" -depth -mindepth 1 ! -path "$ROUTE_FILE" -delete
+  node scripts/scope-route-microsite.mjs "$SINGLE_ROUTE_SLUG"
 fi
 
 if [[ -n "$SINGLE_ROUTE_SLUG" ]]; then

@@ -18,14 +18,21 @@ usage() {
 Usage: ./scripts/route.sh <command> [arguments]
 
   status [slug...]          Where a route stands. No arguments summarises the atlas.
+  propose --request <file>  Validate intake and emit a reviewable JSON proposal.
+  create --proposal <file>  Apply an approved proposal and rebuild route data.
   build                     Regenerate route data from quests.json and the sources.
   curate                    Open Admin with its local owner writer.
   check <slug>              Validate and build a route-only bundle, without publishing.
-  publish <slug> <name>     Check, then publish to https://share-<name>.godiesel.pages.dev/
+  preview <slug> [--detach] Validate, then serve a route-only local preview.
+  publish <slug> <name> [--replace-existing]
+                            Publish to https://share-<name>.godiesel.pages.dev/
 
 Examples:
   ./scripts/route.sh status
   ./scripts/route.sh status 17654151284
+  ./scripts/route.sh propose --request /path/to/request.json
+  ./scripts/route.sh create --proposal /path/to/proposal.json
+  ./scripts/route.sh preview 17654151284 --detach
   ./scripts/route.sh check 17654151284
   ./scripts/route.sh publish 17654151284 kyoto-hills
 EOF
@@ -37,6 +44,14 @@ shift || true
 case "$command" in
   status)
     exec "${PYTHON}" route_status.py "$@"
+    ;;
+
+  propose)
+    exec "${PYTHON}" route_create.py propose "$@"
+    ;;
+
+  create)
+    exec "${PYTHON}" route_create.py create "$@"
     ;;
 
   build)
@@ -56,6 +71,12 @@ case "$command" in
     exec ./scripts/publish-route-microsite.sh "$slug" "check-only" --dry-run
     ;;
 
+  preview)
+    slug="${1:-}"
+    if [[ -z "$slug" ]]; then usage; exit 1; fi
+    exec ./scripts/route-preview.sh "$@"
+    ;;
+
   publish)
     slug="${1:-}"
     share="${2:-}"
@@ -65,17 +86,18 @@ case "$command" in
     # A publishable route is one whose geometry and generated record are sound.
     # A draft guide is not a blocker: publishing a scouted route with an
     # unfinished guide is a legitimate choice, and the page says which it is.
-    if ! "${PYTHON}" -c "
+    if ! "${PYTHON}" - "$slug" <<'PY'
 import sys
 from pathlib import Path
 from route_status import route_status
-status = route_status(Path('.'), '$slug')
+status = route_status(Path('.'), sys.argv[1])
 sys.exit(0 if status['publishable'] else 1)
-"; then
+PY
+    then
       echo "Refusing to publish: the route is blocked above." >&2
       exit 1
     fi
-    exec ./scripts/publish-route-microsite.sh "$slug" "$share"
+    exec ./scripts/publish-route-microsite.sh "$slug" "$share" "${@:3}"
     ;;
 
   ""|-h|--help|help)

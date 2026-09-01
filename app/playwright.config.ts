@@ -33,7 +33,7 @@ export default defineConfig({
   },
   webServer: {
     command:
-      "GODIESEL_DISABLE_LIVE_PROVIDERS=1 npm run build && npm run preview -- --port 8791",
+      "GODIESEL_DISABLE_LIVE_PROVIDERS=1 npm run build && npm run preview -- --host 127.0.0.1 --port 8791",
     url: "http://127.0.0.1:8791",
     reuseExistingServer: false,
     timeout: 120_000,

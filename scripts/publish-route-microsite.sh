@@ -5,7 +5,11 @@ cd "$(dirname "$0")/.."
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/publish-route-microsite.sh <route-slug> <share-name> [--dry-run]
+Usage: ./scripts/publish-route-microsite.sh <route-slug> <share-name> [options]
+
+Options:
+  --dry-run           Validate and build without contacting Cloudflare.
+  --replace-existing  Explicitly replace an existing stable share branch.
 
 Examples:
   ./scripts/publish-route-microsite.sh 3519505225411091950 appian-way --dry-run
@@ -15,7 +19,8 @@ EOF
 
 ROUTE_SLUG="${1:-}"
 SHARE_NAME="${2:-}"
-MODE="${3:-}"
+DRY_RUN=false
+REPLACE_EXISTING=false
 
 if [[ -z "$ROUTE_SLUG" || -z "$SHARE_NAME" ]]; then
   usage
@@ -33,19 +38,28 @@ if (( ${#SHARE_NAME} > 57 )); then
   echo "Share name must be at most 57 characters so the Pages hostname is valid." >&2
   exit 1
 fi
-if [[ -n "$MODE" && "$MODE" != "--dry-run" ]]; then
-  usage
-  exit 1
-fi
+for option in "${@:3}"; do
+  case "$option" in
+    --dry-run) DRY_RUN=true ;;
+    --replace-existing) REPLACE_EXISTING=true ;;
+    *) usage; exit 1 ;;
+  esac
+done
 
 BRANCH="share-${SHARE_NAME}"
 PUBLIC_URL="https://${BRANCH}.godiesel.pages.dev/"
+REQUIRE_PROVIDER_KEY=1
+if [[ "$DRY_RUN" == "true" ]]; then
+  REQUIRE_PROVIDER_KEY=0
+fi
 
 echo "1/4 Validating route source"
 node scripts/validate-route-microsite.mjs "$ROUTE_SLUG" source
 
 echo "2/4 Building route-only bundle"
-GODIESEL_SINGLE_ROUTE_SLUG="$ROUTE_SLUG" ./make-dist.sh
+GODIESEL_REQUIRE_PROVIDER_KEY="$REQUIRE_PROVIDER_KEY" \
+  GODIESEL_SINGLE_ROUTE_SLUG="$ROUTE_SLUG" \
+  ./make-dist.sh
 node scripts/validate-route-microsite.mjs "$ROUTE_SLUG" dist
 
 echo "3/4 Running focused microsite journey"
@@ -54,11 +68,29 @@ echo "3/4 Running focused microsite journey"
   VITE_SINGLE_ROUTE_SLUG="$ROUTE_SLUG" npx playwright test e2e/single-route-microsite.spec.ts
 )
 
-if [[ "$MODE" == "--dry-run" ]]; then
+if [[ "$DRY_RUN" == "true" ]]; then
   echo "4/4 Dry run complete"
-  echo "Review locally: VITE_SINGLE_ROUTE_SLUG=$ROUTE_SLUG npm --prefix app run dev"
+  echo "Review locally: ./scripts/route.sh preview $ROUTE_SLUG"
   echo "Publish: ./scripts/publish-route-microsite.sh $ROUTE_SLUG $SHARE_NAME"
   exit 0
+fi
+
+if ! PUBLIC_STATUS=$(curl --silent --show-error \
+  --output /dev/null --write-out '%{http_code}' \
+  --connect-timeout 10 --max-time 30 "$PUBLIC_URL"); then
+  echo "Could not verify whether ${PUBLIC_URL} already exists; refusing to publish." >&2
+  exit 1
+fi
+if [[ "$PUBLIC_STATUS" != "404" && ! "$PUBLIC_STATUS" =~ ^(2|3)[0-9][0-9]$ && "$PUBLIC_STATUS" != "401" && "$PUBLIC_STATUS" != "403" ]]; then
+  echo "Share-name collision check returned HTTP ${PUBLIC_STATUS}; refusing to publish." >&2
+  exit 1
+fi
+if [[ "$PUBLIC_STATUS" != "404" ]]; then
+  if [[ "$REPLACE_EXISTING" != "true" ]]; then
+    echo "Refusing to replace existing share ${BRANCH}." >&2
+    echo "Repeat with --replace-existing only after explicit owner approval." >&2
+    exit 1
+  fi
 fi
 
 echo "4/4 Publishing ${PUBLIC_URL}"

@@ -156,6 +156,13 @@ describe("filterRoutes", () => {
     },
   );
 
+  it("does not classify unavailable elevation as a flat route", () => {
+    const unavailable = route({ elevationGainM: null, elevationStatus: "unavailable" });
+
+    expect(filterRoutes([unavailable], filters({ climb: "under-250" }))).toEqual([]);
+    expect(filterRoutes([unavailable], filters({ climb: "all" }))).toEqual([unavailable]);
+  });
+
   it("returns no routes when nothing satisfies the filters", () => {
     expect(
       filterRoutes(

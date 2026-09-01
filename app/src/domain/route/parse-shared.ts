@@ -1,6 +1,6 @@
 // Primitives shared by both parse tiers (ADR-0004).
 
-import type { GeneratedQuestRoute, RoutePoint } from "@/domain/route/contract";
+import type { GeneratedQuestRoute, RouteElevationStatus, RoutePoint } from "@/domain/route/contract";
 
 export const curationFields = [
   "vibe",
@@ -50,7 +50,10 @@ export function requiredSlug(input: GeneratedQuestRoute, context: string) {
   return slug;
 }
 
-export function parsedRoutePoints(value: unknown) {
+export function parsedRoutePoints(
+  value: unknown,
+  elevationStatus: RouteElevationStatus = "recorded",
+) {
   if (!Array.isArray(value) || value.length < 2) {
     return { points: [] as RoutePoint[], status: "missing" as const };
   }
@@ -66,7 +69,12 @@ export function parsedRoutePoints(value: unknown) {
         : undefined;
     const lat = source ? numberValue(source.lat, Number.NaN) : Number.NaN;
     const lng = source ? numberValue(source.lng, Number.NaN) : Number.NaN;
-    const elev = source ? numberValue(source.elev, Number.NaN) : Number.NaN;
+    if (elevationStatus === "unavailable" && source?.elev !== null) {
+      return { points: [] as RoutePoint[], status: "invalid" as const };
+    }
+    const elev = source?.elev === null && elevationStatus === "unavailable"
+      ? 0
+      : source ? numberValue(source.elev, Number.NaN) : Number.NaN;
     const d = source ? numberValue(source.d, Number.NaN) : Number.NaN;
     const rawElapsed = source?.elapsed_s;
     const elapsedS =

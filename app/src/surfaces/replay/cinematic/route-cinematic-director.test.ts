@@ -296,6 +296,24 @@ describe("route cinematic director", () => {
     ).toBe(true);
   });
 
+  it("does not turn mesh-relative terrain into recorded elevation claims", () => {
+    const unavailableRoute = {
+      ...mountainRoute,
+      lifecycle: "discovered",
+      elevationStatus: "unavailable",
+      elevationGainM: null,
+    } as QuestRoute;
+    const duration = cinematicDuration(unavailableRoute, "feature");
+    const subtitles = Array.from({ length: 300 }, (_, index) =>
+      cinematicFrame(unavailableRoute, "feature", (duration * index) / 299)
+        .chapterSubtitle,
+    );
+
+    expect(subtitles.some((subtitle) => subtitle.includes("Provider-relative terrain"))).toBe(true);
+    expect(subtitles.join(" ")).not.toMatch(/\d[\d,]* metres (?:of climbing|from low point)/);
+    expect(subtitles.join(" ")).not.toContain("One recorded");
+  });
+
   it("keeps adjacent camera targets on a stable spatial rail", () => {
     const frames = Array.from({ length: 70 }, (_, index) =>
       cinematicFrame(route, "kinetic", 0.15 + index / 30),

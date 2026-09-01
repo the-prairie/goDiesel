@@ -18,6 +18,7 @@ venv/
 .geo_cache.json
 .geocode_buckets.json
 .rebuild.log
+/app/public/data/.route-generation-backup/
 
 # Generated build output.
 /index.html
@@ -33,6 +34,7 @@ venv/
 # Temporary files
 tmp/
 *.tmp
+.route-share/
 
 # Node dependencies (app/ has its own ignore; this covers the repository root)
 node_modules/

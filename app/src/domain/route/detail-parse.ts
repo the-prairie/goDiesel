@@ -1,8 +1,17 @@
 // The strict tier (ADR-0004). Any contract violation throws.
 
 import type { RouteLifecycle } from "@/domain/route/lifecycle";
+import type { RouteElevationStatus } from "@/domain/route/contract";
 import type { RouteAnnotation, RouteAnnotationMedia, GeneratedQuestRoute, QuestRoute, ReplayMetadata, RouteCuration, RouteGeometryStatus, RoutePoint, RouteProvenance, RouteDiscontinuityKind, RouteDiscontinuitySource, RouteTemporalProvenance } from "@/domain/route/contract";
 import { curationFieldSet, curationFields, generatedRoute, optionalCurationList, optionalCurationText, parsedRoutePoints, requiredSlug, validTimeZone } from "@/domain/route/parse-shared";
+
+function validatedElevationStatus(value: unknown): RouteElevationStatus {
+  const status = value ?? "recorded";
+  if (status !== "recorded" && status !== "unavailable") {
+    throw new Error("elevation_status must be recorded or unavailable");
+  }
+  return status;
+}
 
 function validatedCuration(value: unknown): RouteCuration {
   if (value === undefined) return { reviewStatus: "draft" };
@@ -52,10 +61,12 @@ function validatedCuration(value: unknown): RouteCuration {
 function validatedProvenance(
   value: unknown,
   route: RoutePoint[],
+  elevationStatus: RouteElevationStatus,
 ): RouteProvenance {
   if (value === undefined) {
     return {
       temporal: { status: "unavailable" },
+      elevation: { status: elevationStatus },
       track: { segmentCount: route.length > 0 ? 1 : 0 },
       discontinuities: [],
     };
@@ -64,6 +75,20 @@ function validatedProvenance(
     throw new Error("provenance must be an object");
   }
   const source = value as Record<string, unknown>;
+  const elevationSource = source.elevation;
+  const provenanceElevationStatus =
+    elevationSource && typeof elevationSource === "object" && !Array.isArray(elevationSource)
+      ? (elevationSource as Record<string, unknown>).status
+      : elevationStatus;
+  if (
+    provenanceElevationStatus !== "recorded" &&
+    provenanceElevationStatus !== "unavailable"
+  ) {
+    throw new Error("provenance.elevation.status must be recorded or unavailable");
+  }
+  if (provenanceElevationStatus !== elevationStatus) {
+    throw new Error("provenance elevation must agree with elevation_status");
+  }
   const temporalSource = source.temporal;
   if (!temporalSource || typeof temporalSource !== "object" || Array.isArray(temporalSource)) {
     throw new Error("provenance.temporal must be an object");
@@ -180,6 +205,7 @@ function validatedProvenance(
 
   return {
     temporal,
+    elevation: { status: provenanceElevationStatus },
     track: { segmentCount },
     discontinuities,
   };
@@ -266,6 +292,10 @@ function validatedDetailFields(
     throw new Error("lifecycle must be completed, planned, or discovered");
   }
   const lifecycle = lifecycleValue as RouteLifecycle;
+  const elevationStatus = validatedElevationStatus(input.elevation_status);
+  if (elevationStatus === "unavailable" && input.elevation_gain_m !== null) {
+    throw new Error("unavailable elevation requires a null elevation_gain_m");
+  }
 
   return {
     slug,
@@ -277,7 +307,11 @@ function validatedDetailFields(
     region: requiredStringField(input, "region", false),
     date: requiredStringField(input, "date"),
     distanceKm: requiredNumberField(input, "distance_km", { min: 0 }),
-    elevationGainM: requiredNumberField(input, "elevation_gain_m", { min: 0 }),
+    elevationGainM:
+      elevationStatus === "unavailable"
+        ? null
+        : requiredNumberField(input, "elevation_gain_m", { min: 0 }),
+    elevationStatus,
     type: requiredStringField(input, "type", false),
     description: requiredStringField(input, "description"),
     completionRule: requiredStringField(input, "completion_rule"),
@@ -431,7 +465,19 @@ function validatedAnnotations(
 export function parseRouteDetail(value: unknown): QuestRoute {
   const input = generatedRoute(value, "Route detail");
   const slug = requiredSlug(input, "Route detail");
-  const parsedRoute = parsedRoutePoints(input.route);
+  const elevationStatus = validatedElevationStatus(input.elevation_status);
+  if (
+    elevationStatus === "unavailable" &&
+    Array.isArray(input.route) &&
+    input.route.some((point) => {
+      if (Array.isArray(point)) return point[2] !== null;
+      return Boolean(point && typeof point === "object") &&
+        (point as Record<string, unknown>).elev !== null;
+    })
+  ) {
+    throw new Error("unavailable elevation requires null point elevations");
+  }
+  const parsedRoute = parsedRoutePoints(input.route, elevationStatus);
   const route = parsedRoute.points;
   const geometryStatus = parsedRoute.status;
   const midIdx = requiredNumberField(input, "mid_idx", { min: 0, integer: true });
@@ -444,6 +490,6 @@ export function parseRouteDetail(value: unknown): QuestRoute {
     route,
     midIdx,
     annotations: validatedAnnotations(input.annotations, route),
-    provenance: validatedProvenance(input.provenance, route),
+    provenance: validatedProvenance(input.provenance, route, elevationStatus),
   };
 }

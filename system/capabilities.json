@@ -1,0 +1,242 @@
+{
+  "$schema": "./capabilities.schema.json",
+  "schema_version": 1,
+  "document_type": "godiesel-capability-manifest",
+  "capabilities": [
+    {
+      "id": "route-share",
+      "entity": "route",
+      "summary": "Turn one owner-supplied activity into one verified, scoped, shareable route experience.",
+      "verbs": ["inspect", "plan", "apply", "verify", "release"],
+      "authority": {
+        "inspect": "read-only",
+        "plan": "ephemeral-local",
+        "apply": "canonical-local",
+        "verify": "ephemeral-local",
+        "release": "external-durable"
+      },
+      "inputs": {
+        "inspect": ["optional route slug"],
+        "plan": ["normalized request JSON", "optional owner choices"],
+        "apply": ["approved proposal path"],
+        "verify": ["route slug"],
+        "release": ["route slug", "stable share name", "exact target authority", "exact replacement authority when replacing an alias"]
+      },
+      "reads": ["quests.json", "route_sources/**", ".route-share/**"],
+      "writes": [".route-share/**", "quests.json", "route_sources/imported/**", "route_sources/media/**", "app/public/media/**", "app/src/data/generated/**", "app/public/data/routes/**", "dist/**"],
+      "external_effects": ["cloudflare-pages-route-branch"],
+      "required_files": ["scripts/godiesel", "godiesel_route_share.py", "scripts/route.sh", "route_create.py", "route_create.schema.json", "system/result.schema.json", "system/route-share-receipt.schema.json", "docs/agents/route-share.md"],
+      "configuration": [
+        { "name": "GOOGLE_MAPS_API_KEY", "required_for": ["release"], "sensitive": true }
+      ],
+      "commands": {
+        "inspect": [{ "command": "./scripts/godiesel inspect route-share --json", "cwd": "." }],
+        "plan": [{ "command": "./scripts/godiesel plan route-share --request <request-json> --json", "cwd": "." }],
+        "apply": [{ "command": "./scripts/godiesel apply route-share --proposal <proposal-path> --authorize canonical-local --json", "cwd": "." }],
+        "verify": [{ "command": "./scripts/godiesel verify route-share <slug> --json", "cwd": "." }],
+        "release": [{ "command": "./scripts/godiesel release route-share <slug> <share-name> --authorize external-durable --authorize-target <share-name> --json", "cwd": "." }]
+      },
+      "preconditions": [
+        "supplied source is locally readable or available through the authenticated export",
+        "route identity does not conflict with canonical state",
+        "publication has explicit authority for its exact target and replacement effect",
+        "Cloudflare authentication is an external prerequisite inspected at release time and is not proven by doctor"
+      ],
+      "idempotency": {
+        "inspect": "read-only",
+        "plan": "guarded",
+        "apply": "guarded",
+        "verify": "deterministic",
+        "release": "external-check-required"
+      },
+      "recovery": {
+        "inspect": "No recovery is required because inspection is read-only.",
+        "plan": "Discard ignored staging and create a new proposal when observed inputs change.",
+        "apply": "Use the creation report; failed post-write validation records recoverable state under .route-share/recovery/.",
+        "verify": "Correct the reported local invariant failure and rerun the focused gate.",
+        "release": "Re-inspect the named Cloudflare target after any ambiguous remote result before retrying."
+      },
+      "artifacts": [
+        { "kind": "route-share-proposal", "location": "command result and .route-share/proposals/**", "persistence": "ignored-local", "schema": "route_create.schema.json#/$defs/proposal" },
+        { "kind": "capability-result", "location": "command result", "persistence": "runtime", "schema": "system/result.schema.json" },
+        { "kind": "route-share-run-receipt", "location": ".route-share/runs/**", "persistence": "ignored-local", "schema": "system/route-share-receipt.schema.json" },
+        { "kind": "route-share-result-artifact", "location": ".route-share/results/**", "persistence": "ignored-local" },
+        { "kind": "route-share-creation-report", "location": "command result", "persistence": "ignored-local", "schema": "route-share-creation-report" },
+        { "kind": "route-source-staging", "location": ".route-share/staging/**", "persistence": "ignored-local" },
+        { "kind": "route-write-recovery", "location": ".route-share/recovery/**", "persistence": "ignored-local" },
+        { "kind": "durable-route-media", "location": "route_sources/media/**", "persistence": "tracked-local" },
+        { "kind": "public-route-media", "location": "app/public/media/**", "persistence": "tracked-local" },
+        { "kind": "single-route-bundle", "location": "dist/**", "persistence": "generated-local" },
+        { "kind": "route-share-deployment", "location": "cloudflare-pages-route-branch", "persistence": "external" }
+      ],
+      "invariants": ["source-truth", "stable-route-identity", "single-route-microsite"],
+      "verification": {
+        "focused": [{ "command": "python -m pytest -q test_godiesel_route_share.py test_route_create.py test_route_share_cli.py", "cwd": "." }],
+        "ticket": [{ "command": "./scripts/test-route-share-acceptance.sh", "cwd": "." }],
+        "live": [{ "command": "node app/scripts/smoke-single-route-microsite.mjs <public-url> <slug>", "cwd": "." }]
+      },
+      "documents": ["CONTEXT.md", "docs/agents/route-share.md", "docs/adr/0011-single-route-microsites-are-build-time-scoped.md", "docs/adr/0012-risk-based-verification-with-a-no-skip-live-gate.md", "docs/adr/0015-imported-route-identity-is-allocated-once.md"]
+    },
+    {
+      "id": "route-generation",
+      "entity": "generated-route-projection",
+      "summary": "Project approved canonical route specifications into the two public application data tiers.",
+      "verbs": ["inspect", "apply", "verify"],
+      "authority": {
+        "inspect": "read-only",
+        "apply": "canonical-local",
+        "verify": "ephemeral-local"
+      },
+      "inputs": {
+        "inspect": [],
+        "apply": ["canonical route specifications and durable sources"],
+        "verify": ["generated projection diff"]
+      },
+      "reads": ["quests.json", "route_sources/**", "external-private:DieselDiaries/activities.csv", "external-private:DieselDiaries/strava_export/activities/**"],
+      "writes": ["app/src/data/generated/**", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**"],
+      "external_effects": [],
+      "required_files": ["build.py", "quest_meta.py", "quests.json"],
+      "configuration": [],
+      "commands": {
+        "inspect": [{ "command": "./scripts/route.sh status", "cwd": "." }],
+        "apply": [{ "command": "./rebuild.sh", "cwd": "." }],
+        "verify": [{ "command": "python -m pytest -q test_react_app.py", "cwd": "." }]
+      },
+      "preconditions": [
+        "canonical route specifications are valid",
+        "durable recorded sources referenced by approved public routes are available"
+      ],
+      "idempotency": {
+        "inspect": "read-only",
+        "apply": "guarded",
+        "verify": "deterministic"
+      },
+      "recovery": {
+        "inspect": "No recovery is required because inspection is read-only.",
+        "apply": "The generator stages both tiers and restores its publication backup after an interrupted or failed replacement.",
+        "verify": "Correct canonical input or generator behavior, then rebuild and rerun the focused gate."
+      },
+      "artifacts": [
+        { "kind": "route-summary-manifest", "location": "app/src/data/generated/routes.manifest.json", "persistence": "generated-local" },
+        { "kind": "route-statistics", "location": "app/src/data/generated/route-stats.json", "persistence": "generated-local" },
+        { "kind": "route-detail-records", "location": "app/public/data/routes/**", "persistence": "generated-local" },
+        { "kind": "route-generation-recovery", "location": "app/public/data/.route-generation-backup/**", "persistence": "ignored-local" }
+      ],
+      "invariants": ["single-writer", "two-tier-route-data", "atomic-publication"],
+      "verification": {
+        "focused": [{ "command": "python -m pytest -q test_react_app.py", "cwd": "." }],
+        "ticket": [{ "command": "npm --prefix app run verify:ticket", "cwd": "." }],
+        "live": []
+      },
+      "documents": ["CONTEXT.md", "docs/adr/0003-python-generator-is-the-only-writer-of-route-data.md", "docs/adr/0004-two-tier-route-data-with-lenient-summaries-and-strict-details.md"]
+    },
+    {
+      "id": "owner-curation",
+      "entity": "owner-curation",
+      "summary": "Inspect and publish owner-authored route notes through the loopback-only writer.",
+      "verbs": ["inspect", "apply", "verify"],
+      "authority": {
+        "inspect": "read-only",
+        "apply": "canonical-local",
+        "verify": "ephemeral-local"
+      },
+      "inputs": {
+        "inspect": [],
+        "apply": ["validated owner curation payload"],
+        "verify": ["curation and generated projection diff"]
+      },
+      "reads": ["quests.json", "app/public/data/routes/**"],
+      "writes": ["quests.json", "app/src/data/generated/**", "app/public/data/routes/**"],
+      "external_effects": [],
+      "required_files": ["admin.sh", "admin.py", "curation_publish.py", "docs/adr/0010-owner-curation-through-a-loopback-only-writer.md"],
+      "configuration": [],
+      "commands": {
+        "inspect": [{ "command": "./scripts/godiesel doctor --json", "cwd": "." }],
+        "apply": [{ "command": "./admin.sh", "cwd": "." }],
+        "verify": [{ "command": "python -m pytest -q test_admin_curation.py test_curation_publish.py", "cwd": "." }]
+      },
+      "preconditions": [
+        "the owner writer is bound to loopback",
+        "the target route already has canonical identity"
+      ],
+      "idempotency": {
+        "inspect": "read-only",
+        "apply": "idempotent",
+        "verify": "deterministic"
+      },
+      "recovery": {
+        "inspect": "No recovery is required because inspection is read-only.",
+        "apply": "The focused publisher restores canonical and generated files from its backup after a failed publication.",
+        "verify": "Correct the owner payload or writer behavior and rerun focused recovery tests."
+      },
+      "artifacts": [
+        { "kind": "owner-curation", "location": "quests.json", "persistence": "tracked-local" },
+        { "kind": "curated-route-projection", "location": "app/public/data/routes/**", "persistence": "generated-local" }
+      ],
+      "invariants": ["loopback-only-writer", "owner-authored-provenance", "recoverable-publication"],
+      "verification": {
+        "focused": [{ "command": "python -m pytest -q test_admin_curation.py test_curation_publish.py", "cwd": "." }],
+        "ticket": [{ "command": "npm --prefix app run verify:ticket", "cwd": "." }],
+        "live": []
+      },
+      "documents": ["CONTEXT.md", "docs/adr/0010-owner-curation-through-a-loopback-only-writer.md", "docs/agents/testing.md"]
+    },
+    {
+      "id": "application-release",
+      "entity": "application-artifact",
+      "summary": "Verify and publish the exact built application artifact to its named production target.",
+      "verbs": ["inspect", "verify", "release"],
+      "authority": {
+        "inspect": "read-only",
+        "verify": "ephemeral-local",
+        "release": "external-durable"
+      },
+      "inputs": {
+        "inspect": [],
+        "verify": ["application source and generated route projections"],
+        "release": ["verified immutable application artifact", "named Cloudflare target", "exact replacement authority"]
+      },
+      "reads": ["app/**", "dist/**"],
+      "writes": ["app/dist/**", "dist/**"],
+      "external_effects": ["cloudflare-pages-production"],
+      "required_files": ["app/package.json", "make-dist.sh", "scripts/check-provider-key.mjs", "docs/agents/testing.md"],
+      "configuration": [
+        { "name": "GOOGLE_MAPS_API_KEY", "required_for": ["verify:live", "release"], "sensitive": true },
+        { "name": "GODIESEL_EARTH_ENGINE_PROJECT", "required_for": ["verify:live"], "sensitive": false },
+        { "name": "GODIESEL_PIPELINE_SHARE_NAME", "required_for": ["verify:live"], "sensitive": false }
+      ],
+      "commands": {
+        "inspect": [{ "command": "./scripts/godiesel doctor --json", "cwd": "." }],
+        "verify": [{ "command": "./make-dist.sh", "cwd": "." }],
+        "release": [{ "command": "npx wrangler pages deploy dist --project-name=godiesel --branch=production", "cwd": "." }]
+      },
+      "preconditions": [
+        "the application artifact has passed its applicable local gate",
+        "provider-dependent claims have the required live evidence",
+        "the exact external target and replacement effect are authorized",
+        "Cloudflare authentication is an external prerequisite inspected at release time and is not proven by doctor"
+      ],
+      "idempotency": {
+        "inspect": "read-only",
+        "verify": "idempotent",
+        "release": "external-check-required"
+      },
+      "recovery": {
+        "inspect": "No recovery is required because inspection is read-only.",
+        "verify": "Correct the reported build or behavior failure and rebuild the exact artifact.",
+        "release": "Re-inspect Cloudflare deployment state after an ambiguous result; never retry blindly."
+      },
+      "artifacts": [
+        { "kind": "application-bundle", "location": "dist/**", "persistence": "generated-local" },
+        { "kind": "production-deployment", "location": "cloudflare-pages-production", "persistence": "external" }
+      ],
+      "invariants": ["exact-artifact-release", "named-degradation", "provider-proof-honesty"],
+      "verification": {
+        "focused": [{ "command": "npm --prefix app run verify:ticket", "cwd": "." }],
+        "ticket": [{ "command": "npm --prefix app run verify", "cwd": "." }],
+        "live": [{ "command": "npm --prefix app run verify:live-pipeline", "cwd": "." }]
+      },
+      "documents": ["CONTEXT.md", "docs/agents/testing.md", "docs/adr/0007-named-degradation-instead-of-silent-failure.md", "docs/adr/0012-risk-based-verification-with-a-no-skip-live-gate.md"]
+    }
+  ]
+}

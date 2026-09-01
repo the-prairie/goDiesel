@@ -81,4 +81,19 @@ describe("regional Atlas entry", () => {
       valueM: 250,
     });
   });
+
+  it("does not derive terrain facts from mesh-relative fallback elevation", () => {
+    const unavailable = route({
+      elevationGainM: null,
+      elevationStatus: "unavailable",
+      trace: [
+        { lat: 1, lng: 1, elev: 0, d: 0 },
+        { lat: 2, lng: 2, elev: 0, d: 12_000 },
+      ],
+    });
+    const region = buildRouteRegions([unavailable])[0];
+
+    expect(deriveRouteTerrainDistinction(unavailable)).toBeNull();
+    expect(deriveTerrainReading(region)).toBeNull();
+  });
 });

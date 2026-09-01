@@ -133,6 +133,42 @@ def test_gpx_loader_preserves_timestamps_and_segment_boundaries(tmp_path):
     assert points[0].timestamp == datetime(2025, 11, 26, 21, 21, 5, tzinfo=UTC)
 
 
+def test_gpx_without_elevation_stays_unavailable(tmp_path):
+    gpx = tmp_path / "high-plateau.gpx"
+    gpx.write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="goDiesel">
+  <trk><trkseg>
+    <trkpt lat="27.98" lon="86.90" />
+    <trkpt lat="27.99" lon="86.91" />
+  </trkseg></trk>
+</gpx>"""
+    )
+
+    result = build_route_provenance(load_source_route_points(gpx), sample_interval_m=0)
+
+    assert result.elevation == {"status": "unavailable"}
+    assert [point["elev"] for point in result.route] == [None, None]
+
+
+def test_partially_recorded_elevation_normalizes_to_unavailable(tmp_path):
+    gpx = tmp_path / "partial-elevation.gpx"
+    gpx.write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="goDiesel">
+  <trk><trkseg>
+    <trkpt lat="27.98" lon="86.90"><ele>5100</ele></trkpt>
+    <trkpt lat="27.99" lon="86.91" />
+  </trkseg></trk>
+</gpx>"""
+    )
+
+    result = build_route_provenance(load_source_route_points(gpx), sample_interval_m=0)
+
+    assert result.elevation == {"status": "unavailable"}
+    assert [point["elev"] for point in result.route] == [None, None]
+
+
 def test_fit_adapter_preserves_timestamp_and_converts_semicircles():
     point = source_point_from_fit_fields(
         {
@@ -160,7 +196,7 @@ def test_fit_adapter_preserves_timestamp_when_position_is_missing():
     assert point == SourceRoutePoint(
         lat=None,
         lng=None,
-        elevation=0,
+        elevation=None,
         timestamp=datetime(2025, 11, 26, 21, 21, 5, tzinfo=UTC),
         segment_index=0,
     )

@@ -116,7 +116,11 @@ export function RouteCard({
                 {formatTerrain(route.planning.intent.terrain)}
               </MemoryFact>
             ) : (
-              <MemoryFact label="Climb">{route.elevationGainM.toLocaleString()} m up</MemoryFact>
+              <MemoryFact label="Climb">
+                {route.elevationStatus === "unavailable"
+                  ? "Unavailable"
+                  : `${route.elevationGainM!.toLocaleString()} m up`}
+              </MemoryFact>
             )}
           </dl>
 

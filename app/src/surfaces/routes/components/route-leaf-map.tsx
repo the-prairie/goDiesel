@@ -1,20 +1,16 @@
 import { LocateFixed, Minus, Plus } from "lucide-react";
 import maplibregl, { LngLatBounds, Map as MapLibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { RepairEvidence } from "@/ui/repair-evidence";
 import { Button } from "@/ui/button";
-import {
-  routeRepairAriaLabel,
-  routeRepairs,
-  type RouteRepair,
-} from "@/domain/geometry/route-repairs";
 import type { QuestRoute } from "@/domain/route";
 
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
-const ROUTE_COLOR = "#315fb4";
-const ROUTE_HALO = "#f6f2e8";
+const ROUTE_COLOR = "#3379df";
+const ROUTE_HALO = "#fffaf2";
+const ROUTE_WIDTH = 4;
+const ROUTE_HALO_WIDTH = 8;
 
 function routeFeature(route: QuestRoute) {
   return {
@@ -33,12 +29,6 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
   const [status, setStatus] = useState<"loading" | "ready" | "unavailable">(
     route.route.length > 1 ? "loading" : "unavailable",
   );
-  const repairs = useMemo(() => routeRepairs(route), [route]);
-  const [activeRepairs, setActiveRepairs] = useState<RouteRepair[]>([]);
-  const [repairPositions, setRepairPositions] = useState<
-    Array<{ id: string; x: number; y: number }>
-  >([]);
-
   useEffect(() => {
     const host = hostRef.current;
     if (!host || route.route.length < 2) return;
@@ -68,18 +58,7 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
       errorCount += 1;
       if (active && errorCount >= 4 && !ready) setStatus("unavailable");
     };
-    const syncRepairPositions = () => {
-      setRepairPositions(
-        repairs.flatMap((repair) => {
-          if (!repair.point) return [];
-          const projected = map.project([repair.point.lng, repair.point.lat]);
-          return [{ id: repair.id, x: projected.x, y: projected.y }];
-        }),
-      );
-    };
     map.on("error", handleError);
-    map.on("move", syncRepairPositions);
-    map.on("resize", syncRepairPositions);
     map.once("load", () => {
       if (!active) return;
       map.resize();
@@ -91,8 +70,8 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
           "line-color": ROUTE_HALO,
-          "line-width": 10,
-          "line-opacity": 0.9,
+          "line-width": ROUTE_HALO_WIDTH,
+          "line-opacity": 0.88,
         },
       });
       map.addLayer({
@@ -102,8 +81,8 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
           "line-color": ROUTE_COLOR,
-          "line-width": 5,
-          "line-opacity": 1,
+          "line-width": ROUTE_WIDTH,
+          "line-opacity": 0.96,
         },
       });
       const start = route.route[0];
@@ -132,10 +111,10 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
         source: "leaf-endpoints",
         filter: ["==", ["get", "kind"], "start"],
         paint: {
-          "circle-radius": 7,
+          "circle-radius": 5,
           "circle-color": "#d95d45",
           "circle-stroke-color": ROUTE_HALO,
-          "circle-stroke-width": 3,
+          "circle-stroke-width": 2,
         },
       });
       map.addLayer({
@@ -144,10 +123,10 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
         source: "leaf-endpoints",
         filter: ["==", ["get", "kind"], "finish"],
         paint: {
-          "circle-radius": 7,
+          "circle-radius": 5,
           "circle-color": "#174f46",
           "circle-stroke-color": ROUTE_HALO,
-          "circle-stroke-width": 3,
+          "circle-stroke-width": 2,
         },
       });
       map.fitBounds(bounds, {
@@ -155,7 +134,6 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
         maxZoom: 14,
         duration: 0,
       });
-      syncRepairPositions();
       map.getCanvas().setAttribute("aria-label", `${route.name} interactive route map`);
       map.once("idle", () => {
         if (!active) return;
@@ -170,12 +148,10 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
       window.clearTimeout(loadTimer);
       resizeObserver.disconnect();
       map.off("error", handleError);
-      map.off("move", syncRepairPositions);
-      map.off("resize", syncRepairPositions);
       map.remove();
       mapRef.current = undefined;
     };
-  }, [repairs, route]);
+  }, [route]);
 
   function resetView() {
     const map = mapRef.current;
@@ -189,8 +165,6 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
     });
   }
 
-  const repairGroups = projectedRepairGroups(repairs, repairPositions);
-
   return (
     <section
       aria-label="Route geography"
@@ -198,6 +172,8 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
       data-geometry-points={route.route.length}
       data-route-color={ROUTE_COLOR}
       data-route-halo={ROUTE_HALO}
+      data-route-width={ROUTE_WIDTH}
+      data-route-halo-width={ROUTE_HALO_WIDTH}
       className="relative min-h-0 overflow-hidden bg-[#d9ddd2]"
     >
       <div
@@ -206,51 +182,6 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
         aria-label={`${route.name} recorded path on a real map`}
         className="h-full w-full"
       />
-
-      {status === "ready"
-        ? repairs.map((repair) => {
-            const position = repairPositions.find(({ id }) => id === repair.id);
-            if (!position) return null;
-            return (
-              <span
-                key={repair.id}
-                data-testid="leaf-repair-mark"
-                aria-hidden="true"
-                data-repair-distance-m={repair.distanceM.toFixed(2)}
-                className="pointer-events-none absolute z-10 h-7 w-1 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded-full bg-repair shadow-[0_0_0_2px_rgba(24,33,29,0.88),0_0_0_4px_rgba(246,242,232,0.92)]"
-                style={{ left: position.x, top: position.y }}
-              />
-            );
-          })
-        : null}
-
-      {status === "ready"
-        ? repairGroups.map((group) => (
-            <button
-              key={group.repairs.map(({ id }) => id).join("-")}
-              type="button"
-              aria-label={
-                group.repairs.length === 1
-                  ? routeRepairAriaLabel(group.repairs[0])
-                  : `${group.repairs.length} recorded repairs near ${(
-                      group.repairs.reduce((sum, repair) => sum + repair.distanceM, 0) /
-                      group.repairs.length /
-                      1_000
-                    ).toFixed(2)} km`
-              }
-              className="absolute z-10 size-11 -translate-x-1/2 -translate-y-1/2 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-repair focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
-              style={{ left: group.x, top: group.y }}
-              onClick={() => setActiveRepairs(group.repairs)}
-            />
-          ))
-        : null}
-
-      {activeRepairs.length > 0 ? (
-        <RepairEvidence
-          repairs={activeRepairs}
-          className="absolute left-4 top-16 z-20 max-w-[min(22rem,calc(100%-2rem))]"
-        />
-      ) : null}
 
       {status === "loading" ? (
         <div
@@ -320,27 +251,4 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
       ) : null}
     </section>
   );
-}
-
-function projectedRepairGroups(
-  repairs: RouteRepair[],
-  positions: Array<{ id: string; x: number; y: number }>,
-) {
-  const groups: Array<{ repairs: RouteRepair[]; x: number; y: number }> = [];
-  for (const repair of repairs) {
-    const position = positions.find(({ id }) => id === repair.id);
-    if (!position) continue;
-    const group = groups.find(
-      (candidate) => Math.hypot(candidate.x - position.x, candidate.y - position.y) < 44,
-    );
-    if (!group) {
-      groups.push({ repairs: [repair], x: position.x, y: position.y });
-      continue;
-    }
-    const count = group.repairs.length;
-    group.x = (group.x * count + position.x) / (count + 1);
-    group.y = (group.y * count + position.y) / (count + 1);
-    group.repairs.push(repair);
-  }
-  return groups;
 }

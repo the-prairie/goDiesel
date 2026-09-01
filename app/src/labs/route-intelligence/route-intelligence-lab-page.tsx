@@ -318,7 +318,7 @@ function EarthObservationScenes({
                 <div>
                   <h3 className="font-editorial text-xl font-semibold">{place}</h3>
                   <p className="mt-0.5 text-caption text-[var(--ink-muted)]">
-                    {route.distanceKm.toFixed(1)} km · {route.elevationGainM.toLocaleString()} m up
+                    {route.distanceKm.toFixed(1)} km · {route.elevationStatus === "unavailable" ? "Elevation unavailable" : `${route.elevationGainM!.toLocaleString()} m up`}
                   </p>
                 </div>
                 <span className="text-micro font-semibold uppercase text-[var(--coral)]">
@@ -385,7 +385,12 @@ function RoutePortrait({ entry, active }: { entry: LabRoute; active: boolean }) 
         <div className="grid grid-cols-3 gap-px self-start border border-[var(--line)] bg-[var(--line)] text-center">
           {[
             [route.distanceKm.toFixed(1), "km"],
-            [route.elevationGainM.toLocaleString(), "m up"],
+            [
+              route.elevationStatus === "unavailable"
+                ? "Unavailable"
+                : route.elevationGainM!.toLocaleString(),
+              route.elevationStatus === "unavailable" ? "elevation" : "m up",
+            ],
             [route.route.length.toLocaleString(), "points"],
           ].map(([value, label]) => (
             <div className="min-w-[4.25rem] bg-[var(--surface-raised)] px-3 py-2" key={label}>

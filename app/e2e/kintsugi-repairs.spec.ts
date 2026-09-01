@@ -41,7 +41,7 @@ async function installDeterministicReplayEngine(page: Page) {
   });
 }
 
-test("Leaf renders only source-backed repairs and exposes factual evidence", async ({
+test("Leaf keeps route provenance diagnostics off the owner-facing map", async ({
   page,
 }) => {
   await page.goto(`/#/routes/${repairedRouteSlug}`);
@@ -50,18 +50,9 @@ test("Leaf renders only source-backed repairs and exposes factual evidence", asy
   await expect(geography).toHaveAttribute("data-map-status", "ready", {
     timeout: 15_000,
   });
-  await expect(geography.getByTestId("leaf-repair-mark")).toHaveCount(3);
-  const repairs = geography.getByRole("button", { name: /recorded repair/i });
-  await expect(repairs).toHaveCount(2);
-  await repairs.first().focus();
-  await expect(repairs.first()).toBeFocused();
-  await repairs.first().press("Enter");
-  await expect(geography.getByRole("status", { name: "Recorded repair evidence" })).toContainText(
-    "Recorded timestamps",
-  );
-  await expect(geography.getByRole("status", { name: "Recorded repair evidence" })).toContainText(
-    "No route geometry was inferred",
-  );
+  await expect(geography.getByTestId("leaf-repair-mark")).toHaveCount(0);
+  await expect(geography.getByRole("button", { name: /recorded repair/i })).toHaveCount(0);
+  await expect(geography.getByRole("status", { name: "Recorded repair evidence" })).toHaveCount(0);
 });
 
 test("clean Leaf routes render no decorative gold", async ({ page }) => {

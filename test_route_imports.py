@@ -1,3 +1,4 @@
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -69,6 +70,26 @@ class ImportedRouteTest(unittest.TestCase):
                     },
                     root,
                 )
+
+    def test_revalidates_the_durable_source_checksum(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "route_sources" / "imported" / "route.gpx"
+            source.parent.mkdir(parents=True)
+            source.write_text("<gpx />")
+            digest = hashlib.sha256(source.read_bytes()).hexdigest()
+            spec = {
+                "source_gpx": "route_sources/imported/route.gpx",
+                "source_sha256": digest,
+                "activity_name": "Durable route",
+                "activity_type": "Run",
+            }
+
+            self.assertEqual(imported_route_from_spec(spec, root).source_sha256, digest)
+            source.write_text("<gpx><changed /></gpx>")
+
+            with self.assertRaisesRegex(ValueError, "checksum does not match"):
+                imported_route_from_spec(spec, root)
 
 
 if __name__ == "__main__":

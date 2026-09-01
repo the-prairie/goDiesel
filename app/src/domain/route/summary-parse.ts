@@ -1,7 +1,7 @@
 // The lenient tier (ADR-0004). A bad manifest entry must not break the app.
 
 import { normalizeRouteLifecycle, type RouteLifecycle } from "@/domain/route/lifecycle";
-import type { GeneratedQuestRoute, ReplayMetadata, RouteGeometryStatus, RouteGuidePreview, RouteSummary } from "@/domain/route/contract";
+import type { GeneratedQuestRoute, ReplayMetadata, RouteElevationStatus, RouteGeometryStatus, RouteGuidePreview, RouteSummary } from "@/domain/route/contract";
 import { generatedRoute, numberValue, parsedRoutePoints, requiredSlug, stringValue } from "@/domain/route/parse-shared";
 
 function validatedGuidePreview(value: unknown): RouteGuidePreview {
@@ -70,6 +70,8 @@ function commonRouteFields(
   geometryStatus: RouteGeometryStatus,
 ) {
   const lifecycle = normalizeRouteLifecycle(input.lifecycle ?? input.status);
+  const elevationStatus: RouteElevationStatus =
+    input.elevation_status === "unavailable" ? "unavailable" : "recorded";
 
   return {
     slug,
@@ -81,7 +83,9 @@ function commonRouteFields(
     region: stringValue(input.region, "Unknown region"),
     date: stringValue(input.date),
     distanceKm: numberValue(input.distance_km),
-    elevationGainM: numberValue(input.elevation_gain_m),
+    elevationGainM:
+      elevationStatus === "unavailable" ? null : numberValue(input.elevation_gain_m),
+    elevationStatus,
     type: stringValue(input.type, "Run"),
     description: stringValue(input.description),
     completionRule: stringValue(input.completion_rule),
@@ -97,7 +101,9 @@ function commonRouteFields(
 export function parseRouteSummary(value: unknown): RouteSummary {
   const input = generatedRoute(value, "Route summary");
   const slug = requiredSlug(input, "Route summary");
-  const parsedTrace = parsedRoutePoints(input.trace);
+  const elevationStatus: RouteElevationStatus =
+    input.elevation_status === "unavailable" ? "unavailable" : "recorded";
+  const parsedTrace = parsedRoutePoints(input.trace, elevationStatus);
   const trace = parsedTrace.points;
   const geometryStatus =
     input.replay &&

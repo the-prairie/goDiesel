@@ -152,12 +152,15 @@ for (const route of ROUTES) {
     );
     expect(ribbonLayer("lead")?.outerWidth ?? 0).toBe(0);
     await expect(page.getByTestId("google-route-playhead")).toBeVisible();
-    await expect(
-      page.getByTestId("google-route-playhead").locator("div"),
-    ).toHaveAttribute("data-moving", "true");
-    await expect(
-      page.getByTestId("google-route-playhead").locator("div"),
-    ).toHaveAttribute("data-relative-bearing", /\d/);
+    const playheadVisual = page
+      .getByTestId("google-route-playhead")
+      .locator("div");
+    await expect(playheadVisual).toHaveAttribute("data-moving", "true");
+    await expect(playheadVisual).toHaveAttribute("data-relative-bearing", /\d/);
+    await expect(playheadVisual).toHaveCSS("width", "18px");
+    await expect(playheadVisual).toHaveCSS("height", "18px");
+    await expect(playheadVisual).toHaveCSS("border-radius", "50%");
+    await expect(playheadVisual).toHaveCSS("border-top-width", "3px");
     await page.waitForTimeout(3_500);
     await captureEvidence(page, `${route.slug}-desktop-playback.png`);
 

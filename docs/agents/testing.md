@@ -22,6 +22,40 @@ A successful gate remains valid unless subsequent edits touch behavior covered b
 | Ticket | Once before merging a ticket | Run `npm run verify:ticket`, then run every affected Playwright spec separately. Add a targeted visual check for user-facing work. Run live-provider tests only for provider, terrain, imagery, or camera changes. |
 | Release | Before production cutover, or after shared application infrastructure changes | Run `npm run verify`, the applicable live-provider suites, the required viewport and visual evidence matrix, and any release-specific performance or accessibility gates. |
 
+## Proof contract
+
+Before running a gate, state what changed, which interfaces and invariants are affected, and why the selected tier is sufficient.
+
+After running it, report:
+
+- exact command;
+- normalized result: `passed`, `failed`, `blocked`, or `not_run`;
+- observable behavior or invariant covered;
+- commit and relevant dirty state;
+- provider target or test adapter used;
+- artifact, screenshot, deployment id, or URL when applicable;
+- remaining unproven claims.
+
+Never report a missing live dependency as skipped success.
+Use `blocked` and name the missing credential, acceleration, quota, source, or provider without exposing its value.
+
+Until the evidence receipt in ADR-0016 is implemented, record this proof contract in the pull request or final task report.
+
+## Impact selection
+
+Classify the change before choosing commands:
+
+| Change | Minimum impact inspection |
+| --- | --- |
+| Pure domain or writer | Owning module interface, invariants, unit tests, and affected generated contract |
+| One product surface | Surface behavior, shared UI/domain dependencies, focused Playwright, and viewport evidence |
+| Provider, renderer, terrain, imagery, or camera | Deterministic interface tests plus the applicable live-provider proof |
+| Build, routing, data tier, shared shell, or test infrastructure | Cross-application consumers and release-tier escalation |
+| Documentation only | Local links, indexes, command references, terminology, and `git diff --check` |
+
+An affected path that cannot be assigned to an owning module or invariant is an architecture gap.
+Do not silently choose a small gate for an unclassified change.
+
 ## Commands
 
 Run commands from `app/`.
@@ -102,3 +136,15 @@ Do not rerun a successful gate after documentation, evidence packaging, or other
 Rerun the smallest affected tier when a subsequent edit touches behavior covered by an earlier result.
 
 Escalate to the release tier when a defect indicates a cross-application regression or when shared routing, build, test, rendering, or application-shell infrastructure changes.
+
+A proof's covered inputs include implementation, contracts, schemas, fixtures, test code, build and runtime configuration, canonical data fingerprints when applicable, and the external provider or deployment target for live proof.
+Changing any covered input invalidates that proof.
+
+Documentation, evidence packaging, or unrelated edits do not invalidate a proof unless they change an executable command, contract, or claimed behavior.
+
+## Resource discipline
+
+Run inexpensive, local, and deterministic checks before expensive or external checks.
+Load route summaries before details, compare hashes before reparsing full geometry, and reuse valid proof rather than rerunning it for ceremony.
+
+Do not save resources by weakening source honesty, live-provider requirements, viewport coverage, or release proof.

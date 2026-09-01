@@ -61,18 +61,21 @@ def build_replay_metadata(
     point_count,
     best_in_earth_ids,
     lifecycle="completed",
+    preferred_mode=None,
 ):
     """Build replay metadata without contradicting validated route geometry."""
     if not isinstance(point_count, int) or point_count < 0:
         raise ValueError("replay point_count must be a non-negative integer")
     if lifecycle not in ("completed", "planned", "discovered"):
         raise ValueError("replay lifecycle must be completed, planned, or discovered")
+    if preferred_mode not in (None, "atlas", "earth"):
+        raise ValueError("replay preferred mode must be atlas or earth")
 
     geometry_ready = point_count > 1
     replay_eligible = geometry_ready and lifecycle in ("completed", "discovered")
     best_in_earth = replay_eligible and str(activity_id) in best_in_earth_ids
     return {
-        "mode": "earth" if best_in_earth else "atlas",
+        "mode": preferred_mode or ("earth" if best_in_earth else "atlas"),
         "replay_eligible": replay_eligible,
         "best_in_earth": best_in_earth,
         "geometry_status": "ready" if geometry_ready else "missing",
@@ -128,25 +131,29 @@ def _theme(activity_type, distance_km, elevation_gain, region_label, activity_na
 
 
 def build_quest_meta(activity_type, distance_km, elevation_gain, region_label, activity_name):
-    difficulty = _difficulty(activity_type, distance_km, elevation_gain)
-    theme = _theme(activity_type, distance_km, elevation_gain, region_label, activity_name)
+    recorded_elevation = elevation_gain is not None
+    scoring_elevation = elevation_gain if recorded_elevation else 0
+    difficulty = _difficulty(activity_type, distance_km, scoring_elevation)
+    theme = _theme(activity_type, distance_km, scoring_elevation, region_label, activity_name)
     verb = "ride" if activity_type == "Ride" else "run"
     xp = _round_to_10(
         (120 if activity_type == "Ride" else 50)
         + distance_km * (7 if activity_type == "Ride" else 8)
-        + elevation_gain * (0.43 if activity_type == "Ride" else 0.25)
+        + scoring_elevation * (0.43 if activity_type == "Ride" else 0.25)
     )
-    climbing = f"{elevation_gain:,} m of climbing"
+    completion_rule = f"Complete a {distance_km:.1f} km {verb} in {region_label}."
+    if recorded_elevation:
+        completion_rule = (
+            f"Complete a {distance_km:.1f} km {verb} in {region_label} "
+            f"with about {elevation_gain:,} m of climbing."
+        )
 
     return {
         "difficulty": difficulty,
         "theme": theme,
         "xp": xp,
-        "elevation_gain_m": int(elevation_gain),
-        "completion_rule": (
-            f"Complete a {distance_km:.1f} km {verb} in {region_label} "
-            f"with about {climbing}."
-        ),
+        "elevation_gain_m": int(elevation_gain) if recorded_elevation else None,
+        "completion_rule": completion_rule,
     }
 
 

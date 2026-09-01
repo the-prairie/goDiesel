@@ -83,9 +83,25 @@ export default defineConfig(({ mode }) => {
       chunkSizeWarningLimit: 5_600,
     },
     resolve: {
-      alias: {
-        "@": path.resolve(__dirname, "./src"),
-      },
+      alias: [
+        {
+          find: "@/app/app-shell",
+          replacement: path.resolve(
+            __dirname,
+            singleRouteSlug
+              ? "./src/app/app-shell.single.tsx"
+              : "./src/app/app-shell.tsx",
+          ),
+        },
+        {
+          find: "@/app/router",
+          replacement: path.resolve(
+            __dirname,
+            singleRouteSlug ? "./src/app/router.single.tsx" : "./src/app/router.tsx",
+          ),
+        },
+        { find: "@", replacement: path.resolve(__dirname, "./src") },
+      ],
     },
   };
 });

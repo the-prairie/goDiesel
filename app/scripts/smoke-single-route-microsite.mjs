@@ -60,7 +60,9 @@ try {
     throw new Error("desktop product navigation is visible");
   }
 
-  await page.getByRole("link", { name: "Open replay" }).click();
+  await page
+    .getByRole("link", { name: "Cinematic replay", exact: true })
+    .click();
   await page.getByRole("button", { name: "Route guide" }).waitFor();
   if ((await page.getByText("Change route", { exact: true }).count()) > 0) {
     throw new Error("route switching is available in the public replay");

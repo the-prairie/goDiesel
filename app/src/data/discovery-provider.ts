@@ -1,11 +1,19 @@
+import { singleRouteMicrosite } from "@/app/single-route-microsite";
 import { findRouteBySlug } from "@/data/routes";
 import type {
   DiscoveryCandidate,
   FinderIntent,
+  FinderTerrain,
   RouteDiscoveryProvider,
 } from "@/domain/planning";
 
-const candidateDefinitions = [
+interface CandidateDefinition {
+  slug: string;
+  terrain: Exclude<FinderTerrain, "any">[];
+  vibes: string[];
+}
+
+const candidateDefinitions: CandidateDefinition[] = import.meta.env.VITE_SINGLE_ROUTE_SLUG ? [] : [
   {
     slug: "17654151284",
     terrain: ["mixed", "mountain"],
@@ -26,24 +34,35 @@ const candidateDefinitions = [
     terrain: ["road", "mixed"],
     vibes: ["touring", "farm roads", "long ride", "big day"],
   },
-] as const;
+] as CandidateDefinition[];
 
-export const curatedDiscoveryCandidates: DiscoveryCandidate[] = candidateDefinitions.map(
-  (definition) => {
-    const route = findRouteBySlug(definition.slug);
+export function buildCuratedDiscoveryCandidates(
+  definitions: readonly CandidateDefinition[],
+  routeLookup: typeof findRouteBySlug,
+  allowMissing: boolean,
+): DiscoveryCandidate[] {
+  return definitions.flatMap((definition) => {
+    const route = routeLookup(definition.slug);
     if (!route) {
-      throw new Error(`Curated Finder candidate ${definition.slug} is missing`);
+      if (allowMissing) return [];
+      throw new Error(`Curated discovery route ${definition.slug} is missing`);
     }
 
-    return {
+    return [{
       id: `owner-route-${route.slug}`,
       sourceRouteSlug: route.slug,
       sourceLabel: "Owner-curated from recorded GPX",
       terrain: [...definition.terrain],
       vibes: [...definition.vibes],
       route,
-    };
-  },
+    }];
+  });
+}
+
+export const curatedDiscoveryCandidates = buildCuratedDiscoveryCandidates(
+  candidateDefinitions,
+  findRouteBySlug,
+  Boolean(singleRouteMicrosite),
 );
 
 const unsupportedMessage =

@@ -15,7 +15,7 @@ function readJson(filePath) {
   try {
     return JSON.parse(fs.readFileSync(filePath, "utf8"));
   } catch (error) {
-    fail(`${filePath} is not valid JSON (${error.message})`);
+    fail(`${path.basename(filePath)} is not valid JSON (${error.name})`);
   }
 }
 
@@ -25,7 +25,7 @@ function validateRoute(route, expectedSlug) {
   }
   if (route.slug !== expectedSlug) fail(`route slug must equal ${expectedSlug}`);
 
-  for (const field of ["name", "region", "date", "type"]) {
+  for (const field of ["name", "region", "type"]) {
     if (typeof route[field] !== "string" || !route[field].trim()) {
       fail(`${field} is required`);
     }
@@ -50,16 +50,27 @@ function validateRoute(route, expectedSlug) {
   ) {
     fail("subtitle or activity_name is required for the public route title");
   }
-  const date = new Date(`${route.date}T00:00:00Z`);
-  if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(route.date) ||
-    Number.isNaN(date.valueOf()) ||
-    date.toISOString().slice(0, 10) !== route.date
-  ) {
-    fail("date must use a valid YYYY-MM-DD value");
+  if (route.date !== "") {
+    const date = new Date(`${route.date}T00:00:00Z`);
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(route.date) ||
+      Number.isNaN(date.valueOf()) ||
+      date.toISOString().slice(0, 10) !== route.date
+    ) {
+      fail("date must use a valid YYYY-MM-DD value");
+    }
+  } else if (route.lifecycle !== "discovered") {
+    fail("only a discovered route may have an unavailable date");
   }
   if (!Number.isFinite(route.distance_km) || route.distance_km <= 0) {
     fail("distance_km must be a positive number");
+  }
+  if (
+    route.elevation_status === "unavailable"
+      ? route.elevation_gain_m !== null
+      : !Number.isFinite(route.elevation_gain_m) || route.elevation_gain_m < 0
+  ) {
+    fail("elevation_gain_m must agree with elevation availability");
   }
   if (!Array.isArray(route.route) || route.route.length < 2) {
     fail("route geometry must contain at least two points");
@@ -71,8 +82,14 @@ function validateRoute(route, expectedSlug) {
     if (!point || typeof point !== "object" || Array.isArray(point)) {
       fail(`route point ${index} must be an object`);
     }
-    if (![point.lat, point.lng, point.elev, point.d].every(Number.isFinite)) {
-      fail(`route point ${index} must contain finite lat, lng, elev, and d values`);
+    const elevationRecorded = route.elevation_status !== "unavailable";
+    if (
+      ![point.lat, point.lng, point.d].every(Number.isFinite) ||
+      (elevationRecorded ? !Number.isFinite(point.elev) : point.elev !== null)
+    ) {
+      fail(
+        `route point ${index} must contain valid lat, lng, elevation, and distance values`,
+      );
     }
     if (point.lat < -90 || point.lat > 90) {
       fail(`route point ${index} latitude is outside -90 to 90`);
@@ -140,12 +157,26 @@ function validateRoute(route, expectedSlug) {
 }
 
 function listFiles(directory, prefix = "") {
+  if (!fs.existsSync(directory)) return [];
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const relativePath = path.posix.join(prefix, entry.name);
     return entry.isDirectory()
       ? listFiles(path.join(directory, entry.name), relativePath)
       : [relativePath];
   });
+}
+
+function collectMediaReferences(value, references = new Set()) {
+  if (typeof value === "string" && value.startsWith("media/")) {
+    references.add(value);
+    return references;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectMediaReferences(item, references);
+  } else if (value && typeof value === "object") {
+    for (const item of Object.values(value)) collectMediaReferences(item, references);
+  }
+  return references;
 }
 
 if (!routeSlug || !/^[A-Za-z0-9._-]+$/.test(routeSlug)) {
@@ -156,7 +187,7 @@ if (!new Set(["source", "dist"]).has(mode)) {
 }
 
 const sourcePath = path.join(root, "app/public/data/routes", `${routeSlug}.json`);
-if (!fs.existsSync(sourcePath)) fail(`missing source route ${sourcePath}`);
+if (!fs.existsSync(sourcePath)) fail(`missing source route ${routeSlug}.json`);
 validateRoute(readJson(sourcePath), routeSlug);
 
 if (mode === "dist") {
@@ -166,7 +197,60 @@ if (mode === "dist") {
   if (dataFiles.length !== 1 || dataFiles[0] !== expectedRoutePath) {
     fail(`built bundle data must contain only ${expectedRoutePath}`);
   }
-  validateRoute(readJson(path.join(dataDir, expectedRoutePath)), routeSlug);
+  const builtRoute = readJson(path.join(dataDir, expectedRoutePath));
+  validateRoute(builtRoute, routeSlug);
+
+  const expectedMedia = [...collectMediaReferences(builtRoute)].sort();
+  for (const reference of expectedMedia) {
+    if (
+      path.posix.normalize(reference) !== reference ||
+      !reference.startsWith(`media/${routeSlug}/`)
+    ) {
+      fail(`route media reference is outside media/${routeSlug}: ${reference}`);
+    }
+  }
+  const builtMedia = listFiles(path.join(root, "dist/media"))
+    .map((file) => `media/${file}`)
+    .sort();
+  if (JSON.stringify(builtMedia) !== JSON.stringify(expectedMedia)) {
+    fail("built bundle media must contain only files referenced by the shared route");
+  }
+
+  const assetDir = path.join(root, "dist/assets");
+  const assetFiles = listFiles(assetDir).sort();
+  const forbiddenProductChunks = [
+    "admin-page",
+    "atlas-page",
+    "finder-page",
+    "routes-page",
+    "playable-earth-lab-page",
+    "design-system-lab-page",
+    "route-intelligence-lab-page",
+    "google-route-navigator-lab-page",
+    "cinematic-route-trailer-lab-page",
+    "cinematic-director-lab-page",
+  ];
+  const productChunk = assetFiles.find((file) =>
+    forbiddenProductChunks.some((name) => file.includes(name)),
+  );
+  if (productChunk) {
+    fail(`built bundle includes unrelated product chunk ${productChunk}`);
+  }
+
+  const compiledText = assetFiles
+    .filter((file) => /\.(?:css|js)$/.test(file))
+    .map((file) => fs.readFileSync(path.join(assetDir, file), "utf8"))
+    .join("\n");
+  const routeConfig = readJson(path.join(root, "quests.json"));
+  const unrelatedRouteId = (routeConfig.routes ?? [])
+    .map((route) => String(route?.activity_id ?? ""))
+    .find(
+      (activityId) =>
+        activityId && activityId !== routeSlug && compiledText.includes(activityId),
+    );
+  if (unrelatedRouteId) {
+    fail(`built assets include unrelated route identifier ${unrelatedRouteId}`);
+  }
 
   const robots = fs.readFileSync(path.join(root, "dist/robots.txt"), "utf8");
   if (!robots.includes("Disallow: /")) {

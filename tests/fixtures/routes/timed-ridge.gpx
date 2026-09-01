@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="goDiesel fixture" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk>
+    <name>Timed Ridge</name>
+    <trkseg>
+      <trkpt lat="50.7000" lon="-115.1000"><ele>1680</ele><time>2026-08-20T14:00:00Z</time></trkpt>
+      <trkpt lat="50.7050" lon="-115.0950"><ele>1740</ele><time>2026-08-20T14:08:00Z</time></trkpt>
+      <trkpt lat="50.7100" lon="-115.0900"><ele>1810</ele><time>2026-08-20T14:17:00Z</time></trkpt>
+      <trkpt lat="50.7150" lon="-115.0850"><ele>1770</ele><time>2026-08-20T14:26:00Z</time></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

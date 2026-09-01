@@ -5,6 +5,7 @@ import { curationFields } from "@/domain/route/parse-shared";
 
 export type RouteActivityType = "Run" | "Ride" | string;
 export type RouteGeometryStatus = "ready" | "missing" | "invalid";
+export type RouteElevationStatus = "recorded" | "unavailable";
 
 export interface RoutePoint {
   lat: number;
@@ -42,6 +43,7 @@ export interface RouteDiscontinuityEvidence {
 
 export interface RouteProvenance {
   temporal: RouteTemporalProvenance;
+  elevation?: { status: RouteElevationStatus };
   track: { segmentCount: number };
   discontinuities: RouteDiscontinuityEvidence[];
 }
@@ -116,7 +118,8 @@ export interface RouteSummary {
   region: string;
   date: string;
   distanceKm: number;
-  elevationGainM: number;
+  elevationGainM: number | null;
+  elevationStatus?: RouteElevationStatus;
   type: RouteActivityType;
   description: string;
   completionRule: string;
@@ -150,6 +153,7 @@ export interface GeneratedQuestRoute {
   date?: unknown;
   distance_km?: unknown;
   elevation_gain_m?: unknown;
+  elevation_status?: unknown;
   type?: unknown;
   description?: unknown;
   completion_rule?: unknown;

@@ -78,7 +78,7 @@ export function CandidateRoute({
 
         <dl className="grid grid-cols-3 divide-x divide-line border-y border-line py-1.5 text-sm">
           <Metric label="Distance" value={`${route.distanceKm.toFixed(1)} km`} />
-          <Metric label="Climb" value={`${route.elevationGainM.toLocaleString()} m`} />
+          <Metric label="Climb" value={route.elevationStatus === "unavailable" ? "Unavailable" : `${route.elevationGainM!.toLocaleString()} m`} />
           <Metric label="Surface" value={candidate.terrain[0] ?? "recorded"} />
         </dl>
 

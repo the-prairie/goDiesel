@@ -22,7 +22,24 @@ export function routeStoryTitle(route: QuestRoute) {
 }
 
 export function routeStoryPremise(route: QuestRoute) {
-  return route.curation.vibe || route.description || route.completionRule;
+  const curatedPremise = route.curation.vibe?.trim();
+  if (curatedPremise) return curatedPremise;
+
+  const description = route.description.trim();
+  if (description && !isSourceMetadata(description)) return description;
+
+  const provenance = route.lifecycle === "completed" ? "recorded" : "imported";
+  const climb =
+    route.elevationStatus === "recorded" && route.elevationGainM !== null
+      ? ` with ${route.elevationGainM.toLocaleString()} m of climbing`
+      : "";
+  return `A ${provenance} ${route.distanceKm.toFixed(1)} km ${route.type.toLowerCase()} through ${route.region}${climb}.`;
+}
+
+function isSourceMetadata(description: string) {
+  return /(?:authenticated (?:gpx|fit) export|owner-recorded strava activity|source (?:file|export))/i.test(
+    description,
+  );
 }
 
 export function routeStoryChapters(route: QuestRoute): RouteStoryChapter[] {
@@ -42,7 +59,7 @@ export function routeStoryChapters(route: QuestRoute): RouteStoryChapter[] {
         : `The imported ${route.type.toLowerCase()} route begins in ${route.region}${route.date ? ` on ${formatRouteDate(route.date)}` : ""}.`,
       evidence: "recorded",
       distanceM: 0,
-      elevationM: start?.elev,
+      elevationM: route.elevationStatus !== "unavailable" ? start.elev : undefined,
     });
   }
 
@@ -52,7 +69,8 @@ export function routeStoryChapters(route: QuestRoute): RouteStoryChapter[] {
     chapters.push({
       id: annotation.id,
       kind: "annotation",
-      title: annotation.title || annotationKindTitle(annotation.kind),
+      title:
+        annotation.title || annotationKindTitle(annotation.kind, annotation.evidence),
       body: annotation.body,
       evidence: annotation.evidence,
       distanceM: annotation.atDistanceM,
@@ -84,12 +102,14 @@ export function routeStoryChapters(route: QuestRoute): RouteStoryChapter[] {
       id: "recorded-finish",
       kind: "finish",
       title: "The recording closes",
-      body: isCompleted
-        ? `The activity ends after ${route.distanceKm.toFixed(1)} km and ${route.elevationGainM.toLocaleString()} m of recorded climbing.`
-        : `The imported route closes after ${route.distanceKm.toFixed(1)} km and ${route.elevationGainM.toLocaleString()} m of source-recorded climbing.`,
+      body: route.elevationStatus === "unavailable"
+        ? `${isCompleted ? "The activity" : "The imported route"} closes after ${route.distanceKm.toFixed(1)} km. Elevation is unavailable.`
+        : isCompleted
+          ? `The activity ends after ${route.distanceKm.toFixed(1)} km and ${route.elevationGainM!.toLocaleString()} m of recorded climbing.`
+          : `The imported route closes after ${route.distanceKm.toFixed(1)} km and ${route.elevationGainM!.toLocaleString()} m of source-recorded climbing.`,
       evidence: "recorded",
       distanceM: totalDistanceM,
-      elevationM: finish.elev,
+      elevationM: route.elevationStatus === "recorded" ? finish.elev : undefined,
     });
   }
 
@@ -97,7 +117,7 @@ export function routeStoryChapters(route: QuestRoute): RouteStoryChapter[] {
 }
 
 export function highestPoint(route: QuestRoute) {
-  if (route.route.length === 0) return undefined;
+  if (route.route.length === 0 || route.elevationStatus === "unavailable") return undefined;
   const point = route.route.reduce((highest, candidate) =>
     candidate.elev > highest.elev ? candidate : highest,
   );
@@ -105,7 +125,7 @@ export function highestPoint(route: QuestRoute) {
 }
 
 export function elevationAtDistance(route: QuestRoute, distanceM: number) {
-  if (route.route.length === 0) return undefined;
+  if (route.route.length === 0 || route.elevationStatus === "unavailable") return undefined;
   return route.route.reduce((closest, point) =>
     Math.abs(point.d - distanceM) < Math.abs(closest.d - distanceM) ? point : closest,
   ).elev;
@@ -117,9 +137,14 @@ export function distanceLabel(distanceM: number) {
     : `${(distanceM / 1_000).toFixed(1)} km`;
 }
 
-function annotationKindTitle(kind: QuestRoute["annotations"][number]["kind"]) {
+function annotationKindTitle(
+  kind: QuestRoute["annotations"][number]["kind"],
+  evidence: RouteAnnotationEvidence,
+) {
   if (kind === "warning") return "Watch this section";
-  if (kind === "landmark") return "A recorded landmark";
+  if (kind === "landmark") {
+    return evidence === "hypothesis" ? "Possible landmark" : "A recorded landmark";
+  }
   if (kind === "image") return "A photographed moment";
   return "Field note";
 }

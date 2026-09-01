@@ -6,6 +6,11 @@ import { findRouteBySlug } from "@/data/routes";
 import { useRouteDetail } from "@/data/use-route-detail";
 import { decodedRouteSlug } from "@/app/route-paths";
 
+const FIELD_TEST_ROUTES = [
+  { slug: "14736711660", label: "San Francisco" },
+  { slug: "14023448720", label: "Crete" },
+] as const;
+
 export function GoogleRouteNavigatorLabPage() {
   const { routeSlug } = useParams();
   const decodedSlug = decodedRouteSlug(routeSlug);
@@ -26,5 +31,7 @@ export function GoogleRouteNavigatorLabPage() {
   }
   if (detail.status !== "ready") return <RouteNotFound />;
 
-  return <GoogleRouteNavigatorStage route={detail.route} />;
+  return (
+    <GoogleRouteNavigatorStage fieldTestRoutes={FIELD_TEST_ROUTES} route={detail.route} />
+  );
 }

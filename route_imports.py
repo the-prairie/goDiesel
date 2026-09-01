@@ -2,7 +2,9 @@
 
 from dataclasses import dataclass
 from datetime import date
+import hashlib
 from pathlib import Path
+import re
 
 
 SUPPORTED_ACTIVITY_TYPES = frozenset(("Run", "Ride"))
@@ -15,6 +17,7 @@ class ImportedRoute:
     activity_type: str
     date: str
     description: str
+    source_sha256: str | None
 
 
 def imported_route_from_spec(spec: dict[str, object], checkout_root: Path) -> ImportedRoute | None:
@@ -32,6 +35,18 @@ def imported_route_from_spec(spec: dict[str, object], checkout_root: Path) -> Im
         raise ValueError("source_gpx must resolve inside route_sources")
     if source_path.suffix.lower() != ".gpx" or not source_path.is_file():
         raise ValueError(f"source_gpx does not identify a GPX file: {source_value}")
+    expected_sha256 = spec.get("source_sha256")
+    if expected_sha256 is not None:
+        if not isinstance(expected_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", expected_sha256):
+            raise ValueError("source_sha256 must be a lowercase SHA-256 digest")
+        try:
+            actual_sha256 = hashlib.sha256(source_path.read_bytes()).hexdigest()
+        except OSError as error:
+            raise ValueError(
+                f"source_gpx is unreadable: {error.__class__.__name__}"
+            ) from error
+        if actual_sha256 != expected_sha256:
+            raise ValueError("source_gpx checksum does not match source_sha256")
 
     name = _required_string(spec, "activity_name")
     activity_type = _required_string(spec, "activity_type")
@@ -44,6 +59,7 @@ def imported_route_from_spec(spec: dict[str, object], checkout_root: Path) -> Im
         activity_type=activity_type,
         date=_optional_iso_date(spec, "date"),
         description=_optional_string(spec, "description"),
+        source_sha256=expected_sha256,
     )
 
 

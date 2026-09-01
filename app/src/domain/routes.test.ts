@@ -116,6 +116,7 @@ describe("parseRouteDetail", () => {
         elapsedTimeS: 185,
         timeZone: "America/Edmonton",
       },
+      elevation: { status: "recorded" },
       track: { segmentCount: 2 },
       discontinuities: [
         {
@@ -132,6 +133,7 @@ describe("parseRouteDetail", () => {
   it("keeps legacy route records valid with unavailable provenance", () => {
     expect(parseRouteDetail(validRouteDetail()).provenance).toEqual({
       temporal: { status: "unavailable" },
+      elevation: { status: "recorded" },
       track: { segmentCount: 1 },
       discontinuities: [],
     });
@@ -151,6 +153,49 @@ describe("parseRouteDetail", () => {
 
     expect(parsed.lifecycle).toBe("discovered");
     expect(parsed.replay.replayEligible).toBe(true);
+  });
+
+  it("parses missing elevation through the mesh-relative path without recorded zeroes", () => {
+    const route = parseRouteDetail(validRouteDetail({
+      lifecycle: "discovered",
+      elevation_status: "unavailable",
+      elevation_gain_m: null,
+      route: [
+        { lat: 27.98, lng: 86.9, elev: null, d: 0 },
+        { lat: 27.99, lng: 86.91, elev: null, d: 1_500 },
+      ],
+      provenance: {
+        temporal: { status: "unavailable" },
+        elevation: { status: "unavailable" },
+        track: { segment_count: 1 },
+        discontinuities: [],
+      },
+    }));
+
+    expect(route.elevationStatus).toBe("unavailable");
+    expect(route.elevationGainM).toBeNull();
+    expect(route.route.map((point) => point.elev)).toEqual([0, 0]);
+    expect(route.provenance.elevation).toEqual({ status: "unavailable" });
+  });
+
+  it("rejects contradictory unavailable elevation metrics and points", () => {
+    expect(() => parseRouteDetail(validRouteDetail({
+      elevation_status: "unavailable",
+      elevation_gain_m: 0,
+      route: [
+        { lat: 27.98, lng: 86.9, elev: null, d: 0 },
+        { lat: 27.99, lng: 86.91, elev: null, d: 1_500 },
+      ],
+    }))).toThrow(/null elevation_gain_m/);
+
+    expect(() => parseRouteDetail(validRouteDetail({
+      elevation_status: "unavailable",
+      elevation_gain_m: null,
+      route: [
+        { lat: 27.98, lng: 86.9, elev: 0, d: 0 },
+        { lat: 27.99, lng: 86.91, elev: null, d: 1_500 },
+      ],
+    }))).toThrow(/null point elevations/);
   });
 
   it("rejects discontinuities outside recorded route distance", () => {

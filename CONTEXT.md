@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-14
+last_updated: 2026-08-31
 status: canonical
 ---
 
@@ -14,6 +14,17 @@ domain-modeling gap in this file rather than inventing a local word.
 
 Architecture decisions live under `docs/adr/`. Product direction lives in
 `STRATEGY.md`. This file is the shared language between them.
+
+Agent operating mechanics live under `docs/architecture/` and focused procedures live under `docs/agents/`.
+Those documents must use this vocabulary and must not redefine it.
+
+## Live state is queried
+
+This file defines durable meaning and invariants, not live counts or readiness.
+
+Run `./scripts/route.sh status` for current atlas and route state.
+Inspect Git, provider, and deployment state directly before making a current-state claim.
+Do not maintain dynamic counts, current branches, credential status, or deployment status in canonical prose.
 
 ## 1. Product frame
 
@@ -39,9 +50,12 @@ sub-contexts and no translation layers between them.
 The central entity. A **route** is a real, specific path through the world,
 grounded in recorded activity data and enriched with owner curation.
 
-A route is identified by a **slug**, which is currently always its Strava
-**activity id** (for example `17665674778`). The slug is the stable public
-identifier and appears in every canonical URL.
+A route is identified by a **slug**.
+A Strava-backed route keeps its Strava **activity id** (for example `17665674778`).
+An imported GPX route receives one opaque `gpx-<id>` slug when its creation proposal is made.
+That imported slug is never derived from a mutable title, region, filename, checksum, or public share name.
+The slug is the stable public identifier and appears in every canonical URL.
+See ADR-0015.
 
 A route is **not** a segment, a plan, a workout, or a performance. Metrics exist
 to describe the experience, not to score it.
@@ -54,9 +68,10 @@ the pointer to its original **source file**.
 
 ### Source file
 
-The original recorded geometry: a GPX or FIT file under `route_sources/`. Source
-files are the ground truth for geometry, elevation, and time. Nothing downstream
-may contradict them.
+The original recorded geometry: a GPX or FIT file under `route_sources/`.
+Source files are the ground truth for geometry, elevation, and time.
+An imported source carries a stored SHA-256 digest that is revalidated whenever the route is read or built.
+Nothing downstream may contradict a source file.
 
 ### Source kind
 
@@ -73,13 +88,10 @@ describes. `route_imports.route_source_kind()` is the single definition, and
 `admin.py` use them, so the generator and the curation surface cannot disagree
 about a route again.
 
-Current data: 66 `strava-export`, 1 `imported-gpx`.
-
 ### Master routes list
 
 `quests.json` at the repository root. The owner-curated record of every known
-activity and its editorial state. It currently holds 2,237 activity records, of
-which 67 are `approved`.
+activity and its editorial state.
 
 Only `approved` routes with `visibility != "hidden"` are generated into the
 product.
@@ -93,8 +105,6 @@ product.
 | `completed` | The owner recorded this route by doing it. It is a memory. |
 | `discovered` | The route's geometry is real and imported, but the owner has not recorded doing it. |
 | `planned` | An intention. It has no owner-recorded completion geometry and is never replay-eligible. It may reference visibly labelled planning-source geometry. |
-
-Current data: 66 `completed`, 1 `discovered`, 0 `planned` generated.
 
 `completed` and `discovered` routes belong to Atlas. `planned` routes belong to
 Finder and are deliberately kept distinct from memories. A planned route must
@@ -127,6 +137,21 @@ Every value the product presents is one of:
 `provenance.temporal.status` is exactly `recorded` or `unavailable`. There is no
 guessed timestamp and no third state. When time is unavailable, the product says
 so rather than estimating.
+
+Supplied timestamps on a `discovered` route remain in its durable source file, but are not published as owner elapsed time or pace.
+The public route has unavailable temporal provenance until owner-recorded completion evidence exists.
+
+### Elevation provenance
+
+`elevation_status` and `provenance.elevation.status` are exactly `recorded` or `unavailable`.
+A GPX with missing elevation stores `null` at the generated source boundary and uses provider-relative terrain internally for rendering.
+It never turns missing altitude into a recorded zero, a zero-metre climb, or a zero-metre high point.
+
+### Route date
+
+An imported `discovered` route may use the empty string as the canonical unknown-date representation.
+The interface renders it as `Date not recorded`.
+A `completed` route still requires a valid `YYYY-MM-DD` activity date.
 
 ### Discontinuity
 
@@ -173,8 +198,6 @@ The schema is closed. Unknown fields are rejected rather than ignored.
 | `draft` | Partial curation is allowed. Admin presents it as not yet reviewed. |
 | `reviewed` | The owner has approved it. All eight fields are required. |
 | `published` | Same completeness requirement as `reviewed`. |
-
-Current data: 66 `draft`, 1 `reviewed`.
 
 Admin and factual guide surfaces show an unreviewed route with the neutral label
 "Guide not yet reviewed".
@@ -250,8 +273,6 @@ intent` rather than lifecycle or guide-review workflow states.
 | --- | --- |
 | `earth` | Best experienced in photorealistic 3D. |
 | `atlas` | Best experienced on the 2D map. |
-
-Current data: 60 `atlas`, 7 `earth`.
 
 **`bestInEarth`** marks a route the owner considers a showcase for
 photorealistic replay. A `bestInEarth` route must use `earth` mode.
@@ -353,6 +374,13 @@ Invariants 11 and 12 are enforced by `app/src/structure.test.ts`.
 | Labs (no production commitment) | `app/src/labs/` |
 | Design system and shared components | `app/src/ui/` |
 | Private inputs | `../DieselDiaries`, `../Travel` (outside this repository) |
+| Agent orientation and task routing | `AGENTS.md` |
+| System architecture and operator model | `docs/architecture/` |
+| Focused operating procedures | `docs/agents/` |
+| Current and historical plans | `docs/plans/README.md` |
+| Agent control interface | `scripts/godiesel` |
+| Route compatibility interface | `scripts/route.sh` |
+| Ignored route-share proposals, result artifacts, receipts, staging, and recovery evidence | `.route-share/` |
 
 ## 11. Domain-modeling gaps
 

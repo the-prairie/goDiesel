@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { QuestRoute } from "@/domain/route";
-import { routeStoryChapters, routeStoryTitle } from "@/surfaces/routes/route-story";
+import {
+  highestPoint,
+  routeStoryChapters,
+  routeStoryPremise,
+  routeStoryTitle,
+} from "@/surfaces/routes/route-story";
 
 function route(overrides: Partial<QuestRoute> = {}): QuestRoute {
   return {
@@ -15,6 +20,7 @@ function route(overrides: Partial<QuestRoute> = {}): QuestRoute {
     date: "2026-08-13",
     distanceKm: 10,
     elevationGainM: 420,
+    elevationStatus: "recorded",
     type: "Run",
     description: "",
     completionRule: "Complete the route.",
@@ -39,6 +45,7 @@ function route(overrides: Partial<QuestRoute> = {}): QuestRoute {
     annotations: [],
     provenance: {
       temporal: { status: "recorded" },
+      elevation: { status: "recorded" },
       track: { segmentCount: 1 },
       discontinuities: [],
     },
@@ -97,8 +104,49 @@ describe("route story chapters", () => {
     expect(routeStoryTitle(route({ activityName: "🍑🍑🍑" }))).toBe("Kyoto, Japan");
   });
 
+  it("uses a factual route summary instead of source-ingestion metadata", () => {
+    expect(
+      routeStoryPremise(
+        route({
+          description:
+            "Owner-recorded Strava activity 123 supplied through its authenticated GPX export.",
+        }),
+      ),
+    ).toBe("A recorded 10.0 km run through Kyoto, Japan with 420 m of climbing.");
+  });
+
+  it("preserves an owner-curated route premise", () => {
+    expect(
+      routeStoryPremise(
+        route({
+          curation: { reviewStatus: "reviewed", vibe: "A long day above the city." },
+        }),
+      ),
+    ).toBe("A long day above the city.");
+  });
+
   it("does not present start or finish chapters without recorded GPS geometry", () => {
     expect(routeStoryChapters(route({ route: [] }))).toEqual([]);
+  });
+
+  it("does not title a hypothetical landmark as recorded", () => {
+    const chapters = routeStoryChapters(
+      route({
+        annotations: [
+          {
+            id: "possible-water",
+            atDistanceM: 2_000,
+            kind: "landmark",
+            evidence: "hypothesis",
+            body: "Water may be available here.",
+          },
+        ],
+      }),
+    );
+
+    expect(chapters.find(({ id }) => id === "possible-water")?.title).toBe(
+      "Possible landmark",
+    );
   });
 
   it("describes imported geometry without inventing a completed activity", () => {
@@ -110,5 +158,29 @@ describe("route story chapters", () => {
     expect(chapters.at(-1)?.body).toBe(
       "The imported route closes after 10.0 km and 420 m of source-recorded climbing.",
     );
+  });
+
+  it("does not turn unavailable elevation into a zero-metre story", () => {
+    const unavailable = route({
+      lifecycle: "discovered",
+      elevationStatus: "unavailable",
+      elevationGainM: null,
+      route: [
+        { lat: 27.98, lng: 86.9, elev: 0, d: 0 },
+        { lat: 27.99, lng: 86.91, elev: 0, d: 1_500 },
+      ],
+      provenance: {
+        temporal: { status: "unavailable" },
+        elevation: { status: "unavailable" },
+        track: { segmentCount: 1 },
+        discontinuities: [],
+      },
+    });
+    const chapters = routeStoryChapters(unavailable);
+
+    expect(highestPoint(unavailable)).toBeUndefined();
+    expect(chapters.every((chapter) => chapter.elevationM === undefined)).toBe(true);
+    expect(chapters.at(-1)?.body).toContain("Elevation is unavailable");
+    expect(chapters.at(-1)?.body).not.toContain("0 m");
   });
 });
