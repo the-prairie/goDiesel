@@ -124,6 +124,7 @@ fi
 
 node - <<'NODE'
 const fs = require("node:fs");
+const { isDeepStrictEqual } = require("node:util");
 const plateau = JSON.parse(fs.readFileSync(
   "app/public/data/routes/gpx-acceptance-plateau.json",
   "utf8",
@@ -162,7 +163,7 @@ if (route.annotations?.[0]?.body !== "Review major crossings and local access be
 if (retry.result !== "already_applied" || !retry.validation?.publishable) {
   throw new Error("acceptance retry did not revalidate canonical state");
 }
-if (JSON.stringify(retry) !== JSON.stringify(compatibilityRetry)) {
+if (!isDeepStrictEqual(retry, compatibilityRetry)) {
   throw new Error("unified and compatibility retries produced different domain results");
 }
 const dataFiles = fs.readdirSync("dist/data/routes");
