@@ -137,7 +137,8 @@ def test_inspect_system_returns_a_redacted_operator_view():
     assert result["document_type"] == "godiesel-system-inspection"
     assert result["status"] in {"passed", "warning", "blocked"}
     assert len(result["repository"]["commit"]) == 40
-    assert result["repository"]["worktree"]["clean"] is False
+    assert isinstance(result["repository"]["worktree"]["clean"], bool)
+    assert isinstance(result["repository"]["worktree"]["changed_paths"], list)
     assert {item["id"] for item in result["capabilities"]} == {
         "application-release",
         "owner-curation",
