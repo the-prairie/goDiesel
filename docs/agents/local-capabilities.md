@@ -18,8 +18,10 @@ After reviewing canonical source changes, rebuild both generated tiers through `
 ```
 
 The adapter invokes `rebuild.sh`; it never imports `build.py` or writes generated data itself.
-Generation shares the catalogue mutation lock with route creation, owner curation, and every Admin writer that can change canonical or generated route state.
+`rebuild.sh` delegates to the locked `route_build.py` writer entry point.
+Route creation owns the same lock inside `route_create.py`, so both the unified interface and retained `scripts/route.sh` commands share one write boundary with owner curation and Admin.
 The existing staging, backup, atomic replacement, and interrupted-run recovery remain authoritative.
+Inspection validates route identities, canonical fields represented in the public projection, detail-to-manifest agreement, and finite non-negative aggregate statistics.
 
 Run or reuse focused proof:
 
@@ -44,7 +46,7 @@ Turn that request into a deterministic review plan:
 ```
 
 The plan is written under ignored `.godiesel/plans/owner-curation/`.
-It records the observed canonical and generated state fingerprint, a self-digest, and the complete possible write set.
+It records the observed canonical and generated state fingerprint, the exact checkout and implementation identity, a privacy-safe field-level change summary, a self-digest, and the complete possible write set.
 That set includes `quests.json`, both generated metadata files, and the generated route-detail directory because a failed incremental publication may invoke the full-generation fallback.
 
 Review the plan, then apply that exact file with explicit local authority:
@@ -53,8 +55,8 @@ Review the plan, then apply that exact file with explicit local authority:
 ./scripts/godiesel apply owner-curation --plan <plan-path> --authorize canonical-local --json
 ```
 
-Apply blocks when the plan digest is invalid or route state changed after planning.
-Reapplying an already completed plan succeeds without invoking the writer again only when both canonical curation and every required generated projection agree.
+Apply blocks when the plan digest is invalid, the checkout or implementation changed, or route state changed after planning.
+Reapplying an already completed plan succeeds without invoking the writer again only when canonical curation and the complete generated projection agree.
 The CLI and loopback HTTP endpoint call the same `save_owner_curation` service, which retains validation, incremental publication, full-rebuild fallback, source rollback, and generated-file recovery behavior.
 All Admin and unified CLI writes to the owner-owned route catalogue or its generated projections share one non-blocking cross-process lock.
 
@@ -97,7 +99,8 @@ Run one existing live browser check against one exact target:
 ```
 
 The target must be an HTTP or HTTPS URL without credentials, query parameters, or fragments.
-The adapter records configuration presence, provider identity, and a digest of the exact target in an ignored evidence receipt.
+It must expose `build-identity.json` for the same clean Git commit being verified.
+The adapter records configuration presence, provider identity, the deployed commit, and a digest of the exact target in an ignored evidence receipt.
 Configuration presence and a passing deterministic test never substitute for this live result.
 
 Reuse is provider- and target-specific:
@@ -106,7 +109,7 @@ Reuse is provider- and target-specific:
 ./scripts/godiesel verify provider-readiness --provider atlas --provider-target <url> --reuse --json
 ```
 
-Live-provider proof can be reused for at most 15 minutes and only while its exact target, configuration presence, selected command, and covered inputs remain unchanged.
+Live-provider proof can be reused for at most 15 minutes and only while its exact target, deployed commit, configuration presence, selected command, and covered inputs remain unchanged.
 
 Do not run a live provider command merely because configuration exists.
 Run it only when the intended claim depends on that provider, renderer, terrain, imagery, or camera behavior.
@@ -116,6 +119,8 @@ Run it only when the intended claim depends on that provider, renderer, terrain,
 Successful generation, curation, and provider verification writes a schema-valid receipt under ignored `.godiesel/evidence/`.
 Impact rules decide which gates a changed path requires.
 Each exact verification command separately declares the implementation, contract, fixture, configuration, data, renderer, and provider inputs that invalidate its receipt.
+The adapter snapshots those inputs before and after the gate and blocks proof when they change during execution.
+Broken or external covered-input symlinks block proof instead of disappearing from the fingerprint.
 Those command inputs also narrow a known provider path to its applicable live check; a newly classified provider path that matches no known command expands to every command in the tier so proof cannot disappear silently.
 The generation, curation, and live-provider commands also run their adapter contract tests before recording success.
 Raw test output, private route values, and secret values are not included.

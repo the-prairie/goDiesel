@@ -46,7 +46,10 @@ def _git(root: Path, *args: str, text: bool = True) -> subprocess.CompletedProce
     )
 
 
-def _repository_snapshot(root: Path) -> dict[str, Any]:
+def repository_snapshot(root: Path | str) -> dict[str, Any]:
+    """Return a privacy-safe identity for the exact checkout and repository state."""
+
+    root = Path(root).resolve()
     try:
         commit = _git(root, "rev-parse", "HEAD")
         branch = _git(root, "branch", "--show-current")
@@ -66,6 +69,7 @@ def _repository_snapshot(root: Path) -> dict[str, Any]:
     return {
         "commit": commit.stdout.strip() if commit.returncode == 0 else None,
         "branch": branch.stdout.strip() or None if branch.returncode == 0 else None,
+        "worktree_sha256": canonical_digest(root.as_posix()),
         "dirty_state": {
             "clean": status.returncode == 0 and not status_bytes,
             "sha256": sha256(status_bytes or b"clean").hexdigest(),
@@ -112,7 +116,7 @@ def write_evidence_receipt(
         "started_at": started_at,
         "finished_at": finished_at,
         "status": status,
-        "repository": _repository_snapshot(root),
+        "repository": repository_snapshot(root),
         "inputs": [dict(item) for item in inputs],
         "covered_inputs": [dict(item) for item in covered_inputs],
         "proof_fingerprint": proof_fingerprint,

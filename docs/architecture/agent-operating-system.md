@@ -108,6 +108,7 @@ Route generation delegates to the sole full-catalogue Python writer.
 Owner curation produces a fingerprinted plan and calls the same owner-writer service as the loopback HTTP endpoint.
 Planned-route inspection reports browser-local ownership and unknown current state instead of projecting it into canonical files.
 Provider readiness separates configuration presence from one explicitly selected live check against one exact target.
+That target must identify the same clean source commit, so browser success cannot be attributed to an unrelated deployment.
 
 ## 5. Capability manifest
 
@@ -222,6 +223,9 @@ A plan must be:
 - explicit about facts, derivations, hypotheses, and owner choices;
 - independent from a public name or mutable display title when identity requires stability.
 
+Owner-curation plans are also bound to a privacy-safe checkout identity, dirty-state digest, and implementation fingerprint.
+Their review summary exposes changed field names and review-status transitions without copying owner-authored text.
+
 The existing route-share proposal demonstrates this contract.
 Future write capabilities should reuse the pattern while retaining their own domain-specific schemas.
 
@@ -278,20 +282,20 @@ When a tier has multiple provider commands, those same inputs select only comman
 The command recorded in evidence and the command-specific proof inputs included in the reusable fingerprint come from the same manifest declaration.
 The existing risk tiers in `docs/agents/testing.md` remain the policy.
 
-A proof is reusable only while all covered inputs remain unchanged:
+A proof is reusable only while all covered inputs remain unchanged before, during, and after its gate:
 
 - implementation paths;
 - contract and schema paths;
 - fixture and test paths;
 - build and runtime configuration;
 - file type, executable mode, and symlink target for covered files;
-- provider target when the proof is live;
+- provider target and matching deployed build commit when the proof is live;
 - canonical data fingerprints when the proof covers real data.
 
 A changed documentation file does not invalidate a runtime proof unless it changes an executable contract or command.
 A provider-dependent claim is never proven by a deterministic test adapter.
 A missing live dependency produces `blocked`, never a skipped green result.
-Live-provider proof is reusable for at most 15 minutes and only against the same target and configuration-presence state.
+Live-provider proof is reusable for at most 15 minutes and only against the same target, deployed commit, and configuration-presence state.
 
 ## 11. Knowledge topology
 

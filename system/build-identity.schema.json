@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://godiesel.local/system/build-identity.schema.json",
+  "title": "goDiesel deployed build identity",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "document_type", "commit"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "document_type": { "const": "godiesel-build-identity" },
+    "commit": { "type": "string", "pattern": "^[a-f0-9]{40}$" }
+  }
+}

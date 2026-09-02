@@ -814,12 +814,11 @@ class RouteCreateTest(unittest.TestCase):
     def test_rebuild_failure_preserves_exit_code_without_streaming_private_paths(self):
         proposal = propose_request(self.request(), self.root)
         private_path = self.root / "owner-files" / "secret.gpx"
-        rebuild = self.root / "rebuild.sh"
-        rebuild.write_text(
-            f"#!/bin/bash\nprintf '%s\\n' '{private_path}' >&2\nexit 7\n",
+        build = self.root / "build.py"
+        build.write_text(
+            f"import sys\nprint({str(private_path)!r}, file=sys.stderr)\nraise SystemExit(7)\n",
             encoding="utf-8",
         )
-        rebuild.chmod(0o755)
         stderr = io.StringIO()
 
         with redirect_stderr(stderr), self.assertRaises(RouteCreateError) as raised:

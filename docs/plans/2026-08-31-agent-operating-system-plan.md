@@ -213,12 +213,13 @@ Route release validates that reusable proof before any external effect.
 
 ## Phase 4: Add canonical local capability adapters
 
-Status: complete on 2026-09-02.
+Status: implemented on 2026-09-02, pending merge.
 
 The implemented interface delegates full generation to `rebuild.sh` and `build.py`, delegates curation to the same owner-writer service used by the loopback endpoint, reports browser-local planned-route state without inventing a repository projection, and separates provider configuration from explicit live success.
-Owner curation uses a deterministic, state-bound plan schema, and generation, curation, and named provider checks emit reusable Phase 3 evidence receipts.
-Unified route creation, generation, curation, and every competing Admin writer share one cross-process catalogue lock.
+Owner curation uses a deterministic plan schema bound to route state, checkout identity, and implementation state, and generation, curation, and named provider checks emit reusable Phase 3 evidence receipts.
+Route creation, generation, curation, and every competing Admin writer own the same cross-process catalogue lock at their retained writer entry points.
 Command-specific provider inputs select proportionate live proof, invalidate exact receipts, and fail safe to the full tier for an unrecognized provider path.
+Named provider proof requires the target deployment to identify the same clean local commit.
 
 ### Work
 

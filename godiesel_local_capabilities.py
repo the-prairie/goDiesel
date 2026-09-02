@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import subprocess
@@ -12,6 +13,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any, Callable, Mapping
 from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 from jsonschema import Draft202012Validator
 
@@ -23,13 +25,19 @@ from admin_curation import (
     write_atomic,
 )
 from curation_publish import CurationRecoveryError
-from godiesel_evidence import canonical_digest, write_evidence_receipt
+from godiesel_evidence import (
+    canonical_digest,
+    repository_snapshot,
+    write_evidence_receipt,
+)
 from godiesel_verification import build_proof_snapshot
 from quest_meta import build_route_curation, route_guide_preview
 
 
 SCHEMA_VERSION = 1
 Runner = Callable[..., subprocess.CompletedProcess[str]]
+TargetIdentityReader = Callable[[str], Mapping[str, object]]
+RepositoryReader = Callable[[Path], Mapping[str, object]]
 GENERATION_AUTHORITY = {
     "inspect": "read-only",
     "apply": "canonical-local",
@@ -111,18 +119,28 @@ def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[s
         stats = _read_json(root / "app/src/data/generated/route-stats.json")
         if not isinstance(config, dict) or not isinstance(manifest, dict) or not isinstance(stats, dict):
             raise TypeError
-        canonical_ids = [
-            str(route["activity_id"])
+        canonical_routes = [
+            route
             for route in config.get("routes", config.get("quests", []))
-            if route.get("status", "approved") == "approved"
+            if isinstance(route, dict)
+            and route.get("status", "approved") == "approved"
             and route.get("visibility", "public") != "hidden"
         ]
-        summary_ids = [str(route["activity_id"]) for route in manifest["routes"]]
-        summary_slugs = [str(route["slug"]) for route in manifest["routes"]]
-        detail_slugs = sorted(
-            path.stem for path in (root / "app/public/data/routes").glob("*.json")
-        )
+        summary_routes = manifest["routes"]
+        if not isinstance(summary_routes, list) or not all(
+            isinstance(route, dict) for route in summary_routes
+        ):
+            raise TypeError
+        canonical_ids = [str(route["activity_id"]) for route in canonical_routes]
+        summary_ids = [str(route["activity_id"]) for route in summary_routes]
+        summary_slugs = [str(route["slug"]) for route in summary_routes]
+        detail_paths = sorted((root / "app/public/data/routes").glob("*.json"))
+        details = [_read_json(path) for path in detail_paths]
+        if not all(isinstance(detail, dict) for detail in details):
+            raise TypeError
+        detail_slugs = [path.stem for path in detail_paths]
         reported_count = stats["route_count"]
+        reported_completed_km = stats["completed_km"]
     except (OSError, json.JSONDecodeError, KeyError, TypeError, AttributeError):
         return None, [
             _issue(
@@ -132,18 +150,141 @@ def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[s
             )
         ]
 
-    current = (
+    inventory_current = (
         len(canonical_ids) == len(set(canonical_ids))
         and len(summary_ids) == len(set(summary_ids))
         and len(summary_slugs) == len(set(summary_slugs))
         and set(canonical_ids) == set(summary_ids) == set(summary_slugs) == set(detail_slugs)
         and reported_count == len(summary_ids)
     )
+    projection_current = inventory_current
+    canonical_by_id = {str(route["activity_id"]): route for route in canonical_routes}
+    summary_by_id = {str(route["activity_id"]): route for route in summary_routes}
+    detail_by_slug = {path.stem: detail for path, detail in zip(detail_paths, details)}
+    canonical_projection_fields = {
+        "activity_name": ("activity_name",),
+        "activity_type": ("type",),
+        "region": ("region", "name"),
+        "date": ("date",),
+        "description": ("description",),
+        "difficulty": ("difficulty",),
+        "completion_rule": ("completion_rule",),
+        "theme": ("theme",),
+        "title": ("subtitle",),
+    }
+    shared_projection_fields = (
+        "slug",
+        "activity_id",
+        "source_kind",
+        "lifecycle",
+        "name",
+        "subtitle",
+        "activity_name",
+        "region",
+        "date",
+        "distance_km",
+        "elevation_gain_m",
+        "elevation_status",
+        "type",
+        "description",
+        "completion_rule",
+        "difficulty",
+        "theme",
+        "xp",
+        "center_lat",
+        "center_lng",
+        "replay",
+    )
+    required_summary_fields = {*shared_projection_fields, "trace", "guide_preview"}
+    required_detail_fields = {*shared_projection_fields, "route", "provenance"}
+    if inventory_current:
+        for activity_id in canonical_ids:
+            canonical = canonical_by_id[activity_id]
+            summary = summary_by_id[activity_id]
+            detail = detail_by_slug[activity_id]
+            if (
+                str(detail.get("slug")) != activity_id
+                or str(detail.get("activity_id")) != activity_id
+                or not required_summary_fields.issubset(summary)
+                or not required_detail_fields.issubset(detail)
+                or not isinstance(summary.get("trace"), list)
+                or not summary["trace"]
+                or not isinstance(detail.get("route"), list)
+                or not detail["route"]
+                or not isinstance(detail.get("provenance"), dict)
+                or summary.get("lifecycle")
+                != canonical.get("lifecycle", "completed")
+                or detail.get("lifecycle")
+                != canonical.get("lifecycle", "completed")
+                or any(
+                    field in summary
+                    and field in detail
+                    and summary[field] != detail[field]
+                    for field in shared_projection_fields
+                )
+            ):
+                projection_current = False
+                break
+            for source_field, generated_fields in canonical_projection_fields.items():
+                if source_field not in canonical or canonical[source_field] in (None, ""):
+                    continue
+                expected = canonical[source_field]
+                if any(
+                    summary.get(field) != expected or detail.get(field) != expected
+                    for field in generated_fields
+                ):
+                    projection_current = False
+                    break
+            if not projection_current:
+                break
+            if canonical.get("curation") is not None:
+                try:
+                    expected_curation = build_route_curation(canonical["curation"])
+                    expected_preview = route_guide_preview(canonical["curation"])
+                except ValueError:
+                    projection_current = False
+                    break
+                if (
+                    detail.get("curation") != expected_curation
+                    or summary.get("guide_preview") != expected_preview
+                ):
+                    projection_current = False
+                    break
+
+    completed_distances = [
+        route.get("distance_km")
+        for route in summary_routes
+        if route.get("lifecycle", "completed") == "completed"
+    ]
+    numeric_state_valid = (
+        isinstance(reported_count, int)
+        and not isinstance(reported_count, bool)
+        and isinstance(reported_completed_km, (int, float))
+        and not isinstance(reported_completed_km, bool)
+        and math.isfinite(float(reported_completed_km))
+        and float(reported_completed_km) >= 0
+        and all(
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and math.isfinite(float(value))
+            and float(value) >= 0
+            for value in completed_distances
+        )
+    )
+    expected_completed_km = (
+        round(sum(float(value) for value in completed_distances), 1)
+        if numeric_state_valid
+        else None
+    )
+    stats_current = numeric_state_valid and reported_completed_km == expected_completed_km
+    current = inventory_current and projection_current and stats_current
     state = {
         "canonical_public_routes": len(canonical_ids),
         "generated_summary_routes": len(summary_ids),
         "generated_detail_routes": len(detail_slugs),
         "reported_route_count": reported_count,
+        "reported_completed_km": reported_completed_km,
+        "expected_completed_km": expected_completed_km,
         "inventory_state": "current" if current else "drifted",
         "recovery_state": (
             "pending"
@@ -151,13 +292,31 @@ def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[s
             else "clear"
         ),
     }
-    blockers = [] if current else [
-        _issue(
-            "GODIESEL_GENERATED_INVENTORY_DRIFT",
-            "Canonical route identities and generated route inventories do not agree.",
-            "Apply route-generation through the owning Python writer, then inspect again.",
+    blockers = []
+    if not inventory_current:
+        blockers.append(
+            _issue(
+                "GODIESEL_GENERATED_INVENTORY_DRIFT",
+                "Canonical route identities and generated route inventories do not agree.",
+                "Apply route-generation through the owning Python writer, then inspect again.",
+            )
         )
-    ]
+    if inventory_current and not projection_current:
+        blockers.append(
+            _issue(
+                "GODIESEL_GENERATED_PROJECTION_DRIFT",
+                "Generated route fields do not agree with canonical route state.",
+                "Apply route-generation through the owning Python writer, then inspect again.",
+            )
+        )
+    if not stats_current:
+        blockers.append(
+            _issue(
+                "GODIESEL_GENERATED_STATS_DRIFT",
+                "Generated route statistics are invalid or disagree with the route manifest.",
+                "Apply route-generation through the owning Python writer, then inspect again.",
+            )
+        )
     return state, blockers
 
 
@@ -208,12 +367,13 @@ def _run_verification(
                 )
             ],
         )
+    proof_environment = environ if proof_environ is None else proof_environ
     snapshot = build_proof_snapshot(
         root,
         capability,
         tiers=[tier],
         commands=[display_command],
-        environ=environ if proof_environ is None else proof_environ,
+        environ=proof_environment,
         provider_target=provider_target,
     )
     if snapshot["status"] != "passed":
@@ -241,6 +401,37 @@ def _run_verification(
     blockers = [] if passed else [
         _issue(failure_code, failure_message, failure_remediation)
     ]
+    post_snapshot = build_proof_snapshot(
+        root,
+        capability,
+        tiers=[tier],
+        commands=[display_command],
+        environ=proof_environment,
+        provider_target=provider_target,
+    )
+    stable_inputs = (
+        post_snapshot["status"] == "passed"
+        and post_snapshot["proof_fingerprint"] == snapshot["proof_fingerprint"]
+    )
+    if post_snapshot["status"] != "passed":
+        blockers.append(
+            _issue(
+                "GODIESEL_VERIFICATION_POSTCHECK_FAILED",
+                "Verification finished but its covered inputs could not be rechecked.",
+                "Restore the covered inputs and rerun verification before reusing proof.",
+            )
+        )
+        blockers.extend(post_snapshot["blockers"])
+    elif not stable_inputs:
+        blockers.append(
+            _issue(
+                "GODIESEL_VERIFICATION_INPUTS_CHANGED",
+                "One or more covered inputs changed while the verification gate was running.",
+                "Stabilize the worktree and rerun verification against one unchanged input set.",
+            )
+        )
+    receipt_snapshot = post_snapshot if post_snapshot["status"] == "passed" else snapshot
+    receipt_status = "failed" if not passed else "passed" if stable_inputs else "blocked"
     output = _command_result(display_command, completed)
     evidence = write_evidence_receipt(
         root,
@@ -249,14 +440,14 @@ def _run_verification(
         authority="ephemeral-local",
         started_at=started_at,
         finished_at=finished_at,
-        status="passed" if passed else "failed",
+        status=receipt_status,
         inputs=inputs,
-        covered_inputs=snapshot["covered_inputs"],
-        proof_fingerprint=snapshot["proof_fingerprint"],
+        covered_inputs=receipt_snapshot["covered_inputs"],
+        proof_fingerprint=receipt_snapshot["proof_fingerprint"],
         selection={
             "mode": "explicit",
             "tiers": [tier],
-            "impact_rules": snapshot["impact_rules"],
+            "impact_rules": receipt_snapshot["impact_rules"],
         },
         gates=[
             {
@@ -273,7 +464,7 @@ def _run_verification(
             }
             for gate in snapshot["gates"]
         ],
-        configuration=snapshot["configuration"],
+        configuration=receipt_snapshot["configuration"],
         warnings=[],
         external_target=external_target,
         safe_next_actions=[item["remediation"] for item in blockers],
@@ -295,7 +486,7 @@ def _run_verification(
         result=result(completed),
         result_contract="godiesel_local_capabilities.py#command-summary",
         blockers=blockers,
-        exit_code=0 if passed and evidence is not None else 2,
+        exit_code=0 if passed and stable_inputs and evidence is not None else 2,
     )
     envelope["evidence"] = evidence
     return envelope
@@ -383,16 +574,18 @@ def execute_route_generation(
             failure_message="The existing route-generation verify command failed.",
             failure_remediation="Inspect the focused test output, correct the cause, and retry.",
         )
-    try:
-        with owner_mutation_lock(root):
-            completed = runner(
-                command,
-                cwd=root,
-                capture_output=True,
-                text=True,
-                env=process_env,
-            )
-    except OwnerMutationBusyError:
+    completed = runner(
+        command,
+        cwd=root,
+        capture_output=True,
+        text=True,
+        env=process_env,
+    )
+    mutation_busy = (
+        completed.returncode == 2
+        and "Another catalogue mutation is in progress." in (completed.stderr or "")
+    )
+    if mutation_busy:
         return _envelope(
             "route-generation",
             verb,
@@ -492,6 +685,59 @@ def _curation_observed_state(root: Path, activity_id: str) -> str:
     )
 
 
+CURATION_IMPLEMENTATION_PATHS = (
+    "godiesel_local_capabilities.py",
+    "admin_curation.py",
+    "curation_publish.py",
+    "quest_meta.py",
+    "route_annotations.py",
+    "build.py",
+    "system/owner-curation-plan.schema.json",
+)
+
+
+def _curation_implementation_digest(root: Path) -> str:
+    inputs = []
+    for relative in CURATION_IMPLEMENTATION_PATHS:
+        path = root / relative
+        inputs.append(
+            {
+                "path": relative,
+                "sha256": sha256(path.read_bytes()).hexdigest() if path.is_file() else None,
+            }
+        )
+    return canonical_digest(inputs)
+
+
+def _curation_plan_context(root: Path) -> dict[str, object]:
+    return {
+        "repository": repository_snapshot(root),
+        "implementation_sha256": _curation_implementation_digest(root),
+    }
+
+
+def _curation_change_summary(
+    root: Path,
+    activity_id: str,
+    curation: Mapping[str, Any],
+) -> dict[str, object]:
+    config = _read_json(root / "quests.json")
+    route = next(
+        route
+        for route in config.get("routes", config.get("quests", []))
+        if str(route.get("activity_id")) == activity_id
+    )
+    before = route.get("curation") if isinstance(route.get("curation"), dict) else {}
+    fields = sorted(
+        key for key in set(before) | set(curation) if before.get(key) != curation.get(key)
+    )
+    return {
+        "changed_fields": fields,
+        "review_status_before": before.get("review_status", "unset"),
+        "review_status_after": curation["review_status"],
+    }
+
+
 def _plan_owner_curation(
     root: Path,
     request_path: Path | str | None,
@@ -514,6 +760,7 @@ def _plan_owner_curation(
             raise ValueError
         curation = build_route_curation(request["curation"])
         observed_state = _curation_observed_state(root, activity_id)
+        change_summary = _curation_change_summary(root, activity_id, curation)
     except Exception:
         return _envelope(
             "owner-curation",
@@ -537,6 +784,8 @@ def _plan_owner_curation(
         "activity_id": activity_id,
         "curation": curation,
         "observed_state_sha256": observed_state,
+        "context": _curation_plan_context(root),
+        "change_summary": change_summary,
         "publication_strategy": "incremental-with-full-generation-fallback",
         "intended_writes": [
             "quests.json",
@@ -598,13 +847,45 @@ def _load_curation_plan(root: Path, plan_path: Path | str | None) -> tuple[dict[
             )
         ]
     try:
+        current_context = _curation_plan_context(root)
+        planned_context = plan["context"]
+        current_repository = current_context["repository"]
+        planned_repository = planned_context["repository"]
+        stable_context_matches = (
+            current_context["implementation_sha256"]
+            == planned_context["implementation_sha256"]
+            and all(
+                current_repository[key] == planned_repository[key]
+                for key in ("commit", "branch", "worktree_sha256")
+            )
+        )
+        fully_matches = stable_context_matches and (
+            current_repository["dirty_state"] == planned_repository["dirty_state"]
+        )
+        if not stable_context_matches:
+            return None, [
+                _issue(
+                    "GODIESEL_CURATION_PLAN_CONTEXT_MISMATCH",
+                    "The curation plan was created for a different checkout or implementation state.",
+                    "Create and review a fresh curation plan in this exact checkout.",
+                )
+            ]
         current_state = _curation_observed_state(root, str(plan["activity_id"]))
     except Exception:
         current_state = None
-    if current_state != plan["observed_state_sha256"]:
+        fully_matches = False
+    if not fully_matches or current_state != plan["observed_state_sha256"]:
         if _curation_is_applied(root, str(plan["activity_id"]), plan["curation"]):
             plan["_already_applied"] = True
             return plan, []
+        if not fully_matches:
+            return None, [
+                _issue(
+                    "GODIESEL_CURATION_PLAN_CONTEXT_MISMATCH",
+                    "Repository state changed after curation planning.",
+                    "Create and review a fresh curation plan in this exact checkout.",
+                )
+            ]
         return None, [
             _issue(
                 "GODIESEL_CURATION_PLAN_STALE",
@@ -651,6 +932,9 @@ def _curation_is_applied(root: Path, activity_id: str, curation: Mapping[str, An
             len(summaries) != 1
             or summaries[0].get("guide_preview") != route_guide_preview(curation)
         ):
+            return False
+        _, generation_blockers = _generation_state(root)
+        if generation_blockers:
             return False
     except (OSError, json.JSONDecodeError, AttributeError, TypeError, ValueError):
         return False
@@ -760,6 +1044,28 @@ def execute_owner_curation(
                     plan["activity_id"],
                     plan["curation"],
                     acquire_lock=False,
+                )
+            generation_state, generation_blockers = _generation_state(root)
+            if generation_blockers:
+                return _envelope(
+                    "owner-curation",
+                    verb,
+                    required_authority,
+                    status="blocked",
+                    authorized=True,
+                    result={
+                        "recovery_state": "source-published",
+                        "generation_state": generation_state,
+                    },
+                    result_contract="godiesel_local_capabilities.py#owner-curation-recovery",
+                    blockers=[
+                        _issue(
+                            "GODIESEL_CURATION_PROJECTION_INCOMPLETE",
+                            "Owner curation was saved but the complete public projection is not ready.",
+                            "Run route generation through the owning writer, inspect the projection, then retry.",
+                        ),
+                        *generation_blockers,
+                    ],
                 )
     except OwnerMutationBusyError:
         return _envelope(
@@ -979,6 +1285,66 @@ def _valid_provider_target(value: str | None) -> bool:
     )
 
 
+def _read_target_build_identity(provider_target: str) -> Mapping[str, object]:
+    identity_url = provider_target.rstrip("/") + "/build-identity.json"
+    request = Request(identity_url, headers={"Accept": "application/json"})
+    with urlopen(request, timeout=5) as response:
+        payload = response.read(65_537)
+    if len(payload) > 65_536:
+        raise ValueError("build identity exceeds the bounded response size")
+    value = json.loads(payload.decode("utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError("build identity is not an object")
+    return value
+
+
+def _verified_provider_build_identity(
+    root: Path,
+    provider_target: str,
+    *,
+    target_identity_reader: TargetIdentityReader,
+    repository_reader: RepositoryReader,
+) -> tuple[dict[str, object] | None, list[dict[str, str]]]:
+    repository = dict(repository_reader(root))
+    commit = repository.get("commit")
+    dirty_state = repository.get("dirty_state")
+    if (
+        not isinstance(commit, str)
+        or re.fullmatch(r"[a-f0-9]{40}", commit) is None
+        or not isinstance(dirty_state, Mapping)
+        or dirty_state.get("clean") is not True
+    ):
+        return None, [
+            _issue(
+                "GODIESEL_PROVIDER_LOCAL_BUILD_UNBOUND",
+                "Live provider proof requires one clean local commit to identify the expected build.",
+                "Commit the exact implementation to verify, then deploy a preview from that commit.",
+            )
+        ]
+    try:
+        identity = dict(target_identity_reader(provider_target))
+        schema = _read_json(root / "system/build-identity.schema.json")
+        Draft202012Validator.check_schema(schema)
+        Draft202012Validator(schema).validate(identity)
+    except Exception:
+        return None, [
+            _issue(
+                "GODIESEL_PROVIDER_BUILD_IDENTITY_UNREADABLE",
+                "The named live target did not expose a valid goDiesel build identity.",
+                "Deploy this branch with build-identity.json enabled, then retry the exact target.",
+            )
+        ]
+    if identity["commit"] != commit:
+        return None, [
+            _issue(
+                "GODIESEL_PROVIDER_BUILD_IDENTITY_MISMATCH",
+                "The named live target was built from a different commit.",
+                "Deploy the exact local commit to a preview target, then verify that target.",
+            )
+        ]
+    return identity, []
+
+
 def execute_provider_readiness(
     root: Path | str,
     verb: str,
@@ -987,6 +1353,8 @@ def execute_provider_readiness(
     provider_target: str | None = None,
     environ: Mapping[str, str] | None = None,
     runner: Runner = subprocess.run,
+    target_identity_reader: TargetIdentityReader = _read_target_build_identity,
+    repository_reader: RepositoryReader = repository_snapshot,
 ) -> dict[str, Any]:
     """Inspect provider configuration or run one explicit existing live check."""
 
@@ -1075,6 +1443,28 @@ def execute_provider_readiness(
                 )
             ],
         )
+    build_identity, identity_blockers = _verified_provider_build_identity(
+        root,
+        str(provider_target),
+        target_identity_reader=target_identity_reader,
+        repository_reader=repository_reader,
+    )
+    if identity_blockers or build_identity is None:
+        return _envelope(
+            "provider-readiness",
+            verb,
+            authority,
+            status="blocked",
+            authorized=True,
+            result={
+                "provider": provider,
+                "provider_target": provider_target,
+                "configuration_state": "configured",
+                "provider_state": "not_run",
+            },
+            result_contract="godiesel_local_capabilities.py#provider-verification",
+            blockers=identity_blockers,
+        )
     command = list(details["command"])
     process_env["GODIESEL_ATLAS_PREVIEW_URL"] = str(provider_target)
     proof_env = provider_proof_environment(root, process_env)
@@ -1095,12 +1485,18 @@ def execute_provider_readiness(
                 "name": "provider-target",
                 "sha256": canonical_digest(provider_target),
             },
+            {
+                "kind": "provider",
+                "name": "deployed-build",
+                "sha256": canonical_digest(build_identity),
+            },
         ],
         result=lambda completed: {
             "provider": provider,
             "provider_target": provider_target,
             "configuration_state": "configured",
             "provider_state": "passed" if completed.returncode == 0 else "failed",
+            "build_identity": build_identity,
             "command": display_command,
             "command_exit_code": completed.returncode,
         },
@@ -1111,5 +1507,6 @@ def execute_provider_readiness(
         external_target={
             "kind": provider,
             "name_sha256": canonical_digest(provider_target),
+            "immutable_id": str(build_identity["commit"]),
         },
     )

@@ -13,6 +13,7 @@ Run live-provider tests only for provider, terrain, imagery, or camera changes.
 Run the complete release gate only for production cutover or changes to shared application infrastructure.
 
 A successful gate remains valid unless subsequent edits touch behavior covered by that gate.
+Verification also blocks when covered inputs change between its pre-run and post-run snapshots.
 
 ## Verification Matrix
 
@@ -162,11 +163,12 @@ Escalate to the release tier when a defect indicates a cross-application regress
 A proof's covered inputs include implementation, contracts, schemas, fixtures, test code, build and runtime configuration, canonical data fingerprints when applicable, and the external provider or deployment target for live proof.
 The manifest-owned fingerprint aggregates every matching file per impact pattern, records absent patterns, records configuration presence without secret values, and digests non-sensitive provider targets.
 Each observed file also contributes its file type, executable mode, and symlink target when applicable.
+Broken symlinks and symlinks that resolve outside the checkout are invalid proof inputs.
 Changing any covered input invalidates that proof.
 
 Each impact rule names the capability invariants that justify its selected gates.
 Focused route-share evidence records the exact manifest-declared route check that ran; its fingerprint covers the route-only application source, browser journey, build and scoping scripts, dependency and test configuration, route data, and public route media consumed by that check.
-Live proof requires an explicit provider or deployment target even when no additional credential is required.
+Live provider proof requires an explicit target whose `build-identity.json` matches the clean local commit being verified.
 
 Documentation, evidence packaging, or unrelated edits do not invalidate a proof unless they change an executable command, contract, or claimed behavior.
 

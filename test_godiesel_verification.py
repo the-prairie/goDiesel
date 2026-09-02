@@ -58,6 +58,30 @@ def test_trailing_recursive_pattern_fingerprints_nested_files(tmp_path: Path):
     assert before["sha256"] != after["sha256"]
 
 
+@pytest.mark.parametrize("target_state", ["external", "broken"])
+def test_proof_snapshot_blocks_unsafe_covered_input_symlink(
+    tmp_path: Path,
+    target_state: str,
+):
+    _write_reuse_fixture(tmp_path)
+    linked_input = tmp_path / "implementation.py"
+    linked_input.unlink()
+    target = tmp_path.parent / f"{tmp_path.name}-{target_state}.py"
+    if target_state == "external":
+        target.write_text("external\n", encoding="utf-8")
+    linked_input.symlink_to(target)
+
+    snapshot = build_proof_snapshot(
+        tmp_path,
+        "route-share",
+        tiers=["focused"],
+        environ={},
+    )
+
+    assert snapshot["status"] == "blocked"
+    assert snapshot["blockers"][0]["code"] == "GODIESEL_COVERED_INPUT_SYMLINK_UNSAFE"
+
+
 def _write_reuse_fixture(root: Path) -> None:
     (root / "system").mkdir()
     for name in ("evidence-receipt.schema.json", "verification-reuse.schema.json"):
@@ -274,6 +298,20 @@ def test_verification_explanation_schema_is_valid():
             "live",
             "provider-proof-honesty",
         ),
+        (
+            "route_provenance.py",
+            "route-generation",
+            "implementation",
+            "focused",
+            "single-writer",
+        ),
+        (
+            "route_annotations.py",
+            "owner-curation",
+            "implementation",
+            "focused",
+            "owner-authored-provenance",
+        ),
     ],
 )
 def test_explain_maps_paths_to_capabilities_and_required_gates(
@@ -383,6 +421,10 @@ def test_cli_verify_explain_emits_json_without_executing_a_gate(monkeypatch, cap
                 "./scripts/verify-provider-readiness.sh earth-replay",
                 "./scripts/verify-provider-readiness.sh google-3d",
             },
+        ),
+        (
+            "app/src/surfaces/replay/cinematic/native-cinematic-renderer.ts",
+            {"./scripts/verify-provider-readiness.sh google-3d"},
         ),
         (
             "app/src/surfaces/atlas/cesium-atlas-world-engine.ts",

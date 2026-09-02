@@ -8,6 +8,6 @@ if [ -x ".venv/bin/python" ]; then
   PYTHON=".venv/bin/python"
 fi
 echo "Regenerating goDiesel route data..."
-"${PYTHON}" build.py
+"${PYTHON}" route_build.py
 echo "Route data regenerated."
 echo "Run the app with: npm --prefix app run dev"

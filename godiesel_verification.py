@@ -142,7 +142,7 @@ def _pattern_input(
         candidates = sorted(
             path
             for path in root.glob(glob_pattern)
-            if path.is_file() and path.resolve().is_relative_to(root)
+            if path.is_relative_to(root) and (path.is_symlink() or path.is_file())
         )
     except (OSError, ValueError):
         return None, _issue(
@@ -153,6 +153,21 @@ def _pattern_input(
     observed = []
     for path in candidates:
         metadata = path.lstat()
+        if path.is_symlink():
+            try:
+                resolved = path.resolve(strict=True)
+            except OSError:
+                resolved = None
+            if (
+                resolved is None
+                or not resolved.is_relative_to(root)
+                or not resolved.is_file()
+            ):
+                return None, _issue(
+                    "GODIESEL_COVERED_INPUT_SYMLINK_UNSAFE",
+                    "A covered input is a broken or repository-escaping symbolic link.",
+                    "Replace it with a repository-contained file or symbolic link before verification.",
+                )
         entry = {
             "path": path.relative_to(root).as_posix(),
             "kind": "symlink" if path.is_symlink() else "file",

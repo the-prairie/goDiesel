@@ -101,7 +101,7 @@
       "reads": ["quests.json", "route_sources/**", "external-private:DieselDiaries/activities.csv", "external-private:DieselDiaries/strava_export/activities/**"],
       "writes": ["app/src/data/generated/**", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**", ".godiesel/evidence/**", ".godiesel/owner-mutation.lock"],
       "external_effects": [],
-      "required_files": ["scripts/godiesel", "godiesel_local_capabilities.py", "build.py", "quest_meta.py", "rebuild.sh", "quests.json", "system/result.schema.json"],
+      "required_files": ["scripts/godiesel", "godiesel_local_capabilities.py", "build.py", "route_build.py", "quest_meta.py", "rebuild.sh", "quests.json", "system/result.schema.json"],
       "configuration": [],
       "commands": {
         "inspect": [{ "command": "./scripts/godiesel inspect route-generation --json", "cwd": "." }],
@@ -243,12 +243,12 @@
       "authority": { "inspect": "read-only", "verify": "ephemeral-local" },
       "inputs": {
         "inspect": [],
-        "verify": ["named provider", "exact credential-free HTTP target"]
+        "verify": ["named provider", "exact credential-free HTTP target", "clean local commit", "matching deployed build identity"]
       },
       "reads": [".env", "app/.env", "app/src/providers/**", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts"],
       "writes": [".godiesel/evidence/**", "app/test-results/**", "app/playwright-report/**"],
       "external_effects": ["read named map or imagery provider through the selected live browser check"],
-      "required_files": ["scripts/godiesel", "scripts/verify-provider-readiness.sh", "godiesel_local_capabilities.py", "scripts/check-provider-key.mjs", "app/src/providers/google-maps-loader.ts", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts", "docs/agents/testing.md"],
+      "required_files": ["scripts/godiesel", "scripts/verify-provider-readiness.sh", "godiesel_local_capabilities.py", "system/build-identity.schema.json", "app/vite.config.ts", "scripts/check-provider-key.mjs", "app/src/providers/google-maps-loader.ts", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts", "docs/agents/testing.md"],
       "configuration": [
         { "name": "GOOGLE_MAPS_API_KEY", "required_for": ["verify:live"], "sensitive": true }
       ],
@@ -266,6 +266,7 @@
       "preconditions": [
         "the selected provider configuration is present without exposing its value",
         "the exact localhost or deployed preview target is named",
+        "the target exposes build-identity.json for the same clean local commit",
         "browser and hardware evidence are available for claims that depend on rendering"
       ],
       "idempotency": { "inspect": "read-only", "verify": "external-check-required" },
@@ -287,8 +288,8 @@
             "command": "./scripts/verify-provider-readiness.sh atlas",
             "cwd": ".",
             "proof_inputs": [
-              { "category": "implementation", "paths": ["godiesel_local_capabilities.py", "godiesel_verification.py", "godiesel_evidence.py", "scripts/verify-provider-readiness.sh", "app/src/providers/cesium-render-quality.ts", "app/src/providers/render-health.ts", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/atlas/components/cesium-atlas-globe.tsx", "app/src/surfaces/atlas/atlas-region-camera.ts"] },
-              { "category": "contract", "paths": ["system/capabilities.json", "system/capabilities.schema.json", "system/evidence-receipt.schema.json"] },
+              { "category": "implementation", "paths": ["godiesel_local_capabilities.py", "godiesel_verification.py", "godiesel_evidence.py", "scripts/verify-provider-readiness.sh", "app/vite.config.ts", "app/src/domain/route.ts", "app/src/data/route-regions.ts", "app/src/providers/cesium-render-quality.ts", "app/src/providers/render-health.ts", "app/src/surfaces/atlas/atlas-world.ts", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/atlas/components/cesium-atlas-globe.tsx", "app/src/surfaces/atlas/atlas-region-camera.ts"] },
+              { "category": "contract", "paths": ["system/build-identity.schema.json", "system/capabilities.json", "system/capabilities.schema.json", "system/evidence-receipt.schema.json"] },
               { "category": "fixture", "paths": ["test_godiesel_local_capabilities.py", "test_godiesel_verification.py", "app/e2e/atlas-region-live.spec.ts", "app/playwright.live.config.ts", "app/package.json", "app/package-lock.json"] }
             ]
           },
@@ -296,8 +297,8 @@
             "command": "./scripts/verify-provider-readiness.sh earth-replay",
             "cwd": ".",
             "proof_inputs": [
-              { "category": "implementation", "paths": ["godiesel_local_capabilities.py", "godiesel_verification.py", "godiesel_evidence.py", "scripts/verify-provider-readiness.sh", "app/src/providers/cesium-render-quality.ts", "app/src/providers/render-health.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts", "app/src/surfaces/replay/renderers/replay-camera-clearance.ts", "app/src/surfaces/replay/story-flight/replay-camera-framing.ts", "app/src/surfaces/replay/scene/route-camera-stabilizer.ts"] },
-              { "category": "contract", "paths": ["system/capabilities.json", "system/capabilities.schema.json", "system/evidence-receipt.schema.json"] },
+              { "category": "implementation", "paths": ["godiesel_local_capabilities.py", "godiesel_verification.py", "godiesel_evidence.py", "scripts/verify-provider-readiness.sh", "app/vite.config.ts", "app/src/domain/route.ts", "app/src/domain/geometry/route-path.ts", "app/src/domain/geometry/route-thread-style.ts", "app/src/providers/cesium-render-quality.ts", "app/src/providers/render-health.ts", "app/src/surfaces/replay/renderer-port.ts", "app/src/surfaces/replay/playback/replay-controller.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts", "app/src/surfaces/replay/renderers/replay-camera-clearance.ts", "app/src/surfaces/replay/story-flight/replay-camera-framing.ts", "app/src/surfaces/replay/scene/route-grounding.ts", "app/src/surfaces/replay/scene/route-camera-stabilizer.ts"] },
+              { "category": "contract", "paths": ["system/build-identity.schema.json", "system/capabilities.json", "system/capabilities.schema.json", "system/evidence-receipt.schema.json"] },
               { "category": "fixture", "paths": ["test_godiesel_local_capabilities.py", "test_godiesel_verification.py", "app/e2e/earth-replay-live.spec.ts", "app/playwright.live.config.ts", "app/package.json", "app/package-lock.json"] }
             ]
           },
@@ -305,8 +306,8 @@
             "command": "./scripts/verify-provider-readiness.sh google-3d",
             "cwd": ".",
             "proof_inputs": [
-              { "category": "implementation", "paths": ["godiesel_local_capabilities.py", "godiesel_verification.py", "godiesel_evidence.py", "scripts/verify-provider-readiness.sh", "app/src/providers/google-maps-loader.ts", "app/src/providers/provider-error.ts", "app/src/surfaces/replay/renderers/google-route-navigator-engine.ts", "app/src/surfaces/replay/components/google-route-navigator-stage.tsx", "app/src/surfaces/replay/story-flight/replay-camera-framing.ts", "app/src/surfaces/replay/scene/route-camera-stabilizer.ts"] },
-              { "category": "contract", "paths": ["system/capabilities.json", "system/capabilities.schema.json", "system/evidence-receipt.schema.json"] },
+              { "category": "implementation", "paths": ["godiesel_local_capabilities.py", "godiesel_verification.py", "godiesel_evidence.py", "scripts/verify-provider-readiness.sh", "app/vite.config.ts", "app/src/domain/route.ts", "app/src/domain/geometry/route-path.ts", "app/src/providers/google-maps-loader.ts", "app/src/providers/provider-error.ts", "app/src/surfaces/replay/cinematic/**", "app/src/surfaces/replay/playback/route-navigator-controller.ts", "app/src/surfaces/replay/renderers/google-route-navigator-engine.ts", "app/src/surfaces/replay/components/google-route-navigator-stage.tsx", "app/src/surfaces/replay/story-flight/replay-camera-framing.ts", "app/src/surfaces/replay/scene/route-camera-stabilizer.ts"] },
+              { "category": "contract", "paths": ["system/build-identity.schema.json", "system/capabilities.json", "system/capabilities.schema.json", "system/evidence-receipt.schema.json"] },
               { "category": "fixture", "paths": ["test_godiesel_local_capabilities.py", "test_godiesel_verification.py", "app/e2e/google-route-navigator-live.spec.ts", "app/e2e/cinematic-route-trailer-live.spec.ts", "app/e2e/cinematic-director-live.spec.ts", "app/e2e/cinematic-export-live.spec.ts", "app/playwright.live.config.ts", "app/package.json", "app/package-lock.json"] }
             ]
           }
@@ -430,7 +431,7 @@
     },
     {
       "id": "route-generation-implementation",
-      "paths": ["build.py", "quest_meta.py", "rebuild.sh", "test_react_app.py"],
+      "paths": ["build.py", "route_build.py", "quest_meta.py", "route_provenance.py", "route_annotations.py", "route_imports.py", "route_timezones.py", "rebuild.sh", "test_react_app.py"],
       "capabilities": ["route-generation"],
       "category": "implementation",
       "gates": [{ "capability": "route-generation", "tier": "focused" }],
@@ -439,7 +440,7 @@
     },
     {
       "id": "owner-curation-implementation",
-      "paths": ["admin.py", "admin.sh", "admin_curation.py", "curation_publish.py", "test_admin_curation.py", "test_curation_publish.py"],
+      "paths": ["admin.py", "admin.sh", "admin_curation.py", "curation_publish.py", "quest_meta.py", "route_annotations.py", "test_admin_curation.py", "test_curation_publish.py"],
       "capabilities": ["owner-curation"],
       "category": "implementation",
       "gates": [{ "capability": "owner-curation", "tier": "focused" }],
@@ -502,7 +503,7 @@
     },
     {
       "id": "live-provider-runtime",
-      "paths": ["app/src/services/google*", "app/src/**/google*", "app/src/providers/**", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/atlas/components/cesium-atlas-globe.tsx", "app/src/surfaces/atlas/atlas-region-camera.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts", "app/src/surfaces/replay/renderers/replay-camera-clearance.ts", "app/src/surfaces/replay/story-flight/replay-camera-framing.ts", "app/src/surfaces/replay/scene/route-camera-stabilizer.ts", "app/e2e/*live*", "app/e2e/earth-*", "scripts/verify-provider-readiness.sh"],
+      "paths": ["app/vite.config.ts", "app/src/services/google*", "app/src/**/google*", "app/src/providers/**", "app/src/surfaces/atlas/atlas-world.ts", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/atlas/components/cesium-atlas-globe.tsx", "app/src/surfaces/atlas/atlas-region-camera.ts", "app/src/surfaces/replay/cinematic/**", "app/src/surfaces/replay/playback/replay-controller.ts", "app/src/surfaces/replay/playback/route-navigator-controller.ts", "app/src/surfaces/replay/renderer-port.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts", "app/src/surfaces/replay/renderers/replay-camera-clearance.ts", "app/src/surfaces/replay/story-flight/replay-camera-framing.ts", "app/src/surfaces/replay/scene/route-grounding.ts", "app/src/surfaces/replay/scene/route-camera-stabilizer.ts", "app/src/domain/route.ts", "app/src/domain/geometry/route-path.ts", "app/src/domain/geometry/route-thread-style.ts", "app/src/data/route-regions.ts", "app/e2e/*live*", "app/e2e/earth-*", "scripts/verify-provider-readiness.sh"],
       "capabilities": ["application-release", "provider-readiness"],
       "category": "provider",
       "gates": [{ "capability": "provider-readiness", "tier": "live" }],

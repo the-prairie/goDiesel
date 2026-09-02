@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
+from hashlib import sha256
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
@@ -19,6 +21,10 @@ from godiesel_local_capabilities import (
 from godiesel_control import main
 from godiesel_verification import reuse_verification
 from quest_meta import route_guide_preview
+
+
+ROOT = Path(__file__).resolve().parent
+TEST_BUILD_COMMIT = "a" * 40
 
 
 COMPLETE_CURATION = {
@@ -41,10 +47,57 @@ def _write_json(path: Path, value: object) -> None:
 
 def _install_evidence_contract(root: Path) -> None:
     source = Path(__file__).parent / "system"
-    for name in ("capabilities.json", "evidence-receipt.schema.json"):
+    for name in (
+        "build-identity.schema.json",
+        "capabilities.json",
+        "evidence-receipt.schema.json",
+    ):
         destination = root / "system" / name
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes((source / name).read_bytes())
+
+
+def _matching_target_identity(_target: str) -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "document_type": "godiesel-build-identity",
+        "commit": TEST_BUILD_COMMIT,
+    }
+
+
+def _clean_repository_identity(_root: Path) -> dict[str, object]:
+    return {
+        "commit": TEST_BUILD_COMMIT,
+        "branch": "test",
+        "worktree_sha256": "b" * 64,
+        "dirty_state": {"clean": True, "sha256": "c" * 64},
+    }
+
+
+def _projection_record(activity_id: str) -> dict[str, object]:
+    return {
+        "activity_id": activity_id,
+        "slug": activity_id,
+        "source_kind": "strava-export",
+        "lifecycle": "completed",
+        "name": "Test region",
+        "subtitle": "Test route",
+        "activity_name": "Test route",
+        "region": "Test region",
+        "date": "2026-01-01",
+        "distance_km": 1.0,
+        "elevation_gain_m": 0,
+        "elevation_status": "unavailable",
+        "type": "Run",
+        "description": "",
+        "completion_rule": "Complete the route.",
+        "difficulty": "Easy",
+        "theme": "Test",
+        "xp": 10,
+        "center_lat": 50.0,
+        "center_lng": -114.0,
+        "replay": {"mode": "atlas"},
+    }
 
 
 def _assert_valid_evidence(root: Path, result: dict[str, object]) -> None:
@@ -70,10 +123,20 @@ def _generation_fixture(root: Path) -> Path:
     )
     _write_json(
         root / "app/src/data/generated/routes.manifest.json",
-        {"routes": [{"activity_id": "route-1", "slug": "route-1"}]},
+        {"routes": [{**_projection_record("route-1"), "trace": [[50, -114]], "guide_preview": {"review_status": "draft"}}]},
     )
-    _write_json(root / "app/src/data/generated/route-stats.json", {"route_count": 1})
-    _write_json(root / "app/public/data/routes/route-1.json", {"slug": "route-1"})
+    _write_json(
+        root / "app/src/data/generated/route-stats.json",
+        {"route_count": 1, "completed_km": 1.0},
+    )
+    _write_json(
+        root / "app/public/data/routes/route-1.json",
+        {
+            **_projection_record("route-1"),
+            "route": [{"lat": 50, "lng": -114, "d": 1000}],
+            "provenance": {},
+        },
+    )
     (root / "rebuild.sh").write_text("#!/bin/sh\n", encoding="utf-8")
     return root
 
@@ -88,6 +151,7 @@ def _curation_fixture(root: Path) -> Path:
                 {
                     "activity_id": "route-2",
                     "status": "approved",
+                    "visibility": "hidden",
                     "curation": {**COMPLETE_CURATION, "review_status": "published"},
                 },
             ]
@@ -98,6 +162,46 @@ def _curation_fixture(root: Path) -> Path:
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_bytes(schema.read_bytes())
     return root
+
+
+def _write_complete_curation_projection(
+    root: Path,
+    activity_id: str,
+    curation: dict[str, object],
+) -> None:
+    config_path = root / "quests.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    route = next(
+        route for route in config["routes"] if route["activity_id"] == activity_id
+    )
+    route["curation"] = curation
+    _write_json(config_path, config)
+    projected = _projection_record(activity_id)
+    _write_json(
+        root / "app/public/data/routes" / f"{activity_id}.json",
+        {
+            **projected,
+            "route": [{"lat": 50, "lng": -114, "d": 1000}],
+            "provenance": {},
+            "curation": curation,
+        },
+    )
+    _write_json(
+        root / "app/src/data/generated/routes.manifest.json",
+        {
+            "routes": [
+                {
+                    **projected,
+                    "trace": [[50, -114]],
+                    "guide_preview": route_guide_preview(curation),
+                }
+            ]
+        },
+    )
+    _write_json(
+        root / "app/src/data/generated/route-stats.json",
+        {"route_count": 1, "completed_km": 1.0},
+    )
 
 
 def _write_curation_request(root: Path) -> Path:
@@ -148,6 +252,8 @@ def test_generation_inspect_reports_projection_without_mutating_it(tmp_path: Pat
         "generated_summary_routes": 1,
         "generated_detail_routes": 1,
         "reported_route_count": 1,
+        "reported_completed_km": 1.0,
+        "expected_completed_km": 1.0,
         "inventory_state": "current",
         "recovery_state": "clear",
     }
@@ -167,6 +273,26 @@ def test_generation_apply_requires_authority_before_invoking_writer(tmp_path: Pa
     assert result["status"] == "blocked"
     assert result["blockers"][0]["code"] == "GODIESEL_AUTHORITY_REQUIRED"
     assert calls == []
+
+
+def test_generation_inspect_rejects_stale_fields_and_statistics(tmp_path: Path):
+    root = _generation_fixture(tmp_path)
+    manifest_path = root / "app/src/data/generated/routes.manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["routes"][0]["distance_km"] = 99.0
+    _write_json(manifest_path, manifest)
+    _write_json(
+        root / "app/src/data/generated/route-stats.json",
+        {"route_count": 1, "completed_km": -4.0},
+    )
+
+    result = execute_route_generation(root, "inspect")
+
+    assert result["status"] == "blocked"
+    assert {blocker["code"] for blocker in result["blockers"]} == {
+        "GODIESEL_GENERATED_PROJECTION_DRIFT",
+        "GODIESEL_GENERATED_STATS_DRIFT",
+    }
 
 
 def test_generation_apply_delegates_to_the_existing_writer(tmp_path: Path):
@@ -201,12 +327,53 @@ def test_generation_apply_blocks_while_catalogue_mutation_lock_is_held(tmp_path:
             root,
             "apply",
             authority="canonical-local",
-            runner=lambda *args, **kwargs: calls.append((args, kwargs)),
+            runner=lambda command, **kwargs: (
+                calls.append((command, kwargs))
+                or subprocess.CompletedProcess(
+                    command,
+                    2,
+                    "",
+                    "Another catalogue mutation is in progress.\n",
+                )
+            ),
         )
 
     assert result["status"] == "blocked"
     assert result["blockers"][0]["code"] == "GODIESEL_ROUTE_GENERATION_BUSY"
-    assert calls == []
+    assert len(calls) == 1
+
+
+def test_retained_route_commands_honor_catalogue_mutation_lock(tmp_path: Path):
+    proposal = tmp_path / "proposal.json"
+    _write_json(proposal, {})
+    watched = [
+        ROOT / "quests.json",
+        ROOT / "app/src/data/generated/routes.manifest.json",
+        ROOT / "app/src/data/generated/route-stats.json",
+    ]
+    before = {path: path.read_bytes() for path in watched}
+
+    with owner_mutation_lock(ROOT):
+        create = subprocess.run(
+            [str(ROOT / "scripts/route.sh"), "create", "--proposal", str(proposal)],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        build = subprocess.run(
+            [str(ROOT / "scripts/route.sh"), "build"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    assert create.returncode == 2
+    assert json.loads(create.stderr)["error"]["code"] == "repository.mutation_busy"
+    assert build.returncode == 2
+    assert "Another catalogue mutation is in progress." in build.stderr
+    assert {path: path.read_bytes() for path in watched} == before
 
 
 def test_generation_verify_uses_the_focused_public_gate(tmp_path: Path):
@@ -236,6 +403,29 @@ def test_generation_verify_uses_the_focused_public_gate(tmp_path: Path):
 
     reused = reuse_verification(root, "route-generation", environ={})
     assert reused["status"] == "passed"
+
+
+def test_generation_verify_blocks_when_covered_inputs_change_during_gate(
+    tmp_path: Path,
+):
+    root = _generation_fixture(tmp_path)
+
+    def runner(command, **kwargs):
+        config = json.loads((root / "quests.json").read_text(encoding="utf-8"))
+        config["routes"][0]["status"] = "pending"
+        _write_json(root / "quests.json", config)
+        return subprocess.CompletedProcess(command, 0, "passed", "")
+
+    result = execute_route_generation(root, "verify", runner=runner)
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_VERIFICATION_INPUTS_CHANGED"
+    receipt = json.loads(
+        (root / result["evidence"]["path"]).read_text(encoding="utf-8")
+    )
+    assert receipt["status"] == "blocked"
+    reused = reuse_verification(root, "route-generation", environ={})
+    assert reused["status"] == "blocked"
 
 
 def test_curation_inspect_reports_status_counts_without_owner_copy(tmp_path: Path):
@@ -279,6 +469,7 @@ def test_curation_apply_uses_the_shared_owner_writer(monkeypatch, tmp_path: Path
             activity_id=activity_id,
             curation=curation,
         )
+        _write_complete_curation_projection(checkout_root, activity_id, curation)
         return {"activity_id": activity_id, "curation": curation}
 
     monkeypatch.setattr(
@@ -354,6 +545,12 @@ def test_curation_plan_is_deterministic_and_bound_to_observed_state(tmp_path: Pa
     assert first["result"] == second["result"]
     plan = first["result"]["plan"]
     assert len(plan["observed_state_sha256"]) == 64
+    assert len(plan["context"]["implementation_sha256"]) == 64
+    assert len(plan["context"]["repository"]["worktree_sha256"]) == 64
+    assert plan["change_summary"]["review_status_before"] == "unset"
+    assert plan["change_summary"]["review_status_after"] == "reviewed"
+    assert plan["change_summary"]["changed_fields"] == sorted(COMPLETE_CURATION)
+    assert COMPLETE_CURATION["editorial_note"] not in json.dumps(plan["change_summary"])
     assert len(plan["plan_digest"]) == 64
     assert plan["publication_strategy"] == (
         "incremental-with-full-generation-fallback"
@@ -365,6 +562,27 @@ def test_curation_plan_is_deterministic_and_bound_to_observed_state(tmp_path: Pa
         "app/public/data/routes/**",
     ]
     assert (root / first["result"]["plan_path"]).is_file()
+
+
+def test_curation_plan_cannot_be_applied_in_another_checkout(tmp_path: Path):
+    first_root = _curation_fixture(tmp_path / "checkout-a")
+    plan = _plan_curation(first_root)
+    second_root = tmp_path / "checkout-b"
+    shutil.copytree(first_root, second_root)
+
+    result = execute_owner_curation(
+        second_root,
+        "apply",
+        plan_path=plan,
+        authority="canonical-local",
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == (
+        "GODIESEL_CURATION_PLAN_CONTEXT_MISMATCH"
+    )
+    config = json.loads((second_root / "quests.json").read_text(encoding="utf-8"))
+    assert "curation" not in config["routes"][0]
 
 
 def test_curation_apply_blocks_when_observed_state_changed(monkeypatch, tmp_path: Path):
@@ -411,6 +629,20 @@ def test_curation_apply_blocks_while_another_process_owns_mutation_lock(tmp_path
 
 def test_curation_reapply_is_idempotent_without_reinvoking_writer(monkeypatch, tmp_path: Path):
     root = _curation_fixture(tmp_path)
+
+    def changing_repository_identity(checkout_root: Path) -> dict[str, object]:
+        dirty_digest = sha256((checkout_root / "quests.json").read_bytes()).hexdigest()
+        return {
+            "commit": TEST_BUILD_COMMIT,
+            "branch": "test",
+            "worktree_sha256": "b" * 64,
+            "dirty_state": {"clean": False, "sha256": dirty_digest},
+        }
+
+    monkeypatch.setattr(
+        "godiesel_local_capabilities.repository_snapshot",
+        changing_repository_identity,
+    )
     plan = _plan_curation(root)
     calls = 0
 
@@ -418,25 +650,7 @@ def test_curation_reapply_is_idempotent_without_reinvoking_writer(monkeypatch, t
         nonlocal calls
         assert acquire_lock is False
         calls += 1
-        config_path = checkout_root / "quests.json"
-        config = json.loads(config_path.read_text(encoding="utf-8"))
-        config["routes"][0]["curation"] = curation
-        _write_json(config_path, config)
-        _write_json(
-            checkout_root / "app/public/data/routes" / f"{activity_id}.json",
-            {"activity_id": activity_id, "curation": curation},
-        )
-        _write_json(
-            checkout_root / "app/src/data/generated/routes.manifest.json",
-            {
-                "routes": [
-                    {
-                        "slug": activity_id,
-                        "guide_preview": route_guide_preview(curation),
-                    }
-                ]
-            },
-        )
+        _write_complete_curation_projection(checkout_root, activity_id, curation)
 
     monkeypatch.setattr("godiesel_local_capabilities.save_owner_curation", fake_save)
 
@@ -489,7 +703,10 @@ def test_curation_reapply_rejects_incomplete_public_projection(
         authority="canonical-local",
     )
 
-    assert first["status"] == "passed"
+    assert first["status"] == "blocked"
+    assert first["blockers"][0]["code"] == (
+        "GODIESEL_CURATION_PROJECTION_INCOMPLETE"
+    )
     assert second["status"] == "blocked"
     assert second["blockers"][0]["code"] == "GODIESEL_CURATION_PLAN_STALE"
     assert calls == 1
@@ -633,6 +850,55 @@ def test_provider_verify_requires_an_explicit_live_target(tmp_path: Path):
     assert calls == []
 
 
+def test_provider_verify_rejects_target_built_from_another_commit(tmp_path: Path):
+    _install_evidence_contract(tmp_path)
+    calls: list[object] = []
+
+    result = execute_provider_readiness(
+        tmp_path,
+        "verify",
+        provider="atlas",
+        provider_target="https://preview.example.test/",
+        environ={"GOOGLE_MAPS_API_KEY": "secret"},
+        runner=lambda *args, **kwargs: calls.append((args, kwargs)),
+        target_identity_reader=lambda _target: {
+            **_matching_target_identity(""),
+            "commit": "d" * 40,
+        },
+        repository_reader=_clean_repository_identity,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == (
+        "GODIESEL_PROVIDER_BUILD_IDENTITY_MISMATCH"
+    )
+    assert calls == []
+
+
+def test_provider_verify_rejects_dirty_or_uncommitted_local_build(tmp_path: Path):
+    _install_evidence_contract(tmp_path)
+    calls: list[object] = []
+    dirty_repository = _clean_repository_identity(tmp_path)
+    dirty_repository["dirty_state"] = {"clean": False, "sha256": "e" * 64}
+
+    result = execute_provider_readiness(
+        tmp_path,
+        "verify",
+        provider="google-3d",
+        provider_target="https://preview.example.test/",
+        environ={"GOOGLE_MAPS_API_KEY": "secret"},
+        runner=lambda *args, **kwargs: calls.append((args, kwargs)),
+        target_identity_reader=_matching_target_identity,
+        repository_reader=lambda _root: dirty_repository,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == (
+        "GODIESEL_PROVIDER_LOCAL_BUILD_UNBOUND"
+    )
+    assert calls == []
+
+
 def test_provider_verify_runs_the_named_existing_live_check(tmp_path: Path):
     _install_evidence_contract(tmp_path)
     calls: list[tuple[object, object]] = []
@@ -648,6 +914,8 @@ def test_provider_verify_runs_the_named_existing_live_check(tmp_path: Path):
         provider_target="https://preview.example.test/",
         environ={"GOOGLE_MAPS_API_KEY": "secret"},
         runner=runner,
+        target_identity_reader=_matching_target_identity,
+        repository_reader=_clean_repository_identity,
     )
 
     assert calls[0][0] == ["./scripts/verify-provider-readiness.sh", "atlas"]
@@ -658,11 +926,16 @@ def test_provider_verify_runs_the_named_existing_live_check(tmp_path: Path):
         "provider_target": "https://preview.example.test/",
         "configuration_state": "configured",
         "provider_state": "passed",
+        "build_identity": _matching_target_identity(""),
         "command": "./scripts/verify-provider-readiness.sh atlas",
         "command_exit_code": 0,
     }
     assert "live provider passed" not in json.dumps(result)
     _assert_valid_evidence(tmp_path, result)
+    receipt = json.loads(
+        (tmp_path / result["evidence"]["path"]).read_text(encoding="utf-8")
+    )
+    assert receipt["external_target"]["immutable_id"] == TEST_BUILD_COMMIT
 
     wrong_provider = reuse_verification(
         tmp_path,
@@ -696,6 +969,8 @@ def test_provider_verify_fingerprints_env_file_presence_without_exporting_secret
         provider_target="http://localhost:8787/",
         environ={},
         runner=runner,
+        target_identity_reader=_matching_target_identity,
+        repository_reader=_clean_repository_identity,
     )
 
     assert result["status"] == "passed"
@@ -721,6 +996,8 @@ def test_provider_proof_reuse_invalidates_when_adapter_changes(tmp_path: Path):
         runner=lambda command, **kwargs: subprocess.CompletedProcess(
             command, 0, "passed", ""
         ),
+        target_identity_reader=_matching_target_identity,
+        repository_reader=_clean_repository_identity,
     )
     adapter.write_text("second\n", encoding="utf-8")
 
@@ -751,6 +1028,8 @@ def test_provider_proof_reuse_blocks_expired_live_evidence(tmp_path: Path):
         runner=lambda command, **kwargs: subprocess.CompletedProcess(
             command, 0, "passed", ""
         ),
+        target_identity_reader=_matching_target_identity,
+        repository_reader=_clean_repository_identity,
     )
     receipt_path = tmp_path / result["evidence"]["path"]
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))

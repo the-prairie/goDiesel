@@ -11,12 +11,15 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import uuid
 
 import gpxpy
 from jsonschema import Draft202012Validator
 from PIL import Image
+
+from admin_curation import OwnerMutationBusyError, owner_mutation_lock
 
 from quest_meta import build_route_curation
 from route_annotations import build_route_annotations
@@ -1291,7 +1294,7 @@ def _validate_proposal_semantics(
 
 def _default_rebuild(root: Path, slug: str) -> dict[str, object]:
     subprocess.run(
-        [str(root / "rebuild.sh")],
+        [sys.executable, str(root / "build.py")],
         cwd=root,
         check=True,
         stdout=subprocess.DEVNULL,
@@ -1351,7 +1354,7 @@ def _run_rebuild_validation(
     return validation
 
 
-def apply_proposal(
+def _apply_proposal_unlocked(
     proposal: object,
     root: str | Path,
     *,
@@ -1436,6 +1439,30 @@ def apply_proposal(
         rebuild_callback,
     )
     return _creation_report(proposal, result, validation)
+
+
+def apply_proposal(
+    proposal: object,
+    root: str | Path,
+    *,
+    rebuild=None,
+) -> dict[str, object]:
+    """Apply an approved proposal while owning the catalogue mutation boundary."""
+
+    resolved_root = Path(root).resolve()
+    try:
+        with owner_mutation_lock(resolved_root):
+            return _apply_proposal_unlocked(
+                proposal,
+                resolved_root,
+                rebuild=rebuild,
+            )
+    except OwnerMutationBusyError as error:
+        raise RouteCreateError(
+            "repository.mutation_busy",
+            "another catalogue mutation is in progress",
+            exit_code=2,
+        ) from error
 
 
 def _creation_report(

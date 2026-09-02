@@ -349,7 +349,21 @@ def test_apply_preserves_idempotent_creation_report_and_links_proposal(tmp_path:
 def test_apply_blocks_while_catalogue_mutation_lock_is_held(tmp_path: Path):
     proposal_path = tmp_path / "proposal.json"
     proposal_path.write_text('{"proposal_id":"proposal-1"}\n', encoding="utf-8")
-    runner = RecordingRunner(completed([], stdout="{}"))
+    runner = RecordingRunner(
+        completed(
+            [],
+            returncode=2,
+            stderr=json.dumps(
+                {
+                    "ok": False,
+                    "error": {
+                        "code": "repository.mutation_busy",
+                        "message": "another catalogue mutation is in progress",
+                    },
+                }
+            ),
+        )
+    )
 
     with owner_mutation_lock(tmp_path):
         result = execute_route_share(
@@ -362,7 +376,7 @@ def test_apply_blocks_while_catalogue_mutation_lock_is_held(tmp_path: Path):
 
     assert result["status"] == "blocked"
     assert result["blockers"][0]["code"] == "GODIESEL_ROUTE_MUTATION_BUSY"
-    assert runner.calls == []
+    assert len(runner.calls) == 1
 
 
 @pytest.mark.parametrize(
