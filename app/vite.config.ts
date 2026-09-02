@@ -13,13 +13,26 @@ function buildIdentity() {
   const configuredCommit = (
     process.env.GODIESEL_BUILD_COMMIT || process.env.CF_PAGES_COMMIT_SHA
   )?.trim();
-  const commit =
-    configuredCommit ||
-    execFileSync("git", ["rev-parse", "HEAD"], {
+  let checkoutCommit: string | undefined;
+  try {
+    checkoutCommit = execFileSync("git", ["rev-parse", "HEAD"], {
       cwd: path.resolve(__dirname, ".."),
       encoding: "utf8",
     }).trim();
-  if (!/^[a-f0-9]{40}$/.test(commit)) {
+  } catch {
+    checkoutCommit = undefined;
+  }
+  if (
+    configuredCommit &&
+    checkoutCommit &&
+    configuredCommit !== checkoutCommit
+  ) {
+    throw new Error(
+      "Configured build commit does not match the checked-out Git commit.",
+    );
+  }
+  const commit = checkoutCommit || configuredCommit;
+  if (!commit || !/^[a-f0-9]{40}$/.test(commit)) {
     throw new Error("goDiesel build identity requires a full Git commit SHA.");
   }
   return {

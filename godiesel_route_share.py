@@ -17,7 +17,11 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
 
 from godiesel_evidence import canonical_digest, write_evidence_receipt
-from godiesel_verification import build_proof_snapshot, reuse_verification
+from godiesel_verification import (
+    build_proof_snapshot,
+    proof_snapshot_stability_issues,
+    reuse_verification,
+)
 
 
 SCHEMA_VERSION = 1
@@ -706,7 +710,20 @@ def execute_route_share(
     )
     finished_at = datetime.now(timezone.utc).isoformat()
     domain_result = _domain_result(completed)
-    blockers = []
+    post_proof_snapshot = proof_snapshot
+    proof_stability_blockers: list[dict[str, str]] = []
+    if proof_snapshot is not None:
+        post_proof_snapshot = build_proof_snapshot(
+            root,
+            "route-share",
+            tiers=["focused"],
+            environ=dict(os.environ if environ is None else environ),
+        )
+        proof_stability_blockers = proof_snapshot_stability_issues(
+            proof_snapshot,
+            post_proof_snapshot,
+        )
+    blockers = list(proof_stability_blockers)
     domain_error = (
         domain_result.get("error")
         if isinstance(domain_result, dict) else None
@@ -779,9 +796,9 @@ def execute_route_share(
     status = "blocked" if blockers else "warning" if warnings else "passed"
     exit_code = 2 if blockers and completed.returncode == 0 else completed.returncode
     evidence = None
-    if verb == "verify" and receipt is not None and proof_snapshot is not None:
+    if verb == "verify" and receipt is not None and post_proof_snapshot is not None:
         gate_status = "passed" if completed.returncode == 0 else "failed"
-        evidence_status = "blocked" if proof_snapshot["blockers"] else gate_status
+        evidence_status = "blocked" if proof_stability_blockers else gate_status
         evidence = write_evidence_receipt(
             root,
             capability="route-share",
@@ -802,12 +819,12 @@ def execute_route_share(
                     "sha256": receipt["result_sha256"],
                 },
             ],
-            covered_inputs=proof_snapshot["covered_inputs"],
-            proof_fingerprint=proof_snapshot["proof_fingerprint"],
+            covered_inputs=post_proof_snapshot["covered_inputs"],
+            proof_fingerprint=post_proof_snapshot["proof_fingerprint"],
             selection={
                 "mode": "explicit",
                 "tiers": ["focused"],
-                "impact_rules": proof_snapshot["impact_rules"],
+                "impact_rules": post_proof_snapshot["impact_rules"],
             },
             gates=[
                 {

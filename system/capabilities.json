@@ -101,7 +101,7 @@
       "reads": ["quests.json", "route_sources/**", "external-private:DieselDiaries/activities.csv", "external-private:DieselDiaries/strava_export/activities/**"],
       "writes": ["app/src/data/generated/**", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**", ".godiesel/evidence/**", ".godiesel/owner-mutation.lock"],
       "external_effects": [],
-      "required_files": ["scripts/godiesel", "godiesel_local_capabilities.py", "build.py", "route_build.py", "quest_meta.py", "rebuild.sh", "quests.json", "system/result.schema.json"],
+      "required_files": ["scripts/godiesel", "godiesel_local_capabilities.py", "generated_route_contract.py", "build.py", "route_build.py", "quest_meta.py", "rebuild.sh", "quests.json", "system/result.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json"],
       "configuration": [],
       "commands": {
         "inspect": [{ "command": "./scripts/godiesel inspect route-generation --json", "cwd": "." }],
@@ -135,7 +135,18 @@
       ],
       "invariants": ["single-writer", "two-tier-route-data", "atomic-publication"],
       "verification": {
-        "focused": [{ "command": "python -m pytest -q test_godiesel_local_capabilities.py test_react_app.py", "cwd": "." }],
+        "focused": [
+          {
+            "command": "python -m pytest -q test_godiesel_local_capabilities.py test_react_app.py",
+            "cwd": ".",
+            "proof_inputs": [
+              { "category": "implementation", "paths": ["godiesel_local_capabilities.py", "generated_route_contract.py", "route_build.py", "build.py", "rebuild.sh", "requirements.txt"] },
+              { "category": "data", "paths": ["quests.json", "route_sources/**", "app/src/data/generated/**", "app/public/data/routes/**"] },
+              { "category": "fixture", "paths": ["test_godiesel_local_capabilities.py", "test_react_app.py"] },
+              { "category": "contract", "paths": ["system/capabilities.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json"] }
+            ]
+          }
+        ],
         "ticket": [{ "command": "npm --prefix app run verify:ticket", "cwd": "." }],
         "release": [{ "command": "npm --prefix app run verify", "cwd": "." }],
         "live": []
@@ -162,7 +173,7 @@
       "reads": ["quests.json", "app/public/data/routes/**"],
       "writes": [".godiesel/plans/owner-curation/**", ".godiesel/evidence/**", ".godiesel/owner-mutation.lock", "quests.json", "app/src/data/generated/**", "app/public/data/routes/**"],
       "external_effects": [],
-      "required_files": ["scripts/godiesel", "godiesel_local_capabilities.py", "admin.sh", "admin.py", "admin_curation.py", "curation_publish.py", "system/owner-curation-plan.schema.json", "system/result.schema.json", "docs/adr/0010-owner-curation-through-a-loopback-only-writer.md"],
+      "required_files": ["scripts/godiesel", "godiesel_local_capabilities.py", "generated_route_contract.py", "admin.sh", "admin.py", "admin_curation.py", "curation_publish.py", "build.py", "system/owner-curation-plan.schema.json", "system/result.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json", "docs/adr/0010-owner-curation-through-a-loopback-only-writer.md"],
       "configuration": [],
       "commands": {
         "inspect": [{ "command": "./scripts/godiesel inspect owner-curation --json", "cwd": "." }],
@@ -198,7 +209,18 @@
       ],
       "invariants": ["loopback-only-writer", "owner-authored-provenance", "recoverable-publication"],
       "verification": {
-        "focused": [{ "command": "python -m pytest -q test_godiesel_local_capabilities.py test_admin_curation.py test_curation_publish.py", "cwd": "." }],
+        "focused": [
+          {
+            "command": "python -m pytest -q test_godiesel_local_capabilities.py test_admin_curation.py test_curation_publish.py",
+            "cwd": ".",
+            "proof_inputs": [
+              { "category": "implementation", "paths": ["godiesel_local_capabilities.py", "generated_route_contract.py", "admin.py", "admin_curation.py", "curation_publish.py", "build.py", "requirements.txt"] },
+              { "category": "data", "paths": ["quests.json", "route_sources/**", "app/src/data/generated/**", "app/public/data/routes/**"] },
+              { "category": "fixture", "paths": ["test_godiesel_local_capabilities.py", "test_admin_curation.py", "test_curation_publish.py"] },
+              { "category": "contract", "paths": ["system/capabilities.json", "system/owner-curation-plan.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json"] }
+            ]
+          }
+        ],
         "ticket": [{ "command": "npm --prefix app run verify:ticket", "cwd": "." }],
         "release": [{ "command": "npm --prefix app run verify", "cwd": "." }],
         "live": []
@@ -248,7 +270,7 @@
       "reads": [".env", "app/.env", "app/src/providers/**", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts"],
       "writes": [".godiesel/evidence/**", "app/test-results/**", "app/playwright-report/**"],
       "external_effects": ["read named map or imagery provider through the selected live browser check"],
-      "required_files": ["scripts/godiesel", "scripts/verify-provider-readiness.sh", "godiesel_local_capabilities.py", "system/build-identity.schema.json", "app/vite.config.ts", "scripts/check-provider-key.mjs", "app/src/providers/google-maps-loader.ts", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts", "docs/agents/testing.md"],
+      "required_files": ["scripts/godiesel", "scripts/verify-provider-readiness.sh", "godiesel_local_capabilities.py", "system/build-identity.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json", "app/vite.config.ts", "scripts/check-provider-key.mjs", "app/src/providers/google-maps-loader.ts", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts", "docs/agents/testing.md"],
       "configuration": [
         { "name": "GOOGLE_MAPS_API_KEY", "required_for": ["verify:live"], "sensitive": true }
       ],
@@ -289,7 +311,7 @@
             "cwd": ".",
             "proof_inputs": [
               { "category": "implementation", "paths": ["godiesel_local_capabilities.py", "godiesel_verification.py", "godiesel_evidence.py", "scripts/verify-provider-readiness.sh", "app/vite.config.ts", "app/src/domain/route.ts", "app/src/data/route-regions.ts", "app/src/providers/cesium-render-quality.ts", "app/src/providers/render-health.ts", "app/src/surfaces/atlas/atlas-world.ts", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/atlas/components/cesium-atlas-globe.tsx", "app/src/surfaces/atlas/atlas-region-camera.ts"] },
-              { "category": "contract", "paths": ["system/build-identity.schema.json", "system/capabilities.json", "system/capabilities.schema.json", "system/evidence-receipt.schema.json"] },
+              { "category": "contract", "paths": ["system/build-identity.schema.json", "system/capabilities.json", "system/capabilities.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json"] },
               { "category": "fixture", "paths": ["test_godiesel_local_capabilities.py", "test_godiesel_verification.py", "app/e2e/atlas-region-live.spec.ts", "app/playwright.live.config.ts", "app/package.json", "app/package-lock.json"] }
             ]
           },
@@ -297,8 +319,8 @@
             "command": "./scripts/verify-provider-readiness.sh earth-replay",
             "cwd": ".",
             "proof_inputs": [
-              { "category": "implementation", "paths": ["godiesel_local_capabilities.py", "godiesel_verification.py", "godiesel_evidence.py", "scripts/verify-provider-readiness.sh", "app/vite.config.ts", "app/src/domain/route.ts", "app/src/domain/geometry/route-path.ts", "app/src/domain/geometry/route-thread-style.ts", "app/src/providers/cesium-render-quality.ts", "app/src/providers/render-health.ts", "app/src/surfaces/replay/renderer-port.ts", "app/src/surfaces/replay/playback/replay-controller.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts", "app/src/surfaces/replay/renderers/replay-camera-clearance.ts", "app/src/surfaces/replay/story-flight/replay-camera-framing.ts", "app/src/surfaces/replay/scene/route-grounding.ts", "app/src/surfaces/replay/scene/route-camera-stabilizer.ts"] },
-              { "category": "contract", "paths": ["system/build-identity.schema.json", "system/capabilities.json", "system/capabilities.schema.json", "system/evidence-receipt.schema.json"] },
+              { "category": "implementation", "paths": ["godiesel_local_capabilities.py", "godiesel_verification.py", "godiesel_evidence.py", "scripts/verify-provider-readiness.sh", "app/vite.config.ts", "app/src/domain/route.ts", "app/src/domain/geometry/route-path.ts", "app/src/domain/geometry/route-thread-style.ts", "app/src/providers/cesium-render-quality.ts", "app/src/providers/render-health.ts", "app/src/surfaces/replay/renderer-port.ts", "app/src/surfaces/replay/components/earth-replay-stage.tsx", "app/src/surfaces/replay/playback/replay-controller.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts", "app/src/surfaces/replay/renderers/google-route-navigator-engine.ts", "app/src/surfaces/replay/renderers/replay-camera-clearance.ts", "app/src/surfaces/replay/story-flight/replay-camera-framing.ts", "app/src/surfaces/replay/scene/route-grounding.ts", "app/src/surfaces/replay/scene/route-camera-stabilizer.ts"] },
+              { "category": "contract", "paths": ["system/build-identity.schema.json", "system/capabilities.json", "system/capabilities.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json"] },
               { "category": "fixture", "paths": ["test_godiesel_local_capabilities.py", "test_godiesel_verification.py", "app/e2e/earth-replay-live.spec.ts", "app/playwright.live.config.ts", "app/package.json", "app/package-lock.json"] }
             ]
           },
@@ -307,7 +329,7 @@
             "cwd": ".",
             "proof_inputs": [
               { "category": "implementation", "paths": ["godiesel_local_capabilities.py", "godiesel_verification.py", "godiesel_evidence.py", "scripts/verify-provider-readiness.sh", "app/vite.config.ts", "app/src/domain/route.ts", "app/src/domain/geometry/route-path.ts", "app/src/providers/google-maps-loader.ts", "app/src/providers/provider-error.ts", "app/src/surfaces/replay/cinematic/**", "app/src/surfaces/replay/playback/route-navigator-controller.ts", "app/src/surfaces/replay/renderers/google-route-navigator-engine.ts", "app/src/surfaces/replay/components/google-route-navigator-stage.tsx", "app/src/surfaces/replay/story-flight/replay-camera-framing.ts", "app/src/surfaces/replay/scene/route-camera-stabilizer.ts"] },
-              { "category": "contract", "paths": ["system/build-identity.schema.json", "system/capabilities.json", "system/capabilities.schema.json", "system/evidence-receipt.schema.json"] },
+              { "category": "contract", "paths": ["system/build-identity.schema.json", "system/capabilities.json", "system/capabilities.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json"] },
               { "category": "fixture", "paths": ["test_godiesel_local_capabilities.py", "test_godiesel_verification.py", "app/e2e/google-route-navigator-live.spec.ts", "app/e2e/cinematic-route-trailer-live.spec.ts", "app/e2e/cinematic-director-live.spec.ts", "app/e2e/cinematic-export-live.spec.ts", "app/playwright.live.config.ts", "app/package.json", "app/package-lock.json"] }
             ]
           }
@@ -431,7 +453,7 @@
     },
     {
       "id": "route-generation-implementation",
-      "paths": ["build.py", "route_build.py", "quest_meta.py", "route_provenance.py", "route_annotations.py", "route_imports.py", "route_timezones.py", "rebuild.sh", "test_react_app.py"],
+      "paths": ["build.py", "route_build.py", "generated_route_contract.py", "quest_meta.py", "route_provenance.py", "route_annotations.py", "route_imports.py", "route_timezones.py", "requirements.txt", "rebuild.sh", "test_react_app.py"],
       "capabilities": ["route-generation"],
       "category": "implementation",
       "gates": [{ "capability": "route-generation", "tier": "focused" }],
@@ -440,7 +462,7 @@
     },
     {
       "id": "owner-curation-implementation",
-      "paths": ["admin.py", "admin.sh", "admin_curation.py", "curation_publish.py", "quest_meta.py", "route_annotations.py", "test_admin_curation.py", "test_curation_publish.py"],
+      "paths": ["admin.py", "admin.sh", "admin_curation.py", "curation_publish.py", "generated_route_contract.py", "build.py", "quest_meta.py", "route_provenance.py", "route_annotations.py", "route_imports.py", "route_timezones.py", "requirements.txt", "test_admin_curation.py", "test_curation_publish.py"],
       "capabilities": ["owner-curation"],
       "category": "implementation",
       "gates": [{ "capability": "owner-curation", "tier": "focused" }],

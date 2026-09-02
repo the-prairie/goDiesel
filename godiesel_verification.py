@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
+import ast
 import fnmatch
 import json
+import re
 import stat
 import subprocess
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path, PurePosixPath
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
+from urllib.request import Request, urlopen
 
 from jsonschema import Draft202012Validator
 
-from godiesel_evidence import canonical_digest
+from godiesel_evidence import canonical_digest, repository_snapshot
 
 
 SCHEMA_VERSION = 1
@@ -22,6 +25,16 @@ EVIDENCE_SCHEMA_PATH = Path("system/evidence-receipt.schema.json")
 EVIDENCE_ROOT = Path(".godiesel/evidence")
 VERIFICATION_TIERS = {"focused", "ticket", "release", "live"}
 LIVE_PROOF_MAX_AGE_SECONDS = 15 * 60
+SOURCE_SUFFIXES = (".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
+SCRIPT_IMPORT_PATTERN = re.compile(
+    r"(?:\b(?:import|export)\s+(?:[^\n;]*?\s+from\s+)?|\bimport\s*\()"
+    r"[\"']([^\"']+)[\"']"
+)
+SCRIPT_FROM_PATTERN = re.compile(r"\bfrom\s*[\"']([^\"']+)[\"']")
+
+
+class UnsafeCoveredInputSymlink(ValueError):
+    """A proof input reaches a broken or repository-external symlink."""
 
 
 def _issue(code: str, message: str, remediation: str) -> dict[str, str]:
@@ -124,6 +137,183 @@ def _file_digest(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _unsafe_symlink_in_path(root: Path, path: Path) -> bool:
+    relative = path.relative_to(root)
+    current = root
+    for part in relative.parts:
+        current = current / part
+        try:
+            if not current.is_symlink():
+                continue
+            resolved = current.resolve(strict=True)
+        except OSError:
+            return True
+        if not resolved.is_relative_to(root):
+            return True
+    return False
+
+
+def _resolve_local_module(root: Path, source: Path, module: str) -> Path | None:
+    if module.startswith("@/"):
+        base = root / "app/src" / module[2:]
+    elif module.startswith("."):
+        if source.suffix == ".py":
+            level = len(module) - len(module.lstrip("."))
+            package_root = source.parent
+            for _ in range(max(0, level - 1)):
+                package_root = package_root.parent
+            base = package_root / module[level:].replace(".", "/")
+        else:
+            base = source.parent / module
+    elif source.suffix == ".py":
+        base = root / module.replace(".", "/")
+    else:
+        return None
+    candidates = [base]
+    if base.suffix not in SOURCE_SUFFIXES:
+        candidates.extend(base.with_suffix(suffix) for suffix in SOURCE_SUFFIXES)
+        candidates.extend(base / f"index{suffix}" for suffix in SOURCE_SUFFIXES)
+        candidates.append(base / "__init__.py")
+    for candidate in candidates:
+        if candidate.is_file() and candidate.is_relative_to(root):
+            return candidate
+    return None
+
+
+def _source_dependencies(root: Path, source: Path) -> list[Path]:
+    if source.suffix not in SOURCE_SUFFIXES:
+        return []
+    text = source.read_text(encoding="utf-8")
+    modules: set[str] = set()
+    if source.suffix == ".py":
+        tree = ast.parse(text, filename=source.as_posix())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                modules.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                prefix = "." * node.level
+                module = prefix + (node.module or "")
+                if module:
+                    modules.add(module)
+                modules.update(
+                    f"{module}.{alias.name}" if node.module else f"{prefix}{alias.name}"
+                    for alias in node.names
+                    if alias.name != "*"
+                )
+    else:
+        modules.update(SCRIPT_IMPORT_PATTERN.findall(text))
+        modules.update(SCRIPT_FROM_PATTERN.findall(text))
+    return sorted(
+        {
+            dependency
+            for module in modules
+            if (dependency := _resolve_local_module(root, source, module)) is not None
+        }
+    )
+
+
+def _dependency_closure(root: Path, seeds: Iterable[Path]) -> list[Path]:
+    pending = list(seeds)
+    observed: set[Path] = set()
+    while pending:
+        source = pending.pop()
+        if source in observed:
+            continue
+        observed.add(source)
+        pending.extend(
+            dependency
+            for dependency in _source_dependencies(root, source)
+            if dependency not in observed
+        )
+    return sorted(observed)
+
+
+def proof_snapshot_stability_issues(
+    before: Mapping[str, Any],
+    after: Mapping[str, Any],
+) -> list[dict[str, str]]:
+    if after["status"] != "passed":
+        return [
+            _issue(
+                "GODIESEL_VERIFICATION_POSTCHECK_FAILED",
+                "Verification finished but its covered inputs could not be rechecked.",
+                "Restore the covered inputs and rerun verification before reusing proof.",
+            ),
+            *after["blockers"],
+        ]
+    if after["proof_fingerprint"] != before["proof_fingerprint"]:
+        return [
+            _issue(
+                "GODIESEL_VERIFICATION_INPUTS_CHANGED",
+                "One or more covered inputs changed while the verification gate was running.",
+                "Stabilize the worktree and rerun verification against one unchanged input set.",
+            )
+        ]
+    return []
+
+
+def read_target_build_identity(provider_target: str) -> Mapping[str, object]:
+    identity_url = provider_target.rstrip("/") + "/build-identity.json"
+    request = Request(identity_url, headers={"Accept": "application/json"})
+    with urlopen(request, timeout=5) as response:
+        payload = response.read(65_537)
+    if len(payload) > 65_536:
+        raise ValueError("build identity exceeds the bounded response size")
+    value = json.loads(payload.decode("utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError("build identity is not an object")
+    return value
+
+
+def verified_provider_build_identity(
+    root: Path,
+    provider_target: str,
+    *,
+    target_identity_reader: Callable[[str], Mapping[str, object]] = read_target_build_identity,
+    repository_reader: Callable[[Path], Mapping[str, object]] = repository_snapshot,
+) -> tuple[dict[str, object] | None, list[dict[str, str]]]:
+    repository = dict(repository_reader(root))
+    commit = repository.get("commit")
+    dirty_state = repository.get("dirty_state")
+    if (
+        not isinstance(commit, str)
+        or re.fullmatch(r"[a-f0-9]{40}", commit) is None
+        or not isinstance(dirty_state, Mapping)
+        or dirty_state.get("clean") is not True
+    ):
+        return None, [
+            _issue(
+                "GODIESEL_PROVIDER_LOCAL_BUILD_UNBOUND",
+                "Live provider proof requires one clean local commit to identify the expected build.",
+                "Commit the exact implementation to verify, then deploy a preview from that commit.",
+            )
+        ]
+    try:
+        identity = dict(target_identity_reader(provider_target))
+        schema = json.loads(
+            (root / "system/build-identity.schema.json").read_text(encoding="utf-8")
+        )
+        Draft202012Validator.check_schema(schema)
+        Draft202012Validator(schema).validate(identity)
+    except Exception:
+        return None, [
+            _issue(
+                "GODIESEL_PROVIDER_BUILD_IDENTITY_UNREADABLE",
+                "The named live target did not expose a valid goDiesel build identity.",
+                "Deploy this branch with build-identity.json enabled, then retry the exact target.",
+            )
+        ]
+    if identity["commit"] != commit:
+        return None, [
+            _issue(
+                "GODIESEL_PROVIDER_BUILD_IDENTITY_MISMATCH",
+                "The named live target was built from a different commit.",
+                "Deploy the exact local commit to a preview target, then verify that target.",
+            )
+        ]
+    return identity, []
+
+
 def _pattern_input(
     root: Path,
     *,
@@ -139,44 +329,75 @@ def _pattern_input(
         )
     glob_pattern = f"{normalized}/*" if normalized.endswith("/**") else normalized
     try:
+        anchor_parts = []
+        for part in PurePosixPath(normalized).parts:
+            if any(token in part for token in ("*", "?", "[")):
+                break
+            anchor_parts.append(part)
+        anchor = root.joinpath(*anchor_parts) if anchor_parts else root
+        if anchor.exists() or anchor.is_symlink():
+            if _unsafe_symlink_in_path(root, anchor):
+                raise UnsafeCoveredInputSymlink
         candidates = sorted(
             path
             for path in root.glob(glob_pattern)
             if path.is_relative_to(root) and (path.is_symlink() or path.is_file())
         )
-    except (OSError, ValueError):
+        if any(_unsafe_symlink_in_path(root, path) for path in candidates):
+            raise UnsafeCoveredInputSymlink
+    except UnsafeCoveredInputSymlink:
+        return None, _issue(
+            "GODIESEL_COVERED_INPUT_SYMLINK_UNSAFE",
+            "A covered input is a broken or repository-escaping symbolic link.",
+            "Replace it with a repository-contained file or symbolic link before verification.",
+        )
+    except ValueError:
+        return None, _issue(
+            "GODIESEL_COVERED_INPUT_UNAVAILABLE",
+            f"The covered input pattern {normalized} could not be read.",
+            "Repair the repository input and rerun verification before reuse.",
+        )
+    except OSError:
         return None, _issue(
             "GODIESEL_COVERED_INPUT_UNAVAILABLE",
             f"The covered input pattern {normalized} could not be read.",
             "Repair the repository input and rerun verification before reuse.",
         )
     observed = []
-    for path in candidates:
-        metadata = path.lstat()
-        if path.is_symlink():
-            try:
+    try:
+        for path in _dependency_closure(root, candidates):
+            metadata = path.lstat()
+            if path.is_symlink():
                 resolved = path.resolve(strict=True)
-            except OSError:
-                resolved = None
-            if (
-                resolved is None
-                or not resolved.is_relative_to(root)
-                or not resolved.is_file()
-            ):
-                return None, _issue(
-                    "GODIESEL_COVERED_INPUT_SYMLINK_UNSAFE",
-                    "A covered input is a broken or repository-escaping symbolic link.",
-                    "Replace it with a repository-contained file or symbolic link before verification.",
-                )
-        entry = {
-            "path": path.relative_to(root).as_posix(),
-            "kind": "symlink" if path.is_symlink() else "file",
-            "mode": format(stat.S_IMODE(metadata.st_mode), "04o"),
-            "sha256": _file_digest(path),
-        }
-        if path.is_symlink():
-            entry["target"] = path.readlink().as_posix()
-        observed.append(entry)
+                if not resolved.is_relative_to(root) or not resolved.is_file():
+                    raise UnsafeCoveredInputSymlink
+            entry = {
+                "path": path.relative_to(root).as_posix(),
+                "kind": "symlink" if path.is_symlink() else "file",
+                "mode": format(stat.S_IMODE(metadata.st_mode), "04o"),
+                "sha256": _file_digest(path),
+            }
+            if path.is_symlink():
+                entry["target"] = path.readlink().as_posix()
+            observed.append(entry)
+    except UnsafeCoveredInputSymlink:
+        return None, _issue(
+            "GODIESEL_COVERED_INPUT_SYMLINK_UNSAFE",
+            "A covered input is a broken or repository-escaping symbolic link.",
+            "Replace it with a repository-contained file or symbolic link before verification.",
+        )
+    except ValueError:
+        return None, _issue(
+            "GODIESEL_COVERED_INPUT_UNAVAILABLE",
+            f"The covered input pattern {normalized} could not be read.",
+            "Repair the repository input and rerun verification before reuse.",
+        )
+    except (OSError, SyntaxError, UnicodeError):
+        return None, _issue(
+            "GODIESEL_COVERED_INPUT_UNAVAILABLE",
+            f"The covered input pattern {normalized} could not be read.",
+            "Repair the repository input and rerun verification before reuse.",
+        )
     return (
         {
             "category": category,
@@ -196,6 +417,7 @@ def build_proof_snapshot(
     commands: Sequence[str] | None = None,
     environ: Mapping[str, str] | None = None,
     provider_target: str | None = None,
+    provider_identity: Mapping[str, object] | None = None,
 ) -> dict[str, Any]:
     """Fingerprint every manifest input covered by the selected capability gates."""
 
@@ -383,6 +605,15 @@ def build_proof_snapshot(
                 "sha256": canonical_digest(provider_target),
             }
         )
+        if provider_identity is not None:
+            covered_inputs.append(
+                {
+                    "category": "provider",
+                    "name": "deployed-build-identity",
+                    "state": "observed",
+                    "sha256": canonical_digest(provider_identity),
+                }
+            )
     elif "live" in selected_tiers:
         blockers.append(
             _issue(
@@ -484,6 +715,8 @@ def reuse_verification(
     expected_inputs: Mapping[str, object] | None = None,
     environ: Mapping[str, str] | None = None,
     provider_target: str | None = None,
+    target_identity_reader: Callable[[str], Mapping[str, object]] = read_target_build_identity,
+    repository_reader: Callable[[Path], Mapping[str, object]] = repository_snapshot,
 ) -> dict[str, Any]:
     """Reuse the newest valid passed proof whose complete fingerprint still matches."""
 
@@ -546,6 +779,43 @@ def reuse_verification(
         ):
             candidates.append((path, receipt))
 
+    provider_identity = None
+    if candidates and capability_id == "provider-readiness":
+        if provider_target is None:
+            identity_blockers = [
+                _issue(
+                    "GODIESEL_LIVE_TARGET_MISSING",
+                    "Live verification reuse requires the exact deployment target.",
+                    "Pass the same provider target used by the recorded live proof.",
+                )
+            ]
+        else:
+            provider_identity, identity_blockers = verified_provider_build_identity(
+                root,
+                provider_target,
+                target_identity_reader=target_identity_reader,
+                repository_reader=repository_reader,
+            )
+        if identity_blockers:
+            explanation = {
+                "schema_version": SCHEMA_VERSION,
+                "document_type": "godiesel-verification-reuse",
+                "reused": False,
+                "source_receipt": candidates[0][0].relative_to(root).as_posix(),
+                "proof_fingerprint": canonical_digest([]),
+                "source_proof_fingerprint": candidates[0][1]["proof_fingerprint"],
+                "covered_inputs": [],
+                "invalidated_inputs": [],
+                "reason": identity_blockers[0]["message"],
+            }
+            return _reuse_result(
+                capability_id,
+                status="blocked",
+                explanation=explanation,
+                blockers=identity_blockers,
+                evidence=None,
+            )
+
     latest_invalidated: tuple[Path, dict[str, Any], dict[str, Any]] | None = None
     for path, receipt in candidates:
         tiers = sorted({gate["tier"] for gate in receipt["gates"]})
@@ -557,6 +827,7 @@ def reuse_verification(
             commands=[gate["command"] for gate in receipt["gates"]],
             environ=environ,
             provider_target=provider_target,
+            provider_identity=provider_identity,
         )
         relative_path = path.relative_to(root).as_posix()
         explanation = {
@@ -672,6 +943,7 @@ def reuse_verification(
 
 
 def _selected_gates(
+    root: Path,
     manifest: Mapping[str, Any],
     classifications: Sequence[Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -693,10 +965,7 @@ def _selected_gates(
                     command
                     for command in commands
                     if not command.get("proof_inputs")
-                    or any(
-                        _matches(path, proof_input["paths"])
-                        for proof_input in command["proof_inputs"]
-                    )
+                    or _command_covers_path(root, command, path)
                 ]
                 if not applicable_commands:
                     applicable_commands = commands
@@ -725,6 +994,61 @@ def _selected_gates(
     return sorted(
         selected.values(),
         key=lambda item: (item["capability"], item["tier"], item["command"]),
+    )
+
+
+def _command_covers_path(
+    root: Path,
+    command: Mapping[str, Any],
+    path: str,
+    *,
+    category: str | None = None,
+) -> bool:
+    for proof_input in command.get("proof_inputs", []):
+        if category is not None and proof_input["category"] != category:
+            continue
+        if _matches(path, proof_input["paths"]):
+            return True
+        seeds: list[Path] = []
+        try:
+            for pattern in proof_input["paths"]:
+                normalized = _normalized_path(pattern)
+                if normalized is None:
+                    continue
+                glob_pattern = (
+                    f"{normalized}/*" if normalized.endswith("/**") else normalized
+                )
+                seeds.extend(
+                    candidate
+                    for candidate in root.glob(glob_pattern)
+                    if candidate.is_file() and candidate.is_relative_to(root)
+                )
+            dependencies = {
+                candidate.relative_to(root).as_posix()
+                for candidate in _dependency_closure(root, seeds)
+            }
+        except (OSError, SyntaxError, UnicodeError, ValueError):
+            continue
+        if path in dependencies:
+            return True
+    return False
+
+
+def _rule_covers_dependency(
+    root: Path,
+    manifest: Mapping[str, Any],
+    rule: Mapping[str, Any],
+    path: str,
+) -> bool:
+    if len(rule["gates"]) != 1:
+        return False
+    capabilities = {
+        capability["id"]: capability for capability in manifest["capabilities"]
+    }
+    return any(
+        _command_covers_path(root, command, path)
+        for gate in rule["gates"]
+        for command in capabilities[gate["capability"]]["verification"][gate["tier"]]
     )
 
 
@@ -765,6 +1089,7 @@ def explain_verification(
                 rule
                 for rule in manifest["impact_rules"]
                 if _matches(path, rule["paths"])
+                or _rule_covers_dependency(root, manifest, rule, path)
             ]
             if not matching:
                 unclassified.append(path)
@@ -799,7 +1124,9 @@ def explain_verification(
             )
         )
     selected_gates = (
-        _selected_gates(manifest, classifications) if manifest is not None else []
+        _selected_gates(root, manifest, classifications)
+        if manifest is not None
+        else []
     )
     explanation = {
         "schema_version": SCHEMA_VERSION,

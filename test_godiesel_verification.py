@@ -82,6 +82,55 @@ def test_proof_snapshot_blocks_unsafe_covered_input_symlink(
     assert snapshot["blockers"][0]["code"] == "GODIESEL_COVERED_INPUT_SYMLINK_UNSAFE"
 
 
+@pytest.mark.parametrize("target_state", ["external", "broken"])
+def test_proof_snapshot_blocks_unsafe_covered_directory_symlink(
+    tmp_path: Path,
+    target_state: str,
+):
+    _write_reuse_fixture(tmp_path)
+    manifest_path = tmp_path / "system/capabilities.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["impact_rules"][0]["paths"] = ["generated/**"]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    external = tmp_path.parent / f"{tmp_path.name}-{target_state}-directory"
+    if target_state == "external":
+        external.mkdir()
+        (external / "implementation.py").write_text("external\n", encoding="utf-8")
+    (tmp_path / "generated").symlink_to(external, target_is_directory=True)
+
+    snapshot = build_proof_snapshot(
+        tmp_path,
+        "route-share",
+        tiers=["focused"],
+        environ={},
+    )
+
+    assert snapshot["status"] == "blocked"
+    assert snapshot["blockers"][0]["code"] == "GODIESEL_COVERED_INPUT_SYMLINK_UNSAFE"
+
+
+def test_proof_snapshot_blocks_unreadable_covered_input(
+    tmp_path: Path,
+    monkeypatch,
+):
+    _write_reuse_fixture(tmp_path)
+
+    def unreadable(_path: Path) -> str:
+        raise PermissionError("not readable")
+
+    monkeypatch.setattr("godiesel_verification._file_digest", unreadable)
+
+    snapshot = build_proof_snapshot(
+        tmp_path,
+        "route-share",
+        tiers=["focused"],
+        environ={},
+    )
+
+    assert snapshot["status"] == "blocked"
+    assert snapshot["blockers"][0]["code"] == "GODIESEL_COVERED_INPUT_UNAVAILABLE"
+
+
 def _write_reuse_fixture(root: Path) -> None:
     (root / "system").mkdir()
     for name in ("evidence-receipt.schema.json", "verification-reuse.schema.json"):
@@ -394,7 +443,10 @@ def test_cli_verify_explain_emits_json_without_executing_a_gate(monkeypatch, cap
     [
         (
             "app/src/providers/google-maps-loader.ts",
-            {"./scripts/verify-provider-readiness.sh google-3d"},
+            {
+                "./scripts/verify-provider-readiness.sh earth-replay",
+                "./scripts/verify-provider-readiness.sh google-3d",
+            },
         ),
         (
             "app/src/providers/cesium-render-quality.ts",
@@ -412,7 +464,10 @@ def test_cli_verify_explain_emits_json_without_executing_a_gate(monkeypatch, cap
         ),
         (
             "app/src/providers/provider-error.ts",
-            {"./scripts/verify-provider-readiness.sh google-3d"},
+            {
+                "./scripts/verify-provider-readiness.sh earth-replay",
+                "./scripts/verify-provider-readiness.sh google-3d",
+            },
         ),
         (
             "app/src/providers/new-provider-adapter.ts",
@@ -425,6 +480,20 @@ def test_cli_verify_explain_emits_json_without_executing_a_gate(monkeypatch, cap
         (
             "app/src/surfaces/replay/cinematic/native-cinematic-renderer.ts",
             {"./scripts/verify-provider-readiness.sh google-3d"},
+        ),
+        (
+            "app/src/domain/geometry/recorded-light.ts",
+            {
+                "./scripts/verify-provider-readiness.sh earth-replay",
+                "./scripts/verify-provider-readiness.sh google-3d",
+            },
+        ),
+        (
+            "app/src/surfaces/replay/components/recorded-light-layer.tsx",
+            {
+                "./scripts/verify-provider-readiness.sh earth-replay",
+                "./scripts/verify-provider-readiness.sh google-3d",
+            },
         ),
         (
             "app/src/surfaces/atlas/cesium-atlas-world-engine.ts",
@@ -444,7 +513,10 @@ def test_cli_verify_explain_emits_json_without_executing_a_gate(monkeypatch, cap
         ),
         (
             "app/src/surfaces/replay/renderers/google-route-navigator-engine.ts",
-            {"./scripts/verify-provider-readiness.sh google-3d"},
+            {
+                "./scripts/verify-provider-readiness.sh earth-replay",
+                "./scripts/verify-provider-readiness.sh google-3d",
+            },
         ),
         (
             "app/src/surfaces/replay/renderers/replay-camera-clearance.ts",
@@ -529,6 +601,101 @@ def test_exact_command_proof_inputs_do_not_include_other_commands(tmp_path: Path
     assert "provider.json" in names
     assert "other-provider.json" not in names
     assert "implementation.py" not in names
+
+
+@pytest.mark.parametrize(
+    ("entry_path", "dependency_path", "entry_source", "before_source", "after_source"),
+    [
+        (
+            "app/src/entry.ts",
+            "app/src/runtime.ts",
+            'import { value } from "./runtime";\n',
+            "export const value = 1;\n",
+            "export const value = 2;\n",
+        ),
+        (
+            "entry.py",
+            "runtime.py",
+            "from runtime import value\n",
+            "value = 1\n",
+            "value = 2\n",
+        ),
+    ],
+)
+def test_exact_command_proof_fingerprint_includes_transitive_local_imports(
+    tmp_path: Path,
+    entry_path: str,
+    dependency_path: str,
+    entry_source: str,
+    before_source: str,
+    after_source: str,
+):
+    _write_reuse_fixture(tmp_path)
+    manifest_path = tmp_path / "system/capabilities.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["capabilities"][0]["verification"]["live"][0]["proof_inputs"] = [
+        {"category": "implementation", "paths": [entry_path]}
+    ]
+    manifest["impact_rules"][-2]["paths"] = [entry_path]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    entry = tmp_path / entry_path
+    dependency = tmp_path / dependency_path
+    entry.parent.mkdir(parents=True, exist_ok=True)
+    entry.write_text(entry_source, encoding="utf-8")
+    dependency.write_text(before_source, encoding="utf-8")
+
+    before = build_proof_snapshot(
+        tmp_path,
+        "route-share",
+        tiers=["live"],
+        commands=["verify-live"],
+        environ={"PROVIDER_PROJECT": "target-a"},
+        provider_target="target-a",
+    )
+    dependency.write_text(after_source, encoding="utf-8")
+    after = build_proof_snapshot(
+        tmp_path,
+        "route-share",
+        tiers=["live"],
+        commands=["verify-live"],
+        environ={"PROVIDER_PROJECT": "target-a"},
+        provider_target="target-a",
+    )
+
+    assert before["status"] == "passed"
+    assert after["status"] == "passed"
+    assert before["proof_fingerprint"] != after["proof_fingerprint"]
+
+
+def test_dependency_change_selects_the_exact_live_gate(tmp_path: Path):
+    _write_reuse_fixture(tmp_path)
+    manifest_path = tmp_path / "system/capabilities.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["capabilities"][0]["verification"]["live"][0]["proof_inputs"] = [
+        {"category": "provider", "paths": ["app/src/entry.ts"]}
+    ]
+    manifest["impact_rules"][-2]["paths"] = ["app/src/entry.ts"]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    entry = tmp_path / "app/src/entry.ts"
+    dependency = tmp_path / "app/src/runtime.ts"
+    entry.parent.mkdir(parents=True, exist_ok=True)
+    entry.write_text('import { value } from "./runtime";\n', encoding="utf-8")
+    dependency.write_text("export const value = 1;\n", encoding="utf-8")
+
+    result = explain_verification(tmp_path, changed_paths=["app/src/runtime.ts"])
+
+    assert result["status"] == "passed"
+    assert result["result"]["selected_gates"] == [
+        {
+            "capability": "route-share",
+            "tier": "live",
+            "command": "verify-live",
+            "cwd": ".",
+            "provider": "live-provider",
+            "reasons": ["Fixture live provider input."],
+            "required_by": ["app/src/runtime.ts"],
+        }
+    ]
 
 
 def test_reuse_returns_the_existing_proof_without_executing_a_gate(tmp_path: Path):

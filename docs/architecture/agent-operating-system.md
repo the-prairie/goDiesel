@@ -277,7 +277,8 @@ changed paths
 The capability manifest owns this mapping.
 Each impact rule links paths to capability-owned invariant identifiers as well as to focused, ticket, release, or live gates.
 Impact rules select required gates from changed paths.
-Each exact gate command separately declares its proof inputs, so its reusable fingerprint includes all of that command's implementation and runtime dependencies without causing those dependencies to select unrelated commands.
+Each exact gate command declares proof-input entry points.
+The proof layer computes their repository-local Python and JavaScript or TypeScript import closure, so its reusable fingerprint and impact selection include transitive executable dependencies without broadening unrelated commands.
 When a tier has multiple provider commands, those same inputs select only commands covering a known changed path; if no command recognizes a classified provider path, selection expands to every command in that tier.
 The command recorded in evidence and the command-specific proof inputs included in the reusable fingerprint come from the same manifest declaration.
 The existing risk tiers in `docs/agents/testing.md` remain the policy.
@@ -295,7 +296,7 @@ A proof is reusable only while all covered inputs remain unchanged before, durin
 A changed documentation file does not invalidate a runtime proof unless it changes an executable contract or command.
 A provider-dependent claim is never proven by a deterministic test adapter.
 A missing live dependency produces `blocked`, never a skipped green result.
-Live-provider proof is reusable for at most 15 minutes and only against the same target, deployed commit, and configuration-presence state.
+Live-provider proof is reusable for at most 15 minutes and only after freshly observing the same target, deployed commit, clean local commit, and configuration-presence state.
 
 ## 11. Knowledge topology
 

@@ -581,6 +581,32 @@ def test_release_without_immutable_url_is_incomplete_and_blocks_handoff(tmp_path
     assert_valid_result(result)
 
 
+def test_route_share_verify_blocks_when_covered_inputs_change_during_gate(
+    tmp_path: Path,
+):
+    install_evidence_contract(tmp_path)
+    implementation = tmp_path / "godiesel_route_share.py"
+    implementation.write_text("before\n", encoding="utf-8")
+
+    def mutating_runner(command, **kwargs):
+        implementation.write_text("after\n", encoding="utf-8")
+        return completed(command, stdout="verified\n")
+
+    result = execute_route_share(
+        tmp_path,
+        "verify",
+        slug="route-1",
+        runner=mutating_runner,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_VERIFICATION_INPUTS_CHANGED"
+    receipt = json.loads(
+        (tmp_path / result["evidence"]["path"]).read_text(encoding="utf-8")
+    )
+    assert receipt["status"] == "blocked"
+
+
 def test_release_requires_complete_passed_route_transition_lineage(tmp_path: Path):
     runner = RecordingRunner()
 

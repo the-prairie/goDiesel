@@ -9,6 +9,7 @@ import sys
 from hashlib import sha256
 from pathlib import Path
 
+import pytest
 from jsonschema import Draft202012Validator
 
 from admin_curation import owner_mutation_lock
@@ -86,7 +87,7 @@ def _projection_record(activity_id: str) -> dict[str, object]:
         "region": "Test region",
         "date": "2026-01-01",
         "distance_km": 1.0,
-        "elevation_gain_m": 0,
+        "elevation_gain_m": None,
         "elevation_status": "unavailable",
         "type": "Run",
         "description": "",
@@ -96,7 +97,29 @@ def _projection_record(activity_id: str) -> dict[str, object]:
         "xp": 10,
         "center_lat": 50.0,
         "center_lng": -114.0,
-        "replay": {"mode": "atlas"},
+        "replay": {
+            "mode": "atlas",
+            "replay_eligible": True,
+            "best_in_earth": False,
+            "geometry_status": "ready",
+            "point_count": 2,
+        },
+    }
+
+
+def _route_points() -> list[dict[str, object]]:
+    return [
+        {"lat": 50.0, "lng": -114.0, "elev": None, "d": 0.0},
+        {"lat": 50.0, "lng": -114.0, "elev": None, "d": 1000.0},
+    ]
+
+
+def _route_provenance() -> dict[str, object]:
+    return {
+        "temporal": {"status": "unavailable"},
+        "elevation": {"status": "unavailable"},
+        "track": {"segment_count": 1},
+        "discontinuities": [],
     }
 
 
@@ -123,7 +146,18 @@ def _generation_fixture(root: Path) -> Path:
     )
     _write_json(
         root / "app/src/data/generated/routes.manifest.json",
-        {"routes": [{**_projection_record("route-1"), "trace": [[50, -114]], "guide_preview": {"review_status": "draft"}}]},
+        {
+            "routes": [
+                {
+                    **_projection_record("route-1"),
+                    "trace": [
+                        [50.0, -114.0, None, 0.0],
+                        [50.0, -114.0, None, 1000.0],
+                    ],
+                    "guide_preview": {"review_status": "draft"},
+                }
+            ]
+        },
     )
     _write_json(
         root / "app/src/data/generated/route-stats.json",
@@ -133,8 +167,9 @@ def _generation_fixture(root: Path) -> Path:
         root / "app/public/data/routes/route-1.json",
         {
             **_projection_record("route-1"),
-            "route": [{"lat": 50, "lng": -114, "d": 1000}],
-            "provenance": {},
+            "route": _route_points(),
+            "mid_idx": 1,
+            "provenance": _route_provenance(),
         },
     )
     (root / "rebuild.sh").write_text("#!/bin/sh\n", encoding="utf-8")
@@ -181,8 +216,9 @@ def _write_complete_curation_projection(
         root / "app/public/data/routes" / f"{activity_id}.json",
         {
             **projected,
-            "route": [{"lat": 50, "lng": -114, "d": 1000}],
-            "provenance": {},
+            "route": _route_points(),
+            "mid_idx": 1,
+            "provenance": _route_provenance(),
             "curation": curation,
         },
     )
@@ -192,7 +228,10 @@ def _write_complete_curation_projection(
             "routes": [
                 {
                     **projected,
-                    "trace": [[50, -114]],
+                    "trace": [
+                        [50.0, -114.0, None, 0.0],
+                        [50.0, -114.0, None, 1000.0],
+                    ],
                     "guide_preview": route_guide_preview(curation),
                 }
             ]
@@ -426,6 +465,83 @@ def test_generation_verify_blocks_when_covered_inputs_change_during_gate(
     assert receipt["status"] == "blocked"
     reused = reuse_verification(root, "route-generation", environ={})
     assert reused["status"] == "blocked"
+
+
+@pytest.mark.parametrize(
+    ("target", "mutation"),
+    [
+        (
+            "detail",
+            lambda value: value.update(
+                route=[
+                    {"lat": 999, "lng": -114, "elev": None, "d": -1},
+                    {"lat": 50, "lng": -114, "elev": None, "d": 1000},
+                ]
+            ),
+        ),
+        ("detail", lambda value: value.update(provenance={})),
+        (
+            "summary",
+            lambda value: value.update(
+                trace=[[999, -114, None, -1], [50, -114, None, 1000]]
+            ),
+        ),
+    ],
+)
+def test_generation_inspect_blocks_structurally_invalid_projection(
+    tmp_path: Path,
+    target: str,
+    mutation,
+):
+    root = _generation_fixture(tmp_path)
+    path = (
+        root / "app/public/data/routes/route-1.json"
+        if target == "detail"
+        else root / "app/src/data/generated/routes.manifest.json"
+    )
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    record = payload if target == "detail" else payload["routes"][0]
+    mutation(record)
+    _write_json(path, payload)
+
+    result = execute_route_generation(root, "inspect")
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_PROJECTION_DRIFT"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("replay_mode", "earth"),
+        (
+            "annotations",
+            [
+                {
+                    "id": "owner-note",
+                    "at_distance_m": 500,
+                    "kind": "note",
+                    "evidence": "recorded",
+                    "body": "A route note.",
+                }
+            ],
+        ),
+    ],
+)
+def test_generation_inspect_compares_canonical_replay_and_annotations(
+    tmp_path: Path,
+    field: str,
+    value: object,
+):
+    root = _generation_fixture(tmp_path)
+    config = json.loads((root / "quests.json").read_text(encoding="utf-8"))
+    config["routes"][0][field] = value
+    _write_json(root / "quests.json", config)
+
+    result = execute_route_generation(root, "inspect")
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_PROJECTION_DRIFT"
 
 
 def test_curation_inspect_reports_status_counts_without_owner_copy(tmp_path: Path):
@@ -937,6 +1053,27 @@ def test_provider_verify_runs_the_named_existing_live_check(tmp_path: Path):
     )
     assert receipt["external_target"]["immutable_id"] == TEST_BUILD_COMMIT
 
+    reused = reuse_verification(
+        tmp_path,
+        "provider-readiness",
+        expected_inputs={
+            "provider": "atlas",
+            "provider-target": "https://preview.example.test/",
+        },
+        environ={"GOOGLE_MAPS_API_KEY": "secret"},
+        provider_target="https://preview.example.test/",
+        target_identity_reader=_matching_target_identity,
+        repository_reader=_clean_repository_identity,
+    )
+    assert reused["status"] == "passed"
+    Draft202012Validator(
+        json.loads(
+            (ROOT / "system/verification-reuse.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+    ).validate(reused["result"])
+
     wrong_provider = reuse_verification(
         tmp_path,
         "provider-readiness",
@@ -946,8 +1083,83 @@ def test_provider_verify_runs_the_named_existing_live_check(tmp_path: Path):
         },
         environ={"GOOGLE_MAPS_API_KEY": "secret"},
         provider_target="https://preview.example.test/",
+        target_identity_reader=_matching_target_identity,
+        repository_reader=_clean_repository_identity,
     )
     assert wrong_provider["status"] == "blocked"
+
+
+def test_provider_verify_blocks_when_deployed_identity_changes_during_gate(
+    tmp_path: Path,
+):
+    _install_evidence_contract(tmp_path)
+    identities = [
+        _matching_target_identity(""),
+        {**_matching_target_identity(""), "commit": "d" * 40},
+    ]
+
+    result = execute_provider_readiness(
+        tmp_path,
+        "verify",
+        provider="atlas",
+        provider_target="https://preview.example.test/",
+        environ={"GOOGLE_MAPS_API_KEY": "secret"},
+        runner=lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 0, "passed", ""
+        ),
+        target_identity_reader=lambda _target: identities.pop(0),
+        repository_reader=_clean_repository_identity,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == (
+        "GODIESEL_PROVIDER_BUILD_IDENTITY_CHANGED"
+    )
+    receipt = json.loads(
+        (tmp_path / result["evidence"]["path"]).read_text(encoding="utf-8")
+    )
+    assert receipt["status"] == "blocked"
+    assert identities == []
+
+
+def test_provider_reuse_refetches_and_rejects_changed_deployed_identity(
+    tmp_path: Path,
+):
+    _install_evidence_contract(tmp_path)
+    result = execute_provider_readiness(
+        tmp_path,
+        "verify",
+        provider="atlas",
+        provider_target="https://preview.example.test/",
+        environ={"GOOGLE_MAPS_API_KEY": "secret"},
+        runner=lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 0, "passed", ""
+        ),
+        target_identity_reader=_matching_target_identity,
+        repository_reader=_clean_repository_identity,
+    )
+
+    reused = reuse_verification(
+        tmp_path,
+        "provider-readiness",
+        expected_inputs={
+            "provider": "atlas",
+            "provider-target": "https://preview.example.test/",
+        },
+        environ={"GOOGLE_MAPS_API_KEY": "secret"},
+        provider_target="https://preview.example.test/",
+        target_identity_reader=lambda _target: {
+            **_matching_target_identity(""),
+            "commit": "d" * 40,
+        },
+        repository_reader=_clean_repository_identity,
+    )
+
+    assert result["status"] == "passed"
+    assert reused["status"] == "blocked"
+    assert reused["blockers"][0]["code"] == (
+        "GODIESEL_PROVIDER_BUILD_IDENTITY_MISMATCH"
+    )
 
 
 def test_provider_verify_fingerprints_env_file_presence_without_exporting_secret(tmp_path: Path):
@@ -1010,6 +1222,8 @@ def test_provider_proof_reuse_invalidates_when_adapter_changes(tmp_path: Path):
         },
         environ={"GOOGLE_MAPS_API_KEY": "secret"},
         provider_target="https://preview.example.test/",
+        target_identity_reader=_matching_target_identity,
+        repository_reader=_clean_repository_identity,
     )
 
     assert result["status"] == "passed"
@@ -1045,6 +1259,8 @@ def test_provider_proof_reuse_blocks_expired_live_evidence(tmp_path: Path):
         },
         environ={"GOOGLE_MAPS_API_KEY": "secret"},
         provider_target="https://preview.example.test/",
+        target_identity_reader=_matching_target_identity,
+        repository_reader=_clean_repository_identity,
     )
 
     assert reused["status"] == "blocked"

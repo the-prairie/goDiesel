@@ -62,7 +62,7 @@
       "properties": {
         "category": { "$ref": "#/$defs/category" },
         "name": { "type": "string", "minLength": 1 },
-        "state": { "enum": ["matched", "absent", "present", "missing", "target"] },
+        "state": { "enum": ["matched", "absent", "present", "missing", "target", "observed"] },
         "sha256": { "$ref": "#/$defs/sha256" }
       }
     }

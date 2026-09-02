@@ -136,7 +136,7 @@
           "enum": ["implementation", "contract", "fixture", "configuration", "data", "provider"]
         },
         "name": { "type": "string", "minLength": 1 },
-        "state": { "enum": ["matched", "absent", "present", "missing", "target"] },
+        "state": { "enum": ["matched", "absent", "present", "missing", "target", "observed"] },
         "sha256": { "$ref": "#/$defs/sha256" }
       }
     },

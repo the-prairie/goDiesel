@@ -13,7 +13,6 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any, Callable, Mapping
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
 
 from jsonschema import Draft202012Validator
 
@@ -25,12 +24,21 @@ from admin_curation import (
     write_atomic,
 )
 from curation_publish import CurationRecoveryError
+from generated_route_contract import (
+    completed_distance_km,
+    valid_generated_projection,
+)
 from godiesel_evidence import (
     canonical_digest,
     repository_snapshot,
     write_evidence_receipt,
 )
-from godiesel_verification import build_proof_snapshot
+from godiesel_verification import (
+    build_proof_snapshot,
+    proof_snapshot_stability_issues,
+    read_target_build_identity,
+    verified_provider_build_identity,
+)
 from quest_meta import build_route_curation, route_guide_preview
 
 
@@ -172,56 +180,17 @@ def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[s
         "theme": ("theme",),
         "title": ("subtitle",),
     }
-    shared_projection_fields = (
-        "slug",
-        "activity_id",
-        "source_kind",
-        "lifecycle",
-        "name",
-        "subtitle",
-        "activity_name",
-        "region",
-        "date",
-        "distance_km",
-        "elevation_gain_m",
-        "elevation_status",
-        "type",
-        "description",
-        "completion_rule",
-        "difficulty",
-        "theme",
-        "xp",
-        "center_lat",
-        "center_lng",
-        "replay",
-    )
-    required_summary_fields = {*shared_projection_fields, "trace", "guide_preview"}
-    required_detail_fields = {*shared_projection_fields, "route", "provenance"}
     if inventory_current:
         for activity_id in canonical_ids:
             canonical = canonical_by_id[activity_id]
             summary = summary_by_id[activity_id]
             detail = detail_by_slug[activity_id]
             if (
-                str(detail.get("slug")) != activity_id
-                or str(detail.get("activity_id")) != activity_id
-                or not required_summary_fields.issubset(summary)
-                or not required_detail_fields.issubset(detail)
-                or not isinstance(summary.get("trace"), list)
-                or not summary["trace"]
-                or not isinstance(detail.get("route"), list)
-                or not detail["route"]
-                or not isinstance(detail.get("provenance"), dict)
+                not valid_generated_projection(canonical, summary, detail)
                 or summary.get("lifecycle")
                 != canonical.get("lifecycle", "completed")
                 or detail.get("lifecycle")
                 != canonical.get("lifecycle", "completed")
-                or any(
-                    field in summary
-                    and field in detail
-                    and summary[field] != detail[field]
-                    for field in shared_projection_fields
-                )
             ):
                 projection_current = False
                 break
@@ -237,25 +206,7 @@ def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[s
                     break
             if not projection_current:
                 break
-            if canonical.get("curation") is not None:
-                try:
-                    expected_curation = build_route_curation(canonical["curation"])
-                    expected_preview = route_guide_preview(canonical["curation"])
-                except ValueError:
-                    projection_current = False
-                    break
-                if (
-                    detail.get("curation") != expected_curation
-                    or summary.get("guide_preview") != expected_preview
-                ):
-                    projection_current = False
-                    break
-
-    completed_distances = [
-        route.get("distance_km")
-        for route in summary_routes
-        if route.get("lifecycle", "completed") == "completed"
-    ]
+    expected_completed_km = completed_distance_km(details)
     numeric_state_valid = (
         isinstance(reported_count, int)
         and not isinstance(reported_count, bool)
@@ -263,18 +214,7 @@ def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[s
         and not isinstance(reported_completed_km, bool)
         and math.isfinite(float(reported_completed_km))
         and float(reported_completed_km) >= 0
-        and all(
-            isinstance(value, (int, float))
-            and not isinstance(value, bool)
-            and math.isfinite(float(value))
-            and float(value) >= 0
-            for value in completed_distances
-        )
-    )
-    expected_completed_km = (
-        round(sum(float(value) for value in completed_distances), 1)
-        if numeric_state_valid
-        else None
+        and expected_completed_km is not None
     )
     stats_current = numeric_state_valid and reported_completed_km == expected_completed_km
     current = inventory_current and projection_current and stats_current
@@ -313,7 +253,7 @@ def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[s
         blockers.append(
             _issue(
                 "GODIESEL_GENERATED_STATS_DRIFT",
-                "Generated route statistics are invalid or disagree with the route manifest.",
+                "Generated route statistics are invalid or disagree with route details.",
                 "Apply route-generation through the owning Python writer, then inspect again.",
             )
         )
@@ -345,6 +285,11 @@ def _run_verification(
     failure_message: str,
     failure_remediation: str,
     provider_target: str | None = None,
+    provider_identity: Mapping[str, object] | None = None,
+    refresh_provider_identity: Callable[
+        [], tuple[dict[str, object] | None, list[dict[str, str]]]
+    ]
+    | None = None,
     external_target: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     try:
@@ -375,6 +320,7 @@ def _run_verification(
         commands=[display_command],
         environ=proof_environment,
         provider_target=provider_target,
+        provider_identity=provider_identity,
     )
     if snapshot["status"] != "passed":
         return _envelope(
@@ -401,6 +347,20 @@ def _run_verification(
     blockers = [] if passed else [
         _issue(failure_code, failure_message, failure_remediation)
     ]
+    post_provider_identity = provider_identity
+    post_identity_blockers: list[dict[str, str]] = []
+    if refresh_provider_identity is not None:
+        post_provider_identity, post_identity_blockers = refresh_provider_identity()
+        if post_provider_identity != provider_identity:
+            blockers.append(
+                _issue(
+                    "GODIESEL_PROVIDER_BUILD_IDENTITY_CHANGED",
+                    "The deployed build identity changed while live verification was running.",
+                    "Stabilize the named deployment and rerun the live provider gate.",
+                )
+            )
+        elif post_identity_blockers:
+            blockers.extend(post_identity_blockers)
     post_snapshot = build_proof_snapshot(
         root,
         capability,
@@ -408,28 +368,11 @@ def _run_verification(
         commands=[display_command],
         environ=proof_environment,
         provider_target=provider_target,
+        provider_identity=post_provider_identity,
     )
-    stable_inputs = (
-        post_snapshot["status"] == "passed"
-        and post_snapshot["proof_fingerprint"] == snapshot["proof_fingerprint"]
-    )
-    if post_snapshot["status"] != "passed":
-        blockers.append(
-            _issue(
-                "GODIESEL_VERIFICATION_POSTCHECK_FAILED",
-                "Verification finished but its covered inputs could not be rechecked.",
-                "Restore the covered inputs and rerun verification before reusing proof.",
-            )
-        )
-        blockers.extend(post_snapshot["blockers"])
-    elif not stable_inputs:
-        blockers.append(
-            _issue(
-                "GODIESEL_VERIFICATION_INPUTS_CHANGED",
-                "One or more covered inputs changed while the verification gate was running.",
-                "Stabilize the worktree and rerun verification against one unchanged input set.",
-            )
-        )
+    stability_blockers = proof_snapshot_stability_issues(snapshot, post_snapshot)
+    blockers.extend(stability_blockers)
+    stable_inputs = not stability_blockers and not post_identity_blockers
     receipt_snapshot = post_snapshot if post_snapshot["status"] == "passed" else snapshot
     receipt_status = "failed" if not passed else "passed" if stable_inputs else "blocked"
     output = _command_result(display_command, completed)
@@ -1285,66 +1228,6 @@ def _valid_provider_target(value: str | None) -> bool:
     )
 
 
-def _read_target_build_identity(provider_target: str) -> Mapping[str, object]:
-    identity_url = provider_target.rstrip("/") + "/build-identity.json"
-    request = Request(identity_url, headers={"Accept": "application/json"})
-    with urlopen(request, timeout=5) as response:
-        payload = response.read(65_537)
-    if len(payload) > 65_536:
-        raise ValueError("build identity exceeds the bounded response size")
-    value = json.loads(payload.decode("utf-8"))
-    if not isinstance(value, dict):
-        raise ValueError("build identity is not an object")
-    return value
-
-
-def _verified_provider_build_identity(
-    root: Path,
-    provider_target: str,
-    *,
-    target_identity_reader: TargetIdentityReader,
-    repository_reader: RepositoryReader,
-) -> tuple[dict[str, object] | None, list[dict[str, str]]]:
-    repository = dict(repository_reader(root))
-    commit = repository.get("commit")
-    dirty_state = repository.get("dirty_state")
-    if (
-        not isinstance(commit, str)
-        or re.fullmatch(r"[a-f0-9]{40}", commit) is None
-        or not isinstance(dirty_state, Mapping)
-        or dirty_state.get("clean") is not True
-    ):
-        return None, [
-            _issue(
-                "GODIESEL_PROVIDER_LOCAL_BUILD_UNBOUND",
-                "Live provider proof requires one clean local commit to identify the expected build.",
-                "Commit the exact implementation to verify, then deploy a preview from that commit.",
-            )
-        ]
-    try:
-        identity = dict(target_identity_reader(provider_target))
-        schema = _read_json(root / "system/build-identity.schema.json")
-        Draft202012Validator.check_schema(schema)
-        Draft202012Validator(schema).validate(identity)
-    except Exception:
-        return None, [
-            _issue(
-                "GODIESEL_PROVIDER_BUILD_IDENTITY_UNREADABLE",
-                "The named live target did not expose a valid goDiesel build identity.",
-                "Deploy this branch with build-identity.json enabled, then retry the exact target.",
-            )
-        ]
-    if identity["commit"] != commit:
-        return None, [
-            _issue(
-                "GODIESEL_PROVIDER_BUILD_IDENTITY_MISMATCH",
-                "The named live target was built from a different commit.",
-                "Deploy the exact local commit to a preview target, then verify that target.",
-            )
-        ]
-    return identity, []
-
-
 def execute_provider_readiness(
     root: Path | str,
     verb: str,
@@ -1353,7 +1236,7 @@ def execute_provider_readiness(
     provider_target: str | None = None,
     environ: Mapping[str, str] | None = None,
     runner: Runner = subprocess.run,
-    target_identity_reader: TargetIdentityReader = _read_target_build_identity,
+    target_identity_reader: TargetIdentityReader = read_target_build_identity,
     repository_reader: RepositoryReader = repository_snapshot,
 ) -> dict[str, Any]:
     """Inspect provider configuration or run one explicit existing live check."""
@@ -1443,7 +1326,7 @@ def execute_provider_readiness(
                 )
             ],
         )
-    build_identity, identity_blockers = _verified_provider_build_identity(
+    build_identity, identity_blockers = verified_provider_build_identity(
         root,
         str(provider_target),
         target_identity_reader=target_identity_reader,
@@ -1504,6 +1387,13 @@ def execute_provider_readiness(
         failure_message=f"The existing {provider} live provider check failed.",
         failure_remediation="Inspect the retained Playwright evidence and provider response before retrying.",
         provider_target=provider_target,
+        provider_identity=build_identity,
+        refresh_provider_identity=lambda: verified_provider_build_identity(
+            root,
+            str(provider_target),
+            target_identity_reader=target_identity_reader,
+            repository_reader=repository_reader,
+        ),
         external_target={
             "kind": provider,
             "name_sha256": canonical_digest(provider_target),

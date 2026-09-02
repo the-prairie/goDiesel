@@ -21,7 +21,7 @@ The adapter invokes `rebuild.sh`; it never imports `build.py` or writes generate
 `rebuild.sh` delegates to the locked `route_build.py` writer entry point.
 Route creation owns the same lock inside `route_create.py`, so both the unified interface and retained `scripts/route.sh` commands share one write boundary with owner curation and Admin.
 The existing staging, backup, atomic replacement, and interrupted-run recovery remain authoritative.
-Inspection validates route identities, canonical fields represented in the public projection, detail-to-manifest agreement, and finite non-negative aggregate statistics.
+Inspection validates route identities, the strict detail and summary consumer contracts, canonical annotations and replay choices, detail-to-manifest agreement, and aggregate statistics derived from valid detail records.
 
 Run or reuse focused proof:
 
@@ -101,6 +101,7 @@ Run one existing live browser check against one exact target:
 The target must be an HTTP or HTTPS URL without credentials, query parameters, or fragments.
 It must expose `build-identity.json` for the same clean Git commit being verified.
 The adapter records configuration presence, provider identity, the deployed commit, and a digest of the exact target in an ignored evidence receipt.
+It reads and validates the deployed identity before and after the live gate, and blocks if the target changes during execution.
 Configuration presence and a passing deterministic test never substitute for this live result.
 
 Reuse is provider- and target-specific:
@@ -109,7 +110,7 @@ Reuse is provider- and target-specific:
 ./scripts/godiesel verify provider-readiness --provider atlas --provider-target <url> --reuse --json
 ```
 
-Live-provider proof can be reused for at most 15 minutes and only while its exact target, deployed commit, configuration presence, selected command, and covered inputs remain unchanged.
+Live-provider proof can be reused for at most 15 minutes and only while its exact target, freshly observed deployed commit, clean local commit, configuration presence, selected command, and covered inputs remain unchanged.
 
 Do not run a live provider command merely because configuration exists.
 Run it only when the intended claim depends on that provider, renderer, terrain, imagery, or camera behavior.
@@ -118,7 +119,8 @@ Run it only when the intended claim depends on that provider, renderer, terrain,
 
 Successful generation, curation, and provider verification writes a schema-valid receipt under ignored `.godiesel/evidence/`.
 Impact rules decide which gates a changed path requires.
-Each exact verification command separately declares the implementation, contract, fixture, configuration, data, renderer, and provider inputs that invalidate its receipt.
+Each exact verification command declares its implementation, contract, fixture, configuration, data, renderer, and provider entry points.
+The proof layer recursively includes repository-local Python and JavaScript or TypeScript imports, so a transitive executable dependency invalidates the same receipt and selects the same gate.
 The adapter snapshots those inputs before and after the gate and blocks proof when they change during execution.
 Broken or external covered-input symlinks block proof instead of disappearing from the fingerprint.
 Those command inputs also narrow a known provider path to its applicable live check; a newly classified provider path that matches no known command expands to every command in the tier so proof cannot disappear silently.

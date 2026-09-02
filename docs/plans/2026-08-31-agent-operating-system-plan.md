@@ -219,7 +219,9 @@ The implemented interface delegates full generation to `rebuild.sh` and `build.p
 Owner curation uses a deterministic plan schema bound to route state, checkout identity, and implementation state, and generation, curation, and named provider checks emit reusable Phase 3 evidence receipts.
 Route creation, generation, curation, and every competing Admin writer own the same cross-process catalogue lock at their retained writer entry points.
 Command-specific provider inputs select proportionate live proof, invalidate exact receipts, and fail safe to the full tier for an unrecognized provider path.
-Named provider proof requires the target deployment to identify the same clean local commit.
+Repository-local import closure makes transitive executable dependencies participate in proof fingerprints and gate selection.
+Named provider proof requires the target deployment to identify the same clean local commit before and after execution and again during reuse.
+Generated-route readiness validates the strict public projection structure and canonical annotation and replay choices before reporting current state.
 
 ### Work
 

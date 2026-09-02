@@ -161,14 +161,16 @@ Rerun the smallest affected tier when a subsequent edit touches behavior covered
 Escalate to the release tier when a defect indicates a cross-application regression or when shared routing, build, test, rendering, or application-shell infrastructure changes.
 
 A proof's covered inputs include implementation, contracts, schemas, fixtures, test code, build and runtime configuration, canonical data fingerprints when applicable, and the external provider or deployment target for live proof.
-The manifest-owned fingerprint aggregates every matching file per impact pattern, records absent patterns, records configuration presence without secret values, and digests non-sensitive provider targets.
+The manifest-owned fingerprint aggregates every matching file per impact pattern and every repository-local Python or JavaScript or TypeScript import reachable from command proof inputs.
+It records absent patterns, records configuration presence without secret values, and digests non-sensitive provider targets and observed deployment identities.
 Each observed file also contributes its file type, executable mode, and symlink target when applicable.
 Broken symlinks and symlinks that resolve outside the checkout are invalid proof inputs.
 Changing any covered input invalidates that proof.
 
 Each impact rule names the capability invariants that justify its selected gates.
 Focused route-share evidence records the exact manifest-declared route check that ran; its fingerprint covers the route-only application source, browser journey, build and scoping scripts, dependency and test configuration, route data, and public route media consumed by that check.
-Live provider proof requires an explicit target whose `build-identity.json` matches the clean local commit being verified.
+Live provider proof requires an explicit target whose `build-identity.json` matches the clean local commit before and after the gate.
+Reuse fetches that identity again and blocks when either the target or local checkout no longer identifies the same commit.
 
 Documentation, evidence packaging, or unrelated edits do not invalidate a proof unless they change an executable command, contract, or claimed behavior.
 
