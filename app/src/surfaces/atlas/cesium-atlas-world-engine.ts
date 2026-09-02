@@ -173,6 +173,9 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   private routeDisplayMode: "standard" | "density" | "terrain" = "standard";
   private regionGeneration = 0;
   private generation = 0;
+  private globalCameraGeneration = 0;
+  private globalCameraReady: Promise<void> = Promise.resolve();
+  private finishGlobalCameraWait?: () => void;
   private detachedCanvas?: {
     parent: Node;
     nextSibling: ChildNode | null;
@@ -189,6 +192,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     routeDisplayMode = "standard",
   }: AtlasWorldEngineMountOptions) {
     const generation = ++this.generation;
+    let renderFailed = false;
     this.regions = regions;
     this.onStatus = onStatus;
     this.onSelectRoute = onSelectRoute;
@@ -279,17 +283,19 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
         viewer.canvas.dataset.cameraPitch = viewer.camera.pitch.toFixed(6);
       });
       this.removeRenderErrorListener = viewer.scene.renderError.addEventListener(() => {
+        renderFailed = true;
         onStatus({
           state: "unavailable",
           message: "The Cesium world stopped rendering.",
         });
       });
-      this.resetView();
+      void this.moveToGlobalView();
       await this.waitForGlobalRoutePrimitive(
         this.globalRoutePolylines,
         generation,
       );
-      if (generation !== this.generation) return;
+      await this.waitForGlobalCameraSettlement();
+      if (generation !== this.generation || renderFailed) return;
       onStatus({ state: "ready", message: "Atlas world ready." });
     } catch (error) {
       if (generation !== this.generation) return;
@@ -315,10 +321,18 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
       viewer.canvas.dataset.cameraState = "settled";
       viewer.canvas.dataset.terrainState = "global";
       viewer.canvas.dataset.regionRouteCount = "0";
-      viewer.canvas.dataset.cameraDurationMs = "600";
       this.restoreGlobalRouteGeometry();
-      this.resetView();
-      this.onStatus?.({ state: "ready", message: "Atlas world ready." });
+      this.onStatus?.({ state: "loading", message: "Opening the Atlas world." });
+      void this.moveToGlobalView().then(() => {
+        if (
+          regionGeneration !== this.regionGeneration ||
+          this.selectedRegionName !== undefined ||
+          viewer.isDestroyed()
+        ) {
+          return;
+        }
+        this.onStatus?.({ state: "ready", message: "Atlas world ready." });
+      });
       return;
     }
     viewer.canvas.dataset.cameraRegion = region.name;
@@ -438,30 +452,82 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   }
 
   resetView() {
+    void this.moveToGlobalView();
+  }
+
+  private moveToGlobalView(): Promise<void> {
     const viewer = this.viewer;
-    if (!viewer || viewer.isDestroyed()) return;
+    if (!viewer || viewer.isDestroyed()) return Promise.resolve();
+    if (this.finishGlobalCameraWait) return this.globalCameraReady;
+    const cameraGeneration = ++this.globalCameraGeneration;
     const duration = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-      ? atlasRegionTransitionDurationSeconds(true)
+      ? 0
       : 0.6;
-    viewer.camera.flyTo({
-      destination: Cartesian3.fromDegrees(
-        DEFAULT_VIEW.lng,
-        DEFAULT_VIEW.lat,
-        DEFAULT_VIEW.heightM,
-      ),
-      orientation: new HeadingPitchRoll(0, -CesiumMath.PI_OVER_TWO, 0),
-      duration,
-    });
-    this.resetFrustumOffsets();
+    viewer.canvas.dataset.cameraState =
+      duration === 0 ? "settled" : "transitioning";
     viewer.canvas.dataset.cameraDurationMs = String(Math.round(duration * 1_000));
     viewer.canvas.dataset.cameraTarget = DEFAULT_VIEW.heightM.toFixed(0);
     viewer.canvas.dataset.cameraHeading = "0.000000";
     viewer.canvas.dataset.cameraPitch = (-CesiumMath.PI_OVER_TWO).toFixed(6);
+    this.resetFrustumOffsets();
+
+    this.globalCameraReady = new Promise((resolve) => {
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        if (this.finishGlobalCameraWait === finish) {
+          this.finishGlobalCameraWait = undefined;
+        }
+        if (
+          cameraGeneration === this.globalCameraGeneration &&
+          !viewer.isDestroyed()
+        ) {
+          viewer.canvas.dataset.cameraState = "settled";
+          viewer.canvas.dataset.cameraTarget = DEFAULT_VIEW.heightM.toFixed(0);
+          viewer.canvas.dataset.cameraHeading = "0.000000";
+          viewer.canvas.dataset.cameraPitch = (-CesiumMath.PI_OVER_TWO).toFixed(6);
+        }
+        resolve();
+      };
+      this.finishGlobalCameraWait = finish;
+      viewer.camera.flyTo({
+        destination: Cartesian3.fromDegrees(
+          DEFAULT_VIEW.lng,
+          DEFAULT_VIEW.lat,
+          DEFAULT_VIEW.heightM,
+        ),
+        orientation: new HeadingPitchRoll(0, -CesiumMath.PI_OVER_TWO, 0),
+        duration,
+        complete: finish,
+        cancel: finish,
+      });
+      if (duration === 0) finish();
+    });
+    return this.globalCameraReady;
+  }
+
+  private async waitForGlobalCameraSettlement() {
+    const viewer = this.viewer;
+    while (viewer && !viewer.isDestroyed()) {
+      const cameraGeneration = this.globalCameraGeneration;
+      const cameraReady = this.globalCameraReady;
+      await cameraReady;
+      if (
+        cameraGeneration === this.globalCameraGeneration &&
+        cameraReady === this.globalCameraReady
+      ) {
+        return;
+      }
+    }
   }
 
   destroy() {
     this.generation += 1;
     this.regionGeneration += 1;
+    this.globalCameraGeneration += 1;
+    this.finishGlobalCameraWait?.();
+    this.finishGlobalCameraWait = undefined;
     this.leaveRegionalTerrain();
     this.removeRenderErrorListener?.();
     this.removeCameraChangedListener?.();
@@ -492,6 +558,9 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   ) {
     const viewer = this.viewer;
     if (!viewer || viewer.isDestroyed()) return;
+    this.globalCameraGeneration += 1;
+    this.finishGlobalCameraWait?.();
+    this.finishGlobalCameraWait = undefined;
     this.leaveRegionalTerrain();
     viewer.useDefaultRenderLoop = true;
     viewer.scene.globe.show = true;

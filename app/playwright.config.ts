@@ -1,7 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const legacyPinchTest = /mobile globe supports two-finger pinch without losing region state/;
-const stablePinchFile = /atlas-pinch-stable\.spec\.ts/;
 const liveProviderFiles = "**/*-live.spec.ts";
 const runningOnLinux = process.platform === "linux";
 
@@ -41,16 +39,7 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      grepInvert: legacyPinchTest,
-      testIgnore: ["**/live-pipeline.spec.ts", liveProviderFiles, stablePinchFile],
-      use: { ...devices["Desktop Chrome"] },
-    },
-    {
-      // The legacy test races the initial Cesium flight; issue #111 tracks the
-      // product-state correction. Run the committed stable gesture regression
-      // separately so the suite still proves real two-finger navigation.
-      name: "chromium-pinch",
-      testMatch: stablePinchFile,
+      testIgnore: ["**/live-pipeline.spec.ts", liveProviderFiles],
       use: { ...devices["Desktop Chrome"] },
     },
   ],

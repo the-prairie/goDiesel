@@ -10,7 +10,7 @@ This audit identifies which existing tests are valid equivalence oracles for run
 | `src/surfaces/atlas/*test.ts` | Pure camera, selection, route rendering, and lifecycle invariants | High | Preserve outputs. Add performance-specific pure benchmarks separately. |
 | `e2e/atlas-cesium.spec.ts` | Product, renderer lifecycle, named degradation, and interaction invariants | High | Required for Atlas engine changes. Live provider spec remains separate. |
 | `e2e/atlas.spec.ts` | Cross-surface state, viewport, input, and accessibility behavior | High, but expensive | Preserve relevant scenarios. Do not use incidental timing as a performance oracle. |
-| `e2e/atlas-pinch-stable.spec.ts` | Stable touch behavior after actual camera settlement | High | Preserve; it exists because readiness and camera transition are distinct. |
+| `e2e/atlas.spec.ts` immediate-ready pinch scenario | Touch behavior after authoritative camera settlement | High | Preserve; Atlas readiness owns initial camera settlement, so the gesture begins without a timing workaround. |
 | `src/surfaces/routes/route-filters.test.ts` | Exact filter membership/order | High | Use as golden oracle for indexed or memoized filtering. |
 | `e2e/routes-library.spec.ts` | URL, lazy detail, progressive reveal, mobile/desktop usability | High | Preserve. Visual layout assertions remain product behavior, not a throughput benchmark. |
 | `e2e/finder-planning.spec.ts` | Honest candidate source, exact planning behavior, URL restoration | High | Preserve exact current candidate membership and unsupported behavior. |

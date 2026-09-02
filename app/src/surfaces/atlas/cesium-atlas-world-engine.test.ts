@@ -16,6 +16,7 @@ describe("CesiumAtlasWorldEngine", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("freezes fixture illumination without changing production time", () => {
@@ -79,6 +80,186 @@ describe("CesiumAtlasWorldEngine", () => {
 
     engine.destroy();
     expect(destroyViewer).toHaveBeenCalledOnce();
+  });
+
+  it.each(["complete", "cancel"] as const)(
+    "reports the global Atlas ready only after its camera flight %ss",
+    async (settleWith) => {
+      vi.stubGlobal("window", {
+        clearInterval,
+        matchMedia: () => ({ matches: false }),
+      });
+      let settleFlight: (() => void) | undefined;
+      const onStatus = vi.fn();
+      const canvas = {
+        dataset: {} as Record<string, string>,
+        parentNode: null,
+        nextSibling: null,
+      };
+      const globalRoutePolylines = { show: false };
+      const viewer = {
+        canvas: canvas as unknown as HTMLCanvasElement,
+        camera: {
+          flyTo: vi.fn(
+            (options: { cancel?: () => void; complete?: () => void }) => {
+              settleFlight = options[settleWith];
+            },
+          ),
+          frustum: {},
+        },
+        scene: {
+          globe: { show: false },
+          primitives: { remove: vi.fn() },
+        },
+        useDefaultRenderLoop: false,
+        isDestroyed: () => false,
+      };
+      const engine = new CesiumAtlasWorldEngine();
+      Object.assign(engine, { viewer, onStatus, globalRoutePolylines });
+
+      engine.setSelectedRegion(undefined);
+
+      expect(onStatus.mock.calls.map(([status]) => status.state)).toEqual([
+        "loading",
+      ]);
+      expect(canvas.dataset.cameraState).toBe("transitioning");
+
+      settleFlight?.();
+      await Promise.resolve();
+
+      expect(onStatus.mock.calls.map(([status]) => status.state)).toEqual([
+        "loading",
+        "ready",
+      ]);
+      expect(canvas.dataset.cameraState).toBe("settled");
+    },
+  );
+
+  it("settles the global camera immediately for reduced motion", async () => {
+    vi.stubGlobal("window", {
+      clearInterval,
+      matchMedia: () => ({ matches: true }),
+    });
+    const onStatus = vi.fn();
+    const canvas = {
+      dataset: {} as Record<string, string>,
+      parentNode: null,
+      nextSibling: null,
+    };
+    const flyTo = vi.fn();
+    const engine = new CesiumAtlasWorldEngine();
+    Object.assign(engine, {
+      viewer: {
+        canvas: canvas as unknown as HTMLCanvasElement,
+        camera: { flyTo, frustum: {} },
+        scene: {
+          globe: { show: false },
+          primitives: { remove: vi.fn() },
+        },
+        useDefaultRenderLoop: false,
+        isDestroyed: () => false,
+      },
+      onStatus,
+      globalRoutePolylines: { show: false },
+    });
+
+    engine.setSelectedRegion(undefined);
+    await Promise.resolve();
+
+    expect(flyTo).toHaveBeenCalledWith(expect.objectContaining({ duration: 0 }));
+    expect(onStatus.mock.calls.map(([status]) => status.state)).toEqual([
+      "loading",
+      "ready",
+    ]);
+    expect(canvas.dataset.cameraState).toBe("settled");
+  });
+
+  it("shares an active global camera flight with reset requests", async () => {
+    vi.stubGlobal("window", {
+      clearInterval,
+      matchMedia: () => ({ matches: false }),
+    });
+    let settleFlight: (() => void) | undefined;
+    const onStatus = vi.fn();
+    const canvas = {
+      dataset: {} as Record<string, string>,
+      parentNode: null,
+      nextSibling: null,
+    };
+    const flyTo = vi.fn(
+      (options: { complete?: () => void }) => {
+        settleFlight = options.complete;
+      },
+    );
+    const engine = new CesiumAtlasWorldEngine();
+    Object.assign(engine, {
+      viewer: {
+        canvas: canvas as unknown as HTMLCanvasElement,
+        camera: { flyTo, frustum: {} },
+        scene: {
+          globe: { show: false },
+          primitives: { remove: vi.fn() },
+        },
+        useDefaultRenderLoop: false,
+        isDestroyed: () => false,
+      },
+      onStatus,
+      globalRoutePolylines: { show: false },
+    });
+
+    engine.setSelectedRegion(undefined);
+    engine.resetView();
+
+    expect(flyTo).toHaveBeenCalledOnce();
+    expect(onStatus.mock.calls.map(([status]) => status.state)).toEqual([
+      "loading",
+    ]);
+
+    settleFlight?.();
+    await Promise.resolve();
+
+    expect(onStatus.mock.calls.map(([status]) => status.state)).toEqual([
+      "loading",
+      "ready",
+    ]);
+  });
+
+  it("waits for the latest global camera generation", async () => {
+    let resolveInitial!: () => void;
+    let resolveReplacement!: () => void;
+    const initialCameraReady = new Promise<void>((resolve) => {
+      resolveInitial = resolve;
+    });
+    const replacementCameraReady = new Promise<void>((resolve) => {
+      resolveReplacement = resolve;
+    });
+    const engine = new CesiumAtlasWorldEngine();
+    Object.assign(engine, {
+      viewer: { isDestroyed: () => false },
+      globalCameraGeneration: 1,
+      globalCameraReady: initialCameraReady,
+    });
+    const waitForSettlement = (
+      engine as unknown as { waitForGlobalCameraSettlement: () => Promise<void> }
+    ).waitForGlobalCameraSettlement();
+    let settled = false;
+    void waitForSettlement.then(() => {
+      settled = true;
+    });
+
+    resolveInitial();
+    Object.assign(engine, {
+      globalCameraGeneration: 2,
+      globalCameraReady: replacementCameraReady,
+    });
+    await Promise.resolve();
+
+    expect(settled).toBe(false);
+
+    resolveReplacement();
+    await waitForSettlement;
+
+    expect(settled).toBe(true);
   });
 
   it("detaches Cesium while regional fallback owns the WebGL viewport", () => {
