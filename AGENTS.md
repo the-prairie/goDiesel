@@ -17,7 +17,7 @@ Query dynamic state and preserve unrelated work.
 
 ## Operator loop
 
-Use this loop while the unified mutation interface in ADR-0016 remains proposed:
+Use the accepted unified control model from ADR-0016 for every implemented capability:
 
 ```text
 orient -> inspect -> plan -> apply -> verify -> release -> learn
@@ -40,15 +40,16 @@ orient -> inspect -> plan -> apply -> verify -> release -> learn
 | Understand product language or invariants | `CONTEXT.md`, relevant ADR | Domain modules and tests |
 | Inspect route or atlas readiness | `docs/agents/route-share.md` | `./scripts/route.sh status [slug]` |
 | Create, update, preview, or publish a route share | `docs/agents/route-share.md` | `./scripts/route.sh` |
-| Curate owner guide content | ADR-0010, `README.md` | `./admin.sh` and loopback writer |
-| Change generated route data | ADR-0003 and ADR-0004 | `./rebuild.sh` / `build.py` |
+| Curate owner guide content | `docs/agents/local-capabilities.md`, ADR-0010 | `./scripts/godiesel` and the shared local owner writer |
+| Change generated route data | `docs/agents/local-capabilities.md`, ADR-0003 and ADR-0004 | `./scripts/godiesel` over `rebuild.sh` / `build.py` |
+| Inspect planned-route persistence | `docs/agents/local-capabilities.md` | Browser-local storage metadata through `./scripts/godiesel` |
 | Change Atlas, Finder, Routes, Replay, or Admin | `CONTEXT.md` section 6, `app/DESIGN.md` | Owning folder under `app/src/surfaces/` |
 | Change route contract or derivation | `app/src/domain/route/`, relevant ADR | Pure domain interface and its tests |
-| Change provider, terrain, imagery, or camera behavior | ADR-0006, ADR-0007, ADR-0009 | Provider or renderer interface plus live gate |
+| Change provider, terrain, imagery, or camera behavior | `docs/agents/local-capabilities.md`, ADR-0006, ADR-0007, ADR-0009 | Provider or renderer interface plus named live gate |
 | Change deployment or public artifact scoping | ADR-0011 and ADR-0012 | `make-dist.sh`, scoped publisher, smoke tests |
 | Select verification | `docs/agents/testing.md` | Focused, ticket, release, or live gate |
 | Triage repository work | `docs/agents/issue-tracker.md` | `the-prairie/goDiesel` issues |
-| Change the agent operating model | `docs/architecture/agent-operating-system.md` | Read-only control module, proposed ADR-0016, and current plan |
+| Change the agent operating model | `docs/architecture/agent-operating-system.md` | Manifest-driven control module, ADR-0016, and current plan |
 
 ## Authority
 

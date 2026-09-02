@@ -57,6 +57,10 @@ Inspect the atlas or one route without changing state:
 ./scripts/godiesel doctor --json
 ./scripts/godiesel inspect route-share --json
 ./scripts/godiesel inspect route-share <slug> --json
+./scripts/godiesel inspect route-generation --json
+./scripts/godiesel inspect owner-curation --json
+./scripts/godiesel inspect planned-route-persistence --json
+./scripts/godiesel inspect provider-readiness --json
 ./scripts/godiesel verify --explain --json
 ./scripts/godiesel verify route-share <slug> --reuse --json
 ```
@@ -75,15 +79,16 @@ The verification explanation classifies changed paths against the manifest, name
 Proof reuse succeeds only when the latest schema-valid passed receipt has the same manifest-selected gates and complete covered-input fingerprint.
 It blocks without executing a gate when implementation, contracts, fixtures, configuration, data, or provider targets changed.
 
-The manifest, doctor, first full capability adapter, proof receipts, impact explanation, and guarded route-share proof reuse implement Phases 1 through 3 in `docs/architecture/agent-operating-system.md`.
-Additional capability adapters remain sequenced in `docs/plans/2026-08-31-agent-operating-system-plan.md`.
+The manifest, doctor, route-share workflow, canonical generation and curation adapters, runtime-boundary inspection, proof receipts, impact explanation, and guarded proof reuse implement Phases 1 through 4 in `docs/architecture/agent-operating-system.md`.
+Release adapters and later consolidation remain sequenced in `docs/plans/2026-08-31-agent-operating-system-plan.md`.
+See `docs/agents/local-capabilities.md` for the local capability commands and authority boundaries.
 
 ## Generate Route Data
 
 Regenerate route summaries and full route records after changing `quests.json` or refreshing the Strava export:
 
 ```bash
-./rebuild.sh
+./scripts/godiesel apply route-generation --authorize canonical-local --json
 ```
 
 The generator stages React route artifacts and publishes them atomically.
@@ -99,6 +104,7 @@ Launch the React app and local owner writer together:
 
 Admin edits the complete experiential guide contract, validates draft and reviewed states, and regenerates application route data on save.
 The deployed Admin is read-only because the loopback writer is not available there.
+Agents use the fingerprinted curation plan and apply flow in `docs/agents/local-capabilities.md`; both paths call the same local owner writer.
 
 ## Test
 

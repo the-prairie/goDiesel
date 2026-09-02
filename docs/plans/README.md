@@ -7,7 +7,7 @@ They do not override `CONTEXT.md`, accepted ADRs, executable contracts, or live 
 
 | Plan | Status | Next decision |
 | --- | --- | --- |
-| [Agent Operating System](2026-08-31-agent-operating-system-plan.md) | In progress | Add Phase 4 generation and curation adapters while keeping ADR-0016 proposed until two real adapters prove leverage |
+| [Agent Operating System](2026-08-31-agent-operating-system-plan.md) | In progress | Add Phase 5 release adapters over immutable built artifacts and exact named targets |
 
 ## Reference plans
 

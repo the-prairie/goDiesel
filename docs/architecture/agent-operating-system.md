@@ -1,6 +1,6 @@
 ---
 status: partially-implemented
-last_updated: 2026-09-01
+last_updated: 2026-09-02
 decision: ADR-0016
 ---
 
@@ -31,15 +31,15 @@ It is not a second domain model, a generic agent framework, or a reason to move 
 | --- | --- |
 | Domain model, writer ownership, provenance, generated data tiers, and risk-based verification | Implemented |
 | Route inspect, proposal, creation, preview, publication, and public smoke workflow | Implemented through `scripts/godiesel`; `scripts/route.sh` remains compatible |
-| Five-verb operator vocabulary used by agent guidance | Implemented for route share; other adapters remain proposed |
+| Five-verb operator vocabulary used by agent guidance | Implemented for route share, generation, owner curation, planned-route inspection, and provider readiness |
 | Machine-readable capability manifest | Implemented in `system/capabilities.json` |
-| Unified `scripts/godiesel` interface | System inspection, doctor, and the full route-share capability implemented |
-| Shared result envelope and evidence receipts | Route-share results, lineage receipts, and general route verification proof receipts implemented |
-| Impact-directed proof selection and reuse | Manifest-owned selection, `verify --explain`, complete input fingerprints, and guarded route-share reuse implemented |
+| Unified `scripts/godiesel` interface | System inspection, doctor, route share, generation, owner curation, planned-route inspection, and provider readiness implemented |
+| Shared result envelope and evidence receipts | Route-share lineage plus generation, curation, and exact provider verification receipts implemented |
+| Impact-directed proof selection and reuse | Manifest-owned selection, exact-command fingerprints, `verify --explain`, and guarded reuse implemented for canonical adapters |
 
 Use `./scripts/godiesel inspect system --json` and `./scripts/godiesel doctor --json` for current read-only control-plane inspection.
-Use the route-share commands in `docs/agents/route-share.md` for that implemented capability.
-Do not invoke mutation verbs for another capability or claim that proof reuse exists beyond route-share verification.
+Use the route-share commands in `docs/agents/route-share.md` and canonical local commands in `docs/agents/local-capabilities.md`.
+Application release remains outside the unified release adapter until Phase 5.
 
 ## 2. Design objective
 
@@ -102,6 +102,12 @@ The route-share workflow is the first strong vertical slice of this model:
 
 That workflow should be generalized, not bypassed or wrapped in another shallow command layer.
 During migration, the unified control interface delegates to existing modules and preserves their validation and recovery behavior.
+
+Phase 4 adds three more operator shapes without creating a generic executor.
+Route generation delegates to the sole full-catalogue Python writer.
+Owner curation produces a fingerprinted plan and calls the same owner-writer service as the loopback HTTP endpoint.
+Planned-route inspection reports browser-local ownership and unknown current state instead of projecting it into canonical files.
+Provider readiness separates configuration presence from one explicitly selected live check against one exact target.
 
 ## 5. Capability manifest
 
@@ -266,7 +272,10 @@ changed paths
 
 The capability manifest owns this mapping.
 Each impact rule links paths to capability-owned invariant identifiers as well as to focused, ticket, release, or live gates.
-The gate command recorded in evidence and the gate command included in the reusable fingerprint come from that same declaration.
+Impact rules select required gates from changed paths.
+Each exact gate command separately declares its proof inputs, so its reusable fingerprint includes all of that command's implementation and runtime dependencies without causing those dependencies to select unrelated commands.
+When a tier has multiple provider commands, those same inputs select only commands covering a known changed path; if no command recognizes a classified provider path, selection expands to every command in that tier.
+The command recorded in evidence and the command-specific proof inputs included in the reusable fingerprint come from the same manifest declaration.
 The existing risk tiers in `docs/agents/testing.md` remain the policy.
 
 A proof is reusable only while all covered inputs remain unchanged:
@@ -282,6 +291,7 @@ A proof is reusable only while all covered inputs remain unchanged:
 A changed documentation file does not invalidate a runtime proof unless it changes an executable contract or command.
 A provider-dependent claim is never proven by a deterministic test adapter.
 A missing live dependency produces `blocked`, never a skipped green result.
+Live-provider proof is reusable for at most 15 minutes and only against the same target and configuration-presence state.
 
 ## 11. Knowledge topology
 
@@ -332,12 +342,11 @@ goDiesel already contains several deep modules and strong system properties:
 
 The remaining friction is mostly in the mutation, proof, and release layers:
 
-- The read-only inspector now provides one capability map, but an agent still needs focused domain guidance before changing a capability.
-- Route sharing has a coherent control interface, while curation, generation, deployment, provider checks, and evidence use separate entry points.
-- Commands return a mixture of prose, JSON, logs, URLs, and generated files without one result envelope.
-- Verification impact selection is documented but manually reconstructed from changed paths.
-- Gate validity is a prose rule rather than a fingerprinted proof.
-- The read-only doctor proves route identity inventory and configuration presence, but it deliberately does not re-derive generated content or contact providers.
+- The inspector provides one capability map, while focused guides remain necessary for domain-specific owner decisions.
+- Route sharing, curation, generation, planned-route ownership, provider readiness, and evidence use the unified interface; application deployment still uses a separate release path.
+- Local capability commands return the shared result envelope, while older compatibility paths retain their existing human output.
+- Verification selection and reuse are manifest-owned, but application release does not yet enforce the shared receipt contract.
+- The doctor proves route identity inventory and configuration presence, while explicit capability commands own generation and live-provider checks.
 - The doctor checks architecture and plan indexes mechanically, but semantic contradictions between documents still require review.
 - External deployments have good smoke tests but no shared receipt contract across release types.
 
@@ -387,6 +396,7 @@ A new worktree is preferred when the primary checkout is dirty, the task is long
 The plan and receipt identify the worktree and commit they apply to.
 
 Canonical writers use atomic publication and capability-specific locks where concurrent execution could corrupt state.
+The Admin service and unified route creation, generation, and curation commands share one cross-process lock for every mutation of the owner-owned route catalogue or its generated projections.
 The control layer does not invent a global lock unless two real writers compete for the same state.
 
 ## 16. System invariants

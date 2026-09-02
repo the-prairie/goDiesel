@@ -40,7 +40,10 @@ Never report a missing live dependency as skipped success.
 Use `blocked` and name the missing credential, acceleration, quota, source, or provider without exposing its value.
 
 Route-share verification records this contract under `.godiesel/evidence/`.
+Canonical generation, owner-curation, and named provider verification record the same contract under `.godiesel/evidence/`.
 Until every capability uses the general receipt, record the same proof contract in the pull request or final task report for uncovered capabilities.
+
+See `docs/agents/local-capabilities.md` for executing and reusing these capability-specific proofs.
 
 ## Impact selection
 

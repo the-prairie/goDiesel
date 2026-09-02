@@ -1,6 +1,6 @@
 ---
 status: in-progress
-last_updated: 2026-09-01
+last_updated: 2026-09-02
 architecture: docs/architecture/agent-operating-system.md
 decision: docs/adr/0016-agent-control-plane-is-manifest-driven.md
 ---
@@ -77,7 +77,7 @@ This plan does not introduce:
 | 1. Manifest and doctor | Complete | Phase 0 |
 | 2. Route-share adapter | Complete | Phase 1 manifest accuracy |
 | 3. Proof receipts and impact graph | Complete | Phase 2 result envelope |
-| 4. Canonical local adapters | Pending | Phase 3 verification contract |
+| 4. Canonical local adapters | Complete | Phase 3 verification contract |
 | 5. Release adapters | Pending | Phase 4 ownership coverage |
 | 6. Mechanical accretion | Pending | Stable manifest and receipts |
 | 7. Interface consolidation | Pending | Proven parity and at least two real capability adapters |
@@ -212,6 +212,13 @@ Route release validates that reusable proof before any external effect.
 - Comparison against the current testing matrix for representative route, UI, provider, build, and documentation changes.
 
 ## Phase 4: Add canonical local capability adapters
+
+Status: complete on 2026-09-02.
+
+The implemented interface delegates full generation to `rebuild.sh` and `build.py`, delegates curation to the same owner-writer service used by the loopback endpoint, reports browser-local planned-route state without inventing a repository projection, and separates provider configuration from explicit live success.
+Owner curation uses a deterministic, state-bound plan schema, and generation, curation, and named provider checks emit reusable Phase 3 evidence receipts.
+Unified route creation, generation, curation, and every competing Admin writer share one cross-process catalogue lock.
+Command-specific provider inputs select proportionate live proof, invalidate exact receipts, and fail safe to the full tier for an unrecognized provider path.
 
 ### Work
 
