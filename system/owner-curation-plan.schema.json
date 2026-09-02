@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://godiesel.local/system/owner-curation-plan.schema.json",
+  "title": "goDiesel owner curation plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "document_type", "activity_id", "curation", "observed_state_sha256", "publication_strategy", "intended_writes", "external_effects", "verification_requirements", "warnings", "blockers", "plan_digest"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "document_type": { "const": "owner-curation-plan" },
+    "activity_id": { "type": "string", "minLength": 1 },
+    "observed_state_sha256": { "$ref": "#/$defs/sha256" },
+    "publication_strategy": { "const": "incremental-with-full-generation-fallback" },
+    "intended_writes": {
+      "const": ["quests.json", "app/src/data/generated/routes.manifest.json", "app/src/data/generated/route-stats.json", "app/public/data/routes/**"]
+    },
+    "external_effects": { "const": [] },
+    "verification_requirements": {
+      "const": ["python -m pytest -q test_godiesel_local_capabilities.py test_admin_curation.py test_curation_publish.py"]
+    },
+    "warnings": { "const": [] },
+    "blockers": { "const": [] },
+    "plan_digest": { "$ref": "#/$defs/sha256" },
+    "curation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["review_status"],
+      "properties": {
+        "vibe": { "type": "string" },
+        "ideal_use": { "type": "string" },
+        "terrain": { "$ref": "#/$defs/string_list" },
+        "difficulty": { "type": "string" },
+        "highlights": { "$ref": "#/$defs/string_list" },
+        "caveats": { "$ref": "#/$defs/string_list" },
+        "seasonality": { "type": "string" },
+        "editorial_note": { "type": "string" },
+        "review_status": { "enum": ["draft", "reviewed", "published"] }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "string_list": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    }
+  }
+}

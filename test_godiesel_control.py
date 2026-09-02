@@ -122,6 +122,8 @@ def test_capability_manifest_is_valid_and_declares_the_system_boundaries():
     assert set(capabilities) == {
         "application-release",
         "owner-curation",
+        "planned-route-persistence",
+        "provider-readiness",
         "route-generation",
         "route-share",
     }
@@ -135,6 +137,16 @@ def test_capability_manifest_is_valid_and_declares_the_system_boundaries():
     assert capabilities["application-release"]["commands"]["release"][0]["command"] == (
         "npx wrangler pages deploy dist --project-name=godiesel --branch=production"
     )
+    assert capabilities["route-generation"]["commands"]["apply"][0]["command"] == (
+        "./scripts/godiesel apply route-generation --authorize canonical-local --json"
+    )
+    assert capabilities["owner-curation"]["commands"]["apply"][0]["command"] == (
+        "./scripts/godiesel apply owner-curation --plan <plan-path> "
+        "--authorize canonical-local --json"
+    )
+    assert capabilities["planned-route-persistence"]["writes"] == []
+    assert capabilities["provider-readiness"]["authority"]["inspect"] == "read-only"
+    assert capabilities["provider-readiness"]["authority"]["verify"] == "ephemeral-local"
     assert "/app/public/data/.route-generation-backup/" in (
         ROOT / ".gitignore"
     ).read_text(encoding="utf-8").splitlines()
@@ -194,6 +206,8 @@ def test_inspect_system_returns_a_redacted_operator_view():
     assert {item["id"] for item in result["capabilities"]} == {
         "application-release",
         "owner-curation",
+        "planned-route-persistence",
+        "provider-readiness",
         "route-generation",
         "route-share",
     }

@@ -6,6 +6,7 @@ import fnmatch
 import json
 import stat
 import subprocess
+from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping, Sequence
@@ -20,6 +21,7 @@ MANIFEST_PATH = Path("system/capabilities.json")
 EVIDENCE_SCHEMA_PATH = Path("system/evidence-receipt.schema.json")
 EVIDENCE_ROOT = Path(".godiesel/evidence")
 VERIFICATION_TIERS = {"focused", "ticket", "release", "live"}
+LIVE_PROOF_MAX_AGE_SECONDS = 15 * 60
 
 
 def _issue(code: str, message: str, remediation: str) -> dict[str, str]:
@@ -175,6 +177,7 @@ def build_proof_snapshot(
     capability_id: str,
     *,
     tiers: Sequence[str],
+    commands: Sequence[str] | None = None,
     environ: Mapping[str, str] | None = None,
     provider_target: str | None = None,
 ) -> dict[str, Any]:
@@ -242,8 +245,30 @@ def build_proof_snapshot(
             "blockers": blockers,
         }
     gate_refs = {(capability_id, tier) for tier in selected_tiers}
-    patterns = sorted(
-        {
+    selected_command_items = [
+        (tier, item)
+        for tier in selected_tiers
+        for item in capability["verification"][tier]
+    ]
+    if commands is not None:
+        requested_commands = set(commands)
+        declared_commands = {
+            item["command"] for _, item in selected_command_items
+        }
+        if requested_commands - declared_commands:
+            blockers.append(
+                _issue(
+                    "GODIESEL_VERIFICATION_COMMAND_UNKNOWN",
+                    "The selected verification command is not declared by the capability tier.",
+                    "Select an exact command returned by capability inspection.",
+                )
+            )
+        selected_command_items = [
+            (tier, item)
+            for tier, item in selected_command_items
+            if item["command"] in requested_commands
+        ]
+    impact_patterns = {
             (rule["category"], pattern)
             for rule in manifest["impact_rules"]
             if any(
@@ -252,6 +277,19 @@ def build_proof_snapshot(
             )
             for pattern in rule["paths"]
         }
+    command_patterns = {
+            (proof_input["category"], pattern)
+            for _, item in selected_command_items
+            for proof_input in item.get("proof_inputs", [])
+            for pattern in proof_input["paths"]
+        }
+    exact_command_inputs = (
+        commands is not None
+        and bool(selected_command_items)
+        and all(item.get("proof_inputs") for _, item in selected_command_items)
+    )
+    patterns = sorted(
+        command_patterns if exact_command_inputs else impact_patterns | command_patterns
     )
     impact_rule_ids = sorted(
         {
@@ -341,16 +379,13 @@ def build_proof_snapshot(
         covered_inputs,
         key=lambda item: (item["category"], item["name"], item["state"]),
     )
-    gates = [
-        {"tier": tier, "command": command, "cwd": cwd}
-        for tier, command, cwd in sorted(
-            {
-                (tier, item["command"], item["cwd"])
-                for tier in selected_tiers
-                for item in capability["verification"][tier]
-            }
-        )
-    ]
+    gates = sorted(
+        (
+            {"tier": tier, "command": item["command"], "cwd": item["cwd"]}
+            for tier, item in selected_command_items
+        ),
+        key=lambda gate: (gate["tier"], gate["command"], gate["cwd"]),
+    )
     proof_fingerprint = canonical_digest(
         {
             "capability": capability_id,
@@ -414,11 +449,23 @@ def _covered_input_changes(
     ]
 
 
+def _live_proof_is_stale(receipt: Mapping[str, Any]) -> bool:
+    try:
+        finished_at = datetime.fromisoformat(str(receipt["finished_at"]))
+        if finished_at.tzinfo is None:
+            return True
+        age_seconds = (datetime.now(timezone.utc) - finished_at).total_seconds()
+    except (KeyError, TypeError, ValueError):
+        return True
+    return age_seconds < -60 or age_seconds > LIVE_PROOF_MAX_AGE_SECONDS
+
+
 def reuse_verification(
     root: Path | str,
     capability_id: str,
     *,
-    slug: str,
+    slug: str | None = None,
+    expected_inputs: Mapping[str, object] | None = None,
     environ: Mapping[str, str] | None = None,
     provider_target: str | None = None,
 ) -> dict[str, Any]:
@@ -455,7 +502,12 @@ def reuse_verification(
             evidence=None,
         )
 
-    route_digest = canonical_digest(slug)
+    required_input_digests = {
+        name: canonical_digest(value)
+        for name, value in (expected_inputs or {}).items()
+    }
+    if slug is not None:
+        required_input_digests["route-slug"] = canonical_digest(slug)
     candidates: list[tuple[Path, dict[str, Any]]] = []
     for path in sorted((root / EVIDENCE_ROOT).glob("*.json"), reverse=True):
         try:
@@ -468,10 +520,12 @@ def reuse_verification(
             receipt.get("capability") == capability_id
             and receipt.get("verb") == "verify"
             and receipt.get("status") == "passed"
-            and any(
-                item.get("name") == "route-slug"
-                and item.get("sha256") == route_digest
-                for item in receipt.get("inputs", [])
+            and all(
+                any(
+                    item.get("name") == name and item.get("sha256") == digest
+                    for item in receipt.get("inputs", [])
+                )
+                for name, digest in required_input_digests.items()
             )
         ):
             candidates.append((path, receipt))
@@ -479,10 +533,12 @@ def reuse_verification(
     latest_invalidated: tuple[Path, dict[str, Any], dict[str, Any]] | None = None
     for path, receipt in candidates:
         tiers = sorted({gate["tier"] for gate in receipt["gates"]})
+        live_proof_stale = "live" in tiers and _live_proof_is_stale(receipt)
         snapshot = build_proof_snapshot(
             root,
             capability_id,
             tiers=tiers,
+            commands=[gate["command"] for gate in receipt["gates"]],
             environ=environ,
             provider_target=provider_target,
         )
@@ -490,7 +546,10 @@ def reuse_verification(
         explanation = {
             "schema_version": SCHEMA_VERSION,
             "document_type": "godiesel-verification-reuse",
-            "reused": snapshot["proof_fingerprint"] == receipt["proof_fingerprint"],
+            "reused": (
+                snapshot["proof_fingerprint"] == receipt["proof_fingerprint"]
+                and not live_proof_stale
+            ),
             "source_receipt": relative_path,
             "proof_fingerprint": snapshot["proof_fingerprint"],
             "source_proof_fingerprint": receipt["proof_fingerprint"],
@@ -499,6 +558,9 @@ def reuse_verification(
                 receipt["covered_inputs"], snapshot["covered_inputs"]
             ),
             "reason": (
+                "Live-provider evidence is older than the 15-minute reuse window."
+                if live_proof_stale
+                else
                 "Every covered input and selected gate remains unchanged."
                 if snapshot["proof_fingerprint"] == receipt["proof_fingerprint"]
                 else "One or more covered inputs or selected gates changed."
@@ -515,6 +577,20 @@ def reuse_verification(
                 status="blocked",
                 explanation=explanation,
                 blockers=snapshot["blockers"],
+                evidence=evidence,
+            )
+        if live_proof_stale:
+            return _reuse_result(
+                capability_id,
+                status="blocked",
+                explanation=explanation,
+                blockers=[
+                    _issue(
+                        "GODIESEL_LIVE_PROOF_STALE",
+                        "Live-provider evidence is outside the 15-minute reuse window.",
+                        "Run the named live verification again before claiming current readiness.",
+                    )
+                ],
                 evidence=evidence,
             )
         if explanation["reused"]:
@@ -596,7 +672,19 @@ def _selected_gates(
                 capability_id = gate_ref["capability"]
                 tier = gate_ref["tier"]
                 capability = capabilities[capability_id]
-                for command in capability["verification"][tier]:
+                commands = capability["verification"][tier]
+                applicable_commands = [
+                    command
+                    for command in commands
+                    if not command.get("proof_inputs")
+                    or any(
+                        _matches(path, proof_input["paths"])
+                        for proof_input in command["proof_inputs"]
+                    )
+                ]
+                if not applicable_commands:
+                    applicable_commands = commands
+                for command in applicable_commands:
                     key = (capability_id, tier, command["command"], command["cwd"])
                     gate = selected.setdefault(
                         key,

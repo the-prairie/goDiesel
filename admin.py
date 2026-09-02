@@ -29,10 +29,11 @@ import gpxpy
 import pandas as pd
 
 from admin_curation import (
+    OwnerMutationBusyError,
     SourceRollbackError,
     curation_readiness,
-    publish_curation_or_rebuild,
-    save_curation_and_rebuild,
+    owner_mutation_lock,
+    save_owner_curation,
     write_atomic,
 )
 import hashlib
@@ -42,7 +43,6 @@ from curation_publish import (
     CurationPublishError,
     CurationRecoveryError,
     publish_annotations,
-    publish_curation,
 )
 from route_imports import route_metadata
 from route_media import (
@@ -739,50 +739,54 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(409, {'error': 'another owner mutation is in progress'})
                 return
             try:
-                data = json.loads(body)
-                if not isinstance(data, dict) or not isinstance(data.get('routes', []), list):
-                    raise ValueError('request must contain a routes list')
-                updates = data.get('routes', [])
-                if any(not isinstance(update, dict) or 'activity_id' not in update for update in updates):
-                    raise ValueError('every route update must contain an activity_id')
-                config_path = QUESTS / 'quests.json'
-                cfg = json.loads(config_path.read_text(encoding='utf-8'))
-                routes = cfg.get('routes')
-                if not isinstance(routes, list):
-                    raise ValueError('quests.json must contain a routes list')
-                route_ids = [route.get('activity_id') for route in routes]
-                if len(route_ids) != len(set(route_ids)):
-                    raise ValueError('quests.json contains duplicate activity ids')
-                by_id = {route['activity_id']: route for route in routes}
-                updated = 0
-                for update in updates:
-                    aid = update['activity_id']
-                    if aid not in by_id:
-                        continue
-                    if 'status' in update:
-                        by_id[aid]['status'] = update['status']
-                    if 'region' in update:
-                        by_id[aid]['region'] = update['region'] or None
-                    for field in CURATION_TEXT_FIELDS:
-                        if field in update:
-                            value = str(update[field]).strip()
-                            if value:
-                                by_id[aid][field] = value
+                with owner_mutation_lock(QUESTS):
+                    data = json.loads(body)
+                    if not isinstance(data, dict) or not isinstance(data.get('routes', []), list):
+                        raise ValueError('request must contain a routes list')
+                    updates = data.get('routes', [])
+                    if any(not isinstance(update, dict) or 'activity_id' not in update for update in updates):
+                        raise ValueError('every route update must contain an activity_id')
+                    config_path = QUESTS / 'quests.json'
+                    cfg = json.loads(config_path.read_text(encoding='utf-8'))
+                    routes = cfg.get('routes')
+                    if not isinstance(routes, list):
+                        raise ValueError('quests.json must contain a routes list')
+                    route_ids = [route.get('activity_id') for route in routes]
+                    if len(route_ids) != len(set(route_ids)):
+                        raise ValueError('quests.json contains duplicate activity ids')
+                    by_id = {route['activity_id']: route for route in routes}
+                    updated = 0
+                    for update in updates:
+                        aid = update['activity_id']
+                        if aid not in by_id:
+                            continue
+                        if 'status' in update:
+                            by_id[aid]['status'] = update['status']
+                        if 'region' in update:
+                            by_id[aid]['region'] = update['region'] or None
+                        for field in CURATION_TEXT_FIELDS:
+                            if field in update:
+                                value = str(update[field]).strip()
+                                if value:
+                                    by_id[aid][field] = value
+                                else:
+                                    by_id[aid].pop(field, None)
+                        if 'visibility' in update:
+                            value = str(update['visibility']).strip()
+                            if value and value not in CURATION_VISIBILITIES:
+                                raise ValueError(
+                                    f'visibility must be one of: {", ".join(CURATION_VISIBILITIES)}'
+                                )
+                            if value and value != 'public':
+                                by_id[aid]['visibility'] = value
                             else:
-                                by_id[aid].pop(field, None)
-                    if 'visibility' in update:
-                        value = str(update['visibility']).strip()
-                        if value and value not in CURATION_VISIBILITIES:
-                            raise ValueError(
-                                f'visibility must be one of: {", ".join(CURATION_VISIBILITIES)}'
-                            )
-                        if value and value != 'public':
-                            by_id[aid]['visibility'] = value
-                        else:
-                            by_id[aid].pop('visibility', None)
-                    updated += 1
-                cfg['routes'] = list(by_id.values())
-                write_atomic(config_path, json.dumps(cfg, indent=2) + '\n')
+                                by_id[aid].pop('visibility', None)
+                        updated += 1
+                    cfg['routes'] = list(by_id.values())
+                    write_atomic(config_path, json.dumps(cfg, indent=2) + '\n')
+            except OwnerMutationBusyError as error:
+                self._send(409, {'error': str(error)})
+                return
             except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
                 self._send(400, {'error': str(error)})
                 return
@@ -799,28 +803,10 @@ class Handler(BaseHTTPRequestHandler):
                 activity_id = str(data['activity_id'])
                 curation = data['curation']
 
-                def rebuild():
-                    # A curation edit changes no geometry, so republish only the
-                    # artifacts that carry curation. test_curation_publish.py
-                    # asserts this equals a full rebuild byte for byte. A route
-                    # with no generated record yet still needs the full path.
-                    def full_rebuild():
-                        subprocess.run(
-                            [sys.executable, str(QUESTS / 'build.py')],
-                            cwd=str(QUESTS),
-                            check=True,
-                            capture_output=True,
-                            text=True,
-                        )
-
-                    publish_curation_or_rebuild(
-                        lambda: publish_curation(QUESTS, activity_id, curation),
-                        full_rebuild,
-                    )
-
-                route = save_curation_and_rebuild(
-                    QUESTS / 'quests.json', activity_id, curation, rebuild
-                )
+                route = save_owner_curation(QUESTS, activity_id, curation)
+            except OwnerMutationBusyError as error:
+                self._send(409, {'error': str(error)})
+                return
             except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
                 self._send(400, {'error': str(error)})
                 return
@@ -863,23 +849,27 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(409, {'error': 'another owner mutation is in progress'})
                 return
             try:
-                data = json.loads(body)
-                activity_id = str(data['activity_id'])
-                annotations = data['annotations']
-                config_path = QUESTS / 'quests.json'
-                original = config_path.read_text(encoding='utf-8')
-                config = json.loads(original)
-                matching = [
-                    route for route in config.get('routes', [])
-                    if str(route.get('activity_id')) == activity_id
-                ]
-                if len(matching) != 1:
-                    raise ValueError(f'route {activity_id} was not found')
-                # Publish first, so an invalid anchor is refused before the
-                # source of truth changes.
-                published = publish_annotations(QUESTS, activity_id, annotations)
-                matching[0]['annotations'] = published
-                write_atomic(config_path, json.dumps(config, indent=2) + '\n')
+                with owner_mutation_lock(QUESTS):
+                    data = json.loads(body)
+                    activity_id = str(data['activity_id'])
+                    annotations = data['annotations']
+                    config_path = QUESTS / 'quests.json'
+                    original = config_path.read_text(encoding='utf-8')
+                    config = json.loads(original)
+                    matching = [
+                        route for route in config.get('routes', [])
+                        if str(route.get('activity_id')) == activity_id
+                    ]
+                    if len(matching) != 1:
+                        raise ValueError(f'route {activity_id} was not found')
+                    # Publish first, so an invalid anchor is refused before the
+                    # source of truth changes.
+                    published = publish_annotations(QUESTS, activity_id, annotations)
+                    matching[0]['annotations'] = published
+                    write_atomic(config_path, json.dumps(config, indent=2) + '\n')
+            except OwnerMutationBusyError as error:
+                self._send(409, {'error': str(error)})
+                return
             except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
                 self._send(400, {'error': str(error)})
                 return
@@ -908,19 +898,35 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(409, {'error': 'another owner mutation is in progress'})
                 return
 
+            lock_ready = threading.Event()
+            lock_error = []
+
             def rebuild_in_background():
                 try:
-                    subprocess.run(
-                        [sys.executable, str(QUESTS / 'build.py')],
-                        cwd=str(QUESTS),
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        check=False,
-                    )
+                    with owner_mutation_lock(QUESTS):
+                        lock_ready.set()
+                        subprocess.run(
+                            [sys.executable, str(QUESTS / 'build.py')],
+                            cwd=str(QUESTS),
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            check=False,
+                        )
+                except OwnerMutationBusyError as error:
+                    lock_error.append(error)
+                    lock_ready.set()
+                except Exception as error:
+                    lock_error.append(error)
+                    lock_ready.set()
                 finally:
                     OWNER_MUTATION_LOCK.release()
 
             threading.Thread(target=rebuild_in_background, daemon=True).start()
+            lock_ready.wait()
+            if lock_error:
+                status = 409 if isinstance(lock_error[0], OwnerMutationBusyError) else 500
+                self._send(status, {'error': str(lock_error[0])})
+                return
             self._send(200, {'ok': True, 'msg': 'Rebuild started in background.'})
             return
         if path == '/api/auto-classify':

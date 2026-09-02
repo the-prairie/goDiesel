@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from jsonschema import Draft202012Validator
+
+from admin_curation import OwnerMutationBusyError, owner_mutation_lock
 from jsonschema.exceptions import SchemaError
 
 from godiesel_evidence import canonical_digest, write_evidence_receipt
@@ -696,13 +698,35 @@ def execute_route_share(
         replace_existing=replace_existing,
     )
     started_at = datetime.now(timezone.utc).isoformat()
-    completed = runner(
-        command,
-        cwd=root,
-        capture_output=True,
-        text=True,
-        env=dict(os.environ if environ is None else environ),
-    )
+    try:
+        if verb == "apply":
+            with owner_mutation_lock(root):
+                completed = runner(
+                    command,
+                    cwd=root,
+                    capture_output=True,
+                    text=True,
+                    env=dict(os.environ if environ is None else environ),
+                )
+        else:
+            completed = runner(
+                command,
+                cwd=root,
+                capture_output=True,
+                text=True,
+                env=dict(os.environ if environ is None else environ),
+            )
+    except OwnerMutationBusyError:
+        return _blocked_result(
+            verb,
+            required_authority,
+            _issue(
+                "GODIESEL_ROUTE_MUTATION_BUSY",
+                "Another catalogue mutation currently owns the canonical write boundary.",
+                "Wait for the active catalogue mutation to finish, then create or apply a fresh proposal.",
+            ),
+            authorized=True,
+        )
     finished_at = datetime.now(timezone.utc).isoformat()
     domain_result = _domain_result(completed)
     blockers = []

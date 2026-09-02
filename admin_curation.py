@@ -1,11 +1,19 @@
 """Validated owner-curation writes for the local Admin service."""
 
 import copy
+import fcntl
 import json
 import os
+import subprocess
+import sys
+from contextlib import contextmanager
 from pathlib import Path
 
-from curation_publish import CurationPublishError, CurationRecoveryError
+from curation_publish import (
+    CurationPublishError,
+    CurationRecoveryError,
+    publish_curation,
+)
 from quest_meta import (
     CURATION_LIST_FIELDS,
     CURATION_TEXT_FIELDS,
@@ -17,6 +25,70 @@ REQUIRED_CURATION_FIELDS = (*CURATION_TEXT_FIELDS, *CURATION_LIST_FIELDS)
 
 class SourceRollbackError(RuntimeError):
     """Canonical curation source could not be restored after publication failed."""
+
+
+class OwnerMutationBusyError(RuntimeError):
+    """Another process currently owns the canonical owner-mutation boundary."""
+
+
+@contextmanager
+def owner_mutation_lock(checkout_root):
+    """Serialize owner curation across the Admin server and local CLI processes."""
+
+    root = Path(checkout_root).resolve()
+    lock_path = root / ".godiesel/owner-mutation.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+", encoding="utf-8") as lock_file:
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise OwnerMutationBusyError(
+                "another owner mutation is in progress"
+            ) from error
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def save_owner_curation(
+    checkout_root,
+    activity_id,
+    curation,
+    runner=subprocess.run,
+    *,
+    acquire_lock=True,
+):
+    """Apply one owner-approved curation change through the canonical writers."""
+    root = Path(checkout_root).resolve()
+
+    def full_rebuild():
+        runner(
+            [sys.executable, str(root / "build.py")],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    def publish():
+        publish_curation_or_rebuild(
+            lambda: publish_curation(root, activity_id, curation),
+            full_rebuild,
+        )
+
+    def save():
+        return save_curation_and_rebuild(
+            root / "quests.json",
+            activity_id,
+            curation,
+            publish,
+        )
+
+    if not acquire_lock:
+        return save()
+    with owner_mutation_lock(root):
+        return save()
 
 
 def publish_curation_or_rebuild(publish, full_rebuild):

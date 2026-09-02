@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator
 
+from admin_curation import owner_mutation_lock
 from godiesel_route_share import execute_route_share
 
 
@@ -343,6 +344,25 @@ def test_apply_preserves_idempotent_creation_report_and_links_proposal(tmp_path:
     assert receipt["proposal"]["id"] == "proposal-1"
     assert receipt["creation_report"]["result"] == "already_applied"
     assert receipt["route_slug"] == "route-1"
+
+
+def test_apply_blocks_while_catalogue_mutation_lock_is_held(tmp_path: Path):
+    proposal_path = tmp_path / "proposal.json"
+    proposal_path.write_text('{"proposal_id":"proposal-1"}\n', encoding="utf-8")
+    runner = RecordingRunner(completed([], stdout="{}"))
+
+    with owner_mutation_lock(tmp_path):
+        result = execute_route_share(
+            tmp_path,
+            "apply",
+            proposal_path=proposal_path,
+            authority="canonical-local",
+            runner=runner,
+        )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_ROUTE_MUTATION_BUSY"
+    assert runner.calls == []
 
 
 @pytest.mark.parametrize(

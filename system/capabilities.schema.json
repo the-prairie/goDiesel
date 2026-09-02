@@ -37,7 +37,27 @@
       "properties": {
         "command": { "type": "string", "minLength": 1 },
         "cwd": { "type": "string", "minLength": 1 },
-        "description": { "type": "string", "minLength": 1 }
+        "description": { "type": "string", "minLength": 1 },
+        "proof_inputs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/proofInput" }
+        }
+      }
+    },
+    "proofInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["category", "paths"],
+      "properties": {
+        "category": {
+          "enum": ["implementation", "contract", "fixture", "configuration", "data", "provider"]
+        },
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
       }
     },
     "configuration": {

@@ -23,7 +23,7 @@
         "release": ["route slug", "stable share name", "exact target authority", "exact replacement authority when replacing an alias"]
       },
       "reads": ["quests.json", "route_sources/**", ".route-share/**"],
-      "writes": [".route-share/**", "quests.json", "route_sources/imported/**", "route_sources/media/**", "app/public/media/**", "app/src/data/generated/**", "app/public/data/routes/**", "dist/**"],
+      "writes": [".route-share/**", ".godiesel/owner-mutation.lock", "quests.json", "route_sources/imported/**", "route_sources/media/**", "app/public/media/**", "app/src/data/generated/**", "app/public/data/routes/**", "dist/**"],
       "external_effects": ["cloudflare-pages-route-branch"],
       "required_files": ["scripts/godiesel", "godiesel_route_share.py", "godiesel_evidence.py", "godiesel_verification.py", "scripts/route.sh", "route_create.py", "route_create.schema.json", "system/result.schema.json", "system/route-share-receipt.schema.json", "system/evidence-receipt.schema.json", "system/verification-explanation.schema.json", "system/verification-reuse.schema.json", "docs/agents/route-share.md"],
       "configuration": [
@@ -68,6 +68,7 @@
         { "kind": "route-share-creation-report", "location": "command result", "persistence": "ignored-local", "schema": "route-share-creation-report" },
         { "kind": "route-source-staging", "location": ".route-share/staging/**", "persistence": "ignored-local" },
         { "kind": "route-write-recovery", "location": ".route-share/recovery/**", "persistence": "ignored-local" },
+        { "kind": "catalogue-mutation-lock", "location": ".godiesel/owner-mutation.lock", "persistence": "ignored-local" },
         { "kind": "durable-route-media", "location": "route_sources/media/**", "persistence": "tracked-local" },
         { "kind": "public-route-media", "location": "app/public/media/**", "persistence": "tracked-local" },
         { "kind": "single-route-bundle", "location": "dist/**", "persistence": "generated-local" },
@@ -98,14 +99,17 @@
         "verify": ["generated projection diff"]
       },
       "reads": ["quests.json", "route_sources/**", "external-private:DieselDiaries/activities.csv", "external-private:DieselDiaries/strava_export/activities/**"],
-      "writes": ["app/src/data/generated/**", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**"],
+      "writes": ["app/src/data/generated/**", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**", ".godiesel/evidence/**", ".godiesel/owner-mutation.lock"],
       "external_effects": [],
-      "required_files": ["build.py", "quest_meta.py", "quests.json"],
+      "required_files": ["scripts/godiesel", "godiesel_local_capabilities.py", "build.py", "quest_meta.py", "rebuild.sh", "quests.json", "system/result.schema.json"],
       "configuration": [],
       "commands": {
-        "inspect": [{ "command": "./scripts/route.sh status", "cwd": "." }],
-        "apply": [{ "command": "./rebuild.sh", "cwd": "." }],
-        "verify": [{ "command": "python -m pytest -q test_react_app.py", "cwd": "." }]
+        "inspect": [{ "command": "./scripts/godiesel inspect route-generation --json", "cwd": "." }],
+        "apply": [{ "command": "./scripts/godiesel apply route-generation --authorize canonical-local --json", "cwd": "." }],
+        "verify": [
+          { "command": "./scripts/godiesel verify route-generation --json", "cwd": "." },
+          { "command": "./scripts/godiesel verify route-generation --reuse --json", "cwd": ".", "description": "Reuse only a passed proof whose complete covered-input fingerprint is unchanged." }
+        ]
       },
       "preconditions": [
         "canonical route specifications are valid",
@@ -125,41 +129,49 @@
         { "kind": "route-summary-manifest", "location": "app/src/data/generated/routes.manifest.json", "persistence": "generated-local" },
         { "kind": "route-statistics", "location": "app/src/data/generated/route-stats.json", "persistence": "generated-local" },
         { "kind": "route-detail-records", "location": "app/public/data/routes/**", "persistence": "generated-local" },
-        { "kind": "route-generation-recovery", "location": "app/public/data/.route-generation-backup/**", "persistence": "ignored-local" }
+        { "kind": "route-generation-recovery", "location": "app/public/data/.route-generation-backup/**", "persistence": "ignored-local" },
+        { "kind": "catalogue-mutation-lock", "location": ".godiesel/owner-mutation.lock", "persistence": "ignored-local" },
+        { "kind": "verification-evidence-receipt", "location": ".godiesel/evidence/**", "persistence": "ignored-local", "schema": "system/evidence-receipt.schema.json" }
       ],
       "invariants": ["single-writer", "two-tier-route-data", "atomic-publication"],
       "verification": {
-        "focused": [{ "command": "python -m pytest -q test_react_app.py", "cwd": "." }],
+        "focused": [{ "command": "python -m pytest -q test_godiesel_local_capabilities.py test_react_app.py", "cwd": "." }],
         "ticket": [{ "command": "npm --prefix app run verify:ticket", "cwd": "." }],
         "release": [{ "command": "npm --prefix app run verify", "cwd": "." }],
         "live": []
       },
-      "documents": ["CONTEXT.md", "docs/adr/0003-python-generator-is-the-only-writer-of-route-data.md", "docs/adr/0004-two-tier-route-data-with-lenient-summaries-and-strict-details.md"]
+      "documents": ["CONTEXT.md", "docs/agents/local-capabilities.md", "docs/adr/0003-python-generator-is-the-only-writer-of-route-data.md", "docs/adr/0004-two-tier-route-data-with-lenient-summaries-and-strict-details.md"]
     },
     {
       "id": "owner-curation",
       "entity": "owner-curation",
       "summary": "Inspect and publish owner-authored route notes through the loopback-only writer.",
-      "verbs": ["inspect", "apply", "verify"],
+      "verbs": ["inspect", "plan", "apply", "verify"],
       "authority": {
         "inspect": "read-only",
+        "plan": "ephemeral-local",
         "apply": "canonical-local",
         "verify": "ephemeral-local"
       },
       "inputs": {
         "inspect": [],
-        "apply": ["validated owner curation payload"],
+        "plan": ["closed owner curation request"],
+        "apply": ["approved owner curation plan"],
         "verify": ["curation and generated projection diff"]
       },
       "reads": ["quests.json", "app/public/data/routes/**"],
-      "writes": ["quests.json", "app/src/data/generated/**", "app/public/data/routes/**"],
+      "writes": [".godiesel/plans/owner-curation/**", ".godiesel/evidence/**", ".godiesel/owner-mutation.lock", "quests.json", "app/src/data/generated/**", "app/public/data/routes/**"],
       "external_effects": [],
-      "required_files": ["admin.sh", "admin.py", "curation_publish.py", "docs/adr/0010-owner-curation-through-a-loopback-only-writer.md"],
+      "required_files": ["scripts/godiesel", "godiesel_local_capabilities.py", "admin.sh", "admin.py", "admin_curation.py", "curation_publish.py", "system/owner-curation-plan.schema.json", "system/result.schema.json", "docs/adr/0010-owner-curation-through-a-loopback-only-writer.md"],
       "configuration": [],
       "commands": {
-        "inspect": [{ "command": "./scripts/godiesel doctor --json", "cwd": "." }],
-        "apply": [{ "command": "./admin.sh", "cwd": "." }],
-        "verify": [{ "command": "python -m pytest -q test_admin_curation.py test_curation_publish.py", "cwd": "." }]
+        "inspect": [{ "command": "./scripts/godiesel inspect owner-curation --json", "cwd": "." }],
+        "plan": [{ "command": "./scripts/godiesel plan owner-curation --request <request-json> --json", "cwd": "." }],
+        "apply": [{ "command": "./scripts/godiesel apply owner-curation --plan <plan-path> --authorize canonical-local --json", "cwd": "." }],
+        "verify": [
+          { "command": "./scripts/godiesel verify owner-curation --json", "cwd": "." },
+          { "command": "./scripts/godiesel verify owner-curation --reuse --json", "cwd": ".", "description": "Reuse only a passed proof whose complete covered-input fingerprint is unchanged." }
+        ]
       },
       "preconditions": [
         "the owner writer is bound to loopback",
@@ -167,26 +179,140 @@
       ],
       "idempotency": {
         "inspect": "read-only",
+        "plan": "guarded",
         "apply": "idempotent",
         "verify": "deterministic"
       },
       "recovery": {
         "inspect": "No recovery is required because inspection is read-only.",
+        "plan": "Discard the ignored plan and create a new one when observed route state changes.",
         "apply": "The focused publisher restores canonical and generated files from its backup after a failed publication.",
         "verify": "Correct the owner payload or writer behavior and rerun focused recovery tests."
       },
       "artifacts": [
+        { "kind": "owner-curation-plan", "location": ".godiesel/plans/owner-curation/**", "persistence": "ignored-local", "schema": "system/owner-curation-plan.schema.json" },
         { "kind": "owner-curation", "location": "quests.json", "persistence": "tracked-local" },
-        { "kind": "curated-route-projection", "location": "app/public/data/routes/**", "persistence": "generated-local" }
+        { "kind": "curated-route-projection", "location": "app/public/data/routes/**", "persistence": "generated-local" },
+        { "kind": "catalogue-mutation-lock", "location": ".godiesel/owner-mutation.lock", "persistence": "ignored-local" },
+        { "kind": "verification-evidence-receipt", "location": ".godiesel/evidence/**", "persistence": "ignored-local", "schema": "system/evidence-receipt.schema.json" }
       ],
       "invariants": ["loopback-only-writer", "owner-authored-provenance", "recoverable-publication"],
       "verification": {
-        "focused": [{ "command": "python -m pytest -q test_admin_curation.py test_curation_publish.py", "cwd": "." }],
+        "focused": [{ "command": "python -m pytest -q test_godiesel_local_capabilities.py test_admin_curation.py test_curation_publish.py", "cwd": "." }],
         "ticket": [{ "command": "npm --prefix app run verify:ticket", "cwd": "." }],
         "release": [{ "command": "npm --prefix app run verify", "cwd": "." }],
         "live": []
       },
-      "documents": ["CONTEXT.md", "docs/adr/0010-owner-curation-through-a-loopback-only-writer.md", "docs/agents/testing.md"]
+      "documents": ["CONTEXT.md", "docs/agents/local-capabilities.md", "docs/adr/0010-owner-curation-through-a-loopback-only-writer.md", "docs/agents/testing.md"]
+    },
+    {
+      "id": "planned-route-persistence",
+      "entity": "browser-local-planned-route-state",
+      "summary": "Describe the browser-owned planned-route store without treating it as canonical repository data.",
+      "verbs": ["inspect"],
+      "authority": { "inspect": "read-only" },
+      "inputs": { "inspect": [] },
+      "reads": ["app/src/data/planned-route-store.ts"],
+      "writes": [],
+      "external_effects": [],
+      "required_files": ["scripts/godiesel", "godiesel_local_capabilities.py", "app/src/data/planned-route-store.ts"],
+      "configuration": [],
+      "commands": {
+        "inspect": [{ "command": "./scripts/godiesel inspect planned-route-persistence --json", "cwd": "." }]
+      },
+      "preconditions": ["current planned-route records can only be observed in the intended browser profile"],
+      "idempotency": { "inspect": "read-only" },
+      "recovery": { "inspect": "No recovery is required because repository inspection does not access or mutate browser storage." },
+      "artifacts": [
+        { "kind": "planned-route-store", "location": "browser localStorage: godiesel.planned-routes.v1", "persistence": "runtime" }
+      ],
+      "invariants": ["browser-local-planning-state", "planned-is-not-recorded"],
+      "verification": {
+        "focused": [{ "command": "npm --prefix app run test:unit -- src/data/planned-route-store.test.ts", "cwd": "." }],
+        "ticket": [{ "command": "npm --prefix app run verify:ticket", "cwd": "." }],
+        "release": [],
+        "live": []
+      },
+      "documents": ["CONTEXT.md", "docs/agents/local-capabilities.md", "docs/architecture/agent-operating-system.md"]
+    },
+    {
+      "id": "provider-readiness",
+      "entity": "runtime-provider-readiness",
+      "summary": "Separate provider configuration presence from explicit live-provider success.",
+      "verbs": ["inspect", "verify"],
+      "authority": { "inspect": "read-only", "verify": "ephemeral-local" },
+      "inputs": {
+        "inspect": [],
+        "verify": ["named provider", "exact credential-free HTTP target"]
+      },
+      "reads": [".env", "app/.env", "app/src/providers/**", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts"],
+      "writes": [".godiesel/evidence/**", "app/test-results/**", "app/playwright-report/**"],
+      "external_effects": ["read named map or imagery provider through the selected live browser check"],
+      "required_files": ["scripts/godiesel", "scripts/verify-provider-readiness.sh", "godiesel_local_capabilities.py", "scripts/check-provider-key.mjs", "app/src/providers/google-maps-loader.ts", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts", "docs/agents/testing.md"],
+      "configuration": [
+        { "name": "GOOGLE_MAPS_API_KEY", "required_for": ["verify:live"], "sensitive": true }
+      ],
+      "commands": {
+        "inspect": [{ "command": "./scripts/godiesel inspect provider-readiness --json", "cwd": "." }],
+        "verify": [
+          { "command": "./scripts/godiesel verify provider-readiness --provider atlas --provider-target <url> --json", "cwd": "." },
+          { "command": "./scripts/godiesel verify provider-readiness --provider atlas --provider-target <url> --reuse --json", "cwd": "." },
+          { "command": "./scripts/godiesel verify provider-readiness --provider earth-replay --provider-target <url> --json", "cwd": "." },
+          { "command": "./scripts/godiesel verify provider-readiness --provider earth-replay --provider-target <url> --reuse --json", "cwd": "." },
+          { "command": "./scripts/godiesel verify provider-readiness --provider google-3d --provider-target <url> --json", "cwd": "." },
+          { "command": "./scripts/godiesel verify provider-readiness --provider google-3d --provider-target <url> --reuse --json", "cwd": "." }
+        ]
+      },
+      "preconditions": [
+        "the selected provider configuration is present without exposing its value",
+        "the exact localhost or deployed preview target is named",
+        "browser and hardware evidence are available for claims that depend on rendering"
+      ],
+      "idempotency": { "inspect": "read-only", "verify": "external-check-required" },
+      "recovery": {
+        "inspect": "No recovery is required because inspection checks configuration presence only.",
+        "verify": "Inspect retained Playwright evidence and provider state before retrying a failed live check."
+      },
+      "artifacts": [
+        { "kind": "live-provider-test-evidence", "location": "app/test-results/**", "persistence": "generated-local" },
+        { "kind": "verification-evidence-receipt", "location": ".godiesel/evidence/**", "persistence": "ignored-local", "schema": "system/evidence-receipt.schema.json" }
+      ],
+      "invariants": ["configuration-is-not-success", "provider-proof-honesty", "named-live-target"],
+      "verification": {
+        "focused": [{ "command": "npm --prefix app run test:unit -- src/providers/google-maps-loader.test.ts src/providers/render-health.test.ts", "cwd": "." }],
+        "ticket": [{ "command": "npm --prefix app run verify:ticket", "cwd": "." }],
+        "release": [],
+        "live": [
+          {
+            "command": "./scripts/verify-provider-readiness.sh atlas",
+            "cwd": ".",
+            "proof_inputs": [
+              { "category": "implementation", "paths": ["godiesel_local_capabilities.py", "godiesel_verification.py", "godiesel_evidence.py", "scripts/verify-provider-readiness.sh", "app/src/providers/cesium-render-quality.ts", "app/src/providers/render-health.ts", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/atlas/components/cesium-atlas-globe.tsx", "app/src/surfaces/atlas/atlas-region-camera.ts"] },
+              { "category": "contract", "paths": ["system/capabilities.json", "system/capabilities.schema.json", "system/evidence-receipt.schema.json"] },
+              { "category": "fixture", "paths": ["test_godiesel_local_capabilities.py", "test_godiesel_verification.py", "app/e2e/atlas-region-live.spec.ts", "app/playwright.live.config.ts", "app/package.json", "app/package-lock.json"] }
+            ]
+          },
+          {
+            "command": "./scripts/verify-provider-readiness.sh earth-replay",
+            "cwd": ".",
+            "proof_inputs": [
+              { "category": "implementation", "paths": ["godiesel_local_capabilities.py", "godiesel_verification.py", "godiesel_evidence.py", "scripts/verify-provider-readiness.sh", "app/src/providers/cesium-render-quality.ts", "app/src/providers/render-health.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts", "app/src/surfaces/replay/renderers/replay-camera-clearance.ts", "app/src/surfaces/replay/story-flight/replay-camera-framing.ts", "app/src/surfaces/replay/scene/route-camera-stabilizer.ts"] },
+              { "category": "contract", "paths": ["system/capabilities.json", "system/capabilities.schema.json", "system/evidence-receipt.schema.json"] },
+              { "category": "fixture", "paths": ["test_godiesel_local_capabilities.py", "test_godiesel_verification.py", "app/e2e/earth-replay-live.spec.ts", "app/playwright.live.config.ts", "app/package.json", "app/package-lock.json"] }
+            ]
+          },
+          {
+            "command": "./scripts/verify-provider-readiness.sh google-3d",
+            "cwd": ".",
+            "proof_inputs": [
+              { "category": "implementation", "paths": ["godiesel_local_capabilities.py", "godiesel_verification.py", "godiesel_evidence.py", "scripts/verify-provider-readiness.sh", "app/src/providers/google-maps-loader.ts", "app/src/providers/provider-error.ts", "app/src/surfaces/replay/renderers/google-route-navigator-engine.ts", "app/src/surfaces/replay/components/google-route-navigator-stage.tsx", "app/src/surfaces/replay/story-flight/replay-camera-framing.ts", "app/src/surfaces/replay/scene/route-camera-stabilizer.ts"] },
+              { "category": "contract", "paths": ["system/capabilities.json", "system/capabilities.schema.json", "system/evidence-receipt.schema.json"] },
+              { "category": "fixture", "paths": ["test_godiesel_local_capabilities.py", "test_godiesel_verification.py", "app/e2e/google-route-navigator-live.spec.ts", "app/e2e/cinematic-route-trailer-live.spec.ts", "app/e2e/cinematic-director-live.spec.ts", "app/e2e/cinematic-export-live.spec.ts", "app/playwright.live.config.ts", "app/package.json", "app/package-lock.json"] }
+            ]
+          }
+        ]
+      },
+      "documents": ["CONTEXT.md", "docs/agents/local-capabilities.md", "docs/agents/testing.md", "docs/adr/0007-named-degradation-instead-of-silent-failure.md", "docs/adr/0012-risk-based-verification-with-a-no-skip-live-gate.md"]
     },
     {
       "id": "application-release",
@@ -250,30 +376,30 @@
   "impact_rules": [
     {
       "id": "control-plane-implementation",
-      "paths": ["godiesel_control.py", "godiesel_evidence.py", "godiesel_route_share.py", "godiesel_verification.py", "scripts/godiesel"],
-      "capabilities": ["route-share"],
+      "paths": ["godiesel_control.py", "godiesel_evidence.py", "godiesel_local_capabilities.py", "godiesel_route_share.py", "godiesel_verification.py", "scripts/godiesel"],
+      "capabilities": ["route-share", "route-generation", "owner-curation", "planned-route-persistence", "provider-readiness"],
       "category": "implementation",
-      "gates": [{ "capability": "route-share", "tier": "focused" }],
-      "invariants": [{ "capability": "route-share", "id": "source-truth" }, { "capability": "route-share", "id": "stable-route-identity" }, { "capability": "route-share", "id": "single-route-microsite" }],
-      "reason": "The shared operator implementation can change route-share behavior or evidence."
+      "gates": [{ "capability": "route-share", "tier": "focused" }, { "capability": "route-generation", "tier": "focused" }, { "capability": "owner-curation", "tier": "focused" }, { "capability": "planned-route-persistence", "tier": "focused" }, { "capability": "provider-readiness", "tier": "focused" }],
+      "invariants": [{ "capability": "route-share", "id": "source-truth" }, { "capability": "route-share", "id": "stable-route-identity" }, { "capability": "route-share", "id": "single-route-microsite" }, { "capability": "route-generation", "id": "single-writer" }, { "capability": "owner-curation", "id": "recoverable-publication" }, { "capability": "planned-route-persistence", "id": "browser-local-planning-state" }, { "capability": "provider-readiness", "id": "configuration-is-not-success" }],
+      "reason": "The shared operator implementation can change capability dispatch, behavior, or evidence."
     },
     {
       "id": "control-plane-contracts",
       "paths": ["system/**"],
-      "capabilities": ["route-share"],
+      "capabilities": ["route-share", "route-generation", "owner-curation", "planned-route-persistence", "provider-readiness"],
       "category": "contract",
-      "gates": [{ "capability": "route-share", "tier": "focused" }],
-      "invariants": [{ "capability": "route-share", "id": "source-truth" }, { "capability": "route-share", "id": "stable-route-identity" }, { "capability": "route-share", "id": "single-route-microsite" }],
+      "gates": [{ "capability": "route-share", "tier": "focused" }, { "capability": "route-generation", "tier": "focused" }, { "capability": "owner-curation", "tier": "focused" }, { "capability": "planned-route-persistence", "tier": "focused" }, { "capability": "provider-readiness", "tier": "focused" }],
+      "invariants": [{ "capability": "route-share", "id": "source-truth" }, { "capability": "route-share", "id": "stable-route-identity" }, { "capability": "route-generation", "id": "single-writer" }, { "capability": "owner-curation", "id": "owner-authored-provenance" }, { "capability": "planned-route-persistence", "id": "planned-is-not-recorded" }, { "capability": "provider-readiness", "id": "provider-proof-honesty" }],
       "reason": "A machine-readable control contract changed."
     },
     {
       "id": "control-plane-fixtures",
-      "paths": ["test_godiesel_control.py", "test_godiesel_route_share.py", "test_godiesel_verification.py", "test_route_share_cli.py", "scripts/test-route-share-acceptance.sh"],
-      "capabilities": ["route-share"],
+      "paths": ["test_godiesel_control.py", "test_godiesel_local_capabilities.py", "test_godiesel_route_share.py", "test_godiesel_verification.py", "test_route_share_cli.py", "scripts/test-route-share-acceptance.sh"],
+      "capabilities": ["route-share", "route-generation", "owner-curation", "planned-route-persistence", "provider-readiness"],
       "category": "fixture",
-      "gates": [{ "capability": "route-share", "tier": "focused" }],
-      "invariants": [{ "capability": "route-share", "id": "single-route-microsite" }],
-      "reason": "A test or acceptance fixture that defines route-share proof changed."
+      "gates": [{ "capability": "route-share", "tier": "focused" }, { "capability": "route-generation", "tier": "focused" }, { "capability": "owner-curation", "tier": "focused" }, { "capability": "planned-route-persistence", "tier": "focused" }, { "capability": "provider-readiness", "tier": "focused" }],
+      "invariants": [{ "capability": "route-share", "id": "single-route-microsite" }, { "capability": "route-generation", "id": "atomic-publication" }, { "capability": "owner-curation", "id": "recoverable-publication" }, { "capability": "planned-route-persistence", "id": "browser-local-planning-state" }, { "capability": "provider-readiness", "id": "configuration-is-not-success" }],
+      "reason": "A control-interface test or acceptance fixture changed."
     },
     {
       "id": "repository-evidence-configuration",
@@ -296,10 +422,10 @@
     {
       "id": "route-data",
       "paths": ["quests.json", "route_sources/**", "app/src/data/generated/**", "app/public/data/routes/**"],
-      "capabilities": ["route-share", "route-generation"],
+      "capabilities": ["route-share", "route-generation", "owner-curation"],
       "category": "data",
-      "gates": [{ "capability": "route-share", "tier": "focused" }, { "capability": "route-generation", "tier": "focused" }],
-      "invariants": [{ "capability": "route-share", "id": "source-truth" }, { "capability": "route-share", "id": "stable-route-identity" }, { "capability": "route-share", "id": "single-route-microsite" }, { "capability": "route-generation", "id": "single-writer" }, { "capability": "route-generation", "id": "two-tier-route-data" }, { "capability": "route-generation", "id": "atomic-publication" }],
+      "gates": [{ "capability": "route-share", "tier": "focused" }, { "capability": "route-generation", "tier": "focused" }, { "capability": "owner-curation", "tier": "focused" }],
+      "invariants": [{ "capability": "route-share", "id": "source-truth" }, { "capability": "route-share", "id": "stable-route-identity" }, { "capability": "route-share", "id": "single-route-microsite" }, { "capability": "route-generation", "id": "single-writer" }, { "capability": "route-generation", "id": "two-tier-route-data" }, { "capability": "route-generation", "id": "atomic-publication" }, { "capability": "owner-curation", "id": "owner-authored-provenance" }, { "capability": "owner-curation", "id": "recoverable-publication" }],
       "reason": "Canonical or generated route data changed."
     },
     {
@@ -313,12 +439,21 @@
     },
     {
       "id": "owner-curation-implementation",
-      "paths": ["admin.py", "admin.sh", "curation_publish.py", "test_admin_curation.py", "test_curation_publish.py"],
+      "paths": ["admin.py", "admin.sh", "admin_curation.py", "curation_publish.py", "test_admin_curation.py", "test_curation_publish.py"],
       "capabilities": ["owner-curation"],
       "category": "implementation",
       "gates": [{ "capability": "owner-curation", "tier": "focused" }],
       "invariants": [{ "capability": "owner-curation", "id": "loopback-only-writer" }, { "capability": "owner-curation", "id": "owner-authored-provenance" }, { "capability": "owner-curation", "id": "recoverable-publication" }],
       "reason": "The loopback owner-curation writer or recovery contract changed."
+    },
+    {
+      "id": "planned-route-persistence",
+      "paths": ["app/src/data/planned-route-store.ts", "app/src/data/planned-route-store.test.ts", "app/src/domain/planning.ts", "app/src/domain/plan-completion.ts"],
+      "capabilities": ["planned-route-persistence", "application-release"],
+      "category": "implementation",
+      "gates": [{ "capability": "planned-route-persistence", "tier": "focused" }, { "capability": "application-release", "tier": "focused" }],
+      "invariants": [{ "capability": "planned-route-persistence", "id": "browser-local-planning-state" }, { "capability": "planned-route-persistence", "id": "planned-is-not-recorded" }, { "capability": "application-release", "id": "exact-artifact-release" }],
+      "reason": "Browser-owned planned-route persistence or completion behavior changed."
     },
     {
       "id": "route-microsite-runtime",
@@ -350,7 +485,7 @@
     {
       "id": "application-runtime",
       "paths": ["app/src/**", "app/e2e/**"],
-      "capabilities": ["application-release"],
+      "capabilities": ["application-release", "provider-readiness"],
       "category": "implementation",
       "gates": [{ "capability": "application-release", "tier": "focused" }],
       "invariants": [{ "capability": "application-release", "id": "exact-artifact-release" }, { "capability": "application-release", "id": "named-degradation" }, { "capability": "application-release", "id": "provider-proof-honesty" }],
@@ -367,20 +502,29 @@
     },
     {
       "id": "live-provider-runtime",
-      "paths": ["app/src/services/google*", "app/src/**/google*", "app/e2e/*live*", "app/e2e/earth-*", "scripts/verify-live-pipeline.sh"],
+      "paths": ["app/src/services/google*", "app/src/**/google*", "app/src/providers/**", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/atlas/components/cesium-atlas-globe.tsx", "app/src/surfaces/atlas/atlas-region-camera.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts", "app/src/surfaces/replay/renderers/replay-camera-clearance.ts", "app/src/surfaces/replay/story-flight/replay-camera-framing.ts", "app/src/surfaces/replay/scene/route-camera-stabilizer.ts", "app/e2e/*live*", "app/e2e/earth-*", "scripts/verify-provider-readiness.sh"],
+      "capabilities": ["application-release", "provider-readiness"],
+      "category": "provider",
+      "gates": [{ "capability": "provider-readiness", "tier": "live" }],
+      "invariants": [{ "capability": "application-release", "id": "provider-proof-honesty" }, { "capability": "application-release", "id": "named-degradation" }, { "capability": "provider-readiness", "id": "provider-proof-honesty" }, { "capability": "provider-readiness", "id": "named-live-target" }],
+      "reason": "Provider-dependent behavior changed and still requires live proof."
+    },
+    {
+      "id": "complete-live-pipeline-runtime",
+      "paths": ["scripts/verify-live-pipeline.sh"],
       "capabilities": ["application-release"],
       "category": "provider",
       "gates": [{ "capability": "application-release", "tier": "live" }],
       "invariants": [{ "capability": "application-release", "id": "provider-proof-honesty" }, { "capability": "application-release", "id": "named-degradation" }],
-      "reason": "Provider-dependent behavior changed and still requires live proof."
+      "reason": "The complete live provider and deployment pipeline changed."
     },
     {
       "id": "canonical-documentation",
       "paths": ["AGENTS.md", "CONTEXT.md", "PRODUCT.md", "STRATEGY.md", "README.md", "docs/**"],
-      "capabilities": ["route-share", "route-generation", "owner-curation", "application-release"],
+      "capabilities": ["route-share", "route-generation", "owner-curation", "planned-route-persistence", "provider-readiness", "application-release"],
       "category": "documentation",
       "gates": [],
-      "invariants": [{ "capability": "route-share", "id": "source-truth" }, { "capability": "route-generation", "id": "single-writer" }, { "capability": "owner-curation", "id": "owner-authored-provenance" }, { "capability": "application-release", "id": "provider-proof-honesty" }],
+      "invariants": [{ "capability": "route-share", "id": "source-truth" }, { "capability": "route-generation", "id": "single-writer" }, { "capability": "owner-curation", "id": "owner-authored-provenance" }, { "capability": "planned-route-persistence", "id": "planned-is-not-recorded" }, { "capability": "provider-readiness", "id": "configuration-is-not-success" }, { "capability": "application-release", "id": "provider-proof-honesty" }],
       "reason": "Documentation changed without changing an executable runtime input."
     }
   ]

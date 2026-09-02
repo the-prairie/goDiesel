@@ -324,6 +324,144 @@ def test_cli_verify_explain_emits_json_without_executing_a_gate(monkeypatch, cap
     assert result["evidence"] is None
 
 
+@pytest.mark.parametrize(
+    ("path", "expected_commands"),
+    [
+        (
+            "app/src/providers/google-maps-loader.ts",
+            {"./scripts/verify-provider-readiness.sh google-3d"},
+        ),
+        (
+            "app/src/providers/cesium-render-quality.ts",
+            {
+                "./scripts/verify-provider-readiness.sh atlas",
+                "./scripts/verify-provider-readiness.sh earth-replay",
+            },
+        ),
+        (
+            "app/src/providers/render-health.ts",
+            {
+                "./scripts/verify-provider-readiness.sh atlas",
+                "./scripts/verify-provider-readiness.sh earth-replay",
+            },
+        ),
+        (
+            "app/src/providers/provider-error.ts",
+            {"./scripts/verify-provider-readiness.sh google-3d"},
+        ),
+        (
+            "app/src/providers/new-provider-adapter.ts",
+            {
+                "./scripts/verify-provider-readiness.sh atlas",
+                "./scripts/verify-provider-readiness.sh earth-replay",
+                "./scripts/verify-provider-readiness.sh google-3d",
+            },
+        ),
+        (
+            "app/src/surfaces/atlas/cesium-atlas-world-engine.ts",
+            {"./scripts/verify-provider-readiness.sh atlas"},
+        ),
+        (
+            "app/src/surfaces/atlas/components/cesium-atlas-globe.tsx",
+            {"./scripts/verify-provider-readiness.sh atlas"},
+        ),
+        (
+            "app/src/surfaces/atlas/atlas-region-camera.ts",
+            {"./scripts/verify-provider-readiness.sh atlas"},
+        ),
+        (
+            "app/src/surfaces/replay/renderers/cesium-replay-engine.ts",
+            {"./scripts/verify-provider-readiness.sh earth-replay"},
+        ),
+        (
+            "app/src/surfaces/replay/renderers/google-route-navigator-engine.ts",
+            {"./scripts/verify-provider-readiness.sh google-3d"},
+        ),
+        (
+            "app/src/surfaces/replay/renderers/replay-camera-clearance.ts",
+            {"./scripts/verify-provider-readiness.sh earth-replay"},
+        ),
+        (
+            "app/src/surfaces/replay/story-flight/replay-camera-framing.ts",
+            {
+                "./scripts/verify-provider-readiness.sh earth-replay",
+                "./scripts/verify-provider-readiness.sh google-3d",
+            },
+        ),
+        (
+            "app/src/surfaces/replay/scene/route-camera-stabilizer.ts",
+            {
+                "./scripts/verify-provider-readiness.sh earth-replay",
+                "./scripts/verify-provider-readiness.sh google-3d",
+            },
+        ),
+        (
+            "app/e2e/new-provider-live.spec.ts",
+            {
+                "./scripts/verify-provider-readiness.sh atlas",
+                "./scripts/verify-provider-readiness.sh earth-replay",
+                "./scripts/verify-provider-readiness.sh google-3d",
+            },
+        ),
+    ],
+)
+def test_provider_or_camera_change_selects_exact_live_provider_proof(
+    path: str,
+    expected_commands: set[str],
+):
+    result = explain_verification(
+        ROOT,
+        changed_paths=[path],
+    )
+
+    selected = {
+        gate["command"]
+        for gate in result["result"]["selected_gates"]
+        if gate["capability"] == "provider-readiness" and gate["tier"] == "live"
+    }
+    assert selected == expected_commands
+
+
+def test_exact_command_proof_inputs_do_not_include_other_commands(tmp_path: Path):
+    _write_reuse_fixture(tmp_path)
+    manifest_path = tmp_path / "system/capabilities.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    live = manifest["capabilities"][0]["verification"]["live"]
+    live[0]["proof_inputs"] = [
+        {"category": "provider", "paths": ["provider.json"]}
+    ]
+    live.append(
+        {
+            "command": "verify-other-live",
+            "cwd": ".",
+            "proof_inputs": [
+                {"category": "provider", "paths": ["other-provider.json"]}
+            ],
+        }
+    )
+    (tmp_path / "other-provider.json").write_text("other\n", encoding="utf-8")
+    next(
+        rule
+        for rule in manifest["impact_rules"]
+        if rule["id"] == "fixture-live-provider"
+    )["paths"].append("other-provider.json")
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    snapshot = build_proof_snapshot(
+        tmp_path,
+        "route-share",
+        tiers=["live"],
+        commands=["verify-live"],
+        environ={"PROVIDER_PROJECT": "target-a"},
+        provider_target="target-a",
+    )
+
+    names = {item["name"] for item in snapshot["covered_inputs"]}
+    assert "provider.json" in names
+    assert "other-provider.json" not in names
+    assert "implementation.py" not in names
+
+
 def test_reuse_returns_the_existing_proof_without_executing_a_gate(tmp_path: Path):
     _write_reuse_fixture(tmp_path)
     recorded, runner = _record_proof(tmp_path)
@@ -416,6 +554,46 @@ def test_provider_target_changes_the_live_proof_fingerprint(tmp_path: Path):
 
     assert first["proof_fingerprint"] != second["proof_fingerprint"]
     assert "provider" in {item["category"] for item in first["covered_inputs"]}
+
+
+def test_live_proof_can_select_one_exact_manifest_command(tmp_path: Path):
+    _write_reuse_fixture(tmp_path)
+    manifest_path = tmp_path / "system/capabilities.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["capabilities"][0]["verification"]["live"].append(
+        {"command": "verify-other-live", "cwd": "."}
+    )
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    snapshot = build_proof_snapshot(
+        tmp_path,
+        "route-share",
+        tiers=["live"],
+        commands=["verify-live"],
+        environ={"PROVIDER_PROJECT": "target-a"},
+        provider_target="target-a",
+    )
+
+    assert snapshot["status"] == "passed"
+    assert snapshot["gates"] == [
+        {"tier": "live", "command": "verify-live", "cwd": "."}
+    ]
+
+
+def test_proof_blocks_a_command_not_declared_by_the_selected_tier(tmp_path: Path):
+    _write_reuse_fixture(tmp_path)
+
+    snapshot = build_proof_snapshot(
+        tmp_path,
+        "route-share",
+        tiers=["live"],
+        commands=["not-declared"],
+        environ={"PROVIDER_PROJECT": "target-a"},
+        provider_target="target-a",
+    )
+
+    assert snapshot["status"] == "blocked"
+    assert snapshot["blockers"][0]["code"] == "GODIESEL_VERIFICATION_COMMAND_UNKNOWN"
 
 
 def test_missing_live_configuration_is_blocked_not_passed(tmp_path: Path):
