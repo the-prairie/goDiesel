@@ -14,7 +14,7 @@ The existing `scripts/route.sh` interface remains available as a compatibility a
 | Inspect | `./scripts/godiesel inspect route-share [slug] --json` | Read only | Current route readiness |
 | Plan | `./scripts/godiesel plan route-share --request <file> --json` | Ephemeral local | Fingerprinted proposal in a result envelope and ignored proposal file |
 | Apply | `./scripts/godiesel apply route-share --proposal <file> --authorize canonical-local --json` | Canonical local | Creation report in a result envelope |
-| Verify | `./scripts/godiesel verify route-share <slug> --json` or `--preview` | Ephemeral local | Validation, focused journey, and optional loopback URLs |
+| Verify | `./scripts/godiesel verify route-share <slug> --json` or `--preview` | Ephemeral local | Focused proof from normal verification, or loopback runtime review from preview |
 | Release | `./scripts/godiesel release route-share <slug> <name> --authorize external-durable --authorize-target <name> --json` | External durable | Deployment, stable URLs, public smoke result, and receipt |
 
 Standard output is a `system/result.schema.json` result envelope.
@@ -22,7 +22,9 @@ The unchanged domain result is under `result`.
 Treat that value as the domain authority rather than parsing terminal narration.
 Plan, apply, verify, and release also write ignored route-transition receipts under `.route-share/runs/` and their digest-verifiable results under `.route-share/results/`.
 These Phase 2 receipts prove route workflow lineage only.
-The repository fingerprint, gate attribution, configuration presence, and other system-wide evidence fields remain part of the Phase 3 proof-receipt contract.
+Normal, non-preview route verification additionally writes a general proof receipt under `.godiesel/evidence/` with repository state, gate attribution, digested inputs and outputs, and redacted configuration presence.
+Preview writes only its route-transition receipt because it starts a loopback runtime instead of executing the manifest-declared focused proof gate.
+Impact-directed gate selection and guarded proof reuse are implemented for route verification.
 
 ## State Machine
 
@@ -127,7 +129,9 @@ After explicit approval to create, run:
 
 ```sh
 ./scripts/godiesel apply route-share --proposal .route-share/proposals/<proposal-id>.json --authorize canonical-local --json
+./scripts/godiesel verify route-share <slug> --json
 ./scripts/godiesel verify route-share <slug> --preview --json
+./scripts/godiesel verify route-share <slug> --reuse --json
 ```
 
 `create` registers durable sources, atomically updates `quests.json`, rebuilds generated data, validates source health and the microsite source record, and emits a JSON creation report.
@@ -139,6 +143,11 @@ That bundle contains only the shared route's generated record and public media r
 Use `--detach` only when a background preview is useful; it writes a PID and log under `.route-share/`.
 Report the exact validation outcome, local guide URL, and local Replay URL.
 
+Use `--reuse` only after the normal, non-preview verification has passed and written general evidence.
+It re-hashes every manifest-covered implementation, contract, fixture, configuration, data, and provider input for the focused route-share gate.
+It does not execute the gate and blocks when any covered input or selected command changed.
+Documentation-only edits remain outside the runtime proof fingerprint.
+
 ## Evidence artifacts
 
 | Artifact | State class | Purpose |
@@ -147,6 +156,7 @@ Report the exact validation outcome, local guide URL, and local Replay URL.
 | Proposal JSON | Ignored evidence and plan | Reviewable normalized transition with source observations |
 | Capability result | Runtime evidence | Stable envelope around the unchanged domain result, authority, issues, and receipt pointer |
 | Route-transition receipt and result artifact | Ignored evidence | Digest-linked transition outcome, exact local result, and proposal-specific lineage |
+| Verification evidence receipt | Ignored evidence | Repository-bound focused gate result under the general evidence schema |
 | Staged source and media | Ignored ephemeral local state | Checksum-verified inputs used by an approved proposal |
 | Creation report JSON | Evidence result | Applied or already-applied result and validation |
 | `quests.json` and durable source files | Canonical authored state | Durable route identity, metadata, curation, and source |
@@ -173,6 +183,7 @@ The release authority class and `--authorize-target` value must both be present.
 The target value must exactly match the requested stable share name and does not imply replacement authority.
 An approved replacement also requires `--authorize-replacement <share-name>` for that exact alias.
 The unified release path also requires passed, digest-matched plan, apply, and verify receipts for the same route.
+It requires the latest general verification proof to remain reusable before any Cloudflare command runs.
 Before publication, it validates those receipts, confines every linked path to the ignored evidence directories, and re-hashes the proposal and result artifacts.
 This detects accidental corruption and incomplete or fabricated local evidence, but it is not a signature against a hostile actor who can rewrite the repository and all local evidence.
 Use the compatibility adapter only for an explicitly reviewed legacy workflow, not to bypass this state machine.

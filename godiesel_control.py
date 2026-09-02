@@ -15,12 +15,14 @@ from typing import Any, Mapping
 
 from godiesel_route_share import AUTHORITY as ROUTE_SHARE_AUTHORITY
 from godiesel_route_share import execute_route_share
+from godiesel_verification import explain_verification, reuse_verification
 
 
 SCHEMA_VERSION = 1
 MANIFEST_PATH = Path("system/capabilities.json")
 MANIFEST_SCHEMA_PATH = Path("system/capabilities.schema.json")
 VERBS = {"inspect", "plan", "apply", "verify", "release"}
+VERIFICATION_TIERS = {"focused", "ticket", "release", "live"}
 AUTHORITY_CLASSES = {
     "read-only",
     "ephemeral-local",
@@ -294,7 +296,7 @@ def _is_capability(value: Any) -> bool:
     verification = value["verification"]
     return (
         isinstance(verification, dict)
-        and set(verification) == {"focused", "ticket", "live"}
+        and set(verification) == VERIFICATION_TIERS
         and all(_is_command_list(commands) for commands in verification.values())
     )
 
@@ -302,10 +304,10 @@ def _is_capability(value: Any) -> bool:
 def _is_manifest(value: Any) -> bool:
     if not isinstance(value, dict):
         return False
-    if not {"schema_version", "document_type", "capabilities"}.issubset(value):
+    if not {"schema_version", "document_type", "capabilities", "impact_rules"}.issubset(value):
         return False
     if not set(value).issubset(
-        {"$schema", "schema_version", "document_type", "capabilities"}
+        {"$schema", "schema_version", "document_type", "capabilities", "impact_rules"}
     ):
         return False
     capabilities = value["capabilities"]
@@ -318,7 +320,69 @@ def _is_manifest(value: Any) -> bool:
     ):
         return False
     ids = [capability["id"] for capability in capabilities]
-    return len(ids) == len(set(ids))
+    if len(ids) != len(set(ids)):
+        return False
+    impact_rules = value["impact_rules"]
+    if not isinstance(impact_rules, list) or not impact_rules:
+        return False
+    rule_ids: list[str] = []
+    for rule in impact_rules:
+        if not isinstance(rule, dict) or set(rule) != {
+            "id",
+            "paths",
+            "capabilities",
+            "category",
+            "gates",
+            "invariants",
+            "reason",
+        }:
+            return False
+        if not _is_string(rule["id"]) or not re.fullmatch(
+            r"[a-z][a-z0-9-]+", rule["id"]
+        ):
+            return False
+        if not _is_string_list(rule["paths"]) or not rule["paths"]:
+            return False
+        if (
+            not _is_string_list(rule["capabilities"])
+            or not rule["capabilities"]
+            or not set(rule["capabilities"]).issubset(ids)
+        ):
+            return False
+        if rule["category"] not in {
+            "implementation",
+            "contract",
+            "fixture",
+            "configuration",
+            "data",
+            "provider",
+            "documentation",
+        }:
+            return False
+        if not isinstance(rule["gates"], list) or not all(
+            isinstance(gate, dict)
+            and set(gate) == {"capability", "tier"}
+            and gate["capability"] in ids
+            and gate["tier"] in VERIFICATION_TIERS
+            for gate in rule["gates"]
+        ):
+            return False
+        capability_invariants = {
+            capability["id"]: set(capability["invariants"])
+            for capability in capabilities
+        }
+        if not isinstance(rule["invariants"], list) or not all(
+            isinstance(invariant, dict)
+            and set(invariant) == {"capability", "id"}
+            and invariant["capability"] in rule["capabilities"]
+            and invariant["id"] in capability_invariants[invariant["capability"]]
+            for invariant in rule["invariants"]
+        ):
+            return False
+        if not _is_string(rule["reason"]):
+            return False
+        rule_ids.append(rule["id"])
+    return len(rule_ids) == len(set(rule_ids))
 
 
 def _load_manifest(root: Path) -> tuple[dict[str, Any] | None, list[dict[str, str]]]:
@@ -1054,8 +1118,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--authorize")
     parser.add_argument("--authorize-target")
     parser.add_argument("--authorize-replacement")
+    parser.add_argument("--explain", action="store_true")
+    parser.add_argument("--reuse", action="store_true")
+    parser.add_argument("--base", default="origin/main")
+    parser.add_argument("--changed-path", action="append")
     parser.add_argument("--json", action="store_true", dest="as_json")
     args = parser.parse_args(argv)
+    if args.explain and args.reuse:
+        parser.error("--explain and --reuse are mutually exclusive")
     root = Path(__file__).resolve().parent
     try:
         if args.verb == "doctor":
@@ -1063,9 +1133,16 @@ def main(argv: list[str] | None = None) -> int:
                 parser.error("doctor only supports the system target")
             result = doctor_system(root)
         elif args.target == "system":
-            if args.verb != "inspect":
-                parser.error("system currently supports inspect and doctor")
-            result = inspect_system(root)
+            if args.verb == "inspect":
+                result = inspect_system(root)
+            elif args.verb == "verify" and args.explain:
+                result = explain_verification(
+                    root,
+                    changed_paths=args.changed_path,
+                    base_ref=args.base,
+                )
+            else:
+                parser.error("system supports inspect, doctor, and verify --explain")
         elif args.target == "route-share":
             if args.verb == "plan" and args.request is None:
                 parser.error("plan route-share requires --request")
@@ -1077,20 +1154,29 @@ def main(argv: list[str] | None = None) -> int:
                 parser.error("release route-share requires a share name")
             if args.detach and not args.preview:
                 parser.error("--detach requires --preview")
-            result = execute_route_share(
-                root,
-                args.verb,
-                request_path=args.request,
-                proposal_path=args.proposal,
-                slug=args.slug,
-                share_name=args.share_name,
-                preview=args.preview,
-                detach=args.detach,
-                replace_existing=args.replace_existing,
-                authority=args.authorize,
-                target_authority=args.authorize_target,
-                replacement_authority=args.authorize_replacement,
-            )
+            if args.reuse:
+                if args.verb != "verify":
+                    parser.error("--reuse only supports verification")
+                result = reuse_verification(
+                    root,
+                    "route-share",
+                    slug=args.slug,
+                )
+            else:
+                result = execute_route_share(
+                    root,
+                    args.verb,
+                    request_path=args.request,
+                    proposal_path=args.proposal,
+                    slug=args.slug,
+                    share_name=args.share_name,
+                    preview=args.preview,
+                    detach=args.detach,
+                    replace_existing=args.replace_existing,
+                    authority=args.authorize,
+                    target_authority=args.authorize_target,
+                    replacement_authority=args.authorize_replacement,
+                )
         else:
             parser.error(f"unknown target: {args.target}")
     except Exception:
@@ -1114,6 +1200,7 @@ def main(argv: list[str] | None = None) -> int:
                 "blockers": [issue],
                 "warnings": [],
                 "receipt": None,
+                "evidence": None,
             }
         else:
             issue = _issue(

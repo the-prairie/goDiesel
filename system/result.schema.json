@@ -17,7 +17,8 @@
     "result_contract",
     "blockers",
     "warnings",
-    "receipt"
+    "receipt",
+    "evidence"
   ],
   "properties": {
     "schema_version": { "const": 1 },
@@ -47,6 +48,21 @@
             "result_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
             "result_path": { "type": "string", "pattern": "^\\.route-share/proposals/.+\\.json$" },
             "evidence_path": { "type": "string", "pattern": "^\\.route-share/results/.+\\.json$" }
+          }
+        }
+      ]
+    },
+    "evidence": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "path", "sha256"],
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "path": { "type": "string", "pattern": "^\\.godiesel/evidence/.+\\.json$" },
+            "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
           }
         }
       ]

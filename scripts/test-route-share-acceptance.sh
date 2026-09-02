@@ -108,6 +108,10 @@ OWNER_PROPOSAL=$(node -e 'const value=require("./.route-share/owner-plan-envelop
   --proposal "$OWNER_PROPOSAL" --authorize canonical-local --json \
   > .route-share/owner-retry-envelope.json
 ./scripts/godiesel verify route-share gpx-acceptance-owner-adventure \
+  --json > .route-share/verification-envelope.json
+./scripts/godiesel verify route-share gpx-acceptance-owner-adventure \
+  --reuse --json > .route-share/reuse-envelope.json
+./scripts/godiesel verify route-share gpx-acceptance-owner-adventure \
   --preview --detach --json > .route-share/preview-envelope.json
 node -e 'const value=require("./.route-share/preview-envelope.json"); process.stdout.write(value.result.stdout)' \
   > .route-share/acceptance-preview.txt
@@ -141,6 +145,14 @@ const compatibilityRetry = JSON.parse(fs.readFileSync(
   ".route-share/owner-compatibility-retry.json",
   "utf8",
 ));
+const verificationEnvelope = JSON.parse(fs.readFileSync(
+  ".route-share/verification-envelope.json",
+  "utf8",
+));
+const reuseEnvelope = JSON.parse(fs.readFileSync(
+  ".route-share/reuse-envelope.json",
+  "utf8",
+));
 const retry = retryEnvelope.result;
 if (route.lifecycle !== "discovered" || route.date !== "") {
   throw new Error("acceptance route lifecycle/date provenance changed");
@@ -165,6 +177,12 @@ if (retry.result !== "already_applied" || !retry.validation?.publishable) {
 }
 if (!isDeepStrictEqual(retry, compatibilityRetry)) {
   throw new Error("unified and compatibility retries produced different domain results");
+}
+if (verificationEnvelope.status !== "passed" || !verificationEnvelope.evidence?.path) {
+  throw new Error("normal verification did not record reusable evidence");
+}
+if (reuseEnvelope.status !== "passed" || reuseEnvelope.result?.reused !== true) {
+  throw new Error("unchanged route verification proof was not reusable");
 }
 const dataFiles = fs.readdirSync("dist/data/routes");
 if (dataFiles.length !== 1 || dataFiles[0] !== "gpx-acceptance-owner-adventure.json") {

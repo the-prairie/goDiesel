@@ -45,6 +45,7 @@ def establish_route_lineage(
     *,
     route_slug: str = "route-1",
 ) -> None:
+    install_evidence_contract(tmp_path)
     schema_destination = tmp_path / "system" / "route-share-receipt.schema.json"
     schema_destination.parent.mkdir(parents=True, exist_ok=True)
     schema_destination.write_text(
@@ -94,14 +95,155 @@ def establish_route_lineage(
     )
 
 
+def install_evidence_contract(tmp_path: Path) -> None:
+    system = tmp_path / "system"
+    system.mkdir(exist_ok=True)
+    for name in ("evidence-receipt.schema.json", "capabilities.json"):
+        (system / name).write_text(
+            (ROOT / "system" / name).read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+
+
 def test_result_and_receipt_schemas_are_valid():
     result_schema = json.loads((ROOT / "system/result.schema.json").read_text())
     receipt_schema = json.loads(
         (ROOT / "system/route-share-receipt.schema.json").read_text()
     )
+    evidence_schema = json.loads(
+        (ROOT / "system/evidence-receipt.schema.json").read_text()
+    )
 
     Draft202012Validator.check_schema(result_schema)
     Draft202012Validator.check_schema(receipt_schema)
+    Draft202012Validator.check_schema(evidence_schema)
+
+
+def test_verify_writes_a_general_redacted_evidence_receipt(tmp_path: Path):
+    (tmp_path / "system").mkdir()
+    (tmp_path / "system/evidence-receipt.schema.json").write_text(
+        (ROOT / "system/evidence-receipt.schema.json").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (tmp_path / "system/capabilities.json").write_text(
+        (ROOT / "system/capabilities.json").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (tmp_path / ".gitignore").write_text(
+        ".godiesel/\n.route-share/\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "fixture@example.test"],
+        cwd=tmp_path,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Fixture"],
+        cwd=tmp_path,
+        check=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-qm", "fixture"], cwd=tmp_path, check=True)
+    secret = "never-write-this-provider-key"
+    runner = RecordingRunner(completed([], stdout="verified\n"))
+
+    result = execute_route_share(
+        tmp_path,
+        "verify",
+        slug="route-1",
+        environ={"GOOGLE_MAPS_API_KEY": secret},
+        runner=runner,
+    )
+
+    assert result["status"] == "passed"
+    assert result["evidence"]["path"].startswith(".godiesel/evidence/")
+    evidence_path = tmp_path / result["evidence"]["path"]
+    receipt = json.loads(evidence_path.read_text(encoding="utf-8"))
+    Draft202012Validator(
+        json.loads((ROOT / "system/evidence-receipt.schema.json").read_text())
+    ).validate(receipt)
+    assert receipt["capability"] == "route-share"
+    assert receipt["verb"] == "verify"
+    assert receipt["status"] == "passed"
+    assert len(receipt["repository"]["commit"]) == 40
+    assert receipt["repository"]["dirty_state"]["clean"] is True
+    assert len(receipt["repository"]["dirty_state"]["sha256"]) == 64
+    assert receipt["gates"] == [
+        {
+            "command": "./scripts/route.sh check <slug>",
+            "cwd": ".",
+            "exit_code": 0,
+            "finished_at": receipt["finished_at"],
+            "id": "route-share-check",
+            "output_sha256": result["receipt"]["result_sha256"],
+            "provider": "deterministic-local",
+            "started_at": receipt["started_at"],
+            "status": "passed",
+            "tier": "focused",
+        }
+    ]
+    assert {item["name"] for item in receipt["inputs"]} == {
+        "route-slug",
+        "verification-result",
+    }
+    assert receipt["configuration"] == []
+    assert len(receipt["proof_fingerprint"]) == 64
+    assert receipt["selection"]["mode"] == "explicit"
+    assert receipt["selection"]["tiers"] == ["focused"]
+    assert receipt["selection"]["impact_rules"]
+    assert {
+        item["category"] for item in receipt["covered_inputs"]
+    }.issuperset({"implementation", "contract", "fixture", "configuration", "data"})
+    assert secret not in evidence_path.read_text(encoding="utf-8")
+
+
+def test_verify_blocks_when_the_evidence_contract_is_missing(tmp_path: Path):
+    system = tmp_path / "system"
+    system.mkdir()
+    (system / "capabilities.json").write_text(
+        (ROOT / "system/capabilities.json").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    runner = RecordingRunner(completed([], stdout="verified\n"))
+
+    result = execute_route_share(
+        tmp_path,
+        "verify",
+        slug="route-1",
+        runner=runner,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_EVIDENCE_SCHEMA_UNAVAILABLE"
+    assert result["evidence"] is None
+    assert runner.calls == []
+    assert_valid_result(result)
+
+
+def test_verify_blocks_when_the_capability_manifest_is_missing(tmp_path: Path):
+    system = tmp_path / "system"
+    system.mkdir()
+    (system / "evidence-receipt.schema.json").write_text(
+        (ROOT / "system/evidence-receipt.schema.json").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    runner = RecordingRunner(completed([], stdout="verified\n"))
+
+    result = execute_route_share(
+        tmp_path,
+        "verify",
+        slug="route-1",
+        runner=runner,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_MANIFEST_UNAVAILABLE"
+    assert result["evidence"] is None
+    assert runner.calls == []
+    assert_valid_result(result)
 
 
 def test_plan_wraps_the_unchanged_proposal_and_writes_a_digest_receipt(tmp_path: Path):
@@ -217,6 +359,8 @@ def test_verify_maps_check_and_loopback_preview_modes(
     detach: bool,
     expected: list[str],
 ):
+    if not preview:
+        install_evidence_contract(tmp_path)
     runner = RecordingRunner(completed([], stdout="verified\n"))
 
     result = execute_route_share(
@@ -231,6 +375,7 @@ def test_verify_maps_check_and_loopback_preview_modes(
     assert runner.calls == [[str(tmp_path / "scripts/route.sh"), *expected]]
     assert result["result"] == {"stdout": "verified\n", "stderr": ""}
     assert result["receipt"]["path"].startswith(".route-share/runs/")
+    assert (result["evidence"] is None) is preview
     assert_valid_result(result)
 
 
@@ -422,6 +567,62 @@ def test_release_requires_complete_passed_route_transition_lineage(tmp_path: Pat
     assert_valid_result(result)
 
 
+def test_release_blocks_when_the_verification_proof_is_invalidated(tmp_path: Path):
+    system = tmp_path / "system"
+    system.mkdir()
+    for name in ("evidence-receipt.schema.json", "capabilities.json"):
+        (system / name).write_text(
+            (ROOT / "system" / name).read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+    runner = RecordingRunner()
+    establish_route_lineage(tmp_path, runner)
+    (tmp_path / "godiesel_control.py").write_text(
+        "# changed after verification\n",
+        encoding="utf-8",
+    )
+
+    result = execute_route_share(
+        tmp_path,
+        "release",
+        slug="route-1",
+        share_name="ridge",
+        authority="external-durable",
+        target_authority="ridge",
+        runner=runner,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_RELEASE_PROOF_INVALIDATED"
+    assert len(runner.calls) == 3
+    assert_valid_result(result)
+
+
+def test_release_blocks_when_the_evidence_contract_is_missing(tmp_path: Path):
+    runner = RecordingRunner()
+    establish_route_lineage(tmp_path, runner)
+    (tmp_path / "system/evidence-receipt.schema.json").unlink()
+
+    result = execute_route_share(
+        tmp_path,
+        "release",
+        slug="route-1",
+        share_name="ridge",
+        authority="external-durable",
+        target_authority="ridge",
+        runner=runner,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_RELEASE_PROOF_REQUIRED"
+    assert result["blockers"][1]["code"] == "GODIESEL_EVIDENCE_SCHEMA_UNAVAILABLE"
+    assert "Restore system/evidence-receipt.schema.json" in result["blockers"][1][
+        "remediation"
+    ]
+    assert len(runner.calls) == 3
+    assert_valid_result(result)
+
+
 def test_release_rejects_corrupted_lineage_result_artifact(tmp_path: Path):
     runner = RecordingRunner()
     establish_route_lineage(tmp_path, runner)
@@ -532,6 +733,7 @@ def test_release_rejects_fabricated_receipts_without_linked_artifacts(tmp_path: 
 
 
 def test_release_receipt_links_the_complete_route_transition_lineage(tmp_path: Path):
+    install_evidence_contract(tmp_path)
     proposal = {
         "document_type": "route-share-proposal",
         "proposal_id": "proposal-1",

@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://godiesel.local/system/verification-explanation.schema.json",
+  "title": "goDiesel verification selection explanation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "document_type",
+    "execution",
+    "base_ref",
+    "changed_paths",
+    "classifications",
+    "selected_gates",
+    "unclassified_paths"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "document_type": { "const": "godiesel-verification-explanation" },
+    "execution": { "const": "not_run" },
+    "base_ref": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "minLength": 1 }
+      ]
+    },
+    "changed_paths": { "$ref": "#/$defs/paths" },
+    "classifications": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/classification" }
+    },
+    "selected_gates": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/gate" }
+    },
+    "unclassified_paths": { "$ref": "#/$defs/paths" }
+  },
+  "$defs": {
+    "paths": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "classification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "capabilities", "categories", "invariants", "rules"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "capabilities": { "$ref": "#/$defs/identifiers" },
+        "categories": { "$ref": "#/$defs/categories" },
+        "invariants": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/invariant" },
+          "uniqueItems": true
+        },
+        "rules": { "$ref": "#/$defs/identifiers" }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capability",
+        "tier",
+        "command",
+        "cwd",
+        "provider",
+        "reasons",
+        "required_by"
+      ],
+      "properties": {
+        "capability": { "type": "string", "pattern": "^[a-z][a-z0-9-]+$" },
+        "tier": { "enum": ["focused", "ticket", "release", "live"] },
+        "command": { "type": "string", "minLength": 1 },
+        "cwd": { "type": "string", "minLength": 1 },
+        "provider": { "enum": ["deterministic-local", "live-provider"] },
+        "reasons": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "required_by": { "$ref": "#/$defs/paths" }
+      }
+    },
+    "identifiers": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]+$" },
+      "uniqueItems": true
+    },
+    "invariant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capability", "id"],
+      "properties": {
+        "capability": { "type": "string", "pattern": "^[a-z][a-z0-9-]+$" },
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]+$" }
+      }
+    },
+    "categories": {
+      "type": "array",
+      "items": {
+        "enum": ["implementation", "contract", "fixture", "configuration", "data", "provider", "documentation"]
+      },
+      "uniqueItems": true
+    }
+  }
+}

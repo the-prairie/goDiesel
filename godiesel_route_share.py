@@ -13,6 +13,10 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from jsonschema import Draft202012Validator
+from jsonschema.exceptions import SchemaError
+
+from godiesel_evidence import canonical_digest, write_evidence_receipt
+from godiesel_verification import build_proof_snapshot, reuse_verification
 
 
 SCHEMA_VERSION = 1
@@ -32,13 +36,7 @@ def _issue(code: str, message: str, remediation: str) -> dict[str, str]:
 
 
 def _canonical_digest(value: object) -> str:
-    serialized = json.dumps(
-        value,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
-    return sha256(serialized).hexdigest()
+    return canonical_digest(value)
 
 
 def _json_value(value: str) -> object | None:
@@ -529,6 +527,9 @@ def _blocked_result(
     verb: str,
     authority: str,
     issue: Mapping[str, str],
+    *,
+    authorized: bool = False,
+    additional_issues: tuple[Mapping[str, str], ...] = (),
 ) -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
@@ -537,13 +538,14 @@ def _blocked_result(
         "verb": verb,
         "status": "blocked",
         "authority": authority,
-        "authorized": False,
+        "authorized": authorized,
         "exit_code": 2,
         "result": None,
         "result_contract": "none",
-        "blockers": [dict(issue)],
+        "blockers": [dict(issue), *(dict(item) for item in additional_issues)],
         "warnings": [],
         "receipt": None,
+        "evidence": None,
     }
 
 
@@ -616,6 +618,71 @@ def execute_route_share(
                 )
             )
             return _blocked_result(verb, required_authority, blocker)
+        proof = reuse_verification(
+            root,
+            "route-share",
+            slug=str(slug),
+            environ=dict(os.environ if environ is None else environ),
+        )
+        if proof["status"] != "passed":
+            proof_codes = {
+                issue["code"] for issue in proof.get("blockers", [])
+            }
+            invalidated = "GODIESEL_PROOF_INVALIDATED" in proof_codes
+            blocker = _issue(
+                (
+                    "GODIESEL_RELEASE_PROOF_INVALIDATED"
+                    if invalidated
+                    else "GODIESEL_RELEASE_PROOF_REQUIRED"
+                ),
+                (
+                    "The route verification proof no longer covers the release inputs."
+                    if invalidated
+                    else "Release requires a reusable passed route verification proof."
+                ),
+                "Run route-share verification normally and review its new evidence receipt before release.",
+            )
+            return _blocked_result(
+                verb,
+                required_authority,
+                blocker,
+                authorized=True,
+                additional_issues=tuple(proof.get("blockers", [])),
+            )
+
+    proof_snapshot = None
+    if verb == "verify" and not preview:
+        evidence_schema = root / "system/evidence-receipt.schema.json"
+        try:
+            schema = json.loads(evidence_schema.read_text(encoding="utf-8"))
+            Draft202012Validator.check_schema(schema)
+        except (OSError, json.JSONDecodeError, SchemaError):
+            blocker = _issue(
+                "GODIESEL_EVIDENCE_SCHEMA_UNAVAILABLE",
+                "The evidence receipt schema could not be validated.",
+                "Restore system/evidence-receipt.schema.json before recording verification proof.",
+            )
+            return _blocked_result(
+                verb,
+                required_authority,
+                blocker,
+                authorized=True,
+            )
+        proof_snapshot = build_proof_snapshot(
+            root,
+            "route-share",
+            tiers=["focused"],
+            environ=dict(os.environ if environ is None else environ),
+        )
+        if proof_snapshot["status"] != "passed":
+            proof_blockers = tuple(proof_snapshot["blockers"])
+            return _blocked_result(
+                verb,
+                required_authority,
+                proof_blockers[0],
+                authorized=True,
+                additional_issues=proof_blockers[1:],
+            )
 
     command = _command(
         root,
@@ -628,6 +695,7 @@ def execute_route_share(
         detach=detach,
         replace_existing=replace_existing,
     )
+    started_at = datetime.now(timezone.utc).isoformat()
     completed = runner(
         command,
         cwd=root,
@@ -635,6 +703,7 @@ def execute_route_share(
         text=True,
         env=dict(os.environ if environ is None else environ),
     )
+    finished_at = datetime.now(timezone.utc).isoformat()
     domain_result = _domain_result(completed)
     blockers = []
     if completed.returncode != 0:
@@ -692,6 +761,64 @@ def execute_route_share(
         )
     status = "blocked" if blockers else "warning" if warnings else "passed"
     exit_code = 2 if blockers and completed.returncode == 0 else completed.returncode
+    evidence = None
+    if verb == "verify" and receipt is not None and proof_snapshot is not None:
+        gate_status = "passed" if completed.returncode == 0 else "failed"
+        evidence_status = "blocked" if proof_snapshot["blockers"] else gate_status
+        evidence = write_evidence_receipt(
+            root,
+            capability="route-share",
+            verb="verify",
+            authority=required_authority,
+            started_at=started_at,
+            finished_at=finished_at,
+            status=evidence_status,
+            inputs=[
+                {
+                    "kind": "input",
+                    "name": "route-slug",
+                    "sha256": canonical_digest(slug),
+                },
+                {
+                    "kind": "output",
+                    "name": "verification-result",
+                    "sha256": receipt["result_sha256"],
+                },
+            ],
+            covered_inputs=proof_snapshot["covered_inputs"],
+            proof_fingerprint=proof_snapshot["proof_fingerprint"],
+            selection={
+                "mode": "explicit",
+                "tiers": ["focused"],
+                "impact_rules": proof_snapshot["impact_rules"],
+            },
+            gates=[
+                {
+                    "id": "route-share-check",
+                    "tier": gate["tier"],
+                    "command": gate["command"],
+                    "cwd": gate["cwd"],
+                    "provider": "deterministic-local",
+                    "started_at": started_at,
+                    "finished_at": finished_at,
+                    "status": gate_status,
+                    "exit_code": completed.returncode,
+                    "output_sha256": receipt["result_sha256"],
+                }
+                for gate in proof_snapshot["gates"]
+            ],
+            configuration=proof_snapshot["configuration"],
+            warnings=warnings,
+            recovery_paths=[],
+            safe_next_actions=[issue["remediation"] for issue in blockers],
+            artifacts=[
+                {
+                    "kind": "route-share-run-receipt",
+                    "path": receipt["path"],
+                    "sha256": sha256((root / receipt["path"]).read_bytes()).hexdigest(),
+                }
+            ],
+        )
     return {
         "schema_version": SCHEMA_VERSION,
         "document_type": "godiesel-capability-result",
@@ -706,4 +833,5 @@ def execute_route_share(
         "blockers": blockers,
         "warnings": warnings,
         "receipt": receipt,
+        "evidence": evidence,
     }

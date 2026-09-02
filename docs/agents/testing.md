@@ -39,7 +39,8 @@ After running it, report:
 Never report a missing live dependency as skipped success.
 Use `blocked` and name the missing credential, acceleration, quota, source, or provider without exposing its value.
 
-Until the evidence receipt in ADR-0016 is implemented, record this proof contract in the pull request or final task report.
+Route-share verification records this contract under `.godiesel/evidence/`.
+Until every capability uses the general receipt, record the same proof contract in the pull request or final task report for uncovered capabilities.
 
 ## Impact selection
 
@@ -55,6 +56,24 @@ Classify the change before choosing commands:
 
 An affected path that cannot be assigned to an owning module or invariant is an architecture gap.
 Do not silently choose a small gate for an unclassified change.
+
+Inspect the manifest-owned impact decision without running a gate:
+
+```sh
+./scripts/godiesel verify --explain --json
+```
+
+Pass one or more `--changed-path <repository-relative-path>` values for a bounded explanation.
+Without explicit paths, the command compares the worktree with the merge base of `origin/main`.
+
+Reuse a route-share proof without executing its gate only when every covered input remains valid:
+
+```sh
+./scripts/godiesel verify route-share <slug> --reuse --json
+```
+
+The reuse result names invalidated input categories and blocks when no valid proof remains.
+Route release performs the same reuse validation before any external effect.
 
 ## Commands
 
@@ -138,7 +157,13 @@ Rerun the smallest affected tier when a subsequent edit touches behavior covered
 Escalate to the release tier when a defect indicates a cross-application regression or when shared routing, build, test, rendering, or application-shell infrastructure changes.
 
 A proof's covered inputs include implementation, contracts, schemas, fixtures, test code, build and runtime configuration, canonical data fingerprints when applicable, and the external provider or deployment target for live proof.
+The manifest-owned fingerprint aggregates every matching file per impact pattern, records absent patterns, records configuration presence without secret values, and digests non-sensitive provider targets.
+Each observed file also contributes its file type, executable mode, and symlink target when applicable.
 Changing any covered input invalidates that proof.
+
+Each impact rule names the capability invariants that justify its selected gates.
+Focused route-share evidence records the exact manifest-declared route check that ran; its fingerprint covers the route-only application source, browser journey, build and scoping scripts, dependency and test configuration, route data, and public route media consumed by that check.
+Live proof requires an explicit provider or deployment target even when no additional credential is required.
 
 Documentation, evidence packaging, or unrelated edits do not invalidate a proof unless they change an executable command, contract, or claimed behavior.
 

@@ -1,6 +1,6 @@
 ---
 status: in-progress
-last_updated: 2026-08-31
+last_updated: 2026-09-01
 architecture: docs/architecture/agent-operating-system.md
 decision: docs/adr/0016-agent-control-plane-is-manifest-driven.md
 ---
@@ -76,7 +76,7 @@ This plan does not introduce:
 | 0. Knowledge topology | Complete in this documentation branch | None |
 | 1. Manifest and doctor | Complete | Phase 0 |
 | 2. Route-share adapter | Complete | Phase 1 manifest accuracy |
-| 3. Proof receipts and impact graph | Pending | Phase 2 result envelope |
+| 3. Proof receipts and impact graph | Complete | Phase 2 result envelope |
 | 4. Canonical local adapters | Pending | Phase 3 verification contract |
 | 5. Release adapters | Pending | Phase 4 ownership coverage |
 | 6. Mechanical accretion | Pending | Stable manifest and receipts |
@@ -178,6 +178,13 @@ Implemented by `test_godiesel_control.py` and the focused commands documented in
 - Public smoke only when release behavior itself changes or a real release is authorized.
 
 ## Phase 3: Add proof receipts and impact-directed verification
+
+Status: complete on 2026-09-01.
+
+The implementation emits closed evidence receipts for route verification, explains manifest-owned path and invariant impacts without executing gates, and represents focused, ticket, release, and live tiers explicitly.
+The route-share receipt and proof fingerprint are derived from the same manifest-declared route check and its complete build, test, data, and runtime dependency set.
+Fingerprints include file content, file type, executable mode, configuration presence, and target identity; unavailable live targets or proof contracts block rather than fall through.
+Route release validates that reusable proof before any external effect.
 
 ### Work
 
