@@ -8,6 +8,7 @@ from jsonschema import Draft202012Validator
 from godiesel_control import main
 from godiesel_route_share import execute_route_share
 from godiesel_verification import (
+    _pattern_input,
     build_proof_snapshot,
     explain_verification,
     reuse_verification,
@@ -29,6 +30,32 @@ class RecordingRunner:
             "verified\n",
             "",
         )
+
+
+def test_trailing_recursive_pattern_fingerprints_nested_files(tmp_path: Path):
+    detail = tmp_path / "generated/routes/route-1.json"
+    detail.parent.mkdir(parents=True)
+    detail.write_text('{"status":"published"}\n', encoding="utf-8")
+
+    before, before_issue = _pattern_input(
+        tmp_path,
+        category="data",
+        pattern="generated/**",
+    )
+    detail.write_text('{"status":"draft"}\n', encoding="utf-8")
+    after, after_issue = _pattern_input(
+        tmp_path,
+        category="data",
+        pattern="generated/**",
+    )
+
+    assert before_issue is None
+    assert after_issue is None
+    assert before is not None
+    assert after is not None
+    assert before["state"] == "matched"
+    assert after["state"] == "matched"
+    assert before["sha256"] != after["sha256"]
 
 
 def _write_reuse_fixture(root: Path) -> None:

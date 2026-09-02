@@ -137,10 +137,11 @@ def _pattern_input(
             "An impact pattern is absolute, empty, or escapes the repository.",
             "Repair the named pattern in system/capabilities.json.",
         )
+    glob_pattern = f"{normalized}/*" if normalized.endswith("/**") else normalized
     try:
         candidates = sorted(
             path
-            for path in root.glob(normalized)
+            for path in root.glob(glob_pattern)
             if path.is_file() and path.resolve().is_relative_to(root)
         )
     except (OSError, ValueError):
