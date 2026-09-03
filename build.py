@@ -13,7 +13,11 @@ from quest_meta import (
     infer_route_region,
     route_manifest_record,
 )
-from route_provenance import build_route_provenance, load_source_route_points
+from route_provenance import (
+    build_route_provenance,
+    load_source_route_points,
+    project_public_route_provenance,
+)
 from route_annotations import build_route_annotations
 from route_imports import find_strava_activity_file, route_metadata
 from route_timezones import route_time_zone
@@ -114,33 +118,21 @@ for spec in quest_specs:
     lifecycle = spec.get('lifecycle', 'completed')
     if lifecycle not in ('completed', 'planned', 'discovered'):
         raise ValueError(f'Invalid lifecycle for {aid}: {lifecycle!r}')
-    route_js = [dict(point) for point in route_provenance.route]
-    if not route_js:
+    source_route = [dict(point) for point in route_provenance.route]
+    if not source_route:
         print(f'    ✗ {aid}: empty polyline'); continue
-    distance_km = route_js[-1]['d'] / 1000
 
     # Auto-detect region if not specified
     region_label = spec.get('region') or infer_route_region(
-        route_js[0]['lat'], route_js[0]['lng']
+        source_route[0]['lat'], source_route[0]['lng']
     )
-    temporal_provenance = dict(route_provenance.temporal)
-    discontinuities = [dict(item) for item in route_provenance.discontinuities]
-    # Supplied timestamps on a discovered route are source provenance, not
-    # evidence that the owner completed it. Keep them in the durable GPX but do
-    # not publish elapsed time or pace as owner experience.
-    if lifecycle == 'discovered':
-        temporal_provenance = {'status': 'unavailable'}
-        route_js = [
-            {key: value for key, value in point.items() if key != 'elapsed_s'}
-            for point in route_js
-        ]
-        discontinuities = [
-            {key: value for key, value in item.items() if key != 'elapsed_time_s'}
-            for item in discontinuities
-        ]
     time_zone = route_time_zone(region_label)
-    if temporal_provenance.get('status') == 'recorded' and time_zone:
-        temporal_provenance['time_zone'] = time_zone
+    route_js, public_provenance = project_public_route_provenance(
+        route_provenance,
+        lifecycle=lifecycle,
+        time_zone=time_zone,
+    )
+    distance_km = route_js[-1]['d'] / 1000
 
     # Slug from activity_id
     slug = aid
@@ -181,12 +173,7 @@ for spec in quest_specs:
         'type': typ,
         'description': desc,
         'route': route_js,
-        'provenance': {
-            'temporal': temporal_provenance,
-            'elevation': route_provenance.elevation,
-            'track': route_provenance.track,
-            'discontinuities': discontinuities,
-        },
+        'provenance': public_provenance,
         'center_lat': cx, 'center_lng': cy,
         'mid_idx': len(route_js) // 2,
         **quest_meta,

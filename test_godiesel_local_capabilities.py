@@ -669,6 +669,69 @@ def test_generation_inspect_rebuilds_expected_geometry_from_source(tmp_path: Pat
     assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_PROJECTION_DRIFT"
 
 
+def test_generation_inspect_rebuilds_expected_provenance_from_source(tmp_path: Path):
+    root = _generation_fixture(tmp_path)
+    detail_path = root / "app/public/data/routes/route-1.json"
+    detail = json.loads(detail_path.read_text(encoding="utf-8"))
+    detail["provenance"]["track"]["segment_count"] = 99
+    _write_json(detail_path, detail)
+
+    result = execute_route_generation(root, "inspect")
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_PROJECTION_DRIFT"
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    [
+        "quests.json",
+        "app/src/data/generated/routes.manifest.json",
+        "app/src/data/generated/route-stats.json",
+        "app/public/data/routes/route-1.json",
+    ],
+)
+def test_generation_inspect_blocks_invalid_utf8_inputs(
+    tmp_path: Path,
+    relative_path: str,
+):
+    root = _generation_fixture(tmp_path)
+    (root / relative_path).write_bytes(b"\xff")
+
+    result = execute_route_generation(root, "inspect")
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_PROJECTION_UNREADABLE"
+
+
+def test_generation_inspect_blocks_invalid_utf8_private_metadata(
+    tmp_path: Path,
+    monkeypatch,
+):
+    root = _generation_fixture(tmp_path)
+    config_path = root / "quests.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["routes"][0].pop("source_gpx")
+    config["routes"][0].pop("source_sha256")
+    _write_json(config_path, config)
+    private_root = tmp_path / "private"
+    private_root.mkdir()
+    (private_root / "activities.csv").write_bytes(b"\xff")
+    monkeypatch.setattr(
+        "godiesel_local_capabilities.DEFAULT_DIESEL_DIARIES_ROOT",
+        private_root,
+    )
+    monkeypatch.setattr(
+        "godiesel_local_capabilities.find_strava_activity_file",
+        lambda _activity_id: root / "route_sources/route-1.gpx",
+    )
+
+    result = execute_route_generation(root, "inspect")
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_PROJECTION_DRIFT"
+
+
 @pytest.mark.parametrize(
     "routes",
     [

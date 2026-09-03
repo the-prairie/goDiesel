@@ -4,6 +4,7 @@ from route_provenance import (
     SourceRoutePoint,
     build_route_provenance,
     load_source_route_points,
+    project_public_route_provenance,
     source_point_from_fit_fields,
 )
 from route_timezones import route_time_zone
@@ -260,3 +261,49 @@ def test_curated_regions_map_to_explicit_iana_timezones():
     assert route_time_zone("Banff/Kananaskis") == "America/Edmonton"
     assert route_time_zone("Canary Islands") == "Atlantic/Canary"
     assert route_time_zone("Unknown trail") is None
+
+
+def test_public_provenance_adds_the_resolved_time_zone():
+    source = build_route_provenance(
+        [
+            point(35.0, 135.0, seconds=0),
+            point(35.001, 135.0, seconds=60),
+        ],
+        sample_interval_m=0,
+    )
+
+    route, provenance = project_public_route_provenance(
+        source,
+        lifecycle="completed",
+        time_zone="Asia/Tokyo",
+    )
+
+    assert route == source.route
+    assert provenance["temporal"] == {
+        **source.temporal,
+        "time_zone": "Asia/Tokyo",
+    }
+    assert provenance["track"] == source.track
+
+
+def test_discovered_public_provenance_removes_owner_timing_claims():
+    source = build_route_provenance(
+        [
+            point(35.0, 135.0, seconds=0, segment=0),
+            point(35.001, 135.0, seconds=180, segment=1),
+        ],
+        sample_interval_m=0,
+    )
+
+    route, provenance = project_public_route_provenance(
+        source,
+        lifecycle="discovered",
+        time_zone="Asia/Tokyo",
+    )
+
+    assert provenance["temporal"] == {"status": "unavailable"}
+    assert all("elapsed_s" not in item for item in route)
+    assert all(
+        "elapsed_time_s" not in item for item in provenance["discontinuities"]
+    )
+    assert provenance["track"] == source.track

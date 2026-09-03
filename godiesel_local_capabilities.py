@@ -49,7 +49,12 @@ from route_imports import (
     find_strava_activity_file,
     imported_route_from_spec,
 )
-from route_provenance import build_route_provenance, load_source_route_points
+from route_provenance import (
+    build_route_provenance,
+    load_source_route_points,
+    project_public_route_provenance,
+)
+from route_timezones import route_time_zone
 
 
 SCHEMA_VERSION = 1
@@ -158,7 +163,7 @@ def _source_projection(
     root: Path,
     canonical: dict[str, object],
     strava_metadata: Mapping[str, Mapping[str, str]],
-) -> tuple[dict[str, str], list[dict[str, object]], str, str]:
+) -> tuple[dict[str, str], list[dict[str, object]], dict[str, object], str, str]:
     activity_id = str(canonical["activity_id"])
     imported = imported_route_from_spec(canonical, root)
     if imported is not None:
@@ -176,21 +181,21 @@ def _source_projection(
         if source_path is None:
             raise OSError(f"route source unavailable for {activity_id}")
 
-    provenance = build_route_provenance(load_source_route_points(source_path))
-    route = [dict(point) for point in provenance.route]
-    if not route:
+    source_provenance = build_route_provenance(load_source_route_points(source_path))
+    source_route = [dict(point) for point in source_provenance.route]
+    if not source_route:
         raise ValueError(f"route source is empty for {activity_id}")
-    if canonical.get("lifecycle", "completed") == "discovered":
-        route = [
-            {key: value for key, value in point.items() if key != "elapsed_s"}
-            for point in route
-        ]
     region = str(
         canonical.get("region")
-        or infer_route_region(route[0]["lat"], route[0]["lng"])
+        or infer_route_region(source_route[0]["lat"], source_route[0]["lng"])
+    )
+    route, provenance = project_public_route_provenance(
+        source_provenance,
+        lifecycle=str(canonical.get("lifecycle", "completed")),
+        time_zone=route_time_zone(region),
     )
     subtitle = str(canonical.get("title") or source["activity_name"]).strip()
-    return source, route, region, subtitle
+    return source, route, provenance, region, subtitle
 
 
 def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[str, str]]]:
@@ -228,7 +233,14 @@ def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[s
         detail_slugs = [path.stem for path in detail_paths]
         reported_count = stats["route_count"]
         reported_completed_km = stats["completed_km"]
-    except (OSError, json.JSONDecodeError, KeyError, TypeError, AttributeError):
+    except (
+        OSError,
+        UnicodeError,
+        json.JSONDecodeError,
+        KeyError,
+        TypeError,
+        AttributeError,
+    ):
         return None, [
             _issue(
                 "GODIESEL_GENERATED_PROJECTION_UNREADABLE",
@@ -284,7 +296,7 @@ def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[s
     if any(not route.get("source_gpx") for route in canonical_routes):
         try:
             strava_metadata = _strava_metadata()
-        except (OSError, csv.Error):
+        except (OSError, UnicodeError, csv.Error):
             projection_current = False
     canonical_projection_fields = {
         "difficulty": ("difficulty",),
@@ -306,10 +318,22 @@ def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[s
                 projection_current = False
                 break
             try:
-                expected_source, expected_route, expected_region, expected_subtitle = (
-                    _source_projection(root, canonical, strava_metadata)
-                )
-            except (FitParseError, GPXException, KeyError, OSError, RuntimeError, ValueError):
+                (
+                    expected_source,
+                    expected_route,
+                    expected_provenance,
+                    expected_region,
+                    expected_subtitle,
+                ) = _source_projection(root, canonical, strava_metadata)
+            except (
+                FitParseError,
+                GPXException,
+                KeyError,
+                OSError,
+                RuntimeError,
+                UnicodeError,
+                ValueError,
+            ):
                 projection_current = False
                 break
             source_fields = {
@@ -329,6 +353,7 @@ def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[s
                 break
             if (
                 detail.get("route") != expected_route
+                or detail.get("provenance") != expected_provenance
                 or summary.get("region") != expected_region
                 or detail.get("region") != expected_region
                 or summary.get("name") != expected_region

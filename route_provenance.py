@@ -28,6 +28,40 @@ class RouteProvenanceResult:
     discontinuities: list[dict[str, object]]
 
 
+def project_public_route_provenance(
+    source: RouteProvenanceResult,
+    *,
+    lifecycle: str,
+    time_zone: str | None,
+) -> tuple[list[dict[str, object]], dict[str, object]]:
+    """Apply lifecycle rules to the source-backed public route evidence."""
+    route = [dict(point) for point in source.route]
+    temporal = dict(source.temporal)
+    discontinuities = [dict(item) for item in source.discontinuities]
+    if lifecycle == "discovered":
+        temporal = {"status": "unavailable"}
+        route = [
+            {key: value for key, value in point.items() if key != "elapsed_s"}
+            for point in route
+        ]
+        discontinuities = [
+            {
+                key: value
+                for key, value in item.items()
+                if key != "elapsed_time_s"
+            }
+            for item in discontinuities
+        ]
+    if temporal.get("status") == "recorded" and time_zone:
+        temporal["time_zone"] = time_zone
+    return route, {
+        "temporal": temporal,
+        "elevation": dict(source.elevation),
+        "track": dict(source.track),
+        "discontinuities": discontinuities,
+    }
+
+
 def _recorded_timestamp(value: object) -> datetime | None:
     if not isinstance(value, datetime):
         return None

@@ -343,7 +343,7 @@ def _route_generation_external_sources(
                 }
             )
             monitor_paths.append(str(source_path))
-    except (KeyError, OSError, TypeError, json.JSONDecodeError):
+    except (KeyError, OSError, TypeError, UnicodeError, json.JSONDecodeError):
         return None, [], _issue(
             "GODIESEL_PRIVATE_ROUTE_SOURCE_UNAVAILABLE",
             "The private source inventory for generated routes could not be fingerprinted.",
