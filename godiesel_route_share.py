@@ -18,6 +18,7 @@ from jsonschema.exceptions import SchemaError
 
 from godiesel_evidence import canonical_digest, write_evidence_receipt
 from godiesel_verification import (
+    ProofInputMonitor,
     build_proof_snapshot,
     proof_snapshot_stability_issues,
     reuse_verification,
@@ -700,14 +701,20 @@ def execute_route_share(
         detach=detach,
         replace_existing=replace_existing,
     )
+    monitor = ProofInputMonitor(root, proof_snapshot) if proof_snapshot is not None else None
     started_at = datetime.now(timezone.utc).isoformat()
-    completed = runner(
-        command,
-        cwd=root,
-        capture_output=True,
-        text=True,
-        env=dict(os.environ if environ is None else environ),
-    )
+    try:
+        completed = runner(
+            command,
+            cwd=root,
+            capture_output=True,
+            text=True,
+            env=dict(os.environ if environ is None else environ),
+        )
+    finally:
+        transient_input_change = monitor.changed() if monitor is not None else False
+        if monitor is not None:
+            monitor.close()
     finished_at = datetime.now(timezone.utc).isoformat()
     domain_result = _domain_result(completed)
     post_proof_snapshot = proof_snapshot
@@ -723,6 +730,17 @@ def execute_route_share(
             proof_snapshot,
             post_proof_snapshot,
         )
+        if transient_input_change and not any(
+            issue["code"] == "GODIESEL_VERIFICATION_INPUTS_CHANGED"
+            for issue in proof_stability_blockers
+        ):
+            proof_stability_blockers.append(
+                _issue(
+                    "GODIESEL_VERIFICATION_INPUTS_CHANGED",
+                    "A covered input changed while the verification gate was running.",
+                    "Stabilize the worktree and rerun verification against one unchanged input set.",
+                )
+            )
     blockers = list(proof_stability_blockers)
     domain_error = (
         domain_result.get("error")

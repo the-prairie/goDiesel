@@ -13,7 +13,7 @@ Run live-provider tests only for provider, terrain, imagery, or camera changes.
 Run the complete release gate only for production cutover or changes to shared application infrastructure.
 
 A successful gate remains valid unless subsequent edits touch behavior covered by that gate.
-Verification also blocks when covered inputs change between its pre-run and post-run snapshots.
+Verification also blocks when covered inputs change between its pre-run and post-run snapshots or emit a filesystem mutation event during the gate.
 
 ## Verification Matrix
 
@@ -169,8 +169,8 @@ Changing any covered input invalidates that proof.
 
 Each impact rule names the capability invariants that justify its selected gates.
 Focused route-share evidence records the exact manifest-declared route check that ran; its fingerprint covers the route-only application source, browser journey, build and scoping scripts, dependency and test configuration, route data, and public route media consumed by that check.
-Live provider proof requires an explicit target whose `build-identity.json` matches the clean local commit before and after the gate.
-Reuse fetches that identity again and blocks when either the target or local checkout no longer identifies the same commit.
+Live provider proof requires an explicit origin root whose non-redirected `build-identity.json` matches the clean local commit and tree before and after the gate.
+The identity also carries a unique build instance id, so reuse blocks after a same-commit redeployment as well as after a source change.
 
 Documentation, evidence packaging, or unrelated edits do not invalidate a proof unless they change an executable command, contract, or claimed behavior.
 

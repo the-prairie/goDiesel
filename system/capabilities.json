@@ -265,7 +265,7 @@
       "authority": { "inspect": "read-only", "verify": "ephemeral-local" },
       "inputs": {
         "inspect": [],
-        "verify": ["named provider", "exact credential-free HTTP target", "clean local commit", "matching deployed build identity"]
+        "verify": ["named provider", "exact credential-free origin root", "clean local commit and tree", "matching immutable deployed build identity"]
       },
       "reads": [".env", "app/.env", "app/src/providers/**", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts"],
       "writes": [".godiesel/evidence/**", "app/test-results/**", "app/playwright-report/**"],
@@ -288,7 +288,7 @@
       "preconditions": [
         "the selected provider configuration is present without exposing its value",
         "the exact localhost or deployed preview target is named",
-        "the target exposes build-identity.json for the same clean local commit",
+        "the origin root exposes build-identity.json for the same clean local commit and tree with one immutable build instance id",
         "browser and hardware evidence are available for claims that depend on rendering"
       ],
       "idempotency": { "inspect": "read-only", "verify": "external-check-required" },

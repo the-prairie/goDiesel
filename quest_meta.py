@@ -170,3 +170,46 @@ def route_guide_preview(curation):
     if curation.get("vibe"):
         preview["vibe"] = curation["vibe"]
     return preview
+
+
+def simplify_route_for_manifest(points, max_points=96):
+    """Project full route geometry into the deterministic summary trace."""
+    if len(points) <= max_points:
+        simplified = points
+    else:
+        last = len(points) - 1
+        indices = [round(index * last / (max_points - 1)) for index in range(max_points)]
+        simplified = [points[index] for index in indices]
+    return [
+        [point["lat"], point["lng"], point.get("elev"), point.get("d", 0)]
+        for point in simplified
+    ]
+
+
+def route_manifest_record(record):
+    """Return the exact public summary projection for one generated detail record."""
+    return {
+        "slug": record["slug"],
+        "activity_id": record["activity_id"],
+        "source_kind": record.get("source_kind", "strava-export"),
+        "lifecycle": record["lifecycle"],
+        "name": record["name"],
+        "subtitle": record["subtitle"],
+        "activity_name": record["activity_name"],
+        "region": record["region"],
+        "date": record["date"],
+        "distance_km": record["distance_km"],
+        "elevation_gain_m": record["elevation_gain_m"],
+        "elevation_status": record["elevation_status"],
+        "type": record["type"],
+        "description": record["description"],
+        "completion_rule": record["completion_rule"],
+        "difficulty": record["difficulty"],
+        "theme": record["theme"],
+        "xp": record["xp"],
+        "center_lat": record["center_lat"],
+        "center_lng": record["center_lng"],
+        "trace": simplify_route_for_manifest(record.get("route", [])),
+        "replay": record["replay"],
+        "guide_preview": route_guide_preview(record.get("curation")),
+    }

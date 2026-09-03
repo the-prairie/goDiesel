@@ -7,12 +7,22 @@ from datetime import datetime
 from typing import Mapping, Sequence
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from quest_meta import build_route_curation, route_guide_preview
+from quest_meta import (
+    build_quest_meta,
+    build_replay_metadata,
+    build_route_curation,
+    elevation_gain_m,
+    route_manifest_record,
+)
 from route_annotations import build_route_annotations
 
 
 LIFECYCLES = {"completed", "planned", "discovered"}
 ELEVATION_STATUSES = {"recorded", "unavailable"}
+BEST_IN_EARTH_IDS = {
+    "13935098460", "14349820520", "17636880071", "17654151284",
+    "13358070690", "9959792315", "9934715694",
+}
 COMMON_STRING_FIELDS = (
     "slug",
     "activity_id",
@@ -246,18 +256,8 @@ def valid_generated_projection(
         return False
     assert isinstance(route, list)
     assert isinstance(trace, list)
-    route_first = _point_values(route[0])
     route_last = _point_values(route[-1])
-    trace_first = _point_values(trace[0])
-    trace_last = _point_values(trace[-1])
-    if (
-        route_first is None
-        or route_last is None
-        or trace_first is None
-        or trace_last is None
-        or trace_first[:4] != route_first[:4]
-        or trace_last[:4] != route_last[:4]
-    ):
+    if route_last is None:
         return False
     total_distance = float(route_last[3])
     route_lats = [float(_point_values(point)[0]) for point in route]
@@ -271,8 +271,7 @@ def valid_generated_projection(
     if (
         not isinstance(mid_idx, int)
         or isinstance(mid_idx, bool)
-        or mid_idx < 0
-        or mid_idx >= len(route)
+        or mid_idx != len(route) // 2
         or not _valid_replay(detail, len(route))
         or not _valid_replay(summary, len(route))
         or not _valid_provenance(
@@ -287,9 +286,28 @@ def valid_generated_projection(
     canonical_id = str(canonical.get("activity_id", ""))
     if canonical_id != detail.get("activity_id") or canonical_id != detail.get("slug"):
         return False
-    if canonical.get("replay_mode") is not None and (
-        detail["replay"].get("mode") != canonical.get("replay_mode")
-    ):
+    expected_replay = build_replay_metadata(
+        canonical_id,
+        len(route),
+        BEST_IN_EARTH_IDS,
+        str(detail["lifecycle"]),
+        canonical.get("replay_mode"),
+    )
+    if detail.get("replay") != expected_replay:
+        return False
+    expected_meta = build_quest_meta(
+        activity_type=str(detail["type"]),
+        distance_km=float(detail["distance_km"]),
+        elevation_gain=(
+            elevation_gain_m(route) if elevation_status == "recorded" else None
+        ),
+        region_label=str(detail["region"]),
+        activity_name=str(detail["activity_name"]),
+    )
+    for field in ("theme", "difficulty", "completion_rule"):
+        if canonical.get(field):
+            expected_meta[field] = str(canonical[field]).strip()
+    if any(detail.get(field) != value for field, value in expected_meta.items()):
         return False
     try:
         expected_curation = build_route_curation(canonical.get("curation") or {})
@@ -298,11 +316,15 @@ def valid_generated_projection(
         )
     except ValueError:
         return False
-    return (
-        detail.get("curation", {"review_status": "draft"}) == expected_curation
-        and summary.get("guide_preview") == route_guide_preview(expected_curation)
-        and detail.get("annotations", []) == expected_annotations
-    )
+    if (
+        detail.get("curation", {"review_status": "draft"}) != expected_curation
+        or detail.get("annotations", []) != expected_annotations
+    ):
+        return False
+    try:
+        return dict(summary) == route_manifest_record(detail)
+    except (KeyError, TypeError):
+        return False
 
 
 def completed_distance_km(details: Sequence[Mapping[str, object]]) -> float | None:

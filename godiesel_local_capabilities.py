@@ -34,6 +34,7 @@ from godiesel_evidence import (
     write_evidence_receipt,
 )
 from godiesel_verification import (
+    ProofInputMonitor,
     build_proof_snapshot,
     proof_snapshot_stability_issues,
     read_target_build_identity,
@@ -334,14 +335,19 @@ def _run_verification(
             blockers=list(snapshot["blockers"]),
         )
 
+    monitor = ProofInputMonitor(root, snapshot)
     started_at = datetime.now(timezone.utc).isoformat()
-    completed = runner(
-        command,
-        cwd=root,
-        capture_output=True,
-        text=True,
-        env=dict(environ),
-    )
+    try:
+        completed = runner(
+            command,
+            cwd=root,
+            capture_output=True,
+            text=True,
+            env=dict(environ),
+        )
+    finally:
+        transient_input_change = monitor.changed()
+        monitor.close()
     finished_at = datetime.now(timezone.utc).isoformat()
     passed = completed.returncode == 0
     blockers = [] if passed else [
@@ -371,6 +377,17 @@ def _run_verification(
         provider_identity=post_provider_identity,
     )
     stability_blockers = proof_snapshot_stability_issues(snapshot, post_snapshot)
+    if transient_input_change and not any(
+        issue["code"] == "GODIESEL_VERIFICATION_INPUTS_CHANGED"
+        for issue in stability_blockers
+    ):
+        stability_blockers.append(
+            _issue(
+                "GODIESEL_VERIFICATION_INPUTS_CHANGED",
+                "A covered input changed while the verification gate was running.",
+                "Stabilize the worktree and rerun verification against one unchanged input set.",
+            )
+        )
     blockers.extend(stability_blockers)
     stable_inputs = not stability_blockers and not post_identity_blockers
     receipt_snapshot = post_snapshot if post_snapshot["status"] == "passed" else snapshot
@@ -1223,6 +1240,7 @@ def _valid_provider_target(value: str | None) -> bool:
         and bool(parsed.netloc)
         and parsed.username is None
         and parsed.password is None
+        and parsed.path in {"", "/"}
         and not parsed.query
         and not parsed.fragment
     )
@@ -1397,6 +1415,6 @@ def execute_provider_readiness(
         external_target={
             "kind": provider,
             "name_sha256": canonical_digest(provider_target),
-            "immutable_id": str(build_identity["commit"]),
+            "immutable_id": str(build_identity["build_id"]),
         },
     )

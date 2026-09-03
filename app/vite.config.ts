@@ -1,6 +1,7 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { defineConfig, loadEnv, type Plugin } from "vite";
@@ -9,41 +10,51 @@ import { viteStaticCopy } from "vite-plugin-static-copy";
 const cesiumBuild = "node_modules/cesium/Build/Cesium";
 const cesiumBaseUrl = "/cesiumStatic";
 
-function buildIdentity() {
+function gitOutput(args: string[]) {
+  return execFileSync("git", args, {
+    cwd: path.resolve(__dirname, ".."),
+    encoding: "utf8",
+  }).trim();
+}
+
+function buildIdentity(command: string) {
   const configuredCommit = (
     process.env.GODIESEL_BUILD_COMMIT || process.env.CF_PAGES_COMMIT_SHA
   )?.trim();
-  let checkoutCommit: string | undefined;
+  let checkoutCommit: string;
+  let tree: string;
+  let status: string;
   try {
-    checkoutCommit = execFileSync("git", ["rev-parse", "HEAD"], {
-      cwd: path.resolve(__dirname, ".."),
-      encoding: "utf8",
-    }).trim();
+    checkoutCommit = gitOutput(["rev-parse", "HEAD"]);
+    tree = gitOutput(["rev-parse", "HEAD^{tree}"]);
+    status = gitOutput(["status", "--porcelain=v1", "--untracked-files=all"]);
   } catch {
-    checkoutCommit = undefined;
+    throw new Error(
+      "goDiesel build identity requires an available Git checkout.",
+    );
   }
-  if (
-    configuredCommit &&
-    checkoutCommit &&
-    configuredCommit !== checkoutCommit
-  ) {
+  if (command === "build" && status) {
+    throw new Error("Production build identity requires a clean Git checkout.");
+  }
+  if (configuredCommit && configuredCommit !== checkoutCommit) {
     throw new Error(
       "Configured build commit does not match the checked-out Git commit.",
     );
   }
-  const commit = checkoutCommit || configuredCommit;
-  if (!commit || !/^[a-f0-9]{40}$/.test(commit)) {
-    throw new Error("goDiesel build identity requires a full Git commit SHA.");
+  if (!/^[a-f0-9]{40}$/.test(checkoutCommit) || !/^[a-f0-9]{40}$/.test(tree)) {
+    throw new Error("goDiesel build identity requires full Git object IDs.");
   }
   return {
     schema_version: 1,
     document_type: "godiesel-build-identity",
-    commit,
+    commit: checkoutCommit,
+    tree,
+    build_id: randomUUID(),
   } as const;
 }
 
-function buildIdentityPlugin(): Plugin {
-  const identity = JSON.stringify(buildIdentity());
+function buildIdentityPlugin(command: string): Plugin {
+  const identity = JSON.stringify(buildIdentity(command));
   return {
     name: "godiesel-build-identity",
     configureServer(server) {
@@ -63,7 +74,7 @@ function buildIdentityPlugin(): Plugin {
   };
 }
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, path.resolve(__dirname, ".."), "");
   const liveProvidersDisabled =
     process.env.GODIESEL_DISABLE_LIVE_PROVIDERS === "1";
@@ -84,7 +95,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
-      buildIdentityPlugin(),
+      buildIdentityPlugin(command),
       {
         name: "godiesel-single-route-manifest",
         enforce: "pre" as const,

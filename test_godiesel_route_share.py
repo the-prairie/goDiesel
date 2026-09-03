@@ -607,6 +607,27 @@ def test_route_share_verify_blocks_when_covered_inputs_change_during_gate(
     assert receipt["status"] == "blocked"
 
 
+def test_route_share_verify_blocks_transient_covered_input_change(tmp_path: Path):
+    install_evidence_contract(tmp_path)
+    implementation = tmp_path / "godiesel_route_share.py"
+    implementation.write_text("before\n", encoding="utf-8")
+
+    def mutating_runner(command, **kwargs):
+        implementation.write_text("during\n", encoding="utf-8")
+        implementation.write_text("before\n", encoding="utf-8")
+        return completed(command, stdout="verified\n")
+
+    result = execute_route_share(
+        tmp_path,
+        "verify",
+        slug="route-1",
+        runner=mutating_runner,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_VERIFICATION_INPUTS_CHANGED"
+
+
 def test_release_requires_complete_passed_route_transition_lineage(tmp_path: Path):
     runner = RecordingRunner()
 

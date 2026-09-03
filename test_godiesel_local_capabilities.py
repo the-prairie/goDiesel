@@ -26,6 +26,8 @@ from quest_meta import route_guide_preview
 
 ROOT = Path(__file__).resolve().parent
 TEST_BUILD_COMMIT = "a" * 40
+TEST_BUILD_TREE = "b" * 40
+TEST_BUILD_ID = "12345678-1234-4234-8234-123456789abc"
 
 
 COMPLETE_CURATION = {
@@ -63,12 +65,15 @@ def _matching_target_identity(_target: str) -> dict[str, object]:
         "schema_version": 1,
         "document_type": "godiesel-build-identity",
         "commit": TEST_BUILD_COMMIT,
+        "tree": TEST_BUILD_TREE,
+        "build_id": TEST_BUILD_ID,
     }
 
 
 def _clean_repository_identity(_root: Path) -> dict[str, object]:
     return {
         "commit": TEST_BUILD_COMMIT,
+        "tree": TEST_BUILD_TREE,
         "branch": "test",
         "worktree_sha256": "b" * 64,
         "dirty_state": {"clean": True, "sha256": "c" * 64},
@@ -91,10 +96,10 @@ def _projection_record(activity_id: str) -> dict[str, object]:
         "elevation_status": "unavailable",
         "type": "Run",
         "description": "",
-        "completion_rule": "Complete the route.",
+        "completion_rule": "Complete a 1.0 km run in Test region.",
         "difficulty": "Easy",
-        "theme": "Test",
-        "xp": 10,
+        "theme": "Wander Run",
+        "xp": 60,
         "center_lat": 50.0,
         "center_lng": -114.0,
         "replay": {
@@ -102,7 +107,7 @@ def _projection_record(activity_id: str) -> dict[str, object]:
             "replay_eligible": True,
             "best_in_earth": False,
             "geometry_status": "ready",
-            "point_count": 2,
+            "point_count": 3,
         },
     }
 
@@ -110,6 +115,7 @@ def _projection_record(activity_id: str) -> dict[str, object]:
 def _route_points() -> list[dict[str, object]]:
     return [
         {"lat": 50.0, "lng": -114.0, "elev": None, "d": 0.0},
+        {"lat": 50.0, "lng": -114.0, "elev": None, "d": 500.0},
         {"lat": 50.0, "lng": -114.0, "elev": None, "d": 1000.0},
     ]
 
@@ -152,6 +158,7 @@ def _generation_fixture(root: Path) -> Path:
                     **_projection_record("route-1"),
                     "trace": [
                         [50.0, -114.0, None, 0.0],
+                        [50.0, -114.0, None, 500.0],
                         [50.0, -114.0, None, 1000.0],
                     ],
                     "guide_preview": {"review_status": "draft"},
@@ -230,6 +237,7 @@ def _write_complete_curation_projection(
                     **projected,
                     "trace": [
                         [50.0, -114.0, None, 0.0],
+                        [50.0, -114.0, None, 500.0],
                         [50.0, -114.0, None, 1000.0],
                     ],
                     "guide_preview": route_guide_preview(curation),
@@ -503,6 +511,38 @@ def test_generation_inspect_blocks_structurally_invalid_projection(
     record = payload if target == "detail" else payload["routes"][0]
     mutation(record)
     _write_json(path, payload)
+
+    result = execute_route_generation(root, "inspect")
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_PROJECTION_DRIFT"
+
+
+@pytest.mark.parametrize(
+    ("target", "field", "value"),
+    [
+        ("summary", "trace", [[50.0, -114.0, None, 0.0], [50.1, -114.0, None, 500.0], [50.0, -114.0, None, 1000.0]]),
+        ("detail", "mid_idx", 0),
+        ("both", "xp", 999),
+    ],
+)
+def test_generation_inspect_blocks_semantically_stale_projection(
+    tmp_path: Path,
+    target: str,
+    field: str,
+    value: object,
+):
+    root = _generation_fixture(tmp_path)
+    summary_path = root / "app/src/data/generated/routes.manifest.json"
+    detail_path = root / "app/public/data/routes/route-1.json"
+    if target in {"summary", "both"}:
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        summary["routes"][0][field] = value
+        _write_json(summary_path, summary)
+    if target in {"detail", "both"}:
+        detail = json.loads(detail_path.read_text(encoding="utf-8"))
+        detail[field] = value
+        _write_json(detail_path, detail)
 
     result = execute_route_generation(root, "inspect")
 
@@ -966,6 +1006,23 @@ def test_provider_verify_requires_an_explicit_live_target(tmp_path: Path):
     assert calls == []
 
 
+def test_provider_verify_rejects_path_scoped_target(tmp_path: Path):
+    calls: list[object] = []
+
+    result = execute_provider_readiness(
+        tmp_path,
+        "verify",
+        provider="atlas",
+        provider_target="https://preview.example.test/identity-proxy",
+        environ={"GOOGLE_MAPS_API_KEY": "secret"},
+        runner=lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_PROVIDER_TARGET_REQUIRED"
+    assert calls == []
+
+
 def test_provider_verify_rejects_target_built_from_another_commit(tmp_path: Path):
     _install_evidence_contract(tmp_path)
     calls: list[object] = []
@@ -1051,7 +1108,7 @@ def test_provider_verify_runs_the_named_existing_live_check(tmp_path: Path):
     receipt = json.loads(
         (tmp_path / result["evidence"]["path"]).read_text(encoding="utf-8")
     )
-    assert receipt["external_target"]["immutable_id"] == TEST_BUILD_COMMIT
+    assert receipt["external_target"]["immutable_id"] == TEST_BUILD_ID
 
     reused = reuse_verification(
         tmp_path,
@@ -1095,7 +1152,7 @@ def test_provider_verify_blocks_when_deployed_identity_changes_during_gate(
     _install_evidence_contract(tmp_path)
     identities = [
         _matching_target_identity(""),
-        {**_matching_target_identity(""), "commit": "d" * 40},
+        {**_matching_target_identity(""), "build_id": "87654321-4321-4321-8321-cba987654321"},
     ]
 
     result = execute_provider_readiness(
@@ -1160,6 +1217,39 @@ def test_provider_reuse_refetches_and_rejects_changed_deployed_identity(
     assert reused["blockers"][0]["code"] == (
         "GODIESEL_PROVIDER_BUILD_IDENTITY_MISMATCH"
     )
+
+
+def test_provider_reuse_rejects_same_commit_redeployment(tmp_path: Path):
+    _install_evidence_contract(tmp_path)
+    execute_provider_readiness(
+        tmp_path,
+        "verify",
+        provider="atlas",
+        provider_target="https://preview.example.test/",
+        environ={"GOOGLE_MAPS_API_KEY": "secret"},
+        runner=lambda command, **kwargs: subprocess.CompletedProcess(command, 0, "passed", ""),
+        target_identity_reader=_matching_target_identity,
+        repository_reader=_clean_repository_identity,
+    )
+
+    reused = reuse_verification(
+        tmp_path,
+        "provider-readiness",
+        expected_inputs={
+            "provider": "atlas",
+            "provider-target": "https://preview.example.test/",
+        },
+        environ={"GOOGLE_MAPS_API_KEY": "secret"},
+        provider_target="https://preview.example.test/",
+        target_identity_reader=lambda _target: {
+            **_matching_target_identity(""),
+            "build_id": "87654321-4321-4321-8321-cba987654321",
+        },
+        repository_reader=_clean_repository_identity,
+    )
+
+    assert reused["status"] == "blocked"
+    assert reused["blockers"][0]["code"] == "GODIESEL_PROOF_INVALIDATED"
 
 
 def test_provider_verify_fingerprints_env_file_presence_without_exporting_secret(tmp_path: Path):

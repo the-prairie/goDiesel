@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import ast
+import ctypes
 import fnmatch
 import json
+import os
 import re
+import select
 import stat
 import subprocess
 from datetime import datetime, timezone
 from hashlib import sha256
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Callable, Iterable, Mapping, Sequence
-from urllib.request import Request, urlopen
+from urllib.parse import urlparse
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from jsonschema import Draft202012Validator
 
@@ -25,16 +29,136 @@ EVIDENCE_SCHEMA_PATH = Path("system/evidence-receipt.schema.json")
 EVIDENCE_ROOT = Path(".godiesel/evidence")
 VERIFICATION_TIERS = {"focused", "ticket", "release", "live"}
 LIVE_PROOF_MAX_AGE_SECONDS = 15 * 60
-SOURCE_SUFFIXES = (".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
+SOURCE_SUFFIXES = (
+    ".py", ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"
+)
 SCRIPT_IMPORT_PATTERN = re.compile(
     r"(?:\b(?:import|export)\s+(?:[^\n;]*?\s+from\s+)?|\bimport\s*\()"
     r"[\"']([^\"']+)[\"']"
 )
 SCRIPT_FROM_PATTERN = re.compile(r"\bfrom\s*[\"']([^\"']+)[\"']")
+SCRIPT_REQUIRE_PATTERN = re.compile(r"\brequire\s*\(\s*[\"']([^\"']+)[\"']\s*\)")
 
 
 class UnsafeCoveredInputSymlink(ValueError):
     """A proof input reaches a broken or repository-external symlink."""
+
+
+class ProofInputMonitor:
+    """Record covered-input filesystem events that before/after hashes can miss."""
+
+    def __init__(self, root: Path, snapshot: Mapping[str, Any]):
+        self.root = root
+        self.paths = self._paths(snapshot)
+        self.before = self._state()
+        self.kqueue = None
+        self.descriptors: list[int] = []
+        self.inotify_fd: int | None = None
+        if hasattr(select, "kqueue"):
+            self._start_kqueue()
+        elif os.name == "posix":
+            self._start_inotify()
+
+    def _paths(self, snapshot: Mapping[str, Any]) -> list[Path]:
+        paths: set[Path] = {self.root}
+        for item in snapshot.get("covered_inputs", []):
+            if item.get("state") not in {"matched", "absent"}:
+                continue
+            normalized = _normalized_path(str(item.get("name", "")))
+            if normalized is None:
+                continue
+            glob_pattern = f"{normalized}/*" if normalized.endswith("/**") else normalized
+            candidates = [
+                candidate
+                for candidate in self.root.glob(glob_pattern)
+                if candidate.is_file() and candidate.is_relative_to(self.root)
+            ]
+            try:
+                paths.update(_dependency_closure(self.root, candidates))
+            except (OSError, RuntimeError, SyntaxError, UnicodeError, ValueError):
+                paths.update(candidates)
+            anchor = self.root
+            for part in PurePosixPath(normalized).parts:
+                if any(token in part for token in ("*", "?", "[")):
+                    break
+                anchor = anchor / part
+            paths.add(anchor if anchor.exists() else anchor.parent)
+        paths.update(path.parent for path in tuple(paths) if path != self.root)
+        return sorted(path for path in paths if path.exists())
+
+    def _state(self) -> dict[str, tuple[int, int, int]]:
+        state = {}
+        for path in self.paths:
+            try:
+                details = path.stat()
+                state[path.as_posix()] = (
+                    details.st_ino,
+                    details.st_size,
+                    details.st_mtime_ns,
+                )
+            except OSError:
+                state[path.as_posix()] = (-1, -1, -1)
+        return state
+
+    def _start_kqueue(self) -> None:
+        self.kqueue = select.kqueue()
+        events = []
+        flags = (
+            select.KQ_NOTE_WRITE
+            | select.KQ_NOTE_DELETE
+            | select.KQ_NOTE_EXTEND
+            | select.KQ_NOTE_ATTRIB
+            | select.KQ_NOTE_RENAME
+            | select.KQ_NOTE_REVOKE
+        )
+        for path in self.paths:
+            try:
+                descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+            except OSError:
+                continue
+            self.descriptors.append(descriptor)
+            events.append(
+                select.kevent(
+                    descriptor,
+                    filter=select.KQ_FILTER_VNODE,
+                    flags=select.KQ_EV_ADD | select.KQ_EV_CLEAR,
+                    fflags=flags,
+                )
+            )
+        if events:
+            self.kqueue.control(events, 0, 0)
+
+    def _start_inotify(self) -> None:
+        try:
+            libc = ctypes.CDLL(None, use_errno=True)
+            fd = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
+            if fd < 0:
+                return
+            mask = 0x00000FFF
+            for path in self.paths:
+                libc.inotify_add_watch(fd, os.fsencode(path), mask)
+            self.inotify_fd = fd
+        except (AttributeError, OSError):
+            self.inotify_fd = None
+
+    def changed(self) -> bool:
+        event_seen = False
+        if self.kqueue is not None:
+            event_seen = bool(self.kqueue.control(None, max(1, len(self.paths)), 0))
+        if self.inotify_fd is not None:
+            try:
+                event_seen = bool(os.read(self.inotify_fd, 65536)) or event_seen
+            except BlockingIOError:
+                pass
+        return event_seen or self._state() != self.before
+
+    def close(self) -> None:
+        if self.kqueue is not None:
+            self.kqueue.close()
+        for descriptor in self.descriptors:
+            os.close(descriptor)
+        if self.inotify_fd is not None:
+            os.close(self.inotify_fd)
 
 
 def _issue(code: str, message: str, remediation: str) -> dict[str, str]:
@@ -44,7 +168,12 @@ def _issue(code: str, message: str, remediation: str) -> dict[str, str]:
 def _normalized_path(value: str) -> str | None:
     candidate = value.replace("\\", "/")
     path = PurePosixPath(candidate)
-    if path.is_absolute() or not candidate or ".." in path.parts:
+    if (
+        path.is_absolute()
+        or PureWindowsPath(value).drive
+        or not candidate
+        or ".." in path.parts
+    ):
         return None
     normalized = path.as_posix()
     return None if normalized == "." else normalized
@@ -146,7 +275,7 @@ def _unsafe_symlink_in_path(root: Path, path: Path) -> bool:
             if not current.is_symlink():
                 continue
             resolved = current.resolve(strict=True)
-        except OSError:
+        except (OSError, RuntimeError):
             return True
         if not resolved.is_relative_to(root):
             return True
@@ -175,8 +304,9 @@ def _resolve_local_module(root: Path, source: Path, module: str) -> Path | None:
         candidates.extend(base / f"index{suffix}" for suffix in SOURCE_SUFFIXES)
         candidates.append(base / "__init__.py")
     for candidate in candidates:
-        if candidate.is_file() and candidate.is_relative_to(root):
-            return candidate
+        normalized_candidate = Path(os.path.abspath(candidate))
+        if normalized_candidate.is_file() and normalized_candidate.is_relative_to(root):
+            return normalized_candidate
     return None
 
 
@@ -203,6 +333,7 @@ def _source_dependencies(root: Path, source: Path) -> list[Path]:
     else:
         modules.update(SCRIPT_IMPORT_PATTERN.findall(text))
         modules.update(SCRIPT_FROM_PATTERN.findall(text))
+        modules.update(SCRIPT_REQUIRE_PATTERN.findall(text))
     return sorted(
         {
             dependency
@@ -219,6 +350,8 @@ def _dependency_closure(root: Path, seeds: Iterable[Path]) -> list[Path]:
         source = pending.pop()
         if source in observed:
             continue
+        if _unsafe_symlink_in_path(root, source):
+            raise UnsafeCoveredInputSymlink
         observed.add(source)
         pending.extend(
             dependency
@@ -253,9 +386,17 @@ def proof_snapshot_stability_issues(
 
 
 def read_target_build_identity(provider_target: str) -> Mapping[str, object]:
-    identity_url = provider_target.rstrip("/") + "/build-identity.json"
+    parsed_target = urlparse(provider_target)
+    if parsed_target.path not in ("", "/"):
+        raise ValueError("provider target must identify an origin root")
+    identity_url = f"{parsed_target.scheme}://{parsed_target.netloc}/build-identity.json"
     request = Request(identity_url, headers={"Accept": "application/json"})
-    with urlopen(request, timeout=5) as response:
+
+    class RejectRedirects(HTTPRedirectHandler):
+        def redirect_request(self, request, fp, code, message, headers, newurl):
+            return None
+
+    with build_opener(RejectRedirects()).open(request, timeout=5) as response:
         payload = response.read(65_537)
     if len(payload) > 65_536:
         raise ValueError("build identity exceeds the bounded response size")
@@ -275,9 +416,24 @@ def verified_provider_build_identity(
     repository = dict(repository_reader(root))
     commit = repository.get("commit")
     dirty_state = repository.get("dirty_state")
+    tree = repository.get("tree")
+    if tree is None:
+        try:
+            tree = subprocess.run(
+                ["git", "rev-parse", "HEAD^{tree}"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            ).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            tree = None
     if (
         not isinstance(commit, str)
         or re.fullmatch(r"[a-f0-9]{40}", commit) is None
+        or not isinstance(tree, str)
+        or re.fullmatch(r"[a-f0-9]{40}", tree) is None
         or not isinstance(dirty_state, Mapping)
         or dirty_state.get("clean") is not True
     ):
@@ -311,6 +467,14 @@ def verified_provider_build_identity(
                 "Deploy the exact local commit to a preview target, then verify that target.",
             )
         ]
+    if identity["tree"] != tree:
+        return None, [
+            _issue(
+                "GODIESEL_PROVIDER_BUILD_TREE_MISMATCH",
+                "The named live target was built from a different source tree.",
+                "Deploy the exact clean local tree to a preview target, then verify that target.",
+            )
+        ]
     return identity, []
 
 
@@ -338,6 +502,10 @@ def _pattern_input(
         if anchor.exists() or anchor.is_symlink():
             if _unsafe_symlink_in_path(root, anchor):
                 raise UnsafeCoveredInputSymlink
+            if anchor.is_dir():
+                mode = stat.S_IMODE(anchor.stat().st_mode)
+                if mode & 0o444 == 0 or mode & 0o111 == 0:
+                    raise PermissionError
         candidates = sorted(
             path
             for path in root.glob(glob_pattern)
@@ -366,6 +534,8 @@ def _pattern_input(
     observed = []
     try:
         for path in _dependency_closure(root, candidates):
+            if _unsafe_symlink_in_path(root, path):
+                raise UnsafeCoveredInputSymlink
             metadata = path.lstat()
             if path.is_symlink():
                 resolved = path.resolve(strict=True)
@@ -392,7 +562,7 @@ def _pattern_input(
             f"The covered input pattern {normalized} could not be read.",
             "Repair the repository input and rerun verification before reuse.",
         )
-    except (OSError, SyntaxError, UnicodeError):
+    except (OSError, RuntimeError, SyntaxError, UnicodeError):
         return None, _issue(
             "GODIESEL_COVERED_INPUT_UNAVAILABLE",
             f"The covered input pattern {normalized} could not be read.",
@@ -1040,16 +1210,49 @@ def _rule_covers_dependency(
     rule: Mapping[str, Any],
     path: str,
 ) -> bool:
-    if len(rule["gates"]) != 1:
-        return False
     capabilities = {
         capability["id"]: capability for capability in manifest["capabilities"]
     }
-    return any(
-        _command_covers_path(root, command, path)
-        for gate in rule["gates"]
-        for command in capabilities[gate["capability"]]["verification"][gate["tier"]]
-    )
+    for gate in rule["gates"]:
+        commands = capabilities[gate["capability"]]["verification"][gate["tier"]]
+        for command in commands:
+            for proof_input in command.get("proof_inputs", []):
+                seeds: list[Path] = []
+                try:
+                    for pattern in proof_input["paths"]:
+                        normalized = _normalized_path(pattern)
+                        if normalized is None:
+                            continue
+                        glob_pattern = (
+                            f"{normalized}/*"
+                            if normalized.endswith("/**")
+                            else normalized
+                        )
+                        seeds.extend(
+                            candidate
+                            for candidate in root.glob(glob_pattern)
+                            if candidate.is_file() and candidate.is_relative_to(root)
+                        )
+                    seed_paths = {
+                        seed.relative_to(root).as_posix() for seed in seeds
+                    }
+                    if not any(_matches(seed, rule["paths"]) for seed in seed_paths):
+                        continue
+                    dependencies = {
+                        candidate.relative_to(root).as_posix()
+                        for candidate in _dependency_closure(root, seeds)
+                    }
+                except (
+                    OSError,
+                    RuntimeError,
+                    SyntaxError,
+                    UnicodeError,
+                    ValueError,
+                ):
+                    continue
+                if path in dependencies:
+                    return True
+    return False
 
 
 def explain_verification(

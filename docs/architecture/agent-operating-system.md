@@ -108,7 +108,7 @@ Route generation delegates to the sole full-catalogue Python writer.
 Owner curation produces a fingerprinted plan and calls the same owner-writer service as the loopback HTTP endpoint.
 Planned-route inspection reports browser-local ownership and unknown current state instead of projecting it into canonical files.
 Provider readiness separates configuration presence from one explicitly selected live check against one exact target.
-That target must identify the same clean source commit, so browser success cannot be attributed to an unrelated deployment.
+That origin must identify the same clean source commit and tree plus one immutable build instance, so browser success cannot be attributed to an unrelated or same-commit replacement deployment.
 
 ## 5. Capability manifest
 
@@ -290,13 +290,13 @@ A proof is reusable only while all covered inputs remain unchanged before, durin
 - fixture and test paths;
 - build and runtime configuration;
 - file type, executable mode, and symlink target for covered files;
-- provider target and matching deployed build commit when the proof is live;
+- provider origin and matching deployed commit, tree, and build instance when the proof is live;
 - canonical data fingerprints when the proof covers real data.
 
 A changed documentation file does not invalidate a runtime proof unless it changes an executable contract or command.
 A provider-dependent claim is never proven by a deterministic test adapter.
 A missing live dependency produces `blocked`, never a skipped green result.
-Live-provider proof is reusable for at most 15 minutes and only after freshly observing the same target, deployed commit, clean local commit, and configuration-presence state.
+Live-provider proof is reusable for at most 15 minutes and only after freshly observing the same origin, immutable build instance, deployed commit and tree, clean local commit and tree, and configuration-presence state.
 
 ## 11. Knowledge topology
 

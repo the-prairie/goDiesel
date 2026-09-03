@@ -1,6 +1,9 @@
 import json
 import subprocess
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.error import HTTPError
 
 import pytest
 from jsonschema import Draft202012Validator
@@ -11,11 +14,34 @@ from godiesel_verification import (
     _pattern_input,
     build_proof_snapshot,
     explain_verification,
+    read_target_build_identity,
     reuse_verification,
 )
 
 
 ROOT = Path(__file__).resolve().parent
+
+
+def test_target_build_identity_rejects_redirects():
+    class RedirectHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(302)
+            self.send_header("Location", "https://example.test/build-identity.json")
+            self.end_headers()
+
+        def log_message(self, format, *args):
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), RedirectHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with pytest.raises(HTTPError):
+            read_target_build_identity(f"http://127.0.0.1:{server.server_port}/")
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
 
 
 class RecordingRunner:
@@ -82,6 +108,20 @@ def test_proof_snapshot_blocks_unsafe_covered_input_symlink(
     assert snapshot["blockers"][0]["code"] == "GODIESEL_COVERED_INPUT_SYMLINK_UNSAFE"
 
 
+def test_proof_snapshot_blocks_covered_symlink_cycle(tmp_path: Path):
+    _write_reuse_fixture(tmp_path)
+    linked_input = tmp_path / "implementation.py"
+    linked_input.unlink()
+    linked_input.symlink_to("implementation.py")
+
+    snapshot = build_proof_snapshot(
+        tmp_path, "route-share", tiers=["focused"], environ={}
+    )
+
+    assert snapshot["status"] == "blocked"
+    assert snapshot["blockers"][0]["code"] == "GODIESEL_COVERED_INPUT_SYMLINK_UNSAFE"
+
+
 @pytest.mark.parametrize("target_state", ["external", "broken"])
 def test_proof_snapshot_blocks_unsafe_covered_directory_symlink(
     tmp_path: Path,
@@ -129,6 +169,36 @@ def test_proof_snapshot_blocks_unreadable_covered_input(
 
     assert snapshot["status"] == "blocked"
     assert snapshot["blockers"][0]["code"] == "GODIESEL_COVERED_INPUT_UNAVAILABLE"
+
+
+def test_proof_snapshot_blocks_unreadable_recursive_directory(tmp_path: Path):
+    _write_reuse_fixture(tmp_path)
+    manifest_path = tmp_path / "system/capabilities.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["impact_rules"][0]["paths"] = ["secret/**"]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    secret = tmp_path / "secret"
+    secret.mkdir()
+    secret.chmod(0)
+    try:
+        snapshot = build_proof_snapshot(
+            tmp_path, "route-share", tiers=["focused"], environ={}
+        )
+    finally:
+        secret.chmod(0o700)
+
+    assert snapshot["status"] == "blocked"
+    assert snapshot["blockers"][0]["code"] == "GODIESEL_COVERED_INPUT_UNAVAILABLE"
+
+
+@pytest.mark.parametrize("path", [r"C:\\outside\\proof.py", "C:/outside/proof.py"])
+def test_verification_rejects_windows_absolute_paths(tmp_path: Path, path: str):
+    _write_reuse_fixture(tmp_path)
+
+    result = explain_verification(tmp_path, changed_paths=[path])
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_CHANGED_PATH_INVALID"
 
 
 def _write_reuse_fixture(root: Path) -> None:
@@ -620,6 +690,13 @@ def test_exact_command_proof_inputs_do_not_include_other_commands(tmp_path: Path
             "value = 1\n",
             "value = 2\n",
         ),
+        (
+            "app/src/entry.cjs",
+            "app/src/runtime.cjs",
+            'const runtime = require("./runtime");\n',
+            "module.exports = { value: 1 };\n",
+            "module.exports = { value: 2 };\n",
+        ),
     ],
 )
 def test_exact_command_proof_fingerprint_includes_transitive_local_imports(
@@ -696,6 +773,64 @@ def test_dependency_change_selects_the_exact_live_gate(tmp_path: Path):
             "required_by": ["app/src/runtime.ts"],
         }
     ]
+
+
+def test_dependency_change_preserves_every_gate_on_matching_rule(tmp_path: Path):
+    _write_reuse_fixture(tmp_path)
+    manifest_path = tmp_path / "system/capabilities.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    proof_input = [{"category": "implementation", "paths": ["app/src/entry.ts"]}]
+    manifest["capabilities"][0]["verification"]["focused"][0]["proof_inputs"] = proof_input
+    manifest["capabilities"][0]["verification"]["live"][0]["proof_inputs"] = proof_input
+    rule = manifest["impact_rules"][-2]
+    rule["paths"] = ["app/src/entry.ts"]
+    rule["gates"] = [
+        {"capability": "route-share", "tier": "focused"},
+        {"capability": "route-share", "tier": "live"},
+    ]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    entry = tmp_path / "app/src/entry.ts"
+    dependency = tmp_path / "app/src/runtime.ts"
+    entry.parent.mkdir(parents=True, exist_ok=True)
+    entry.write_text('import { value } from "./runtime";\n', encoding="utf-8")
+    dependency.write_text("export const value = 1;\n", encoding="utf-8")
+
+    result = explain_verification(tmp_path, changed_paths=["app/src/runtime.ts"])
+
+    assert result["status"] == "passed"
+    assert {gate["tier"] for gate in result["result"]["selected_gates"]} == {
+        "focused",
+        "live",
+    }
+
+
+def test_transitive_external_directory_symlink_blocks_snapshot(tmp_path: Path):
+    _write_reuse_fixture(tmp_path)
+    manifest_path = tmp_path / "system/capabilities.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["capabilities"][0]["verification"]["live"][0]["proof_inputs"] = [
+        {"category": "implementation", "paths": ["app/src/entry.ts"]}
+    ]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    entry = tmp_path / "app/src/entry.ts"
+    entry.parent.mkdir(parents=True, exist_ok=True)
+    entry.write_text('import { value } from "./linked/runtime";\n', encoding="utf-8")
+    external = tmp_path.parent / f"{tmp_path.name}-external-runtime"
+    external.mkdir()
+    (external / "runtime.ts").write_text("export const value = 1;\n", encoding="utf-8")
+    (entry.parent / "linked").symlink_to(external, target_is_directory=True)
+
+    snapshot = build_proof_snapshot(
+        tmp_path,
+        "route-share",
+        tiers=["live"],
+        commands=["verify-live"],
+        environ={"PROVIDER_PROJECT": "target-a"},
+        provider_target="target-a",
+    )
+
+    assert snapshot["status"] == "blocked"
+    assert snapshot["blockers"][0]["code"] == "GODIESEL_COVERED_INPUT_SYMLINK_UNSAFE"
 
 
 def test_reuse_returns_the_existing_proof_without_executing_a_gate(tmp_path: Path):

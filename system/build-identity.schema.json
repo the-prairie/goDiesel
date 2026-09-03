@@ -4,10 +4,12 @@
   "title": "goDiesel deployed build identity",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "document_type", "commit"],
+  "required": ["schema_version", "document_type", "commit", "tree", "build_id"],
   "properties": {
     "schema_version": { "const": 1 },
     "document_type": { "const": "godiesel-build-identity" },
-    "commit": { "type": "string", "pattern": "^[a-f0-9]{40}$" }
+    "commit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "tree": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "build_id": { "type": "string", "format": "uuid" }
   }
 }
