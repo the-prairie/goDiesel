@@ -1,6 +1,7 @@
 import { expect, test, type Page, type Request } from "@playwright/test";
 
 const adminApi = "http://127.0.0.1:8766";
+const captureEvidence = process.env.GODIESEL_CAPTURE_E2E_EVIDENCE === "1";
 
 const adminRoute = {
   activity_id: "17654151284",
@@ -143,23 +144,29 @@ for (const viewport of [
       expect(listBox).not.toBeNull();
       expect(editorBox).not.toBeNull();
       expect(listBox!.x + listBox!.width).toBeLessThanOrEqual(editorBox!.x + 1);
-      await page.screenshot({
-        path: "e2e/evidence/issue-62-admin-workspace/admin-desktop.png",
-      });
+      if (captureEvidence) {
+        await page.screenshot({
+          path: "e2e/evidence/issue-62-admin-workspace/admin-desktop.png",
+        });
+      }
     } else {
       await page.evaluate(() => window.scrollTo(0, 0));
-      await page.screenshot({
-        path: "e2e/evidence/issue-62-admin-workspace/admin-mobile.png",
-      });
+      if (captureEvidence) {
+        await page.screenshot({
+          path: "e2e/evidence/issue-62-admin-workspace/admin-mobile.png",
+        });
+      }
       await actionBar.scrollIntoViewIfNeeded();
       const actionBox = await actionBar.boundingBox();
       const navigationBox = await page.getByTestId("atlas-spine-mobile").boundingBox();
       expect(actionBox).not.toBeNull();
       expect(navigationBox).not.toBeNull();
       expect(actionBox!.y + actionBox!.height).toBeLessThanOrEqual(navigationBox!.y + 1);
-      await page.screenshot({
-        path: "e2e/evidence/issue-62-admin-workspace/admin-mobile-actions.png",
-      });
+      if (captureEvidence) {
+        await page.screenshot({
+          path: "e2e/evidence/issue-62-admin-workspace/admin-mobile-actions.png",
+        });
+      }
     }
   });
 }
