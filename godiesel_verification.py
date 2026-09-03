@@ -60,13 +60,16 @@ class ProofInputMonitor:
             self._start_inotify()
 
     def _paths(self, snapshot: Mapping[str, Any]) -> list[Path]:
-        paths: set[Path] = {self.root}
+        paths: set[Path] = set()
         for item in snapshot.get("covered_inputs", []):
             if item.get("state") not in {"matched", "absent"}:
                 continue
             normalized = _normalized_path(str(item.get("name", "")))
             if normalized is None:
                 continue
+            has_wildcard = any(
+                token in normalized for token in ("*", "?", "[")
+            )
             glob_pattern = f"{normalized}/*" if normalized.endswith("/**") else normalized
             candidates = [
                 candidate
@@ -82,8 +85,10 @@ class ProofInputMonitor:
                 if any(token in part for token in ("*", "?", "[")):
                     break
                 anchor = anchor / part
-            paths.add(anchor if anchor.exists() else anchor.parent)
-        paths.update(path.parent for path in tuple(paths) if path != self.root)
+            if has_wildcard:
+                paths.add(anchor if anchor.is_dir() else anchor.parent)
+            elif not candidates:
+                paths.add(anchor.parent)
         return sorted(path for path in paths if path.exists())
 
     def _state(self) -> dict[str, tuple[int, int, int]]:
