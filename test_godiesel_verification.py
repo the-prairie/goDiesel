@@ -327,6 +327,58 @@ def test_route_generation_proof_fingerprints_private_sources_without_paths(
     assert set(before["_monitor_paths"]) == {str(metadata), str(geometry)}
 
 
+@pytest.mark.parametrize(
+    "metadata_bytes",
+    [
+        b"\xff",
+        b"Filename,Activity Name\nactivities/999.gpx,Wrong route\n",
+    ],
+)
+def test_route_generation_proof_blocks_unusable_private_metadata(
+    tmp_path: Path,
+    monkeypatch,
+    metadata_bytes: bytes,
+):
+    _write_reuse_fixture(tmp_path)
+    manifest_path = tmp_path / "system/capabilities.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["capabilities"][0]["id"] = "route-generation"
+    for rule in manifest["impact_rules"]:
+        rule["capabilities"] = ["route-generation"]
+        for gate in rule["gates"]:
+            gate["capability"] = "route-generation"
+        for invariant in rule["invariants"]:
+            invariant["capability"] = "route-generation"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    (tmp_path / "quests.json").write_text(
+        json.dumps({"routes": [{"activity_id": "123", "status": "approved"}]}),
+        encoding="utf-8",
+    )
+    private_root = tmp_path / "private"
+    private_root.mkdir()
+    metadata = private_root / "activities.csv"
+    geometry = private_root / "123.gpx"
+    metadata.write_bytes(metadata_bytes)
+    geometry.write_text("<gpx />\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "godiesel_verification.DEFAULT_DIESEL_DIARIES_ROOT",
+        private_root,
+    )
+    monkeypatch.setattr(
+        "godiesel_verification.find_strava_activity_file",
+        lambda activity_id: geometry if activity_id == "123" else None,
+    )
+
+    snapshot = build_proof_snapshot(
+        tmp_path, "route-generation", tiers=["focused"], environ={}
+    )
+
+    assert snapshot["status"] == "blocked"
+    assert snapshot["blockers"][-1]["code"] == (
+        "GODIESEL_PRIVATE_ROUTE_SOURCE_UNAVAILABLE"
+    )
+
+
 @pytest.mark.parametrize("path", [r"C:\\outside\\proof.py", "C:/outside/proof.py"])
 def test_verification_rejects_windows_absolute_paths(tmp_path: Path, path: str):
     _write_reuse_fixture(tmp_path)

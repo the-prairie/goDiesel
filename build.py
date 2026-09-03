@@ -1,9 +1,7 @@
 """Build the React application's generated route data from curated sources."""
-import json, re, shutil, tempfile
+import json, shutil, tempfile
 from datetime import UTC, datetime
 from pathlib import Path
-
-import pandas as pd
 
 from quest_meta import (
     build_quest_meta,
@@ -19,7 +17,11 @@ from route_provenance import (
     project_public_route_provenance,
 )
 from route_annotations import build_route_annotations
-from route_imports import find_strava_activity_file, route_metadata
+from route_imports import (
+    find_strava_activity_file,
+    load_strava_route_metadata,
+    route_metadata,
+)
 from route_timezones import route_time_zone
 
 # ── Paths ──
@@ -82,23 +84,7 @@ rejected_n = sum(1 for r in all_routes if r.get('status') == 'rejected')
 print(f'[1/2] Curation: {len(quest_specs)} approved · {pending_n} pending · {rejected_n} rejected')
 
 # ── Load Strava activities ──
-def parse_strava_date(s):
-    if not isinstance(s, str): return None
-    MM = {'Jan':'January','Feb':'February','Mar':'March','Apr':'April','May':'May',
-          'Jun':'June','Jul':'July','Aug':'August','Sep':'September','Oct':'October',
-          'Nov':'November','Dec':'December'}
-    dp = s.rsplit(', ', 1)[0].strip()
-    for a, f in MM.items():
-        if dp.startswith(a + ' '): dp = f + dp[len(a):]; break
-    try: return datetime.strptime(dp, '%B %d, %Y')
-    except: return None
-
-df = pd.read_csv(DD / 'activities.csv')
-df['date'] = df['Activity Date'].apply(parse_strava_date)
-df['km'] = pd.to_numeric(df['Distance'], errors='coerce').fillna(0)
-df['act_id'] = df['Filename'].fillna('').astype(str).apply(
-    lambda s: re.match(r'.*?/(\d+)', s).group(1) if re.match(r'.*?/(\d+)', s) else None)
-acts_by_id = {r['act_id']: r for _, r in df.iterrows() if r['act_id']}
+acts_by_id = load_strava_route_metadata(DD / 'activities.csv')
 
 # ── Build each quest ──
 print('[2/2] Building routes…')

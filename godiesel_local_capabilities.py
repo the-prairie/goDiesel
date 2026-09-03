@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import csv
 import json
 import math
 import os
@@ -48,6 +47,8 @@ from route_imports import (
     DEFAULT_DIESEL_DIARIES_ROOT,
     find_strava_activity_file,
     imported_route_from_spec,
+    load_strava_route_metadata,
+    RouteMetadata,
 )
 from route_provenance import (
     build_route_provenance,
@@ -133,36 +134,10 @@ def _read_json(path: Path) -> object:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _strava_metadata() -> dict[str, dict[str, str]]:
-    metadata: dict[str, dict[str, str]] = {}
-    metadata_path = DEFAULT_DIESEL_DIARIES_ROOT / "activities.csv"
-    with metadata_path.open(encoding="utf-8-sig", newline="") as source:
-        for row in csv.DictReader(source):
-            match = re.search(r"(?:^|/)(\d+)", row.get("Filename", ""))
-            if not match:
-                continue
-            raw_date = row.get("Activity Date", "").rsplit(", ", 1)[0]
-            parsed_date = None
-            for date_format in ("%b %d, %Y", "%B %d, %Y"):
-                try:
-                    parsed_date = datetime.strptime(raw_date, date_format)
-                    break
-                except ValueError:
-                    continue
-            metadata[match.group(1)] = {
-                "activity_name": row.get("Activity Name") or "(unnamed)",
-                "activity_type": row.get("Activity Type") or "",
-                "date": parsed_date.strftime("%Y-%m-%d") if parsed_date else "",
-                "description": row.get("Activity Description") or "",
-                "source_kind": "strava-export",
-            }
-    return metadata
-
-
 def _source_projection(
     root: Path,
     canonical: dict[str, object],
-    strava_metadata: Mapping[str, Mapping[str, str]],
+    strava_metadata: Mapping[str, RouteMetadata],
 ) -> tuple[dict[str, str], list[dict[str, object]], dict[str, object], str, str]:
     activity_id = str(canonical["activity_id"])
     imported = imported_route_from_spec(canonical, root)
@@ -176,7 +151,14 @@ def _source_projection(
         }
         source_path = imported.path
     else:
-        source = dict(strava_metadata[activity_id])
+        metadata = strava_metadata[activity_id]
+        source = {
+            "activity_name": metadata.name,
+            "activity_type": metadata.activity_type,
+            "date": metadata.date,
+            "description": metadata.description,
+            "source_kind": metadata.source_kind,
+        }
         source_path = find_strava_activity_file(activity_id)
         if source_path is None:
             raise OSError(f"route source unavailable for {activity_id}")
@@ -292,11 +274,13 @@ def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[s
     canonical_by_id = {str(route["activity_id"]): route for route in canonical_routes}
     summary_by_id = {str(route["activity_id"]): route for route in summary_routes}
     detail_by_slug = {path.stem: detail for path, detail in zip(detail_paths, details)}
-    strava_metadata: dict[str, dict[str, str]] = {}
+    strava_metadata: dict[str, RouteMetadata] = {}
     if any(not route.get("source_gpx") for route in canonical_routes):
         try:
-            strava_metadata = _strava_metadata()
-        except (OSError, UnicodeError, csv.Error):
+            strava_metadata = load_strava_route_metadata(
+                DEFAULT_DIESEL_DIARIES_ROOT / "activities.csv"
+            )
+        except (OSError, UnicodeError):
             projection_current = False
     canonical_projection_fields = {
         "difficulty": ("difficulty",),

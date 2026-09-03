@@ -1,7 +1,8 @@
 """Validated metadata for route files that are not recorded Strava activities."""
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
+import csv
 import hashlib
 from pathlib import Path
 import re
@@ -134,6 +135,35 @@ class RouteMetadata:
     source_path: Path | None
 
 
+def load_strava_route_metadata(
+    metadata_path: Path = DEFAULT_DIESEL_DIARIES_ROOT / "activities.csv",
+) -> dict[str, RouteMetadata]:
+    """Read the Strava export metadata used by generation and verification."""
+    metadata: dict[str, RouteMetadata] = {}
+    with metadata_path.open(encoding="utf-8-sig", newline="") as source:
+        for row in csv.DictReader(source):
+            match = re.search(r"(?:^|/)(\d+)", row.get("Filename", ""))
+            if not match:
+                continue
+            raw_date = row.get("Activity Date", "").rsplit(", ", 1)[0]
+            parsed_date = None
+            for date_format in ("%b %d, %Y", "%B %d, %Y"):
+                try:
+                    parsed_date = datetime.strptime(raw_date, date_format)
+                    break
+                except ValueError:
+                    continue
+            metadata[match.group(1)] = RouteMetadata(
+                source_kind=STRAVA_EXPORT,
+                name=row.get("Activity Name") or "(unnamed)",
+                activity_type=row.get("Activity Type") or "",
+                date=parsed_date.strftime("%Y-%m-%d") if parsed_date else "",
+                description=row.get("Activity Description") or "",
+                source_path=None,
+            )
+    return metadata
+
+
 def route_metadata(
     spec: dict[str, object],
     checkout_root: Path,
@@ -158,6 +188,9 @@ def route_metadata(
 
     if activity_row is None:
         return None
+
+    if isinstance(activity_row, RouteMetadata):
+        return activity_row
 
     return RouteMetadata(
         source_kind=STRAVA_EXPORT,

@@ -21,7 +21,11 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from jsonschema import Draft202012Validator, FormatChecker
 
 from godiesel_evidence import canonical_digest, repository_snapshot
-from route_imports import DEFAULT_DIESEL_DIARIES_ROOT, find_strava_activity_file
+from route_imports import (
+    DEFAULT_DIESEL_DIARIES_ROOT,
+    find_strava_activity_file,
+    load_strava_route_metadata,
+)
 
 
 SCHEMA_VERSION = 1
@@ -324,6 +328,9 @@ def _route_generation_external_sources(
         metadata_path = DEFAULT_DIESEL_DIARIES_ROOT / "activities.csv"
         if not metadata_path.is_file():
             raise OSError("private activity metadata is unavailable")
+        metadata = load_strava_route_metadata(metadata_path)
+        if any(activity_id not in metadata for activity_id in activity_ids):
+            raise ValueError("private activity metadata is incomplete")
         sources = [
             {
                 "kind": "activity-metadata",
@@ -343,7 +350,14 @@ def _route_generation_external_sources(
                 }
             )
             monitor_paths.append(str(source_path))
-    except (KeyError, OSError, TypeError, UnicodeError, json.JSONDecodeError):
+    except (
+        KeyError,
+        OSError,
+        TypeError,
+        UnicodeError,
+        ValueError,
+        json.JSONDecodeError,
+    ):
         return None, [], _issue(
             "GODIESEL_PRIVATE_ROUTE_SOURCE_UNAVAILABLE",
             "The private source inventory for generated routes could not be fingerprinted.",
