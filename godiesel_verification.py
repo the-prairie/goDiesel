@@ -18,7 +18,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, FormatChecker
 
 from godiesel_evidence import canonical_digest, repository_snapshot
 
@@ -84,9 +84,13 @@ class ProofInputMonitor:
                     break
                 anchor = anchor / part
             if recursive_pattern:
-                paths.add(anchor if anchor.is_dir() else anchor.parent)
-            elif not candidates:
-                paths.add(anchor.parent)
+                recursive_root = anchor if anchor.is_dir() else anchor.parent
+                paths.add(recursive_root)
+                paths.update(
+                    candidate
+                    for candidate in recursive_root.rglob("*")
+                    if candidate.is_dir()
+                )
         return sorted(path for path in paths if path.exists())
 
     def _state(self) -> dict[str, tuple[int, int, int]]:
@@ -137,7 +141,7 @@ class ProofInputMonitor:
             fd = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
             if fd < 0:
                 return
-            mask = 0x00000FFF
+            mask = 0x00000FCE
             for path in self.paths:
                 libc.inotify_add_watch(fd, os.fsencode(path), mask)
             self.inotify_fd = fd
@@ -267,6 +271,10 @@ def _file_digest(path: Path) -> str:
         for chunk in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _raise_walk_error(error: OSError) -> None:
+    raise error
 
 
 def _unsafe_symlink_in_path(root: Path, path: Path) -> bool:
@@ -453,7 +461,7 @@ def verified_provider_build_identity(
             (root / "system/build-identity.schema.json").read_text(encoding="utf-8")
         )
         Draft202012Validator.check_schema(schema)
-        Draft202012Validator(schema).validate(identity)
+        Draft202012Validator(schema, format_checker=FormatChecker()).validate(identity)
     except Exception:
         return None, [
             _issue(
@@ -509,6 +517,23 @@ def _pattern_input(
                 mode = stat.S_IMODE(anchor.stat().st_mode)
                 if mode & 0o444 == 0 or mode & 0o111 == 0:
                     raise PermissionError
+                if normalized.endswith("/**"):
+                    for current, directories, _files in os.walk(
+                        anchor,
+                        followlinks=False,
+                        onerror=_raise_walk_error,
+                    ):
+                        for directory in [Path(current), *(
+                            Path(current) / name for name in directories
+                        )]:
+                            if _unsafe_symlink_in_path(root, directory):
+                                raise UnsafeCoveredInputSymlink
+                            directory_mode = stat.S_IMODE(directory.stat().st_mode)
+                            if (
+                                directory_mode & 0o444 == 0
+                                or directory_mode & 0o111 == 0
+                            ):
+                                raise PermissionError
         candidates = sorted(
             path
             for path in root.glob(glob_pattern)
@@ -1236,14 +1261,15 @@ def _rule_covers_dependency(
                             for candidate in root.glob(glob_pattern)
                             if candidate.is_file() and candidate.is_relative_to(root)
                         )
-                    seed_paths = {
-                        seed.relative_to(root).as_posix() for seed in seeds
-                    }
-                    if not any(_matches(seed, rule["paths"]) for seed in seed_paths):
-                        continue
+                    matching_seeds = [
+                        seed
+                        for seed in seeds
+                        if _matches(seed.relative_to(root).as_posix(), rule["paths"])
+                    ]
                     dependencies = {
                         candidate.relative_to(root).as_posix()
-                        for candidate in _dependency_closure(root, seeds)
+                        for seed in matching_seeds
+                        for candidate in _dependency_closure(root, [seed])
                     }
                 except (
                     OSError,

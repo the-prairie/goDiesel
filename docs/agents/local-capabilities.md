@@ -21,7 +21,7 @@ The adapter invokes `rebuild.sh`; it never imports `build.py` or writes generate
 `rebuild.sh` delegates to the locked `route_build.py` writer entry point.
 Route creation owns the same lock inside `route_create.py`, so both the unified interface and retained `scripts/route.sh` commands share one write boundary with owner curation and Admin.
 The existing staging, backup, atomic replacement, and interrupted-run recovery remain authoritative.
-Inspection validates route identities, the strict detail and summary consumer contracts, canonical annotations and replay choices, detail-to-manifest agreement, and aggregate statistics derived from valid detail records.
+Inspection validates the manifest version, generation timestamp, inventory statistics, route identities, strict detail and summary consumer contracts, durable-source metadata, canonical annotations and replay choices, exact detail-to-manifest projection, and aggregate statistics derived from valid detail records.
 
 Run or reuse focused proof:
 
@@ -122,7 +122,9 @@ Successful generation, curation, and provider verification writes a schema-valid
 Impact rules decide which gates a changed path requires.
 Each exact verification command declares its implementation, contract, fixture, configuration, data, renderer, and provider entry points.
 The proof layer recursively includes repository-local Python and JavaScript or TypeScript imports, so a transitive executable dependency invalidates the same receipt and selects the same gate.
-The adapter snapshots those inputs before and after the gate and monitors filesystem events throughout execution, so even a transient write-and-restore invalidates proof.
+The adapter snapshots every covered state before and after the gate.
+On macOS and Linux it also monitors existing covered files and every directory in recursive covered trees, so a transient write-and-restore in those inputs invalidates proof.
+Absent exact inputs and additions to nonrecursive wildcard patterns are certified by before/after state only; they are not represented as continuously monitored.
 Broken or external covered-input symlinks block proof instead of disappearing from the fingerprint.
 Those command inputs also narrow a known provider path to its applicable live check; a newly classified provider path that matches no known command expands to every command in the tier so proof cannot disappear silently.
 The generation, curation, and live-provider commands also run their adapter contract tests before recording success.

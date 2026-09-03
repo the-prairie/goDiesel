@@ -145,7 +145,14 @@ def _generation_fixture(root: Path) -> Path:
         root / "quests.json",
         {
             "routes": [
-                {"activity_id": "route-1", "status": "approved"},
+                {
+                    "activity_id": "route-1",
+                    "status": "approved",
+                    "activity_name": "Test route",
+                    "activity_type": "Run",
+                    "date": "2026-01-01",
+                    "description": "",
+                },
                 {"activity_id": "route-2", "status": "pending"},
             ]
         },
@@ -153,6 +160,9 @@ def _generation_fixture(root: Path) -> Path:
     _write_json(
         root / "app/src/data/generated/routes.manifest.json",
         {
+            "schema_version": 1,
+            "generated_at": "2026-01-01T00:00:00Z",
+            "stats": {"approved": 1, "pending": 1, "rejected": 0, "total": 2},
             "routes": [
                 {
                     **_projection_record("route-1"),
@@ -189,7 +199,14 @@ def _curation_fixture(root: Path) -> Path:
         root / "quests.json",
         {
             "routes": [
-                {"activity_id": "route-1", "status": "approved"},
+                {
+                    "activity_id": "route-1",
+                    "status": "approved",
+                    "activity_name": "Test route",
+                    "activity_type": "Run",
+                    "date": "2026-01-01",
+                    "description": "",
+                },
                 {
                     "activity_id": "route-2",
                     "status": "approved",
@@ -232,6 +249,9 @@ def _write_complete_curation_projection(
     _write_json(
         root / "app/src/data/generated/routes.manifest.json",
         {
+            "schema_version": 1,
+            "generated_at": "2026-01-01T00:00:00Z",
+            "stats": {"approved": 1, "pending": 0, "rejected": 0, "total": 2},
             "routes": [
                 {
                     **projected,
@@ -548,6 +568,48 @@ def test_generation_inspect_blocks_semantically_stale_projection(
 
     assert result["status"] == "blocked"
     assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_PROJECTION_DRIFT"
+
+
+def test_generation_inspect_blocks_coordinated_source_metadata_drift(tmp_path: Path):
+    root = _generation_fixture(tmp_path)
+    summary_path = root / "app/src/data/generated/routes.manifest.json"
+    detail_path = root / "app/public/data/routes/route-1.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    detail = json.loads(detail_path.read_text(encoding="utf-8"))
+    summary["routes"][0]["date"] = "2099-12-31"
+    detail["date"] = "2099-12-31"
+    _write_json(summary_path, summary)
+    _write_json(detail_path, detail)
+
+    result = execute_route_generation(root, "inspect")
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_PROJECTION_DRIFT"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("schema_version", 99),
+        ("generated_at", "not-a-timestamp"),
+        ("stats", {"approved": 999, "pending": 0, "rejected": 0, "total": 999}),
+    ],
+)
+def test_generation_inspect_blocks_manifest_metadata_drift(
+    tmp_path: Path,
+    field: str,
+    value: object,
+):
+    root = _generation_fixture(tmp_path)
+    manifest_path = root / "app/src/data/generated/routes.manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest[field] = value
+    _write_json(manifest_path, manifest)
+
+    result = execute_route_generation(root, "inspect")
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_INVENTORY_DRIFT"
 
 
 @pytest.mark.parametrize(
@@ -1046,6 +1108,27 @@ def test_provider_verify_rejects_target_built_from_another_commit(tmp_path: Path
         "GODIESEL_PROVIDER_BUILD_IDENTITY_MISMATCH"
     )
     assert calls == []
+
+
+def test_provider_verify_rejects_malformed_build_instance_id(tmp_path: Path):
+    _install_evidence_contract(tmp_path)
+
+    result = execute_provider_readiness(
+        tmp_path,
+        "verify",
+        provider="atlas",
+        provider_target="https://preview.example.test/",
+        environ={"GOOGLE_MAPS_API_KEY": "secret"},
+        runner=lambda *args, **kwargs: None,
+        target_identity_reader=lambda _target: {
+            **_matching_target_identity(""),
+            "build_id": "not-a-uuid",
+        },
+        repository_reader=_clean_repository_identity,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_PROVIDER_BUILD_IDENTITY_UNREADABLE"
 
 
 def test_provider_verify_rejects_dirty_or_uncommitted_local_build(tmp_path: Path):

@@ -13,7 +13,8 @@ Run live-provider tests only for provider, terrain, imagery, or camera changes.
 Run the complete release gate only for production cutover or changes to shared application infrastructure.
 
 A successful gate remains valid unless subsequent edits touch behavior covered by that gate.
-Verification also blocks when covered inputs change between its pre-run and post-run snapshots or emit a filesystem mutation event during the gate.
+Verification blocks when covered inputs differ between its pre-run and post-run snapshots.
+On macOS and Linux it also blocks when an existing covered file or any directory in a recursive covered tree emits a mutation event during the gate.
 
 ## Verification Matrix
 
@@ -161,6 +162,7 @@ Rerun the smallest affected tier when a subsequent edit touches behavior covered
 Escalate to the release tier when a defect indicates a cross-application regression or when shared routing, build, test, rendering, or application-shell infrastructure changes.
 
 A proof's covered inputs include implementation, contracts, schemas, fixtures, test code, build and runtime configuration, canonical data fingerprints when applicable, and the external provider or deployment target for live proof.
+Unreadable directories anywhere inside a recursive input tree block the snapshot rather than disappearing from its aggregate digest.
 The manifest-owned fingerprint aggregates every matching file per impact pattern and every repository-local Python or JavaScript or TypeScript import reachable from command proof inputs.
 It records absent patterns, records configuration presence without secret values, and digests non-sensitive provider targets and observed deployment identities.
 Each observed file also contributes its file type, executable mode, and symlink target when applicable.

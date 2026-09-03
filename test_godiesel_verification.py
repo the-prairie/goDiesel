@@ -11,6 +11,7 @@ from jsonschema import Draft202012Validator
 from godiesel_control import main
 from godiesel_route_share import execute_route_share
 from godiesel_verification import (
+    ProofInputMonitor,
     _pattern_input,
     build_proof_snapshot,
     explain_verification,
@@ -179,16 +180,38 @@ def test_proof_snapshot_blocks_unreadable_recursive_directory(tmp_path: Path):
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     secret = tmp_path / "secret"
     secret.mkdir()
-    secret.chmod(0)
+    nested = secret / "nested"
+    nested.mkdir()
+    (nested / "hidden.json").write_text("{}\n", encoding="utf-8")
+    nested.chmod(0)
     try:
         snapshot = build_proof_snapshot(
             tmp_path, "route-share", tiers=["focused"], environ={}
         )
     finally:
-        secret.chmod(0o700)
+        nested.chmod(0o700)
 
     assert snapshot["status"] == "blocked"
     assert snapshot["blockers"][0]["code"] == "GODIESEL_COVERED_INPUT_UNAVAILABLE"
+
+
+def test_monitor_detects_transient_file_in_nested_recursive_directory(tmp_path: Path):
+    nested = tmp_path / "covered/nested"
+    nested.mkdir(parents=True)
+    (nested / "existing.py").write_text("value = 1\n", encoding="utf-8")
+    snapshot = {
+        "covered_inputs": [
+            {"name": "covered/**", "state": "matched", "category": "implementation"}
+        ]
+    }
+    monitor = ProofInputMonitor(tmp_path, snapshot)
+    transient = nested / "transient.py"
+    transient.write_text("value = 2\n", encoding="utf-8")
+    transient.unlink()
+    try:
+        assert monitor.changed() is True
+    finally:
+        monitor.close()
 
 
 @pytest.mark.parametrize("path", [r"C:\\outside\\proof.py", "C:/outside/proof.py"])
@@ -802,6 +825,33 @@ def test_dependency_change_preserves_every_gate_on_matching_rule(tmp_path: Path)
         "focused",
         "live",
     }
+
+
+def test_dependency_selection_does_not_borrow_an_unrelated_seed(tmp_path: Path):
+    _write_reuse_fixture(tmp_path)
+    manifest_path = tmp_path / "system/capabilities.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["capabilities"][0]["verification"]["live"][0]["proof_inputs"] = [
+        {
+            "category": "implementation",
+            "paths": ["app/src/owned.ts", "app/src/unrelated.ts"],
+        }
+    ]
+    manifest["impact_rules"][-2]["paths"] = ["app/src/owned.ts"]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    source_root = tmp_path / "app/src"
+    source_root.mkdir(parents=True, exist_ok=True)
+    (source_root / "owned.ts").write_text("export const owned = 1;\n", encoding="utf-8")
+    (source_root / "unrelated.ts").write_text(
+        'import { value } from "./runtime";\n', encoding="utf-8"
+    )
+    (source_root / "runtime.ts").write_text("export const value = 1;\n", encoding="utf-8")
+
+    result = explain_verification(tmp_path, changed_paths=["app/src/runtime.ts"])
+
+    assert result["status"] == "blocked"
+    assert result["result"]["selected_gates"] == []
+    assert result["result"]["unclassified_paths"] == ["app/src/runtime.ts"]
 
 
 def test_transitive_external_directory_symlink_blocks_snapshot(tmp_path: Path):

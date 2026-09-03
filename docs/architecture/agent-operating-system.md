@@ -283,7 +283,8 @@ When a tier has multiple provider commands, those same inputs select only comman
 The command recorded in evidence and the command-specific proof inputs included in the reusable fingerprint come from the same manifest declaration.
 The existing risk tiers in `docs/agents/testing.md` remain the policy.
 
-A proof is reusable only while all covered inputs remain unchanged before, during, and after its gate:
+A proof is reusable only while all covered inputs have identical pre-run and post-run state.
+Existing covered files and recursive input trees are additionally monitored for transient mutation throughout a gate on macOS and Linux:
 
 - implementation paths;
 - contract and schema paths;

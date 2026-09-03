@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import math
 import os
@@ -159,8 +160,26 @@ def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[s
             )
         ]
 
+    all_routes = config.get("routes", config.get("quests", []))
+    manifest_stats = manifest.get("stats")
+    expected_manifest_stats = {
+        "approved": len(canonical_routes),
+        "pending": sum(1 for route in all_routes if route.get("status") == "pending"),
+        "rejected": sum(1 for route in all_routes if route.get("status") == "rejected"),
+        "total": len(all_routes),
+    }
+    try:
+        generated_at = datetime.fromisoformat(
+            str(manifest.get("generated_at", "")).replace("Z", "+00:00")
+        )
+    except ValueError:
+        generated_at = None
     inventory_current = (
-        len(canonical_ids) == len(set(canonical_ids))
+        manifest.get("schema_version") == 1
+        and generated_at is not None
+        and str(manifest.get("generated_at", "")).endswith("Z")
+        and manifest_stats == expected_manifest_stats
+        and len(canonical_ids) == len(set(canonical_ids))
         and len(summary_ids) == len(set(summary_ids))
         and len(summary_slugs) == len(set(summary_slugs))
         and set(canonical_ids) == set(summary_ids) == set(summary_slugs) == set(detail_slugs)
@@ -170,6 +189,34 @@ def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[s
     canonical_by_id = {str(route["activity_id"]): route for route in canonical_routes}
     summary_by_id = {str(route["activity_id"]): route for route in summary_routes}
     detail_by_slug = {path.stem: detail for path, detail in zip(detail_paths, details)}
+    strava_metadata: dict[str, dict[str, str]] = {}
+    metadata_path = Path("/Users/laurenzary/Desktop/DieselDiaries/activities.csv")
+    if any(
+        not route.get("source_gpx")
+        and any(not route.get(field) for field in ("activity_name", "activity_type", "date"))
+        for route in canonical_routes
+    ):
+        try:
+            with metadata_path.open(encoding="utf-8-sig", newline="") as source:
+                for row in csv.DictReader(source):
+                    match = re.search(r"(?:^|/)(\d+)", row.get("Filename", ""))
+                    if match:
+                        raw_date = row.get("Activity Date", "").rsplit(", ", 1)[0]
+                        parsed_date = None
+                        for date_format in ("%b %d, %Y", "%B %d, %Y"):
+                            try:
+                                parsed_date = datetime.strptime(raw_date, date_format)
+                                break
+                            except ValueError:
+                                continue
+                        strava_metadata[match.group(1)] = {
+                            "activity_name": row.get("Activity Name") or "(unnamed)",
+                            "activity_type": row.get("Activity Type") or "",
+                            "date": parsed_date.strftime("%Y-%m-%d") if parsed_date else "",
+                            "description": row.get("Activity Description") or "",
+                        }
+        except OSError:
+            projection_current = False
     canonical_projection_fields = {
         "activity_name": ("activity_name",),
         "activity_type": ("type",),
@@ -192,6 +239,32 @@ def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[s
                 != canonical.get("lifecycle", "completed")
                 or detail.get("lifecycle")
                 != canonical.get("lifecycle", "completed")
+            ):
+                projection_current = False
+                break
+            expected_source = {
+                field: (
+                    canonical.get(field)
+                    if field in canonical
+                    else strava_metadata.get(activity_id, {}).get(field)
+                )
+                for field in ("activity_name", "activity_type", "date", "description")
+            }
+            expected_source["source_kind"] = (
+                "imported-gpx" if canonical.get("source_gpx") else "strava-export"
+            )
+            source_fields = {
+                "activity_name": "activity_name",
+                "activity_type": "type",
+                "date": "date",
+                "description": "description",
+                "source_kind": "source_kind",
+            }
+            if any(
+                expected_source[source] is None
+                or summary.get(generated) != expected_source[source]
+                or detail.get(generated) != expected_source[source]
+                for source, generated in source_fields.items()
             ):
                 projection_current = False
                 break
