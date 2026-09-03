@@ -8,6 +8,8 @@ import re
 
 
 SUPPORTED_ACTIVITY_TYPES = frozenset(("Run", "Ride"))
+DEFAULT_DIESEL_DIARIES_ROOT = Path("/Users/laurenzary/Desktop/DieselDiaries")
+STRAVA_ACTIVITY_SUFFIXES = (".gpx", ".fit.gz", ".fit")
 
 
 @dataclass(frozen=True)
@@ -105,6 +107,19 @@ def route_source_kind(spec: dict[str, object]) -> str:
     cannot drift away from the data it describes.
     """
     return IMPORTED_GPX if spec.get("source_gpx") else STRAVA_EXPORT
+
+
+def find_strava_activity_file(
+    activity_id: str,
+    data_root: Path = DEFAULT_DIESEL_DIARIES_ROOT,
+) -> Path | None:
+    """Resolve the exact exported geometry file used by the route generator."""
+    source_root = data_root / "strava_export" / "activities"
+    for suffix in STRAVA_ACTIVITY_SUFFIXES:
+        candidate = source_root / f"{activity_id}{suffix}"
+        if candidate.is_file():
+            return candidate
+    return None
 
 
 @dataclass(frozen=True)

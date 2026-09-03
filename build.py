@@ -10,11 +10,12 @@ from quest_meta import (
     build_replay_metadata,
     build_route_curation,
     elevation_gain_m,
+    infer_route_region,
     route_manifest_record,
 )
 from route_provenance import build_route_provenance, load_source_route_points
 from route_annotations import build_route_annotations
-from route_imports import route_metadata
+from route_imports import find_strava_activity_file, route_metadata
 from route_timezones import route_time_zone
 
 # ── Paths ──
@@ -95,28 +96,6 @@ df['act_id'] = df['Filename'].fillna('').astype(str).apply(
     lambda s: re.match(r'.*?/(\d+)', s).group(1) if re.match(r'.*?/(\d+)', s) else None)
 acts_by_id = {r['act_id']: r for _, r in df.iterrows() if r['act_id']}
 
-def find_activity_file(activity_id):
-    base = DD / 'strava_export/activities'
-    for ext in ('.gpx', '.fit.gz', '.fit'):
-        fp = base / f'{activity_id}{ext}'
-        if fp.exists(): return fp
-    return None
-
-# ── Region auto-detect (for fallback) ──
-def region(lat, lng):
-    R = [(28,30,-16,-13,'Canary Islands'),(35,36.5,23,26,'Crete, Greece'),
-         (37,39.5,22,25,'Mainland Greece'),(-9,-8,115,115.7,'Bali, Indonesia'),
-         (34.5,35.5,135.5,136,'Kyoto, Japan'),(34,40,135,141,'Japan'),
-         (41.5,43,2,3.5,'Costa Brava, Spain'),(40,41,-4,-3,'Madrid, Spain'),
-         (48,49,-124,-123,'Victoria, BC'),(49,50,-124,-122.5,'Vancouver, BC'),
-         (49,50,-126,-125,'Tofino, BC'),(50.5,51.8,-116,-115,'Banff/Kananaskis'),
-         (51.5,53,-107,-106,'Saskatoon, SK'),(33,34,-118,-117,'San Diego, CA'),
-         (37.5,38.5,-123,-122,'Bay Area, CA')]
-    for lo_lat, hi_lat, lo_lng, hi_lng, name in R:
-        if lo_lat <= lat <= hi_lat and lo_lng <= lng <= hi_lng:
-            return name
-    return f'{lat:.1f}°, {lng:.1f}°'
-
 # ── Build each quest ──
 print('[2/2] Building routes…')
 routes_data = []
@@ -128,7 +107,7 @@ for spec in quest_specs:
         print(f'    ✗ {aid}: not found in activities.csv'); continue
     source_kind = meta.source_kind
     name, date, typ, desc = meta.name, meta.date, meta.activity_type, meta.description
-    fp = meta.source_path or find_activity_file(aid)
+    fp = meta.source_path or find_strava_activity_file(aid, DD)
     if fp is None:
         print(f'    ✗ {aid}: no .gpx/.fit file'); continue
     route_provenance = build_route_provenance(load_source_route_points(fp))
@@ -141,7 +120,9 @@ for spec in quest_specs:
     distance_km = route_js[-1]['d'] / 1000
 
     # Auto-detect region if not specified
-    region_label = spec.get('region') or region(route_js[0]['lat'], route_js[0]['lng'])
+    region_label = spec.get('region') or infer_route_region(
+        route_js[0]['lat'], route_js[0]['lng']
+    )
     temporal_provenance = dict(route_provenance.temporal)
     discontinuities = [dict(item) for item in route_provenance.discontinuities]
     # Supplied timestamps on a discovered route are source provenance, not

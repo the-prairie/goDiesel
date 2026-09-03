@@ -21,6 +21,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from jsonschema import Draft202012Validator, FormatChecker
 
 from godiesel_evidence import canonical_digest, repository_snapshot
+from route_imports import DEFAULT_DIESEL_DIARIES_ROOT, find_strava_activity_file
 
 
 SCHEMA_VERSION = 1
@@ -54,13 +55,18 @@ class ProofInputMonitor:
         self.kqueue = None
         self.descriptors: list[int] = []
         self.inotify_fd: int | None = None
+        self.monitoring_failed = False
         if hasattr(select, "kqueue"):
             self._start_kqueue()
         elif os.name == "posix":
             self._start_inotify()
 
     def _paths(self, snapshot: Mapping[str, Any]) -> list[Path]:
-        paths: set[Path] = set()
+        paths = {
+            Path(path)
+            for path in snapshot.get("_monitor_paths", [])
+            if Path(path).exists()
+        }
         for item in snapshot.get("covered_inputs", []):
             if item.get("state") not in {"matched", "absent"}:
                 continue
@@ -84,7 +90,9 @@ class ProofInputMonitor:
                     break
                 anchor = anchor / part
             if recursive_pattern:
-                recursive_root = anchor if anchor.is_dir() else anchor.parent
+                if not anchor.is_dir():
+                    continue
+                recursive_root = anchor
                 paths.add(recursive_root)
                 paths.update(
                     candidate
@@ -108,7 +116,11 @@ class ProofInputMonitor:
         return state
 
     def _start_kqueue(self) -> None:
-        self.kqueue = select.kqueue()
+        try:
+            self.kqueue = select.kqueue()
+        except OSError:
+            self.monitoring_failed = True
+            return
         events = []
         flags = (
             select.KQ_NOTE_WRITE
@@ -122,6 +134,7 @@ class ProofInputMonitor:
             try:
                 descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
             except OSError:
+                self.monitoring_failed = True
                 continue
             self.descriptors.append(descriptor)
             events.append(
@@ -133,31 +146,44 @@ class ProofInputMonitor:
                 )
             )
         if events:
-            self.kqueue.control(events, 0, 0)
+            try:
+                self.kqueue.control(events, 0, 0)
+            except OSError:
+                self.monitoring_failed = True
 
     def _start_inotify(self) -> None:
         try:
             libc = ctypes.CDLL(None, use_errno=True)
             fd = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
             if fd < 0:
+                self.monitoring_failed = True
                 return
             mask = 0x00000FCE
             for path in self.paths:
-                libc.inotify_add_watch(fd, os.fsencode(path), mask)
+                if libc.inotify_add_watch(fd, os.fsencode(path), mask) < 0:
+                    self.monitoring_failed = True
+                    os.close(fd)
+                    return
             self.inotify_fd = fd
         except (AttributeError, OSError):
+            self.monitoring_failed = True
             self.inotify_fd = None
 
     def changed(self) -> bool:
         event_seen = False
         if self.kqueue is not None:
-            event_seen = bool(self.kqueue.control(None, max(1, len(self.paths)), 0))
+            try:
+                event_seen = bool(
+                    self.kqueue.control(None, max(1, len(self.paths)), 0)
+                )
+            except OSError:
+                self.monitoring_failed = True
         if self.inotify_fd is not None:
             try:
                 event_seen = bool(os.read(self.inotify_fd, 65536)) or event_seen
             except BlockingIOError:
                 pass
-        return event_seen or self._state() != self.before
+        return self.monitoring_failed or event_seen or self._state() != self.before
 
     def close(self) -> None:
         if self.kqueue is not None:
@@ -271,6 +297,68 @@ def _file_digest(path: Path) -> str:
         for chunk in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _route_generation_external_sources(
+    root: Path,
+) -> tuple[dict[str, str] | None, list[str], dict[str, str] | None]:
+    """Fingerprint private route inputs without exposing their filesystem paths."""
+    try:
+        config = json.loads((root / "quests.json").read_text(encoding="utf-8"))
+        if not isinstance(config, dict):
+            raise TypeError
+        routes = config.get("routes", config.get("quests", []))
+        if not isinstance(routes, list) or not all(
+            isinstance(route, dict) for route in routes
+        ):
+            raise TypeError
+        activity_ids = sorted(
+            str(route["activity_id"])
+            for route in routes
+            if route.get("status", "approved") == "approved"
+            and route.get("visibility", "public") != "hidden"
+            and not route.get("source_gpx")
+        )
+        if not activity_ids:
+            return None, [], None
+        metadata_path = DEFAULT_DIESEL_DIARIES_ROOT / "activities.csv"
+        if not metadata_path.is_file():
+            raise OSError("private activity metadata is unavailable")
+        sources = [
+            {
+                "kind": "activity-metadata",
+                "sha256": _file_digest(metadata_path),
+            }
+        ]
+        monitor_paths = [str(metadata_path)]
+        for activity_id in activity_ids:
+            source_path = find_strava_activity_file(activity_id)
+            if source_path is None:
+                raise OSError(f"private geometry is unavailable for {activity_id}")
+            sources.append(
+                {
+                    "kind": "activity-geometry",
+                    "activity_id": activity_id,
+                    "sha256": _file_digest(source_path),
+                }
+            )
+            monitor_paths.append(str(source_path))
+    except (KeyError, OSError, TypeError, json.JSONDecodeError):
+        return None, [], _issue(
+            "GODIESEL_PRIVATE_ROUTE_SOURCE_UNAVAILABLE",
+            "The private source inventory for generated routes could not be fingerprinted.",
+            "Restore the declared Strava metadata and geometry sources, then rerun verification.",
+        )
+    return (
+        {
+            "category": "data",
+            "name": "external-private:route-generation-sources",
+            "state": "matched",
+            "sha256": canonical_digest(sources),
+        },
+        monitor_paths,
+        None,
+    )
 
 
 def _raise_walk_error(error: OSError) -> None:
@@ -738,12 +826,22 @@ def build_proof_snapshot(
         }
     )
     covered_inputs: list[dict[str, str]] = []
+    monitor_paths: list[str] = []
     for category, pattern in patterns:
         covered, issue = _pattern_input(root, category=category, pattern=pattern)
         if issue is not None:
             blockers.append(issue)
         elif covered is not None:
             covered_inputs.append(covered)
+    if capability_id == "route-generation":
+        external_input, external_paths, external_issue = (
+            _route_generation_external_sources(root)
+        )
+        if external_issue is not None:
+            blockers.append(external_issue)
+        elif external_input is not None:
+            covered_inputs.append(external_input)
+            monitor_paths.extend(external_paths)
 
     configuration: list[dict[str, Any]] = []
     requirements = {
@@ -846,6 +944,7 @@ def build_proof_snapshot(
         "gates": gates,
         "proof_fingerprint": proof_fingerprint,
         "blockers": blockers,
+        "_monitor_paths": monitor_paths,
     }
 
 

@@ -1,4 +1,6 @@
 import json
+import os
+import select
 import subprocess
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -212,6 +214,117 @@ def test_monitor_detects_transient_file_in_nested_recursive_directory(tmp_path: 
         assert monitor.changed() is True
     finally:
         monitor.close()
+
+
+def test_monitor_ignores_unrelated_sibling_when_recursive_root_is_absent(
+    tmp_path: Path,
+):
+    covered = tmp_path / "covered"
+    covered.mkdir()
+    snapshot = {
+        "covered_inputs": [
+            {
+                "name": "covered/missing/**",
+                "state": "absent",
+                "category": "implementation",
+            }
+        ]
+    }
+    monitor = ProofInputMonitor(tmp_path, snapshot)
+    unrelated = covered / "unrelated.tmp"
+    unrelated.write_text("transient\n", encoding="utf-8")
+    unrelated.unlink()
+    try:
+        assert monitor.changed() is False
+    finally:
+        monitor.close()
+
+
+def test_monitor_fails_closed_when_watch_registration_fails(
+    tmp_path: Path,
+    monkeypatch,
+):
+    covered = tmp_path / "covered.py"
+    covered.write_text("value = 1\n", encoding="utf-8")
+    snapshot = {
+        "covered_inputs": [
+            {"name": "covered.py", "state": "matched", "category": "implementation"}
+        ]
+    }
+    if hasattr(select, "kqueue"):
+        monkeypatch.setattr(os, "open", lambda *args, **kwargs: (_ for _ in ()).throw(OSError()))
+    else:
+        descriptor = os.open(os.devnull, os.O_RDONLY)
+
+        class FailedInotify:
+            def inotify_init1(self, _flags):
+                return descriptor
+
+            def inotify_add_watch(self, _fd, _path, _mask):
+                return -1
+
+        monkeypatch.setattr("godiesel_verification.ctypes.CDLL", lambda *args, **kwargs: FailedInotify())
+
+    monitor = ProofInputMonitor(tmp_path, snapshot)
+    try:
+        assert monitor.changed() is True
+    finally:
+        monitor.close()
+
+
+def test_route_generation_proof_fingerprints_private_sources_without_paths(
+    tmp_path: Path,
+    monkeypatch,
+):
+    _write_reuse_fixture(tmp_path)
+    manifest_path = tmp_path / "system/capabilities.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["capabilities"][0]["id"] = "route-generation"
+    for rule in manifest["impact_rules"]:
+        rule["capabilities"] = ["route-generation"]
+        for gate in rule["gates"]:
+            gate["capability"] = "route-generation"
+        for invariant in rule["invariants"]:
+            invariant["capability"] = "route-generation"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    (tmp_path / "quests.json").write_text(
+        json.dumps({"routes": [{"activity_id": "123", "status": "approved"}]}),
+        encoding="utf-8",
+    )
+    private_root = tmp_path / "private"
+    private_root.mkdir()
+    metadata = private_root / "activities.csv"
+    geometry = private_root / "123.gpx"
+    metadata.write_text("Filename,Activity Name\nactivities/123.gpx,Test\n", encoding="utf-8")
+    geometry.write_text("<gpx />\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "godiesel_verification.DEFAULT_DIESEL_DIARIES_ROOT",
+        private_root,
+    )
+    monkeypatch.setattr(
+        "godiesel_verification.find_strava_activity_file",
+        lambda activity_id: geometry if activity_id == "123" else None,
+    )
+
+    before = build_proof_snapshot(
+        tmp_path, "route-generation", tiers=["focused"], environ={}
+    )
+    geometry.write_text("<gpx><trk /></gpx>\n", encoding="utf-8")
+    after = build_proof_snapshot(
+        tmp_path, "route-generation", tiers=["focused"], environ={}
+    )
+
+    private_input = next(
+        item
+        for item in before["covered_inputs"]
+        if item["name"] == "external-private:route-generation-sources"
+    )
+    assert before["status"] == "passed"
+    assert after["status"] == "passed"
+    assert before["proof_fingerprint"] != after["proof_fingerprint"]
+    assert str(private_root) not in json.dumps(before["covered_inputs"])
+    assert private_input["state"] == "matched"
+    assert set(before["_monitor_paths"]) == {str(metadata), str(geometry)}
 
 
 @pytest.mark.parametrize("path", [r"C:\\outside\\proof.py", "C:/outside/proof.py"])

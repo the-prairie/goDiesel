@@ -16,6 +16,8 @@ from typing import Any, Callable, Mapping
 from urllib.parse import urlparse
 
 from jsonschema import Draft202012Validator
+from fitparse import FitParseError
+from gpxpy.gpx import GPXException
 
 from admin_curation import (
     OwnerMutationBusyError,
@@ -41,7 +43,13 @@ from godiesel_verification import (
     read_target_build_identity,
     verified_provider_build_identity,
 )
-from quest_meta import build_route_curation, route_guide_preview
+from quest_meta import build_route_curation, infer_route_region, route_guide_preview
+from route_imports import (
+    DEFAULT_DIESEL_DIARIES_ROOT,
+    find_strava_activity_file,
+    imported_route_from_spec,
+)
+from route_provenance import build_route_provenance, load_source_route_points
 
 
 SCHEMA_VERSION = 1
@@ -120,6 +128,71 @@ def _read_json(path: Path) -> object:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _strava_metadata() -> dict[str, dict[str, str]]:
+    metadata: dict[str, dict[str, str]] = {}
+    metadata_path = DEFAULT_DIESEL_DIARIES_ROOT / "activities.csv"
+    with metadata_path.open(encoding="utf-8-sig", newline="") as source:
+        for row in csv.DictReader(source):
+            match = re.search(r"(?:^|/)(\d+)", row.get("Filename", ""))
+            if not match:
+                continue
+            raw_date = row.get("Activity Date", "").rsplit(", ", 1)[0]
+            parsed_date = None
+            for date_format in ("%b %d, %Y", "%B %d, %Y"):
+                try:
+                    parsed_date = datetime.strptime(raw_date, date_format)
+                    break
+                except ValueError:
+                    continue
+            metadata[match.group(1)] = {
+                "activity_name": row.get("Activity Name") or "(unnamed)",
+                "activity_type": row.get("Activity Type") or "",
+                "date": parsed_date.strftime("%Y-%m-%d") if parsed_date else "",
+                "description": row.get("Activity Description") or "",
+                "source_kind": "strava-export",
+            }
+    return metadata
+
+
+def _source_projection(
+    root: Path,
+    canonical: dict[str, object],
+    strava_metadata: Mapping[str, Mapping[str, str]],
+) -> tuple[dict[str, str], list[dict[str, object]], str, str]:
+    activity_id = str(canonical["activity_id"])
+    imported = imported_route_from_spec(canonical, root)
+    if imported is not None:
+        source = {
+            "activity_name": imported.name,
+            "activity_type": imported.activity_type,
+            "date": imported.date,
+            "description": imported.description,
+            "source_kind": "imported-gpx",
+        }
+        source_path = imported.path
+    else:
+        source = dict(strava_metadata[activity_id])
+        source_path = find_strava_activity_file(activity_id)
+        if source_path is None:
+            raise OSError(f"route source unavailable for {activity_id}")
+
+    provenance = build_route_provenance(load_source_route_points(source_path))
+    route = [dict(point) for point in provenance.route]
+    if not route:
+        raise ValueError(f"route source is empty for {activity_id}")
+    if canonical.get("lifecycle", "completed") == "discovered":
+        route = [
+            {key: value for key, value in point.items() if key != "elapsed_s"}
+            for point in route
+        ]
+    region = str(
+        canonical.get("region")
+        or infer_route_region(route[0]["lat"], route[0]["lng"])
+    )
+    subtitle = str(canonical.get("title") or source["activity_name"]).strip()
+    return source, route, region, subtitle
+
+
 def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[str, str]]]:
     try:
         config = _read_json(root / "quests.json")
@@ -129,11 +202,15 @@ def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[s
         stats = _read_json(root / "app/src/data/generated/route-stats.json")
         if not isinstance(config, dict) or not isinstance(manifest, dict) or not isinstance(stats, dict):
             raise TypeError
+        all_routes = config.get("routes", config.get("quests", []))
+        if not isinstance(all_routes, list) or not all(
+            isinstance(route, dict) for route in all_routes
+        ):
+            raise TypeError
         canonical_routes = [
             route
-            for route in config.get("routes", config.get("quests", []))
-            if isinstance(route, dict)
-            and route.get("status", "approved") == "approved"
+            for route in all_routes
+            if route.get("status", "approved") == "approved"
             and route.get("visibility", "public") != "hidden"
         ]
         summary_routes = manifest["routes"]
@@ -160,7 +237,6 @@ def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[s
             )
         ]
 
-    all_routes = config.get("routes", config.get("quests", []))
     manifest_stats = manifest.get("stats")
     expected_manifest_stats = {
         "approved": len(canonical_routes),
@@ -168,17 +244,32 @@ def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[s
         "rejected": sum(1 for route in all_routes if route.get("status") == "rejected"),
         "total": len(all_routes),
     }
-    try:
-        generated_at = datetime.fromisoformat(
-            str(manifest.get("generated_at", "")).replace("Z", "+00:00")
+    generated_at_value = manifest.get("generated_at")
+    generated_at_valid = (
+        isinstance(generated_at_value, str)
+        and re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", generated_at_value)
+        is not None
+    )
+    if generated_at_valid:
+        try:
+            datetime.strptime(generated_at_value, "%Y-%m-%dT%H:%M:%SZ")
+        except ValueError:
+            generated_at_valid = False
+    manifest_stats_valid = (
+        isinstance(manifest_stats, dict)
+        and set(manifest_stats) == set(expected_manifest_stats)
+        and all(
+            isinstance(value, int) and not isinstance(value, bool) and value >= 0
+            for value in manifest_stats.values()
         )
-    except ValueError:
-        generated_at = None
-    inventory_current = (
-        manifest.get("schema_version") == 1
-        and generated_at is not None
-        and str(manifest.get("generated_at", "")).endswith("Z")
         and manifest_stats == expected_manifest_stats
+    )
+    inventory_current = (
+        isinstance(manifest.get("schema_version"), int)
+        and not isinstance(manifest.get("schema_version"), bool)
+        and manifest.get("schema_version") == 1
+        and generated_at_valid
+        and manifest_stats_valid
         and len(canonical_ids) == len(set(canonical_ids))
         and len(summary_ids) == len(set(summary_ids))
         and len(summary_slugs) == len(set(summary_slugs))
@@ -190,43 +281,15 @@ def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[s
     summary_by_id = {str(route["activity_id"]): route for route in summary_routes}
     detail_by_slug = {path.stem: detail for path, detail in zip(detail_paths, details)}
     strava_metadata: dict[str, dict[str, str]] = {}
-    metadata_path = Path("/Users/laurenzary/Desktop/DieselDiaries/activities.csv")
-    if any(
-        not route.get("source_gpx")
-        and any(not route.get(field) for field in ("activity_name", "activity_type", "date"))
-        for route in canonical_routes
-    ):
+    if any(not route.get("source_gpx") for route in canonical_routes):
         try:
-            with metadata_path.open(encoding="utf-8-sig", newline="") as source:
-                for row in csv.DictReader(source):
-                    match = re.search(r"(?:^|/)(\d+)", row.get("Filename", ""))
-                    if match:
-                        raw_date = row.get("Activity Date", "").rsplit(", ", 1)[0]
-                        parsed_date = None
-                        for date_format in ("%b %d, %Y", "%B %d, %Y"):
-                            try:
-                                parsed_date = datetime.strptime(raw_date, date_format)
-                                break
-                            except ValueError:
-                                continue
-                        strava_metadata[match.group(1)] = {
-                            "activity_name": row.get("Activity Name") or "(unnamed)",
-                            "activity_type": row.get("Activity Type") or "",
-                            "date": parsed_date.strftime("%Y-%m-%d") if parsed_date else "",
-                            "description": row.get("Activity Description") or "",
-                        }
-        except OSError:
+            strava_metadata = _strava_metadata()
+        except (OSError, csv.Error):
             projection_current = False
     canonical_projection_fields = {
-        "activity_name": ("activity_name",),
-        "activity_type": ("type",),
-        "region": ("region", "name"),
-        "date": ("date",),
-        "description": ("description",),
         "difficulty": ("difficulty",),
         "completion_rule": ("completion_rule",),
         "theme": ("theme",),
-        "title": ("subtitle",),
     }
     if inventory_current:
         for activity_id in canonical_ids:
@@ -242,17 +305,13 @@ def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[s
             ):
                 projection_current = False
                 break
-            expected_source = {
-                field: (
-                    canonical.get(field)
-                    if field in canonical
-                    else strava_metadata.get(activity_id, {}).get(field)
+            try:
+                expected_source, expected_route, expected_region, expected_subtitle = (
+                    _source_projection(root, canonical, strava_metadata)
                 )
-                for field in ("activity_name", "activity_type", "date", "description")
-            }
-            expected_source["source_kind"] = (
-                "imported-gpx" if canonical.get("source_gpx") else "strava-export"
-            )
+            except (FitParseError, GPXException, KeyError, OSError, RuntimeError, ValueError):
+                projection_current = False
+                break
             source_fields = {
                 "activity_name": "activity_name",
                 "activity_type": "type",
@@ -265,6 +324,17 @@ def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[s
                 or summary.get(generated) != expected_source[source]
                 or detail.get(generated) != expected_source[source]
                 for source, generated in source_fields.items()
+            ):
+                projection_current = False
+                break
+            if (
+                detail.get("route") != expected_route
+                or summary.get("region") != expected_region
+                or detail.get("region") != expected_region
+                or summary.get("name") != expected_region
+                or detail.get("name") != expected_region
+                or summary.get("subtitle") != expected_subtitle
+                or detail.get("subtitle") != expected_subtitle
             ):
                 projection_current = False
                 break

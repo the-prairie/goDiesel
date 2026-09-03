@@ -13,6 +13,33 @@ CURATION_REVIEW_STATUSES = ("draft", "reviewed", "published")
 CURATION_FIELDS = frozenset((*CURATION_TEXT_FIELDS, *CURATION_LIST_FIELDS, "review_status"))
 
 
+REGION_BOUNDS = (
+    (28, 30, -16, -13, "Canary Islands"),
+    (35, 36.5, 23, 26, "Crete, Greece"),
+    (37, 39.5, 22, 25, "Mainland Greece"),
+    (-9, -8, 115, 115.7, "Bali, Indonesia"),
+    (34.5, 35.5, 135.5, 136, "Kyoto, Japan"),
+    (34, 40, 135, 141, "Japan"),
+    (41.5, 43, 2, 3.5, "Costa Brava, Spain"),
+    (40, 41, -4, -3, "Madrid, Spain"),
+    (48, 49, -124, -123, "Victoria, BC"),
+    (49, 50, -124, -122.5, "Vancouver, BC"),
+    (49, 50, -126, -125, "Tofino, BC"),
+    (50.5, 51.8, -116, -115, "Banff/Kananaskis"),
+    (51.5, 53, -107, -106, "Saskatoon, SK"),
+    (33, 34, -118, -117, "San Diego, CA"),
+    (37.5, 38.5, -123, -122, "Bay Area, CA"),
+)
+
+
+def infer_route_region(lat, lng):
+    """Return the generator's deterministic fallback label for a route origin."""
+    for low_lat, high_lat, low_lng, high_lng, name in REGION_BOUNDS:
+        if low_lat <= lat <= high_lat and low_lng <= lng <= high_lng:
+            return name
+    return f"{lat:.1f}\N{DEGREE SIGN}, {lng:.1f}\N{DEGREE SIGN}"
+
+
 def build_route_curation(value):
     """Validate owner-authored route curation for generated route details."""
     if not isinstance(value, dict):

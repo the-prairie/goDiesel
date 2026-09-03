@@ -21,7 +21,8 @@ The adapter invokes `rebuild.sh`; it never imports `build.py` or writes generate
 `rebuild.sh` delegates to the locked `route_build.py` writer entry point.
 Route creation owns the same lock inside `route_create.py`, so both the unified interface and retained `scripts/route.sh` commands share one write boundary with owner curation and Admin.
 The existing staging, backup, atomic replacement, and interrupted-run recovery remain authoritative.
-Inspection validates the manifest version, generation timestamp, inventory statistics, route identities, strict detail and summary consumer contracts, durable-source metadata, canonical annotations and replay choices, exact detail-to-manifest projection, and aggregate statistics derived from valid detail records.
+Inspection validates the manifest version, generation timestamp, inventory statistics, route identities, strict detail and summary consumer contracts, durable-source metadata and geometry, canonical annotations and replay choices, exact detail-to-manifest projection, and aggregate statistics derived from valid detail records.
+Route-generation proof fingerprints the selected private Strava metadata and geometry as one path-free aggregate, monitors those source files during the gate, and never writes their paths or values into the evidence receipt.
 
 Run or reuse focused proof:
 

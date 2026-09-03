@@ -21,7 +21,12 @@ from godiesel_local_capabilities import (
 )
 from godiesel_control import main
 from godiesel_verification import reuse_verification
-from quest_meta import route_guide_preview
+from quest_meta import (
+    build_quest_meta,
+    route_guide_preview,
+    simplify_route_for_manifest,
+)
+from route_provenance import SourceRoutePoint, build_route_provenance
 
 
 ROOT = Path(__file__).resolve().parent
@@ -81,51 +86,91 @@ def _clean_repository_identity(_root: Path) -> dict[str, object]:
 
 
 def _projection_record(activity_id: str) -> dict[str, object]:
+    route = _route_points()
+    distance_km = round(float(route[-1]["d"]) / 1000, 1)
+    quest_meta = build_quest_meta(
+        "Run", distance_km, None, "Test region", "Test route"
+    )
     return {
         "activity_id": activity_id,
         "slug": activity_id,
-        "source_kind": "strava-export",
+        "source_kind": "imported-gpx",
         "lifecycle": "completed",
         "name": "Test region",
         "subtitle": "Test route",
         "activity_name": "Test route",
         "region": "Test region",
         "date": "2026-01-01",
-        "distance_km": 1.0,
+        "distance_km": distance_km,
         "elevation_gain_m": None,
         "elevation_status": "unavailable",
         "type": "Run",
         "description": "",
-        "completion_rule": "Complete a 1.0 km run in Test region.",
-        "difficulty": "Easy",
-        "theme": "Wander Run",
-        "xp": 60,
-        "center_lat": 50.0,
-        "center_lng": -114.0,
+        "completion_rule": quest_meta["completion_rule"],
+        "difficulty": quest_meta["difficulty"],
+        "theme": quest_meta["theme"],
+        "xp": quest_meta["xp"],
+        "center_lat": (min(point["lat"] for point in route) + max(point["lat"] for point in route)) / 2,
+        "center_lng": (min(point["lng"] for point in route) + max(point["lng"] for point in route)) / 2,
         "replay": {
             "mode": "atlas",
             "replay_eligible": True,
             "best_in_earth": False,
             "geometry_status": "ready",
-            "point_count": 3,
+            "point_count": len(route),
         },
     }
 
 
 def _route_points() -> list[dict[str, object]]:
-    return [
-        {"lat": 50.0, "lng": -114.0, "elev": None, "d": 0.0},
-        {"lat": 50.0, "lng": -114.0, "elev": None, "d": 500.0},
-        {"lat": 50.0, "lng": -114.0, "elev": None, "d": 1000.0},
-    ]
+    return [dict(point) for point in _route_result().route]
+
+
+def _route_result():
+    return build_route_provenance(
+        [
+            SourceRoutePoint(50.0, -114.0, None),
+            SourceRoutePoint(50.0, -113.993, None),
+            SourceRoutePoint(50.0, -113.986, None),
+        ]
+    )
 
 
 def _route_provenance() -> dict[str, object]:
+    result = _route_result()
     return {
-        "temporal": {"status": "unavailable"},
-        "elevation": {"status": "unavailable"},
-        "track": {"segment_count": 1},
-        "discontinuities": [],
+        "temporal": result.temporal,
+        "elevation": result.elevation,
+        "track": result.track,
+        "discontinuities": result.discontinuities,
+    }
+
+
+def _route_spec(root: Path) -> dict[str, object]:
+    source = root / "route_sources/route-1.gpx"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="goDiesel" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><trkseg>
+    <trkpt lat="50.0" lon="-114.0" />
+    <trkpt lat="50.0" lon="-113.993" />
+    <trkpt lat="50.0" lon="-113.986" />
+  </trkseg></trk>
+</gpx>
+""",
+        encoding="utf-8",
+    )
+    return {
+        "activity_id": "route-1",
+        "status": "approved",
+        "source_gpx": "route_sources/route-1.gpx",
+        "source_sha256": sha256(source.read_bytes()).hexdigest(),
+        "activity_name": "Test route",
+        "activity_type": "Run",
+        "region": "Test region",
+        "date": "2026-01-01",
+        "description": "",
     }
 
 
@@ -145,14 +190,7 @@ def _generation_fixture(root: Path) -> Path:
         root / "quests.json",
         {
             "routes": [
-                {
-                    "activity_id": "route-1",
-                    "status": "approved",
-                    "activity_name": "Test route",
-                    "activity_type": "Run",
-                    "date": "2026-01-01",
-                    "description": "",
-                },
+                _route_spec(root),
                 {"activity_id": "route-2", "status": "pending"},
             ]
         },
@@ -166,11 +204,7 @@ def _generation_fixture(root: Path) -> Path:
             "routes": [
                 {
                     **_projection_record("route-1"),
-                    "trace": [
-                        [50.0, -114.0, None, 0.0],
-                        [50.0, -114.0, None, 500.0],
-                        [50.0, -114.0, None, 1000.0],
-                    ],
+                    "trace": simplify_route_for_manifest(_route_points()),
                     "guide_preview": {"review_status": "draft"},
                 }
             ]
@@ -199,14 +233,7 @@ def _curation_fixture(root: Path) -> Path:
         root / "quests.json",
         {
             "routes": [
-                {
-                    "activity_id": "route-1",
-                    "status": "approved",
-                    "activity_name": "Test route",
-                    "activity_type": "Run",
-                    "date": "2026-01-01",
-                    "description": "",
-                },
+                _route_spec(root),
                 {
                     "activity_id": "route-2",
                     "status": "approved",
@@ -255,11 +282,7 @@ def _write_complete_curation_projection(
             "routes": [
                 {
                     **projected,
-                    "trace": [
-                        [50.0, -114.0, None, 0.0],
-                        [50.0, -114.0, None, 500.0],
-                        [50.0, -114.0, None, 1000.0],
-                    ],
+                    "trace": simplify_route_for_manifest(_route_points()),
                     "guide_preview": route_guide_preview(curation),
                 }
             ]
@@ -587,12 +610,94 @@ def test_generation_inspect_blocks_coordinated_source_metadata_drift(tmp_path: P
     assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_PROJECTION_DRIFT"
 
 
+def test_generation_inspect_blocks_coordinated_derived_label_drift(tmp_path: Path):
+    root = _generation_fixture(tmp_path)
+    config_path = root / "quests.json"
+    summary_path = root / "app/src/data/generated/routes.manifest.json"
+    detail_path = root / "app/public/data/routes/route-1.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["routes"][0].pop("region")
+    _write_json(config_path, config)
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    detail = json.loads(detail_path.read_text(encoding="utf-8"))
+    for record in (summary["routes"][0], detail):
+        record["name"] = "Invented region"
+        record["region"] = "Invented region"
+        record["subtitle"] = "Invented title"
+    _write_json(summary_path, summary)
+    _write_json(detail_path, detail)
+
+    result = execute_route_generation(root, "inspect")
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_PROJECTION_DRIFT"
+
+
+@pytest.mark.parametrize("source_state", ["missing", "checksum-mismatch"])
+def test_generation_inspect_requires_valid_durable_geometry_source(
+    tmp_path: Path,
+    source_state: str,
+):
+    root = _generation_fixture(tmp_path)
+    source = root / "route_sources/route-1.gpx"
+    if source_state == "missing":
+        source.unlink()
+    else:
+        source.write_text(source.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+
+    result = execute_route_generation(root, "inspect")
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_PROJECTION_DRIFT"
+
+
+def test_generation_inspect_rebuilds_expected_geometry_from_source(tmp_path: Path):
+    root = _generation_fixture(tmp_path)
+    config_path = root / "quests.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["routes"][0].pop("source_sha256")
+    _write_json(config_path, config)
+    source = root / "route_sources/route-1.gpx"
+    source.write_text(
+        source.read_text(encoding="utf-8").replace("-113.986", "-113.980"),
+        encoding="utf-8",
+    )
+
+    result = execute_route_generation(root, "inspect")
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_PROJECTION_DRIFT"
+
+
+@pytest.mark.parametrize(
+    "routes",
+    [
+        {"route-1": {"activity_id": "route-1"}},
+        [{"activity_id": "route-1"}, "not-an-object"],
+    ],
+)
+def test_generation_inspect_blocks_malformed_canonical_route_collection(
+    tmp_path: Path,
+    routes: object,
+):
+    root = _generation_fixture(tmp_path)
+    _write_json(root / "quests.json", {"routes": routes})
+
+    result = execute_route_generation(root, "inspect")
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_PROJECTION_UNREADABLE"
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [
         ("schema_version", 99),
+        ("schema_version", True),
         ("generated_at", "not-a-timestamp"),
+        ("generated_at", "2026-09-02Z"),
         ("stats", {"approved": 999, "pending": 0, "rejected": 0, "total": 999}),
+        ("stats", {"approved": 1.0, "pending": 1, "rejected": False, "total": 2}),
     ],
 )
 def test_generation_inspect_blocks_manifest_metadata_drift(
