@@ -67,9 +67,7 @@ class ProofInputMonitor:
             normalized = _normalized_path(str(item.get("name", "")))
             if normalized is None:
                 continue
-            has_wildcard = any(
-                token in normalized for token in ("*", "?", "[")
-            )
+            recursive_pattern = normalized.endswith("/**")
             glob_pattern = f"{normalized}/*" if normalized.endswith("/**") else normalized
             candidates = [
                 candidate
@@ -85,7 +83,7 @@ class ProofInputMonitor:
                 if any(token in part for token in ("*", "?", "[")):
                     break
                 anchor = anchor / part
-            if has_wildcard:
+            if recursive_pattern:
                 paths.add(anchor if anchor.is_dir() else anchor.parent)
             elif not candidates:
                 paths.add(anchor.parent)
