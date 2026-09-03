@@ -1,5 +1,5 @@
 """Build the React application's generated route data from curated sources."""
-import json, shutil, tempfile
+import json, re, shutil, tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
