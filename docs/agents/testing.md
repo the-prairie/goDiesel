@@ -79,6 +79,7 @@ Reuse a route-share proof without executing its gate only when every covered inp
 ```
 
 The reuse result names invalidated input categories and blocks when no valid proof remains.
+For a passed receipt, every recorded gate must itself be passed with exit code zero; contradictory evidence is never reusable.
 Route release performs the same reuse validation before any external effect.
 That runtime release precondition is the route-share focused proof for the exact route artifact.
 Impact-selected ticket, release, and live gates remain merge and production-cutover requirements for code changes and are not replaced or downgraded by the route release command.

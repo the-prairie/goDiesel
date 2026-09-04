@@ -1188,10 +1188,16 @@ def reuse_verification(
             continue
         if not validator.is_valid(receipt):
             continue
+        gates = receipt.get("gates", [])
+        gates_passed = bool(gates) and all(
+            gate.get("status") == "passed" and gate.get("exit_code") == 0
+            for gate in gates
+        )
         if (
             receipt.get("capability") == capability_id
             and receipt.get("verb") == "verify"
             and receipt.get("status") == "passed"
+            and gates_passed
             and all(
                 any(
                     item.get("name") == name and item.get("sha256") == digest

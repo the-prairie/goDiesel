@@ -922,6 +922,14 @@ def test_cli_verify_explain_emits_json_without_executing_a_gate(monkeypatch, cap
             },
         ),
         (
+            "godiesel_local_capabilities.py",
+            {
+                "./scripts/verify-provider-readiness.sh atlas",
+                "./scripts/verify-provider-readiness.sh earth-replay",
+                "./scripts/verify-provider-readiness.sh google-3d",
+            },
+        ),
+        (
             "app/src/providers/cesium-render-quality.ts",
             {
                 "./scripts/verify-provider-readiness.sh atlas",
@@ -1291,6 +1299,30 @@ def test_reuse_returns_the_existing_proof_without_executing_a_gate(tmp_path: Pat
     Draft202012Validator(
         json.loads((ROOT / "system/verification-reuse.schema.json").read_text())
     ).validate(reused["result"])
+
+
+def test_reuse_rejects_a_passed_receipt_with_a_failed_gate(tmp_path: Path):
+    _write_reuse_fixture(tmp_path)
+    recorded, _runner = _record_proof(tmp_path)
+    receipt_path = tmp_path / recorded["evidence"]["path"]
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["gates"][0]["status"] = "failed"
+    receipt["gates"][0]["exit_code"] = 1
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    schema = json.loads(
+        (tmp_path / "system/evidence-receipt.schema.json").read_text(encoding="utf-8")
+    )
+
+    reused = reuse_verification(
+        tmp_path,
+        "route-share",
+        slug="route-1",
+        environ={},
+    )
+
+    assert Draft202012Validator(schema).is_valid(receipt) is False
+    assert reused["status"] == "blocked"
+    assert reused["blockers"][-1]["code"] == "GODIESEL_REUSABLE_PROOF_NOT_FOUND"
 
 
 def test_documentation_change_does_not_invalidate_runtime_proof(tmp_path: Path):

@@ -49,7 +49,7 @@
     },
     "publication_strategy": { "const": "incremental-with-full-generation-fallback" },
     "intended_writes": {
-      "const": ["quests.json", "app/src/data/generated/routes.manifest.json", "app/src/data/generated/route-stats.json", "app/public/data/routes/**"]
+      "const": [".godiesel/owner-mutation.lock", "quests.json", ".quests.json.rollback", "app/src/data/generated/routes.manifest.json", "app/src/data/generated/route-stats.json", "app/src/data/generated/.*.rollback", "app/public/data/routes/**", "app/public/data/routes/.*.rollback", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**"]
     },
     "external_effects": { "const": [] },
     "verification_requirements": {

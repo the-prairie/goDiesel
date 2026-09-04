@@ -15,7 +15,8 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator
 
-from admin_curation import owner_mutation_lock
+from admin_curation import SourceRollbackError, owner_mutation_lock
+from curation_publish import CurationRecoveryError
 from godiesel_local_capabilities import (
     _google_3d_preview,
     execute_owner_curation,
@@ -57,6 +58,11 @@ COMPLETE_CURATION = {
 def _write_json(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value), encoding="utf-8")
+
+
+def _initialize_git_repository(root: Path) -> None:
+    root.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
 
 
 def _install_evidence_contract(root: Path) -> None:
@@ -356,6 +362,24 @@ def test_generation_inspect_reports_projection_without_mutating_it(tmp_path: Pat
         "recovery_state": "clear",
     }
     assert {path: path.read_bytes() for path in watched} == before
+
+
+def test_generation_inspect_blocks_while_recovery_backup_is_pending(
+    tmp_path: Path,
+):
+    root = _generation_fixture(tmp_path)
+    backup = root / "app/public/data/.route-generation-backup"
+    backup.mkdir(parents=True)
+    (backup / "ready").touch()
+
+    result = execute_route_generation(root, "inspect")
+
+    assert result["status"] == "blocked"
+    assert result["result"]["inventory_state"] == "current"
+    assert result["result"]["recovery_state"] == "pending"
+    assert result["blockers"][0]["code"] == (
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_PENDING"
+    )
 
 
 def test_generation_apply_requires_authority_before_invoking_writer(tmp_path: Path):
@@ -973,10 +997,16 @@ def test_curation_plan_is_deterministic_and_bound_to_observed_state(tmp_path: Pa
         "incremental-with-full-generation-fallback"
     )
     assert plan["intended_writes"] == [
+        ".godiesel/owner-mutation.lock",
         "quests.json",
+        ".quests.json.rollback",
         "app/src/data/generated/routes.manifest.json",
         "app/src/data/generated/route-stats.json",
+        "app/src/data/generated/.*.rollback",
         "app/public/data/routes/**",
+        "app/public/data/routes/.*.rollback",
+        "app/public/data/.route-generation-backup/**",
+        "app/public/data/.routes-staging-*/**",
     ]
     assert (root / first["result"]["plan_path"]).is_file()
 
@@ -1127,6 +1157,37 @@ def test_curation_reapply_rejects_incomplete_public_projection(
     assert second["status"] == "blocked"
     assert second["blockers"][0]["code"] == "GODIESEL_CURATION_PLAN_STALE"
     assert calls == 1
+
+
+@pytest.mark.parametrize("error_type", [CurationRecoveryError, SourceRollbackError])
+def test_curation_apply_returns_repository_relative_recovery_paths(
+    monkeypatch,
+    tmp_path: Path,
+    error_type: type[Exception],
+):
+    root = _curation_fixture(tmp_path)
+    plan = _plan_curation(root)
+    recovery_path = root / ".quests.json.rollback"
+
+    def fake_save(*_args, **_kwargs):
+        raise error_type(
+            "manual recovery required",
+            recovery_paths=[recovery_path, root.parent / "private-recovery"],
+        )
+
+    monkeypatch.setattr("godiesel_local_capabilities.save_owner_curation", fake_save)
+
+    result = execute_owner_curation(
+        root,
+        "apply",
+        plan_path=plan,
+        authority="canonical-local",
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_CURATION_RECOVERY_REQUIRED"
+    assert result["result"]["recovery_paths"] == [".quests.json.rollback"]
+    assert str(root) not in json.dumps(result)
 
 
 def test_curation_verify_uses_the_existing_recovery_suite(tmp_path: Path):
@@ -1306,6 +1367,7 @@ def test_google_3d_reuse_requires_the_canonical_local_target(tmp_path: Path):
 
 
 def test_google_3d_provider_owns_a_missing_local_preview(tmp_path: Path):
+    _initialize_git_repository(tmp_path)
     _install_evidence_contract(tmp_path)
     (tmp_path / "app/dist").mkdir(parents=True)
     (tmp_path / "app/dist/build-identity.json").write_text("{}\n", encoding="utf-8")
@@ -1369,7 +1431,50 @@ def test_google_3d_provider_owns_a_missing_local_preview(tmp_path: Path):
     assert identity_reads == 3
 
 
+def test_google_3d_provider_blocks_when_shared_lease_cannot_be_resolved(
+    monkeypatch,
+    tmp_path: Path,
+):
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        "godiesel_local_capabilities.subprocess.run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args[0], 1, "", "failed"
+        ),
+    )
+
+    def unexpected_target_read(_target: str):
+        calls.append("target-read")
+        raise AssertionError("target identity must not be read without the shared lease")
+
+    def unexpected_preview_launch(*_args, **_kwargs):
+        calls.append("preview-launch")
+        raise AssertionError("preview must not launch without the shared lease")
+
+    result = execute_provider_readiness(
+        tmp_path,
+        "verify",
+        provider="google-3d",
+        provider_target="http://localhost:8787",
+        environ={"GOOGLE_MAPS_API_KEY": "secret"},
+        runner=lambda *args, **kwargs: subprocess.CompletedProcess(
+            args[0], 0, "", ""
+        ),
+        target_identity_reader=unexpected_target_read,
+        preview_launcher=unexpected_preview_launch,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == (
+        "GODIESEL_GOOGLE_PREVIEW_LEASE_UNAVAILABLE"
+    )
+    assert result["result"]["provider_state"] == "not_run"
+    assert calls == []
+
+
 def test_google_preview_context_serializes_concurrent_owners(tmp_path: Path):
+    _initialize_git_repository(tmp_path)
     barrier = threading.Barrier(3)
     guard = threading.Lock()
     active = 0
@@ -1434,14 +1539,23 @@ from pathlib import Path
 from godiesel_local_capabilities import _google_3d_preview
 
 root = Path(sys.argv[1])
-marker = Path(sys.argv[2])
+attempting = Path(sys.argv[2])
+entered = Path(sys.argv[3])
+release = None if sys.argv[4] == "-" else Path(sys.argv[4])
+attempting.write_text("attempting\\n", encoding="utf-8")
 with _google_3d_preview(root, {}, lambda _target: {}):
-    marker.write_text("entered\\n", encoding="utf-8")
-    time.sleep(float(sys.argv[3]))
+    entered.write_text("entered\\n", encoding="utf-8")
+    if release is not None:
+        deadline = time.monotonic() + 10
+        while not release.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
 """
     environment = {**os.environ, "PYTHONPATH": str(ROOT)}
+    first_attempting = tmp_path / "first-attempting"
     first_marker = tmp_path / "first-entered"
+    second_attempting = tmp_path / "second-attempting"
     second_marker = tmp_path / "second-entered"
+    release_first = tmp_path / "release-first"
     processes: list[subprocess.Popen[str]] = []
     try:
         first = subprocess.Popen(
@@ -1450,8 +1564,9 @@ with _google_3d_preview(root, {}, lambda _target: {}):
                 "-c",
                 child_code,
                 str(repository),
+                str(first_attempting),
                 str(first_marker),
-                "1",
+                str(release_first),
             ],
             env=environment,
             text=True,
@@ -1463,14 +1578,26 @@ with _google_3d_preview(root, {}, lambda _target: {}):
         assert first_marker.exists()
 
         second = subprocess.Popen(
-            [sys.executable, "-c", child_code, str(sibling), str(second_marker), "0"],
+            [
+                sys.executable,
+                "-c",
+                child_code,
+                str(sibling),
+                str(second_attempting),
+                str(second_marker),
+                "-",
+            ],
             env=environment,
             text=True,
         )
         processes.append(second)
-        time.sleep(0.2)
+        deadline = time.monotonic() + 5
+        while not second_attempting.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert second_attempting.exists()
         assert not second_marker.exists()
 
+        release_first.write_text("release\n", encoding="utf-8")
         assert first.wait(timeout=5) == 0
         assert second.wait(timeout=5) == 0
         assert second_marker.exists()
@@ -1531,6 +1658,7 @@ def test_provider_verify_rejects_non_proof_artifact(
     tmp_path: Path,
     artifact_kind: str,
 ):
+    _initialize_git_repository(tmp_path)
     _install_evidence_contract(tmp_path)
     calls: list[object] = []
 
@@ -1577,6 +1705,7 @@ def test_provider_verify_rejects_malformed_build_instance_id(tmp_path: Path):
 
 
 def test_provider_verify_rejects_dirty_or_uncommitted_local_build(tmp_path: Path):
+    _initialize_git_repository(tmp_path)
     _install_evidence_contract(tmp_path)
     calls: list[object] = []
     dirty_repository = _clean_repository_identity(tmp_path)
@@ -1781,6 +1910,7 @@ def test_provider_reuse_rejects_same_commit_redeployment(tmp_path: Path):
 
 
 def test_provider_verify_fingerprints_env_file_presence_without_exporting_secret(tmp_path: Path):
+    _initialize_git_repository(tmp_path)
     _install_evidence_contract(tmp_path)
     secret = "file-only-provider-secret"
     env_file = tmp_path / "app/.env"

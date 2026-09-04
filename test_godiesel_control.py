@@ -155,10 +155,25 @@ def test_capability_manifest_is_valid_and_declares_the_system_boundaries():
         and artifact["location"] == "app/public/data/.route-generation-backup/**"
         for artifact in capabilities["route-share"]["artifacts"]
     )
+    for capability_id in ("route-share", "route-generation", "owner-curation"):
+        assert "app/public/data/.routes-staging-*/**" in capabilities[
+            capability_id
+        ]["writes"]
+        assert any(
+            artifact["kind"] == "route-generation-staging"
+            for artifact in capabilities[capability_id]["artifacts"]
+        )
+    assert ".quests.json.rollback" in capabilities["owner-curation"]["writes"]
+    assert "app/public/data/.route-generation-backup/**" in capabilities[
+        "owner-curation"
+    ]["writes"]
     assert "$GIT_COMMON_DIR/godiesel-provider-preview.lock" in capabilities[
         "provider-readiness"
     ]["writes"]
     assert "/app/public/data/.route-generation-backup/" in (
+        ROOT / ".gitignore"
+    ).read_text(encoding="utf-8").splitlines()
+    assert "/app/public/data/.routes-staging-*/" in (
         ROOT / ".gitignore"
     ).read_text(encoding="utf-8").splitlines()
     for capability in capabilities.values():

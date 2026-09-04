@@ -23,7 +23,7 @@
         "release": ["route slug", "stable share name", "exact target authority", "exact replacement authority when replacing an alias"]
       },
       "reads": ["quests.json", "route_sources/**", ".route-share/**"],
-      "writes": [".route-share/**", ".godiesel/evidence/**", ".godiesel/owner-mutation.lock", "quests.json", "route_sources/imported/**", "route_sources/media/**", "app/public/media/**", "app/src/data/generated/**", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**", "app/dist/**", "app/test-results/**", "app/playwright-report/**", "dist/**"],
+      "writes": [".route-share/**", ".godiesel/evidence/**", ".godiesel/owner-mutation.lock", "quests.json", "route_sources/imported/**", "route_sources/media/**", "app/public/media/**", "app/src/data/generated/**", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**", "app/dist/**", "app/test-results/**", "app/playwright-report/**", "dist/**"],
       "external_effects": ["cloudflare-pages-route-branch"],
       "required_files": ["scripts/godiesel", "godiesel_route_share.py", "godiesel_evidence.py", "godiesel_verification.py", "scripts/route.sh", "route_create.py", "route_create.schema.json", "system/result.schema.json", "system/route-share-receipt.schema.json", "system/evidence-receipt.schema.json", "system/verification-explanation.schema.json", "system/verification-reuse.schema.json", "docs/agents/route-share.md"],
       "configuration": [
@@ -69,6 +69,7 @@
         { "kind": "route-source-staging", "location": ".route-share/staging/**", "persistence": "ignored-local" },
         { "kind": "route-write-recovery", "location": ".route-share/recovery/**", "persistence": "ignored-local" },
         { "kind": "route-generation-recovery", "location": "app/public/data/.route-generation-backup/**", "persistence": "ignored-local" },
+        { "kind": "route-generation-staging", "location": "app/public/data/.routes-staging-*/**", "persistence": "ignored-local" },
         { "kind": "catalogue-mutation-lock", "location": ".godiesel/owner-mutation.lock", "persistence": "ignored-local" },
         { "kind": "durable-route-media", "location": "route_sources/media/**", "persistence": "tracked-local" },
         { "kind": "public-route-media", "location": "app/public/media/**", "persistence": "tracked-local" },
@@ -114,7 +115,7 @@
         "verify": ["generated projection diff"]
       },
       "reads": ["quests.json", "route_sources/**", "external-private:DieselDiaries/activities.csv", "external-private:DieselDiaries/strava_export/activities/**"],
-      "writes": ["app/src/data/generated/**", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**", ".godiesel/evidence/**", ".godiesel/owner-mutation.lock"],
+      "writes": ["app/src/data/generated/**", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**", ".godiesel/evidence/**", ".godiesel/owner-mutation.lock"],
       "external_effects": [],
       "required_files": ["scripts/godiesel", "godiesel_local_capabilities.py", "generated_route_contract.py", "build.py", "route_build.py", "quest_meta.py", "rebuild.sh", "quests.json", "system/result.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json"],
       "configuration": [],
@@ -145,6 +146,7 @@
         { "kind": "route-statistics", "location": "app/src/data/generated/route-stats.json", "persistence": "generated-local" },
         { "kind": "route-detail-records", "location": "app/public/data/routes/**", "persistence": "generated-local" },
         { "kind": "route-generation-recovery", "location": "app/public/data/.route-generation-backup/**", "persistence": "ignored-local" },
+        { "kind": "route-generation-staging", "location": "app/public/data/.routes-staging-*/**", "persistence": "ignored-local" },
         { "kind": "catalogue-mutation-lock", "location": ".godiesel/owner-mutation.lock", "persistence": "ignored-local" },
         { "kind": "verification-evidence-receipt", "location": ".godiesel/evidence/**", "persistence": "ignored-local", "schema": "system/evidence-receipt.schema.json" }
       ],
@@ -186,7 +188,7 @@
         "verify": ["curation and generated projection diff"]
       },
       "reads": ["quests.json", "app/public/data/routes/**"],
-      "writes": [".godiesel/plans/owner-curation/**", ".godiesel/evidence/**", ".godiesel/owner-mutation.lock", "quests.json", "app/src/data/generated/**", "app/public/data/routes/**"],
+      "writes": [".godiesel/plans/owner-curation/**", ".godiesel/evidence/**", ".godiesel/owner-mutation.lock", "quests.json", ".quests.json.rollback", "app/src/data/generated/**", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**"],
       "external_effects": [],
       "required_files": ["scripts/godiesel", "godiesel_local_capabilities.py", "generated_route_contract.py", "admin.sh", "admin.py", "admin_curation.py", "curation_publish.py", "build.py", "system/owner-curation-plan.schema.json", "system/result.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json", "docs/adr/0010-owner-curation-through-a-loopback-only-writer.md"],
       "configuration": [],
@@ -219,6 +221,11 @@
         { "kind": "owner-curation-plan", "location": ".godiesel/plans/owner-curation/**", "persistence": "ignored-local", "schema": "system/owner-curation-plan.schema.json" },
         { "kind": "owner-curation", "location": "quests.json", "persistence": "tracked-local" },
         { "kind": "curated-route-projection", "location": "app/public/data/routes/**", "persistence": "generated-local" },
+        { "kind": "owner-source-recovery", "location": ".quests.json.rollback", "persistence": "ignored-local" },
+        { "kind": "curation-detail-recovery", "location": "app/public/data/routes/.*.rollback", "persistence": "ignored-local" },
+        { "kind": "curation-summary-recovery", "location": "app/src/data/generated/.*.rollback", "persistence": "ignored-local" },
+        { "kind": "route-generation-recovery", "location": "app/public/data/.route-generation-backup/**", "persistence": "ignored-local" },
+        { "kind": "route-generation-staging", "location": "app/public/data/.routes-staging-*/**", "persistence": "ignored-local" },
         { "kind": "catalogue-mutation-lock", "location": ".godiesel/owner-mutation.lock", "persistence": "ignored-local" },
         { "kind": "verification-evidence-receipt", "location": ".godiesel/evidence/**", "persistence": "ignored-local", "schema": "system/evidence-receipt.schema.json" }
       ],
@@ -283,7 +290,7 @@
         "verify": ["named provider", "exact credential-free origin root", "clean local commit and tree", "matching immutable built-artifact identity"]
       },
       "reads": [".env", "app/.env", "app/src/providers/**", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts"],
-      "writes": [".godiesel/evidence/**", "$GIT_COMMON_DIR/godiesel-provider-preview.lock", ".godiesel/provider-preview.lock", "app/test-results/**", "app/playwright-report/**", "app/e2e/evidence/auto-director/**"],
+      "writes": [".godiesel/evidence/**", "$GIT_COMMON_DIR/godiesel-provider-preview.lock", "app/test-results/**", "app/playwright-report/**", "app/e2e/evidence/auto-director/**"],
       "external_effects": ["read named map or imagery provider through the selected live browser check"],
       "required_files": ["scripts/godiesel", "scripts/verify-provider-readiness.sh", "godiesel_local_capabilities.py", "system/artifact-manifest.schema.json", "system/build-identity.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json", "app/scripts/finalize-build-identity.mjs", "app/vite.config.ts", "scripts/check-provider-key.mjs", "app/src/providers/google-maps-loader.ts", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts", "docs/agents/testing.md"],
       "configuration": [
@@ -571,7 +578,7 @@
     },
     {
       "id": "live-provider-runtime",
-      "paths": ["app/vite.config.ts", "app/src/services/google*", "app/src/**/google*", "app/src/providers/**", "app/src/surfaces/atlas/**", "app/src/surfaces/replay/cinematic/**", "app/src/surfaces/replay/playback/replay-controller.ts", "app/src/surfaces/replay/playback/route-navigator-controller.ts", "app/src/surfaces/replay/renderer-port.ts", "app/src/surfaces/replay/renderers/**", "app/src/surfaces/replay/story-flight/replay-camera-framing.ts", "app/src/surfaces/replay/scene/route-grounding.ts", "app/src/surfaces/replay/scene/route-camera-stabilizer.ts", "app/src/domain/route.ts", "app/src/domain/geometry/route-path.ts", "app/src/domain/geometry/route-thread-style.ts", "app/src/data/route-regions.ts", "app/e2e/*live*", "app/e2e/earth-*", "scripts/verify-provider-readiness.sh"],
+      "paths": ["godiesel_local_capabilities.py", "app/vite.config.ts", "app/src/services/google*", "app/src/**/google*", "app/src/providers/**", "app/src/surfaces/atlas/**", "app/src/surfaces/replay/cinematic/**", "app/src/surfaces/replay/playback/replay-controller.ts", "app/src/surfaces/replay/playback/route-navigator-controller.ts", "app/src/surfaces/replay/renderer-port.ts", "app/src/surfaces/replay/renderers/**", "app/src/surfaces/replay/story-flight/replay-camera-framing.ts", "app/src/surfaces/replay/scene/route-grounding.ts", "app/src/surfaces/replay/scene/route-camera-stabilizer.ts", "app/src/domain/route.ts", "app/src/domain/geometry/route-path.ts", "app/src/domain/geometry/route-thread-style.ts", "app/src/data/route-regions.ts", "app/e2e/*live*", "app/e2e/earth-*", "scripts/verify-provider-readiness.sh"],
       "capabilities": ["application-release", "provider-readiness"],
       "category": "provider",
       "gates": [{ "capability": "provider-readiness", "tier": "live" }],

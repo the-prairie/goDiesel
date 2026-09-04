@@ -50,7 +50,8 @@ Turn that request into a deterministic review plan:
 
 The plan is written under ignored `.godiesel/plans/owner-curation/`.
 It records the observed canonical and generated state fingerprint, the exact checkout and implementation identity, a privacy-safe field-level change summary, a self-digest, and the complete possible write set.
-That set includes `quests.json`, both generated metadata files, and the generated route-detail directory because a failed incremental publication may invoke the full-generation fallback.
+That set includes the mutation lease, `quests.json`, both generated metadata files, the generated route-detail directory, and ignored source, projection, staging, and full-generation recovery paths.
+When automatic rollback cannot finish, the blocked result names only repository-relative recovery paths for manual repair.
 
 Review the plan, then apply that exact file with explicit local authority:
 
@@ -113,6 +114,7 @@ The adapter records configuration presence, deployed identity, and a digest of t
 It reads and validates the deployed identity before and after the live gate, rejects redirected identity documents, and blocks if the target changes during execution.
 Google preview verification holds one lease in the repository's Git common directory for the complete preview lifecycle.
 Every sibling worktree therefore coordinates ownership of the host-global local target before starting, inspecting, or stopping its preview.
+If the shared Git directory cannot be resolved, verification blocks before reading or launching the target.
 Configuration presence and a passing deterministic test never substitute for this live result.
 
 Reuse is provider- and target-specific:

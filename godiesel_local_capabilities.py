@@ -100,8 +100,27 @@ PROVIDER_CHECKS = {
 }
 
 
+class GooglePreviewLeaseError(RuntimeError):
+    """The host-global Google preview lease could not be resolved safely."""
+
+
 def _issue(code: str, message: str, remediation: str) -> dict[str, str]:
     return {"code": code, "message": message, "remediation": remediation}
+
+
+def _repository_relative_recovery_paths(
+    root: Path,
+    error: CurationRecoveryError | SourceRollbackError,
+) -> list[str]:
+    relative_paths: set[str] = set()
+    for value in getattr(error, "recovery_paths", ()):
+        path = Path(value)
+        candidate = path if path.is_absolute() else root / path
+        try:
+            relative_paths.add(candidate.resolve().relative_to(root).as_posix())
+        except (OSError, ValueError):
+            continue
+    return sorted(relative_paths)
 
 
 def _envelope(
@@ -415,6 +434,14 @@ def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[s
                 "GODIESEL_GENERATED_STATS_DRIFT",
                 "Generated route statistics are invalid or disagree with route details.",
                 "Apply route-generation through the owning Python writer, then inspect again.",
+            )
+        )
+    if state["recovery_state"] == "pending":
+        blockers.append(
+            _issue(
+                "GODIESEL_ROUTE_GENERATION_RECOVERY_PENDING",
+                "An interrupted route-generation backup still requires recovery.",
+                "Run route generation through the owning writer to recover or complete publication, then inspect again.",
             )
         )
     return state, blockers
@@ -915,10 +942,16 @@ def _plan_owner_curation(
         "change_summary": change_summary,
         "publication_strategy": "incremental-with-full-generation-fallback",
         "intended_writes": [
+            ".godiesel/owner-mutation.lock",
             "quests.json",
+            ".quests.json.rollback",
             "app/src/data/generated/routes.manifest.json",
             "app/src/data/generated/route-stats.json",
+            "app/src/data/generated/.*.rollback",
             "app/public/data/routes/**",
+            "app/public/data/routes/.*.rollback",
+            "app/public/data/.route-generation-backup/**",
+            "app/public/data/.routes-staging-*/**",
         ],
         "external_effects": [],
         "verification_requirements": [
@@ -1213,13 +1246,18 @@ def execute_owner_curation(
             ],
         )
     except (CurationRecoveryError, SourceRollbackError) as error:
+        recovery_paths = _repository_relative_recovery_paths(root, error)
         return _envelope(
             "owner-curation",
             verb,
             required_authority,
             status="blocked",
             authorized=True,
-            result={"recovery_state": "manual-required", "error_type": type(error).__name__},
+            result={
+                "recovery_state": "manual-required",
+                "error_type": type(error).__name__,
+                "recovery_paths": recovery_paths,
+            },
             result_contract="godiesel_local_capabilities.py#owner-curation-recovery",
             blockers=[
                 _issue(
@@ -1507,8 +1545,10 @@ def _google_preview_lock_path(root: Path) -> Path:
             text=True,
             timeout=5,
         )
-    except (OSError, subprocess.TimeoutExpired):
-        completed = None
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise GooglePreviewLeaseError(
+            "Git common-directory discovery failed"
+        ) from error
 
     if completed is not None and completed.returncode == 0:
         common_dir_value = completed.stdout.strip()
@@ -1516,9 +1556,19 @@ def _google_preview_lock_path(root: Path) -> Path:
             common_dir = Path(common_dir_value)
             if not common_dir.is_absolute():
                 common_dir = root / common_dir
-            return common_dir.resolve() / "godiesel-provider-preview.lock"
+            try:
+                resolved_common_dir = common_dir.resolve()
+            except OSError as error:
+                raise GooglePreviewLeaseError(
+                    "Git common-directory path could not be resolved"
+                ) from error
+            if not resolved_common_dir.is_dir():
+                raise GooglePreviewLeaseError(
+                    "Git common-directory path is not an existing directory"
+                )
+            return resolved_common_dir / "godiesel-provider-preview.lock"
 
-    return root / ".godiesel/provider-preview.lock"
+    raise GooglePreviewLeaseError("Git common-directory discovery returned no path")
 
 
 @contextmanager
@@ -1530,10 +1580,31 @@ def _google_3d_preview(
     preview_launcher: Callable[..., Any] = subprocess.Popen,
     preview_sleep: Callable[[float], None] = time.sleep,
 ) -> Iterator[tuple[Mapping[str, object] | None, list[dict[str, str]]]]:
-    lock_path = _google_preview_lock_path(root)
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    with _GOOGLE_PREVIEW_THREAD_LOCK, lock_path.open("a+b") as lock_file:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+    try:
+        lock_path = _google_preview_lock_path(root)
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_file = lock_path.open("a+b")
+    except (GooglePreviewLeaseError, OSError):
+        yield None, [
+            _issue(
+                "GODIESEL_GOOGLE_PREVIEW_LEASE_UNAVAILABLE",
+                "The shared Google preview lease could not be resolved safely.",
+                "Restore this checkout's Git common-directory metadata, then retry.",
+            )
+        ]
+        return
+    with _GOOGLE_PREVIEW_THREAD_LOCK, lock_file:
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        except OSError:
+            yield None, [
+                _issue(
+                    "GODIESEL_GOOGLE_PREVIEW_LEASE_UNAVAILABLE",
+                    "The shared Google preview lease could not be acquired safely.",
+                    "Restore access to the repository's Git common directory, then retry.",
+                )
+            ]
+            return
         try:
             with _google_3d_preview_unlocked(
                 root,

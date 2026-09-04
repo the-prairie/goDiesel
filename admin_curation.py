@@ -26,6 +26,10 @@ REQUIRED_CURATION_FIELDS = (*CURATION_TEXT_FIELDS, *CURATION_LIST_FIELDS)
 class SourceRollbackError(RuntimeError):
     """Canonical curation source could not be restored after publication failed."""
 
+    def __init__(self, message, *, recovery_paths=()):
+        super().__init__(message)
+        self.recovery_paths = tuple(Path(path) for path in recovery_paths)
+
 
 class OwnerMutationBusyError(RuntimeError):
     """Another process currently owns the canonical owner-mutation boundary."""
@@ -174,7 +178,8 @@ def save_curation_and_rebuild(config_path, activity_id, value, rebuild):
             raise SourceRollbackError(
                 f"publication failed: {publication_error}; "
                 f"source rollback failed: {rollback_error}; "
-                f"recovery copy: {recovery_path}"
+                f"recovery copy: {recovery_path}",
+                recovery_paths=[recovery_path],
             ) from rollback_error
         raise
     else:

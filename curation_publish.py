@@ -25,6 +25,10 @@ class CurationPublishError(RuntimeError):
 class CurationRecoveryError(CurationPublishError):
     """Publication failed and at least one prior artifact needs recovery."""
 
+    def __init__(self, message, *, recovery_paths=()):
+        super().__init__(message)
+        self.recovery_paths = tuple(Path(path) for path in recovery_paths)
+
 
 def generated_paths(checkout_root):
     """The tracked artifacts that carry curation, in write order."""
@@ -213,7 +217,8 @@ def _publish_staged_with_rollback(staged):
             raise CurationRecoveryError(
                 f"generated publication failed: {publication_error}; "
                 f"rollback failed: {failure_details}; "
-                f"recovery copies: {recovery_paths}"
+                f"recovery copies: {recovery_paths}",
+                recovery_paths=[backup for backup, _, _ in rollback_failures],
             ) from rollback_failures[0][2]
         raise
     finally:
