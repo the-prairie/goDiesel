@@ -7,6 +7,7 @@ import json
 import math
 import os
 import re
+import stat
 import subprocess
 import sys
 import threading
@@ -37,6 +38,8 @@ from generated_route_contract import (
 from godiesel_evidence import (
     canonical_digest,
     repository_snapshot,
+    unlink_local_file,
+    write_local_text_atomic,
     write_evidence_receipt,
 )
 from godiesel_verification import (
@@ -526,9 +529,10 @@ def _run_verification(
             text=True,
             env=dict(environ),
         )
-    finally:
-        transient_input_change = monitor.changed()
+    except Exception:
         monitor.close()
+        raise
+    transient_input_change = monitor.changed()
     finished_at = datetime.now(timezone.utc).isoformat()
     passed = completed.returncode == 0
     blockers = [] if passed else [
@@ -662,10 +666,76 @@ def _run_verification(
                 if issue["code"] not in {item["code"] for item in blockers}
             )
             if evidence is not None:
-                evidence_path = root / evidence["path"]
-                if evidence_path.is_file() and not evidence_path.is_symlink():
-                    evidence_path.unlink()
+                evidence_path = Path(evidence["path"])
+                try:
+                    unlink_local_file(
+                        root,
+                        evidence_path.parent,
+                        evidence_path.name,
+                        missing_ok=True,
+                    )
+                except OSError:
+                    pass
                 evidence = None
+    final_provider_identity = post_provider_identity
+    final_identity_blockers: list[dict[str, str]] = []
+    if refresh_provider_identity is not None:
+        final_provider_identity, final_identity_blockers = refresh_provider_identity()
+        if final_provider_identity != post_provider_identity or final_identity_blockers:
+            blockers.append(
+                _issue(
+                    "GODIESEL_PROVIDER_BUILD_IDENTITY_CHANGED",
+                    "The deployed build identity changed while verification evidence was being finalized.",
+                    "Stabilize the named deployment and rerun the live provider gate.",
+                )
+            )
+    final_proof_environment = (
+        dict(refresh_proof_environ())
+        if refresh_proof_environ is not None
+        else post_proof_environment
+    )
+    final_snapshot = build_proof_snapshot(
+        root,
+        capability,
+        tiers=[tier],
+        commands=[display_command],
+        environ=final_proof_environment,
+        provider_target=provider_target,
+        provider_identity=final_provider_identity,
+    )
+    late_stability_blockers = proof_snapshot_stability_issues(snapshot, final_snapshot)
+    if monitor.changed() and not any(
+        issue["code"] == "GODIESEL_VERIFICATION_INPUTS_CHANGED"
+        for issue in late_stability_blockers
+    ):
+        late_stability_blockers.append(
+            _issue(
+                "GODIESEL_VERIFICATION_INPUTS_CHANGED",
+                "A covered input changed while verification evidence was being finalized.",
+                "Stabilize the worktree and rerun verification against one unchanged input set.",
+            )
+        )
+    monitor.close()
+    existing_codes = {item["code"] for item in blockers}
+    newly_detected = [
+        issue
+        for issue in [*final_identity_blockers, *late_stability_blockers]
+        if issue["code"] not in existing_codes
+    ]
+    blockers.extend(newly_detected)
+    if newly_detected and evidence is not None:
+        evidence_path = Path(evidence["path"])
+        try:
+            unlink_local_file(
+                root,
+                evidence_path.parent,
+                evidence_path.name,
+                missing_ok=True,
+            )
+        except OSError:
+            pass
+        evidence = None
+    stable_inputs = not blockers
     envelope = _envelope(
         capability,
         "verify",
@@ -791,12 +861,14 @@ def execute_route_generation(
                 "-m",
                 "pytest",
                 "-q",
+                "-p",
+                "no:cacheprovider",
                 "test_godiesel_local_capabilities.py",
                 "test_react_app.py",
                 "test_route_provenance.py",
             ]
             display_command = (
-                "python -m pytest -q test_godiesel_local_capabilities.py "
+                "python -m pytest -q -p no:cacheprovider test_godiesel_local_capabilities.py "
                 "test_react_app.py test_route_provenance.py"
             )
             return _run_verification(
@@ -1062,7 +1134,7 @@ def _plan_owner_curation(
         ],
         "external_effects": [],
         "verification_requirements": [
-            "python -m pytest -q test_godiesel_local_capabilities.py test_admin_curation.py test_curation_publish.py test_route_provenance.py"
+            "python -m pytest -q -p no:cacheprovider test_godiesel_local_capabilities.py test_admin_curation.py test_curation_publish.py test_route_provenance.py"
         ],
         "warnings": [],
         "blockers": [],
@@ -1071,9 +1143,10 @@ def _plan_owner_curation(
     relative_path = (
         Path(".godiesel/plans/owner-curation") / f"{plan['plan_digest']}.json"
     )
-    (root / relative_path).parent.mkdir(parents=True, exist_ok=True)
-    write_atomic(
-        root / relative_path,
+    write_local_text_atomic(
+        root,
+        relative_path.parent,
+        relative_path.name,
         json.dumps(plan, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
     )
     return _envelope(
@@ -1285,7 +1358,25 @@ def execute_owner_curation(
             blockers=blockers,
         )
     if verb == "plan":
-        return _plan_owner_curation(root, request_path)
+        try:
+            return _plan_owner_curation(root, request_path)
+        except OSError:
+            return _envelope(
+                "owner-curation",
+                verb,
+                required_authority,
+                status="blocked",
+                authorized=True,
+                result=None,
+                result_contract="none",
+                blockers=[
+                    _issue(
+                        "GODIESEL_LOCAL_ARTIFACT_ROOT_UNSAFE",
+                        "The owner-curation plan boundary is not a repository-owned directory.",
+                        "Restore a real .godiesel plan directory inside the checkout, then retry planning.",
+                    )
+                ],
+            )
     if verb == "verify":
         recovery_monitor = catalogue_recovery_monitor(root)
         try:
@@ -1306,13 +1397,15 @@ def execute_owner_curation(
                 "-m",
                 "pytest",
                 "-q",
+                "-p",
+                "no:cacheprovider",
                 "test_godiesel_local_capabilities.py",
                 "test_admin_curation.py",
                 "test_curation_publish.py",
                 "test_route_provenance.py",
             ]
             display_command = (
-                "python -m pytest -q test_godiesel_local_capabilities.py "
+                "python -m pytest -q -p no:cacheprovider test_godiesel_local_capabilities.py "
                 "test_admin_curation.py test_curation_publish.py test_route_provenance.py"
             )
             return _run_verification(
@@ -1749,8 +1842,23 @@ def _google_3d_preview(
 ) -> Iterator[tuple[Mapping[str, object] | None, list[dict[str, str]]]]:
     try:
         lock_path = _google_preview_lock_path(root)
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
-        lock_file = lock_path.open("a+b")
+        parent_fd = os.open(
+            lock_path.parent,
+            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+        )
+        try:
+            lock_fd = os.open(
+                lock_path.name,
+                os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW,
+                0o600,
+                dir_fd=parent_fd,
+            )
+        finally:
+            os.close(parent_fd)
+        if not stat.S_ISREG(os.fstat(lock_fd).st_mode):
+            os.close(lock_fd)
+            raise OSError("preview lease is not a regular file")
+        lock_file = os.fdopen(lock_fd, "a+b")
     except (GooglePreviewLeaseError, OSError):
         yield None, [
             _issue(

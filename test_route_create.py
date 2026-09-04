@@ -844,6 +844,24 @@ class RouteCreateTest(unittest.TestCase):
         self.assertEqual(report["downstream_exit_code"], 7)
         self.assertNotIn(str(self.root), json.dumps(report))
 
+    def test_rebuild_failure_does_not_follow_a_redirected_recovery_root(self):
+        proposal = propose_request(self.request(), self.root)
+        external = self.root / "external-recovery"
+        external.mkdir()
+
+        def failing_rebuild():
+            (self.root / ".route-share/recovery").symlink_to(
+                external,
+                target_is_directory=True,
+            )
+            raise RuntimeError("validation failed")
+
+        with self.assertRaises(RouteCreateError) as raised:
+            apply_proposal(proposal, self.root, rebuild=failing_rebuild)
+
+        self.assertEqual(raised.exception.code, "create.recovery_write_failed")
+        self.assertEqual(list(external.iterdir()), [])
+
     def test_cli_returns_the_downstream_validation_exit_code(self):
         proposal_path = self.root / "proposal.json"
         proposal_path.write_text("{}\n", encoding="utf-8")

@@ -20,6 +20,7 @@ from jsonschema import Draft202012Validator
 from PIL import Image
 
 from admin_curation import OwnerMutationBusyError, owner_mutation_lock
+from godiesel_evidence import unlink_local_file, write_local_text_atomic
 
 from quest_meta import build_route_curation
 from route_annotations import build_route_annotations
@@ -1321,16 +1322,10 @@ def _run_rebuild_validation(
     slug: str,
     rebuild_callback,
 ) -> object:
-    recovery_report = (
-        root
-        / ".route-share"
-        / "recovery"
-        / f"{proposal.get('proposal_id', slug)}.json"
-    )
+    recovery_filename = f"{proposal.get('proposal_id', slug)}.json"
     try:
         validation = rebuild_callback()
     except Exception as error:
-        recovery_report.parent.mkdir(parents=True, exist_ok=True)
         report = {
             "proposal_id": proposal.get("proposal_id"),
             "slug": slug,
@@ -1339,7 +1334,18 @@ def _run_rebuild_validation(
         }
         if isinstance(error, subprocess.CalledProcessError):
             report["downstream_exit_code"] = error.returncode
-        _write_atomic(recovery_report, json.dumps(report, indent=2) + "\n")
+        try:
+            write_local_text_atomic(
+                root,
+                ".route-share/recovery",
+                recovery_filename,
+                json.dumps(report, indent=2) + "\n",
+            )
+        except OSError as write_error:
+            raise RouteCreateError(
+                "create.recovery_write_failed",
+                "canonical route and source were written, validation failed, and the recovery report could not be stored safely",
+            ) from write_error
         raise RouteCreateError(
             "create.validation_failed",
             "canonical route and source were written, but rebuild validation failed; see .route-share/recovery",
@@ -1350,7 +1356,18 @@ def _run_rebuild_validation(
                 else 1
             ),
         ) from error
-    recovery_report.unlink(missing_ok=True)
+    try:
+        unlink_local_file(
+            root,
+            ".route-share/recovery",
+            recovery_filename,
+            missing_ok=True,
+        )
+    except OSError as error:
+        raise RouteCreateError(
+            "create.recovery_cleanup_failed",
+            "route validation passed but its recovery boundary could not be cleared safely",
+        ) from error
     return validation
 
 

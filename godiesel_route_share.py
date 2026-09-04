@@ -21,6 +21,7 @@ from godiesel_evidence import (
     canonical_digest,
     ensure_local_directory,
     existing_local_directory,
+    unlink_local_file,
     write_local_text_atomic,
     write_evidence_receipt,
 )
@@ -157,6 +158,40 @@ def _release_target(
         "guide_url": f"{stable_alias}#/routes/{{route_slug}}",
         "replay_url": f"{stable_alias}#/replay/{{route_slug}}",
     }, []
+
+
+def _release_observation(output: str, share_name: str | None) -> dict[str, Any] | None:
+    """Parse a deployment observed before post-upload verification completed."""
+
+    if share_name is None:
+        return None
+    records = [
+        line.removeprefix("GODIESEL_RELEASE_OBSERVED=")
+        for line in output.splitlines()
+        if line.startswith("GODIESEL_RELEASE_OBSERVED=")
+    ]
+    try:
+        if len(records) != 1:
+            return None
+        observed = json.loads(records[0])
+        stable_alias = f"https://share-{share_name}.godiesel.pages.dev/"
+        immutable = observed["immutable_deployment_url"]
+        if (
+            set(observed)
+            != {"immutable_deployment_url", "stable_alias", "external_status"}
+            or observed["stable_alias"] != stable_alias
+            or observed["external_status"] != "externally-unknown"
+            or not isinstance(immutable, str)
+            or re.fullmatch(
+                r"https://(?!share-)[A-Za-z0-9-]+\.godiesel\.pages\.dev/",
+                immutable,
+            )
+            is None
+        ):
+            return None
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return None
+    return dict(observed)
 
 
 def _receipt_records(root: Path, receipt_root: Path) -> list[tuple[Path, dict[str, Any]]]:
@@ -605,6 +640,7 @@ def _focused_proof_snapshot(root: Path, environ: Mapping[str, str]) -> dict[str,
 def _release_proof_monitor_paths(
     root: Path,
     proof: Mapping[str, Any],
+    route_slug: str | None = None,
 ) -> list[str]:
     """Return the already-validated receipt and artifact paths bound to reuse."""
 
@@ -621,6 +657,21 @@ def _release_proof_monitor_paths(
         relative_artifact = artifact.get("path") if isinstance(artifact, Mapping) else None
         if isinstance(relative_artifact, str):
             paths.append(root / relative_artifact)
+    if route_slug is not None:
+        for receipt_path, value in _receipt_records(
+            root, root / ".route-share" / "runs"
+        ):
+            if value.get("route_slug") != route_slug:
+                continue
+            paths.append(receipt_path)
+            result_artifact = value.get("result_artifact")
+            if isinstance(result_artifact, Mapping) and isinstance(
+                result_artifact.get("path"), str
+            ):
+                paths.append(root / result_artifact["path"])
+            proposal = value.get("proposal")
+            if isinstance(proposal, Mapping) and isinstance(proposal.get("path"), str):
+                paths.append(root / proposal["path"])
     return [str(path) for path in paths]
 
 
@@ -853,7 +904,7 @@ def execute_route_share(
             "status": "passed",
             "covered_inputs": list(proof["result"]["covered_inputs"]),
             "proof_fingerprint": proof["result"]["proof_fingerprint"],
-            "_monitor_paths": _release_proof_monitor_paths(root, proof),
+            "_monitor_paths": _release_proof_monitor_paths(root, proof, slug),
         }
 
     if verb == "verify" and not preview:
@@ -908,6 +959,31 @@ def execute_route_share(
         replace_existing=replace_existing,
     )
     monitor = ProofInputMonitor(root, proof_snapshot) if proof_snapshot is not None else None
+    if verb == "release" and monitor is not None:
+        refreshed_lineage = _release_lineage_state(
+            root,
+            root / ".route-share" / "runs",
+            slug,
+        )
+        refreshed_proof = reuse_verification(
+            root,
+            "route-share",
+            slug=str(slug),
+            environ=dict(os.environ if environ is None else environ),
+            _mutation_lock_held=_mutation_lock_held,
+        )
+        if refreshed_lineage != "ready" or refreshed_proof["status"] != "passed":
+            monitor.close()
+            return _blocked_result(
+                verb,
+                required_authority,
+                _issue(
+                    "GODIESEL_RELEASE_PRECONDITIONS_CHANGED",
+                    "Release lineage or verification proof changed during preflight.",
+                    "Stabilize the local release evidence and rerun release authorization.",
+                ),
+                authorized=True,
+            )
     started_at = datetime.now(timezone.utc).isoformat()
     try:
         completed = runner(
@@ -964,6 +1040,12 @@ def execute_route_share(
                 )
             )
     blockers = list(proof_stability_blockers)
+    release_output = completed.stdout + completed.stderr
+    observed_release = (
+        _release_observation(release_output, share_name)
+        if verb == "release"
+        else None
+    )
     domain_error = (
         domain_result.get("error")
         if isinstance(domain_result, dict) else None
@@ -980,6 +1062,14 @@ def execute_route_share(
                 "Wait for the active catalogue mutation to finish, then create or apply a fresh proposal.",
             )
         )
+    elif completed.returncode != 0 and observed_release is not None:
+        blockers.append(
+            _issue(
+                "GODIESEL_RELEASE_EXTERNAL_STATE_UNKNOWN",
+                "Cloudflare reported an immutable deployment, but post-upload verification did not complete.",
+                "Inspect the reported immutable deployment and stable alias before deciding whether any retry is safe.",
+            )
+        )
     elif completed.returncode != 0:
         blockers.append(
             _issue(
@@ -992,13 +1082,19 @@ def execute_route_share(
     warnings: list[dict[str, str]] = []
     if verb == "release" and completed.returncode == 0:
         release_target, release_blockers = _release_target(
-            completed.stdout + completed.stderr,
+            release_output,
             share_name,
         )
         blockers.extend(release_blockers)
         if release_target is not None:
             release_target["authorized_share_name"] = target_authority
             release_target["replacement_authorized"] = replace_existing
+    elif verb == "release" and observed_release is not None:
+        release_target = {
+            **observed_release,
+            "authorized_share_name": target_authority,
+            "replacement_authorized": replace_existing,
+        }
 
     proposal = (
         domain_result
@@ -1129,15 +1225,25 @@ def execute_route_share(
                     final_proof_snapshot,
                 )
             )
-            if monitor is not None and monitor.changed() and not any(
-                issue["code"] == "GODIESEL_VERIFICATION_INPUTS_CHANGED"
-                for issue in late_issues
-            ):
+        if verb == "release":
+            final_lineage = _release_lineage_state(
+                root,
+                root / ".route-share" / "runs",
+                slug,
+            )
+            final_reuse = reuse_verification(
+                root,
+                "route-share",
+                slug=str(slug),
+                environ=dict(os.environ if environ is None else environ),
+                _mutation_lock_held=_mutation_lock_held,
+            )
+            if final_lineage != "ready" or final_reuse["status"] != "passed":
                 late_issues.append(
                     _issue(
-                        "GODIESEL_VERIFICATION_INPUTS_CHANGED",
-                        "A covered input changed while route-share evidence was being finalized.",
-                        "Stabilize the worktree and rerun the transition against one unchanged input set.",
+                        "GODIESEL_RELEASE_PRECONDITIONS_CHANGED",
+                        "Release lineage or verification proof changed while release evidence was being finalized.",
+                        "Inspect the deployment and repeat the local plan, apply, and verify chain before any retry.",
                     )
                 )
         _final_recovery_state, late_recovery_blockers = route_generation_recovery_state(
@@ -1160,6 +1266,17 @@ def execute_route_share(
                     "Stabilize catalogue publication state and rerun the transition.",
                 )
             )
+        if monitor is not None and monitor.changed() and not any(
+            issue["code"] == "GODIESEL_VERIFICATION_INPUTS_CHANGED"
+            for issue in late_issues
+        ):
+            late_issues.append(
+                _issue(
+                    "GODIESEL_VERIFICATION_INPUTS_CHANGED",
+                    "A covered proof or lineage input changed while route-share evidence was being finalized.",
+                    "Stabilize the worktree and rerun the transition against one unchanged input set.",
+                )
+            )
         existing_codes = {issue["code"] for issue in blockers}
         newly_detected = [
             issue for issue in late_issues if issue["code"] not in existing_codes
@@ -1172,9 +1289,16 @@ def execute_route_share(
                 except OSError:
                     pass
             if evidence is not None:
-                evidence_path = root / evidence["path"]
-                if evidence_path.is_file() and not evidence_path.is_symlink():
-                    evidence_path.unlink()
+                evidence_path = Path(evidence["path"])
+                try:
+                    unlink_local_file(
+                        root,
+                        evidence_path.parent,
+                        evidence_path.name,
+                        missing_ok=True,
+                    )
+                except OSError:
+                    pass
                 evidence = None
             status = "blocked"
             exit_code = 2

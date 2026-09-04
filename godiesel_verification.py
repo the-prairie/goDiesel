@@ -25,6 +25,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 from admin_curation import OwnerMutationBusyError, owner_mutation_lock
 from godiesel_evidence import (
     canonical_digest,
+    ensure_local_directory,
     existing_local_directory,
     repository_snapshot,
 )
@@ -225,7 +226,8 @@ def route_generation_recovery_state(
     data_root = root / "app/public/data"
     generated_root = root / "app/src/data/generated"
     detail_root = data_root / "routes"
-    route_share_recovery_root = root / ".route-share/recovery"
+    route_share_parent = root / ".route-share"
+    route_share_recovery_root = route_share_parent / "recovery"
 
     def has_entry(directory: Path, predicate: Callable[[str], bool]) -> bool:
         if directory.is_symlink():
@@ -266,11 +268,15 @@ def route_generation_recovery_state(
                 lambda name: name.startswith(".")
                 and name.endswith((".tmp", ".recovery", ".rollback")),
             )
+        if route_share_parent.exists() or route_share_parent.is_symlink():
+            if existing_local_directory(root, ".route-share") is None:
+                raise OSError("route-share artifact root is redirected")
         if route_share_recovery_root.exists() or route_share_recovery_root.is_symlink():
+            if existing_local_directory(root, ".route-share/recovery") is None:
+                raise OSError("route-share recovery root is redirected")
             pending = pending or has_entry(
                 route_share_recovery_root,
-                lambda name: name.endswith(".json")
-                and name != allowed_route_share_recovery,
+                lambda name: name != allowed_route_share_recovery,
             )
     except OSError:
         return "unreadable", [
@@ -295,17 +301,22 @@ def catalogue_recovery_monitor(root: Path | str) -> ProofInputMonitor:
     """Observe every directory that can acquire catalogue recovery residue."""
 
     root = Path(root).resolve()
+    monitor_paths = [
+        str(root / "app/public/data"),
+        str(root / "app/public/data/routes"),
+        str(root / "app/src/data/generated"),
+    ]
+    try:
+        monitor_paths.append(str(ensure_local_directory(root, ".route-share/recovery")))
+    except OSError:
+        monitor = ProofInputMonitor(root, {"covered_inputs": [], "_monitor_paths": monitor_paths})
+        monitor.monitoring_failed = True
+        return monitor
     return ProofInputMonitor(
         root,
         {
             "covered_inputs": [],
-            "_monitor_paths": [
-                str(root),
-                str(root / "app/public/data"),
-                str(root / "app/public/data/routes"),
-                str(root / "app/src/data/generated"),
-                str(root / ".route-share/recovery"),
-            ],
+            "_monitor_paths": monitor_paths,
         },
     )
 

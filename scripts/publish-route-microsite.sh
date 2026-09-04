@@ -82,9 +82,14 @@ RELEASE_MANIFEST_SHA=$(shasum -a 256 dist/artifact-manifest.json | awk '{print $
 echo "3/4 Running focused microsite journey"
 (
   cd app
-  VITE_SINGLE_ROUTE_SLUG="$ROUTE_SLUG" \
-    npx playwright test e2e/single-route-microsite.spec.ts
+  npx playwright test e2e/single-route-microsite.spec.ts \
+    --config playwright.route-share.config.ts
 )
+POST_JOURNEY_MANIFEST_SHA=$(shasum -a 256 dist/artifact-manifest.json | awk '{print $1}')
+if [[ "$POST_JOURNEY_MANIFEST_SHA" != "$RELEASE_MANIFEST_SHA" ]]; then
+  echo "Built artifact changed during its browser journey; refusing to publish." >&2
+  exit 1
+fi
 
 if [[ "$DRY_RUN" == "true" ]]; then
   echo "4/4 Dry run complete"
@@ -146,6 +151,23 @@ if not candidates:
     raise SystemExit("Wrangler did not report an immutable deployment URL")
 print(candidates[-1])
 ')
+"$PYTHON" - "$IMMUTABLE_URL" "$PUBLIC_URL" <<'PY'
+import json
+import sys
+
+print(
+    "GODIESEL_RELEASE_OBSERVED="
+    + json.dumps(
+        {
+            "immutable_deployment_url": sys.argv[1],
+            "stable_alias": sys.argv[2],
+            "external_status": "externally-unknown",
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+)
+PY
 (
   cd app
   node scripts/smoke-single-route-microsite.mjs "$IMMUTABLE_URL" "$ROUTE_SLUG"
@@ -154,13 +176,17 @@ print(candidates[-1])
   cd app
   node scripts/smoke-single-route-microsite.mjs "$PUBLIC_URL" "$ROUTE_SLUG"
 )
-"$PYTHON" - "$IMMUTABLE_URL" "$PUBLIC_URL" "$RELEASE_COMMIT" "$RELEASE_TREE" <<'PY'
+"$PYTHON" - "$IMMUTABLE_URL" "$PUBLIC_URL" "$RELEASE_COMMIT" "$RELEASE_TREE" "$DEPLOY_ROOT/build-identity.json" <<'PY'
 import json
 import sys
 
 from godiesel_verification import read_target_build_identity
 
-immutable_url, stable_alias, commit, tree = sys.argv[1:]
+immutable_url, stable_alias, commit, tree, staged_identity_path = sys.argv[1:]
+with open(staged_identity_path, encoding="utf-8") as source:
+    staged = json.load(source)
+if staged.get("artifact_kind") != "built-artifact":
+    raise SystemExit("Staged deployment identity is not an immutable built artifact")
 immutable = dict(
     read_target_build_identity(
         immutable_url,
@@ -175,7 +201,7 @@ alias = dict(
         expected_tree=tree,
     )
 )
-if immutable != alias:
+if immutable != staged or alias != staged:
     raise SystemExit("Stable alias does not resolve to the immutable deployment build")
 print(
     "GODIESEL_RELEASE_TARGET="

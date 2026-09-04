@@ -83,28 +83,60 @@ def write_local_text_atomic(
     filename: str,
     content: str,
 ) -> Path:
-    """Atomically write inside a pinned repository-owned directory."""
+    """Atomically write inside a descriptor-pinned repository directory."""
 
     if not filename or Path(filename).name != filename:
         raise OSError("local artifact filename must be one path component")
     root = Path(root).resolve()
-    directory = ensure_local_directory(root, relative_directory)
-    directory_fd = os.open(
-        directory,
-        os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
-    )
+    relative_directory = Path(relative_directory)
+    if relative_directory.is_absolute() or ".." in relative_directory.parts:
+        raise OSError("local artifact directory must stay inside the repository")
+    directory = root / relative_directory
+    directory_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for part in relative_directory.parts:
+            try:
+                next_fd = os.open(
+                    part,
+                    os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                    dir_fd=directory_fd,
+                )
+            except FileNotFoundError:
+                os.mkdir(part, 0o700, dir_fd=directory_fd)
+                next_fd = os.open(
+                    part,
+                    os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                    dir_fd=directory_fd,
+                )
+            os.close(directory_fd)
+            directory_fd = next_fd
+    except Exception:
+        os.close(directory_fd)
+        raise
     temporary = f".{filename}.{uuid.uuid4().hex}.tmp"
     try:
         opened = os.fstat(directory_fd)
 
         def directory_is_still_pinned() -> bool:
             try:
-                current = directory.lstat()
+                reopened = os.open(
+                    root,
+                    os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                )
+                for part in relative_directory.parts:
+                    next_fd = os.open(
+                        part,
+                        os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                        dir_fd=reopened,
+                    )
+                    os.close(reopened)
+                    reopened = next_fd
+                current = os.fstat(reopened)
+                os.close(reopened)
             except OSError:
                 return False
             return (
                 stat.S_ISDIR(current.st_mode)
-                and not stat.S_ISLNK(current.st_mode)
                 and current.st_dev == opened.st_dev
                 and current.st_ino == opened.st_ino
             )
@@ -137,6 +169,46 @@ def write_local_text_atomic(
             pass
         os.close(directory_fd)
     return directory / filename
+
+
+def unlink_local_file(
+    root: Path | str,
+    relative_directory: Path | str,
+    filename: str,
+    *,
+    missing_ok: bool = False,
+) -> None:
+    """Unlink one file without following a redirected repository directory."""
+
+    if not filename or Path(filename).name != filename:
+        raise OSError("local artifact filename must be one path component")
+    root = Path(root).resolve()
+    relative_directory = Path(relative_directory)
+    if relative_directory.is_absolute() or ".." in relative_directory.parts:
+        raise OSError("local artifact directory must stay inside the repository")
+    directory_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for part in relative_directory.parts:
+            try:
+                next_fd = os.open(
+                    part,
+                    os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                    dir_fd=directory_fd,
+                )
+            except FileNotFoundError:
+                if missing_ok:
+                    return
+                raise
+            os.close(directory_fd)
+            directory_fd = next_fd
+        try:
+            os.unlink(filename, dir_fd=directory_fd)
+        except FileNotFoundError:
+            if not missing_ok:
+                raise
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
 
 
 def _git(root: Path, *args: str, text: bool = True) -> subprocess.CompletedProcess[Any]:

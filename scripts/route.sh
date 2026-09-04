@@ -7,6 +7,7 @@
 # them rather than reimplementing them.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+export PYTHONDONTWRITEBYTECODE=1
 
 PYTHON="python3"
 if [ -x ".venv/bin/python" ]; then
@@ -65,7 +66,7 @@ case "$command" in
   check)
     slug="${1:-}"
     if [[ -z "$slug" ]]; then usage; exit 1; fi
-    PYTHONDONTWRITEBYTECODE=1 "${PYTHON}" -m pytest -q -p no:cacheprovider \
+    "${PYTHON}" -m pytest -q -p no:cacheprovider \
       test_route_create.py test_route_provenance.py
     # Report readiness before spending a build on it.
     "${PYTHON}" route_status.py "$slug"

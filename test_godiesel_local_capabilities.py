@@ -413,6 +413,7 @@ def test_generation_inspect_blocks_on_any_recovery_residue(
     [
         ".quests.json.rollback",
         ".quests.json.1234.tmp",
+        ".route-share/recovery/.proposal.json.1234.tmp",
         "app/src/data/generated/.route-stats.json.recovery",
         "app/public/data/routes/.route-1.json.rollback",
     ],
@@ -432,6 +433,23 @@ def test_generation_inspect_blocks_on_every_catalogue_recovery_family(
     assert result["result"]["recovery_state"] == "pending"
     assert result["blockers"][-1]["code"] == (
         "GODIESEL_ROUTE_GENERATION_RECOVERY_PENDING"
+    )
+
+
+def test_generation_inspect_rejects_redirected_route_share_recovery(tmp_path: Path):
+    root = _generation_fixture(tmp_path)
+    external = tmp_path / "external-recovery"
+    external.mkdir()
+    route_share = root / ".route-share"
+    route_share.mkdir()
+    (route_share / "recovery").symlink_to(external, target_is_directory=True)
+
+    result = execute_route_generation(root, "inspect")
+
+    assert result["status"] == "blocked"
+    assert result["result"]["recovery_state"] == "unreadable"
+    assert result["blockers"][-1]["code"] == (
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_UNREADABLE"
     )
 
 
@@ -607,13 +625,15 @@ def test_generation_verify_uses_the_focused_public_gate(tmp_path: Path):
         "-m",
         "pytest",
         "-q",
+        "-p",
+        "no:cacheprovider",
         "test_godiesel_local_capabilities.py",
         "test_react_app.py",
         "test_route_provenance.py",
     ]]
     assert result["status"] == "passed"
     assert result["result"]["command"] == (
-        "python -m pytest -q test_godiesel_local_capabilities.py test_react_app.py "
+        "python -m pytest -q -p no:cacheprovider test_godiesel_local_capabilities.py test_react_app.py "
         "test_route_provenance.py"
     )
     assert "1 passed" not in json.dumps(result)
@@ -1198,6 +1218,20 @@ def test_curation_plan_is_deterministic_and_bound_to_observed_state(tmp_path: Pa
     assert (root / first["result"]["plan_path"]).is_file()
 
 
+def test_curation_plan_does_not_follow_a_redirected_artifact_root(tmp_path: Path):
+    root = _curation_fixture(tmp_path)
+    request = _write_curation_request(root)
+    external = tmp_path / "external-plans"
+    external.mkdir()
+    (root / ".godiesel").symlink_to(external, target_is_directory=True)
+
+    result = execute_owner_curation(root, "plan", request_path=request)
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_LOCAL_ARTIFACT_ROOT_UNSAFE"
+    assert list(external.iterdir()) == []
+
+
 def test_curation_plan_cannot_be_applied_in_another_checkout(tmp_path: Path):
     first_root = _curation_fixture(tmp_path / "checkout-a")
     plan = _plan_curation(first_root)
@@ -1442,6 +1476,8 @@ def test_curation_verify_uses_the_existing_recovery_suite(tmp_path: Path):
         "-m",
         "pytest",
         "-q",
+        "-p",
+        "no:cacheprovider",
         "test_godiesel_local_capabilities.py",
         "test_admin_curation.py",
         "test_curation_publish.py",
@@ -1740,7 +1776,28 @@ def test_google_3d_provider_owns_a_missing_local_preview(tmp_path: Path):
         "--strictPort",
     ]
     assert process.terminated is True
-    assert identity_reads == 3
+    assert identity_reads == 4
+
+
+def test_google_preview_lease_rejects_a_final_component_symlink(tmp_path: Path):
+    _initialize_git_repository(tmp_path)
+    external = tmp_path / "external-lock"
+    external.write_text("unchanged\n", encoding="utf-8")
+    (tmp_path / ".git/godiesel-provider-preview.lock").symlink_to(external)
+
+    result = execute_provider_readiness(
+        tmp_path,
+        "verify",
+        provider="google-3d",
+        provider_target="http://localhost:8787",
+        environ={"GOOGLE_MAPS_API_KEY": "secret"},
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == (
+        "GODIESEL_GOOGLE_PREVIEW_LEASE_UNAVAILABLE"
+    )
+    assert external.read_text(encoding="utf-8") == "unchanged\n"
 
 
 def test_google_3d_provider_blocks_when_shared_lease_cannot_be_resolved(
@@ -2122,6 +2179,7 @@ def test_provider_verify_blocks_when_deployed_identity_changes_during_gate(
     identities = [
         _matching_target_identity(""),
         {**_matching_target_identity(""), "build_id": "87654321-4321-4321-8321-cba987654321"},
+        {**_matching_target_identity(""), "build_id": "87654321-4321-4321-8321-cba987654321"},
     ]
 
     result = execute_provider_readiness(
@@ -2145,6 +2203,38 @@ def test_provider_verify_blocks_when_deployed_identity_changes_during_gate(
         (tmp_path / result["evidence"]["path"]).read_text(encoding="utf-8")
     )
     assert receipt["status"] == "blocked"
+    assert identities == []
+
+
+def test_provider_verify_withdraws_evidence_for_late_identity_change(
+    tmp_path: Path,
+):
+    _install_evidence_contract(tmp_path)
+    initial = _matching_target_identity("")
+    changed = {
+        **initial,
+        "build_id": "87654321-4321-4321-8321-cba987654321",
+    }
+    identities = [initial, initial, changed]
+
+    result = execute_provider_readiness(
+        tmp_path,
+        "verify",
+        provider="atlas",
+        provider_target="https://preview.example.test/",
+        environ={"GOOGLE_MAPS_API_KEY": "secret"},
+        runner=lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 0, "passed", ""
+        ),
+        target_identity_reader=lambda _target: identities.pop(0),
+        repository_reader=_clean_repository_identity,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["evidence"] is None
+    assert "GODIESEL_PROVIDER_BUILD_IDENTITY_CHANGED" in {
+        issue["code"] for issue in result["blockers"]
+    }
     assert identities == []
 
 

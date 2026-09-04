@@ -181,6 +181,95 @@ exit 0
     assert "--location" not in curl_calls.read_text(encoding="utf-8")
 
 
+def test_publish_tests_and_verifies_the_exact_staged_artifact(tmp_path: Path):
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    shutil.copyfile(
+        ROOT / "scripts/publish-route-microsite.sh",
+        scripts / "publish-route-microsite.sh",
+    )
+    (scripts / "publish-route-microsite.sh").chmod(0o755)
+    (tmp_path / "app").mkdir()
+    executable(
+        tmp_path / "make-dist.sh",
+        """#!/bin/bash
+set -euo pipefail
+mkdir -p dist
+printf '{"schema_version":1,"document_type":"godiesel-artifact-manifest","files":[]}\n' > dist/artifact-manifest.json
+manifest=$(shasum -a 256 dist/artifact-manifest.json | awk '{print $1}')
+commit=$(git rev-parse HEAD)
+tree=$(git rev-parse 'HEAD^{tree}')
+printf '{"schema_version":1,"document_type":"godiesel-build-identity","artifact_kind":"built-artifact","commit":"%s","tree":"%s","build_id":"12345678-1234-4234-8234-123456789abc","artifact_manifest_sha256":"%s"}\n' "$commit" "$tree" "$manifest" > dist/build-identity.json
+""",
+    )
+    (tmp_path / "godiesel_verification.py").write_text(
+        """import json
+from pathlib import Path
+
+def read_target_build_identity(_target, **_kwargs):
+    return json.loads(Path('dist/build-identity.json').read_text())
+""",
+        encoding="utf-8",
+    )
+    calls = tmp_path / "calls.log"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    executable(bin_dir / "node", "#!/bin/bash\nexit 0\n")
+    executable(bin_dir / "curl", "#!/bin/bash\nprintf '404'\n")
+    executable(
+        bin_dir / "npx",
+        f"""#!/bin/bash
+printf '%s\n' "$*" >> {calls}
+if [[ "$1" == "wrangler" ]]; then
+  printf 'Deployment: https://abc123.godiesel.pages.dev/\n'
+fi
+""",
+    )
+    (tmp_path / ".gitignore").write_text(
+        "bin/\ndist/\ncalls.log\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "add", "."],
+        cwd=tmp_path,
+        check=True,
+    )
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.test",
+            "commit",
+            "-qm",
+            "fixture",
+        ],
+        cwd=tmp_path,
+        check=True,
+    )
+    environment = os.environ.copy()
+    environment["PATH"] = f"{bin_dir}:{environment['PATH']}"
+
+    completed = subprocess.run(
+        [str(scripts / "publish-route-microsite.sh"), "gpx-preview", "new-share"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    recorded = calls.read_text(encoding="utf-8")
+    assert "playwright test e2e/single-route-microsite.spec.ts --config playwright.route-share.config.ts" in recorded
+    wrangler = next(line for line in recorded.splitlines() if line.startswith("wrangler "))
+    assert " pages deploy /" in wrangler
+    assert " pages deploy dist " not in wrangler
+    assert "GODIESEL_RELEASE_OBSERVED=" in completed.stdout
+    assert "GODIESEL_RELEASE_TARGET=" in completed.stdout
+
+
 def test_microsite_validator_redacts_checkout_paths():
     completed = subprocess.run(
         ["node", "scripts/validate-route-microsite.mjs", "gpx-not-present", "source"],

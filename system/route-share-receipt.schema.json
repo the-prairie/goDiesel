@@ -70,6 +70,7 @@
         "immutable_deployment_url": { "type": "string", "format": "uri" },
         "guide_url": { "type": "string", "format": "uri" },
         "replay_url": { "type": "string", "format": "uri" },
+        "external_status": { "enum": ["externally-unknown"] },
         "smoke_status": { "const": "passed" },
         "commit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
         "tree": { "type": "string", "pattern": "^[a-f0-9]{40}$" },

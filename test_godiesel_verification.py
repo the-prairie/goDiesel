@@ -847,12 +847,12 @@ def test_explain_maps_paths_to_capabilities_and_required_gates(
                 (
                     "route-generation",
                     "focused",
-                    "python -m pytest -q test_godiesel_local_capabilities.py test_react_app.py test_route_provenance.py",
+                    "python -m pytest -q -p no:cacheprovider test_godiesel_local_capabilities.py test_react_app.py test_route_provenance.py",
                 ),
                 (
                     "owner-curation",
                     "focused",
-                    "python -m pytest -q test_godiesel_local_capabilities.py test_admin_curation.py test_curation_publish.py test_route_provenance.py",
+                    "python -m pytest -q -p no:cacheprovider test_godiesel_local_capabilities.py test_admin_curation.py test_curation_publish.py test_route_provenance.py",
                 ),
             },
         ),
