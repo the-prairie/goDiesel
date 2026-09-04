@@ -435,6 +435,45 @@ def test_catalogue_monitor_detects_transient_root_recovery_artifacts(
         monitor.close()
 
 
+def test_catalogue_monitor_ignores_non_recovery_root_file_changes(
+    tmp_path: Path,
+):
+    (tmp_path / "app/public/data/routes").mkdir(parents=True)
+    (tmp_path / "app/src/data/generated").mkdir(parents=True)
+    implementation = tmp_path / "godiesel_route_share.py"
+    implementation.write_text("before\n", encoding="utf-8")
+    monitor = godiesel_verification.catalogue_recovery_monitor(tmp_path)
+    implementation.write_text("after\n", encoding="utf-8")
+    try:
+        assert monitor.changed() is False
+    finally:
+        monitor.close()
+
+
+def test_catalogue_monitor_filters_linux_directory_events_by_artifact_name(
+    tmp_path: Path,
+):
+    (tmp_path / "app/public/data/routes").mkdir(parents=True)
+    (tmp_path / "app/src/data/generated").mkdir(parents=True)
+    monitor = godiesel_verification.catalogue_recovery_monitor(tmp_path)
+    watch_descriptor = 17
+    monitor.inotify_paths = {watch_descriptor: tmp_path}
+
+    def event(name: str) -> bytes:
+        encoded = name.encode("utf-8") + b"\0"
+        padding = b"\0" * (-len(encoded) % 4)
+        payload = encoded + padding
+        return godiesel_verification.struct.pack(
+            "iIII", watch_descriptor, 0x00000002, 0, len(payload)
+        ) + payload
+
+    try:
+        assert monitor._inotify_event_seen(event("godiesel_route_share.py")) is False
+        assert monitor._inotify_event_seen(event(".quests.json.rollback")) is True
+    finally:
+        monitor.close()
+
+
 def test_monitor_fails_closed_when_watch_registration_fails(
     tmp_path: Path,
     monkeypatch,
@@ -993,7 +1032,22 @@ def test_route_fixtures_select_exact_executing_gates(
 def test_route_fixture_gates_fingerprint_every_executed_test(
     capability: str,
     fixture_paths: set[str],
+    monkeypatch,
 ):
+    monkeypatch.setattr(
+        godiesel_verification,
+        "_route_generation_external_sources",
+        lambda _root: (
+            {
+                "category": "data",
+                "name": "external-private:route-generation-sources",
+                "state": "matched",
+                "sha256": "fixture-source-fingerprint",
+            },
+            [],
+            None,
+        ),
+    )
     snapshot = build_proof_snapshot(ROOT, capability, tiers=["focused"])
 
     assert snapshot["status"] == "passed"

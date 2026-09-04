@@ -10,6 +10,7 @@ import os
 import re
 import select
 import stat
+import struct
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -60,13 +61,21 @@ class UnsafeCoveredInputSymlink(ValueError):
 class ProofInputMonitor:
     """Record covered-input filesystem events that before/after hashes can miss."""
 
-    def __init__(self, root: Path, snapshot: Mapping[str, Any]):
+    def __init__(
+        self,
+        root: Path,
+        snapshot: Mapping[str, Any],
+        *,
+        event_filter: Callable[[Path, str], bool] | None = None,
+    ):
         self.root = root
         self.paths = self._paths(snapshot)
         self.before = self._state()
+        self.event_filter = event_filter
         self.kqueue = None
         self.descriptors: list[int] = []
         self.inotify_fd: int | None = None
+        self.inotify_paths: dict[int, Path] = {}
         self.monitoring_failed = False
         if hasattr(select, "kqueue"):
             self._start_kqueue()
@@ -176,14 +185,44 @@ class ProofInputMonitor:
             # events include harmless access-time updates when a script executes.
             mask = 0x00000FCA
             for path in self.paths:
-                if libc.inotify_add_watch(fd, os.fsencode(path), mask) < 0:
+                watch_descriptor = libc.inotify_add_watch(
+                    fd, os.fsencode(path), mask
+                )
+                if watch_descriptor < 0:
                     self.monitoring_failed = True
                     os.close(fd)
                     return
+                self.inotify_paths[watch_descriptor] = path
             self.inotify_fd = fd
         except (AttributeError, OSError):
             self.monitoring_failed = True
             self.inotify_fd = None
+
+    def _inotify_event_seen(self, events: bytes) -> bool:
+        offset = 0
+        header_size = struct.calcsize("iIII")
+        try:
+            while offset < len(events):
+                if len(events) - offset < header_size:
+                    raise ValueError
+                watch_descriptor, _mask, _cookie, name_length = struct.unpack_from(
+                    "iIII", events, offset
+                )
+                offset += header_size
+                if len(events) - offset < name_length:
+                    raise ValueError
+                raw_name = events[offset : offset + name_length]
+                offset += name_length
+                name = os.fsdecode(raw_name.split(b"\0", 1)[0])
+                path = self.inotify_paths.get(watch_descriptor)
+                if path is None or not name or self.event_filter is None:
+                    return True
+                if self.event_filter(path, name):
+                    return True
+        except (UnicodeError, ValueError, struct.error):
+            self.monitoring_failed = True
+            return True
+        return False
 
     def changed(self) -> bool:
         event_seen = False
@@ -197,7 +236,8 @@ class ProofInputMonitor:
                 self.monitoring_failed = True
         if self.inotify_fd is not None:
             try:
-                event_seen = bool(os.read(self.inotify_fd, 65536)) or event_seen
+                events = os.read(self.inotify_fd, 65536)
+                event_seen = self._inotify_event_seen(events) or event_seen
             except BlockingIOError:
                 pass
         return self.monitoring_failed or event_seen or self._state() != self.before
@@ -320,12 +360,37 @@ def catalogue_recovery_monitor(root: Path | str) -> ProofInputMonitor:
         str(root / "app/src/data/generated"),
         str(recovery_path),
     ]
+
+    def is_recovery_artifact(directory: Path, name: str) -> bool:
+        relative_directory = directory.relative_to(root).as_posix()
+        if relative_directory == ".":
+            return name in {
+                "quests.json.tmp",
+                ".quests.json.rollback",
+                ".quests.json.rollback.tmp",
+            } or (name.startswith(".quests.json.") and name.endswith(".tmp"))
+        if relative_directory == "app/public/data":
+            return name == ".route-generation-backup" or name.startswith(
+                ".routes-staging-"
+            )
+        if relative_directory in {
+            "app/public/data/routes",
+            "app/src/data/generated",
+        }:
+            return name.startswith(".") and name.endswith(
+                (".tmp", ".recovery", ".rollback")
+            )
+        if relative_directory == ".route-share/recovery":
+            return True
+        return True
+
     return ProofInputMonitor(
         root,
         {
             "covered_inputs": [],
             "_monitor_paths": monitor_paths,
         },
+        event_filter=is_recovery_artifact,
     )
 
 
