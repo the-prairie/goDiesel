@@ -182,7 +182,94 @@
           }
         },
         "documents": { "$ref": "#/$defs/pathList" }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "verbs": { "contains": { "const": "inspect" } } } },
+          "then": { "properties": {
+            "authority": { "required": ["inspect"] },
+            "inputs": { "required": ["inspect"] },
+            "commands": { "required": ["inspect"] },
+            "idempotency": { "required": ["inspect"] },
+            "recovery": { "required": ["inspect"] }
+          } },
+          "else": { "properties": {
+            "authority": { "not": { "required": ["inspect"] } },
+            "inputs": { "not": { "required": ["inspect"] } },
+            "commands": { "not": { "required": ["inspect"] } },
+            "idempotency": { "not": { "required": ["inspect"] } },
+            "recovery": { "not": { "required": ["inspect"] } }
+          } }
+        },
+        {
+          "if": { "properties": { "verbs": { "contains": { "const": "plan" } } } },
+          "then": { "properties": {
+            "authority": { "required": ["plan"] },
+            "inputs": { "required": ["plan"] },
+            "commands": { "required": ["plan"] },
+            "idempotency": { "required": ["plan"] },
+            "recovery": { "required": ["plan"] }
+          } },
+          "else": { "properties": {
+            "authority": { "not": { "required": ["plan"] } },
+            "inputs": { "not": { "required": ["plan"] } },
+            "commands": { "not": { "required": ["plan"] } },
+            "idempotency": { "not": { "required": ["plan"] } },
+            "recovery": { "not": { "required": ["plan"] } }
+          } }
+        },
+        {
+          "if": { "properties": { "verbs": { "contains": { "const": "apply" } } } },
+          "then": { "properties": {
+            "authority": { "required": ["apply"] },
+            "inputs": { "required": ["apply"] },
+            "commands": { "required": ["apply"] },
+            "idempotency": { "required": ["apply"] },
+            "recovery": { "required": ["apply"] }
+          } },
+          "else": { "properties": {
+            "authority": { "not": { "required": ["apply"] } },
+            "inputs": { "not": { "required": ["apply"] } },
+            "commands": { "not": { "required": ["apply"] } },
+            "idempotency": { "not": { "required": ["apply"] } },
+            "recovery": { "not": { "required": ["apply"] } }
+          } }
+        },
+        {
+          "if": { "properties": { "verbs": { "contains": { "const": "verify" } } } },
+          "then": { "properties": {
+            "authority": { "required": ["verify"] },
+            "inputs": { "required": ["verify"] },
+            "commands": { "required": ["verify"] },
+            "idempotency": { "required": ["verify"] },
+            "recovery": { "required": ["verify"] }
+          } },
+          "else": { "properties": {
+            "authority": { "not": { "required": ["verify"] } },
+            "inputs": { "not": { "required": ["verify"] } },
+            "commands": { "not": { "required": ["verify"] } },
+            "idempotency": { "not": { "required": ["verify"] } },
+            "recovery": { "not": { "required": ["verify"] } }
+          } }
+        },
+        {
+          "if": { "properties": { "verbs": { "contains": { "const": "release" } } } },
+          "then": { "properties": {
+            "authority": { "required": ["release"] },
+            "inputs": { "required": ["release"] },
+            "commands": { "required": ["release"] },
+            "idempotency": { "required": ["release"] },
+            "recovery": { "required": ["release"] }
+          } },
+          "else": { "properties": {
+            "authority": { "not": { "required": ["release"] } },
+            "inputs": { "not": { "required": ["release"] } },
+            "commands": { "not": { "required": ["release"] } },
+            "idempotency": { "not": { "required": ["release"] } },
+            "recovery": { "not": { "required": ["release"] } }
+          } }
+        }
+      ]
     },
     "pathList": {
       "type": "array",

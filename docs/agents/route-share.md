@@ -180,15 +180,15 @@ Stop after local preview until the owner explicitly authorizes publication and c
 Then run:
 
 ```sh
-./scripts/godiesel release route-share <slug> <share-name> --authorize external-durable --authorize-target <share-name> --json
+./scripts/godiesel release route-share <slug> <share-name> --authorize external-durable --authorize-target <share-name> --authorize-replacement <share-name> --json
 ```
 
 The command reuses the existing route-only build, Playwright journey, Cloudflare Pages deployment, and public smoke test.
 It refuses an existing `share-<name>` branch.
 Use `--replace-existing` only when the owner explicitly approves replacement of that durable URL.
-The release authority class and `--authorize-target` value must both be present.
-The target value must exactly match the requested stable share name and does not imply replacement authority.
-An approved replacement also requires `--authorize-replacement <share-name>` for that exact alias.
+The release authority class, `--authorize-target`, and `--authorize-replacement` values must all be present and exactly match the requested stable share name.
+Replacement-risk authority is required even when the alias was just observed as absent because the provider does not offer atomic create-if-absent publication.
+`--replace-existing` remains a separate statement of intent and is required when the preflight observation already finds the alias.
 The unified release path also requires passed, digest-matched plan, apply, and verify receipts for the same route.
 It requires the latest general verification proof to remain reusable before any Cloudflare command runs.
 This is the focused route artifact proof required by the runtime transition.

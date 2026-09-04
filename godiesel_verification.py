@@ -54,7 +54,7 @@ SCRIPT_REQUIRE_PATTERN = re.compile(r"\brequire\s*\(\s*[\"']([^\"']+)[\"']\s*\)"
 
 
 class UnsafeCoveredInputSymlink(ValueError):
-    """A proof input reaches a broken or repository-external symlink."""
+    """A proof input reaches a symbolic link."""
 
 
 class ProofInputMonitor:
@@ -539,6 +539,14 @@ def _route_generation_external_sources(
     )
 
 
+def external_route_source_fingerprint(
+    root: Path | str,
+) -> tuple[dict[str, str] | None, list[str], dict[str, str] | None]:
+    """Return the redacted fingerprint for private route-generation inputs."""
+
+    return _route_generation_external_sources(Path(root).resolve())
+
+
 def _raise_walk_error(error: OSError) -> None:
     raise error
 
@@ -549,12 +557,9 @@ def _unsafe_symlink_in_path(root: Path, path: Path) -> bool:
     for part in relative.parts:
         current = current / part
         try:
-            if not current.is_symlink():
-                continue
-            resolved = current.resolve(strict=True)
+            if current.is_symlink():
+                return True
         except (OSError, RuntimeError):
-            return True
-        if not resolved.is_relative_to(root):
             return True
     return False
 
@@ -636,6 +641,22 @@ def _dependency_closure(root: Path, seeds: Iterable[Path]) -> list[Path]:
             if dependency not in observed
         )
     return sorted(observed)
+
+
+def source_dependency_paths(
+    root: Path | str,
+    seeds: Iterable[Path | str],
+) -> list[Path]:
+    """Resolve the complete repository-local source dependency closure."""
+
+    resolved_root = Path(root).resolve()
+    resolved_seeds = []
+    for seed in seeds:
+        candidate = resolved_root / Path(seed)
+        if not candidate.is_file() or not candidate.is_relative_to(resolved_root):
+            raise OSError(f"source dependency seed is unavailable: {seed}")
+        resolved_seeds.append(candidate)
+    return _dependency_closure(resolved_root, resolved_seeds)
 
 
 def proof_snapshot_stability_issues(
@@ -997,8 +1018,8 @@ def _pattern_input(
     except UnsafeCoveredInputSymlink:
         return None, _issue(
             "GODIESEL_COVERED_INPUT_SYMLINK_UNSAFE",
-            "A covered input is a broken or repository-escaping symbolic link.",
-            "Replace it with a repository-contained file or symbolic link before verification.",
+            "A covered input traverses a symbolic link, which is not accepted as proof input.",
+            "Replace it with a repository-owned regular file or directory before verification.",
         )
     except ValueError:
         return None, _issue(
@@ -1034,8 +1055,8 @@ def _pattern_input(
     except UnsafeCoveredInputSymlink:
         return None, _issue(
             "GODIESEL_COVERED_INPUT_SYMLINK_UNSAFE",
-            "A covered input is a broken or repository-escaping symbolic link.",
-            "Replace it with a repository-contained file or symbolic link before verification.",
+            "A covered input traverses a symbolic link, which is not accepted as proof input.",
+            "Replace it with a repository-owned regular file or directory before verification.",
         )
     except ValueError:
         return None, _issue(
@@ -1198,7 +1219,7 @@ def build_proof_snapshot(
             blockers.append(issue)
         elif covered is not None:
             covered_inputs.append(covered)
-    if capability_id == "route-generation":
+    if capability_id in {"route-generation", "owner-curation"}:
         external_input, external_paths, external_issue = (
             _route_generation_external_sources(root)
         )
@@ -1887,10 +1908,15 @@ def _rule_covers_dependency(
     manifest: Mapping[str, Any],
     rule: Mapping[str, Any],
     path: str,
+    cache: dict[str, set[str]] | None = None,
 ) -> bool:
+    cache_key = str(rule["id"])
+    if cache is not None and cache_key in cache:
+        return path in cache[cache_key]
     capabilities = {
         capability["id"]: capability for capability in manifest["capabilities"]
     }
+    dependencies: set[str] = set()
     for gate in rule["gates"]:
         commands = capabilities[gate["capability"]]["verification"][gate["tier"]]
         for command in commands:
@@ -1916,11 +1942,10 @@ def _rule_covers_dependency(
                         for seed in seeds
                         if _matches(seed.relative_to(root).as_posix(), rule["paths"])
                     ]
-                    dependencies = {
+                    dependencies.update(
                         candidate.relative_to(root).as_posix()
-                        for seed in matching_seeds
-                        for candidate in _dependency_closure(root, [seed])
-                    }
+                        for candidate in _dependency_closure(root, matching_seeds)
+                    )
                 except (
                     OSError,
                     RuntimeError,
@@ -1929,9 +1954,9 @@ def _rule_covers_dependency(
                     ValueError,
                 ):
                     continue
-                if path in dependencies:
-                    return True
-    return False
+    if cache is not None:
+        cache[cache_key] = dependencies
+    return path in dependencies
 
 
 def explain_verification(
@@ -1966,12 +1991,19 @@ def explain_verification(
     classifications: list[dict[str, Any]] = []
     unclassified: list[str] = []
     if manifest is not None:
+        dependency_cache: dict[str, set[str]] = {}
         for path in normalized_paths:
             matching = [
                 rule
                 for rule in manifest["impact_rules"]
                 if _matches(path, rule["paths"])
-                or _rule_covers_dependency(root, manifest, rule, path)
+                or _rule_covers_dependency(
+                    root,
+                    manifest,
+                    rule,
+                    path,
+                    dependency_cache,
+                )
             ]
             if not matching:
                 unclassified.append(path)

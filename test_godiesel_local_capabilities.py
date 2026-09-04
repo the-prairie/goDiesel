@@ -774,6 +774,78 @@ def test_generation_verify_withdraws_proof_if_recovery_changes_during_evidence_w
     )
 
 
+def test_generation_verify_withdraws_proof_if_input_changes_during_promotion(
+    tmp_path: Path,
+    monkeypatch,
+):
+    root = _generation_fixture(tmp_path)
+    implementation = root / "godiesel_local_capabilities.py"
+    implementation.write_text("stable\n", encoding="utf-8")
+    original_update = godiesel_local_capabilities.update_evidence_receipt
+
+    def racing_update(*args, **kwargs):
+        promoted = original_update(*args, **kwargs)
+        implementation.write_text("changed during promotion\n", encoding="utf-8")
+        return promoted
+
+    monkeypatch.setattr(
+        godiesel_local_capabilities,
+        "update_evidence_receipt",
+        racing_update,
+    )
+    result = execute_route_generation(
+        root,
+        "verify",
+        runner=lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 0, "passed", ""
+        ),
+    )
+
+    assert result["status"] == "blocked"
+    assert result["evidence"] is None
+    assert "GODIESEL_VERIFICATION_INPUTS_CHANGED" in {
+        issue["code"] for issue in result["blockers"]
+    }
+    evidence_receipts = [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in (root / ".godiesel/evidence").glob("*.json")
+    ]
+    assert evidence_receipts
+    assert all(receipt["status"] != "passed" for receipt in evidence_receipts)
+
+
+def test_generation_verify_rejects_a_rewritten_evidence_draft(
+    tmp_path: Path,
+    monkeypatch,
+):
+    root = _generation_fixture(tmp_path)
+    original_write = godiesel_local_capabilities.write_evidence_receipt
+
+    def rewriting_write(*args, **kwargs):
+        summary = original_write(*args, **kwargs)
+        path = root / summary["path"]
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+        path.write_text(json.dumps(receipt), encoding="utf-8")
+        return summary
+
+    monkeypatch.setattr(
+        godiesel_local_capabilities,
+        "write_evidence_receipt",
+        rewriting_write,
+    )
+    result = execute_route_generation(
+        root,
+        "verify",
+        runner=lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 0, "passed", ""
+        ),
+    )
+
+    assert result["status"] == "blocked"
+    assert result["evidence"] is None
+    assert result["blockers"][-1]["code"] == "GODIESEL_EVIDENCE_PROMOTION_FAILED"
+
+
 @pytest.mark.parametrize(
     ("target", "mutation"),
     [
@@ -1251,6 +1323,72 @@ def test_curation_plan_cannot_be_applied_in_another_checkout(tmp_path: Path):
     )
     config = json.loads((second_root / "quests.json").read_text(encoding="utf-8"))
     assert "curation" not in config["routes"][0]
+
+
+def test_curation_plan_invalidates_when_an_imported_dependency_changes(
+    tmp_path: Path,
+):
+    root = _curation_fixture(tmp_path)
+    (root / "admin.py").write_text(
+        "from curation_context_helper import VALUE\n",
+        encoding="utf-8",
+    )
+    helper = root / "curation_context_helper.py"
+    helper.write_text("VALUE = 1\n", encoding="utf-8")
+    plan = _plan_curation(root)
+
+    helper.write_text("VALUE = 2\n", encoding="utf-8")
+    result = execute_owner_curation(
+        root,
+        "apply",
+        plan_path=plan,
+        authority="canonical-local",
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == (
+        "GODIESEL_CURATION_PLAN_CONTEXT_MISMATCH"
+    )
+
+
+def test_curation_plan_invalidates_when_private_fallback_sources_change(
+    tmp_path: Path,
+    monkeypatch,
+):
+    root = _curation_fixture(tmp_path)
+    fingerprint = {"sha256": "a" * 64}
+
+    def external_fingerprint(_root):
+        return (
+            {
+                "category": "data",
+                "name": "external-private:route-generation-sources",
+                "state": "matched",
+                "sha256": fingerprint["sha256"],
+            },
+            [],
+            None,
+        )
+
+    monkeypatch.setattr(
+        godiesel_local_capabilities,
+        "external_route_source_fingerprint",
+        external_fingerprint,
+    )
+    plan = _plan_curation(root)
+    fingerprint["sha256"] = "b" * 64
+
+    result = execute_owner_curation(
+        root,
+        "apply",
+        plan_path=plan,
+        authority="canonical-local",
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == (
+        "GODIESEL_CURATION_PLAN_CONTEXT_MISMATCH"
+    )
 
 
 def test_curation_apply_blocks_when_observed_state_changed(monkeypatch, tmp_path: Path):
@@ -1776,7 +1914,7 @@ def test_google_3d_provider_owns_a_missing_local_preview(tmp_path: Path):
         "--strictPort",
     ]
     assert process.terminated is True
-    assert identity_reads == 4
+    assert identity_reads == 5
 
 
 def test_google_preview_lease_rejects_a_final_component_symlink(tmp_path: Path):

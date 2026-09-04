@@ -37,6 +37,7 @@ from generated_route_contract import (
 )
 from godiesel_evidence import (
     canonical_digest,
+    invalidate_evidence_receipt,
     repository_snapshot,
     update_evidence_receipt,
     write_local_text_atomic,
@@ -46,9 +47,11 @@ from godiesel_verification import (
     ProofInputMonitor,
     build_proof_snapshot,
     catalogue_recovery_monitor,
+    external_route_source_fingerprint,
     proof_snapshot_stability_issues,
     read_target_build_identity,
     route_generation_recovery_state,
+    source_dependency_paths,
     reuse_verification,
     verified_provider_build_identity,
 )
@@ -710,7 +713,6 @@ def _run_verification(
                 "Stabilize the worktree and rerun verification against one unchanged input set.",
             )
         )
-    monitor.close()
     existing_codes = {item["code"] for item in blockers}
     newly_detected = [
         issue
@@ -734,6 +736,81 @@ def _run_verification(
                     "Repair the ignored .godiesel evidence directory and rerun verification.",
                 )
             )
+    if evidence is not None and not blockers:
+        promoted_provider_identity = final_provider_identity
+        promoted_identity_blockers: list[dict[str, str]] = []
+        if refresh_provider_identity is not None:
+            promoted_provider_identity, promoted_identity_blockers = (
+                refresh_provider_identity()
+            )
+            if promoted_provider_identity != final_provider_identity:
+                promoted_identity_blockers.append(
+                    _issue(
+                        "GODIESEL_PROVIDER_BUILD_IDENTITY_CHANGED",
+                        "The deployed build identity changed while proof was being promoted.",
+                        "Stabilize the named deployment and rerun the live provider gate.",
+                    )
+                )
+        promoted_proof_environment = (
+            dict(refresh_proof_environ())
+            if refresh_proof_environ is not None
+            else final_proof_environment
+        )
+        promoted_snapshot = build_proof_snapshot(
+            root,
+            capability,
+            tiers=[tier],
+            commands=[display_command],
+            environ=promoted_proof_environment,
+            provider_target=provider_target,
+            provider_identity=promoted_provider_identity,
+        )
+        promotion_blockers = [
+            *promoted_identity_blockers,
+            *proof_snapshot_stability_issues(snapshot, promoted_snapshot),
+        ]
+        if monitor.changed() and not any(
+            issue["code"] == "GODIESEL_VERIFICATION_INPUTS_CHANGED"
+            for issue in promotion_blockers
+        ):
+            promotion_blockers.append(
+                _issue(
+                    "GODIESEL_VERIFICATION_INPUTS_CHANGED",
+                    "A covered input changed while verification proof was being promoted.",
+                    "Stabilize the worktree and rerun verification against one unchanged input set.",
+                )
+            )
+        if recovery_monitor is not None:
+            _promoted_recovery_state, promoted_recovery_blockers = (
+                route_generation_recovery_state(root)
+            )
+            promotion_blockers.extend(promoted_recovery_blockers)
+            if recovery_monitor.changed() and not any(
+                issue["code"]
+                in {
+                    "GODIESEL_ROUTE_GENERATION_RECOVERY_CHANGED",
+                    "GODIESEL_ROUTE_GENERATION_RECOVERY_PENDING",
+                    "GODIESEL_ROUTE_GENERATION_RECOVERY_UNREADABLE",
+                }
+                for issue in promotion_blockers
+            ):
+                promotion_blockers.append(
+                    _issue(
+                        "GODIESEL_ROUTE_GENERATION_RECOVERY_CHANGED",
+                        "Catalogue recovery state changed while proof was being promoted.",
+                        "Stabilize catalogue publication state and rerun verification.",
+                    )
+                )
+        if promotion_blockers:
+            invalidate_evidence_receipt(root, evidence)
+            evidence = None
+            existing_codes = {item["code"] for item in blockers}
+            blockers.extend(
+                issue
+                for issue in promotion_blockers
+                if issue["code"] not in existing_codes
+            )
+    monitor.close()
     stable_inputs = not blockers
     envelope = _envelope(
         capability,
@@ -1011,20 +1088,32 @@ def _curation_observed_state(root: Path, activity_id: str) -> str:
     )
 
 
-CURATION_IMPLEMENTATION_PATHS = (
+CURATION_IMPLEMENTATION_SEEDS = (
     "godiesel_local_capabilities.py",
+    "admin.py",
     "admin_curation.py",
     "curation_publish.py",
-    "quest_meta.py",
-    "route_annotations.py",
     "build.py",
+)
+CURATION_CONTRACT_PATHS = (
     "system/owner-curation-plan.schema.json",
+    "system/evidence-receipt.schema.json",
+    "system/result.schema.json",
 )
 
 
 def _curation_implementation_digest(root: Path) -> str:
+    available_seeds = [
+        relative
+        for relative in CURATION_IMPLEMENTATION_SEEDS
+        if (root / relative).is_file()
+    ]
+    dependencies = source_dependency_paths(root, available_seeds)
+    relative_paths = {
+        path.relative_to(root).as_posix() for path in dependencies
+    } | set(CURATION_CONTRACT_PATHS)
     inputs = []
-    for relative in CURATION_IMPLEMENTATION_PATHS:
+    for relative in sorted(relative_paths):
         path = root / relative
         inputs.append(
             {
@@ -1036,9 +1125,17 @@ def _curation_implementation_digest(root: Path) -> str:
 
 
 def _curation_plan_context(root: Path) -> dict[str, object]:
+    external_input, _external_paths, external_issue = (
+        external_route_source_fingerprint(root)
+    )
+    if external_issue is not None:
+        raise OSError(external_issue["message"])
     return {
         "repository": repository_snapshot(root),
         "implementation_sha256": _curation_implementation_digest(root),
+        "external_sources_sha256": (
+            external_input["sha256"] if external_input else canonical_digest([])
+        ),
     }
 
 
@@ -1193,6 +1290,8 @@ def _load_curation_plan(root: Path, plan_path: Path | str | None) -> tuple[dict[
         stable_context_matches = (
             current_context["implementation_sha256"]
             == planned_context["implementation_sha256"]
+            and current_context["external_sources_sha256"]
+            == planned_context["external_sources_sha256"]
             and all(
                 current_repository[key] == planned_repository[key]
                 for key in ("commit", "branch", "worktree_sha256")

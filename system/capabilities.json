@@ -20,7 +20,7 @@
         "plan": ["normalized request JSON", "optional owner choices"],
         "apply": ["approved proposal path"],
         "verify": ["route slug"],
-        "release": ["route slug", "stable share name", "exact target authority", "exact replacement authority when replacing an alias"]
+        "release": ["route slug", "stable share name", "exact target authority", "exact replacement-risk authority for the alias"]
       },
       "reads": ["quests.json", "route_sources/**", ".route-share/**", ".godiesel/evidence/**"],
       "writes": [".route-share/**", ".godiesel/evidence/**", ".godiesel/owner-mutation.lock", "quests.json", ".quests.json.*.tmp", "route_sources/imported/**", "route_sources/media/**", "app/public/media/**", "app/src/data/generated/**", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**", "app/dist/**", "app/test-results/**", "app/playwright-report/**", "dist/**"],
@@ -39,7 +39,7 @@
           { "command": "./scripts/godiesel verify route-share <slug> --preview --json", "cwd": ".", "description": "Verify through an attached local route preview without issuing reusable proof." },
           { "command": "./scripts/godiesel verify route-share <slug> --preview --detach --json", "cwd": ".", "description": "Start the local route preview in detached mode without issuing reusable proof." }
         ],
-        "release": [{ "command": "./scripts/godiesel release route-share <slug> <share-name> --authorize external-durable --authorize-target <share-name> --json", "cwd": "." }]
+        "release": [{ "command": "./scripts/godiesel release route-share <slug> <share-name> --authorize external-durable --authorize-target <share-name> --authorize-replacement <share-name> --json", "cwd": "." }]
       },
       "preconditions": [
         "supplied source is locally readable or available through the authenticated export",
@@ -119,7 +119,7 @@
         "apply": ["canonical route specifications and durable sources"],
         "verify": ["generated projection diff"]
       },
-      "reads": ["quests.json", "quests.json.tmp", ".quests.json.rollback", ".quests.json.rollback.tmp", ".quests.json.*.tmp", ".route-share/recovery/**", "route_sources/**", "app/src/data/generated/routes.manifest.json", "app/src/data/generated/route-stats.json", "app/src/data/generated/.*.tmp", "app/src/data/generated/.*.recovery", "app/src/data/generated/.*.rollback", "app/public/data/routes/**", "app/public/data/routes/.*.tmp", "app/public/data/routes/.*.recovery", "app/public/data/routes/.*.rollback", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**", "external-private:DieselDiaries/activities.csv", "external-private:DieselDiaries/strava_export/activities/**"],
+      "reads": [".godiesel/evidence/**", "quests.json", "quests.json.tmp", ".quests.json.rollback", ".quests.json.rollback.tmp", ".quests.json.*.tmp", ".route-share/recovery/**", "route_sources/**", "app/src/data/generated/routes.manifest.json", "app/src/data/generated/route-stats.json", "app/src/data/generated/.*.tmp", "app/src/data/generated/.*.recovery", "app/src/data/generated/.*.rollback", "app/public/data/routes/**", "app/public/data/routes/.*.tmp", "app/public/data/routes/.*.recovery", "app/public/data/routes/.*.rollback", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**", "external-private:DieselDiaries/activities.csv", "external-private:DieselDiaries/strava_export/activities/**"],
       "writes": ["app/src/data/generated/**", "app/src/data/generated/.routes.manifest.json.recovery", "app/src/data/generated/.route-stats.json.recovery", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**", ".godiesel/evidence/**", ".godiesel/owner-mutation.lock"],
       "external_effects": [],
       "required_files": ["scripts/godiesel", "godiesel_local_capabilities.py", "generated_route_contract.py", "build.py", "route_build.py", "quest_meta.py", "rebuild.sh", "quests.json", "system/result.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json"],
@@ -198,7 +198,7 @@
         "apply": ["approved owner curation plan"],
         "verify": ["curation and generated projection diff"]
       },
-      "reads": [".godiesel/plans/owner-curation/**", "quests.json", "quests.json.tmp", ".quests.json.rollback", ".quests.json.rollback.tmp", ".quests.json.*.tmp", ".route-share/recovery/**", "app/src/data/generated/routes.manifest.json", "app/src/data/generated/route-stats.json", "app/src/data/generated/.*.tmp", "app/src/data/generated/.*.recovery", "app/src/data/generated/.*.rollback", "app/public/data/routes/**", "app/public/data/routes/.*.tmp", "app/public/data/routes/.*.recovery", "app/public/data/routes/.*.rollback", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**"],
+      "reads": [".godiesel/plans/owner-curation/**", ".godiesel/evidence/**", "quests.json", "quests.json.tmp", ".quests.json.rollback", ".quests.json.rollback.tmp", ".quests.json.*.tmp", ".route-share/recovery/**", "app/src/data/generated/routes.manifest.json", "app/src/data/generated/route-stats.json", "app/src/data/generated/.*.tmp", "app/src/data/generated/.*.recovery", "app/src/data/generated/.*.rollback", "app/public/data/routes/**", "app/public/data/routes/.*.tmp", "app/public/data/routes/.*.recovery", "app/public/data/routes/.*.rollback", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**", "external-private:DieselDiaries/activities.csv", "external-private:DieselDiaries/strava_export/activities/**"],
       "writes": [".godiesel/plans/owner-curation/**", ".godiesel/evidence/**", ".godiesel/owner-mutation.lock", "quests.json", "quests.json.tmp", ".quests.json.rollback", ".quests.json.rollback.tmp", "app/src/data/generated/**", "app/src/data/generated/.routes.manifest.json.tmp", "app/src/data/generated/.routes.manifest.json.recovery", "app/src/data/generated/.route-stats.json.tmp", "app/src/data/generated/.route-stats.json.recovery", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**"],
       "external_effects": [],
       "required_files": ["scripts/godiesel", "godiesel_local_capabilities.py", "generated_route_contract.py", "admin.sh", "admin.py", "admin_curation.py", "curation_publish.py", "build.py", "system/owner-curation-plan.schema.json", "system/result.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json", "docs/adr/0010-owner-curation-through-a-loopback-only-writer.md"],
@@ -303,7 +303,7 @@
         "inspect": [],
         "verify": ["named provider", "exact credential-free origin root", "clean local commit and tree", "matching immutable built-artifact identity"]
       },
-      "reads": [".env", "app/.env", "app/src/providers/**", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts"],
+      "reads": [".godiesel/evidence/**", ".env", "app/.env", "app/src/providers/**", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts"],
       "writes": [".godiesel/evidence/**", "$GIT_COMMON_DIR/godiesel-provider-preview.lock", "app/test-results/**", "app/playwright-report/**", "app/e2e/evidence/auto-director/**"],
       "external_effects": ["read named map or imagery provider through the selected live browser check"],
       "required_files": ["scripts/godiesel", "scripts/verify-provider-readiness.sh", "godiesel_local_capabilities.py", "system/artifact-manifest.schema.json", "system/build-identity.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json", "app/scripts/finalize-build-identity.mjs", "app/vite.config.ts", "scripts/check-provider-key.mjs", "app/src/providers/google-maps-loader.ts", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts", "docs/agents/testing.md"],
@@ -378,54 +378,46 @@
     {
       "id": "application-release",
       "entity": "application-artifact",
-      "summary": "Verify and publish the exact built application artifact to its named production target.",
-      "verbs": ["inspect", "verify", "release"],
+      "summary": "Inspect and verify the exact built application artifact; production publication remains outside the unified adapter until Phase 5.",
+      "verbs": ["inspect", "verify"],
       "authority": {
         "inspect": "read-only",
-        "verify": "ephemeral-local",
-        "release": "external-durable"
+        "verify": "ephemeral-local"
       },
       "inputs": {
         "inspect": [],
-        "verify": ["application source and generated route projections"],
-        "release": ["verified immutable application artifact", "named Cloudflare target", "exact replacement authority"]
+        "verify": ["application source and generated route projections"]
       },
       "reads": ["app/**", "dist/**"],
       "writes": ["app/dist/**", "dist/**", "app/e2e/evidence/issue-62-admin-workspace/**"],
-      "external_effects": ["cloudflare-pages-production"],
+      "external_effects": [],
       "required_files": ["app/package.json", "app/scripts/finalize-build-identity.mjs", "make-dist.sh", "system/artifact-manifest.schema.json", "system/build-identity.schema.json", "scripts/check-provider-key.mjs", "docs/agents/testing.md"],
       "configuration": [
-        { "name": "GOOGLE_MAPS_API_KEY", "required_for": ["verify:live", "release"], "sensitive": true },
+        { "name": "GOOGLE_MAPS_API_KEY", "required_for": ["verify:live"], "sensitive": true },
         { "name": "GODIESEL_EARTH_ENGINE_PROJECT", "required_for": ["verify:live"], "sensitive": false },
         { "name": "GODIESEL_PIPELINE_SHARE_NAME", "required_for": ["verify:live"], "sensitive": false }
       ],
       "commands": {
         "inspect": [{ "command": "./scripts/godiesel doctor --json", "cwd": "." }],
-        "verify": [{ "command": "./make-dist.sh", "cwd": "." }],
-        "release": [{ "command": "npx wrangler pages deploy dist --project-name=godiesel --branch=production", "cwd": "." }]
+        "verify": [{ "command": "./make-dist.sh", "cwd": "." }]
       },
       "preconditions": [
         "the application artifact has passed its applicable local gate",
-        "provider-dependent claims have the required live evidence",
-        "the exact external target and replacement effect are authorized",
-        "Cloudflare authentication is an external prerequisite inspected at release time and is not proven by doctor"
+        "provider-dependent claims have the required live evidence"
       ],
       "idempotency": {
         "inspect": "read-only",
-        "verify": "idempotent",
-        "release": "external-check-required"
+        "verify": "idempotent"
       },
       "recovery": {
         "inspect": "No recovery is required because inspection is read-only.",
-        "verify": "Correct the reported build or behavior failure and rebuild the exact artifact.",
-        "release": "Re-inspect Cloudflare deployment state after an ambiguous result; never retry blindly."
+        "verify": "Correct the reported build or behavior failure and rebuild the exact artifact."
       },
       "artifacts": [
         { "kind": "application-bundle", "location": "dist/**", "persistence": "generated-local" },
         { "kind": "artifact-integrity-manifest", "location": "app/dist/artifact-manifest.json and dist/artifact-manifest.json", "persistence": "generated-local", "schema": "system/artifact-manifest.schema.json" },
         { "kind": "build-identity", "location": "app/dist/build-identity.json and dist/build-identity.json", "persistence": "generated-local", "schema": "system/build-identity.schema.json" },
-        { "kind": "archival-admin-screenshots", "location": "app/e2e/evidence/issue-62-admin-workspace/**", "persistence": "tracked-local" },
-        { "kind": "production-deployment", "location": "cloudflare-pages-production", "persistence": "external" }
+        { "kind": "archival-admin-screenshots", "location": "app/e2e/evidence/issue-62-admin-workspace/**", "persistence": "tracked-local" }
       ],
       "invariants": ["exact-artifact-release", "named-degradation", "provider-proof-honesty"],
       "verification": {

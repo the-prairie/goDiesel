@@ -133,7 +133,8 @@ def test_capability_manifest_is_valid_and_declares_the_system_boundaries():
     assert capabilities["route-share"]["authority"]["release"] == "external-durable"
     assert capabilities["route-share"]["commands"]["release"][0]["command"] == (
         "./scripts/godiesel release route-share <slug> <share-name> "
-        "--authorize external-durable --authorize-target <share-name> --json"
+        "--authorize external-durable --authorize-target <share-name> "
+        "--authorize-replacement <share-name> --json"
     )
     route_share_verify_commands = {
         command["command"]
@@ -146,9 +147,9 @@ def test_capability_manifest_is_valid_and_declares_the_system_boundaries():
         "./scripts/godiesel verify route-share <slug> --preview --detach --json"
         in route_share_verify_commands
     )
-    assert capabilities["application-release"]["commands"]["release"][0]["command"] == (
-        "npx wrangler pages deploy dist --project-name=godiesel --branch=production"
-    )
+    assert capabilities["application-release"]["verbs"] == ["inspect", "verify"]
+    assert "release" not in capabilities["application-release"]["commands"]
+    assert capabilities["application-release"]["external_effects"] == []
     assert capabilities["route-generation"]["commands"]["apply"][0]["command"] == (
         "./scripts/godiesel apply route-generation --authorize canonical-local --json"
     )
@@ -220,6 +221,23 @@ def test_capability_manifest_is_valid_and_declares_the_system_boundaries():
         assert set(capability["recovery"]) == verbs
 
 
+def test_capability_schema_requires_exact_per_verb_mappings():
+    schema = json.loads((ROOT / "system/capabilities.schema.json").read_text())
+    manifest = json.loads((ROOT / "system/capabilities.json").read_text())
+    route_share = next(
+        capability
+        for capability in manifest["capabilities"]
+        if capability["id"] == "route-share"
+    )
+    for mapping in ("authority", "inputs", "commands", "idempotency", "recovery"):
+        route_share[mapping].pop("release")
+
+    errors = list(Draft202012Validator(schema).iter_errors(manifest))
+
+    assert errors
+    assert all("release" in error.message for error in errors)
+
+
 def test_release_cli_forwards_exact_target_authority(monkeypatch, capsys):
     captured: dict[str, object] = {}
 
@@ -242,6 +260,8 @@ def test_release_cli_forwards_exact_target_authority(monkeypatch, capsys):
             "external-durable",
             "--authorize-target",
             "ridge",
+            "--authorize-replacement",
+            "ridge",
             "--json",
         ]
     )
@@ -250,6 +270,7 @@ def test_release_cli_forwards_exact_target_authority(monkeypatch, capsys):
     assert captured["verb"] == "release"
     assert captured["authority"] == "external-durable"
     assert captured["target_authority"] == "ridge"
+    assert captured["replacement_authority"] == "ridge"
     assert json.loads(capsys.readouterr().out)["status"] == "passed"
 
 

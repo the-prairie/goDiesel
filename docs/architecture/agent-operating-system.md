@@ -204,7 +204,8 @@ Every capability verb declares one authority class before execution.
 
 Approval is attached to a specific plan digest, target, and effect.
 Approval to create is not approval to publish.
-Approval to publish a new target is not approval to replace an existing stable target.
+Stable-alias publication always requires exact replacement-risk authority because absence cannot be held atomically through upload.
+An alias already observed as present also requires explicit replacement intent.
 
 The interface must report the next required authority checkpoint instead of merely failing with a generic permission error.
 

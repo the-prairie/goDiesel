@@ -13,9 +13,10 @@
     "context": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["repository", "implementation_sha256"],
+      "required": ["repository", "implementation_sha256", "external_sources_sha256"],
       "properties": {
         "implementation_sha256": { "$ref": "#/$defs/sha256" },
+        "external_sources_sha256": { "$ref": "#/$defs/sha256" },
         "repository": {
           "type": "object",
           "additionalProperties": false,

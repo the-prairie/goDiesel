@@ -41,10 +41,11 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["id", "path", "result_sha256"],
+          "required": ["id", "path", "sha256", "result_sha256"],
           "properties": {
             "id": { "type": "string", "minLength": 1 },
             "path": { "type": "string", "pattern": "^\\.route-share/runs/.+\\.json$" },
+            "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
             "result_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
             "result_path": { "type": "string", "pattern": "^\\.route-share/proposals/.+\\.json$" },
             "evidence_path": { "type": "string", "pattern": "^\\.route-share/results/.+\\.json$" }

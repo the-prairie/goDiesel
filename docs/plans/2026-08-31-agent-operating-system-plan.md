@@ -165,7 +165,7 @@ Implemented by `test_godiesel_control.py` and the focused commands documented in
 - The unified interface exercises the same route-share invariants and errors as the existing interface.
 - Reapplying an approved proposal remains idempotent.
 - Preview remains loopback-only and never invokes Wrangler.
-- Release still refuses an existing alias without explicit replacement authority.
+- Release always requires exact replacement-risk authority for the stable alias and still requires explicit replacement intent when the alias is already present.
 - A live release receipt records the immutable deployment URL, stable alias, expected commit and tree, build ID, artifact-manifest digest, and successful smoke result.
 - The compatibility path and unified path produce equivalent observable results for the acceptance fixtures.
 
@@ -260,7 +260,7 @@ Generated-route readiness validates the strict public projection structure and c
 
 - Release cannot rebuild a different artifact after approval without invalidating the plan.
 - Production and route-share targets cannot be confused by a default branch.
-- Existing stable aliases require exact replacement authority.
+- Every stable-alias upload requires exact replacement-risk authority because the provider has no atomic create-if-absent operation.
 - Ambiguous remote failures block blind retries and trigger remote inspection.
 - A successful release reports what is live and what remains unverified.
 

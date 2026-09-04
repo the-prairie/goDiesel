@@ -233,6 +233,26 @@ def test_proof_snapshot_blocks_covered_symlink_cycle(tmp_path: Path):
     assert snapshot["blockers"][0]["code"] == "GODIESEL_COVERED_INPUT_SYMLINK_UNSAFE"
 
 
+def test_proof_snapshot_blocks_a_contained_covered_input_symlink(tmp_path: Path):
+    _write_reuse_fixture(tmp_path)
+    linked_input = tmp_path / "implementation.py"
+    linked_input.unlink()
+    target = tmp_path / "implementation-target.py"
+    target.write_text("from helper import VALUE\n", encoding="utf-8")
+    (tmp_path / "helper.py").write_text("VALUE = 1\n", encoding="utf-8")
+    linked_input.symlink_to(target.name)
+
+    snapshot = build_proof_snapshot(
+        tmp_path,
+        "route-share",
+        tiers=["focused"],
+        environ={},
+    )
+
+    assert snapshot["status"] == "blocked"
+    assert snapshot["blockers"][0]["code"] == "GODIESEL_COVERED_INPUT_SYMLINK_UNSAFE"
+
+
 @pytest.mark.parametrize("target_state", ["external", "broken"])
 def test_proof_snapshot_blocks_unsafe_covered_directory_symlink(
     tmp_path: Path,

@@ -491,6 +491,7 @@ def update_evidence_receipt(
         receipt = json.loads(raw.decode("utf-8"))
         if (
             status != "passed"
+            or sha256(raw).hexdigest() != summary.get("sha256")
             or not isinstance(receipt, dict)
             or receipt.get("status") != "blocked"
             or receipt.get("receipt_id") != summary.get("id")
@@ -499,6 +500,44 @@ def update_evidence_receipt(
         receipt["status"] = status
         if artifacts is not None:
             receipt["artifacts"] = [dict(item) for item in artifacts]
+        destination = write_local_text_atomic(
+            root,
+            EVIDENCE_ROOT,
+            relative.name,
+            json.dumps(receipt, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None
+    return {
+        "id": str(summary.get("id", receipt.get("receipt_id", ""))),
+        "path": relative.as_posix(),
+        "sha256": _file_digest(destination),
+    }
+
+
+def invalidate_evidence_receipt(
+    root: Path | str,
+    summary: Mapping[str, str],
+) -> dict[str, str] | None:
+    """Atomically demote the exact passed evidence receipt after a late change."""
+
+    root = Path(root).resolve()
+    relative = Path(str(summary.get("path", "")))
+    if relative.parent != EVIDENCE_ROOT or not relative.name:
+        return None
+    if existing_local_directory(root, EVIDENCE_ROOT) is None:
+        return None
+    try:
+        raw = read_local_bytes(root, EVIDENCE_ROOT, relative.name)
+        receipt = json.loads(raw.decode("utf-8"))
+        if (
+            sha256(raw).hexdigest() != summary.get("sha256")
+            or not isinstance(receipt, dict)
+            or receipt.get("status") != "passed"
+            or receipt.get("receipt_id") != summary.get("id")
+        ):
+            return None
+        receipt["status"] = "blocked"
         destination = write_local_text_atomic(
             root,
             EVIDENCE_ROOT,

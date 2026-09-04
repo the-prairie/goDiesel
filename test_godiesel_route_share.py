@@ -237,6 +237,74 @@ def test_verify_writes_a_general_redacted_evidence_receipt(tmp_path: Path):
     assert secret not in evidence_path.read_text(encoding="utf-8")
 
 
+def test_verify_withdraws_promoted_proof_when_input_changes_during_promotion(
+    tmp_path: Path,
+    monkeypatch,
+):
+    install_evidence_contract(tmp_path)
+    implementation = tmp_path / "godiesel_route_share.py"
+    implementation.write_text("stable\n", encoding="utf-8")
+    original_set_outcome = godiesel_route_share._set_receipt_outcome
+
+    def mutating_set_outcome(root, summary, outcome):
+        promoted = original_set_outcome(root, summary, outcome)
+        if outcome == "passed":
+            implementation.write_text("changed during promotion\n", encoding="utf-8")
+        return promoted
+
+    monkeypatch.setattr(
+        godiesel_route_share,
+        "_set_receipt_outcome",
+        mutating_set_outcome,
+    )
+    result = execute_route_share(
+        tmp_path,
+        "verify",
+        slug="route-1",
+        runner=RecordingRunner(completed([], stdout="verified\n")),
+    )
+
+    assert result["status"] == "blocked"
+    assert result["evidence"] is None
+    assert "GODIESEL_VERIFICATION_INPUTS_CHANGED" in {
+        issue["code"] for issue in result["blockers"]
+    }
+    receipt = json.loads((tmp_path / result["receipt"]["path"]).read_text())
+    assert receipt["outcome"] == "incomplete"
+    evidence_receipts = [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in (tmp_path / ".godiesel/evidence").glob("*.json")
+    ]
+    assert evidence_receipts
+    assert all(receipt["status"] != "passed" for receipt in evidence_receipts)
+
+
+def test_verify_rejects_a_mutated_receipt_draft_with_the_same_identity(
+    tmp_path: Path,
+    monkeypatch,
+):
+    install_evidence_contract(tmp_path)
+    original_write = godiesel_route_share._write_receipt
+
+    def rewriting_write(*args, **kwargs):
+        summary = original_write(*args, **kwargs)
+        path = tmp_path / summary["path"]
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+        path.write_text(json.dumps(receipt), encoding="utf-8")
+        return summary
+
+    monkeypatch.setattr(godiesel_route_share, "_write_receipt", rewriting_write)
+    result = execute_route_share(
+        tmp_path,
+        "verify",
+        slug="route-1",
+        runner=RecordingRunner(completed([], stdout="verified\n")),
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][-1]["code"] == "GODIESEL_RECEIPT_PROMOTION_FAILED"
+
+
 def test_route_share_verify_and_reuse_block_while_generation_recovery_is_pending(
     tmp_path: Path,
 ):
@@ -793,6 +861,7 @@ def test_release_without_immutable_url_is_incomplete_and_blocks_handoff(tmp_path
         share_name="ridge",
         authority="external-durable",
         target_authority="ridge",
+        replacement_authority="ridge",
         runner=runner,
     )
 
@@ -819,6 +888,7 @@ def test_release_records_ambiguous_external_state_before_any_retry(tmp_path: Pat
         share_name="ridge",
         authority="external-durable",
         target_authority="ridge",
+        replacement_authority="ridge",
         runner=runner,
     )
 
@@ -850,6 +920,7 @@ def test_release_records_an_attempt_when_upload_fails_before_a_url_is_known(
         share_name="ridge",
         authority="external-durable",
         target_authority="ridge",
+        replacement_authority="ridge",
         runner=runner,
     )
 
@@ -863,7 +934,7 @@ def test_release_records_an_attempt_when_upload_fails_before_a_url_is_known(
         "stable_alias": "https://share-ridge.godiesel.pages.dev/",
         "external_status": "externally-unknown",
         "authorized_share_name": "ridge",
-        "replacement_authorized": False,
+        "replacement_authorized": True,
     }
 
 
@@ -887,6 +958,7 @@ def test_release_observes_transient_recovery_changes_during_publication(tmp_path
         share_name="ridge",
         authority="external-durable",
         target_authority="ridge",
+        replacement_authority="ridge",
         runner=mutating_release,
     )
 
@@ -921,6 +993,7 @@ def test_release_observes_transient_covered_input_changes_during_publication(
         share_name="ridge",
         authority="external-durable",
         target_authority="ridge",
+        replacement_authority="ridge",
         runner=mutating_release,
     )
 
@@ -955,6 +1028,7 @@ def test_release_monitors_the_reused_evidence_artifact_during_publication(
         share_name="ridge",
         authority="external-durable",
         target_authority="ridge",
+        replacement_authority="ridge",
         runner=mutating_release,
     )
 
@@ -993,6 +1067,7 @@ def test_release_monitor_stays_live_through_receipt_finalization(
         share_name="ridge",
         authority="external-durable",
         target_authority="ridge",
+        replacement_authority="ridge",
         runner=RecordingRunner(completed([], stdout=release_output())),
     )
 
@@ -1028,6 +1103,7 @@ def test_release_monitor_stays_live_for_lineage_receipt_finalization(
         share_name="ridge",
         authority="external-durable",
         target_authority="ridge",
+        replacement_authority="ridge",
         runner=RecordingRunner(completed([], stdout=release_output())),
     )
 
@@ -1136,6 +1212,7 @@ def test_release_requires_complete_passed_route_transition_lineage(tmp_path: Pat
         share_name="ridge",
         authority="external-durable",
         target_authority="ridge",
+        replacement_authority="ridge",
         runner=runner,
     )
 
@@ -1168,6 +1245,7 @@ def test_release_blocks_when_the_verification_proof_is_invalidated(tmp_path: Pat
         share_name="ridge",
         authority="external-durable",
         target_authority="ridge",
+        replacement_authority="ridge",
         runner=runner,
     )
 
@@ -1189,6 +1267,7 @@ def test_release_blocks_when_the_evidence_contract_is_missing(tmp_path: Path):
         share_name="ridge",
         authority="external-durable",
         target_authority="ridge",
+        replacement_authority="ridge",
         runner=runner,
     )
 
@@ -1219,6 +1298,7 @@ def test_release_rejects_corrupted_lineage_result_artifact(tmp_path: Path):
         share_name="ridge",
         authority="external-durable",
         target_authority="ridge",
+        replacement_authority="ridge",
         runner=runner,
     )
 
@@ -1245,6 +1325,7 @@ def test_release_rejects_corrupted_plan_proposal_artifact(tmp_path: Path):
         share_name="ridge",
         authority="external-durable",
         target_authority="ridge",
+        replacement_authority="ridge",
         runner=runner,
     )
 
@@ -1271,6 +1352,7 @@ def test_release_rejects_lineage_link_that_does_not_match_its_receipt(tmp_path: 
         share_name="ridge",
         authority="external-durable",
         target_authority="ridge",
+        replacement_authority="ridge",
         runner=runner,
     )
 
@@ -1303,6 +1385,7 @@ def test_release_rejects_fabricated_receipts_without_linked_artifacts(tmp_path: 
         share_name="ridge",
         authority="external-durable",
         target_authority="ridge",
+        replacement_authority="ridge",
         runner=runner,
     )
 
@@ -1361,6 +1444,7 @@ def test_release_receipt_links_the_complete_route_transition_lineage(tmp_path: P
         share_name="ridge",
         authority="external-durable",
         target_authority="ridge",
+        replacement_authority="ridge",
         runner=runner,
     )
 
