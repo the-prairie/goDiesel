@@ -65,6 +65,15 @@ def release_observed_output(share_name: str = "ridge") -> str:
     ) + "\n"
 
 
+def release_attempted_output(share_name: str = "ridge") -> str:
+    return "GODIESEL_RELEASE_ATTEMPTED=" + json.dumps(
+        {
+            "stable_alias": f"https://share-{share_name}.godiesel.pages.dev/",
+            "external_status": "externally-unknown",
+        }
+    ) + "\n"
+
+
 def establish_route_lineage(
     tmp_path: Path,
     runner: RecordingRunner,
@@ -825,6 +834,39 @@ def test_release_records_ambiguous_external_state_before_any_retry(tmp_path: Pat
     assert_valid_result(result)
 
 
+def test_release_records_an_attempt_when_upload_fails_before_a_url_is_known(
+    tmp_path: Path,
+):
+    runner = RecordingRunner()
+    establish_route_lineage(tmp_path, runner)
+    runner.results.append(
+        completed([], returncode=1, stdout=release_attempted_output())
+    )
+
+    result = execute_route_share(
+        tmp_path,
+        "release",
+        slug="route-1",
+        share_name="ridge",
+        authority="external-durable",
+        target_authority="ridge",
+        runner=runner,
+    )
+
+    assert result["status"] == "blocked"
+    assert "GODIESEL_RELEASE_EXTERNAL_STATE_UNKNOWN" in {
+        issue["code"] for issue in result["blockers"]
+    }
+    receipt = json.loads((tmp_path / result["receipt"]["path"]).read_text())
+    assert receipt["outcome"] == "incomplete"
+    assert receipt["release_target"] == {
+        "stable_alias": "https://share-ridge.godiesel.pages.dev/",
+        "external_status": "externally-unknown",
+        "authorized_share_name": "ridge",
+        "replacement_authorized": False,
+    }
+
+
 def test_release_observes_transient_recovery_changes_during_publication(tmp_path: Path):
     lineage_runner = RecordingRunner()
     establish_route_lineage(tmp_path, lineage_runner)
@@ -1022,6 +1064,19 @@ def test_verify_late_recovery_invalidates_transition_and_general_evidence(
     assert result["evidence"] is None
     receipt = json.loads((tmp_path / result["receipt"]["path"]).read_text())
     assert receipt["outcome"] == "incomplete"
+    evidence_receipts = [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in (tmp_path / ".godiesel/evidence").glob("*.json")
+    ]
+    assert evidence_receipts
+    assert all(item["status"] != "passed" for item in evidence_receipts)
+    reused = reuse_verification(
+        tmp_path,
+        "route-share",
+        slug="route-1",
+        environ={},
+    )
+    assert reused["status"] == "blocked"
 
 
 def test_route_share_verify_blocks_when_covered_inputs_change_during_gate(

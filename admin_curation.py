@@ -10,6 +10,8 @@ import sys
 from contextlib import contextmanager
 from pathlib import Path
 
+from godiesel_evidence import replace_local_file, write_local_text_atomic
+
 from curation_publish import (
     CurationPublishError,
     CurationRecoveryError,
@@ -220,7 +222,12 @@ def save_curation_and_rebuild(config_path, activity_id, value, rebuild):
         rebuild()
     except Exception as publication_error:
         try:
-            os.replace(recovery_path, config_path)
+            replace_local_file(
+                config_path.parent,
+                ".",
+                recovery_path.name,
+                config_path.name,
+            )
         except Exception as rollback_error:
             raise SourceRollbackError(
                 f"publication failed: {publication_error}; "
@@ -241,9 +248,8 @@ def save_curation_and_rebuild(config_path, activity_id, value, rebuild):
 
 def write_atomic(path, content):
     """Replace a text file without exposing a partially written destination."""
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(content, encoding="utf-8")
-    os.replace(temporary, path)
+    path = Path(path)
+    write_local_text_atomic(path.parent, ".", path.name, content)
 
 
 def _unlink_best_effort(path):

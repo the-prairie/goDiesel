@@ -21,7 +21,8 @@ from godiesel_evidence import (
     canonical_digest,
     ensure_local_directory,
     existing_local_directory,
-    unlink_local_file,
+    read_local_bytes,
+    update_evidence_receipt,
     write_local_text_atomic,
     write_evidence_receipt,
 )
@@ -192,6 +193,30 @@ def _release_observation(output: str, share_name: str | None) -> dict[str, Any] 
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):
         return None
     return dict(observed)
+
+
+def _release_attempt(output: str, share_name: str | None) -> dict[str, Any] | None:
+    """Parse the marker emitted immediately before the external upload boundary."""
+
+    if share_name is None:
+        return None
+    records = [
+        line.removeprefix("GODIESEL_RELEASE_ATTEMPTED=")
+        for line in output.splitlines()
+        if line.startswith("GODIESEL_RELEASE_ATTEMPTED=")
+    ]
+    try:
+        if len(records) != 1:
+            return None
+        attempted = json.loads(records[0])
+        if attempted != {
+            "stable_alias": f"https://share-{share_name}.godiesel.pages.dev/",
+            "external_status": "externally-unknown",
+        }:
+            return None
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    return dict(attempted)
 
 
 def _receipt_records(root: Path, receipt_root: Path) -> list[tuple[Path, dict[str, Any]]]:
@@ -675,21 +700,40 @@ def _release_proof_monitor_paths(
     return [str(path) for path in paths]
 
 
-def _mark_receipt_incomplete(root: Path, summary: Mapping[str, str]) -> None:
+def _set_receipt_outcome(
+    root: Path,
+    summary: Mapping[str, str],
+    outcome: str,
+) -> bool:
     relative_path = summary.get("path")
     if not isinstance(relative_path, str):
-        return
-    path = root / relative_path
-    valid, receipt = _read_json_file(path)
-    if not valid or not isinstance(receipt, dict):
-        return
-    receipt["outcome"] = "incomplete"
+        return False
+    relative = Path(relative_path)
+    if relative.parent != Path(".route-share/runs") or not relative.name:
+        return False
+    try:
+        receipt = json.loads(
+            read_local_bytes(root, relative.parent, relative.name).decode("utf-8")
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return False
+    if (
+        not isinstance(receipt, dict)
+        or receipt.get("receipt_id") != summary.get("id")
+    ):
+        return False
+    receipt["outcome"] = outcome
     write_local_text_atomic(
         root,
-        path.parent.relative_to(root),
-        path.name,
+        relative.parent,
+        relative.name,
         json.dumps(receipt, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
     )
+    return True
+
+
+def _mark_receipt_incomplete(root: Path, summary: Mapping[str, str]) -> None:
+    _set_receipt_outcome(root, summary, "incomplete")
 
 
 def _blocked_result(
@@ -1046,6 +1090,11 @@ def execute_route_share(
         if verb == "release"
         else None
     )
+    attempted_release = (
+        _release_attempt(release_output, share_name)
+        if verb == "release"
+        else None
+    )
     domain_error = (
         domain_result.get("error")
         if isinstance(domain_result, dict) else None
@@ -1062,12 +1111,14 @@ def execute_route_share(
                 "Wait for the active catalogue mutation to finish, then create or apply a fresh proposal.",
             )
         )
-    elif completed.returncode != 0 and observed_release is not None:
+    elif completed.returncode != 0 and (
+        observed_release is not None or attempted_release is not None
+    ):
         blockers.append(
             _issue(
                 "GODIESEL_RELEASE_EXTERNAL_STATE_UNKNOWN",
-                "Cloudflare reported an immutable deployment, but post-upload verification did not complete.",
-                "Inspect the reported immutable deployment and stable alias before deciding whether any retry is safe.",
+                "The Cloudflare upload began, but its final external state could not be proven.",
+                "Inspect the named stable alias and any reported immutable deployment before deciding whether a retry is safe.",
             )
         )
     elif completed.returncode != 0:
@@ -1089,9 +1140,11 @@ def execute_route_share(
         if release_target is not None:
             release_target["authorized_share_name"] = target_authority
             release_target["replacement_authorized"] = replace_existing
-    elif verb == "release" and observed_release is not None:
+    elif verb == "release" and (
+        observed_release is not None or attempted_release is not None
+    ):
         release_target = {
-            **observed_release,
+            **(observed_release or attempted_release or {}),
             "authorized_share_name": target_authority,
             "replacement_authorized": replace_existing,
         }
@@ -1103,12 +1156,21 @@ def execute_route_share(
     )
     receipt = None
     if verb != "inspect":
-        outcome = (
-            "blocked"
+        intended_outcome = (
+            "incomplete"
+            if completed.returncode != 0
+            and verb == "release"
+            and (observed_release is not None or attempted_release is not None)
+            else "blocked"
             if completed.returncode != 0
             else "incomplete"
             if blockers
             else "passed"
+        )
+        outcome = (
+            "incomplete"
+            if intended_outcome == "passed" and verb in {"verify", "release"}
+            else intended_outcome
         )
         try:
             receipt = _write_receipt(
@@ -1143,7 +1205,7 @@ def execute_route_share(
     evidence = None
     if verb == "verify" and receipt is not None and post_proof_snapshot is not None:
         gate_status = "passed" if completed.returncode == 0 else "failed"
-        evidence_status = "blocked" if proof_stability_blockers else gate_status
+        evidence_status = "blocked"
         evidence = write_evidence_receipt(
             root,
             capability="route-share",
@@ -1289,19 +1351,55 @@ def execute_route_share(
                 except OSError:
                     pass
             if evidence is not None:
-                evidence_path = Path(evidence["path"])
-                try:
-                    unlink_local_file(
-                        root,
-                        evidence_path.parent,
-                        evidence_path.name,
-                        missing_ok=True,
-                    )
-                except OSError:
-                    pass
                 evidence = None
             status = "blocked"
             exit_code = 2
+    if (
+        verb in {"verify", "release"}
+        and completed.returncode == 0
+        and not blockers
+        and receipt is not None
+    ):
+        try:
+            promoted = _set_receipt_outcome(root, receipt, "passed")
+        except OSError:
+            promoted = False
+        if not promoted:
+            blockers.append(
+                _issue(
+                    "GODIESEL_RECEIPT_PROMOTION_FAILED",
+                    "The transition passed but its receipt draft could not be promoted safely.",
+                    "Repair the ignored route-share receipt directory and rerun the transition.",
+                )
+            )
+            status = "blocked"
+            exit_code = 2
+        elif verb == "verify" and evidence is not None:
+            receipt_artifact = {
+                "kind": "route-share-run-receipt",
+                "path": receipt["path"],
+                "sha256": sha256((root / receipt["path"]).read_bytes()).hexdigest(),
+            }
+            evidence = update_evidence_receipt(
+                root,
+                evidence,
+                status="passed",
+                artifacts=[receipt_artifact],
+            )
+            if evidence is None:
+                try:
+                    _mark_receipt_incomplete(root, receipt)
+                except OSError:
+                    pass
+                blockers.append(
+                    _issue(
+                        "GODIESEL_EVIDENCE_PROMOTION_FAILED",
+                        "Verification passed but its evidence draft could not be promoted safely.",
+                        "Repair the ignored evidence directory and rerun route-share verification.",
+                    )
+                )
+                status = "blocked"
+                exit_code = 2
     if monitor is not None:
         monitor.close()
     return {

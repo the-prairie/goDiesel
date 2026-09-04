@@ -2235,6 +2235,12 @@ def test_provider_verify_withdraws_evidence_for_late_identity_change(
     assert "GODIESEL_PROVIDER_BUILD_IDENTITY_CHANGED" in {
         issue["code"] for issue in result["blockers"]
     }
+    receipts = [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in (tmp_path / ".godiesel/evidence").glob("*.json")
+    ]
+    assert receipts
+    assert all(item["status"] != "passed" for item in receipts)
     assert identities == []
 
 

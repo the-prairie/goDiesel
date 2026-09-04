@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 
 SCHEMA_VERSION = 1
@@ -77,13 +77,15 @@ def existing_local_directory(root: Path | str, relative: Path | str) -> Path | N
         return None
 
 
-def write_local_text_atomic(
+def _write_local_chunks_atomic(
     root: Path | str,
     relative_directory: Path | str,
     filename: str,
-    content: str,
+    chunks: Callable[[], Iterable[bytes]],
+    *,
+    expected_sha256: str | None = None,
 ) -> Path:
-    """Atomically write inside a descriptor-pinned repository directory."""
+    """Atomically stream bytes inside a descriptor-pinned repository directory."""
 
     if not filename or Path(filename).name != filename:
         raise OSError("local artifact filename must be one path component")
@@ -147,10 +149,21 @@ def write_local_text_atomic(
             0o600,
             dir_fd=directory_fd,
         )
-        with os.fdopen(file_fd, "w", encoding="utf-8") as destination:
-            destination.write(content)
-            destination.flush()
-            os.fsync(destination.fileno())
+        digest = sha256()
+        try:
+            for chunk in chunks():
+                digest.update(chunk)
+                remaining = memoryview(chunk)
+                while remaining:
+                    written = os.write(file_fd, remaining)
+                    if written <= 0:
+                        raise OSError("local artifact write made no progress")
+                    remaining = remaining[written:]
+            os.fsync(file_fd)
+        finally:
+            os.close(file_fd)
+        if expected_sha256 is not None and digest.hexdigest() != expected_sha256:
+            raise OSError("local artifact content digest changed during write")
         if not directory_is_still_pinned():
             raise OSError("local artifact directory changed during write")
         os.replace(
@@ -169,6 +182,140 @@ def write_local_text_atomic(
             pass
         os.close(directory_fd)
     return directory / filename
+
+
+def write_local_text_atomic(
+    root: Path | str,
+    relative_directory: Path | str,
+    filename: str,
+    content: str,
+) -> Path:
+    """Atomically write UTF-8 text inside a pinned repository directory."""
+
+    payload = content.encode("utf-8")
+    return _write_local_chunks_atomic(
+        root,
+        relative_directory,
+        filename,
+        lambda: (payload,),
+    )
+
+
+def write_local_bytes_atomic(
+    root: Path | str,
+    relative_directory: Path | str,
+    filename: str,
+    content: bytes,
+) -> Path:
+    """Atomically write bytes inside a pinned repository directory."""
+
+    return _write_local_chunks_atomic(
+        root,
+        relative_directory,
+        filename,
+        lambda: (content,),
+    )
+
+
+def copy_local_file_atomic(
+    root: Path | str,
+    relative_directory: Path | str,
+    filename: str,
+    source: Path | str,
+    *,
+    expected_sha256: str,
+) -> Path:
+    """Atomically stream one checksummed source into a pinned local directory."""
+
+    source = Path(source)
+
+    def source_chunks() -> Iterable[bytes]:
+        with source.open("rb") as input_file:
+            while chunk := input_file.read(1024 * 1024):
+                yield chunk
+
+    return _write_local_chunks_atomic(
+        root,
+        relative_directory,
+        filename,
+        source_chunks,
+        expected_sha256=expected_sha256,
+    )
+
+
+def replace_local_file(
+    root: Path | str,
+    relative_directory: Path | str,
+    source_filename: str,
+    destination_filename: str,
+) -> None:
+    """Replace one local file with another through one pinned directory."""
+
+    if any(
+        not filename or Path(filename).name != filename
+        for filename in (source_filename, destination_filename)
+    ):
+        raise OSError("local artifact filenames must be one path component")
+    root = Path(root).resolve()
+    relative_directory = Path(relative_directory)
+    if relative_directory.is_absolute() or ".." in relative_directory.parts:
+        raise OSError("local artifact directory must stay inside the repository")
+    directory_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for part in relative_directory.parts:
+            next_fd = os.open(
+                part,
+                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                dir_fd=directory_fd,
+            )
+            os.close(directory_fd)
+            directory_fd = next_fd
+        os.replace(
+            source_filename,
+            destination_filename,
+            src_dir_fd=directory_fd,
+            dst_dir_fd=directory_fd,
+        )
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+
+
+def read_local_bytes(
+    root: Path | str,
+    relative_directory: Path | str,
+    filename: str,
+) -> bytes:
+    """Read one regular file through a no-follow repository directory chain."""
+
+    if not filename or Path(filename).name != filename:
+        raise OSError("local artifact filename must be one path component")
+    root = Path(root).resolve()
+    relative_directory = Path(relative_directory)
+    if relative_directory.is_absolute() or ".." in relative_directory.parts:
+        raise OSError("local artifact directory must stay inside the repository")
+    directory_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for part in relative_directory.parts:
+            next_fd = os.open(
+                part,
+                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                dir_fd=directory_fd,
+            )
+            os.close(directory_fd)
+            directory_fd = next_fd
+        file_fd = os.open(filename, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory_fd)
+        try:
+            if not stat.S_ISREG(os.fstat(file_fd).st_mode):
+                raise OSError("local artifact is not a regular file")
+            chunks: list[bytes] = []
+            while chunk := os.read(file_fd, 1024 * 1024):
+                chunks.append(chunk)
+            return b"".join(chunks)
+        finally:
+            os.close(file_fd)
+    finally:
+        os.close(directory_fd)
 
 
 def unlink_local_file(
@@ -319,5 +466,49 @@ def write_evidence_receipt(
     return {
         "id": receipt_id,
         "path": relative_path.as_posix(),
+        "sha256": _file_digest(destination),
+    }
+
+
+def update_evidence_receipt(
+    root: Path | str,
+    summary: Mapping[str, str],
+    *,
+    status: str,
+    artifacts: Sequence[Mapping[str, str]] | None = None,
+) -> dict[str, str] | None:
+    """Atomically promote a non-reusable evidence draft after final stability."""
+
+    root = Path(root).resolve()
+    relative = Path(str(summary.get("path", "")))
+    if relative.parent != EVIDENCE_ROOT or not relative.name:
+        return None
+    directory = existing_local_directory(root, EVIDENCE_ROOT)
+    if directory is None:
+        return None
+    try:
+        raw = read_local_bytes(root, EVIDENCE_ROOT, relative.name)
+        receipt = json.loads(raw.decode("utf-8"))
+        if (
+            status != "passed"
+            or not isinstance(receipt, dict)
+            or receipt.get("status") != "blocked"
+            or receipt.get("receipt_id") != summary.get("id")
+        ):
+            return None
+        receipt["status"] = status
+        if artifacts is not None:
+            receipt["artifacts"] = [dict(item) for item in artifacts]
+        destination = write_local_text_atomic(
+            root,
+            EVIDENCE_ROOT,
+            relative.name,
+            json.dumps(receipt, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None
+    return {
+        "id": str(summary.get("id", receipt.get("receipt_id", ""))),
+        "path": relative.as_posix(),
         "sha256": _file_digest(destination),
     }

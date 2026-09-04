@@ -82,7 +82,8 @@ RELEASE_MANIFEST_SHA=$(shasum -a 256 dist/artifact-manifest.json | awk '{print $
 echo "3/4 Running focused microsite journey"
 (
   cd app
-  npx playwright test e2e/single-route-microsite.spec.ts \
+  VITE_SINGLE_ROUTE_SLUG="$ROUTE_SLUG" \
+    npx playwright test e2e/single-route-microsite.spec.ts \
     --config playwright.route-share.config.ts
 )
 POST_JOURNEY_MANIFEST_SHA=$(shasum -a 256 dist/artifact-manifest.json | awk '{print $1}')
@@ -136,8 +137,38 @@ if [[ "$STAGED_MANIFEST_SHA" != "$RELEASE_MANIFEST_SHA" ]]; then
   echo "Built artifact changed while staging the immutable deployment input; refusing to publish." >&2
   exit 1
 fi
+STAGED_IDENTITY_JSON=$("$PYTHON" - "$DEPLOY_ROOT/build-identity.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as source:
+    identity = json.load(source)
+if identity.get("artifact_kind") != "built-artifact":
+    raise SystemExit("Staged deployment identity is not an immutable built artifact")
+print(json.dumps(identity, separators=(",", ":"), sort_keys=True))
+PY
+)
+"$PYTHON" - "$PUBLIC_URL" <<'PY'
+import json
+import sys
+
+print(
+    "GODIESEL_RELEASE_ATTEMPTED="
+    + json.dumps(
+        {"stable_alias": sys.argv[1], "external_status": "externally-unknown"},
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+)
+PY
+set +e
 DEPLOY_OUTPUT=$(npx wrangler pages deploy "$DEPLOY_ROOT" --project-name=godiesel --branch="$BRANCH" --commit-dirty=true)
+DEPLOY_STATUS=$?
+set -e
 printf '%s\n' "$DEPLOY_OUTPUT"
+if [[ "$DEPLOY_STATUS" -ne 0 ]]; then
+  exit "$DEPLOY_STATUS"
+fi
 IMMUTABLE_URL=$(printf '%s\n' "$DEPLOY_OUTPUT" | "$PYTHON" -c '
 import re
 import sys
@@ -176,17 +207,14 @@ PY
   cd app
   node scripts/smoke-single-route-microsite.mjs "$PUBLIC_URL" "$ROUTE_SLUG"
 )
-"$PYTHON" - "$IMMUTABLE_URL" "$PUBLIC_URL" "$RELEASE_COMMIT" "$RELEASE_TREE" "$DEPLOY_ROOT/build-identity.json" <<'PY'
+"$PYTHON" - "$IMMUTABLE_URL" "$PUBLIC_URL" "$RELEASE_COMMIT" "$RELEASE_TREE" "$STAGED_IDENTITY_JSON" <<'PY'
 import json
 import sys
 
 from godiesel_verification import read_target_build_identity
 
-immutable_url, stable_alias, commit, tree, staged_identity_path = sys.argv[1:]
-with open(staged_identity_path, encoding="utf-8") as source:
-    staged = json.load(source)
-if staged.get("artifact_kind") != "built-artifact":
-    raise SystemExit("Staged deployment identity is not an immutable built artifact")
+immutable_url, stable_alias, commit, tree, staged_identity_json = sys.argv[1:]
+staged = json.loads(staged_identity_json)
 immutable = dict(
     read_target_build_identity(
         immutable_url,

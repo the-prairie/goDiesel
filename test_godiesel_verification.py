@@ -400,6 +400,21 @@ def test_monitor_ignores_unrelated_sibling_when_recursive_root_is_absent(
         monitor.close()
 
 
+def test_catalogue_monitor_detects_transient_root_recovery_artifacts(
+    tmp_path: Path,
+):
+    (tmp_path / "app/public/data/routes").mkdir(parents=True)
+    (tmp_path / "app/src/data/generated").mkdir(parents=True)
+    monitor = godiesel_verification.catalogue_recovery_monitor(tmp_path)
+    recovery = tmp_path / ".quests.json.rollback"
+    recovery.write_text("{}\n", encoding="utf-8")
+    recovery.unlink()
+    try:
+        assert monitor.changed() is True
+    finally:
+        monitor.close()
+
+
 def test_monitor_fails_closed_when_watch_registration_fails(
     tmp_path: Path,
     monkeypatch,

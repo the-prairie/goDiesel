@@ -38,7 +38,7 @@ from generated_route_contract import (
 from godiesel_evidence import (
     canonical_digest,
     repository_snapshot,
-    unlink_local_file,
+    update_evidence_receipt,
     write_local_text_atomic,
     write_evidence_receipt,
 )
@@ -599,7 +599,12 @@ def _run_verification(
     blockers.extend(stability_blockers)
     stable_inputs = not stability_blockers and not post_identity_blockers
     receipt_snapshot = post_snapshot if post_snapshot["status"] == "passed" else snapshot
-    receipt_status = "failed" if not passed else "passed" if stable_inputs else "blocked"
+    intended_receipt_status = (
+        "failed" if not passed else "passed" if stable_inputs else "blocked"
+    )
+    receipt_status = (
+        "blocked" if intended_receipt_status == "passed" else intended_receipt_status
+    )
     output = _command_result(display_command, completed)
     evidence = write_evidence_receipt(
         root,
@@ -666,16 +671,6 @@ def _run_verification(
                 if issue["code"] not in {item["code"] for item in blockers}
             )
             if evidence is not None:
-                evidence_path = Path(evidence["path"])
-                try:
-                    unlink_local_file(
-                        root,
-                        evidence_path.parent,
-                        evidence_path.name,
-                        missing_ok=True,
-                    )
-                except OSError:
-                    pass
                 evidence = None
     final_provider_identity = post_provider_identity
     final_identity_blockers: list[dict[str, str]] = []
@@ -724,17 +719,21 @@ def _run_verification(
     ]
     blockers.extend(newly_detected)
     if newly_detected and evidence is not None:
-        evidence_path = Path(evidence["path"])
-        try:
-            unlink_local_file(
-                root,
-                evidence_path.parent,
-                evidence_path.name,
-                missing_ok=True,
-            )
-        except OSError:
-            pass
         evidence = None
+    if (
+        intended_receipt_status == "passed"
+        and not blockers
+        and evidence is not None
+    ):
+        evidence = update_evidence_receipt(root, evidence, status="passed")
+        if evidence is None:
+            blockers.append(
+                _issue(
+                    "GODIESEL_EVIDENCE_PROMOTION_FAILED",
+                    "Verification passed but its evidence draft could not be promoted safely.",
+                    "Repair the ignored .godiesel evidence directory and rerun verification.",
+                )
+            )
     stable_inputs = not blockers
     envelope = _envelope(
         capability,

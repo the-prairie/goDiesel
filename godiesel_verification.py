@@ -301,17 +301,20 @@ def catalogue_recovery_monitor(root: Path | str) -> ProofInputMonitor:
     """Observe every directory that can acquire catalogue recovery residue."""
 
     root = Path(root).resolve()
+    try:
+        ensure_local_directory(root, ".godiesel/evidence")
+        recovery_path = ensure_local_directory(root, ".route-share/recovery")
+    except OSError:
+        monitor = ProofInputMonitor(root, {"covered_inputs": [], "_monitor_paths": [str(root)]})
+        monitor.monitoring_failed = True
+        return monitor
     monitor_paths = [
+        str(root),
         str(root / "app/public/data"),
         str(root / "app/public/data/routes"),
         str(root / "app/src/data/generated"),
+        str(recovery_path),
     ]
-    try:
-        monitor_paths.append(str(ensure_local_directory(root, ".route-share/recovery")))
-    except OSError:
-        monitor = ProofInputMonitor(root, {"covered_inputs": [], "_monitor_paths": monitor_paths})
-        monitor.monitoring_failed = True
-        return monitor
     return ProofInputMonitor(
         root,
         {

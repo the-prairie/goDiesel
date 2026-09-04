@@ -219,14 +219,17 @@ def read_target_build_identity(_target, **_kwargs):
     executable(
         bin_dir / "npx",
         f"""#!/bin/bash
-printf '%s\n' "$*" >> {calls}
+printf '%s slug=%s\n' "$*" "${{VITE_SINGLE_ROUTE_SLUG:-}}" >> {calls}
 if [[ "$1" == "wrangler" ]]; then
+  if [[ "${{FAIL_DEPLOY:-}}" == "1" ]]; then
+    exit 9
+  fi
   printf 'Deployment: https://abc123.godiesel.pages.dev/\n'
 fi
 """,
     )
     (tmp_path / ".gitignore").write_text(
-        "bin/\ndist/\ncalls.log\n",
+        "bin/\ndist/\ncalls.log\n__pycache__/\n",
         encoding="utf-8",
     )
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
@@ -263,11 +266,27 @@ fi
     assert completed.returncode == 0, completed.stderr
     recorded = calls.read_text(encoding="utf-8")
     assert "playwright test e2e/single-route-microsite.spec.ts --config playwright.route-share.config.ts" in recorded
+    playwright = next(line for line in recorded.splitlines() if line.startswith("playwright "))
+    assert "slug=gpx-preview" in playwright
     wrangler = next(line for line in recorded.splitlines() if line.startswith("wrangler "))
     assert " pages deploy /" in wrangler
     assert " pages deploy dist " not in wrangler
     assert "GODIESEL_RELEASE_OBSERVED=" in completed.stdout
+    assert "GODIESEL_RELEASE_ATTEMPTED=" in completed.stdout
     assert "GODIESEL_RELEASE_TARGET=" in completed.stdout
+
+    failed_environment = dict(environment)
+    failed_environment["FAIL_DEPLOY"] = "1"
+    failed = subprocess.run(
+        [str(scripts / "publish-route-microsite.sh"), "gpx-preview", "new-share"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env=failed_environment,
+    )
+    assert failed.returncode == 9
+    assert "GODIESEL_RELEASE_ATTEMPTED=" in failed.stdout
+    assert "GODIESEL_RELEASE_OBSERVED=" not in failed.stdout
 
 
 def test_microsite_validator_redacts_checkout_paths():

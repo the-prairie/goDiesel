@@ -35,6 +35,20 @@ COMPLETE_CURATION = {
 
 
 class AdminCurationTests(unittest.TestCase):
+    def test_atomic_writer_replaces_a_final_symlink_without_touching_its_target(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            external = root / "external.json"
+            external.write_text("outside\n", encoding="utf-8")
+            destination = root / "quests.json"
+            destination.symlink_to(external)
+
+            admin_curation.write_atomic(destination, "canonical\n")
+
+            self.assertFalse(destination.is_symlink())
+            self.assertEqual(destination.read_text(encoding="utf-8"), "canonical\n")
+            self.assertEqual(external.read_text(encoding="utf-8"), "outside\n")
+
     def test_owner_mutation_lock_rejects_final_component_symlink(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -247,19 +261,19 @@ class AdminCurationTests(unittest.TestCase):
             recovery_path = root / ".quests.json.rollback"
             original = {"routes": [{"activity_id": "one", "status": "approved"}]}
             config_path.write_text(json.dumps(original), encoding="utf-8")
-            real_replace = admin_curation.os.replace
+            real_replace = admin_curation.replace_local_file
 
-            def fail_source_restore(source, destination):
-                if Path(source) == recovery_path:
+            def fail_source_restore(root, directory, source, destination):
+                if source == recovery_path.name:
                     raise OSError("injected source rollback failure")
-                return real_replace(source, destination)
+                return real_replace(root, directory, source, destination)
 
             def fail_publication():
                 raise CurationRecoveryError("injected generated recovery failure")
 
             with mock.patch.object(
-                admin_curation.os,
-                "replace",
+                admin_curation,
+                "replace_local_file",
                 side_effect=fail_source_restore,
             ):
                 with self.assertRaises(SourceRollbackError) as caught:

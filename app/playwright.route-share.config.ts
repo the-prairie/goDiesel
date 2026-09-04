@@ -1,5 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
 
+if (!process.env.VITE_SINGLE_ROUTE_SLUG) {
+  throw new Error("VITE_SINGLE_ROUTE_SLUG is required for the route-share journey");
+}
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,

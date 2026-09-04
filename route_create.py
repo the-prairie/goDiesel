@@ -20,7 +20,12 @@ from jsonschema import Draft202012Validator
 from PIL import Image
 
 from admin_curation import OwnerMutationBusyError, owner_mutation_lock
-from godiesel_evidence import unlink_local_file, write_local_text_atomic
+from godiesel_evidence import (
+    copy_local_file_atomic,
+    read_local_bytes,
+    unlink_local_file,
+    write_local_text_atomic,
+)
 
 from quest_meta import build_route_curation
 from route_annotations import build_route_annotations
@@ -290,16 +295,33 @@ def _stage_file(
     )
     staging.mkdir(parents=True, exist_ok=True)
     destination = staging / staged_name
-    if destination.exists():
-        if _file_sha256(destination) != expected_sha256:
+    relative_directory = staging.relative_to(root)
+    if destination.exists() or destination.is_symlink():
+        try:
+            existing_sha256 = hashlib.sha256(
+                read_local_bytes(root, relative_directory, staged_name)
+            ).hexdigest()
+        except OSError as error:
+            raise RouteCreateError(
+                "source.unsafe_staging",
+                "staged source is not a repository-owned regular file",
+            ) from error
+        if existing_sha256 != expected_sha256:
             raise RouteCreateError("source.staging_conflict", "staged GPX checksum does not match")
         return destination.relative_to(root).as_posix()
-    temporary = destination.with_suffix(".gpx.tmp")
-    shutil.copyfile(source, temporary)
-    if _file_sha256(temporary) != expected_sha256:
-        temporary.unlink(missing_ok=True)
-        raise RouteCreateError("source.checksum_mismatch", "staged GPX checksum does not match")
-    os.replace(temporary, destination)
+    try:
+        copy_local_file_atomic(
+            root,
+            relative_directory,
+            staged_name,
+            source,
+            expected_sha256=expected_sha256,
+        )
+    except OSError as error:
+        raise RouteCreateError(
+            "source.checksum_mismatch",
+            "staged GPX checksum does not match",
+        ) from error
     return destination.relative_to(root).as_posix()
 
 
@@ -705,9 +727,7 @@ def propose_request(request: object, root: str | Path) -> dict[str, object]:
 
 
 def _write_atomic(path: Path, content: str) -> None:
-    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    temporary.write_text(content, encoding="utf-8")
-    os.replace(temporary, path)
+    write_local_text_atomic(path.parent, ".", path.name, content)
 
 
 def _validated_source_path(
@@ -828,39 +848,72 @@ def _register_source(proposal: dict[str, object], root: Path) -> Path:
     )
     if not durable.is_relative_to(durable_root):
         raise RouteCreateError("source.unsafe_destination", "durable source must stay inside route_sources")
-    durable.parent.mkdir(parents=True, exist_ok=True)
-    if durable.exists():
-        if _file_sha256(durable) != expected:
+    relative_directory = durable.parent.relative_to(root)
+    if durable.exists() or durable.is_symlink():
+        try:
+            existing_sha256 = hashlib.sha256(
+                read_local_bytes(root, relative_directory, durable.name)
+            ).hexdigest()
+        except OSError as error:
+            raise RouteCreateError(
+                "source.unsafe_destination",
+                "durable source is not a repository-owned regular file",
+            ) from error
+        if existing_sha256 != expected:
             raise RouteCreateError("source.destination_conflict", "durable GPX exists with a different checksum")
         return durable
-    temporary = durable.with_suffix(".gpx.tmp")
-    shutil.copyfile(staged, temporary)
-    if _file_sha256(temporary) != expected:
-        temporary.unlink(missing_ok=True)
-        raise RouteCreateError("source.checksum_mismatch", "durable GPX checksum does not match")
-    os.replace(temporary, durable)
+    try:
+        copy_local_file_atomic(
+            root,
+            relative_directory,
+            durable.name,
+            staged,
+            expected_sha256=expected,
+        )
+    except OSError as error:
+        raise RouteCreateError(
+            "source.checksum_mismatch",
+            "durable GPX checksum does not match",
+        ) from error
     return durable
 
 
 def _copy_verified_source(
+    root: Path,
     staged: Path,
     durable: Path,
     expected_sha256: str,
 ) -> None:
-    if durable.exists():
-        if _file_sha256(durable) != expected_sha256:
+    relative_directory = durable.parent.relative_to(root)
+    if durable.exists() or durable.is_symlink():
+        try:
+            existing_sha256 = hashlib.sha256(
+                read_local_bytes(root, relative_directory, durable.name)
+            ).hexdigest()
+        except OSError as error:
+            raise RouteCreateError(
+                "media.unsafe_destination",
+                "durable media is not a repository-owned regular file",
+            ) from error
+        if existing_sha256 != expected_sha256:
             raise RouteCreateError(
                 "media.destination_conflict",
                 "durable media exists with a different checksum",
             )
         return
-    durable.parent.mkdir(parents=True, exist_ok=True)
-    temporary = durable.with_suffix(durable.suffix + ".tmp")
-    shutil.copyfile(staged, temporary)
-    if _file_sha256(temporary) != expected_sha256:
-        temporary.unlink(missing_ok=True)
-        raise RouteCreateError("media.checksum_mismatch", "durable media checksum does not match")
-    os.replace(temporary, durable)
+    try:
+        copy_local_file_atomic(
+            root,
+            relative_directory,
+            durable.name,
+            staged,
+            expected_sha256=expected_sha256,
+        )
+    except OSError as error:
+        raise RouteCreateError(
+            "media.checksum_mismatch",
+            "durable media checksum does not match",
+        ) from error
 
 
 def _media_destination_roots(root: Path, slug: str) -> tuple[Path, Path]:
@@ -909,7 +962,7 @@ def _route_spec_with_registered_media(
                 "media.unsafe_destination",
                 "durable media must stay inside the route media directory",
             )
-        _copy_verified_source(staged, durable, item["sha256"])
+        _copy_verified_source(root, staged, durable, item["sha256"])
         record = {
             "path": durable_relative.as_posix(),
             "sha256": item["sha256"],
