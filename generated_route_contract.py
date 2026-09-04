@@ -8,6 +8,7 @@ from typing import Mapping, Sequence
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from quest_meta import (
+    BEST_IN_EARTH_IDS,
     build_quest_meta,
     build_replay_metadata,
     build_route_curation,
@@ -19,10 +20,6 @@ from route_annotations import build_route_annotations
 
 LIFECYCLES = {"completed", "planned", "discovered"}
 ELEVATION_STATUSES = {"recorded", "unavailable"}
-BEST_IN_EARTH_IDS = {
-    "13935098460", "14349820520", "17636880071", "17654151284",
-    "13358070690", "9959792315", "9934715694",
-}
 COMMON_STRING_FIELDS = (
     "slug",
     "activity_id",

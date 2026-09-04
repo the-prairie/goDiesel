@@ -529,6 +529,24 @@ def _result_contract(verb: str, domain_result: object) -> str:
     return f"scripts/route.sh#{verb}-transcript"
 
 
+def _focused_proof_snapshot(root: Path, environ: Mapping[str, str]) -> dict[str, Any]:
+    selection = build_proof_snapshot(
+        root,
+        "route-share",
+        tiers=["focused"],
+        environ=environ,
+    )
+    if selection["status"] != "passed" or len(selection["gates"]) != 1:
+        return selection
+    return build_proof_snapshot(
+        root,
+        "route-share",
+        tiers=["focused"],
+        commands=[selection["gates"][0]["command"]],
+        environ=environ,
+    )
+
+
 def _blocked_result(
     verb: str,
     authority: str,
@@ -674,11 +692,9 @@ def execute_route_share(
                 blocker,
                 authorized=True,
             )
-        proof_snapshot = build_proof_snapshot(
+        proof_snapshot = _focused_proof_snapshot(
             root,
-            "route-share",
-            tiers=["focused"],
-            environ=dict(os.environ if environ is None else environ),
+            dict(os.environ if environ is None else environ),
         )
         if proof_snapshot["status"] != "passed":
             proof_blockers = tuple(proof_snapshot["blockers"])
@@ -720,11 +736,9 @@ def execute_route_share(
     post_proof_snapshot = proof_snapshot
     proof_stability_blockers: list[dict[str, str]] = []
     if proof_snapshot is not None:
-        post_proof_snapshot = build_proof_snapshot(
+        post_proof_snapshot = _focused_proof_snapshot(
             root,
-            "route-share",
-            tiers=["focused"],
-            environ=dict(os.environ if environ is None else environ),
+            dict(os.environ if environ is None else environ),
         )
         proof_stability_blockers = proof_snapshot_stability_issues(
             proof_snapshot,

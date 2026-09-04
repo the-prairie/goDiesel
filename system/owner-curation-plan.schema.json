@@ -53,7 +53,7 @@
     },
     "external_effects": { "const": [] },
     "verification_requirements": {
-      "const": ["python -m pytest -q test_godiesel_local_capabilities.py test_admin_curation.py test_curation_publish.py"]
+      "const": ["python -m pytest -q test_godiesel_local_capabilities.py test_admin_curation.py test_curation_publish.py test_route_provenance.py"]
     },
     "warnings": { "const": [] },
     "blockers": { "const": [] },

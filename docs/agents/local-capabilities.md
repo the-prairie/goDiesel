@@ -96,11 +96,13 @@ Run one existing live browser check against one exact target:
 ```sh
 ./scripts/godiesel verify provider-readiness --provider atlas --provider-target <url> --json
 ./scripts/godiesel verify provider-readiness --provider earth-replay --provider-target <url> --json
-./scripts/godiesel verify provider-readiness --provider google-3d --provider-target <url> --json
+./scripts/godiesel verify provider-readiness --provider google-3d --provider-target http://localhost:8787 --json
 ```
 
 The target must be an HTTP or HTTPS URL without credentials, query parameters, or fragments.
 It must name an origin root and expose `build-identity.json` from that same origin.
+Google 3D is stricter: its only valid target is exactly `http://localhost:8787`.
+When that origin is not already running, the adapter starts a Vite preview of the exact prebuilt `app/dist` artifact, waits for its identity, and stops the process after verification.
 Production builds require a clean Git checkout, and the identity binds the commit, Git tree, and a unique immutable build instance id.
 The adapter records configuration presence, deployed identity, and a digest of the exact target in an ignored evidence receipt.
 It reads and validates the deployed identity before and after the live gate, rejects redirected identity documents, and blocks if the target changes during execution.
@@ -120,6 +122,8 @@ Run it only when the intended claim depends on that provider, renderer, terrain,
 ## Evidence
 
 Successful generation, curation, and provider verification writes a schema-valid receipt under ignored `.godiesel/evidence/`.
+Normal gates do not rewrite tracked screenshots.
+Set `GODIESEL_CAPTURE_E2E_EVIDENCE=1` only when deliberately refreshing archival browser evidence, and review the resulting image diffs.
 Impact rules decide which gates a changed path requires.
 Each exact verification command declares its implementation, contract, fixture, configuration, data, renderer, and provider entry points.
 The proof layer recursively includes repository-local Python and JavaScript or TypeScript imports, so a transitive executable dependency invalidates the same receipt and selects the same gate.

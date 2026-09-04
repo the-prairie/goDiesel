@@ -51,6 +51,17 @@ def owner_mutation_lock(checkout_root):
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
+def run_owner_mutation(checkout_root, local_lock, mutation):
+    """Run one Admin mutation behind both process-local and checkout-wide locks."""
+    if not local_lock.acquire(blocking=False):
+        raise OwnerMutationBusyError("another owner mutation is in progress")
+    try:
+        with owner_mutation_lock(checkout_root):
+            return mutation()
+    finally:
+        local_lock.release()
+
+
 def save_owner_curation(
     checkout_root,
     activity_id,

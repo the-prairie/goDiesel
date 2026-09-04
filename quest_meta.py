@@ -11,6 +11,17 @@ CURATION_TEXT_FIELDS = (
 CURATION_LIST_FIELDS = ("terrain", "highlights", "caveats")
 CURATION_REVIEW_STATUSES = ("draft", "reviewed", "published")
 CURATION_FIELDS = frozenset((*CURATION_TEXT_FIELDS, *CURATION_LIST_FIELDS, "review_status"))
+BEST_IN_EARTH_IDS = frozenset(
+    {
+        "13935098460",
+        "14349820520",
+        "17636880071",
+        "17654151284",
+        "13358070690",
+        "9959792315",
+        "9934715694",
+    }
+)
 
 
 REGION_BOUNDS = (

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -18,6 +19,7 @@ from godiesel_local_capabilities import (
     execute_provider_readiness,
     execute_route_generation,
     inspect_planned_route_persistence,
+    reuse_provider_readiness,
 )
 from godiesel_control import main
 from godiesel_verification import reuse_verification
@@ -483,10 +485,12 @@ def test_generation_verify_uses_the_focused_public_gate(tmp_path: Path):
         "-q",
         "test_godiesel_local_capabilities.py",
         "test_react_app.py",
+        "test_route_provenance.py",
     ]]
     assert result["status"] == "passed"
     assert result["result"]["command"] == (
-        "python -m pytest -q test_godiesel_local_capabilities.py test_react_app.py"
+        "python -m pytest -q test_godiesel_local_capabilities.py test_react_app.py "
+        "test_route_provenance.py"
     )
     assert "1 passed" not in json.dumps(result)
     _assert_valid_evidence(root, result)
@@ -1116,6 +1120,7 @@ def test_curation_verify_uses_the_existing_recovery_suite(tmp_path: Path):
         "test_godiesel_local_capabilities.py",
         "test_admin_curation.py",
         "test_curation_publish.py",
+        "test_route_provenance.py",
     ]]
     assert result["status"] == "passed"
     assert "24 passed" not in json.dumps(result)
@@ -1236,6 +1241,107 @@ def test_provider_verify_requires_an_explicit_live_target(tmp_path: Path):
     assert calls == []
 
 
+@pytest.mark.parametrize(
+    "target",
+    [
+        "https://preview.example.test/",
+        "http://127.0.0.1:8787",
+        "http://localhost:8787/",
+        "http://localhost:8788",
+    ],
+)
+def test_google_3d_provider_requires_the_canonical_local_target(
+    tmp_path: Path,
+    target: str,
+):
+    result = execute_provider_readiness(
+        tmp_path,
+        "verify",
+        provider="google-3d",
+        provider_target=target,
+        environ={"GOOGLE_MAPS_API_KEY": "secret"},
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_PROVIDER_TARGET_REQUIRED"
+
+
+def test_google_3d_reuse_requires_the_canonical_local_target(tmp_path: Path):
+    result = reuse_provider_readiness(
+        tmp_path,
+        provider="google-3d",
+        provider_target="https://preview.example.test/",
+        environ={"GOOGLE_MAPS_API_KEY": "secret"},
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_PROVIDER_TARGET_REQUIRED"
+
+
+def test_google_3d_provider_owns_a_missing_local_preview(tmp_path: Path):
+    _install_evidence_contract(tmp_path)
+    (tmp_path / "app/dist").mkdir(parents=True)
+    (tmp_path / "app/dist/build-identity.json").write_text("{}\n", encoding="utf-8")
+    vite = tmp_path / "app/node_modules/.bin/vite"
+    vite.parent.mkdir(parents=True)
+    vite.write_text("#!/bin/sh\n", encoding="utf-8")
+    identity_reads = 0
+
+    def target_identity_reader(_target: str):
+        nonlocal identity_reads
+        identity_reads += 1
+        if identity_reads == 1:
+            raise OSError("preview is not running")
+        return _matching_target_identity("")
+
+    class PreviewProcess:
+        def __init__(self):
+            self.terminated = False
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            self.terminated = True
+
+        def wait(self, timeout):
+            return 0
+
+    process = PreviewProcess()
+    launches: list[tuple[object, object]] = []
+
+    def preview_launcher(command, **kwargs):
+        launches.append((command, kwargs))
+        return process
+
+    result = execute_provider_readiness(
+        tmp_path,
+        "verify",
+        provider="google-3d",
+        provider_target="http://localhost:8787",
+        environ={"GOOGLE_MAPS_API_KEY": "secret"},
+        runner=lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 0, "passed", ""
+        ),
+        target_identity_reader=target_identity_reader,
+        repository_reader=_clean_repository_identity,
+        preview_launcher=preview_launcher,
+        preview_sleep=lambda _seconds: None,
+    )
+
+    assert result["status"] == "passed"
+    assert launches[0][0][1:] == [
+        "preview",
+        "--host",
+        "localhost",
+        "--port",
+        "8787",
+        "--strictPort",
+    ]
+    assert process.terminated is True
+    assert identity_reads == 3
+
+
 def test_provider_verify_rejects_path_scoped_target(tmp_path: Path):
     calls: list[object] = []
 
@@ -1261,7 +1367,7 @@ def test_provider_verify_rejects_target_built_from_another_commit(tmp_path: Path
         tmp_path,
         "verify",
         provider="atlas",
-        provider_target="https://preview.example.test/",
+        provider_target="http://localhost:8787",
         environ={"GOOGLE_MAPS_API_KEY": "secret"},
         runner=lambda *args, **kwargs: calls.append((args, kwargs)),
         target_identity_reader=lambda _target: {
@@ -1309,7 +1415,7 @@ def test_provider_verify_rejects_dirty_or_uncommitted_local_build(tmp_path: Path
         tmp_path,
         "verify",
         provider="google-3d",
-        provider_target="https://preview.example.test/",
+        provider_target="http://localhost:8787",
         environ={"GOOGLE_MAPS_API_KEY": "secret"},
         runner=lambda *args, **kwargs: calls.append((args, kwargs)),
         target_identity_reader=_matching_target_identity,
@@ -1519,7 +1625,7 @@ def test_provider_verify_fingerprints_env_file_presence_without_exporting_secret
         tmp_path,
         "verify",
         provider="google-3d",
-        provider_target="http://localhost:8787/",
+        provider_target="http://localhost:8787",
         environ={},
         runner=runner,
         target_identity_reader=_matching_target_identity,
@@ -1739,15 +1845,11 @@ def test_cli_reuses_generation_proof_without_running_the_gate(monkeypatch, capsy
 def test_cli_binds_provider_reuse_to_provider_and_target(monkeypatch, capsys):
     captured: dict[str, object] = {}
 
-    def fake_reuse(root, capability, **kwargs):
-        captured.update(root=root, capability=capability, **kwargs)
+    def fake_reuse(root, **kwargs):
+        captured.update(root=root, **kwargs)
         return {"status": "passed", "exit_code": 0}
 
-    monkeypatch.setattr("godiesel_control.reuse_verification", fake_reuse)
-    monkeypatch.setattr(
-        "godiesel_control.provider_proof_environment",
-        lambda root, environ: {"GOOGLE_MAPS_API_KEY": "present-without-value"},
-    )
+    monkeypatch.setattr("godiesel_control.reuse_provider_readiness", fake_reuse)
 
     exit_code = main(
         [
@@ -1763,14 +1865,9 @@ def test_cli_binds_provider_reuse_to_provider_and_target(monkeypatch, capsys):
     )
 
     assert exit_code == 0
-    assert captured["expected_inputs"] == {
-        "provider": "atlas",
-        "provider-target": "https://preview.example.test/",
-    }
+    assert captured["provider"] == "atlas"
     assert captured["provider_target"] == "https://preview.example.test/"
-    assert captured["environ"] == {
-        "GOOGLE_MAPS_API_KEY": "present-without-value"
-    }
+    assert captured["environ"] is os.environ
     assert json.loads(capsys.readouterr().out)["status"] == "passed"
 
 

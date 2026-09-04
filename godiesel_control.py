@@ -21,7 +21,7 @@ from godiesel_local_capabilities import (
     execute_provider_readiness,
     execute_route_generation,
     inspect_planned_route_persistence,
-    provider_proof_environment,
+    reuse_provider_readiness,
 )
 from godiesel_route_share import AUTHORITY as ROUTE_SHARE_AUTHORITY
 from godiesel_route_share import execute_route_share
@@ -1260,15 +1260,11 @@ def main(argv: list[str] | None = None) -> int:
                     parser.error("--reuse only supports verification")
                 if args.provider is None or args.provider_target is None:
                     parser.error("provider proof reuse requires --provider and --provider-target")
-                result = reuse_verification(
+                result = reuse_provider_readiness(
                     root,
-                    "provider-readiness",
-                    expected_inputs={
-                        "provider": args.provider,
-                        "provider-target": args.provider_target,
-                    },
-                    environ=provider_proof_environment(root, os.environ),
+                    provider=args.provider,
                     provider_target=args.provider_target,
+                    environ=os.environ,
                 )
             else:
                 result = execute_provider_readiness(

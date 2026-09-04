@@ -615,14 +615,14 @@ def test_verification_explanation_schema_is_valid():
         (
             "test_route_create.py",
             "route-share",
-            "implementation",
-            "ticket",
+            "fixture",
+            "focused",
             "source-truth",
         ),
         (
             "test_route_provenance.py",
             "route-generation",
-            "implementation",
+            "fixture",
             "focused",
             "single-writer",
         ),
@@ -660,6 +660,79 @@ def test_explain_maps_paths_to_capabilities_and_required_gates(
             (ROOT / "system/verification-explanation.schema.json").read_text()
         )
     ).validate(explanation)
+
+
+@pytest.mark.parametrize(
+    ("changed_path", "expected_gates"),
+    [
+        (
+            "test_route_create.py",
+            {
+                (
+                    "route-share",
+                    "focused",
+                    "./scripts/route.sh check <slug>",
+                )
+            },
+        ),
+        (
+            "test_route_provenance.py",
+            {
+                (
+                    "route-share",
+                    "focused",
+                    "./scripts/route.sh check <slug>",
+                ),
+                (
+                    "route-generation",
+                    "focused",
+                    "python -m pytest -q test_godiesel_local_capabilities.py test_react_app.py test_route_provenance.py",
+                ),
+                (
+                    "owner-curation",
+                    "focused",
+                    "python -m pytest -q test_godiesel_local_capabilities.py test_admin_curation.py test_curation_publish.py test_route_provenance.py",
+                ),
+            },
+        ),
+    ],
+)
+def test_route_fixtures_select_exact_executing_gates(
+    changed_path: str,
+    expected_gates: set[tuple[str, str, str]],
+):
+    result = explain_verification(ROOT, changed_paths=[changed_path])
+
+    assert result["status"] == "passed"
+    explanation = result["result"]
+    assert {
+        (gate["capability"], gate["tier"], gate["command"])
+        for gate in explanation["selected_gates"]
+    } == expected_gates
+    assert explanation["classifications"][0]["categories"] == ["fixture"]
+
+
+@pytest.mark.parametrize(
+    ("capability", "fixture_paths"),
+    [
+        ("route-share", {"test_route_create.py", "test_route_provenance.py"}),
+        ("route-generation", {"test_route_provenance.py"}),
+        ("owner-curation", {"test_route_provenance.py"}),
+    ],
+)
+def test_route_fixture_gates_fingerprint_every_executed_test(
+    capability: str,
+    fixture_paths: set[str],
+):
+    snapshot = build_proof_snapshot(ROOT, capability, tiers=["focused"])
+
+    assert snapshot["status"] == "passed"
+    covered_fixture_paths = {
+        item["name"]
+        for item in snapshot["covered_inputs"]
+        if item["category"] == "fixture"
+    }
+    assert fixture_paths <= covered_fixture_paths
 
 
 def test_documentation_only_change_selects_no_runtime_gate():

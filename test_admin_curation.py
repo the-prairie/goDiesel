@@ -1,15 +1,20 @@
+import importlib.util
 import json
+import os
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
 
 import admin_curation
+import pandas as pd
 
 from admin_curation import (
     SourceRollbackError,
     curation_readiness,
     publish_curation_or_rebuild,
+    run_owner_mutation,
     save_curation_and_rebuild,
     update_route_curation,
 )
@@ -30,6 +35,60 @@ COMPLETE_CURATION = {
 
 
 class AdminCurationTests(unittest.TestCase):
+    def test_media_mutation_helper_blocks_on_checkout_wide_contention(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            local_lock = threading.Lock()
+            mutation = mock.Mock()
+
+            with admin_curation.owner_mutation_lock(root):
+                with self.assertRaises(admin_curation.OwnerMutationBusyError):
+                    run_owner_mutation(root, local_lock, mutation)
+
+            mutation.assert_not_called()
+            self.assertFalse(local_lock.locked())
+
+    def test_media_upload_endpoint_returns_409_on_checkout_wide_contention(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "quests.json").write_text('{"routes": []}\n', encoding="utf-8")
+            module_path = Path(__file__).resolve().parent / "admin.py"
+            spec = importlib.util.spec_from_file_location(
+                "godiesel_admin_contention_fixture",
+                module_path,
+            )
+            self.assertIsNotNone(spec)
+            self.assertIsNotNone(spec.loader)
+
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "GODIESEL_CHECKOUT_ROOT": str(root),
+                    "GODIESEL_DIESEL_DIARIES_ROOT": str(root),
+                },
+            ), mock.patch.object(
+                pd,
+                "read_csv",
+                return_value=pd.DataFrame(columns=["Activity Date", "Filename"]),
+            ):
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+
+            handler = object.__new__(module.Handler)
+            handler.path = "/api/media/upload"
+            handler._origin_allowed = mock.Mock(return_value=True)
+            handler._handle_media_upload = mock.Mock()
+            handler._send = mock.Mock()
+
+            with admin_curation.owner_mutation_lock(root):
+                handler.do_POST()
+
+            handler._send.assert_called_once_with(
+                409,
+                {"error": "another owner mutation is in progress"},
+            )
+            handler._handle_media_upload.assert_not_called()
+
     def test_readiness_distinguishes_incomplete_draft_from_reviewed_guide(self):
         draft = curation_readiness({
             "vibe": "Riverside miles.",

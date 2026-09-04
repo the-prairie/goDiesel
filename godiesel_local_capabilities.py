@@ -8,10 +8,12 @@ import os
 import re
 import subprocess
 import sys
+import time
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Iterator, Mapping
 from urllib.parse import urlparse
 
 from jsonschema import Draft202012Validator
@@ -40,6 +42,7 @@ from godiesel_verification import (
     build_proof_snapshot,
     proof_snapshot_stability_issues,
     read_target_build_identity,
+    reuse_verification,
     verified_provider_build_identity,
 )
 from quest_meta import build_route_curation, infer_route_region, route_guide_preview
@@ -74,6 +77,7 @@ CURATION_AUTHORITY = {
     "verify": "ephemeral-local",
 }
 PROVIDER_AUTHORITY = {"inspect": "read-only", "verify": "ephemeral-local"}
+GOOGLE_3D_PROVIDER_TARGET = "http://localhost:8787"
 PROVIDER_CHECKS = {
     "atlas": {
         "configuration": "GOOGLE_MAPS_API_KEY",
@@ -661,10 +665,11 @@ def execute_route_generation(
             "-q",
             "test_godiesel_local_capabilities.py",
             "test_react_app.py",
+            "test_route_provenance.py",
         ]
         display_command = (
             "python -m pytest -q test_godiesel_local_capabilities.py "
-            "test_react_app.py"
+            "test_react_app.py test_route_provenance.py"
         )
         return _run_verification(
             root,
@@ -907,7 +912,7 @@ def _plan_owner_curation(
         ],
         "external_effects": [],
         "verification_requirements": [
-            "python -m pytest -q test_godiesel_local_capabilities.py test_admin_curation.py test_curation_publish.py"
+            "python -m pytest -q test_godiesel_local_capabilities.py test_admin_curation.py test_curation_publish.py test_route_provenance.py"
         ],
         "warnings": [],
         "blockers": [],
@@ -1109,10 +1114,11 @@ def execute_owner_curation(
             "test_godiesel_local_capabilities.py",
             "test_admin_curation.py",
             "test_curation_publish.py",
+            "test_route_provenance.py",
         ]
         display_command = (
             "python -m pytest -q test_godiesel_local_capabilities.py "
-            "test_admin_curation.py test_curation_publish.py"
+            "test_admin_curation.py test_curation_publish.py test_route_provenance.py"
         )
         return _run_verification(
             root,
@@ -1383,9 +1389,11 @@ def _provider_inventory(root: Path, environ: Mapping[str, str]) -> list[dict[str
     return providers
 
 
-def _valid_provider_target(value: str | None) -> bool:
+def _valid_provider_target(provider: str, value: str | None) -> bool:
     if value is None:
         return False
+    if provider == "google-3d":
+        return value == GOOGLE_3D_PROVIDER_TARGET
     parsed = urlparse(value)
     return (
         parsed.scheme in {"http", "https"}
@@ -1398,6 +1406,87 @@ def _valid_provider_target(value: str | None) -> bool:
     )
 
 
+@contextmanager
+def _google_3d_preview(
+    root: Path,
+    environ: Mapping[str, str],
+    target_identity_reader: TargetIdentityReader,
+    *,
+    preview_launcher: Callable[..., Any] = subprocess.Popen,
+    preview_sleep: Callable[[float], None] = time.sleep,
+) -> Iterator[tuple[Mapping[str, object] | None, list[dict[str, str]]]]:
+    process = None
+    observed_identity = None
+    blockers: list[dict[str, str]] = []
+    try:
+        try:
+            observed_identity = target_identity_reader(GOOGLE_3D_PROVIDER_TARGET)
+        except Exception:
+            build_identity_path = root / "app/dist/build-identity.json"
+            vite_path = root / "app/node_modules/.bin/vite"
+            if not build_identity_path.is_file():
+                blockers.append(
+                    _issue(
+                        "GODIESEL_GOOGLE_PREVIEW_BUILD_REQUIRED",
+                        "Google 3D verification requires an exact prebuilt application artifact.",
+                        "Build the clean checkout with ./make-dist.sh, then rerun provider verification.",
+                    )
+                )
+            elif not vite_path.is_file():
+                blockers.append(
+                    _issue(
+                        "GODIESEL_GOOGLE_PREVIEW_RUNTIME_REQUIRED",
+                        "The local Vite preview runtime is unavailable.",
+                        "Install the application dependencies, then rerun provider verification.",
+                    )
+                )
+            else:
+                process = preview_launcher(
+                    [
+                        str(vite_path),
+                        "preview",
+                        "--host",
+                        "localhost",
+                        "--port",
+                        "8787",
+                        "--strictPort",
+                    ],
+                    cwd=root / "app",
+                    env=dict(environ),
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                )
+                deadline = time.monotonic() + 15
+                while time.monotonic() < deadline:
+                    if process.poll() is not None:
+                        break
+                    try:
+                        observed_identity = target_identity_reader(
+                            GOOGLE_3D_PROVIDER_TARGET
+                        )
+                        break
+                    except Exception:
+                        preview_sleep(0.1)
+                if observed_identity is None:
+                    blockers.append(
+                        _issue(
+                            "GODIESEL_GOOGLE_PREVIEW_UNAVAILABLE",
+                            "The exact local Google 3D preview did not become reachable.",
+                            "Inspect the clean build and local port 8787, then rerun provider verification.",
+                        )
+                    )
+        yield observed_identity, blockers
+    finally:
+        if process is not None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+
+
 def execute_provider_readiness(
     root: Path | str,
     verb: str,
@@ -1408,6 +1497,8 @@ def execute_provider_readiness(
     runner: Runner = subprocess.run,
     target_identity_reader: TargetIdentityReader = read_target_build_identity,
     repository_reader: RepositoryReader = repository_snapshot,
+    preview_launcher: Callable[..., Any] = subprocess.Popen,
+    preview_sleep: Callable[[float], None] = time.sleep,
 ) -> dict[str, Any]:
     """Inspect provider configuration or run one explicit existing live check."""
 
@@ -1454,7 +1545,7 @@ def execute_provider_readiness(
                 )
             ],
         )
-    if not _valid_provider_target(provider_target):
+    if not _valid_provider_target(provider, provider_target):
         return _envelope(
             "provider-readiness",
             verb,
@@ -1466,8 +1557,16 @@ def execute_provider_readiness(
             blockers=[
                 _issue(
                     "GODIESEL_PROVIDER_TARGET_REQUIRED",
-                    "Live provider verification requires an explicit credential-free HTTP target.",
-                    "Supply the exact preview or localhost URL with --provider-target.",
+                    (
+                        f"Google 3D verification requires {GOOGLE_3D_PROVIDER_TARGET}."
+                        if provider == "google-3d"
+                        else "Live provider verification requires an explicit credential-free HTTP target."
+                    ),
+                    (
+                        f"Pass --provider-target {GOOGLE_3D_PROVIDER_TARGET}."
+                        if provider == "google-3d"
+                        else "Supply the exact preview URL with --provider-target."
+                    ),
                 )
             ],
         )
@@ -1496,77 +1595,203 @@ def execute_provider_readiness(
                 )
             ],
         )
-    build_identity, identity_blockers = verified_provider_build_identity(
-        root,
-        str(provider_target),
-        target_identity_reader=target_identity_reader,
-        repository_reader=repository_reader,
+    preview_context = (
+        _google_3d_preview(
+            root,
+            process_env,
+            target_identity_reader,
+            preview_launcher=preview_launcher,
+            preview_sleep=preview_sleep,
+        )
+        if provider == "google-3d"
+        else nullcontext((None, []))
     )
-    if identity_blockers or build_identity is None:
-        return _envelope(
-            "provider-readiness",
-            verb,
-            authority,
-            status="blocked",
-            authorized=True,
-            result={
+    with preview_context as (observed_identity, preview_blockers):
+        if preview_blockers:
+            return _envelope(
+                "provider-readiness",
+                verb,
+                authority,
+                status="blocked",
+                authorized=True,
+                result={
+                    "provider": provider,
+                    "provider_target": provider_target,
+                    "configuration_state": "configured",
+                    "provider_state": "not_run",
+                },
+                result_contract="godiesel_local_capabilities.py#provider-verification",
+                blockers=preview_blockers,
+            )
+        identity_reader = (
+            (lambda _target: observed_identity)
+            if observed_identity is not None
+            else target_identity_reader
+        )
+        build_identity, identity_blockers = verified_provider_build_identity(
+            root,
+            str(provider_target),
+            target_identity_reader=identity_reader,
+            repository_reader=repository_reader,
+        )
+        if identity_blockers or build_identity is None:
+            return _envelope(
+                "provider-readiness",
+                verb,
+                authority,
+                status="blocked",
+                authorized=True,
+                result={
+                    "provider": provider,
+                    "provider_target": provider_target,
+                    "configuration_state": "configured",
+                    "provider_state": "not_run",
+                },
+                result_contract="godiesel_local_capabilities.py#provider-verification",
+                blockers=identity_blockers,
+            )
+        command = list(details["command"])
+        process_env["GODIESEL_ATLAS_PREVIEW_URL"] = str(provider_target)
+        proof_env = provider_proof_environment(root, process_env)
+        display_command = " ".join(command)
+        return _run_verification(
+            root,
+            capability="provider-readiness",
+            command=command,
+            display_command=display_command,
+            tier="live",
+            environ=process_env,
+            proof_environ=proof_env,
+            runner=runner,
+            inputs=[
+                {"kind": "provider", "name": "provider", "sha256": canonical_digest(provider)},
+                {
+                    "kind": "provider",
+                    "name": "provider-target",
+                    "sha256": canonical_digest(provider_target),
+                },
+                {
+                    "kind": "provider",
+                    "name": "deployed-build",
+                    "sha256": canonical_digest(build_identity),
+                },
+            ],
+            result=lambda completed: {
                 "provider": provider,
                 "provider_target": provider_target,
                 "configuration_state": "configured",
-                "provider_state": "not_run",
+                "provider_state": "passed" if completed.returncode == 0 else "failed",
+                "build_identity": build_identity,
+                "command": display_command,
+                "command_exit_code": completed.returncode,
             },
-            result_contract="godiesel_local_capabilities.py#provider-verification",
-            blockers=identity_blockers,
+            failure_code="GODIESEL_PROVIDER_CHECK_FAILED",
+            failure_message=f"The existing {provider} live provider check failed.",
+            failure_remediation="Inspect the retained Playwright evidence and provider response before retrying.",
+            provider_target=provider_target,
+            provider_identity=build_identity,
+            refresh_provider_identity=lambda: verified_provider_build_identity(
+                root,
+                str(provider_target),
+                target_identity_reader=target_identity_reader,
+                repository_reader=repository_reader,
+            ),
+            external_target={
+                "kind": provider,
+                "name_sha256": canonical_digest(provider_target),
+                "immutable_id": str(build_identity["build_id"]),
+            },
         )
-    command = list(details["command"])
-    process_env["GODIESEL_ATLAS_PREVIEW_URL"] = str(provider_target)
-    proof_env = provider_proof_environment(root, process_env)
-    display_command = " ".join(command)
-    return _run_verification(
-        root,
-        capability="provider-readiness",
-        command=command,
-        display_command=display_command,
-        tier="live",
-        environ=process_env,
-        proof_environ=proof_env,
-        runner=runner,
-        inputs=[
-            {"kind": "provider", "name": "provider", "sha256": canonical_digest(provider)},
-            {
-                "kind": "provider",
-                "name": "provider-target",
-                "sha256": canonical_digest(provider_target),
-            },
-            {
-                "kind": "provider",
-                "name": "deployed-build",
-                "sha256": canonical_digest(build_identity),
-            },
-        ],
-        result=lambda completed: {
-            "provider": provider,
-            "provider_target": provider_target,
-            "configuration_state": "configured",
-            "provider_state": "passed" if completed.returncode == 0 else "failed",
-            "build_identity": build_identity,
-            "command": display_command,
-            "command_exit_code": completed.returncode,
-        },
-        failure_code="GODIESEL_PROVIDER_CHECK_FAILED",
-        failure_message=f"The existing {provider} live provider check failed.",
-        failure_remediation="Inspect the retained Playwright evidence and provider response before retrying.",
-        provider_target=provider_target,
-        provider_identity=build_identity,
-        refresh_provider_identity=lambda: verified_provider_build_identity(
+
+
+def reuse_provider_readiness(
+    root: Path | str,
+    *,
+    provider: str,
+    provider_target: str,
+    environ: Mapping[str, str] | None = None,
+    target_identity_reader: TargetIdentityReader = read_target_build_identity,
+    repository_reader: RepositoryReader = repository_snapshot,
+    preview_launcher: Callable[..., Any] = subprocess.Popen,
+    preview_sleep: Callable[[float], None] = time.sleep,
+) -> dict[str, Any]:
+    """Reuse provider proof while owning any required local preview lifecycle."""
+    root = Path(root).resolve()
+    process_env = dict(os.environ if environ is None else environ)
+    if provider not in PROVIDER_CHECKS or not _valid_provider_target(
+        provider, provider_target
+    ):
+        return _envelope(
+            "provider-readiness",
+            "verify",
+            "ephemeral-local",
+            status="blocked",
+            authorized=True,
+            result=None,
+            result_contract="none",
+            blockers=[
+                _issue(
+                    "GODIESEL_PROVIDER_TARGET_REQUIRED",
+                    "Provider proof reuse requires a supported provider and its exact target.",
+                    "Inspect provider readiness and pass the provider's exact verification target.",
+                )
+            ],
+        )
+    configuration = str(PROVIDER_CHECKS[provider]["configuration"])
+    if not _configuration_present(root, process_env, configuration):
+        return _envelope(
+            "provider-readiness",
+            "verify",
+            "ephemeral-local",
+            status="blocked",
+            authorized=True,
+            result=None,
+            result_contract="none",
+            blockers=[
+                _issue(
+                    "GODIESEL_PROVIDER_CONFIGURATION_MISSING",
+                    f"Configuration {configuration} is required for {provider} proof reuse.",
+                    f"Configure {configuration} without exposing its value, then retry.",
+                )
+            ],
+        )
+    preview_context = (
+        _google_3d_preview(
             root,
-            str(provider_target),
-            target_identity_reader=target_identity_reader,
-            repository_reader=repository_reader,
-        ),
-        external_target={
-            "kind": provider,
-            "name_sha256": canonical_digest(provider_target),
-            "immutable_id": str(build_identity["build_id"]),
-        },
+            process_env,
+            target_identity_reader,
+            preview_launcher=preview_launcher,
+            preview_sleep=preview_sleep,
+        )
+        if provider == "google-3d"
+        else nullcontext((None, []))
     )
+    with preview_context as (observed_identity, preview_blockers):
+        if preview_blockers:
+            return _envelope(
+                "provider-readiness",
+                "verify",
+                "ephemeral-local",
+                status="blocked",
+                authorized=True,
+                result=None,
+                result_contract="none",
+                blockers=preview_blockers,
+            )
+        identity_reader = (
+            (lambda _target: observed_identity)
+            if observed_identity is not None
+            else target_identity_reader
+        )
+        return reuse_verification(
+            root,
+            "provider-readiness",
+            expected_inputs={
+                "provider": provider,
+                "provider-target": provider_target,
+            },
+            environ=provider_proof_environment(root, process_env),
+            provider_target=provider_target,
+            target_identity_reader=identity_reader,
+            repository_reader=repository_reader,
+        )

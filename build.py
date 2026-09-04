@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from quest_meta import (
+    BEST_IN_EARTH_IDS,
     build_quest_meta,
     build_replay_metadata,
     build_route_curation,
@@ -35,10 +36,6 @@ REACT_GENERATED_FILES = (
     REACT_GENERATED_DATA / 'route-stats.json',
 )
 ROUTE_GENERATION_BACKUP = REACT_ROUTE_DETAILS.parent / '.route-generation-backup'
-BEST_IN_EARTH_IDS = {
-    '13935098460', '14349820520', '17636880071', '17654151284',
-    '13358070690', '9959792315', '9934715694',
-}
 
 def recover_interrupted_route_publication():
     if not ROUTE_GENERATION_BACKUP.exists():

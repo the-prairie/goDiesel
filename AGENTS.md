@@ -17,7 +17,7 @@ Query dynamic state and preserve unrelated work.
 
 ## Operator loop
 
-Use the accepted unified control model from ADR-0016 for every implemented capability:
+Use the unified control model proposed in ADR-0016 for every implemented capability:
 
 ```text
 orient -> inspect -> plan -> apply -> verify -> release -> learn

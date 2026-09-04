@@ -141,8 +141,11 @@ GODIESEL_ATLAS_PREVIEW_URL=<preview-url> npm run test:e2e:earth
 Local Google 3D cinematic verification is:
 
 ```sh
-npm run test:e2e:google-live
+./scripts/godiesel verify provider-readiness --provider google-3d --provider-target http://localhost:8787 --json
 ```
+
+The adapter serves the exact prebuilt application artifact on that origin when no preview is already running.
+Build the clean checkout with `./make-dist.sh` before invoking the live gate.
 
 Every explicit live-provider command fails when its required configuration or
 provider is unavailable. Missing evidence must never appear as a skipped green run.
@@ -150,6 +153,9 @@ provider is unavailable. Missing evidence must never appear as a skipped green r
 Local native Google 3D verification must use `http://localhost:8787` rather
 than `http://127.0.0.1:8787`. The configured browser key authorizes the
 `localhost` origin, and Google treats the loopback IP as a different referrer.
+
+Normal verification leaves tracked archival screenshots untouched.
+Set `GODIESEL_CAPTURE_E2E_EVIDENCE=1` only for an intentional evidence refresh, then review every changed image before committing it.
 
 ## Gate Validity
 

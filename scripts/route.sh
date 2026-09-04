@@ -65,6 +65,7 @@ case "$command" in
   check)
     slug="${1:-}"
     if [[ -z "$slug" ]]; then usage; exit 1; fi
+    "${PYTHON}" -m pytest -q test_route_create.py test_route_provenance.py
     # Report readiness before spending a build on it.
     "${PYTHON}" route_status.py "$slug"
     echo

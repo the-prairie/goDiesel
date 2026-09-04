@@ -76,7 +76,19 @@
       ],
       "invariants": ["source-truth", "stable-route-identity", "single-route-microsite"],
       "verification": {
-        "focused": [{ "command": "./scripts/route.sh check <slug>", "cwd": "." }],
+        "focused": [
+          {
+            "command": "./scripts/route.sh check <slug>",
+            "cwd": ".",
+            "proof_inputs": [
+              { "category": "implementation", "paths": ["godiesel_control.py", "godiesel_evidence.py", "godiesel_route_share.py", "godiesel_verification.py", "scripts/godiesel", "route_create.py", "route_status.py", "admin_curation.py", "curation_publish.py", "generated_route_contract.py", "route_build.py", "build.py", "quest_meta.py", "route_provenance.py", "route_annotations.py", "route_imports.py", "route_timezones.py", "scripts/route.sh", "scripts/route-preview.sh", "scripts/publish-route-microsite.sh", "scripts/scope-route-microsite.mjs", "app/src/**", "app/scripts/check-bundle-budget.mjs", "app/scripts/smoke-single-route-microsite.mjs"] },
+              { "category": "data", "paths": ["quests.json", "route_sources/**", "app/src/data/generated/**", "app/public/data/routes/**", "app/public/media/**"] },
+              { "category": "fixture", "paths": ["test_godiesel_control.py", "test_godiesel_route_share.py", "test_godiesel_verification.py", "test_route_create.py", "test_route_provenance.py", "test_route_share_cli.py", "app/e2e/single-route-microsite.spec.ts"] },
+              { "category": "contract", "paths": ["route_create.schema.json", "system/capabilities.json", "system/capabilities.schema.json", "system/result.schema.json", "system/route-share-receipt.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json"] },
+              { "category": "configuration", "paths": [".gitignore", "make-dist.sh", "requirements.txt", "app/package.json", "app/package-lock.json", "app/vite.config.ts", "app/playwright.config.ts"] }
+            ]
+          }
+        ],
         "ticket": [{ "command": "./scripts/test-route-share-acceptance.sh", "cwd": "." }],
         "release": [{ "command": "npm --prefix app run verify", "cwd": "." }],
         "live": [{ "command": "node app/scripts/smoke-single-route-microsite.mjs <public-url> <slug>", "cwd": "." }]
@@ -137,12 +149,12 @@
       "verification": {
         "focused": [
           {
-            "command": "python -m pytest -q test_godiesel_local_capabilities.py test_react_app.py",
+            "command": "python -m pytest -q test_godiesel_local_capabilities.py test_react_app.py test_route_provenance.py",
             "cwd": ".",
             "proof_inputs": [
               { "category": "implementation", "paths": ["godiesel_local_capabilities.py", "generated_route_contract.py", "route_build.py", "build.py", "rebuild.sh", "requirements.txt"] },
               { "category": "data", "paths": ["quests.json", "route_sources/**", "app/src/data/generated/**", "app/public/data/routes/**"] },
-              { "category": "fixture", "paths": ["test_godiesel_local_capabilities.py", "test_react_app.py"] },
+              { "category": "fixture", "paths": ["test_godiesel_local_capabilities.py", "test_react_app.py", "test_route_provenance.py"] },
               { "category": "contract", "paths": ["system/capabilities.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json"] }
             ]
           }
@@ -211,12 +223,12 @@
       "verification": {
         "focused": [
           {
-            "command": "python -m pytest -q test_godiesel_local_capabilities.py test_admin_curation.py test_curation_publish.py",
+            "command": "python -m pytest -q test_godiesel_local_capabilities.py test_admin_curation.py test_curation_publish.py test_route_provenance.py",
             "cwd": ".",
             "proof_inputs": [
               { "category": "implementation", "paths": ["godiesel_local_capabilities.py", "generated_route_contract.py", "admin.py", "admin_curation.py", "curation_publish.py", "build.py", "requirements.txt"] },
               { "category": "data", "paths": ["quests.json", "route_sources/**", "app/src/data/generated/**", "app/public/data/routes/**"] },
-              { "category": "fixture", "paths": ["test_godiesel_local_capabilities.py", "test_admin_curation.py", "test_curation_publish.py"] },
+              { "category": "fixture", "paths": ["test_godiesel_local_capabilities.py", "test_admin_curation.py", "test_curation_publish.py", "test_route_provenance.py"] },
               { "category": "contract", "paths": ["system/capabilities.json", "system/owner-curation-plan.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json"] }
             ]
           }
@@ -268,7 +280,7 @@
         "verify": ["named provider", "exact credential-free origin root", "clean local commit and tree", "matching immutable deployed build identity"]
       },
       "reads": [".env", "app/.env", "app/src/providers/**", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts"],
-      "writes": [".godiesel/evidence/**", "app/test-results/**", "app/playwright-report/**"],
+      "writes": [".godiesel/evidence/**", "app/test-results/**", "app/playwright-report/**", "app/e2e/evidence/auto-director/**"],
       "external_effects": ["read named map or imagery provider through the selected live browser check"],
       "required_files": ["scripts/godiesel", "scripts/verify-provider-readiness.sh", "godiesel_local_capabilities.py", "system/build-identity.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json", "app/vite.config.ts", "scripts/check-provider-key.mjs", "app/src/providers/google-maps-loader.ts", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts", "docs/agents/testing.md"],
       "configuration": [
@@ -281,13 +293,13 @@
           { "command": "./scripts/godiesel verify provider-readiness --provider atlas --provider-target <url> --reuse --json", "cwd": "." },
           { "command": "./scripts/godiesel verify provider-readiness --provider earth-replay --provider-target <url> --json", "cwd": "." },
           { "command": "./scripts/godiesel verify provider-readiness --provider earth-replay --provider-target <url> --reuse --json", "cwd": "." },
-          { "command": "./scripts/godiesel verify provider-readiness --provider google-3d --provider-target <url> --json", "cwd": "." },
-          { "command": "./scripts/godiesel verify provider-readiness --provider google-3d --provider-target <url> --reuse --json", "cwd": "." }
+          { "command": "./scripts/godiesel verify provider-readiness --provider google-3d --provider-target http://localhost:8787 --json", "cwd": "." },
+          { "command": "./scripts/godiesel verify provider-readiness --provider google-3d --provider-target http://localhost:8787 --reuse --json", "cwd": "." }
         ]
       },
       "preconditions": [
         "the selected provider configuration is present without exposing its value",
-        "the exact localhost or deployed preview target is named",
+        "the exact deployed preview target is named, or Google 3D uses http://localhost:8787 with an exact prebuilt artifact",
         "the origin root exposes build-identity.json for the same clean local commit and tree with one immutable build instance id",
         "browser and hardware evidence are available for claims that depend on rendering"
       ],
@@ -298,6 +310,7 @@
       },
       "artifacts": [
         { "kind": "live-provider-test-evidence", "location": "app/test-results/**", "persistence": "generated-local" },
+        { "kind": "archival-provider-screenshots", "location": "app/e2e/evidence/auto-director/**", "persistence": "tracked-local" },
         { "kind": "verification-evidence-receipt", "location": ".godiesel/evidence/**", "persistence": "ignored-local", "schema": "system/evidence-receipt.schema.json" }
       ],
       "invariants": ["configuration-is-not-success", "provider-proof-honesty", "named-live-target"],
@@ -353,7 +366,7 @@
         "release": ["verified immutable application artifact", "named Cloudflare target", "exact replacement authority"]
       },
       "reads": ["app/**", "dist/**"],
-      "writes": ["app/dist/**", "dist/**"],
+      "writes": ["app/dist/**", "dist/**", "app/e2e/evidence/issue-62-admin-workspace/**"],
       "external_effects": ["cloudflare-pages-production"],
       "required_files": ["app/package.json", "make-dist.sh", "scripts/check-provider-key.mjs", "docs/agents/testing.md"],
       "configuration": [
@@ -384,6 +397,7 @@
       },
       "artifacts": [
         { "kind": "application-bundle", "location": "dist/**", "persistence": "generated-local" },
+        { "kind": "archival-admin-screenshots", "location": "app/e2e/evidence/issue-62-admin-workspace/**", "persistence": "tracked-local" },
         { "kind": "production-deployment", "location": "cloudflare-pages-production", "persistence": "external" }
       ],
       "invariants": ["exact-artifact-release", "named-degradation", "provider-proof-honesty"],
@@ -435,12 +449,30 @@
     },
     {
       "id": "route-share-implementation",
-      "paths": ["route_create.py", "route_create.schema.json", "route_status.py", "admin_curation.py", "curation_publish.py", "quest_meta.py", "route_annotations.py", "route_imports.py", "requirements.txt", "test_route_create.py", "scripts/route.sh", "scripts/route-preview.sh", "scripts/publish-route-microsite.sh", "app/scripts/smoke-single-route-microsite.mjs"],
+      "paths": ["route_create.py", "route_create.schema.json", "route_status.py", "admin_curation.py", "curation_publish.py", "quest_meta.py", "route_annotations.py", "route_imports.py", "requirements.txt", "scripts/route.sh", "scripts/route-preview.sh", "scripts/publish-route-microsite.sh", "app/scripts/smoke-single-route-microsite.mjs"],
       "capabilities": ["route-share"],
       "category": "implementation",
       "gates": [{ "capability": "route-share", "tier": "focused" }, { "capability": "route-share", "tier": "ticket" }],
       "invariants": [{ "capability": "route-share", "id": "source-truth" }, { "capability": "route-share", "id": "stable-route-identity" }, { "capability": "route-share", "id": "single-route-microsite" }],
       "reason": "The route-share state machine, writer, preview, or publication path changed."
+    },
+    {
+      "id": "route-share-fixtures",
+      "paths": ["test_route_create.py", "test_route_provenance.py"],
+      "capabilities": ["route-share"],
+      "category": "fixture",
+      "gates": [{ "capability": "route-share", "tier": "focused" }],
+      "invariants": [{ "capability": "route-share", "id": "source-truth" }, { "capability": "route-share", "id": "stable-route-identity" }],
+      "reason": "A route creation or provenance fixture changed."
+    },
+    {
+      "id": "route-projection-fixture",
+      "paths": ["test_route_provenance.py"],
+      "capabilities": ["route-generation", "owner-curation"],
+      "category": "fixture",
+      "gates": [{ "capability": "route-generation", "tier": "focused" }, { "capability": "owner-curation", "tier": "focused" }],
+      "invariants": [{ "capability": "route-generation", "id": "single-writer" }, { "capability": "route-generation", "id": "two-tier-route-data" }, { "capability": "owner-curation", "id": "owner-authored-provenance" }],
+      "reason": "The shared route provenance fixture changed."
     },
     {
       "id": "route-data",
@@ -453,7 +485,7 @@
     },
     {
       "id": "route-generation-implementation",
-      "paths": ["build.py", "route_build.py", "generated_route_contract.py", "quest_meta.py", "route_provenance.py", "route_annotations.py", "route_imports.py", "route_timezones.py", "requirements.txt", "rebuild.sh", "test_react_app.py", "test_route_provenance.py"],
+      "paths": ["build.py", "route_build.py", "generated_route_contract.py", "quest_meta.py", "route_provenance.py", "route_annotations.py", "route_imports.py", "route_timezones.py", "requirements.txt", "rebuild.sh", "test_react_app.py"],
       "capabilities": ["route-generation"],
       "category": "implementation",
       "gates": [{ "capability": "route-generation", "tier": "focused" }],
@@ -462,7 +494,7 @@
     },
     {
       "id": "owner-curation-implementation",
-      "paths": ["admin.py", "admin.sh", "admin_curation.py", "curation_publish.py", "generated_route_contract.py", "build.py", "quest_meta.py", "route_provenance.py", "route_annotations.py", "route_imports.py", "route_timezones.py", "requirements.txt", "test_admin_curation.py", "test_curation_publish.py", "test_route_provenance.py"],
+      "paths": ["admin.py", "admin.sh", "admin_curation.py", "curation_publish.py", "generated_route_contract.py", "build.py", "quest_meta.py", "route_provenance.py", "route_annotations.py", "route_imports.py", "route_timezones.py", "requirements.txt", "test_admin_curation.py", "test_curation_publish.py"],
       "capabilities": ["owner-curation"],
       "category": "implementation",
       "gates": [{ "capability": "owner-curation", "tier": "focused" }],

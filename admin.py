@@ -33,6 +33,7 @@ from admin_curation import (
     SourceRollbackError,
     curation_readiness,
     owner_mutation_lock,
+    run_owner_mutation,
     save_owner_curation,
     write_atomic,
 )
@@ -710,13 +711,14 @@ class Handler(BaseHTTPRequestHandler):
         # Media arrives as raw bytes, so it is handled before the UTF-8 decode
         # that every JSON endpoint depends on.
         if path == '/api/media/upload':
-            if not OWNER_MUTATION_LOCK.acquire(blocking=False):
-                self._send(409, {'error': 'another owner mutation is in progress'})
-                return
             try:
-                self._handle_media_upload()
-            finally:
-                OWNER_MUTATION_LOCK.release()
+                run_owner_mutation(
+                    QUESTS,
+                    OWNER_MUTATION_LOCK,
+                    self._handle_media_upload,
+                )
+            except OwnerMutationBusyError as error:
+                self._send(409, {'error': str(error)})
             return
         try:
             n = int(self.headers.get('Content-Length', 0))
