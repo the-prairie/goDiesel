@@ -51,14 +51,22 @@ def test_target_build_identity_rejects_redirects():
 
 def test_target_build_identity_verifies_every_manifest_asset():
     asset = b"exact application bytes\n"
+    control = b"/*\n  X-Frame-Options: DENY\n"
     manifest = {
         "schema_version": 1,
         "document_type": "godiesel-artifact-manifest",
         "files": [
             {
+                "path": "_headers",
+                "size": len(control),
+                "sha256": sha256(control).hexdigest(),
+                "delivery": "deployment-control",
+            },
+            {
                 "path": "assets/application.js",
                 "size": len(asset),
                 "sha256": sha256(asset).hexdigest(),
+                "delivery": "served-asset",
             }
         ],
     }
@@ -77,9 +85,11 @@ def test_target_build_identity_verifies_every_manifest_asset():
         "/artifact-manifest.json": manifest_bytes,
         "/assets/application.js": asset,
     }
+    requests: list[str] = []
 
     class ArtifactHandler(BaseHTTPRequestHandler):
         def do_GET(self):
+            requests.append(self.path)
             payload = responses.get(self.path)
             if payload is None:
                 self.send_error(404)
@@ -98,6 +108,7 @@ def test_target_build_identity_verifies_every_manifest_asset():
     target = f"http://127.0.0.1:{server.server_port}/"
     try:
         assert read_target_build_identity(target) == identity
+        assert "/_headers" not in requests
         responses["/assets/application.js"] = b"fake! application bytes\n"
         with pytest.raises(ValueError, match="does not match its manifest"):
             read_target_build_identity(target)
@@ -1373,6 +1384,25 @@ def test_reuse_rejects_missing_bound_artifact(tmp_path: Path):
         (tmp_path / recorded["evidence"]["path"]).read_text(encoding="utf-8")
     )
     (tmp_path / receipt["artifacts"][0]["path"]).unlink()
+
+    reused = reuse_verification(
+        tmp_path,
+        "route-share",
+        slug="route-1",
+        environ={},
+    )
+
+    assert reused["status"] == "blocked"
+    assert reused["blockers"][0]["code"] == "GODIESEL_PROOF_ARTIFACT_INVALID"
+
+
+def test_reuse_rejects_route_share_proof_without_bound_artifacts(tmp_path: Path):
+    _write_reuse_fixture(tmp_path)
+    recorded, _runner = _record_proof(tmp_path)
+    receipt_path = tmp_path / recorded["evidence"]["path"]
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["artifacts"] = []
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
 
     reused = reuse_verification(
         tmp_path,

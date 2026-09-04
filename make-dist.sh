@@ -18,8 +18,12 @@ fi
 npm --prefix app run test:bundle
 node scripts/check-provider-key.mjs
 
-rm -rf dist
+if [[ -L dist || ( -e dist && ! -d dist ) ]]; then
+  echo "Refusing unsafe dist output path." >&2
+  exit 1
+fi
 mkdir -p dist
+find dist -mindepth 1 -delete
 cp -R app/dist/. dist/
 
 if [[ -n "$SINGLE_ROUTE_SLUG" ]]; then

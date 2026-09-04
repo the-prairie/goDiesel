@@ -21,6 +21,7 @@ from godiesel_evidence import (
     canonical_digest,
     ensure_local_directory,
     existing_local_directory,
+    write_local_text_atomic,
     write_evidence_receipt,
 )
 from godiesel_verification import (
@@ -102,19 +103,45 @@ def _release_target(
     if share_name is None:
         return None, []
     stable_alias = f"https://share-{share_name}.godiesel.pages.dev/"
-    candidates = re.findall(
-        r"https://([a-zA-Z0-9-]+)\.godiesel\.pages\.dev/?",
-        output,
-    )
-    immutable = next(
-        (
-            f"https://{hostname}.godiesel.pages.dev/"
-            for hostname in candidates
-            if not hostname.startswith("share-")
-        ),
-        None,
-    )
-    if immutable is None:
+    records = [
+        line.removeprefix("GODIESEL_RELEASE_TARGET=")
+        for line in output.splitlines()
+        if line.startswith("GODIESEL_RELEASE_TARGET=")
+    ]
+    try:
+        if len(records) != 1:
+            raise ValueError
+        target = json.loads(records[0])
+        immutable = target["immutable_deployment_url"]
+        if (
+            set(target)
+            != {
+                "immutable_deployment_url",
+                "stable_alias",
+                "commit",
+                "tree",
+                "build_id",
+                "artifact_manifest_sha256",
+                "smoke_status",
+            }
+            or target["stable_alias"] != stable_alias
+            or target["smoke_status"] != "passed"
+            or not isinstance(immutable, str)
+            or re.fullmatch(
+                r"https://(?!share-)[A-Za-z0-9-]+\.godiesel\.pages\.dev/",
+                immutable,
+            )
+            is None
+            or re.fullmatch(r"[a-f0-9]{40}", target["commit"]) is None
+            or re.fullmatch(r"[a-f0-9]{40}", target["tree"]) is None
+            or re.fullmatch(
+                r"[a-f0-9]{64}", target["artifact_manifest_sha256"]
+            )
+            is None
+        ):
+            raise ValueError
+        uuid.UUID(target["build_id"])
+    except (IndexError, KeyError, TypeError, ValueError, json.JSONDecodeError):
         return (
             {"stable_alias": stable_alias},
             [
@@ -126,11 +153,9 @@ def _release_target(
             ],
         )
     return {
-        "immutable_deployment_url": immutable,
-        "stable_alias": stable_alias,
+        **target,
         "guide_url": f"{stable_alias}#/routes/{{route_slug}}",
         "replay_url": f"{stable_alias}#/replay/{{route_slug}}",
-        "smoke_status": "passed",
     }, []
 
 
@@ -477,14 +502,12 @@ def _write_receipt(
                 target[key] = target[key].format(route_slug=route_slug)
         receipt["release_target"] = target
 
-    receipt_root = ensure_local_directory(root, Path(".route-share/runs"))
-    results_root = ensure_local_directory(root, Path(".route-share/results"))
-    proposals_root = ensure_local_directory(root, Path(".route-share/proposals"))
     relative_evidence = Path(".route-share") / "results" / f"{receipt_id}.json"
-    evidence_destination = results_root / f"{receipt_id}.json"
-    evidence_destination.write_text(
+    write_local_text_atomic(
+        root,
+        Path(".route-share/results"),
+        f"{receipt_id}.json",
         json.dumps(domain_result, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
-        encoding="utf-8",
     )
     receipt["result_artifact"] = {
         "path": relative_evidence.as_posix(),
@@ -493,18 +516,20 @@ def _write_receipt(
     result_path = None
     if verb == "plan" and proposal_id is not None:
         relative_result = Path(".route-share") / "proposals" / f"{proposal_id}.json"
-        result_destination = proposals_root / f"{proposal_id}.json"
-        result_destination.write_text(
+        write_local_text_atomic(
+            root,
+            Path(".route-share/proposals"),
+            f"{proposal_id}.json",
             json.dumps(domain_result, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
         )
         result_path = relative_result.as_posix()
         receipt["proposal"]["path"] = result_path
     relative_path = Path(".route-share") / "runs" / f"{receipt_id}.json"
-    destination = root / relative_path
-    destination.write_text(
+    write_local_text_atomic(
+        root,
+        Path(".route-share/runs"),
+        f"{receipt_id}.json",
         json.dumps(receipt, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
-        encoding="utf-8",
     )
     summary = {
         "id": receipt_id,
@@ -574,6 +599,45 @@ def _focused_proof_snapshot(root: Path, environ: Mapping[str, str]) -> dict[str,
         tiers=["focused"],
         commands=[selection["gates"][0]["command"]],
         environ=environ,
+    )
+
+
+def _release_proof_monitor_paths(
+    root: Path,
+    proof: Mapping[str, Any],
+) -> list[str]:
+    """Return the already-validated receipt and artifact paths bound to reuse."""
+
+    evidence = proof.get("evidence")
+    relative_receipt = evidence.get("path") if isinstance(evidence, Mapping) else None
+    if not isinstance(relative_receipt, str):
+        return []
+    receipt_path = root / relative_receipt
+    valid, receipt = _read_json_file(receipt_path)
+    if not valid or not isinstance(receipt, Mapping):
+        return []
+    paths = [receipt_path]
+    for artifact in receipt.get("artifacts", []):
+        relative_artifact = artifact.get("path") if isinstance(artifact, Mapping) else None
+        if isinstance(relative_artifact, str):
+            paths.append(root / relative_artifact)
+    return [str(path) for path in paths]
+
+
+def _mark_receipt_incomplete(root: Path, summary: Mapping[str, str]) -> None:
+    relative_path = summary.get("path")
+    if not isinstance(relative_path, str):
+        return
+    path = root / relative_path
+    valid, receipt = _read_json_file(path)
+    if not valid or not isinstance(receipt, dict):
+        return
+    receipt["outcome"] = "incomplete"
+    write_local_text_atomic(
+        root,
+        path.parent.relative_to(root),
+        path.name,
+        json.dumps(receipt, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
     )
 
 
@@ -662,6 +726,7 @@ def execute_route_share(
     if verb in {"verify", "release"} and _recovery_monitor is None:
         try:
             ensure_local_directory(root, ".route-share")
+            ensure_local_directory(root, "dist")
         except OSError:
             return _blocked_result(
                 verb,
@@ -788,6 +853,7 @@ def execute_route_share(
             "status": "passed",
             "covered_inputs": list(proof["result"]["covered_inputs"]),
             "proof_fingerprint": proof["result"]["proof_fingerprint"],
+            "_monitor_paths": _release_proof_monitor_paths(root, proof),
         }
 
     if verb == "verify" and not preview:
@@ -853,8 +919,6 @@ def execute_route_share(
         )
     finally:
         transient_input_change = monitor.changed() if monitor is not None else False
-        if monitor is not None:
-            monitor.close()
     finished_at = datetime.now(timezone.utc).isoformat()
     domain_result = _domain_result(completed)
     post_proof_snapshot = proof_snapshot
@@ -1038,33 +1102,84 @@ def execute_route_share(
                 }
             ],
         )
-        if _recovery_monitor is not None:
-            _final_recovery_state, late_recovery_blockers = (
-                route_generation_recovery_state(root)
-            )
-            late_recovery_changed = _recovery_monitor.changed()
-            if (
-                late_recovery_blockers or late_recovery_changed
-            ) and not (post_recovery_blockers or recovery_changed):
-                late_issues = late_recovery_blockers or [
-                    _issue(
-                        "GODIESEL_ROUTE_GENERATION_RECOVERY_CHANGED",
-                        "Catalogue recovery state changed while route-share evidence was being finalized.",
-                        "Stabilize catalogue publication state and rerun route-share verification.",
-                    )
-                ]
-                blockers.extend(
-                    issue
-                    for issue in late_issues
-                    if issue["code"] not in {item["code"] for item in blockers}
+        if evidence is None:
+            blockers.append(
+                _issue(
+                    "GODIESEL_LOCAL_ARTIFACT_ROOT_UNSAFE",
+                    "The general evidence receipt could not be committed inside its repository-owned directory.",
+                    "Restore a real .godiesel/evidence directory inside the checkout, then rerun verification.",
                 )
-                if evidence is not None:
-                    evidence_path = root / evidence["path"]
-                    if evidence_path.is_file() and not evidence_path.is_symlink():
-                        evidence_path.unlink()
-                    evidence = None
-                status = "blocked"
-                exit_code = 2
+            )
+            try:
+                _mark_receipt_incomplete(root, receipt)
+            except OSError:
+                pass
+            status = "blocked"
+            exit_code = 2
+    late_issues: list[dict[str, str]] = []
+    if verb in {"verify", "release"}:
+        if proof_snapshot is not None:
+            final_proof_snapshot = _focused_proof_snapshot(
+                root,
+                dict(os.environ if environ is None else environ),
+            )
+            late_issues.extend(
+                proof_snapshot_stability_issues(
+                    post_proof_snapshot,
+                    final_proof_snapshot,
+                )
+            )
+            if monitor is not None and monitor.changed() and not any(
+                issue["code"] == "GODIESEL_VERIFICATION_INPUTS_CHANGED"
+                for issue in late_issues
+            ):
+                late_issues.append(
+                    _issue(
+                        "GODIESEL_VERIFICATION_INPUTS_CHANGED",
+                        "A covered input changed while route-share evidence was being finalized.",
+                        "Stabilize the worktree and rerun the transition against one unchanged input set.",
+                    )
+                )
+        _final_recovery_state, late_recovery_blockers = route_generation_recovery_state(
+            root
+        )
+        late_issues.extend(late_recovery_blockers)
+        if _recovery_monitor is not None and _recovery_monitor.changed() and not any(
+            issue["code"]
+            in {
+                "GODIESEL_ROUTE_GENERATION_RECOVERY_CHANGED",
+                "GODIESEL_ROUTE_GENERATION_RECOVERY_PENDING",
+                "GODIESEL_ROUTE_GENERATION_RECOVERY_UNREADABLE",
+            }
+            for issue in late_issues
+        ):
+            late_issues.append(
+                _issue(
+                    "GODIESEL_ROUTE_GENERATION_RECOVERY_CHANGED",
+                    "Catalogue recovery state changed while route-share evidence was being finalized.",
+                    "Stabilize catalogue publication state and rerun the transition.",
+                )
+            )
+        existing_codes = {issue["code"] for issue in blockers}
+        newly_detected = [
+            issue for issue in late_issues if issue["code"] not in existing_codes
+        ]
+        blockers.extend(newly_detected)
+        if newly_detected:
+            if receipt is not None:
+                try:
+                    _mark_receipt_incomplete(root, receipt)
+                except OSError:
+                    pass
+            if evidence is not None:
+                evidence_path = root / evidence["path"]
+                if evidence_path.is_file() and not evidence_path.is_symlink():
+                    evidence_path.unlink()
+                evidence = None
+            status = "blocked"
+            exit_code = 2
+    if monitor is not None:
+        monitor.close()
     return {
         "schema_version": SCHEMA_VERSION,
         "document_type": "godiesel-capability-result",

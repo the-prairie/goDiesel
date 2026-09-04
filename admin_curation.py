@@ -4,6 +4,7 @@ import copy
 import fcntl
 import json
 import os
+import stat
 import subprocess
 import sys
 from contextlib import contextmanager
@@ -41,23 +42,64 @@ def owner_mutation_lock(checkout_root):
     """Serialize owner curation across the Admin server and local CLI processes."""
 
     root = Path(checkout_root).resolve()
+    directory_fd = None
+    lock_fd = None
     try:
-        lock_path = ensure_local_directory(root, ".godiesel") / "owner-mutation.lock"
+        lock_directory = ensure_local_directory(root, ".godiesel")
+        directory_fd = os.open(
+            lock_directory,
+            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+        )
+        lock_fd = os.open(
+            "owner-mutation.lock",
+            os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW,
+            0o600,
+            dir_fd=directory_fd,
+        )
+        if not stat.S_ISREG(os.fstat(lock_fd).st_mode):
+            raise OSError("owner mutation lock is not a regular file")
+        opened_directory = os.fstat(directory_fd)
+
+        def directory_is_still_pinned():
+            try:
+                current_directory = lock_directory.lstat()
+            except OSError:
+                return False
+            return (
+                stat.S_ISDIR(current_directory.st_mode)
+                and not stat.S_ISLNK(current_directory.st_mode)
+                and current_directory.st_dev == opened_directory.st_dev
+                and current_directory.st_ino == opened_directory.st_ino
+            )
+
+        if not directory_is_still_pinned():
+            raise OSError("owner mutation lock directory changed during acquisition")
     except OSError as error:
+        if lock_fd is not None:
+            os.close(lock_fd)
+        if directory_fd is not None:
+            os.close(directory_fd)
         raise OwnerMutationBusyError(
             "owner mutation lock boundary is unavailable"
         ) from error
-    with lock_path.open("a+", encoding="utf-8") as lock_file:
-        try:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as error:
-            raise OwnerMutationBusyError(
-                "another owner mutation is in progress"
-            ) from error
-        try:
-            yield
-        finally:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+    try:
+        with os.fdopen(lock_fd, "a+", encoding="utf-8") as lock_file:
+            try:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as error:
+                raise OwnerMutationBusyError(
+                    "another owner mutation is in progress"
+                ) from error
+            if not directory_is_still_pinned():
+                raise OwnerMutationBusyError(
+                    "owner mutation lock directory changed during acquisition"
+                )
+            try:
+                yield
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+    finally:
+        os.close(directory_fd)
 
 
 def run_owner_mutation(checkout_root, local_lock, mutation):

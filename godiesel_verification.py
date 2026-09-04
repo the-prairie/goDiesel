@@ -223,6 +223,7 @@ def route_generation_recovery_state(
     data_root = root / "app/public/data"
     generated_root = root / "app/src/data/generated"
     detail_root = data_root / "routes"
+    route_share_recovery_root = root / ".route-share/recovery"
 
     def has_entry(directory: Path, predicate: Callable[[str], bool]) -> bool:
         if directory.is_symlink():
@@ -263,6 +264,11 @@ def route_generation_recovery_state(
                 lambda name: name.startswith(".")
                 and name.endswith((".tmp", ".recovery", ".rollback")),
             )
+        if route_share_recovery_root.exists() or route_share_recovery_root.is_symlink():
+            pending = pending or has_entry(
+                route_share_recovery_root,
+                lambda name: name.endswith(".json"),
+            )
     except OSError:
         return "unreadable", [
             _issue(
@@ -291,9 +297,11 @@ def catalogue_recovery_monitor(root: Path | str) -> ProofInputMonitor:
         {
             "covered_inputs": [],
             "_monitor_paths": [
+                str(root),
                 str(root / "app/public/data"),
                 str(root / "app/public/data/routes"),
                 str(root / "app/src/data/generated"),
+                str(root / ".route-share/recovery"),
             ],
         },
     )
@@ -337,6 +345,8 @@ def _local_regular_file(root: Path, relative_path: object) -> Path | None:
 def _evidence_artifacts_valid(root: Path, receipt: Mapping[str, Any]) -> bool:
     artifacts = receipt.get("artifacts")
     if not isinstance(artifacts, list):
+        return False
+    if receipt.get("capability") == "route-share" and not artifacts:
         return False
     for artifact in artifacts:
         if not isinstance(artifact, Mapping):
@@ -673,11 +683,17 @@ def _artifact_manifest_files(value: object) -> list[dict[str, object]]:
     previous_path = ""
     total_size = 0
     for item in value["files"]:
-        if not isinstance(item, dict) or set(item) != {"path", "size", "sha256"}:
+        if not isinstance(item, dict) or set(item) != {
+            "path",
+            "size",
+            "sha256",
+            "delivery",
+        }:
             raise ValueError("artifact manifest entry is not a closed object")
         relative_path = item.get("path")
         size = item.get("size")
         digest = item.get("sha256")
+        delivery = item.get("delivery")
         normalized = (
             _normalized_path(relative_path)
             if isinstance(relative_path, str)
@@ -694,6 +710,15 @@ def _artifact_manifest_files(value: object) -> list[dict[str, object]]:
             or size > 64 * 1024 * 1024
             or not isinstance(digest, str)
             or re.fullmatch(r"[a-f0-9]{64}", digest) is None
+            or delivery not in {"served-asset", "deployment-control"}
+            or (
+                delivery == "deployment-control"
+                and relative_path not in {"_headers", "_redirects"}
+            )
+            or (
+                relative_path in {"_headers", "_redirects"}
+                and delivery != "deployment-control"
+            )
         ):
             raise ValueError("artifact manifest entry is invalid")
         total_size += size
@@ -802,8 +827,13 @@ def read_target_build_identity(
                     f"served artifact does not match its manifest: {relative_path}"
                 )
 
-        with ThreadPoolExecutor(max_workers=min(16, len(files))) as executor:
-            list(executor.map(verify_file, files))
+        served_files = [
+            item for item in files if item["delivery"] == "served-asset"
+        ]
+        if not served_files:
+            raise ValueError("artifact manifest has no served assets")
+        with ThreadPoolExecutor(max_workers=min(16, len(served_files))) as executor:
+            list(executor.map(verify_file, served_files))
     return value
 
 

@@ -71,6 +71,10 @@
         "guide_url": { "type": "string", "format": "uri" },
         "replay_url": { "type": "string", "format": "uri" },
         "smoke_status": { "const": "passed" },
+        "commit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "tree": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "build_id": { "type": "string", "format": "uuid" },
+        "artifact_manifest_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
         "replacement_authorized": { "type": "boolean" }
       }
     },
@@ -110,6 +114,10 @@
               "guide_url",
               "replay_url",
               "smoke_status",
+              "commit",
+              "tree",
+              "build_id",
+              "artifact_manifest_sha256",
               "replacement_authorized"
             ]
           }

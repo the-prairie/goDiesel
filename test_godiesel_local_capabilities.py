@@ -450,6 +450,26 @@ def test_generation_apply_requires_authority_before_invoking_writer(tmp_path: Pa
     assert calls == []
 
 
+def test_generation_apply_checks_recovery_before_invoking_writer(tmp_path: Path):
+    root = _generation_fixture(tmp_path)
+    recovery = root / ".quests.json.rollback"
+    recovery.write_text("pending\n", encoding="utf-8")
+    calls: list[object] = []
+
+    result = execute_route_generation(
+        root,
+        "apply",
+        authority="canonical-local",
+        runner=lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == (
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_PENDING"
+    )
+    assert calls == []
+
+
 def test_generation_inspect_rejects_stale_fields_and_statistics(tmp_path: Path):
     root = _generation_fixture(tmp_path)
     manifest_path = root / "app/src/data/generated/routes.manifest.json"

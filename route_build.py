@@ -7,12 +7,20 @@ import sys
 from pathlib import Path
 
 from admin_curation import OwnerMutationBusyError, owner_mutation_lock
+from godiesel_verification import route_generation_recovery_state
 
 
 def main() -> int:
     root = Path(__file__).resolve().parent
     try:
         with owner_mutation_lock(root):
+            recovery_state, recovery_blockers = route_generation_recovery_state(root)
+            if recovery_blockers:
+                print(
+                    f"Catalogue recovery state is {recovery_state}; refusing to rebuild.",
+                    file=sys.stderr,
+                )
+                return 2
             completed = subprocess.run(
                 [sys.executable, str(root / "build.py")],
                 cwd=root,

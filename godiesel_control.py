@@ -1165,8 +1165,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.explain and args.reuse:
         parser.error("--explain and --reuse are mutually exclusive")
-    if args.target != "route-share" and (args.preview or args.detach):
-        parser.error("--preview and --detach only support route-share")
+    if (args.preview or args.detach) and not (
+        args.target == "route-share" and args.verb == "verify"
+    ):
+        parser.error("--preview and --detach only support route-share verification")
     root = Path(__file__).resolve().parent
     try:
         if args.verb == "doctor":

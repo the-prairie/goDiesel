@@ -200,7 +200,8 @@ Use the compatibility adapter only for an explicitly reviewed legacy workflow, n
 Report the public guide URL, public Replay URL, and smoke-test result.
 Google 3D or terrain promises still require the live-provider review described in `docs/agents/testing.md`.
 
-Report both the immutable deployment URL and the stable alias when Wrangler provides them.
+The publisher must smoke-test both the immutable deployment URL and stable alias, then prove that both expose the same expected commit, tree, build ID, and artifact-manifest digest.
+The release receipt records this complete structured deployment identity.
 State explicitly when hardware-accelerated Google 3D remains unverified by headless smoke testing.
 
 ## Failure handling

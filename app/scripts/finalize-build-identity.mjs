@@ -38,7 +38,14 @@ function artifactFiles(directory, prefix = "") {
       files.push(...artifactFiles(absolutePath, relativePath));
     } else if (entry.isFile() && !excluded.has(relativePath)) {
       const bytes = fs.readFileSync(absolutePath);
-      files.push({ path: relativePath, size: bytes.length, sha256: digest(bytes) });
+      files.push({
+        path: relativePath,
+        size: bytes.length,
+        sha256: digest(bytes),
+        delivery: ["_headers", "_redirects"].includes(relativePath)
+          ? "deployment-control"
+          : "served-asset",
+      });
     }
   }
   return files.sort((left, right) =>

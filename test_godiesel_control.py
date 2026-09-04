@@ -4,6 +4,7 @@ import subprocess
 from hashlib import sha256
 from pathlib import Path
 
+import pytest
 from jsonschema import Draft202012Validator
 
 from godiesel_control import doctor_system, inspect_system, main
@@ -250,6 +251,22 @@ def test_release_cli_forwards_exact_target_authority(monkeypatch, capsys):
     assert captured["authority"] == "external-durable"
     assert captured["target_authority"] == "ridge"
     assert json.loads(capsys.readouterr().out)["status"] == "passed"
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["inspect", "route-share", "--preview"],
+        ["plan", "route-share", "--request", "request.json", "--detach"],
+        ["apply", "route-share", "--proposal", "proposal.json", "--preview"],
+        ["release", "route-share", "route-1", "ridge", "--preview"],
+    ],
+)
+def test_preview_controls_only_support_route_share_verification(arguments):
+    with pytest.raises(SystemExit) as raised:
+        main(arguments)
+
+    assert raised.value.code == 2
 
 
 def test_inspect_system_returns_a_redacted_operator_view():

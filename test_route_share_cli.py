@@ -111,7 +111,10 @@ def test_publish_treats_an_initial_redirect_as_an_existing_share(tmp_path: Path)
         scripts / "publish-route-microsite.sh",
     )
     (scripts / "publish-route-microsite.sh").chmod(0o755)
-    executable(tmp_path / "make-dist.sh", "#!/bin/bash\nexit 0\n")
+    executable(
+        tmp_path / "make-dist.sh",
+        "#!/bin/bash\nmkdir -p dist\nprintf '{}\\n' > dist/artifact-manifest.json\n",
+    )
     (tmp_path / "app").mkdir()
     calls = tmp_path / "calls.log"
     curl_calls = tmp_path / "curl-calls.log"

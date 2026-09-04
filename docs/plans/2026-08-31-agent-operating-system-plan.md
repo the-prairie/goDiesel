@@ -166,7 +166,7 @@ Implemented by `test_godiesel_control.py` and the focused commands documented in
 - Reapplying an approved proposal remains idempotent.
 - Preview remains loopback-only and never invokes Wrangler.
 - Release still refuses an existing alias without explicit replacement authority.
-- A live release receipt records both immutable deployment URL and stable alias.
+- A live release receipt records the immutable deployment URL, stable alias, expected commit and tree, build ID, artifact-manifest digest, and successful smoke result.
 - The compatibility path and unified path produce equivalent observable results for the acceptance fixtures.
 
 ### Verification
@@ -252,7 +252,7 @@ Generated-route readiness validates the strict public projection structure and c
 
 - Model route microsite publication and production application deployment as separate release targets.
 - Require an immutable built artifact digest before release.
-- Record explicit target, replacement intent, remote result, stable alias, and immutable deployment id.
+- Record explicit target, replacement intent, remote result, stable alias, commit, tree, immutable build ID, and artifact-manifest digest.
 - Re-inspect remote state after ambiguous failures.
 - Add provider-specific live review requirements to release results without claiming headless proof of hardware rendering.
 

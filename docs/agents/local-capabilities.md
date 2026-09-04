@@ -113,7 +113,8 @@ Route microsites built from pending working-tree changes declare `artifact_kind:
 Google 3D is stricter: its only valid target is exactly `http://localhost:8787`.
 When that origin is not already running, the adapter starts a Vite preview of the exact prebuilt `app/dist` artifact, waits for its identity, and stops the process after verification.
 Production builds require a clean Git checkout, and the identity binds the commit, Git tree, and a unique immutable build instance id.
-Built identities also bind a canonical artifact manifest, and provider verification independently fetches and hashes every declared served file before accepting the target.
+Built identities also bind a canonical artifact manifest.
+Provider verification independently fetches and hashes every declared served asset before accepting the target, while deployment-control files remain digest-bound without being treated as public URLs.
 The adapter records configuration presence, deployed identity, and a digest of the exact target in an ignored evidence receipt.
 It reads and validates the deployed identity before and after the live gate, rejects redirected identity documents, and blocks if the target changes during execution.
 Google preview verification holds one lease in the repository's Git common directory for the complete preview lifecycle.

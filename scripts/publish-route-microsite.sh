@@ -2,6 +2,10 @@
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+PYTHON="python3"
+if [[ -x ".venv/bin/python" ]]; then
+  PYTHON=".venv/bin/python"
+fi
 
 usage() {
   cat <<'EOF'
@@ -73,6 +77,7 @@ GODIESEL_REQUIRE_PROVIDER_KEY="$REQUIRE_PROVIDER_KEY" \
   GODIESEL_SINGLE_ROUTE_SLUG="$ROUTE_SLUG" \
   ./make-dist.sh
 node scripts/validate-route-microsite.mjs "$ROUTE_SLUG" dist
+RELEASE_MANIFEST_SHA=$(shasum -a 256 dist/artifact-manifest.json | awk '{print $1}')
 
 echo "3/4 Running focused microsite journey"
 (
@@ -108,11 +113,87 @@ fi
 
 echo "4/4 Publishing ${PUBLIC_URL}"
 verify_release_checkout
-npx wrangler pages deploy dist --project-name=godiesel --branch="$BRANCH" --commit-dirty=true
+node app/scripts/finalize-build-identity.mjs dist
+FINAL_MANIFEST_SHA=$(shasum -a 256 dist/artifact-manifest.json | awk '{print $1}')
+if [[ "$FINAL_MANIFEST_SHA" != "$RELEASE_MANIFEST_SHA" ]]; then
+  echo "Built artifact changed after validation; refusing to publish." >&2
+  exit 1
+fi
+DEPLOY_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/godiesel-route-release.XXXXXX")
+cleanup_deploy_root() {
+  rm -rf "$DEPLOY_ROOT"
+}
+trap cleanup_deploy_root EXIT
+cp -R dist/. "$DEPLOY_ROOT/"
+node app/scripts/finalize-build-identity.mjs "$DEPLOY_ROOT"
+STAGED_MANIFEST_SHA=$(shasum -a 256 "$DEPLOY_ROOT/artifact-manifest.json" | awk '{print $1}')
+if [[ "$STAGED_MANIFEST_SHA" != "$RELEASE_MANIFEST_SHA" ]]; then
+  echo "Built artifact changed while staging the immutable deployment input; refusing to publish." >&2
+  exit 1
+fi
+DEPLOY_OUTPUT=$(npx wrangler pages deploy "$DEPLOY_ROOT" --project-name=godiesel --branch="$BRANCH" --commit-dirty=true)
+printf '%s\n' "$DEPLOY_OUTPUT"
+IMMUTABLE_URL=$(printf '%s\n' "$DEPLOY_OUTPUT" | "$PYTHON" -c '
+import re
+import sys
+urls = re.findall(r"https://[A-Za-z0-9-]+\.godiesel\.pages\.dev/?", sys.stdin.read())
+candidates = [
+    url.rstrip("/") + "/"
+    for url in urls
+    if not url.startswith("https://share-")
+]
+if not candidates:
+    raise SystemExit("Wrangler did not report an immutable deployment URL")
+print(candidates[-1])
+')
+(
+  cd app
+  node scripts/smoke-single-route-microsite.mjs "$IMMUTABLE_URL" "$ROUTE_SLUG"
+)
 (
   cd app
   node scripts/smoke-single-route-microsite.mjs "$PUBLIC_URL" "$ROUTE_SLUG"
 )
+"$PYTHON" - "$IMMUTABLE_URL" "$PUBLIC_URL" "$RELEASE_COMMIT" "$RELEASE_TREE" <<'PY'
+import json
+import sys
+
+from godiesel_verification import read_target_build_identity
+
+immutable_url, stable_alias, commit, tree = sys.argv[1:]
+immutable = dict(
+    read_target_build_identity(
+        immutable_url,
+        expected_commit=commit,
+        expected_tree=tree,
+    )
+)
+alias = dict(
+    read_target_build_identity(
+        stable_alias,
+        expected_commit=commit,
+        expected_tree=tree,
+    )
+)
+if immutable != alias:
+    raise SystemExit("Stable alias does not resolve to the immutable deployment build")
+print(
+    "GODIESEL_RELEASE_TARGET="
+    + json.dumps(
+        {
+            "immutable_deployment_url": immutable_url,
+            "stable_alias": stable_alias,
+            "commit": immutable["commit"],
+            "tree": immutable["tree"],
+            "build_id": immutable["build_id"],
+            "artifact_manifest_sha256": immutable["artifact_manifest_sha256"],
+            "smoke_status": "passed",
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+)
+PY
 
 echo "Published route guide: ${PUBLIC_URL}#/routes/${ROUTE_SLUG}"
 echo "Published replay: ${PUBLIC_URL}#/replay/${ROUTE_SLUG}"

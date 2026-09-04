@@ -35,6 +35,21 @@ COMPLETE_CURATION = {
 
 
 class AdminCurationTests(unittest.TestCase):
+    def test_owner_mutation_lock_rejects_final_component_symlink(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            external = root / "external-lock"
+            external.write_text("unchanged\n", encoding="utf-8")
+            lock_root = root / ".godiesel"
+            lock_root.mkdir()
+            (lock_root / "owner-mutation.lock").symlink_to(external)
+
+            with self.assertRaises(admin_curation.OwnerMutationBusyError):
+                with admin_curation.owner_mutation_lock(root):
+                    pass
+
+            self.assertEqual(external.read_text(encoding="utf-8"), "unchanged\n")
+
     def test_media_mutation_helper_blocks_on_checkout_wide_contention(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

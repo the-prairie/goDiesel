@@ -14,12 +14,23 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["path", "size", "sha256"],
+        "required": ["path", "size", "sha256", "delivery"],
         "properties": {
           "path": { "type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$" },
           "size": { "type": "integer", "minimum": 0 },
-          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
-        }
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "delivery": { "enum": ["served-asset", "deployment-control"] }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "delivery": { "const": "deployment-control" } } },
+            "then": { "properties": { "path": { "enum": ["_headers", "_redirects"] } } }
+          },
+          {
+            "if": { "properties": { "path": { "enum": ["_headers", "_redirects"] } } },
+            "then": { "properties": { "delivery": { "const": "deployment-control" } } }
+          }
+        ]
       }
     }
   }

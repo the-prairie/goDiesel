@@ -757,6 +757,18 @@ def execute_route_generation(
 
     process_env = dict(os.environ if environ is None else environ)
     if verb == "apply":
+        recovery_state, recovery_blockers = route_generation_recovery_state(root)
+        if recovery_blockers:
+            return _envelope(
+                "route-generation",
+                verb,
+                required_authority,
+                status="blocked",
+                authorized=True,
+                result={"recovery_state": recovery_state},
+                result_contract="godiesel_local_capabilities.py#route-generation-recovery",
+                blockers=recovery_blockers,
+            )
         command = [str(root / "rebuild.sh")]
         display_command = "./rebuild.sh"
     else:

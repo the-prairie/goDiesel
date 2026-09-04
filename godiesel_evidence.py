@@ -77,6 +77,68 @@ def existing_local_directory(root: Path | str, relative: Path | str) -> Path | N
         return None
 
 
+def write_local_text_atomic(
+    root: Path | str,
+    relative_directory: Path | str,
+    filename: str,
+    content: str,
+) -> Path:
+    """Atomically write inside a pinned repository-owned directory."""
+
+    if not filename or Path(filename).name != filename:
+        raise OSError("local artifact filename must be one path component")
+    root = Path(root).resolve()
+    directory = ensure_local_directory(root, relative_directory)
+    directory_fd = os.open(
+        directory,
+        os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+    )
+    temporary = f".{filename}.{uuid.uuid4().hex}.tmp"
+    try:
+        opened = os.fstat(directory_fd)
+
+        def directory_is_still_pinned() -> bool:
+            try:
+                current = directory.lstat()
+            except OSError:
+                return False
+            return (
+                stat.S_ISDIR(current.st_mode)
+                and not stat.S_ISLNK(current.st_mode)
+                and current.st_dev == opened.st_dev
+                and current.st_ino == opened.st_ino
+            )
+
+        file_fd = os.open(
+            temporary,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+            0o600,
+            dir_fd=directory_fd,
+        )
+        with os.fdopen(file_fd, "w", encoding="utf-8") as destination:
+            destination.write(content)
+            destination.flush()
+            os.fsync(destination.fileno())
+        if not directory_is_still_pinned():
+            raise OSError("local artifact directory changed during write")
+        os.replace(
+            temporary,
+            filename,
+            src_dir_fd=directory_fd,
+            dst_dir_fd=directory_fd,
+        )
+        os.fsync(directory_fd)
+        if not directory_is_still_pinned():
+            raise OSError("local artifact directory changed during commit")
+    finally:
+        try:
+            os.unlink(temporary, dir_fd=directory_fd)
+        except FileNotFoundError:
+            pass
+        os.close(directory_fd)
+    return directory / filename
+
+
 def _git(root: Path, *args: str, text: bool = True) -> subprocess.CompletedProcess[Any]:
     return subprocess.run(
         ["git", *args],
@@ -174,15 +236,14 @@ def write_evidence_receipt(
     }
     relative_path = EVIDENCE_ROOT / f"{receipt_id}.json"
     try:
-        destination = ensure_local_directory(root, EVIDENCE_ROOT) / f"{receipt_id}.json"
+        destination = write_local_text_atomic(
+            root,
+            EVIDENCE_ROOT,
+            f"{receipt_id}.json",
+            json.dumps(receipt, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+        )
     except OSError:
         return None
-    temporary = destination.with_suffix(f".tmp-{os.getpid()}")
-    temporary.write_text(
-        json.dumps(receipt, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    temporary.replace(destination)
     return {
         "id": receipt_id,
         "path": relative_path.as_posix(),
