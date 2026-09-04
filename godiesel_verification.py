@@ -291,7 +291,6 @@ def catalogue_recovery_monitor(root: Path | str) -> ProofInputMonitor:
         {
             "covered_inputs": [],
             "_monitor_paths": [
-                str(root),
                 str(root / "app/public/data"),
                 str(root / "app/public/data/routes"),
                 str(root / "app/src/data/generated"),
