@@ -435,7 +435,7 @@
     },
     {
       "id": "route-share-implementation",
-      "paths": ["route_create.py", "route_create.schema.json", "route_status.py", "admin_curation.py", "curation_publish.py", "quest_meta.py", "route_annotations.py", "route_imports.py", "requirements.txt", "scripts/route.sh", "scripts/route-preview.sh", "scripts/publish-route-microsite.sh", "app/scripts/smoke-single-route-microsite.mjs"],
+      "paths": ["route_create.py", "route_create.schema.json", "route_status.py", "admin_curation.py", "curation_publish.py", "quest_meta.py", "route_annotations.py", "route_imports.py", "requirements.txt", "test_route_create.py", "scripts/route.sh", "scripts/route-preview.sh", "scripts/publish-route-microsite.sh", "app/scripts/smoke-single-route-microsite.mjs"],
       "capabilities": ["route-share"],
       "category": "implementation",
       "gates": [{ "capability": "route-share", "tier": "focused" }, { "capability": "route-share", "tier": "ticket" }],
@@ -453,7 +453,7 @@
     },
     {
       "id": "route-generation-implementation",
-      "paths": ["build.py", "route_build.py", "generated_route_contract.py", "quest_meta.py", "route_provenance.py", "route_annotations.py", "route_imports.py", "route_timezones.py", "requirements.txt", "rebuild.sh", "test_react_app.py"],
+      "paths": ["build.py", "route_build.py", "generated_route_contract.py", "quest_meta.py", "route_provenance.py", "route_annotations.py", "route_imports.py", "route_timezones.py", "requirements.txt", "rebuild.sh", "test_react_app.py", "test_route_provenance.py"],
       "capabilities": ["route-generation"],
       "category": "implementation",
       "gates": [{ "capability": "route-generation", "tier": "focused" }],
@@ -462,7 +462,7 @@
     },
     {
       "id": "owner-curation-implementation",
-      "paths": ["admin.py", "admin.sh", "admin_curation.py", "curation_publish.py", "generated_route_contract.py", "build.py", "quest_meta.py", "route_provenance.py", "route_annotations.py", "route_imports.py", "route_timezones.py", "requirements.txt", "test_admin_curation.py", "test_curation_publish.py"],
+      "paths": ["admin.py", "admin.sh", "admin_curation.py", "curation_publish.py", "generated_route_contract.py", "build.py", "quest_meta.py", "route_provenance.py", "route_annotations.py", "route_imports.py", "route_timezones.py", "requirements.txt", "test_admin_curation.py", "test_curation_publish.py", "test_route_provenance.py"],
       "capabilities": ["owner-curation"],
       "category": "implementation",
       "gates": [{ "capability": "owner-curation", "tier": "focused" }],

@@ -613,6 +613,20 @@ def test_verification_explanation_schema_is_valid():
             "single-writer",
         ),
         (
+            "test_route_create.py",
+            "route-share",
+            "implementation",
+            "ticket",
+            "source-truth",
+        ),
+        (
+            "test_route_provenance.py",
+            "route-generation",
+            "implementation",
+            "focused",
+            "single-writer",
+        ),
+        (
             "route_annotations.py",
             "owner-curation",
             "implementation",
