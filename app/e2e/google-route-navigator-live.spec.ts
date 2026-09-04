@@ -14,8 +14,11 @@ const ROUTES = [
 ] as const;
 
 const EVIDENCE_DIR = "e2e/evidence/auto-director";
+const shouldCaptureEvidence =
+  process.env.GODIESEL_CAPTURE_E2E_EVIDENCE === "1";
 
 async function captureEvidence(page: Page, filename: string) {
+  if (!shouldCaptureEvidence) return;
   await mkdir(EVIDENCE_DIR, { recursive: true });
   await page.screenshot({
     path: `${EVIDENCE_DIR}/${filename}`,
