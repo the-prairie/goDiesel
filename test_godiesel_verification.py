@@ -1237,6 +1237,25 @@ def test_provider_or_camera_change_selects_exact_live_provider_proof(
     assert selected == expected_commands
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "test_godiesel_local_capabilities.py",
+        "test_godiesel_verification.py",
+    ],
+)
+def test_monolithic_control_plane_tests_do_not_select_live_provider_gates(path: str):
+    result = explain_verification(ROOT, changed_paths=[path])
+
+    selected = {
+        gate["command"]
+        for gate in result["result"]["selected_gates"]
+        if gate["provider"] == "live-provider"
+    }
+
+    assert selected == set()
+
+
 def test_exact_command_proof_inputs_do_not_include_other_commands(tmp_path: Path):
     _write_reuse_fixture(tmp_path)
     manifest_path = tmp_path / "system/capabilities.json"

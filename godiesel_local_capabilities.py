@@ -121,6 +121,19 @@ class CurationPlanContextError(RuntimeError):
         self.issue = dict(issue)
 
 
+class CurationProjectionError(RuntimeError):
+    """Carry projection blockers raised inside the curation transaction."""
+
+    def __init__(
+        self,
+        state: Mapping[str, object] | None,
+        blockers: list[dict[str, str]],
+    ) -> None:
+        super().__init__("owner curation projection is incomplete")
+        self.state = dict(state) if state is not None else None
+        self.blockers = [dict(blocker) for blocker in blockers]
+
+
 def _issue(code: str, message: str, remediation: str) -> dict[str, str]:
     return {"code": code, "message": message, "remediation": remediation}
 
@@ -223,7 +236,11 @@ def _source_projection(
     return source, route, provenance, region, subtitle
 
 
-def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[str, str]]]:
+def _generation_state(
+    root: Path,
+    *,
+    include_recovery_blockers: bool = True,
+) -> tuple[dict[str, object] | None, list[dict[str, str]]]:
     recovery_state, recovery_blockers = route_generation_recovery_state(root)
     try:
         config = _read_json(root / "quests.json")
@@ -453,7 +470,8 @@ def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[s
                 "Apply route-generation through the owning Python writer, then inspect again.",
             )
         )
-    blockers.extend(recovery_blockers)
+    if include_recovery_blockers:
+        blockers.extend(recovery_blockers)
     return state, blockers
 
 
@@ -1602,15 +1620,33 @@ def execute_owner_curation(
                 )
             already_applied = bool(plan.pop("_already_applied", False))
             if not already_applied:
+                def validate_publication(*, include_recovery_blockers: bool) -> None:
+                    generation_state, generation_blockers = _generation_state(
+                        root,
+                        include_recovery_blockers=include_recovery_blockers,
+                    )
+                    if generation_blockers:
+                        raise CurationProjectionError(
+                            generation_state,
+                            generation_blockers,
+                        )
+
                 save_owner_curation(
                     root,
                     plan["activity_id"],
                     plan["curation"],
                     acquire_lock=False,
                     precondition=lambda: _validate_curation_plan_sources(root, plan),
+                    publication_validator=lambda: validate_publication(
+                        include_recovery_blockers=False,
+                    ),
+                    commit_validator=lambda: validate_publication(
+                        include_recovery_blockers=True,
+                    ),
                 )
-            generation_state, generation_blockers = _generation_state(root)
-            if generation_blockers:
+            else:
+                generation_state, generation_blockers = _generation_state(root)
+            if already_applied and generation_blockers:
                 return _envelope(
                     "owner-curation",
                     verb,
@@ -1658,6 +1694,27 @@ def execute_owner_curation(
             result=None,
             result_contract="system/owner-curation-plan.schema.json",
             blockers=[error.issue],
+        )
+    except CurationProjectionError as error:
+        return _envelope(
+            "owner-curation",
+            verb,
+            required_authority,
+            status="blocked",
+            authorized=True,
+            result={
+                "recovery_state": "source-restored",
+                "generation_state": error.state,
+            },
+            result_contract="godiesel_local_capabilities.py#owner-curation-recovery",
+            blockers=[
+                _issue(
+                    "GODIESEL_CURATION_PROJECTION_INCOMPLETE",
+                    "Owner curation was not committed because the complete public projection is not ready.",
+                    "Correct the generated projection, then create and apply a fresh plan.",
+                ),
+                *error.blockers,
+            ],
         )
     except (CurationRecoveryError, SourceRollbackError) as error:
         recovery_paths = _repository_relative_recovery_paths(root, error)

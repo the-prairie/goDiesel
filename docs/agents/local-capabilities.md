@@ -64,6 +64,9 @@ Reapplying an already completed plan succeeds without invoking the writer again 
 The CLI and loopback HTTP endpoint call the same `save_owner_curation` service, which retains validation, incremental publication, full-rebuild fallback, source rollback, and generated-file recovery behavior.
 All Admin and unified CLI writes to the owner-owned route catalogue or its generated projections share one non-blocking cross-process lock under a real repository-owned `.godiesel` directory.
 Apply checks the complete recovery inventory after acquiring that lease and before changing canonical state.
+Apply commits only after source freshness and the complete public projection pass a final validation following incremental publication or full-rebuild fallback.
+If that validation fails, the writer restores both canonical state and the complete generated projection captured before mutation.
+Successful final validation is the transaction's linearization point; later source edits are new repository state surfaced by the next inspect or verify.
 
 Run or reuse the existing writer and recovery proof:
 

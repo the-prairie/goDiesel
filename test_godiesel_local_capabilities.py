@@ -15,9 +15,11 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator
 
+import admin_curation
+import curation_publish
 import godiesel_local_capabilities
 from admin_curation import SourceRollbackError, owner_mutation_lock
-from curation_publish import CurationRecoveryError
+from curation_publish import CurationPublishError, CurationRecoveryError
 from godiesel_local_capabilities import (
     _google_3d_preview,
     execute_owner_curation,
@@ -1289,15 +1291,21 @@ def test_curation_apply_uses_the_shared_owner_writer(monkeypatch, tmp_path: Path
         *,
         acquire_lock,
         precondition,
+        publication_validator,
+        commit_validator,
     ):
         assert acquire_lock is False
         assert callable(precondition)
+        assert callable(publication_validator)
+        assert callable(commit_validator)
         captured.update(
             root=checkout_root,
             activity_id=activity_id,
             curation=curation,
         )
         _write_complete_curation_projection(checkout_root, activity_id, curation)
+        publication_validator()
+        commit_validator()
         return {"activity_id": activity_id, "curation": curation}
 
     monkeypatch.setattr(
@@ -1664,6 +1672,109 @@ def test_curation_apply_rolls_back_when_source_changes_during_publication(
     assert manifest_path.read_bytes() == manifest_before
 
 
+def test_curation_apply_rolls_back_a_source_change_during_publication_cleanup(
+    tmp_path: Path,
+    monkeypatch,
+):
+    root = _curation_fixture(tmp_path)
+    draft_curation = {**COMPLETE_CURATION, "review_status": "draft"}
+    _write_complete_curation_projection(root, "route-1", draft_curation)
+    plan = _plan_curation(root)
+    source_path = root / "route_sources/route-1.gpx"
+    projection_paths = [
+        root / "quests.json",
+        root / "app/public/data/routes/route-1.json",
+        root / "app/src/data/generated/routes.manifest.json",
+        root / "app/src/data/generated/route-stats.json",
+    ]
+    projection_before = {path: path.read_bytes() for path in projection_paths}
+    original_cleanup = curation_publish._cleanup_files
+    cleanup_calls = 0
+
+    def cleanup_then_mutate(*args, **kwargs):
+        nonlocal cleanup_calls
+        original_cleanup(*args, **kwargs)
+        cleanup_calls += 1
+        if cleanup_calls == 1:
+            source_path.write_text(
+                source_path.read_text(encoding="utf-8") + "\n",
+                encoding="utf-8",
+            )
+
+    monkeypatch.setattr(curation_publish, "_cleanup_files", cleanup_then_mutate)
+
+    result = execute_owner_curation(
+        root,
+        "apply",
+        plan_path=plan,
+        authority="canonical-local",
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == (
+        "GODIESEL_CURATION_PLAN_CONTEXT_MISMATCH"
+    )
+    assert {path: path.read_bytes() for path in projection_paths} == projection_before
+
+
+def test_curation_apply_rolls_back_a_source_change_during_full_rebuild(
+    tmp_path: Path,
+    monkeypatch,
+):
+    root = _curation_fixture(tmp_path)
+    draft_curation = {**COMPLETE_CURATION, "review_status": "draft"}
+    _write_complete_curation_projection(root, "route-1", draft_curation)
+    plan = _plan_curation(root)
+    source_path = root / "route_sources/route-1.gpx"
+    projection_paths = [
+        root / "quests.json",
+        root / "app/public/data/routes/route-1.json",
+        root / "app/src/data/generated/routes.manifest.json",
+        root / "app/src/data/generated/route-stats.json",
+    ]
+    projection_before = {path: path.read_bytes() for path in projection_paths}
+
+    def force_full_rebuild(*_args, **_kwargs):
+        raise CurationPublishError("force full rebuild")
+
+    def rebuild_then_change_source(*_args, **_kwargs):
+        config = json.loads((root / "quests.json").read_text(encoding="utf-8"))
+        curation = config["routes"][0]["curation"]
+        _write_complete_curation_projection(root, "route-1", curation)
+        source_path.write_text(
+            source_path.read_text(encoding="utf-8") + "\n",
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess([], 0, "", "")
+
+    def save_with_rebuild_runner(*args, **kwargs):
+        return admin_curation.save_owner_curation(
+            *args,
+            **kwargs,
+            runner=rebuild_then_change_source,
+        )
+
+    monkeypatch.setattr(admin_curation, "publish_curation", force_full_rebuild)
+    monkeypatch.setattr(
+        godiesel_local_capabilities,
+        "save_owner_curation",
+        save_with_rebuild_runner,
+    )
+
+    result = execute_owner_curation(
+        root,
+        "apply",
+        plan_path=plan,
+        authority="canonical-local",
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == (
+        "GODIESEL_CURATION_PLAN_CONTEXT_MISMATCH"
+    )
+    assert {path: path.read_bytes() for path in projection_paths} == projection_before
+
+
 def test_curation_apply_blocks_when_observed_state_changed(monkeypatch, tmp_path: Path):
     root = _curation_fixture(tmp_path)
     plan = _plan_curation(root)
@@ -1782,12 +1893,18 @@ def test_curation_reapply_is_idempotent_without_reinvoking_writer(monkeypatch, t
         *,
         acquire_lock,
         precondition,
+        publication_validator,
+        commit_validator,
     ):
         nonlocal calls
         assert acquire_lock is False
         assert callable(precondition)
+        assert callable(publication_validator)
+        assert callable(commit_validator)
         calls += 1
         _write_complete_curation_projection(checkout_root, activity_id, curation)
+        publication_validator()
+        commit_validator()
 
     monkeypatch.setattr("godiesel_local_capabilities.save_owner_curation", fake_save)
 
@@ -1809,7 +1926,7 @@ def test_curation_reapply_is_idempotent_without_reinvoking_writer(monkeypatch, t
     assert second["result"]["already_applied"] is True
 
 
-def test_curation_reapply_rejects_incomplete_public_projection(
+def test_curation_apply_rejects_incomplete_public_projection_transactionally(
     monkeypatch, tmp_path: Path
 ):
     root = _curation_fixture(tmp_path)
@@ -1823,15 +1940,25 @@ def test_curation_reapply_rejects_incomplete_public_projection(
         *,
         acquire_lock,
         precondition,
+        publication_validator,
+        commit_validator,
     ):
         nonlocal calls
         assert acquire_lock is False
         assert callable(precondition)
+        assert callable(publication_validator)
+        assert callable(commit_validator)
         calls += 1
         config_path = checkout_root / "quests.json"
         config = json.loads(config_path.read_text(encoding="utf-8"))
+        original = json.loads(config_path.read_text(encoding="utf-8"))
         config["routes"][0]["curation"] = curation
         _write_json(config_path, config)
+        try:
+            publication_validator()
+        except Exception:
+            _write_json(config_path, original)
+            raise
 
     monkeypatch.setattr("godiesel_local_capabilities.save_owner_curation", fake_save)
 
@@ -1853,8 +1980,10 @@ def test_curation_reapply_rejects_incomplete_public_projection(
         "GODIESEL_CURATION_PROJECTION_INCOMPLETE"
     )
     assert second["status"] == "blocked"
-    assert second["blockers"][0]["code"] == "GODIESEL_CURATION_PLAN_STALE"
-    assert calls == 1
+    assert second["blockers"][0]["code"] == (
+        "GODIESEL_CURATION_PROJECTION_INCOMPLETE"
+    )
+    assert calls == 2
 
 
 @pytest.mark.parametrize("error_type", [CurationRecoveryError, SourceRollbackError])

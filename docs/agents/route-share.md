@@ -15,7 +15,7 @@ The existing `scripts/route.sh` interface remains available as a compatibility a
 | Plan | `./scripts/godiesel plan route-share --request <file> --json` | Ephemeral local | Fingerprinted proposal in a result envelope and ignored proposal file |
 | Apply | `./scripts/godiesel apply route-share --proposal <file> --authorize canonical-local --json` | Canonical local | Creation report in a result envelope |
 | Verify | `./scripts/godiesel verify route-share <slug> --json` or `--preview` | Ephemeral local | Focused proof from normal verification, or loopback runtime review from preview |
-| Release | `./scripts/godiesel release route-share <slug> <name> --authorize external-durable --authorize-target <name> --json` | External durable | Deployment, stable URLs, public smoke result, and receipt |
+| Release | `./scripts/godiesel release route-share <slug> <share-name> --authorize external-durable --authorize-target <share-name> --authorize-replacement <share-name> --json` | External durable | Deployment, stable URLs, public smoke result, and receipt |
 
 Standard output is a `system/result.schema.json` result envelope.
 The unchanged domain result is under `result`.

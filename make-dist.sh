@@ -10,6 +10,11 @@ if [[ -n "$SINGLE_ROUTE_SLUG" && ! "$SINGLE_ROUTE_SLUG" =~ ^[A-Za-z0-9._-]+$ ]];
   exit 1
 fi
 
+if [[ -L app/dist || ( -e app/dist && ! -d app/dist ) ]]; then
+  echo "Refusing unsafe app/dist build path." >&2
+  exit 1
+fi
+
 if [[ -n "$SINGLE_ROUTE_SLUG" ]]; then
   VITE_SINGLE_ROUTE_SLUG="$SINGLE_ROUTE_SLUG" npm --prefix app run build
 else
@@ -17,6 +22,11 @@ else
 fi
 npm --prefix app run test:bundle
 node scripts/check-provider-key.mjs
+
+if [[ -L app/dist || ! -d app/dist ]]; then
+  echo "Refusing unsafe app/dist build output." >&2
+  exit 1
+fi
 
 if [[ -L dist || ( -e dist && ! -d dist ) ]]; then
   echo "Refusing unsafe dist output path." >&2

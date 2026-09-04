@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import subprocess
@@ -51,6 +52,44 @@ def test_required_provider_key_rejects_a_keyless_build(tmp_path):
     assert "a Google Maps key is required" in result.stderr
 
 
+def test_packaging_rejects_redirected_app_dist_before_build(tmp_path):
+    script = tmp_path / "make-dist.sh"
+    shutil.copy2(ROOT / "make-dist.sh", script)
+    script.chmod(0o755)
+    app = tmp_path / "app"
+    app.mkdir()
+    external = tmp_path / "external-build"
+    external.mkdir()
+    sentinel = external / "sentinel.txt"
+    sentinel.write_text("preserve", encoding="utf-8")
+    (app / "dist").symlink_to(external, target_is_directory=True)
+    binaries = tmp_path / "bin"
+    binaries.mkdir()
+    npm = binaries / "npm"
+    npm.write_text(
+        '#!/bin/bash\nprintf "invoked" > "$GODIESEL_NPM_MARKER"\n',
+        encoding="utf-8",
+    )
+    npm.chmod(0o755)
+    environment = os.environ.copy()
+    environment["PATH"] = f"{binaries}:{environment['PATH']}"
+    environment["GODIESEL_NPM_MARKER"] = str(tmp_path / "npm-invoked")
+
+    result = subprocess.run(
+        [str(script)],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "unsafe app/dist build path" in result.stderr
+    assert sentinel.read_text(encoding="utf-8") == "preserve"
+    assert not (tmp_path / "npm-invoked").exists()
+
+
 def test_public_route_publish_requires_the_provider_key():
     publish_script = (ROOT / "scripts" / "publish-route-microsite.sh").read_text(
         encoding="utf-8"
@@ -59,6 +98,23 @@ def test_public_route_publish_requires_the_provider_key():
     assert 'REQUIRE_PROVIDER_KEY=1' in publish_script
     assert 'REQUIRE_PROVIDER_KEY=0' in publish_script
     assert 'GODIESEL_REQUIRE_PROVIDER_KEY="$REQUIRE_PROVIDER_KEY"' in publish_script
+
+
+def test_route_share_documentation_uses_the_manifest_release_command():
+    manifest = json.loads(
+        (ROOT / "system/capabilities.json").read_text(encoding="utf-8")
+    )
+    route_share = next(
+        capability
+        for capability in manifest["capabilities"]
+        if capability["id"] == "route-share"
+    )
+    release_command = route_share["commands"]["release"][0]["command"]
+    documentation = (ROOT / "docs/agents/route-share.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert f"`{release_command}`" in documentation
 
 
 def test_live_pipeline_requires_independent_stable_alias_authority():
