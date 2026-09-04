@@ -120,6 +120,10 @@ OWNER_PROPOSAL=$(node -e 'const value=require("./.route-share/owner-plan-envelop
 ./scripts/godiesel apply route-share \
   --proposal "$OWNER_PROPOSAL" --authorize canonical-local --json \
   > .route-share/owner-retry-envelope.json
+git add -A
+git -c user.name="goDiesel acceptance" \
+  -c user.email="acceptance@godiesel.local" \
+  commit -qm "Record accepted route fixtures"
 ./scripts/godiesel verify route-share gpx-acceptance-owner-adventure \
   --json > .route-share/verification-envelope.json
 ./scripts/godiesel verify route-share gpx-acceptance-owner-adventure \
