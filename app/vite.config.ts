@@ -33,7 +33,9 @@ function buildIdentity(command: string) {
       "goDiesel build identity requires an available Git checkout.",
     );
   }
-  if (command === "build" && status) {
+  const unverifiedWorkingTreeBuildAllowed =
+    process.env.GODIESEL_ALLOW_UNVERIFIED_WORKING_TREE_BUILD === "1";
+  if (command === "build" && status && !unverifiedWorkingTreeBuildAllowed) {
     throw new Error("Production build identity requires a clean Git checkout.");
   }
   if (configuredCommit && configuredCommit !== checkoutCommit) {
@@ -48,7 +50,11 @@ function buildIdentity(command: string) {
     schema_version: 1,
     document_type: "godiesel-build-identity",
     artifact_kind:
-      command === "build" ? "built-artifact" : "development-server",
+      command !== "build"
+        ? "development-server"
+        : status
+          ? "unverified-working-tree-artifact"
+          : "built-artifact",
     commit: checkoutCommit,
     tree,
     build_id: randomUUID(),

@@ -58,6 +58,7 @@ node scripts/validate-route-microsite.mjs "$ROUTE_SLUG" source
 
 echo "2/4 Building route-only bundle"
 GODIESEL_REQUIRE_PROVIDER_KEY="$REQUIRE_PROVIDER_KEY" \
+  GODIESEL_ALLOW_UNVERIFIED_WORKING_TREE_BUILD=1 \
   GODIESEL_SINGLE_ROUTE_SLUG="$ROUTE_SLUG" \
   ./make-dist.sh
 node scripts/validate-route-microsite.mjs "$ROUTE_SLUG" dist

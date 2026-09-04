@@ -8,7 +8,7 @@
   "properties": {
     "schema_version": { "const": 1 },
     "document_type": { "const": "godiesel-build-identity" },
-    "artifact_kind": { "enum": ["built-artifact", "development-server"] },
+    "artifact_kind": { "enum": ["built-artifact", "development-server", "unverified-working-tree-artifact"] },
     "commit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
     "tree": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
     "build_id": { "type": "string", "format": "uuid" }

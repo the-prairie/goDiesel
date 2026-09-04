@@ -102,6 +102,7 @@ Run one existing live browser check against one exact target:
 The target must be an HTTP or HTTPS URL without credentials, query parameters, or fragments.
 It must name an origin root and expose `build-identity.json` from that same origin.
 That identity must declare `artifact_kind: built-artifact`; a Vite development server is not valid live-proof evidence even when it exposes the same commit and tree.
+Route microsites built from pending working-tree changes declare `artifact_kind: unverified-working-tree-artifact` and are also ineligible for provider proof.
 Google 3D is stricter: its only valid target is exactly `http://localhost:8787`.
 When that origin is not already running, the adapter starts a Vite preview of the exact prebuilt `app/dist` artifact, waits for its identity, and stops the process after verification.
 Production builds require a clean Git checkout, and the identity binds the commit, Git tree, and a unique immutable build instance id.

@@ -1385,7 +1385,14 @@ def test_provider_verify_rejects_target_built_from_another_commit(tmp_path: Path
     assert calls == []
 
 
-def test_provider_verify_rejects_development_server(tmp_path: Path):
+@pytest.mark.parametrize(
+    "artifact_kind",
+    ["development-server", "unverified-working-tree-artifact"],
+)
+def test_provider_verify_rejects_non_proof_artifact(
+    tmp_path: Path,
+    artifact_kind: str,
+):
     _install_evidence_contract(tmp_path)
     calls: list[object] = []
 
@@ -1398,7 +1405,7 @@ def test_provider_verify_rejects_development_server(tmp_path: Path):
         runner=lambda *args, **kwargs: calls.append((args, kwargs)),
         target_identity_reader=lambda _target: {
             **_matching_target_identity(""),
-            "artifact_kind": "development-server",
+            "artifact_kind": artifact_kind,
         },
         repository_reader=_clean_repository_identity,
     )
