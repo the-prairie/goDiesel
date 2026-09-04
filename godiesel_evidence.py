@@ -600,3 +600,47 @@ def withdraw_evidence_receipt(
             "path": (EVIDENCE_ROOT / quarantine_name).as_posix(),
             "sha256": _file_digest(quarantine_path),
         }
+
+
+def ensure_evidence_receipt_not_reusable(
+    root: Path | str,
+    summary: Mapping[str, str],
+) -> bool:
+    """Fail closed when a withdrawal helper did not make its receipt non-reusable."""
+
+    root = Path(root).resolve()
+    relative = Path(str(summary.get("path", "")))
+    receipt_id = str(summary.get("id", ""))
+    if relative.parent != EVIDENCE_ROOT or relative.name != f"{receipt_id}.json":
+        return False
+    try:
+        raw = read_local_bytes(root, EVIDENCE_ROOT, relative.name)
+        receipt = json.loads(raw.decode("utf-8"))
+        if (
+            isinstance(receipt, dict)
+            and receipt.get("receipt_id") == receipt_id
+            and receipt.get("status") != "passed"
+        ):
+            return True
+    except FileNotFoundError:
+        return True
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        pass
+
+    quarantine_name = f"{relative.name}.{uuid.uuid4().hex}.invalid"
+    try:
+        replace_local_file(root, EVIDENCE_ROOT, relative.name, quarantine_name)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        try:
+            unlink_local_file(root, EVIDENCE_ROOT, relative.name, missing_ok=True)
+        except OSError:
+            return False
+    try:
+        read_local_bytes(root, EVIDENCE_ROOT, relative.name)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    return False

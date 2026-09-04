@@ -454,6 +454,29 @@ def test_generation_inspect_rejects_redirected_route_share_recovery(tmp_path: Pa
     )
 
 
+def test_generation_apply_rejects_symlinked_publication_ancestor(tmp_path: Path):
+    root = _generation_fixture(tmp_path / "repository")
+    external_public = tmp_path / "external-public"
+    (external_public / "data").mkdir(parents=True)
+    shutil.rmtree(root / "app/public")
+    (root / "app/public").symlink_to(external_public, target_is_directory=True)
+    calls = []
+
+    result = execute_route_generation(
+        root,
+        "apply",
+        authority="canonical-local",
+        runner=lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    assert result["status"] == "blocked"
+    assert result["result"]["recovery_state"] == "unreadable"
+    assert result["blockers"][0]["code"] == (
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_UNREADABLE"
+    )
+    assert calls == []
+
+
 def test_generation_apply_requires_authority_before_invoking_writer(tmp_path: Path):
     root = _generation_fixture(tmp_path)
     calls: list[object] = []
@@ -815,6 +838,52 @@ def test_generation_verify_withdraws_proof_if_input_changes_during_promotion(
     assert all(receipt["status"] != "passed" for receipt in evidence_receipts)
 
 
+def test_generation_verify_quarantines_proof_when_withdrawal_helper_fails(
+    tmp_path: Path,
+    monkeypatch,
+):
+    root = _generation_fixture(tmp_path)
+    implementation = root / "godiesel_local_capabilities.py"
+    implementation.write_text("stable\n", encoding="utf-8")
+    original_update = godiesel_local_capabilities.update_evidence_receipt
+
+    def racing_update(*args, **kwargs):
+        promoted = original_update(*args, **kwargs)
+        implementation.write_text("changed during promotion\n", encoding="utf-8")
+        return promoted
+
+    monkeypatch.setattr(
+        godiesel_local_capabilities,
+        "update_evidence_receipt",
+        racing_update,
+    )
+    monkeypatch.setattr(
+        godiesel_local_capabilities,
+        "withdraw_evidence_receipt",
+        lambda *_args, **_kwargs: None,
+    )
+
+    result = execute_route_generation(
+        root,
+        "verify",
+        runner=lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 0, "passed", ""
+        ),
+    )
+    implementation.write_text("stable\n", encoding="utf-8")
+    reused = reuse_verification(root, "route-generation", environ={})
+
+    assert result["status"] == "blocked"
+    assert result["evidence"] is None
+    assert reused["status"] == "blocked"
+    evidence_receipts = [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in (root / ".godiesel/evidence").glob("*.json")
+    ]
+    assert all(receipt["status"] != "passed" for receipt in evidence_receipts)
+    assert list((root / ".godiesel/evidence").glob("*.invalid"))
+
+
 def test_generation_verify_rejects_a_rewritten_evidence_draft(
     tmp_path: Path,
     monkeypatch,
@@ -901,6 +970,29 @@ def test_generation_inspect_rejects_undeclared_public_detail_fields(tmp_path: Pa
 
     assert result["status"] == "blocked"
     assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_PROJECTION_DRIFT"
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    [
+        "app/src/data/generated/routes.manifest.json",
+        "app/src/data/generated/route-stats.json",
+    ],
+)
+def test_generation_inspect_rejects_undeclared_projection_root_fields(
+    tmp_path: Path,
+    relative_path: str,
+):
+    root = _generation_fixture(tmp_path)
+    path = root / relative_path
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["private_note"] = "must not enter the public projection"
+    _write_json(path, payload)
+
+    result = execute_route_generation(root, "inspect")
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_INVENTORY_DRIFT"
 
 
 @pytest.mark.parametrize(
@@ -1442,6 +1534,34 @@ def test_curation_plan_preserves_private_source_recovery_guidance(
         root,
         "plan",
         request_path=_write_curation_request(root),
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"] == [issue]
+
+
+def test_curation_apply_preserves_private_source_recovery_guidance(
+    tmp_path: Path,
+    monkeypatch,
+):
+    root = _curation_fixture(tmp_path)
+    plan = _plan_curation(root)
+    issue = {
+        "code": "GODIESEL_PRIVATE_ROUTE_SOURCE_UNAVAILABLE",
+        "message": "Private route sources are unavailable.",
+        "remediation": "Restore the declared private route sources.",
+    }
+    monkeypatch.setattr(
+        godiesel_local_capabilities,
+        "external_route_source_fingerprint",
+        lambda _root: (None, [], issue),
+    )
+
+    result = execute_owner_curation(
+        root,
+        "apply",
+        plan_path=plan,
+        authority="canonical-local",
     )
 
     assert result["status"] == "blocked"

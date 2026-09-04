@@ -13,6 +13,9 @@ import sys
 from pathlib import Path
 from typing import Any, Mapping
 
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import SchemaError
+
 from godiesel_local_capabilities import (
     CURATION_AUTHORITY,
     GENERATION_AUTHORITY,
@@ -440,12 +443,18 @@ def _load_manifest(root: Path) -> tuple[dict[str, Any] | None, list[dict[str, st
                 "Repair system/capabilities.schema.json and run the focused control-plane tests.",
             )
         ]
-    if (
-        not isinstance(schema, dict)
-        or schema.get("$schema") != "https://json-schema.org/draft/2020-12/schema"
-        or schema.get("type") != "object"
-        or schema.get("additionalProperties") is not False
-    ):
+    schema_contract_valid = (
+        isinstance(schema, dict)
+        and schema.get("$schema") == "https://json-schema.org/draft/2020-12/schema"
+        and schema.get("type") == "object"
+        and schema.get("additionalProperties") is False
+    )
+    if schema_contract_valid:
+        try:
+            Draft202012Validator.check_schema(schema)
+        except SchemaError:
+            schema_contract_valid = False
+    if not schema_contract_valid:
         return None, [
             _issue(
                 "GODIESEL_MANIFEST_SCHEMA_INVALID",
@@ -472,7 +481,17 @@ def _load_manifest(root: Path) -> tuple[dict[str, Any] | None, list[dict[str, st
             )
         ]
 
-    if not _is_manifest(manifest):
+    try:
+        manifest_matches_schema = Draft202012Validator(schema).is_valid(manifest)
+    except Exception:
+        return None, [
+            _issue(
+                "GODIESEL_MANIFEST_SCHEMA_INVALID",
+                "The capability manifest schema cannot validate the control-plane contract.",
+                "Restore the self-contained Draft 2020-12 schema and run the focused control-plane tests.",
+            )
+        ]
+    if not manifest_matches_schema or not _is_manifest(manifest):
         return None, [
             _issue(
                 "GODIESEL_MANIFEST_INVALID",

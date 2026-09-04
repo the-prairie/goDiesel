@@ -522,6 +522,44 @@ def test_route_generation_proof_fingerprints_private_sources_without_paths(
     assert set(before["_monitor_paths"]) == {str(metadata), str(geometry)}
 
 
+@pytest.mark.parametrize("linked_source", ["metadata", "geometry"])
+def test_route_generation_proof_rejects_symlinked_private_sources(
+    tmp_path: Path,
+    monkeypatch,
+    linked_source: str,
+):
+    (tmp_path / "quests.json").write_text(
+        json.dumps({"routes": [{"activity_id": "123", "status": "approved"}]}),
+        encoding="utf-8",
+    )
+    private_root = tmp_path / "private"
+    private_root.mkdir()
+    metadata = private_root / "activities.csv"
+    geometry = private_root / "123.gpx"
+    metadata.write_text("Filename,Activity Name\nactivities/123.gpx,Test\n", encoding="utf-8")
+    geometry.write_text("<gpx />\n", encoding="utf-8")
+    linked_path = metadata if linked_source == "metadata" else geometry
+    target = private_root / f"real-{linked_path.name}"
+    linked_path.replace(target)
+    linked_path.symlink_to(target.name)
+    monkeypatch.setattr(
+        "godiesel_verification.DEFAULT_DIESEL_DIARIES_ROOT",
+        private_root,
+    )
+    monkeypatch.setattr(
+        "godiesel_verification.find_strava_activity_file",
+        lambda activity_id: geometry if activity_id == "123" else None,
+    )
+
+    source_input, monitor_paths, issue = (
+        godiesel_verification.external_route_source_fingerprint(tmp_path)
+    )
+
+    assert source_input is None
+    assert monitor_paths == []
+    assert issue["code"] == "GODIESEL_PRIVATE_ROUTE_SOURCE_UNAVAILABLE"
+
+
 @pytest.mark.parametrize(
     "metadata_bytes",
     [

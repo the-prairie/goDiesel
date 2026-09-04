@@ -128,8 +128,11 @@ GODIESEL_EARTH_ENGINE_PROJECT=playground-406023 \
 GODIESEL_PIPELINE_SHARE_NAME=pipeline-proof \
 GODIESEL_PIPELINE_TARGET_AUTHORITY=pipeline-proof \
 GODIESEL_PIPELINE_REPLACEMENT_AUTHORITY=pipeline-proof \
+GODIESEL_PIPELINE_REPLACE_EXISTING=1 \
 npm --prefix app run verify:live-pipeline
 ```
+
+Set `GODIESEL_PIPELINE_REPLACE_EXISTING=1` only after the owner explicitly approves replacing the existing stable proof alias.
 
 This gate checks all 103 columns and every approved activity row in the real Strava export, parses every original GPX/FIT source, rebuilds all generated route records in isolation, and compares every route detail, manifest record, geometry point, provenance record, and statistic.
 It then exercises real Run/Ride, Earth/Atlas, recorded/imported, completed/discovered, and reviewed/draft cases through the browser.

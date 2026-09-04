@@ -524,6 +524,31 @@ def test_schema_invalid_manifest_returns_the_stable_manifest_blocker(tmp_path):
     }
 
 
+@pytest.mark.parametrize("malformation", ["numeric-schema", "duplicate-invariant"])
+def test_json_schema_invalid_manifest_returns_the_stable_manifest_blocker(
+    tmp_path,
+    malformation,
+):
+    root = _make_repository_fixture(tmp_path / "repository")
+    manifest_path = root / "system" / "capabilities.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if malformation == "numeric-schema":
+        manifest["$schema"] = 1
+    else:
+        manifest["impact_rules"][0]["invariants"].append(
+            dict(manifest["impact_rules"][0]["invariants"][0])
+        )
+    _write_json(manifest_path, manifest)
+
+    result = inspect_system(root)
+
+    assert result["status"] == "blocked"
+    assert result["capabilities"] == []
+    assert {issue["code"] for issue in result["blockers"]} == {
+        "GODIESEL_MANIFEST_INVALID"
+    }
+
+
 def test_missing_manifest_schema_returns_a_stable_blocker(tmp_path):
     root = _make_repository_fixture(tmp_path / "repository")
     (root / "system" / "capabilities.schema.json").unlink()
@@ -534,6 +559,22 @@ def test_missing_manifest_schema_returns_a_stable_blocker(tmp_path):
     assert result["capabilities"] == []
     assert {issue["code"] for issue in result["blockers"]} == {
         "GODIESEL_MANIFEST_SCHEMA_MISSING"
+    }
+
+
+def test_metaschema_invalid_manifest_schema_returns_a_stable_blocker(tmp_path):
+    root = _make_repository_fixture(tmp_path / "repository")
+    schema_path = root / "system" / "capabilities.schema.json"
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    schema["required"] = "not-an-array"
+    _write_json(schema_path, schema)
+
+    result = inspect_system(root)
+
+    assert result["status"] == "blocked"
+    assert result["capabilities"] == []
+    assert {issue["code"] for issue in result["blockers"]} == {
+        "GODIESEL_MANIFEST_SCHEMA_INVALID"
     }
 
 

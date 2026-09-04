@@ -19,6 +19,7 @@ from jsonschema.exceptions import SchemaError
 from admin_curation import OwnerMutationBusyError, owner_mutation_lock
 from godiesel_evidence import (
     canonical_digest,
+    ensure_evidence_receipt_not_reusable,
     ensure_local_directory,
     existing_local_directory,
     invalidate_evidence_receipt,
@@ -1551,7 +1552,8 @@ def execute_route_share(
                 )
         if post_promotion_issues:
             if evidence is not None:
-                if withdraw_evidence_receipt(root, evidence) is None:
+                withdraw_evidence_receipt(root, evidence)
+                if not ensure_evidence_receipt_not_reusable(root, evidence):
                     post_promotion_issues.append(
                         _issue(
                             "GODIESEL_EVIDENCE_WITHDRAWAL_FAILED",

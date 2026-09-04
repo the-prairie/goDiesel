@@ -123,8 +123,11 @@ GODIESEL_EARTH_ENGINE_PROJECT=playground-406023 \
 GODIESEL_PIPELINE_SHARE_NAME=pipeline-proof \
 GODIESEL_PIPELINE_TARGET_AUTHORITY=pipeline-proof \
 GODIESEL_PIPELINE_REPLACEMENT_AUTHORITY=pipeline-proof \
+GODIESEL_PIPELINE_REPLACE_EXISTING=1 \
 npm run verify:live-pipeline
 ```
+
+Set `GODIESEL_PIPELINE_REPLACE_EXISTING=1` only after the owner explicitly approves replacing the existing stable proof alias.
 
 Run it only when proving a production cutover or the complete provider pipeline.
 It reads the complete private Strava export, sends selected real route geometry to the configured providers, and creates a real Cloudflare Pages branch deployment.

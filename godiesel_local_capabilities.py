@@ -37,6 +37,7 @@ from generated_route_contract import (
 )
 from godiesel_evidence import (
     canonical_digest,
+    ensure_evidence_receipt_not_reusable,
     repository_snapshot,
     update_evidence_receipt,
     withdraw_evidence_receipt,
@@ -303,7 +304,9 @@ def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[s
         and manifest_stats == expected_manifest_stats
     )
     inventory_current = (
-        isinstance(manifest.get("schema_version"), int)
+        set(manifest) == {"schema_version", "generated_at", "stats", "routes"}
+        and set(stats) == {"route_count", "completed_km"}
+        and isinstance(manifest.get("schema_version"), int)
         and not isinstance(manifest.get("schema_version"), bool)
         and manifest.get("schema_version") == 1
         and generated_at_valid
@@ -810,7 +813,8 @@ def _run_verification(
                     )
                 )
         if promotion_blockers:
-            if withdraw_evidence_receipt(root, evidence) is None:
+            withdraw_evidence_receipt(root, evidence)
+            if not ensure_evidence_receipt_not_reusable(root, evidence):
                 promotion_blockers.append(
                     _issue(
                         "GODIESEL_EVIDENCE_WITHDRAWAL_FAILED",
@@ -1316,6 +1320,8 @@ def _load_curation_plan(root: Path, plan_path: Path | str | None) -> tuple[dict[
             current_repository["dirty_state"] == planned_repository["dirty_state"]
         )
         current_state = _curation_observed_state(root, str(plan["activity_id"]))
+    except CurationPlanContextError as error:
+        return None, [error.issue]
     except Exception:
         current_state = None
         fully_matches = False

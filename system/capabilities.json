@@ -391,13 +391,14 @@
       "reads": ["app/**", "dist/**"],
       "writes": ["app/dist/**", "dist/**", "app/e2e/evidence/issue-62-admin-workspace/**"],
       "external_effects": [],
-      "required_files": ["app/package.json", "app/scripts/finalize-build-identity.mjs", "make-dist.sh", "system/artifact-manifest.schema.json", "system/build-identity.schema.json", "scripts/check-provider-key.mjs", "docs/agents/testing.md"],
+      "required_files": ["app/package.json", "app/scripts/finalize-build-identity.mjs", "make-dist.sh", "system/artifact-manifest.schema.json", "system/build-identity.schema.json", "scripts/check-provider-key.mjs", "scripts/publish-live-pipeline-proof.sh", "docs/agents/testing.md"],
       "configuration": [
         { "name": "GOOGLE_MAPS_API_KEY", "required_for": ["verify:live"], "sensitive": true },
         { "name": "GODIESEL_EARTH_ENGINE_PROJECT", "required_for": ["verify:live"], "sensitive": false },
         { "name": "GODIESEL_PIPELINE_SHARE_NAME", "required_for": ["verify:live"], "sensitive": false },
         { "name": "GODIESEL_PIPELINE_TARGET_AUTHORITY", "required_for": ["verify:live"], "sensitive": false },
-        { "name": "GODIESEL_PIPELINE_REPLACEMENT_AUTHORITY", "required_for": ["verify:live"], "sensitive": false }
+        { "name": "GODIESEL_PIPELINE_REPLACEMENT_AUTHORITY", "required_for": ["verify:live"], "sensitive": false },
+        { "name": "GODIESEL_PIPELINE_REPLACE_EXISTING", "required_for": ["verify:live"], "sensitive": false }
       ],
       "commands": {
         "inspect": [{ "command": "./scripts/godiesel doctor --json", "cwd": "." }],
@@ -596,7 +597,7 @@
     },
     {
       "id": "complete-live-pipeline-runtime",
-      "paths": ["scripts/verify-live-pipeline.sh"],
+      "paths": ["scripts/verify-live-pipeline.sh", "scripts/publish-live-pipeline-proof.sh"],
       "capabilities": ["application-release"],
       "category": "provider",
       "gates": [{ "capability": "application-release", "tier": "live" }],

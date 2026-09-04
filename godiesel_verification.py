@@ -239,6 +239,11 @@ def route_generation_recovery_state(
             return False
 
     try:
+        if any(
+            _unsafe_symlink_in_path(root, path)
+            for path in (data_root, generated_root, detail_root)
+        ):
+            raise OSError("catalogue publication path traverses a symbolic link")
         pending = has_entry(
             data_root,
             lambda name: name == ".route-generation-backup"
@@ -453,6 +458,27 @@ def _file_digest(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _is_regular_private_source(path: Path, source_root: Path) -> bool:
+    """Accept only a regular source reached without symlinks below its declared root."""
+
+    path = path.absolute()
+    source_root = source_root.absolute()
+    if not path.is_relative_to(source_root):
+        return False
+    current = source_root
+    try:
+        if current.is_symlink() or not current.is_dir():
+            return False
+        for part in path.relative_to(source_root).parts:
+            current = current / part
+            metadata = current.lstat()
+            if stat.S_ISLNK(metadata.st_mode):
+                return False
+        return stat.S_ISREG(path.lstat().st_mode)
+    except OSError:
+        return False
+
+
 def _route_generation_external_sources(
     root: Path,
 ) -> tuple[dict[str, str] | None, list[str], dict[str, str] | None]:
@@ -515,7 +541,9 @@ def _route_generation_external_sources(
                 None,
             )
         metadata_path = DEFAULT_DIESEL_DIARIES_ROOT / "activities.csv"
-        if not metadata_path.is_file():
+        if not _is_regular_private_source(
+            metadata_path, DEFAULT_DIESEL_DIARIES_ROOT
+        ):
             raise OSError("private activity metadata is unavailable")
         metadata = load_strava_route_metadata(metadata_path)
         if any(activity_id not in metadata for activity_id in activity_ids):
@@ -530,7 +558,9 @@ def _route_generation_external_sources(
         monitor_paths = [*repository_monitor_paths, str(metadata_path)]
         for activity_id in activity_ids:
             source_path = find_strava_activity_file(activity_id)
-            if source_path is None:
+            if source_path is None or not _is_regular_private_source(
+                source_path, DEFAULT_DIESEL_DIARIES_ROOT
+            ):
                 raise OSError(f"private geometry is unavailable for {activity_id}")
             sources.append(
                 {

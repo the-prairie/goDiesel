@@ -66,5 +66,62 @@ def test_live_pipeline_requires_independent_stable_alias_authority():
 
     assert "GODIESEL_PIPELINE_TARGET_AUTHORITY" in pipeline
     assert "GODIESEL_PIPELINE_REPLACEMENT_AUTHORITY" in pipeline
-    assert '--authorize-target "$TARGET_AUTHORITY"' in pipeline
-    assert '--authorize-replacement "$REPLACEMENT_AUTHORITY"' in pipeline
+    assert "./scripts/publish-live-pipeline-proof.sh" in pipeline
+
+
+def test_live_pipeline_repeated_target_requires_explicit_replacement_intent(tmp_path):
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    wrapper = scripts / "publish-live-pipeline-proof.sh"
+    shutil.copy2(ROOT / "scripts/publish-live-pipeline-proof.sh", wrapper)
+    wrapper.chmod(0o755)
+    publisher = scripts / "publish-route-microsite.sh"
+    publisher.write_text(
+        '#!/bin/bash\nprintf "%s\\n" "$@" > "$GODIESEL_TEST_CAPTURE"\n',
+        encoding="utf-8",
+    )
+    publisher.chmod(0o755)
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "GODIESEL_PIPELINE_SHARE_NAME": "pipeline-proof",
+            "GODIESEL_PIPELINE_TARGET_AUTHORITY": "pipeline-proof",
+            "GODIESEL_PIPELINE_REPLACEMENT_AUTHORITY": "pipeline-proof",
+            "GODIESEL_TEST_CAPTURE": str(tmp_path / "arguments.txt"),
+        }
+    )
+
+    missing_intent = subprocess.run(
+        [str(wrapper)],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    publisher_was_not_called = not (tmp_path / "arguments.txt").exists()
+    environment["GODIESEL_PIPELINE_REPLACE_EXISTING"] = "1"
+    repeated = subprocess.run(
+        [str(wrapper)],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    repeated_arguments = (
+        (tmp_path / "arguments.txt").read_text(encoding="utf-8").splitlines()
+    )
+
+    assert missing_intent.returncode == 2
+    assert publisher_was_not_called
+    assert repeated.returncode == 0
+    assert repeated_arguments[-1] == "--replace-existing"
+    assert repeated_arguments[:6] == [
+        "3519505225411091950",
+        "pipeline-proof",
+        "--authorize-target",
+        "pipeline-proof",
+        "--authorize-replacement",
+        "pipeline-proof",
+    ]

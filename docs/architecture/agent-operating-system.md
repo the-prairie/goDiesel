@@ -291,7 +291,7 @@ Existing covered files and recursive input trees are additionally monitored for 
 - contract and schema paths;
 - fixture and test paths;
 - build and runtime configuration;
-- file type, executable mode, and symlink target for covered files;
+- regular-file type and executable mode for covered files, with every symbolic link rejected;
 - provider origin and matching deployed commit, tree, and build instance when the proof is live;
 - canonical data fingerprints when the proof covers real data.
 
