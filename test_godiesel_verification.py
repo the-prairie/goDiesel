@@ -11,6 +11,7 @@ from urllib.error import HTTPError
 import pytest
 from jsonschema import Draft202012Validator
 
+import godiesel_verification
 from godiesel_control import main
 from godiesel_route_share import execute_route_share
 from godiesel_verification import (
@@ -1038,6 +1039,28 @@ def test_cli_verify_explain_emits_json_without_executing_a_gate(monkeypatch, cap
                 "./scripts/verify-provider-readiness.sh google-3d",
             },
         ),
+        *[
+            (
+                path,
+                {
+                    "./scripts/verify-provider-readiness.sh atlas",
+                    "./scripts/verify-provider-readiness.sh earth-replay",
+                    "./scripts/verify-provider-readiness.sh google-3d",
+                },
+            )
+            for path in (
+                "app/scripts/finalize-build-identity.mjs",
+                "system/build-identity.schema.json",
+                "system/artifact-manifest.schema.json",
+                "app/playwright.live.config.ts",
+                "app/package.json",
+                "app/package-lock.json",
+                "godiesel_evidence.py",
+                "godiesel_verification.py",
+                "system/evidence-receipt.schema.json",
+                "system/verification-reuse.schema.json",
+            )
+        ],
     ],
 )
 def test_provider_or_camera_change_selects_exact_live_provider_proof(
@@ -1304,6 +1327,40 @@ def test_reuse_returns_the_existing_proof_without_executing_a_gate(tmp_path: Pat
     Draft202012Validator(
         json.loads((ROOT / "system/verification-reuse.schema.json").read_text())
     ).validate(reused["result"])
+
+
+def test_reuse_observes_transient_recovery_changes_during_snapshot(
+    tmp_path: Path,
+    monkeypatch,
+):
+    _write_reuse_fixture(tmp_path)
+    _record_proof(tmp_path)
+    staging = tmp_path / "app/public/data/.routes-staging-interrupted"
+    original_snapshot = godiesel_verification.build_proof_snapshot
+    calls = 0
+
+    def racing_snapshot(*args, **kwargs):
+        nonlocal calls
+        if calls == 0:
+            staging.mkdir()
+            staging.rmdir()
+        calls += 1
+        return original_snapshot(*args, **kwargs)
+
+    monkeypatch.setattr(godiesel_verification, "build_proof_snapshot", racing_snapshot)
+
+    reused = reuse_verification(
+        tmp_path,
+        "route-share",
+        slug="route-1",
+        environ={},
+    )
+
+    assert reused["status"] == "blocked"
+    assert reused["result"]["reused"] is False
+    assert reused["blockers"][0]["code"] == (
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_CHANGED"
+    )
 
 
 def test_reuse_rejects_a_passed_receipt_with_a_failed_gate(tmp_path: Path):
@@ -1615,3 +1672,25 @@ def test_cli_verify_reuse_dispatches_without_running_route_verification(
     assert captured["capability"] == "route-share"
     assert captured["slug"] == "route-1"
     assert json.loads(capsys.readouterr().out)["status"] == "passed"
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["verify", "route-share", "route-1", "--reuse", "--preview"],
+        [
+            "verify",
+            "route-share",
+            "route-1",
+            "--reuse",
+            "--preview",
+            "--detach",
+        ],
+    ],
+)
+def test_cli_rejects_reuse_with_preview_modes(arguments, capsys):
+    with pytest.raises(SystemExit) as raised:
+        main(arguments)
+
+    assert raised.value.code == 2
+    assert "--reuse cannot be combined with --preview or --detach" in capsys.readouterr().err

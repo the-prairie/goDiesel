@@ -134,6 +134,17 @@ def test_capability_manifest_is_valid_and_declares_the_system_boundaries():
         "./scripts/godiesel release route-share <slug> <share-name> "
         "--authorize external-durable --authorize-target <share-name> --json"
     )
+    route_share_verify_commands = {
+        command["command"]
+        for command in capabilities["route-share"]["commands"]["verify"]
+    }
+    assert "./scripts/godiesel verify route-share <slug> --preview --json" in (
+        route_share_verify_commands
+    )
+    assert (
+        "./scripts/godiesel verify route-share <slug> --preview --detach --json"
+        in route_share_verify_commands
+    )
     assert capabilities["application-release"]["commands"]["release"][0]["command"] == (
         "npx wrangler pages deploy dist --project-name=godiesel --branch=production"
     )
@@ -163,6 +174,11 @@ def test_capability_manifest_is_valid_and_declares_the_system_boundaries():
             artifact["kind"] == "route-generation-staging"
             for artifact in capabilities[capability_id]["artifacts"]
         )
+        artifact_locations = {
+            artifact["location"] for artifact in capabilities[capability_id]["artifacts"]
+        }
+        assert "app/src/data/generated/.*.tmp" in artifact_locations
+        assert "app/src/data/generated/.*.recovery" in artifact_locations
         proof_paths = {
             path
             for proof_input in capabilities[capability_id]["verification"]["focused"][0][

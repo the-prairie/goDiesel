@@ -25,6 +25,8 @@ These Phase 2 receipts prove route workflow lineage only.
 Normal, non-preview route verification additionally writes a general proof receipt under `.godiesel/evidence/` with repository state, gate attribution, digested inputs and outputs, and redacted configuration presence.
 Preview writes only its route-transition receipt because it starts a loopback runtime instead of executing the manifest-declared focused proof gate.
 Impact-directed gate selection and guarded proof reuse are implemented for route verification.
+Proof reuse is mutually exclusive with `--preview` and `--detach` because preview is an executable runtime check, not a reusable proof lookup.
+Verify and release monitor interrupted generation state across their complete decision window.
 
 ## State Machine
 
@@ -131,6 +133,7 @@ After explicit approval to create, run:
 ./scripts/godiesel apply route-share --proposal .route-share/proposals/<proposal-id>.json --authorize canonical-local --json
 ./scripts/godiesel verify route-share <slug> --json
 ./scripts/godiesel verify route-share <slug> --preview --json
+./scripts/godiesel verify route-share <slug> --preview --detach --json
 ./scripts/godiesel verify route-share <slug> --reuse --json
 ```
 

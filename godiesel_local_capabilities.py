@@ -470,6 +470,7 @@ def _run_verification(
     ]
     | None = None,
     external_target: Mapping[str, Any] | None = None,
+    recovery_monitor: ProofInputMonitor | None = None,
 ) -> dict[str, Any]:
     try:
         evidence_schema = _read_json(root / "system/evidence-receipt.schema.json")
@@ -566,6 +567,22 @@ def _run_verification(
                 "Stabilize the worktree and rerun verification against one unchanged input set.",
             )
         )
+    if recovery_monitor is not None:
+        _recovery_state, recovery_blockers = route_generation_recovery_state(root)
+        stability_blockers.extend(
+            issue
+            for issue in recovery_blockers
+            if issue["code"]
+            not in {blocker["code"] for blocker in stability_blockers}
+        )
+        if recovery_monitor.changed() and not recovery_blockers:
+            stability_blockers.append(
+                _issue(
+                    "GODIESEL_ROUTE_GENERATION_RECOVERY_CHANGED",
+                    "Route-generation recovery state changed while verification was running.",
+                    "Stabilize generated publication state, inspect route generation, and rerun verification.",
+                )
+            )
     blockers.extend(stability_blockers)
     stable_inputs = not stability_blockers and not post_identity_blockers
     receipt_snapshot = post_snapshot if post_snapshot["status"] == "passed" else snapshot
@@ -680,51 +697,59 @@ def execute_route_generation(
         command = [str(root / "rebuild.sh")]
         display_command = "./rebuild.sh"
     else:
-        recovery_state, recovery_blockers = route_generation_recovery_state(root)
-        if recovery_blockers:
-            return _envelope(
-                "route-generation",
-                verb,
-                required_authority,
-                status="blocked",
-                authorized=True,
-                result={"recovery_state": recovery_state},
-                result_contract="godiesel_local_capabilities.py#route-generation-recovery",
-                blockers=recovery_blockers,
-            )
-        command = [
-            sys.executable,
-            "-m",
-            "pytest",
-            "-q",
-            "test_godiesel_local_capabilities.py",
-            "test_react_app.py",
-            "test_route_provenance.py",
-        ]
-        display_command = (
-            "python -m pytest -q test_godiesel_local_capabilities.py "
-            "test_react_app.py test_route_provenance.py"
-        )
-        return _run_verification(
+        recovery_monitor = ProofInputMonitor(
             root,
-            capability="route-generation",
-            command=command,
-            display_command=display_command,
-            tier="focused",
-            environ=process_env,
-            runner=runner,
-            inputs=[
-                {
-                    "kind": "input",
-                    "name": "capability-state",
-                    "sha256": canonical_digest("route-generation"),
-                }
-            ],
-            result=lambda completed: _command_result(display_command, completed),
-            failure_code="GODIESEL_ROUTE_GENERATION_COMMAND_FAILED",
-            failure_message="The existing route-generation verify command failed.",
-            failure_remediation="Inspect the focused test output, correct the cause, and retry.",
+            {"covered_inputs": [], "_monitor_paths": [str(root / "app/public/data")]},
         )
+        try:
+            recovery_state, recovery_blockers = route_generation_recovery_state(root)
+            if recovery_blockers:
+                return _envelope(
+                    "route-generation",
+                    verb,
+                    required_authority,
+                    status="blocked",
+                    authorized=True,
+                    result={"recovery_state": recovery_state},
+                    result_contract="godiesel_local_capabilities.py#route-generation-recovery",
+                    blockers=recovery_blockers,
+                )
+            command = [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                "test_godiesel_local_capabilities.py",
+                "test_react_app.py",
+                "test_route_provenance.py",
+            ]
+            display_command = (
+                "python -m pytest -q test_godiesel_local_capabilities.py "
+                "test_react_app.py test_route_provenance.py"
+            )
+            return _run_verification(
+                root,
+                capability="route-generation",
+                command=command,
+                display_command=display_command,
+                tier="focused",
+                environ=process_env,
+                runner=runner,
+                inputs=[
+                    {
+                        "kind": "input",
+                        "name": "capability-state",
+                        "sha256": canonical_digest("route-generation"),
+                    }
+                ],
+                result=lambda completed: _command_result(display_command, completed),
+                failure_code="GODIESEL_ROUTE_GENERATION_COMMAND_FAILED",
+                failure_message="The existing route-generation verify command failed.",
+                failure_remediation="Inspect the focused test output, correct the cause, and retry.",
+                recovery_monitor=recovery_monitor,
+            )
+        finally:
+            recovery_monitor.close()
     completed = runner(
         command,
         cwd=root,
@@ -1159,52 +1184,60 @@ def execute_owner_curation(
     if verb == "plan":
         return _plan_owner_curation(root, request_path)
     if verb == "verify":
-        recovery_state, recovery_blockers = route_generation_recovery_state(root)
-        if recovery_blockers:
-            return _envelope(
-                "owner-curation",
-                verb,
-                required_authority,
-                status="blocked",
-                authorized=True,
-                result={"recovery_state": recovery_state},
-                result_contract="godiesel_local_capabilities.py#route-generation-recovery",
-                blockers=recovery_blockers,
-            )
-        command = [
-            sys.executable,
-            "-m",
-            "pytest",
-            "-q",
-            "test_godiesel_local_capabilities.py",
-            "test_admin_curation.py",
-            "test_curation_publish.py",
-            "test_route_provenance.py",
-        ]
-        display_command = (
-            "python -m pytest -q test_godiesel_local_capabilities.py "
-            "test_admin_curation.py test_curation_publish.py test_route_provenance.py"
-        )
-        return _run_verification(
+        recovery_monitor = ProofInputMonitor(
             root,
-            capability="owner-curation",
-            command=command,
-            display_command=display_command,
-            tier="focused",
-            environ=dict(os.environ if environ is None else environ),
-            runner=runner,
-            inputs=[
-                {
-                    "kind": "input",
-                    "name": "capability-state",
-                    "sha256": canonical_digest("owner-curation"),
-                }
-            ],
-            result=lambda completed: _command_result(display_command, completed),
-            failure_code="GODIESEL_OWNER_CURATION_COMMAND_FAILED",
-            failure_message="The existing owner-curation verification command failed.",
-            failure_remediation="Inspect the focused recovery test output, correct the cause, and retry.",
+            {"covered_inputs": [], "_monitor_paths": [str(root / "app/public/data")]},
         )
+        try:
+            recovery_state, recovery_blockers = route_generation_recovery_state(root)
+            if recovery_blockers:
+                return _envelope(
+                    "owner-curation",
+                    verb,
+                    required_authority,
+                    status="blocked",
+                    authorized=True,
+                    result={"recovery_state": recovery_state},
+                    result_contract="godiesel_local_capabilities.py#route-generation-recovery",
+                    blockers=recovery_blockers,
+                )
+            command = [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                "test_godiesel_local_capabilities.py",
+                "test_admin_curation.py",
+                "test_curation_publish.py",
+                "test_route_provenance.py",
+            ]
+            display_command = (
+                "python -m pytest -q test_godiesel_local_capabilities.py "
+                "test_admin_curation.py test_curation_publish.py test_route_provenance.py"
+            )
+            return _run_verification(
+                root,
+                capability="owner-curation",
+                command=command,
+                display_command=display_command,
+                tier="focused",
+                environ=dict(os.environ if environ is None else environ),
+                runner=runner,
+                inputs=[
+                    {
+                        "kind": "input",
+                        "name": "capability-state",
+                        "sha256": canonical_digest("owner-curation"),
+                    }
+                ],
+                result=lambda completed: _command_result(display_command, completed),
+                failure_code="GODIESEL_OWNER_CURATION_COMMAND_FAILED",
+                failure_message="The existing owner-curation verification command failed.",
+                failure_remediation="Inspect the focused recovery test output, correct the cause, and retry.",
+                recovery_monitor=recovery_monitor,
+            )
+        finally:
+            recovery_monitor.close()
 
     try:
         with owner_mutation_lock(root):

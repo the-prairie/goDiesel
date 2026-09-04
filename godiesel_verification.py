@@ -1172,10 +1172,60 @@ def reuse_verification(
     provider_target: str | None = None,
     target_identity_reader: Callable[[str], Mapping[str, object]] = read_target_build_identity,
     repository_reader: Callable[[Path], Mapping[str, object]] = repository_snapshot,
+    _recovery_monitor: ProofInputMonitor | None = None,
 ) -> dict[str, Any]:
     """Reuse the newest valid passed proof whose complete fingerprint still matches."""
 
     root = Path(root).resolve()
+    if (
+        capability_id in {"route-share", "route-generation", "owner-curation"}
+        and _recovery_monitor is None
+    ):
+        recovery_monitor = ProofInputMonitor(
+            root,
+            {"covered_inputs": [], "_monitor_paths": [str(root / "app/public/data")]},
+        )
+        try:
+            result = reuse_verification(
+                root,
+                capability_id,
+                slug=slug,
+                expected_inputs=expected_inputs,
+                environ=environ,
+                provider_target=provider_target,
+                target_identity_reader=target_identity_reader,
+                repository_reader=repository_reader,
+                _recovery_monitor=recovery_monitor,
+            )
+            _recovery_state, recovery_blockers = route_generation_recovery_state(root)
+            recovery_changed = recovery_monitor.changed()
+            if result["status"] == "passed" and (
+                recovery_blockers or recovery_changed
+            ):
+                blockers = recovery_blockers or [
+                    _issue(
+                        "GODIESEL_ROUTE_GENERATION_RECOVERY_CHANGED",
+                        "Route-generation recovery state changed while proof reuse was evaluated.",
+                        "Stabilize generated publication state, inspect route generation, and request proof reuse again.",
+                    )
+                ]
+                explanation = dict(result["result"])
+                explanation["reused"] = False
+                explanation["invalidated_inputs"] = [
+                    *explanation.get("invalidated_inputs", []),
+                    {"category": "data", "name": "route-generation-recovery"},
+                ]
+                explanation["reason"] = blockers[0]["message"]
+                return _reuse_result(
+                    capability_id,
+                    status="blocked",
+                    explanation=explanation,
+                    blockers=blockers,
+                    evidence=result.get("evidence"),
+                )
+            return result
+        finally:
+            recovery_monitor.close()
     schema_path = root / EVIDENCE_SCHEMA_PATH
     try:
         schema = json.loads(schema_path.read_text(encoding="utf-8"))

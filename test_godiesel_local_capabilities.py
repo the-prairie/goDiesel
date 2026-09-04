@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator
 
+import godiesel_local_capabilities
 from admin_curation import SourceRollbackError, owner_mutation_lock
 from curation_publish import CurationRecoveryError
 from godiesel_local_capabilities import (
@@ -633,6 +634,45 @@ def test_generation_verify_blocks_when_covered_inputs_change_during_gate(
     assert receipt["status"] == "blocked"
     reused = reuse_verification(root, "route-generation", environ={})
     assert reused["status"] == "blocked"
+
+
+def test_generation_verify_observes_recovery_changes_before_proof_snapshot(
+    tmp_path: Path,
+    monkeypatch,
+):
+    root = _generation_fixture(tmp_path)
+    staging = root / "app/public/data/.routes-staging-interrupted"
+    original_snapshot = godiesel_local_capabilities.build_proof_snapshot
+    calls = 0
+
+    def racing_snapshot(*args, **kwargs):
+        nonlocal calls
+        if calls == 0:
+            staging.mkdir()
+            staging.rmdir()
+        calls += 1
+        return original_snapshot(*args, **kwargs)
+
+    monkeypatch.setattr(
+        godiesel_local_capabilities,
+        "build_proof_snapshot",
+        racing_snapshot,
+    )
+
+    result = execute_route_generation(
+        root,
+        "verify",
+        runner=lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 0, "passed", ""
+        ),
+    )
+
+    assert result["status"] == "blocked"
+    assert {blocker["code"] for blocker in result["blockers"]} >= {
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_CHANGED"
+    }
+    receipt = json.loads((root / result["evidence"]["path"]).read_text())
+    assert receipt["status"] == "blocked"
 
 
 @pytest.mark.parametrize(
@@ -1317,6 +1357,45 @@ def test_curation_verify_and_reuse_block_while_generation_recovery_is_pending(
     assert reused["blockers"][0]["code"] == (
         "GODIESEL_ROUTE_GENERATION_RECOVERY_PENDING"
     )
+
+
+def test_curation_verify_observes_recovery_changes_before_proof_snapshot(
+    tmp_path: Path,
+    monkeypatch,
+):
+    root = _curation_fixture(tmp_path)
+    staging = root / "app/public/data/.routes-staging-interrupted"
+    original_snapshot = godiesel_local_capabilities.build_proof_snapshot
+    calls = 0
+
+    def racing_snapshot(*args, **kwargs):
+        nonlocal calls
+        if calls == 0:
+            staging.mkdir()
+            staging.rmdir()
+        calls += 1
+        return original_snapshot(*args, **kwargs)
+
+    monkeypatch.setattr(
+        godiesel_local_capabilities,
+        "build_proof_snapshot",
+        racing_snapshot,
+    )
+
+    result = execute_owner_curation(
+        root,
+        "verify",
+        runner=lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 0, "passed", ""
+        ),
+    )
+
+    assert result["status"] == "blocked"
+    assert {blocker["code"] for blocker in result["blockers"]} >= {
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_CHANGED"
+    }
+    receipt = json.loads((root / result["evidence"]["path"]).read_text())
+    assert receipt["status"] == "blocked"
 
 
 def test_curation_proof_reuse_invalidates_when_canonical_state_changes(tmp_path: Path):

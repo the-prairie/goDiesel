@@ -1,5 +1,5 @@
 """Build the React application's generated route data from curated sources."""
-import json, re, shutil, tempfile
+import json, os, re, shutil, tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -37,9 +37,49 @@ REACT_GENERATED_FILES = (
 )
 ROUTE_GENERATION_BACKUP = REACT_ROUTE_DETAILS.parent / '.route-generation-backup'
 
-def recover_interrupted_route_publication():
-    if not ROUTE_GENERATION_BACKUP.exists():
+
+def validate_route_publication_backup():
+    if ROUTE_GENERATION_BACKUP.is_symlink() or not ROUTE_GENERATION_BACKUP.is_dir():
+        raise RuntimeError('Route generation backup must be a real directory')
+    for current, directories, files in os.walk(
+        ROUTE_GENERATION_BACKUP, followlinks=False
+    ):
+        current_path = Path(current)
+        for name in directories:
+            path = current_path / name
+            if path.is_symlink() or not path.is_dir():
+                raise RuntimeError('Route generation backup contains an unsafe directory')
+        for name in files:
+            path = current_path / name
+            if path.is_symlink() or not path.is_file():
+                raise RuntimeError('Route generation backup contains an unsafe file')
+
+    ready_marker = ROUTE_GENERATION_BACKUP / 'ready'
+    if ready_marker.exists() and not ready_marker.is_file():
+        raise RuntimeError('Route generation backup ready marker is invalid')
+    if not ready_marker.exists():
         return
+
+    backup_details = ROUTE_GENERATION_BACKUP / 'routes'
+    metadata_backup = ROUTE_GENERATION_BACKUP / 'metadata'
+    if backup_details.exists() and not backup_details.is_dir():
+        raise RuntimeError('Route generation detail backup is invalid')
+    if not metadata_backup.is_dir():
+        raise RuntimeError('Route generation metadata backup is incomplete')
+    for index, _path in enumerate(REACT_GENERATED_FILES):
+        backup_file = metadata_backup / f'{index}.bin'
+        missing_marker = metadata_backup / f'{index}.missing'
+        if backup_file.exists() == missing_marker.exists():
+            raise RuntimeError('Route generation metadata backup is ambiguous')
+        selected = backup_file if backup_file.exists() else missing_marker
+        if not selected.is_file():
+            raise RuntimeError('Route generation metadata backup entry is invalid')
+
+
+def recover_interrupted_route_publication():
+    if not os.path.lexists(ROUTE_GENERATION_BACKUP):
+        return
+    validate_route_publication_backup()
     ready_marker = ROUTE_GENERATION_BACKUP / 'ready'
     if not ready_marker.exists():
         shutil.rmtree(ROUTE_GENERATION_BACKUP)

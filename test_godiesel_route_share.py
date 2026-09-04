@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator
 
+import godiesel_route_share
 from admin_curation import owner_mutation_lock
 from godiesel_route_share import execute_route_share
 from godiesel_verification import reuse_verification
@@ -302,6 +303,43 @@ def test_route_share_preview_verify_blocks_when_recovery_changes_during_command(
     ) in blocker_codes
     receipt = json.loads((tmp_path / result["receipt"]["path"]).read_text())
     assert receipt["outcome"] == "incomplete"
+
+
+def test_route_share_verify_observes_recovery_changes_before_proof_snapshot(
+    tmp_path: Path,
+    monkeypatch,
+):
+    install_evidence_contract(tmp_path)
+    staging = tmp_path / "app/public/data/.routes-staging-interrupted"
+    original_snapshot = godiesel_route_share._focused_proof_snapshot
+    calls = 0
+
+    def racing_snapshot(root, environ):
+        nonlocal calls
+        if calls == 0:
+            staging.mkdir()
+            staging.rmdir()
+        calls += 1
+        return original_snapshot(root, environ)
+
+    monkeypatch.setattr(godiesel_route_share, "_focused_proof_snapshot", racing_snapshot)
+
+    result = execute_route_share(
+        tmp_path,
+        "verify",
+        slug="route-1",
+        runner=RecordingRunner(completed([], stdout="verified\n")),
+    )
+
+    assert result["status"] == "blocked"
+    assert result["exit_code"] == 2
+    assert {blocker["code"] for blocker in result["blockers"]} >= {
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_CHANGED"
+    }
+    receipt = json.loads((tmp_path / result["receipt"]["path"]).read_text())
+    assert receipt["outcome"] == "incomplete"
+    evidence = json.loads((tmp_path / result["evidence"]["path"]).read_text())
+    assert evidence["status"] == "blocked"
 
 
 def test_verify_blocks_when_the_evidence_contract_is_missing(tmp_path: Path):
@@ -681,6 +719,37 @@ def test_release_without_immutable_url_is_incomplete_and_blocks_handoff(tmp_path
     assert receipt["outcome"] == "incomplete"
     assert "immutable_deployment_url" not in receipt["release_target"]
     assert_valid_result(result)
+
+
+def test_release_observes_transient_recovery_changes_during_publication(tmp_path: Path):
+    lineage_runner = RecordingRunner()
+    establish_route_lineage(tmp_path, lineage_runner)
+    staging = tmp_path / "app/public/data/.routes-staging-interrupted"
+
+    def mutating_release(command, **kwargs):
+        staging.mkdir()
+        staging.rmdir()
+        return completed(
+            command,
+            stdout="Deployment complete: https://a1b2c3.godiesel.pages.dev\n",
+        )
+
+    result = execute_route_share(
+        tmp_path,
+        "release",
+        slug="route-1",
+        share_name="ridge",
+        authority="external-durable",
+        target_authority="ridge",
+        runner=mutating_release,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == (
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_CHANGED"
+    )
+    receipt = json.loads((tmp_path / result["receipt"]["path"]).read_text())
+    assert receipt["outcome"] == "incomplete"
 
 
 def test_route_share_verify_blocks_when_covered_inputs_change_during_gate(

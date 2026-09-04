@@ -71,7 +71,8 @@ Run or reuse the existing writer and recovery proof:
 ./scripts/godiesel verify owner-curation --reuse --json
 ```
 
-Fresh verification and proof reuse both block while full-generation backup or staging residue exists, including malformed or dangling symbolic-link entries.
+Fresh verification and proof reuse monitor full-generation recovery state from before the initial check through the final proof decision.
+They block on persistent or transient backup and staging residue, including malformed or dangling symbolic-link entries.
 
 ## Planned Routes
 

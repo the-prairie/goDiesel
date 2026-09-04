@@ -1,7 +1,10 @@
 import ast
 import json
+import os
 import shutil
 from pathlib import Path
+
+import pytest
 
 from quest_meta import build_route_curation
 
@@ -83,12 +86,15 @@ def test_generated_manifest_and_lazy_route_records_preserve_source_data():
 
 def test_interrupted_route_publication_restores_last_complete_generation(tmp_path):
     build_tree = ast.parse((ROOT / "build.py").read_text())
-    recovery_function = next(
+    recovery_functions = [
         node
         for node in build_tree.body
         if isinstance(node, ast.FunctionDef)
-        and node.name == "recover_interrupted_route_publication"
-    )
+        and node.name in {
+            "validate_route_publication_backup",
+            "recover_interrupted_route_publication",
+        }
+    ]
 
     route_details = tmp_path / "public/data/routes"
     route_details.mkdir(parents=True)
@@ -109,14 +115,71 @@ def test_interrupted_route_publication_restores_last_complete_generation(tmp_pat
         path.write_text("new metadata")
 
     namespace = {
+        "os": os,
+        "Path": Path,
         "shutil": shutil,
         "ROUTE_GENERATION_BACKUP": backup,
         "REACT_ROUTE_DETAILS": route_details,
         "REACT_GENERATED_FILES": generated_files,
     }
-    exec(compile(ast.Module(body=[recovery_function], type_ignores=[]), "build.py", "exec"), namespace)
+    exec(compile(ast.Module(body=recovery_functions, type_ignores=[]), "build.py", "exec"), namespace)
     namespace["recover_interrupted_route_publication"]()
 
     assert (route_details / "route.json").read_text() == "old route"
     assert all(path.read_text() == "old metadata" for path in generated_files)
     assert not backup.exists()
+
+
+@pytest.mark.parametrize("symlink_location", ["backup", "nested"])
+def test_interrupted_route_publication_rejects_symlinks_before_mutation(
+    tmp_path,
+    symlink_location,
+):
+    build_tree = ast.parse((ROOT / "build.py").read_text())
+    recovery_functions = [
+        node
+        for node in build_tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name in {
+            "validate_route_publication_backup",
+            "recover_interrupted_route_publication",
+        }
+    ]
+    route_details = tmp_path / "public/data/routes"
+    route_details.mkdir(parents=True)
+    (route_details / "route.json").write_text("current route")
+    generated_files = tuple(tmp_path / f"generated-{index}.json" for index in range(2))
+    for path in generated_files:
+        path.write_text("current metadata")
+    external = tmp_path / "external"
+    external.mkdir()
+    (external / "route.json").write_text("external route")
+    backup = route_details.parent / ".route-generation-backup"
+    if symlink_location == "backup":
+        backup.symlink_to(external, target_is_directory=True)
+    else:
+        backup.mkdir()
+        (backup / "routes").symlink_to(external, target_is_directory=True)
+        (backup / "metadata").mkdir()
+        for index, _path in enumerate(generated_files):
+            (backup / "metadata" / f"{index}.missing").touch()
+        (backup / "ready").touch()
+    namespace = {
+        "os": os,
+        "Path": Path,
+        "shutil": shutil,
+        "ROUTE_GENERATION_BACKUP": backup,
+        "REACT_ROUTE_DETAILS": route_details,
+        "REACT_GENERATED_FILES": generated_files,
+    }
+    exec(
+        compile(ast.Module(body=recovery_functions, type_ignores=[]), "build.py", "exec"),
+        namespace,
+    )
+
+    with pytest.raises(RuntimeError):
+        namespace["recover_interrupted_route_publication"]()
+
+    assert (route_details / "route.json").read_text() == "current route"
+    assert all(path.read_text() == "current metadata" for path in generated_files)
+    assert (external / "route.json").read_text() == "external route"

@@ -1193,6 +1193,8 @@ def main(argv: list[str] | None = None) -> int:
                 parser.error("release route-share requires a share name")
             if args.detach and not args.preview:
                 parser.error("--detach requires --preview")
+            if args.reuse and (args.preview or args.detach):
+                parser.error("--reuse cannot be combined with --preview or --detach")
             if args.reuse:
                 if args.verb != "verify":
                     parser.error("--reuse only supports verification")

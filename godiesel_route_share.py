@@ -590,12 +590,38 @@ def execute_route_share(
     replacement_authority: str | None = None,
     environ: Mapping[str, str] | None = None,
     runner: Runner = subprocess.run,
+    _recovery_monitor: ProofInputMonitor | None = None,
 ) -> dict[str, Any]:
     """Run one route-share transition and return its stable result envelope."""
 
     if verb not in AUTHORITY:
         raise ValueError(f"unsupported route-share verb: {verb}")
     root = Path(root).resolve()
+    if verb in {"verify", "release"} and _recovery_monitor is None:
+        recovery_monitor = ProofInputMonitor(
+            root,
+            {"covered_inputs": [], "_monitor_paths": [str(root / "app/public/data")]},
+        )
+        try:
+            return execute_route_share(
+                root,
+                verb,
+                request_path=request_path,
+                proposal_path=proposal_path,
+                slug=slug,
+                share_name=share_name,
+                preview=preview,
+                detach=detach,
+                replace_existing=replace_existing,
+                authority=authority,
+                target_authority=target_authority,
+                replacement_authority=replacement_authority,
+                environ=environ,
+                runner=runner,
+                _recovery_monitor=recovery_monitor,
+            )
+        finally:
+            recovery_monitor.close()
     request = Path(request_path).resolve() if request_path is not None else None
     proposal_file = (
         Path(proposal_path).resolve() if proposal_path is not None else None
@@ -643,6 +669,15 @@ def execute_route_share(
                 )
             )
             return _blocked_result(verb, required_authority, blocker)
+        _recovery_state, recovery_blockers = route_generation_recovery_state(root)
+        if recovery_blockers:
+            return _blocked_result(
+                verb,
+                required_authority,
+                recovery_blockers[0],
+                authorized=True,
+                additional_issues=tuple(recovery_blockers[1:]),
+            )
         proof = reuse_verification(
             root,
             "route-share",
@@ -716,7 +751,6 @@ def execute_route_share(
                 authorized=True,
                 additional_issues=tuple(recovery_blockers[1:]),
             )
-
     command = _command(
         root,
         verb,
@@ -728,17 +762,7 @@ def execute_route_share(
         detach=detach,
         replace_existing=replace_existing,
     )
-    monitor_snapshot = proof_snapshot
-    if verb == "verify" and preview:
-        monitor_snapshot = {
-            "covered_inputs": [],
-            "_monitor_paths": [str(root / "app/public/data")],
-        }
-    monitor = (
-        ProofInputMonitor(root, monitor_snapshot)
-        if monitor_snapshot is not None
-        else None
-    )
+    monitor = ProofInputMonitor(root, proof_snapshot) if proof_snapshot is not None else None
     started_at = datetime.now(timezone.utc).isoformat()
     try:
         completed = runner(
@@ -776,7 +800,7 @@ def execute_route_share(
                     "Stabilize the worktree and rerun verification against one unchanged input set.",
                 )
             )
-    if verb == "verify":
+    if verb in {"verify", "release"}:
         _recovery_state, post_recovery_blockers = route_generation_recovery_state(root)
         proof_stability_blockers.extend(
             issue
@@ -784,12 +808,15 @@ def execute_route_share(
             if issue["code"]
             not in {blocker["code"] for blocker in proof_stability_blockers}
         )
-        if preview and transient_input_change and not post_recovery_blockers:
+        recovery_changed = (
+            _recovery_monitor.changed() if _recovery_monitor is not None else False
+        )
+        if recovery_changed and not post_recovery_blockers:
             proof_stability_blockers.append(
                 _issue(
                     "GODIESEL_ROUTE_GENERATION_RECOVERY_CHANGED",
-                    "Route-generation recovery state changed during preview verification.",
-                    "Stabilize generated publication state, inspect route generation, and retry preview verification.",
+                    "Route-generation recovery state changed during the route-share transition.",
+                    "Stabilize generated publication state, inspect route generation, and retry the transition.",
                 )
             )
     blockers = list(proof_stability_blockers)
