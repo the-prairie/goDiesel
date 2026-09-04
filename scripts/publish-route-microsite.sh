@@ -66,7 +66,9 @@ node scripts/validate-route-microsite.mjs "$ROUTE_SLUG" dist
 echo "3/4 Running focused microsite journey"
 (
   cd app
-  VITE_SINGLE_ROUTE_SLUG="$ROUTE_SLUG" npx playwright test e2e/single-route-microsite.spec.ts
+  GODIESEL_ALLOW_UNVERIFIED_WORKING_TREE_BUILD=1 \
+    VITE_SINGLE_ROUTE_SLUG="$ROUTE_SLUG" \
+    npx playwright test e2e/single-route-microsite.spec.ts
 )
 
 if [[ "$DRY_RUN" == "true" ]]; then
