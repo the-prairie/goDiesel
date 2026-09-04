@@ -44,6 +44,7 @@ from godiesel_verification import (
     build_proof_snapshot,
     proof_snapshot_stability_issues,
     read_target_build_identity,
+    route_generation_recovery_state,
     reuse_verification,
     verified_provider_build_identity,
 )
@@ -207,6 +208,7 @@ def _source_projection(
 
 
 def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[str, str]]]:
+    recovery_state, recovery_blockers = route_generation_recovery_state(root)
     try:
         config = _read_json(root / "quests.json")
         manifest = _read_json(
@@ -254,7 +256,8 @@ def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[s
                 "GODIESEL_GENERATED_PROJECTION_UNREADABLE",
                 "Canonical or generated route inventory could not be read.",
                 "Restore the route data files, then rebuild through the Python generator.",
-            )
+            ),
+            *recovery_blockers,
         ]
 
     manifest_stats = manifest.get("stats")
@@ -405,11 +408,7 @@ def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[s
         "reported_completed_km": reported_completed_km,
         "expected_completed_km": expected_completed_km,
         "inventory_state": "current" if current else "drifted",
-        "recovery_state": (
-            "pending"
-            if (root / "app/public/data/.route-generation-backup").exists()
-            else "clear"
-        ),
+        "recovery_state": recovery_state,
     }
     blockers = []
     if not inventory_current:
@@ -436,14 +435,7 @@ def _generation_state(root: Path) -> tuple[dict[str, object] | None, list[dict[s
                 "Apply route-generation through the owning Python writer, then inspect again.",
             )
         )
-    if state["recovery_state"] == "pending":
-        blockers.append(
-            _issue(
-                "GODIESEL_ROUTE_GENERATION_RECOVERY_PENDING",
-                "An interrupted route-generation backup still requires recovery.",
-                "Run route generation through the owning writer to recover or complete publication, then inspect again.",
-            )
-        )
+    blockers.extend(recovery_blockers)
     return state, blockers
 
 
@@ -688,6 +680,18 @@ def execute_route_generation(
         command = [str(root / "rebuild.sh")]
         display_command = "./rebuild.sh"
     else:
+        recovery_state, recovery_blockers = route_generation_recovery_state(root)
+        if recovery_blockers:
+            return _envelope(
+                "route-generation",
+                verb,
+                required_authority,
+                status="blocked",
+                authorized=True,
+                result={"recovery_state": recovery_state},
+                result_contract="godiesel_local_capabilities.py#route-generation-recovery",
+                blockers=recovery_blockers,
+            )
         command = [
             sys.executable,
             "-m",
@@ -944,9 +948,13 @@ def _plan_owner_curation(
         "intended_writes": [
             ".godiesel/owner-mutation.lock",
             "quests.json",
+            "quests.json.tmp",
             ".quests.json.rollback",
+            ".quests.json.rollback.tmp",
             "app/src/data/generated/routes.manifest.json",
+            "app/src/data/generated/.routes.manifest.json.tmp",
             "app/src/data/generated/route-stats.json",
+            "app/src/data/generated/.route-stats.json.tmp",
             "app/src/data/generated/.*.rollback",
             "app/public/data/routes/**",
             "app/public/data/routes/.*.rollback",
@@ -1149,6 +1157,18 @@ def execute_owner_curation(
     if verb == "plan":
         return _plan_owner_curation(root, request_path)
     if verb == "verify":
+        recovery_state, recovery_blockers = route_generation_recovery_state(root)
+        if recovery_blockers:
+            return _envelope(
+                "owner-curation",
+                verb,
+                required_authority,
+                status="blocked",
+                authorized=True,
+                result={"recovery_state": recovery_state},
+                result_contract="godiesel_local_capabilities.py#route-generation-recovery",
+                blockers=recovery_blockers,
+            )
         command = [
             sys.executable,
             "-m",

@@ -163,7 +163,23 @@ def test_capability_manifest_is_valid_and_declares_the_system_boundaries():
             artifact["kind"] == "route-generation-staging"
             for artifact in capabilities[capability_id]["artifacts"]
         )
+        proof_paths = {
+            path
+            for proof_input in capabilities[capability_id]["verification"]["focused"][0][
+                "proof_inputs"
+            ]
+            for path in proof_input["paths"]
+        }
+        assert "app/public/data/.route-generation-backup/**" in proof_paths
+        assert "app/public/data/.routes-staging-*/**" in proof_paths
     assert ".quests.json.rollback" in capabilities["owner-curation"]["writes"]
+    for path in (
+        "quests.json.tmp",
+        ".quests.json.rollback.tmp",
+        "app/src/data/generated/.routes.manifest.json.tmp",
+        "app/src/data/generated/.route-stats.json.tmp",
+    ):
+        assert path in capabilities["owner-curation"]["writes"]
     assert "app/public/data/.route-generation-backup/**" in capabilities[
         "owner-curation"
     ]["writes"]

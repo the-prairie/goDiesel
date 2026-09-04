@@ -243,6 +243,7 @@ def _generation_fixture(root: Path) -> Path:
 
 def _curation_fixture(root: Path) -> Path:
     _install_evidence_contract(root)
+    (root / "app/public/data").mkdir(parents=True, exist_ok=True)
     _write_json(
         root / "quests.json",
         {
@@ -378,6 +379,30 @@ def test_generation_inspect_blocks_while_recovery_backup_is_pending(
     assert result["result"]["inventory_state"] == "current"
     assert result["result"]["recovery_state"] == "pending"
     assert result["blockers"][0]["code"] == (
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_PENDING"
+    )
+
+
+@pytest.mark.parametrize("residue", ["dangling-backup", "staging-directory"])
+def test_generation_inspect_blocks_on_any_recovery_residue(
+    tmp_path: Path,
+    residue: str,
+):
+    root = _generation_fixture(tmp_path)
+    data_root = root / "app/public/data"
+    if residue == "dangling-backup":
+        (data_root / ".route-generation-backup").symlink_to(
+            data_root / "missing-recovery-target",
+            target_is_directory=True,
+        )
+    else:
+        (data_root / ".routes-staging-interrupted").mkdir()
+
+    result = execute_route_generation(root, "inspect")
+
+    assert result["status"] == "blocked"
+    assert result["result"]["recovery_state"] == "pending"
+    assert result["blockers"][-1]["code"] == (
         "GODIESEL_ROUTE_GENERATION_RECOVERY_PENDING"
     )
 
@@ -548,6 +573,43 @@ def test_generation_verify_uses_the_focused_public_gate(tmp_path: Path):
 
     reused = reuse_verification(root, "route-generation", environ={})
     assert reused["status"] == "passed"
+
+
+def test_generation_verify_and_reuse_block_while_recovery_is_pending(
+    tmp_path: Path,
+):
+    root = _generation_fixture(tmp_path)
+    successful = execute_route_generation(
+        root,
+        "verify",
+        runner=lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 0, "passed", ""
+        ),
+    )
+    backup = root / "app/public/data/.route-generation-backup"
+    backup.mkdir()
+    (backup / "ready").touch()
+    calls: list[object] = []
+
+    fresh = execute_route_generation(
+        root,
+        "verify",
+        runner=lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+    reused = reuse_verification(root, "route-generation", environ={})
+
+    assert successful["status"] == "passed"
+    assert fresh["status"] == "blocked"
+    assert fresh["evidence"] is None
+    assert fresh["blockers"][0]["code"] == (
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_PENDING"
+    )
+    assert calls == []
+    assert reused["status"] == "blocked"
+    assert reused["result"]["reused"] is False
+    assert reused["blockers"][0]["code"] == (
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_PENDING"
+    )
 
 
 def test_generation_verify_blocks_when_covered_inputs_change_during_gate(
@@ -999,9 +1061,13 @@ def test_curation_plan_is_deterministic_and_bound_to_observed_state(tmp_path: Pa
     assert plan["intended_writes"] == [
         ".godiesel/owner-mutation.lock",
         "quests.json",
+        "quests.json.tmp",
         ".quests.json.rollback",
+        ".quests.json.rollback.tmp",
         "app/src/data/generated/routes.manifest.json",
+        "app/src/data/generated/.routes.manifest.json.tmp",
         "app/src/data/generated/route-stats.json",
+        "app/src/data/generated/.route-stats.json.tmp",
         "app/src/data/generated/.*.rollback",
         "app/public/data/routes/**",
         "app/public/data/routes/.*.rollback",
@@ -1213,6 +1279,42 @@ def test_curation_verify_uses_the_existing_recovery_suite(tmp_path: Path):
     assert result["status"] == "passed"
     assert "24 passed" not in json.dumps(result)
     _assert_valid_evidence(root, result)
+
+
+def test_curation_verify_and_reuse_block_while_generation_recovery_is_pending(
+    tmp_path: Path,
+):
+    root = _curation_fixture(tmp_path)
+    successful = execute_owner_curation(
+        root,
+        "verify",
+        runner=lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 0, "passed", ""
+        ),
+    )
+    staging = root / "app/public/data/.routes-staging-interrupted"
+    staging.mkdir()
+    calls: list[object] = []
+
+    fresh = execute_owner_curation(
+        root,
+        "verify",
+        runner=lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+    reused = reuse_verification(root, "owner-curation", environ={})
+
+    assert successful["status"] == "passed"
+    assert fresh["status"] == "blocked"
+    assert fresh["evidence"] is None
+    assert fresh["blockers"][0]["code"] == (
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_PENDING"
+    )
+    assert calls == []
+    assert reused["status"] == "blocked"
+    assert reused["result"]["reused"] is False
+    assert reused["blockers"][0]["code"] == (
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_PENDING"
+    )
 
 
 def test_curation_proof_reuse_invalidates_when_canonical_state_changes(tmp_path: Path):

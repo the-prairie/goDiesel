@@ -21,6 +21,7 @@ from godiesel_verification import (
     ProofInputMonitor,
     build_proof_snapshot,
     proof_snapshot_stability_issues,
+    route_generation_recovery_state,
     reuse_verification,
 )
 
@@ -704,6 +705,15 @@ def execute_route_share(
                 proof_blockers[0],
                 authorized=True,
                 additional_issues=proof_blockers[1:],
+            )
+        _recovery_state, recovery_blockers = route_generation_recovery_state(root)
+        if recovery_blockers:
+            return _blocked_result(
+                verb,
+                required_authority,
+                recovery_blockers[0],
+                authorized=True,
+                additional_issues=tuple(recovery_blockers[1:]),
             )
 
     command = _command(

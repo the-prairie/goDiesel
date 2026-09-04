@@ -8,6 +8,7 @@ from jsonschema import Draft202012Validator
 
 from admin_curation import owner_mutation_lock
 from godiesel_route_share import execute_route_share
+from godiesel_verification import reuse_verification
 
 
 ROOT = Path(__file__).resolve().parent
@@ -97,6 +98,7 @@ def establish_route_lineage(
 
 
 def install_evidence_contract(tmp_path: Path) -> None:
+    (tmp_path / "app/public/data").mkdir(parents=True, exist_ok=True)
     system = tmp_path / "system"
     system.mkdir(exist_ok=True)
     for name in ("evidence-receipt.schema.json", "capabilities.json"):
@@ -121,6 +123,7 @@ def test_result_and_receipt_schemas_are_valid():
 
 
 def test_verify_writes_a_general_redacted_evidence_receipt(tmp_path: Path):
+    (tmp_path / "app/public/data").mkdir(parents=True)
     (tmp_path / "system").mkdir()
     (tmp_path / "system/evidence-receipt.schema.json").write_text(
         (ROOT / "system/evidence-receipt.schema.json").read_text(encoding="utf-8"),
@@ -199,6 +202,48 @@ def test_verify_writes_a_general_redacted_evidence_receipt(tmp_path: Path):
         item["category"] for item in receipt["covered_inputs"]
     }.issuperset({"implementation", "contract", "fixture", "configuration", "data"})
     assert secret not in evidence_path.read_text(encoding="utf-8")
+
+
+def test_route_share_verify_and_reuse_block_while_generation_recovery_is_pending(
+    tmp_path: Path,
+):
+    install_evidence_contract(tmp_path)
+    successful = execute_route_share(
+        tmp_path,
+        "verify",
+        slug="route-1",
+        runner=RecordingRunner(completed([], stdout="verified\n")),
+    )
+    backup = tmp_path / "app/public/data/.route-generation-backup"
+    backup.mkdir()
+    (backup / "ready").touch()
+    runner = RecordingRunner(completed([], stdout="must not run\n"))
+
+    fresh = execute_route_share(
+        tmp_path,
+        "verify",
+        slug="route-1",
+        runner=runner,
+    )
+    reused = reuse_verification(
+        tmp_path,
+        "route-share",
+        slug="route-1",
+        environ={},
+    )
+
+    assert successful["status"] == "passed"
+    assert fresh["status"] == "blocked"
+    assert fresh["evidence"] is None
+    assert fresh["blockers"][0]["code"] == (
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_PENDING"
+    )
+    assert runner.calls == []
+    assert reused["status"] == "blocked"
+    assert reused["result"]["reused"] is False
+    assert reused["blockers"][0]["code"] == (
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_PENDING"
+    )
 
 
 def test_verify_blocks_when_the_evidence_contract_is_missing(tmp_path: Path):

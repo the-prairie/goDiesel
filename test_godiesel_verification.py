@@ -501,6 +501,7 @@ def test_verification_rejects_windows_absolute_paths(tmp_path: Path, path: str):
 
 
 def _write_reuse_fixture(root: Path) -> None:
+    (root / "app/public/data").mkdir(parents=True, exist_ok=True)
     (root / "system").mkdir()
     for name in ("evidence-receipt.schema.json", "verification-reuse.schema.json"):
         (root / "system" / name).write_text(

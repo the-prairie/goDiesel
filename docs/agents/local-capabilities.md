@@ -50,7 +50,7 @@ Turn that request into a deterministic review plan:
 
 The plan is written under ignored `.godiesel/plans/owner-curation/`.
 It records the observed canonical and generated state fingerprint, the exact checkout and implementation identity, a privacy-safe field-level change summary, a self-digest, and the complete possible write set.
-That set includes the mutation lease, `quests.json`, both generated metadata files, the generated route-detail directory, and ignored source, projection, staging, and full-generation recovery paths.
+That set includes the mutation lease, `quests.json`, both generated metadata files, their atomic temporary files, the generated route-detail directory, and ignored source, projection, staging, and full-generation recovery paths.
 When automatic rollback cannot finish, the blocked result names only repository-relative recovery paths for manual repair.
 
 Review the plan, then apply that exact file with explicit local authority:
@@ -70,6 +70,8 @@ Run or reuse the existing writer and recovery proof:
 ./scripts/godiesel verify owner-curation --json
 ./scripts/godiesel verify owner-curation --reuse --json
 ```
+
+Fresh verification and proof reuse both block while full-generation backup or staging residue exists, including malformed or dangling symbolic-link entries.
 
 ## Planned Routes
 

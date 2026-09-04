@@ -208,6 +208,38 @@ def _issue(code: str, message: str, remediation: str) -> dict[str, str]:
     return {"code": code, "message": message, "remediation": remediation}
 
 
+def route_generation_recovery_state(
+    root: Path | str,
+) -> tuple[str, list[dict[str, str]]]:
+    """Return fail-closed state for interrupted route-generation publication."""
+
+    data_root = Path(root).resolve() / "app/public/data"
+    try:
+        with os.scandir(data_root) as entries:
+            pending = any(
+                entry.name == ".route-generation-backup"
+                or entry.name.startswith(".routes-staging-")
+                for entry in entries
+            )
+    except OSError:
+        return "unreadable", [
+            _issue(
+                "GODIESEL_ROUTE_GENERATION_RECOVERY_UNREADABLE",
+                "Route-generation recovery state could not be inspected.",
+                "Restore readable app/public/data state before verification or proof reuse.",
+            )
+        ]
+    if pending:
+        return "pending", [
+            _issue(
+                "GODIESEL_ROUTE_GENERATION_RECOVERY_PENDING",
+                "Interrupted route-generation publication still requires recovery.",
+                "Run route generation through the owning writer to recover or complete publication, then inspect again.",
+            )
+        ]
+    return "clear", []
+
+
 def _normalized_path(value: str) -> str | None:
     candidate = value.replace("\\", "/")
     path = PurePosixPath(candidate)
@@ -1173,6 +1205,30 @@ def reuse_verification(
             blockers=[blocker],
             evidence=None,
         )
+
+    if capability_id in {"route-share", "route-generation", "owner-curation"}:
+        recovery_state, recovery_blockers = route_generation_recovery_state(root)
+        if recovery_blockers:
+            explanation = {
+                "schema_version": SCHEMA_VERSION,
+                "document_type": "godiesel-verification-reuse",
+                "reused": False,
+                "source_receipt": None,
+                "proof_fingerprint": canonical_digest([]),
+                "source_proof_fingerprint": None,
+                "covered_inputs": [],
+                "invalidated_inputs": [
+                    {"category": "data", "name": "route-generation-recovery"}
+                ],
+                "reason": recovery_blockers[0]["message"],
+            }
+            return _reuse_result(
+                capability_id,
+                status="blocked",
+                explanation=explanation,
+                blockers=recovery_blockers,
+                evidence=None,
+            )
 
     required_input_digests = {
         name: canonical_digest(value)

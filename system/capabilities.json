@@ -86,7 +86,7 @@
             "cwd": ".",
             "proof_inputs": [
               { "category": "implementation", "paths": ["godiesel_control.py", "godiesel_evidence.py", "godiesel_route_share.py", "godiesel_verification.py", "scripts/godiesel", "route_create.py", "route_status.py", "admin_curation.py", "curation_publish.py", "generated_route_contract.py", "route_build.py", "build.py", "quest_meta.py", "route_provenance.py", "route_annotations.py", "route_imports.py", "route_timezones.py", "scripts/route.sh", "scripts/route-preview.sh", "scripts/publish-route-microsite.sh", "scripts/scope-route-microsite.mjs", "app/src/**", "app/scripts/check-bundle-budget.mjs", "app/scripts/finalize-build-identity.mjs", "app/scripts/smoke-single-route-microsite.mjs"] },
-              { "category": "data", "paths": ["quests.json", "route_sources/**", "app/src/data/generated/**", "app/public/data/routes/**", "app/public/media/**"] },
+              { "category": "data", "paths": ["quests.json", "route_sources/**", "app/src/data/generated/**", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**", "app/public/media/**"] },
               { "category": "fixture", "paths": ["test_godiesel_control.py", "test_godiesel_route_share.py", "test_godiesel_verification.py", "test_route_create.py", "test_route_provenance.py", "test_route_share_cli.py", "app/e2e/single-route-microsite.spec.ts"] },
               { "category": "contract", "paths": ["route_create.schema.json", "system/artifact-manifest.schema.json", "system/build-identity.schema.json", "system/capabilities.json", "system/capabilities.schema.json", "system/result.schema.json", "system/route-share-receipt.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json"] },
               { "category": "configuration", "paths": [".gitignore", "make-dist.sh", "requirements.txt", "app/package.json", "app/package-lock.json", "app/vite.config.ts", "app/playwright.config.ts"] }
@@ -158,7 +158,7 @@
             "cwd": ".",
             "proof_inputs": [
               { "category": "implementation", "paths": ["godiesel_local_capabilities.py", "generated_route_contract.py", "route_build.py", "build.py", "rebuild.sh", "requirements.txt"] },
-              { "category": "data", "paths": ["quests.json", "route_sources/**", "app/src/data/generated/**", "app/public/data/routes/**"] },
+              { "category": "data", "paths": ["quests.json", "route_sources/**", "app/src/data/generated/**", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**"] },
               { "category": "fixture", "paths": ["test_godiesel_local_capabilities.py", "test_react_app.py", "test_route_provenance.py"] },
               { "category": "contract", "paths": ["system/capabilities.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json"] }
             ]
@@ -188,7 +188,7 @@
         "verify": ["curation and generated projection diff"]
       },
       "reads": ["quests.json", "app/public/data/routes/**"],
-      "writes": [".godiesel/plans/owner-curation/**", ".godiesel/evidence/**", ".godiesel/owner-mutation.lock", "quests.json", ".quests.json.rollback", "app/src/data/generated/**", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**"],
+      "writes": [".godiesel/plans/owner-curation/**", ".godiesel/evidence/**", ".godiesel/owner-mutation.lock", "quests.json", "quests.json.tmp", ".quests.json.rollback", ".quests.json.rollback.tmp", "app/src/data/generated/**", "app/src/data/generated/.routes.manifest.json.tmp", "app/src/data/generated/.route-stats.json.tmp", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**"],
       "external_effects": [],
       "required_files": ["scripts/godiesel", "godiesel_local_capabilities.py", "generated_route_contract.py", "admin.sh", "admin.py", "admin_curation.py", "curation_publish.py", "build.py", "system/owner-curation-plan.schema.json", "system/result.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json", "docs/adr/0010-owner-curation-through-a-loopback-only-writer.md"],
       "configuration": [],
@@ -237,7 +237,7 @@
             "cwd": ".",
             "proof_inputs": [
               { "category": "implementation", "paths": ["godiesel_local_capabilities.py", "generated_route_contract.py", "admin.py", "admin_curation.py", "curation_publish.py", "build.py", "requirements.txt"] },
-              { "category": "data", "paths": ["quests.json", "route_sources/**", "app/src/data/generated/**", "app/public/data/routes/**"] },
+              { "category": "data", "paths": ["quests.json", "quests.json.tmp", ".quests.json.rollback", ".quests.json.rollback.tmp", "route_sources/**", "app/src/data/generated/**", "app/src/data/generated/.routes.manifest.json.tmp", "app/src/data/generated/.route-stats.json.tmp", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**"] },
               { "category": "fixture", "paths": ["test_godiesel_local_capabilities.py", "test_admin_curation.py", "test_curation_publish.py", "test_route_provenance.py"] },
               { "category": "contract", "paths": ["system/capabilities.json", "system/owner-curation-plan.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json"] }
             ]
