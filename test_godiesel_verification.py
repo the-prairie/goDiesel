@@ -450,6 +450,20 @@ def test_catalogue_monitor_ignores_non_recovery_root_file_changes(
         monitor.close()
 
 
+def test_catalogue_monitor_ignores_persistent_non_recovery_root_entries(
+    tmp_path: Path,
+):
+    (tmp_path / "app/public/data/routes").mkdir(parents=True)
+    (tmp_path / "app/src/data/generated").mkdir(parents=True)
+    monitor = godiesel_verification.catalogue_recovery_monitor(tmp_path)
+    unrelated = tmp_path / "unrelated.txt"
+    unrelated.write_text("unrelated\n", encoding="utf-8")
+    try:
+        assert monitor.changed() is False
+    finally:
+        monitor.close()
+
+
 def test_catalogue_monitor_filters_linux_directory_events_by_artifact_name(
     tmp_path: Path,
 ):
@@ -471,6 +485,45 @@ def test_catalogue_monitor_filters_linux_directory_events_by_artifact_name(
         assert monitor._inotify_event_seen(event("godiesel_route_share.py")) is False
         assert monitor._inotify_event_seen(event(".quests.json.rollback")) is True
     finally:
+        monitor.close()
+
+
+def test_catalogue_monitor_drains_every_linux_event_batch(
+    tmp_path: Path,
+    monkeypatch,
+):
+    (tmp_path / "app/public/data/routes").mkdir(parents=True)
+    (tmp_path / "app/src/data/generated").mkdir(parents=True)
+    monitor = godiesel_verification.catalogue_recovery_monitor(tmp_path)
+    watch_descriptor = 17
+    monitor.inotify_paths = {watch_descriptor: tmp_path}
+    monitor.inotify_fd = 99
+
+    def event(name: str) -> bytes:
+        encoded = name.encode("utf-8") + b"\0"
+        payload = encoded + b"\0" * (-len(encoded) % 4)
+        return godiesel_verification.struct.pack(
+            "iIII", watch_descriptor, 0x00000002, 0, len(payload)
+        ) + payload
+
+    batches = iter(
+        [
+            event("unrelated.txt"),
+            event(".quests.json.rollback"),
+        ]
+    )
+
+    def read_events(_descriptor: int, _size: int) -> bytes:
+        try:
+            return next(batches)
+        except StopIteration:
+            raise BlockingIOError
+
+    monkeypatch.setattr(godiesel_verification.os, "read", read_events)
+    try:
+        assert monitor.changed() is True
+    finally:
+        monitor.inotify_fd = None
         monitor.close()
 
 

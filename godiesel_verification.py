@@ -70,10 +70,13 @@ class ProofInputMonitor:
     ):
         self.root = root
         self.paths = self._paths(snapshot)
-        self.before = self._state()
         self.event_filter = event_filter
+        self.before = self._state()
+        self.filtered_before = self._filtered_state()
+        self.directory_entries_before = self._directory_entries()
         self.kqueue = None
         self.descriptors: list[int] = []
+        self.kqueue_paths: dict[int, Path] = {}
         self.inotify_fd: int | None = None
         self.inotify_paths: dict[int, Path] = {}
         self.monitoring_failed = False
@@ -138,6 +141,51 @@ class ProofInputMonitor:
                 state[path.as_posix()] = (-1, -1, -1, -1, -1)
         return state
 
+    def _filtered_state(self) -> dict[str, object]:
+        if self.event_filter is None:
+            return self._state()
+        state: dict[str, object] = {}
+        for path in self.paths:
+            key = path.as_posix()
+            try:
+                if not path.is_dir():
+                    state[key] = self._state().get(key)
+                    continue
+                entries = []
+                with os.scandir(path) as children:
+                    for child in children:
+                        if not self.event_filter(path, child.name):
+                            continue
+                        details = child.stat(follow_symlinks=False)
+                        entries.append(
+                            (
+                                child.name,
+                                details.st_ino,
+                                details.st_size,
+                                details.st_mtime_ns,
+                                details.st_ctime_ns,
+                                details.st_mode,
+                            )
+                        )
+                state[key] = tuple(sorted(entries))
+            except OSError:
+                state[key] = None
+        return state
+
+    def _directory_entries(self) -> dict[str, tuple[str, ...] | None]:
+        entries: dict[str, tuple[str, ...] | None] = {}
+        for path in self.paths:
+            if not path.is_dir():
+                continue
+            try:
+                with os.scandir(path) as children:
+                    entries[path.as_posix()] = tuple(
+                        sorted(child.name for child in children)
+                    )
+            except OSError:
+                entries[path.as_posix()] = None
+        return entries
+
     def _start_kqueue(self) -> None:
         try:
             self.kqueue = select.kqueue()
@@ -160,6 +208,7 @@ class ProofInputMonitor:
                 self.monitoring_failed = True
                 continue
             self.descriptors.append(descriptor)
+            self.kqueue_paths[descriptor] = path
             events.append(
                 select.kevent(
                     descriptor,
@@ -201,6 +250,7 @@ class ProofInputMonitor:
     def _inotify_event_seen(self, events: bytes) -> bool:
         offset = 0
         header_size = struct.calcsize("iIII")
+        event_seen = False
         try:
             while offset < len(events):
                 if len(events) - offset < header_size:
@@ -216,12 +266,37 @@ class ProofInputMonitor:
                 name = os.fsdecode(raw_name.split(b"\0", 1)[0])
                 path = self.inotify_paths.get(watch_descriptor)
                 if path is None or not name or self.event_filter is None:
-                    return True
-                if self.event_filter(path, name):
-                    return True
+                    event_seen = True
+                elif self.event_filter(path, name):
+                    event_seen = True
         except (UnicodeError, ValueError, struct.error):
             self.monitoring_failed = True
             return True
+        return event_seen
+
+    def _kqueue_event_seen(self, events: Sequence[Any]) -> bool:
+        relevant_events = [
+            event
+            for event in events
+            if event.fflags & ~select.KQ_NOTE_ATTRIB
+        ]
+        if not relevant_events:
+            return False
+        if self.event_filter is None:
+            return True
+        filtered_state = self._filtered_state()
+        directory_entries = self._directory_entries()
+        current_state = self._state()
+        for event in relevant_events:
+            path = self.kqueue_paths.get(event.ident)
+            if path is None:
+                return True
+            key = path.as_posix()
+            if filtered_state.get(key) != self.filtered_before.get(key):
+                return True
+            if directory_entries.get(key) == self.directory_entries_before.get(key):
+                if current_state.get(key) != self.before.get(key):
+                    return True
         return False
 
     def changed(self) -> bool:
@@ -229,18 +304,30 @@ class ProofInputMonitor:
         if self.kqueue is not None:
             try:
                 events = self.kqueue.control(None, max(1, len(self.paths)), 0)
-                event_seen = any(
-                    event.fflags & ~select.KQ_NOTE_ATTRIB for event in events
-                )
+                event_seen = self._kqueue_event_seen(events)
             except OSError:
                 self.monitoring_failed = True
         if self.inotify_fd is not None:
-            try:
-                events = os.read(self.inotify_fd, 65536)
-                event_seen = self._inotify_event_seen(events) or event_seen
-            except BlockingIOError:
-                pass
-        return self.monitoring_failed or event_seen or self._state() != self.before
+            while True:
+                try:
+                    events = os.read(self.inotify_fd, 65536)
+                    if not events:
+                        self.monitoring_failed = True
+                        break
+                    event_seen = self._inotify_event_seen(events) or event_seen
+                except BlockingIOError:
+                    break
+        observed_state = (
+            self._filtered_state()
+            if self.event_filter is not None
+            else self._state()
+        )
+        expected_state = (
+            self.filtered_before
+            if self.event_filter is not None
+            else self.before
+        )
+        return self.monitoring_failed or event_seen or observed_state != expected_state
 
     def close(self) -> None:
         if self.kqueue is not None:
