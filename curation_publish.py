@@ -87,7 +87,7 @@ def publish_annotations(checkout_root, activity_id, annotations):
     return normalized
 
 
-def publish_curation(checkout_root, activity_id, curation):
+def publish_curation(checkout_root, activity_id, curation, *, postcondition=None):
     """Rewrite the generated artifacts for one route's curation.
 
     Every file is staged before any file is replaced, and each replacement is
@@ -127,7 +127,11 @@ def publish_curation(checkout_root, activity_id, curation):
     )
     staged.append((paths["manifest"], json.dumps(manifest, ensure_ascii=False)))
 
-    _publish_staged_with_rollback(checkout_root, staged)
+    _publish_staged_with_rollback(
+        checkout_root,
+        staged,
+        postcondition=postcondition,
+    )
     return normalized
 
 
@@ -185,7 +189,7 @@ def _replace_route(routes, activity_id, apply_change, artifact):
     apply_change(matching[0])
 
 
-def _publish_staged_with_rollback(checkout_root, staged):
+def _publish_staged_with_rollback(checkout_root, staged, *, postcondition=None):
     """Stage every file and roll back completed replacements on failure.
 
     Replacement is the only step that mutates a published artifact, and each
@@ -226,6 +230,8 @@ def _publish_staged_with_rollback(checkout_root, staged):
         for relative_directory, temporary_name, path in temporaries:
             replace_local_file(root, relative_directory, temporary_name, path.name)
             replaced.append(path)
+        if postcondition is not None:
+            postcondition()
     except Exception as publication_error:
         rollback_failures = []
         for relative_directory, backup_name, path in reversed(backups):

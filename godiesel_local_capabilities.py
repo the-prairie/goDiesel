@@ -1348,6 +1348,25 @@ def _load_curation_plan(root: Path, plan_path: Path | str | None) -> tuple[dict[
     return plan, []
 
 
+def _validate_curation_plan_sources(root: Path, plan: Mapping[str, Any]) -> None:
+    external_input, _external_paths, external_issue = (
+        external_route_source_fingerprint(root)
+    )
+    if external_issue is not None:
+        raise CurationPlanContextError(external_issue)
+    current_digest = (
+        external_input["sha256"] if external_input else canonical_digest([])
+    )
+    if current_digest != plan["context"]["external_sources_sha256"]:
+        raise CurationPlanContextError(
+            _issue(
+                "GODIESEL_CURATION_PLAN_CONTEXT_MISMATCH",
+                "Route source state changed after curation planning.",
+                "Restore the bound sources or create and review a fresh curation plan.",
+            )
+        )
+
+
 def _curation_is_applied(root: Path, activity_id: str, curation: Mapping[str, Any]) -> bool:
     try:
         config = _read_json(root / "quests.json")
@@ -1588,6 +1607,7 @@ def execute_owner_curation(
                     plan["activity_id"],
                     plan["curation"],
                     acquire_lock=False,
+                    precondition=lambda: _validate_curation_plan_sources(root, plan),
                 )
             generation_state, generation_blockers = _generation_state(root)
             if generation_blockers:
@@ -1627,6 +1647,17 @@ def execute_owner_curation(
                     "Wait for the active owner mutation to finish, then create or apply a fresh plan.",
                 )
             ],
+        )
+    except CurationPlanContextError as error:
+        return _envelope(
+            "owner-curation",
+            verb,
+            required_authority,
+            status="blocked",
+            authorized=True,
+            result=None,
+            result_contract="system/owner-curation-plan.schema.json",
+            blockers=[error.issue],
         )
     except (CurationRecoveryError, SourceRollbackError) as error:
         recovery_paths = _repository_relative_recovery_paths(root, error)

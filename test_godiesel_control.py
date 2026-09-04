@@ -549,6 +549,30 @@ def test_json_schema_invalid_manifest_returns_the_stable_manifest_blocker(
     }
 
 
+def test_manifest_semantics_reject_duplicate_invariant_when_schema_is_weakened(
+    tmp_path,
+):
+    root = _make_repository_fixture(tmp_path / "repository")
+    schema_path = root / "system" / "capabilities.schema.json"
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    schema["$defs"]["impactRule"]["properties"]["invariants"].pop("uniqueItems")
+    _write_json(schema_path, schema)
+    manifest_path = root / "system" / "capabilities.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["impact_rules"][0]["invariants"].append(
+        dict(manifest["impact_rules"][0]["invariants"][0])
+    )
+    _write_json(manifest_path, manifest)
+
+    result = inspect_system(root)
+
+    assert result["status"] == "blocked"
+    assert result["capabilities"] == []
+    assert {issue["code"] for issue in result["blockers"]} == {
+        "GODIESEL_MANIFEST_INVALID"
+    }
+
+
 def test_missing_manifest_schema_returns_a_stable_blocker(tmp_path):
     root = _make_repository_fixture(tmp_path / "repository")
     (root / "system" / "capabilities.schema.json").unlink()

@@ -1282,8 +1282,16 @@ def test_curation_apply_uses_the_shared_owner_writer(monkeypatch, tmp_path: Path
     plan = _plan_curation(root)
     captured: dict[str, object] = {}
 
-    def fake_save(checkout_root, activity_id, curation, *, acquire_lock):
+    def fake_save(
+        checkout_root,
+        activity_id,
+        curation,
+        *,
+        acquire_lock,
+        precondition,
+    ):
         assert acquire_lock is False
+        assert callable(precondition)
         captured.update(
             root=checkout_root,
             activity_id=activity_id,
@@ -1568,6 +1576,94 @@ def test_curation_apply_preserves_private_source_recovery_guidance(
     assert result["blockers"] == [issue]
 
 
+def test_curation_apply_does_not_mutate_when_source_disappears_after_plan_load(
+    tmp_path: Path,
+    monkeypatch,
+):
+    root = _curation_fixture(tmp_path)
+    draft_curation = {**COMPLETE_CURATION, "review_status": "draft"}
+    _write_complete_curation_projection(root, "route-1", draft_curation)
+    plan = _plan_curation(root)
+    canonical_before = (root / "quests.json").read_bytes()
+    detail_path = root / "app/public/data/routes/route-1.json"
+    manifest_path = root / "app/src/data/generated/routes.manifest.json"
+    detail_before = detail_path.read_bytes()
+    manifest_before = manifest_path.read_bytes()
+    original_load = godiesel_local_capabilities._load_curation_plan
+
+    def racing_load(*args, **kwargs):
+        loaded = original_load(*args, **kwargs)
+        (root / "route_sources/route-1.gpx").unlink()
+        return loaded
+
+    monkeypatch.setattr(
+        godiesel_local_capabilities,
+        "_load_curation_plan",
+        racing_load,
+    )
+
+    result = execute_owner_curation(
+        root,
+        "apply",
+        plan_path=plan,
+        authority="canonical-local",
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == (
+        "GODIESEL_PRIVATE_ROUTE_SOURCE_UNAVAILABLE"
+    )
+    assert (root / "quests.json").read_bytes() == canonical_before
+    assert detail_path.read_bytes() == detail_before
+    assert manifest_path.read_bytes() == manifest_before
+
+
+def test_curation_apply_rolls_back_when_source_changes_during_publication(
+    tmp_path: Path,
+    monkeypatch,
+):
+    root = _curation_fixture(tmp_path)
+    draft_curation = {**COMPLETE_CURATION, "review_status": "draft"}
+    _write_complete_curation_projection(root, "route-1", draft_curation)
+    plan = _plan_curation(root)
+    canonical_before = (root / "quests.json").read_bytes()
+    detail_path = root / "app/public/data/routes/route-1.json"
+    manifest_path = root / "app/src/data/generated/routes.manifest.json"
+    detail_before = detail_path.read_bytes()
+    manifest_before = manifest_path.read_bytes()
+    original_validate = godiesel_local_capabilities._validate_curation_plan_sources
+    validation_calls = 0
+
+    def racing_validate(*args, **kwargs):
+        nonlocal validation_calls
+        validation_calls += 1
+        if validation_calls == 3:
+            (root / "route_sources/route-1.gpx").unlink()
+        return original_validate(*args, **kwargs)
+
+    monkeypatch.setattr(
+        godiesel_local_capabilities,
+        "_validate_curation_plan_sources",
+        racing_validate,
+    )
+
+    result = execute_owner_curation(
+        root,
+        "apply",
+        plan_path=plan,
+        authority="canonical-local",
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == (
+        "GODIESEL_PRIVATE_ROUTE_SOURCE_UNAVAILABLE"
+    )
+    assert validation_calls == 3
+    assert (root / "quests.json").read_bytes() == canonical_before
+    assert detail_path.read_bytes() == detail_before
+    assert manifest_path.read_bytes() == manifest_before
+
+
 def test_curation_apply_blocks_when_observed_state_changed(monkeypatch, tmp_path: Path):
     root = _curation_fixture(tmp_path)
     plan = _plan_curation(root)
@@ -1679,9 +1775,17 @@ def test_curation_reapply_is_idempotent_without_reinvoking_writer(monkeypatch, t
     plan = _plan_curation(root)
     calls = 0
 
-    def fake_save(checkout_root, activity_id, curation, *, acquire_lock):
+    def fake_save(
+        checkout_root,
+        activity_id,
+        curation,
+        *,
+        acquire_lock,
+        precondition,
+    ):
         nonlocal calls
         assert acquire_lock is False
+        assert callable(precondition)
         calls += 1
         _write_complete_curation_projection(checkout_root, activity_id, curation)
 
@@ -1712,9 +1816,17 @@ def test_curation_reapply_rejects_incomplete_public_projection(
     plan = _plan_curation(root)
     calls = 0
 
-    def fake_save(checkout_root, activity_id, curation, *, acquire_lock):
+    def fake_save(
+        checkout_root,
+        activity_id,
+        curation,
+        *,
+        acquire_lock,
+        precondition,
+    ):
         nonlocal calls
         assert acquire_lock is False
+        assert callable(precondition)
         calls += 1
         config_path = checkout_root / "quests.json"
         config = json.loads(config_path.read_text(encoding="utf-8"))

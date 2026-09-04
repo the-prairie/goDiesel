@@ -406,6 +406,12 @@ def _is_manifest(value: Any) -> bool:
             for gate in rule["gates"]
         ):
             return False
+        gate_pairs = [
+            (gate["capability"], gate["tier"])
+            for gate in rule["gates"]
+        ]
+        if len(gate_pairs) != len(set(gate_pairs)):
+            return False
         capability_invariants = {
             capability["id"]: set(capability["invariants"])
             for capability in capabilities
@@ -417,6 +423,12 @@ def _is_manifest(value: Any) -> bool:
             and invariant["id"] in capability_invariants[invariant["capability"]]
             for invariant in rule["invariants"]
         ):
+            return False
+        invariant_pairs = [
+            (invariant["capability"], invariant["id"])
+            for invariant in rule["invariants"]
+        ]
+        if len(invariant_pairs) != len(set(invariant_pairs)):
             return False
         if not _is_string(rule["reason"]):
             return False

@@ -122,11 +122,14 @@ def save_owner_curation(
     runner=subprocess.run,
     *,
     acquire_lock=True,
+    precondition=None,
 ):
     """Apply one owner-approved curation change through the canonical writers."""
     root = Path(checkout_root).resolve()
 
     def full_rebuild():
+        if precondition is not None:
+            precondition()
         runner(
             [sys.executable, str(root / "build.py")],
             cwd=root,
@@ -137,7 +140,12 @@ def save_owner_curation(
 
     def publish():
         publish_curation_or_rebuild(
-            lambda: publish_curation(root, activity_id, curation),
+            lambda: publish_curation(
+                root,
+                activity_id,
+                curation,
+                postcondition=precondition,
+            ),
             full_rebuild,
         )
 
@@ -147,6 +155,7 @@ def save_owner_curation(
             activity_id,
             curation,
             publish,
+            precondition=precondition,
         )
 
     if not acquire_lock:
@@ -202,7 +211,14 @@ def update_route_curation(config, activity_id, value):
     return updated
 
 
-def save_curation_and_rebuild(config_path, activity_id, value, rebuild):
+def save_curation_and_rebuild(
+    config_path,
+    activity_id,
+    value,
+    rebuild,
+    *,
+    precondition=None,
+):
     """Persist one route, rebuild generated data, and roll back source on failure."""
     config_path = Path(config_path)
     recovery_path = config_path.with_name(f".{config_path.name}.rollback")
@@ -211,8 +227,12 @@ def save_curation_and_rebuild(config_path, activity_id, value, rebuild):
     updated = update_route_curation(config, activity_id, value)
     serialized = json.dumps(updated, indent=2) + "\n"
 
+    if precondition is not None:
+        precondition()
     write_atomic(recovery_path, original)
     try:
+        if precondition is not None:
+            precondition()
         write_atomic(config_path, serialized)
     except Exception:
         _unlink_best_effort(recovery_path)
