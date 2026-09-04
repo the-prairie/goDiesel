@@ -450,7 +450,7 @@ def test_catalogue_monitor_ignores_non_recovery_root_file_changes(
         monitor.close()
 
 
-def test_catalogue_monitor_ignores_persistent_non_recovery_root_entries(
+def test_catalogue_monitor_blocks_ambiguous_kqueue_directory_entry_changes(
     tmp_path: Path,
 ):
     (tmp_path / "app/public/data/routes").mkdir(parents=True)
@@ -459,7 +459,9 @@ def test_catalogue_monitor_ignores_persistent_non_recovery_root_entries(
     unrelated = tmp_path / "unrelated.txt"
     unrelated.write_text("unrelated\n", encoding="utf-8")
     try:
-        assert monitor.changed() is False
+        if monitor.kqueue is None:
+            pytest.skip("kqueue policy is specific to macOS/BSD")
+        assert monitor.changed() is True
     finally:
         monitor.close()
 
@@ -522,6 +524,42 @@ def test_catalogue_monitor_drains_every_linux_event_batch(
     monkeypatch.setattr(godiesel_verification.os, "read", read_events)
     try:
         assert monitor.changed() is True
+    finally:
+        monitor.inotify_fd = None
+        monitor.close()
+
+
+def test_catalogue_monitor_bounds_linux_event_draining(
+    tmp_path: Path,
+    monkeypatch,
+):
+    (tmp_path / "app/public/data/routes").mkdir(parents=True)
+    (tmp_path / "app/src/data/generated").mkdir(parents=True)
+    monitor = godiesel_verification.catalogue_recovery_monitor(tmp_path)
+    watch_descriptor = 17
+    monitor.inotify_paths = {watch_descriptor: tmp_path}
+    monitor.inotify_fd = 99
+    reads = 0
+    encoded = b"unrelated.txt\0"
+    payload = encoded + b"\0" * (-len(encoded) % 4)
+    irrelevant_event = godiesel_verification.struct.pack(
+        "iIII", watch_descriptor, 0x00000002, 0, len(payload)
+    ) + payload
+
+    def endless_irrelevant_events(_descriptor: int, _size: int) -> bytes:
+        nonlocal reads
+        reads += 1
+        return irrelevant_event
+
+    monkeypatch.setattr(
+        godiesel_verification.os,
+        "read",
+        endless_irrelevant_events,
+    )
+    try:
+        assert monitor.changed() is True
+        assert monitor.monitoring_failed is True
+        assert reads == godiesel_verification.MAX_INOTIFY_READS
     finally:
         monitor.inotify_fd = None
         monitor.close()

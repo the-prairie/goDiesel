@@ -15,6 +15,7 @@ Run the complete release gate only for production cutover or changes to shared a
 A successful gate remains valid unless subsequent edits touch behavior covered by that gate.
 Verification blocks when covered inputs differ between its pre-run and post-run snapshots.
 On macOS and Linux it also blocks when an existing covered file or any directory in a recursive covered tree emits a content mutation event, or when file state proves a transient permission mutation, during the gate.
+The catalogue recovery monitor is deliberately conservative on macOS: because kqueue does not name the child behind a directory-entry event, any such event in a recovery-bearing directory blocks proof rather than risking an undetected transient recovery artifact.
 
 ## Verification Matrix
 

@@ -43,6 +43,7 @@ EVIDENCE_SCHEMA_PATH = Path("system/evidence-receipt.schema.json")
 EVIDENCE_ROOT = Path(".godiesel/evidence")
 VERIFICATION_TIERS = {"focused", "ticket", "release", "live"}
 LIVE_PROOF_MAX_AGE_SECONDS = 15 * 60
+MAX_INOTIFY_READS = 64
 SOURCE_SUFFIXES = (
     ".py", ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"
 )
@@ -294,9 +295,10 @@ class ProofInputMonitor:
             key = path.as_posix()
             if filtered_state.get(key) != self.filtered_before.get(key):
                 return True
-            if directory_entries.get(key) == self.directory_entries_before.get(key):
-                if current_state.get(key) != self.before.get(key):
-                    return True
+            if directory_entries.get(key) != self.directory_entries_before.get(key):
+                return True
+            if current_state.get(key) != self.before.get(key):
+                return True
         return False
 
     def changed(self) -> bool:
@@ -308,7 +310,7 @@ class ProofInputMonitor:
             except OSError:
                 self.monitoring_failed = True
         if self.inotify_fd is not None:
-            while True:
+            for _batch in range(MAX_INOTIFY_READS):
                 try:
                     events = os.read(self.inotify_fd, 65536)
                     if not events:
@@ -317,6 +319,8 @@ class ProofInputMonitor:
                     event_seen = self._inotify_event_seen(events) or event_seen
                 except BlockingIOError:
                     break
+            else:
+                self.monitoring_failed = True
         observed_state = (
             self._filtered_state()
             if self.event_filter is not None
