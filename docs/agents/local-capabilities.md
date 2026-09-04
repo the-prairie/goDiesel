@@ -111,7 +111,8 @@ Production builds require a clean Git checkout, and the identity binds the commi
 Built identities also bind a canonical artifact manifest, and provider verification independently fetches and hashes every declared served file before accepting the target.
 The adapter records configuration presence, deployed identity, and a digest of the exact target in an ignored evidence receipt.
 It reads and validates the deployed identity before and after the live gate, rejects redirected identity documents, and blocks if the target changes during execution.
-Google preview verification holds one repository-scoped lease for the complete preview lifecycle, so concurrent agents cannot stop or replace each other's local target.
+Google preview verification holds one lease in the repository's Git common directory for the complete preview lifecycle.
+Every sibling worktree therefore coordinates ownership of the host-global local target before starting, inspecting, or stopping its preview.
 Configuration presence and a passing deterministic test never substitute for this live result.
 
 Reuse is provider- and target-specific:

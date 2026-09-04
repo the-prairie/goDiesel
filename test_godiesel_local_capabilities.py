@@ -1401,6 +1401,86 @@ def test_google_preview_context_serializes_concurrent_owners(tmp_path: Path):
     assert maximum_active == 1
 
 
+def test_google_preview_context_serializes_sibling_worktree_processes(
+    tmp_path: Path,
+):
+    repository = tmp_path / "repository"
+    sibling = tmp_path / "sibling"
+    repository.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repository, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "fixture@example.test"],
+        cwd=repository,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Fixture"],
+        cwd=repository,
+        check=True,
+    )
+    (repository / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    subprocess.run(["git", "add", "tracked.txt"], cwd=repository, check=True)
+    subprocess.run(["git", "commit", "-qm", "fixture"], cwd=repository, check=True)
+    subprocess.run(
+        ["git", "worktree", "add", "-qb", "sibling", str(sibling)],
+        cwd=repository,
+        check=True,
+    )
+
+    child_code = """
+import sys
+import time
+from pathlib import Path
+from godiesel_local_capabilities import _google_3d_preview
+
+root = Path(sys.argv[1])
+marker = Path(sys.argv[2])
+with _google_3d_preview(root, {}, lambda _target: {}):
+    marker.write_text("entered\\n", encoding="utf-8")
+    time.sleep(float(sys.argv[3]))
+"""
+    environment = {**os.environ, "PYTHONPATH": str(ROOT)}
+    first_marker = tmp_path / "first-entered"
+    second_marker = tmp_path / "second-entered"
+    processes: list[subprocess.Popen[str]] = []
+    try:
+        first = subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                child_code,
+                str(repository),
+                str(first_marker),
+                "1",
+            ],
+            env=environment,
+            text=True,
+        )
+        processes.append(first)
+        deadline = time.monotonic() + 5
+        while not first_marker.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert first_marker.exists()
+
+        second = subprocess.Popen(
+            [sys.executable, "-c", child_code, str(sibling), str(second_marker), "0"],
+            env=environment,
+            text=True,
+        )
+        processes.append(second)
+        time.sleep(0.2)
+        assert not second_marker.exists()
+
+        assert first.wait(timeout=5) == 0
+        assert second.wait(timeout=5) == 0
+        assert second_marker.exists()
+    finally:
+        for process in processes:
+            if process.poll() is None:
+                process.terminate()
+                process.wait(timeout=5)
+
+
 def test_provider_verify_rejects_path_scoped_target(tmp_path: Path):
     calls: list[object] = []
 

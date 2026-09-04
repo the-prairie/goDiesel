@@ -1497,6 +1497,30 @@ def _google_3d_preview_unlocked(
                 process.wait(timeout=5)
 
 
+def _google_preview_lock_path(root: Path) -> Path:
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        completed = None
+
+    if completed is not None and completed.returncode == 0:
+        common_dir_value = completed.stdout.strip()
+        if common_dir_value:
+            common_dir = Path(common_dir_value)
+            if not common_dir.is_absolute():
+                common_dir = root / common_dir
+            return common_dir.resolve() / "godiesel-provider-preview.lock"
+
+    return root / ".godiesel/provider-preview.lock"
+
+
 @contextmanager
 def _google_3d_preview(
     root: Path,
@@ -1506,7 +1530,7 @@ def _google_3d_preview(
     preview_launcher: Callable[..., Any] = subprocess.Popen,
     preview_sleep: Callable[[float], None] = time.sleep,
 ) -> Iterator[tuple[Mapping[str, object] | None, list[dict[str, str]]]]:
-    lock_path = root / ".godiesel/provider-preview.lock"
+    lock_path = _google_preview_lock_path(root)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     with _GOOGLE_PREVIEW_THREAD_LOCK, lock_path.open("a+b") as lock_file:
         fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)

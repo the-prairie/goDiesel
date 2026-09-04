@@ -137,6 +137,7 @@ After explicit approval to create, run:
 `create` registers durable sources, atomically updates `quests.json`, rebuilds generated data, validates source health and the microsite source record, and emits a JSON creation report.
 The same approved proposal may be applied again and returns `already_applied`.
 If post-write validation fails, report the recoverable state under `.route-share/recovery/` and do not publish.
+The generator may also retain its ignored atomic-publication backup under `app/public/data/.route-generation-backup/` until recovery is complete.
 
 `preview` runs the existing route-only dry-run before it starts a loopback-only server on an available port.
 That bundle contains only the shared route's generated record and public media referenced by that record.

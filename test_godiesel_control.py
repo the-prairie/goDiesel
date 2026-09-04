@@ -147,6 +147,17 @@ def test_capability_manifest_is_valid_and_declares_the_system_boundaries():
     assert capabilities["planned-route-persistence"]["writes"] == []
     assert capabilities["provider-readiness"]["authority"]["inspect"] == "read-only"
     assert capabilities["provider-readiness"]["authority"]["verify"] == "ephemeral-local"
+    assert "app/public/data/.route-generation-backup/**" in capabilities[
+        "route-share"
+    ]["writes"]
+    assert any(
+        artifact["kind"] == "route-generation-recovery"
+        and artifact["location"] == "app/public/data/.route-generation-backup/**"
+        for artifact in capabilities["route-share"]["artifacts"]
+    )
+    assert "$GIT_COMMON_DIR/godiesel-provider-preview.lock" in capabilities[
+        "provider-readiness"
+    ]["writes"]
     assert "/app/public/data/.route-generation-backup/" in (
         ROOT / ".gitignore"
     ).read_text(encoding="utf-8").splitlines()

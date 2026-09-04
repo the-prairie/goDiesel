@@ -23,7 +23,7 @@
         "release": ["route slug", "stable share name", "exact target authority", "exact replacement authority when replacing an alias"]
       },
       "reads": ["quests.json", "route_sources/**", ".route-share/**"],
-      "writes": [".route-share/**", ".godiesel/evidence/**", ".godiesel/owner-mutation.lock", "quests.json", "route_sources/imported/**", "route_sources/media/**", "app/public/media/**", "app/src/data/generated/**", "app/public/data/routes/**", "app/dist/**", "app/test-results/**", "app/playwright-report/**", "dist/**"],
+      "writes": [".route-share/**", ".godiesel/evidence/**", ".godiesel/owner-mutation.lock", "quests.json", "route_sources/imported/**", "route_sources/media/**", "app/public/media/**", "app/src/data/generated/**", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**", "app/dist/**", "app/test-results/**", "app/playwright-report/**", "dist/**"],
       "external_effects": ["cloudflare-pages-route-branch"],
       "required_files": ["scripts/godiesel", "godiesel_route_share.py", "godiesel_evidence.py", "godiesel_verification.py", "scripts/route.sh", "route_create.py", "route_create.schema.json", "system/result.schema.json", "system/route-share-receipt.schema.json", "system/evidence-receipt.schema.json", "system/verification-explanation.schema.json", "system/verification-reuse.schema.json", "docs/agents/route-share.md"],
       "configuration": [
@@ -68,6 +68,7 @@
         { "kind": "route-share-creation-report", "location": "command result", "persistence": "ignored-local", "schema": "route-share-creation-report" },
         { "kind": "route-source-staging", "location": ".route-share/staging/**", "persistence": "ignored-local" },
         { "kind": "route-write-recovery", "location": ".route-share/recovery/**", "persistence": "ignored-local" },
+        { "kind": "route-generation-recovery", "location": "app/public/data/.route-generation-backup/**", "persistence": "ignored-local" },
         { "kind": "catalogue-mutation-lock", "location": ".godiesel/owner-mutation.lock", "persistence": "ignored-local" },
         { "kind": "durable-route-media", "location": "route_sources/media/**", "persistence": "tracked-local" },
         { "kind": "public-route-media", "location": "app/public/media/**", "persistence": "tracked-local" },
@@ -282,7 +283,7 @@
         "verify": ["named provider", "exact credential-free origin root", "clean local commit and tree", "matching immutable built-artifact identity"]
       },
       "reads": [".env", "app/.env", "app/src/providers/**", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts"],
-      "writes": [".godiesel/evidence/**", ".godiesel/provider-preview.lock", "app/test-results/**", "app/playwright-report/**", "app/e2e/evidence/auto-director/**"],
+      "writes": [".godiesel/evidence/**", "$GIT_COMMON_DIR/godiesel-provider-preview.lock", ".godiesel/provider-preview.lock", "app/test-results/**", "app/playwright-report/**", "app/e2e/evidence/auto-director/**"],
       "external_effects": ["read named map or imagery provider through the selected live browser check"],
       "required_files": ["scripts/godiesel", "scripts/verify-provider-readiness.sh", "godiesel_local_capabilities.py", "system/artifact-manifest.schema.json", "system/build-identity.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json", "app/scripts/finalize-build-identity.mjs", "app/vite.config.ts", "scripts/check-provider-key.mjs", "app/src/providers/google-maps-loader.ts", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts", "docs/agents/testing.md"],
       "configuration": [
@@ -311,6 +312,7 @@
         "verify": "Inspect retained Playwright evidence and provider state before retrying a failed live check."
       },
       "artifacts": [
+        { "kind": "provider-preview-lease", "location": "$GIT_COMMON_DIR/godiesel-provider-preview.lock", "persistence": "ignored-local" },
         { "kind": "live-provider-test-evidence", "location": "app/test-results/**", "persistence": "generated-local" },
         { "kind": "archival-provider-screenshots", "location": "app/e2e/evidence/auto-director/**", "persistence": "tracked-local" },
         { "kind": "verification-evidence-receipt", "location": ".godiesel/evidence/**", "persistence": "ignored-local", "schema": "system/evidence-receipt.schema.json" }
