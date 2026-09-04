@@ -105,7 +105,7 @@ class ProofInputMonitor:
                 )
         return sorted(path for path in paths if path.exists())
 
-    def _state(self) -> dict[str, tuple[int, int, int]]:
+    def _state(self) -> dict[str, tuple[int, int, int, int]]:
         state = {}
         for path in self.paths:
             try:
@@ -114,9 +114,10 @@ class ProofInputMonitor:
                     details.st_ino,
                     details.st_size,
                     details.st_mtime_ns,
+                    details.st_mode,
                 )
             except OSError:
-                state[path.as_posix()] = (-1, -1, -1)
+                state[path.as_posix()] = (-1, -1, -1, -1)
         return state
 
     def _start_kqueue(self) -> None:
@@ -130,7 +131,6 @@ class ProofInputMonitor:
             select.KQ_NOTE_WRITE
             | select.KQ_NOTE_DELETE
             | select.KQ_NOTE_EXTEND
-            | select.KQ_NOTE_ATTRIB
             | select.KQ_NOTE_RENAME
             | select.KQ_NOTE_REVOKE
         )
@@ -162,7 +162,9 @@ class ProofInputMonitor:
             if fd < 0:
                 self.monitoring_failed = True
                 return
-            mask = 0x00000FCE
+            # Content and directory-entry mutations matter here. Attribute-only
+            # events include harmless access-time updates when a script executes.
+            mask = 0x00000FCA
             for path in self.paths:
                 if libc.inotify_add_watch(fd, os.fsencode(path), mask) < 0:
                     self.monitoring_failed = True

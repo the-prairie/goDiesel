@@ -216,6 +216,40 @@ def test_monitor_detects_transient_file_in_nested_recursive_directory(tmp_path: 
         monitor.close()
 
 
+def test_monitor_ignores_executing_unchanged_covered_script(tmp_path: Path):
+    covered = tmp_path / "covered.sh"
+    covered.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    covered.chmod(0o755)
+    snapshot = {
+        "covered_inputs": [
+            {"name": "covered.sh", "state": "matched", "category": "implementation"}
+        ]
+    }
+    monitor = ProofInputMonitor(tmp_path, snapshot)
+    subprocess.run([str(covered)], check=True)
+    try:
+        assert monitor.changed() is False
+    finally:
+        monitor.close()
+
+
+def test_monitor_detects_covered_file_mode_change(tmp_path: Path):
+    covered = tmp_path / "covered.sh"
+    covered.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    covered.chmod(0o644)
+    snapshot = {
+        "covered_inputs": [
+            {"name": "covered.sh", "state": "matched", "category": "implementation"}
+        ]
+    }
+    monitor = ProofInputMonitor(tmp_path, snapshot)
+    covered.chmod(0o755)
+    try:
+        assert monitor.changed() is True
+    finally:
+        monitor.close()
+
+
 def test_monitor_ignores_unrelated_sibling_when_recursive_root_is_absent(
     tmp_path: Path,
 ):
