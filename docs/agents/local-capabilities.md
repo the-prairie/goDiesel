@@ -21,6 +21,8 @@ The adapter invokes `rebuild.sh`; it never imports `build.py` or writes generate
 `rebuild.sh` delegates to the locked `route_build.py` writer entry point.
 Route creation owns the same lock inside `route_create.py`, so both the unified interface and retained `scripts/route.sh` commands share one write boundary with owner curation and Admin.
 The existing staging, backup, atomic replacement, and interrupted-run recovery remain authoritative.
+The writer fails the whole generation when any approved route lacks metadata, source geometry, or route points, so an incomplete projection cannot replace the complete public catalogue.
+After the writer exits successfully, the adapter independently inspects the complete projection and reports a blocked result when any inventory, field, provenance, or aggregate remains stale.
 Inspection validates the manifest version, generation timestamp, inventory statistics, route identities, strict detail and summary consumer contracts, durable-source metadata and geometry, canonical annotations and replay choices, exact detail-to-manifest projection, and aggregate statistics derived from valid detail records.
 Route-generation proof fingerprints the selected private Strava metadata and geometry as one path-free aggregate, monitors those source files during the gate, and never writes their paths or values into the evidence receipt.
 
@@ -106,8 +108,10 @@ Route microsites built from pending working-tree changes declare `artifact_kind:
 Google 3D is stricter: its only valid target is exactly `http://localhost:8787`.
 When that origin is not already running, the adapter starts a Vite preview of the exact prebuilt `app/dist` artifact, waits for its identity, and stops the process after verification.
 Production builds require a clean Git checkout, and the identity binds the commit, Git tree, and a unique immutable build instance id.
+Built identities also bind a canonical artifact manifest, and provider verification independently fetches and hashes every declared served file before accepting the target.
 The adapter records configuration presence, deployed identity, and a digest of the exact target in an ignored evidence receipt.
 It reads and validates the deployed identity before and after the live gate, rejects redirected identity documents, and blocks if the target changes during execution.
+Google preview verification holds one repository-scoped lease for the complete preview lifecycle, so concurrent agents cannot stop or replace each other's local target.
 Configuration presence and a passing deterministic test never substitute for this live result.
 
 Reuse is provider- and target-specific:
@@ -130,7 +134,7 @@ Impact rules decide which gates a changed path requires.
 Each exact verification command declares its implementation, contract, fixture, configuration, data, renderer, and provider entry points.
 The proof layer recursively includes repository-local Python and JavaScript or TypeScript imports, so a transitive executable dependency invalidates the same receipt and selects the same gate.
 The adapter snapshots every covered state before and after the gate.
-On macOS and Linux it also monitors existing covered files and every directory in recursive covered trees, so a transient write-and-restore in those inputs invalidates proof.
+On macOS and Linux it also monitors existing covered files and every directory in recursive covered trees, so a transient content or permission write-and-restore in those inputs invalidates proof.
 Absent exact inputs and additions to nonrecursive wildcard patterns are certified by before/after state only; they are not represented as continuously monitored.
 Broken or external covered-input symlinks block proof instead of disappearing from the fingerprint.
 Those command inputs also narrow a known provider path to its applicable live check; a newly classified provider path that matches no known command expands to every command in the tier so proof cannot disappear silently.

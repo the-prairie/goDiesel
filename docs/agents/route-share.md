@@ -184,6 +184,8 @@ The target value must exactly match the requested stable share name and does not
 An approved replacement also requires `--authorize-replacement <share-name>` for that exact alias.
 The unified release path also requires passed, digest-matched plan, apply, and verify receipts for the same route.
 It requires the latest general verification proof to remain reusable before any Cloudflare command runs.
+This is the focused route artifact proof required by the runtime transition.
+Code-change merge and production cutover still follow the impact-selected ticket, release, and live gates in `docs/agents/testing.md`.
 Before publication, it validates those receipts, confines every linked path to the ignored evidence directories, and re-hashes the proposal and result artifacts.
 This detects accidental corruption and incomplete or fabricated local evidence, but it is not a signature against a hostile actor who can rewrite the repository and all local evidence.
 Use the compatibility adapter only for an explicitly reviewed legacy workflow, not to bypass this state machine.

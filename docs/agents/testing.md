@@ -14,7 +14,7 @@ Run the complete release gate only for production cutover or changes to shared a
 
 A successful gate remains valid unless subsequent edits touch behavior covered by that gate.
 Verification blocks when covered inputs differ between its pre-run and post-run snapshots.
-On macOS and Linux it also blocks when an existing covered file or any directory in a recursive covered tree emits a mutation event during the gate.
+On macOS and Linux it also blocks when an existing covered file or any directory in a recursive covered tree emits a content mutation event, or when file state proves a transient permission mutation, during the gate.
 
 ## Verification Matrix
 
@@ -55,6 +55,7 @@ Classify the change before choosing commands:
 | --- | --- |
 | Pure domain or writer | Owning module interface, invariants, unit tests, and affected generated contract |
 | One product surface | Surface behavior, shared UI/domain dependencies, focused Playwright, and viewport evidence |
+| Browser specification or snapshot | The Playwright-inclusive application ticket gate |
 | Provider, renderer, terrain, imagery, or camera | Deterministic interface tests plus the applicable live-provider proof |
 | Build, routing, data tier, shared shell, or test infrastructure | Cross-application consumers and release-tier escalation |
 | Documentation only | Local links, indexes, command references, terminology, and `git diff --check` |
@@ -79,6 +80,8 @@ Reuse a route-share proof without executing its gate only when every covered inp
 
 The reuse result names invalidated input categories and blocks when no valid proof remains.
 Route release performs the same reuse validation before any external effect.
+That runtime release precondition is the route-share focused proof for the exact route artifact.
+Impact-selected ticket, release, and live gates remain merge and production-cutover requirements for code changes and are not replaced or downgraded by the route release command.
 
 ## Commands
 
@@ -180,6 +183,7 @@ Focused route-share evidence records the exact manifest-declared route check tha
 Live provider proof requires an explicit origin root whose non-redirected `build-identity.json` matches the clean local commit and tree before and after the gate.
 The identity must declare `artifact_kind: built-artifact`; development-server identities are rejected before a browser gate runs.
 The identity also carries a unique build instance id, so reuse blocks after a same-commit redeployment as well as after a source change.
+Its digest-bound artifact manifest inventories every served file by path, size, and SHA-256; verification fetches those bytes from the named origin and blocks proof or reuse after bundle tampering.
 
 Documentation, evidence packaging, or unrelated edits do not invalidate a proof unless they change an executable command, contract, or claimed behavior.
 

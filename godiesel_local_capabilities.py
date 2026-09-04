@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
 import math
 import os
 import re
 import subprocess
 import sys
+import threading
 import time
 from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
@@ -78,6 +80,7 @@ CURATION_AUTHORITY = {
 }
 PROVIDER_AUTHORITY = {"inspect": "read-only", "verify": "ephemeral-local"}
 GOOGLE_3D_PROVIDER_TARGET = "http://localhost:8787"
+_GOOGLE_PREVIEW_THREAD_LOCK = threading.Lock()
 PROVIDER_CHECKS = {
     "atlas": {
         "configuration": "GOOGLE_MAPS_API_KEY",
@@ -719,23 +722,30 @@ def execute_route_generation(
                 )
             ],
         )
-    blockers = [] if completed.returncode == 0 else [
-        _issue(
-            "GODIESEL_ROUTE_GENERATION_COMMAND_FAILED",
-            f"The existing route-generation {verb} command failed.",
-            "Inspect the writer or focused test output locally, correct the cause, and retry.",
-        )
-    ]
+    projection_state = None
+    if completed.returncode == 0:
+        projection_state, blockers = _generation_state(root)
+    else:
+        blockers = [
+            _issue(
+                "GODIESEL_ROUTE_GENERATION_COMMAND_FAILED",
+                f"The existing route-generation {verb} command failed.",
+                "Inspect the writer or focused test output locally, correct the cause, and retry.",
+            )
+        ]
+    command_result = _command_result(display_command, completed)
+    if projection_state is not None:
+        command_result["projection"] = projection_state
     return _envelope(
         "route-generation",
         verb,
         required_authority,
         status="blocked" if blockers else "passed",
         authorized=True,
-        result=_command_result(display_command, completed),
+        result=command_result,
         result_contract="godiesel_local_capabilities.py#command-summary",
         blockers=blockers,
-        exit_code=completed.returncode if completed.returncode == 0 else 2,
+        exit_code=0 if not blockers else 2,
     )
 
 
@@ -1407,7 +1417,7 @@ def _valid_provider_target(provider: str, value: str | None) -> bool:
 
 
 @contextmanager
-def _google_3d_preview(
+def _google_3d_preview_unlocked(
     root: Path,
     environ: Mapping[str, str],
     target_identity_reader: TargetIdentityReader,
@@ -1485,6 +1495,32 @@ def _google_3d_preview(
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait(timeout=5)
+
+
+@contextmanager
+def _google_3d_preview(
+    root: Path,
+    environ: Mapping[str, str],
+    target_identity_reader: TargetIdentityReader,
+    *,
+    preview_launcher: Callable[..., Any] = subprocess.Popen,
+    preview_sleep: Callable[[float], None] = time.sleep,
+) -> Iterator[tuple[Mapping[str, object] | None, list[dict[str, str]]]]:
+    lock_path = root / ".godiesel/provider-preview.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with _GOOGLE_PREVIEW_THREAD_LOCK, lock_path.open("a+b") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            with _google_3d_preview_unlocked(
+                root,
+                environ,
+                target_identity_reader,
+                preview_launcher=preview_launcher,
+                preview_sleep=preview_sleep,
+            ) as state:
+                yield state
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def execute_provider_readiness(

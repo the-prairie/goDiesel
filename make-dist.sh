@@ -85,6 +85,8 @@ else
 EOF
 fi
 
+node app/scripts/finalize-build-identity.mjs dist
+
 SIZE=$(du -sh dist | awk '{print $1}')
 FILES=$(find dist -type f | wc -l | tr -d ' ')
 echo "React dist ready: ${SIZE}, ${FILES} files"

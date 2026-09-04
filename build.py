@@ -91,19 +91,19 @@ for spec in quest_specs:
     act = acts_by_id.get(aid)
     meta = route_metadata(spec, QUESTS, act)
     if meta is None:
-        print(f'    ✗ {aid}: not found in activities.csv'); continue
+        raise RuntimeError(f'Approved route {aid} is missing source metadata')
     source_kind = meta.source_kind
     name, date, typ, desc = meta.name, meta.date, meta.activity_type, meta.description
     fp = meta.source_path or find_strava_activity_file(aid, DD)
     if fp is None:
-        print(f'    ✗ {aid}: no .gpx/.fit file'); continue
+        raise RuntimeError(f'Approved route {aid} is missing source geometry')
     route_provenance = build_route_provenance(load_source_route_points(fp))
     lifecycle = spec.get('lifecycle', 'completed')
     if lifecycle not in ('completed', 'planned', 'discovered'):
         raise ValueError(f'Invalid lifecycle for {aid}: {lifecycle!r}')
     source_route = [dict(point) for point in route_provenance.route]
     if not source_route:
-        print(f'    ✗ {aid}: empty polyline'); continue
+        raise RuntimeError(f'Approved route {aid} has empty source geometry')
 
     # Auto-detect region if not specified
     region_label = spec.get('region') or infer_route_region(

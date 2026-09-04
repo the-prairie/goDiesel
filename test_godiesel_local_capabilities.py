@@ -7,6 +7,8 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
+import time
 from hashlib import sha256
 from pathlib import Path
 
@@ -15,6 +17,7 @@ from jsonschema import Draft202012Validator
 
 from admin_curation import owner_mutation_lock
 from godiesel_local_capabilities import (
+    _google_3d_preview,
     execute_owner_curation,
     execute_provider_readiness,
     execute_route_generation,
@@ -35,6 +38,7 @@ ROOT = Path(__file__).resolve().parent
 TEST_BUILD_COMMIT = "a" * 40
 TEST_BUILD_TREE = "b" * 40
 TEST_BUILD_ID = "12345678-1234-4234-8234-123456789abc"
+TEST_ARTIFACT_MANIFEST_SHA256 = "d" * 64
 
 
 COMPLETE_CURATION = {
@@ -72,6 +76,7 @@ def _matching_target_identity(_target: str) -> dict[str, object]:
         "schema_version": 1,
         "document_type": "godiesel-build-identity",
         "artifact_kind": "built-artifact",
+        "artifact_manifest_sha256": TEST_ARTIFACT_MANIFEST_SHA256,
         "commit": TEST_BUILD_COMMIT,
         "tree": TEST_BUILD_TREE,
         "build_id": TEST_BUILD_ID,
@@ -409,6 +414,27 @@ def test_generation_apply_delegates_to_the_existing_writer(tmp_path: Path):
     assert result["authorized"] is True
     assert result["result"]["command"] == "./rebuild.sh"
     assert "private writer output" not in json.dumps(result)
+
+
+def test_generation_apply_blocks_when_writer_leaves_projection_incomplete(
+    tmp_path: Path,
+):
+    root = _generation_fixture(tmp_path)
+
+    def incomplete_writer(command, **kwargs):
+        (root / "app/public/data/routes/route-1.json").unlink()
+        return subprocess.CompletedProcess(command, 0, "writer reported success", "")
+
+    result = execute_route_generation(
+        root,
+        "apply",
+        authority="canonical-local",
+        runner=incomplete_writer,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["exit_code"] == 2
+    assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_INVENTORY_DRIFT"
 
 
 def test_generation_apply_blocks_while_catalogue_mutation_lock_is_held(tmp_path: Path):
@@ -1341,6 +1367,38 @@ def test_google_3d_provider_owns_a_missing_local_preview(tmp_path: Path):
     ]
     assert process.terminated is True
     assert identity_reads == 3
+
+
+def test_google_preview_context_serializes_concurrent_owners(tmp_path: Path):
+    barrier = threading.Barrier(3)
+    guard = threading.Lock()
+    active = 0
+    maximum_active = 0
+
+    def worker():
+        nonlocal active, maximum_active
+        barrier.wait()
+        with _google_3d_preview(
+            tmp_path,
+            {},
+            _matching_target_identity,
+        ):
+            with guard:
+                active += 1
+                maximum_active = max(maximum_active, active)
+            time.sleep(0.05)
+            with guard:
+                active -= 1
+
+    threads = [threading.Thread(target=worker) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    barrier.wait()
+    for thread in threads:
+        thread.join(timeout=2)
+
+    assert all(not thread.is_alive() for thread in threads)
+    assert maximum_active == 1
 
 
 def test_provider_verify_rejects_path_scoped_target(tmp_path: Path):

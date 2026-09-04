@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://godiesel.local/system/artifact-manifest.schema.json",
+  "title": "goDiesel built artifact manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "document_type", "files"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "document_type": { "const": "godiesel-artifact-manifest" },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "size", "sha256"],
+        "properties": {
+          "path": { "type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$" },
+          "size": { "type": "integer", "minimum": 0 },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        }
+      }
+    }
+  }
+}

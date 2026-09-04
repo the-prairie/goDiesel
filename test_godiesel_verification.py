@@ -3,6 +3,7 @@ import os
 import select
 import subprocess
 import threading
+from hashlib import sha256
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError
@@ -41,6 +42,64 @@ def test_target_build_identity_rejects_redirects():
     try:
         with pytest.raises(HTTPError):
             read_target_build_identity(f"http://127.0.0.1:{server.server_port}/")
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
+def test_target_build_identity_verifies_every_manifest_asset():
+    asset = b"exact application bytes\n"
+    manifest = {
+        "schema_version": 1,
+        "document_type": "godiesel-artifact-manifest",
+        "files": [
+            {
+                "path": "assets/application.js",
+                "size": len(asset),
+                "sha256": sha256(asset).hexdigest(),
+            }
+        ],
+    }
+    manifest_bytes = f"{json.dumps(manifest, separators=(',', ':'))}\n".encode()
+    identity = {
+        "schema_version": 1,
+        "document_type": "godiesel-build-identity",
+        "artifact_kind": "built-artifact",
+        "artifact_manifest_sha256": sha256(manifest_bytes).hexdigest(),
+        "commit": "a" * 40,
+        "tree": "b" * 40,
+        "build_id": "12345678-1234-4234-8234-123456789abc",
+    }
+    responses = {
+        "/build-identity.json": f"{json.dumps(identity)}\n".encode(),
+        "/artifact-manifest.json": manifest_bytes,
+        "/assets/application.js": asset,
+    }
+
+    class ArtifactHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            payload = responses.get(self.path)
+            if payload is None:
+                self.send_error(404)
+                return
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, format, *args):
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), ArtifactHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    target = f"http://127.0.0.1:{server.server_port}/"
+    try:
+        assert read_target_build_identity(target) == identity
+        responses["/assets/application.js"] = b"fake! application bytes\n"
+        with pytest.raises(ValueError, match="does not match its manifest"):
+            read_target_build_identity(target)
     finally:
         server.shutdown()
         server.server_close()
@@ -244,6 +303,24 @@ def test_monitor_detects_covered_file_mode_change(tmp_path: Path):
     }
     monitor = ProofInputMonitor(tmp_path, snapshot)
     covered.chmod(0o755)
+    try:
+        assert monitor.changed() is True
+    finally:
+        monitor.close()
+
+
+def test_monitor_detects_transient_covered_file_mode_change(tmp_path: Path):
+    covered = tmp_path / "covered.sh"
+    covered.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    covered.chmod(0o644)
+    snapshot = {
+        "covered_inputs": [
+            {"name": "covered.sh", "state": "matched", "category": "implementation"}
+        ]
+    }
+    monitor = ProofInputMonitor(tmp_path, snapshot)
+    covered.chmod(0o755)
+    covered.chmod(0o644)
     try:
         assert monitor.changed() is True
     finally:
@@ -791,6 +868,23 @@ def test_unclassified_path_blocks_instead_of_choosing_a_small_gate():
     assert result["blockers"][0]["code"] == "GODIESEL_UNCLASSIFIED_PATH"
 
 
+def test_browser_snapshot_change_selects_playwright_inclusive_ticket_gate():
+    result = explain_verification(
+        ROOT,
+        changed_paths=["app/e2e/example.spec.ts-snapshots/example-desktop-darwin.png"],
+    )
+
+    selected = {
+        (gate["capability"], gate["tier"], gate["command"])
+        for gate in result["result"]["selected_gates"]
+    }
+    assert (
+        "application-release",
+        "ticket",
+        "npm --prefix app run verify",
+    ) in selected
+
+
 def test_cli_verify_explain_emits_json_without_executing_a_gate(monkeypatch, capsys):
     def fail_execute(*args: object, **kwargs: object) -> object:
         raise AssertionError("route verification must not execute during explanation")
@@ -900,6 +994,14 @@ def test_cli_verify_explain_emits_json_without_executing_a_gate(monkeypatch, cap
         (
             "app/src/surfaces/replay/renderers/replay-camera-clearance.ts",
             {"./scripts/verify-provider-readiness.sh earth-replay"},
+        ),
+        (
+            "app/src/surfaces/replay/renderers/new-provider-engine.ts",
+            {
+                "./scripts/verify-provider-readiness.sh atlas",
+                "./scripts/verify-provider-readiness.sh earth-replay",
+                "./scripts/verify-provider-readiness.sh google-3d",
+            },
         ),
         (
             "app/src/surfaces/replay/story-flight/replay-camera-framing.ts",

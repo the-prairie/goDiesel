@@ -9,8 +9,18 @@
     "schema_version": { "const": 1 },
     "document_type": { "const": "godiesel-build-identity" },
     "artifact_kind": { "enum": ["built-artifact", "development-server", "unverified-working-tree-artifact"] },
+    "artifact_manifest_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "commit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
     "tree": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
     "build_id": { "type": "string", "format": "uuid" }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "artifact_kind": { "enum": ["built-artifact", "unverified-working-tree-artifact"] } },
+        "required": ["artifact_kind"]
+      },
+      "then": { "required": ["artifact_manifest_sha256"] }
+    }
+  ]
 }

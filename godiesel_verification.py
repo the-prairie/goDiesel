@@ -11,11 +11,12 @@ import re
 import select
 import stat
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Callable, Iterable, Mapping, Sequence
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from jsonschema import Draft202012Validator, FormatChecker
@@ -105,7 +106,7 @@ class ProofInputMonitor:
                 )
         return sorted(path for path in paths if path.exists())
 
-    def _state(self) -> dict[str, tuple[int, int, int, int]]:
+    def _state(self) -> dict[str, tuple[int, int, int, int, int]]:
         state = {}
         for path in self.paths:
             try:
@@ -114,10 +115,11 @@ class ProofInputMonitor:
                     details.st_ino,
                     details.st_size,
                     details.st_mtime_ns,
+                    details.st_ctime_ns,
                     details.st_mode,
                 )
             except OSError:
-                state[path.as_posix()] = (-1, -1, -1, -1)
+                state[path.as_posix()] = (-1, -1, -1, -1, -1)
         return state
 
     def _start_kqueue(self) -> None:
@@ -131,6 +133,7 @@ class ProofInputMonitor:
             select.KQ_NOTE_WRITE
             | select.KQ_NOTE_DELETE
             | select.KQ_NOTE_EXTEND
+            | select.KQ_NOTE_ATTRIB
             | select.KQ_NOTE_RENAME
             | select.KQ_NOTE_REVOKE
         )
@@ -179,8 +182,9 @@ class ProofInputMonitor:
         event_seen = False
         if self.kqueue is not None:
             try:
-                event_seen = bool(
-                    self.kqueue.control(None, max(1, len(self.paths)), 0)
+                events = self.kqueue.control(None, max(1, len(self.paths)), 0)
+                event_seen = any(
+                    event.fflags & ~select.KQ_NOTE_ATTRIB for event in events
                 )
             except OSError:
                 self.monitoring_failed = True
@@ -500,24 +504,122 @@ def proof_snapshot_stability_issues(
     return []
 
 
+class _RejectRedirects(HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, message, headers, newurl):
+        return None
+
+
+def _read_target_bytes(origin: str, relative_path: str, limit: int) -> bytes:
+    request = Request(
+        f"{origin}/{quote(relative_path, safe='/')}",
+        headers={"Accept-Encoding": "identity"},
+    )
+    with build_opener(_RejectRedirects()).open(request, timeout=10) as response:
+        payload = response.read(limit + 1)
+    if len(payload) > limit:
+        raise ValueError(
+            f"target artifact exceeds the bounded response size: {relative_path}"
+        )
+    return payload
+
+
+def _artifact_manifest_files(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, dict) or set(value) != {
+        "schema_version",
+        "document_type",
+        "files",
+    }:
+        raise ValueError("artifact manifest is not a closed object")
+    if (
+        value.get("schema_version") != 1
+        or value.get("document_type") != "godiesel-artifact-manifest"
+        or not isinstance(value.get("files"), list)
+        or not value["files"]
+        or len(value["files"]) > 10_000
+    ):
+        raise ValueError("artifact manifest header is invalid")
+    files: list[dict[str, object]] = []
+    previous_path = ""
+    total_size = 0
+    for item in value["files"]:
+        if not isinstance(item, dict) or set(item) != {"path", "size", "sha256"}:
+            raise ValueError("artifact manifest entry is not a closed object")
+        relative_path = item.get("path")
+        size = item.get("size")
+        digest = item.get("sha256")
+        normalized = (
+            _normalized_path(relative_path)
+            if isinstance(relative_path, str)
+            else None
+        )
+        if (
+            normalized != relative_path
+            or relative_path in {"artifact-manifest.json", "build-identity.json"}
+            or "\\" in relative_path
+            or relative_path <= previous_path
+            or not isinstance(size, int)
+            or isinstance(size, bool)
+            or size < 0
+            or size > 64 * 1024 * 1024
+            or not isinstance(digest, str)
+            or re.fullmatch(r"[a-f0-9]{64}", digest) is None
+        ):
+            raise ValueError("artifact manifest entry is invalid")
+        total_size += size
+        if total_size > 256 * 1024 * 1024:
+            raise ValueError("artifact manifest exceeds the bounded total size")
+        files.append(item)
+        previous_path = relative_path
+    return files
+
+
 def read_target_build_identity(provider_target: str) -> Mapping[str, object]:
     parsed_target = urlparse(provider_target)
-    if parsed_target.path not in ("", "/"):
+    if (
+        parsed_target.scheme not in {"http", "https"}
+        or not parsed_target.netloc
+        or parsed_target.username is not None
+        or parsed_target.password is not None
+        or parsed_target.path not in ("", "/")
+        or parsed_target.query
+        or parsed_target.fragment
+    ):
         raise ValueError("provider target must identify an origin root")
-    identity_url = f"{parsed_target.scheme}://{parsed_target.netloc}/build-identity.json"
-    request = Request(identity_url, headers={"Accept": "application/json"})
-
-    class RejectRedirects(HTTPRedirectHandler):
-        def redirect_request(self, request, fp, code, message, headers, newurl):
-            return None
-
-    with build_opener(RejectRedirects()).open(request, timeout=5) as response:
-        payload = response.read(65_537)
-    if len(payload) > 65_536:
-        raise ValueError("build identity exceeds the bounded response size")
+    origin = f"{parsed_target.scheme}://{parsed_target.netloc}"
+    payload = _read_target_bytes(origin, "build-identity.json", 65_536)
     value = json.loads(payload.decode("utf-8"))
     if not isinstance(value, dict):
         raise ValueError("build identity is not an object")
+    if value.get("artifact_kind") in {
+        "built-artifact",
+        "unverified-working-tree-artifact",
+    }:
+        expected_manifest_digest = value.get("artifact_manifest_sha256")
+        if (
+            not isinstance(expected_manifest_digest, str)
+            or re.fullmatch(r"[a-f0-9]{64}", expected_manifest_digest) is None
+        ):
+            raise ValueError("build identity does not bind an artifact manifest")
+        manifest_payload = _read_target_bytes(
+            origin, "artifact-manifest.json", 4 * 1024 * 1024
+        )
+        if sha256(manifest_payload).hexdigest() != expected_manifest_digest:
+            raise ValueError("artifact manifest does not match the build identity")
+        files = _artifact_manifest_files(json.loads(manifest_payload.decode("utf-8")))
+
+        def verify_file(item: Mapping[str, object]) -> None:
+            relative_path = str(item["path"])
+            content = _read_target_bytes(origin, relative_path, int(item["size"]))
+            if (
+                len(content) != item["size"]
+                or sha256(content).hexdigest() != item["sha256"]
+            ):
+                raise ValueError(
+                    f"served artifact does not match its manifest: {relative_path}"
+                )
+
+        with ThreadPoolExecutor(max_workers=min(16, len(files))) as executor:
+            list(executor.map(verify_file, files))
     return value
 
 
