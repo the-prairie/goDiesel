@@ -706,6 +706,7 @@ def execute_route_share(
                 authorized=True,
                 additional_issues=proof_blockers[1:],
             )
+    if verb == "verify":
         _recovery_state, recovery_blockers = route_generation_recovery_state(root)
         if recovery_blockers:
             return _blocked_result(
@@ -727,7 +728,17 @@ def execute_route_share(
         detach=detach,
         replace_existing=replace_existing,
     )
-    monitor = ProofInputMonitor(root, proof_snapshot) if proof_snapshot is not None else None
+    monitor_snapshot = proof_snapshot
+    if verb == "verify" and preview:
+        monitor_snapshot = {
+            "covered_inputs": [],
+            "_monitor_paths": [str(root / "app/public/data")],
+        }
+    monitor = (
+        ProofInputMonitor(root, monitor_snapshot)
+        if monitor_snapshot is not None
+        else None
+    )
     started_at = datetime.now(timezone.utc).isoformat()
     try:
         completed = runner(
@@ -763,6 +774,22 @@ def execute_route_share(
                     "GODIESEL_VERIFICATION_INPUTS_CHANGED",
                     "A covered input changed while the verification gate was running.",
                     "Stabilize the worktree and rerun verification against one unchanged input set.",
+                )
+            )
+    if verb == "verify":
+        _recovery_state, post_recovery_blockers = route_generation_recovery_state(root)
+        proof_stability_blockers.extend(
+            issue
+            for issue in post_recovery_blockers
+            if issue["code"]
+            not in {blocker["code"] for blocker in proof_stability_blockers}
+        )
+        if preview and transient_input_change and not post_recovery_blockers:
+            proof_stability_blockers.append(
+                _issue(
+                    "GODIESEL_ROUTE_GENERATION_RECOVERY_CHANGED",
+                    "Route-generation recovery state changed during preview verification.",
+                    "Stabilize generated publication state, inspect route generation, and retry preview verification.",
                 )
             )
     blockers = list(proof_stability_blockers)

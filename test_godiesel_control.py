@@ -177,7 +177,9 @@ def test_capability_manifest_is_valid_and_declares_the_system_boundaries():
         "quests.json.tmp",
         ".quests.json.rollback.tmp",
         "app/src/data/generated/.routes.manifest.json.tmp",
+        "app/src/data/generated/.routes.manifest.json.recovery",
         "app/src/data/generated/.route-stats.json.tmp",
+        "app/src/data/generated/.route-stats.json.recovery",
     ):
         assert path in capabilities["owner-curation"]["writes"]
     assert "app/public/data/.route-generation-backup/**" in capabilities[

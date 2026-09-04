@@ -115,7 +115,7 @@
         "verify": ["generated projection diff"]
       },
       "reads": ["quests.json", "route_sources/**", "external-private:DieselDiaries/activities.csv", "external-private:DieselDiaries/strava_export/activities/**"],
-      "writes": ["app/src/data/generated/**", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**", ".godiesel/evidence/**", ".godiesel/owner-mutation.lock"],
+      "writes": ["app/src/data/generated/**", "app/src/data/generated/.routes.manifest.json.recovery", "app/src/data/generated/.route-stats.json.recovery", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**", ".godiesel/evidence/**", ".godiesel/owner-mutation.lock"],
       "external_effects": [],
       "required_files": ["scripts/godiesel", "godiesel_local_capabilities.py", "generated_route_contract.py", "build.py", "route_build.py", "quest_meta.py", "rebuild.sh", "quests.json", "system/result.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json"],
       "configuration": [],
@@ -188,7 +188,7 @@
         "verify": ["curation and generated projection diff"]
       },
       "reads": ["quests.json", "app/public/data/routes/**"],
-      "writes": [".godiesel/plans/owner-curation/**", ".godiesel/evidence/**", ".godiesel/owner-mutation.lock", "quests.json", "quests.json.tmp", ".quests.json.rollback", ".quests.json.rollback.tmp", "app/src/data/generated/**", "app/src/data/generated/.routes.manifest.json.tmp", "app/src/data/generated/.route-stats.json.tmp", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**"],
+      "writes": [".godiesel/plans/owner-curation/**", ".godiesel/evidence/**", ".godiesel/owner-mutation.lock", "quests.json", "quests.json.tmp", ".quests.json.rollback", ".quests.json.rollback.tmp", "app/src/data/generated/**", "app/src/data/generated/.routes.manifest.json.tmp", "app/src/data/generated/.routes.manifest.json.recovery", "app/src/data/generated/.route-stats.json.tmp", "app/src/data/generated/.route-stats.json.recovery", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**"],
       "external_effects": [],
       "required_files": ["scripts/godiesel", "godiesel_local_capabilities.py", "generated_route_contract.py", "admin.sh", "admin.py", "admin_curation.py", "curation_publish.py", "build.py", "system/owner-curation-plan.schema.json", "system/result.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json", "docs/adr/0010-owner-curation-through-a-loopback-only-writer.md"],
       "configuration": [],
@@ -578,7 +578,7 @@
     },
     {
       "id": "live-provider-runtime",
-      "paths": ["godiesel_local_capabilities.py", "app/vite.config.ts", "app/src/services/google*", "app/src/**/google*", "app/src/providers/**", "app/src/surfaces/atlas/**", "app/src/surfaces/replay/cinematic/**", "app/src/surfaces/replay/playback/replay-controller.ts", "app/src/surfaces/replay/playback/route-navigator-controller.ts", "app/src/surfaces/replay/renderer-port.ts", "app/src/surfaces/replay/renderers/**", "app/src/surfaces/replay/story-flight/replay-camera-framing.ts", "app/src/surfaces/replay/scene/route-grounding.ts", "app/src/surfaces/replay/scene/route-camera-stabilizer.ts", "app/src/domain/route.ts", "app/src/domain/geometry/route-path.ts", "app/src/domain/geometry/route-thread-style.ts", "app/src/data/route-regions.ts", "app/e2e/*live*", "app/e2e/earth-*", "scripts/verify-provider-readiness.sh"],
+      "paths": ["godiesel_local_capabilities.py", "app/vite.config.ts", "app/src/services/google*", "app/src/**/google*", "app/src/providers/**", "app/src/surfaces/atlas/**", "app/src/surfaces/replay/cinematic/**", "app/src/surfaces/replay/components/earth-replay-stage.tsx", "app/src/surfaces/replay/playback/replay-controller.ts", "app/src/surfaces/replay/playback/route-navigator-controller.ts", "app/src/surfaces/replay/renderer-port.ts", "app/src/surfaces/replay/renderers/**", "app/src/surfaces/replay/story-flight/replay-camera-framing.ts", "app/src/surfaces/replay/scene/route-grounding.ts", "app/src/surfaces/replay/scene/route-camera-stabilizer.ts", "app/src/domain/route.ts", "app/src/domain/geometry/route-path.ts", "app/src/domain/geometry/route-thread-style.ts", "app/src/data/route-regions.ts", "app/e2e/*live*", "app/e2e/earth-*", "scripts/verify-provider-readiness.sh"],
       "capabilities": ["application-release", "provider-readiness"],
       "category": "provider",
       "gates": [{ "capability": "provider-readiness", "tier": "live" }],

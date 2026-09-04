@@ -23,6 +23,7 @@ venv/
 /.quests.json.rollback
 /app/public/data/routes/.*.rollback
 /app/src/data/generated/.*.rollback
+/app/src/data/generated/.*.recovery
 
 # Generated build output.
 /index.html

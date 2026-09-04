@@ -994,6 +994,10 @@ def test_cli_verify_explain_emits_json_without_executing_a_gate(monkeypatch, cap
             {"./scripts/verify-provider-readiness.sh earth-replay"},
         ),
         (
+            "app/src/surfaces/replay/components/earth-replay-stage.tsx",
+            {"./scripts/verify-provider-readiness.sh earth-replay"},
+        ),
+        (
             "app/src/surfaces/replay/renderers/google-route-navigator-engine.ts",
             {
                 "./scripts/verify-provider-readiness.sh earth-replay",

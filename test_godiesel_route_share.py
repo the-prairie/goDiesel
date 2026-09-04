@@ -246,6 +246,64 @@ def test_route_share_verify_and_reuse_block_while_generation_recovery_is_pending
     )
 
 
+def test_route_share_preview_verify_blocks_while_generation_recovery_is_pending(
+    tmp_path: Path,
+):
+    install_evidence_contract(tmp_path)
+    (tmp_path / "app/public/data/.routes-staging-interrupted").mkdir()
+    runner = RecordingRunner(completed([], stdout="must not run\n"))
+
+    result = execute_route_share(
+        tmp_path,
+        "verify",
+        slug="route-1",
+        preview=True,
+        runner=runner,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["evidence"] is None
+    assert result["blockers"][0]["code"] == (
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_PENDING"
+    )
+    assert runner.calls == []
+
+
+@pytest.mark.parametrize("remove_residue", [False, True])
+def test_route_share_preview_verify_blocks_when_recovery_changes_during_command(
+    tmp_path: Path,
+    remove_residue: bool,
+):
+    install_evidence_contract(tmp_path)
+    staging = tmp_path / "app/public/data/.routes-staging-interrupted"
+
+    def mutating_runner(command, **kwargs):
+        staging.mkdir()
+        if remove_residue:
+            staging.rmdir()
+        return completed(command, stdout="preview ready\n")
+
+    result = execute_route_share(
+        tmp_path,
+        "verify",
+        slug="route-1",
+        preview=True,
+        runner=mutating_runner,
+    )
+
+    blocker_codes = {blocker["code"] for blocker in result["blockers"]}
+    assert result["status"] == "blocked"
+    assert result["exit_code"] == 2
+    assert result["evidence"] is None
+    assert (
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_CHANGED"
+        if remove_residue
+        else "GODIESEL_ROUTE_GENERATION_RECOVERY_PENDING"
+    ) in blocker_codes
+    receipt = json.loads((tmp_path / result["receipt"]["path"]).read_text())
+    assert receipt["outcome"] == "incomplete"
+
+
 def test_verify_blocks_when_the_evidence_contract_is_missing(tmp_path: Path):
     system = tmp_path / "system"
     system.mkdir()
@@ -438,8 +496,7 @@ def test_verify_maps_check_and_loopback_preview_modes(
     detach: bool,
     expected: list[str],
 ):
-    if not preview:
-        install_evidence_contract(tmp_path)
+    install_evidence_contract(tmp_path)
     runner = RecordingRunner(completed([], stdout="verified\n"))
 
     result = execute_route_share(
