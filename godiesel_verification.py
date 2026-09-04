@@ -18,10 +18,16 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Callable, Iterable, Mapping, Sequence
 from urllib.parse import quote, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
+from uuid import UUID
 
 from jsonschema import Draft202012Validator, FormatChecker
 
-from godiesel_evidence import canonical_digest, repository_snapshot
+from admin_curation import OwnerMutationBusyError, owner_mutation_lock
+from godiesel_evidence import (
+    canonical_digest,
+    existing_local_directory,
+    repository_snapshot,
+)
 from route_imports import (
     DEFAULT_DIESEL_DIARIES_ROOT,
     find_strava_activity_file,
@@ -211,33 +217,87 @@ def _issue(code: str, message: str, remediation: str) -> dict[str, str]:
 def route_generation_recovery_state(
     root: Path | str,
 ) -> tuple[str, list[dict[str, str]]]:
-    """Return fail-closed state for interrupted route-generation publication."""
+    """Return fail-closed state for unresolved catalogue publication artifacts."""
 
-    data_root = Path(root).resolve() / "app/public/data"
+    root = Path(root).resolve()
+    data_root = root / "app/public/data"
+    generated_root = root / "app/src/data/generated"
+    detail_root = data_root / "routes"
+
+    def has_entry(directory: Path, predicate: Callable[[str], bool]) -> bool:
+        if directory.is_symlink():
+            raise OSError("catalogue recovery directory is a symbolic link")
+        try:
+            with os.scandir(directory) as entries:
+                return any(predicate(entry.name) for entry in entries)
+        except FileNotFoundError:
+            return False
+
     try:
-        with os.scandir(data_root) as entries:
-            pending = any(
-                entry.name == ".route-generation-backup"
-                or entry.name.startswith(".routes-staging-")
-                for entry in entries
+        pending = has_entry(
+            data_root,
+            lambda name: name == ".route-generation-backup"
+            or name.startswith(".routes-staging-"),
+        )
+        pending = pending or has_entry(
+            root,
+            lambda name: name in {
+                "quests.json.tmp",
+                ".quests.json.rollback",
+                ".quests.json.rollback.tmp",
+            }
+            or (
+                name.startswith(".quests.json.")
+                and name.endswith(".tmp")
+            ),
+        )
+        if generated_root.exists() or generated_root.is_symlink():
+            pending = pending or has_entry(
+                generated_root,
+                lambda name: name.startswith(".")
+                and name.endswith((".tmp", ".recovery", ".rollback")),
+            )
+        if detail_root.exists() or detail_root.is_symlink():
+            pending = pending or has_entry(
+                detail_root,
+                lambda name: name.startswith(".")
+                and name.endswith((".tmp", ".recovery", ".rollback")),
             )
     except OSError:
         return "unreadable", [
             _issue(
                 "GODIESEL_ROUTE_GENERATION_RECOVERY_UNREADABLE",
-                "Route-generation recovery state could not be inspected.",
-                "Restore readable app/public/data state before verification or proof reuse.",
+                "Catalogue recovery state could not be inspected.",
+                "Restore readable repository-owned catalogue paths before mutation, verification, or proof reuse.",
             )
         ]
     if pending:
         return "pending", [
             _issue(
                 "GODIESEL_ROUTE_GENERATION_RECOVERY_PENDING",
-                "Interrupted route-generation publication still requires recovery.",
-                "Run route generation through the owning writer to recover or complete publication, then inspect again.",
+                "Unresolved catalogue publication artifacts still require recovery.",
+                "Repair the named writer recovery state, then inspect the catalogue before continuing.",
             )
         ]
     return "clear", []
+
+
+def catalogue_recovery_monitor(root: Path | str) -> ProofInputMonitor:
+    """Observe every directory that can acquire catalogue recovery residue."""
+
+    root = Path(root).resolve()
+    return ProofInputMonitor(
+        root,
+        {
+            "covered_inputs": [],
+            "_monitor_paths": [
+                str(root),
+                str(root / "app/public/data"),
+                str(root / "app/public/data/routes"),
+                str(root / "app/src/data/generated"),
+            ],
+        },
+    )
 
 
 def _normalized_path(value: str) -> str | None:
@@ -252,6 +312,46 @@ def _normalized_path(value: str) -> str | None:
         return None
     normalized = path.as_posix()
     return None if normalized == "." else normalized
+
+
+def _local_regular_file(root: Path, relative_path: object) -> Path | None:
+    if not isinstance(relative_path, str):
+        return None
+    normalized = _normalized_path(relative_path)
+    if normalized != relative_path:
+        return None
+    current = root
+    try:
+        for part in PurePosixPath(normalized).parts:
+            current = current / part
+            mode = current.lstat().st_mode
+            if stat.S_ISLNK(mode):
+                return None
+        if not stat.S_ISREG(current.lstat().st_mode):
+            return None
+        current.resolve().relative_to(root)
+    except (OSError, ValueError):
+        return None
+    return current
+
+
+def _evidence_artifacts_valid(root: Path, receipt: Mapping[str, Any]) -> bool:
+    artifacts = receipt.get("artifacts")
+    if not isinstance(artifacts, list):
+        return False
+    for artifact in artifacts:
+        if not isinstance(artifact, Mapping):
+            return False
+        path = _local_regular_file(root, artifact.get("path"))
+        expected = artifact.get("sha256")
+        if (
+            path is None
+            or not isinstance(expected, str)
+            or re.fullmatch(r"[a-f0-9]{64}", expected) is None
+            or _file_digest(path) != expected
+        ):
+            return False
+    return True
 
 
 def _git_changed_paths(root: Path, base_ref: str) -> tuple[list[str], list[dict[str, str]]]:
@@ -605,7 +705,58 @@ def _artifact_manifest_files(value: object) -> list[dict[str, object]]:
     return files
 
 
-def read_target_build_identity(provider_target: str) -> Mapping[str, object]:
+def _validate_build_identity_shape(value: object) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise ValueError("build identity is not an object")
+    artifact_kind = value.get("artifact_kind")
+    expected_keys = {
+        "schema_version",
+        "document_type",
+        "artifact_kind",
+        "commit",
+        "tree",
+        "build_id",
+    }
+    if artifact_kind in {"built-artifact", "unverified-working-tree-artifact"}:
+        expected_keys.add("artifact_manifest_sha256")
+    if (
+        set(value) != expected_keys
+        or value.get("schema_version") != 1
+        or value.get("document_type") != "godiesel-build-identity"
+        or artifact_kind
+        not in {
+            "built-artifact",
+            "development-server",
+            "unverified-working-tree-artifact",
+        }
+        or not isinstance(value.get("commit"), str)
+        or re.fullmatch(r"[a-f0-9]{40}", str(value.get("commit"))) is None
+        or not isinstance(value.get("tree"), str)
+        or re.fullmatch(r"[a-f0-9]{40}", str(value.get("tree"))) is None
+        or not isinstance(value.get("build_id"), str)
+    ):
+        raise ValueError("build identity has an invalid closed shape")
+    try:
+        UUID(str(value["build_id"]))
+    except ValueError as error:
+        raise ValueError("build identity has an invalid build id") from error
+    if "artifact_manifest_sha256" in expected_keys and (
+        not isinstance(value.get("artifact_manifest_sha256"), str)
+        or re.fullmatch(
+            r"[a-f0-9]{64}", str(value.get("artifact_manifest_sha256"))
+        )
+        is None
+    ):
+        raise ValueError("build identity does not bind an artifact manifest")
+    return value
+
+
+def read_target_build_identity(
+    provider_target: str,
+    *,
+    expected_commit: str | None = None,
+    expected_tree: str | None = None,
+) -> Mapping[str, object]:
     parsed_target = urlparse(provider_target)
     if (
         parsed_target.scheme not in {"http", "https"}
@@ -619,9 +770,11 @@ def read_target_build_identity(provider_target: str) -> Mapping[str, object]:
         raise ValueError("provider target must identify an origin root")
     origin = f"{parsed_target.scheme}://{parsed_target.netloc}"
     payload = _read_target_bytes(origin, "build-identity.json", 65_536)
-    value = json.loads(payload.decode("utf-8"))
-    if not isinstance(value, dict):
-        raise ValueError("build identity is not an object")
+    value = _validate_build_identity_shape(json.loads(payload.decode("utf-8")))
+    if expected_commit is not None and value["commit"] != expected_commit:
+        raise ValueError("build identity commit does not match the expected commit")
+    if expected_tree is not None and value["tree"] != expected_tree:
+        raise ValueError("build identity tree does not match the expected tree")
     if value.get("artifact_kind") in {
         "built-artifact",
         "unverified-working-tree-artifact",
@@ -694,7 +847,15 @@ def verified_provider_build_identity(
             )
         ]
     try:
-        identity = dict(target_identity_reader(provider_target))
+        identity = dict(
+            read_target_build_identity(
+                provider_target,
+                expected_commit=commit,
+                expected_tree=tree,
+            )
+            if target_identity_reader is read_target_build_identity
+            else target_identity_reader(provider_target)
+        )
         schema = json.loads(
             (root / "system/build-identity.schema.json").read_text(encoding="utf-8")
         )
@@ -1173,18 +1334,57 @@ def reuse_verification(
     target_identity_reader: Callable[[str], Mapping[str, object]] = read_target_build_identity,
     repository_reader: Callable[[Path], Mapping[str, object]] = repository_snapshot,
     _recovery_monitor: ProofInputMonitor | None = None,
+    _mutation_lock_held: bool = False,
 ) -> dict[str, Any]:
     """Reuse the newest valid passed proof whose complete fingerprint still matches."""
 
     root = Path(root).resolve()
     if (
         capability_id in {"route-share", "route-generation", "owner-curation"}
+        and not _mutation_lock_held
+    ):
+        try:
+            with owner_mutation_lock(root):
+                return reuse_verification(
+                    root,
+                    capability_id,
+                    slug=slug,
+                    expected_inputs=expected_inputs,
+                    environ=environ,
+                    provider_target=provider_target,
+                    target_identity_reader=target_identity_reader,
+                    repository_reader=repository_reader,
+                    _recovery_monitor=_recovery_monitor,
+                    _mutation_lock_held=True,
+                )
+        except OwnerMutationBusyError:
+            blocker = _issue(
+                "GODIESEL_CATALOGUE_MUTATION_BUSY",
+                "Another catalogue mutation is in progress while proof reuse is requested.",
+                "Wait for the active catalogue mutation to finish, then request proof reuse again.",
+            )
+            return _reuse_result(
+                capability_id,
+                status="blocked",
+                explanation={
+                    "schema_version": SCHEMA_VERSION,
+                    "document_type": "godiesel-verification-reuse",
+                    "reused": False,
+                    "source_receipt": None,
+                    "proof_fingerprint": canonical_digest([]),
+                    "source_proof_fingerprint": None,
+                    "covered_inputs": [],
+                    "invalidated_inputs": [],
+                    "reason": blocker["message"],
+                },
+                blockers=[blocker],
+                evidence=None,
+            )
+    if (
+        capability_id in {"route-share", "route-generation", "owner-curation"}
         and _recovery_monitor is None
     ):
-        recovery_monitor = ProofInputMonitor(
-            root,
-            {"covered_inputs": [], "_monitor_paths": [str(root / "app/public/data")]},
-        )
+        recovery_monitor = catalogue_recovery_monitor(root)
         try:
             result = reuse_verification(
                 root,
@@ -1196,6 +1396,7 @@ def reuse_verification(
                 target_identity_reader=target_identity_reader,
                 repository_reader=repository_reader,
                 _recovery_monitor=recovery_monitor,
+                _mutation_lock_held=True,
             )
             _recovery_state, recovery_blockers = route_generation_recovery_state(root)
             recovery_changed = recovery_monitor.changed()
@@ -1287,7 +1488,37 @@ def reuse_verification(
     if slug is not None:
         required_input_digests["route-slug"] = canonical_digest(slug)
     candidates: list[tuple[Path, dict[str, Any]]] = []
-    for path in sorted((root / EVIDENCE_ROOT).glob("*.json"), reverse=True):
+    evidence_root_path = root / EVIDENCE_ROOT
+    safe_evidence_root = existing_local_directory(root, EVIDENCE_ROOT)
+    if safe_evidence_root is None and (
+        evidence_root_path.exists() or evidence_root_path.is_symlink()
+    ):
+        blocker = _issue(
+            "GODIESEL_EVIDENCE_ROOT_UNSAFE",
+            "The evidence root is not a repository-owned directory.",
+            "Restore a real .godiesel/evidence directory inside the checkout before proof reuse.",
+        )
+        return _reuse_result(
+            capability_id,
+            status="blocked",
+            explanation={
+                "schema_version": SCHEMA_VERSION,
+                "document_type": "godiesel-verification-reuse",
+                "reused": False,
+                "source_receipt": None,
+                "proof_fingerprint": canonical_digest([]),
+                "source_proof_fingerprint": None,
+                "covered_inputs": [],
+                "invalidated_inputs": [],
+                "reason": blocker["message"],
+            },
+            blockers=[blocker],
+            evidence=None,
+        )
+    invalid_artifact_candidate: tuple[Path, dict[str, Any]] | None = None
+    for path in sorted((safe_evidence_root or evidence_root_path).glob("*.json"), reverse=True):
+        if path.is_symlink() or not path.is_file():
+            continue
         try:
             receipt = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -1299,7 +1530,7 @@ def reuse_verification(
             gate.get("status") == "passed" and gate.get("exit_code") == 0
             for gate in gates
         )
-        if (
+        matches_request = (
             receipt.get("capability") == capability_id
             and receipt.get("verb") == "verify"
             and receipt.get("status") == "passed"
@@ -1311,7 +1542,12 @@ def reuse_verification(
                 )
                 for name, digest in required_input_digests.items()
             )
-        ):
+        )
+        if matches_request and not _evidence_artifacts_valid(root, receipt):
+            if invalid_artifact_candidate is None:
+                invalid_artifact_candidate = (path, receipt)
+            continue
+        if matches_request:
             candidates.append((path, receipt))
 
     provider_identity = None
@@ -1437,6 +1673,37 @@ def reuse_verification(
             capability_id,
             status="blocked",
             explanation=explanation,
+            blockers=[blocker],
+            evidence={
+                "id": receipt["receipt_id"],
+                "path": path.relative_to(root).as_posix(),
+                "sha256": _file_digest(path),
+            },
+        )
+
+    if invalid_artifact_candidate is not None:
+        path, receipt = invalid_artifact_candidate
+        blocker = _issue(
+            "GODIESEL_PROOF_ARTIFACT_INVALID",
+            "A referenced verification artifact is missing or no longer matches its recorded digest.",
+            "Run verification again and retain every artifact bound by the new evidence receipt.",
+        )
+        return _reuse_result(
+            capability_id,
+            status="blocked",
+            explanation={
+                "schema_version": SCHEMA_VERSION,
+                "document_type": "godiesel-verification-reuse",
+                "reused": False,
+                "source_receipt": path.relative_to(root).as_posix(),
+                "proof_fingerprint": canonical_digest([]),
+                "source_proof_fingerprint": receipt.get("proof_fingerprint"),
+                "covered_inputs": [],
+                "invalidated_inputs": [
+                    {"category": "artifact", "name": "evidence-artifact"}
+                ],
+                "reason": blocker["message"],
+            },
             blockers=[blocker],
             evidence={
                 "id": receipt["receipt_id"],

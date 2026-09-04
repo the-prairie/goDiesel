@@ -247,6 +247,33 @@ def test_route_share_verify_and_reuse_block_while_generation_recovery_is_pending
     )
 
 
+def test_route_share_receipts_do_not_follow_route_share_symlink(tmp_path: Path):
+    install_evidence_contract(tmp_path)
+    external = tmp_path / "external"
+    external.mkdir()
+    (tmp_path / ".route-share").symlink_to(external, target_is_directory=True)
+    request = tmp_path / "request.json"
+    request.write_text("{}\n", encoding="utf-8")
+    proposal = {
+        "document_type": "route-share-proposal",
+        "proposal_id": "proposal-1",
+        "route_spec": {"activity_id": "route-1"},
+    }
+
+    result = execute_route_share(
+        tmp_path,
+        "plan",
+        request_path=request,
+        runner=RecordingRunner(completed([], stdout=json.dumps(proposal))),
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == (
+        "GODIESEL_LOCAL_ARTIFACT_ROOT_UNSAFE"
+    )
+    assert list(external.iterdir()) == []
+
+
 def test_route_share_preview_verify_blocks_while_generation_recovery_is_pending(
     tmp_path: Path,
 ):
@@ -747,6 +774,41 @@ def test_release_observes_transient_recovery_changes_during_publication(tmp_path
     assert result["status"] == "blocked"
     assert result["blockers"][0]["code"] == (
         "GODIESEL_ROUTE_GENERATION_RECOVERY_CHANGED"
+    )
+    receipt = json.loads((tmp_path / result["receipt"]["path"]).read_text())
+    assert receipt["outcome"] == "incomplete"
+
+
+def test_release_observes_transient_covered_input_changes_during_publication(
+    tmp_path: Path,
+):
+    implementation = tmp_path / "godiesel_route_share.py"
+    implementation.write_text("stable\n", encoding="utf-8")
+    lineage_runner = RecordingRunner()
+    establish_route_lineage(tmp_path, lineage_runner)
+
+    def mutating_release(command, **kwargs):
+        implementation.write_text("transient\n", encoding="utf-8")
+        implementation.write_text("stable\n", encoding="utf-8")
+        return completed(
+            command,
+            stdout="Deployment complete: https://a1b2c3.godiesel.pages.dev\n",
+        )
+
+    result = execute_route_share(
+        tmp_path,
+        "release",
+        slug="route-1",
+        share_name="ridge",
+        authority="external-durable",
+        target_authority="ridge",
+        runner=mutating_release,
+    )
+
+    assert result["status"] == "blocked"
+    assert any(
+        issue["code"] == "GODIESEL_VERIFICATION_INPUTS_CHANGED"
+        for issue in result["blockers"]
     )
     receipt = json.loads((tmp_path / result["receipt"]["path"]).read_text())
     assert receipt["outcome"] == "incomplete"

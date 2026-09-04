@@ -16,10 +16,17 @@ from jsonschema import Draft202012Validator
 
 from jsonschema.exceptions import SchemaError
 
-from godiesel_evidence import canonical_digest, write_evidence_receipt
+from admin_curation import OwnerMutationBusyError, owner_mutation_lock
+from godiesel_evidence import (
+    canonical_digest,
+    ensure_local_directory,
+    existing_local_directory,
+    write_evidence_receipt,
+)
 from godiesel_verification import (
     ProofInputMonitor,
     build_proof_snapshot,
+    catalogue_recovery_monitor,
     proof_snapshot_stability_issues,
     route_generation_recovery_state,
     reuse_verification,
@@ -127,9 +134,14 @@ def _release_target(
     }, []
 
 
-def _receipt_records(receipt_root: Path) -> list[tuple[Path, dict[str, Any]]]:
+def _receipt_records(root: Path, receipt_root: Path) -> list[tuple[Path, dict[str, Any]]]:
     records: list[tuple[Path, dict[str, Any]]] = []
-    for path in sorted(receipt_root.glob("*.json")):
+    safe_root = existing_local_directory(root, receipt_root.relative_to(root))
+    if safe_root is None:
+        return records
+    for path in sorted(safe_root.glob("*.json")):
+        if path.is_symlink() or not path.is_file():
+            continue
         value = _read_mapping(path)
         if value:
             records.append((path, value))
@@ -146,13 +158,30 @@ def _contained_artifact_path(
 ) -> Path | None:
     if not isinstance(relative_path, str):
         return None
-    candidate = (root / relative_path).resolve()
-    directory = (root / expected_directory).resolve()
+    normalized = Path(relative_path)
+    if normalized.is_absolute() or ".." in normalized.parts:
+        return None
     try:
-        candidate.relative_to(directory)
+        normalized.relative_to(expected_directory)
     except ValueError:
         return None
-    return candidate
+    directory = existing_local_directory(root, expected_directory)
+    if directory is None:
+        return None
+    candidate = root / normalized
+    current = root
+    try:
+        for part in normalized.parts:
+            current = current / part
+            if current.is_symlink():
+                return None
+    except OSError:
+        return None
+    try:
+        candidate.resolve().relative_to(directory)
+    except ValueError:
+        return None
+    return candidate if candidate.is_file() else None
 
 
 def _receipt_integrity_valid(
@@ -240,7 +269,7 @@ def _release_lineage_state(
 ) -> str:
     if route_slug is None:
         return "missing"
-    records = _receipt_records(receipt_root)
+    records = _receipt_records(root, receipt_root)
     records_by_path = {
         path.relative_to(root).as_posix(): value for path, value in records
     }
@@ -322,7 +351,7 @@ def _lineage_context(
     proposal_sha256: str | None,
     route_slug: str | None,
 ) -> tuple[str | None, list[dict[str, Any]]]:
-    records = _receipt_records(receipt_root)
+    records = _receipt_records(root, receipt_root)
     if proposal_sha256 is None and route_slug is not None:
         predecessor = "apply" if verb == "verify" else "verify" if verb == "release" else None
         if predecessor is not None:
@@ -448,10 +477,11 @@ def _write_receipt(
                 target[key] = target[key].format(route_slug=route_slug)
         receipt["release_target"] = target
 
-    receipt_root.mkdir(parents=True, exist_ok=True)
+    receipt_root = ensure_local_directory(root, Path(".route-share/runs"))
+    results_root = ensure_local_directory(root, Path(".route-share/results"))
+    proposals_root = ensure_local_directory(root, Path(".route-share/proposals"))
     relative_evidence = Path(".route-share") / "results" / f"{receipt_id}.json"
-    evidence_destination = root / relative_evidence
-    evidence_destination.parent.mkdir(parents=True, exist_ok=True)
+    evidence_destination = results_root / f"{receipt_id}.json"
     evidence_destination.write_text(
         json.dumps(domain_result, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -463,8 +493,7 @@ def _write_receipt(
     result_path = None
     if verb == "plan" and proposal_id is not None:
         relative_result = Path(".route-share") / "proposals" / f"{proposal_id}.json"
-        result_destination = root / relative_result
-        result_destination.parent.mkdir(parents=True, exist_ok=True)
+        result_destination = proposals_root / f"{proposal_id}.json"
         result_destination.write_text(
             json.dumps(domain_result, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
@@ -591,17 +620,60 @@ def execute_route_share(
     environ: Mapping[str, str] | None = None,
     runner: Runner = subprocess.run,
     _recovery_monitor: ProofInputMonitor | None = None,
+    _mutation_lock_held: bool = False,
 ) -> dict[str, Any]:
     """Run one route-share transition and return its stable result envelope."""
 
     if verb not in AUTHORITY:
         raise ValueError(f"unsupported route-share verb: {verb}")
     root = Path(root).resolve()
+    if (verb == "release" or (verb == "verify" and not preview)) and not _mutation_lock_held:
+        try:
+            with owner_mutation_lock(root):
+                return execute_route_share(
+                    root,
+                    verb,
+                    request_path=request_path,
+                    proposal_path=proposal_path,
+                    slug=slug,
+                    share_name=share_name,
+                    preview=preview,
+                    detach=detach,
+                    replace_existing=replace_existing,
+                    authority=authority,
+                    target_authority=target_authority,
+                    replacement_authority=replacement_authority,
+                    environ=environ,
+                    runner=runner,
+                    _recovery_monitor=_recovery_monitor,
+                    _mutation_lock_held=True,
+                )
+        except OwnerMutationBusyError:
+            return _blocked_result(
+                verb,
+                AUTHORITY[verb],
+                _issue(
+                    "GODIESEL_ROUTE_MUTATION_BUSY",
+                    "Another catalogue mutation currently owns the canonical write boundary.",
+                    "Wait for the active catalogue mutation to finish, then retry the transition.",
+                ),
+                authorized=verb not in EFFECTFUL_AUTHORITY or authority == AUTHORITY[verb],
+            )
     if verb in {"verify", "release"} and _recovery_monitor is None:
-        recovery_monitor = ProofInputMonitor(
-            root,
-            {"covered_inputs": [], "_monitor_paths": [str(root / "app/public/data")]},
-        )
+        try:
+            ensure_local_directory(root, ".route-share")
+        except OSError:
+            return _blocked_result(
+                verb,
+                AUTHORITY[verb],
+                _issue(
+                    "GODIESEL_LOCAL_ARTIFACT_ROOT_UNSAFE",
+                    "The local route-share artifact boundary is not a repository-owned directory.",
+                    "Restore a real .route-share directory inside the checkout, then retry the transition.",
+                ),
+                authorized=verb not in EFFECTFUL_AUTHORITY or authority == AUTHORITY[verb],
+            )
+        recovery_monitor = catalogue_recovery_monitor(root)
         try:
             return execute_route_share(
                 root,
@@ -619,6 +691,7 @@ def execute_route_share(
                 environ=environ,
                 runner=runner,
                 _recovery_monitor=recovery_monitor,
+                _mutation_lock_held=_mutation_lock_held,
             )
         finally:
             recovery_monitor.close()
@@ -648,6 +721,7 @@ def execute_route_share(
             f"Review the existing target, then repeat with --authorize-replacement {share_name}.",
         )
         return _blocked_result(verb, required_authority, blocker)
+    proof_snapshot = None
     if verb == "release":
         lineage_state = _release_lineage_state(
             root,
@@ -683,6 +757,7 @@ def execute_route_share(
             "route-share",
             slug=str(slug),
             environ=dict(os.environ if environ is None else environ),
+            _mutation_lock_held=_mutation_lock_held,
         )
         if proof["status"] != "passed":
             proof_codes = {
@@ -709,8 +784,12 @@ def execute_route_share(
                 authorized=True,
                 additional_issues=tuple(proof.get("blockers", [])),
             )
+        proof_snapshot = {
+            "status": "passed",
+            "covered_inputs": list(proof["result"]["covered_inputs"]),
+            "proof_fingerprint": proof["result"]["proof_fingerprint"],
+        }
 
-    proof_snapshot = None
     if verb == "verify" and not preview:
         evidence_schema = root / "system/evidence-receipt.schema.json"
         try:
@@ -812,7 +891,8 @@ def execute_route_share(
             _recovery_monitor.changed() if _recovery_monitor is not None else False
         )
         if recovery_changed and not post_recovery_blockers:
-            proof_stability_blockers.append(
+            proof_stability_blockers.insert(
+                0,
                 _issue(
                     "GODIESEL_ROUTE_GENERATION_RECOVERY_CHANGED",
                     "Route-generation recovery state changed during the route-share transition.",
@@ -870,25 +950,34 @@ def execute_route_share(
             if blockers
             else "passed"
         )
-        receipt = _write_receipt(
-            root,
-            verb=verb,
-            authority=required_authority,
-            exit_code=completed.returncode,
-            outcome=outcome,
-            domain_result=domain_result,
-            proposal=proposal,
-            route_slug=slug
-            or (
-                str(domain_result.get("slug"))
-                if verb == "apply"
-                and isinstance(domain_result, dict)
-                and domain_result.get("slug") is not None
-                else None
-            ),
-            release_target=release_target,
-            verification_mode="preview" if preview else "check",
-        )
+        try:
+            receipt = _write_receipt(
+                root,
+                verb=verb,
+                authority=required_authority,
+                exit_code=completed.returncode,
+                outcome=outcome,
+                domain_result=domain_result,
+                proposal=proposal,
+                route_slug=slug
+                or (
+                    str(domain_result.get("slug"))
+                    if verb == "apply"
+                    and isinstance(domain_result, dict)
+                    and domain_result.get("slug") is not None
+                    else None
+                ),
+                release_target=release_target,
+                verification_mode="preview" if preview else "check",
+            )
+        except OSError:
+            blockers.append(
+                _issue(
+                    "GODIESEL_LOCAL_ARTIFACT_ROOT_UNSAFE",
+                    "The local route-share artifact boundary is not a repository-owned directory.",
+                    "Restore real .route-share directories inside the checkout, then retry the transition.",
+                )
+            )
     status = "blocked" if blockers else "warning" if warnings else "passed"
     exit_code = 2 if blockers and completed.returncode == 0 else completed.returncode
     evidence = None
@@ -949,6 +1038,33 @@ def execute_route_share(
                 }
             ],
         )
+        if _recovery_monitor is not None:
+            _final_recovery_state, late_recovery_blockers = (
+                route_generation_recovery_state(root)
+            )
+            late_recovery_changed = _recovery_monitor.changed()
+            if (
+                late_recovery_blockers or late_recovery_changed
+            ) and not (post_recovery_blockers or recovery_changed):
+                late_issues = late_recovery_blockers or [
+                    _issue(
+                        "GODIESEL_ROUTE_GENERATION_RECOVERY_CHANGED",
+                        "Catalogue recovery state changed while route-share evidence was being finalized.",
+                        "Stabilize catalogue publication state and rerun route-share verification.",
+                    )
+                ]
+                blockers.extend(
+                    issue
+                    for issue in late_issues
+                    if issue["code"] not in {item["code"] for item in blockers}
+                )
+                if evidence is not None:
+                    evidence_path = root / evidence["path"]
+                    if evidence_path.is_file() and not evidence_path.is_symlink():
+                        evidence_path.unlink()
+                    evidence = None
+                status = "blocked"
+                exit_code = 2
     return {
         "schema_version": SCHEMA_VERSION,
         "document_type": "godiesel-capability-result",

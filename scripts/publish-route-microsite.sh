@@ -53,12 +53,23 @@ if [[ "$DRY_RUN" == "true" ]]; then
   REQUIRE_PROVIDER_KEY=0
 fi
 
+RELEASE_COMMIT=$(git rev-parse HEAD)
+RELEASE_TREE=$(git rev-parse 'HEAD^{tree}')
+verify_release_checkout() {
+  if [[ "$(git rev-parse HEAD)" != "$RELEASE_COMMIT" ]] || \
+     [[ "$(git rev-parse 'HEAD^{tree}')" != "$RELEASE_TREE" ]] || \
+     [[ -n "$(git status --porcelain=v1 --untracked-files=all)" ]]; then
+    echo "Release checkout changed or became dirty; refusing to publish." >&2
+    exit 1
+  fi
+}
+verify_release_checkout
+
 echo "1/4 Validating route source"
 node scripts/validate-route-microsite.mjs "$ROUTE_SLUG" source
 
 echo "2/4 Building route-only bundle"
 GODIESEL_REQUIRE_PROVIDER_KEY="$REQUIRE_PROVIDER_KEY" \
-  GODIESEL_ALLOW_UNVERIFIED_WORKING_TREE_BUILD=1 \
   GODIESEL_SINGLE_ROUTE_SLUG="$ROUTE_SLUG" \
   ./make-dist.sh
 node scripts/validate-route-microsite.mjs "$ROUTE_SLUG" dist
@@ -66,8 +77,7 @@ node scripts/validate-route-microsite.mjs "$ROUTE_SLUG" dist
 echo "3/4 Running focused microsite journey"
 (
   cd app
-  GODIESEL_ALLOW_UNVERIFIED_WORKING_TREE_BUILD=1 \
-    VITE_SINGLE_ROUTE_SLUG="$ROUTE_SLUG" \
+  VITE_SINGLE_ROUTE_SLUG="$ROUTE_SLUG" \
     npx playwright test e2e/single-route-microsite.spec.ts
 )
 
@@ -97,6 +107,7 @@ if [[ "$PUBLIC_STATUS" != "404" ]]; then
 fi
 
 echo "4/4 Publishing ${PUBLIC_URL}"
+verify_release_checkout
 npx wrangler pages deploy dist --project-name=godiesel --branch="$BRANCH" --commit-dirty=true
 (
   cd app

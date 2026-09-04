@@ -315,6 +315,19 @@ class RouteCreateTest(unittest.TestCase):
         self.assertEqual(first["result"], "created")
         self.assertEqual(second["result"], "already_applied")
 
+    def test_apply_checks_catalogue_recovery_before_canonical_writes(self):
+        proposal = propose_request(self.request(), self.root)
+        before = (self.root / "quests.json").read_bytes()
+        (self.root / ".quests.json.rollback").write_text(
+            "pending\n", encoding="utf-8"
+        )
+
+        with self.assertRaises(RouteCreateError) as raised:
+            apply_proposal(proposal, self.root, rebuild=lambda: None)
+
+        self.assertEqual(raised.exception.code, "repository.recovery_pending")
+        self.assertEqual((self.root / "quests.json").read_bytes(), before)
+
     def test_retry_after_validation_failure_revalidates_canonical_state(self):
         proposal = propose_request(self.request(), self.root)
 

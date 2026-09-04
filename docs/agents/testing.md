@@ -187,6 +187,10 @@ Live provider proof requires an explicit origin root whose non-redirected `build
 The identity must declare `artifact_kind: built-artifact`; development-server identities are rejected before a browser gate runs.
 The identity also carries a unique build instance id, so reuse blocks after a same-commit redeployment as well as after a source change.
 Its digest-bound artifact manifest inventories every served file by path, size, and SHA-256; verification fetches those bytes from the named origin and blocks proof or reuse after bundle tampering.
+Hosting control files such as `_headers` and `_redirects` are included in that manifest when present.
+The build finalizer rechecks the checkout commit, tree, and clean state after bundling, and the publisher repeats that check immediately before deployment.
+Remote identity shape and expected commit/tree are rejected before the larger artifact manifest is fetched.
+Provider configuration presence is sampled again after the live gate so file-backed configuration cannot disappear while a passed receipt is issued.
 
 Documentation, evidence packaging, or unrelated edits do not invalidate a proof unless they change an executable command, contract, or claimed behavior.
 

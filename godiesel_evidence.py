@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 import subprocess
 import uuid
 from datetime import datetime, timezone
@@ -33,6 +34,47 @@ def _file_digest(path: Path) -> str:
         for chunk in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def ensure_local_directory(root: Path | str, relative: Path | str) -> Path:
+    """Create a repository-owned directory without traversing symbolic links."""
+
+    root = Path(root).resolve()
+    relative = Path(relative)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise OSError("local artifact directory must stay inside the repository")
+    current = root
+    for part in relative.parts:
+        current = current / part
+        try:
+            mode = current.lstat().st_mode
+        except FileNotFoundError:
+            current.mkdir()
+            mode = current.lstat().st_mode
+        if stat.S_ISLNK(mode) or not stat.S_ISDIR(mode):
+            raise OSError("local artifact directory is not a real directory")
+    if not current.resolve().is_relative_to(root):
+        raise OSError("local artifact directory escapes the repository")
+    return current
+
+
+def existing_local_directory(root: Path | str, relative: Path | str) -> Path | None:
+    """Resolve an existing repository-owned directory without following symlinks."""
+
+    try:
+        root = Path(root).resolve()
+        relative = Path(relative)
+        if relative.is_absolute() or ".." in relative.parts:
+            return None
+        current = root
+        for part in relative.parts:
+            current = current / part
+            mode = current.lstat().st_mode
+            if stat.S_ISLNK(mode) or not stat.S_ISDIR(mode):
+                return None
+        return current if current.resolve().is_relative_to(root) else None
+    except OSError:
+        return None
 
 
 def _git(root: Path, *args: str, text: bool = True) -> subprocess.CompletedProcess[Any]:
@@ -131,8 +173,10 @@ def write_evidence_receipt(
         "artifacts": [dict(item) for item in artifacts],
     }
     relative_path = EVIDENCE_ROOT / f"{receipt_id}.json"
-    destination = root / relative_path
-    destination.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        destination = ensure_local_directory(root, EVIDENCE_ROOT) / f"{receipt_id}.json"
+    except OSError:
+        return None
     temporary = destination.with_suffix(f".tmp-{os.getpid()}")
     temporary.write_text(
         json.dumps(receipt, indent=2, ensure_ascii=False, sort_keys=True) + "\n",

@@ -408,6 +408,33 @@ def test_generation_inspect_blocks_on_any_recovery_residue(
     )
 
 
+@pytest.mark.parametrize(
+    "relative_path",
+    [
+        ".quests.json.rollback",
+        ".quests.json.1234.tmp",
+        "app/src/data/generated/.route-stats.json.recovery",
+        "app/public/data/routes/.route-1.json.rollback",
+    ],
+)
+def test_generation_inspect_blocks_on_every_catalogue_recovery_family(
+    tmp_path: Path,
+    relative_path: str,
+):
+    root = _generation_fixture(tmp_path)
+    residue = root / relative_path
+    residue.parent.mkdir(parents=True, exist_ok=True)
+    residue.write_text("pending\n", encoding="utf-8")
+
+    result = execute_route_generation(root, "inspect")
+
+    assert result["status"] == "blocked"
+    assert result["result"]["recovery_state"] == "pending"
+    assert result["blockers"][-1]["code"] == (
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_PENDING"
+    )
+
+
 def test_generation_apply_requires_authority_before_invoking_writer(tmp_path: Path):
     root = _generation_fixture(tmp_path)
     calls: list[object] = []
@@ -673,6 +700,38 @@ def test_generation_verify_observes_recovery_changes_before_proof_snapshot(
     }
     receipt = json.loads((root / result["evidence"]["path"]).read_text())
     assert receipt["status"] == "blocked"
+
+
+def test_generation_verify_withdraws_proof_if_recovery_changes_during_evidence_write(
+    tmp_path: Path,
+    monkeypatch,
+):
+    root = _generation_fixture(tmp_path)
+    original_write = godiesel_local_capabilities.write_evidence_receipt
+    staging = root / "app/public/data/.routes-staging-interrupted"
+
+    def racing_write(*args, **kwargs):
+        evidence = original_write(*args, **kwargs)
+        staging.mkdir()
+        staging.rmdir()
+        return evidence
+
+    monkeypatch.setattr(
+        "godiesel_local_capabilities.write_evidence_receipt", racing_write
+    )
+    result = execute_route_generation(
+        root,
+        "verify",
+        runner=lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 0, "passed", ""
+        ),
+    )
+
+    assert result["status"] == "blocked"
+    assert result["evidence"] is None
+    assert result["blockers"][0]["code"] == (
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_CHANGED"
+    )
 
 
 @pytest.mark.parametrize(
@@ -1180,6 +1239,56 @@ def test_curation_apply_blocks_while_another_process_owns_mutation_lock(tmp_path
 
     assert result["status"] == "blocked"
     assert result["blockers"][0]["code"] == "GODIESEL_OWNER_MUTATION_BUSY"
+
+
+def test_curation_apply_checks_recovery_before_mutating_canonical_state(
+    monkeypatch,
+    tmp_path: Path,
+):
+    root = _curation_fixture(tmp_path)
+    plan = _plan_curation(root)
+    before = (root / "quests.json").read_bytes()
+    (root / ".quests.json.rollback").write_text("pending\n", encoding="utf-8")
+    called = False
+
+    def fake_save(*args, **kwargs):
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr("godiesel_local_capabilities.save_owner_curation", fake_save)
+    result = execute_owner_curation(
+        root,
+        "apply",
+        plan_path=plan,
+        authority="canonical-local",
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == (
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_PENDING"
+    )
+    assert (root / "quests.json").read_bytes() == before
+    assert called is False
+
+
+def test_catalogue_lock_does_not_follow_godiesel_symlink(tmp_path: Path):
+    root = _curation_fixture(tmp_path / "checkout")
+    plan = _plan_curation(root)
+    external = tmp_path / "external"
+    external.mkdir()
+    (root / ".godiesel").rename(root / ".godiesel-real")
+    (root / ".godiesel").symlink_to(external, target_is_directory=True)
+
+    result = execute_owner_curation(
+        root,
+        "apply",
+        plan_path=root / ".godiesel-real/plans/owner-curation" / plan.name,
+        authority="canonical-local",
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_OWNER_MUTATION_BUSY"
+    assert list(external.iterdir()) == []
 
 
 def test_curation_reapply_is_idempotent_without_reinvoking_writer(monkeypatch, tmp_path: Path):
@@ -2123,6 +2232,37 @@ def test_provider_verify_fingerprints_env_file_presence_without_exporting_secret
     evidence = result["evidence"]
     receipt = (tmp_path / evidence["path"]).read_text(encoding="utf-8")
     assert secret not in receipt
+
+
+def test_provider_verify_blocks_if_file_configuration_disappears_during_gate(
+    tmp_path: Path,
+):
+    _initialize_git_repository(tmp_path)
+    _install_evidence_contract(tmp_path)
+    env_file = tmp_path / "app/.env"
+    env_file.parent.mkdir(parents=True, exist_ok=True)
+    env_file.write_text("VITE_GOOGLE_MAPS_API_KEY=file-only-secret\n", encoding="utf-8")
+
+    def runner(command, **kwargs):
+        env_file.unlink()
+        return subprocess.CompletedProcess(command, 0, "passed", "")
+
+    result = execute_provider_readiness(
+        tmp_path,
+        "verify",
+        provider="atlas",
+        provider_target="https://preview.example.test/",
+        environ={},
+        runner=runner,
+        target_identity_reader=_matching_target_identity,
+        repository_reader=_clean_repository_identity,
+    )
+
+    assert result["status"] == "blocked"
+    assert any(
+        issue["code"] == "GODIESEL_LIVE_CONFIGURATION_MISSING"
+        for issue in result["blockers"]
+    )
 
 
 def test_provider_proof_reuse_invalidates_when_adapter_changes(tmp_path: Path):

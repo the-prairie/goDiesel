@@ -14,6 +14,7 @@ from curation_publish import (
     CurationRecoveryError,
     publish_curation,
 )
+from godiesel_evidence import ensure_local_directory
 from quest_meta import (
     CURATION_LIST_FIELDS,
     CURATION_TEXT_FIELDS,
@@ -40,8 +41,12 @@ def owner_mutation_lock(checkout_root):
     """Serialize owner curation across the Admin server and local CLI processes."""
 
     root = Path(checkout_root).resolve()
-    lock_path = root / ".godiesel/owner-mutation.lock"
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        lock_path = ensure_local_directory(root, ".godiesel") / "owner-mutation.lock"
+    except OSError as error:
+        raise OwnerMutationBusyError(
+            "owner mutation lock boundary is unavailable"
+        ) from error
     with lock_path.open("a+", encoding="utf-8") as lock_file:
         try:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)

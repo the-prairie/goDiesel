@@ -23,7 +23,7 @@
         "release": ["route slug", "stable share name", "exact target authority", "exact replacement authority when replacing an alias"]
       },
       "reads": ["quests.json", "route_sources/**", ".route-share/**"],
-      "writes": [".route-share/**", ".godiesel/evidence/**", ".godiesel/owner-mutation.lock", "quests.json", "route_sources/imported/**", "route_sources/media/**", "app/public/media/**", "app/src/data/generated/**", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**", "app/dist/**", "app/test-results/**", "app/playwright-report/**", "dist/**"],
+      "writes": [".route-share/**", ".godiesel/evidence/**", ".godiesel/owner-mutation.lock", "quests.json", ".quests.json.*.tmp", "route_sources/imported/**", "route_sources/media/**", "app/public/media/**", "app/src/data/generated/**", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**", "app/dist/**", "app/test-results/**", "app/playwright-report/**", "dist/**"],
       "external_effects": ["cloudflare-pages-route-branch"],
       "required_files": ["scripts/godiesel", "godiesel_route_share.py", "godiesel_evidence.py", "godiesel_verification.py", "scripts/route.sh", "route_create.py", "route_create.schema.json", "system/result.schema.json", "system/route-share-receipt.schema.json", "system/evidence-receipt.schema.json", "system/verification-explanation.schema.json", "system/verification-reuse.schema.json", "docs/agents/route-share.md"],
       "configuration": [
@@ -68,6 +68,7 @@
         { "kind": "route-share-result-artifact", "location": ".route-share/results/**", "persistence": "ignored-local" },
         { "kind": "verification-evidence-receipt", "location": ".godiesel/evidence/**", "persistence": "ignored-local", "schema": "system/evidence-receipt.schema.json" },
         { "kind": "route-share-creation-report", "location": "command result", "persistence": "ignored-local", "schema": "route-share-creation-report" },
+        { "kind": "route-canonical-temporary", "location": ".quests.json.*.tmp", "persistence": "ignored-local" },
         { "kind": "route-source-staging", "location": ".route-share/staging/**", "persistence": "ignored-local" },
         { "kind": "route-write-recovery", "location": ".route-share/recovery/**", "persistence": "ignored-local" },
         { "kind": "route-generation-recovery", "location": "app/public/data/.route-generation-backup/**", "persistence": "ignored-local" },
@@ -90,7 +91,7 @@
             "cwd": ".",
             "proof_inputs": [
               { "category": "implementation", "paths": ["godiesel_control.py", "godiesel_evidence.py", "godiesel_route_share.py", "godiesel_verification.py", "scripts/godiesel", "route_create.py", "route_status.py", "admin_curation.py", "curation_publish.py", "generated_route_contract.py", "route_build.py", "build.py", "quest_meta.py", "route_provenance.py", "route_annotations.py", "route_imports.py", "route_timezones.py", "scripts/route.sh", "scripts/route-preview.sh", "scripts/publish-route-microsite.sh", "scripts/scope-route-microsite.mjs", "app/src/**", "app/scripts/check-bundle-budget.mjs", "app/scripts/finalize-build-identity.mjs", "app/scripts/smoke-single-route-microsite.mjs"] },
-              { "category": "data", "paths": ["quests.json", "route_sources/**", "app/src/data/generated/**", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**", "app/public/media/**"] },
+              { "category": "data", "paths": ["quests.json", ".quests.json.*.tmp", "route_sources/**", "app/src/data/generated/**", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**", "app/public/media/**"] },
               { "category": "fixture", "paths": ["test_godiesel_control.py", "test_godiesel_route_share.py", "test_godiesel_verification.py", "test_route_create.py", "test_route_provenance.py", "test_route_share_cli.py", "app/e2e/single-route-microsite.spec.ts"] },
               { "category": "contract", "paths": ["route_create.schema.json", "system/artifact-manifest.schema.json", "system/build-identity.schema.json", "system/capabilities.json", "system/capabilities.schema.json", "system/result.schema.json", "system/route-share-receipt.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json"] },
               { "category": "configuration", "paths": [".gitignore", "make-dist.sh", "requirements.txt", "app/package.json", "app/package-lock.json", "app/vite.config.ts", "app/playwright.config.ts"] }

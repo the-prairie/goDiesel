@@ -62,7 +62,8 @@ Review the plan, then apply that exact file with explicit local authority:
 Apply blocks when the plan digest is invalid, the checkout or implementation changed, or route state changed after planning.
 Reapplying an already completed plan succeeds without invoking the writer again only when canonical curation and the complete generated projection agree.
 The CLI and loopback HTTP endpoint call the same `save_owner_curation` service, which retains validation, incremental publication, full-rebuild fallback, source rollback, and generated-file recovery behavior.
-All Admin and unified CLI writes to the owner-owned route catalogue or its generated projections share one non-blocking cross-process lock.
+All Admin and unified CLI writes to the owner-owned route catalogue or its generated projections share one non-blocking cross-process lock under a real repository-owned `.godiesel` directory.
+Apply checks the complete recovery inventory after acquiring that lease and before changing canonical state.
 
 Run or reuse the existing writer and recovery proof:
 
@@ -71,8 +72,8 @@ Run or reuse the existing writer and recovery proof:
 ./scripts/godiesel verify owner-curation --reuse --json
 ```
 
-Fresh verification and proof reuse monitor full-generation recovery state from before the initial check through the final proof decision.
-They block on persistent or transient backup and staging residue, including malformed or dangling symbolic-link entries.
+Fresh verification and proof reuse hold the same lease and monitor the complete catalogue recovery inventory from before the initial check through evidence finalization.
+They block on persistent or transient canonical temporary, rollback, generated metadata, route-detail, backup, and staging residue, including malformed or dangling symbolic-link entries.
 
 ## Planned Routes
 

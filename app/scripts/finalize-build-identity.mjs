@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,11 +11,16 @@ const distRoot = process.argv[2]
 const identityPath = path.join(distRoot, "build-identity.json");
 const manifestPath = path.join(distRoot, "artifact-manifest.json");
 const excluded = new Set([
-  "_headers",
-  "_redirects",
   "artifact-manifest.json",
   "build-identity.json",
 ]);
+
+function gitOutput(...args) {
+  return execFileSync("git", args, {
+    cwd: path.resolve(appRoot, ".."),
+    encoding: "utf8",
+  }).trim();
+}
 
 function digest(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
@@ -41,6 +47,17 @@ function artifactFiles(directory, prefix = "") {
 }
 
 const identity = JSON.parse(fs.readFileSync(identityPath, "utf8"));
+const currentCommit = gitOutput("rev-parse", "HEAD");
+const currentTree = gitOutput("rev-parse", "HEAD^{tree}");
+if (identity.commit !== currentCommit || identity.tree !== currentTree) {
+  throw new Error("Build identity no longer matches the checkout commit and tree");
+}
+if (
+  identity.artifact_kind === "built-artifact" &&
+  gitOutput("status", "--porcelain", "--untracked-files=all")
+) {
+  throw new Error("A built artifact requires an unchanged clean checkout");
+}
 const manifest = {
   schema_version: 1,
   document_type: "godiesel-artifact-manifest",

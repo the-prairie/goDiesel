@@ -107,6 +107,43 @@ def test_target_build_identity_verifies_every_manifest_asset():
         thread.join()
 
 
+def test_target_build_identity_rejects_invalid_identity_before_manifest_fetch():
+    requests: list[str] = []
+    identity = {
+        "schema_version": 1,
+        "document_type": "godiesel-build-identity",
+        "artifact_kind": "built-artifact",
+        "artifact_manifest_sha256": "a" * 64,
+        "commit": "b" * 40,
+        "tree": "c" * 40,
+        "build_id": "not-a-uuid",
+    }
+
+    class IdentityHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            requests.append(self.path)
+            self.send_response(200)
+            payload = json.dumps(identity).encode()
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, format, *args):
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), IdentityHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with pytest.raises(ValueError, match="invalid build id"):
+            read_target_build_identity(f"http://127.0.0.1:{server.server_port}/")
+        assert requests == ["/build-identity.json"]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
 class RecordingRunner:
     def __init__(self):
         self.calls: list[list[str]] = []
@@ -1329,6 +1366,25 @@ def test_reuse_returns_the_existing_proof_without_executing_a_gate(tmp_path: Pat
     ).validate(reused["result"])
 
 
+def test_reuse_rejects_missing_bound_artifact(tmp_path: Path):
+    _write_reuse_fixture(tmp_path)
+    recorded, _runner = _record_proof(tmp_path)
+    receipt = json.loads(
+        (tmp_path / recorded["evidence"]["path"]).read_text(encoding="utf-8")
+    )
+    (tmp_path / receipt["artifacts"][0]["path"]).unlink()
+
+    reused = reuse_verification(
+        tmp_path,
+        "route-share",
+        slug="route-1",
+        environ={},
+    )
+
+    assert reused["status"] == "blocked"
+    assert reused["blockers"][0]["code"] == "GODIESEL_PROOF_ARTIFACT_INVALID"
+
+
 def test_reuse_observes_transient_recovery_changes_during_snapshot(
     tmp_path: Path,
     monkeypatch,
@@ -1694,3 +1750,12 @@ def test_cli_rejects_reuse_with_preview_modes(arguments, capsys):
 
     assert raised.value.code == 2
     assert "--reuse cannot be combined with --preview or --detach" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("target", ["route-generation", "owner-curation"])
+def test_cli_rejects_route_share_preview_flags_for_other_targets(target, capsys):
+    with pytest.raises(SystemExit) as raised:
+        main(["verify", target, "--reuse", "--preview"])
+
+    assert raised.value.code == 2
+    assert "--preview and --detach only support route-share" in capsys.readouterr().err

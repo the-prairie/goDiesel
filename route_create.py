@@ -1362,6 +1362,14 @@ def _apply_proposal_unlocked(
 ) -> dict[str, object]:
     """Apply an approved proposal without duplicating or partially writing a route."""
     root = Path(root).resolve()
+    from godiesel_verification import route_generation_recovery_state
+
+    recovery_state, recovery_blockers = route_generation_recovery_state(root)
+    if recovery_blockers:
+        raise RouteCreateError(
+            "repository.recovery_pending",
+            f"catalogue recovery state is {recovery_state}; repair it before applying a proposal",
+        )
     proposal = _validate_proposal(proposal, root)
     if proposal.get("blocking_errors"):
         raise RouteCreateError("proposal.blocked", "proposal contains blocking errors")

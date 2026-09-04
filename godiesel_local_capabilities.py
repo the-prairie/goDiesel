@@ -42,6 +42,7 @@ from godiesel_evidence import (
 from godiesel_verification import (
     ProofInputMonitor,
     build_proof_snapshot,
+    catalogue_recovery_monitor,
     proof_snapshot_stability_issues,
     read_target_build_identity,
     route_generation_recovery_state,
@@ -457,6 +458,7 @@ def _run_verification(
     tier: str,
     environ: Mapping[str, str],
     proof_environ: Mapping[str, str] | None = None,
+    refresh_proof_environ: Callable[[], Mapping[str, str]] | None = None,
     runner: Runner,
     inputs: list[dict[str, str]],
     result: Callable[[subprocess.CompletedProcess[str]], dict[str, object]],
@@ -546,12 +548,17 @@ def _run_verification(
             )
         elif post_identity_blockers:
             blockers.extend(post_identity_blockers)
+    post_proof_environment = (
+        dict(refresh_proof_environ())
+        if refresh_proof_environ is not None
+        else proof_environment
+    )
     post_snapshot = build_proof_snapshot(
         root,
         capability,
         tiers=[tier],
         commands=[display_command],
-        environ=proof_environment,
+        environ=post_proof_environment,
         provider_target=provider_target,
         provider_identity=post_provider_identity,
     )
@@ -567,6 +574,7 @@ def _run_verification(
                 "Stabilize the worktree and rerun verification against one unchanged input set.",
             )
         )
+    recovery_changed_before_write = False
     if recovery_monitor is not None:
         _recovery_state, recovery_blockers = route_generation_recovery_state(root)
         stability_blockers.extend(
@@ -575,7 +583,8 @@ def _run_verification(
             if issue["code"]
             not in {blocker["code"] for blocker in stability_blockers}
         )
-        if recovery_monitor.changed() and not recovery_blockers:
+        recovery_changed_before_write = recovery_monitor.changed()
+        if recovery_changed_before_write and not recovery_blockers:
             stability_blockers.append(
                 _issue(
                     "GODIESEL_ROUTE_GENERATION_RECOVERY_CHANGED",
@@ -632,6 +641,31 @@ def _run_verification(
                 "Repair the ignored .godiesel evidence directory before retrying.",
             )
         )
+    if recovery_monitor is not None:
+        _final_recovery_state, final_recovery_blockers = route_generation_recovery_state(
+            root
+        )
+        recovery_changed_after_write = recovery_monitor.changed()
+        if (
+            final_recovery_blockers or recovery_changed_after_write
+        ) and not recovery_changed_before_write:
+            late_blockers = final_recovery_blockers or [
+                _issue(
+                    "GODIESEL_ROUTE_GENERATION_RECOVERY_CHANGED",
+                    "Catalogue recovery state changed while verification evidence was being finalized.",
+                    "Stabilize catalogue publication state and rerun verification.",
+                )
+            ]
+            blockers.extend(
+                issue
+                for issue in late_blockers
+                if issue["code"] not in {item["code"] for item in blockers}
+            )
+            if evidence is not None:
+                evidence_path = root / evidence["path"]
+                if evidence_path.is_file() and not evidence_path.is_symlink():
+                    evidence_path.unlink()
+                evidence = None
     envelope = _envelope(
         capability,
         "verify",
@@ -654,6 +688,7 @@ def execute_route_generation(
     authority: str | None = None,
     environ: Mapping[str, str] | None = None,
     runner: Runner = subprocess.run,
+    _mutation_lock_held: bool = False,
 ) -> dict[str, Any]:
     """Inspect or invoke the sole full-catalogue route-data writer."""
 
@@ -661,6 +696,34 @@ def execute_route_generation(
         raise ValueError(f"unsupported route-generation verb: {verb}")
     root = Path(root).resolve()
     required_authority = GENERATION_AUTHORITY[verb]
+    if verb == "verify" and not _mutation_lock_held:
+        try:
+            with owner_mutation_lock(root):
+                return execute_route_generation(
+                    root,
+                    verb,
+                    authority=authority,
+                    environ=environ,
+                    runner=runner,
+                    _mutation_lock_held=True,
+                )
+        except OwnerMutationBusyError:
+            return _envelope(
+                "route-generation",
+                verb,
+                required_authority,
+                status="blocked",
+                authorized=True,
+                result={"recovery_state": "mutation-busy"},
+                result_contract="godiesel_local_capabilities.py#route-generation-recovery",
+                blockers=[
+                    _issue(
+                        "GODIESEL_ROUTE_GENERATION_BUSY",
+                        "Another catalogue mutation currently owns the generated-data boundary.",
+                        "Wait for the active catalogue mutation to finish, then retry verification.",
+                    )
+                ],
+            )
     if verb == "apply" and authority != required_authority:
         return _envelope(
             "route-generation",
@@ -697,10 +760,7 @@ def execute_route_generation(
         command = [str(root / "rebuild.sh")]
         display_command = "./rebuild.sh"
     else:
-        recovery_monitor = ProofInputMonitor(
-            root,
-            {"covered_inputs": [], "_monitor_paths": [str(root / "app/public/data")]},
-        )
+        recovery_monitor = catalogue_recovery_monitor(root)
         try:
             recovery_state, recovery_blockers = route_generation_recovery_state(root)
             if recovery_blockers:
@@ -1145,6 +1205,7 @@ def execute_owner_curation(
     authority: str | None = None,
     environ: Mapping[str, str] | None = None,
     runner: Runner = subprocess.run,
+    _mutation_lock_held: bool = False,
 ) -> dict[str, Any]:
     """Inspect or invoke the local owner-curation writer and recovery path."""
 
@@ -1152,6 +1213,36 @@ def execute_owner_curation(
         raise ValueError(f"unsupported owner-curation verb: {verb}")
     root = Path(root).resolve()
     required_authority = CURATION_AUTHORITY[verb]
+    if verb == "verify" and not _mutation_lock_held:
+        try:
+            with owner_mutation_lock(root):
+                return execute_owner_curation(
+                    root,
+                    verb,
+                    request_path=request_path,
+                    plan_path=plan_path,
+                    authority=authority,
+                    environ=environ,
+                    runner=runner,
+                    _mutation_lock_held=True,
+                )
+        except OwnerMutationBusyError:
+            return _envelope(
+                "owner-curation",
+                verb,
+                required_authority,
+                status="blocked",
+                authorized=True,
+                result={"recovery_state": "mutation-busy"},
+                result_contract="godiesel_local_capabilities.py#owner-curation-recovery",
+                blockers=[
+                    _issue(
+                        "GODIESEL_OWNER_MUTATION_BUSY",
+                        "Another owner mutation currently owns the canonical write boundary.",
+                        "Wait for the active catalogue mutation to finish, then retry verification.",
+                    )
+                ],
+            )
     if verb == "apply" and authority != required_authority:
         return _envelope(
             "owner-curation",
@@ -1184,10 +1275,7 @@ def execute_owner_curation(
     if verb == "plan":
         return _plan_owner_curation(root, request_path)
     if verb == "verify":
-        recovery_monitor = ProofInputMonitor(
-            root,
-            {"covered_inputs": [], "_monitor_paths": [str(root / "app/public/data")]},
-        )
+        recovery_monitor = catalogue_recovery_monitor(root)
         try:
             recovery_state, recovery_blockers = route_generation_recovery_state(root)
             if recovery_blockers:
@@ -1241,6 +1329,18 @@ def execute_owner_curation(
 
     try:
         with owner_mutation_lock(root):
+            recovery_state, recovery_blockers = route_generation_recovery_state(root)
+            if recovery_blockers:
+                return _envelope(
+                    "owner-curation",
+                    verb,
+                    required_authority,
+                    status="blocked",
+                    authorized=True,
+                    result={"recovery_state": recovery_state},
+                    result_contract="godiesel_local_capabilities.py#owner-curation-recovery",
+                    blockers=recovery_blockers,
+                )
             plan, blockers = _load_curation_plan(root, plan_path)
             if blockers or plan is None:
                 return _envelope(
@@ -1848,6 +1948,9 @@ def execute_provider_readiness(
             tier="live",
             environ=process_env,
             proof_environ=proof_env,
+            refresh_proof_environ=lambda: provider_proof_environment(
+                root, process_env
+            ),
             runner=runner,
             inputs=[
                 {"kind": "provider", "name": "provider", "sha256": canonical_digest(provider)},

@@ -26,7 +26,9 @@ Normal, non-preview route verification additionally writes a general proof recei
 Preview writes only its route-transition receipt because it starts a loopback runtime instead of executing the manifest-declared focused proof gate.
 Impact-directed gate selection and guarded proof reuse are implemented for route verification.
 Proof reuse is mutually exclusive with `--preview` and `--detach` because preview is an executable runtime check, not a reusable proof lookup.
-Verify and release monitor interrupted generation state across their complete decision window.
+Apply, verify, proof reuse, and release share one catalogue mutation lease.
+They block on any unresolved canonical, generated-metadata, route-detail, generation backup, or generation staging artifact.
+Verify and release monitor that recovery inventory across their complete decision window and withdraw proof if it changes while evidence is finalized.
 
 ## State Machine
 
@@ -140,7 +142,7 @@ After explicit approval to create, run:
 `create` registers durable sources, atomically updates `quests.json`, rebuilds generated data, validates source health and the microsite source record, and emits a JSON creation report.
 The same approved proposal may be applied again and returns `already_applied`.
 If post-write validation fails, report the recoverable state under `.route-share/recovery/` and do not publish.
-The generator may also retain its ignored atomic-publication backup under `app/public/data/.route-generation-backup/` until recovery is complete.
+Recovery inventory includes canonical `.quests.json.*.tmp` and rollback files, generated metadata temporary, recovery, and rollback files, route-detail rollback files, the atomic-publication backup, and route staging directories.
 
 `preview` runs the existing route-only dry-run before it starts a loopback-only server on an available port.
 That bundle contains only the shared route's generated record and public media referenced by that record.
@@ -150,6 +152,7 @@ Report the exact validation outcome, local guide URL, and local Replay URL.
 Use `--reuse` only after the normal, non-preview verification has passed and written general evidence.
 It re-hashes every manifest-covered implementation, contract, fixture, configuration, data, and provider input for the focused route-share gate.
 It does not execute the gate and blocks when any covered input or selected command changed.
+Every artifact referenced by the source evidence receipt must still exist as a repository-owned regular file with its recorded digest.
 Documentation-only edits remain outside the runtime proof fingerprint.
 
 ## Evidence artifacts
