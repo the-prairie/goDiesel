@@ -216,6 +216,8 @@ def _issue(code: str, message: str, remediation: str) -> dict[str, str]:
 
 def route_generation_recovery_state(
     root: Path | str,
+    *,
+    allowed_route_share_recovery: str | None = None,
 ) -> tuple[str, list[dict[str, str]]]:
     """Return fail-closed state for unresolved catalogue publication artifacts."""
 
@@ -267,7 +269,8 @@ def route_generation_recovery_state(
         if route_share_recovery_root.exists() or route_share_recovery_root.is_symlink():
             pending = pending or has_entry(
                 route_share_recovery_root,
-                lambda name: name.endswith(".json"),
+                lambda name: name.endswith(".json")
+                and name != allowed_route_share_recovery,
             )
     except OSError:
         return "unreadable", [
