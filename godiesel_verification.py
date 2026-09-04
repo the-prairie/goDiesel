@@ -572,6 +572,14 @@ def verified_provider_build_identity(
                 "Deploy this branch with build-identity.json enabled, then retry the exact target.",
             )
         ]
+    if identity["artifact_kind"] != "built-artifact":
+        return None, [
+            _issue(
+                "GODIESEL_PROVIDER_BUILD_ARTIFACT_REQUIRED",
+                "Live provider proof requires a target serving the immutable built application artifact.",
+                "Build this branch and serve app/dist through the canonical preview target, then retry.",
+            )
+        ]
     if identity["commit"] != commit:
         return None, [
             _issue(

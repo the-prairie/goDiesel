@@ -71,6 +71,7 @@ def _matching_target_identity(_target: str) -> dict[str, object]:
     return {
         "schema_version": 1,
         "document_type": "godiesel-build-identity",
+        "artifact_kind": "built-artifact",
         "commit": TEST_BUILD_COMMIT,
         "tree": TEST_BUILD_TREE,
         "build_id": TEST_BUILD_ID,
@@ -1380,6 +1381,31 @@ def test_provider_verify_rejects_target_built_from_another_commit(tmp_path: Path
     assert result["status"] == "blocked"
     assert result["blockers"][0]["code"] == (
         "GODIESEL_PROVIDER_BUILD_IDENTITY_MISMATCH"
+    )
+    assert calls == []
+
+
+def test_provider_verify_rejects_development_server(tmp_path: Path):
+    _install_evidence_contract(tmp_path)
+    calls: list[object] = []
+
+    result = execute_provider_readiness(
+        tmp_path,
+        "verify",
+        provider="google-3d",
+        provider_target="http://localhost:8787",
+        environ={"GOOGLE_MAPS_API_KEY": "secret"},
+        runner=lambda *args, **kwargs: calls.append((args, kwargs)),
+        target_identity_reader=lambda _target: {
+            **_matching_target_identity(""),
+            "artifact_kind": "development-server",
+        },
+        repository_reader=_clean_repository_identity,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == (
+        "GODIESEL_PROVIDER_BUILD_ARTIFACT_REQUIRED"
     )
     assert calls == []
 

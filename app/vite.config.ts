@@ -47,6 +47,8 @@ function buildIdentity(command: string) {
   return {
     schema_version: 1,
     document_type: "godiesel-build-identity",
+    artifact_kind:
+      command === "build" ? "built-artifact" : "development-server",
     commit: checkoutCommit,
     tree,
     build_id: randomUUID(),

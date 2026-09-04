@@ -178,6 +178,7 @@ Changing any covered input invalidates that proof.
 Each impact rule names the capability invariants that justify its selected gates.
 Focused route-share evidence records the exact manifest-declared route check that ran; its fingerprint covers the route-only application source, browser journey, build and scoping scripts, dependency and test configuration, route data, and public route media consumed by that check.
 Live provider proof requires an explicit origin root whose non-redirected `build-identity.json` matches the clean local commit and tree before and after the gate.
+The identity must declare `artifact_kind: built-artifact`; development-server identities are rejected before a browser gate runs.
 The identity also carries a unique build instance id, so reuse blocks after a same-commit redeployment as well as after a source change.
 
 Documentation, evidence packaging, or unrelated edits do not invalidate a proof unless they change an executable command, contract, or claimed behavior.
