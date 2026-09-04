@@ -9,11 +9,24 @@ PREVIEW_PID=""
 REAL_NPX=$(command -v npx)
 
 cleanup() {
+  local exit_code=$?
+  if [[ "$exit_code" -ne 0 ]]; then
+    for diagnostic in \
+      "$CHECKOUT/.route-share/verification-envelope.json" \
+      "$CHECKOUT/.route-share/reuse-envelope.json" \
+      "$CHECKOUT/.route-share/preview-envelope.json"; do
+      if [[ -s "$diagnostic" ]]; then
+        echo "Acceptance diagnostic: ${diagnostic#"$CHECKOUT/"}" >&2
+        sed -n '1,240p' "$diagnostic" >&2
+      fi
+    done
+  fi
   if [[ -n "$PREVIEW_PID" ]]; then
     kill "$PREVIEW_PID" >/dev/null 2>&1 || true
   fi
   git -C "$SOURCE_ROOT" worktree remove --force "$CHECKOUT" >/dev/null 2>&1 || true
   rm -rf "$ACCEPTANCE_PARENT"
+  return "$exit_code"
 }
 trap cleanup EXIT
 
