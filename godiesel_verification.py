@@ -434,25 +434,11 @@ def _git_changed_paths(root: Path, base_ref: str) -> tuple[list[str], list[dict[
 
 
 def _load_manifest(root: Path) -> tuple[dict[str, Any] | None, list[dict[str, str]]]:
-    try:
-        value = json.loads((root / MANIFEST_PATH).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None, [
-            _issue(
-                "GODIESEL_MANIFEST_UNAVAILABLE",
-                "The capability manifest could not be read for verification selection.",
-                "Repair system/capabilities.json and rerun doctor before selecting proof.",
-            )
-        ]
-    if not isinstance(value, dict) or not isinstance(value.get("impact_rules"), list):
-        return None, [
-            _issue(
-                "GODIESEL_IMPACT_GRAPH_UNAVAILABLE",
-                "The capability manifest does not contain an impact graph.",
-                "Restore the manifest impact rules and rerun the focused control-plane tests.",
-            )
-        ]
-    return value, []
+    # Import lazily to avoid a module cycle while sharing the control plane's
+    # closed schema and semantic validation as the verification root of trust.
+    from godiesel_control import _load_manifest as load_control_manifest
+
+    return load_control_manifest(root)
 
 
 def _matches(path: str, patterns: Iterable[str]) -> bool:
@@ -480,6 +466,34 @@ def _route_generation_external_sources(
             isinstance(route, dict) for route in routes
         ):
             raise TypeError
+        repository_sources: list[dict[str, object]] = []
+        repository_monitor_paths: list[str] = []
+        for route in routes:
+            if (
+                route.get("status", "approved") != "approved"
+                or route.get("visibility", "public") == "hidden"
+                or not route.get("source_gpx")
+            ):
+                continue
+            relative = _normalized_path(str(route["source_gpx"]))
+            if relative is None:
+                raise OSError("repository GPX path is invalid")
+            source_path = root / relative
+            source_stat = source_path.lstat()
+            if _unsafe_symlink_in_path(root, source_path) or not stat.S_ISREG(
+                source_stat.st_mode
+            ):
+                raise OSError("repository GPX path is unsafe")
+            repository_sources.append(
+                {
+                    "kind": "repository-gpx",
+                    "path": relative,
+                    "file_type": "regular",
+                    "mode": stat.S_IMODE(source_stat.st_mode),
+                    "sha256": _file_digest(source_path),
+                }
+            )
+            repository_monitor_paths.append(str(source_path))
         activity_ids = sorted(
             str(route["activity_id"])
             for route in routes
@@ -488,7 +502,18 @@ def _route_generation_external_sources(
             and not route.get("source_gpx")
         )
         if not activity_ids:
-            return None, [], None
+            if not repository_sources:
+                return None, [], None
+            return (
+                {
+                    "category": "data",
+                    "name": "external-private:route-generation-sources",
+                    "state": "matched",
+                    "sha256": canonical_digest(repository_sources),
+                },
+                repository_monitor_paths,
+                None,
+            )
         metadata_path = DEFAULT_DIESEL_DIARIES_ROOT / "activities.csv"
         if not metadata_path.is_file():
             raise OSError("private activity metadata is unavailable")
@@ -496,12 +521,13 @@ def _route_generation_external_sources(
         if any(activity_id not in metadata for activity_id in activity_ids):
             raise ValueError("private activity metadata is incomplete")
         sources = [
+            *repository_sources,
             {
                 "kind": "activity-metadata",
                 "sha256": _file_digest(metadata_path),
             }
         ]
-        monitor_paths = [str(metadata_path)]
+        monitor_paths = [*repository_monitor_paths, str(metadata_path)]
         for activity_id in activity_ids:
             source_path = find_strava_activity_file(activity_id)
             if source_path is None:

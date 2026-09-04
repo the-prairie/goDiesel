@@ -587,27 +587,34 @@ def test_verification_rejects_windows_absolute_paths(tmp_path: Path, path: str):
 def _write_reuse_fixture(root: Path) -> None:
     (root / "app/public/data").mkdir(parents=True, exist_ok=True)
     (root / "system").mkdir()
-    for name in ("evidence-receipt.schema.json", "verification-reuse.schema.json"):
+    for name in (
+        "evidence-receipt.schema.json",
+        "verification-reuse.schema.json",
+        "capabilities.schema.json",
+    ):
         (root / "system" / name).write_text(
             (ROOT / "system" / name).read_text(encoding="utf-8"),
             encoding="utf-8",
         )
-    capability = {
-        "id": "route-share",
-        "invariants": ["source-truth", "single-route-microsite"],
-        "configuration": [
-            {
-                "name": "PROVIDER_PROJECT",
-                "required_for": ["verify:live"],
-                "sensitive": False,
-            }
-        ],
-        "verification": {
-            "focused": [{"command": "verify-focused", "cwd": "."}],
-            "ticket": [],
-            "release": [{"command": "verify-release", "cwd": "."}],
-            "live": [{"command": "verify-live", "cwd": "."}],
-        },
+    capability = next(
+        capability
+        for capability in json.loads(
+            (ROOT / "system/capabilities.json").read_text(encoding="utf-8")
+        )["capabilities"]
+        if capability["id"] == "route-share"
+    )
+    capability["configuration"] = [
+        {
+            "name": "PROVIDER_PROJECT",
+            "required_for": ["verify:live"],
+            "sensitive": False,
+        }
+    ]
+    capability["verification"] = {
+        "focused": [{"command": "verify-focused", "cwd": "."}],
+        "ticket": [],
+        "release": [{"command": "verify-release", "cwd": "."}],
+        "live": [{"command": "verify-live", "cwd": "."}],
     }
     categories = {
         "implementation": "implementation.py",
@@ -772,6 +779,35 @@ def test_verification_explanation_schema_is_valid():
 
     Draft202012Validator.check_schema(schema)
     Draft202012Validator.check_schema(reuse_schema)
+
+
+@pytest.mark.parametrize("malformation", ["missing-authority", "duplicate-rule-id"])
+def test_verification_rejects_manifest_semantic_failures(
+    tmp_path: Path,
+    malformation: str,
+):
+    system = tmp_path / "system"
+    system.mkdir()
+    for name in ("capabilities.json", "capabilities.schema.json"):
+        (system / name).write_text(
+            (ROOT / "system" / name).read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+    manifest_path = system / "capabilities.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if malformation == "missing-authority":
+        manifest["capabilities"][0].pop("authority")
+    else:
+        manifest["impact_rules"][1]["id"] = manifest["impact_rules"][0]["id"]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    snapshot = build_proof_snapshot(tmp_path, "route-share", tiers=["focused"])
+    explanation = explain_verification(tmp_path, changed_paths=["godiesel_control.py"])
+
+    assert snapshot["status"] == "blocked"
+    assert snapshot["blockers"][0]["code"] == "GODIESEL_MANIFEST_INVALID"
+    assert explanation["status"] == "blocked"
+    assert explanation["blockers"][0]["code"] == "GODIESEL_MANIFEST_INVALID"
 
 
 @pytest.mark.parametrize(
@@ -1429,6 +1465,9 @@ def test_reuse_rejects_missing_bound_artifact(tmp_path: Path):
 
     assert reused["status"] == "blocked"
     assert reused["blockers"][0]["code"] == "GODIESEL_PROOF_ARTIFACT_INVALID"
+    Draft202012Validator(
+        json.loads((ROOT / "system/verification-reuse.schema.json").read_text())
+    ).validate(reused["result"])
 
 
 def test_reuse_rejects_route_share_proof_without_bound_artifacts(tmp_path: Path):

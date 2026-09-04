@@ -54,6 +54,13 @@ SHARED_FIELDS = (
     "elevation_status",
     "replay",
 )
+DETAIL_FIELDS = set(SHARED_FIELDS) | {
+    "route",
+    "mid_idx",
+    "provenance",
+    "curation",
+    "annotations",
+}
 
 
 def _finite_number(value: object) -> bool:
@@ -240,6 +247,8 @@ def valid_generated_projection(
     summary: Mapping[str, object],
     detail: Mapping[str, object],
 ) -> bool:
+    if set(detail) - DETAIL_FIELDS:
+        return False
     if not _valid_common(summary) or not _valid_common(detail):
         return False
     if any(summary.get(field) != detail.get(field) for field in SHARED_FIELDS):

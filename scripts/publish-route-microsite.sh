@@ -12,12 +12,15 @@ usage() {
 Usage: ./scripts/publish-route-microsite.sh <route-slug> <share-name> [options]
 
 Options:
-  --dry-run           Validate and build without contacting Cloudflare.
-  --replace-existing  Explicitly replace an existing stable share branch.
+  --dry-run                       Validate and build without contacting Cloudflare.
+  --authorize-target <name>       Authorize this exact stable share name.
+  --authorize-replacement <name>  Authorize replacing this exact stable share name.
+  --replace-existing              Explicitly replace an existing stable share branch.
 
 Examples:
   ./scripts/publish-route-microsite.sh 3519505225411091950 appian-way --dry-run
-  ./scripts/publish-route-microsite.sh 3519505225411091950 appian-way
+  ./scripts/publish-route-microsite.sh 3519505225411091950 appian-way \
+    --authorize-target appian-way --authorize-replacement appian-way
 EOF
 }
 
@@ -25,6 +28,8 @@ ROUTE_SLUG="${1:-}"
 SHARE_NAME="${2:-}"
 DRY_RUN=false
 REPLACE_EXISTING=false
+AUTHORIZED_TARGET=""
+AUTHORIZED_REPLACEMENT=""
 
 if [[ -z "$ROUTE_SLUG" || -z "$SHARE_NAME" ]]; then
   usage
@@ -42,10 +47,26 @@ if (( ${#SHARE_NAME} > 57 )); then
   echo "Share name must be at most 57 characters so the Pages hostname is valid." >&2
   exit 1
 fi
-for option in "${@:3}"; do
-  case "$option" in
-    --dry-run) DRY_RUN=true ;;
-    --replace-existing) REPLACE_EXISTING=true ;;
+shift 2
+while (( $# > 0 )); do
+  case "$1" in
+    --dry-run)
+      DRY_RUN=true
+      shift
+      ;;
+    --replace-existing)
+      REPLACE_EXISTING=true
+      shift
+      ;;
+    --authorize-target|--authorize-replacement)
+      if (( $# < 2 )); then usage; exit 1; fi
+      if [[ "$1" == "--authorize-target" ]]; then
+        AUTHORIZED_TARGET="$2"
+      else
+        AUTHORIZED_REPLACEMENT="$2"
+      fi
+      shift 2
+      ;;
     *) usage; exit 1 ;;
   esac
 done
@@ -55,6 +76,10 @@ PUBLIC_URL="https://${BRANCH}.godiesel.pages.dev/"
 REQUIRE_PROVIDER_KEY=1
 if [[ "$DRY_RUN" == "true" ]]; then
   REQUIRE_PROVIDER_KEY=0
+fi
+if [[ "$DRY_RUN" != "true" && ( "$AUTHORIZED_TARGET" != "$SHARE_NAME" || "$AUTHORIZED_REPLACEMENT" != "$SHARE_NAME" ) ]]; then
+  echo "Refusing to publish without exact target and replacement authority for ${SHARE_NAME}." >&2
+  exit 1
 fi
 
 RELEASE_COMMIT=$(git rev-parse HEAD)
@@ -95,7 +120,7 @@ fi
 if [[ "$DRY_RUN" == "true" ]]; then
   echo "4/4 Dry run complete"
   echo "Review locally: ./scripts/route.sh preview $ROUTE_SLUG"
-  echo "Publish: ./scripts/publish-route-microsite.sh $ROUTE_SLUG $SHARE_NAME"
+  echo "Publish: ./scripts/route.sh publish $ROUTE_SLUG $SHARE_NAME --authorize-target $SHARE_NAME --authorize-replacement $SHARE_NAME"
   exit 0
 fi
 

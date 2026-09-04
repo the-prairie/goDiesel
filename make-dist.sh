@@ -94,4 +94,4 @@ node app/scripts/finalize-build-identity.mjs dist
 SIZE=$(du -sh dist | awk '{print $1}')
 FILES=$(find dist -type f | wc -l | tr -d ' ')
 echo "React dist ready: ${SIZE}, ${FILES} files"
-echo "Deploy with: npx wrangler pages deploy dist --project-name=godiesel --branch=production"
+echo "Production publication remains unavailable until the Phase 5 release capability is implemented."

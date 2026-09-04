@@ -71,6 +71,7 @@ def _install_evidence_contract(root: Path) -> None:
     for name in (
         "build-identity.schema.json",
         "capabilities.json",
+        "capabilities.schema.json",
         "evidence-receipt.schema.json",
     ):
         destination = root / "system" / name
@@ -889,6 +890,19 @@ def test_generation_inspect_blocks_structurally_invalid_projection(
     assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_PROJECTION_DRIFT"
 
 
+def test_generation_inspect_rejects_undeclared_public_detail_fields(tmp_path: Path):
+    root = _generation_fixture(tmp_path)
+    detail_path = root / "app/public/data/routes/route-1.json"
+    detail = json.loads(detail_path.read_text(encoding="utf-8"))
+    detail["private_note"] = "must not enter the public projection"
+    _write_json(detail_path, detail)
+
+    result = execute_route_generation(root, "inspect")
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_PROJECTION_DRIFT"
+
+
 @pytest.mark.parametrize(
     ("target", "field", "value"),
     [
@@ -1389,6 +1403,49 @@ def test_curation_plan_invalidates_when_private_fallback_sources_change(
     assert result["blockers"][0]["code"] == (
         "GODIESEL_CURATION_PLAN_CONTEXT_MISMATCH"
     )
+
+
+def test_curation_plan_invalidates_when_repository_gpx_bytes_change(tmp_path: Path):
+    root = _curation_fixture(tmp_path)
+    plan = _plan_curation(root)
+    source = root / "route_sources/route-1.gpx"
+    source.write_text(source.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+
+    result = execute_owner_curation(
+        root,
+        "apply",
+        plan_path=plan,
+        authority="canonical-local",
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_CURATION_PLAN_CONTEXT_MISMATCH"
+
+
+def test_curation_plan_preserves_private_source_recovery_guidance(
+    tmp_path: Path,
+    monkeypatch,
+):
+    root = _curation_fixture(tmp_path)
+    issue = {
+        "code": "GODIESEL_PRIVATE_ROUTE_SOURCE_UNAVAILABLE",
+        "message": "Private route sources are unavailable.",
+        "remediation": "Restore the declared private route sources.",
+    }
+    monkeypatch.setattr(
+        godiesel_local_capabilities,
+        "external_route_source_fingerprint",
+        lambda _root: (None, [], issue),
+    )
+
+    result = execute_owner_curation(
+        root,
+        "plan",
+        request_path=_write_curation_request(root),
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"] == [issue]
 
 
 def test_curation_apply_blocks_when_observed_state_changed(monkeypatch, tmp_path: Path):

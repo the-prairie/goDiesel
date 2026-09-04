@@ -25,7 +25,8 @@ Usage: ./scripts/route.sh <command> [arguments]
   curate                    Open Admin with its local owner writer.
   check <slug>              Validate and build a route-only bundle, without publishing.
   preview <slug> [--detach] Validate, then serve a route-only local preview.
-  publish <slug> <name> [--replace-existing]
+  publish <slug> <name> --authorize-target <name> --authorize-replacement <name>
+                          [--replace-existing]
                             Publish to https://share-<name>.godiesel.pages.dev/
 
 Examples:
@@ -35,7 +36,8 @@ Examples:
   ./scripts/route.sh create --proposal /path/to/proposal.json
   ./scripts/route.sh preview 17654151284 --detach
   ./scripts/route.sh check 17654151284
-  ./scripts/route.sh publish 17654151284 kyoto-hills
+  ./scripts/route.sh publish 17654151284 kyoto-hills \
+    --authorize-target kyoto-hills --authorize-replacement kyoto-hills
 EOF
 }
 

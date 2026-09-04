@@ -134,7 +134,11 @@ def install_evidence_contract(tmp_path: Path) -> None:
     (tmp_path / "app/public/data").mkdir(parents=True, exist_ok=True)
     system = tmp_path / "system"
     system.mkdir(exist_ok=True)
-    for name in ("evidence-receipt.schema.json", "capabilities.json"):
+    for name in (
+        "evidence-receipt.schema.json",
+        "capabilities.json",
+        "capabilities.schema.json",
+    ):
         (system / name).write_text(
             (ROOT / "system" / name).read_text(encoding="utf-8"),
             encoding="utf-8",
@@ -164,6 +168,10 @@ def test_verify_writes_a_general_redacted_evidence_receipt(tmp_path: Path):
     )
     (tmp_path / "system/capabilities.json").write_text(
         (ROOT / "system/capabilities.json").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (tmp_path / "system/capabilities.schema.json").write_text(
+        (ROOT / "system/capabilities.schema.json").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     (tmp_path / ".gitignore").write_text(
@@ -271,6 +279,57 @@ def test_verify_withdraws_promoted_proof_when_input_changes_during_promotion(
     }
     receipt = json.loads((tmp_path / result["receipt"]["path"]).read_text())
     assert receipt["outcome"] == "incomplete"
+    evidence_receipts = [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in (tmp_path / ".godiesel/evidence").glob("*.json")
+    ]
+    assert evidence_receipts
+    assert all(receipt["status"] != "passed" for receipt in evidence_receipts)
+
+
+def test_verify_cannot_leave_reusable_proof_when_normal_withdrawal_fails(
+    tmp_path: Path,
+    monkeypatch,
+):
+    install_evidence_contract(tmp_path)
+    implementation = tmp_path / "godiesel_route_share.py"
+    implementation.write_text("stable\n", encoding="utf-8")
+    original_set_outcome = godiesel_route_share._set_receipt_outcome
+
+    def mutating_set_outcome(root, summary, outcome):
+        if outcome == "incomplete":
+            return None
+        promoted = original_set_outcome(root, summary, outcome)
+        implementation.write_text("changed during promotion\n", encoding="utf-8")
+        implementation.write_text("stable\n", encoding="utf-8")
+        return promoted
+
+    monkeypatch.setattr(
+        godiesel_route_share,
+        "_set_receipt_outcome",
+        mutating_set_outcome,
+    )
+    monkeypatch.setattr(
+        godiesel_route_share,
+        "invalidate_evidence_receipt",
+        lambda *_args, **_kwargs: None,
+    )
+
+    result = execute_route_share(
+        tmp_path,
+        "verify",
+        slug="route-1",
+        runner=RecordingRunner(completed([], stdout="verified\n")),
+    )
+    reused = reuse_verification(tmp_path, "route-share", slug="route-1", environ={})
+
+    assert result["status"] == "blocked"
+    assert "GODIESEL_VERIFICATION_INPUTS_CHANGED" in {
+        issue["code"] for issue in result["blockers"]
+    }
+    assert reused["status"] == "blocked"
+    route_receipt = json.loads((tmp_path / result["receipt"]["path"]).read_text())
+    assert route_receipt["outcome"] == "incomplete"
     evidence_receipts = [
         json.loads(path.read_text(encoding="utf-8"))
         for path in (tmp_path / ".godiesel/evidence").glob("*.json")
@@ -530,7 +589,7 @@ def test_verify_blocks_when_the_capability_manifest_is_missing(tmp_path: Path):
     )
 
     assert result["status"] == "blocked"
-    assert result["blockers"][0]["code"] == "GODIESEL_MANIFEST_UNAVAILABLE"
+    assert result["blockers"][0]["code"] == "GODIESEL_MANIFEST_SCHEMA_MISSING"
     assert result["evidence"] is None
     assert runner.calls == []
     assert_valid_result(result)
@@ -785,6 +844,10 @@ def test_release_requires_exact_authority_and_preserves_replacement_guard(tmp_pa
         "publish",
         "route-1",
         "ridge",
+        "--authorize-target",
+        "ridge",
+        "--authorize-replacement",
+        "ridge",
         "--replace-existing",
     ]
     assert runner.calls == [
@@ -805,6 +868,10 @@ def test_release_requires_exact_authority_and_preserves_replacement_guard(tmp_pa
             str(tmp_path / "scripts/route.sh"),
             "publish",
             "route-1",
+            "ridge",
+            "--authorize-target",
+            "ridge",
+            "--authorize-replacement",
             "ridge",
             "--replace-existing",
         ]

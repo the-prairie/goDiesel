@@ -551,3 +551,52 @@ def invalidate_evidence_receipt(
         "path": relative.as_posix(),
         "sha256": _file_digest(destination),
     }
+
+
+def withdraw_evidence_receipt(
+    root: Path | str,
+    summary: Mapping[str, str],
+) -> dict[str, str] | None:
+    """Ensure an exact evidence receipt cannot remain reusable after failure."""
+
+    invalidated = invalidate_evidence_receipt(root, summary)
+    if invalidated is not None:
+        return invalidated
+    root = Path(root).resolve()
+    relative = Path(str(summary.get("path", "")))
+    receipt_id = str(summary.get("id", ""))
+    if relative.parent != EVIDENCE_ROOT or relative.name != f"{receipt_id}.json":
+        return None
+    try:
+        raw = read_local_bytes(root, EVIDENCE_ROOT, relative.name)
+        receipt = json.loads(raw.decode("utf-8"))
+        if not isinstance(receipt, dict) or receipt.get("receipt_id") != receipt_id:
+            raise ValueError("evidence receipt identity changed")
+        receipt["status"] = "blocked"
+        destination = write_local_text_atomic(
+            root,
+            EVIDENCE_ROOT,
+            relative.name,
+            json.dumps(receipt, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+        )
+        return {
+            "id": receipt_id,
+            "path": relative.as_posix(),
+            "sha256": _file_digest(destination),
+        }
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
+        quarantine_name = f"{relative.name}.{uuid.uuid4().hex}.invalid"
+        try:
+            replace_local_file(root, EVIDENCE_ROOT, relative.name, quarantine_name)
+        except OSError:
+            try:
+                unlink_local_file(root, EVIDENCE_ROOT, relative.name)
+            except OSError:
+                return None
+            return {"id": receipt_id, "path": "", "sha256": ""}
+        quarantine_path = root / EVIDENCE_ROOT / quarantine_name
+        return {
+            "id": receipt_id,
+            "path": (EVIDENCE_ROOT / quarantine_name).as_posix(),
+            "sha256": _file_digest(quarantine_path),
+        }

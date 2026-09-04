@@ -92,7 +92,7 @@
             "proof_inputs": [
               { "category": "implementation", "paths": ["godiesel_control.py", "godiesel_evidence.py", "godiesel_route_share.py", "godiesel_verification.py", "scripts/godiesel", "route_create.py", "route_status.py", "admin_curation.py", "curation_publish.py", "generated_route_contract.py", "route_build.py", "build.py", "quest_meta.py", "route_provenance.py", "route_annotations.py", "route_imports.py", "route_timezones.py", "scripts/route.sh", "scripts/route-preview.sh", "scripts/serve-route-preview.mjs", "scripts/publish-route-microsite.sh", "scripts/scope-route-microsite.mjs", "scripts/validate-route-microsite.mjs", "scripts/check-provider-key.mjs", "app/index.html", "app/public/**", "app/src/**", "app/scripts/check-bundle-budget.mjs", "app/scripts/finalize-build-identity.mjs", "app/scripts/smoke-single-route-microsite.mjs"] },
               { "category": "data", "paths": ["quests.json", ".quests.json.*.tmp", "route_sources/**", "app/src/data/generated/**", "app/public/data/routes/**", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**", "app/public/media/**"] },
-              { "category": "fixture", "paths": ["test_godiesel_control.py", "test_godiesel_route_share.py", "test_godiesel_verification.py", "test_route_create.py", "test_route_provenance.py", "test_route_share_cli.py", "app/e2e/single-route-microsite.spec.ts"] },
+              { "category": "fixture", "paths": ["test_deployment_command.py", "test_godiesel_control.py", "test_godiesel_route_share.py", "test_godiesel_verification.py", "test_route_create.py", "test_route_provenance.py", "test_route_share_cli.py", "app/e2e/single-route-microsite.spec.ts"] },
               { "category": "contract", "paths": ["route_create.schema.json", "system/artifact-manifest.schema.json", "system/build-identity.schema.json", "system/capabilities.json", "system/capabilities.schema.json", "system/result.schema.json", "system/route-share-receipt.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json"] },
               { "category": "configuration", "paths": [".gitignore", "make-dist.sh", "requirements.txt", "app/package.json", "app/package-lock.json", "app/tsconfig*.json", "app/vite.config.ts", "app/playwright.config.ts", "app/playwright.route-share.config.ts"] }
             ]
@@ -171,7 +171,7 @@
               { "category": "implementation", "paths": ["godiesel_evidence.py", "godiesel_verification.py", "godiesel_local_capabilities.py", "generated_route_contract.py", "route_build.py", "build.py", "rebuild.sh", "requirements.txt"] },
               { "category": "data", "paths": ["quests.json", "quests.json.tmp", ".quests.json.rollback", ".quests.json.rollback.tmp", ".quests.json.*.tmp", ".route-share/recovery/**", "route_sources/**", "app/src/data/generated/**", "app/src/data/generated/.*.tmp", "app/src/data/generated/.*.recovery", "app/src/data/generated/.*.rollback", "app/public/data/routes/**", "app/public/data/routes/.*.tmp", "app/public/data/routes/.*.recovery", "app/public/data/routes/.*.rollback", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**"] },
               { "category": "fixture", "paths": ["test_godiesel_local_capabilities.py", "test_react_app.py", "test_route_provenance.py"] },
-              { "category": "contract", "paths": ["system/capabilities.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json"] }
+              { "category": "contract", "paths": ["system/capabilities.json", "system/result.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json"] }
             ]
           }
         ],
@@ -253,7 +253,7 @@
               { "category": "implementation", "paths": ["godiesel_evidence.py", "godiesel_verification.py", "godiesel_local_capabilities.py", "generated_route_contract.py", "admin.py", "admin_curation.py", "curation_publish.py", "build.py", "requirements.txt"] },
               { "category": "data", "paths": ["quests.json", "quests.json.tmp", ".quests.json.rollback", ".quests.json.rollback.tmp", ".quests.json.*.tmp", ".route-share/recovery/**", "route_sources/**", "app/src/data/generated/**", "app/src/data/generated/.*.tmp", "app/src/data/generated/.*.recovery", "app/src/data/generated/.*.rollback", "app/public/data/routes/**", "app/public/data/routes/.*.tmp", "app/public/data/routes/.*.recovery", "app/public/data/routes/.*.rollback", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**"] },
               { "category": "fixture", "paths": ["test_godiesel_local_capabilities.py", "test_admin_curation.py", "test_curation_publish.py", "test_route_provenance.py"] },
-              { "category": "contract", "paths": ["system/capabilities.json", "system/owner-curation-plan.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json"] }
+              { "category": "contract", "paths": ["system/capabilities.json", "system/owner-curation-plan.schema.json", "system/result.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json"] }
             ]
           }
         ],
@@ -306,7 +306,7 @@
       "reads": [".godiesel/evidence/**", ".env", "app/.env", "app/src/providers/**", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts"],
       "writes": [".godiesel/evidence/**", "$GIT_COMMON_DIR/godiesel-provider-preview.lock", "app/test-results/**", "app/playwright-report/**", "app/e2e/evidence/auto-director/**"],
       "external_effects": ["read named map or imagery provider through the selected live browser check"],
-      "required_files": ["scripts/godiesel", "scripts/verify-provider-readiness.sh", "godiesel_local_capabilities.py", "system/artifact-manifest.schema.json", "system/build-identity.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json", "app/scripts/finalize-build-identity.mjs", "app/vite.config.ts", "scripts/check-provider-key.mjs", "app/src/providers/google-maps-loader.ts", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts", "docs/agents/testing.md"],
+      "required_files": ["scripts/godiesel", "scripts/verify-provider-readiness.sh", "godiesel_local_capabilities.py", "system/artifact-manifest.schema.json", "system/build-identity.schema.json", "system/result.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json", "app/scripts/finalize-build-identity.mjs", "app/vite.config.ts", "scripts/check-provider-key.mjs", "app/src/providers/google-maps-loader.ts", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts", "docs/agents/testing.md"],
       "configuration": [
         { "name": "GOOGLE_MAPS_API_KEY", "required_for": ["verify:live"], "sensitive": true }
       ],
@@ -349,7 +349,7 @@
             "cwd": ".",
             "proof_inputs": [
               { "category": "implementation", "paths": ["godiesel_local_capabilities.py", "godiesel_verification.py", "godiesel_evidence.py", "scripts/verify-provider-readiness.sh", "app/scripts/finalize-build-identity.mjs", "app/vite.config.ts", "app/src/domain/route.ts", "app/src/data/route-regions.ts", "app/src/providers/cesium-render-quality.ts", "app/src/providers/render-health.ts", "app/src/surfaces/atlas/atlas-world.ts", "app/src/surfaces/atlas/cesium-atlas-world-engine.ts", "app/src/surfaces/atlas/components/cesium-atlas-globe.tsx", "app/src/surfaces/atlas/atlas-region-camera.ts"] },
-              { "category": "contract", "paths": ["system/artifact-manifest.schema.json", "system/build-identity.schema.json", "system/capabilities.json", "system/capabilities.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json"] },
+              { "category": "contract", "paths": ["system/artifact-manifest.schema.json", "system/build-identity.schema.json", "system/capabilities.json", "system/capabilities.schema.json", "system/result.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json"] },
               { "category": "fixture", "paths": ["test_godiesel_local_capabilities.py", "test_godiesel_verification.py", "app/e2e/atlas-region-live.spec.ts", "app/playwright.live.config.ts", "app/package.json", "app/package-lock.json"] }
             ]
           },
@@ -358,7 +358,7 @@
             "cwd": ".",
             "proof_inputs": [
               { "category": "implementation", "paths": ["godiesel_local_capabilities.py", "godiesel_verification.py", "godiesel_evidence.py", "scripts/verify-provider-readiness.sh", "app/scripts/finalize-build-identity.mjs", "app/vite.config.ts", "app/src/domain/route.ts", "app/src/domain/geometry/route-path.ts", "app/src/domain/geometry/route-thread-style.ts", "app/src/providers/cesium-render-quality.ts", "app/src/providers/render-health.ts", "app/src/surfaces/replay/renderer-port.ts", "app/src/surfaces/replay/components/earth-replay-stage.tsx", "app/src/surfaces/replay/playback/replay-controller.ts", "app/src/surfaces/replay/renderers/cesium-replay-engine.ts", "app/src/surfaces/replay/renderers/google-route-navigator-engine.ts", "app/src/surfaces/replay/renderers/replay-camera-clearance.ts", "app/src/surfaces/replay/story-flight/replay-camera-framing.ts", "app/src/surfaces/replay/scene/route-grounding.ts", "app/src/surfaces/replay/scene/route-camera-stabilizer.ts"] },
-              { "category": "contract", "paths": ["system/artifact-manifest.schema.json", "system/build-identity.schema.json", "system/capabilities.json", "system/capabilities.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json"] },
+              { "category": "contract", "paths": ["system/artifact-manifest.schema.json", "system/build-identity.schema.json", "system/capabilities.json", "system/capabilities.schema.json", "system/result.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json"] },
               { "category": "fixture", "paths": ["test_godiesel_local_capabilities.py", "test_godiesel_verification.py", "app/e2e/earth-replay-live.spec.ts", "app/playwright.live.config.ts", "app/package.json", "app/package-lock.json"] }
             ]
           },
@@ -367,7 +367,7 @@
             "cwd": ".",
             "proof_inputs": [
               { "category": "implementation", "paths": ["godiesel_local_capabilities.py", "godiesel_verification.py", "godiesel_evidence.py", "scripts/verify-provider-readiness.sh", "app/scripts/finalize-build-identity.mjs", "app/vite.config.ts", "app/src/domain/route.ts", "app/src/domain/geometry/route-path.ts", "app/src/providers/google-maps-loader.ts", "app/src/providers/provider-error.ts", "app/src/surfaces/replay/cinematic/**", "app/src/surfaces/replay/playback/route-navigator-controller.ts", "app/src/surfaces/replay/renderers/google-route-navigator-engine.ts", "app/src/surfaces/replay/components/google-route-navigator-stage.tsx", "app/src/surfaces/replay/story-flight/replay-camera-framing.ts", "app/src/surfaces/replay/scene/route-camera-stabilizer.ts"] },
-              { "category": "contract", "paths": ["system/artifact-manifest.schema.json", "system/build-identity.schema.json", "system/capabilities.json", "system/capabilities.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json"] },
+              { "category": "contract", "paths": ["system/artifact-manifest.schema.json", "system/build-identity.schema.json", "system/capabilities.json", "system/capabilities.schema.json", "system/result.schema.json", "system/evidence-receipt.schema.json", "system/verification-reuse.schema.json"] },
               { "category": "fixture", "paths": ["test_godiesel_local_capabilities.py", "test_godiesel_verification.py", "app/e2e/google-route-navigator-live.spec.ts", "app/e2e/cinematic-route-trailer-live.spec.ts", "app/e2e/cinematic-director-live.spec.ts", "app/e2e/cinematic-export-live.spec.ts", "app/playwright.live.config.ts", "app/package.json", "app/package-lock.json"] }
             ]
           }
@@ -395,7 +395,9 @@
       "configuration": [
         { "name": "GOOGLE_MAPS_API_KEY", "required_for": ["verify:live"], "sensitive": true },
         { "name": "GODIESEL_EARTH_ENGINE_PROJECT", "required_for": ["verify:live"], "sensitive": false },
-        { "name": "GODIESEL_PIPELINE_SHARE_NAME", "required_for": ["verify:live"], "sensitive": false }
+        { "name": "GODIESEL_PIPELINE_SHARE_NAME", "required_for": ["verify:live"], "sensitive": false },
+        { "name": "GODIESEL_PIPELINE_TARGET_AUTHORITY", "required_for": ["verify:live"], "sensitive": false },
+        { "name": "GODIESEL_PIPELINE_REPLACEMENT_AUTHORITY", "required_for": ["verify:live"], "sensitive": false }
       ],
       "commands": {
         "inspect": [{ "command": "./scripts/godiesel doctor --json", "cwd": "." }],
@@ -540,7 +542,7 @@
     },
     {
       "id": "route-microsite-build",
-      "paths": ["app/package.json", "app/package-lock.json", "app/*config.*", "app/scripts/check-bundle-budget.mjs", "app/scripts/finalize-build-identity.mjs", "make-dist.sh", "system/artifact-manifest.schema.json", "system/build-identity.schema.json", "scripts/check-provider-key.mjs", "scripts/scope-route-microsite.mjs", "scripts/validate-route-microsite.mjs"],
+      "paths": ["app/package.json", "app/package-lock.json", "app/*config.*", "app/scripts/check-bundle-budget.mjs", "app/scripts/finalize-build-identity.mjs", "make-dist.sh", "system/artifact-manifest.schema.json", "system/build-identity.schema.json", "scripts/check-provider-key.mjs", "scripts/scope-route-microsite.mjs", "scripts/validate-route-microsite.mjs", "test_deployment_command.py"],
       "capabilities": ["route-share", "application-release"],
       "category": "configuration",
       "gates": [{ "capability": "route-share", "tier": "focused" }, { "capability": "route-share", "tier": "release" }, { "capability": "application-release", "tier": "release" }],

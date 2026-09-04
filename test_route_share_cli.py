@@ -168,7 +168,15 @@ exit 0
     environment["PATH"] = f"{bin_dir}:{environment['PATH']}"
 
     completed = subprocess.run(
-        [str(scripts / "publish-route-microsite.sh"), "gpx-preview", "existing"],
+        [
+            str(scripts / "publish-route-microsite.sh"),
+            "gpx-preview",
+            "existing",
+            "--authorize-target",
+            "existing",
+            "--authorize-replacement",
+            "existing",
+        ],
         cwd=tmp_path,
         capture_output=True,
         text=True,
@@ -255,8 +263,28 @@ fi
     environment = os.environ.copy()
     environment["PATH"] = f"{bin_dir}:{environment['PATH']}"
 
-    completed = subprocess.run(
+    unauthorized = subprocess.run(
         [str(scripts / "publish-route-microsite.sh"), "gpx-preview", "new-share"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+
+    assert unauthorized.returncode != 0
+    assert "without exact target and replacement authority" in unauthorized.stderr
+    assert not calls.exists()
+
+    completed = subprocess.run(
+        [
+            str(scripts / "publish-route-microsite.sh"),
+            "gpx-preview",
+            "new-share",
+            "--authorize-target",
+            "new-share",
+            "--authorize-replacement",
+            "new-share",
+        ],
         cwd=tmp_path,
         capture_output=True,
         text=True,
@@ -278,7 +306,15 @@ fi
     failed_environment = dict(environment)
     failed_environment["FAIL_DEPLOY"] = "1"
     failed = subprocess.run(
-        [str(scripts / "publish-route-microsite.sh"), "gpx-preview", "new-share"],
+        [
+            str(scripts / "publish-route-microsite.sh"),
+            "gpx-preview",
+            "new-share",
+            "--authorize-target",
+            "new-share",
+            "--authorize-replacement",
+            "new-share",
+        ],
         cwd=tmp_path,
         capture_output=True,
         text=True,

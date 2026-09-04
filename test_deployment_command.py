@@ -5,12 +5,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).parent
-PRODUCTION_DEPLOY_COMMAND = (
-    "npx wrangler pages deploy dist --project-name=godiesel --branch=production"
-)
 
 
-def test_canonical_pages_deploy_targets_the_production_branch():
+def test_canonical_production_deploy_is_not_exposed_before_phase_five():
     readme_lines = (ROOT / "README.md").read_text(encoding="utf-8").splitlines()
     packaging_lines = (ROOT / "make-dist.sh").read_text(encoding="utf-8").splitlines()
 
@@ -25,9 +22,10 @@ def test_canonical_pages_deploy_targets_the_production_branch():
         if "Deploy with: npx wrangler pages deploy dist" in line
     ]
 
-    assert documented_commands == [PRODUCTION_DEPLOY_COMMAND]
-    assert len(printed_commands) == 1
-    assert PRODUCTION_DEPLOY_COMMAND in printed_commands[0]
+    assert documented_commands == []
+    assert printed_commands == []
+    assert "Phase 5 release capability" in "\n".join(readme_lines)
+    assert "Phase 5 release capability" in "\n".join(packaging_lines)
 
 
 def test_required_provider_key_rejects_a_keyless_build(tmp_path):
@@ -61,3 +59,12 @@ def test_public_route_publish_requires_the_provider_key():
     assert 'REQUIRE_PROVIDER_KEY=1' in publish_script
     assert 'REQUIRE_PROVIDER_KEY=0' in publish_script
     assert 'GODIESEL_REQUIRE_PROVIDER_KEY="$REQUIRE_PROVIDER_KEY"' in publish_script
+
+
+def test_live_pipeline_requires_independent_stable_alias_authority():
+    pipeline = (ROOT / "scripts/verify-live-pipeline.sh").read_text(encoding="utf-8")
+
+    assert "GODIESEL_PIPELINE_TARGET_AUTHORITY" in pipeline
+    assert "GODIESEL_PIPELINE_REPLACEMENT_AUTHORITY" in pipeline
+    assert '--authorize-target "$TARGET_AUTHORITY"' in pipeline
+    assert '--authorize-replacement "$REPLACEMENT_AUTHORITY"' in pipeline

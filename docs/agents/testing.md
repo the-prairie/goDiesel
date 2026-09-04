@@ -121,6 +121,8 @@ The real-data, no-interception pipeline acceptance gate is:
 ```sh
 GODIESEL_EARTH_ENGINE_PROJECT=playground-406023 \
 GODIESEL_PIPELINE_SHARE_NAME=pipeline-proof \
+GODIESEL_PIPELINE_TARGET_AUTHORITY=pipeline-proof \
+GODIESEL_PIPELINE_REPLACEMENT_AUTHORITY=pipeline-proof \
 npm run verify:live-pipeline
 ```
 
@@ -177,8 +179,8 @@ A proof's covered inputs include implementation, contracts, schemas, fixtures, t
 Unreadable directories anywhere inside a recursive input tree block the snapshot rather than disappearing from its aggregate digest.
 The manifest-owned fingerprint aggregates every matching file per impact pattern and every repository-local Python or JavaScript or TypeScript import reachable from command proof inputs.
 It records absent patterns, records configuration presence without secret values, and digests non-sensitive provider targets and observed deployment identities.
-Each observed file also contributes its file type, executable mode, and symlink target when applicable.
-Broken symlinks and symlinks that resolve outside the checkout are invalid proof inputs.
+Each observed regular file also contributes its file type and executable mode.
+Every symlink in a covered input path is invalid, including a symlink whose target remains inside the checkout.
 Changing any covered input invalidates that proof.
 
 Each impact rule names the capability invariants that justify its selected gates.

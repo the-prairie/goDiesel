@@ -144,7 +144,7 @@ The proof layer recursively includes repository-local Python and JavaScript or T
 The adapter snapshots every covered state before and after the gate.
 On macOS and Linux it also monitors existing covered files and every directory in recursive covered trees, so a transient content or permission write-and-restore in those inputs invalidates proof.
 Absent exact inputs and additions to nonrecursive wildcard patterns are certified by before/after state only; they are not represented as continuously monitored.
-Broken or external covered-input symlinks block proof instead of disappearing from the fingerprint.
+Every covered-input symlink blocks proof, including a symlink whose target remains inside the checkout.
 Those command inputs also narrow a known provider path to its applicable live check; a newly classified provider path that matches no known command expands to every command in the tier so proof cannot disappear silently.
 The generation, curation, and live-provider commands also run their adapter contract tests before recording success.
 Raw test output, private route values, and secret values are not included.

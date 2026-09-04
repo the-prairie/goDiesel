@@ -126,6 +126,8 @@ For an explicit real-data, no-interception proof from the complete Strava export
 ```bash
 GODIESEL_EARTH_ENGINE_PROJECT=playground-406023 \
 GODIESEL_PIPELINE_SHARE_NAME=pipeline-proof \
+GODIESEL_PIPELINE_TARGET_AUTHORITY=pipeline-proof \
+GODIESEL_PIPELINE_REPLACEMENT_AUTHORITY=pipeline-proof \
 npm --prefix app run verify:live-pipeline
 ```
 
@@ -147,15 +149,10 @@ Build the React application and prepare the root Cloudflare output directory:
 The deployable output is `dist/` and is generated from `app/dist/`.
 Generated deploy files are not committed.
 
-## Deploy
+## Production deployment
 
-Deploy the generated React output with Wrangler:
-
-```bash
-npx wrangler pages deploy dist --project-name=godiesel --branch=production
-```
-
-The `godiesel` Pages project uses `production` as its production branch. The explicit branch flag is required so the canonical `https://godiesel.pages.dev/` deployment is updated instead of creating only a preview deployment.
+Production publication is intentionally unavailable until the Phase 5 release capability is implemented.
+Building `dist/` creates a verifiable artifact; it does not grant authority to publish the canonical site.
 
 ## Publish a single-route microsite
 
@@ -171,11 +168,14 @@ The route-only bundle removes all unrelated public data and sends a site-wide `X
 Publish the validated bundle to its stable Cloudflare Pages branch URL:
 
 ```bash
-./scripts/publish-route-microsite.sh 3519505225411091950 appian-way
+./scripts/route.sh publish 3519505225411091950 appian-way \
+  --authorize-target appian-way \
+  --authorize-replacement appian-way
 ```
 
 This produces `https://share-appian-way.godiesel.pages.dev/` and smoke-tests the public guide and replay shell.
 Choose a durable share name because it defines the stable URL.
+Both authority values must exactly match that stable share name, including for a new alias.
 Live Google 3D imagery must still be reviewed in a hardware-accelerated browser.
 
 Cloudflare Pages should use `./make-dist.sh` as the build command and `dist` as the output directory.

@@ -37,9 +37,9 @@ from generated_route_contract import (
 )
 from godiesel_evidence import (
     canonical_digest,
-    invalidate_evidence_receipt,
     repository_snapshot,
     update_evidence_receipt,
+    withdraw_evidence_receipt,
     write_local_text_atomic,
     write_evidence_receipt,
 )
@@ -110,6 +110,14 @@ PROVIDER_CHECKS = {
 
 class GooglePreviewLeaseError(RuntimeError):
     """The host-global Google preview lease could not be resolved safely."""
+
+
+class CurationPlanContextError(RuntimeError):
+    """Carry a precise blocker from owner-curation context discovery."""
+
+    def __init__(self, issue: Mapping[str, str]) -> None:
+        super().__init__(issue["message"])
+        self.issue = dict(issue)
 
 
 def _issue(code: str, message: str, remediation: str) -> dict[str, str]:
@@ -802,7 +810,14 @@ def _run_verification(
                     )
                 )
         if promotion_blockers:
-            invalidate_evidence_receipt(root, evidence)
+            if withdraw_evidence_receipt(root, evidence) is None:
+                promotion_blockers.append(
+                    _issue(
+                        "GODIESEL_EVIDENCE_WITHDRAWAL_FAILED",
+                        "Invalid verification evidence could not be withdrawn safely.",
+                        "Quarantine the named evidence receipt before attempting verification reuse.",
+                    )
+                )
             evidence = None
             existing_codes = {item["code"] for item in blockers}
             blockers.extend(
@@ -1129,7 +1144,7 @@ def _curation_plan_context(root: Path) -> dict[str, object]:
         external_route_source_fingerprint(root)
     )
     if external_issue is not None:
-        raise OSError(external_issue["message"])
+        raise CurationPlanContextError(external_issue)
     return {
         "repository": repository_snapshot(root),
         "implementation_sha256": _curation_implementation_digest(root),
@@ -1300,14 +1315,6 @@ def _load_curation_plan(root: Path, plan_path: Path | str | None) -> tuple[dict[
         fully_matches = stable_context_matches and (
             current_repository["dirty_state"] == planned_repository["dirty_state"]
         )
-        if not stable_context_matches:
-            return None, [
-                _issue(
-                    "GODIESEL_CURATION_PLAN_CONTEXT_MISMATCH",
-                    "The curation plan was created for a different checkout or implementation state.",
-                    "Create and review a fresh curation plan in this exact checkout.",
-                )
-            ]
         current_state = _curation_observed_state(root, str(plan["activity_id"]))
     except Exception:
         current_state = None
@@ -1316,6 +1323,14 @@ def _load_curation_plan(root: Path, plan_path: Path | str | None) -> tuple[dict[
         if _curation_is_applied(root, str(plan["activity_id"]), plan["curation"]):
             plan["_already_applied"] = True
             return plan, []
+        if current_state != plan["observed_state_sha256"]:
+            return None, [
+                _issue(
+                    "GODIESEL_CURATION_PLAN_STALE",
+                    "Canonical or generated route state changed after curation planning.",
+                    "Inspect the current route and create a new owner-curation plan.",
+                )
+            ]
         if not fully_matches:
             return None, [
                 _issue(
@@ -1324,13 +1339,6 @@ def _load_curation_plan(root: Path, plan_path: Path | str | None) -> tuple[dict[
                     "Create and review a fresh curation plan in this exact checkout.",
                 )
             ]
-        return None, [
-            _issue(
-                "GODIESEL_CURATION_PLAN_STALE",
-                "Canonical or generated route state changed after curation planning.",
-                "Inspect the current route and create a new owner-curation plan.",
-            )
-        ]
     return plan, []
 
 
@@ -1458,6 +1466,17 @@ def execute_owner_curation(
     if verb == "plan":
         try:
             return _plan_owner_curation(root, request_path)
+        except CurationPlanContextError as error:
+            return _envelope(
+                "owner-curation",
+                verb,
+                required_authority,
+                status="blocked",
+                authorized=True,
+                result=None,
+                result_contract="none",
+                blockers=[error.issue],
+            )
         except OSError:
             return _envelope(
                 "owner-curation",

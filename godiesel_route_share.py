@@ -23,7 +23,10 @@ from godiesel_evidence import (
     existing_local_directory,
     invalidate_evidence_receipt,
     read_local_bytes,
+    replace_local_file,
+    unlink_local_file,
     update_evidence_receipt,
+    withdraw_evidence_receipt,
     write_local_text_atomic,
     write_evidence_receipt,
 )
@@ -628,7 +631,16 @@ def _command(
         if preview and detach:
             command.append("--detach")
         return command
-    command = [route, "publish", str(slug), str(share_name)]
+    command = [
+        route,
+        "publish",
+        str(slug),
+        str(share_name),
+        "--authorize-target",
+        str(share_name),
+        "--authorize-replacement",
+        str(share_name),
+    ]
     if replace_existing:
         command.append("--replace-existing")
     return command
@@ -717,6 +729,14 @@ def _set_receipt_outcome(
         raw = read_local_bytes(root, relative.parent, relative.name)
         receipt = json.loads(raw.decode("utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError):
+        quarantine_name = f"{relative.name}.{uuid.uuid4().hex}.invalid"
+        try:
+            replace_local_file(root, relative.parent, relative.name, quarantine_name)
+        except OSError:
+            try:
+                unlink_local_file(root, relative.parent, relative.name)
+            except OSError:
+                return None
         return None
     current_outcome = receipt.get("outcome") if isinstance(receipt, dict) else None
     if (
@@ -745,6 +765,53 @@ def _mark_receipt_incomplete(
     summary: Mapping[str, str],
 ) -> dict[str, str] | None:
     return _set_receipt_outcome(root, summary, "incomplete")
+
+
+def _withdraw_receipt(
+    root: Path,
+    summary: Mapping[str, str],
+) -> dict[str, str] | None:
+    """Make the exact route receipt ineligible for lineage reuse."""
+
+    demoted = _mark_receipt_incomplete(root, summary)
+    if demoted is not None:
+        return demoted
+    relative = Path(str(summary.get("path", "")))
+    receipt_id = str(summary.get("id", ""))
+    if (
+        relative.parent != Path(".route-share/runs")
+        or relative.name != f"{receipt_id}.json"
+    ):
+        return None
+    try:
+        raw = read_local_bytes(root, relative.parent, relative.name)
+        receipt = json.loads(raw.decode("utf-8"))
+        if not isinstance(receipt, dict) or receipt.get("receipt_id") != receipt_id:
+            raise ValueError("route-share receipt identity changed")
+        receipt["outcome"] = "incomplete"
+        destination = write_local_text_atomic(
+            root,
+            relative.parent,
+            relative.name,
+            json.dumps(receipt, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
+        quarantine_name = f"{relative.name}.{uuid.uuid4().hex}.invalid"
+        try:
+            replace_local_file(root, relative.parent, relative.name, quarantine_name)
+        except OSError:
+            try:
+                unlink_local_file(root, relative.parent, relative.name)
+            except OSError:
+                return None
+            return {**dict(summary), "path": "", "sha256": ""}
+        quarantine_path = root / relative.parent / quarantine_name
+        return {
+            **dict(summary),
+            "path": (relative.parent / quarantine_name).as_posix(),
+            "sha256": sha256(quarantine_path.read_bytes()).hexdigest(),
+        }
+    return {**dict(summary), "sha256": sha256(destination.read_bytes()).hexdigest()}
 
 
 def _blocked_result(
@@ -1484,12 +1551,27 @@ def execute_route_share(
                 )
         if post_promotion_issues:
             if evidence is not None:
-                invalidate_evidence_receipt(root, evidence)
+                if withdraw_evidence_receipt(root, evidence) is None:
+                    post_promotion_issues.append(
+                        _issue(
+                            "GODIESEL_EVIDENCE_WITHDRAWAL_FAILED",
+                            "Invalid route-share evidence could not be withdrawn safely.",
+                            "Quarantine the named evidence receipt before attempting verification reuse.",
+                        )
+                    )
                 evidence = None
             try:
-                demoted = _set_receipt_outcome(root, receipt, "incomplete")
+                demoted = _withdraw_receipt(root, receipt)
                 if demoted is not None:
                     receipt = demoted
+                else:
+                    post_promotion_issues.append(
+                        _issue(
+                            "GODIESEL_RECEIPT_WITHDRAWAL_FAILED",
+                            "Invalid route-share lineage could not be withdrawn safely.",
+                            "Quarantine the named route-share receipt before attempting release.",
+                        )
+                    )
             except OSError:
                 pass
             existing_codes = {issue["code"] for issue in blockers}
