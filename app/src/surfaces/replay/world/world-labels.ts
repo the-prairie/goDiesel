@@ -74,11 +74,13 @@ export async function createWorldLabels(
     plugin.maxSettleTimeMs = budget;
     plugin.maxOccupancyUpdateTimeMs = budget / 2;
     plugin.maxParseTimeMs = budget;
-    driver.labels.drawMode = MVTGlyphs.DrawMode.OBSCURED;
+    // Road glyphs straddle the terrain surface. Ghost the occluded half instead of clipping the text.
+    driver.labels.drawMode = MVTGlyphs.DrawMode.DRAW_THROUGH;
     driver.icons.drawMode = MVTGlyphs.DrawMode.OBSCURED;
     driver.icons.size = 10;
-    driver.labels.fadeInDuration = driver.icons.fadeInDuration = next.reducedMotion ? 0 : 200;
-    driver.labels.fadeOutDuration = driver.icons.fadeOutDuration = next.reducedMotion ? 0 : 200;
+    // MVT glyph fades use seconds, unlike tile fades which use milliseconds.
+    driver.labels.fadeInDuration = driver.icons.fadeInDuration = next.reducedMotion ? 0 : 0.2;
+    driver.labels.fadeOutDuration = driver.icons.fadeOutDuration = next.reducedMotion ? 0 : 0.2;
     driver.enabled = next.labels;
     driver.group.visible = next.labels;
     driver.needsUpdate = true;

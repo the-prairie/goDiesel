@@ -39,7 +39,7 @@ test("real renderer draws synthetic 3D Tiles, atmosphere and MVT labels, then di
     document.body.append(container);
     const state = window as unknown as { __realWorld: typeof engine; __realWorldContainer: HTMLElement };
     state.__realWorld = engine; state.__realWorldContainer = container;
-    engine.setEnvironment({ light: "daylight", clouds: 0, labels: true, quality: "light", reducedMotion: true });
+    engine.setEnvironment({ light: "daylight", clouds: 0, labels: true, quality: "light", reducedMotion: false });
     await engine.mount({
       apiKey: "synthetic-test-only-not-a-provider-key", container,
       groundingMode: "mesh",
@@ -64,6 +64,17 @@ test("real renderer draws synthetic 3D Tiles, atmosphere and MVT labels, then di
   await expect(world).toHaveAttribute("data-world-atmosphere", "ready", { timeout: 45_000 });
   await expect.poll(async () => Number(await world.getAttribute("data-rendered-tile-meshes"))).toBeGreaterThan(0);
   await expect.poll(async () => Number(await world.getAttribute("data-world-label-count")), { timeout: 30_000 }).toBeGreaterThan(0);
+  // With normal motion, the road name must fade in promptly and remain readable below
+  // the terrain baseline. A visible-label count alone misses clipped or 200-second fades.
+  await expect.poll(async () => {
+    const frame = PNG.sync.read(await page.screenshot());
+    let lowerGlyphPixels = 0;
+    for (let y = 241; y < 253; y++) for (let x = 230; x < 412; x++) {
+      const i = (y * frame.width + x) * 4;
+      if (frame.data[i] < 135 && frame.data[i + 1] < 135 && frame.data[i + 2] < 135) lowerGlyphPixels++;
+    }
+    return lowerGlyphPixels;
+  }, { timeout: 8000 }).toBeGreaterThan(25);
   await page.screenshot({ path: testInfo.outputPath("real-pipeline-synthetic-daylight.png") });
   await page.evaluate(() => {
     (window as unknown as { __realWorld: { setEnvironment(value: unknown): void } }).__realWorld.setEnvironment({ light: "golden", clouds: 0.55, labels: true, quality: "balanced", reducedMotion: true });
