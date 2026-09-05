@@ -8,24 +8,24 @@ permissions:
 jobs:
   source:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Package tracked implementation sources only
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Resolve pinned renderer dependencies
+        working-directory: app
         run: |
-          python3 - <<'PY'
-          import pathlib, subprocess, tarfile
-          paths = subprocess.check_output(['git', 'ls-files', '-z', 'app', 'docs', 'AGENTS.md', 'CONTEXT.md', 'PRODUCT.md', 'STRATEGY.md', 'README.md']).decode().split('\0')
-          suffixes = {'.ts', '.tsx', '.js', '.mjs', '.cjs', '.json', '.md', '.css', '.html', '.yml', '.yaml', '.toml', '.txt', '.svg'}
-          with tarfile.open('cinematic-world-source.tar.gz', 'w:gz') as archive:
-              for name in paths:
-                  path = pathlib.Path(name)
-                  if name and path.is_file() and not path.is_symlink() and (path.suffix in suffixes or path.name == '.gitignore'):
-                      archive.add(path, arcname=name)
-          PY
+          npm install --save-exact --no-audit --no-fund three@0.185.1 3d-tiles-renderer@0.5.2 three-mesh-bvh@0.9.11 postprocessing@6.39.4 @takram/three-atmosphere@0.19.1 @takram/three-clouds@0.7.6 @takram/three-geospatial@0.9.1
+          npm install --save-dev --save-exact --no-audit --no-fund @types/three@0.185.0
+      - name: Package installed dependencies and npm-generated lockfile
+        run: tar -czf cinematic-world-dependencies.tar.gz app/node_modules app/package.json app/package-lock.json
       - uses: actions/upload-artifact@v4
         with:
-          name: cinematic-world-source
-          path: cinematic-world-source.tar.gz
+          name: cinematic-world-dependencies
+          path: cinematic-world-dependencies.tar.gz
+          compression-level: 0
           retention-days: 1
