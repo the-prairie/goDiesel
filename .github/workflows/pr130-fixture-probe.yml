@@ -1,0 +1,60 @@
+name: Inspect compressed terrain labels
+on:
+  push:
+    branches: [codex/pr130-refinement-inspection]
+    paths: [.github/workflows/pr130-fixture-probe.yml]
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 134ee760606cafe7c061c4a80cc430910b9a7856
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci --prefix app
+      - run: cd app && npx playwright install --with-deps chromium
+      - name: Instrument only the synthetic test instance
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('app/e2e/cinematic-world-renderer.spec.ts')
+          s=p.read_text().replace('readdirSync, statSync','readdirSync, statSync, writeFileSync')
+          before='  await expect.poll(async () => Number(await world.getAttribute("data-world-label-count")), { timeout: 30_000 }).toBeGreaterThan(0);'
+          injection='''  await page.waitForTimeout(6000);
+          const probe = await page.evaluate(() => {
+            const e = (window as any).__realWorld, t = e.tiles;
+            const p = t.getPluginByName('MVT_ANNOTATIONS_PLUGIN');
+            const model = (scene: any, tile: any) => {
+              const meshes: any[]=[];
+              scene.traverse((o: any) => { if(o.isMesh) meshes.push({ position:o.position.toArray(), matrix:o.matrixWorld.toArray(), count:o.geometry.attributes.position.count }); });
+              return {depth:tile.internal.depth, range:p?.tileLoadState.get(tile), meshes};
+            };
+            const models: any[]=[];t.forEachLoadedModel((s: any,t: any)=>models.push(model(s,t)));
+            const lines = p ? [...p.anchorManager.lines].slice(0,12).map((a: any)=>({ keys:Object.keys(a),text:a.text,enabled:a.enabled,level:a.level,points:a.points,positions:a.positions })) : [];
+            return {world:{...e.options.container.dataset},stats:{...t.stats},models, camera:e.camera.position.toArray(), matrix:e.camera.matrixWorld.toArray(),plugin:p?{ ranges:[...p.tileLoadState.values()], vectors:[...p.vectorTileInfo.entries()].map(([k,v]:any)=>({key:k, annotations:v.annotations.length})),lines,occupancy:{visible:p.occupancy.visible.size,registered:p.occupancy._items?.size, pending:p.occupancy.hasPendingWork},anchorKeys:Object.keys(p.anchorManager),pointKeys:Object.keys(p.pointManager)}:null};
+          });
+          writeFileSync(testInfo.outputPath('placement-probe.json'),JSON.stringify(probe,null,2));
+          await page.screenshot({path:testInfo.outputPath('placement-probe.png')});
+          '''
+          assert before in s
+          p.write_text(s.replace(before,injection+before))
+          PY
+      - name: Reproduce both paths without bypassing assertions
+        run: cd app && npx playwright test e2e/cinematic-world-renderer.spec.ts --project=chromium
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compressed-placement-probe
+          path: app/test-results
+          retention-days: 3
