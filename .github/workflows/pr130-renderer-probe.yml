@@ -1,0 +1,103 @@
+name: Profile PR 130 live refinement
+on:
+  push:
+    branches: [codex/pr130-refinement-inspection]
+    paths: [.github/workflows/pr130-renderer-probe.yml]
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci --prefix app
+      - run: cd app && npx playwright install --with-deps chromium
+      - name: Profile existing deployment with real provider requests
+        working-directory: app
+        run: |
+          mkdir -p ../probe
+          node --input-type=module <<'JS'
+          import { chromium } from '@playwright/test';
+          import { writeFileSync } from 'node:fs';
+          const browser = await chromium.launch({ headless: true });
+          const report = { target: 'https://000c5f79.godiesel.pages.dev', source: 'af5ff4ab9b0fc53dfcdf8f2e347cd0a4b734e53b', synthetic: false, diagnosticOnly: true, samples: [], errors: [] };
+          const page = await browser.newPage({ viewport: { width: 1280, height: 720 }, serviceWorkers: 'block' });
+          page.on('pageerror', error => report.errors.push(error.message.replace(/https?:\/\/\S+/g, '[URL]').replace(/AIza[\w-]+/g, '[redacted]')));
+          try {
+            await page.goto(report.target + '/#/replay/17665674778?renderer=cinematic');
+            for (let i = 0; i < 12; i++) {
+              await page.waitForTimeout(5000);
+              if (i === 2 && await page.getByRole('button', { name: 'Chase', exact: true }).isEnabled()) await page.getByRole('button', { name: 'Chase', exact: true }).click();
+              if (i === 7) {
+                await page.getByRole('button', { name: 'Replay settings', exact: true }).click();
+                const light = page.getByRole('button', { name: 'Light', exact: true });
+                if (await light.count()) await light.click();
+                await page.getByRole('button', { name: 'Replay settings', exact: true }).click();
+              }
+              report.samples.push(await page.evaluate(() => {
+                const stage = document.querySelector('[data-testid="replay-stage"]');
+                const world = document.querySelector('[data-world-terrain]');
+                let fiber = stage?.[Object.keys(stage).find(key => key.startsWith('__reactFiber'))];
+                let engine;
+                for (let i = 0; fiber && i < 30 && !engine; i++, fiber = fiber.return) {
+                  for (let hook = fiber.memoizedState, j = 0; hook && j < 120; j++, hook = hook.next) {
+                    const value = hook.memoizedState?.current;
+                    if (value?.tiles && value?.camera) { engine = value; break; }
+                  }
+                }
+                const basic = { time: performance.now(), world: { ...world?.dataset }, stage: { ...stage?.dataset } };
+                if (!engine) return basic;
+                const t = engine.tiles;
+                if (!window.__decodeProbe) {
+                  const probe = window.__decodeProbe = { active: new Map(), finished: [], next: 0, models: 0, modelTime: 0 };
+                  const parse = t.parseTile.bind(t);
+                  t.parseTile = async function (...args) {
+                    const id = probe.next++; const start = performance.now();
+                    probe.active.set(id, { start, depth: args[1]?.internal?.depth, extension: typeof args[2] === 'string' ? args[2].slice(-5) : null });
+                    try { return await parse(...args); }
+                    finally { probe.finished.push({ ms: performance.now() - start, depth: args[1]?.internal?.depth }); if (probe.finished.length > 100) probe.finished.shift(); probe.active.delete(id); }
+                  };
+                  for (const plugin of t.plugins) {
+                    if (!plugin.processTileModel) continue;
+                    const process = plugin.processTileModel.bind(plugin);
+                    plugin.processTileModel = async (...args) => {
+                      const start = performance.now();
+                      try { return await process(...args); }
+                      finally { probe.models++; probe.modelTime += performance.now() - start; }
+                    };
+                  }
+                }
+                const p = window.__decodeProbe;
+                const mvt = t.plugins.find(p => p.name === 'MVT_ANNOTATIONS_PLUGIN');
+                const ext = t.plugins.find(p => p.dracoLoader);
+                const queue = q => q ? { active: q.currJobs, queued: q.items?.length, maximum: q.maxJobs, scheduled: q.scheduled, pending: q.scheduled } : null;
+                return { ...basic,
+                  stats: { ...t.stats }, progress: t.loadProgress, cacheBytes: t.lruCache.cachedBytes,
+                  parse: queue(t.parseQueue), downloads: queue(t.downloadQueue), nodes: queue(t.processNodeQueue),
+                  active: [...p.active.values()].map(v => ({ age: performance.now() - v.start, depth: v.depth })), finished: p.finished, modelCalls: p.models, modelTime: p.modelTime,
+                  draco: ext?.dracoLoader ? { workers: ext.dracoLoader.workerPool.map(w => ({ load: w._taskLoad, tasks: Object.keys(w._callbacks || {}).length, costs: Object.values(w._taskCosts || {}) })) } : null,
+                  labels: mvt ? { vectorTiles: mvt.vectorTileInfo.size, lines: mvt.anchorManager.lines.size ?? mvt.anchorManager.lines.length, points: mvt.pointManager.points.size, visible: mvt.occupancy.visible.size, queue: mvt.toggleTileQueue.hasPendingWork, resolution: mvt.occupancy.resolution.toArray(), tileLevels: [...mvt.vectorTileInfo.keys()].slice(0, 30).map(k => k.split('_').at(-1)) } : null,
+                };
+              }));
+              if ([2, 6, 11].includes(i)) await page.screenshot({ path: `../probe/tokyo-${i}.png` });
+              writeFileSync('../probe/report.json', JSON.stringify(report, null, 2));
+            }
+          } finally { writeFileSync('../probe/report.json', JSON.stringify(report, null, 2)); await browser.close(); }
+          JS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr130-refinement-profile
+          path: probe/
+          retention-days: 3
