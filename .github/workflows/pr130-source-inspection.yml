@@ -1,0 +1,28 @@
+name: PR 130 source inspection
+on:
+  push:
+    branches: [codex/pr130-refinement-inspection]
+    paths: [.github/workflows/pr130-source-inspection.yml]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: af5ff4ab9b0fc53dfcdf8f2e347cd0a4b734e53b
+      - name: Package tracked application sources, not credentials or provider data
+        shell: bash
+        run: |
+          mkdir -p source-proof
+          git rev-parse HEAD > source-proof/commit.txt
+          git ls-files -s > source-proof/files.txt
+          git archive --format=tar.gz HEAD app docs scripts AGENTS.md CONTEXT.md STRATEGY.md README.md .gitignore .github make-dist.sh > source-proof/source.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pr130-source-inspection
+          path: source-proof/
+          retention-days: 1
