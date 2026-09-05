@@ -21,22 +21,10 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: app/package-lock.json
-      - run: |
-          mkdir -p diagnosis
-          git rev-parse HEAD > diagnosis/inspector-commit.txt
-          python3 - <<'PY'
-          import pathlib, subprocess, tarfile
-          names = subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0')
-          suffixes = {'.ts', '.tsx', '.js', '.mjs', '.cjs', '.json', '.md', '.css', '.html', '.yml', '.yaml', '.toml', '.txt', '.sh', '.py', '.svg'}
-          with tarfile.open('diagnosis/tracked-source.tar.gz', 'w:gz') as archive:
-              for name in names:
-                  path = pathlib.Path(name)
-                  if name and path.is_file() and not path.is_symlink() and (path.suffix in suffixes or path.name in {'.gitignore', 'requirements.txt'}):
-                      archive.add(path, arcname=name)
-          PY
+      - run: mkdir -p diagnosis
       - run: npm ci --prefix app
       - run: cd app && npx playwright install --with-deps chromium
-      - name: Read actual deployed renderer state and capture frames
+      - name: Diagnose caught exceptions without replacing the live renderer
         working-directory: app
         run: |
           node --input-type=module <<'JS'
@@ -44,61 +32,29 @@ jobs:
           import { writeFileSync } from 'node:fs';
           const browser = await chromium.launch({ headless: true });
           const target = 'https://5eddc6ce.godiesel.pages.dev';
-          const report = { target, sourceCommit: '93ff1706a79f49d43feb9c7d4c7543925d88cc75', browser: browser.version(), synthetic: false, cases: [] };
+          const report = { target, sourceCommit: '93ff1706a79f49d43feb9c7d4c7543925d88cc75', browser: browser.version(), synthetic: false, debugging: true, errors: [], samples: [] };
           const clean = value => String(value).replace(/https?:\/\/[^\s)"']+/g, value => { try { const u = new URL(value); return u.origin + u.pathname; } catch { return '[url]'; } }).replace(/AIza[\w-]+/g, '[redacted]');
           try {
-            for (const slug of ['14130782031', '14023448720']) {
-              const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: 'block' });
-              const page = await context.newPage();
-              const result = { slug, responses: {}, errors: [], samples: [] };
-              report.cases.push(result);
-              page.on('response', response => {
-                const u = new URL(response.url());
-                if (['tile.googleapis.com', 'tiles.openfreemap.org'].includes(u.hostname)) {
-                  const key = `${u.hostname} ${response.status()} ${u.pathname.split('.').pop()}`;
-                  result.responses[key] = (result.responses[key] || 0) + 1;
-                }
-              });
-              page.on('pageerror', error => result.errors.push(clean(error.message)));
-              page.on('console', message => { if (message.type() === 'error') result.errors.push(clean(message.text())); });
-              await page.goto(`${target}/#/replay/${slug}?renderer=cinematic`);
-              for (let index = 0; index < 8; index++) {
-                await page.waitForTimeout(5000);
-                result.samples.push(await page.evaluate(() => {
-                  const stage = document.querySelector('[data-testid="replay-stage"]');
-                  if (!stage) return { stage: null };
-                  // Read-only diagnostic of the mounted ref; no factory, network interception,
-                  // renderer replacement, pose mutation, or test tiles are introduced.
-                  let fiber = stage[Object.keys(stage).find(key => key.startsWith('__reactFiber$'))];
-                  let engine;
-                  for (let depth = 0; fiber && depth < 30; depth++, fiber = fiber.return) {
-                    for (let hook = fiber.memoizedState, count = 0; hook && count < 150; count++, hook = hook.next) {
-                      const value = hook.memoizedState?.current;
-                      if (value?.tiles && value?.camera && value?.renderer) { engine = value; break; }
-                    }
-                    if (engine) break;
-                  }
-                  const world = document.querySelector('[data-world-terrain]');
-                  const base = { time: performance.now(), stage: { ...stage.dataset }, world: world ? { ...world.dataset } : null, inspectedEngine: Boolean(engine) };
-                  if (!engine) return base;
-                  const t = engine.tiles;
-                  const gl = engine.renderer.getContext();
-                  const ext = gl.getExtension('WEBGL_debug_renderer_info');
-                  const counts = {}, examples = [];
-                  t.traverse(tile => {
-                    const key = `${tile.internal?.loadingState}/${tile.traversal?.inFrustum}/${Boolean(tile.engineData?.scene)}`;
-                    counts[key] = (counts[key] || 0) + 1;
-                    if (tile.engineData?.scene && examples.length < 3) examples.push({ depth: tile.internal?.depth, traversal: tile.traversal, sceneMatrix: tile.engineData.scene.matrixWorld.elements, visible: tile.engineData.scene.visible });
-                  });
-                  return { ...base, gpu: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER), contextLost: gl.isContextLost(), rendererCalls: engine.renderer.info.render.calls, rendererTriangles: engine.renderer.info.render.triangles, stats: { ...t.stats }, loadProgress: t.loadProgress, cacheBytes: t.lruCache.cachedBytes, pose: engine.pose, cameraPosition: engine.camera.position.toArray(), cameraNear: engine.camera.near, cameraFar: engine.camera.far, groupMatrix: t.group.matrixWorld.elements, cameraInfo: t.cameraInfo?.map(info => ({ position: info.position.toArray(), sse: info.sseDenominator })), tiles: counts, examples };
-                }));
-                writeFileSync('../diagnosis/live-state.json', JSON.stringify(report, null, 2));
-                if ([0, 4, 7].includes(index)) await page.screenshot({ path: `../diagnosis/${slug}-${(index + 1) * 5}s.png` });
-              }
-              await context.close();
+            const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: 'block' });
+            const page = await context.newPage();
+            const cdp = await context.newCDPSession(page);
+            await cdp.send('Debugger.enable');
+            await cdp.send('Debugger.setPauseOnExceptions', { state: 'all' });
+            cdp.on('Debugger.paused', event => {
+              if (event.reason === 'exception' && report.errors.length < 30) report.errors.push(clean(event.data?.description || event.data?.value || 'exception'));
+              void cdp.send('Debugger.resume').catch(() => {});
+            });
+            page.on('pageerror', error => report.errors.push(clean(error.message)));
+            await page.goto(`${target}/#/replay/14130782031?renderer=cinematic`);
+            for (let index = 0; index < 8; index++) {
+              await page.waitForTimeout(5000);
+              report.samples.push(await page.evaluate(() => ({ time: performance.now(), state: document.querySelector('[data-testid="replay-stage"]')?.getAttribute('data-state'), world: { ...document.querySelector('[data-world-terrain]')?.dataset } })));
+              writeFileSync('../diagnosis/caught-errors.json', JSON.stringify(report, null, 2));
+              if (index === 7) await page.screenshot({ path: '../diagnosis/live-final.png' });
             }
-          } finally { await browser.close(); writeFileSync('../diagnosis/live-state.json', JSON.stringify(report, null, 2)); }
-          if (report.cases.some(result => !result.samples.some(s => s.world?.worldTerrain === 'ready'))) process.exitCode = 1;
+            await context.close();
+          } finally { await browser.close(); writeFileSync('../diagnosis/caught-errors.json', JSON.stringify(report, null, 2)); }
+          if (!report.samples.some(s => s.world?.worldTerrain === 'ready')) process.exitCode = 1;
           JS
       - uses: actions/upload-artifact@v4
         if: always()
