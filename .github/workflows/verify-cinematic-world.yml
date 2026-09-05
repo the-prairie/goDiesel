@@ -76,7 +76,7 @@ jobs:
             fi
             sleep 1
           done
-          xvfb-run -a npm run test:e2e:cinematic-live 2>&1 | tee ../proof/live-provider.txt
+          npm run test:e2e:cinematic-live 2>&1 | tee ../proof/live-provider.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
