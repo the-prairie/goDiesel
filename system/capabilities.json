@@ -245,9 +245,52 @@
         "live": [{ "command": "npm --prefix app run verify:live-pipeline", "cwd": "." }]
       },
       "documents": ["CONTEXT.md", "docs/agents/testing.md", "docs/adr/0007-named-degradation-instead-of-silent-failure.md", "docs/adr/0012-risk-based-verification-with-a-no-skip-live-gate.md"]
+    },
+    {
+      "id": "app-walk",
+      "entity": "application-experience",
+      "summary": "Observe bounded user journeys and record private visual field notes without canonical writes or publication.",
+      "verbs": ["inspect", "verify"],
+      "authority": { "inspect": "read-only", "verify": "ephemeral-local" },
+      "inputs": { "inspect": [], "verify": ["profile", "exact target", "mission", "viewport", "bounded action and request budget"] },
+      "reads": ["app/walks/**", "app/src/**", "app/public/**", "app/package*.json", "app/*config.*", "system/**", "external-runtime:authorized-app-target"],
+      "writes": [".godiesel/walks/**", ".godiesel/evidence/**"],
+      "external_effects": [],
+      "required_files": ["scripts/godiesel", "godiesel_app_walk.py", "godiesel_evidence.py", "app/walks/run.mjs", "app/playwright.walk.config.mjs", "docs/agents/app-walk.md"],
+      "configuration": [
+        { "name": "GODIESEL_WALK_BROWSER_PATH", "required_for": [], "sensitive": false }
+      ],
+      "commands": {
+        "inspect": [{ "command": "./scripts/godiesel inspect app-walk --json", "cwd": "." }],
+        "verify": [{ "command": "./scripts/godiesel verify app-walk --profile controlled --target http://127.0.0.1:8792/ --mission planning --json", "cwd": "." }]
+      },
+      "preconditions": ["the target is explicitly selected", "the browser can reach the target", "live imagery requires hardware acceleration and real provider responses", "screenshots and traces remain private unless separately reviewed for sharing"],
+      "idempotency": { "inspect": "read-only", "verify": "external-check-required" },
+      "recovery": { "inspect": "No recovery is required.", "verify": "Read the private field notes; correct the cause and run a new observation without overwriting earlier evidence." },
+      "artifacts": [
+        { "kind": "app-walk-report", "location": ".godiesel/walks/**", "persistence": "ignored-local" },
+        { "kind": "verification-evidence-receipt", "location": ".godiesel/evidence/**", "persistence": "ignored-local", "schema": "system/evidence-receipt.schema.json" }
+      ],
+      "invariants": ["read-only-product-boundary", "fresh-observation", "private-visual-evidence", "explicit-unproven-claims"],
+      "verification": {
+        "focused": [{ "command": "python -m pytest -q test_godiesel_app_walk.py", "cwd": "." }, { "command": "node --test app/walks/core.test.mjs", "cwd": "." }],
+        "ticket": [{ "command": "node --test app/walks/browser.test.mjs", "cwd": "." }],
+        "release": [{ "command": "npm --prefix app run verify", "cwd": "." }],
+        "live": [{ "command": "./scripts/godiesel verify app-walk --profile live --target https://godiesel.pages.dev/ --mission memory --headed --json", "cwd": "." }]
+      },
+      "documents": ["CONTEXT.md", "docs/agents/app-walk.md", "docs/agents/testing.md", "app/DESIGN.md"]
     }
   ],
   "impact_rules": [
+    {
+      "id": "app-walk-runtime",
+      "paths": ["godiesel_app_walk.py", "test_godiesel_app_walk.py", "scripts/godiesel", "app/walks/**", "app/playwright.walk.config.mjs"],
+      "capabilities": ["app-walk"],
+      "category": "implementation",
+      "gates": [{ "capability": "app-walk", "tier": "focused" }, { "capability": "app-walk", "tier": "ticket" }],
+      "invariants": [{ "capability": "app-walk", "id": "read-only-product-boundary" }, { "capability": "app-walk", "id": "fresh-observation" }, { "capability": "app-walk", "id": "private-visual-evidence" }, { "capability": "app-walk", "id": "explicit-unproven-claims" }],
+      "reason": "The App Walk adapter, browser runner, or observation contract changed."
+    },
     {
       "id": "control-plane-implementation",
       "paths": ["godiesel_control.py", "godiesel_evidence.py", "godiesel_route_share.py", "godiesel_verification.py", "scripts/godiesel"],

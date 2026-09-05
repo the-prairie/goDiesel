@@ -70,3 +70,29 @@ harness tests against a rendered in-memory document. Its adapter changes only
 fixture navigation and fixture storage, observes **zero network traffic**, and
 cannot prove HTTP, provider, or real-app behavior. CI and product runs do not use
 that adapter. Administrative network blocks are reported as blocked, not defects.
+
+## Operator integration
+
+```sh
+./scripts/godiesel inspect app-walk --json
+./scripts/godiesel verify app-walk --profile controlled --target http://127.0.0.1:8792/ --mission planning --json
+./scripts/godiesel verify app-walk --profile live --target https://godiesel.pages.dev/ --mission memory --headed --json
+python -m pytest -q test_godiesel_app_walk.py
+```
+
+The existing `scripts/godiesel` entrypoint dispatches this capability to its own
+adapter; all other invocations retain the original control parser and exit status.
+`inspect system` discovers it through the same capability manifest. This adds
+`inspect` and `verify` only, not an `apply` or `release` permission.
+
+Verification rejects stale run identities, wrong targets, inconsistent exit codes,
+contradictory check results, missing visual artifacts, symlinks and changed covered
+inputs. A receipt uses the existing `godiesel_evidence` writer. The outer result
+schema retains its established `passed`/`blocked` vocabulary; the domain result,
+exit code and general evidence receipt preserve `failed` versus `blocked`.
+`--reuse` is deliberately rejected without executing anything. No earlier result
+establishes how an external application behaves now.
+
+Adapter tests use a fake child result to attack this protocol; they are not browser
+or product evidence. The existing control tests still validate all original
+capabilities and their invariants, with App Walk added to their exact inventory.
