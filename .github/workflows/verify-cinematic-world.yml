@@ -1,0 +1,62 @@
+name: Verify cinematic world
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-cinematic-world.yml'
+      - 'app/src/surfaces/replay/**'
+      - 'app/e2e/cinematic-world*'
+      - 'app/e2e/helpers/cinematic-fixture.ts'
+      - 'app/package*.json'
+      - 'app/vite.config.ts'
+permissions:
+  contents: read
+concurrency:
+  group: cinematic-world-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+defaults:
+  run:
+    # Explicit bash enables -eo pipefail: tee must never hide a failed gate.
+    shell: bash
+jobs:
+  renderer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Capture source and runner
+        run: |
+          mkdir -p proof
+          git rev-parse HEAD > proof/commit.txt
+          git status --short > proof/dirty-state.txt
+          node --version > proof/node.txt
+      - name: Install dependencies
+        run: npm ci --prefix app
+      - name: Typecheck and all unit tests
+        working-directory: app
+        run: |
+          npx tsc -b 2>&1 | tee ../proof/typecheck.txt
+          npm run test:unit 2>&1 | tee ../proof/unit.txt
+      - name: Install browser
+        working-directory: app
+        run: npx playwright install --with-deps chromium
+      - name: Production build, controls and real shader pipeline
+        working-directory: app
+        run: |
+          npx playwright test e2e/cinematic-world.spec.ts e2e/cinematic-world-renderer.spec.ts e2e/google-replay-production.spec.ts --project=chromium 2>&1 | tee ../proof/browser.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cinematic-world-proof
+          path: |
+            proof/
+            app/test-results/
+          retention-days: 7

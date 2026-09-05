@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { readdirSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { syntheticGlb, syntheticRoadTile, syntheticTileset } from "./helpers/cinematic-fixture";
 
@@ -7,6 +7,12 @@ test.use({ launchOptions: { args: ["--enable-unsafe-swiftshader"] } });
 
 test("real renderer draws synthetic 3D Tiles, atmosphere and MVT labels, then disposes", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
+  // Fail on a broken deployment asset path before a slow GPU timeout.
+  for (const asset of [
+    "atmosphere/scattering.bin", "atmosphere/irradiance.bin", "atmosphere/transmittance.bin",
+    "clouds/local_weather.png", "clouds/shape.bin", "clouds/shape_detail.bin", "clouds/turbulence.png",
+    "draco/draco_wasm_wrapper.js", "draco/draco_decoder.wasm",
+  ]) expect(statSync(path.resolve("dist/world-assets", asset)).size).toBeGreaterThan(0);
   await page.setViewportSize({ width: 640, height: 480 });
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));

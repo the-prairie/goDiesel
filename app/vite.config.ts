@@ -62,9 +62,10 @@ export default defineConfig(({ mode }) => {
           ...["scattering", "irradiance", "transmittance"].map((name) => ({
             src: `node_modules/@takram/three-atmosphere/assets/${name}.bin`,
             dest: "world-assets/atmosphere",
+            rename: { stripBase: 4 },
           })),
-          { src: "node_modules/@takram/three-clouds/assets/*", dest: "world-assets/clouds" },
-          { src: "node_modules/three/examples/jsm/libs/draco/gltf/*", dest: "world-assets/draco" },
+          { src: "node_modules/@takram/three-clouds/assets/*", dest: "world-assets/clouds", rename: { stripBase: 4 } },
+          { src: "node_modules/three/examples/jsm/libs/draco/gltf/*", dest: "world-assets/draco", rename: { stripBase: 7 } },
           ...["Workers", "Assets", "Widgets", "ThirdParty"].map((directory) => ({
             src: `${cesiumBuild}/${directory}/**/*`,
             dest: `cesiumStatic/${directory}`,

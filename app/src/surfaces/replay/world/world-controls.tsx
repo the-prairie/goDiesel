@@ -38,7 +38,7 @@ export function WorldControls({ mode, environment, onMode, onEnvironment }: Prop
         </label>
         <fieldset>
           <legend className="mb-2 text-xs font-semibold">Detail</legend>
-          <div className="flex gap-2">{(["light", "balanced", "cinema"] as const).map((quality) => <button className={`${button} capitalize`} key={quality} type="button" aria-pressed={environment.quality === quality} onClick={() => onEnvironment({ ...environment, quality })}>{quality}</button>)}</div>
+          <div className="flex gap-2">{(["light", "balanced", "cinema"] as const).map((quality) => <button className={`${button} capitalize`} key={quality} type="button" aria-pressed={environment.quality === quality} onClick={() => onEnvironment({ ...environment, quality })}>{quality[0].toUpperCase() + quality.slice(1)}</button>)}</div>
           <p className="mt-2 text-xs leading-relaxed text-white/70">Light keeps the sky but turns off volumetric clouds. Balanced can step down automatically to keep the flight responsive.</p>
         </fieldset>
       </> : null}

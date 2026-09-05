@@ -36,7 +36,7 @@ export function syntheticTileset() {
     root: {
       transform: [-Math.sin(lng), Math.cos(lng), 0, 0, -Math.sin(lat) * Math.cos(lng), -Math.sin(lat) * Math.sin(lng), Math.cos(lat), 0, Math.cos(lat) * Math.cos(lng), Math.cos(lat) * Math.sin(lng), Math.sin(lat), 0, n * Math.cos(lat) * Math.cos(lng), n * Math.cos(lat) * Math.sin(lng), n * (1 - 0.00669437999014) * Math.sin(lat), 1],
       boundingVolume: { box: [0, 0, 1000, 4000, 0, 0, 0, 4000, 0, 0, 0, 20] },
-      geometricError: 0, refine: "REPLACE", content: { uri: "fixture.glb" },
+      geometricError: 0, refine: "REPLACE", content: { uri: "fixture.glb?session=synthetic-test-session" },
     },
   };
 }
