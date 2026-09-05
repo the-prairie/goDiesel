@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { readdirSync, statSync } from "node:fs";
+import { readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { PNG } from "pngjs";
 import { syntheticGlb, syntheticRoadTile, syntheticTileset, syntheticCompressedGlb, syntheticRefiningTileset } from "./helpers/cinematic-fixture";
@@ -68,7 +68,31 @@ test(`real renderer draws ${refinement ? "refining compressed" : "single"} synth
   await expect(world).toHaveAttribute("data-world-terrain", "ready", { timeout: 45_000 });
   await expect(world).toHaveAttribute("data-world-atmosphere", "ready", { timeout: 45_000 });
   await expect.poll(async () => Number(await world.getAttribute("data-rendered-tile-meshes"))).toBeGreaterThan(0);
-  await expect.poll(async () => Number(await world.getAttribute("data-world-label-count")), { timeout: 30_000 }).toBeGreaterThan(0);
+  try {
+    await expect.poll(async () => Number(await world.getAttribute("data-world-label-count")), { timeout: 30_000 }).toBeGreaterThan(0);
+  } catch (error) {
+    // Only the synthetic fixture is inspected here, never provider credentials or payloads.
+    const diagnostics = await page.evaluate(() => {
+      // The fixture deliberately exposes its actual engine for lifecycle and graphics checks.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const engine = (window as any).__realWorld;
+      const tiles = engine.tiles;
+      const p = tiles.getPluginByName("MVT_ANNOTATIONS_PLUGIN");
+      const lines = p ? [...p.settlingManager._items].filter((x: any) => x.positions) : [];
+      return {
+        world: { ...document.querySelector<HTMLElement>("#real-renderer-fixture")!.dataset },
+        camera: engine.camera.position.toArray(), group: tiles.group.matrixWorld.elements,
+        stats: tiles.stats, labels: p ? {
+          ranges: [...p.tileLoadState.values()], vectors: [...p.vectorTileInfo.keys()],
+          pending: p.settlingManager._queue.size, visible: p.occupancy.visible.size,
+          items: p.occupancy.manager.items.slice(0, 12).map((x: any) => ({ ready: x.ready, enabled: x.enabled, valid: x.valid, rejection: x.rejectionReason, screen: x.screenPos.toArray() })),
+          lines: lines.slice(0, 5).map((x: any) => ({ ready: x.ready, lat: x.lat, lon: x.lon, positions: x.positions.map((p: any) => p.toArray()), lengths: x.cumulativeLen })),
+        } : null,
+      };
+    });
+    writeFileSync(testInfo.outputPath("synthetic-label-diagnostics.json"), JSON.stringify(diagnostics, null, 2));
+    throw error;
+  }
   // With normal motion the road name must fade in promptly below the terrain
   // baseline. The occupancy solver may validly anchor it left or center: inspect
   // the whole road band, not a hardcoded horizontal word position. The labels-off

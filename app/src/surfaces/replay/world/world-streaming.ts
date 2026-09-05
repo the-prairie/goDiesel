@@ -1,5 +1,6 @@
-import { DownloadPriorityQueue, LRUCache, PriorityQueue } from "3d-tiles-renderer/core";
+import { DownloadPriorityQueue, LRUCache } from "3d-tiles-renderer/core";
 import type { TilesRenderer } from "3d-tiles-renderer/three";
+import { WorldTaskQueue } from "./world-tile-scheduling";
 
 /** Replay needs the camera's local terrain, not every sibling of every globe ancestor. */
 export function configureWorldStreaming(tiles: TilesRenderer) {
@@ -18,14 +19,18 @@ export function configureWorldStreaming(tiles: TilesRenderer) {
   const download = new DownloadPriorityQueue();
   download.priorityCallback = tiles.downloadQueue.priorityCallback;
   download.maxJobsPerOrigin = 8;
-  const parse = new PriorityQueue();
+  const parse = new WorldTaskQueue();
   parse.priorityCallback = tiles.parseQueue.priorityCallback;
   parse.maxJobs = 3;
-  const nodes = new PriorityQueue();
+  const nodes = new WorldTaskQueue();
   nodes.priorityCallback = tiles.processNodeQueue.priorityCallback;
   tiles.downloadQueue = download;
   tiles.parseQueue = parse;
   tiles.processNodeQueue = nodes;
+  tiles.registerPlugin({
+    name: "WORLD_STREAMING_QUEUE_LIFECYCLE",
+    dispose: () => { parse.dispose(); nodes.dispose(); },
+  });
 }
 
 /** Keep the mountain horizon at close range without requesting a 100 km disk. */
