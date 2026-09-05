@@ -11,7 +11,7 @@ defaults:
 jobs:
   inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 9
+    timeout-minutes: 7
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,10 +35,11 @@ jobs:
           const report = { target, source: '0df0edbecf484fab9314ab4152652b5aebc162df', synthetic: false, diagnosticOnly: true, cases: [] };
           const browser = await chromium.launch({ headless: true });
           try {
-            for (const slug of ['17665674778', '14130782031']) {
+            for (const slug of ['17665674778']) {
               const page = await browser.newPage({ viewport: { width: 1280, height: 720 }, serviceWorkers: 'block' });
-              const result = { slug, responses: {}, samples: [] }; report.cases.push(result);
-              page.on('response', response => { const url = new URL(response.url()); if (url.hostname === 'tile.googleapis.com' || url.pathname.endsWith('.pbf')) { const key = `${url.hostname}/${response.status()}/${url.pathname.endsWith('.glb') ? 'model' : url.pathname.endsWith('.pbf') ? 'vector' : 'metadata'}`; result.responses[key] = (result.responses[key] || 0) + 1; } });
+              const result = { slug, responses: {}, samples: [], errors: [] }; report.cases.push(result);
+              page.on('console',msg=>{if(msg.type()==='error')result.errors.push(msg.text().replace(/https?:\/\/\S+/g,'[URL]').replace(/AIza[\w-]+/g,'[redacted]').slice(0,500));});
+              page.on('response', response => { const url = new URL(response.url()); if (url.hostname === 'tile.googleapis.com' || url.pathname.endsWith('.pbf') || url.pathname.includes('draco')) { const key = `${url.hostname}/${response.status()}/${url.pathname.endsWith('.glb') ? 'model' : url.pathname.endsWith('.pbf') ? 'vector' : url.pathname.includes('draco') ? 'decoder' : 'metadata'}`; result.responses[key] = (result.responses[key] || 0) + 1; } });
               await page.goto(`${target}/#/replay/${slug}?renderer=cinematic`);
               const probe = async (mode) => page.evaluate((mode) => {
                 const stage = document.querySelector('[data-testid="replay-stage"]');
@@ -49,9 +50,10 @@ jobs:
                 }
                 if (!e) return { mode, found: false, world: {...document.querySelector('[data-world-terrain]')?.dataset} };
                 const t=e.tiles, p=t.getPluginByName('MVT_ANNOTATIONS_PLUGIN'), cache=t.lruCache;
-                const queue = q => ({running:q.currJobs,waiting:q.items.length,max:q.maxJobs});
+                const queue = q => ({running:q?.currJobs,waiting:q?.items?.length,max:q?.maxJobs});
                 const visible=[]; t.forEachLoadedModel((scene,tile)=>{if(t.visibleTiles.has(tile)&&visible.length<12)visible.push({depth:tile.internal.depth,error:tile.geometricError,sse:tile.traversal.error});});
-                const data = { mode, time:performance.now(), world:{...document.querySelector('[data-world-terrain]')?.dataset}, stats:{...t.stats}, progress:t.loadProgress, pose:e.pose, queues:{parse:queue(t.parseQueue),download:queue(t.downloadQueue)}, cacheBytes:cache.cachedBytes, visible, labels:p?{vectors:p.vectorTileInfo.size,keys:[...p.vectorTileInfo.keys()].slice(-20),points:p.pointManager.points.size,lines:p.anchorManager.lines.size,visible:p.occupancy.visible.size}:null };
+                const draco=t.plugins.find(p=>p.dracoLoader)?.dracoLoader;
+                const data = { mode, time:performance.now(), world:{...document.querySelector('[data-world-terrain]')?.dataset}, stats:{...t.stats}, progress:t.loadProgress, queues:{parse:queue(t.parseQueue),download:queue(t.downloadQueue)}, decoder:draco?{tasks:draco.workerNextTaskID,workers:draco.workerPool.map(w=>({load:w._taskLoad,pending:Object.keys(w._callbacks).length}))}:null, cacheBytes:cache.cachedBytes, visible, labels:p?{vectors:p.vectorTileInfo.size,keys:[...p.vectorTileInfo.keys()].slice(-20),points:p.pointManager.points.size,lines:p.anchorManager.lines.size,visible:p.occupancy.visible.size}:null };
                 if(mode==='disable-atmosphere') {e.atmosphereReady=false;e.renderer.toneMapping=4;}
                 if(mode==='skip-ancestors') {t.loadAncestors=false;t.loadSiblings=false;}
                 if(mode==='local-frustum') {e.camera.far=20000;e.camera.updateProjectionMatrix();e.pose=undefined;}
