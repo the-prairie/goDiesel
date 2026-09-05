@@ -30,7 +30,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           # Reviewed code, not an arbitrary event-controlled checkout with secrets.
-          ref: db0a3cf37cdd96f3d7a25d2f56854dbb9a63aeee
+          ref: 1609c4b01ab89415ccb85e07e1cd6cd3854f45e2
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
