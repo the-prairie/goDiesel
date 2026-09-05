@@ -1,0 +1,74 @@
+name: PR 130 live refinement diagnosis
+on:
+  push:
+    branches: [codex/pr130-refinement-inspection]
+    paths: [.github/workflows/pr130-live-inspection.yml]
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: af5ff4ab9b0fc53dfcdf8f2e347cd0a4b734e53b
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci --prefix app
+      - run: cd app && npx playwright install --with-deps chromium
+      - name: Bounded live diagnosis (not acceptance)
+        working-directory: app
+        run: |
+          mkdir -p ../inspection
+          node --input-type=module <<'JS'
+          import { chromium } from '@playwright/test';
+          import { writeFileSync } from 'node:fs';
+          const target = 'https://bf612f03.godiesel.pages.dev';
+          const report = { target, source: '0df0edbecf484fab9314ab4152652b5aebc162df', synthetic: false, diagnosticOnly: true, cases: [] };
+          const browser = await chromium.launch({ headless: true });
+          try {
+            for (const slug of ['17665674778', '14130782031']) {
+              const page = await browser.newPage({ viewport: { width: 1280, height: 720 }, serviceWorkers: 'block' });
+              const result = { slug, responses: {}, samples: [] }; report.cases.push(result);
+              page.on('response', response => { const url = new URL(response.url()); if (url.hostname === 'tile.googleapis.com' || url.pathname.endsWith('.pbf')) { const key = `${url.hostname}/${response.status()}/${url.pathname.endsWith('.glb') ? 'model' : url.pathname.endsWith('.pbf') ? 'vector' : 'metadata'}`; result.responses[key] = (result.responses[key] || 0) + 1; } });
+              await page.goto(`${target}/#/replay/${slug}?renderer=cinematic`);
+              const probe = async (mode) => page.evaluate((mode) => {
+                const stage = document.querySelector('[data-testid="replay-stage"]');
+                let fiber = stage?.[Object.keys(stage).find(k => k.startsWith('__reactFiber'))];
+                let e;
+                for (let i=0; fiber && i<30 && !e; i++, fiber=fiber.return) {
+                  for(let h=fiber.memoizedState,j=0; h && j<100; j++,h=h.next) { const x=h.memoizedState?.current; if(x?.tiles && x?.camera) {e=x;break;} }
+                }
+                if (!e) return { mode, found: false, world: {...document.querySelector('[data-world-terrain]')?.dataset} };
+                const t=e.tiles, p=t.getPluginByName('MVT_ANNOTATIONS_PLUGIN'), cache=t.lruCache;
+                const depths={}, samples=[];
+                t.traverse(tile => { const key=`${tile.internal?.depth}/${tile.internal?.loadingState}/${tile.traversal?.inFrustum}`; depths[key]=(depths[key]||0)+1; if(t.visibleTiles.has(tile)&&samples.length<8) samples.push({depth:tile.internal?.depth,error:tile.geometricError,traversal:tile.traversal,bytes:cache.getMemoryUsage(tile)}); });
+                const data = { mode, world:{...document.querySelector('[data-world-terrain]')?.dataset}, stats:{...t.stats}, progress:t.loadProgress, camera:e.camera.position.toArray(), cameraECEF:e.camera.position.clone().applyMatrix4(e.frame.worldToECEF).toArray(), tileCameras:t.cameraInfo.map(x=>({position:x.position.toArray(),resolution:x.resolution,sse:x.sseDenominator})), cache:{bytes:cache.cachedBytes,maxBytes:cache.maxBytesSize,size:cache.itemSet.size,used:cache.usedSet.size,full:cache.isFull()}, depths,samples, labels: p ? {resolution:p.resolution,vectorTileCount:p.vectorTileInfo.size,vectorKeys:[...p.vectorTileInfo.keys()].slice(-20),ranges:[...p.tileLoadState.values()].slice(-5),points:p.pointManager.points.size,lines:p.anchorManager.lines.size,visible:p.occupancy.visible.size,pending:p.settlingManager.hasPendingWork,occupancy:p.occupancy.hasPendingWork,projection:p.overlay.projection.constructor.name} : null };
+                if(mode==='cache-experiment') {cache.maxBytesSize=1024*1024*1024; cache.minBytesSize=768*1024*1024;}
+                return data;
+              }, mode);
+              await page.waitForTimeout(12000); result.samples.push(await probe('overview'));
+              const chase=page.getByRole('button',{name:'Chase',exact:true}); if(await chase.isEnabled()) await chase.click();
+              await page.waitForTimeout(12000); result.samples.push(await probe('cache-experiment'));
+              await page.screenshot({path:`../inspection/${slug}-before.png`});
+              await page.waitForTimeout(18000); result.samples.push(await probe('after-larger-cache'));
+              await page.screenshot({path:`../inspection/${slug}-after.png`});
+              writeFileSync('../inspection/diagnosis.json',JSON.stringify(report,null,2));
+              await page.close();
+            }
+          } finally { await browser.close(); writeFileSync('../inspection/diagnosis.json',JSON.stringify(report,null,2)); }
+          JS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr130-refinement-diagnosis
+          path: inspection/
+          retention-days: 3
