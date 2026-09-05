@@ -91,7 +91,14 @@ export async function createWorldLabels(
     signal.throwIfAborted();
     tiles.registerPlugin(plugin);
   } catch (error) {
-    driver.dispose(); overlay.dispose(); throw error;
+    driver.dispose(); overlay.imageSource.dispose(); throw error;
   }
-  return { update, attribution, defaultSource: !import.meta.env.VITE_WORLD_VECTOR_SOURCE, get visibleLabelCount() { return driver.visibleLabels.size; }, dispose: () => { tiles.unregisterPlugin(plugin); overlay.dispose(); } };
+  let disposed = false;
+  return { update, attribution, defaultSource: !import.meta.env.VITE_WORLD_VECTOR_SOURCE, get visibleLabelCount() { return driver.visibleLabels.size; }, dispose: () => {
+    if (disposed) return;
+    disposed = true;
+    tiles.unregisterPlugin(plugin);
+    // MVTOverlay owns no dispose method in 0.5.2; its image source owns the caches.
+    overlay.imageSource.dispose();
+  } };
 }

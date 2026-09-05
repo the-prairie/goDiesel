@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { readdirSync, statSync } from "node:fs";
 import path from "node:path";
+import { PNG } from "pngjs";
 import { syntheticGlb, syntheticRoadTile, syntheticTileset } from "./helpers/cinematic-fixture";
 
 test.use({ launchOptions: { args: ["--enable-unsafe-swiftshader"] } });
@@ -34,7 +35,7 @@ test("real renderer draws synthetic 3D Tiles, atmosphere and MVT labels, then di
     const engine = module.createCinematicWorldEngine();
     const container = document.createElement("div");
     container.id = "real-renderer-fixture";
-    container.style.cssText = "position:fixed;inset:0;z-index:100;background:#101010";
+    container.style.cssText = "position:fixed;inset:0;z-index:100;background:#101010;--world-dock-height:0px";
     document.body.append(container);
     const state = window as unknown as { __realWorld: typeof engine; __realWorldContainer: HTMLElement };
     state.__realWorld = engine; state.__realWorldContainer = container;
@@ -52,6 +53,10 @@ test("real renderer draws synthetic 3D Tiles, atmosphere and MVT labels, then di
       },
       onStatus: (status: { state: string; message: string }) => { container.dataset.engineStatus = status.state; container.dataset.message = status.message; },
     });
+    const caption = document.createElement("div");
+    caption.textContent = "SYNTHETIC PIPELINE TEST — NOT LIVE IMAGERY";
+    caption.style.cssText = "position:absolute;top:8px;left:8px;padding:6px;background:#fff;color:#111;font:11px Arial";
+    container.append(caption);
     engine.setCinematicRoute({ startRatio: 0, endRatio: 1, focusRatio: 0.5, rangeM: 2400, motionIntensity: 1, shotKind: "tracking" });
   }, `/assets/${runtime}`);
   const world = page.locator("#real-renderer-fixture");
@@ -66,7 +71,14 @@ test("real renderer draws synthetic 3D Tiles, atmosphere and MVT labels, then di
   // Let the real volumetric pass draw, then assert no shader/runtime errors rather than masking them.
   await page.waitForTimeout(2500);
   await expect(world).toHaveAttribute("data-world-atmosphere", "ready");
-  await page.screenshot({ path: testInfo.outputPath("real-pipeline-synthetic-golden-clouds.png") });
+  const golden = PNG.sync.read(await page.screenshot({ path: testInfo.outputPath("real-pipeline-synthetic-golden-clouds.png") }));
+  // The route is centered by the recorded camera pose. Clouds must not erase its coral trace.
+  let routePixels = 0;
+  for (let y = 230; y < 246; y++) for (let x = 180; x < 440; x++) {
+    const i = (y * golden.width + x) * 4;
+    if (golden.data[i] > 100 && golden.data[i] > golden.data[i + 1] * 1.3 && golden.data[i] > golden.data[i + 2] * 1.3) routePixels++;
+  }
+  expect(routePixels).toBeGreaterThan(3);
   expect(errors).toEqual([]);
   await page.evaluate(() => {
     const element = document.querySelector<HTMLCanvasElement>("#real-renderer-fixture canvas")!;

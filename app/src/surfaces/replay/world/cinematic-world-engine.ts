@@ -154,7 +154,8 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
       this.readyTimer = window.setTimeout(() => {
         if (this.layers.terrain !== "ready") this.fail("Photorealistic terrain did not render in time. Use Native Replay or Atlas; no substitute scenery has been loaded.");
       }, 35_000);
-      this.atmosphere = new WorldAtmosphere(renderer, this.scene, this.camera, frame.worldToECEF, this.environment);
+      this.atmosphere = new WorldAtmosphere(renderer, this.scene, this.camera, frame.worldToECEF, this.environment,
+        route.route.reduce((height, point) => Math.max(height, Number.isFinite(point.elev) ? point.elev : 0), 0));
       void this.atmosphere.load(this.abort.signal).then(() => {
         if (this.abort.signal.aborted) return;
         this.atmosphereReady = true;
@@ -323,6 +324,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
   }
   private fail(message: string) {
     this.layers.terrain = "unavailable";
+    if (this.options) this.options.container.dataset.worldTerrain = "unavailable";
     this.options?.onStatus({ state: "unavailable", message });
     this.abort.abort(); cancelAnimationFrame(this.animation); window.clearTimeout(this.readyTimer);
   }

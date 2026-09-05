@@ -10,7 +10,7 @@ declare module "3d-tiles-renderer/three/plugins" {
     constructor(options: MVTOptions);
     init(): void;
     whenReady(): Promise<void>;
-    dispose(): void;
+    readonly imageSource: { dispose(): void };
     fetchOptions: RequestInit;
     fetch: (url: string, options?: RequestInit) => Promise<Response>;
   }

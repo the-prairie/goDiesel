@@ -31,7 +31,7 @@ export function WorldControls({ mode, environment, onMode, onEnvironment }: Prop
           Cloud cover <span className="float-right tabular-nums">{Math.round(environment.clouds * 100)}%</span>
           <input className="mt-1 block h-11 w-full accent-white disabled:opacity-40" type="range" min="0" max="100" step="5" aria-label="Cloud cover" disabled={environment.quality === "light"} value={Math.round(environment.clouds * 100)} onChange={(event) => onEnvironment({ ...environment, clouds: Number(event.target.value) / 100 })} />
         </label>
-        <p className="text-xs leading-relaxed text-white/70">Light and clouds are a simulated mood, not the weather recorded on this day. The photographs keep their original lighting.</p>
+        <p className="text-xs leading-relaxed text-white/70">Light and clouds set the mood, not the day’s recorded weather.</p>
         <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-xs font-semibold">
           Road names and landmarks
           <input className="size-5 accent-white" type="checkbox" checked={environment.labels} onChange={(event) => onEnvironment({ ...environment, labels: event.target.checked })} />
@@ -39,7 +39,7 @@ export function WorldControls({ mode, environment, onMode, onEnvironment }: Prop
         <fieldset>
           <legend className="mb-2 text-xs font-semibold">Detail</legend>
           <div className="flex gap-2">{(["light", "balanced", "cinema"] as const).map((quality) => <button className={`${button} capitalize`} key={quality} type="button" aria-pressed={environment.quality === quality} onClick={() => onEnvironment({ ...environment, quality })}>{quality[0].toUpperCase() + quality.slice(1)}</button>)}</div>
-          <p className="mt-2 text-xs leading-relaxed text-white/70">Light keeps the sky but turns off volumetric clouds. Balanced can step down automatically to keep the flight responsive.</p>
+          <p className="mt-2 text-xs leading-relaxed text-white/70">Light turns off clouds. Balanced adjusts detail to keep the flight responsive.</p>
         </fieldset>
       </> : null}
     </div>

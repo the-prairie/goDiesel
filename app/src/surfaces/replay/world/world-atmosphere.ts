@@ -4,7 +4,7 @@ import { DataTextureLoader, parseUint8Array } from "@takram/three-geospatial";
 import { EffectComposer, EffectPass, RenderPass, ToneMappingEffect, ToneMappingMode } from "postprocessing";
 import {
   Data3DTexture, HalfFloatType, LinearFilter, LinearMipmapLinearFilter, LoadingManager,
-  NoColorSpace, NoToneMapping, RedFormat, RepeatWrapping, RGBAFormat,
+  NoColorSpace, NoToneMapping, RedFormat, RepeatWrapping,
   Texture, TextureLoader, Vector3,
   type Matrix4, type PerspectiveCamera, type Scene, type WebGLRenderer,
 } from "three";
@@ -27,6 +27,7 @@ export class WorldAtmosphere {
     private readonly camera: PerspectiveCamera,
     private readonly worldToECEF: Matrix4,
     environment: WorldEnvironment,
+    private readonly routeCeilingM = 0,
   ) { this.environment = environment; }
 
   async load(signal: AbortSignal) {
@@ -37,6 +38,11 @@ export class WorldAtmosphere {
       sunLight: false, skyLight: false,
     });
     const clouds = new CloudsEffect(this.camera);
+    // Art-directed weather belongs above the ride, not through the rider's line of sight.
+    const cloudFloor = Math.max(2500, this.routeCeilingM + 1500);
+    clouds.cloudLayers[0].altitude = cloudFloor;
+    clouds.cloudLayers[1].altitude = cloudFloor + 300;
+    clouds.cloudLayers[2].altitude = Math.max(7500, cloudFloor + 5000);
     this.aerial = aerial;
     this.clouds = clouds;
     aerial.worldToECEFMatrix.copy(this.worldToECEF);
@@ -73,11 +79,12 @@ export class WorldAtmosphere {
       clouds.shapeDetailTexture = detail;
       clouds.turbulenceTexture = turbulence;
       // Deterministic temporal dithering. This is sample noise, not environmental data or a claimed STBN asset.
-      const data = new Uint8Array(32 * 32 * 16 * 4);
+      const data = new Uint8Array(128 * 128 * 64);
       let random = 712367;
       for (let i = 0; i < data.length; i++) { random ^= random << 13; random ^= random >>> 17; random ^= random << 5; data[i] = random & 255; }
-      const noise = new Data3DTexture(data, 32, 32, 16);
-      noise.format = RGBAFormat;
+      const noise = new Data3DTexture(data, 128, 128, 64);
+      noise.format = RedFormat;
+      noise.wrapS = noise.wrapT = noise.wrapR = RepeatWrapping;
       noise.needsUpdate = true;
       this.textures.add(noise);
       aerial.stbnTexture = noise;
