@@ -5,10 +5,16 @@ import { WalkStop, assert, check, digest, redact, addFinding } from './core.mjs'
 
 const providers = /(?:^|\.)(?:googleapis\.com|gstatic\.com|google\.com|openfreemap\.org|cartocdn\.com|openstreetmap\.org)$/;
 const destructive = /\b(?:delete|remove|publish|deploy|regenerate|save and regenerate|confirm completion|mark completed)\b/i;
+// Observed in the actual Google Maps JavaScript SDK during the live acceptance
+// run: a read of 3D configuration uses POST. Permit this exact provider RPC,
+// not arbitrary POSTs, application writers, other hosts, ports, or RPC methods.
+const googleMap3DConfig = 'https://maps.googleapis.com/$rpc/google.internal.maps.mapsjs.v1.MapsJsInternalService/GetMap3DConfig';
 export function allowedRequest(url, method, target) {
   let u;
   try { u = new URL(url); } catch { return false; }
-  if (!['GET', 'HEAD', 'OPTIONS'].includes(method) || u.username || u.password) return false;
+  if (u.username || u.password) return false;
+  if (method === 'POST') return u.href === googleMap3DConfig;
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) return false;
   if (u.origin === target) return true;
   return u.protocol === 'https:' && providers.test(u.hostname);
 }
@@ -57,6 +63,8 @@ export class BrowserWalk {
     });
     page.on('response', response => {
       const u = new URL(response.url());
+      if (u.href === googleMap3DConfig && response.request().method() === 'POST')
+        report.observations.push({ kind: 'provider-read', operation: 'google-map3d-config', status: response.status() });
       if (providers.test(u.hostname) && response.ok())
         report.requests.provider_successes[u.hostname] = (report.requests.provider_successes[u.hostname] ?? 0) + 1;
       if (response.status() >= 400 && report.requests.failures.length < 100)
