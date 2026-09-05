@@ -34,13 +34,14 @@ jobs:
           after='''
             const probe = await page.evaluate(() => {
               const e=(window as any).__realWorld,t=e.tiles,p=t.getPluginByName('MVT_ANNOTATIONS_PLUGIN');
-              const simple=(o:any)=>Object.fromEntries(Object.entries(o).filter(([k,v])=>v===null || typeof v==='number' || typeof v==='boolean' || typeof v==='string'));
+              const simple=(o:any)=>Object.fromEntries(Object.entries(o??{}).filter(([k,v])=>v===null || typeof v==='number' || typeof v==='boolean' || typeof v==='string'));
               const models:any[]=[];t.forEachLoadedModel((s:any,tile:any)=>models.push({depth:tile.internal.depth,visible:t.visibleTiles.has(tile),range:p?.tileLoadState.get(tile)}));
               return {world:{...e.options.container.dataset},stats:{...t.stats},camera:e.camera.position.toArray(),models,labels:p?{
                 vectors:[...p.vectorTileInfo.entries()].map(([key,v]:any)=>({key,annotations:v.annotations.length})),
-                lines:[...p.anchorManager.lines].map((l:any)=>({fields:simple(l),positions:l.positions,anchors:l.anchors?.map((a:any)=>({fields:simple(a),point:a.point}))})),
+                lines:[...p.anchorManager.lines].map((l:any)=>({fields:simple(l),positions:l.positions,anchorPositions:l.anchorPositions})),
+                anchors:[...p.anchorManager.anchors].map((a:any)=>({fields:simple(a),point:a.point})),
                 occupancy:simple(p.occupancy),manager:simple(p.occupancy.manager),visible:p.occupancy.visible.size,
-                working:p.occupancy.manager.working.size,items:p.occupancy.manager._items.size,
+                working:p.occupancy.manager.working,items:p.occupancy.manager.items.length,
                 showTimers:[...p.occupancy._showTimers.values()],hideTimers:[...p.occupancy._hideTimers.values()],
                 settlePending:p.settlingManager.hasPendingWork,settleQueue:p.settlingManager._queue.size,parsePending:p.toggleTileQueue.hasPendingWork,
               }:null};
