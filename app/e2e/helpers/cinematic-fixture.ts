@@ -92,10 +92,12 @@ export function syntheticRefiningTileset() {
     ...base.root,
     boundingVolume: { sphere: [0, 0, 1000, 80_000] },
     geometricError: 100_000,
-    content: { uri: "coarse.glb" },
+    // The real Google auth plugin learns the session from the initial tileset.
+    // Omitting it makes every subsequent binary response look like auth JSON.
+    content: { uri: "coarse.glb?session=synthetic-test-session" },
     children: [
-      { boundingVolume: base.root.boundingVolume, geometricError: 0, content: { uri: "detail.glb" } },
-      { boundingVolume: { sphere: [0, -50_000, 1000, 4000] }, geometricError: 0, content: { uri: "offscreen.glb" } },
+      { boundingVolume: base.root.boundingVolume, geometricError: 0, content: { uri: "detail.glb?session=synthetic-test-session" } },
+      { boundingVolume: { sphere: [0, -50_000, 1000, 4000] }, geometricError: 0, content: { uri: "offscreen.glb?session=synthetic-test-session" } },
     ],
   } };
 }
