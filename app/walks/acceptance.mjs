@@ -5,6 +5,7 @@ import { readFile, writeFile, mkdir, lstat } from 'node:fs/promises';
 import { randomBytes, createCipheriv, publicEncrypt, createHash, constants } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { liveAdapterIds } from './agents/provider.mjs';
 
 const exec = promisify(execFile);
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -38,7 +39,7 @@ export function summarize(caseName, operator, report, reportSha = null) {
     renderer: !renderer ? 'unavailable' : /swiftshader|llvmpipe|software|mesa offscreen/i.test(renderer) ? 'software' : 'hardware-reported',
     provider_response_count: Object.values(report?.requests?.provider_successes ?? {}).reduce((n, v) => n + count(v), 0),
     google_response_count: Object.entries(report?.requests?.provider_successes ?? {}).filter(([host]) => /(?:^|\.)(?:googleapis|gstatic|google)\.com$/.test(host)).reduce((n, [, v]) => n + count(v), 0),
-    model_adapter: report?.agent?.adapter === 'openai-responses' ? 'openai-responses' : report?.agent ? 'not-a-live-adapter' : 'not_started',
+    model_adapter: liveAdapterIds.includes(report?.agent?.adapter) ? report.agent.adapter : report?.agent ? 'not-a-live-adapter' : 'not_started',
     model_calls: count(report?.agent?.calls), input_tokens: count(report?.agent?.input_tokens), output_tokens: count(report?.agent?.output_tokens),
     visual_review: 'not_run', imagery_approval: 'not_established',
   };
@@ -49,7 +50,7 @@ export function summarize(caseName, operator, report, reportSha = null) {
     && result.finding_codes.length === 0 && passed('mission') && passed('return-context') && passed('named-degradation')
     && result.checks.some(c => c.id === 'playback-progress' && c.status === 'blocked');
   result.navigation_round_trip = passed('return-context') ? 'passed' : 'not_established';
-  result.model_mission = config.driver === 'agent' && passed('mission') && result.model_adapter === 'openai-responses'
+  result.model_mission = config.driver === 'agent' && passed('mission') && liveAdapterIds.includes(result.model_adapter)
     && result.model_calls > 0 && result.input_tokens > 0 && result.output_tokens > 0 ? 'passed' : 'not_established';
   result.acceptance_status = report && result.operator_codes.length === 0
     && (result.status === 'passed' || controlledRoundTrip)

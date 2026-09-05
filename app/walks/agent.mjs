@@ -4,7 +4,7 @@ import path from 'node:path';
 import { WalkStop, assert, check, digest, redact, addFinding } from './core.mjs';
 import { safeInteraction } from './browser.mjs';
 import { missions } from './missions.mjs';
-import { openaiDecision } from './agents/openai.mjs';
+import { configuredAgent } from './agents/provider.mjs';
 
 export const decisionSchema = {
   type: 'object', additionalProperties: false, required: ['observation_id', 'action'],
@@ -102,12 +102,14 @@ export async function applyDecision(w, a) {
   }
 }
 
-export async function explore(w, { decide = openaiDecision } = {}) {
+export async function explore(w, { decide } = {}) {
   if (!['memory', 'planning', 'explore'].includes(w.config.mission)) throw new WalkStop('AGENT_MISSION', 'This mission uses its focused guided verifier.');
-  // The live model is a separate opt-in. No API request is made by default.
-  if (decide === openaiDecision && (!process.env.OPENAI_API_KEY || !process.env.GODIESEL_WALK_MODEL || process.env.GODIESEL_WALK_ALLOW_REMOTE_AGENT !== '1'))
-    throw new WalkStop('AGENT_UNCONFIGURED', 'Remote exploration requires an explicit model, API key, and permission to send private screenshots.');
-  w.report.agent = { adapter: decide === openaiDecision ? 'openai-responses' : 'injected-test-adapter', calls: 0, input_tokens: 0, output_tokens: 0, budget: { calls: 30, tokens: 150000 }, milestones: [] };
+  // Only the explicitly configured production adapter is live model evidence.
+  // A supplied test decision function must remain labeled as injected.
+  const remote = decide === undefined ? configuredAgent() : null;
+  decide ??= remote.decide;
+  w.report.agent = { adapter: remote?.id ?? 'injected-test-adapter', model: remote?.model ?? null,
+    calls: 0, input_tokens: 0, output_tokens: 0, budget: { calls: 30, tokens: 150000 }, milestones: [] };
   await w.enter();
   let previousAction = "";
   for (let turn = 0; turn < 30; turn++) {
