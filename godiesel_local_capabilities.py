@@ -23,6 +23,8 @@ from jsonschema import Draft202012Validator
 from fitparse import FitParseError
 from gpxpy.gpx import GPXException
 
+import route_imports
+
 from admin_curation import (
     OwnerMutationBusyError,
     SourceRollbackError,
@@ -60,7 +62,6 @@ from quest_meta import build_route_curation, infer_route_region, route_guide_pre
 from route_imports import (
     DEFAULT_DIESEL_DIARIES_ROOT,
     find_strava_activity_file,
-    imported_route_from_spec,
     load_strava_route_metadata,
     RouteMetadata,
 )
@@ -196,28 +197,23 @@ def _source_projection(
     strava_metadata: Mapping[str, RouteMetadata],
 ) -> tuple[dict[str, str], list[dict[str, object]], dict[str, object], str, str]:
     activity_id = str(canonical["activity_id"])
-    imported = imported_route_from_spec(canonical, root)
-    if imported is not None:
-        source = {
-            "activity_name": imported.name,
-            "activity_type": imported.activity_type,
-            "date": imported.date,
-            "description": imported.description,
-            "source_kind": "imported-gpx",
-        }
-        source_path = imported.path
-    else:
-        metadata = strava_metadata[activity_id]
-        source = {
-            "activity_name": metadata.name,
-            "activity_type": metadata.activity_type,
-            "date": metadata.date,
-            "description": metadata.description,
-            "source_kind": metadata.source_kind,
-        }
-        source_path = find_strava_activity_file(activity_id)
-        if source_path is None:
-            raise OSError(f"route source unavailable for {activity_id}")
+    metadata = route_imports.route_metadata(
+        canonical,
+        root,
+        strava_metadata.get(activity_id),
+    )
+    if metadata is None:
+        raise OSError(f"route metadata unavailable for {activity_id}")
+    source = {
+        "activity_name": metadata.name,
+        "activity_type": metadata.activity_type,
+        "date": metadata.date,
+        "description": metadata.description,
+        "source_kind": metadata.source_kind,
+    }
+    source_path = metadata.source_path or find_strava_activity_file(activity_id)
+    if source_path is None:
+        raise OSError(f"route source unavailable for {activity_id}")
 
     source_provenance = build_route_provenance(load_source_route_points(source_path))
     source_route = [dict(point) for point in source_provenance.route]
@@ -240,6 +236,7 @@ def _generation_state(
     root: Path,
     *,
     include_recovery_blockers: bool = True,
+    validate_source_projection: bool = True,
 ) -> tuple[dict[str, object] | None, list[dict[str, str]]]:
     recovery_state, recovery_blockers = route_generation_recovery_state(root)
     try:
@@ -339,7 +336,9 @@ def _generation_state(
     summary_by_id = {str(route["activity_id"]): route for route in summary_routes}
     detail_by_slug = {path.stem: detail for path, detail in zip(detail_paths, details)}
     strava_metadata: dict[str, RouteMetadata] = {}
-    if any(not route.get("source_gpx") for route in canonical_routes):
+    if validate_source_projection and any(
+        not route.get("source_gpx") for route in canonical_routes
+    ):
         try:
             strava_metadata = load_strava_route_metadata(
                 DEFAULT_DIESEL_DIARIES_ROOT / "activities.csv"
@@ -365,52 +364,53 @@ def _generation_state(
             ):
                 projection_current = False
                 break
-            try:
-                (
-                    expected_source,
-                    expected_route,
-                    expected_provenance,
-                    expected_region,
-                    expected_subtitle,
-                ) = _source_projection(root, canonical, strava_metadata)
-            except (
-                FitParseError,
-                GPXException,
-                KeyError,
-                OSError,
-                RuntimeError,
-                UnicodeError,
-                ValueError,
-            ):
-                projection_current = False
-                break
-            source_fields = {
-                "activity_name": "activity_name",
-                "activity_type": "type",
-                "date": "date",
-                "description": "description",
-                "source_kind": "source_kind",
-            }
-            if any(
-                expected_source[source] is None
-                or summary.get(generated) != expected_source[source]
-                or detail.get(generated) != expected_source[source]
-                for source, generated in source_fields.items()
-            ):
-                projection_current = False
-                break
-            if (
-                detail.get("route") != expected_route
-                or detail.get("provenance") != expected_provenance
-                or summary.get("region") != expected_region
-                or detail.get("region") != expected_region
-                or summary.get("name") != expected_region
-                or detail.get("name") != expected_region
-                or summary.get("subtitle") != expected_subtitle
-                or detail.get("subtitle") != expected_subtitle
-            ):
-                projection_current = False
-                break
+            if validate_source_projection:
+                try:
+                    (
+                        expected_source,
+                        expected_route,
+                        expected_provenance,
+                        expected_region,
+                        expected_subtitle,
+                    ) = _source_projection(root, canonical, strava_metadata)
+                except (
+                    FitParseError,
+                    GPXException,
+                    KeyError,
+                    OSError,
+                    RuntimeError,
+                    UnicodeError,
+                    ValueError,
+                ):
+                    projection_current = False
+                    break
+                source_fields = {
+                    "activity_name": "activity_name",
+                    "activity_type": "type",
+                    "date": "date",
+                    "description": "description",
+                    "source_kind": "source_kind",
+                }
+                if any(
+                    expected_source[source] is None
+                    or summary.get(generated) != expected_source[source]
+                    or detail.get(generated) != expected_source[source]
+                    for source, generated in source_fields.items()
+                ):
+                    projection_current = False
+                    break
+                if (
+                    detail.get("route") != expected_route
+                    or detail.get("provenance") != expected_provenance
+                    or summary.get("region") != expected_region
+                    or detail.get("region") != expected_region
+                    or summary.get("name") != expected_region
+                    or detail.get("name") != expected_region
+                    or summary.get("subtitle") != expected_subtitle
+                    or detail.get("subtitle") != expected_subtitle
+                ):
+                    projection_current = False
+                    break
             for source_field, generated_fields in canonical_projection_fields.items():
                 if source_field not in canonical or canonical[source_field] in (None, ""):
                     continue
@@ -482,6 +482,16 @@ def _command_result(command: str, completed: subprocess.CompletedProcess[str]) -
         "command_exit_code": completed.returncode,
         "output_sha256": sha256(output.encode("utf-8", errors="surrogateescape")).hexdigest(),
     }
+
+
+def _withdraw_evidence_with_issues(
+    root: Path,
+    evidence: Mapping[str, str],
+    issues: list[dict[str, str]],
+) -> bool:
+    withdrawn = withdraw_evidence_receipt(root, evidence, issues=issues)
+    not_reusable = ensure_evidence_receipt_not_reusable(root, evidence)
+    return withdrawn is not None and not_reusable
 
 
 def _run_verification(
@@ -703,13 +713,21 @@ def _run_verification(
                 if issue["code"] not in {item["code"] for item in blockers}
             )
             if evidence is not None:
+                if not _withdraw_evidence_with_issues(root, evidence, late_blockers):
+                    blockers.append(
+                        _issue(
+                            "GODIESEL_EVIDENCE_WITHDRAWAL_FAILED",
+                            "Invalid verification evidence could not be withdrawn safely.",
+                            "Quarantine the named evidence receipt before attempting verification reuse.",
+                        )
+                    )
                 evidence = None
     final_provider_identity = post_provider_identity
     final_identity_blockers: list[dict[str, str]] = []
     if refresh_provider_identity is not None:
         final_provider_identity, final_identity_blockers = refresh_provider_identity()
         if final_provider_identity != post_provider_identity or final_identity_blockers:
-            blockers.append(
+            final_identity_blockers.append(
                 _issue(
                     "GODIESEL_PROVIDER_BUILD_IDENTITY_CHANGED",
                     "The deployed build identity changed while verification evidence was being finalized.",
@@ -750,6 +768,14 @@ def _run_verification(
     ]
     blockers.extend(newly_detected)
     if newly_detected and evidence is not None:
+        if not _withdraw_evidence_with_issues(root, evidence, newly_detected):
+            blockers.append(
+                _issue(
+                    "GODIESEL_EVIDENCE_WITHDRAWAL_FAILED",
+                    "Invalid verification evidence could not be withdrawn safely.",
+                    "Quarantine the named evidence receipt before attempting verification reuse.",
+                )
+            )
         evidence = None
     if (
         intended_receipt_status == "passed"
@@ -831,8 +857,7 @@ def _run_verification(
                     )
                 )
         if promotion_blockers:
-            withdraw_evidence_receipt(root, evidence)
-            if not ensure_evidence_receipt_not_reusable(root, evidence):
+            if not _withdraw_evidence_with_issues(root, evidence, promotion_blockers):
                 promotion_blockers.append(
                     _issue(
                         "GODIESEL_EVIDENCE_WITHDRAWAL_FAILED",
@@ -926,7 +951,7 @@ def execute_route_generation(
         )
 
     if verb == "inspect":
-        state, blockers = _generation_state(root)
+        state, blockers = _generation_state(root, validate_source_projection=False)
         return _envelope(
             "route-generation",
             verb,
@@ -968,6 +993,18 @@ def execute_route_generation(
                     result={"recovery_state": recovery_state},
                     result_contract="godiesel_local_capabilities.py#route-generation-recovery",
                     blockers=recovery_blockers,
+                )
+            generation_state, generation_blockers = _generation_state(root)
+            if generation_blockers:
+                return _envelope(
+                    "route-generation",
+                    verb,
+                    required_authority,
+                    status="blocked",
+                    authorized=True,
+                    result=generation_state,
+                    result_contract="godiesel_local_capabilities.py#route-generation-inspection",
+                    blockers=generation_blockers,
                 )
             command = [
                 sys.executable,

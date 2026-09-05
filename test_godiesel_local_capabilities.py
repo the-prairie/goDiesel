@@ -18,6 +18,7 @@ from jsonschema import Draft202012Validator
 import admin_curation
 import curation_publish
 import godiesel_local_capabilities
+import route_imports
 from admin_curation import SourceRollbackError, owner_mutation_lock
 from curation_publish import CurationPublishError, CurationRecoveryError
 from godiesel_local_capabilities import (
@@ -66,6 +67,10 @@ def _write_json(path: Path, value: object) -> None:
 def _initialize_git_repository(root: Path) -> None:
     root.mkdir(parents=True, exist_ok=True)
     subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+
+
+def _unexpected_runner(*_args, **_kwargs):
+    raise AssertionError("verification command must not run after source validation fails")
 
 
 def _install_evidence_contract(root: Path) -> None:
@@ -367,6 +372,62 @@ def test_generation_inspect_reports_projection_without_mutating_it(tmp_path: Pat
         "recovery_state": "clear",
     }
     assert {path: path.read_bytes() for path in watched} == before
+
+
+def test_generation_inspect_does_not_read_private_route_sources(
+    tmp_path: Path,
+    monkeypatch,
+):
+    root = _generation_fixture(tmp_path)
+    config_path = root / "quests.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["routes"][0].pop("source_gpx")
+    config["routes"][0].pop("source_sha256")
+    _write_json(config_path, config)
+
+    def reject_private_read(*_args, **_kwargs):
+        raise AssertionError("inspection must not read private route sources")
+
+    monkeypatch.setattr(
+        godiesel_local_capabilities,
+        "load_strava_route_metadata",
+        reject_private_read,
+    )
+    monkeypatch.setattr(
+        godiesel_local_capabilities,
+        "find_strava_activity_file",
+        reject_private_read,
+    )
+    monkeypatch.setattr(
+        godiesel_local_capabilities,
+        "load_source_route_points",
+        reject_private_read,
+    )
+
+    result = execute_route_generation(root, "inspect")
+
+    assert result["status"] == "passed"
+    assert result["result"]["inventory_state"] == "current"
+
+
+def test_generation_apply_uses_canonical_route_metadata_adapter(
+    tmp_path: Path,
+    monkeypatch,
+):
+    root = _generation_fixture(tmp_path)
+    monkeypatch.setattr(route_imports, "route_metadata", lambda *_args: None)
+
+    result = execute_route_generation(
+        root,
+        "apply",
+        authority="canonical-local",
+        runner=lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 0, "generated", ""
+        ),
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_PROJECTION_DRIFT"
 
 
 def test_generation_inspect_blocks_while_recovery_backup_is_pending(
@@ -1029,7 +1090,7 @@ def test_generation_inspect_blocks_semantically_stale_projection(
     assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_PROJECTION_DRIFT"
 
 
-def test_generation_inspect_blocks_coordinated_source_metadata_drift(tmp_path: Path):
+def test_generation_verify_blocks_coordinated_source_metadata_drift(tmp_path: Path):
     root = _generation_fixture(tmp_path)
     summary_path = root / "app/src/data/generated/routes.manifest.json"
     detail_path = root / "app/public/data/routes/route-1.json"
@@ -1040,7 +1101,7 @@ def test_generation_inspect_blocks_coordinated_source_metadata_drift(tmp_path: P
     _write_json(summary_path, summary)
     _write_json(detail_path, detail)
 
-    result = execute_route_generation(root, "inspect")
+    result = execute_route_generation(root, "verify", runner=_unexpected_runner)
 
     assert result["status"] == "blocked"
     assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_PROJECTION_DRIFT"
@@ -1070,7 +1131,7 @@ def test_generation_inspect_blocks_coordinated_derived_label_drift(tmp_path: Pat
 
 
 @pytest.mark.parametrize("source_state", ["missing", "checksum-mismatch"])
-def test_generation_inspect_requires_valid_durable_geometry_source(
+def test_generation_verify_requires_valid_durable_geometry_source(
     tmp_path: Path,
     source_state: str,
 ):
@@ -1081,13 +1142,13 @@ def test_generation_inspect_requires_valid_durable_geometry_source(
     else:
         source.write_text(source.read_text(encoding="utf-8") + "\n", encoding="utf-8")
 
-    result = execute_route_generation(root, "inspect")
+    result = execute_route_generation(root, "verify", runner=_unexpected_runner)
 
     assert result["status"] == "blocked"
     assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_PROJECTION_DRIFT"
 
 
-def test_generation_inspect_rebuilds_expected_geometry_from_source(tmp_path: Path):
+def test_generation_verify_rebuilds_expected_geometry_from_source(tmp_path: Path):
     root = _generation_fixture(tmp_path)
     config_path = root / "quests.json"
     config = json.loads(config_path.read_text(encoding="utf-8"))
@@ -1099,20 +1160,20 @@ def test_generation_inspect_rebuilds_expected_geometry_from_source(tmp_path: Pat
         encoding="utf-8",
     )
 
-    result = execute_route_generation(root, "inspect")
+    result = execute_route_generation(root, "verify", runner=_unexpected_runner)
 
     assert result["status"] == "blocked"
     assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_PROJECTION_DRIFT"
 
 
-def test_generation_inspect_rebuilds_expected_provenance_from_source(tmp_path: Path):
+def test_generation_verify_rebuilds_expected_provenance_from_source(tmp_path: Path):
     root = _generation_fixture(tmp_path)
     detail_path = root / "app/public/data/routes/route-1.json"
     detail = json.loads(detail_path.read_text(encoding="utf-8"))
     detail["provenance"]["track"]["segment_count"] = 99
     _write_json(detail_path, detail)
 
-    result = execute_route_generation(root, "inspect")
+    result = execute_route_generation(root, "verify", runner=_unexpected_runner)
 
     assert result["status"] == "blocked"
     assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_PROJECTION_DRIFT"
@@ -1140,7 +1201,7 @@ def test_generation_inspect_blocks_invalid_utf8_inputs(
     assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_PROJECTION_UNREADABLE"
 
 
-def test_generation_inspect_blocks_invalid_utf8_private_metadata(
+def test_generation_verify_blocks_invalid_utf8_private_metadata(
     tmp_path: Path,
     monkeypatch,
 ):
@@ -1162,7 +1223,7 @@ def test_generation_inspect_blocks_invalid_utf8_private_metadata(
         lambda _activity_id: root / "route_sources/route-1.gpx",
     )
 
-    result = execute_route_generation(root, "inspect")
+    result = execute_route_generation(root, "verify", runner=_unexpected_runner)
 
     assert result["status"] == "blocked"
     assert result["blockers"][0]["code"] == "GODIESEL_GENERATED_PROJECTION_DRIFT"
@@ -2771,7 +2832,7 @@ def test_provider_verify_withdraws_evidence_for_late_identity_change(
         **initial,
         "build_id": "87654321-4321-4321-8321-cba987654321",
     }
-    identities = [initial, initial, changed]
+    identities = [initial, initial, initial, changed]
 
     result = execute_provider_readiness(
         tmp_path,
@@ -2797,6 +2858,17 @@ def test_provider_verify_withdraws_evidence_for_late_identity_change(
     ]
     assert receipts
     assert all(item["status"] != "passed" for item in receipts)
+    identity_warning = next(
+        warning
+        for warning in receipts[0]["warnings"]
+        if warning["code"] == "GODIESEL_PROVIDER_BUILD_IDENTITY_CHANGED"
+    )
+    assert identity_warning == {
+        "code": "GODIESEL_PROVIDER_BUILD_IDENTITY_CHANGED",
+        "message": "The deployed build identity changed while proof was being promoted.",
+        "remediation": "Stabilize the named deployment and rerun the live provider gate.",
+    }
+    assert identity_warning["remediation"] in receipts[0]["safe_next_actions"]
     assert identities == []
 
 

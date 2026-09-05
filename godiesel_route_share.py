@@ -1552,7 +1552,11 @@ def execute_route_share(
                 )
         if post_promotion_issues:
             if evidence is not None:
-                withdraw_evidence_receipt(root, evidence)
+                withdraw_evidence_receipt(
+                    root,
+                    evidence,
+                    issues=post_promotion_issues,
+                )
                 if not ensure_evidence_receipt_not_reusable(root, evidence):
                     post_promotion_issues.append(
                         _issue(

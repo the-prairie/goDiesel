@@ -23,8 +23,9 @@ Route creation owns the same lock inside `route_create.py`, so both the unified 
 The existing staging, backup, atomic replacement, and interrupted-run recovery remain authoritative.
 The writer fails the whole generation when any approved route lacks metadata, source geometry, or route points, so an incomplete projection cannot replace the complete public catalogue.
 After the writer exits successfully, the adapter independently inspects the complete projection and reports a blocked result when any inventory, field, provenance, or aggregate remains stale.
-Inspection validates the manifest version, generation timestamp, inventory statistics, route identities, strict detail and summary consumer contracts, durable-source metadata and geometry, canonical annotations and replay choices, exact detail-to-manifest projection, and aggregate statistics derived from valid detail records.
-Route-generation proof fingerprints the selected private Strava metadata and geometry as one path-free aggregate, monitors those source files during the gate, and never writes their paths or values into the evidence receipt.
+Inspection validates the manifest version, generation timestamp, inventory statistics, route identities, strict detail and summary consumer contracts, canonical annotations and replay choices, exact detail-to-manifest projection, and aggregate statistics derived from valid detail records.
+It does not open repository-external private route metadata or geometry.
+Route-generation verification validates durable-source metadata and geometry through the canonical source adapter, fingerprints selected private Strava inputs as one path-free aggregate, monitors those source files during the gate, and never writes their paths or values into the evidence receipt.
 
 Run or reuse focused proof:
 

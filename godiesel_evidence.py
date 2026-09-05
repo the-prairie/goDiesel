@@ -518,6 +518,8 @@ def update_evidence_receipt(
 def invalidate_evidence_receipt(
     root: Path | str,
     summary: Mapping[str, str],
+    *,
+    issues: Sequence[Mapping[str, str]] = (),
 ) -> dict[str, str] | None:
     """Atomically demote the exact passed evidence receipt after a late change."""
 
@@ -538,6 +540,7 @@ def invalidate_evidence_receipt(
         ):
             return None
         receipt["status"] = "blocked"
+        _record_evidence_issues(receipt, issues)
         destination = write_local_text_atomic(
             root,
             EVIDENCE_ROOT,
@@ -556,10 +559,12 @@ def invalidate_evidence_receipt(
 def withdraw_evidence_receipt(
     root: Path | str,
     summary: Mapping[str, str],
+    *,
+    issues: Sequence[Mapping[str, str]] = (),
 ) -> dict[str, str] | None:
     """Ensure an exact evidence receipt cannot remain reusable after failure."""
 
-    invalidated = invalidate_evidence_receipt(root, summary)
+    invalidated = invalidate_evidence_receipt(root, summary, issues=issues)
     if invalidated is not None:
         return invalidated
     root = Path(root).resolve()
@@ -573,6 +578,7 @@ def withdraw_evidence_receipt(
         if not isinstance(receipt, dict) or receipt.get("receipt_id") != receipt_id:
             raise ValueError("evidence receipt identity changed")
         receipt["status"] = "blocked"
+        _record_evidence_issues(receipt, issues)
         destination = write_local_text_atomic(
             root,
             EVIDENCE_ROOT,
@@ -600,6 +606,30 @@ def withdraw_evidence_receipt(
             "path": (EVIDENCE_ROOT / quarantine_name).as_posix(),
             "sha256": _file_digest(quarantine_path),
         }
+
+
+def _record_evidence_issues(
+    receipt: dict[str, Any],
+    issues: Sequence[Mapping[str, str]],
+) -> None:
+    warnings = receipt.get("warnings")
+    if not isinstance(warnings, list):
+        warnings = []
+        receipt["warnings"] = warnings
+    safe_next_actions = receipt.get("safe_next_actions")
+    if not isinstance(safe_next_actions, list):
+        safe_next_actions = []
+        receipt["safe_next_actions"] = safe_next_actions
+    for issue in issues:
+        warning = {
+            "code": str(issue["code"]),
+            "message": str(issue["message"]),
+            "remediation": str(issue["remediation"]),
+        }
+        if warning not in warnings:
+            warnings.append(warning)
+        if warning["remediation"] not in safe_next_actions:
+            safe_next_actions.append(warning["remediation"])
 
 
 def ensure_evidence_receipt_not_reusable(
