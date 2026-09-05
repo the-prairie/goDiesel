@@ -11,7 +11,7 @@ defaults:
 jobs:
   inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 9
     steps:
       - uses: actions/checkout@v4
         with:
@@ -24,7 +24,7 @@ jobs:
           cache-dependency-path: app/package-lock.json
       - run: npm ci --prefix app
       - run: cd app && npx playwright install --with-deps chromium
-      - name: Bounded live diagnosis (not acceptance)
+      - name: Bounded live experiments (not acceptance)
         working-directory: app
         run: |
           mkdir -p ../inspection
@@ -49,19 +49,23 @@ jobs:
                 }
                 if (!e) return { mode, found: false, world: {...document.querySelector('[data-world-terrain]')?.dataset} };
                 const t=e.tiles, p=t.getPluginByName('MVT_ANNOTATIONS_PLUGIN'), cache=t.lruCache;
-                const depths={}, samples=[];
-                t.traverse(tile => { const key=`${tile.internal?.depth}/${tile.internal?.loadingState}/${tile.traversal?.inFrustum}`; depths[key]=(depths[key]||0)+1; if(t.visibleTiles.has(tile)&&samples.length<8) samples.push({depth:tile.internal?.depth,error:tile.geometricError,traversal:tile.traversal,bytes:cache.getMemoryUsage(tile)}); });
-                const data = { mode, world:{...document.querySelector('[data-world-terrain]')?.dataset}, stats:{...t.stats}, progress:t.loadProgress, camera:e.camera.position.toArray(), cameraECEF:e.camera.position.clone().applyMatrix4(e.frame.worldToECEF).toArray(), tileCameras:t.cameraInfo.map(x=>({position:x.position.toArray(),resolution:x.resolution,sse:x.sseDenominator})), cache:{bytes:cache.cachedBytes,maxBytes:cache.maxBytesSize,size:cache.itemSet.size,used:cache.usedSet.size,full:cache.isFull()}, depths,samples, labels: p ? {resolution:p.resolution,vectorTileCount:p.vectorTileInfo.size,vectorKeys:[...p.vectorTileInfo.keys()].slice(-20),ranges:[...p.tileLoadState.values()].slice(-5),points:p.pointManager.points.size,lines:p.anchorManager.lines.size,visible:p.occupancy.visible.size,pending:p.settlingManager.hasPendingWork,occupancy:p.occupancy.hasPendingWork,projection:p.overlay.projection.constructor.name} : null };
-                if(mode==='cache-experiment') {cache.maxBytesSize=1024*1024*1024; cache.minBytesSize=768*1024*1024;}
+                const queue = q => ({running:q.currJobs,waiting:q.items.length,max:q.maxJobs});
+                const visible=[]; t.forEachLoadedModel((scene,tile)=>{if(t.visibleTiles.has(tile)&&visible.length<12)visible.push({depth:tile.internal.depth,error:tile.geometricError,sse:tile.traversal.error});});
+                const data = { mode, time:performance.now(), world:{...document.querySelector('[data-world-terrain]')?.dataset}, stats:{...t.stats}, progress:t.loadProgress, pose:e.pose, queues:{parse:queue(t.parseQueue),download:queue(t.downloadQueue)}, cacheBytes:cache.cachedBytes, visible, labels:p?{vectors:p.vectorTileInfo.size,keys:[...p.vectorTileInfo.keys()].slice(-20),points:p.pointManager.points.size,lines:p.anchorManager.lines.size,visible:p.occupancy.visible.size}:null };
+                if(mode==='disable-atmosphere') {e.atmosphereReady=false;e.renderer.toneMapping=4;}
+                if(mode==='skip-ancestors') {t.loadAncestors=false;t.loadSiblings=false;}
+                if(mode==='local-frustum') {e.camera.far=20000;e.camera.updateProjectionMatrix();e.pose=undefined;}
                 return data;
               }, mode);
-              await page.waitForTimeout(12000); result.samples.push(await probe('overview'));
+              await page.waitForTimeout(12000);
               const chase=page.getByRole('button',{name:'Chase',exact:true}); if(await chase.isEnabled()) await chase.click();
-              await page.waitForTimeout(12000); result.samples.push(await probe('cache-experiment'));
-              await page.screenshot({path:`../inspection/${slug}-before.png`});
-              await page.waitForTimeout(18000); result.samples.push(await probe('after-larger-cache'));
-              await page.screenshot({path:`../inspection/${slug}-after.png`});
-              writeFileSync('../inspection/diagnosis.json',JSON.stringify(report,null,2));
+              await page.waitForTimeout(8000);
+              for(const mode of ['disable-atmosphere','skip-ancestors','local-frustum','final']) {
+                result.samples.push(await probe(mode));
+                await page.screenshot({path:`../inspection/${slug}-${mode}.png`});
+                writeFileSync('../inspection/diagnosis.json',JSON.stringify(report,null,2));
+                if(mode!=='final')await page.waitForTimeout(12000);
+              }
               await page.close();
             }
           } finally { await browser.close(); writeFileSync('../inspection/diagnosis.json',JSON.stringify(report,null,2)); }
