@@ -29,7 +29,7 @@ try {
     catch (error) { stdout = error.stdout ?? ''; }
     let result;
     try { result = JSON.parse(stdout); } catch { result = { exit_code: 2, result: { status: 'blocked' }, blockers: [{ code: 'INVALID_OPERATOR_RESULT' }] }; }
-    const item = { mission, viewport, status: result.result?.status ?? 'blocked', checks: [], findings: [], last_action_type: null };
+    const item = { mission, viewport, status: result.result?.status ?? 'blocked', checks: [], findings: [], last_action_type: null, last_action_status: null, diagnostic_tags: [] };
     const reportPath = result.result?.report;
     if (typeof reportPath === 'string' && /^\.godiesel\/walks\/[0-9TZ.:-]+-[a-f0-9]{8}\/report\.json$/.test(reportPath)) {
       const report = JSON.parse(await readFile(path.join(root, reportPath), 'utf8'));
@@ -38,6 +38,10 @@ try {
       item.findings = report.findings.map(f => /^[A-Z_]+$/.test(f.code) ? f.code : 'UNCLASSIFIED');
       const type = report.actions.at(-1)?.replay?.type;
       item.last_action_type = /^[\w-]+$/.test(type ?? '') ? type : null;
+      item.last_action_status = ['passed', 'failed', 'blocked', 'not_run'].includes(report.actions.at(-1)?.status) ? report.actions.at(-1).status : null;
+      // Emit only a closed vocabulary of diagnostic tags, never the error itself.
+      const detail = report.checks.find(c => c.id === 'mission')?.detail ?? '';
+      item.diagnostic_tags = ['strict mode violation', 'Timeout', 'waitFor', 'scrollIntoViewIfNeeded', 'not visible', 'getByText', 'getByLabel', 'getByRole', 'isDisabled', 'Cinematic replay', 'Vibe', 'Read-only mode.', 'Route geography', 'Route story'].filter(tag => detail.includes(tag));
     }
     // Controlled builds deliberately disable Google. A complete round trip may
     // prove navigation/degradation while its playback report correctly stays blocked.
