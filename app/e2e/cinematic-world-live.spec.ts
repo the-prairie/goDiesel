@@ -97,7 +97,8 @@ for (const journey of [
       await page.screenshot({ path: testInfo.outputPath("01-live-overview.png") });
 
       await page.getByRole("button", { name: "Chase", exact: true }).click();
-      await expect.poll(async () => Number(await world.getAttribute("data-world-label-count")), { timeout: 45_000 }).toBeGreaterThan(0);
+      // Preserve a failing label verdict, but still collect playback and lighting evidence.
+      await expect.configure({ soft: true }).poll(async () => Number(await world.getAttribute("data-world-label-count")), { timeout: 45_000 }).toBeGreaterThan(0);
       await page.waitForTimeout(1500);
       await page.screenshot({ path: testInfo.outputPath("02-live-road-alignment.png") });
       expect(evidence.googleResponses).toBeGreaterThan(1);

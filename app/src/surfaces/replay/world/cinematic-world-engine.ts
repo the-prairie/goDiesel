@@ -11,7 +11,6 @@ import type { GoogleRouteCameraPose, GoogleRouteGroundingMode } from "@/surfaces
 import type { CinematicRouteTreatment } from "@/surfaces/replay/cinematic/cinematic-route-filament";
 import { routeDistanceM } from "@/domain/geometry/route-path";
 import { WorldFrame } from "./world-frame";
-import { WorldParseQueue } from "./world-parse-queue";
 import { WorldRoute } from "./world-route";
 import { WorldAtmosphere } from "./world-atmosphere";
 import { createWorldLabels } from "./world-labels";
@@ -27,7 +26,6 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
   private abort = new AbortController();
   private renderer?: WebGLRenderer;
   private tiles?: TilesRenderer;
-  private parseQueue?: WorldParseQueue;
   private frame?: WorldFrame;
   private scene = new Scene();
   private camera = new PerspectiveCamera(54, 1, 0.5, 100_000);
@@ -94,15 +92,8 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
       cache.maxBytesSize = 384 * 1024 * 1024;
       cache.minBytesSize = 256 * 1024 * 1024;
       tiles.lruCache = cache;
-      this.parseQueue = new WorldParseQueue();
-      this.parseQueue.priorityCallback = tiles.parseQueue.priorityCallback;
-      tiles.parseQueue = this.parseQueue;
       tiles.fetchOptions = { signal: this.abort.signal };
       tiles.registerPlugin(new GoogleCloudAuthPlugin({ apiToken: key }));
-      // Route-scale views need visible detail first, not hundreds of off-screen
-      // ancestor/sibling models competing in the decode queue after a camera cut.
-      tiles.loadAncestors = false;
-      tiles.loadSiblings = false;
       const draco = new DRACOLoader().setDecoderPath(`${import.meta.env.BASE_URL}world-assets/draco/`);
       tiles.registerPlugin(new GLTFExtensionsPlugin({ dracoLoader: draco, autoDispose: true }));
       tiles.registerPlugin(new TilesFadePlugin({ fadeDuration: this.environment.reducedMotion ? 0 : 200 }));
@@ -358,12 +349,11 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
     if (this.options) this.options.container.dataset.worldTerrain = "unavailable";
     this.options?.onStatus({ state: "unavailable", message });
     this.abort.abort(); cancelAnimationFrame(this.animation); window.clearTimeout(this.readyTimer);
-    this.parseQueue?.dispose();
   }
   destroy() {
     this.abort.abort(); cancelAnimationFrame(this.animation); window.clearTimeout(this.readyTimer);
     this.resizeObserver?.disconnect(); this.controls?.stopListenToKeyEvents(); this.controls?.dispose();
-    this.labels?.dispose(); this.atmosphere?.dispose(); this.tiles?.dispose(); this.parseQueue?.dispose(); this.trace?.dispose();
+    this.labels?.dispose(); this.atmosphere?.dispose(); this.tiles?.dispose(); this.trace?.dispose();
     this.renderer?.domElement.removeEventListener("webglcontextlost", this.onContextLost);
     this.renderer?.domElement.removeEventListener("keydown", this.onKey);
     this.renderer?.dispose(); this.renderer?.forceContextLoss(); this.renderer?.domElement.remove();
