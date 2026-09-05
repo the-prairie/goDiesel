@@ -1,0 +1,70 @@
+name: App Walk explicit acceptance
+
+# Owner-requested follow-up for PR 129. This is not a recurring production job.
+# Update the reviewed immutable checkout below to request another observation.
+on:
+  pull_request:
+    branches: [main]
+    paths: ['.github/workflows/app-walk-acceptance.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    if: >-
+      github.repository == 'the-prairie/goDiesel' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.pull_request.number == 129 &&
+        github.event.pull_request.head.repo.full_name == 'the-prairie/goDiesel' &&
+        github.event.pull_request.head.ref == 'chatgpt/app-walk-20260904'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        case: [controlled-memory, live-memory, model-planning, model-memory]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Reviewed code, not an arbitrary event-controlled checkout with secrets.
+          ref: db0a3cf37cdd96f3d7a25d2f56854dbb9a63aeee
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt
+      - run: npm ci --prefix app
+      - run: cd app && npx playwright install --with-deps chromium
+      - name: Build actual app only for the separate controlled navigation check
+        if: matrix.case == 'controlled-memory'
+        run: GODIESEL_DISABLE_LIVE_PROVIDERS=1 npm --prefix app run build
+      - name: Observe actual app without fixtures or response substitution
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GODIESEL_WALK_MODEL: gpt-4.1-2025-04-14
+          GODIESEL_WALK_ALLOW_REMOTE_AGENT: '1'
+        run: node app/walks/acceptance.mjs '${{ matrix.case }}'
+      - name: Seal private screenshots and operator diagnostics
+        id: seal
+        if: always()
+        run: node app/walks/acceptance.mjs seal .github/app-walk-reviewer.pub.pem
+      - name: Retain ciphertext and finite-field summary only
+        if: always() && steps.seal.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-walk-acceptance-${{ matrix.case }}
+          path: |
+            .godiesel/acceptance-export/evidence.enc
+            .godiesel/acceptance-export/encryption.json
+            .godiesel/acceptance/*-summary.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 3
