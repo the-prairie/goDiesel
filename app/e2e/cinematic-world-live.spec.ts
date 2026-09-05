@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { writeFileSync } from "node:fs";
 
 const clean = (value: string) => value
   .replace(/https?:\/\/[^\s)"']+/g, (text) => {
@@ -14,10 +15,36 @@ async function rendererEvidence(page: Page) {
     const canvas = document.querySelector<HTMLCanvasElement>('[data-testid="cinematic-world-canvas"]');
     const gl = canvas?.getContext("webgl2");
     const debug = gl?.getExtension("WEBGL_debug_renderer_info");
+    // Read-only diagnostics of this mounted React instance, never an injected
+    // renderer/factory. Copy only numeric state, not options or provider URLs.
+    type EngineProbe = {
+      tiles?: { stats: Record<string, number>; loadProgress: number; errorTarget: number; cameraInfo: { position: { x: number; y: number; z: number } }[]; lruCache: { cachedBytes: number } };
+      camera?: { position: { x: number; y: number; z: number }; near: number; far: number };
+    };
+    type Hook = { memoizedState?: { current?: EngineProbe }; next?: Hook };
+    type Fiber = { memoizedState?: Hook; return?: Fiber };
+    const fiberKey = stage && Object.keys(stage).find((key) => key.startsWith("__reactFiber"));
+    let fiber = fiberKey ? (stage as unknown as Record<string, Fiber>)[fiberKey] : undefined;
+    let engine: EngineProbe | undefined;
+    for (let i = 0; fiber && i < 30 && !engine; i++, fiber = fiber.return) {
+      let hook = fiber.memoizedState;
+      for (let j = 0; hook && j < 100; j++, hook = hook.next) {
+        const current = hook.memoizedState?.current;
+        if (current?.tiles && current?.camera) { engine = current; break; }
+      }
+    }
+    const tiles = engine?.tiles;
+    const position = engine?.camera?.position;
     return {
       viewport: { width: innerWidth, height: innerHeight, pixelRatio: devicePixelRatio },
       stage: stage ? { ...stage.dataset } : null,
       world: world ? { ...world.dataset } : null,
+      streaming: tiles ? {
+        stats: { ...tiles.stats }, progress: tiles.loadProgress, errorTarget: tiles.errorTarget,
+        cachedBytes: tiles.lruCache.cachedBytes,
+        cameraLocal: position ? [position.x, position.y, position.z] : null,
+        tileCameras: tiles.cameraInfo?.map(({ position: p }) => [p.x, p.y, p.z]),
+      } : null,
       graphics: gl ? {
         renderer: debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
         contextLost: gl.isContextLost(),
@@ -108,10 +135,13 @@ for (const journey of [
       // Always retain useful, redacted evidence on failure. No trace/HAR, tile
       // response bodies, browser bundle, request headers or API-key URLs are uploaded.
       if (!page.isClosed()) {
-        evidence.snapshots.push(await rendererEvidence(page).catch(() => ({ viewport: { width: 0, height: 0, pixelRatio: 0 }, stage: null, world: null, graphics: null })));
+        evidence.snapshots.push(await rendererEvidence(page).catch(() => ({ viewport: { width: 0, height: 0, pixelRatio: 0 }, stage: null, world: null, streaming: null, graphics: null })));
         await page.screenshot({ path: testInfo.outputPath("05-live-final-state.png") }).catch(() => {});
       }
-      await testInfo.attach("live-provider-and-renderer-evidence", { body: JSON.stringify(evidence, null, 2), contentType: "application/json" });
+      // A text-only reporter does not persist in-memory attachment bodies.
+      const report = testInfo.outputPath("live-evidence.json");
+      writeFileSync(report, JSON.stringify(evidence, null, 2));
+      await testInfo.attach("live-provider-and-renderer-evidence", { path: report, contentType: "application/json" });
     }
   });
 }
