@@ -94,6 +94,10 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
       tiles.lruCache = cache;
       tiles.fetchOptions = { signal: this.abort.signal };
       tiles.registerPlugin(new GoogleCloudAuthPlugin({ apiToken: key }));
+      // Route-scale views need visible detail first, not hundreds of off-screen
+      // ancestor/sibling models competing in the decode queue after a camera cut.
+      tiles.loadAncestors = false;
+      tiles.loadSiblings = false;
       const draco = new DRACOLoader().setDecoderPath(`${import.meta.env.BASE_URL}world-assets/draco/`);
       tiles.registerPlugin(new GLTFExtensionsPlugin({ dracoLoader: draco, autoDispose: true }));
       tiles.registerPlugin(new TilesFadePlugin({ fadeDuration: this.environment.reducedMotion ? 0 : 200 }));
