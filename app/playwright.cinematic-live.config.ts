@@ -6,12 +6,15 @@ export default defineConfig({
   testMatch: "cinematic-world-live.spec.ts",
   workers: 1,
   retries: 0,
-  timeout: 120_000,
+  timeout: 180_000,
   use: {
     ...devices["Desktop Chrome"],
     baseURL,
     headless: true,
     screenshot: "only-on-failure",
-    trace: "retain-on-failure",
+    // Live traces contain the browser key and provider response bodies. Retain
+    // redacted summaries and screenshots from the spec instead.
+    trace: "off",
+    serviceWorkers: "block",
   },
 });

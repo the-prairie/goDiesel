@@ -3,7 +3,7 @@ import { GoogleCloudAuthPlugin } from "3d-tiles-renderer/core/plugins";
 import { LRUCache } from "3d-tiles-renderer/core";
 import { GLTFExtensionsPlugin, TilesFadePlugin } from "3d-tiles-renderer/three/plugins";
 import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree } from "three-mesh-bvh";
-import { AgXToneMapping, Color, Mesh, PerspectiveCamera, Raycaster, Scene, SRGBColorSpace, WebGLRenderer } from "three";
+import { AgXToneMapping, Color, Mesh, PerspectiveCamera, Raycaster, Scene, SRGBColorSpace, WebGLRenderer, NoToneMapping } from "three";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import type { GoogleRouteNavigatorEngine, GoogleRouteNavigatorStatus } from "@/surfaces/replay/renderers/google-route-navigator-engine";
@@ -159,7 +159,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
       void this.atmosphere.load(this.abort.signal).then(() => {
         if (this.abort.signal.aborted) return;
         this.atmosphereReady = true;
-        this.layers.atmosphere = "ready";
+        renderer.toneMapping = AgXToneMapping;
         this.resize(); this.publish();
       }).catch(() => {
         if (this.abort.signal.aborted) return;
@@ -175,20 +175,29 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
         const elapsed = now - previous;
         previous = now;
         if (document.hidden) return;
+        let phase = "tiles";
         try {
           this.camera.updateMatrixWorld();
+          this.scene.updateMatrixWorld(true);
           tiles.update();
           this.scene.updateMatrixWorld(true);
+          phase = "route-grounding";
           this.trace?.settle(this.sampleHeight, now);
           if (this.trace?.grounded) this.layers.route = "ready";
+          phase = "camera-grounding";
           if (this.pose && this.following && now - this.lastTargetSample > 500) {
             this.lastTargetSample = now;
             this.measuredTarget = this.sampleHeight(this.pose.center.lat, this.pose.center.lng, this.pose.center.altitude ?? 0);
             this.setCamera(this.pose);
           }
           this.renderedTiles = 0;
-          if (this.atmosphereReady) this.atmosphere?.render(Math.min(0.1, elapsed / 1000));
-          else renderer.render(this.scene, this.camera);
+          // Draw terrain first. Expensive optional cloud shaders must not delay the first landscape.
+          phase = this.atmosphereReady && this.layers.terrain === "ready" ? "atmosphere" : "terrain-render";
+          if (phase === "atmosphere") {
+            renderer.toneMapping = NoToneMapping;
+            this.atmosphere?.render(Math.min(0.1, elapsed / 1000));
+            this.layers.atmosphere = "ready";
+          } else renderer.render(this.scene, this.camera);
           if (this.shaderFailed) { this.shaderFailed = false; throw new Error("World shader could not compile"); }
           this.readyFrames = this.renderedTiles > 0 && tiles.loadProgress > 0.9 ? this.readyFrames + 1 : 0;
           if (this.readyFrames >= 2) { this.layers.terrain = "ready"; window.clearTimeout(this.readyTimer); }
@@ -201,8 +210,16 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
           container.dataset.worldLabelCount = String(this.labels?.visibleLabelCount ?? 0);
           container.dataset.cameraMeshCorrectionM = this.lastCameraCorrection.toFixed(1);
           this.updateAttribution(); this.publish();
-        } catch {
-          if (this.atmosphereReady) {
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Unexpected renderer error";
+          // Diagnostic only: never expose provider URLs, API keys or session tokens.
+          container.dataset.worldFailurePhase = phase;
+          container.dataset.worldFailure = message.replace(/https?:\/\/\S+/g, "[provider URL]").replace(/AIza[\w-]+/g, "[redacted]").slice(0, 300);
+          if (phase === "tiles" && this.labels) {
+            this.labels.dispose(); this.labels = undefined;
+            this.labelState = this.layers.labels = "unavailable";
+            this.publish();
+          } else if (phase === "atmosphere") {
             this.atmosphereReady = false; this.atmosphere?.dispose();
             this.layers.atmosphere = "unavailable";
             renderer.toneMapping = AgXToneMapping; renderer.toneMappingExposure = 1;

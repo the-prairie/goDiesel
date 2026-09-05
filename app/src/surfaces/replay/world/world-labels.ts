@@ -3,8 +3,14 @@ import type { TilesRenderer } from "3d-tiles-renderer/three";
 import type { PerspectiveCamera } from "three";
 import { labelFeature, labelText, WORLD_QUALITY, type WorldEnvironment, type LayerState } from "./world-model";
 
+import { bindWorldGlyphCamera } from "./world-glyph-camera";
+
 class RoadLabels extends DefaultMVTAnnotationsDriver {
-  constructor(private readonly onDecoded: () => void) { super(); }
+  constructor(camera: PerspectiveCamera, private readonly onDecoded: () => void) {
+    super();
+    bindWorldGlyphCamera(this.icons, camera);
+    bindWorldGlyphCamera(this.labels, camera);
+  }
   enabled = true;
   readonly visibleLabels = new Set<object>();
   override onLabelsUpdate(added: object[], removed: object[]) {
@@ -67,7 +73,7 @@ export async function createWorldLabels(
       throw error;
     }
   };
-  const driver = new RoadLabels(() => { if (!signal.aborted) onState("ready"); });
+  const driver = new RoadLabels(camera, () => { if (!signal.aborted) onState("ready"); });
   const plugin = new MVTAnnotationsPlugin({ overlay, camera, driver, resolution: 35 });
   const update = (next: WorldEnvironment) => {
     const budget = WORLD_QUALITY[next.quality].labelBudget;

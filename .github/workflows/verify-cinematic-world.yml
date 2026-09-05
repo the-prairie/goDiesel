@@ -9,6 +9,7 @@ on:
       - 'app/e2e/helpers/cinematic-fixture.ts'
       - 'app/package*.json'
       - 'app/vite.config.ts'
+      - 'app/playwright.cinematic-live.config.ts'
 permissions:
   contents: read
 concurrency:
@@ -53,7 +54,8 @@ jobs:
         run: |
           npx playwright test e2e/cinematic-world.spec.ts e2e/cinematic-world-renderer.spec.ts e2e/google-replay-production.spec.ts --project=chromium 2>&1 | tee ../proof/browser.txt
       - name: Build live-key PR preview
-        if: ${{ always() }}
+        id: livebuild
+        if: ${{ success() && github.event.pull_request.number == 130 && github.head_ref == 'codex/cinematic-world-replay' && github.event.pull_request.head.repo.full_name == github.repository }}
         working-directory: app
         env:
           VITE_WORLD_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_WORLD_GOOGLE_MAPS_API_KEY }}
@@ -64,7 +66,7 @@ jobs:
           fi
           npm run build 2>&1 | tee ../proof/live-build.txt
       - name: Deploy PR preview to Cloudflare Pages
-        if: ${{ always() }}
+        if: ${{ success() && steps.livebuild.outcome == 'success' && github.event.pull_request.number == 130 }}
         id: cloudflare
         working-directory: app
         env:
@@ -79,13 +81,26 @@ jobs:
             echo 'BLOCKED: live-key preview build did not produce app/dist.' | tee ../proof/cloudflare-deploy.txt
             exit 1
           fi
-          npx --yes wrangler@4 pages deploy dist \
+          node --input-type=module <<'JS'
+          import { writeFileSync } from 'node:fs';
+          const account = process.env.CLOUDFLARE_ACCOUNT_ID;
+          const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/pages/projects/godiesel`, {
+            headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` },
+          });
+          if (!response.ok) throw new Error(`Cloudflare preview target check failed (${response.status})`);
+          const data = await response.json();
+          if (!data.success || data.result?.name !== 'godiesel' || data.result?.production_branch !== 'main') {
+            throw new Error('BLOCKED: the approved Pages project or production branch does not match. No deployment performed.');
+          }
+          writeFileSync('../proof/preview-target.json', JSON.stringify({ project: 'godiesel', productionBranch: 'main', previewBranch: 'codex/cinematic-world-replay', previousProductionDeployment: data.result.canonical_deployment?.id ?? null }, null, 2));
+          JS
+          npx --yes wrangler@4.129.0 pages deploy dist \
             --project-name=godiesel \
-            --branch="${GITHUB_HEAD_REF:-codex/cinematic-world-replay}" \
+            --branch="codex/cinematic-world-replay" \
             --commit-hash="$(git rev-parse HEAD)" \
             --commit-message="PR #${{ github.event.pull_request.number }} cinematic world preview" \
             2>&1 | tee ../proof/cloudflare-deploy.txt
-          preview_url=$(grep -Eo 'https://[A-Za-z0-9.-]+\.pages\.dev' ../proof/cloudflare-deploy.txt | tail -1)
+          preview_url=$(grep -Eo 'https://[A-Za-z0-9.-]+\.pages\.dev' ../proof/cloudflare-deploy.txt | head -1)
           if [[ -z "$preview_url" ]]; then
             echo 'BLOCKED: Cloudflare deploy succeeded without a parseable preview URL.' | tee -a ../proof/cloudflare-deploy.txt
             exit 1
@@ -97,6 +112,7 @@ jobs:
         working-directory: app
         env:
           GODIESEL_WORLD_PREVIEW_URL: ${{ steps.cloudflare.outputs.preview_url }}
+          GODIESEL_WORLD_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           echo "Testing $GODIESEL_WORLD_PREVIEW_URL" | tee ../proof/live-provider.txt
           npm run test:e2e:cinematic-live 2>&1 | tee -a ../proof/live-provider.txt
