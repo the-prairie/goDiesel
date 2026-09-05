@@ -17,7 +17,7 @@ export function assert(condition, code, message) {
 }
 
 /** Public report text is a projection, not a copy of raw request/console data. */
-export function redact(value) {
+export function redact(value, limit = 1500) {
   return String(value)
     .replace(/https?:\/\/[^\s<>"')]+/g, raw => {
       try { const u = new URL(raw); return `${u.origin}${u.pathname}${u.hash.split('?')[0]}`; } catch { return '[url]'; }
@@ -25,7 +25,7 @@ export function redact(value) {
     .replace(/\b(?:AIza[\w-]{20,}|(?:sk|ghp|github_pat)[_-][\w-]{12,})\b/g, '[secret]')
     .replace(/\b(Bearer|Basic)\s+[\w+/.=-]+/gi, '$1 [secret]')
     .replace(/\b(key|token|password|authorization|cookie|secret)\s*[:=]\s*[^\s,;]+/gi, '$1=[secret]')
-    .slice(0, 1500);
+    .slice(0, limit);
 }
 export function normalizeTarget(input, profile) {
   let u;
@@ -65,7 +65,7 @@ export function initialReport(config, repository) {
     target: config.target, repository,
     served_build: { status: 'unverified', asset_fingerprints: [] },
     browser: { version: null, viewport: config.viewportSize, device: 'emulated viewport, not a physical device', renderer: null },
-    session: config.session, seed: config.seed,
+    session: config.session, session_description: config.session === 'returning' ? 'Reload within a new disposable context, not an existing owner profile' : 'New disposable browser context', seed: config.seed,
     limits: { actions: config.actionBudget, requests: config.requestBudget, seconds: config.timeBudgetSeconds },
     actions: [], checkpoints: [], observations: [], findings: [],
     checks: [], requests: { total: 0, blocked: 0, provider_successes: {}, failures: [] },
@@ -82,7 +82,7 @@ export function check(report, id, status, detail) {
 }
 export function addFinding(report, code, detail, { kind = 'defect', status = 'observed', step = report.actions.length } = {}) {
   const item = { code, detail: redact(detail), kind, status, step,
-    fingerprint: digest([report.mission, code, kind]).slice(0, 24) };
+    fingerprint: digest([report.mission, code, kind, kind === 'opportunity' ? redact(detail) : '']).slice(0, 24) };
   if (!report.findings.some(f => f.fingerprint === item.fingerprint)) report.findings.push(item);
   return item;
 }

@@ -96,3 +96,8 @@ establishes how an external application behaves now.
 Adapter tests use a fake child result to attack this protocol; they are not browser
 or product evidence. The existing control tests still validate all original
 capabilities and their invariants, with App Walk added to their exact inventory.
+
+See [exploration and recovery](app-walk-exploration.md) for the agent driver,
+rotating library, read-only Admin, controlled Retry, and existing-share missions.
+The dedicated CI job also builds the actual application and runs planning, library,
+read-only Admin and Retry journeys against it, separately from harness fixtures.

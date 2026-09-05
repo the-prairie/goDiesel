@@ -2,6 +2,7 @@
 import json
 import os
 from pathlib import Path
+from hashlib import sha256
 import shutil
 import subprocess
 import sys
@@ -41,7 +42,7 @@ def child_factory(status="passed", mutate=None):
                   "status": status, "profile": "controlled", "target": "http://127.0.0.1:8792", "mission": "memory", "driver": "guided",
                   "started_at": now, "finished_at": now,
                   "checks": [{"id": "mission", "status": status}], "findings": [],
-                  "actions": [{"step": 1}], "checkpoints": [{"image": "frame-001.png"}]}
+                  "actions": [{"step": 1}], "checkpoints": [{"image": "frame-001.png", "sha256": sha256(b"fixture-not-a-real-screenshot").hexdigest()}]}
         payload = {"status": status, "id": run_id, "report": str(directory.relative_to(root) / "report.json"), "html": str(directory.relative_to(root) / "index.html")}
         (directory / "frame-001.png").write_bytes(b"fixture-not-a-real-screenshot")
         (directory / "index.html").write_text("<p>adapter fixture</p>")
@@ -143,3 +144,15 @@ def test_shell_dispatch_preserves_other_capabilities(tmp_path):
         result = subprocess.run([str(script),*argv], capture_output=True, text=True)
         assert result.returncode == 7
         assert json.loads(result.stdout) == [expected, argv]
+
+
+def test_nested_application_source_invalidates_walk_fingerprint(repository):
+    p = repository / "app/src/deep/component.tsx"
+    p.parent.mkdir(parents=True); p.write_text("first")
+    before = walk.fingerprint(repository); p.write_text("second")
+    assert before != walk.fingerprint(repository)
+
+
+def test_tampered_screenshot_invalidates_result(repository):
+    result = walk.verify(repository, args(), runner=child_factory(mutate=lambda r,p,d,root: (d / "frame-001.png").write_bytes(b"tampered")))
+    assert result["exit_code"] == 2

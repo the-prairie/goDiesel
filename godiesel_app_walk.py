@@ -18,7 +18,7 @@ from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parent
 STATUS_EXIT = {"passed": 0, "failed": 1, "blocked": 2, "not_run": 2}
-PATTERNS = ("app/walks/**/*.mjs", "app/*config.*", "app/package*.json", "app/src/**", "app/public/**", "godiesel_app_walk.py", "godiesel_evidence.py", "scripts/godiesel", "system/*.json")
+PATTERNS = ("app/walks/**/*.mjs", "app/*config.*", "app/package*.json", "app/src/**/*", "app/public/**/*", "godiesel_app_walk.py", "godiesel_evidence.py", "scripts/godiesel", "system/*.json")
 
 
 def digest(value: Any) -> str:
@@ -69,7 +69,7 @@ def fingerprint(root: Path) -> list[dict[str, str]]:
                     for chunk in iter(lambda: stream.read(1024 * 1024), b""):
                         h.update(chunk)
                 records.append((str(item.relative_to(root)), item.stat().st_mode, "file", h.hexdigest()))
-        covered.append({"category": "contract" if pattern.startswith("system/") else "data" if pattern == "app/public/**" else "configuration" if "config" in pattern or "package" in pattern else "implementation", "name": f"walk-input-{index}", "state": "matched" if records else "absent", "sha256": digest(records)})
+        covered.append({"category": "contract" if pattern.startswith("system/") else "data" if pattern == "app/public/**/*" else "configuration" if "config" in pattern or "package" in pattern else "implementation", "name": f"walk-input-{index}", "state": "matched" if records else "absent", "sha256": digest(records)})
     return covered
 
 
@@ -132,6 +132,7 @@ def read_result(root: Path, payload: dict, args: argparse.Namespace, started: st
         if not re.fullmatch(r"frame-\d{3}\.png", name): raise ValueError("Invalid frame path.")
         image = location.parent / name
         if image.is_symlink() or not image.is_file(): raise ValueError("Missing or linked screenshot.")
+        if frame.get("sha256") != sha256(image.read_bytes()).hexdigest(): raise ValueError("Screenshot fingerprint mismatch.")
     if report["status"] == "passed" and (not report["actions"] or not report["checkpoints"]):
         raise ValueError("A successful visual walk needs actions and screenshots.")
     return report, location

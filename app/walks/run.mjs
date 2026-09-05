@@ -6,6 +6,7 @@ import path from 'node:path';
 import { configuration, initialReport, privateDirectory, saveReport, now, check, addFinding, finishStatus, WalkStop, exitCode, classifyInterruption } from './core.mjs';
 import { BrowserWalk } from './browser.mjs';
 import { missions, runMission } from './missions.mjs';
+import { explore } from './agent.mjs';
 
 export const root = fileURLToPath(new URL('../../', import.meta.url));
 function repositoryState() {
@@ -14,14 +15,13 @@ function repositoryState() {
     return { commit: git('rev-parse', 'HEAD'), dirty: !!git('status', '--porcelain'), kind: 'runner-checkout-not-deployed-build' };
   } catch { return { commit: null, dirty: null, kind: 'unavailable' }; }
 }
-export async function run(input, { chromium: suppliedChromium, repositoryRoot = root } = {}) {
+export async function run(input, { chromium: suppliedChromium, repositoryRoot = root, decide } = {}) {
   const config = configuration(input);
   if (!Object.hasOwn(missions, config.mission)) throw new WalkStop('UNKNOWN_MISSION', 'Unknown mission.');
   const report = initialReport(config, repositoryState());
   const directory = await privateDirectory(repositoryRoot, report.id);
   let browser, context, w, timer;
   try {
-    if (config.driver !== 'guided') throw new WalkStop('AGENT_NOT_CONFIGURED', 'This increment supports guided walks; an agent adapter is not configured.');
     const chromium = suppliedChromium ?? (await import('playwright')).chromium;
     browser = await chromium.launch({ headless: !config.headed, ...(process.env.GODIESEL_WALK_BROWSER_PATH ? { executablePath: process.env.GODIESEL_WALK_BROWSER_PATH } : {}) });
     report.browser.version = browser.version();
@@ -40,12 +40,13 @@ export async function run(input, { chromium: suppliedChromium, repositoryRoot = 
       const renderer = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
       gl.getExtension('WEBGL_lose_context')?.loseContext(); return String(renderer);
     });
-    if (config.profile === 'live') {
+    if (config.profile === 'live' && config.mission === 'memory') {
       const hardware = report.browser.renderer && !/swiftshader|llvmpipe|software|mesa offscreen/i.test(report.browser.renderer);
       check(report, 'hardware-renderer', hardware ? 'passed' : 'blocked', hardware ? 'A hardware renderer was reported. This is not a visual-quality judgment.' : 'No hardware-accelerated renderer was established.');
       report.remaining_unproven.push('Deployment commit identity unless independently attested');
     }
-    await runMission(w);
+    if (config.driver === 'agent') await explore(w, decide ? { decide } : {});
+    else await runMission(w);
     if (config.profile === 'live' && config.mission === 'memory') {
       const google = Object.keys(report.requests.provider_successes).some(host => /(?:googleapis|gstatic|google)\.com$/.test(host));
       check(report, 'live-provider-responses', google ? 'passed' : 'blocked', google ? 'Real Google provider responses were observed; no response was fulfilled by the walk.' : 'No successful Google provider responses were observed.');

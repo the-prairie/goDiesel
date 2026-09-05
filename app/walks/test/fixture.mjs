@@ -35,13 +35,18 @@ function form(){
 }
 addEventListener('hashchange',render); render();
 `;
-export async function serveFixture({ brokenReturn = false, blankProgress = false } = {}) {
+export async function serveFixture({ brokenReturn = false, blankProgress = false, httpDetails = false } = {}) {
   let script = fixtureScript;
   if (brokenReturn) script = script.replace('href="#/routes/fixture">Route story', 'href="#/routes/wrong">Route story');
   if (blankProgress) script = script.replace("Date.now()+' km'", "'0 km'");
+  if (httpDetails) script = script.replace(
+    `body = '<section aria-label="Route story"><h1>Fixture Route</h1><section aria-label="Route geography"><p>The fixture route geography</p></section><a href="#/replay/fixture">Cinematic replay</a></section>';`,
+    `body = '<p role="status">Loading route story.</p>'; queueMicrotask(async()=>{ const response = await fetch('/data/routes/fixture.json'); root.innerHTML = nav + (response.ok ? '<section aria-label="Route story"><h1>Fixture Route</h1><p>Original server data restored</p></section>' : '<p role="alert">Route request failed with status 503</p><button id="retry">Retry</button>'); document.querySelector('#retry')?.addEventListener('click', render); });`
+  );
   const writes = [];
   const server = http.createServer((request, response) => {
     if (!['GET', 'HEAD'].includes(request.method)) writes.push(request.method);
+    if (request.url === '/data/routes/fixture.json') { response.setHeader('Content-Type', 'application/json'); response.end('{\"fixture\":true}'); return; }
     if (request.url === '/fixture.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(script); return; }
     response.setHeader('Content-Type', 'text/html');
     response.end('<!doctype html><html lang="en"><meta charset="utf-8"><title>Harness fixture — NOT goDiesel</title><style>body{font:18px system-ui;margin:36px}nav a{display:inline-block;padding:16px}button,input,select{min-height:44px;margin:12px}label{display:block}section{padding:24px;border:1px solid}h1{font-size:36px}</style><header>Harness fixture — NOT goDiesel</header><main></main><script src="/fixture.js"></script></html>');

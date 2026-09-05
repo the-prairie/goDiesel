@@ -12,7 +12,7 @@ permissions:
 jobs:
   contracts:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,6 +32,10 @@ jobs:
         run: python -m pytest -q test_godiesel_control.py test_godiesel_app_walk.py
       - name: Independent HTTP browser fixture and mutation probes
         run: node --test app/walks/*.test.mjs
+      - name: Build the actual application with explicit controlled providers
+        run: GODIESEL_DISABLE_LIVE_PROVIDERS=1 npm --prefix app run build
+      - name: Actual compiled-app journeys, not the harness fixture
+        run: node app/walks/ci.mjs
       - name: Inspect the integrated capability
         run: ./scripts/godiesel inspect app-walk --json
       - name: No accidental fixture bypass in CI

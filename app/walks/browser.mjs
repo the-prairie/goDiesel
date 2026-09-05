@@ -137,11 +137,11 @@ export class BrowserWalk {
     if (!final) this.budget();
     const index = String(this.report.checkpoints.length + 1).padStart(3, '0');
     const image = `frame-${index}.png`;
-    await this.page.screenshot({ path: path.join(this.directory, image), timeout: 10000 });
+    const imageBytes = await this.page.screenshot({ path: path.join(this.directory, image), timeout: 10000 });
     const snapshot = await this.page.locator('body').ariaSnapshot();
-    await writeFile(path.join(this.directory, `frame-${index}.aria.txt`), redact(snapshot), { mode: 0o600 });
+    await writeFile(path.join(this.directory, `frame-${index}.aria.txt`), redact(snapshot, 24000), { mode: 0o600 });
     const layout = await this.page.evaluate(() => ({ width: innerWidth, content: document.documentElement.scrollWidth }));
-    this.report.checkpoints.push({ title: redact(title), image, snapshot: `frame-${index}.aria.txt`, elapsed_ms: Math.round(performance.now() - this.started), location: redact(this.page.url()) });
+    this.report.checkpoints.push({ title: redact(title), image, sha256: digest(imageBytes), snapshot: `frame-${index}.aria.txt`, elapsed_ms: Math.round(performance.now() - this.started), location: redact(this.page.url()) });
     if (layout.content > layout.width + 2)
       addFinding(this.report, 'HORIZONTAL_OVERFLOW', `${layout.content}px content overflows a ${layout.width}px viewport.`);
   }

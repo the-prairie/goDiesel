@@ -1,7 +1,9 @@
 import { WalkStop, assert, check, digest } from './core.mjs';
 import { visible } from './browser.mjs';
+import { extendedMissions, runExtendedMission } from './extended.mjs';
 
 export const missions = {
+  ...extendedMissions,
   memory: {
     title: 'Revisit a memory',
     goal: 'Explore Atlas, find a route story through visible navigation, experience Replay, and return to the same story.',
@@ -19,15 +21,20 @@ async function follow(w, locator, label) {
   assert(href && new URL(href, w.page.url()).origin === w.config.target, 'LINK_TARGET', 'The chosen link leaves the app.');
   await w.action(label, () => locator.click(), { type: 'link', href });
 }
-export async function libraryStory(w, query = '') {
+export async function libraryStory(w, query = '', slug = null) {
   await w.goSurface('Routes');
   const search = w.page.getByRole('searchbox', { name: 'Search routes' });
   await search.waitFor();
   if (query) await w.action('Find the selected route in Routes', () => search.fill(query), { type: 'fill', role: 'searchbox', name: 'Search routes', value: query });
   const results = w.page.getByRole('region', { name: 'Route results' });
   const card = query ? results.getByRole('article').filter({ hasText: query }).first() : results.getByRole('article').first();
-  await follow(w, card.getByRole('link').first(), 'Open the route story from its visible card');
+  const link = slug ? results.locator(`a[href="#/routes/${CSSSafeSlug(slug)}"]`).first() : card.getByRole('link').first();
+  await follow(w, link, 'Open the route story from its visible card');
   await w.page.getByRole('region', { name: 'Route story', exact: true }).waitFor();
+}
+function CSSSafeSlug(slug) {
+  assert(/^[a-zA-Z0-9_-]+$/.test(slug), 'ROUTE_ID', 'The route identifier was not a safe canonical slug.');
+  return slug;
 }
 export async function memory(w) {
   await w.enter();
@@ -41,7 +48,8 @@ export async function memory(w) {
   const atlasLink = card.getByRole('link', { name: 'Open route' });
   const atlasDestination = await atlasLink.getAttribute('href');
   w.report.observations.push({ kind: 'navigation', detail: atlasDestination?.includes('/replay/') ? 'Atlas Open route leads directly to Replay; the story was reached through Routes.' : 'Atlas destination observed.', destination: atlasDestination });
-  await libraryStory(w, title);
+  const selectedSlug = atlasDestination?.match(/#\/replay\/([^?]+)/)?.[1] ?? null;
+  await libraryStory(w, title, selectedSlug);
   const storyUrl = w.page.url();
   await w.checkpoint('The route story');
   const geography = w.page.getByRole('region', { name: 'Route geography' });
@@ -124,6 +132,7 @@ export async function planning(w) {
 }
 export async function runMission(w) {
   if (!Object.hasOwn(missions, w.config.mission)) throw new WalkStop('UNKNOWN_MISSION', 'Unknown mission.');
+  if (Object.hasOwn(extendedMissions, w.config.mission)) return runExtendedMission(w);
   await ({ memory, planning })[w.config.mission](w);
   check(w.report, 'mission', 'passed', `Completed ${missions[w.config.mission].title}. Other check statuses retain their own meaning.`);
 }
