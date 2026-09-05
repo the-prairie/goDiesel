@@ -1,0 +1,79 @@
+name: Inspect live terrain refinement
+on:
+  push:
+    branches: [codex/cinematic-world-replay]
+    paths: [.github/workflows/inspect-world-loading.yml]
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci --prefix app
+      - run: cd app && npx playwright install --with-deps chromium
+      - name: Read live loading state
+        working-directory: app
+        run: |
+          mkdir -p ../inspection
+          node --input-type=module <<'JS'
+          import { chromium } from '@playwright/test';
+          import { writeFileSync } from 'node:fs';
+          const browser = await chromium.launch({ headless: true });
+          const report = { sourceCommit: '2534e359a3cb4327f88f26f704df7a473d6dd057', target: 'https://efaa8e7b.godiesel.pages.dev', synthetic: false, cases: [] };
+          try {
+            for (const slug of ['17665674778', '14130782031']) {
+              const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: 'block' });
+              const page = await context.newPage();
+              const result = { slug, responses: {}, samples: [] }; report.cases.push(result);
+              page.on('response', response => { const url = new URL(response.url()); if (url.hostname === 'tile.googleapis.com') { const key = `${response.status()} ${url.pathname.endsWith('.glb') ? 'model' : 'metadata'}`; result.responses[key] = (result.responses[key] || 0) + 1; } });
+              await page.goto(`${report.target}/#/replay/${slug}?renderer=cinematic`);
+              for (let index = 0; index < 5; index++) {
+                await page.waitForTimeout(7000);
+                if (index === 2 && await page.getByRole('button', { name: 'Chase', exact: true }).isEnabled()) await page.getByRole('button', { name: 'Chase', exact: true }).click();
+                result.samples.push(await page.evaluate(() => {
+                  const stage = document.querySelector('[data-testid="replay-stage"]');
+                  const world = document.querySelector('[data-world-terrain]');
+                  let fiber = stage?.[Object.keys(stage).find(key => key.startsWith('__reactFiber$'))];
+                  let engine;
+                  for (let depth = 0; fiber && depth < 30; depth++, fiber = fiber.return) {
+                    for (let hook = fiber.memoizedState, count = 0; hook && count < 150; count++, hook = hook.next) { const value = hook.memoizedState?.current; if (value?.tiles && value?.camera && value?.renderer) { engine = value; break; } }
+                    if (engine) break;
+                  }
+                  const base = { time: performance.now(), stage: { ...stage?.dataset }, world: { ...world?.dataset } };
+                  if (!engine) return base;
+                  const t = engine.tiles, depths = {}, examples = [];
+                  t.traverse(tile => {
+                    const key = `${tile.internal?.depth}/${tile.internal?.loadingState}/${tile.traversal?.inFrustum}`;
+                    depths[key] = (depths[key] || 0) + 1;
+                    if (t.visibleTiles.has(tile) && examples.length < 30) {
+                      const meshes = []; tile.engineData.scene.traverse(object => { if (object.isMesh && meshes.length < 1) { const materials = Array.isArray(object.material) ? object.material : [object.material]; meshes.push({ vertices: object.geometry.attributes.position?.count, worldPosition: object.matrixWorld.elements.slice(12,15), textures: materials.map(m => ({ width: m.map?.image?.width, height: m.map?.image?.height })) }); } });
+                      examples.push({ depth: tile.internal.depth, error: tile.geometricError, children: tile.children?.length, traversal: tile.traversal, bounds: tile.boundingVolume, meshes });
+                    }
+                  });
+                  return { ...base, pose: engine.pose, camera: engine.camera.position.toArray(), ecefCamera: engine.camera.position.clone().applyMatrix4(engine.frame.worldToECEF).toArray(), cameraInfo: t.cameraInfo.map(info => ({ position: info.position.toArray(), sse: info.sseDenominator })), stats: { ...t.stats }, loadProgress: t.loadProgress, errorTarget: t.errorTarget, cacheBytes: t.lruCache.cachedBytes, depths, examples };
+                }));
+                await page.screenshot({ path: `../inspection/${slug}-${index}.png` });
+                writeFileSync('../inspection/loading.json', JSON.stringify(report, null, 2));
+              }
+              await context.close();
+            }
+          } finally { await browser.close(); writeFileSync('../inspection/loading.json', JSON.stringify(report, null, 2)); }
+          JS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-refinement-inspection
+          path: inspection/
+          retention-days: 3
