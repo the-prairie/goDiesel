@@ -1,0 +1,61 @@
+name: Inspect label readiness race
+on:
+  push:
+    branches: [codex/pr130-refinement-inspection]
+    paths: [.github/workflows/pr130-label-race.yml]
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 134ee760606cafe7c061c4a80cc430910b9a7856
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci --prefix app
+      - run: cd app && npx playwright install --with-deps chromium
+      - name: Observe label manager only after original assertion
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('app/e2e/cinematic-world-renderer.spec.ts')
+          s=p.read_text().replace('readdirSync, statSync','readdirSync, statSync, writeFileSync')
+          before='  await expect.poll(async () => Number(await world.getAttribute("data-world-label-count")), { timeout: 30_000 }).toBeGreaterThan(0);'
+          after='''
+            const probe = await page.evaluate(() => {
+              const e=(window as any).__realWorld,t=e.tiles,p=t.getPluginByName('MVT_ANNOTATIONS_PLUGIN');
+              const simple=(o:any)=>Object.fromEntries(Object.entries(o).filter(([k,v])=>v===null || typeof v==='number' || typeof v==='boolean' || typeof v==='string'));
+              const models:any[]=[];t.forEachLoadedModel((s:any,tile:any)=>models.push({depth:tile.internal.depth,visible:t.visibleTiles.has(tile),range:p?.tileLoadState.get(tile)}));
+              return {world:{...e.options.container.dataset},stats:{...t.stats},camera:e.camera.position.toArray(),models,labels:p?{
+                vectors:[...p.vectorTileInfo.entries()].map(([key,v]:any)=>({key,annotations:v.annotations.length})),
+                lines:[...p.anchorManager.lines].map((l:any)=>({fields:simple(l),positions:l.positions,anchors:l.anchors?.map((a:any)=>({fields:simple(a),point:a.point}))})),
+                occupancy:simple(p.occupancy),manager:simple(p.occupancy.manager),visible:p.occupancy.visible.size,
+                working:p.occupancy.manager.working.size,items:p.occupancy.manager._items.size,
+                showTimers:[...p.occupancy._showTimers.values()],hideTimers:[...p.occupancy._hideTimers.values()],
+                settlePending:p.settlingManager.hasPendingWork,settleQueue:p.settlingManager._queue.size,parsePending:p.toggleTileQueue.hasPendingWork,
+              }:null};
+            });
+            writeFileSync(testInfo.outputPath('label-state.json'),JSON.stringify(probe,null,2));
+            await page.screenshot({path:testInfo.outputPath('label-state.png')});
+          '''
+          assert before in s
+          p.write_text(s.replace(before,'  try {\n'+before+'\n  } finally {\n'+after+'\n  }'))
+          PY
+      - name: Original assertions and frame timing
+        run: cd app && npx playwright test e2e/cinematic-world-renderer.spec.ts --project=chromium --repeat-each=3
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: label-race-proof
+          path: app/test-results
+          retention-days: 3
