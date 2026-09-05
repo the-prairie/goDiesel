@@ -14,6 +14,7 @@ import { WorldFrame } from "./world-frame";
 import { WorldRoute } from "./world-route";
 import { WorldAtmosphere } from "./world-atmosphere";
 import { createWorldLabels } from "./world-labels";
+import { advanceTerrainReadiness, INITIAL_TERRAIN_READINESS } from "./world-readiness";
 import { DEFAULT_WORLD_ENVIRONMENT, normalizeEnvironment, WORLD_QUALITY, worldStatus, type WorldEnvironment, type WorldLayers } from "./world-model";
 
 type MountOptions = Parameters<GoogleRouteNavigatorEngine["mount"]>[0];
@@ -46,7 +47,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
   private following = true;
   private pose?: GoogleRouteCameraPose;
   private renderedTiles = 0;
-  private readyFrames = 0;
+  private terrainReadiness = INITIAL_TERRAIN_READINESS;
   private terrainGaps = false;
   private attribution?: HTMLDivElement;
   private lastAttribution = "";
@@ -199,8 +200,11 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
             this.layers.atmosphere = "ready";
           } else renderer.render(this.scene, this.camera);
           if (this.shaderFailed) { this.shaderFailed = false; throw new Error("World shader could not compile"); }
-          this.readyFrames = this.renderedTiles > 0 && tiles.loadProgress > 0.9 ? this.readyFrames + 1 : 0;
-          if (this.readyFrames >= 2) { this.layers.terrain = "ready"; window.clearTimeout(this.readyTimer); }
+          // Background refinement is not a failure to draw. A visible, still-refining
+          // landscape is playable with a partial status; an empty canvas is not.
+          this.terrainReadiness = advanceTerrainReadiness(this.terrainReadiness, this.renderedTiles, tiles.loadProgress);
+          if (this.terrainReadiness.ready) { this.layers.terrain = "ready"; window.clearTimeout(this.readyTimer); }
+          container.dataset.terrainRefining = String(this.terrainReadiness.refining);
           if (this.layers.terrain === "ready" && this.environment.quality === "balanced") {
             this.slowFrames = elapsed > 50 && elapsed < 500 ? this.slowFrames + 1 : Math.max(0, this.slowFrames - 1);
             if (this.slowFrames > 90 && this.effectiveQuality !== "light") { this.effectiveQuality = "light"; this.applyEnvironment(); }
@@ -325,12 +329,13 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
   private publish() {
     if (!this.options || this.abort.signal.aborted) return;
     let state = worldStatus(this.layers);
-    if (state === "ready" && (this.terrainGaps || this.effectiveQuality !== this.environment.quality)) state = "partial";
+    if (state === "ready" && (this.terrainGaps || this.terrainReadiness.refining || this.effectiveQuality !== this.environment.quality)) state = "partial";
     const missing = Object.entries(this.layers).filter(([, value]) => value === "unavailable").map(([key]) => key);
     const message = state === "loading" ? "Entering real photorealistic terrain." : [
       "Cinematic world", missing.length ? `${missing.join(" and ")} unavailable` : "",
       Object.values(this.layers).includes("loading") ? "Additional layers are still loading" : "",
       this.terrainGaps ? "Some terrain tiles are unavailable" : "",
+      this.terrainReadiness.refining ? "Terrain detail is still loading" : "",
       this.effectiveQuality !== this.environment.quality ? "Light quality selected to keep the flight responsive" : "",
     ].filter(Boolean).join(" · ");
     const signature = JSON.stringify([state, message, this.layers]);

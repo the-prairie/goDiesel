@@ -9,7 +9,7 @@ export interface WorldEnvironment {
   reducedMotion: boolean;
 }
 export const DEFAULT_WORLD_ENVIRONMENT: WorldEnvironment = {
-  light: "daylight", clouds: 0.35, labels: true, quality: "balanced", reducedMotion: false,
+  light: "daylight", clouds: 0, labels: true, quality: "balanced", reducedMotion: false,
 };
 export const WORLD_QUALITY = {
   light: { pixelRatio: 1, errorTarget: 16, cloudPreset: "low", clouds: false, labelBudget: 0.35 },
@@ -20,7 +20,7 @@ export const WORLD_QUALITY = {
 export function normalizeEnvironment(value: WorldEnvironment): WorldEnvironment {
   return {
     light: ["daylight", "golden", "blue"].includes(value.light) ? value.light : "daylight",
-    clouds: Number.isFinite(value.clouds) ? Math.min(1, Math.max(0, value.clouds)) : 0.35,
+    clouds: Number.isFinite(value.clouds) ? Math.min(1, Math.max(0, value.clouds)) : DEFAULT_WORLD_ENVIRONMENT.clouds,
     labels: Boolean(value.labels),
     quality: Object.hasOwn(WORLD_QUALITY, value.quality) ? value.quality : "balanced",
     reducedMotion: Boolean(value.reducedMotion),

@@ -24,7 +24,7 @@ describe("Cinematic world contract", () => {
     expect(isWorldPlayable("unavailable")).toBe(false);
   });
   it("bounds presentation settings including non-finite and prototype keys", () => {
-    expect(normalizeEnvironment({ ...DEFAULT_WORLD_ENVIRONMENT, clouds: NaN }).clouds).toBe(0.35);
+    expect(normalizeEnvironment({ ...DEFAULT_WORLD_ENVIRONMENT, clouds: NaN }).clouds).toBe(DEFAULT_WORLD_ENVIRONMENT.clouds);
     expect(normalizeEnvironment({ ...DEFAULT_WORLD_ENVIRONMENT, clouds: 20 }).clouds).toBe(1);
     expect(normalizeEnvironment({ ...DEFAULT_WORLD_ENVIRONMENT, clouds: -4 }).clouds).toBe(0);
     expect(normalizeEnvironment({ ...DEFAULT_WORLD_ENVIRONMENT, quality: "constructor" as never }).quality).toBe("balanced");
@@ -33,6 +33,7 @@ describe("Cinematic world contract", () => {
       expect(preset.labelBudget).toBeLessThanOrEqual(1);
     }
     expect(WORLD_QUALITY.light.clouds).toBe(false);
+    expect(DEFAULT_WORLD_ENVIRONMENT.clouds).toBe(0);
   });
   it.each(["daylight", "golden", "blue"] as const)("makes %s a local presentation direction, independent of route time", (light) => {
     expect(new Vector3(...presentationSun(light)).length()).toBeCloseTo(1);
