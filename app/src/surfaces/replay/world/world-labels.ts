@@ -74,7 +74,7 @@ export async function createWorldLabels(
     }
   };
   const driver = new RoadLabels(camera, () => { if (!signal.aborted) onState("ready"); });
-  const plugin = new MVTAnnotationsPlugin({ overlay, camera, driver, resolution: 35 });
+  const plugin = new MVTAnnotationsPlugin({ overlay, camera, driver, resolution: 128 });
   const update = (next: WorldEnvironment) => {
     const budget = WORLD_QUALITY[next.quality].labelBudget;
     plugin.maxSettleTimeMs = budget;

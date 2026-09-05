@@ -58,3 +58,44 @@ export function syntheticRoadTile(z: number, x: number, y: number) {
   const feature = join(integer(1, 1), bytes(2, join(varint(0), varint(0))), integer(3, 2), bytes(4, join(...geometry.map(varint))));
   return bytes(3, join(text(1, "transportation_name"), bytes(2, feature), text(3, "name"), bytes(4, text(1, "Synthetic road — test only")), integer(5, 4096), integer(15, 2)));
 }
+
+/** The same authored plane encoded with Draco 1.5.7, not a captured provider tile. */
+export function syntheticCompressedGlb(): Buffer {
+  const source = syntheticGlb();
+  const jsonLength = source.readUInt32LE(12);
+  const description = JSON.parse(source.subarray(20, 20 + jsonLength).toString());
+  const sourceBinary = source.subarray(28 + jsonLength);
+  const imageView = description.bufferViews[3];
+  const image = sourceBinary.subarray(imageView.byteOffset, imageView.byteOffset + imageView.byteLength);
+  // Encoded from syntheticGlb's four positions, four UVs and two faces. Unique attribute ids 0/1.
+  const draco = Buffer.from("RFJBQ08CAgEBAAAABAIBAgAAAR//ARH/AREC/wAAAAAAAQAJAwAAAgEDCQIAAQIBAQEAAwMBIAEgAwDwgwwFAAAAAAD/PwAAAAB6xQAAekQAAHrFAAD6RQ4BAQEAAwMBMAEQAwAogiwAAAAAAP8PAAAAAAAAAAAAAAAAgD8M", "base64");
+  const binary = pad(join(pad(draco), image));
+  description.extensionsUsed.push("KHR_draco_mesh_compression");
+  description.extensionsRequired.push("KHR_draco_mesh_compression");
+  description.meshes[0].primitives[0].extensions = { KHR_draco_mesh_compression: { bufferView: 0, attributes: { POSITION: 0, TEXCOORD_0: 1 } } };
+  description.accessors.forEach((accessor: { bufferView?: number }) => { delete accessor.bufferView; });
+  description.bufferViews = [{ buffer: 0, byteOffset: 0, byteLength: draco.length }, { buffer: 0, byteOffset: pad(draco).length, byteLength: image.length }];
+  description.images[0].bufferView = 1;
+  description.buffers[0].byteLength = binary.length;
+  const json = pad(Buffer.from(JSON.stringify(description)), 32);
+  const header = Buffer.alloc(20);
+  header.writeUInt32LE(0x46546c67, 0); header.writeUInt32LE(2, 4); header.writeUInt32LE(28 + json.length + binary.length, 8);
+  header.writeUInt32LE(json.length, 12); header.writeUInt32LE(0x4e4f534a, 16);
+  const binaryHeader = Buffer.alloc(8); binaryHeader.writeUInt32LE(binary.length, 0); binaryHeader.writeUInt32LE(0x004e4942, 4);
+  return join(header, json, binaryHeader, binary);
+}
+
+/** A deliberately slow off-screen sibling must not block the detailed foreground. */
+export function syntheticRefiningTileset() {
+  const base = syntheticTileset();
+  return { ...base, geometricError: 100_000, root: {
+    ...base.root,
+    boundingVolume: { sphere: [0, 0, 1000, 80_000] },
+    geometricError: 100_000,
+    content: { uri: "coarse.glb" },
+    children: [
+      { boundingVolume: base.root.boundingVolume, geometricError: 0, content: { uri: "detail.glb" } },
+      { boundingVolume: { sphere: [0, -50_000, 1000, 4000] }, geometricError: 0, content: { uri: "offscreen.glb" } },
+    ],
+  } };
+}

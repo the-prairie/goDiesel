@@ -1,6 +1,5 @@
 import { TilesRenderer } from "3d-tiles-renderer/three";
 import { GoogleCloudAuthPlugin } from "3d-tiles-renderer/core/plugins";
-import { LRUCache } from "3d-tiles-renderer/core";
 import { GLTFExtensionsPlugin, TilesFadePlugin } from "3d-tiles-renderer/three/plugins";
 import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree } from "three-mesh-bvh";
 import { AgXToneMapping, Color, Mesh, PerspectiveCamera, Raycaster, Scene, SRGBColorSpace, WebGLRenderer, NoToneMapping } from "three";
@@ -11,6 +10,7 @@ import type { GoogleRouteCameraPose, GoogleRouteGroundingMode } from "@/surfaces
 import type { CinematicRouteTreatment } from "@/surfaces/replay/cinematic/cinematic-route-filament";
 import { routeDistanceM } from "@/domain/geometry/route-path";
 import { WorldFrame } from "./world-frame";
+import { configureWorldStreaming, canStartWorldAtmosphere, nextSlowFrameDebt, worldFarPlane } from "./world-streaming";
 import { WorldRoute } from "./world-route";
 import { WorldAtmosphere } from "./world-atmosphere";
 import { createWorldLabels } from "./world-labels";
@@ -34,6 +34,9 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
   private atmosphere?: WorldAtmosphere;
   private labels?: Labels;
   private atmosphereReady = false;
+  private atmosphereStarted = false;
+  private draco?: DRACOLoader;
+  private focusErrorM: number | null = null;
   private shaderFailed = false;
   private labelsStarted = false;
   private labelState: WorldLayers["labels"] = "loading";
@@ -87,15 +90,13 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
       this.layers.route = this.trace.grounded ? "ready" : "loading";
       const tiles = new TilesRenderer("https://tile.googleapis.com/v1/3dtiles/root.json");
       this.tiles = tiles;
-      const cache = new LRUCache();
-      cache.unloadPriorityCallback = tiles.lruCache.unloadPriorityCallback;
-      cache.maxBytesSize = 384 * 1024 * 1024;
-      cache.minBytesSize = 256 * 1024 * 1024;
-      tiles.lruCache = cache;
+      configureWorldStreaming(tiles);
       tiles.fetchOptions = { signal: this.abort.signal };
       tiles.registerPlugin(new GoogleCloudAuthPlugin({ apiToken: key }));
-      const draco = new DRACOLoader().setDecoderPath(`${import.meta.env.BASE_URL}world-assets/draco/`);
-      tiles.registerPlugin(new GLTFExtensionsPlugin({ dracoLoader: draco, autoDispose: true }));
+      const draco = new DRACOLoader().setWorkerLimit(2).setDecoderPath(`${import.meta.env.BASE_URL}world-assets/draco/`);
+      this.draco = draco;
+      // Own disposal explicitly; the pinned plugin does not assign autoDispose.
+      tiles.registerPlugin(new GLTFExtensionsPlugin({ dracoLoader: draco, autoDispose: false }));
       tiles.registerPlugin(new TilesFadePlugin({ fadeDuration: this.environment.reducedMotion ? 0 : 200 }));
       tiles.group.matrix.copy(frame.ecefToWorld);
       tiles.group.matrixAutoUpdate = false;
@@ -137,7 +138,9 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
       controls.addEventListener("start", () => { if (this.following) options.onCameraInteraction?.(); });
       controls.addEventListener("change", () => {
         if (!this.following) {
-          this.camera.near = Math.max(0.5, this.camera.position.distanceTo(controls.target) / 100);
+          const range = this.camera.position.distanceTo(controls.target);
+          this.camera.near = Math.max(0.5, range / 100);
+          this.camera.far = worldFarPlane(range);
           this.camera.updateProjectionMatrix();
         }
       });
@@ -175,7 +178,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
         this.animation = requestAnimationFrame(tick);
         const elapsed = now - previous;
         previous = now;
-        if (document.hidden) return;
+        if (document.hidden) { this.slowFrames = 0; return; }
         let phase = "tiles";
         try {
           this.camera.updateMatrixWorld();
@@ -188,12 +191,16 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
           phase = "camera-grounding";
           if (this.pose && this.following && now - this.lastTargetSample > 500) {
             this.lastTargetSample = now;
-            this.measuredTarget = this.sampleHeight(this.pose.center.lat, this.pose.center.lng, this.pose.center.altitude ?? 0);
+            this.measuredTarget = this.sampleHeight(this.pose.center.lat, this.pose.center.lng, this.pose.center.altitude ?? 0, true);
             this.setCamera(this.pose);
           }
           this.renderedTiles = 0;
           // Draw terrain first. Expensive optional cloud shaders must not delay the first landscape.
-          phase = this.atmosphereReady && this.layers.terrain === "ready" ? "atmosphere" : "terrain-render";
+          if (!this.atmosphereStarted && this.layers.terrain === "ready" &&
+            canStartWorldAtmosphere(this.focusErrorM, this.pose?.rangeM ?? 1000, tiles.loadProgress)) {
+            this.atmosphereStarted = true;
+          }
+          phase = this.atmosphereReady && this.atmosphereStarted ? "atmosphere" : "terrain-render";
           if (phase === "atmosphere") {
             renderer.toneMapping = NoToneMapping;
             this.atmosphere?.render(Math.min(0.1, elapsed / 1000));
@@ -206,11 +213,12 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
           if (this.terrainReadiness.ready) { this.layers.terrain = "ready"; window.clearTimeout(this.readyTimer); }
           container.dataset.terrainRefining = String(this.terrainReadiness.refining);
           if (this.layers.terrain === "ready" && this.environment.quality === "balanced") {
-            this.slowFrames = elapsed > 50 && elapsed < 500 ? this.slowFrames + 1 : Math.max(0, this.slowFrames - 1);
-            if (this.slowFrames > 90 && this.effectiveQuality !== "light") { this.effectiveQuality = "light"; this.applyEnvironment(); }
+            this.slowFrames = nextSlowFrameDebt(this.slowFrames, elapsed, true);
+            if (this.slowFrames >= 4000 && this.effectiveQuality !== "light") { this.effectiveQuality = "light"; this.applyEnvironment(); }
           }
           container.dataset.renderedTileMeshes = String(this.renderedTiles);
           container.dataset.visibleTiles = String(tiles.visibleTiles.size);
+          container.dataset.terrainFocusErrorM = this.focusErrorM === null ? "unavailable" : this.focusErrorM.toFixed(2);
           container.dataset.worldLabelCount = String(this.labels?.visibleLabelCount ?? 0);
           container.dataset.cameraMeshCorrectionM = this.lastCameraCorrection.toFixed(1);
           this.updateAttribution(); this.publish();
@@ -248,10 +256,14 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
     this.tiles?.setResolutionFromRenderer(this.camera, this.renderer);
     this.trace?.resize(width, height); this.atmosphere?.resize(width, height);
   };
-  private sampleHeight = (lat: number, lng: number, seed: number): number | null => {
+  private sampleHeight = (lat: number, lng: number, seed: number, focus = false): number | null => {
     if (!this.frame || !this.tiles?.visibleTiles.size) return null;
     this.raycaster.set(this.frame.position(lat, lng, Math.max(10_000, seed + 2000)), this.frame.normal(lat, lng).negate());
     const hit = this.raycaster.intersectObject(this.tiles.group, true)[0];
+    if (focus) {
+      const error: unknown = hit?.object.userData.tile?.geometricError;
+      this.focusErrorM = typeof error === "number" && Number.isFinite(error) ? error : null;
+    }
     return hit ? this.frame.height(hit.point) : null;
   };
   setCamera(pose: GoogleRouteCameraPose) {
@@ -353,7 +365,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
   destroy() {
     this.abort.abort(); cancelAnimationFrame(this.animation); window.clearTimeout(this.readyTimer);
     this.resizeObserver?.disconnect(); this.controls?.stopListenToKeyEvents(); this.controls?.dispose();
-    this.labels?.dispose(); this.atmosphere?.dispose(); this.tiles?.dispose(); this.trace?.dispose();
+    this.labels?.dispose(); this.atmosphere?.dispose(); this.tiles?.dispose(); this.draco?.dispose(); this.trace?.dispose();
     this.renderer?.domElement.removeEventListener("webglcontextlost", this.onContextLost);
     this.renderer?.domElement.removeEventListener("keydown", this.onKey);
     this.renderer?.dispose(); this.renderer?.forceContextLoss(); this.renderer?.domElement.remove();

@@ -1,4 +1,5 @@
 import { Matrix4, PerspectiveCamera, Vector3 } from "three";
+import { worldFarPlane } from "./world-streaming";
 import { Ellipsoid, Geodetic } from "@takram/three-geospatial";
 import type { GoogleRouteCameraPose } from "@/surfaces/replay/playback/route-navigator-controller";
 const radians = (degrees: number) => degrees * Math.PI / 180;
@@ -37,7 +38,7 @@ export class WorldFrame {
     camera.lookAt(target);
     camera.fov = pose.fovDeg;
     camera.near = Math.max(0.5, pose.rangeM / 100);
-    camera.far = Math.max(100_000, pose.rangeM * 8);
+    camera.far = worldFarPlane(pose.rangeM);
     camera.updateProjectionMatrix();
     camera.updateMatrixWorld();
     return target;

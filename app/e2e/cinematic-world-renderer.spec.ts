@@ -2,11 +2,12 @@ import { expect, test } from "@playwright/test";
 import { readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { PNG } from "pngjs";
-import { syntheticGlb, syntheticRoadTile, syntheticTileset } from "./helpers/cinematic-fixture";
+import { syntheticGlb, syntheticRoadTile, syntheticTileset, syntheticCompressedGlb, syntheticRefiningTileset } from "./helpers/cinematic-fixture";
 
 test.use({ launchOptions: { args: ["--enable-unsafe-swiftshader"] } });
 
-test("real renderer draws synthetic 3D Tiles, atmosphere and MVT labels, then disposes", async ({ page }, testInfo) => {
+for (const refinement of [false, true]) {
+test(`real renderer draws ${refinement ? "refining compressed" : "single"} synthetic 3D Tiles, atmosphere and MVT labels, then disposes`, async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   // Fail on a broken deployment asset path before a slow GPU timeout.
   for (const asset of [
@@ -18,9 +19,13 @@ test("real renderer draws synthetic 3D Tiles, atmosphere and MVT labels, then di
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => { if (message.type() === "error" && /shader|WebGL|GL_INVALID|THREE\./i.test(message.text())) errors.push(message.text()); });
+  const requestedTiles: string[] = [];
   await page.route("https://tile.googleapis.com/**", async (request) => {
-    if (request.request().url().includes("root.json")) await request.fulfill({ json: syntheticTileset() });
-    else await request.fulfill({ contentType: "model/gltf-binary", body: syntheticGlb() });
+    const pathname = new URL(request.request().url()).pathname;
+    requestedTiles.push(pathname);
+    if (pathname.includes("root.json")) await request.fulfill({ json: refinement ? syntheticRefiningTileset() : syntheticTileset() });
+    else if (pathname.endsWith("offscreen.glb")) await request.abort("timedout");
+    else await request.fulfill({ contentType: "model/gltf-binary", body: refinement ? syntheticCompressedGlb() : syntheticGlb() });
   });
   await page.route("https://tiles.openfreemap.org/**", async (request) => {
     const match = /fixture\/(\d+)\/(\d+)\/(\d+)\.pbf/.exec(request.request().url());
@@ -91,6 +96,10 @@ test("real renderer draws synthetic 3D Tiles, atmosphere and MVT labels, then di
   }
   expect(routePixels).toBeGreaterThan(3);
   expect(errors).toEqual([]);
+  if (refinement) {
+    expect(requestedTiles.some((name) => name.endsWith("detail.glb"))).toBe(true);
+    expect(requestedTiles.some((name) => /(?:coarse|offscreen)\.glb$/.test(name))).toBe(false);
+  }
   await page.evaluate(() => {
     const element = document.querySelector<HTMLCanvasElement>("#real-renderer-fixture canvas")!;
     element.getContext("webgl2")!.getExtension("WEBGL_lose_context")!.loseContext();
@@ -99,3 +108,5 @@ test("real renderer draws synthetic 3D Tiles, atmosphere and MVT labels, then di
   await page.evaluate(() => (window as unknown as { __realWorld: { destroy(): void } }).__realWorld.destroy());
   await expect(world.locator("canvas")).toHaveCount(0);
 });
+
+}
