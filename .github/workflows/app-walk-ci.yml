@@ -1,0 +1,42 @@
+name: App Walk contracts
+
+on:
+  pull_request:
+    branches: [main]
+    paths: ['app/walks/**', 'app/playwright.walk.config.mjs', 'godiesel_app_walk.py', 'test_godiesel_app_walk.py', 'scripts/godiesel', 'system/**', '.github/workflows/app-walk-ci.yml', '.github/workflows/app-walk.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt
+      - run: npm ci --prefix app
+      - run: cd app && npx playwright install --with-deps chromium
+      - name: Existing control and new adapter contracts
+        run: python -m pytest -q test_godiesel_control.py test_godiesel_app_walk.py
+      - name: Independent HTTP browser fixture and mutation probes
+        run: node --test app/walks/*.test.mjs
+      - name: Build the actual application with explicit controlled providers
+        run: GODIESEL_DISABLE_LIVE_PROVIDERS=1 npm --prefix app run build
+      - name: Actual compiled-app journeys, not the harness fixture
+        run: node app/walks/ci.mjs
+      - name: Inspect the integrated capability
+        run: ./scripts/godiesel inspect app-walk --json
+      - name: No accidental fixture bypass in CI
+        run: test -z "${GODIESEL_WALK_DOM_FIXTURE:-}"

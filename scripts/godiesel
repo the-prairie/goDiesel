@@ -10,4 +10,10 @@ else
   PYTHON=$(command -v python3)
 fi
 
+# App Walk has a bounded, read-only/ephemeral adapter. Other capabilities retain
+# their existing parser, behavior and exit status without argument rewriting.
+if [ "${2-}" = "app-walk" ]; then
+  exec "$PYTHON" "$REPOSITORY_ROOT/godiesel_app_walk.py" "$@"
+fi
+
 exec "$PYTHON" "$REPOSITORY_ROOT/godiesel_control.py" "$@"

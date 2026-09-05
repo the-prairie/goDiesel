@@ -1,0 +1,70 @@
+name: App Walk observations
+
+on:
+  schedule:
+    - cron: '23 13 * * *'
+  deployment_status:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Exact existing goDiesel Pages origin; no deployment is created'
+        default: 'https://godiesel.pages.dev/'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-walk-observations
+  cancel-in-progress: false
+
+jobs:
+  walk:
+    if: >-
+      github.repository == 'the-prairie/goDiesel' &&
+      (github.event_name == 'schedule' ||
+       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+       (github.event_name == 'deployment_status' && github.event.deployment_status.state == 'success' &&
+        (github.event.deployment.ref == 'main' || github.event.deployment.ref == 'production')))
+    # A trusted Linux GPU runner may be selected with the repository variable.
+    # The fallback does not pretend software rendering proves live 3D quality.
+    runs-on: ${{ vars.GODIESEL_WALK_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --prefix app
+      - run: cd app && npx playwright install --with-deps chromium
+      - name: Restore non-private coverage metadata
+        uses: actions/cache/restore@v4
+        with:
+          path: .godiesel/walks/coverage-history.json
+          key: app-walk-coverage-v1-${{ github.run_id }}
+          restore-keys: app-walk-coverage-v1-
+      - name: Observe the real target through the bounded operator
+        run: node app/walks/automate.mjs
+      - name: Retain bounded coverage even when a provider is blocked
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .godiesel/walks/coverage-history.json
+          key: app-walk-coverage-v1-${{ github.run_id }}
+      - name: Publish only the finite-field summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-walk-summary-${{ github.run_id }}
+          path: .godiesel/walks/public-summary.json
+          include-hidden-files: true
+          retention-days: 7
+          if-no-files-found: error

@@ -120,6 +120,7 @@ def test_capability_manifest_is_valid_and_declares_the_system_boundaries():
 
     capabilities = {item["id"]: item for item in manifest["capabilities"]}
     assert set(capabilities) == {
+        "app-walk",
         "application-release",
         "owner-curation",
         "route-generation",
@@ -192,6 +193,7 @@ def test_inspect_system_returns_a_redacted_operator_view():
     assert isinstance(result["repository"]["worktree"]["clean"], bool)
     assert isinstance(result["repository"]["worktree"]["changed_paths"], list)
     assert {item["id"] for item in result["capabilities"]} == {
+        "app-walk",
         "application-release",
         "owner-curation",
         "route-generation",
