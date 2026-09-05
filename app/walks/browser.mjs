@@ -17,8 +17,10 @@ export function safeInteraction(role, name) {
     && typeof name === 'string' && name.length > 0 && name.length <= 250 && !destructive.test(name);
 }
 export async function visible(locator) {
-  for (const item of await locator.all()) if (await item.isVisible()) return item;
-  return null;
+  // Resolve a single visible candidate at observation time. Enumerating a live
+  // collection creates unstable nested locators when repeated CTAs rerender.
+  const candidate = locator.filter({ visible: true }).first();
+  return await candidate.isVisible() ? candidate : null;
 }
 export class BrowserWalk {
   constructor(page, context, config, report, directory) {
@@ -105,9 +107,8 @@ export class BrowserWalk {
   async click(role, name, { exact = true } = {}) {
     if (!safeInteraction(role, String(name))) throw new WalkStop('UNSAFE_ACTION', 'This interaction is outside the read-only walk boundary.');
     const loc = this.page.getByRole(role, { name, exact }).filter({ visible: true });
-    await loc.first().waitFor({ state: 'visible' });
-    const item = await visible(loc);
-    if (!item) throw new WalkStop('CONTROL_NOT_FOUND', `No visible ${role} named ${name}`, 'failed');
+    const item = loc.first();
+    await item.waitFor({ state: 'visible' });
     if (role === 'link') {
       const href = await item.getAttribute('href');
       const url = new URL(href ?? '', this.page.url());
