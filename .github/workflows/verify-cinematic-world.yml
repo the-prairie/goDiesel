@@ -53,6 +53,7 @@ jobs:
         run: |
           npx playwright test e2e/cinematic-world.spec.ts e2e/cinematic-world-renderer.spec.ts e2e/google-replay-production.spec.ts --project=chromium 2>&1 | tee ../proof/browser.txt
       - name: Build live-key PR preview
+        if: ${{ always() }}
         working-directory: app
         env:
           VITE_WORLD_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_WORLD_GOOGLE_MAPS_API_KEY }}
@@ -63,6 +64,7 @@ jobs:
           fi
           npm run build 2>&1 | tee ../proof/live-build.txt
       - name: Deploy PR preview to Cloudflare Pages
+        if: ${{ always() }}
         id: cloudflare
         working-directory: app
         env:
@@ -71,6 +73,10 @@ jobs:
         run: |
           if [[ -z "$CLOUDFLARE_API_TOKEN" || -z "$CLOUDFLARE_ACCOUNT_ID" ]]; then
             echo 'BLOCKED: Cloudflare Pages deployment secrets are unavailable.' | tee ../proof/cloudflare-deploy.txt
+            exit 1
+          fi
+          if [[ ! -d dist ]]; then
+            echo 'BLOCKED: live-key preview build did not produce app/dist.' | tee ../proof/cloudflare-deploy.txt
             exit 1
           fi
           npx --yes wrangler@4 pages deploy dist \
@@ -87,6 +93,7 @@ jobs:
           echo "$preview_url" | tee ../proof/cloudflare-preview-url.txt
           echo "preview_url=$preview_url" >> "$GITHUB_OUTPUT"
       - name: Live Google Map Tiles proof on deployed preview
+        if: ${{ always() && steps.cloudflare.outcome == 'success' }}
         working-directory: app
         env:
           GODIESEL_WORLD_PREVIEW_URL: ${{ steps.cloudflare.outputs.preview_url }}
