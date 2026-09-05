@@ -51,6 +51,7 @@ def test_target_build_identity_rejects_redirects():
 
 def test_target_build_identity_verifies_every_manifest_asset():
     asset = b"exact application bytes\n"
+    index = b"<!doctype html><title>goDiesel</title>\n"
     control = b"/*\n  X-Frame-Options: DENY\n"
     manifest = {
         "schema_version": 1,
@@ -67,7 +68,13 @@ def test_target_build_identity_verifies_every_manifest_asset():
                 "size": len(asset),
                 "sha256": sha256(asset).hexdigest(),
                 "delivery": "served-asset",
-            }
+            },
+            {
+                "path": "index.html",
+                "size": len(index),
+                "sha256": sha256(index).hexdigest(),
+                "delivery": "served-asset",
+            },
         ],
     }
     manifest_bytes = f"{json.dumps(manifest, separators=(',', ':'))}\n".encode()
@@ -84,12 +91,24 @@ def test_target_build_identity_verifies_every_manifest_asset():
         "/build-identity.json": f"{json.dumps(identity)}\n".encode(),
         "/artifact-manifest.json": manifest_bytes,
         "/assets/application.js": asset,
+        "/": index,
     }
     requests: list[str] = []
 
     class ArtifactHandler(BaseHTTPRequestHandler):
         def do_GET(self):
             requests.append(self.path)
+            if self.path == "/index.html":
+                self.send_response(308)
+                self.send_header("Location", "/")
+                self.end_headers()
+                return
+            if (
+                self.path == "/assets/application.js"
+                and self.headers.get("User-Agent", "").startswith("Python-urllib/")
+            ):
+                self.send_error(403)
+                return
             payload = responses.get(self.path)
             if payload is None:
                 self.send_error(404)
@@ -109,6 +128,8 @@ def test_target_build_identity_verifies_every_manifest_asset():
     try:
         assert read_target_build_identity(target) == identity
         assert "/_headers" not in requests
+        assert "/index.html" not in requests
+        assert "/" in requests
         responses["/assets/application.js"] = b"fake! application bytes\n"
         with pytest.raises(ValueError, match="does not match its manifest"):
             read_target_build_identity(target)

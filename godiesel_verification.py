@@ -44,6 +44,9 @@ EVIDENCE_ROOT = Path(".godiesel/evidence")
 VERIFICATION_TIERS = {"focused", "ticket", "release", "live"}
 LIVE_PROOF_MAX_AGE_SECONDS = 15 * 60
 MAX_INOTIFY_READS = 64
+PROVIDER_VERIFIER_USER_AGENT = (
+    "Mozilla/5.0 (compatible; goDiesel-provider-verifier/1.0)"
+)
 SOURCE_SUFFIXES = (
     ".py", ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"
 )
@@ -901,9 +904,13 @@ class _RejectRedirects(HTTPRedirectHandler):
 
 
 def _read_target_bytes(origin: str, relative_path: str, limit: int) -> bytes:
+    request_path = "" if relative_path == "index.html" else quote(relative_path, safe="/")
     request = Request(
-        f"{origin}/{quote(relative_path, safe='/')}",
-        headers={"Accept-Encoding": "identity"},
+        f"{origin}/{request_path}",
+        headers={
+            "Accept-Encoding": "identity",
+            "User-Agent": PROVIDER_VERIFIER_USER_AGENT,
+        },
     )
     with build_opener(_RejectRedirects()).open(request, timeout=10) as response:
         payload = response.read(limit + 1)
