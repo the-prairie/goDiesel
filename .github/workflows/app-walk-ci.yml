@@ -3,7 +3,7 @@ name: App Walk contracts
 on:
   pull_request:
     branches: [main]
-    paths: ['app/walks/**', 'app/playwright.walk.config.mjs', 'godiesel_app_walk.py', 'test_godiesel_app_walk.py', 'scripts/godiesel', 'system/**', '.github/workflows/app-walk-ci.yml']
+    paths: ['app/walks/**', 'app/playwright.walk.config.mjs', 'godiesel_app_walk.py', 'test_godiesel_app_walk.py', 'scripts/godiesel', 'system/**', '.github/workflows/app-walk-ci.yml', '.github/workflows/app-walk.yml']
   workflow_dispatch:
 
 permissions:

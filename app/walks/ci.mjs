@@ -22,7 +22,7 @@ try {
     await new Promise(resolve => setTimeout(resolve, 250));
   }
   if (!ready) throw new Error('PREVIEW_UNAVAILABLE');
-  for (const [mission, viewport] of [['planning', 'phone'], ['library', 'desktop'], ['admin-readonly', 'phone'], ['recovery', 'desktop']]) {
+  for (const [mission, viewport] of [['planning', 'phone'], ['library', 'desktop'], ['admin-readonly', 'phone'], ['recovery', 'desktop'], ['memory', 'desktop']]) {
     const argv = ['verify', 'app-walk', '--profile', 'controlled', '--target', target, '--mission', mission, '--viewport', viewport, '--time-budget', '120', '--seed', 'compiled-app-acceptance', '--json'];
     let stdout = '';
     try { ({ stdout } = await exec(path.join(root, 'scripts/godiesel'), argv, { cwd: root, timeout: 175000, maxBuffer: 200000 })); }
@@ -39,11 +39,18 @@ try {
       const type = report.actions.at(-1)?.replay?.type;
       item.last_action_type = /^[\w-]+$/.test(type ?? '') ? type : null;
     }
+    // Controlled builds deliberately disable Google. A complete round trip may
+    // prove navigation/degradation while its playback report correctly stays blocked.
+    const controlledMemory = mission === 'memory' && item.status === 'blocked' && item.findings.length === 0
+      && item.checks.some(c => c.id === 'return-context' && c.status === 'passed')
+      && item.checks.some(c => c.id === 'named-degradation' && c.status === 'passed')
+      && item.checks.some(c => c.id === 'playback-progress' && c.status === 'blocked');
+    item.acceptance_status = item.status === 'passed' || controlledMemory ? 'passed' : 'failed';
     results.push(item);
     console.log(JSON.stringify(item));
   }
   await writeFile(path.join(root, '.godiesel', 'compiled-app-summary.json'), JSON.stringify({ target_kind: 'local-compiled-app', provider_mode: 'controlled-build', results }, null, 2), { mode: 0o600 });
-  if (results.some(r => r.status !== 'passed')) process.exitCode = 1;
+  if (results.some(r => r.acceptance_status !== 'passed')) process.exitCode = 1;
 } catch {
   console.error('BLOCKED: compiled app acceptance did not complete.'); process.exitCode = 2;
 } finally {

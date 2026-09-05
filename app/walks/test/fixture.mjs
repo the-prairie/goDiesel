@@ -20,7 +20,7 @@ function render() {
  } else if(hash.startsWith('#/finder')) {
   body = '<h1>Plan the next day.</h1><button id="shape">Shape the day</button><div id="form"></div><section aria-label="Finder results"></section>';
  } else if(hash.startsWith('#/admin')) {
-  body = '<h1>Admin</h1><p>Read-only mode.</p><label>Vibe<input disabled></label>';
+  body = '<h1>Admin</h1><p>Read-only mode.</p><label>Vibe<textarea disabled>Owner note</textarea></label>';
  } else {
   body = '<h1>Atlas</h1><article aria-current="true"><h3>Fixture Route</h3><a href="#/replay/fixture">Open route</a></article>';
  }
@@ -30,7 +30,7 @@ function render() {
  document.querySelector('#shape')?.addEventListener('click',form);
 }
 function form(){
- document.querySelector('#form').innerHTML='<form aria-label="Find a route"><label>Place<input id="place"></label><label>Activity<select aria-label="Activity"><option>Run</option></select></label><label>Distance<input></label><label>Terrain<select aria-label="Terrain"><option value="mixed">Mixed</option></select></label><label>Vibe<input></label><button>Find curated routes</button></form>';
+ document.querySelector('#form').innerHTML='<form aria-label="Find a route"><label>Place<input id="place"></label><label>Activity<select><option>Run</option></select></label><label>Distance<span>km</span><input></label><label>Terrain<select><option value="mixed">Mixed</option></select></label><label>Vibe<input></label><button>Find curated routes</button></form>';
  document.querySelector('form').onsubmit=e=>{e.preventDefault();const place=document.querySelector('#place').value;const result=document.querySelector('[aria-label="Finder results"]');document.querySelector('#form').innerHTML='';document.querySelector('#shape').textContent='Edit filters';if(place==='Kyoto'){result.innerHTML='<article aria-label="Kyoto, Japan candidate"><h2>Kyoto, Japan</h2><button id="save">Save planned route</button><div role="status"></div></article>';document.querySelector('#save').onclick=()=>{localStorage.plan='yes';document.querySelector('[role="status"]').textContent='Saved to Planned routes'}}else{result.innerHTML='<p role="status">No owner-curated route matches this search yet</p><button id="edit">Edit search</button>';document.querySelector('#edit').onclick=form}};
 }
 addEventListener('hashchange',render); render();

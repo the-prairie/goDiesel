@@ -116,13 +116,21 @@ export class BrowserWalk {
     }
     await this.action(`Click ${name}`, () => item.click(), { type: 'click', role, name: String(name), exact });
   }
+  async field(label) {
+    // Native wrapping labels include option text and suffixes such as km.
+    const item = this.page.getByLabel(label, { exact: false }).filter({ visible: true });
+    await item.first().waitFor();
+    assert(await item.count() === 1, 'AMBIGUOUS_CONTROL', 'The requested field was not uniquely visible.');
+    return item;
+  }
   async fill(label, value) {
-    const item = this.page.getByLabel(label, { exact: true });
+    const item = await this.field(label);
     assert(await item.getAttribute('type') !== 'password', 'PASSWORD_FIELD', 'The walker must not fill credentials.');
     await this.action(`Fill ${label}`, () => item.fill(value), { type: 'fill', label, value });
   }
   async select(label, value) {
-    await this.action(`Choose ${label}`, () => this.page.getByLabel(label, { exact: true }).selectOption(value), { type: 'select', label, value });
+    const item = await this.field(label);
+    await this.action(`Choose ${label}`, () => item.selectOption(value), { type: 'select', label, value });
   }
   async goSurface(name) {
     let link = await visible(this.page.getByRole('link', { name, exact: true }));
