@@ -41,6 +41,7 @@ try {
       item.last_action_status = ['passed', 'failed', 'blocked', 'not_run'].includes(report.actions.at(-1)?.status) ? report.actions.at(-1).status : null;
       // Emit only a closed vocabulary of diagnostic tags, never the error itself.
       const detail = report.checks.find(c => c.id === 'mission')?.detail ?? '';
+      item.diagnostic_api = ['locator.waitFor', 'locator.isVisible', 'locator.getAttribute', 'locator.ariaSnapshot', 'page.screenshot', 'locator.click'].find(api => detail.startsWith(api + ':')) ?? null;
       item.diagnostic_tags = ['strict mode violation', 'Timeout', 'waitFor', 'scrollIntoViewIfNeeded', 'not visible', 'getByText', 'getByLabel', 'getByRole', 'isDisabled', 'Cinematic replay', 'Vibe', 'Read-only mode.', 'Route geography', 'Route story'].filter(tag => detail.includes(tag));
     }
     // Controlled builds deliberately disable Google. A complete round trip may

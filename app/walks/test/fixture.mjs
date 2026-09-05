@@ -14,13 +14,13 @@ function render() {
  } else if(hash.startsWith('#/routes/plan')) {
   body = '<h1>Kyoto</h1><p>This is a plan, not a recorded activity.</p>';
  } else if(hash.startsWith('#/routes/fixture')) {
-  body = '<section aria-label="Route story"><h1>Fixture Route</h1><section aria-label="Route geography"><p>The fixture route geography</p></section><a href="#/replay/fixture">Cinematic replay</a></section>';
+  body = '<section aria-label="Route story"><h1>Fixture Route</h1><section aria-label="Route geography"><p>The fixture route geography</p></section><a href="#/replay/fixture">Cinematic replay</a><a href="#/replay/fixture">Cinematic replay</a></section>';
  } else if(hash.startsWith('#/routes')) {
   body = '<h1>Routes</h1><input type="search" aria-label="Search routes"><button id="plans">Planned routes</button><section aria-label="Route results"><article><h2>Fixture Route</h2><a href="#/routes/fixture">Open Fixture Route</a></article></section><div id="plans-list"></div>';
  } else if(hash.startsWith('#/finder')) {
   body = '<h1>Plan the next day.</h1><button id="shape">Shape the day</button><div id="form"></div><section aria-label="Finder results"></section>';
  } else if(hash.startsWith('#/admin')) {
-  body = '<h1>Admin</h1><p>Read-only mode.</p><label>Vibe<textarea disabled>Owner note</textarea></label>';
+  body = '<h1>Admin</h1><p role="status">Read-only mode.</p><p>Read-only mode.</p><label>Vibe<textarea disabled>Owner note</textarea></label>';
  } else {
   body = '<h1>Atlas</h1><article aria-current="true"><h3>Fixture Route</h3><a href="#/replay/fixture">Open route</a></article>';
  }
@@ -40,7 +40,7 @@ export async function serveFixture({ brokenReturn = false, blankProgress = false
   if (brokenReturn) script = script.replace('href="#/routes/fixture">Route story', 'href="#/routes/wrong">Route story');
   if (blankProgress) script = script.replace("Date.now()+' km'", "'0 km'");
   if (httpDetails) script = script.replace(
-    `body = '<section aria-label="Route story"><h1>Fixture Route</h1><section aria-label="Route geography"><p>The fixture route geography</p></section><a href="#/replay/fixture">Cinematic replay</a></section>';`,
+    `body = '<section aria-label="Route story"><h1>Fixture Route</h1><section aria-label="Route geography"><p>The fixture route geography</p></section><a href="#/replay/fixture">Cinematic replay</a><a href="#/replay/fixture">Cinematic replay</a></section>';`,
     `body = '<p role="status">Loading route story.</p>'; queueMicrotask(async()=>{ const response = await fetch('/data/routes/fixture.json'); root.innerHTML = nav + (response.ok ? '<section aria-label="Route story"><h1>Fixture Route</h1><p>Original server data restored</p></section>' : '<p role="alert">Route request failed with status 503</p><button id="retry">Retry</button>'); document.querySelector('#retry')?.addEventListener('click', render); });`
   );
   const writes = [];

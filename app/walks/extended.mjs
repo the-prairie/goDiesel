@@ -49,7 +49,7 @@ async function library(w) {
 }
 async function adminReadOnly(w) {
   await w.enter('#/admin');
-  await w.page.getByText('Read-only mode.', { exact: false }).waitFor();
+  await w.page.getByRole('status').filter({ hasText: /^Read-only mode\./ }).first().waitFor();
   assert(await (await w.field('Vibe')).isDisabled(), 'ADMIN_WRITABLE', 'The read-only workspace exposed an editable field.');
   assert(await w.page.getByRole('button', { name: 'Save and regenerate', exact: true }).count() === 0, 'ADMIN_WRITER_VISIBLE', 'A save action was visible in a read-only walk.');
   await w.checkpoint('Owner content is inspectable, not editable');
