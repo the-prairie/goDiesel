@@ -36,6 +36,26 @@ function CSSSafeSlug(slug) {
   assert(/^[a-zA-Z0-9_-]+$/.test(slug), 'ROUTE_ID', 'The route identifier was not a safe canonical slug.');
   return slug;
 }
+// This function runs in the page. Use the same visible numeric value on both
+// sides: textContent also includes hidden responsive labels and can pass at rest.
+export function visibleProgressAdvanced(previous) {
+  const text = document.querySelector('[data-testid="google-route-progress"]')?.innerText;
+  const current = Number.parseFloat(text ?? '');
+  return Number.isFinite(previous) && Number.isFinite(current) && current > previous;
+}
+export async function returnToStory(w, storyUrl) {
+  await w.action('Reveal the Replay return control', () => w.page.mouse.move(w.config.viewportSize.width / 2, 24), { type: 'pointer', purpose: 'reveal-controls' });
+  const button = w.page.getByRole('button', { name: 'Route story', exact: true });
+  const link = w.page.getByRole('link', { name: 'Route story', exact: true });
+  const controls = button.or(link).filter({ visible: true });
+  await controls.first().waitFor({ state: 'visible' });
+  assert(await controls.count() === 1, 'AMBIGUOUS_CONTROL', 'The Replay return control was not uniquely visible.');
+  const previousHash = new URL(w.page.url()).hash;
+  await w.click(await button.isVisible() ? 'button' : 'link', 'Route story');
+  await w.page.waitForFunction(hash => location.hash !== hash, previousHash, { timeout: 8000 });
+  assert(w.page.url() === storyUrl, 'RETURN_CONTEXT', 'Replay did not return to the same route story.');
+  await w.page.getByRole('region', { name: 'Route story', exact: true }).waitFor({ state: 'visible' });
+}
 export async function memory(w) {
   await w.enter();
   await w.page.getByRole('main').waitFor();
@@ -51,29 +71,38 @@ export async function memory(w) {
   const selectedSlug = atlasDestination?.match(/#\/replay\/([^?]+)/)?.[1] ?? null;
   await libraryStory(w, title, selectedSlug);
   const storyUrl = w.page.url();
+  const story = w.page.getByRole('region', { name: 'Route story', exact: true });
+  const storyTitle = await story.getByRole('heading', { level: 1 }).innerText();
+  const storySlug = new URL(storyUrl).hash.split('?')[0].split('/')[2];
+  if (selectedSlug) assert(storySlug === selectedSlug, 'RETURN_CONTEXT', 'The story did not match the route selected in Atlas.');
   await w.checkpoint('The route story');
   const geography = w.page.getByRole('region', { name: 'Route geography' });
   await w.action('Read the route geography', () => geography.scrollIntoViewIfNeeded(), { type: 'scroll-to', role: 'region', name: 'Route geography' });
   await w.checkpoint('Geography and practical context');
   await w.click('link', 'Cinematic replay');
-  await w.page.getByRole('link', { name: 'Route story', exact: true }).waitFor();
-  await w.checkpoint('Entering Replay');
   const stage = w.page.getByTestId('replay-stage');
   await stage.waitFor();
+  assert(new URL(w.page.url()).hash.split('?')[0] === `#/replay/${storySlug}`, 'RETURN_CONTEXT', 'Replay opened a different route.');
   await w.page.waitForFunction(() => {
     const node = document.querySelector('[data-testid="replay-stage"]');
     return node && ['ready', 'unavailable', 'partial'].includes(node.getAttribute('data-state'));
   }, null, { timeout: 30000 });
+  await w.checkpoint('Entering Replay');
   const state = await stage.getAttribute('data-state');
   if (state === 'ready') {
-    const before = await w.page.getByTestId('google-route-progress').innerText();
+    const progress = w.page.getByTestId('google-route-progress');
+    const before = Number.parseFloat(await progress.innerText());
+    assert(Number.isFinite(before), 'PLAYBACK_PROGRESS', 'Visible playback progress was not numeric.');
     await w.click('button', 'Play route');
-    await w.action('Watch the route move', () => w.page.waitForFunction(previous => document.querySelector('[data-testid="google-route-progress"]')?.textContent?.trim() !== previous, before.trim(), { timeout: 12000 }), { type: 'observe-motion', seconds: 12 });
+    await w.action('Watch visible route distance increase', () => w.page.waitForFunction(visibleProgressAdvanced, before, { timeout: 12000 }), { type: 'observe-motion', seconds: 12 });
     await w.checkpoint('Replay in motion');
+    await w.action('Observe a second motion interval', () => w.page.waitForTimeout(1200), { type: 'observe-motion', seconds: 1.2 });
+    await w.checkpoint('Replay further along the route');
+    await w.action('Reveal playback controls', () => w.page.mouse.move(w.config.viewportSize.width / 2, 24), { type: 'pointer', purpose: 'reveal-controls' });
     await w.click('button', 'Pause route');
-    check(w.report, 'playback-progress', 'passed', 'Visible playback progress changed; motion frames captured. Camera aesthetics remain unreviewed.');
-    // A bounded detour chosen from the current visible chapter controls, not a fixed slug.
-    const chapters = w.page.getByRole('navigation', { name: 'Replay chapters' }).getByRole('button');
+    await w.page.getByRole('button', { name: 'Play route', exact: true }).waitFor();
+    check(w.report, 'playback-progress', 'passed', 'Visible numeric distance increased during playback; distinct-time motion frames were captured. Imagery and camera quality require separate evidence.');
+    const chapters = w.page.getByRole('navigation', { name: 'Replay chapters' }).getByRole('button').filter({ visible: true });
     const count = await chapters.count();
     if (count > 1) {
       const index = 1 + Number.parseInt(digest(w.config.seed).slice(0, 8), 16) % (count - 1);
@@ -88,10 +117,10 @@ export async function memory(w) {
     check(w.report, 'named-degradation', 'passed', 'Replay visibly explained that full imagery was unavailable.');
     check(w.report, 'playback-progress', 'blocked', 'Playback was not observed because the real renderer was unavailable.');
   }
-  await w.click('link', 'Route story');
-  assert(w.page.url() === storyUrl, 'RETURN_CONTEXT', 'Replay did not return to the same route story.');
+  await returnToStory(w, storyUrl);
+  assert(await story.getByRole('heading', { level: 1 }).innerText() === storyTitle, 'RETURN_CONTEXT', 'The returned story content did not match the original.');
   await w.checkpoint('Back at the same route story');
-  check(w.report, 'return-context', 'passed', 'The same route story URL was restored. Scroll position is recorded for review, not assumed.');
+  check(w.report, 'return-context', 'passed', 'The Atlas-selected route, Replay route, exact return URL, and loaded story heading match. Scroll restoration is not inferred.');
 }
 export async function planning(w) {
   await w.enter();
