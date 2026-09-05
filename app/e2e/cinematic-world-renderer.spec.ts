@@ -69,18 +69,28 @@ test(`real renderer draws ${refinement ? "refining compressed" : "single"} synth
   await expect(world).toHaveAttribute("data-world-atmosphere", "ready", { timeout: 45_000 });
   await expect.poll(async () => Number(await world.getAttribute("data-rendered-tile-meshes"))).toBeGreaterThan(0);
   await expect.poll(async () => Number(await world.getAttribute("data-world-label-count")), { timeout: 30_000 }).toBeGreaterThan(0);
-  // With normal motion, the road name must fade in promptly and remain readable below
-  // the terrain baseline. A visible-label count alone misses clipped or 200-second fades.
-  await expect.poll(async () => {
+  // With normal motion the road name must fade in promptly below the terrain
+  // baseline. The occupancy solver may validly anchor it left or center: inspect
+  // the whole road band, not a hardcoded horizontal word position. The labels-off
+  // negative control below proves these dark pixels are glyphs, not the texture.
+  const lowerGlyphPixels = async () => {
     const frame = PNG.sync.read(await page.screenshot());
-    let lowerGlyphPixels = 0;
-    for (let y = 241; y < 253; y++) for (let x = 230; x < 412; x++) {
+    let pixels = 0;
+    for (let y = 241; y < 253; y++) for (let x = 20; x < frame.width - 20; x++) {
       const i = (y * frame.width + x) * 4;
-      if (frame.data[i] < 135 && frame.data[i + 1] < 135 && frame.data[i + 2] < 135) lowerGlyphPixels++;
+      if (frame.data[i] < 135 && frame.data[i + 1] < 135 && frame.data[i + 2] < 135) pixels++;
     }
-    return lowerGlyphPixels;
-  }, { timeout: 8000 }).toBeGreaterThan(25);
+    return pixels;
+  };
+  await expect.poll(lowerGlyphPixels, { timeout: 8000 }).toBeGreaterThan(25);
   await page.screenshot({ path: testInfo.outputPath("real-pipeline-synthetic-daylight.png") });
+  const setLabels = async (labels: boolean) => page.evaluate((enabled) => {
+    (window as unknown as { __realWorld: { setEnvironment(value: unknown): void } }).__realWorld.setEnvironment({ light: "daylight", clouds: 0, labels: enabled, quality: "light", reducedMotion: false });
+  }, labels);
+  await setLabels(false);
+  await expect.poll(lowerGlyphPixels, { timeout: 8000 }).toBeLessThan(25);
+  await setLabels(true);
+  await expect.poll(lowerGlyphPixels, { timeout: 8000 }).toBeGreaterThan(25);
   await page.evaluate(() => {
     (window as unknown as { __realWorld: { setEnvironment(value: unknown): void } }).__realWorld.setEnvironment({ light: "golden", clouds: 0.55, labels: true, quality: "balanced", reducedMotion: true });
   });
