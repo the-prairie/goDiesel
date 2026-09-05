@@ -1,0 +1,28 @@
+name: Capture intervening PR fixes
+on:
+  push:
+    branches: [codex/pr130-refinement-inspection]
+    paths: [.github/workflows/pr130-current-fix-inspection.yml]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 134ee760606cafe7c061c4a80cc430910b9a7856
+          persist-credentials: false
+      - name: Package affected tracked implementation only
+        run: |
+          git rev-parse HEAD > commit.txt
+          git ls-files -s app/src/surfaces/replay/world app/e2e/cinematic-world-live.spec.ts app/e2e/cinematic-world-renderer.spec.ts app/e2e/helpers/cinematic-fixture.ts > files.txt
+          git archive --format=tar.gz HEAD app/src/surfaces/replay/world app/e2e/cinematic-world-live.spec.ts app/e2e/cinematic-world-renderer.spec.ts app/e2e/helpers/cinematic-fixture.ts > current-fixes.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pr130-current-fixes
+          path: |
+            current-fixes.tar.gz
+            commit.txt
+            files.txt
+          retention-days: 1
