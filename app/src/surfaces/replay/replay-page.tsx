@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 
 import { EarthReplayStage } from "@/surfaces/replay/components/earth-replay-stage";
 import { GoogleRouteNavigatorStage } from "@/surfaces/replay/components/google-route-navigator-stage";
+import { JOURNAL_REPLAY_THREAD_STYLE } from "@/domain/geometry/route-thread-style";
 import { RouteNotFound } from "@/ui/route-not-found";
 import { singleRouteMicrosite } from "@/app/single-route-microsite";
 import { completedRoutes, findRouteBySlug } from "@/data/routes";
@@ -71,27 +72,55 @@ export function ReplayPage() {
     : returnPath?.startsWith(APP_PATHS.atlas)
       ? "Back to Atlas"
       : "Route story";
+  /*
+   * Optional presentation cast, opt-in via ?theme=journal. Replay stays dark;
+   * this only re-tints the chrome tokens it already uses so the surface carries
+   * the same identity as the route story it was entered from. Absent the
+   * parameter nothing changes.
+   */
+  const journalPresentation = searchParams.get("theme") === "journal";
+  const presentation = journalPresentation ? "seed-replay-warm" : undefined;
+  // The route keeps its identity across Atlas, story and Replay. Only the
+  // journal presentation opts in; every other caller keeps the shared default.
+  const threadStyle = journalPresentation ? JOURNAL_REPLAY_THREAD_STYLE : undefined;
+  /*
+   * Entry distance, in metres along the recorded route.
+   *
+   * A caller that entered from a held position on the route passes it so
+   * playback begins where the reader was standing. Absent or out of range,
+   * playback opens at the start exactly as before.
+   */
+  const requestedAt = Number(searchParams.get("at"));
+  const initialProgressM =
+    Number.isFinite(requestedAt) && requestedAt > 0 ? requestedAt : undefined;
+
   if (!useLegacyEarth && !atlasFallback) {
     return (
-      <GoogleRouteNavigatorStage
-        route={detail.route}
-        variant="replay"
-        pickerRoutes={pickerRoutes}
-        backPath={backPath}
-        backLabel={backLabel}
-        onUseAtlas={() => setAtlasFallback(true)}
-      />
+      <div className={presentation}>
+        <GoogleRouteNavigatorStage
+          route={detail.route}
+          variant="replay"
+          pickerRoutes={pickerRoutes}
+          backPath={backPath}
+          backLabel={backLabel}
+          onUseAtlas={() => setAtlasFallback(true)}
+        />
+      </div>
     );
   }
 
   return (
-    <EarthReplayStage
-      route={detail.route}
-      pickerRoutes={pickerRoutes}
-      backPath={backPath}
-      backLabel={backLabel}
-      initialEngineMode={atlasFallback ? "atlas" : "earth"}
-      allowEarthMode={useLegacyEarth}
-    />
+    <div className={presentation}>
+      <EarthReplayStage
+        route={detail.route}
+        pickerRoutes={pickerRoutes}
+        backPath={backPath}
+        backLabel={backLabel}
+        initialEngineMode={atlasFallback ? "atlas" : "earth"}
+        initialProgressM={initialProgressM}
+        allowEarthMode={useLegacyEarth}
+        threadStyle={threadStyle}
+      />
+    </div>
   );
 }

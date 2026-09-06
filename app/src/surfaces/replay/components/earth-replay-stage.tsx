@@ -12,6 +12,8 @@ import {
   ZoomOut,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+
+import type { RouteThreadStyle } from "@/domain/geometry/route-thread-style";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/ui/button";
@@ -78,6 +80,8 @@ export function EarthReplayStage({
   backLabel,
   initialEngineMode = "earth",
   allowEarthMode = true,
+  threadStyle,
+  initialProgressM,
 }: {
   route: QuestRoute;
   pickerRoutes: RouteSummary[];
@@ -85,6 +89,16 @@ export function EarthReplayStage({
   backLabel: string;
   initialEngineMode?: ReplayEngineMode;
   allowEarthMode?: boolean;
+  /** Optional thread treatment. Omitted means the shared default. */
+  threadStyle?: RouteThreadStyle;
+  /**
+   * Begin at this distance along the route rather than at the start.
+   *
+   * Omitted, playback opens at 0 exactly as before. A caller that entered from
+   * a held position on the route passes it so arrival continues the motion
+   * instead of starting the day again.
+   */
+  initialProgressM?: number;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const elevationScrubberRef = useRef<
@@ -113,6 +127,9 @@ export function EarthReplayStage({
     control.progressM,
   );
 
+  /* Applied once per route, after the engine reports it can draw. */
+  const seededRouteRef = useRef<string | undefined>(undefined);
+
   const commitControl = useCallback(
     (update: (current: ReplayControlState) => ReplayControlState) => {
       const next = update(controlRef.current);
@@ -123,6 +140,13 @@ export function EarthReplayStage({
     },
     [route],
   );
+
+  useEffect(() => {
+    if (initialProgressM === undefined || !operational) return;
+    if (seededRouteRef.current === route.slug) return;
+    seededRouteRef.current = route.slug;
+    commitControl((current) => seekReplay(current, initialProgressM, totalDistanceM));
+  }, [commitControl, initialProgressM, operational, route.slug, totalDistanceM]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -142,6 +166,7 @@ export function EarthReplayStage({
     void engine.mount({
       container,
       route,
+      threadStyle,
       onStatus: (nextStatus) => {
         if (engineRef.current !== engine) return;
         setStatus(nextStatus);

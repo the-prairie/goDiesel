@@ -93,9 +93,34 @@ export function RouteContextHud({
         </div>
       </div>
 
+      {/*
+        The day keeps its own name inside Replay.
+        `route.name` is the generated region label, so this headlined "Crete,
+        Greece" for a route she called "the final boss" - the same erasure of
+        the personal title that the route story and the Atlas index were
+        corrected for. The rule is the one route-card.tsx already uses. Place
+        and date stay, one step down.
+
+        The date is formatted here rather than through `formatRouteDate`.
+        Importing it - from the `@/domain/route` barrel or from its own module -
+        put this file into the entry's chunk group and took lucide-react with
+        it: the initial shell went from 235.9 KiB to 336.9 KiB and the per-icon
+        chunks disappeared. Ten lines of duplication is the cheaper trade.
+      */}
       <h1 className="mt-1 truncate font-editorial text-2xl font-semibold sm:text-3xl">
-        {route.name}
+        {route.activityName.trim() || route.subtitle.trim() || route.name}
       </h1>
+      <p className="mt-0.5 truncate text-caption text-ink-secondary">
+        {route.region}
+        <span aria-hidden="true"> · </span>
+        {route.date
+          ? new Intl.DateTimeFormat("en", {
+              month: "long",
+              day: "numeric",
+              year: "numeric",
+            }).format(new Date(`${route.date}T12:00:00`))
+          : "Date not recorded"}
+      </p>
       <div
         data-testid={detailsTestId}
         className={cn(!detailsVisible && "hidden")}

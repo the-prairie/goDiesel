@@ -1,5 +1,6 @@
 import type { QuestRoute } from "@/domain/route";
 import { MapLibreAtlasReplayEngine } from "@/surfaces/replay/renderers/maplibre-replay-engine";
+import type { RouteThreadStyle } from "@/domain/geometry/route-thread-style";
 import { CesiumReplayEngine } from "@/surfaces/replay/renderers/cesium-replay-engine";
 import type { ReplayPose } from "@/surfaces/replay/playback/replay-controller";
 
@@ -15,6 +16,8 @@ export interface ReplayEngineMountOptions {
   container: HTMLElement;
   route: QuestRoute;
   onStatus: (status: ReplayStatus) => void;
+  /** Optional thread treatment. Omitted means the shared default. */
+  threadStyle?: RouteThreadStyle;
 }
 
 export interface ReplayEngine {

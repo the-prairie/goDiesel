@@ -43,6 +43,7 @@ export class MapLibreAtlasReplayEngine implements ReplayEngine {
     container,
     route,
     onStatus,
+    threadStyle = ROUTE_THREAD_STYLE,
   }: ReplayEngineMountOptions) {
     const generation = ++this.generation;
     onStatus({
@@ -110,7 +111,7 @@ export class MapLibreAtlasReplayEngine implements ReplayEngine {
         type: "line",
         source: "replay-route",
         paint: {
-          "line-color": ROUTE_THREAD_STYLE.halo,
+          "line-color": threadStyle.halo,
           "line-width": 11,
           "line-opacity": 0.9,
         },
@@ -121,7 +122,7 @@ export class MapLibreAtlasReplayEngine implements ReplayEngine {
         type: "line",
         source: "replay-route",
         paint: {
-          "line-color": ROUTE_THREAD_STYLE.color,
+          "line-color": threadStyle.color,
           "line-width": 5,
           "line-opacity": 1,
         },

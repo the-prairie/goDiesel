@@ -1,6 +1,8 @@
 @import "@fontsource-variable/inter";
 @import "@fontsource/cormorant-garamond/latin-500.css";
 @import "@fontsource/cormorant-garamond/latin-600.css";
+/* Design-seed lab: challenger editorial face, loaded only for the comparison. */
+@import "@fontsource-variable/source-serif-4";
 @import "tailwindcss";
 
 @theme inline {
@@ -315,6 +317,506 @@
   }
 
   .godiesel-route-playhead {
+    transition: none;
+  }
+}
+
+/* =============================================================================
+   Design-seed lab: editorial typeface comparison.
+
+   This changes ONE property - the editorial family. Sizes, weights, leading,
+   tracking, colour, numerals, labels and layout are untouched, so the different
+   font metrics are allowed to reflow the text naturally and the result can be
+   attributed to the family rather than to a bundle of changes.
+   ========================================================================== */
+
+.seed-type-source-serif {
+  --font-editorial: "Source Serif 4 Variable", Georgia, serif;
+}
+
+/*
+ * Role-based option. Titles keep Cormorant; only the note's prose changes.
+ *
+ * The rendered comparison showed the two roles wanting opposite things. In the
+ * Atlas index Cormorant's narrower metrics fit "80% climbing up rock walls and
+ * then climbing down rock walls absolutely bollocks" whole where Source Serif
+ * truncated it, and at 1.06 leading Source Serif's title descenders crowd the
+ * line below. In the note the order reverses: at the same 26px Source Serif has
+ * the larger x-height and lower stroke contrast and is markedly easier to read.
+ *
+ * `--font-prose` is only consumed by the note, and its use site falls back to
+ * `--font-editorial`, so the control and the single-family challenger are
+ * byte-for-byte unchanged by this rule existing.
+ */
+.seed-type-role {
+  --font-prose: "Source Serif 4 Variable", Georgia, serif;
+}
+
+/* =============================================================================
+   The carried notebook: the thread, the ribbon, and the leaf.
+
+   The thread is the recorded line taken hold of. Its handle and the
+   photographs pinned along it are DOM over the map canvas, so the handle is a
+   real focusable slider with a 48px target and each photograph is a real
+   button - neither is possible with a MapLibre marker.
+   ========================================================================== */
+
+.seed-thread-handle {
+  /* Positioned from map.project, so the anchor is its centre. */
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+}
+
+.seed-thread-grab {
+  /* 48px of target around a 16px mark: the agreed mobile control size, held
+     even though the visible dot is small. */
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  cursor: grab;
+  display: grid;
+  place-items: center;
+  touch-action: none;
+}
+
+.seed-thread-grab::before {
+  content: "";
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--seed-route, #c34a24);
+  border: 3px solid var(--seed-marker-ring, #faf7f0);
+  box-shadow: 0 2px 8px rgb(40 32 22 / 45%);
+  transition: transform 120ms var(--ease-interface);
+}
+
+.seed-thread-handle[data-dragging="true"] .seed-thread-grab {
+  cursor: grabbing;
+}
+
+.seed-thread-handle[data-dragging="true"] .seed-thread-grab::before,
+.seed-thread-grab:hover::before,
+.seed-thread-grab:focus-visible::before {
+  transform: scale(1.28);
+}
+
+/* A held position pushes a ring outward, so the grip is legible on terrain. */
+.seed-thread-handle[data-dragging="true"]::after {
+  content: "";
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--seed-marker-ring, #faf7f0);
+  opacity: 0.55;
+}
+
+.seed-thread-photo {
+  transform: translate(-50%, -50%);
+  /* The agreed sizes, like every other control. Audited at 44x44 first, which
+     passes on desktop and is short of the 48px mobile minimum. */
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.seed-thread-photo > span {
+  width: 13px;
+  height: 13px;
+  border-radius: 2px;
+  background: var(--seed-marker-ring, #faf7f0);
+  border: 2px solid var(--seed-ink-3, #645c4d);
+  transform: rotate(45deg);
+  transition: transform 140ms var(--ease-interface);
+}
+
+.seed-thread-photo:hover > span,
+.seed-thread-photo:focus-visible > span {
+  transform: rotate(45deg) scale(1.3);
+}
+
+.seed-ribbon {
+  cursor: ew-resize;
+}
+
+.seed-ribbon-playhead {
+  width: 11px;
+  height: 11px;
+  margin-left: -5.5px;
+  margin-top: -5.5px;
+  border-radius: 50%;
+  border: 2px solid var(--seed-marker-ring, #faf7f0);
+  box-shadow: 0 1px 4px rgb(40 32 22 / 40%);
+  pointer-events: none;
+}
+
+.seed-ribbon-photo {
+  transform: translate(-50%, -50%);
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.seed-ribbon-photo > span {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  background: var(--seed-marker-ring, #faf7f0);
+  border: 2px solid var(--seed-ink-3, #645c4d);
+  transform: rotate(45deg);
+}
+
+@media (max-width: 767px) {
+  .seed-thread-photo,
+  .seed-ribbon-photo {
+    width: 48px;
+    height: 48px;
+  }
+}
+
+/*
+   The leaf: a page of the notebook resting on the geography.
+
+   Not a card. A card floats in a UI; a leaf sits on something. The right edge
+   is soft and the shadow is directional, so the map reads as continuing
+   underneath rather than being covered by a panel.
+*/
+.seed-leaf {
+  background: var(--seed-paper-veil, rgb(250 247 240 / 96%));
+  backdrop-filter: blur(10px);
+  box-shadow:
+    1px 0 0 rgb(60 52 40 / 8%),
+    18px 0 44px -22px rgb(48 38 26 / 34%);
+}
+
+.seed-leaf-sheet {
+  background: var(--seed-paper-veil, rgb(250 247 240 / 96%));
+  backdrop-filter: blur(10px);
+  box-shadow:
+    0 -1px 0 rgb(60 52 40 / 8%),
+    0 -20px 46px -24px rgb(48 38 26 / 40%);
+}
+
+/* The descent dims the notebook out of the way as the camera goes down. */
+.seed-descending {
+  transition: opacity 420ms var(--ease-interface), transform 420ms var(--ease-interface);
+  opacity: 0;
+  transform: translateY(10px);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seed-descending {
+    transition: none;
+  }
+  .seed-thread-grab::before {
+    transition: none;
+  }
+}
+
+/* =============================================================================
+   Replay, carrying the journal's identity onto a dark surface.
+
+   Replay should stay dark - you are inside the terrain, not reading a page - so
+   this is a warm-dark cast rather than a light theme. It works by overriding the
+   field-guide tokens the Replay chrome already consumes (bg-surface, text-ink,
+   border-line), so no Replay component is restyled by hand, and it is inert
+   unless the surface is entered with ?theme=journal.
+   ========================================================================== */
+
+.seed-replay-warm {
+  --canvas: #17120d;
+  --surface: #241d16;
+  --surface-raised: #2e251c;
+  --surface-muted: #1e1811;
+  --surface-map-glass: rgb(36 29 22 / 92%);
+  --ink: #f6efe3;
+  --ink-secondary: #d8ccb8;
+  --ink-muted: #a99c86;
+  --line: #43382c;
+  --line-strong: #574a3a;
+  --forest: #d8cbb4;
+  --forest-soft: #2e251c;
+  --coral: #d9613a;
+  --shadow-panel: 0 8px 24px rgb(0 0 0 / 45%);
+  --shadow-sheet: 0 -8px 30px rgb(0 0 0 / 50%);
+
+  /*
+   * The shadcn aliases must be restated, not inherited.
+   * `.field-guide-theme` declares `--background: var(--canvas)` on an ancestor,
+   * so that var() resolves against the ANCESTOR's --canvas and the resolved
+   * light value inherits down. Overriding --canvas here alone left the shared
+   * Button and panel primitives rendering near-white on the warm-dark bar.
+   */
+  --background: #17120d;
+  --foreground: #f6efe3;
+  --card: #241d16;
+  --card-foreground: #f6efe3;
+  --popover: #241d16;
+  --popover-foreground: #f6efe3;
+  --primary: #d8cbb4;
+  --primary-foreground: #17120d;
+  /*
+   * The route accent belongs to the route, not to the chrome. Left at the
+   * shared cobalt it put a bright blue "ATLAS REPLAY" label and progress mark
+   * on a warm dark surface carrying a terracotta line. This is the same value
+   * as JOURNAL_REPLAY_THREAD_STYLE.color, measured at 3.27-4.54:1 on this
+   * basemap's terrain range.
+   */
+  --route: #e2673c;
+  --secondary: #2e251c;
+  --secondary-foreground: #f6efe3;
+  --muted: #1e1811;
+  --muted-foreground: #a99c86;
+  --accent: #2e251c;
+  --accent-foreground: #f6efe3;
+  --border: #43382c;
+  --input: #574a3a;
+  --ring: #d9613a;
+
+  background: var(--canvas);
+  color: var(--ink);
+}
+
+/*
+ * The terrain itself is deliberately NOT re-tinted.
+ *
+ * A warm filter was tried and measured as applying correctly, but on a
+ * near-black night basemap it is imperceptible until pushed hard enough to
+ * start misrepresenting land, water and vegetation - which the product forbids.
+ * Replay's terrain stays a night map; the identity is carried by the warm-dark
+ * chrome around it, which is what makes it read as the same product without
+ * asking Replay to become a light surface.
+ */
+
+/* =============================================================================
+   Design-seed lab: Concept B colour themes.
+
+   Only these values differ between the two directions. Layout, typography,
+   spacing, content, camera framing and interactions are shared, so a
+   side-by-side is a comparison of colour rather than of design.
+   ========================================================================== */
+
+.seed-theme-journal {
+  /* A. Field journal - warm paper, ink, terracotta. */
+  --seed-paper: #f7f4ec;
+  --seed-field: #efe9dc;
+  --seed-ink: #1c1a16;
+  --seed-ink-2: #57534a;
+  --seed-ink-3: #635e54;
+  --seed-rule: #ddd5c4;
+  --seed-action: #0e4039;
+  --seed-data: #2f6bb8;
+  --seed-route: #c34a24;
+  --seed-route-text: #9c3616;
+  --seed-paper-veil: rgb(247 244 236 / 94%);
+  --seed-rule-soft: rgb(221 213 196 / 70%);
+  --seed-miniature: #8f8878;
+  --seed-data-band: rgb(51 121 223 / 14%);
+  --seed-plate-highlight: rgb(255 255 255 / 50%);
+  --seed-marker-ring: #faf7f0;
+}
+
+.seed-theme-expedition {
+  /*
+   * B. Contemporary expedition atlas.
+   *
+   * Chalk reading surface, mineral-grey supporting surface, basalt type, and a
+   * single warm accent reserved for the selected route. The blanket parchment
+   * cast is gone: nothing here is tinted warm except the route itself.
+   */
+  --seed-paper: #f9fafa;
+  --seed-field: #e6eaec;
+  --seed-ink: #14181b;
+  --seed-ink-2: #414a50;
+  --seed-ink-3: #566065;
+  --seed-rule: #d2d8da;
+  --seed-action: #1b3944;
+  --seed-data: #2472ad;
+  --seed-route: #d1481c;
+  --seed-route-text: #a5350f;
+  --seed-paper-veil: rgb(249 250 250 / 94%);
+  --seed-rule-soft: rgb(210 216 218 / 70%);
+  --seed-miniature: #7d878c;
+  --seed-data-band: rgb(36 114 173 / 13%);
+  --seed-plate-highlight: rgb(255 255 255 / 65%);
+  --seed-marker-ring: #f7f8f8;
+}
+
+/* Design-seed lab: journal interaction states.
+   These need real pseudo-classes, so they live here rather than inline.
+   Measured before changing: the journal rows had NO hover state
+   (background-color resolved to rgba(0,0,0,0) on hover), and the focus ring
+   inherited `currentcolor`, which would turn coral on the selected row and
+   collide with the selection accent. Both are made explicit. */
+
+.seed-focus:focus-visible {
+  outline: 2px solid var(--seed-action);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* On the plate, forest on terrain is not reliable; use a paper/ink pair. */
+.seed-focus-plate:focus-visible {
+  outline: 2px solid var(--seed-marker-ring);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 4px rgb(28 26 22 / 55%);
+}
+
+/*
+ * The application's agreed control sizes: 44px minimum, 48px on mobile.
+ *
+ * One rule rather than a minHeight on every control, because the value is
+ * viewport-dependent and the surfaces are styled inline. Audited at 390px the
+ * four journal nav links measured 44x44 and the plate framing toggles 59x44 -
+ * all four sides of the agreed target on desktop, all six short of it on a
+ * phone. Provider attribution is a separate concern and is not sized here.
+ */
+.seed-control {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+@media (max-width: 767px) {
+  .seed-control {
+    min-height: 48px;
+    min-width: 48px;
+  }
+}
+
+.seed-row {
+  transition: background-color 120ms var(--ease-interface);
+}
+
+.seed-row:hover {
+  background-color: rgb(28 26 22 / 4%);
+}
+
+.seed-row[aria-current="true"] {
+  background-color: color-mix(in srgb, var(--seed-route) 7%, transparent);
+}
+
+.seed-row[aria-current="true"]:hover {
+  background-color: color-mix(in srgb, var(--seed-route) 11%, transparent);
+}
+
+/* The selection accent: a precise 2px spine in the row gutter, not an
+   enclosing rectangle. */
+.seed-row::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  background: var(--seed-route);
+  content: "";
+  opacity: 0;
+  transition: opacity 120ms var(--ease-interface);
+}
+
+.seed-row[aria-current="true"]::before {
+  opacity: 1;
+}
+
+/* The scrolling list resolves its own edge: a soft mask at the bottom so an
+   intermediate scroll position reads as "more below" rather than a sliced row.
+   The mask is decorative; it never hides the last row from the scroller. */
+.seed-scroll {
+  scrollbar-color: var(--seed-rule) transparent;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.seed-scroll[data-at-end="false"] {
+  mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 1.75rem), transparent 100%);
+}
+
+.seed-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+
+.seed-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.seed-scroll::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 5px;
+  background-clip: content-box;
+  background-color: var(--seed-rule);
+}
+
+.seed-miniature {
+  /* Keeps the outline glyph crisp at small sizes across DPRs. */
+  shape-rendering: geometricPrecision;
+  transition: opacity 120ms var(--ease-interface);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seed-row,
+  .seed-row::before,
+  .seed-miniature {
+    transition: none;
+  }
+}
+
+/* Design-seed lab: make MapLibre's "compact" attribution actually compact.
+   Rendered check at 390px: it opened to two opaque lines and covered the
+   coastline and Loutro inside a 300px plate. Attribution must stay reachable
+   and legible, so it collapses to its labelled toggle and expands on demand
+   rather than being hidden. */
+[data-seed-terrain] .maplibregl-ctrl-attrib {
+  border-radius: 3px;
+  background: var(--seed-paper-veil);
+}
+
+/* One quiet line instead of two opaque ones. Credit stays fully visible and
+   the links stay clickable; it simply stops covering the coastline. */
+[data-seed-terrain] .maplibregl-ctrl-attrib-inner {
+  font-size: 10px;
+  line-height: 1.5;
+  white-space: nowrap;
+  color: var(--seed-ink-2);
+}
+
+[data-seed-terrain] .maplibregl-ctrl-attrib-inner a {
+  color: var(--seed-ink-2);
+}
+
+[data-seed-terrain] .maplibregl-ctrl-attrib-button {
+  min-width: 24px;
+  min-height: 24px;
+}
+
+/* Design-seed lab: the shared position marker between the elevation profile
+   and the journal plate. Paper ring so it reads over land, water and route. */
+.seed-route-marker {
+  box-sizing: border-box;
+  width: 15px;
+  height: 15px;
+  border: 3px solid var(--seed-marker-ring);
+  border-radius: 50%;
+  background: var(--seed-route);
+  box-shadow:
+    0 1px 2px rgb(40 32 22 / 40%),
+    0 3px 8px rgb(40 32 22 / 26%);
+  transition: transform 120ms var(--ease-interface);
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seed-route-marker {
     transition: none;
   }
 }

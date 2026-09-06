@@ -82,11 +82,150 @@ Cards must not be nested inside other cards.
 - Selected routes use a `4px` cobalt line with a `2px` pale halo outside Atlas.
 - The selected Atlas route uses a `4px` coral line with a restrained pale halo.
 - Replay routes use a `5px` cobalt line.
+- The journal Replay presentation instead carries the selected route's terracotta
+  identity across Atlas, route story and Replay. Because Replay is a dark
+  surface, the hue is kept and the value lifted: `#c34a24` measures 2.27-3.15:1
+  against the replay basemap's terrain range, below the 3:1 a line needs, while
+  `#e2673c` measures 3.27-4.54:1 across the same range, with a warmed `#f2e4d2`
+  casing. This is a named variant (`JOURNAL_REPLAY_THREAD_STYLE`), opted into by
+  the journal presentation; surfaces outside that direction keep the shared
+  cobalt default (`ROUTE_THREAD_STYLE`).
 - Automatic cinematic replay may replace the baseline route with a layered filament: a restrained coral travelled thread, pale future guide, and narrow white focus glint. The treatment must remain terrain-seated and visually lighter than the baseline replay route.
 - Waypoints use a `28px` coral circle, `2px` white border, and a white numeric label.
 - Current replay position uses an `18px` coral point with a `3px` white ring.
 - Region labels use editorial uppercase type between `28px` and `36px` with `0.22em` tracking.
 - Only selected or editorially featured routes receive coral markers.
+
+## Journal presentation (design-seed direction B)
+
+Typography is role-based, not one family:
+
+- Cormorant Garamond for titles and journal entries. Its narrower metrics fit
+  long personal titles whole in the Atlas index where a wider serif truncated
+  them, and its lighter caps keep an all-uppercase title engraved rather than
+  shouted.
+- Source Serif 4 for note and description prose only, through `--font-prose`.
+  At the same 26px it has the larger x-height and lower stroke contrast, and its
+  lining default figures match the tabular data figures below.
+- Inter for controls and measurements, with tabular figures.
+
+There is no user-facing typography or theme setting. Single-family variants are
+reachable by `?type=` for review only.
+
+Attribution never puts the owner's name to text she did not write. A curated
+`vibe` is a description of the route whatever the lifecycle; only `description`
+on one of her own recordings is her voice.
+
+A day page has two compositions, chosen by what its content wants:
+
+- The **reading column** for a page you settle into - a photograph to look at,
+  or prose long enough to be a paragraph (past roughly two lines at the
+  introduction's measure, currently 120 characters).
+- The **compact introduction** for everything else: no note, or a note of a
+  sentence or two. The introduction is a band the height of its own content -
+  date, title, the note when there is one with its byline, and the recorded
+  details read across in one line - and the geography takes the full width with
+  the climb along its lower edge.
+
+Both are primary. 57 of 68 routes have no note and none of those has a
+photograph; of the 11 that do have a note, 9 are a single sentence. A
+full-height column holding fourteen characters is the same reserved-empty
+rectangle as a column holding nothing. The threshold is a property of the
+composition, never a named route, and nothing is ever shortened to fit.
+
+The absence itself stays in the small print beside the recording's other
+caveats. It is never the emotional focus.
+
+The two compositions share the header, type scale, rules, elevation strip,
+Replay bar and unframed geography; only the reading area changes shape. The map
+camera is framed for the pane it is given, not a nominal one - the full-width
+sparse pane is height-bound where the tall column is width-bound.
+
+Every surface has a narrow composition, picked by `useWideLayout` so only one
+mounts and there is never a second MapLibre instance.
+
+The narrow Atlas is for choosing a day, so the days get the screen. Its two
+leaves stack inside one scroller below the header - region header, plate with
+its framing control, caption, climb and action - and that geographic
+introduction scrolls away, leaving the list the full viewport. It must not pin
+the preview and give the list an inner scroller: that left about 153px, under
+two rows.
+
+On a phone a journal row is a link to its day, not a selector. Two panes can
+afford select-then-read because choosing a row repaints the plate beside it;
+stacked, the plate is above the fold you are browsing in, so selecting asked the
+reader to scroll back up to an action that had left the screen.
+
+The reading position is stored against whichever element the composition
+scrolls, never the other way round.
+
+A selection that arrives from the URL is scrolled into view; a selection the
+reader clicked is not. Two rules, one distinction: where the change came from.
+
+On a phone the day's Replay action is in flow beneath the climb, not pinned. A
+fixed bar put the lower third of the elevation curve - playhead and readout
+included - underneath itself during scrubbing. The geography and the climb are
+one inspection unit and are brought into view together when scrubbing starts,
+but only when they are not already both visible.
+
+Replay headlines the day's own name, with place and date one step down.
+Format that date in place rather than importing `formatRouteDate`: importing it
+- from the `@/domain/route` barrel or from its own module - puts the HUD into
+the entry's chunk group and takes lucide-react with it, moving the initial shell
+from 235.9 KiB to 336.9 KiB and dissolving the per-icon chunks.
+`route.name` is the generated region label, so headlining it read "Crete,
+Greece" for a route she called "the final boss" - the same erasure the route
+story and the Atlas index were corrected for. The rule is the one
+`route-card.tsx` already uses. The journal cast restates `--route` so the
+route accent on that dark surface matches the thread rather than the shared
+cobalt.
+
+Controls meet the application's agreed sizes - 44px minimum, 48px on mobile, on
+both axes - through `.seed-control`. That is a stricter rule than the WCAG 2.5.8
+24px floor and is checked separately by `npm run audit:journal-controls`.
+Provider attribution is exempt: MapLibre's required credit is its own control
+with inline text links, and padding it to 48px would put a band of chrome over
+the geography on every surface.
+
+The journal's return context is scoped and its own. The visible in-page return
+link is a real URL, never a history gesture, so a directly opened day still
+lands on the journal with its own route selected and visible. The reading
+position is stored per journey - concept, region and presentation - restored
+before paint, and never inherited by an unrelated journey.
+
+The route is drawn as soon as the style is parsed, not when tiles finish, so on
+a cold load the recorded line is on screen before the basemap. Do not guard that
+work with `isStyleLoaded()`: it also requires every source cache to be loaded
+and so stays false until `load`.
+
+Four checks keep this honest, each needing a running server:
+
+- `npm run perf:journal-paint` - ground, route and basemap-tile paint order
+- `npm run verify:journal-return` - the visible link, Back/Forward, the Replay
+  round trip, a directly opened day, and journey scoping
+- `npm run verify:journal-replay` - playback actually advancing, pause holding,
+  the journal thread on the dark surface, and the return through visible links
+- `npm run verify:journal-mobile` - the five real content shapes at 390x844
+- `npm run audit:journal-controls` - the agreed control sizes
+
+## Exploration: the carried notebook (design-seed direction D)
+
+Not the baseline. An ambitious reading of the same idea, alongside the accepted
+journal presentation, at `/lab/design-seeds/d/*`. Recorded here because two of
+its findings are worth keeping whatever happens to the direction.
+
+Relief is available after all. The cartography note above is right that
+Liberty's only relief source is unusable at these framings; it was wrong to
+conclude that shaded relief was unavailable. Mapzen Terrain Tiles on the AWS
+Open Data registry are public-domain terrarium DEMs served to z15, and give
+real hillshade and real 3D terrain. Credit them in the attribution control.
+
+A line draped on terrain waits for the DEM tiles under it. Measured: layers and
+route geometry were in at 916ms, the same as the flat baseline, but the route
+did not paint until ~1.7s because 21 elevation tiles were still arriving.
+Applying `setTerrain` after the first idle keeps route-first ordering - the line
+lands at ~900ms on the correct camera, then the ground rises to meet it. Nothing
+may drape before that, including a `styledata` handler.
 
 ## Shell Behavior
 

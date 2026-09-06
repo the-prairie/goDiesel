@@ -21,6 +21,36 @@ export function replayPath(slug: string, returnPath?: string) {
   return returnPath ? `${path}?from=${encodeURIComponent(returnPath)}` : path;
 }
 
+/**
+ * Design-seed lab paths.
+ *
+ * The lab is isolated exploration, but its journey uses the application's real
+ * routing so Back, direct links and return context behave like production.
+ */
+export const DESIGN_SEED_PATH = "/lab/design-seeds";
+
+export function designSeedAtlasPath(concept: string, params?: URLSearchParams) {
+  const query = params?.toString();
+  return `${DESIGN_SEED_PATH}/${concept}/atlas${query ? `?${query}` : ""}`;
+}
+
+export function designSeedStoryPath(
+  concept: string,
+  slug: string,
+  returnPath?: string,
+) {
+  const path = `${DESIGN_SEED_PATH}/${concept}/story/${encodedSlug(slug)}`;
+  return returnPath ? `${path}?from=${encodeURIComponent(returnPath)}` : path;
+}
+
+/** True for a design-seed story path, with or without a query string. */
+export function isDesignSeedStoryPath(path: string, slug: string) {
+  const base = `${DESIGN_SEED_PATH}/`;
+  if (!path.startsWith(base)) return false;
+  const [pathname] = path.split("?");
+  return pathname.endsWith(`/story/${encodedSlug(slug)}`);
+}
+
 export function atlasReturnPath(searchParams: URLSearchParams) {
   const path = searchParams.get("from");
   return path === APP_PATHS.atlas || path?.startsWith(`${APP_PATHS.atlas}?`)
@@ -36,7 +66,10 @@ export function replayReturnPath(
   if (atlasPath) return atlasPath;
 
   const path = searchParams.get("from");
-  return path === routeDetailPath(routeSlug) ? path : undefined;
+  if (!path) return undefined;
+  if (path === routeDetailPath(routeSlug)) return path;
+  if (isDesignSeedStoryPath(path, routeSlug)) return path;
+  return undefined;
 }
 
 export function playableEarthLabPath(slug: string, origin?: "replay") {
