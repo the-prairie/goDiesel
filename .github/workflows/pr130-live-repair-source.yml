@@ -21,7 +21,7 @@ jobs:
           mkdir -p proof
           git rev-parse HEAD > proof/commit.txt
           git ls-files -s > proof/files.txt
-          git archive --format=tar.gz HEAD app/src app/e2e app/scripts app/vite.config.ts app/playwright.config.ts app/playwright.cinematic-live.config.ts app/package.json app/package-lock.json app/tsconfig.json app/tsconfig.app.json app/tsconfig.node.json app/vitest.config.ts .github AGENTS.md CONTEXT.md README.md STRATEGY.md docs > proof/source.tar.gz
+          git archive --format=tar.gz HEAD app/src app/e2e app/scripts app/vite.config.ts app/playwright.config.ts app/playwright.cinematic-live.config.ts app/package.json app/package-lock.json app/tsconfig.json app/vitest.config.ts .github AGENTS.md CONTEXT.md README.md STRATEGY.md docs > proof/source.tar.gz
       - uses: actions/upload-artifact@v4
         with:
           name: live-repair-source
