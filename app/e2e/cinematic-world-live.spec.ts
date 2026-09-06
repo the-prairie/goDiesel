@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 
 const clean = (value: string) => value
   .replace(/https?:\/\/[^\s)"']+/g, (text) => {
@@ -23,36 +23,13 @@ async function rendererEvidence(page: Page) {
     const canvas = document.querySelector<HTMLCanvasElement>('[data-testid="cinematic-world-canvas"]');
     const gl = canvas?.getContext("webgl2");
     const debug = gl?.getExtension("WEBGL_debug_renderer_info");
-    // Read-only diagnostics of this mounted React instance, never an injected
-    // renderer/factory. Copy only numeric state, not options or provider URLs.
-    type EngineProbe = {
-      tiles?: { stats: Record<string, number>; loadProgress: number; errorTarget: number; cameraInfo: { position: { x: number; y: number; z: number } }[]; lruCache: { cachedBytes: number } };
-      camera?: { position: { x: number; y: number; z: number }; near: number; far: number };
-    };
-    type Hook = { memoizedState?: { current?: EngineProbe }; next?: Hook };
-    type Fiber = { memoizedState?: Hook; return?: Fiber };
-    const fiberKey = stage && Object.keys(stage).find((key) => key.startsWith("__reactFiber"));
-    let fiber = fiberKey ? (stage as unknown as Record<string, Fiber>)[fiberKey] : undefined;
-    let engine: EngineProbe | undefined;
-    for (let i = 0; fiber && i < 30 && !engine; i++, fiber = fiber.return) {
-      let hook = fiber.memoizedState;
-      for (let j = 0; hook && j < 100; j++, hook = hook.next) {
-        const current = hook.memoizedState?.current;
-        if (current?.tiles && current?.camera) { engine = current; break; }
-      }
-    }
-    const tiles = engine?.tiles;
-    const position = engine?.camera?.position;
+    const detail: { report: unknown } = { report: null };
+    world?.dispatchEvent(new CustomEvent("godiesel:world-diagnostics", { detail }));
     return {
       viewport: { width: innerWidth, height: innerHeight, pixelRatio: devicePixelRatio },
       stage: stage ? { ...stage.dataset } : null,
       world: world ? { ...world.dataset } : null,
-      streaming: tiles ? {
-        stats: { ...tiles.stats }, progress: tiles.loadProgress, errorTarget: tiles.errorTarget,
-        cachedBytes: tiles.lruCache.cachedBytes,
-        cameraLocal: position ? [position.x, position.y, position.z] : null,
-        tileCameras: tiles.cameraInfo?.map(({ position: p }) => [p.x, p.y, p.z]),
-      } : null,
+      report: detail.report,
       graphics: gl ? {
         renderer: debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
         contextLost: gl.isContextLost(),
@@ -68,8 +45,7 @@ for (const journey of [
   { slug: "17665674778", label: "Tokyo streets", width: 1280, height: 720 },
 ]) {
   test(`live Google world: ${journey.label}`, async ({ page, browser }, testInfo) => {
-    // Bound missing controls separately so failure evidence can be captured before
-    // the test-wide deadline tears down the page.
+    // Bound missing controls separately so failure evidence survives.
     page.setDefaultTimeout(15_000);
     const evidence = {
       sourceCommit: process.env.GODIESEL_WORLD_SOURCE_SHA ?? "unrecorded",
@@ -138,11 +114,27 @@ for (const journey of [
       await page.screenshot({ path: testInfo.outputPath("03-live-playback.png") });
 
       await page.getByRole("button", { name: "Replay settings", exact: true }).click();
+      const downloadPromise = page.waitForEvent("download");
+      await page.getByRole("button", { name: "Save playback report", exact: true }).click();
+      const download = await downloadPromise;
+      const reportPath = testInfo.outputPath("device-playback-report.json");
+      await download.saveAs(reportPath);
+      const report = JSON.parse(readFileSync(reportPath, "utf8"));
+      expect(report.schema).toBe("godiesel-world-report-v1");
+      expect(report.routeSlug).toBe(journey.slug);
+      expect(report.frames.samples).toBeGreaterThan(0);
+      expect(report.terrain.renderedMeshes).toBeGreaterThan(0);
+      expect(readFileSync(reportPath, "utf8")).not.toMatch(/AIza|[?&](?:key|token|session)=/);
+      // Explicit Cinema keeps cloud rendering enabled even on a slow CI GPU.
+      await page.getByRole("button", { name: "Cinema", exact: true }).click();
       await page.getByRole("button", { name: "Golden hour", exact: true }).click();
       await page.getByRole("slider", { name: "Cloud cover", exact: true }).fill("55");
       await page.getByRole("button", { name: "Replay settings", exact: true }).click();
       await page.waitForTimeout(1500);
       await page.screenshot({ path: testInfo.outputPath("04-live-golden-clouds.png") });
+      evidence.snapshots.push(await rendererEvidence(page));
+      await expect(world).toHaveAttribute("data-effective-quality", "cinema");
+      await expect(world).toHaveAttribute("data-world-atmosphere", "ready");
       expect(evidence.errors).toEqual([]);
       expect(evidence.failures).toEqual([]);
       await expect(world).toHaveAttribute("data-world-terrain", "ready");
@@ -150,7 +142,7 @@ for (const journey of [
       // Always retain useful, redacted evidence on failure. No trace/HAR, tile
       // response bodies, browser bundle, request headers or API-key URLs are uploaded.
       if (!page.isClosed()) {
-        evidence.snapshots.push(await rendererEvidence(page).catch(() => ({ viewport: { width: 0, height: 0, pixelRatio: 0 }, stage: null, world: null, streaming: null, graphics: null })));
+        evidence.snapshots.push(await rendererEvidence(page).catch(() => ({ viewport: { width: 0, height: 0, pixelRatio: 0 }, stage: null, world: null, report: null, graphics: null })));
         await page.screenshot({ path: testInfo.outputPath("05-live-final-state.png") }).catch(() => {});
       }
       // A text-only reporter does not persist in-memory attachment bodies.

@@ -10,6 +10,7 @@ import type { GoogleRouteCameraPose, GoogleRouteGroundingMode } from "@/surfaces
 import type { CinematicRouteTreatment } from "@/surfaces/replay/cinematic/cinematic-route-filament";
 import { routeDistanceM } from "@/domain/geometry/route-path";
 import { WorldFrame } from "./world-frame";
+import { bindWorldDiagnostics, WorldFrameHistory, type WorldDiagnostics } from "./world-diagnostics";
 import { configureWorldStreaming, canStartWorldAtmosphere, nextSlowFrameDebt, worldFarPlane } from "./world-streaming";
 import { WorldRoute } from "./world-route";
 import { WorldAtmosphere } from "./world-atmosphere";
@@ -60,11 +61,15 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
   private measuredTarget: number | null = null;
   private lastTargetSample = -Infinity;
   private lastCameraCorrection = 0;
+  private readonly frameHistory = new WorldFrameHistory();
+  private unbindDiagnostics?: () => void;
 
   async mount(options: MountOptions) {
     this.options = options;
     this.publish();
     const { container, route } = options;
+    this.unbindDiagnostics = bindWorldDiagnostics(container, () => this.diagnostics());
+    document.addEventListener("visibilitychange", this.onVisibility);
     if (!route.replay.replayEligible || route.lifecycle === "planned" || route.replay.geometryStatus !== "ready" || route.route.length < 2) {
       this.fail("This route has no replayable recorded geometry."); return;
     }
@@ -178,7 +183,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
         this.animation = requestAnimationFrame(tick);
         const elapsed = now - previous;
         previous = now;
-        if (document.hidden) { this.slowFrames = 0; return; }
+        if (document.hidden) { this.slowFrames = 0; this.frameHistory.record(now, false); return; }
         let phase = "tiles";
         try {
           this.camera.updateMatrixWorld();
@@ -221,6 +226,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
           container.dataset.terrainFocusErrorM = this.focusErrorM === null ? "unavailable" : this.focusErrorM.toFixed(2);
           container.dataset.worldLabelCount = String(this.labels?.visibleLabelCount ?? 0);
           container.dataset.cameraMeshCorrectionM = this.lastCameraCorrection.toFixed(1);
+          this.frameHistory.record(now, true);
           this.updateAttribution(); this.publish();
         } catch (error) {
           const message = error instanceof Error ? error.message : "Unexpected renderer error";
@@ -243,6 +249,26 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
     } catch { this.fail("This browser could not start the cinematic 3D world. Try a WebGL2-capable browser, Native Replay or Atlas."); }
   }
 
+  private diagnostics(): WorldDiagnostics {
+    const gl = this.renderer?.getContext();
+    const debug = gl?.getExtension("WEBGL_debug_renderer_info");
+    const graphics = gl ? String(gl.getParameter(debug ? debug.UNMASKED_RENDERER_WEBGL : gl.RENDERER)) : "unavailable";
+    const cache = this.tiles?.lruCache as unknown as { cachedBytes?: number } | undefined;
+    return {
+      schema: "godiesel-world-report-v1",
+      routeSlug: this.options?.route.slug ?? "unknown",
+      capturedAt: new Date().toISOString(),
+      device: { browser: navigator.userAgent, graphics, softwareRenderer: /swiftshader|llvmpipe|software/i.test(graphics), width: window.innerWidth, height: window.innerHeight, pixelRatio: window.devicePixelRatio },
+      layers: { ...this.layers },
+      quality: { requested: this.environment.quality, effective: this.effectiveQuality, light: this.environment.light, clouds: this.environment.clouds, labels: this.environment.labels },
+      terrain: { renderedMeshes: this.renderedTiles, visibleTiles: this.tiles?.visibleTiles.size ?? 0, focusErrorM: this.focusErrorM, progress: this.tiles?.loadProgress ?? 0, cachedBytes: cache?.cachedBytes ?? 0 },
+      visibleRoadLabels: this.labels?.visibleLabelCount ?? 0,
+      frames: this.frameHistory.snapshot(),
+      contextLost: gl?.isContextLost() ?? false,
+    };
+  }
+
+  private onVisibility = () => { this.frameHistory.record(NaN, false); this.slowFrames = 0; };
   private onContextLost = (event: Event) => { event.preventDefault(); this.fail("The browser lost its 3D graphics context. Reopen Cinematic world or use Native Replay."); };
   private onKey = (event: KeyboardEvent) => {
     if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key) && this.following) this.options?.onCameraInteraction?.();
@@ -363,6 +389,8 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
     this.abort.abort(); cancelAnimationFrame(this.animation); window.clearTimeout(this.readyTimer);
   }
   destroy() {
+    this.unbindDiagnostics?.();
+    document.removeEventListener("visibilitychange", this.onVisibility);
     this.abort.abort(); cancelAnimationFrame(this.animation); window.clearTimeout(this.readyTimer);
     this.resizeObserver?.disconnect(); this.controls?.stopListenToKeyEvents(); this.controls?.dispose();
     this.labels?.dispose(); this.atmosphere?.dispose(); this.tiles?.dispose(); this.draco?.dispose(); this.trace?.dispose();

@@ -19,6 +19,7 @@ export class WorldRoute {
   private drawnEdges: Array<[RoutePoint, RoutePoint]> = [];
   private endDistances: number[] = [];
   private cursor = 0;
+  private remaining = 0;
   private dirty = true;
   private lastFlush = -Infinity;
   private progress = 0;
@@ -30,6 +31,7 @@ export class WorldRoute {
   constructor(route: QuestRoute, private readonly frame: WorldFrame) {
     this.edges = recordedEdges(route);
     this.points = [...new Set(this.edges.flat())];
+    this.remaining = this.points.length;
     this.missingElevation = route.elevationStatus === "unavailable" || route.provenance.elevation?.status === "unavailable";
     if (!this.missingElevation) for (const point of this.points) this.heights.set(point, point.elev);
     this.context.frustumCulled = this.traveled.frustumCulled = false;
@@ -37,21 +39,26 @@ export class WorldRoute {
     this.marker.visible = false;
     this.flush(0);
   }
-  invalidate() { this.cursor = 0; }
+  // Refinement can invalidate on every frame. Restarting at zero starves the
+  // rest of a long route; retain the round-robin cursor and refresh its work count.
+  invalidate() { this.remaining = this.points.length; }
   get grounded() { return this.heights.size === this.points.length && this.points.length > 0; }
   grounding(mesh: boolean) {
     if (this.mesh === mesh) return;
     this.mesh = mesh;
     if (!this.missingElevation) for (const point of this.points) this.heights.set(point, point.elev);
     this.cursor = 0;
+    this.remaining = this.points.length;
     this.dirty = true;
   }
   /** Work budget is per frame; no path-wide synchronous mesh sampling. */
   settle(sample: (lat: number, lng: number, seed: number) => number | null, now: number) {
     const until = performance.now() + 0.8;
     let count = 0;
-    while (this.cursor < this.points.length && count++ < 8 && performance.now() < until) {
-      const point = this.points[this.cursor++];
+    while (this.remaining > 0 && count++ < 8 && performance.now() < until) {
+      const point = this.points[this.cursor];
+      this.cursor = (this.cursor + 1) % this.points.length;
+      this.remaining--;
       if (!this.mesh && !this.missingElevation) continue;
       const height = sample(point.lat, point.lng, this.missingElevation ? 0 : point.elev);
       if (height === null) continue;

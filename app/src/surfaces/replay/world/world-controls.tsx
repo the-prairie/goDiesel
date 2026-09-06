@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { saveWorldDiagnostics } from "./world-diagnostics";
 import type { WorldEnvironment } from "./world-model";
 
 export type ReplayWorldMode = "native" | "cinematic";
@@ -10,6 +12,7 @@ interface Props {
 const button = "min-h-11 flex-1 rounded border border-white/20 px-3 py-2 text-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white aria-pressed:bg-white/20 hover:bg-white/10";
 
 export function WorldControls({ mode, environment, onMode, onEnvironment }: Props) {
+  const [reportMessage, setReportMessage] = useState("");
   return (
     <div className="mt-4 space-y-4 border-b border-white/15 pb-4" data-testid="cinematic-world-settings">
       <fieldset>
@@ -41,6 +44,11 @@ export function WorldControls({ mode, environment, onMode, onEnvironment }: Prop
           <div className="flex gap-2">{(["light", "balanced", "cinema"] as const).map((quality) => <button className={`${button} capitalize`} key={quality} type="button" aria-pressed={environment.quality === quality} onClick={() => onEnvironment({ ...environment, quality })}>{quality[0].toUpperCase() + quality.slice(1)}</button>)}</div>
           <p className="mt-2 text-xs leading-relaxed text-white/70">Light turns off clouds. Balanced adjusts detail to keep the flight responsive.</p>
         </fieldset>
+        <div>
+          <button className={button} type="button" onClick={() => setReportMessage(saveWorldDiagnostics() ? "Playback report saved." : "Open Cinematic world before saving a report.")}>Save playback report</button>
+          <p className="mt-2 text-xs leading-relaxed text-white/70">Saves this device’s playback measurements and route ID. Nothing is sent automatically.</p>
+          <p className="text-xs text-white/70" role="status">{reportMessage}</p>
+        </div>
       </> : null}
     </div>
   );
