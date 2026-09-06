@@ -400,8 +400,13 @@ export function GoogleRouteNavigatorStage({
       return;
     }
     chromeTimerRef.current = window.setTimeout(() => {
-      setChromeVisible(false);
       chromeTimerRef.current = undefined;
+      // Never hide/inert a control while someone is hovering or using
+      // its keyboard focus. Slow rendering must not race a user's click.
+      const engaged = [headerRef.current, controlsRef.current].some((element) =>
+        element?.matches(":hover") || element?.querySelector(":focus-visible"),
+      );
+      if (!engaged) setChromeVisible(false);
     }, 1_800);
   }, [productionReplay, reducedMotion, settingsOpen]);
 
@@ -535,9 +540,11 @@ export function GoogleRouteNavigatorStage({
       data-route-slug={route.slug}
       data-state={status.state}
       data-testid={productionReplay ? "replay-stage" : "google-route-navigator"}
+      onBlurCapture={scheduleChromeHide}
       onFocusCapture={revealChrome}
       onPointerDown={revealChrome}
       onPointerMove={revealChrome}
+      onPointerLeave={scheduleChromeHide}
       ref={stageRef}
     >
       <div

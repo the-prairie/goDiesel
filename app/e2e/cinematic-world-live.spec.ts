@@ -83,7 +83,9 @@ for (const journey of [
       evidence.snapshots.push(await rendererEvidence(page));
       await page.screenshot({ path: testInfo.outputPath("01-live-overview.png") });
 
-      await page.getByRole("button", { name: "Chase", exact: true }).click();
+      // Exercise normal keyboard activation on the live world; no forced clicks.
+      await page.getByRole("button", { name: "Chase", exact: true }).press("Enter");
+      await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-camera-mode", "chase");
       // Preserve a failing label verdict, but still collect playback and lighting evidence.
       await expect.configure({ soft: true }).poll(async () => Number(await world.getAttribute("data-world-label-count")), { timeout: 45_000 }).toBeGreaterThan(0);
       await page.waitForTimeout(1500);
@@ -109,7 +111,8 @@ for (const journey of [
       }));
       evidence.snapshots.push(await rendererEvidence(page));
       await revealReplayControls(page);
-      await page.getByRole("button", { name: "Pause route", exact: true }).click();
+      await page.getByRole("button", { name: "Pause route", exact: true }).press("Enter");
+      await expect(page.getByRole("button", { name: "Play route", exact: true })).toBeVisible();
       evidence.snapshots.push(await rendererEvidence(page));
       await page.screenshot({ path: testInfo.outputPath("03-live-playback.png") });
 

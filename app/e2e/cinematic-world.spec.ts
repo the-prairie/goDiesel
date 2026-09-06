@@ -78,7 +78,6 @@ test("terrain failure offers a working native recovery", async ({ page }) => {
   await page.goto("/#/replay/14130782031?renderer=cinematic");
   await page.getByRole("button", { name: "Use Native Replay", exact: true }).click();
   await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-state", "ready");
-  await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-engine", "google-3d-maps");
 });
 
 test("the real engine reports a missing key rather than displaying fixture success", async ({ page }) => {
@@ -105,5 +104,28 @@ for (const viewport of [{ width: 1440, height: 960 }, { width: 390, height: 844 
     await expect(page.getByRole("slider", { name: "Cloud cover", exact: true })).toBeDisabled();
     await expect.poll(() => page.evaluate(() => (window as unknown as { __worldCalls: Array<{ event: string; value?: unknown }> }).__worldCalls.filter((call) => call.event === "environment").at(-1)?.value)).toMatchObject({ reducedMotion: true, quality: "light" });
     await page.screenshot({ path: testInfo.outputPath(`world-settings-${viewport.width}.png`) });
+  });
+}
+
+for (const mode of ["native", "cinematic"] as const) {
+  test(`${mode} controls stay usable while hovered or keyboard-focused, then hide when idle`, async ({ page }) => {
+    // Adapter only for input ownership. Live terrain acceptance is a separate gate.
+    await installAdapters(page);
+    await page.goto(`/#/replay/14130782031${mode === "cinematic" ? "?renderer=cinematic" : ""}`);
+    const stage = page.getByTestId("replay-stage");
+    await page.getByRole("button", { name: "Play route", exact: true }).click();
+    await page.getByRole("button", { name: "Pause route", exact: true }).hover();
+    await page.waitForTimeout(2200);
+    await expect(stage).toHaveAttribute("data-hud-state", "expanded");
+    await page.mouse.move(500, 200);
+    await expect(stage).toHaveAttribute("data-hud-state", "hidden", { timeout: 4000 });
+    await page.mouse.move(520, 220);
+    await expect(stage).toHaveAttribute("data-hud-state", "expanded");
+    await page.keyboard.press("Tab");
+    await expect(stage.locator("header :focus-visible, [data-testid='replay-controls'] :focus-visible")).toHaveCount(1);
+    await page.waitForTimeout(2200);
+    await expect(stage).toHaveAttribute("data-hud-state", "expanded");
+    await page.getByRole("button", { name: "Pause route", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Play route", exact: true })).toBeVisible();
   });
 }

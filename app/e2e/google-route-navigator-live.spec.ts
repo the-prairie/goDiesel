@@ -514,6 +514,7 @@ test("frames an active Story Flight thread above the desktop HUD", async ({
   await page.getByLabel("Route progress").fill("10750");
   await page.getByRole("button", { name: "Play route" }).click();
   await expect(replay).toHaveAttribute("data-directed-camera", "chase");
+  await page.mouse.move(page.viewportSize()!.width / 2, 200);
   await page.waitForTimeout(2_500);
   await expect(replay).toHaveAttribute("data-hud-state", "hidden");
   await captureEvidence(

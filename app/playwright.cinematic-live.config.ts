@@ -4,6 +4,8 @@ if (!baseURL) throw new Error("BLOCKED: GODIESEL_WORLD_PREVIEW_URL must point to
 export default defineConfig({
   testDir: "./e2e",
   testMatch: "cinematic-world-live.spec.ts",
+  // Keep synthetic screenshots alongside, not overwritten by, live evidence.
+  outputDir: "test-results/cinematic-live",
   workers: 1,
   retries: 0,
   timeout: 180_000,
