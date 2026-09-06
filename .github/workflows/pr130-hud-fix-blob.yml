@@ -5,6 +5,9 @@ on:
     paths: [.github/workflows/pr130-hud-fix-blob.yml]
 permissions:
   contents: read
+concurrency:
+  group: pr130-hud-prepare
+  cancel-in-progress: true
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -26,7 +29,7 @@ jobs:
           cache-dependency-path: app/package-lock.json
       - run: npm ci --prefix app
       - run: cd app && npx playwright install --with-deps chromium
-      - name: Apply exact bounded HUD edit
+      - name: Apply exact bounded HUD edit and realistic pointer contracts
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -36,19 +39,32 @@ jobs:
           assert hashlib.sha1(f'blob {len(b)}\0'.encode()+b).hexdigest() == '9dc2eb820109329650866f540ad5bb47643c8d7e'
           s = b.decode()
           before = '      setChromeVisible(false);\n      chromeTimerRef.current = undefined;'
-          after = '''      chromeTimerRef.current = undefined;
-                // Never hide/inert a control while someone is hovering or using
-                // its keyboard focus. Slow rendering must not race a user's click.
-                const engaged = [headerRef.current, controlsRef.current].some((element) =>
-                  element?.matches(":hover") || element?.querySelector(":focus-visible"),
-                );
-                if (!engaged) setChromeVisible(false);'''
-          # Preserve the surrounding source indentation exactly.
-          after = '\n'.join(line[10:] if line.startswith('          ') else line for line in after.split('\n'))
+          after = '\n'.join([
+            '      chromeTimerRef.current = undefined;',
+            '      // Never hide/inert a control while someone is hovering or using',
+            "      // its keyboard focus. Slow rendering must not race a user's click.",
+            '      const engaged = [headerRef.current, controlsRef.current].some((element) =>',
+            '        element?.matches(":hover") || element?.querySelector(":focus-visible"),',
+            '      );',
+            '      if (!engaged) setChromeVisible(false);',
+          ])
           assert s.count(before) == 1
           s = s.replace(before, after)
           s = s.replace('      onFocusCapture={revealChrome}', '      onBlurCapture={scheduleChromeHide}\n      onFocusCapture={revealChrome}')
           s = s.replace('      onPointerMove={revealChrome}', '      onPointerMove={revealChrome}\n      onPointerLeave={scheduleChromeHide}')
+          p.write_text(s)
+          p = Path('app/e2e/google-replay-production.spec.ts')
+          s = p.read_text()
+          before = 'await page.getByTestId("replay-stage").dispatchEvent("pointermove");'
+          assert s.count(before) == 2
+          s = s.replace(before, 'await page.mouse.move(180, 200);', 1)
+          s = s.replace(before, 'await page.mouse.move(200, 220);', 1)
+          p.write_text(s)
+          p = Path('app/e2e/google-route-navigator-live.spec.ts')
+          s = p.read_text()
+          before = '  await expect(replay).toHaveAttribute("data-directed-camera", "chase");\n  await page.waitForTimeout(2_500);'
+          assert s.count(before) == 1
+          s = s.replace(before, '  await expect(replay).toHaveAttribute("data-directed-camera", "chase");\n  await page.mouse.move(page.viewportSize()!.width / 2, 200);\n  await page.waitForTimeout(2_500);')
           p.write_text(s)
           PY
       - name: Existing production Replay contract
@@ -56,18 +72,26 @@ jobs:
           cd app
           npm run typecheck
           npx playwright test e2e/google-replay-production.spec.ts --project=chromium
-      - name: Store verified source blob only, never update a branch
+      - name: Store verified source blobs only, never update a branch
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p hud-proof
-          python3 - <<'PY'
-          from pathlib import Path
-          import json, base64
-          b = Path('app/src/surfaces/replay/components/google-route-navigator-stage.tsx').read_bytes()
-          Path('/tmp/hud-blob.json').write_text(json.dumps({'encoding': 'base64', 'content': base64.b64encode(b).decode()}))
-          PY
-          gh api --method POST repos/the-prairie/goDiesel/git/blobs --input /tmp/hud-blob.json > hud-proof/blob.json
+          node --input-type=module <<'JS'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          const paths = ['app/src/surfaces/replay/components/google-route-navigator-stage.tsx', 'app/e2e/google-replay-production.spec.ts', 'app/e2e/google-route-navigator-live.spec.ts'];
+          const blobs = [];
+          for (const path of paths) {
+            const response = await fetch('https://api.github.com/repos/the-prairie/goDiesel/git/blobs', {
+              method: 'POST', headers: { Authorization: `Bearer ${process.env.GH_TOKEN}`, 'Content-Type': 'application/json', Accept: 'application/vnd.github+json' },
+              body: JSON.stringify({ encoding: 'base64', content: readFileSync(path).toString('base64') }),
+            });
+            if (!response.ok) throw new Error(`Blob storage failed (${response.status})`);
+            const { sha } = await response.json();
+            blobs.push({ path, sha, type: 'blob', mode: '100644' });
+          }
+          writeFileSync('hud-proof/blobs.json', JSON.stringify({ source: 'e22e09723fa2673aed7ca70528ff9eb2b0fa5980', blobs }, null, 2));
+          JS
           git diff --check
           git diff > hud-proof/change.patch
       - uses: actions/upload-artifact@v4
