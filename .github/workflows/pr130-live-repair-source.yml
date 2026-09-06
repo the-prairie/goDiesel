@@ -1,0 +1,29 @@
+name: Export live repair source
+on:
+  push:
+    branches: [codex/pr130-refinement-inspection]
+    paths: [.github/workflows/pr130-live-repair-source.yml]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 938449ac98cd01b5d6da4a68dc023e86f1baaba4
+          persist-credentials: false
+      - name: Export tracked source and identity only
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p proof
+          git rev-parse HEAD > proof/commit.txt
+          git ls-files -s > proof/files.txt
+          git archive --format=tar.gz HEAD app/src app/e2e app/scripts app/vite.config.ts app/playwright.config.ts app/playwright.cinematic-live.config.ts app/package.json app/package-lock.json app/tsconfig.json app/tsconfig.app.json app/tsconfig.node.json app/vitest.config.ts .github AGENTS.md CONTEXT.md README.md STRATEGY.md docs > proof/source.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: live-repair-source
+          path: proof/
+          retention-days: 3
