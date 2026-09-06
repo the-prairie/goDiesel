@@ -33,18 +33,24 @@ jobs:
           python3 - <<'PY'
           import base64, gzip, hashlib, json, os, subprocess, urllib.request
           from pathlib import Path
-          shas = ['64e19fa771dedf020927dc1a39f4d10c31d29bd2', 'c287cc16cbed075d105fe2e3ca3087445d6c754c', '3d335d31d120bc9a5f75ddae36a6c692db2e6af6', 'dac4058015090259d30e28b10e0a5d0de43878bb']
-          encoded = b''
-          for sha in shas:
+          def blob(sha):
             request = urllib.request.Request(f'https://api.github.com/repos/the-prairie/goDiesel/git/blobs/{sha}', headers={'Authorization': 'Bearer '+os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
             with urllib.request.urlopen(request) as response:
-              encoded += base64.b64decode(json.load(response)['content'])
-          patch = gzip.decompress(base64.b64decode(encoded))
+              data = base64.b64decode(json.load(response)['content'])
+            assert hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest() == sha
+            return data
+          shas = ['64e19fa771dedf020927dc1a39f4d10c31d29bd2', 'c287cc16cbed075d105fe2e3ca3087445d6c754c', '3d335d31d120bc9a5f75ddae36a6c692db2e6af6', 'dac4058015090259d30e28b10e0a5d0de43878bb']
+          patch = gzip.decompress(base64.b64decode(b''.join(blob(sha) for sha in shas)))
           digest = hashlib.sha256(patch).hexdigest()
           assert digest == 'a0a21a8604dce55724d93cbcbae06a360730fe9189f6a3e8f9ad8dffca29161a'
           Path('proof/patch-sha256.txt').write_text(digest+'\n')
           subprocess.run(['git','apply','--check','-'], input=patch, check=True)
           subprocess.run(['git','apply','-'], input=patch, check=True)
+          # The 41-point fixture must not retain the original route's mid_idx=138.
+          # Correct only the test input and add a real parser preflight assertion.
+          replacement = 'cf6dd96f984ef2a44324d32ba6be553cf7aef915'
+          Path('app/e2e/cinematic-world-report.spec.ts').write_bytes(blob(replacement))
+          Path('proof/test-input-correction.txt').write_text(replacement+'\n')
           subprocess.run(['git','add','app','docs/architecture/cinematic-world-replay.md','.github/workflows/verify-cinematic-world.yml'], check=True)
           subprocess.run(['git','diff','--cached','--check'], check=True)
           PY
