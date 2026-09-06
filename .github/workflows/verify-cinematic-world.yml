@@ -9,6 +9,7 @@ on:
       - 'app/e2e/helpers/cinematic-fixture.ts'
       - 'app/package*.json'
       - 'app/vite.config.ts'
+      - 'app/scripts/build-identity.ts'
       - 'app/playwright.cinematic-live.config.ts'
 permissions:
   contents: read
@@ -52,7 +53,7 @@ jobs:
       - name: Production build, controls and real shader pipeline
         working-directory: app
         run: |
-          npx playwright test e2e/cinematic-world.spec.ts e2e/cinematic-world-renderer.spec.ts e2e/google-replay-production.spec.ts --project=chromium 2>&1 | tee ../proof/browser.txt
+          npx playwright test e2e/cinematic-world.spec.ts e2e/cinematic-world-renderer.spec.ts e2e/cinematic-world-report.spec.ts e2e/google-replay-production.spec.ts --project=chromium 2>&1 | tee ../proof/browser.txt
       - name: Build live-key PR preview
         id: livebuild
         if: ${{ success() && github.event.pull_request.number == 130 && github.head_ref == 'codex/cinematic-world-replay' && github.event.pull_request.head.repo.full_name == github.repository }}

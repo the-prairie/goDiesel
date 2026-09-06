@@ -2,7 +2,7 @@ import { TilesRenderer } from "3d-tiles-renderer/three";
 import { GoogleCloudAuthPlugin } from "3d-tiles-renderer/core/plugins";
 import { GLTFExtensionsPlugin, TilesFadePlugin } from "3d-tiles-renderer/three/plugins";
 import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree } from "three-mesh-bvh";
-import { AgXToneMapping, Color, Mesh, PerspectiveCamera, Raycaster, Scene, SRGBColorSpace, WebGLRenderer, NoToneMapping } from "three";
+import { AgXToneMapping, Color, Matrix4, Vector2, Mesh, PerspectiveCamera, Raycaster, Scene, SRGBColorSpace, WebGLRenderer, NoToneMapping } from "three";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import type { GoogleRouteNavigatorEngine, GoogleRouteNavigatorStatus } from "@/surfaces/replay/renderers/google-route-navigator-engine";
@@ -10,7 +10,8 @@ import type { GoogleRouteCameraPose, GoogleRouteGroundingMode } from "@/surfaces
 import type { CinematicRouteTreatment } from "@/surfaces/replay/cinematic/cinematic-route-filament";
 import { routeDistanceM } from "@/domain/geometry/route-path";
 import { WorldFrame } from "./world-frame";
-import { bindWorldDiagnostics, WorldFrameHistory, type WorldDiagnostics } from "./world-diagnostics";
+import { bindWorldDiagnostics, WorldFlightRecorder, WORLD_BUILD, type WorldDiagnostics, type WorldPlaybackContext, type WorldReportState, type WorldReportEvent } from "./world-diagnostics";
+import { emptyTerrainFocus, sampleTerrainFocus } from "./world-terrain-diagnostics";
 import { configureWorldStreaming, canStartWorldAtmosphere, nextSlowFrameDebt, worldFarPlane } from "./world-streaming";
 import { WorldRoute } from "./world-route";
 import { WorldAtmosphere } from "./world-atmosphere";
@@ -61,7 +62,12 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
   private measuredTarget: number | null = null;
   private lastTargetSample = -Infinity;
   private lastCameraCorrection = 0;
-  private readonly frameHistory = new WorldFrameHistory();
+  private readonly recorder = new WorldFlightRecorder(performance.now(), !document.hidden);
+  private playback: WorldPlaybackContext | null = null;
+  private focusProbe = emptyTerrainFocus();
+  private readonly probeView = new Matrix4();
+  private readonly probeProjection = new Matrix4();
+  private lastDiagnosticSample = -Infinity;
   private unbindDiagnostics?: () => void;
 
   async mount(options: MountOptions) {
@@ -183,7 +189,8 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
         this.animation = requestAnimationFrame(tick);
         const elapsed = now - previous;
         previous = now;
-        if (document.hidden) { this.slowFrames = 0; this.frameHistory.record(now, false); return; }
+        if (document.hidden) { this.slowFrames = 0; return; }
+        this.recorder.frame(now, this.playback);
         let phase = "tiles";
         try {
           this.camera.updateMatrixWorld();
@@ -226,7 +233,17 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
           container.dataset.terrainFocusErrorM = this.focusErrorM === null ? "unavailable" : this.focusErrorM.toFixed(2);
           container.dataset.worldLabelCount = String(this.labels?.visibleLabelCount ?? 0);
           container.dataset.cameraMeshCorrectionM = this.lastCameraCorrection.toFixed(1);
-          this.frameHistory.record(now, true);
+          this.recorder.submitted(performance.now(), this.renderedTiles);
+          // Diagnostics observe at most once a second; never change detail selection.
+          if (now - this.lastDiagnosticSample >= 1000) {
+            this.lastDiagnosticSample = now;
+            try {
+              this.focusProbe = sampleTerrainFocus(tiles, this.camera, this.recorder.time(now), renderer.getSize(new Vector2()).y);
+              this.probeView.copy(this.camera.matrixWorld);
+              this.probeProjection.copy(this.camera.projectionMatrix);
+            } catch { this.focusProbe = { ...emptyTerrainFocus(), sampledAtMs: this.recorder.time(now), reason: "sample-error" }; }
+            this.recorder.sample(now, this.reportState(now));
+          }
           this.updateAttribution(); this.publish();
         } catch (error) {
           const message = error instanceof Error ? error.message : "Unexpected renderer error";
@@ -249,27 +266,81 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
     } catch { this.fail("This browser could not start the cinematic 3D world. Try a WebGL2-capable browser, Native Replay or Atlas."); }
   }
 
+  private reportState(now = performance.now()): WorldReportState {
+    const cache = this.tiles?.lruCache as unknown as { cachedBytes?: number } | undefined;
+    const stats = (this.tiles as unknown as { stats?: { downloading: number; parsing: number; failed: number } } | undefined)?.stats;
+    return {
+      playback: this.playback ? { ...this.playback } : null,
+      camera: {
+        requestedMode: this.playback?.cameraMode ?? null,
+        directedMode: this.following ? this.pose?.directedMode ?? this.playback?.cameraMode ?? null : null,
+        owner: this.following ? "following" : "free",
+        requestedRangeM: this.pose?.rangeM ?? null,
+        actualRangeM: this.controls ? this.camera.position.distanceTo(this.controls.target) : null,
+        fovDeg: this.camera.fov, nearM: this.camera.near, farM: this.camera.far, meshCorrectionM: this.lastCameraCorrection,
+      },
+      layers: { ...this.layers },
+      quality: {
+        requested: this.environment.quality, effective: this.effectiveQuality,
+        light: this.environment.light, clouds: this.environment.clouds, labels: this.environment.labels,
+        cloudsEnabled: this.layers.atmosphere === "ready" && this.atmosphereStarted && this.atmosphereReady && WORLD_QUALITY[this.effectiveQuality].clouds && this.environment.clouds > 0,
+      },
+      terrain: {
+        renderedMeshes: this.renderedTiles, visibleTiles: this.tiles?.visibleTiles.size ?? 0,
+        focusErrorM: this.focusProbe.geometricErrorM,
+        progress: this.tiles?.loadProgress ?? 0, cachedBytes: cache?.cachedBytes ?? 0,
+        errorTargetPx: this.tiles?.errorTarget ?? WORLD_QUALITY[this.effectiveQuality].errorTarget,
+        focus: {
+          ...this.focusProbe,
+          ageMs: this.focusProbe.sampledAtMs === null ? null : Math.max(0, this.recorder.time(now) - this.focusProbe.sampledAtMs),
+          cameraChangedSinceSample: !this.probeView.equals(this.camera.matrixWorld) || !this.probeProjection.equals(this.camera.projectionMatrix),
+        },
+        queues: { downloading: stats?.downloading ?? 0, parsing: stats?.parsing ?? 0, failed: stats?.failed ?? 0 },
+      },
+      visibleRoadLabels: this.labels?.visibleLabelCount ?? 0,
+      contextLost: this.renderer?.getContext().isContextLost() ?? false,
+    };
+  }
+  private markReport(kind: WorldReportEvent) { this.recorder.mark(kind, performance.now(), this.reportState()); }
+  setPlaybackContext(context: WorldPlaybackContext, intent?: "seek") {
+    const previous = this.playback;
+    // Explicit whitelist: never serialize a controller, route or arbitrary caller fields.
+    this.playback = {
+      playing: context.playing, progressM: context.progressM, speed: context.speed,
+      cameraMode: context.cameraMode, groundingMode: context.groundingMode,
+      following: context.following, rangeScale: context.rangeScale,
+      cameraSettling: context.cameraSettling, settingsOpen: context.settingsOpen, reducedMotion: context.reducedMotion,
+    };
+    if (previous) {
+      if (previous.playing !== context.playing) this.markReport(context.playing ? "play" : "pause");
+      if (previous.cameraMode !== context.cameraMode) this.markReport("camera-mode");
+      if (previous.following !== context.following) this.markReport(context.following ? "recenter" : "free-camera");
+      if (previous.rangeScale !== context.rangeScale) this.markReport("zoom");
+      if (previous.speed !== context.speed) this.markReport("speed");
+      if (previous.groundingMode !== context.groundingMode) this.markReport("grounding");
+      if (previous.settingsOpen !== context.settingsOpen) this.markReport(context.settingsOpen ? "settings-open" : "settings-close");
+    }
+    if (intent === "seek") this.markReport("seek");
+  }
   private diagnostics(): WorldDiagnostics {
+    const now = performance.now();
     const gl = this.renderer?.getContext();
     const debug = gl?.getExtension("WEBGL_debug_renderer_info");
     const graphics = gl ? String(gl.getParameter(debug ? debug.UNMASKED_RENDERER_WEBGL : gl.RENDERER)) : "unavailable";
-    const cache = this.tiles?.lruCache as unknown as { cachedBytes?: number } | undefined;
     return {
-      schema: "godiesel-world-report-v1",
-      routeSlug: this.options?.route.slug ?? "unknown",
-      capturedAt: new Date().toISOString(),
+      schema: "godiesel-world-report-v2", build: { ...WORLD_BUILD },
+      routeSlug: this.options?.route.slug ?? "unknown", capturedAt: new Date().toISOString(),
       device: { browser: navigator.userAgent, graphics, softwareRenderer: /swiftshader|llvmpipe|software/i.test(graphics), width: window.innerWidth, height: window.innerHeight, pixelRatio: window.devicePixelRatio },
-      layers: { ...this.layers },
-      quality: { requested: this.environment.quality, effective: this.effectiveQuality, light: this.environment.light, clouds: this.environment.clouds, labels: this.environment.labels },
-      terrain: { renderedMeshes: this.renderedTiles, visibleTiles: this.tiles?.visibleTiles.size ?? 0, focusErrorM: this.focusErrorM, progress: this.tiles?.loadProgress ?? 0, cachedBytes: cache?.cachedBytes ?? 0 },
-      visibleRoadLabels: this.labels?.visibleLabelCount ?? 0,
-      frames: this.frameHistory.snapshot(),
-      contextLost: gl?.isContextLost() ?? false,
+      ...this.reportState(now), ...this.recorder.snapshot(now),
+      interpretation: {
+        frames: "Callback intervals, not GPU-presented FPS. Hidden intervals are excluded; transitions are separate.",
+        terrain: "Center-ray geometric error estimates detail, not route/label positional accuracy. Loading progress is not a quality score.",
+      },
     };
   }
 
-  private onVisibility = () => { this.frameHistory.record(NaN, false); this.slowFrames = 0; };
-  private onContextLost = (event: Event) => { event.preventDefault(); this.fail("The browser lost its 3D graphics context. Reopen Cinematic world or use Native Replay."); };
+  private onVisibility = () => { this.recorder.visibility(performance.now(), !document.hidden); this.slowFrames = 0; };
+  private onContextLost = (event: Event) => { event.preventDefault(); this.markReport("context-lost"); this.fail("The browser lost its 3D graphics context. Reopen Cinematic world or use Native Replay."); };
   private onKey = (event: KeyboardEvent) => {
     if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key) && this.following) this.options?.onCameraInteraction?.();
   };
@@ -322,7 +393,9 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
   setEnvironment(environment: WorldEnvironment) {
     const next = normalizeEnvironment(environment);
     if (next.quality !== this.environment.quality) { this.effectiveQuality = next.quality; this.slowFrames = 0; }
+    const changed = JSON.stringify(next) !== JSON.stringify(this.environment);
     this.environment = next; this.applyEnvironment(); this.startLabels(); this.publish();
+    if (changed) this.markReport("environment");
   }
   private applyEnvironment() {
     const settings = { ...this.environment, quality: this.effectiveQuality };
@@ -331,7 +404,10 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
     if (this.tiles) this.tiles.errorTarget = quality.errorTarget;
     this.atmosphere?.update(settings); this.labels?.update(settings);
     this.layers.labels = this.environment.labels ? this.labelState : "off";
-    if (this.options) this.options.container.dataset.effectiveQuality = this.effectiveQuality;
+    if (this.options) {
+      if (this.options.container.dataset.effectiveQuality !== this.effectiveQuality) this.markReport("quality");
+      this.options.container.dataset.effectiveQuality = this.effectiveQuality;
+    }
     this.resize();
   }
   private startLabels() {
@@ -379,16 +455,19 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
     const signature = JSON.stringify([state, message, this.layers]);
     if (signature === this.lastStatus) return;
     this.lastStatus = signature;
+    this.markReport("layers");
     Object.assign(this.options.container.dataset, { worldTerrain: this.layers.terrain, worldAtmosphere: this.layers.atmosphere, worldLabels: this.layers.labels, worldRoute: this.layers.route });
     this.options.onStatus({ state, message } as GoogleRouteNavigatorStatus);
   }
   private fail(message: string) {
     this.layers.terrain = "unavailable";
+    this.markReport("failure"); this.recorder.stop(performance.now());
     if (this.options) this.options.container.dataset.worldTerrain = "unavailable";
     this.options?.onStatus({ state: "unavailable", message });
     this.abort.abort(); cancelAnimationFrame(this.animation); window.clearTimeout(this.readyTimer);
   }
   destroy() {
+    this.recorder.stop(performance.now());
     this.unbindDiagnostics?.();
     document.removeEventListener("visibilitychange", this.onVisibility);
     this.abort.abort(); cancelAnimationFrame(this.animation); window.clearTimeout(this.readyTimer);

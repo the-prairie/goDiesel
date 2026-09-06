@@ -137,6 +137,8 @@ export function GoogleRouteNavigatorStage({
   const [status, setStatus] =
     useState<GoogleRouteNavigatorStatus>(INITIAL_STATUS);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsOpenRef = useRef(settingsOpen);
+  settingsOpenRef.current = settingsOpen;
   const [chromeVisible, setChromeVisible] = useState(true);
   const totalDistanceM = routeDistanceM(route);
   const storyChapters = useMemo(
@@ -180,6 +182,13 @@ export function GoogleRouteNavigatorStage({
     },
     [route],
   );
+
+  const publishPlaybackContext = useCallback((state: GoogleRouteNavigatorState, intent?: "seek") => {
+    engineRef.current?.setPlaybackContext?.({
+      ...state, cameraSettling: cameraSettlingRef.current,
+      settingsOpen: settingsOpenRef.current, reducedMotion: reducedMotionRef.current,
+    }, intent);
+  }, []);
 
   const renderCamera = useCallback(
     (
@@ -230,8 +239,9 @@ export function GoogleRouteNavigatorStage({
         googleRouteThreadTreatment(route, next),
       );
       elevationScrubberRef.current?.sync(next.progressM);
+      publishPlaybackContext(next, next.progressM !== current.progressM ? "seek" : undefined);
     },
-    [renderCamera, resolveCamera, route],
+    [publishPlaybackContext, renderCamera, resolveCamera, route],
   );
 
   const takeCameraOwnership = useCallback(() => {
@@ -276,6 +286,7 @@ export function GoogleRouteNavigatorStage({
         : createGoogleRouteNavigatorEngine();
       if (cancelled) { engine.destroy(); return; }
       engineRef.current = engine;
+      publishPlaybackContext(controlRef.current);
       if ("setEnvironment" in engine) (engine as CinematicWorldEnginePort).setEnvironment(environmentRef.current);
       let entered = false;
       await engine.mount({
@@ -309,7 +320,11 @@ export function GoogleRouteNavigatorStage({
       lastCameraAtRef.current = undefined;
       if (engineRef.current === engine) engineRef.current = undefined;
     };
-  }, [renderCamera, resolveCamera, route, takeCameraOwnership, worldMode]);
+  }, [publishPlaybackContext, renderCamera, resolveCamera, route, takeCameraOwnership, worldMode]);
+
+  useEffect(() => {
+    publishPlaybackContext(controlRef.current);
+  }, [publishPlaybackContext, settingsOpen, reducedMotion]);
 
   useEffect(() => {
     const engine = engineRef.current;
@@ -484,11 +499,12 @@ export function GoogleRouteNavigatorStage({
         setControl(next);
         lastUiUpdate = now;
       }
+      publishPlaybackContext(next);
       animationFrame = requestAnimationFrame(tick);
     };
     animationFrame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animationFrame);
-  }, [renderCamera, resolveCamera, route, status.state, totalDistanceM]);
+  }, [publishPlaybackContext, renderCamera, resolveCamera, route, status.state, totalDistanceM]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

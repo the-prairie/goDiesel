@@ -97,7 +97,7 @@ Google imagery.
 Run `npm run verify:ticket` from `app/`, then:
 
 ```sh
-npx playwright test e2e/cinematic-world.spec.ts e2e/cinematic-world-renderer.spec.ts e2e/google-replay-production.spec.ts --project=chromium
+npx playwright test e2e/cinematic-world.spec.ts e2e/cinematic-world-renderer.spec.ts e2e/cinematic-world-report.spec.ts e2e/google-replay-production.spec.ts --project=chromium
 ```
 
 The control tests explicitly use adapters. The renderer test uses the real
@@ -127,3 +127,57 @@ A passing synthetic fixture is never a replacement for that live scorecard.
 - Takram, Three Geospatial (atmosphere/clouds): https://github.com/takram-design-engineering/three-geospatial
 - Google Map Tiles API setup: https://developers.google.com/maps/documentation/tile/get-api-key
 - OpenFreeMap: https://openfreemap.org/
+
+## Playback reports (v2)
+
+**Replay settings → Save playback report** saves a local JSON file; it does not
+upload telemetry. Reporting observes Cinematic world and never changes its
+quality, camera, route data or imagery. Native remains the default.
+
+A report belongs to one Cinematic renderer mount. Switching routes or renderers
+starts a new session. `build` identifies the checked-out commit, source state and
+build time; an archive without Git is explicitly unknown unless a validated
+Cloudflare commit is declared. A declared revision is distinguished from a Git
+checkout. Never infer the tested commit from a moving preview alias.
+
+`frames` retains intervals ending in the last 60 seconds, evicted by time rather
+than refresh rate. It includes exact nearest-rank percentiles, thresholds above
+50/100/250/1000 ms, and one-second summaries. `windowMs` is the observed
+wall-clock span, while `intervalTotalMs` sums complete intervals, including a
+possible interval crossing the window's start. Missing frames are not invented.
+The emergency 65,536-sample cap supports a full minute above 1,000 Hz; any
+capacity loss is explicit in `retention`, never silently called complete.
+
+`session` keeps whole-mount frame/stall counts, the twelve worst stalls, render
+submission count, first terrain draw time, and visible/hidden wall time even after
+recent samples expire. These are animation-frame callback intervals, not
+GPU-presented frames per second. Successful render submissions are counted
+separately. Hidden-tab boundaries reset timing; very slow visible intervals are
+not discarded. `byActivity` separates playing, paused, transition and unknown
+samples; an interval spanning an interaction is attributed to transition.
+
+`timeline` samples camera, playback, quality and terrain context at most once a
+second for the last minute. `events` retains up to 256 timestamped interactions
+(play/pause, seek, camera mode, free camera/recenter, zoom, speed, settings,
+quality/environment, layer and visibility changes). Whole-session event totals
+and dropped-event counts remain available if the event list fills. Times are
+milliseconds from mount. Reports never serialize a controller or route object.
+
+The current camera record distinguishes requested mode/range from the directed
+mode and actual range, plus free/following ownership, field of view and clipping
+planes. The center-ray terrain probe observes only visible terrain models. Its
+missing states distinguish not sampled, no terrain, no hit, missing geometric
+error and probe failure. Sample age and camera movement since sampling prevent
+stale measurements being read as the current view. The projected-error estimate
+uses the sampled geometric error, distance, projection matrix and the same CSS
+pixel resolution configured by the pinned tile renderer. It is **not** the
+library's bounding-volume selection error, GPS error, label alignment error or
+imagery-sharpness score. A progress value of one is not visual acceptance.
+
+The reporter exports no provider keys/URLs, route coordinates or tile bodies.
+Its bounded buffers/listeners belong to the mount and are released on destroy.
+The minute-long synthetic browser test exercises the real renderer, owning
+controller, ordinary interactions and downloaded JSON without a mocked clock.
+The separate live minute-report test uses actual provider terrain and validates
+the deployed build identity. The existing live cloud/imagery scorecard remains a
+separate obligation; report success cannot turn failed visual acceptance green.

@@ -45,8 +45,8 @@ export function WorldControls({ mode, environment, onMode, onEnvironment }: Prop
           <p className="mt-2 text-xs leading-relaxed text-white/70">Light turns off clouds. Balanced adjusts detail to keep the flight responsive.</p>
         </fieldset>
         <div>
-          <button className={button} type="button" onClick={() => setReportMessage(saveWorldDiagnostics() ? "Playback report saved." : "Open Cinematic world before saving a report.")}>Save playback report</button>
-          <p className="mt-2 text-xs leading-relaxed text-white/70">Saves this device’s playback measurements and route ID. Nothing is sent automatically.</p>
+          <button className={button} type="button" onClick={() => setReportMessage(saveWorldDiagnostics() ? "Playback report saved." : "The report could not be saved. Please try again.")}>Save playback report</button>
+          <p className="mt-2 text-xs leading-relaxed text-white/70">Saves the last minute and session totals, including camera changes and this device’s settings. Nothing is sent automatically.</p>
           <p className="text-xs text-white/70" role="status">{reportMessage}</p>
         </div>
       </> : null}

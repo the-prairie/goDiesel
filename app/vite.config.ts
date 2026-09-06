@@ -1,3 +1,4 @@
+import { readBuildIdentity } from "./scripts/build-identity";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import fs from "node:fs";
@@ -75,6 +76,7 @@ export default defineConfig(({ mode }) => {
       }),
     ],
     define: {
+      __GODIESEL_BUILD__: JSON.stringify(readBuildIdentity(__dirname, process.env.CF_PAGES_COMMIT_SHA)),
       CESIUM_BASE_URL: JSON.stringify(cesiumBaseUrl),
       "import.meta.env.VITE_WORLD_GOOGLE_MAPS_API_KEY": JSON.stringify(liveProvidersDisabled ? "" : env.VITE_WORLD_GOOGLE_MAPS_API_KEY || process.env.VITE_WORLD_GOOGLE_MAPS_API_KEY || ""),
       "import.meta.env.VITE_WORLD_VECTOR_ATTRIBUTION": JSON.stringify(env.VITE_WORLD_VECTOR_ATTRIBUTION || process.env.VITE_WORLD_VECTOR_ATTRIBUTION || ""),

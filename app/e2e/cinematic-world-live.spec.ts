@@ -38,6 +38,59 @@ async function rendererEvidence(page: Page) {
   });
 }
 
+// Reporting acceptance is independent of the heavier lighting/imagery scorecard below.
+// No factory, network interception, clock substitution or fixture terrain is installed.
+test("live playback report preserves a full minute, controller context and exact build identity", async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
+  page.setDefaultTimeout(15_000);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  let models = 0;
+  page.on("response", response => {
+    const url = new URL(response.url());
+    if (response.ok() && url.hostname === "tile.googleapis.com" && url.pathname.endsWith(".glb")) models++;
+  });
+  try {
+    await page.goto("/#/replay/14130782031?renderer=cinematic");
+    expect(await page.evaluate(() => Boolean(window.__GODIESEL_CINEMATIC_WORLD_FACTORY__))).toBe(false);
+    await expect(page.locator("[data-world-terrain]")).toHaveAttribute("data-world-terrain", "ready", { timeout: 60_000 });
+    await page.getByRole("button", { name: "Chase", exact: true }).press("Enter");
+    await page.getByRole("button", { name: "Play route", exact: true }).press("Enter");
+    await expect(page.getByRole("button", { name: "Pause route", exact: true })).toBeVisible();
+    await page.waitForTimeout(61_000);
+    await page.getByRole("button", { name: "Pause route", exact: true }).press("Enter");
+    await page.getByRole("button", { name: "Replay settings", exact: true }).click();
+    const downloading = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Save playback report", exact: true }).click();
+    const download = await downloading;
+    const output = testInfo.outputPath("live-minute-report.json"); await download.saveAs(output);
+    const text = readFileSync(output, "utf8"); const saved = JSON.parse(text);
+    expect(models).toBeGreaterThan(0);
+    expect(saved.schema).toBe("godiesel-world-report-v2");
+    expect(saved.build.revision).toMatch(/^[a-f0-9]{40}$/);
+    expect(saved.build.source).toBe("git");
+    expect(saved.build.sourceState).toBe("clean");
+    if (process.env.GODIESEL_WORLD_SOURCE_SHA) expect(saved.build.revision).toBe(process.env.GODIESEL_WORLD_SOURCE_SHA);
+    expect(saved.routeSlug).toBe("14130782031");
+    expect(saved.session.elapsedMs).toBeGreaterThan(61_000);
+    expect(saved.frames.requestedWindowMs).toBe(60_000);
+    expect(saved.frames.windowMs).toBeGreaterThan(55_000);
+    expect(saved.frames.retention.truncated).toBe(false);
+    expect(saved.session.frames.samples).toBeGreaterThanOrEqual(saved.frames.samples);
+    expect(saved.frames.byActivity.playing.samples).toBeGreaterThan(0);
+    expect(saved.timeline.length).toBeGreaterThan(20);
+    expect(saved.playback).toMatchObject({ playing: false, cameraMode: "chase", following: true, settingsOpen: true });
+    expect(saved.camera.actualRangeM).toBeGreaterThan(0);
+    expect(saved.terrain.focus.reason).not.toBe("not-sampled");
+    expect(saved.session.renderSubmissions).toBeGreaterThan(0);
+    expect(saved.events.entries.map((entry: { kind: string }) => entry.kind)).toEqual(expect.arrayContaining(["play", "pause", "camera-mode", "settings-open"]));
+    expect(text).not.toMatch(/AIza|https?:\/\/|"(?:lat|lng|apiKey|url|center)"/);
+    await page.screenshot({ path: testInfo.outputPath("live-report-settings.png") });
+  } finally {
+    // Only the read-only whitelisted report and screenshot, never provider payloads.
+    writeFileSync(testInfo.outputPath("live-report-state.json"), JSON.stringify(await rendererEvidence(page).catch(() => null), null, 2));
+  }
+});
+
 // Real published routes, real provider responses. A phone-sized desktop browser is
 // a layout check, not a claim about the owner's phone or hardware performance.
 for (const journey of [
@@ -123,7 +176,10 @@ for (const journey of [
       const reportPath = testInfo.outputPath("device-playback-report.json");
       await download.saveAs(reportPath);
       const report = JSON.parse(readFileSync(reportPath, "utf8"));
-      expect(report.schema).toBe("godiesel-world-report-v1");
+      expect(report.schema).toBe("godiesel-world-report-v2");
+      expect(report.playback).toMatchObject({ playing: false, cameraMode: "chase", settingsOpen: true });
+      expect(report.camera.actualRangeM).toBeGreaterThan(0);
+      if (process.env.GODIESEL_WORLD_SOURCE_SHA) expect(report.build.revision).toBe(process.env.GODIESEL_WORLD_SOURCE_SHA);
       expect(report.routeSlug).toBe(journey.slug);
       expect(report.frames.samples).toBeGreaterThan(0);
       expect(report.terrain.renderedMeshes).toBeGreaterThan(0);
