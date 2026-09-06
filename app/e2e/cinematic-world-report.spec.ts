@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { parseRouteDetail } from "../src/domain/route";
@@ -14,8 +14,7 @@ async function report(page: Page): Promise<WorldDiagnostics> {
   });
 }
 
-test("real renderer and owning controls export a minute of synthetic playback with context and session totals", async ({ page }, testInfo) => {
-  test.setTimeout(150_000);
+async function mountReportFixture(page: Page, testInfo: TestInfo) {
   page.setDefaultTimeout(15_000);
   testInfo.annotations.push({ type: "evidence", description: "Real controller/renderer, explicitly synthetic route and tiles; not live imagery or hardware acceptance." });
   await page.setViewportSize({ width: 1280, height: 720 });
@@ -51,13 +50,58 @@ test("real renderer and owning controls export a minute of synthetic playback wi
   }, `/assets/${runtime}`);
   const world = page.locator("[data-world-terrain]");
   await expect(world).toHaveAttribute("data-world-terrain", "ready", { timeout: 45_000 });
+}
+
+async function downloadReport(page: Page, testInfo: TestInfo, filename: string) {
+  await page.getByRole("button", { name: "Replay settings", exact: true }).click();
+  const downloading = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Save playback report", exact: true }).click();
+  const downloaded = await downloading;
+  const output = testInfo.outputPath(filename);
+  await downloaded.saveAs(output);
+  const text = readFileSync(output, "utf8");
+  const saved: WorldDiagnostics = JSON.parse(text);
+  expect(saved.schema).toBe("godiesel-world-report-v2");
+  expect(saved.session.renderSubmissions).toBeGreaterThan(0);
+  expect(saved.camera.actualRangeM).toBeGreaterThan(0);
+  expect(saved.build.revision).toMatch(/^[a-f0-9]{40}$/);
+  expect(saved.terrain.focus.reason).not.toBe("not-sampled");
+  expect(text).not.toMatch(/synthetic-credential-canary|https?:\/\/|"(?:lat|lng|center|apiKey|url)"/);
+  return saved;
+}
+
+// Retention and interaction/lifecycle are independent contracts. Combining a real
+// minute wait with every pointer action consumed the overall deadline on software
+// rendering after the report had already passed. Keep both, without longer timeouts.
+test("real renderer exports a full minute of synthetic playback and independent session totals", async ({ page }, testInfo) => {
+  test.setTimeout(150_000);
+  await mountReportFixture(page, testInfo);
   await page.getByRole("button", { name: "Chase", exact: true }).press("Enter");
   await page.getByRole("button", { name: "Play route", exact: true }).press("Enter");
   await expect.poll(async () => (await report(page)).playback?.playing).toBe(true);
-  // Ordinary keyboard activation retains focus on the playback control.
-  // HUD auto-hide is covered separately; this is a recording contract test.
-  // Real elapsed time, no mocked clock. More playback must produce more history.
+  // Real elapsed time, no mocked clock. Ordinary keyboard activation retains focus;
+  // HUD auto-hide and pointer responsiveness remain covered by their separate gates.
   await page.waitForTimeout(61_000);
+  await page.getByRole("button", { name: "Pause route", exact: true }).press("Enter");
+  await expect.poll(async () => (await report(page)).playback?.playing).toBe(false);
+  const saved = await downloadReport(page, testInfo, "synthetic-minute-report.json");
+  expect(saved.frames.windowMs).toBeGreaterThan(59_000);
+  expect(saved.frames.retention.truncated).toBe(false);
+  expect(saved.frames.byActivity.playing.samples).toBeGreaterThan(0);
+  expect(saved.session.elapsedMs).toBeGreaterThan(61_000);
+  expect(saved.session.frames.samples).toBeGreaterThanOrEqual(saved.frames.samples);
+  expect(saved.timeline.length).toBeGreaterThan(30);
+  expect(saved.playback).toMatchObject({ playing: false, cameraMode: "chase", following: true, settingsOpen: true });
+  expect(saved.events.entries.map(event => event.kind)).toEqual(expect.arrayContaining(["play", "pause", "camera-mode", "settings-open"]));
+  await page.screenshot({ path: testInfo.outputPath("synthetic-minute-settings.png") });
+});
+
+test("real controls record seek, free camera and recenter in the download, then release the renderer", async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
+  await mountReportFixture(page, testInfo);
+  await page.getByRole("button", { name: "Chase", exact: true }).press("Enter");
+  await page.getByRole("button", { name: "Play route", exact: true }).press("Enter");
+  await expect.poll(async () => (await report(page)).playback?.playing).toBe(true);
   await page.getByRole("button", { name: "Pause route", exact: true }).press("Enter");
   await expect.poll(async () => (await report(page)).playback?.playing).toBe(false);
   await page.getByRole("slider", { name: "Route progress", exact: true }).press("ArrowRight");
@@ -68,27 +112,10 @@ test("real renderer and owning controls export a minute of synthetic playback wi
   await expect.poll(async () => (await report(page)).camera.owner).toBe("free");
   await page.getByRole("button", { name: "Recenter route", exact: true }).click();
   await page.getByRole("button", { name: "Overview", exact: true }).click();
-  await page.getByRole("button", { name: "Replay settings", exact: true }).click();
-  const downloading = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Save playback report", exact: true }).click();
-  const downloaded = await downloading;
-  const output = testInfo.outputPath("synthetic-minute-report.json"); await downloaded.saveAs(output);
-  const saved: WorldDiagnostics = JSON.parse(readFileSync(output, "utf8"));
-  expect(saved.schema).toBe("godiesel-world-report-v2");
-  expect(saved.frames.windowMs).toBeGreaterThan(59_000);
-  expect(saved.frames.retention.truncated).toBe(false);
-  expect(saved.frames.byActivity.playing.samples).toBeGreaterThan(0);
-  expect(saved.session.elapsedMs).toBeGreaterThan(61_000);
-  expect(saved.session.frames.samples).toBeGreaterThanOrEqual(saved.frames.samples);
-  expect(saved.session.renderSubmissions).toBeGreaterThan(0);
-  expect(saved.timeline.length).toBeGreaterThan(30);
+  const saved = await downloadReport(page, testInfo, "synthetic-context-report.json");
   expect(saved.playback).toMatchObject({ playing: false, cameraMode: "overview", following: true, settingsOpen: true });
-  expect(saved.camera.actualRangeM).toBeGreaterThan(0);
   expect(saved.events.entries.map(event => event.kind)).toEqual(expect.arrayContaining(["play", "pause", "seek", "camera-mode", "free-camera", "recenter", "settings-open"]));
-  expect(saved.build.revision).toMatch(/^[a-f0-9]{40}$/);
-  expect(saved.terrain.focus.reason).not.toBe("not-sampled");
-  expect(readFileSync(output, "utf8")).not.toMatch(/synthetic-credential-canary|https?:\/\/|"(?:lat|lng|center|apiKey|url)"/);
-  await page.screenshot({ path: testInfo.outputPath("synthetic-report-settings.png") });
+  await page.screenshot({ path: testInfo.outputPath("synthetic-context-settings.png") });
   await page.getByRole("button", { name: "Route story", exact: true }).click();
   await expect(page.locator("[data-world-terrain]")).toHaveCount(0);
 });
