@@ -139,19 +139,22 @@ for (const mode of ["cinematic", "native"] as const) {
     await page.goto(`/#/replay/14130782031${mode === "cinematic" ? "?renderer=cinematic" : ""}`);
     await page.evaluate(() => { (window as unknown as { __worldHold: boolean }).__worldHold = true; });
     await page.getByRole("button", {name:"Play route",exact:true}).click();
-    const progress = page.getByTestId("google-route-progress");
-    const start = await progress.textContent();
+    const progress = page.getByRole("slider", {name:"Route progress",exact:true});
+    const start = Number(await progress.inputValue());
     await page.waitForTimeout(600);
-    if (mode === "cinematic") await expect(progress).toHaveText(start!);
-    else await expect(progress).not.toHaveText(start!);
+    if (mode === "cinematic") await expect(progress).toHaveValue(String(start));
+    else await expect.poll(async () => Number(await progress.inputValue())).toBeGreaterThan(start);
     await page.getByRole("button", {name:"Pause route",exact:true}).click();
-    await page.getByRole("slider",{name:"Route progress",exact:true}).press("ArrowRight");
-    await expect(progress).not.toHaveText(start!);
-    const sought = await progress.textContent();
+    const beforeSeek = Number(await progress.inputValue());
+    await progress.press("ArrowRight");
+    // One keyboard step is one metre; the visible kilometre label rounds it to
+    // 0.00. Assert the actual accessible control value, not that rounded label.
+    await expect.poll(async () => Number(await progress.inputValue())).toBeGreaterThan(beforeSeek);
+    const sought = await progress.inputValue();
     await page.evaluate(() => { (window as unknown as { __worldHold: boolean }).__worldHold = false; });
     await page.waitForTimeout(200);
-    await expect(progress).toHaveText(sought!); // Clearing a hold must not steal Pause.
+    await expect(progress).toHaveValue(sought); // Clearing a hold must not steal Pause.
     await page.getByRole("button", {name:"Play route",exact:true}).click();
-    await expect(progress).not.toHaveText(sought!);
+    await expect.poll(async () => Number(await progress.inputValue())).toBeGreaterThan(Number(sought));
   });
 }
