@@ -23,7 +23,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: app/package-lock.json
-      - name: Apply reviewed source and validated desktop test fixture
+      - name: Apply reviewed source and normal keyboard report journey
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -43,9 +43,15 @@ jobs:
           assert hashlib.sha256(patch).hexdigest() == 'a0a21a8604dce55724d93cbcbae06a360730fe9189f6a3e8f9ad8dffca29161a'
           subprocess.run(['git','apply','--check','-'], input=patch, check=True)
           subprocess.run(['git','apply','-'], input=patch, check=True)
-          replacement = '3f6486bed48446676df21b7eb832adeb692912a1'
-          Path('app/e2e/cinematic-world-report.spec.ts').write_bytes(blob(replacement))
-          Path('proof/test-input-correction.txt').write_text(replacement+'\n')
+          p = Path('app/e2e/cinematic-world-report.spec.ts')
+          s = blob('3f6486bed48446676df21b7eb832adeb692912a1').decode()
+          s = s.replace('name: "Chase", exact: true }).click();', 'name: "Chase", exact: true }).press("Enter");').replace('name: "Play route", exact: true }).click();', 'name: "Play route", exact: true }).press("Enter");').replace('  await page.mouse.move(450, 300);\n', '')
+          s = s.replace('  await page.getByRole("button", { name: "Pause route", exact: true }).press("Enter");', '  await page.getByRole("button", { name: "Pause route", exact: true }).press("Enter");\n  await expect.poll(async () => (await report(page)).playback?.playing).toBe(false);')
+          s = s.replace('  // Real elapsed time, no mocked clock.', '  // Ordinary keyboard activation retains focus on the playback control.\n  // HUD auto-hide is covered separately; this is a recording contract test.\n  // Real elapsed time, no mocked clock.')
+          p.write_text(s)
+          p = Path('app/e2e/cinematic-world-live.spec.ts')
+          s = p.read_text().replace('name: "Play route", exact: true }).click();', 'name: "Play route", exact: true }).press("Enter");', 1).replace('    await page.mouse.move(640, 300);\n', '', 1).replace('    await page.mouse.move(630, 300);\n', '', 1)
+          p.write_text(s)
           subprocess.run(['git','add','app','docs/architecture/cinematic-world-replay.md','.github/workflows/verify-cinematic-world.yml'], check=True)
           subprocess.run(['git','diff','--cached','--check'], check=True)
           PY
@@ -58,8 +64,7 @@ jobs:
       - run: cd app && npx playwright install --with-deps chromium
       - name: Actual renderer and controller minute-report round trip
         working-directory: app
-        # The other 25 browser checks passed in run 34021942690. The retained PR
-        # gate still runs all 26; this preparation retries only the corrected test.
+        # Other 25 checks passed in 34021942690. The retained PR gate runs all 26.
         run: npx playwright test e2e/cinematic-world-report.spec.ts --project=chromium 2>&1 | tee ../proof/browser.txt
       - name: Create verified source blobs only
         env:
