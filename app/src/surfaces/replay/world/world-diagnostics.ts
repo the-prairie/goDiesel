@@ -1,3 +1,4 @@
+import type { CloudBudgetReport } from "./world-cloud-budget";
 import type { GoogleRouteNavigatorState } from "@/surfaces/replay/playback/route-navigator-controller";
 import type { WorldEnvironment, WorldLayers } from "./world-model";
 import type { WorldViewCoverage, WorldViewState } from "./world-view-health";
@@ -33,7 +34,7 @@ export interface WorldReportState {
   layers: WorldLayers;
   quality: {
     requested: WorldEnvironment["quality"]; effective: WorldEnvironment["quality"];
-    light: WorldEnvironment["light"]; clouds: number; labels: boolean; cloudsEnabled: boolean; cloudPassSubmissions?: number;
+    light: WorldEnvironment["light"]; clouds: number; labels: boolean; cloudsEnabled: boolean; cloudPassSubmissions?: number; cloudBudget?: CloudBudgetReport;
   };
   terrain: {
     renderedMeshes: number; visibleTiles: number; focusErrorM: number | null;

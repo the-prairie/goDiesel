@@ -42,7 +42,7 @@ export function WorldControls({ mode, environment, onMode, onEnvironment }: Prop
         <fieldset>
           <legend className="mb-2 text-xs font-semibold">Detail</legend>
           <div className="flex gap-2">{(["light", "balanced", "cinema"] as const).map((quality) => <button className={`${button} capitalize`} key={quality} type="button" aria-pressed={environment.quality === quality} onClick={() => onEnvironment({ ...environment, quality })}>{quality[0].toUpperCase() + quality.slice(1)}</button>)}</div>
-          <p className="mt-2 text-xs leading-relaxed text-white/70">Light turns off clouds. Balanced adjusts detail to keep the flight responsive.</p>
+          <p className="mt-2 text-xs leading-relaxed text-white/70">Light turns off clouds. Balanced adjusts terrain detail. Clouds sharpen when your device has headroom, without changing the light or terrain setting.</p>
         </fieldset>
         <div>
           <button className={button} type="button" onClick={() => setReportMessage(saveWorldDiagnostics() ? "Playback report saved." : "The report could not be saved. Please try again.")}>Save playback report</button>

@@ -1,5 +1,5 @@
 import { WorldContinuity } from "./world-continuity";
-import { TilesRenderer } from "3d-tiles-renderer/three";
+import type { TilesRenderer } from "3d-tiles-renderer/three";
 import { GoogleCloudAuthPlugin } from "3d-tiles-renderer/core/plugins";
 import { GLTFExtensionsPlugin, TilesFadePlugin } from "3d-tiles-renderer/three/plugins";
 import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree } from "three-mesh-bvh";
@@ -11,6 +11,7 @@ import type { GoogleRouteCameraPose, GoogleRouteGroundingMode } from "@/surfaces
 import type { CinematicRouteTreatment } from "@/surfaces/replay/cinematic/cinematic-route-filament";
 import { routeDistanceM } from "@/domain/geometry/route-path";
 import { WorldFrame } from "./world-frame";
+import { WorldTilesRenderer } from "./world-tiles";
 import { bindWorldDiagnostics, WorldFlightRecorder, WORLD_BUILD, type WorldDiagnostics, type WorldPlaybackContext, type WorldReportState, type WorldReportEvent } from "./world-diagnostics";
 import { emptyTerrainFocus, sampleTerrainFocus } from "./world-terrain-diagnostics";
 import { configureWorldStreaming, canStartWorldAtmosphere, nextSlowFrameDebt, worldFarPlane } from "./world-streaming";
@@ -115,7 +116,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
       this.trace = new WorldRoute(route, frame);
       this.scene.add(this.trace.group);
       this.layers.route = this.trace.grounded ? "ready" : "loading";
-      const tiles = new TilesRenderer("https://tile.googleapis.com/v1/3dtiles/root.json");
+      const tiles = new WorldTilesRenderer("https://tile.googleapis.com/v1/3dtiles/root.json");
       this.tiles = tiles;
       this.downloadBudget = configureWorldStreaming(tiles);
       this.lookAhead = new WorldLookAhead(tiles, route, frame);
@@ -242,7 +243,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
           phase = this.atmosphereReady && this.atmosphereStarted ? "atmosphere" : "terrain-render";
           if (phase === "atmosphere") {
             renderer.toneMapping = NoToneMapping;
-            this.atmosphere?.render(Math.min(0.1, elapsed / 1000));
+            this.atmosphere?.render(Math.min(0.1, elapsed / 1000), elapsed);
             this.layers.atmosphere = "ready";
           } else renderer.render(this.scene, this.camera);
           if (this.shaderFailed) { this.shaderFailed = false; throw new Error("World shader could not compile"); }
@@ -258,7 +259,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
           this.viewState = currentWorldView(this.terrainReadiness.ready, this.renderedTiles, this.coverage, now, this.terrainReadiness.refining);
           const wasHolding = this.continuity.holding;
           this.continuity.update(now, Boolean(this.playback?.playing && this.following),
-            this.renderedTiles > 0 && this.coverage.centerHit && this.coverage.sampledAtMs !== null && now - this.coverage.sampledAtMs < 800);
+            this.renderedTiles > 0 && this.coverage.centerHit && this.coverage.hits >= Math.ceil(this.coverage.tested * 0.8) && this.coverage.sampledAtMs !== null && now - this.coverage.sampledAtMs < 800);
           if (wasHolding !== this.continuity.holding) {
             if (this.continuity.holding) this.lookAhead?.seek(now);
             this.markReport(this.continuity.holding ? "buffer-start" : "buffer-end");
@@ -325,6 +326,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
         requested: this.environment.quality, effective: this.effectiveQuality,
         light: this.environment.light, clouds: this.environment.clouds, labels: this.environment.labels,
         cloudPassSubmissions: this.atmosphere?.cloudFrames ?? 0,
+        cloudBudget: this.atmosphere?.cloudBudget,
         cloudsEnabled: this.atmosphere?.cloudWorkEnabled === true && this.layers.atmosphere === "ready" && this.atmosphereStarted && this.atmosphereReady && WORLD_QUALITY[this.effectiveQuality].clouds && this.environment.clouds > 0,
       },
       terrain: {

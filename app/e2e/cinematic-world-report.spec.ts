@@ -119,3 +119,34 @@ test("real controls record seek, free camera and recenter in the download, then 
   await page.getByRole("button", { name: "Route story", exact: true }).click();
   await expect(page.locator("[data-world-terrain]")).toHaveCount(0);
 });
+
+test("Cinema clouds retain ordinary pointer access to light and settings", async ({ page }, testInfo) => {
+  test.setTimeout(90_000);
+  await page.emulateMedia({reducedMotion:"reduce"});
+  await mountReportFixture(page, testInfo);
+  await page.getByRole("button", {name:"Replay settings",exact:true}).click();
+  await page.getByRole("button", {name:"Cinema",exact:true}).click();
+  await page.getByRole("button", {name:"Golden hour",exact:true}).click();
+  const before = (await report(page)).quality.cloudPassSubmissions ?? 0;
+  await page.getByRole("slider", {name:"Cloud cover",exact:true}).fill("55");
+  const closeStarted = Date.now();
+  await page.getByRole("button", {name:"Replay settings",exact:true}).click();
+  const closeMs = Date.now() - closeStarted;
+  expect(closeMs).toBeLessThan(15_000);
+  await expect.poll(async()=> (await report(page)).playback?.settingsOpen).toBe(false);
+  await expect.poll(async()=> (await report(page)).quality.cloudPassSubmissions ?? 0).toBeGreaterThan(before+2);
+  const cloudy = await report(page);
+  expect(cloudy.quality).toMatchObject({requested:"cinema",effective:"cinema",light:"golden",clouds:.55,cloudsEnabled:true,cloudBudget:{ceiling:"cinema"}});
+  expect(cloudy.contextLost).toBe(false);
+  await page.screenshot({path:testInfo.outputPath("synthetic-cinema-clouds-unobstructed.png")});
+  await page.getByRole("button", {name:"Replay settings",exact:true}).click();
+  await page.getByRole("button", {name:"Blue hour",exact:true}).click();
+  await page.getByRole("slider", {name:"Cloud cover",exact:true}).fill("0");
+  const clearFrames = (await report(page)).quality.cloudPassSubmissions;
+  await page.getByRole("button", {name:"Replay settings",exact:true}).click();
+  await page.waitForTimeout(500);
+  const clear = await report(page);
+  expect(clear.quality.cloudPassSubmissions).toBe(clearFrames);
+  expect(clear.quality.cloudBudget?.tier).toBe("off");
+  await testInfo.attach("cloud-pointer-receipt",{body:JSON.stringify({synthetic:true,closeMs,cloudy,clear}),contentType:"application/json"});
+});

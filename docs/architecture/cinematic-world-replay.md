@@ -249,3 +249,32 @@ ray hits and queue limits are correctness checks; frame screenshots and real-dev
 measurements still separately determine geographic fidelity, route readability,
 input latency and final cinematic quality. A positive startup flag is never a
 substitute for that visual review.
+
+### Current-view continuity repair
+
+The local-coordinate renderer owns a small adapter for the pinned 3D Tiles fade
+lifecycle. A tile can stop being active while its fading geometry remains a child
+of the rendering group. Its Earth-to-local parent must survive until the fade
+actually removes that child. The dependency regression exercises this exact
+transition and also verifies final detachment. Camera clearance uses the library's
+supported actual-active-geometry raycast path, because a provider bounding volume
+can miss an existing photogrammetry surface.
+
+Current-view coverage uses fifteen geographically downward screen rays, bounded
+by the camera clipping planes; intentional above-horizon rays do not count as
+missing ground. This is a sparse surface check, not an imagery or label-alignment
+score. The live Runner checkpoints additionally reject distributed blank regions
+in their ground area and require three successive usable samples within the
+existing recovery deadline. Sharp terrain in one corner no longer certifies a gray
+band elsewhere. The pixel check is specific to these close Runner shots, not a
+universal image-quality classifier.
+
+Cloud detail now has a separate adaptive budget. It starts with a small shadow map
+and lower-resolution real volume rendering, increases after sustained callback
+headroom, and retreats on stalls with a cooldown. Cinema can still reach the pinned
+high preset; Balanced retains its existing cloud ceiling. This does not change the
+terrain preset, selected light, cloud cover, transport intent or recorded route.
+The report includes actual cloud tier, ceiling, resolution scale, shadow size and
+submitted cloud frames. These are callback-budget decisions, not measured GPU
+presentation times. A clear sky still submits no volume or shadow work. Pointer
+interaction with clouds enabled is verified independently of cloud-off rendering.

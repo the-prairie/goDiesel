@@ -8,6 +8,7 @@ import {
   Texture, TextureLoader, Vector3,
   type Matrix4, type PerspectiveCamera, type Scene, type WebGLRenderer,
 } from "three";
+import { WorldCloudBudget } from "./world-cloud-budget";
 import { WorldCloudsEffect } from "./world-cloud-work";
 import { presentationSun, WORLD_QUALITY, type WorldEnvironment } from "./world-model";
 
@@ -20,6 +21,9 @@ export class WorldAtmosphere {
   private aerial?: AerialPerspectiveEffect;
   private clouds?: WorldCloudsEffect;
   private cloudPreset?: string;
+  private cloudBudgetTier?: string;
+  private readonly budget = new WorldCloudBudget();
+  get cloudBudget() { return this.budget.snapshot(); }
   get cloudFrames() { return this.clouds?.submittedFrames ?? 0; }
   get cloudWorkEnabled() { return this.clouds?.workEnabled ?? false; }
   private environment: WorldEnvironment;
@@ -116,11 +120,9 @@ export class WorldAtmosphere {
     aerial.sunDirection.copy(sun);
     clouds.sunDirection.copy(sun);
     const enabled = quality.clouds && environment.clouds > 0;
+    this.budget.configure(environment.quality, environment.clouds);
     // A detail button must not compile heavy cloud variants while clouds are off.
-    if (enabled && this.cloudPreset !== quality.cloudPreset) {
-      clouds.qualityPreset = quality.cloudPreset;
-      this.cloudPreset = quality.cloudPreset;
-    }
+    if (enabled) this.applyCloudBudget();
     clouds.workEnabled = enabled;
     clouds.skipRendering = !enabled;
     if (!enabled) { aerial.overlay = null; aerial.shadow = null; aerial.shadowLength = null; }
@@ -132,7 +134,25 @@ export class WorldAtmosphere {
     this.renderer.toneMappingExposure = environment.light === "blue" ? 2 : 1;
   }
   resize(width: number, height: number) { this.composer?.setSize(width, height); }
-  render(deltaSeconds: number) { this.composer?.render(this.environment.reducedMotion ? 0 : deltaSeconds); }
+  private applyCloudBudget() {
+    const { clouds } = this;
+    if (!clouds || !this.budget || this.cloudBudgetTier === this.budget.settings.name) return;
+    const settings = this.budget.settings;
+    if (this.cloudPreset !== settings.preset) {
+      clouds.qualityPreset = settings.preset;
+      this.cloudPreset = settings.preset;
+    }
+    clouds.resolutionScale = settings.resolutionScale;
+    clouds.shadow.mapSize.set(settings.shadowSize, settings.shadowSize);
+    clouds.clouds.maxIterationCount = settings.steps;
+    clouds.shadow.maxIterationCount = settings.shadowSteps;
+    this.cloudBudgetTier = settings.name;
+  }
+  render(deltaSeconds: number, visibleFrameMs: number) {
+    this.budget.observe(visibleFrameMs);
+    if (this.cloudWorkEnabled) this.applyCloudBudget();
+    this.composer?.render(this.environment.reducedMotion ? 0 : deltaSeconds);
+  }
   dispose() {
     if (this.disposed) return;
     this.disposed = true;

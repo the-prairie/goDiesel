@@ -1,3 +1,4 @@
+import { landscapePixels } from "../scripts/landscape-pixels";
 import { expect, test, type Page } from "@playwright/test";
 import { PNG } from "pngjs";
 import type { WorldDiagnostics } from "../src/surfaces/replay/world/world-diagnostics";
@@ -189,8 +190,12 @@ for (const journey of [
       // Explicit Cinema keeps cloud rendering enabled even on a slow CI GPU.
       await page.getByRole("button", { name: "Cinema", exact: true }).click();
       await page.getByRole("button", { name: "Golden hour", exact: true }).click();
+      const beforeClouds = ((await rendererEvidence(page)).report as WorldDiagnostics).quality.cloudPassSubmissions ?? 0;
       await page.getByRole("slider", { name: "Cloud cover", exact: true }).fill("55");
       await page.getByRole("button", { name: "Replay settings", exact: true }).click();
+      await expect.poll(async()=>((await rendererEvidence(page)).report as WorldDiagnostics).playback?.settingsOpen).toBe(false);
+      await expect.poll(async()=>((await rendererEvidence(page)).report as WorldDiagnostics).quality.cloudPassSubmissions ?? 0).toBeGreaterThan(beforeClouds + 2);
+      expect(((await rendererEvidence(page)).report as WorldDiagnostics).quality.cloudBudget?.ceiling).toBe("cinema");
       await page.waitForTimeout(1500);
       await page.screenshot({ path: testInfo.outputPath("04-live-golden-clouds.png") });
       evidence.snapshots.push(await rendererEvidence(page));
@@ -220,7 +225,8 @@ for (const journey of [
 test("live Runner revisits sharpest turn and high point with bounded terrain work", async ({page},testInfo) => {
   page.setDefaultTimeout(15_000);
   await page.setViewportSize({width:1280,height:720});
-  const receipts: Array<{distanceM:number;report:WorldDiagnostics;textureVariation:number}>=[];
+  const receipts: Array<{distanceM:number;report:WorldDiagnostics;pixels:ReturnType<typeof landscapePixels>;stableSamples:number}>=[];
+  const attempts: Array<{distanceM:number;report:WorldDiagnostics;pixels:ReturnType<typeof landscapePixels>}> = [];
   let models=0;
   page.on("response", response => {const url=new URL(response.url());if(response.ok()&&url.hostname==="tile.googleapis.com"&&url.pathname.endsWith(".glb"))models++;});
   const read = async () => (await rendererEvidence(page)).report as WorldDiagnostics;
@@ -235,25 +241,27 @@ test("live Runner revisits sharpest turn and high point with bounded terrain wor
     for(const value of ["12000","9500","11000","9700"]) await progress.fill(value);
     for(const distanceM of [9850,12620]) {
       await progress.fill(String(distanceM));
+      let stableSamples = 0;
+      // A textured corner plus a historical ready latch passed the documented
+      // torn scene. Require wide current coverage AND distributed ground texture
+      // on three consecutive samples, within the original 30-second deadline.
       await expect.poll(async()=>{
         const state=await read();
-        return state.terrain.view?.coverage.centerHit && state.terrain.view.coverage.hits>=4 && state.terrain.renderedMeshes>0;
-      },{timeout:30_000}).toBe(true);
-      await expect.poll(async()=>(await read()).camera.actualRangeM).toBeLessThan(600);
-      await page.waitForTimeout(1000);
+        const pixels=landscapePixels(PNG.sync.read(await page.screenshot()));
+        attempts.push({distanceM,report:state,pixels});
+        if(attempts.length>60) attempts.shift();
+        const coverage=state.terrain.view?.coverage;
+        const usable=coverage && coverage.tested>=10 && coverage.centerHit &&
+          coverage.hits>=Math.ceil(coverage.tested*.93) && state.terrain.renderedMeshes>0 &&
+          (state.camera.actualRangeM ?? Infinity)<600 && pixels.flatFraction<.18 && pixels.textureVariation>.015;
+        stableSamples=usable ? stableSamples+1 : 0;
+        return stableSamples;
+      },{timeout:30_000,intervals:[500,750,1000]}).toBeGreaterThanOrEqual(3);
       const report=await read();
-      const image=PNG.sync.read(await page.screenshot({path:testInfo.outputPath(`runner-${distanceM}.png`)}));
-      let changing=0,total=0;
-      // Reject a flat gray center even if another corner happens to draw a tile.
-      // This is a blank-scene check, not an imagery-quality or alignment score.
-      for(let y=Math.floor(image.height*.3);y<image.height*.68;y++)for(let x=Math.floor(image.width*.4);x<image.width*.85;x++) {
-        const i=(y*image.width+x)*4,j=i+4;
-        if(Math.abs(image.data[i]-image.data[j])+Math.abs(image.data[i+1]-image.data[j+1])+Math.abs(image.data[i+2]-image.data[j+2])>12)changing++;
-        total++;
-      }
-      const textureVariation=changing/total;
-      receipts.push({distanceM,report,textureVariation});
-      expect(textureVariation).toBeGreaterThan(.015);
+      const pixels=landscapePixels(PNG.sync.read(await page.screenshot({path:testInfo.outputPath(`runner-${distanceM}.png`)})));
+      receipts.push({distanceM,report,pixels,stableSamples});
+      expect(pixels.flatFraction).toBeLessThan(.18);
+      expect(pixels.textureVariation).toBeGreaterThan(.015);
       expect(report.playback?.cameraMode).toBe("runner");
       expect(report.terrain.queues.downloading+report.terrain.queues.parsing).toBeLessThanOrEqual(24);
       expect(report.quality.cloudPassSubmissions).toBe(0);
@@ -268,7 +276,7 @@ test("live Runner revisits sharpest turn and high point with bounded terrain wor
     await expect.poll(async()=>(await read()).playback!.playing).toBe(false);
   } finally {
     const final=await rendererEvidence(page).catch(()=>null);
-    writeFileSync(testInfo.outputPath("runner-continuity-evidence.json"),JSON.stringify({models,receipts,final},null,2));
+    writeFileSync(testInfo.outputPath("runner-continuity-evidence.json"),JSON.stringify({models,receipts,attempts,final},null,2));
     await page.screenshot({path:testInfo.outputPath("runner-final.png")}).catch(()=>{});
   }
 });

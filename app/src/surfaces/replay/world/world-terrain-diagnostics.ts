@@ -25,6 +25,7 @@ export function sampleTerrainFocus(tiles: TilesRenderer | undefined, camera: Per
   const result = { ...emptyTerrainFocus(), sampledAtMs: now, selectionTargetPx: tiles?.errorTarget ?? null };
   if (!tiles?.visibleTiles.size) return { ...result, reason: "no-visible-terrain" };
   const ray = new Raycaster(); ray.firstHitOnly = true;
+  ray.near = camera.near; ray.far = camera.far;
   ray.setFromCamera(new Vector2(0, 0), camera);
   const meshes: Mesh[] = [];
   const errors = new WeakMap<Mesh, number>();
