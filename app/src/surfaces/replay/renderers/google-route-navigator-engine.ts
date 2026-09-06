@@ -1,3 +1,4 @@
+import type { WorldPlaybackContext } from "@/surfaces/replay/world/world-diagnostics";
 import type { QuestRoute } from "@/domain/route";
 import {
   buildCinematicThreadStyles,
@@ -42,6 +43,8 @@ interface MountOptions {
 export interface GoogleRouteNavigatorEngine {
   mount(options: MountOptions): Promise<void>;
   setCamera(pose: GoogleRouteCameraPose): void;
+  /** Optional observation only; the owning controller remains the playback authority. */
+  setPlaybackContext?(context: WorldPlaybackContext, intent?: "seek"): void;
   setFollowing(following: boolean): void;
   setGrounding(mode: GoogleRouteGroundingMode): void;
   setCinematicRoute(treatment: CinematicRouteTreatment): void;

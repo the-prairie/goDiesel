@@ -21,7 +21,7 @@ const representativeRoute =
 
 export function ReplayPage() {
   const { routeSlug } = useParams();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const decodedSlug = decodedRouteSlug(routeSlug);
   const selectedSummary = routeSlug
     ? decodedSlug
@@ -76,6 +76,13 @@ export function ReplayPage() {
       <GoogleRouteNavigatorStage
         route={detail.route}
         variant="replay"
+        worldMode={requestedRenderer === "cinematic" ? "cinematic" : "native"}
+        onWorldMode={(mode) => {
+          const next = new URLSearchParams(searchParams);
+          if (mode === "cinematic") next.set("renderer", "cinematic");
+          else next.delete("renderer");
+          setSearchParams(next, { replace: true });
+        }}
         pickerRoutes={pickerRoutes}
         backPath={backPath}
         backLabel={backLabel}

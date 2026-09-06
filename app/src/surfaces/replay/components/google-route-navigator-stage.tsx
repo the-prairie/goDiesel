@@ -15,7 +15,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import {
@@ -69,6 +69,10 @@ import {
 } from "@/surfaces/replay/story-flight/replay-camera-framing";
 import { ReplayPerformanceMonitor } from "@/surfaces/replay/story-flight/replay-performance";
 
+import { WorldControls, type ReplayWorldMode } from "@/surfaces/replay/world/world-controls";
+import { DEFAULT_WORLD_ENVIRONMENT, isWorldPlayable } from "@/surfaces/replay/world/world-model";
+import type { CinematicWorldEnginePort } from "@/surfaces/replay/world/cinematic-world-engine";
+
 const INITIAL_STATUS: GoogleRouteNavigatorStatus = {
   state: "loading",
   message: "Preparing the native Google 3D route world.",
@@ -76,6 +80,8 @@ const INITIAL_STATUS: GoogleRouteNavigatorStatus = {
 
 interface GoogleRouteNavigatorStageProps {
   route: QuestRoute;
+  worldMode?: ReplayWorldMode;
+  onWorldMode?: (mode: ReplayWorldMode) => void;
   variant?: "lab" | "replay";
   pickerRoutes?: RouteSummary[];
   backPath?: string;
@@ -86,6 +92,8 @@ interface GoogleRouteNavigatorStageProps {
 
 export function GoogleRouteNavigatorStage({
   route,
+  worldMode = "native",
+  onWorldMode,
   variant = "lab",
   pickerRoutes = [],
   backPath = "/lab/route-intelligence",
@@ -120,11 +128,17 @@ export function GoogleRouteNavigatorStage({
     top: 0,
     width: 0,
   });
+  const mountedRouteRef = useRef<string | undefined>(undefined);
+  const [environment, setEnvironment] = useState(DEFAULT_WORLD_ENVIRONMENT);
+  const environmentRef = useRef(environment);
+  environmentRef.current = { ...environment, reducedMotion };
   const controlRef = useRef(initialGoogleRouteNavigatorState());
   const [control, setControl] = useState(controlRef.current);
   const [status, setStatus] =
     useState<GoogleRouteNavigatorStatus>(INITIAL_STATUS);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsOpenRef = useRef(settingsOpen);
+  settingsOpenRef.current = settingsOpen;
   const [chromeVisible, setChromeVisible] = useState(true);
   const totalDistanceM = routeDistanceM(route);
   const storyChapters = useMemo(
@@ -168,6 +182,13 @@ export function GoogleRouteNavigatorStage({
     },
     [route],
   );
+
+  const publishPlaybackContext = useCallback((state: GoogleRouteNavigatorState, intent?: "seek") => {
+    engineRef.current?.setPlaybackContext?.({
+      ...state, cameraSettling: cameraSettlingRef.current,
+      settingsOpen: settingsOpenRef.current, reducedMotion: reducedMotionRef.current,
+    }, intent);
+  }, []);
 
   const renderCamera = useCallback(
     (
@@ -218,8 +239,9 @@ export function GoogleRouteNavigatorStage({
         googleRouteThreadTreatment(route, next),
       );
       elevationScrubberRef.current?.sync(next.progressM);
+      publishPlaybackContext(next, next.progressM !== current.progressM ? "seek" : undefined);
     },
-    [renderCamera, resolveCamera, route],
+    [publishPlaybackContext, renderCamera, resolveCamera, route],
   );
 
   const takeCameraOwnership = useCallback(() => {
@@ -244,57 +266,72 @@ export function GoogleRouteNavigatorStage({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const engine = createGoogleRouteNavigatorEngine();
-    const initial = initialGoogleRouteNavigatorState();
-    engineRef.current = engine;
+    let cancelled = false;
+    let engine: GoogleRouteNavigatorEngine | undefined;
+    const newRoute = mountedRouteRef.current !== route.slug;
+    mountedRouteRef.current = route.slug;
+    const initial = newRoute ? initialGoogleRouteNavigatorState() : { ...controlRef.current, playing: false };
     cameraMotionRef.current = undefined;
     cameraTargetRef.current = undefined;
     cameraSettlingRef.current = false;
     lastCameraAtRef.current = undefined;
     controlRef.current = initial;
     setControl(initial);
-    setSettingsOpen(false);
+    if (newRoute) setSettingsOpen(false);
     setChromeVisible(true);
-    setStatus(INITIAL_STATUS);
-
-    void engine.mount({
-      apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
-      container,
-      route,
-      groundingMode: initial.groundingMode,
-      initialCamera: resolveCamera(initial),
-      onCameraInteraction: takeCameraOwnership,
-      routeStyle: {
-        color: "#ef684e",
-        mode: "filament",
-        outerColor: "#15100d",
-        outerWidth: 0.14,
-        width: 3,
-      },
-      onStatus: (next) => {
-        setStatus(next);
-        if (next.state === "ready") {
-          renderCamera(
-            resolveCamera(controlRef.current),
-            performance.now(),
-            true,
-          );
-          engine.setCinematicRoute(
-            googleRouteThreadTreatment(route, controlRef.current),
-          );
-        }
-      },
+    setStatus({ state: "loading", message: worldMode === "cinematic" ? "Preparing Cinematic world." : INITIAL_STATUS.message });
+    void (async () => {
+      engine = worldMode === "cinematic"
+        ? (await import("@/surfaces/replay/world/cinematic-world-engine")).createCinematicWorldEngine()
+        : createGoogleRouteNavigatorEngine();
+      if (cancelled) { engine.destroy(); return; }
+      engineRef.current = engine;
+      publishPlaybackContext(controlRef.current);
+      if ("setEnvironment" in engine) (engine as CinematicWorldEnginePort).setEnvironment(environmentRef.current);
+      let entered = false;
+      await engine.mount({
+        apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
+        container, route, groundingMode: initial.groundingMode,
+        initialCamera: resolveCamera(initial), onCameraInteraction: takeCameraOwnership,
+        routeStyle: { color: "#ef684e", mode: "filament", outerColor: "#15100d", outerWidth: 0.14, width: 3 },
+        onStatus: (next) => {
+          if (cancelled) return;
+          setStatus(next);
+          if (isWorldPlayable(next.state) && !entered) {
+            entered = true;
+            renderCamera(resolveCamera(controlRef.current), performance.now(), true);
+            engine?.setCinematicRoute(googleRouteThreadTreatment(route, controlRef.current));
+          }
+        },
+      });
+      if (!cancelled) {
+        engine.setFollowing(controlRef.current.following);
+        engine.setGrounding(controlRef.current.groundingMode);
+      }
+    })().catch(() => {
+      if (!cancelled) setStatus({ state: "unavailable", message: "This replay world could not start. Choose another world or use Atlas replay." });
     });
-
     return () => {
-      engine.destroy();
+      cancelled = true;
+      engine?.destroy();
       cameraMotionRef.current = undefined;
       cameraTargetRef.current = undefined;
       cameraSettlingRef.current = false;
       lastCameraAtRef.current = undefined;
       if (engineRef.current === engine) engineRef.current = undefined;
     };
-  }, [renderCamera, resolveCamera, route, takeCameraOwnership]);
+  }, [publishPlaybackContext, renderCamera, resolveCamera, route, takeCameraOwnership, worldMode]);
+
+  useEffect(() => {
+    publishPlaybackContext(controlRef.current);
+  }, [publishPlaybackContext, settingsOpen, reducedMotion]);
+
+  useEffect(() => {
+    const engine = engineRef.current;
+    if (engine && "setEnvironment" in engine) {
+      (engine as CinematicWorldEnginePort).setEnvironment({ ...environment, reducedMotion });
+    }
+  }, [environment, reducedMotion]);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -346,10 +383,11 @@ export function GoogleRouteNavigatorStage({
         width: stageRect.width,
       };
       viewportInsetsRef.current = next;
+      stage.style.setProperty("--world-dock-height", `${next.bottom}px`);
       const band = replaySubjectBand(next);
       stage.dataset.subjectBandMinY = band.minimumY.toFixed(1);
       stage.dataset.subjectBandMaxY = band.maximumY.toFixed(1);
-      if (status.state === "ready" && controlRef.current.following) {
+      if (isWorldPlayable(status.state) && controlRef.current.following) {
         renderCamera(resolveCamera(controlRef.current));
       }
     };
@@ -377,8 +415,13 @@ export function GoogleRouteNavigatorStage({
       return;
     }
     chromeTimerRef.current = window.setTimeout(() => {
-      setChromeVisible(false);
       chromeTimerRef.current = undefined;
+      // Never hide/inert a control while someone is hovering or using
+      // its keyboard focus. Slow rendering must not race a user's click.
+      const engaged = [headerRef.current, controlsRef.current].some((element) =>
+        element?.matches(":hover") || element?.querySelector(":focus-visible"),
+      );
+      if (!engaged) setChromeVisible(false);
     }, 1_800);
   }, [productionReplay, reducedMotion, settingsOpen]);
 
@@ -399,7 +442,7 @@ export function GoogleRouteNavigatorStage({
   }, [control.following, control.playing, scheduleChromeHide]);
 
   useEffect(() => {
-    if (status.state !== "ready") return;
+    if (!isWorldPlayable(status.state)) return;
     let animationFrame = 0;
     let previous = performance.now();
     let lastUiUpdate = previous;
@@ -456,11 +499,12 @@ export function GoogleRouteNavigatorStage({
         setControl(next);
         lastUiUpdate = now;
       }
+      publishPlaybackContext(next);
       animationFrame = requestAnimationFrame(tick);
     };
     animationFrame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animationFrame);
-  }, [renderCamera, resolveCamera, route, status.state, totalDistanceM]);
+  }, [publishPlaybackContext, renderCamera, resolveCamera, route, status.state, totalDistanceM]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -507,18 +551,20 @@ export function GoogleRouteNavigatorStage({
       data-grounding-mode={control.groundingMode}
       data-hud-state={chromeVisible ? "expanded" : "hidden"}
       data-reduced-motion={reducedMotion}
-      data-engine="google-3d-maps"
+      data-engine={worldMode === "cinematic" ? "cinematic-world" : "google-3d-maps"}
       data-replay-shell={productionReplay ? "story-flight" : "field-lab"}
       data-route-slug={route.slug}
       data-state={status.state}
       data-testid={productionReplay ? "replay-stage" : "google-route-navigator"}
+      onBlurCapture={scheduleChromeHide}
       onFocusCapture={revealChrome}
       onPointerDown={revealChrome}
       onPointerMove={revealChrome}
+      onPointerLeave={scheduleChromeHide}
       ref={stageRef}
     >
       <div
-        aria-label={`Google photorealistic 3D view of ${route.name}`}
+        aria-label={`${worldMode === "cinematic" ? "Cinematic world" : "Google photorealistic 3D"} view of ${route.name}`}
         className="absolute inset-0"
         ref={containerRef}
       />
@@ -646,7 +692,7 @@ export function GoogleRouteNavigatorStage({
           ) : null}
           {productionReplay ? (
             <span className="hidden text-[9px] font-semibold uppercase text-white/58 sm:inline">
-              Google 3D Replay
+              {worldMode === "cinematic" ? "Cinematic world" : "Google 3D Replay"}
             </span>
           ) : null}
           <Button
@@ -663,6 +709,7 @@ export function GoogleRouteNavigatorStage({
           {productionReplay && pickerRoutes.length > 0 ? (
             <div className="text-ink sm:min-w-36">
               <ReplayRoutePicker
+                renderer={worldMode === "cinematic" ? "cinematic" : undefined}
                 compact
                 currentSlug={route.slug}
                 routes={pickerRoutes}
@@ -706,10 +753,14 @@ export function GoogleRouteNavigatorStage({
           onSelectCamera={selectCamera}
           route={route}
           fieldTestRoutes={productionReplay ? [] : fieldTestRoutes}
+          worldControls={onWorldMode ? <WorldControls mode={worldMode} environment={environment} onMode={onWorldMode} onEnvironment={setEnvironment} /> : undefined}
         />
       ) : null}
 
-      {status.state !== "ready" ? (
+      {status.state === "partial" ? (
+        <p role="status" className="pointer-events-none absolute bottom-[calc(var(--world-dock-height,180px)+5rem)] left-3 z-30 max-w-[calc(100%-1.5rem)] rounded bg-black/80 px-3 py-2 text-xs text-white" data-testid="replay-partial-status">{status.message}</p>
+      ) : null}
+      {!isWorldPlayable(status.state) ? (
         <div
           className={cn(
             "absolute inset-0 z-20 grid place-items-center p-6",
@@ -733,6 +784,9 @@ export function GoogleRouteNavigatorStage({
                 : "3D world unavailable"}
             </h2>
             <p className="mt-2 text-sm text-white/62">{status.message}</p>
+            {status.state === "unavailable" && worldMode === "cinematic" && onWorldMode ? (
+              <Button className="mt-4" onClick={() => onWorldMode("native")} type="button">Use Native Replay</Button>
+            ) : null}
             {status.state === "unavailable" && onUseAtlas ? (
               <Button
                 className="mt-5 bg-white text-black hover:bg-white/90"
@@ -762,7 +816,7 @@ export function GoogleRouteNavigatorStage({
             activeChapterIndex={activeChapterIndex}
             chapters={storyChapters}
             control={control}
-            disabled={status.state !== "ready"}
+            disabled={!isWorldPlayable(status.state)}
             elevationScrubberRef={elevationScrubberRef}
             onCommit={commitControl}
             onSelectCamera={selectCamera}
@@ -774,7 +828,7 @@ export function GoogleRouteNavigatorStage({
         ) : (
           <ExpandedReplayHud
             control={control}
-            disabled={status.state !== "ready"}
+            disabled={!isWorldPlayable(status.state)}
             onCommit={commitControl}
             onSelectCamera={selectCamera}
             onTogglePlayback={togglePlayback}
@@ -938,12 +992,14 @@ function ReplaySettings({
   onSelectCamera,
   route,
   fieldTestRoutes,
+  worldControls,
 }: {
   control: GoogleRouteNavigatorState;
   onCommit: ReplayHudProps["onCommit"];
   onSelectCamera: ReplayHudProps["onSelectCamera"];
   route: QuestRoute;
   fieldTestRoutes: ReadonlyArray<{ slug: string; label: string }>;
+  worldControls?: ReactNode;
 }) {
   return (
     <aside
@@ -959,6 +1015,8 @@ function ReplaySettings({
         </div>
         <Settings2 aria-hidden="true" className="size-4 text-white/50" />
       </div>
+
+      {worldControls}
 
       <div className="mt-4 grid gap-4">
         <SettingGroup icon={Mountain} label="Route placement">

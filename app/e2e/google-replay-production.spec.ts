@@ -468,7 +468,7 @@ test("keeps playback telemetry visible on a phone", async ({ page }) => {
     390,
   );
   await page.waitForTimeout(2_000);
-  await page.getByTestId("replay-stage").dispatchEvent("pointermove");
+  await page.mouse.move(180, 200);
   await page.waitForTimeout(900);
   await expect(page.getByTestId("replay-stage")).toHaveAttribute(
     "data-hud-state",
@@ -479,7 +479,7 @@ test("keeps playback telemetry visible on a phone", async ({ page }) => {
     "hidden",
     { timeout: 1_500 },
   );
-  await page.getByTestId("replay-stage").dispatchEvent("pointermove");
+  await page.mouse.move(200, 220);
   await expect(page.getByTestId("replay-stage")).toHaveAttribute(
     "data-hud-state",
     "expanded",
