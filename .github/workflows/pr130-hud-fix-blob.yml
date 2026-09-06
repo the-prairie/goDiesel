@@ -1,0 +1,80 @@
+name: Verify PR 130 HUD interaction fix
+on:
+  push:
+    branches: [codex/pr130-refinement-inspection]
+    paths: [.github/workflows/pr130-hud-fix-blob.yml]
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: e22e09723fa2673aed7ca70528ff9eb2b0fa5980
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci --prefix app
+      - run: cd app && npx playwright install --with-deps chromium
+      - name: Apply exact bounded HUD edit
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          p = Path('app/src/surfaces/replay/components/google-route-navigator-stage.tsx')
+          b = p.read_bytes()
+          assert hashlib.sha1(f'blob {len(b)}\0'.encode()+b).hexdigest() == '9dc2eb820109329650866f540ad5bb47643c8d7e'
+          s = b.decode()
+          before = '      setChromeVisible(false);\n      chromeTimerRef.current = undefined;'
+          after = '''      chromeTimerRef.current = undefined;
+                // Never hide/inert a control while someone is hovering or using
+                // its keyboard focus. Slow rendering must not race a user's click.
+                const engaged = [headerRef.current, controlsRef.current].some((element) =>
+                  element?.matches(":hover") || element?.querySelector(":focus-visible"),
+                );
+                if (!engaged) setChromeVisible(false);'''
+          # Preserve the surrounding source indentation exactly.
+          after = '\n'.join(line[10:] if line.startswith('          ') else line for line in after.split('\n'))
+          assert s.count(before) == 1
+          s = s.replace(before, after)
+          s = s.replace('      onFocusCapture={revealChrome}', '      onBlurCapture={scheduleChromeHide}\n      onFocusCapture={revealChrome}')
+          s = s.replace('      onPointerMove={revealChrome}', '      onPointerMove={revealChrome}\n      onPointerLeave={scheduleChromeHide}')
+          p.write_text(s)
+          PY
+      - name: Existing production Replay contract
+        run: |
+          cd app
+          npm run typecheck
+          npx playwright test e2e/google-replay-production.spec.ts --project=chromium
+      - name: Store verified source blob only, never update a branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p hud-proof
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, base64
+          b = Path('app/src/surfaces/replay/components/google-route-navigator-stage.tsx').read_bytes()
+          Path('/tmp/hud-blob.json').write_text(json.dumps({'encoding': 'base64', 'content': base64.b64encode(b).decode()}))
+          PY
+          gh api --method POST repos/the-prairie/goDiesel/git/blobs --input /tmp/hud-blob.json > hud-proof/blob.json
+          git diff --check
+          git diff > hud-proof/change.patch
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr130-hud-fix
+          path: |
+            hud-proof/
+            app/test-results/
+          retention-days: 3
