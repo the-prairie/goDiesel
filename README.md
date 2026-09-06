@@ -181,7 +181,9 @@ Choose a durable share name because it defines the stable URL.
 Both authority values must exactly match that stable share name, including for a new alias.
 Live Google 3D imagery must still be reviewed in a hardware-accelerated browser.
 
-Cloudflare Pages should use `./make-dist.sh` as the build command and `dist` as the output directory.
+The guarded publisher uses `./make-dist.sh` to construct and validate `dist` before direct upload.
+Keep automatic Git-integrated preview deployments disabled instead of asking Cloudflare to build every preview branch from a clean clone.
+Production branch deployment controls are governed separately.
 Hash routing keeps direct Atlas, route, and Replay links compatible with static hosting.
 
 ## Static Fallback

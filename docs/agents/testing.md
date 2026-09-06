@@ -135,6 +135,10 @@ It reads the complete private Strava export, sends selected real route geometry 
 It must fail when credentials, billing, quota, browser acceleration, raw source data, or any provider are unavailable.
 It never substitutes network responses, route records, renderers, or writer APIs.
 
+Keep automatic Git-integrated Cloudflare preview deployments disabled for the Pages project.
+An authorized preview must be built, identity-bound, and uploaded through the repository's guarded direct-upload command so a clean Git clone cannot bypass artifact construction or provider-key validation.
+Production branch deployment controls remain a separate release decision.
+
 The generated evidence under `app/artifacts/live-pipeline/` is intentionally ignored because it contains source and response hashes derived from private inputs.
 Do not commit it.
 
