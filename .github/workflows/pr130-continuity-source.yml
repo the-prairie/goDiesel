@@ -1,28 +1,83 @@
-name: Export terrain continuity source
+name: Validate terrain continuity source
 on:
   push:
     branches: [codex/pr130-refinement-inspection]
     paths: [.github/workflows/pr130-continuity-source.yml]
 permissions:
-  contents: read
+  contents: write
+# One-off preparation: creates Git blob objects only. No commits, ref changes,
+# provider/deployment secrets, or deployments. PR CI owns browser/live acceptance.
+defaults:
+  run:
+    shell: bash
 jobs:
   source:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ca75ff90e32f0c3fe1ab1bf7a3472bc4adacfb05
-          fetch-depth: 0
           persist-credentials: false
-      - name: Export tracked baseline only
-        shell: bash
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Apply exact reviewed patch to exact PR head
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p proof
-          git rev-parse HEAD > proof/commit.txt
-          git ls-files -s > proof/files.txt
-          git diff --binary 237006bc0face615b8f0214c030a31e2de3e66bf HEAD > proof/report-v2.patch
+          git rev-parse HEAD > proof/base.txt
+          python3 - <<'PY'
+          import base64, gzip, hashlib, json, os, subprocess, urllib.request
+          from pathlib import Path
+          shas = ['10f2470427d24b11b3dfa5504d9707c6b8ec7278', 'ec59fb54b1e6a63f614dd8ca98d679aa30460276', '46f5961b18868832b630b99c5e77560a2cbf4304', '71ca89b4e8f7f56e16959ebcba44706e37671ebe']
+          encoded = b''
+          for sha in shas:
+            request = urllib.request.Request(f'https://api.github.com/repos/the-prairie/goDiesel/git/blobs/{sha}', headers={'Authorization': 'Bearer '+os.environ['GH_TOKEN'], 'Accept':'application/vnd.github+json'})
+            with urllib.request.urlopen(request) as response:
+              encoded += base64.b64decode(json.load(response)['content'])
+          patch = gzip.decompress(base64.b64decode(encoded))
+          digest = hashlib.sha256(patch).hexdigest()
+          assert digest == 'c0f019af2f5769e9c361f1710bbd4a42a2ba2cf419301863d02df969aa969f8d'
+          Path('proof/patch-sha256.txt').write_text(digest+'\n')
+          subprocess.run(['git','apply','--check','-'], input=patch, check=True)
+          subprocess.run(['git','apply','-'], input=patch, check=True)
+          subprocess.run(['git','add','app/src/surfaces/replay','app/e2e','docs/architecture/cinematic-world-replay.md','.github/workflows/verify-cinematic-world.yml'], check=True)
+          subprocess.run(['git','diff','--cached','--check'], check=True)
+          PY
+      - run: npm ci --prefix app
+      - name: Typecheck and unit regressions
+        working-directory: app
+        run: |
+          npm run typecheck 2>&1 | tee ../proof/typecheck.txt
+          npm run test:unit 2>&1 | tee ../proof/unit.txt
+      - name: Create source blobs only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, json, os, subprocess, urllib.request
+          from pathlib import Path
+          paths = subprocess.check_output(['git','diff','--cached','--name-only','-z']).decode().strip('\0').split('\0')
+          assert len(paths) == 27, paths
+          entries = []
+          for path in paths:
+            assert path.startswith(('app/src/surfaces/replay/', 'app/e2e/')) or path in ['docs/architecture/cinematic-world-replay.md', '.github/workflows/verify-cinematic-world.yml']
+            data = Path(path).read_bytes()
+            expected = hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
+            payload = json.dumps({'content':base64.b64encode(data).decode(), 'encoding':'base64'}).encode()
+            request = urllib.request.Request('https://api.github.com/repos/the-prairie/goDiesel/git/blobs', data=payload, method='POST', headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'], 'Content-Type':'application/json', 'Accept':'application/vnd.github+json'})
+            with urllib.request.urlopen(request) as response:
+              actual = json.load(response)['sha']
+            assert actual == expected
+            entries.append({'path':path, 'mode':'100644', 'type':'blob', 'sha':actual})
+          Path('proof/source-blobs.json').write_text(json.dumps(entries,indent=2)+'\n')
+          PY
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: continuity-source
           path: proof/
