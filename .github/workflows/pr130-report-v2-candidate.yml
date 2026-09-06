@@ -1,0 +1,91 @@
+name: Validate PR 130 report v2 candidate
+on:
+  push:
+    branches: [codex/pr130-refinement-inspection]
+    paths: [.github/workflows/pr130-report-v2-candidate.yml]
+permissions:
+  contents: write
+# This one-off preparation creates Git blob objects only. It never commits,
+# changes a ref, deploys, or reads repository deployment/provider secrets.
+defaults:
+  run:
+    shell: bash
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 237006bc0face615b8f0214c030a31e2de3e66bf
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Apply exact reviewed patch to exact PR head
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p proof
+          git rev-parse HEAD > proof/base.txt
+          python3 - <<'PY'
+          import base64, gzip, hashlib, json, os, subprocess, urllib.request
+          from pathlib import Path
+          shas = ['64e19fa771dedf020927dc1a39f4d10c31d29bd2', 'c287cc16cbed075d105fe2e3ca3087445d6c754c', '3d335d31d120bc9a5f75ddae36a6c692db2e6af6', 'dac4058015090259d30e28b10e0a5d0de43878bb']
+          encoded = b''
+          for sha in shas:
+            request = urllib.request.Request(f'https://api.github.com/repos/the-prairie/goDiesel/git/blobs/{sha}', headers={'Authorization': 'Bearer '+os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
+            with urllib.request.urlopen(request) as response:
+              encoded += base64.b64decode(json.load(response)['content'])
+          patch = gzip.decompress(base64.b64decode(encoded))
+          digest = hashlib.sha256(patch).hexdigest()
+          assert digest == 'a0a21a8604dce55724d93cbcbae06a360730fe9189f6a3e8f9ad8dffca29161a'
+          Path('proof/patch-sha256.txt').write_text(digest+'\n')
+          subprocess.run(['git','apply','--check','-'], input=patch, check=True)
+          subprocess.run(['git','apply','-'], input=patch, check=True)
+          subprocess.run(['git','add','app','docs/architecture/cinematic-world-replay.md','.github/workflows/verify-cinematic-world.yml'], check=True)
+          subprocess.run(['git','diff','--cached','--check'], check=True)
+          PY
+      - run: npm ci --prefix app
+      - name: Typecheck and unit regression tests
+        working-directory: app
+        run: |
+          npm run typecheck 2>&1 | tee ../proof/typecheck.txt
+          npm run test:unit 2>&1 | tee ../proof/unit.txt
+      - run: cd app && npx playwright install --with-deps chromium
+      - name: Actual renderer and controller report round trip
+        working-directory: app
+        run: |
+          npx playwright test e2e/cinematic-world-report.spec.ts e2e/cinematic-world.spec.ts e2e/cinematic-world-renderer.spec.ts e2e/google-replay-production.spec.ts --project=chromium 2>&1 | tee ../proof/browser.txt
+      - name: Create verified source blobs only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, json, os, subprocess, urllib.request
+          from pathlib import Path
+          paths = subprocess.check_output(['git','diff','--cached','--name-only','-z']).decode().strip('\0').split('\0')
+          assert len(paths) == 17
+          entries = []
+          for path in paths:
+            assert path.startswith(('app/', 'docs/architecture/')) or path == '.github/workflows/verify-cinematic-world.yml'
+            data = Path(path).read_bytes()
+            expected = hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
+            payload = json.dumps({'content':base64.b64encode(data).decode(), 'encoding':'base64'}).encode()
+            request = urllib.request.Request('https://api.github.com/repos/the-prairie/goDiesel/git/blobs', data=payload, method='POST', headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'], 'Content-Type':'application/json', 'Accept':'application/vnd.github+json'})
+            with urllib.request.urlopen(request) as response:
+              actual = json.load(response)['sha']
+            assert actual == expected
+            entries.append({'path':path, 'mode':'100644', 'type':'blob', 'sha':actual})
+          Path('proof/source-blobs.json').write_text(json.dumps(entries,indent=2)+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr130-report-v2-candidate
+          path: |
+            proof/
+            app/test-results/
+          retention-days: 3
