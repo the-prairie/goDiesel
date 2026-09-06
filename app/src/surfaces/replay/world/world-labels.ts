@@ -4,6 +4,7 @@ import type { PerspectiveCamera } from "three";
 import { labelFeature, labelText, WORLD_QUALITY, type WorldEnvironment, type LayerState } from "./world-model";
 
 import { bindWorldGlyphCamera } from "./world-glyph-camera";
+import { observeWorldLabelSettling } from "./world-label-settling";
 
 class RoadLabels extends DefaultMVTAnnotationsDriver {
   constructor(camera: PerspectiveCamera, private readonly onDecoded: () => void) {
@@ -75,6 +76,7 @@ export async function createWorldLabels(
   };
   const driver = new RoadLabels(camera, () => { if (!signal.aborted) onState("ready"); });
   const plugin = new MVTAnnotationsPlugin({ overlay, camera, driver, resolution: 128 });
+  const stopObservingSettling = observeWorldLabelSettling(plugin);
   const update = (next: WorldEnvironment) => {
     const budget = WORLD_QUALITY[next.quality].labelBudget;
     plugin.maxSettleTimeMs = budget;
@@ -99,12 +101,14 @@ export async function createWorldLabels(
     signal.throwIfAborted();
     tiles.registerPlugin(plugin);
   } catch (error) {
+    stopObservingSettling();
     driver.dispose(); overlay.imageSource.dispose(); throw error;
   }
   let disposed = false;
   return { update, attribution, defaultSource: !import.meta.env.VITE_WORLD_VECTOR_SOURCE, get visibleLabelCount() { return driver.visibleLabels.size; }, dispose: () => {
     if (disposed) return;
     disposed = true;
+    stopObservingSettling();
     tiles.unregisterPlugin(plugin);
     // MVTOverlay owns no dispose method in 0.5.2; its image source owns the caches.
     overlay.imageSource.dispose();
