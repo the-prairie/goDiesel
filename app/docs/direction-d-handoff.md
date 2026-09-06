@@ -11,7 +11,8 @@ something is a claim rather than an observation it says so.
 |---|---|
 | Worktree | `/Users/laurenzary/Desktop/goDiesel/.claude/worktrees/fable-opus-migration-70932f` |
 | Branch | `clank/fable-opus-migration-70932f` |
-| Checkpoint | the single commit on top of `6b23f859` (`test(navigation): refresh field-guide shell baselines for 68 routes`) |
+| Checkpoint | `2abe97dd` `feat(labs): journal presentation baseline and Direction D checkpoint` |
+| Parent | `6b23f859` `test(navigation): refresh field-guide shell baselines for 68 routes` |
 | Merge base with `main` | `30e60425` |
 | Toolchain used | Node v26.7.0, npm 11.19.0 |
 
