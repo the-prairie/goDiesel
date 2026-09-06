@@ -25,4 +25,3 @@ export class WorldTaskQueue extends PriorityQueue {
     this.removeByFilter(() => true);
   }
 }
-

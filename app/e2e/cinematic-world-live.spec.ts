@@ -8,6 +8,14 @@ const clean = (value: string) => value
   })
   .replace(/AIza[\w-]+/g, "[redacted]");
 
+async function revealReplayControls(page: Page) {
+  const viewport = page.viewportSize()!;
+  // Immersive playback intentionally hides/inerts its controls after 1.8s.
+  // A real pointer move reveals them; never force-click an inaccessible control.
+  await page.mouse.move(viewport.width / 2, viewport.height / 2, { steps: 2 });
+  await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-hud-state", "expanded");
+}
+
 async function rendererEvidence(page: Page) {
   return page.evaluate(() => {
     const stage = document.querySelector<HTMLElement>('[data-testid="replay-stage"]');
@@ -60,6 +68,9 @@ for (const journey of [
   { slug: "17665674778", label: "Tokyo streets", width: 1280, height: 720 },
 ]) {
   test(`live Google world: ${journey.label}`, async ({ page, browser }, testInfo) => {
+    // Bound missing controls separately so failure evidence can be captured before
+    // the test-wide deadline tears down the page.
+    page.setDefaultTimeout(15_000);
     const evidence = {
       sourceCommit: process.env.GODIESEL_WORLD_SOURCE_SHA ?? "unrecorded",
       origin: new URL(testInfo.project.use.baseURL as string).origin,
@@ -100,6 +111,7 @@ for (const journey of [
       // Preserve a failing label verdict, but still collect playback and lighting evidence.
       await expect.configure({ soft: true }).poll(async () => Number(await world.getAttribute("data-world-label-count")), { timeout: 45_000 }).toBeGreaterThan(0);
       await page.waitForTimeout(1500);
+      evidence.snapshots.push(await rendererEvidence(page));
       await page.screenshot({ path: testInfo.outputPath("02-live-road-alignment.png") });
       expect(evidence.googleResponses).toBeGreaterThan(1);
       expect(evidence.googleModelResponses).toBeGreaterThan(0);
@@ -119,6 +131,8 @@ for (const journey of [
         };
         requestAnimationFrame(tick);
       }));
+      evidence.snapshots.push(await rendererEvidence(page));
+      await revealReplayControls(page);
       await page.getByRole("button", { name: "Pause route", exact: true }).click();
       evidence.snapshots.push(await rendererEvidence(page));
       await page.screenshot({ path: testInfo.outputPath("03-live-playback.png") });
