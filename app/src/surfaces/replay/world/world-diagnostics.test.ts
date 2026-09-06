@@ -45,6 +45,21 @@ describe("session diagnostics", () => {
     expect(recorder.snapshot(3600_000).timeline[0].state.camera.actualRangeM).toBe(1050);
     expect(recorder.snapshot(3700_000).timeline).toHaveLength(0);
   });
+  it("coalesces hundreds of scrub updates without losing earlier events or the final destination", () => {
+    const recorder = new WorldFlightRecorder(0, true);
+    recorder.mark("play", 100, state());
+    for (let i = 0; i < 453; i++) {
+      const snapshot = state(); snapshot.playback!.progressM = 9000 + i;
+      recorder.mark("seek", 1000 + i * 8, snapshot);
+      if (i === 200) recorder.mark("layers", 1000 + i * 8, state());
+    }
+    recorder.mark("pause", 5000, state());
+    const report = recorder.snapshot(5010);
+    expect(report.events.entries.map(e=>e.kind)).toEqual(["mount","play","seek","layers","pause"]);
+    expect(report.events.entries[2].scrub).toMatchObject({fromM:9000,toM:9452,updates:453});
+    expect(report.session.eventCounts.seek).toBe(453);
+    expect(report.events.dropped).toBe(0);
+  });
   it("counts submissions independently of callbacks, and freezes ended-session totals", () => {
     const recorder = new WorldFlightRecorder(100, true);
     recorder.frame(100, playback(false)); recorder.frame(120, playback(false));

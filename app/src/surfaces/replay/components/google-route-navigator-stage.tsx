@@ -450,7 +450,7 @@ export function GoogleRouteNavigatorStage({
       const current = controlRef.current;
       const next = advanceGoogleRouteNavigator(
         current,
-        (now - previous) / 1_000,
+        engineRef.current?.isPlaybackBuffering?.() ? 0 : (now - previous) / 1_000,
         totalDistanceM,
       );
       previous = now;

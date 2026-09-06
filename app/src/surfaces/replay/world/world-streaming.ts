@@ -1,6 +1,7 @@
-import { DownloadPriorityQueue, LRUCache } from "3d-tiles-renderer/core";
+import { LRUCache } from "3d-tiles-renderer/core";
 import type { TilesRenderer } from "3d-tiles-renderer/three";
 import { WorldTaskQueue } from "./world-tile-scheduling";
+import { WorldDownloadQueue } from "./world-download-budget";
 
 /** Replay needs the camera's local terrain, not every sibling of every globe ancestor. */
 export function configureWorldStreaming(tiles: TilesRenderer) {
@@ -11,12 +12,15 @@ export function configureWorldStreaming(tiles: TilesRenderer) {
   const cache = new LRUCache();
   cache.unloadPriorityCallback = tiles.lruCache.unloadPriorityCallback;
   cache.maxBytesSize = 384 * 1024 * 1024;
-  cache.minBytesSize = 256 * 1024 * 1024;
+  cache.minBytesSize = 320 * 1024 * 1024;
   tiles.lruCache = cache;
 
   // Defaults are shared across renderers. Own the queues so a previous world or
   // a label overlay cannot change this instance's concurrency or scheduling.
-  const download = new DownloadPriorityQueue();
+  const download = new WorldDownloadQueue(() => {
+    const stats = (tiles as unknown as { stats: { downloading: number; parsing: number } }).stats;
+    return { downloading: stats.downloading, parsing: stats.parsing };
+  });
   download.priorityCallback = tiles.downloadQueue.priorityCallback;
   download.maxJobsPerOrigin = 8;
   const parse = new WorldTaskQueue();
@@ -29,8 +33,9 @@ export function configureWorldStreaming(tiles: TilesRenderer) {
   tiles.processNodeQueue = nodes;
   tiles.registerPlugin({
     name: "WORLD_STREAMING_QUEUE_LIFECYCLE",
-    dispose: () => { parse.dispose(); nodes.dispose(); },
+    dispose: () => { download.dispose(); parse.dispose(); nodes.dispose(); },
   });
+  return download;
 }
 
 /** Keep the mountain horizon at close range without requesting a 100 km disk. */

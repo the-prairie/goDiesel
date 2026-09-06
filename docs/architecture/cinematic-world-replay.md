@@ -181,3 +181,71 @@ controller, ordinary interactions and downloaded JSON without a mocked clock.
 The separate live minute-report test uses actual provider terrain and validates
 the deployed build identity. The existing live cloud/imagery scorecard remains a
 separate obligation; report success cannot turn failed visual acceptance green.
+
+## Terrain continuity and work ownership
+
+Cinematic now distinguishes historical startup completion from the current view.
+Five bounded center-area rays sample selected, visible terrain at most four times
+per second. `terrain.view` reports entering, missing, recovering, refining or ready;
+this is a sparse geometry check, not a full-frame coverage percentage, a texture
+sharpness score or a label-alignment guarantee. A stale or missing probe cannot
+certify the current camera.
+
+When a following, playing view has no center terrain for 200 ms, the renderer's
+optional `isPlaybackBuffering()` signal asks the owning transport to advance by
+zero seconds. Stable coverage for 250 ms releases the hold. The transport retains
+Play/Pause intent, distance, source telemetry and camera choice; it never catches
+up skipped wall-clock time. Seeking, pausing, changing views, leaving Replay and
+free-camera ownership remain available. Native implements no hold signal and is
+unchanged. The status says the current moment is being held. Provider coverage
+that never arrives is not treated as a recovered view.
+
+Terrain requests and decoding share a 24-item allowance. This includes response
+bodies after HTTP response headers arrive, not just concurrent fetches. Origin
+queues keep their own limits and original priority ordering; a yielding task wake
+lets decoding and HTTP work proceed independently of expensive animation frames.
+Under pressure, obsolete **queued** parses are removed through the dependency's
+cache lifecycle. Running decoders and current visible/used terrain are not cut
+out. The cache still has a 384 MiB ceiling; retaining up to 320 MiB after eviction
+reduces repeated unloading on revisits without permitting an unbounded cache.
+
+One optional, non-masking load sphere prepares a maximum of 320 m of recorded
+travel ahead. Actual camera requests retain priority. Prediction stops under
+pending-work/memory pressure, in free camera, for wide overview, with unavailable
+recorded elevation, or at a recording gap. A seek debounces intermediate traversal
+and points the hint at the destination. It does not predict a fictitious straight
+line between disconnected recording segments or persist provider tiles. This is
+bounded prefetch, not a guarantee that arbitrary cold seeks have instant imagery.
+
+The current two route points receive priority sampling, with a bounded periodic
+refresh and round-robin work for the remainder. No sampling runs on a settled,
+unchanged route. A contrast edge on the traveled filament and an 18 CSS-pixel
+camera-facing coral/white rider improve close-view reading. Recording gaps remain
+gaps; surface offsets are display-only. Missing mesh clearance is explicitly
+`unknown`; a previously measured height is not reused across unrelated seeks.
+
+### Optional effects must be optional work
+
+In pinned `@takram/three-clouds` 0.7.6, `skipRendering` controls composition but its
+`update` still submits shadow and volume passes. The instance-local subclass gates
+that work explicitly. Zero cover or Light quality means zero cloud-pass updates,
+and changing to Cinema with zero cover does not apply a heavy cloud shader preset.
+Enabling clouds resumes the original effect. Disabling clears its aerial overlay
+and shadow references. These are real cloud passes when enabled, not a still image.
+
+The report retains its v2 local/whitelisted format and adds cloud-pass counts,
+current-view/buffering state, clearance confidence, backpressure and look-ahead
+state. Rapid seek updates within 250 ms are coalesced into a burst with first/last
+and min/max distances; raw counts remain in session totals. These are seek bursts,
+not a claim that every burst equals one physical pointer gesture.
+
+### Verification boundaries
+
+The focused gate exercises actual GLB/Draco geometry, missing-view recovery,
+cloud work off/on/off, renderer cleanup, and transport hold/resume with Native
+isolation. The live gate additionally checks the owner's Crete Runner checkpoints
+around 9.85 km and 12.62 km with real provider data and ordinary UI input. Sparse
+ray hits and queue limits are correctness checks; frame screenshots and real-device
+measurements still separately determine geographic fidelity, route readability,
+input latency and final cinematic quality. A positive startup flag is never a
+substitute for that visual review.

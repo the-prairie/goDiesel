@@ -45,6 +45,8 @@ export interface GoogleRouteNavigatorEngine {
   setCamera(pose: GoogleRouteCameraPose): void;
   /** Optional observation only; the owning controller remains the playback authority. */
   setPlaybackContext?(context: WorldPlaybackContext, intent?: "seek"): void;
+  /** Optional renderer backpressure. The controller retains play intent and distance authority. */
+  isPlaybackBuffering?(): boolean;
   setFollowing(following: boolean): void;
   setGrounding(mode: GoogleRouteGroundingMode): void;
   setCinematicRoute(treatment: CinematicRouteTreatment): void;

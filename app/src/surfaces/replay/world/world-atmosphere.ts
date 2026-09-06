@@ -1,5 +1,5 @@
 import { AerialPerspectiveEffect, PrecomputedTexturesLoader } from "@takram/three-atmosphere";
-import { CloudsEffect, CLOUD_SHAPE_TEXTURE_SIZE, CLOUD_SHAPE_DETAIL_TEXTURE_SIZE } from "@takram/three-clouds";
+import { CLOUD_SHAPE_TEXTURE_SIZE, CLOUD_SHAPE_DETAIL_TEXTURE_SIZE } from "@takram/three-clouds";
 import { DataTextureLoader, parseUint8Array } from "@takram/three-geospatial";
 import { EffectComposer, EffectPass, RenderPass, ToneMappingEffect, ToneMappingMode } from "postprocessing";
 import {
@@ -8,6 +8,7 @@ import {
   Texture, TextureLoader, Vector3,
   type Matrix4, type PerspectiveCamera, type Scene, type WebGLRenderer,
 } from "three";
+import { WorldCloudsEffect } from "./world-cloud-work";
 import { presentationSun, WORLD_QUALITY, type WorldEnvironment } from "./world-model";
 
 /** Real scattering/cloud passes, kept outside the recorded route and provider imagery data. */
@@ -17,7 +18,10 @@ export class WorldAtmosphere {
   private disposed = false;
   private composer?: EffectComposer;
   private aerial?: AerialPerspectiveEffect;
-  private clouds?: CloudsEffect;
+  private clouds?: WorldCloudsEffect;
+  private cloudPreset?: string;
+  get cloudFrames() { return this.clouds?.submittedFrames ?? 0; }
+  get cloudWorkEnabled() { return this.clouds?.workEnabled ?? false; }
   private environment: WorldEnvironment;
   private readonly base = `${import.meta.env.BASE_URL}world-assets/`;
 
@@ -37,7 +41,7 @@ export class WorldAtmosphere {
       // Photos already contain baked lighting. Do not pretend to physically re-light their materials.
       sunLight: false, skyLight: false,
     });
-    const clouds = new CloudsEffect(this.camera);
+    const clouds = new WorldCloudsEffect(this.camera);
     // Art-directed weather belongs above the ride, not through the rider's line of sight.
     const cloudFloor = Math.max(2500, this.routeCeilingM + 1500);
     clouds.cloudLayers[0].altitude = cloudFloor;
@@ -111,8 +115,16 @@ export class WorldAtmosphere {
     const sun = new Vector3(...presentationSun(environment.light)).transformDirection(this.worldToECEF);
     aerial.sunDirection.copy(sun);
     clouds.sunDirection.copy(sun);
-    clouds.qualityPreset = quality.cloudPreset;
-    clouds.skipRendering = !quality.clouds || environment.clouds === 0;
+    const enabled = quality.clouds && environment.clouds > 0;
+    // A detail button must not compile heavy cloud variants while clouds are off.
+    if (enabled && this.cloudPreset !== quality.cloudPreset) {
+      clouds.qualityPreset = quality.cloudPreset;
+      this.cloudPreset = quality.cloudPreset;
+    }
+    clouds.workEnabled = enabled;
+    clouds.skipRendering = !enabled;
+    if (!enabled) { aerial.overlay = null; aerial.shadow = null; aerial.shadowLength = null; }
+    else { aerial.overlay = clouds.atmosphereOverlay; aerial.shadow = clouds.atmosphereShadow; aerial.shadowLength = clouds.atmosphereShadowLength; }
     clouds.coverage = environment.clouds;
     clouds.localWeatherVelocity.set(environment.reducedMotion ? 0 : 0.00015, 0);
     clouds.shapeVelocity.setScalar(0);

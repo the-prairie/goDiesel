@@ -4,6 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
 async function installAdapters(page: Page, worldState: "ready" | "partial" | "unavailable" = "ready") {
   await page.addInitScript((state) => {
     const target = window as typeof window & {
+      __worldHold?: boolean;
       __worldCalls: Array<{ event: string; value?: unknown }>;
       __GODIESEL_CINEMATIC_WORLD_FACTORY__?: () => unknown;
       __GODIESEL_GOOGLE_ROUTE_NAVIGATOR_FACTORY__?: () => unknown;
@@ -19,6 +20,7 @@ async function installAdapters(page: Page, worldState: "ready" | "partial" | "un
         container.replaceChildren(surface);
         onStatus({ state: mode === "cinematic" ? state : "ready", message: state === "partial" ? "Atmosphere unavailable; terrain remains usable." : "Control test adapter" });
       },
+      isPlaybackBuffering() { return mode === "cinematic" && target.__worldHold === true; },
       setEnvironment(value: unknown) { target.__worldCalls.push({ event: "environment", value }); },
       setCamera(value: unknown) { target.__worldCalls.push({ event: `${mode}:camera`, value }); },
       setCinematicRoute() {}, setRouteReveal() {}, setFollowing() {}, setGrounding() {},
@@ -127,5 +129,29 @@ for (const mode of ["native", "cinematic"] as const) {
     await expect(stage).toHaveAttribute("data-hud-state", "expanded");
     await page.getByRole("button", { name: "Pause route", exact: true }).click();
     await expect(page.getByRole("button", { name: "Play route", exact: true })).toBeVisible();
+  });
+}
+
+
+for (const mode of ["cinematic", "native"] as const) {
+  test(`${mode} transport honors only its own terrain backpressure and retains pause/seek authority`, async ({ page }) => {
+    await installAdapters(page);
+    await page.goto(`/#/replay/14130782031${mode === "cinematic" ? "?renderer=cinematic" : ""}`);
+    await page.evaluate(() => { (window as unknown as { __worldHold: boolean }).__worldHold = true; });
+    await page.getByRole("button", {name:"Play route",exact:true}).click();
+    const progress = page.getByTestId("google-route-progress");
+    const start = await progress.textContent();
+    await page.waitForTimeout(600);
+    if (mode === "cinematic") await expect(progress).toHaveText(start!);
+    else await expect(progress).not.toHaveText(start!);
+    await page.getByRole("button", {name:"Pause route",exact:true}).click();
+    await page.getByRole("slider",{name:"Route progress",exact:true}).press("ArrowRight");
+    await expect(progress).not.toHaveText(start!);
+    const sought = await progress.textContent();
+    await page.evaluate(() => { (window as unknown as { __worldHold: boolean }).__worldHold = false; });
+    await page.waitForTimeout(200);
+    await expect(progress).toHaveText(sought!); // Clearing a hold must not steal Pause.
+    await page.getByRole("button", {name:"Play route",exact:true}).click();
+    await expect(progress).not.toHaveText(sought!);
   });
 }

@@ -1,4 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
+import { PNG } from "pngjs";
+import type { WorldDiagnostics } from "../src/surfaces/replay/world/world-diagnostics";
 import { readFileSync, writeFileSync } from "node:fs";
 
 const clean = (value: string) => value
@@ -211,3 +213,62 @@ for (const journey of [
     }
   });
 }
+
+
+// The owner's failed Runner checkpoints: real provider data, ordinary controls,
+// and current coverage rather than a startup latch or a successful HTTP status.
+test("live Runner revisits sharpest turn and high point with bounded terrain work", async ({page},testInfo) => {
+  page.setDefaultTimeout(15_000);
+  await page.setViewportSize({width:1280,height:720});
+  const receipts: Array<{distanceM:number;report:WorldDiagnostics;textureVariation:number}>=[];
+  let models=0;
+  page.on("response", response => {const url=new URL(response.url());if(response.ok()&&url.hostname==="tile.googleapis.com"&&url.pathname.endsWith(".glb"))models++;});
+  const read = async () => (await rendererEvidence(page)).report as WorldDiagnostics;
+  try {
+    await page.goto("/#/replay/14130782031?renderer=cinematic");
+    expect(await page.evaluate(()=>Boolean(window.__GODIESEL_CINEMATIC_WORLD_FACTORY__))).toBe(false);
+    const world=page.locator("[data-world-terrain]");
+    await expect(world).toHaveAttribute("data-world-terrain","ready",{timeout:60_000});
+    await page.getByRole("button",{name:"Runner",exact:true}).press("Enter");
+    const progress=page.getByRole("slider",{name:"Route progress",exact:true});
+    // Real range input changes, no force click or controller state mutation.
+    for(const value of ["12000","9500","11000","9700"]) await progress.fill(value);
+    for(const distanceM of [9850,12620]) {
+      await progress.fill(String(distanceM));
+      await expect.poll(async()=>{
+        const state=await read();
+        return state.terrain.view?.coverage.centerHit && state.terrain.view.coverage.hits>=4 && state.terrain.renderedMeshes>0;
+      },{timeout:30_000}).toBe(true);
+      await expect.poll(async()=>(await read()).camera.actualRangeM).toBeLessThan(600);
+      await page.waitForTimeout(1000);
+      const report=await read();
+      const image=PNG.sync.read(await page.screenshot({path:testInfo.outputPath(`runner-${distanceM}.png`)}));
+      let changing=0,total=0;
+      // Reject a flat gray center even if another corner happens to draw a tile.
+      // This is a blank-scene check, not an imagery-quality or alignment score.
+      for(let y=Math.floor(image.height*.3);y<image.height*.68;y++)for(let x=Math.floor(image.width*.4);x<image.width*.85;x++) {
+        const i=(y*image.width+x)*4,j=i+4;
+        if(Math.abs(image.data[i]-image.data[j])+Math.abs(image.data[i+1]-image.data[j+1])+Math.abs(image.data[i+2]-image.data[j+2])>12)changing++;
+        total++;
+      }
+      const textureVariation=changing/total;
+      receipts.push({distanceM,report,textureVariation});
+      expect(textureVariation).toBeGreaterThan(.015);
+      expect(report.playback?.cameraMode).toBe("runner");
+      expect(report.terrain.queues.downloading+report.terrain.queues.parsing).toBeLessThanOrEqual(24);
+      expect(report.quality.cloudPassSubmissions).toBe(0);
+      expect(report.contextLost).toBe(false);
+    }
+    expect(models).toBeGreaterThan(0);
+    const before=(await read()).playback!.progressM;
+    await page.getByRole("button",{name:"Play route",exact:true}).click();
+    await page.getByRole("button",{name:"Pause route",exact:true}).hover();
+    await expect.poll(async()=>(await read()).playback!.progressM,{timeout:15_000}).toBeGreaterThan(before+10);
+    await page.getByRole("button",{name:"Pause route",exact:true}).click();
+    await expect.poll(async()=>(await read()).playback!.playing).toBe(false);
+  } finally {
+    const final=await rendererEvidence(page).catch(()=>null);
+    writeFileSync(testInfo.outputPath("runner-continuity-evidence.json"),JSON.stringify({models,receipts,final},null,2));
+    await page.screenshot({path:testInfo.outputPath("runner-final.png")}).catch(()=>{});
+  }
+});

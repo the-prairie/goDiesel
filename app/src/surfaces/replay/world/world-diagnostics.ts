@@ -1,5 +1,6 @@
 import type { GoogleRouteNavigatorState } from "@/surfaces/replay/playback/route-navigator-controller";
 import type { WorldEnvironment, WorldLayers } from "./world-model";
+import type { WorldViewCoverage, WorldViewState } from "./world-view-health";
 import type { TerrainFocusSample } from "./world-terrain-diagnostics";
 import { WorldFrameHistory, WORLD_HISTORY_MS } from "./world-frame-history";
 export { WorldFrameHistory } from "./world-frame-history";
@@ -27,31 +28,34 @@ export interface WorldReportState {
   camera: {
     requestedMode: string | null; directedMode: string | null; owner: "following" | "free";
     requestedRangeM: number | null; actualRangeM: number | null; fovDeg: number;
-    nearM: number; farM: number; meshCorrectionM: number;
+    nearM: number; farM: number; meshCorrectionM: number; clearanceState?: "measured" | "unknown";
   };
   layers: WorldLayers;
   quality: {
     requested: WorldEnvironment["quality"]; effective: WorldEnvironment["quality"];
-    light: WorldEnvironment["light"]; clouds: number; labels: boolean; cloudsEnabled: boolean;
+    light: WorldEnvironment["light"]; clouds: number; labels: boolean; cloudsEnabled: boolean; cloudPassSubmissions?: number;
   };
   terrain: {
     renderedMeshes: number; visibleTiles: number; focusErrorM: number | null;
     progress: number; cachedBytes: number; errorTargetPx: number;
     focus: TerrainFocusSample & { ageMs: number | null; cameraChangedSinceSample: boolean };
     queues: { downloading: number; parsing: number; failed: number };
+    view?: { state: WorldViewState; coverage: WorldViewCoverage; buffering?: boolean };
+    streaming?: { pendingLimit: number; backpressured: boolean; discardedStaleParses: number; lookAhead: string; lookAheadProgressM: number | null };
   };
   visibleRoadLabels: number;
   contextLost: boolean;
 }
-export type WorldReportEvent = "mount" | "play" | "pause" | "seek" | "camera-mode" | "free-camera" | "recenter" | "zoom" | "speed" | "grounding" | "settings-open" | "settings-close" | "quality" | "environment" | "layers" | "hidden" | "visible" | "context-lost" | "failure";
+export type WorldReportEvent = "mount" | "play" | "pause" | "seek" | "camera-mode" | "free-camera" | "recenter" | "zoom" | "speed" | "grounding" | "settings-open" | "settings-close" | "quality" | "environment" | "layers" | "hidden" | "visible" | "context-lost" | "failure" | "buffer-start" | "buffer-end";
 
 /** All retained state is numeric/enumerated. No route geometry, resource names or payloads. */
 export class WorldFlightRecorder {
   private readonly history = new WorldFrameHistory();
-  private readonly events: { atMs: number; kind: WorldReportEvent; state?: WorldReportState }[] = [];
+  private readonly events: { atMs: number; kind: WorldReportEvent; state?: WorldReportState; scrub?: { fromM: number; toM: number; minM: number; maxM: number; updates: number; endMs: number } }[] = [];
   private readonly timeline: { atMs: number; state: WorldReportState }[] = [];
   private readonly eventCounts: Partial<Record<WorldReportEvent, number>> = {};
   private droppedEvents = 0;
+  private seekEvent: (typeof this.events)[number] | undefined;
   private lastTimeline = -Infinity;
   private visibilityAt = 0;
   private visibleMs = 0;
@@ -63,11 +67,11 @@ export class WorldFlightRecorder {
     this.mark("mount", startedAt);
   }
   time(now: number) { return Math.max(0, now - this.startedAt); }
-  frame(now: number, context: WorldPlaybackContext | null) {
+  frame(now: number, context: WorldPlaybackContext | null, buffering = false) {
     if (this.endedAt !== undefined) return;
     // A following camera continually eases during normal playback. Do not label
     // the entire ride a transition merely because that moving target has not settled.
-    const activity = !context ? "unknown" : context.playing ? "playing" : context.cameraSettling ? "transition" : "paused";
+    const activity = !context ? "unknown" : buffering ? "transition" : context.playing ? "playing" : context.cameraSettling ? "transition" : "paused";
     this.history.record(this.time(now), this.visible, activity);
   }
   submitted(now: number, terrainMeshes: number) {
@@ -77,9 +81,26 @@ export class WorldFlightRecorder {
   }
   mark(kind: WorldReportEvent, now: number, state?: WorldReportState) {
     if (this.endedAt !== undefined) return;
-    this.history.boundary();
     this.eventCounts[kind] = (this.eventCounts[kind] ?? 0) + 1;
-    this.events.push({ atMs: this.time(now), kind, ...(state ? { state: structuredClone(state) } : {}) });
+    const atMs = this.time(now), progress = state?.playback?.progressM;
+    if (kind === "seek" && progress !== undefined) {
+      const previous = this.seekEvent;
+      if (previous?.scrub && atMs - previous.scrub.endMs < 250) {
+        previous.scrub.toM = progress;
+        previous.scrub.minM = Math.min(previous.scrub.minM, progress);
+        previous.scrub.maxM = Math.max(previous.scrub.maxM, progress);
+        previous.scrub.updates++; previous.scrub.endMs = atMs;
+        previous.state = structuredClone(state);
+        return;
+      }
+    } else if (kind !== "layers" && kind !== "quality") this.seekEvent = undefined;
+    this.history.boundary();
+    const event: (typeof this.events)[number] = { atMs, kind, ...(state ? { state: structuredClone(state) } : {}) };
+    if (kind === "seek" && progress !== undefined) {
+      event.scrub = { fromM: progress, toM: progress, minM: progress, maxM: progress, updates: 1, endMs: atMs };
+      this.seekEvent = event;
+    }
+    this.events.push(event);
     if (this.events.length > 256) { this.events.shift(); this.droppedEvents++; }
   }
   sample(now: number, state: WorldReportState) {

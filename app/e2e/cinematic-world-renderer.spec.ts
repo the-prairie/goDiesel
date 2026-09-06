@@ -93,6 +93,12 @@ test(`real renderer draws ${refinement ? "refining compressed" : "single"} synth
     writeFileSync(testInfo.outputPath("synthetic-label-diagnostics.json"), JSON.stringify(diagnostics, null, 2));
     throw error;
   }
+  const report = () => page.evaluate(() => {
+    const detail = { report: null as null | { quality: { cloudPassSubmissions: number; cloudsEnabled: boolean } } };
+    document.querySelector("#real-renderer-fixture")!.dispatchEvent(new CustomEvent("godiesel:world-diagnostics", { detail }));
+    return detail.report!;
+  });
+  expect((await report()).quality.cloudPassSubmissions).toBe(0);
   // With normal motion the road name must fade in promptly below the terrain
   // baseline. The occupancy solver may validly anchor it left or center: inspect
   // the whole road band, not a hardcoded horizontal word position. The labels-off
@@ -129,6 +135,12 @@ test(`real renderer draws ${refinement ? "refining compressed" : "single"} synth
     if (golden.data[i] > 100 && golden.data[i] > golden.data[i + 1] * 1.3 && golden.data[i] > golden.data[i + 2] * 1.3) routePixels++;
   }
   expect(routePixels).toBeGreaterThan(3);
+  expect((await report()).quality.cloudPassSubmissions).toBeGreaterThan(0);
+  await setLabels(true); // Restore daylight with zero clouds.
+  const stopped = (await report()).quality.cloudPassSubmissions;
+  await page.waitForTimeout(500);
+  expect((await report()).quality.cloudPassSubmissions).toBe(stopped);
+  expect((await report()).quality.cloudsEnabled).toBe(false);
   expect(errors).toEqual([]);
   if (refinement) {
     expect(requestedTiles.some((name) => name.endsWith("detail.glb"))).toBe(true);

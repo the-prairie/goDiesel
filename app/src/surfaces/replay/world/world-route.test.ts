@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { PerspectiveCamera, Group, Vector3 } from "three";
 import type { QuestRoute } from "@/domain/route";
 import { WorldRoute } from "./world-route";
 import { WorldFrame } from "./world-frame";
@@ -39,5 +40,35 @@ describe("route grounding during continuous refinement", () => {
       trace.invalidate(); trace.settle(sample, 100);
       expect(sample).toHaveBeenCalledTimes(33);
     } finally { trace.dispose(); }
+  });
+});
+
+
+describe("foreground route treatment", () => {
+  it("samples the rider's bracketing points first without starving background work", () => {
+    vi.spyOn(performance, "now").mockReturnValue(0);
+    const { route, trace } = fixture(true);
+    trace.update(1950,179);
+    const sample = vi.fn((_lat: number, _lng: number, _seed: number) => 1100);
+    trace.settle(sample,0);
+    expect(sample.mock.calls.length).toBeLessThanOrEqual(8);
+    expect(sample.mock.calls[0]).toEqual([route.route[19].lat,route.route[19].lng,0]);
+    expect(sample.mock.calls[1]).toEqual([route.route[20].lat,route.route[20].lng,0]);
+    for (let i=1;i<6;i++) { trace.invalidate(); trace.settle(sample,i*16); }
+    expect(new Set(sample.mock.calls.map(call => call[1])).size).toBe(25);
+    trace.dispose();
+  });
+  it("keeps the rider at eighteen CSS pixels across camera distances", () => {
+    const { trace } = fixture();
+    trace.update(50,179);
+    const marker = trace.group.children.find(child => child instanceof Group)!;
+    const camera = new PerspectiveCamera(50,1,0.1,100000);
+    for (const distance of [179,1000,10000]) {
+      camera.position.copy(marker.position).add(new Vector3(0,0,distance));
+      camera.lookAt(marker.position); camera.updateMatrixWorld();
+      trace.projectMarker(camera,720);
+      expect(2*9*marker.scale.x / (2*distance*Math.tan(50*Math.PI/360)) * 720).toBeCloseTo(18);
+    }
+    trace.dispose();
   });
 });

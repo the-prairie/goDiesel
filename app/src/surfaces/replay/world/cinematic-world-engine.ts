@@ -1,3 +1,4 @@
+import { WorldContinuity } from "./world-continuity";
 import { TilesRenderer } from "3d-tiles-renderer/three";
 import { GoogleCloudAuthPlugin } from "3d-tiles-renderer/core/plugins";
 import { GLTFExtensionsPlugin, TilesFadePlugin } from "3d-tiles-renderer/three/plugins";
@@ -13,6 +14,10 @@ import { WorldFrame } from "./world-frame";
 import { bindWorldDiagnostics, WorldFlightRecorder, WORLD_BUILD, type WorldDiagnostics, type WorldPlaybackContext, type WorldReportState, type WorldReportEvent } from "./world-diagnostics";
 import { emptyTerrainFocus, sampleTerrainFocus } from "./world-terrain-diagnostics";
 import { configureWorldStreaming, canStartWorldAtmosphere, nextSlowFrameDebt, worldFarPlane } from "./world-streaming";
+import { WorldLookAhead } from "./world-look-ahead";
+import { WorldDownloadQueue, WORLD_PENDING_LIMIT } from "./world-download-budget";
+import { pruneWorldStaleWork } from "./world-stale-work";
+import { EMPTY_VIEW_COVERAGE, currentWorldView, sampleWorldView, type WorldViewCoverage, type WorldViewState } from "./world-view-health";
 import { WorldRoute } from "./world-route";
 import { WorldAtmosphere } from "./world-atmosphere";
 import { createWorldLabels } from "./world-labels";
@@ -62,6 +67,17 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
   private measuredTarget: number | null = null;
   private lastTargetSample = -Infinity;
   private lastCameraCorrection = 0;
+  private clearanceState: "measured" | "unknown" = "unknown";
+  private downloadBudget?: WorldDownloadQueue;
+  private lookAhead?: WorldLookAhead;
+  private discardedStaleParses = 0;
+  private coverage: WorldViewCoverage = { ...EMPTY_VIEW_COVERAGE };
+  private viewState: WorldViewState = "entering";
+  private lastCoverageSample = -Infinity;
+  private latestSeek = -Infinity;
+  private lastTraversal = -Infinity;
+  private readonly continuity = new WorldContinuity();
+  private measuredProgressM = -Infinity;
   private readonly recorder = new WorldFlightRecorder(performance.now(), !document.hidden);
   private playback: WorldPlaybackContext | null = null;
   private focusProbe = emptyTerrainFocus();
@@ -101,7 +117,8 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
       this.layers.route = this.trace.grounded ? "ready" : "loading";
       const tiles = new TilesRenderer("https://tile.googleapis.com/v1/3dtiles/root.json");
       this.tiles = tiles;
-      configureWorldStreaming(tiles);
+      this.downloadBudget = configureWorldStreaming(tiles);
+      this.lookAhead = new WorldLookAhead(tiles, route, frame);
       tiles.fetchOptions = { signal: this.abort.signal };
       tiles.registerPlugin(new GoogleCloudAuthPlugin({ apiToken: key }));
       const draco = new DRACOLoader().setWorkerLimit(2).setDecoderPath(`${import.meta.env.BASE_URL}world-assets/draco/`);
@@ -190,12 +207,20 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
         const elapsed = now - previous;
         previous = now;
         if (document.hidden) { this.slowFrames = 0; return; }
-        this.recorder.frame(now, this.playback);
+        this.recorder.frame(now, this.playback, this.isPlaybackBuffering());
         let phase = "tiles";
         try {
           this.camera.updateMatrixWorld();
           this.scene.updateMatrixWorld(true);
-          tiles.update();
+          const pending = (tiles as unknown as { stats: { downloading: number; parsing: number } }).stats;
+          this.lookAhead?.update(now, this.playback, this.pose?.rangeM ?? 1000, this.camera.fov,
+            renderer.getSize(new Vector2()).y, pending.downloading + pending.parsing);
+          // Keep input/camera rendering immediate, but do not repeatedly cancel and
+          // requeue entire tile trees at 120 Hz during a continuous scrub.
+          if (now - this.latestSeek > 90 || now - this.lastTraversal >= 90) {
+            tiles.update(); this.lastTraversal = now;
+            this.discardedStaleParses += pruneWorldStaleWork(tiles);
+          }
           this.scene.updateMatrixWorld(true);
           phase = "route-grounding";
           this.trace?.settle(this.sampleHeight, now);
@@ -204,8 +229,10 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
           if (this.pose && this.following && now - this.lastTargetSample > 500) {
             this.lastTargetSample = now;
             this.measuredTarget = this.sampleHeight(this.pose.center.lat, this.pose.center.lng, this.pose.center.altitude ?? 0, true);
+            this.measuredProgressM = this.pose.progressM;
             this.setCamera(this.pose);
           }
+          this.trace?.projectMarker(this.camera, renderer.getSize(new Vector2()).y);
           this.renderedTiles = 0;
           // Draw terrain first. Expensive optional cloud shaders must not delay the first landscape.
           if (!this.atmosphereStarted && this.layers.terrain === "ready" &&
@@ -224,6 +251,20 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
           this.terrainReadiness = advanceTerrainReadiness(this.terrainReadiness, this.renderedTiles, tiles.loadProgress);
           if (this.terrainReadiness.ready) { this.layers.terrain = "ready"; window.clearTimeout(this.readyTimer); }
           container.dataset.terrainRefining = String(this.terrainReadiness.refining);
+          if (now - this.lastCoverageSample >= 250) {
+            this.lastCoverageSample = now;
+            this.coverage = sampleWorldView(tiles, this.camera, now);
+          }
+          this.viewState = currentWorldView(this.terrainReadiness.ready, this.renderedTiles, this.coverage, now, this.terrainReadiness.refining);
+          const wasHolding = this.continuity.holding;
+          this.continuity.update(now, Boolean(this.playback?.playing && this.following),
+            this.renderedTiles > 0 && this.coverage.centerHit && this.coverage.sampledAtMs !== null && now - this.coverage.sampledAtMs < 800);
+          if (wasHolding !== this.continuity.holding) {
+            if (this.continuity.holding) this.lookAhead?.seek(now);
+            this.markReport(this.continuity.holding ? "buffer-start" : "buffer-end");
+          }
+          container.dataset.worldView = this.viewState;
+          container.dataset.worldBuffering = String(this.isPlaybackBuffering());
           if (this.layers.terrain === "ready" && this.environment.quality === "balanced") {
             this.slowFrames = nextSlowFrameDebt(this.slowFrames, elapsed, true);
             if (this.slowFrames >= 4000 && this.effectiveQuality !== "light") { this.effectiveQuality = "light"; this.applyEnvironment(); }
@@ -277,13 +318,14 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
         owner: this.following ? "following" : "free",
         requestedRangeM: this.pose?.rangeM ?? null,
         actualRangeM: this.controls ? this.camera.position.distanceTo(this.controls.target) : null,
-        fovDeg: this.camera.fov, nearM: this.camera.near, farM: this.camera.far, meshCorrectionM: this.lastCameraCorrection,
+        fovDeg: this.camera.fov, nearM: this.camera.near, farM: this.camera.far, meshCorrectionM: this.lastCameraCorrection, clearanceState: this.clearanceState,
       },
       layers: { ...this.layers },
       quality: {
         requested: this.environment.quality, effective: this.effectiveQuality,
         light: this.environment.light, clouds: this.environment.clouds, labels: this.environment.labels,
-        cloudsEnabled: this.layers.atmosphere === "ready" && this.atmosphereStarted && this.atmosphereReady && WORLD_QUALITY[this.effectiveQuality].clouds && this.environment.clouds > 0,
+        cloudPassSubmissions: this.atmosphere?.cloudFrames ?? 0,
+        cloudsEnabled: this.atmosphere?.cloudWorkEnabled === true && this.layers.atmosphere === "ready" && this.atmosphereStarted && this.atmosphereReady && WORLD_QUALITY[this.effectiveQuality].clouds && this.environment.clouds > 0,
       },
       terrain: {
         renderedMeshes: this.renderedTiles, visibleTiles: this.tiles?.visibleTiles.size ?? 0,
@@ -296,6 +338,8 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
           cameraChangedSinceSample: !this.probeView.equals(this.camera.matrixWorld) || !this.probeProjection.equals(this.camera.projectionMatrix),
         },
         queues: { downloading: stats?.downloading ?? 0, parsing: stats?.parsing ?? 0, failed: stats?.failed ?? 0 },
+        view: { state: this.viewState, buffering: this.isPlaybackBuffering(), coverage: { ...this.coverage, sampledAtMs: this.coverage.sampledAtMs === null ? null : this.recorder.time(this.coverage.sampledAtMs) } },
+        streaming: { pendingLimit: WORLD_PENDING_LIMIT, backpressured: this.downloadBudget?.blocked ?? false, discardedStaleParses: this.discardedStaleParses, lookAhead: this.lookAhead?.mode ?? "off", lookAheadProgressM: this.lookAhead?.progressM ?? null },
       },
       visibleRoadLabels: this.labels?.visibleLabelCount ?? 0,
       contextLost: this.renderer?.getContext().isContextLost() ?? false,
@@ -320,7 +364,14 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
       if (previous.groundingMode !== context.groundingMode) this.markReport("grounding");
       if (previous.settingsOpen !== context.settingsOpen) this.markReport(context.settingsOpen ? "settings-open" : "settings-close");
     }
-    if (intent === "seek") this.markReport("seek");
+    if (intent === "seek") {
+      this.latestSeek = performance.now();
+      this.lookAhead?.seek(this.latestSeek);
+      this.measuredTarget = null; this.measuredProgressM = -Infinity;
+      this.lastTargetSample = -Infinity;
+      this.coverage = { ...EMPTY_VIEW_COVERAGE };
+      this.markReport("seek");
+    }
   }
   private diagnostics(): WorldDiagnostics {
     const now = performance.now();
@@ -364,7 +415,8 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
     return hit ? this.frame.height(hit.point) : null;
   };
   setCamera(pose: GoogleRouteCameraPose) {
-    if (this.pose && Math.abs(this.pose.progressM - pose.progressM) > 500) this.measuredTarget = null;
+    // An old surface height cannot follow the camera kilometres through a scrub.
+    if (Math.abs(this.measuredProgressM - pose.progressM) > 80) this.measuredTarget = null;
     this.pose = pose;
     if (!this.frame || !this.following || !this.options) return;
     const recorded = this.options.route.elevationStatus !== "unavailable";
@@ -377,6 +429,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
     const up = this.frame.normal(pose.center.lat, pose.center.lng);
     this.raycaster.set(position.clone().addScaledVector(up, 1500), up.clone().negate());
     const hit = this.tiles?.visibleTiles.size ? this.raycaster.intersectObject(this.tiles.group, true)[0] : undefined;
+    this.clearanceState = hit ? "measured" : "unknown";
     const clearance = hit ? position.sub(hit.point).dot(up) : Infinity;
     this.lastCameraCorrection = Math.max(0, 18 - clearance);
     if (Number.isFinite(this.lastCameraCorrection) && this.lastCameraCorrection > 0) {
@@ -384,6 +437,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
       this.camera.lookAt(target); this.camera.updateMatrixWorld();
     }
   }
+  isPlaybackBuffering() { return Boolean(this.playback?.playing && this.following && this.continuity.holding); }
   setFollowing(following: boolean) { this.following = following; }
   setGrounding(mode: GoogleRouteGroundingMode) { this.trace?.grounding(mode === "mesh"); }
   setCinematicRoute(treatment: CinematicRouteTreatment) {
@@ -400,7 +454,9 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
   private applyEnvironment() {
     const settings = { ...this.environment, quality: this.effectiveQuality };
     const quality = WORLD_QUALITY[this.effectiveQuality];
-    this.renderer?.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality.pixelRatio));
+    const ratio = Math.min(window.devicePixelRatio || 1, quality.pixelRatio);
+    const resized = this.renderer?.getPixelRatio() !== ratio;
+    if (resized) this.renderer?.setPixelRatio(ratio);
     if (this.tiles) this.tiles.errorTarget = quality.errorTarget;
     this.atmosphere?.update(settings); this.labels?.update(settings);
     this.layers.labels = this.environment.labels ? this.labelState : "off";
@@ -408,7 +464,8 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
       if (this.options.container.dataset.effectiveQuality !== this.effectiveQuality) this.markReport("quality");
       this.options.container.dataset.effectiveQuality = this.effectiveQuality;
     }
-    this.resize();
+    // Reallocating all render targets on every light/label click was unnecessary.
+    if (resized) this.resize();
   }
   private startLabels() {
     if (this.labelsStarted || !this.tiles || !this.environment.labels || this.abort.signal.aborted) return;
@@ -443,13 +500,15 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
   private publish() {
     if (!this.options || this.abort.signal.aborted) return;
     let state = worldStatus(this.layers);
-    if (state === "ready" && (this.terrainGaps || this.terrainReadiness.refining || this.effectiveQuality !== this.environment.quality)) state = "partial";
+    if (state === "ready" && (this.viewState !== "ready" || this.terrainGaps || this.terrainReadiness.refining || this.effectiveQuality !== this.environment.quality)) state = "partial";
     const missing = Object.entries(this.layers).filter(([, value]) => value === "unavailable").map(([key]) => key);
     const message = state === "loading" ? "Entering real photorealistic terrain." : [
       "Cinematic world", missing.length ? `${missing.join(" and ")} unavailable` : "",
       Object.values(this.layers).includes("loading") ? "Additional layers are still loading" : "",
       this.terrainGaps ? "Some terrain tiles are unavailable" : "",
-      this.terrainReadiness.refining ? "Terrain detail is still loading" : "",
+      this.isPlaybackBuffering() ? "Preparing terrain · Holding this moment" : this.viewState === "missing" ? "Preparing terrain for this view" :
+        this.viewState === "recovering" ? "Bringing this view into focus" :
+          this.terrainReadiness.refining ? "Sharpening the landscape" : "",
       this.effectiveQuality !== this.environment.quality ? "Light quality selected to keep the flight responsive" : "",
     ].filter(Boolean).join(" · ");
     const signature = JSON.stringify([state, message, this.layers]);
@@ -472,7 +531,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
     document.removeEventListener("visibilitychange", this.onVisibility);
     this.abort.abort(); cancelAnimationFrame(this.animation); window.clearTimeout(this.readyTimer);
     this.resizeObserver?.disconnect(); this.controls?.stopListenToKeyEvents(); this.controls?.dispose();
-    this.labels?.dispose(); this.atmosphere?.dispose(); this.tiles?.dispose(); this.draco?.dispose(); this.trace?.dispose();
+    this.lookAhead?.dispose(); this.labels?.dispose(); this.atmosphere?.dispose(); this.tiles?.dispose(); this.draco?.dispose(); this.trace?.dispose();
     this.renderer?.domElement.removeEventListener("webglcontextlost", this.onContextLost);
     this.renderer?.domElement.removeEventListener("keydown", this.onKey);
     this.renderer?.dispose(); this.renderer?.forceContextLoss(); this.renderer?.domElement.remove();
