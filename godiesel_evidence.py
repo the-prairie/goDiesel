@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 import subprocess
 import uuid
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 
 SCHEMA_VERSION = 1
@@ -35,6 +36,328 @@ def _file_digest(path: Path) -> str:
     return digest.hexdigest()
 
 
+def ensure_local_directory(root: Path | str, relative: Path | str) -> Path:
+    """Create a repository-owned directory without traversing symbolic links."""
+
+    root = Path(root).resolve()
+    relative = Path(relative)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise OSError("local artifact directory must stay inside the repository")
+    current = root
+    for part in relative.parts:
+        current = current / part
+        try:
+            mode = current.lstat().st_mode
+        except FileNotFoundError:
+            current.mkdir()
+            mode = current.lstat().st_mode
+        if stat.S_ISLNK(mode) or not stat.S_ISDIR(mode):
+            raise OSError("local artifact directory is not a real directory")
+    if not current.resolve().is_relative_to(root):
+        raise OSError("local artifact directory escapes the repository")
+    return current
+
+
+def existing_local_directory(root: Path | str, relative: Path | str) -> Path | None:
+    """Resolve an existing repository-owned directory without following symlinks."""
+
+    try:
+        root = Path(root).resolve()
+        relative = Path(relative)
+        if relative.is_absolute() or ".." in relative.parts:
+            return None
+        current = root
+        for part in relative.parts:
+            current = current / part
+            mode = current.lstat().st_mode
+            if stat.S_ISLNK(mode) or not stat.S_ISDIR(mode):
+                return None
+        return current if current.resolve().is_relative_to(root) else None
+    except OSError:
+        return None
+
+
+def _write_local_chunks_atomic(
+    root: Path | str,
+    relative_directory: Path | str,
+    filename: str,
+    chunks: Callable[[], Iterable[bytes]],
+    *,
+    expected_sha256: str | None = None,
+) -> Path:
+    """Atomically stream bytes inside a descriptor-pinned repository directory."""
+
+    if not filename or Path(filename).name != filename:
+        raise OSError("local artifact filename must be one path component")
+    root = Path(root).resolve()
+    relative_directory = Path(relative_directory)
+    if relative_directory.is_absolute() or ".." in relative_directory.parts:
+        raise OSError("local artifact directory must stay inside the repository")
+    directory = root / relative_directory
+    directory_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for part in relative_directory.parts:
+            try:
+                next_fd = os.open(
+                    part,
+                    os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                    dir_fd=directory_fd,
+                )
+            except FileNotFoundError:
+                os.mkdir(part, 0o700, dir_fd=directory_fd)
+                next_fd = os.open(
+                    part,
+                    os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                    dir_fd=directory_fd,
+                )
+            os.close(directory_fd)
+            directory_fd = next_fd
+    except Exception:
+        os.close(directory_fd)
+        raise
+    temporary = f".{filename}.{uuid.uuid4().hex}.tmp"
+    try:
+        opened = os.fstat(directory_fd)
+
+        def directory_is_still_pinned() -> bool:
+            try:
+                reopened = os.open(
+                    root,
+                    os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                )
+                for part in relative_directory.parts:
+                    next_fd = os.open(
+                        part,
+                        os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                        dir_fd=reopened,
+                    )
+                    os.close(reopened)
+                    reopened = next_fd
+                current = os.fstat(reopened)
+                os.close(reopened)
+            except OSError:
+                return False
+            return (
+                stat.S_ISDIR(current.st_mode)
+                and current.st_dev == opened.st_dev
+                and current.st_ino == opened.st_ino
+            )
+
+        file_fd = os.open(
+            temporary,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+            0o600,
+            dir_fd=directory_fd,
+        )
+        digest = sha256()
+        try:
+            for chunk in chunks():
+                digest.update(chunk)
+                remaining = memoryview(chunk)
+                while remaining:
+                    written = os.write(file_fd, remaining)
+                    if written <= 0:
+                        raise OSError("local artifact write made no progress")
+                    remaining = remaining[written:]
+            os.fsync(file_fd)
+        finally:
+            os.close(file_fd)
+        if expected_sha256 is not None and digest.hexdigest() != expected_sha256:
+            raise OSError("local artifact content digest changed during write")
+        if not directory_is_still_pinned():
+            raise OSError("local artifact directory changed during write")
+        os.replace(
+            temporary,
+            filename,
+            src_dir_fd=directory_fd,
+            dst_dir_fd=directory_fd,
+        )
+        os.fsync(directory_fd)
+        if not directory_is_still_pinned():
+            raise OSError("local artifact directory changed during commit")
+    finally:
+        try:
+            os.unlink(temporary, dir_fd=directory_fd)
+        except FileNotFoundError:
+            pass
+        os.close(directory_fd)
+    return directory / filename
+
+
+def write_local_text_atomic(
+    root: Path | str,
+    relative_directory: Path | str,
+    filename: str,
+    content: str,
+) -> Path:
+    """Atomically write UTF-8 text inside a pinned repository directory."""
+
+    payload = content.encode("utf-8")
+    return _write_local_chunks_atomic(
+        root,
+        relative_directory,
+        filename,
+        lambda: (payload,),
+    )
+
+
+def write_local_bytes_atomic(
+    root: Path | str,
+    relative_directory: Path | str,
+    filename: str,
+    content: bytes,
+) -> Path:
+    """Atomically write bytes inside a pinned repository directory."""
+
+    return _write_local_chunks_atomic(
+        root,
+        relative_directory,
+        filename,
+        lambda: (content,),
+    )
+
+
+def copy_local_file_atomic(
+    root: Path | str,
+    relative_directory: Path | str,
+    filename: str,
+    source: Path | str,
+    *,
+    expected_sha256: str,
+) -> Path:
+    """Atomically stream one checksummed source into a pinned local directory."""
+
+    source = Path(source)
+
+    def source_chunks() -> Iterable[bytes]:
+        with source.open("rb") as input_file:
+            while chunk := input_file.read(1024 * 1024):
+                yield chunk
+
+    return _write_local_chunks_atomic(
+        root,
+        relative_directory,
+        filename,
+        source_chunks,
+        expected_sha256=expected_sha256,
+    )
+
+
+def replace_local_file(
+    root: Path | str,
+    relative_directory: Path | str,
+    source_filename: str,
+    destination_filename: str,
+) -> None:
+    """Replace one local file with another through one pinned directory."""
+
+    if any(
+        not filename or Path(filename).name != filename
+        for filename in (source_filename, destination_filename)
+    ):
+        raise OSError("local artifact filenames must be one path component")
+    root = Path(root).resolve()
+    relative_directory = Path(relative_directory)
+    if relative_directory.is_absolute() or ".." in relative_directory.parts:
+        raise OSError("local artifact directory must stay inside the repository")
+    directory_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for part in relative_directory.parts:
+            next_fd = os.open(
+                part,
+                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                dir_fd=directory_fd,
+            )
+            os.close(directory_fd)
+            directory_fd = next_fd
+        os.replace(
+            source_filename,
+            destination_filename,
+            src_dir_fd=directory_fd,
+            dst_dir_fd=directory_fd,
+        )
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+
+
+def read_local_bytes(
+    root: Path | str,
+    relative_directory: Path | str,
+    filename: str,
+) -> bytes:
+    """Read one regular file through a no-follow repository directory chain."""
+
+    if not filename or Path(filename).name != filename:
+        raise OSError("local artifact filename must be one path component")
+    root = Path(root).resolve()
+    relative_directory = Path(relative_directory)
+    if relative_directory.is_absolute() or ".." in relative_directory.parts:
+        raise OSError("local artifact directory must stay inside the repository")
+    directory_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for part in relative_directory.parts:
+            next_fd = os.open(
+                part,
+                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                dir_fd=directory_fd,
+            )
+            os.close(directory_fd)
+            directory_fd = next_fd
+        file_fd = os.open(filename, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory_fd)
+        try:
+            if not stat.S_ISREG(os.fstat(file_fd).st_mode):
+                raise OSError("local artifact is not a regular file")
+            chunks: list[bytes] = []
+            while chunk := os.read(file_fd, 1024 * 1024):
+                chunks.append(chunk)
+            return b"".join(chunks)
+        finally:
+            os.close(file_fd)
+    finally:
+        os.close(directory_fd)
+
+
+def unlink_local_file(
+    root: Path | str,
+    relative_directory: Path | str,
+    filename: str,
+    *,
+    missing_ok: bool = False,
+) -> None:
+    """Unlink one file without following a redirected repository directory."""
+
+    if not filename or Path(filename).name != filename:
+        raise OSError("local artifact filename must be one path component")
+    root = Path(root).resolve()
+    relative_directory = Path(relative_directory)
+    if relative_directory.is_absolute() or ".." in relative_directory.parts:
+        raise OSError("local artifact directory must stay inside the repository")
+    directory_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for part in relative_directory.parts:
+            try:
+                next_fd = os.open(
+                    part,
+                    os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                    dir_fd=directory_fd,
+                )
+            except FileNotFoundError:
+                if missing_ok:
+                    return
+                raise
+            os.close(directory_fd)
+            directory_fd = next_fd
+        try:
+            os.unlink(filename, dir_fd=directory_fd)
+        except FileNotFoundError:
+            if not missing_ok:
+                raise
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+
+
 def _git(root: Path, *args: str, text: bool = True) -> subprocess.CompletedProcess[Any]:
     return subprocess.run(
         ["git", *args],
@@ -46,7 +369,10 @@ def _git(root: Path, *args: str, text: bool = True) -> subprocess.CompletedProce
     )
 
 
-def _repository_snapshot(root: Path) -> dict[str, Any]:
+def repository_snapshot(root: Path | str) -> dict[str, Any]:
+    """Return a privacy-safe identity for the exact checkout and repository state."""
+
+    root = Path(root).resolve()
     try:
         commit = _git(root, "rev-parse", "HEAD")
         branch = _git(root, "branch", "--show-current")
@@ -66,6 +392,7 @@ def _repository_snapshot(root: Path) -> dict[str, Any]:
     return {
         "commit": commit.stdout.strip() if commit.returncode == 0 else None,
         "branch": branch.stdout.strip() or None if branch.returncode == 0 else None,
+        "worktree_sha256": canonical_digest(root.as_posix()),
         "dirty_state": {
             "clean": status.returncode == 0 and not status_bytes,
             "sha256": sha256(status_bytes or b"clean").hexdigest(),
@@ -112,7 +439,7 @@ def write_evidence_receipt(
         "started_at": started_at,
         "finished_at": finished_at,
         "status": status,
-        "repository": _repository_snapshot(root),
+        "repository": repository_snapshot(root),
         "inputs": [dict(item) for item in inputs],
         "covered_inputs": [dict(item) for item in covered_inputs],
         "proof_fingerprint": proof_fingerprint,
@@ -127,16 +454,223 @@ def write_evidence_receipt(
         "artifacts": [dict(item) for item in artifacts],
     }
     relative_path = EVIDENCE_ROOT / f"{receipt_id}.json"
-    destination = root / relative_path
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_suffix(f".tmp-{os.getpid()}")
-    temporary.write_text(
-        json.dumps(receipt, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    temporary.replace(destination)
+    try:
+        destination = write_local_text_atomic(
+            root,
+            EVIDENCE_ROOT,
+            f"{receipt_id}.json",
+            json.dumps(receipt, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+        )
+    except OSError:
+        return None
     return {
         "id": receipt_id,
         "path": relative_path.as_posix(),
         "sha256": _file_digest(destination),
     }
+
+
+def update_evidence_receipt(
+    root: Path | str,
+    summary: Mapping[str, str],
+    *,
+    status: str,
+    artifacts: Sequence[Mapping[str, str]] | None = None,
+) -> dict[str, str] | None:
+    """Atomically promote a non-reusable evidence draft after final stability."""
+
+    root = Path(root).resolve()
+    relative = Path(str(summary.get("path", "")))
+    if relative.parent != EVIDENCE_ROOT or not relative.name:
+        return None
+    directory = existing_local_directory(root, EVIDENCE_ROOT)
+    if directory is None:
+        return None
+    try:
+        raw = read_local_bytes(root, EVIDENCE_ROOT, relative.name)
+        receipt = json.loads(raw.decode("utf-8"))
+        if (
+            status != "passed"
+            or sha256(raw).hexdigest() != summary.get("sha256")
+            or not isinstance(receipt, dict)
+            or receipt.get("status") != "blocked"
+            or receipt.get("receipt_id") != summary.get("id")
+        ):
+            return None
+        receipt["status"] = status
+        if artifacts is not None:
+            receipt["artifacts"] = [dict(item) for item in artifacts]
+        destination = write_local_text_atomic(
+            root,
+            EVIDENCE_ROOT,
+            relative.name,
+            json.dumps(receipt, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None
+    return {
+        "id": str(summary.get("id", receipt.get("receipt_id", ""))),
+        "path": relative.as_posix(),
+        "sha256": _file_digest(destination),
+    }
+
+
+def invalidate_evidence_receipt(
+    root: Path | str,
+    summary: Mapping[str, str],
+    *,
+    issues: Sequence[Mapping[str, str]] = (),
+) -> dict[str, str] | None:
+    """Atomically demote the exact passed evidence receipt after a late change."""
+
+    root = Path(root).resolve()
+    relative = Path(str(summary.get("path", "")))
+    if relative.parent != EVIDENCE_ROOT or not relative.name:
+        return None
+    if existing_local_directory(root, EVIDENCE_ROOT) is None:
+        return None
+    try:
+        raw = read_local_bytes(root, EVIDENCE_ROOT, relative.name)
+        receipt = json.loads(raw.decode("utf-8"))
+        if (
+            sha256(raw).hexdigest() != summary.get("sha256")
+            or not isinstance(receipt, dict)
+            or receipt.get("status") != "passed"
+            or receipt.get("receipt_id") != summary.get("id")
+        ):
+            return None
+        receipt["status"] = "blocked"
+        _record_evidence_issues(receipt, issues)
+        destination = write_local_text_atomic(
+            root,
+            EVIDENCE_ROOT,
+            relative.name,
+            json.dumps(receipt, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None
+    return {
+        "id": str(summary.get("id", receipt.get("receipt_id", ""))),
+        "path": relative.as_posix(),
+        "sha256": _file_digest(destination),
+    }
+
+
+def withdraw_evidence_receipt(
+    root: Path | str,
+    summary: Mapping[str, str],
+    *,
+    issues: Sequence[Mapping[str, str]] = (),
+) -> dict[str, str] | None:
+    """Ensure an exact evidence receipt cannot remain reusable after failure."""
+
+    invalidated = invalidate_evidence_receipt(root, summary, issues=issues)
+    if invalidated is not None:
+        return invalidated
+    root = Path(root).resolve()
+    relative = Path(str(summary.get("path", "")))
+    receipt_id = str(summary.get("id", ""))
+    if relative.parent != EVIDENCE_ROOT or relative.name != f"{receipt_id}.json":
+        return None
+    try:
+        raw = read_local_bytes(root, EVIDENCE_ROOT, relative.name)
+        receipt = json.loads(raw.decode("utf-8"))
+        if not isinstance(receipt, dict) or receipt.get("receipt_id") != receipt_id:
+            raise ValueError("evidence receipt identity changed")
+        receipt["status"] = "blocked"
+        _record_evidence_issues(receipt, issues)
+        destination = write_local_text_atomic(
+            root,
+            EVIDENCE_ROOT,
+            relative.name,
+            json.dumps(receipt, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+        )
+        return {
+            "id": receipt_id,
+            "path": relative.as_posix(),
+            "sha256": _file_digest(destination),
+        }
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
+        quarantine_name = f"{relative.name}.{uuid.uuid4().hex}.invalid"
+        try:
+            replace_local_file(root, EVIDENCE_ROOT, relative.name, quarantine_name)
+        except OSError:
+            try:
+                unlink_local_file(root, EVIDENCE_ROOT, relative.name)
+            except OSError:
+                return None
+            return {"id": receipt_id, "path": "", "sha256": ""}
+        quarantine_path = root / EVIDENCE_ROOT / quarantine_name
+        return {
+            "id": receipt_id,
+            "path": (EVIDENCE_ROOT / quarantine_name).as_posix(),
+            "sha256": _file_digest(quarantine_path),
+        }
+
+
+def _record_evidence_issues(
+    receipt: dict[str, Any],
+    issues: Sequence[Mapping[str, str]],
+) -> None:
+    warnings = receipt.get("warnings")
+    if not isinstance(warnings, list):
+        warnings = []
+        receipt["warnings"] = warnings
+    safe_next_actions = receipt.get("safe_next_actions")
+    if not isinstance(safe_next_actions, list):
+        safe_next_actions = []
+        receipt["safe_next_actions"] = safe_next_actions
+    for issue in issues:
+        warning = {
+            "code": str(issue["code"]),
+            "message": str(issue["message"]),
+            "remediation": str(issue["remediation"]),
+        }
+        if warning not in warnings:
+            warnings.append(warning)
+        if warning["remediation"] not in safe_next_actions:
+            safe_next_actions.append(warning["remediation"])
+
+
+def ensure_evidence_receipt_not_reusable(
+    root: Path | str,
+    summary: Mapping[str, str],
+) -> bool:
+    """Fail closed when a withdrawal helper did not make its receipt non-reusable."""
+
+    root = Path(root).resolve()
+    relative = Path(str(summary.get("path", "")))
+    receipt_id = str(summary.get("id", ""))
+    if relative.parent != EVIDENCE_ROOT or relative.name != f"{receipt_id}.json":
+        return False
+    try:
+        raw = read_local_bytes(root, EVIDENCE_ROOT, relative.name)
+        receipt = json.loads(raw.decode("utf-8"))
+        if (
+            isinstance(receipt, dict)
+            and receipt.get("receipt_id") == receipt_id
+            and receipt.get("status") != "passed"
+        ):
+            return True
+    except FileNotFoundError:
+        return True
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        pass
+
+    quarantine_name = f"{relative.name}.{uuid.uuid4().hex}.invalid"
+    try:
+        replace_local_file(root, EVIDENCE_ROOT, relative.name, quarantine_name)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        try:
+            unlink_local_file(root, EVIDENCE_ROOT, relative.name, missing_ok=True)
+        except OSError:
+            return False
+    try:
+        read_local_bytes(root, EVIDENCE_ROOT, relative.name)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    return False

@@ -15,7 +15,7 @@ The existing `scripts/route.sh` interface remains available as a compatibility a
 | Plan | `./scripts/godiesel plan route-share --request <file> --json` | Ephemeral local | Fingerprinted proposal in a result envelope and ignored proposal file |
 | Apply | `./scripts/godiesel apply route-share --proposal <file> --authorize canonical-local --json` | Canonical local | Creation report in a result envelope |
 | Verify | `./scripts/godiesel verify route-share <slug> --json` or `--preview` | Ephemeral local | Focused proof from normal verification, or loopback runtime review from preview |
-| Release | `./scripts/godiesel release route-share <slug> <name> --authorize external-durable --authorize-target <name> --json` | External durable | Deployment, stable URLs, public smoke result, and receipt |
+| Release | `./scripts/godiesel release route-share <slug> <share-name> --authorize external-durable --authorize-target <share-name> --authorize-replacement <share-name> --json` | External durable | Deployment, stable URLs, public smoke result, and receipt |
 
 Standard output is a `system/result.schema.json` result envelope.
 The unchanged domain result is under `result`.
@@ -25,6 +25,10 @@ These Phase 2 receipts prove route workflow lineage only.
 Normal, non-preview route verification additionally writes a general proof receipt under `.godiesel/evidence/` with repository state, gate attribution, digested inputs and outputs, and redacted configuration presence.
 Preview writes only its route-transition receipt because it starts a loopback runtime instead of executing the manifest-declared focused proof gate.
 Impact-directed gate selection and guarded proof reuse are implemented for route verification.
+Proof reuse is mutually exclusive with `--preview` and `--detach` because preview is an executable runtime check, not a reusable proof lookup.
+Apply, verify, proof reuse, and release share one catalogue mutation lease.
+They block on any unresolved canonical, generated-metadata, route-detail, generation backup, or generation staging artifact.
+Verify and release monitor that recovery inventory across their complete decision window and withdraw proof if it changes while evidence is finalized.
 
 ## State Machine
 
@@ -131,12 +135,14 @@ After explicit approval to create, run:
 ./scripts/godiesel apply route-share --proposal .route-share/proposals/<proposal-id>.json --authorize canonical-local --json
 ./scripts/godiesel verify route-share <slug> --json
 ./scripts/godiesel verify route-share <slug> --preview --json
+./scripts/godiesel verify route-share <slug> --preview --detach --json
 ./scripts/godiesel verify route-share <slug> --reuse --json
 ```
 
 `create` registers durable sources, atomically updates `quests.json`, rebuilds generated data, validates source health and the microsite source record, and emits a JSON creation report.
 The same approved proposal may be applied again and returns `already_applied`.
 If post-write validation fails, report the recoverable state under `.route-share/recovery/` and do not publish.
+Recovery inventory includes canonical `.quests.json.*.tmp` and rollback files, generated metadata temporary, recovery, and rollback files, route-detail rollback files, the atomic-publication backup, and route staging directories.
 
 `preview` runs the existing route-only dry-run before it starts a loopback-only server on an available port.
 That bundle contains only the shared route's generated record and public media referenced by that record.
@@ -146,6 +152,7 @@ Report the exact validation outcome, local guide URL, and local Replay URL.
 Use `--reuse` only after the normal, non-preview verification has passed and written general evidence.
 It re-hashes every manifest-covered implementation, contract, fixture, configuration, data, and provider input for the focused route-share gate.
 It does not execute the gate and blocks when any covered input or selected command changed.
+Every artifact referenced by the source evidence receipt must still exist as a repository-owned regular file with its recorded digest.
 Documentation-only edits remain outside the runtime proof fingerprint.
 
 ## Evidence artifacts
@@ -173,17 +180,19 @@ Stop after local preview until the owner explicitly authorizes publication and c
 Then run:
 
 ```sh
-./scripts/godiesel release route-share <slug> <share-name> --authorize external-durable --authorize-target <share-name> --json
+./scripts/godiesel release route-share <slug> <share-name> --authorize external-durable --authorize-target <share-name> --authorize-replacement <share-name> --json
 ```
 
 The command reuses the existing route-only build, Playwright journey, Cloudflare Pages deployment, and public smoke test.
 It refuses an existing `share-<name>` branch.
 Use `--replace-existing` only when the owner explicitly approves replacement of that durable URL.
-The release authority class and `--authorize-target` value must both be present.
-The target value must exactly match the requested stable share name and does not imply replacement authority.
-An approved replacement also requires `--authorize-replacement <share-name>` for that exact alias.
+The release authority class, `--authorize-target`, and `--authorize-replacement` values must all be present and exactly match the requested stable share name.
+Replacement-risk authority is required even when the alias was just observed as absent because the provider does not offer atomic create-if-absent publication.
+`--replace-existing` remains a separate statement of intent and is required when the preflight observation already finds the alias.
 The unified release path also requires passed, digest-matched plan, apply, and verify receipts for the same route.
 It requires the latest general verification proof to remain reusable before any Cloudflare command runs.
+This is the focused route artifact proof required by the runtime transition.
+Code-change merge and production cutover still follow the impact-selected ticket, release, and live gates in `docs/agents/testing.md`.
 Before publication, it validates those receipts, confines every linked path to the ignored evidence directories, and re-hashes the proposal and result artifacts.
 This detects accidental corruption and incomplete or fabricated local evidence, but it is not a signature against a hostile actor who can rewrite the repository and all local evidence.
 Use the compatibility adapter only for an explicitly reviewed legacy workflow, not to bypass this state machine.
@@ -191,7 +200,8 @@ Use the compatibility adapter only for an explicitly reviewed legacy workflow, n
 Report the public guide URL, public Replay URL, and smoke-test result.
 Google 3D or terrain promises still require the live-provider review described in `docs/agents/testing.md`.
 
-Report both the immutable deployment URL and the stable alias when Wrangler provides them.
+The publisher must smoke-test both the immutable deployment URL and stable alias, then prove that both expose the same expected commit, tree, build ID, and artifact-manifest digest.
+The release receipt records this complete structured deployment identity.
 State explicitly when hardware-accelerated Google 3D remains unverified by headless smoke testing.
 
 ## Failure handling

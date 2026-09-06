@@ -315,6 +315,19 @@ class RouteCreateTest(unittest.TestCase):
         self.assertEqual(first["result"], "created")
         self.assertEqual(second["result"], "already_applied")
 
+    def test_apply_checks_catalogue_recovery_before_canonical_writes(self):
+        proposal = propose_request(self.request(), self.root)
+        before = (self.root / "quests.json").read_bytes()
+        (self.root / ".quests.json.rollback").write_text(
+            "pending\n", encoding="utf-8"
+        )
+
+        with self.assertRaises(RouteCreateError) as raised:
+            apply_proposal(proposal, self.root, rebuild=lambda: None)
+
+        self.assertEqual(raised.exception.code, "repository.recovery_pending")
+        self.assertEqual((self.root / "quests.json").read_bytes(), before)
+
     def test_retry_after_validation_failure_revalidates_canonical_state(self):
         proposal = propose_request(self.request(), self.root)
 
@@ -814,12 +827,11 @@ class RouteCreateTest(unittest.TestCase):
     def test_rebuild_failure_preserves_exit_code_without_streaming_private_paths(self):
         proposal = propose_request(self.request(), self.root)
         private_path = self.root / "owner-files" / "secret.gpx"
-        rebuild = self.root / "rebuild.sh"
-        rebuild.write_text(
-            f"#!/bin/bash\nprintf '%s\\n' '{private_path}' >&2\nexit 7\n",
+        build = self.root / "build.py"
+        build.write_text(
+            f"import sys\nprint({str(private_path)!r}, file=sys.stderr)\nraise SystemExit(7)\n",
             encoding="utf-8",
         )
-        rebuild.chmod(0o755)
         stderr = io.StringIO()
 
         with redirect_stderr(stderr), self.assertRaises(RouteCreateError) as raised:
@@ -831,6 +843,24 @@ class RouteCreateTest(unittest.TestCase):
         report = json.loads(recovery.read_text(encoding="utf-8"))
         self.assertEqual(report["downstream_exit_code"], 7)
         self.assertNotIn(str(self.root), json.dumps(report))
+
+    def test_rebuild_failure_does_not_follow_a_redirected_recovery_root(self):
+        proposal = propose_request(self.request(), self.root)
+        external = self.root / "external-recovery"
+        external.mkdir()
+
+        def failing_rebuild():
+            (self.root / ".route-share/recovery").symlink_to(
+                external,
+                target_is_directory=True,
+            )
+            raise RuntimeError("validation failed")
+
+        with self.assertRaises(RouteCreateError) as raised:
+            apply_proposal(proposal, self.root, rebuild=failing_rebuild)
+
+        self.assertEqual(raised.exception.code, "create.recovery_write_failed")
+        self.assertEqual(list(external.iterdir()), [])
 
     def test_cli_returns_the_downstream_validation_exit_code(self):
         proposal_path = self.root / "proposal.json"

@@ -57,6 +57,10 @@ Inspect the atlas or one route without changing state:
 ./scripts/godiesel doctor --json
 ./scripts/godiesel inspect route-share --json
 ./scripts/godiesel inspect route-share <slug> --json
+./scripts/godiesel inspect route-generation --json
+./scripts/godiesel inspect owner-curation --json
+./scripts/godiesel inspect planned-route-persistence --json
+./scripts/godiesel inspect provider-readiness --json
 ./scripts/godiesel verify --explain --json
 ./scripts/godiesel verify route-share <slug> --reuse --json
 ```
@@ -75,15 +79,16 @@ The verification explanation classifies changed paths against the manifest, name
 Proof reuse succeeds only when the latest schema-valid passed receipt has the same manifest-selected gates and complete covered-input fingerprint.
 It blocks without executing a gate when implementation, contracts, fixtures, configuration, data, or provider targets changed.
 
-The manifest, doctor, first full capability adapter, proof receipts, impact explanation, and guarded route-share proof reuse implement Phases 1 through 3 in `docs/architecture/agent-operating-system.md`.
-Additional capability adapters remain sequenced in `docs/plans/2026-08-31-agent-operating-system-plan.md`.
+The manifest, doctor, route-share workflow, canonical generation and curation adapters, runtime-boundary inspection, proof receipts, impact explanation, and guarded proof reuse implement Phases 1 through 4 in `docs/architecture/agent-operating-system.md`.
+Release adapters and later consolidation remain sequenced in `docs/plans/2026-08-31-agent-operating-system-plan.md`.
+See `docs/agents/local-capabilities.md` for the local capability commands and authority boundaries.
 
 ## Generate Route Data
 
 Regenerate route summaries and full route records after changing `quests.json` or refreshing the Strava export:
 
 ```bash
-./rebuild.sh
+./scripts/godiesel apply route-generation --authorize canonical-local --json
 ```
 
 The generator stages React route artifacts and publishes them atomically.
@@ -99,6 +104,7 @@ Launch the React app and local owner writer together:
 
 Admin edits the complete experiential guide contract, validates draft and reviewed states, and regenerates application route data on save.
 The deployed Admin is read-only because the loopback writer is not available there.
+Agents use the fingerprinted curation plan and apply flow in `docs/agents/local-capabilities.md`; both paths call the same local owner writer.
 
 ## Test
 
@@ -120,8 +126,13 @@ For an explicit real-data, no-interception proof from the complete Strava export
 ```bash
 GODIESEL_EARTH_ENGINE_PROJECT=playground-406023 \
 GODIESEL_PIPELINE_SHARE_NAME=pipeline-proof \
+GODIESEL_PIPELINE_TARGET_AUTHORITY=pipeline-proof \
+GODIESEL_PIPELINE_REPLACEMENT_AUTHORITY=pipeline-proof \
+GODIESEL_PIPELINE_REPLACE_EXISTING=1 \
 npm --prefix app run verify:live-pipeline
 ```
+
+Set `GODIESEL_PIPELINE_REPLACE_EXISTING=1` only after the owner explicitly approves replacing the existing stable proof alias.
 
 This gate checks all 103 columns and every approved activity row in the real Strava export, parses every original GPX/FIT source, rebuilds all generated route records in isolation, and compares every route detail, manifest record, geometry point, provenance record, and statistic.
 It then exercises real Run/Ride, Earth/Atlas, recorded/imported, completed/discovered, and reviewed/draft cases through the browser.
@@ -141,15 +152,10 @@ Build the React application and prepare the root Cloudflare output directory:
 The deployable output is `dist/` and is generated from `app/dist/`.
 Generated deploy files are not committed.
 
-## Deploy
+## Production deployment
 
-Deploy the generated React output with Wrangler:
-
-```bash
-npx wrangler pages deploy dist --project-name=godiesel --branch=production
-```
-
-The `godiesel` Pages project uses `production` as its production branch. The explicit branch flag is required so the canonical `https://godiesel.pages.dev/` deployment is updated instead of creating only a preview deployment.
+Production publication is intentionally unavailable until the Phase 5 release capability is implemented.
+Building `dist/` creates a verifiable artifact; it does not grant authority to publish the canonical site.
 
 ## Publish a single-route microsite
 
@@ -165,14 +171,19 @@ The route-only bundle removes all unrelated public data and sends a site-wide `X
 Publish the validated bundle to its stable Cloudflare Pages branch URL:
 
 ```bash
-./scripts/publish-route-microsite.sh 3519505225411091950 appian-way
+./scripts/route.sh publish 3519505225411091950 appian-way \
+  --authorize-target appian-way \
+  --authorize-replacement appian-way
 ```
 
 This produces `https://share-appian-way.godiesel.pages.dev/` and smoke-tests the public guide and replay shell.
 Choose a durable share name because it defines the stable URL.
+Both authority values must exactly match that stable share name, including for a new alias.
 Live Google 3D imagery must still be reviewed in a hardware-accelerated browser.
 
-Cloudflare Pages should use `./make-dist.sh` as the build command and `dist` as the output directory.
+The guarded publisher uses `./make-dist.sh` to construct and validate `dist` before direct upload.
+Keep automatic Git-integrated preview deployments disabled instead of asking Cloudflare to build every preview branch from a clean clone.
+Production branch deployment controls are governed separately.
 Hash routing keeps direct Atlas, route, and Replay links compatible with static hosting.
 
 ## Static Fallback

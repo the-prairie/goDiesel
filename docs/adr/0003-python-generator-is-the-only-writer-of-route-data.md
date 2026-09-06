@@ -40,6 +40,8 @@ Publish route data atomically:
 Run `recover_interrupted_route_publication()` before anything else on every
 invocation: no backup is a no-op, a backup without `ready` is discarded, and a
 backup with `ready` is fully restored.
+Recovery validates the complete backup tree and marker shape before any mutation.
+Symbolic links and non-regular entries are rejected so recovery cannot read or delete outside the repository-owned backup boundary.
 
 ## Consequences
 

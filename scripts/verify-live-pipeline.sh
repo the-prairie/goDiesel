@@ -5,11 +5,17 @@ cd "$(dirname "$0")/.."
 
 EARTH_ENGINE_PROJECT="${GODIESEL_EARTH_ENGINE_PROJECT:-}"
 SHARE_NAME="${GODIESEL_PIPELINE_SHARE_NAME:-}"
-if [[ -z "$EARTH_ENGINE_PROJECT" || -z "$SHARE_NAME" ]]; then
+TARGET_AUTHORITY="${GODIESEL_PIPELINE_TARGET_AUTHORITY:-}"
+REPLACEMENT_AUTHORITY="${GODIESEL_PIPELINE_REPLACEMENT_AUTHORITY:-}"
+REPLACE_EXISTING="${GODIESEL_PIPELINE_REPLACE_EXISTING:-}"
+if [[ -z "$EARTH_ENGINE_PROJECT" || -z "$SHARE_NAME" || -z "$TARGET_AUTHORITY" || -z "$REPLACEMENT_AUTHORITY" || -z "$REPLACE_EXISTING" ]]; then
   cat >&2 <<'EOF'
 The complete live pipeline gate requires:
   GODIESEL_EARTH_ENGINE_PROJECT=<registered-project>
   GODIESEL_PIPELINE_SHARE_NAME=<stable-pages-share-name>
+  GODIESEL_PIPELINE_TARGET_AUTHORITY=<same-stable-pages-share-name>
+  GODIESEL_PIPELINE_REPLACEMENT_AUTHORITY=<same-stable-pages-share-name>
+  GODIESEL_PIPELINE_REPLACE_EXISTING=1
 
 This gate sends the selected real route geometry to the already-configured
 providers and publishes a real Cloudflare Pages branch deployment.
@@ -23,6 +29,14 @@ if [[ ! "$EARTH_ENGINE_PROJECT" =~ ^[a-z][a-z0-9-]{4,28}[a-z0-9]$ ]]; then
 fi
 if [[ ! "$SHARE_NAME" =~ ^[a-z0-9]+([a-z0-9-]*[a-z0-9])?$ ]] || (( ${#SHARE_NAME} > 57 )); then
   echo "GODIESEL_PIPELINE_SHARE_NAME is not a DNS-safe Pages share name." >&2
+  exit 2
+fi
+if [[ "$TARGET_AUTHORITY" != "$SHARE_NAME" || "$REPLACEMENT_AUTHORITY" != "$SHARE_NAME" ]]; then
+  echo "Live pipeline authority must exactly match GODIESEL_PIPELINE_SHARE_NAME." >&2
+  exit 2
+fi
+if [[ "$REPLACE_EXISTING" != "1" ]]; then
+  echo "GODIESEL_PIPELINE_REPLACE_EXISTING must be 1 after explicit owner approval." >&2
   exit 2
 fi
 
@@ -115,7 +129,7 @@ echo "[6/8] Run every hardware-backed Google, Cesium, imagery, and export journe
 )
 
 echo "[7/8] Build, deploy, and smoke a real route-only Pages artifact"
-./scripts/publish-route-microsite.sh 3519505225411091950 "$SHARE_NAME"
+./scripts/publish-live-pipeline-proof.sh
 
 echo "[8/8] Complete"
 echo "Live pipeline evidence: ${EVIDENCE_DIR}"

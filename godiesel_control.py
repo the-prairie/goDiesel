@@ -13,6 +13,19 @@ import sys
 from pathlib import Path
 from typing import Any, Mapping
 
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import SchemaError
+
+from godiesel_local_capabilities import (
+    CURATION_AUTHORITY,
+    GENERATION_AUTHORITY,
+    PROVIDER_AUTHORITY,
+    execute_owner_curation,
+    execute_provider_readiness,
+    execute_route_generation,
+    inspect_planned_route_persistence,
+    reuse_provider_readiness,
+)
 from godiesel_route_share import AUTHORITY as ROUTE_SHARE_AUTHORITY
 from godiesel_route_share import execute_route_share
 from godiesel_verification import explain_verification, reuse_verification
@@ -36,6 +49,13 @@ IDEMPOTENCY_CLASSES = {
     "idempotent",
     "guarded",
     "external-check-required",
+}
+CAPABILITY_AUTHORITY = {
+    "route-share": ROUTE_SHARE_AUTHORITY,
+    "route-generation": GENERATION_AUTHORITY,
+    "owner-curation": CURATION_AUTHORITY,
+    "planned-route-persistence": {"inspect": "read-only"},
+    "provider-readiness": PROVIDER_AUTHORITY,
 }
 CAPABILITY_KEYS = {
     "id",
@@ -179,9 +199,28 @@ def _is_string_list(value: Any, *, pattern: str | None = None) -> bool:
 def _is_command(value: Any) -> bool:
     if not isinstance(value, dict) or not {"command", "cwd"}.issubset(value):
         return False
-    if not set(value).issubset({"command", "cwd", "description"}):
+    if not set(value).issubset({"command", "cwd", "description", "proof_inputs"}):
         return False
-    return all(_is_string(item) for item in value.values())
+    if not all(_is_string(value[key]) for key in ("command", "cwd")):
+        return False
+    if "description" in value and not _is_string(value["description"]):
+        return False
+    proof_inputs = value.get("proof_inputs", [])
+    return isinstance(proof_inputs, list) and all(
+        isinstance(item, dict)
+        and set(item) == {"category", "paths"}
+        and item["category"] in {
+            "implementation",
+            "contract",
+            "fixture",
+            "configuration",
+            "data",
+            "provider",
+        }
+        and _is_string_list(item["paths"])
+        and bool(item["paths"])
+        for item in proof_inputs
+    )
 
 
 def _is_command_list(value: Any) -> bool:
@@ -367,6 +406,12 @@ def _is_manifest(value: Any) -> bool:
             for gate in rule["gates"]
         ):
             return False
+        gate_pairs = [
+            (gate["capability"], gate["tier"])
+            for gate in rule["gates"]
+        ]
+        if len(gate_pairs) != len(set(gate_pairs)):
+            return False
         capability_invariants = {
             capability["id"]: set(capability["invariants"])
             for capability in capabilities
@@ -378,6 +423,12 @@ def _is_manifest(value: Any) -> bool:
             and invariant["id"] in capability_invariants[invariant["capability"]]
             for invariant in rule["invariants"]
         ):
+            return False
+        invariant_pairs = [
+            (invariant["capability"], invariant["id"])
+            for invariant in rule["invariants"]
+        ]
+        if len(invariant_pairs) != len(set(invariant_pairs)):
             return False
         if not _is_string(rule["reason"]):
             return False
@@ -404,12 +455,18 @@ def _load_manifest(root: Path) -> tuple[dict[str, Any] | None, list[dict[str, st
                 "Repair system/capabilities.schema.json and run the focused control-plane tests.",
             )
         ]
-    if (
-        not isinstance(schema, dict)
-        or schema.get("$schema") != "https://json-schema.org/draft/2020-12/schema"
-        or schema.get("type") != "object"
-        or schema.get("additionalProperties") is not False
-    ):
+    schema_contract_valid = (
+        isinstance(schema, dict)
+        and schema.get("$schema") == "https://json-schema.org/draft/2020-12/schema"
+        and schema.get("type") == "object"
+        and schema.get("additionalProperties") is False
+    )
+    if schema_contract_valid:
+        try:
+            Draft202012Validator.check_schema(schema)
+        except SchemaError:
+            schema_contract_valid = False
+    if not schema_contract_valid:
         return None, [
             _issue(
                 "GODIESEL_MANIFEST_SCHEMA_INVALID",
@@ -436,7 +493,17 @@ def _load_manifest(root: Path) -> tuple[dict[str, Any] | None, list[dict[str, st
             )
         ]
 
-    if not _is_manifest(manifest):
+    try:
+        manifest_matches_schema = Draft202012Validator(schema).is_valid(manifest)
+    except Exception:
+        return None, [
+            _issue(
+                "GODIESEL_MANIFEST_SCHEMA_INVALID",
+                "The capability manifest schema cannot validate the control-plane contract.",
+                "Restore the self-contained Draft 2020-12 schema and run the focused control-plane tests.",
+            )
+        ]
+    if not manifest_matches_schema or not _is_manifest(manifest):
         return None, [
             _issue(
                 "GODIESEL_MANIFEST_INVALID",
@@ -1112,6 +1179,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("share_name", nargs="?")
     parser.add_argument("--request")
     parser.add_argument("--proposal")
+    parser.add_argument("--plan")
     parser.add_argument("--preview", action="store_true")
     parser.add_argument("--detach", action="store_true")
     parser.add_argument("--replace-existing", action="store_true")
@@ -1122,10 +1190,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--reuse", action="store_true")
     parser.add_argument("--base", default="origin/main")
     parser.add_argument("--changed-path", action="append")
+    parser.add_argument("--provider")
+    parser.add_argument("--provider-target")
     parser.add_argument("--json", action="store_true", dest="as_json")
     args = parser.parse_args(argv)
     if args.explain and args.reuse:
         parser.error("--explain and --reuse are mutually exclusive")
+    if (args.preview or args.detach) and not (
+        args.target == "route-share" and args.verb == "verify"
+    ):
+        parser.error("--preview and --detach only support route-share verification")
     root = Path(__file__).resolve().parent
     try:
         if args.verb == "doctor":
@@ -1154,6 +1228,8 @@ def main(argv: list[str] | None = None) -> int:
                 parser.error("release route-share requires a share name")
             if args.detach and not args.preview:
                 parser.error("--detach requires --preview")
+            if args.reuse and (args.preview or args.detach):
+                parser.error("--reuse cannot be combined with --preview or --detach")
             if args.reuse:
                 if args.verb != "verify":
                     parser.error("--reuse only supports verification")
@@ -1177,22 +1253,80 @@ def main(argv: list[str] | None = None) -> int:
                     target_authority=args.authorize_target,
                     replacement_authority=args.authorize_replacement,
                 )
+        elif args.target == "route-generation":
+            if args.verb not in {"inspect", "apply", "verify"}:
+                parser.error("route-generation supports inspect, apply, and verify")
+            if args.reuse:
+                if args.verb != "verify":
+                    parser.error("--reuse only supports verification")
+                result = reuse_verification(root, "route-generation")
+            else:
+                result = execute_route_generation(
+                    root,
+                    args.verb,
+                    authority=args.authorize,
+                )
+        elif args.target == "owner-curation":
+            if args.verb not in {"inspect", "plan", "apply", "verify"}:
+                parser.error("owner-curation supports inspect, plan, apply, and verify")
+            if args.verb == "plan" and args.request is None:
+                parser.error("plan owner-curation requires --request")
+            if args.verb == "apply" and args.plan is None:
+                parser.error("apply owner-curation requires --plan")
+            if args.reuse:
+                if args.verb != "verify":
+                    parser.error("--reuse only supports verification")
+                result = reuse_verification(root, "owner-curation")
+            else:
+                result = execute_owner_curation(
+                    root,
+                    args.verb,
+                    request_path=args.request,
+                    plan_path=args.plan,
+                    authority=args.authorize,
+                )
+        elif args.target == "planned-route-persistence":
+            if args.verb != "inspect":
+                parser.error("planned-route-persistence supports inspect")
+            result = inspect_planned_route_persistence(root)
+        elif args.target == "provider-readiness":
+            if args.verb not in {"inspect", "verify"}:
+                parser.error("provider-readiness supports inspect and verify")
+            if args.reuse:
+                if args.verb != "verify":
+                    parser.error("--reuse only supports verification")
+                if args.provider is None or args.provider_target is None:
+                    parser.error("provider proof reuse requires --provider and --provider-target")
+                result = reuse_provider_readiness(
+                    root,
+                    provider=args.provider,
+                    provider_target=args.provider_target,
+                    environ=os.environ,
+                )
+            else:
+                result = execute_provider_readiness(
+                    root,
+                    args.verb,
+                    provider=args.provider,
+                    provider_target=args.provider_target,
+                )
         else:
             parser.error(f"unknown target: {args.target}")
     except Exception:
-        if args.target == "route-share" and args.verb in ROUTE_SHARE_AUTHORITY:
+        authority = CAPABILITY_AUTHORITY.get(args.target, {}).get(args.verb)
+        if authority is not None:
             issue = _issue(
                 "GODIESEL_CONTROL_INTERNAL_ERROR",
-                "The route-share transition could not produce a complete result.",
-                "Run the focused route-share adapter tests and inspect ignored local receipts before retrying.",
+                f"The {args.target} transition could not produce a complete result.",
+                "Run the focused capability adapter tests and inspect ignored local artifacts before retrying.",
             )
             result = {
                 "schema_version": SCHEMA_VERSION,
                 "document_type": "godiesel-capability-result",
-                "capability": "route-share",
+                "capability": args.target,
                 "verb": args.verb,
                 "status": "blocked",
-                "authority": ROUTE_SHARE_AUTHORITY[args.verb],
+                "authority": authority,
                 "authorized": False,
                 "exit_code": 2,
                 "result": None,

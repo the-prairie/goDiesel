@@ -111,7 +111,10 @@ def test_publish_treats_an_initial_redirect_as_an_existing_share(tmp_path: Path)
         scripts / "publish-route-microsite.sh",
     )
     (scripts / "publish-route-microsite.sh").chmod(0o755)
-    executable(tmp_path / "make-dist.sh", "#!/bin/bash\nexit 0\n")
+    executable(
+        tmp_path / "make-dist.sh",
+        "#!/bin/bash\nmkdir -p dist\nprintf '{}\\n' > dist/artifact-manifest.json\n",
+    )
     (tmp_path / "app").mkdir()
     calls = tmp_path / "calls.log"
     curl_calls = tmp_path / "curl-calls.log"
@@ -132,11 +135,48 @@ fi
 exit 0
 """,
     )
+    (tmp_path / ".gitignore").write_text("bin/\n*.log\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.test",
+            "add",
+            ".",
+        ],
+        cwd=tmp_path,
+        check=True,
+    )
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.test",
+            "commit",
+            "-qm",
+            "fixture",
+        ],
+        cwd=tmp_path,
+        check=True,
+    )
     environment = os.environ.copy()
     environment["PATH"] = f"{bin_dir}:{environment['PATH']}"
 
     completed = subprocess.run(
-        [str(scripts / "publish-route-microsite.sh"), "gpx-preview", "existing"],
+        [
+            str(scripts / "publish-route-microsite.sh"),
+            "gpx-preview",
+            "existing",
+            "--authorize-target",
+            "existing",
+            "--authorize-replacement",
+            "existing",
+        ],
         cwd=tmp_path,
         capture_output=True,
         text=True,
@@ -147,6 +187,142 @@ exit 0
     assert "Refusing to replace existing share" in completed.stderr
     assert "wrangler pages deploy dist" not in calls.read_text(encoding="utf-8")
     assert "--location" not in curl_calls.read_text(encoding="utf-8")
+
+
+def test_publish_tests_and_verifies_the_exact_staged_artifact(tmp_path: Path):
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    shutil.copyfile(
+        ROOT / "scripts/publish-route-microsite.sh",
+        scripts / "publish-route-microsite.sh",
+    )
+    (scripts / "publish-route-microsite.sh").chmod(0o755)
+    (tmp_path / "app").mkdir()
+    executable(
+        tmp_path / "make-dist.sh",
+        """#!/bin/bash
+set -euo pipefail
+mkdir -p dist
+printf '{"schema_version":1,"document_type":"godiesel-artifact-manifest","files":[]}\n' > dist/artifact-manifest.json
+manifest=$(shasum -a 256 dist/artifact-manifest.json | awk '{print $1}')
+commit=$(git rev-parse HEAD)
+tree=$(git rev-parse 'HEAD^{tree}')
+printf '{"schema_version":1,"document_type":"godiesel-build-identity","artifact_kind":"built-artifact","commit":"%s","tree":"%s","build_id":"12345678-1234-4234-8234-123456789abc","artifact_manifest_sha256":"%s"}\n' "$commit" "$tree" "$manifest" > dist/build-identity.json
+""",
+    )
+    (tmp_path / "godiesel_verification.py").write_text(
+        """import json
+from pathlib import Path
+
+def read_target_build_identity(_target, **_kwargs):
+    return json.loads(Path('dist/build-identity.json').read_text())
+""",
+        encoding="utf-8",
+    )
+    calls = tmp_path / "calls.log"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    executable(bin_dir / "node", "#!/bin/bash\nexit 0\n")
+    executable(bin_dir / "curl", "#!/bin/bash\nprintf '404'\n")
+    executable(
+        bin_dir / "npx",
+        f"""#!/bin/bash
+printf '%s slug=%s\n' "$*" "${{VITE_SINGLE_ROUTE_SLUG:-}}" >> {calls}
+if [[ "$1" == "wrangler" ]]; then
+  if [[ "${{FAIL_DEPLOY:-}}" == "1" ]]; then
+    exit 9
+  fi
+  printf 'Deployment: https://abc123.godiesel.pages.dev/\n'
+fi
+""",
+    )
+    (tmp_path / ".gitignore").write_text(
+        "bin/\ndist/\ncalls.log\n__pycache__/\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "add", "."],
+        cwd=tmp_path,
+        check=True,
+    )
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.test",
+            "commit",
+            "-qm",
+            "fixture",
+        ],
+        cwd=tmp_path,
+        check=True,
+    )
+    environment = os.environ.copy()
+    environment["PATH"] = f"{bin_dir}:{environment['PATH']}"
+
+    unauthorized = subprocess.run(
+        [str(scripts / "publish-route-microsite.sh"), "gpx-preview", "new-share"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+
+    assert unauthorized.returncode != 0
+    assert "without exact target and replacement authority" in unauthorized.stderr
+    assert not calls.exists()
+
+    completed = subprocess.run(
+        [
+            str(scripts / "publish-route-microsite.sh"),
+            "gpx-preview",
+            "new-share",
+            "--authorize-target",
+            "new-share",
+            "--authorize-replacement",
+            "new-share",
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    recorded = calls.read_text(encoding="utf-8")
+    assert "playwright test e2e/single-route-microsite.spec.ts --config playwright.route-share.config.ts" in recorded
+    playwright = next(line for line in recorded.splitlines() if line.startswith("playwright "))
+    assert "slug=gpx-preview" in playwright
+    wrangler = next(line for line in recorded.splitlines() if line.startswith("wrangler "))
+    assert " pages deploy /" in wrangler
+    assert " pages deploy dist " not in wrangler
+    assert "GODIESEL_RELEASE_OBSERVED=" in completed.stdout
+    assert "GODIESEL_RELEASE_ATTEMPTED=" in completed.stdout
+    assert "GODIESEL_RELEASE_TARGET=" in completed.stdout
+
+    failed_environment = dict(environment)
+    failed_environment["FAIL_DEPLOY"] = "1"
+    failed = subprocess.run(
+        [
+            str(scripts / "publish-route-microsite.sh"),
+            "gpx-preview",
+            "new-share",
+            "--authorize-target",
+            "new-share",
+            "--authorize-replacement",
+            "new-share",
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env=failed_environment,
+    )
+    assert failed.returncode == 9
+    assert "GODIESEL_RELEASE_ATTEMPTED=" in failed.stdout
+    assert "GODIESEL_RELEASE_OBSERVED=" not in failed.stdout
 
 
 def test_microsite_validator_redacts_checkout_paths():

@@ -11,12 +11,21 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import uuid
 
 import gpxpy
 from jsonschema import Draft202012Validator
 from PIL import Image
+
+from admin_curation import OwnerMutationBusyError, owner_mutation_lock
+from godiesel_evidence import (
+    copy_local_file_atomic,
+    read_local_bytes,
+    unlink_local_file,
+    write_local_text_atomic,
+)
 
 from quest_meta import build_route_curation
 from route_annotations import build_route_annotations
@@ -286,16 +295,33 @@ def _stage_file(
     )
     staging.mkdir(parents=True, exist_ok=True)
     destination = staging / staged_name
-    if destination.exists():
-        if _file_sha256(destination) != expected_sha256:
+    relative_directory = staging.relative_to(root)
+    if destination.exists() or destination.is_symlink():
+        try:
+            existing_sha256 = hashlib.sha256(
+                read_local_bytes(root, relative_directory, staged_name)
+            ).hexdigest()
+        except OSError as error:
+            raise RouteCreateError(
+                "source.unsafe_staging",
+                "staged source is not a repository-owned regular file",
+            ) from error
+        if existing_sha256 != expected_sha256:
             raise RouteCreateError("source.staging_conflict", "staged GPX checksum does not match")
         return destination.relative_to(root).as_posix()
-    temporary = destination.with_suffix(".gpx.tmp")
-    shutil.copyfile(source, temporary)
-    if _file_sha256(temporary) != expected_sha256:
-        temporary.unlink(missing_ok=True)
-        raise RouteCreateError("source.checksum_mismatch", "staged GPX checksum does not match")
-    os.replace(temporary, destination)
+    try:
+        copy_local_file_atomic(
+            root,
+            relative_directory,
+            staged_name,
+            source,
+            expected_sha256=expected_sha256,
+        )
+    except OSError as error:
+        raise RouteCreateError(
+            "source.checksum_mismatch",
+            "staged GPX checksum does not match",
+        ) from error
     return destination.relative_to(root).as_posix()
 
 
@@ -701,9 +727,7 @@ def propose_request(request: object, root: str | Path) -> dict[str, object]:
 
 
 def _write_atomic(path: Path, content: str) -> None:
-    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    temporary.write_text(content, encoding="utf-8")
-    os.replace(temporary, path)
+    write_local_text_atomic(path.parent, ".", path.name, content)
 
 
 def _validated_source_path(
@@ -824,39 +848,72 @@ def _register_source(proposal: dict[str, object], root: Path) -> Path:
     )
     if not durable.is_relative_to(durable_root):
         raise RouteCreateError("source.unsafe_destination", "durable source must stay inside route_sources")
-    durable.parent.mkdir(parents=True, exist_ok=True)
-    if durable.exists():
-        if _file_sha256(durable) != expected:
+    relative_directory = durable.parent.relative_to(root)
+    if durable.exists() or durable.is_symlink():
+        try:
+            existing_sha256 = hashlib.sha256(
+                read_local_bytes(root, relative_directory, durable.name)
+            ).hexdigest()
+        except OSError as error:
+            raise RouteCreateError(
+                "source.unsafe_destination",
+                "durable source is not a repository-owned regular file",
+            ) from error
+        if existing_sha256 != expected:
             raise RouteCreateError("source.destination_conflict", "durable GPX exists with a different checksum")
         return durable
-    temporary = durable.with_suffix(".gpx.tmp")
-    shutil.copyfile(staged, temporary)
-    if _file_sha256(temporary) != expected:
-        temporary.unlink(missing_ok=True)
-        raise RouteCreateError("source.checksum_mismatch", "durable GPX checksum does not match")
-    os.replace(temporary, durable)
+    try:
+        copy_local_file_atomic(
+            root,
+            relative_directory,
+            durable.name,
+            staged,
+            expected_sha256=expected,
+        )
+    except OSError as error:
+        raise RouteCreateError(
+            "source.checksum_mismatch",
+            "durable GPX checksum does not match",
+        ) from error
     return durable
 
 
 def _copy_verified_source(
+    root: Path,
     staged: Path,
     durable: Path,
     expected_sha256: str,
 ) -> None:
-    if durable.exists():
-        if _file_sha256(durable) != expected_sha256:
+    relative_directory = durable.parent.relative_to(root)
+    if durable.exists() or durable.is_symlink():
+        try:
+            existing_sha256 = hashlib.sha256(
+                read_local_bytes(root, relative_directory, durable.name)
+            ).hexdigest()
+        except OSError as error:
+            raise RouteCreateError(
+                "media.unsafe_destination",
+                "durable media is not a repository-owned regular file",
+            ) from error
+        if existing_sha256 != expected_sha256:
             raise RouteCreateError(
                 "media.destination_conflict",
                 "durable media exists with a different checksum",
             )
         return
-    durable.parent.mkdir(parents=True, exist_ok=True)
-    temporary = durable.with_suffix(durable.suffix + ".tmp")
-    shutil.copyfile(staged, temporary)
-    if _file_sha256(temporary) != expected_sha256:
-        temporary.unlink(missing_ok=True)
-        raise RouteCreateError("media.checksum_mismatch", "durable media checksum does not match")
-    os.replace(temporary, durable)
+    try:
+        copy_local_file_atomic(
+            root,
+            relative_directory,
+            durable.name,
+            staged,
+            expected_sha256=expected_sha256,
+        )
+    except OSError as error:
+        raise RouteCreateError(
+            "media.checksum_mismatch",
+            "durable media checksum does not match",
+        ) from error
 
 
 def _media_destination_roots(root: Path, slug: str) -> tuple[Path, Path]:
@@ -905,7 +962,7 @@ def _route_spec_with_registered_media(
                 "media.unsafe_destination",
                 "durable media must stay inside the route media directory",
             )
-        _copy_verified_source(staged, durable, item["sha256"])
+        _copy_verified_source(root, staged, durable, item["sha256"])
         record = {
             "path": durable_relative.as_posix(),
             "sha256": item["sha256"],
@@ -1291,7 +1348,7 @@ def _validate_proposal_semantics(
 
 def _default_rebuild(root: Path, slug: str) -> dict[str, object]:
     subprocess.run(
-        [str(root / "rebuild.sh")],
+        [sys.executable, str(root / "build.py")],
         cwd=root,
         check=True,
         stdout=subprocess.DEVNULL,
@@ -1318,16 +1375,10 @@ def _run_rebuild_validation(
     slug: str,
     rebuild_callback,
 ) -> object:
-    recovery_report = (
-        root
-        / ".route-share"
-        / "recovery"
-        / f"{proposal.get('proposal_id', slug)}.json"
-    )
+    recovery_filename = f"{proposal.get('proposal_id', slug)}.json"
     try:
         validation = rebuild_callback()
     except Exception as error:
-        recovery_report.parent.mkdir(parents=True, exist_ok=True)
         report = {
             "proposal_id": proposal.get("proposal_id"),
             "slug": slug,
@@ -1336,7 +1387,18 @@ def _run_rebuild_validation(
         }
         if isinstance(error, subprocess.CalledProcessError):
             report["downstream_exit_code"] = error.returncode
-        _write_atomic(recovery_report, json.dumps(report, indent=2) + "\n")
+        try:
+            write_local_text_atomic(
+                root,
+                ".route-share/recovery",
+                recovery_filename,
+                json.dumps(report, indent=2) + "\n",
+            )
+        except OSError as write_error:
+            raise RouteCreateError(
+                "create.recovery_write_failed",
+                "canonical route and source were written, validation failed, and the recovery report could not be stored safely",
+            ) from write_error
         raise RouteCreateError(
             "create.validation_failed",
             "canonical route and source were written, but rebuild validation failed; see .route-share/recovery",
@@ -1347,11 +1409,22 @@ def _run_rebuild_validation(
                 else 1
             ),
         ) from error
-    recovery_report.unlink(missing_ok=True)
+    try:
+        unlink_local_file(
+            root,
+            ".route-share/recovery",
+            recovery_filename,
+            missing_ok=True,
+        )
+    except OSError as error:
+        raise RouteCreateError(
+            "create.recovery_cleanup_failed",
+            "route validation passed but its recovery boundary could not be cleared safely",
+        ) from error
     return validation
 
 
-def apply_proposal(
+def _apply_proposal_unlocked(
     proposal: object,
     root: str | Path,
     *,
@@ -1359,7 +1432,21 @@ def apply_proposal(
 ) -> dict[str, object]:
     """Apply an approved proposal without duplicating or partially writing a route."""
     root = Path(root).resolve()
+    from godiesel_verification import route_generation_recovery_state
+
     proposal = _validate_proposal(proposal, root)
+    proposal_id = proposal.get("proposal_id")
+    recovery_state, recovery_blockers = route_generation_recovery_state(
+        root,
+        allowed_route_share_recovery=(
+            f"{proposal_id}.json" if isinstance(proposal_id, str) else None
+        ),
+    )
+    if recovery_blockers:
+        raise RouteCreateError(
+            "repository.recovery_pending",
+            f"catalogue recovery state is {recovery_state}; repair it before applying a proposal",
+        )
     if proposal.get("blocking_errors"):
         raise RouteCreateError("proposal.blocked", "proposal contains blocking errors")
     proposal_route_spec = proposal.get("route_spec")
@@ -1436,6 +1523,30 @@ def apply_proposal(
         rebuild_callback,
     )
     return _creation_report(proposal, result, validation)
+
+
+def apply_proposal(
+    proposal: object,
+    root: str | Path,
+    *,
+    rebuild=None,
+) -> dict[str, object]:
+    """Apply an approved proposal while owning the catalogue mutation boundary."""
+
+    resolved_root = Path(root).resolve()
+    try:
+        with owner_mutation_lock(resolved_root):
+            return _apply_proposal_unlocked(
+                proposal,
+                resolved_root,
+                rebuild=rebuild,
+            )
+    except OwnerMutationBusyError as error:
+        raise RouteCreateError(
+            "repository.mutation_busy",
+            "another catalogue mutation is in progress",
+            exit_code=2,
+        ) from error
 
 
 def _creation_report(

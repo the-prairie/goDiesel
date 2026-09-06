@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-08-31
 deciders: owner
 ---
@@ -61,7 +61,10 @@ The control plane records and enforces the authority required for a plan or targ
 - `system/capabilities.schema.json`
 - `system/capabilities.json`
 - `godiesel_control.py`
+- `godiesel_local_capabilities.py`
+- `system/owner-curation-plan.schema.json`
 - `test_godiesel_control.py`
+- `test_godiesel_local_capabilities.py`
 - `docs/agents/route-share.md`
 - `docs/agents/testing.md`
 - ADR-0003, ADR-0010, ADR-0011, ADR-0012, and ADR-0015

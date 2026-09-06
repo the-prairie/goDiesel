@@ -1,6 +1,6 @@
 ---
 status: partially-implemented
-last_updated: 2026-09-01
+last_updated: 2026-09-02
 decision: ADR-0016
 ---
 
@@ -31,15 +31,15 @@ It is not a second domain model, a generic agent framework, or a reason to move 
 | --- | --- |
 | Domain model, writer ownership, provenance, generated data tiers, and risk-based verification | Implemented |
 | Route inspect, proposal, creation, preview, publication, and public smoke workflow | Implemented through `scripts/godiesel`; `scripts/route.sh` remains compatible |
-| Five-verb operator vocabulary used by agent guidance | Implemented for route share; other adapters remain proposed |
+| Five-verb operator vocabulary used by agent guidance | Implemented for route share, generation, owner curation, planned-route inspection, and provider readiness |
 | Machine-readable capability manifest | Implemented in `system/capabilities.json` |
-| Unified `scripts/godiesel` interface | System inspection, doctor, and the full route-share capability implemented |
-| Shared result envelope and evidence receipts | Route-share results, lineage receipts, and general route verification proof receipts implemented |
-| Impact-directed proof selection and reuse | Manifest-owned selection, `verify --explain`, complete input fingerprints, and guarded route-share reuse implemented |
+| Unified `scripts/godiesel` interface | System inspection, doctor, route share, generation, owner curation, planned-route inspection, and provider readiness implemented |
+| Shared result envelope and evidence receipts | Route-share lineage plus generation, curation, and exact provider verification receipts implemented |
+| Impact-directed proof selection and reuse | Manifest-owned selection, exact-command fingerprints, `verify --explain`, and guarded reuse implemented for canonical adapters |
 
 Use `./scripts/godiesel inspect system --json` and `./scripts/godiesel doctor --json` for current read-only control-plane inspection.
-Use the route-share commands in `docs/agents/route-share.md` for that implemented capability.
-Do not invoke mutation verbs for another capability or claim that proof reuse exists beyond route-share verification.
+Use the route-share commands in `docs/agents/route-share.md` and canonical local commands in `docs/agents/local-capabilities.md`.
+Application release remains outside the unified release adapter until Phase 5.
 
 ## 2. Design objective
 
@@ -102,6 +102,13 @@ The route-share workflow is the first strong vertical slice of this model:
 
 That workflow should be generalized, not bypassed or wrapped in another shallow command layer.
 During migration, the unified control interface delegates to existing modules and preserves their validation and recovery behavior.
+
+Phase 4 adds three more operator shapes without creating a generic executor.
+Route generation delegates to the sole full-catalogue Python writer.
+Owner curation produces a fingerprinted plan and calls the same owner-writer service as the loopback HTTP endpoint.
+Planned-route inspection reports browser-local ownership and unknown current state instead of projecting it into canonical files.
+Provider readiness separates configuration presence from one explicitly selected live check against one exact target.
+That origin must identify the same clean source commit and tree plus one immutable build instance, so browser success cannot be attributed to an unrelated or same-commit replacement deployment.
 
 ## 5. Capability manifest
 
@@ -197,7 +204,8 @@ Every capability verb declares one authority class before execution.
 
 Approval is attached to a specific plan digest, target, and effect.
 Approval to create is not approval to publish.
-Approval to publish a new target is not approval to replace an existing stable target.
+Stable-alias publication always requires exact replacement-risk authority because absence cannot be held atomically through upload.
+An alias already observed as present also requires explicit replacement intent.
 
 The interface must report the next required authority checkpoint instead of merely failing with a generic permission error.
 
@@ -215,6 +223,9 @@ A plan must be:
 - idempotent when safely reapplied;
 - explicit about facts, derivations, hypotheses, and owner choices;
 - independent from a public name or mutable display title when identity requires stability.
+
+Owner-curation plans are also bound to a privacy-safe checkout identity, dirty-state digest, and implementation fingerprint.
+Their review summary exposes changed field names and review-status transitions without copying owner-authored text.
 
 The existing route-share proposal demonstrates this contract.
 Future write capabilities should reuse the pattern while retaining their own domain-specific schemas.
@@ -266,22 +277,28 @@ changed paths
 
 The capability manifest owns this mapping.
 Each impact rule links paths to capability-owned invariant identifiers as well as to focused, ticket, release, or live gates.
-The gate command recorded in evidence and the gate command included in the reusable fingerprint come from that same declaration.
+Impact rules select required gates from changed paths.
+Each exact gate command declares proof-input entry points.
+The proof layer computes their repository-local Python and JavaScript or TypeScript import closure, so its reusable fingerprint and impact selection include transitive executable dependencies without broadening unrelated commands.
+When a tier has multiple provider commands, those same inputs select only commands covering a known changed path; if no command recognizes a classified provider path, selection expands to every command in that tier.
+The command recorded in evidence and the command-specific proof inputs included in the reusable fingerprint come from the same manifest declaration.
 The existing risk tiers in `docs/agents/testing.md` remain the policy.
 
-A proof is reusable only while all covered inputs remain unchanged:
+A proof is reusable only while all covered inputs have identical pre-run and post-run state.
+Existing covered files and recursive input trees are additionally monitored for transient mutation throughout a gate on macOS and Linux:
 
 - implementation paths;
 - contract and schema paths;
 - fixture and test paths;
 - build and runtime configuration;
-- file type, executable mode, and symlink target for covered files;
-- provider target when the proof is live;
+- regular-file type and executable mode for covered files, with every symbolic link rejected;
+- provider origin and matching deployed commit, tree, and build instance when the proof is live;
 - canonical data fingerprints when the proof covers real data.
 
 A changed documentation file does not invalidate a runtime proof unless it changes an executable contract or command.
 A provider-dependent claim is never proven by a deterministic test adapter.
 A missing live dependency produces `blocked`, never a skipped green result.
+Live-provider proof is reusable for at most 15 minutes and only after freshly observing the same origin, immutable build instance, deployed commit and tree, clean local commit and tree, and configuration-presence state.
 
 ## 11. Knowledge topology
 
@@ -332,12 +349,11 @@ goDiesel already contains several deep modules and strong system properties:
 
 The remaining friction is mostly in the mutation, proof, and release layers:
 
-- The read-only inspector now provides one capability map, but an agent still needs focused domain guidance before changing a capability.
-- Route sharing has a coherent control interface, while curation, generation, deployment, provider checks, and evidence use separate entry points.
-- Commands return a mixture of prose, JSON, logs, URLs, and generated files without one result envelope.
-- Verification impact selection is documented but manually reconstructed from changed paths.
-- Gate validity is a prose rule rather than a fingerprinted proof.
-- The read-only doctor proves route identity inventory and configuration presence, but it deliberately does not re-derive generated content or contact providers.
+- The inspector provides one capability map, while focused guides remain necessary for domain-specific owner decisions.
+- Route sharing, curation, generation, planned-route ownership, provider readiness, and evidence use the unified interface; application deployment still uses a separate release path.
+- Local capability commands return the shared result envelope, while older compatibility paths retain their existing human output.
+- Verification selection and reuse are manifest-owned, but application release does not yet enforce the shared receipt contract.
+- The doctor proves route identity inventory and configuration presence, while explicit capability commands own generation and live-provider checks.
 - The doctor checks architecture and plan indexes mechanically, but semantic contradictions between documents still require review.
 - External deployments have good smoke tests but no shared receipt contract across release types.
 
@@ -387,6 +403,7 @@ A new worktree is preferred when the primary checkout is dirty, the task is long
 The plan and receipt identify the worktree and commit they apply to.
 
 Canonical writers use atomic publication and capability-specific locks where concurrent execution could corrupt state.
+The Admin service and unified route creation, generation, and curation commands share one cross-process lock for every mutation of the owner-owned route catalogue or its generated projections.
 The control layer does not invent a global lock unless two real writers compete for the same state.
 
 ## 16. System invariants

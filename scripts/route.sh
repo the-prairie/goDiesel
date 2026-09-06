@@ -7,6 +7,7 @@
 # them rather than reimplementing them.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+export PYTHONDONTWRITEBYTECODE=1
 
 PYTHON="python3"
 if [ -x ".venv/bin/python" ]; then
@@ -24,7 +25,8 @@ Usage: ./scripts/route.sh <command> [arguments]
   curate                    Open Admin with its local owner writer.
   check <slug>              Validate and build a route-only bundle, without publishing.
   preview <slug> [--detach] Validate, then serve a route-only local preview.
-  publish <slug> <name> [--replace-existing]
+  publish <slug> <name> --authorize-target <name> --authorize-replacement <name>
+                          [--replace-existing]
                             Publish to https://share-<name>.godiesel.pages.dev/
 
 Examples:
@@ -34,7 +36,8 @@ Examples:
   ./scripts/route.sh create --proposal /path/to/proposal.json
   ./scripts/route.sh preview 17654151284 --detach
   ./scripts/route.sh check 17654151284
-  ./scripts/route.sh publish 17654151284 kyoto-hills
+  ./scripts/route.sh publish 17654151284 kyoto-hills \
+    --authorize-target kyoto-hills --authorize-replacement kyoto-hills
 EOF
 }
 
@@ -65,6 +68,8 @@ case "$command" in
   check)
     slug="${1:-}"
     if [[ -z "$slug" ]]; then usage; exit 1; fi
+    "${PYTHON}" -m pytest -q -p no:cacheprovider \
+      test_route_create.py test_route_provenance.py
     # Report readiness before spending a build on it.
     "${PYTHON}" route_status.py "$slug"
     echo

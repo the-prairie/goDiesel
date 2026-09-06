@@ -13,6 +13,9 @@ Run live-provider tests only for provider, terrain, imagery, or camera changes.
 Run the complete release gate only for production cutover or changes to shared application infrastructure.
 
 A successful gate remains valid unless subsequent edits touch behavior covered by that gate.
+Verification blocks when covered inputs differ between its pre-run and post-run snapshots.
+On macOS and Linux it also blocks when an existing covered file or any directory in a recursive covered tree emits a content mutation event, or when file state proves a transient permission mutation, during the gate.
+The catalogue recovery monitor is deliberately conservative on macOS: because kqueue does not name the child behind a directory-entry event, any such event in a recovery-bearing directory blocks proof rather than risking an undetected transient recovery artifact.
 
 ## Verification Matrix
 
@@ -40,7 +43,10 @@ Never report a missing live dependency as skipped success.
 Use `blocked` and name the missing credential, acceleration, quota, source, or provider without exposing its value.
 
 Route-share verification records this contract under `.godiesel/evidence/`.
+Canonical generation, owner-curation, and named provider verification record the same contract under `.godiesel/evidence/`.
 Until every capability uses the general receipt, record the same proof contract in the pull request or final task report for uncovered capabilities.
+
+See `docs/agents/local-capabilities.md` for executing and reusing these capability-specific proofs.
 
 ## Impact selection
 
@@ -50,6 +56,7 @@ Classify the change before choosing commands:
 | --- | --- |
 | Pure domain or writer | Owning module interface, invariants, unit tests, and affected generated contract |
 | One product surface | Surface behavior, shared UI/domain dependencies, focused Playwright, and viewport evidence |
+| Browser specification or snapshot | The Playwright-inclusive application ticket gate |
 | Provider, renderer, terrain, imagery, or camera | Deterministic interface tests plus the applicable live-provider proof |
 | Build, routing, data tier, shared shell, or test infrastructure | Cross-application consumers and release-tier escalation |
 | Documentation only | Local links, indexes, command references, terminology, and `git diff --check` |
@@ -73,7 +80,12 @@ Reuse a route-share proof without executing its gate only when every covered inp
 ```
 
 The reuse result names invalidated input categories and blocks when no valid proof remains.
+For a passed receipt, every recorded gate must itself be passed with exit code zero; contradictory evidence is never reusable.
+Route-share, route-generation, and owner-curation verification also block before issuing or reusing proof while interrupted generation backup or staging residue exists.
+Route-share preview verification checks the same state before and after its command and blocks on transient recovery-directory changes.
 Route release performs the same reuse validation before any external effect.
+That runtime release precondition is the route-share focused proof for the exact route artifact.
+Impact-selected ticket, release, and live gates remain merge and production-cutover requirements for code changes and are not replaced or downgraded by the route release command.
 
 ## Commands
 
@@ -110,13 +122,22 @@ The real-data, no-interception pipeline acceptance gate is:
 ```sh
 GODIESEL_EARTH_ENGINE_PROJECT=playground-406023 \
 GODIESEL_PIPELINE_SHARE_NAME=pipeline-proof \
+GODIESEL_PIPELINE_TARGET_AUTHORITY=pipeline-proof \
+GODIESEL_PIPELINE_REPLACEMENT_AUTHORITY=pipeline-proof \
+GODIESEL_PIPELINE_REPLACE_EXISTING=1 \
 npm run verify:live-pipeline
 ```
+
+Set `GODIESEL_PIPELINE_REPLACE_EXISTING=1` only after the owner explicitly approves replacing the existing stable proof alias.
 
 Run it only when proving a production cutover or the complete provider pipeline.
 It reads the complete private Strava export, sends selected real route geometry to the configured providers, and creates a real Cloudflare Pages branch deployment.
 It must fail when credentials, billing, quota, browser acceleration, raw source data, or any provider are unavailable.
 It never substitutes network responses, route records, renderers, or writer APIs.
+
+Keep automatic Git-integrated Cloudflare preview deployments disabled for the Pages project.
+An authorized preview must be built, identity-bound, and uploaded through the repository's guarded direct-upload command so a clean Git clone cannot bypass artifact construction or provider-key validation.
+Production branch deployment controls remain a separate release decision.
 
 The generated evidence under `app/artifacts/live-pipeline/` is intentionally ignored because it contains source and response hashes derived from private inputs.
 Do not commit it.
@@ -136,8 +157,11 @@ GODIESEL_ATLAS_PREVIEW_URL=<preview-url> npm run test:e2e:earth
 Local Google 3D cinematic verification is:
 
 ```sh
-npm run test:e2e:google-live
+./scripts/godiesel verify provider-readiness --provider google-3d --provider-target http://localhost:8787 --json
 ```
+
+The adapter serves the exact prebuilt application artifact on that origin when no preview is already running.
+Build the clean checkout with `./make-dist.sh` before invoking the live gate.
 
 Every explicit live-provider command fails when its required configuration or
 provider is unavailable. Missing evidence must never appear as a skipped green run.
@@ -145,6 +169,9 @@ provider is unavailable. Missing evidence must never appear as a skipped green r
 Local native Google 3D verification must use `http://localhost:8787` rather
 than `http://127.0.0.1:8787`. The configured browser key authorizes the
 `localhost` origin, and Google treats the loopback IP as a different referrer.
+
+Normal verification leaves tracked archival screenshots untouched.
+Set `GODIESEL_CAPTURE_E2E_EVIDENCE=1` only for an intentional evidence refresh, then review every changed image before committing it.
 
 ## Gate Validity
 
@@ -157,13 +184,24 @@ Rerun the smallest affected tier when a subsequent edit touches behavior covered
 Escalate to the release tier when a defect indicates a cross-application regression or when shared routing, build, test, rendering, or application-shell infrastructure changes.
 
 A proof's covered inputs include implementation, contracts, schemas, fixtures, test code, build and runtime configuration, canonical data fingerprints when applicable, and the external provider or deployment target for live proof.
-The manifest-owned fingerprint aggregates every matching file per impact pattern, records absent patterns, records configuration presence without secret values, and digests non-sensitive provider targets.
-Each observed file also contributes its file type, executable mode, and symlink target when applicable.
+Unreadable directories anywhere inside a recursive input tree block the snapshot rather than disappearing from its aggregate digest.
+The manifest-owned fingerprint aggregates every matching file per impact pattern and every repository-local Python or JavaScript or TypeScript import reachable from command proof inputs.
+It records absent patterns, records configuration presence without secret values, and digests non-sensitive provider targets and observed deployment identities.
+Each observed regular file also contributes its file type and executable mode.
+Every symlink in a covered input path is invalid, including a symlink whose target remains inside the checkout.
 Changing any covered input invalidates that proof.
 
 Each impact rule names the capability invariants that justify its selected gates.
 Focused route-share evidence records the exact manifest-declared route check that ran; its fingerprint covers the route-only application source, browser journey, build and scoping scripts, dependency and test configuration, route data, and public route media consumed by that check.
-Live proof requires an explicit provider or deployment target even when no additional credential is required.
+Live provider proof requires an explicit origin root whose non-redirected `build-identity.json` matches the clean local commit and tree before and after the gate.
+The identity must declare `artifact_kind: built-artifact`; development-server identities are rejected before a browser gate runs.
+The identity also carries a unique build instance id, so reuse blocks after a same-commit redeployment as well as after a source change.
+Its digest-bound artifact manifest inventories every deployment input by path, size, SHA-256, and delivery class.
+Verification fetches every `served-asset` from the named origin and blocks proof or reuse after bundle tampering.
+Cloudflare consumes hosting control files such as `_headers` and `_redirects` during deployment instead of serving them, so the manifest binds them as `deployment-control` inputs without attempting an HTTP fetch.
+The build finalizer rechecks the checkout commit, tree, and clean state after bundling, and the publisher regenerates and compares the manifest immediately before deployment.
+Remote identity shape and expected commit/tree are rejected before the larger artifact manifest is fetched.
+Provider configuration presence is sampled again after the live gate so file-backed configuration cannot disappear while a passed receipt is issued.
 
 Documentation, evidence packaging, or unrelated edits do not invalidate a proof unless they change an executable command, contract, or claimed behavior.
 

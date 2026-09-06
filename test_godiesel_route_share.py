@@ -6,7 +6,10 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator
 
+import godiesel_route_share
+from admin_curation import owner_mutation_lock
 from godiesel_route_share import execute_route_share
+from godiesel_verification import reuse_verification
 
 
 ROOT = Path(__file__).resolve().parent
@@ -37,6 +40,38 @@ def completed(
     stderr: str = "",
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.CompletedProcess(command, returncode, stdout, stderr)
+
+
+def release_output(share_name: str = "ridge") -> str:
+    target = {
+        "immutable_deployment_url": "https://a1b2c3.godiesel.pages.dev/",
+        "stable_alias": f"https://share-{share_name}.godiesel.pages.dev/",
+        "commit": "a" * 40,
+        "tree": "b" * 40,
+        "build_id": "12345678-1234-4234-8234-123456789abc",
+        "artifact_manifest_sha256": "c" * 64,
+        "smoke_status": "passed",
+    }
+    return "GODIESEL_RELEASE_TARGET=" + json.dumps(target) + "\n"
+
+
+def release_observed_output(share_name: str = "ridge") -> str:
+    return "GODIESEL_RELEASE_OBSERVED=" + json.dumps(
+        {
+            "immutable_deployment_url": "https://a1b2c3.godiesel.pages.dev/",
+            "stable_alias": f"https://share-{share_name}.godiesel.pages.dev/",
+            "external_status": "externally-unknown",
+        }
+    ) + "\n"
+
+
+def release_attempted_output(share_name: str = "ridge") -> str:
+    return "GODIESEL_RELEASE_ATTEMPTED=" + json.dumps(
+        {
+            "stable_alias": f"https://share-{share_name}.godiesel.pages.dev/",
+            "external_status": "externally-unknown",
+        }
+    ) + "\n"
 
 
 def establish_route_lineage(
@@ -96,9 +131,14 @@ def establish_route_lineage(
 
 
 def install_evidence_contract(tmp_path: Path) -> None:
+    (tmp_path / "app/public/data").mkdir(parents=True, exist_ok=True)
     system = tmp_path / "system"
     system.mkdir(exist_ok=True)
-    for name in ("evidence-receipt.schema.json", "capabilities.json"):
+    for name in (
+        "evidence-receipt.schema.json",
+        "capabilities.json",
+        "capabilities.schema.json",
+    ):
         (system / name).write_text(
             (ROOT / "system" / name).read_text(encoding="utf-8"),
             encoding="utf-8",
@@ -120,6 +160,7 @@ def test_result_and_receipt_schemas_are_valid():
 
 
 def test_verify_writes_a_general_redacted_evidence_receipt(tmp_path: Path):
+    (tmp_path / "app/public/data").mkdir(parents=True)
     (tmp_path / "system").mkdir()
     (tmp_path / "system/evidence-receipt.schema.json").write_text(
         (ROOT / "system/evidence-receipt.schema.json").read_text(encoding="utf-8"),
@@ -127,6 +168,10 @@ def test_verify_writes_a_general_redacted_evidence_receipt(tmp_path: Path):
     )
     (tmp_path / "system/capabilities.json").write_text(
         (ROOT / "system/capabilities.json").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (tmp_path / "system/capabilities.schema.json").write_text(
+        (ROOT / "system/capabilities.schema.json").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     (tmp_path / ".gitignore").write_text(
@@ -200,6 +245,310 @@ def test_verify_writes_a_general_redacted_evidence_receipt(tmp_path: Path):
     assert secret not in evidence_path.read_text(encoding="utf-8")
 
 
+def test_verify_withdraws_promoted_proof_when_input_changes_during_promotion(
+    tmp_path: Path,
+    monkeypatch,
+):
+    install_evidence_contract(tmp_path)
+    implementation = tmp_path / "godiesel_route_share.py"
+    implementation.write_text("stable\n", encoding="utf-8")
+    original_set_outcome = godiesel_route_share._set_receipt_outcome
+
+    def mutating_set_outcome(root, summary, outcome):
+        promoted = original_set_outcome(root, summary, outcome)
+        if outcome == "passed":
+            implementation.write_text("changed during promotion\n", encoding="utf-8")
+        return promoted
+
+    monkeypatch.setattr(
+        godiesel_route_share,
+        "_set_receipt_outcome",
+        mutating_set_outcome,
+    )
+    result = execute_route_share(
+        tmp_path,
+        "verify",
+        slug="route-1",
+        runner=RecordingRunner(completed([], stdout="verified\n")),
+    )
+
+    assert result["status"] == "blocked"
+    assert result["evidence"] is None
+    assert "GODIESEL_VERIFICATION_INPUTS_CHANGED" in {
+        issue["code"] for issue in result["blockers"]
+    }
+    receipt = json.loads((tmp_path / result["receipt"]["path"]).read_text())
+    assert receipt["outcome"] == "incomplete"
+    evidence_receipts = [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in (tmp_path / ".godiesel/evidence").glob("*.json")
+    ]
+    assert evidence_receipts
+    assert all(receipt["status"] != "passed" for receipt in evidence_receipts)
+
+
+def test_verify_cannot_leave_reusable_proof_when_normal_withdrawal_fails(
+    tmp_path: Path,
+    monkeypatch,
+):
+    install_evidence_contract(tmp_path)
+    implementation = tmp_path / "godiesel_route_share.py"
+    implementation.write_text("stable\n", encoding="utf-8")
+    original_set_outcome = godiesel_route_share._set_receipt_outcome
+
+    def mutating_set_outcome(root, summary, outcome):
+        if outcome == "incomplete":
+            return None
+        promoted = original_set_outcome(root, summary, outcome)
+        implementation.write_text("changed during promotion\n", encoding="utf-8")
+        implementation.write_text("stable\n", encoding="utf-8")
+        return promoted
+
+    monkeypatch.setattr(
+        godiesel_route_share,
+        "_set_receipt_outcome",
+        mutating_set_outcome,
+    )
+    monkeypatch.setattr(
+        godiesel_route_share,
+        "invalidate_evidence_receipt",
+        lambda *_args, **_kwargs: None,
+    )
+
+    result = execute_route_share(
+        tmp_path,
+        "verify",
+        slug="route-1",
+        runner=RecordingRunner(completed([], stdout="verified\n")),
+    )
+    reused = reuse_verification(tmp_path, "route-share", slug="route-1", environ={})
+
+    assert result["status"] == "blocked"
+    assert "GODIESEL_VERIFICATION_INPUTS_CHANGED" in {
+        issue["code"] for issue in result["blockers"]
+    }
+    assert reused["status"] == "blocked"
+    route_receipt = json.loads((tmp_path / result["receipt"]["path"]).read_text())
+    assert route_receipt["outcome"] == "incomplete"
+    evidence_receipts = [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in (tmp_path / ".godiesel/evidence").glob("*.json")
+    ]
+    assert evidence_receipts
+    assert all(receipt["status"] != "passed" for receipt in evidence_receipts)
+
+
+def test_verify_rejects_a_mutated_receipt_draft_with_the_same_identity(
+    tmp_path: Path,
+    monkeypatch,
+):
+    install_evidence_contract(tmp_path)
+    original_write = godiesel_route_share._write_receipt
+
+    def rewriting_write(*args, **kwargs):
+        summary = original_write(*args, **kwargs)
+        path = tmp_path / summary["path"]
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+        path.write_text(json.dumps(receipt), encoding="utf-8")
+        return summary
+
+    monkeypatch.setattr(godiesel_route_share, "_write_receipt", rewriting_write)
+    result = execute_route_share(
+        tmp_path,
+        "verify",
+        slug="route-1",
+        runner=RecordingRunner(completed([], stdout="verified\n")),
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][-1]["code"] == "GODIESEL_RECEIPT_PROMOTION_FAILED"
+
+
+def test_route_share_verify_and_reuse_block_while_generation_recovery_is_pending(
+    tmp_path: Path,
+):
+    install_evidence_contract(tmp_path)
+    successful = execute_route_share(
+        tmp_path,
+        "verify",
+        slug="route-1",
+        runner=RecordingRunner(completed([], stdout="verified\n")),
+    )
+    backup = tmp_path / "app/public/data/.route-generation-backup"
+    backup.mkdir()
+    (backup / "ready").touch()
+    runner = RecordingRunner(completed([], stdout="must not run\n"))
+
+    fresh = execute_route_share(
+        tmp_path,
+        "verify",
+        slug="route-1",
+        runner=runner,
+    )
+    reused = reuse_verification(
+        tmp_path,
+        "route-share",
+        slug="route-1",
+        environ={},
+    )
+
+    assert successful["status"] == "passed"
+    assert fresh["status"] == "blocked"
+    assert fresh["evidence"] is None
+    assert fresh["blockers"][0]["code"] == (
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_PENDING"
+    )
+    assert runner.calls == []
+    assert reused["status"] == "blocked"
+    assert reused["result"]["reused"] is False
+    assert reused["blockers"][0]["code"] == (
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_PENDING"
+    )
+
+
+def test_route_share_blocks_while_route_share_recovery_is_pending(tmp_path: Path):
+    install_evidence_contract(tmp_path)
+    recovery = tmp_path / ".route-share/recovery/unresolved.json"
+    recovery.parent.mkdir(parents=True)
+    recovery.write_text("{}\n", encoding="utf-8")
+    runner = RecordingRunner(completed([], stdout="must not run\n"))
+
+    result = execute_route_share(
+        tmp_path,
+        "verify",
+        slug="route-1",
+        runner=runner,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == (
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_PENDING"
+    )
+    assert runner.calls == []
+
+
+def test_route_share_receipts_do_not_follow_route_share_symlink(tmp_path: Path):
+    install_evidence_contract(tmp_path)
+    external = tmp_path / "external"
+    external.mkdir()
+    (tmp_path / ".route-share").symlink_to(external, target_is_directory=True)
+    request = tmp_path / "request.json"
+    request.write_text("{}\n", encoding="utf-8")
+    proposal = {
+        "document_type": "route-share-proposal",
+        "proposal_id": "proposal-1",
+        "route_spec": {"activity_id": "route-1"},
+    }
+
+    result = execute_route_share(
+        tmp_path,
+        "plan",
+        request_path=request,
+        runner=RecordingRunner(completed([], stdout=json.dumps(proposal))),
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == (
+        "GODIESEL_LOCAL_ARTIFACT_ROOT_UNSAFE"
+    )
+    assert list(external.iterdir()) == []
+
+
+def test_route_share_preview_verify_blocks_while_generation_recovery_is_pending(
+    tmp_path: Path,
+):
+    install_evidence_contract(tmp_path)
+    (tmp_path / "app/public/data/.routes-staging-interrupted").mkdir()
+    runner = RecordingRunner(completed([], stdout="must not run\n"))
+
+    result = execute_route_share(
+        tmp_path,
+        "verify",
+        slug="route-1",
+        preview=True,
+        runner=runner,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["evidence"] is None
+    assert result["blockers"][0]["code"] == (
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_PENDING"
+    )
+    assert runner.calls == []
+
+
+@pytest.mark.parametrize("remove_residue", [False, True])
+def test_route_share_preview_verify_blocks_when_recovery_changes_during_command(
+    tmp_path: Path,
+    remove_residue: bool,
+):
+    install_evidence_contract(tmp_path)
+    staging = tmp_path / "app/public/data/.routes-staging-interrupted"
+
+    def mutating_runner(command, **kwargs):
+        staging.mkdir()
+        if remove_residue:
+            staging.rmdir()
+        return completed(command, stdout="preview ready\n")
+
+    result = execute_route_share(
+        tmp_path,
+        "verify",
+        slug="route-1",
+        preview=True,
+        runner=mutating_runner,
+    )
+
+    blocker_codes = {blocker["code"] for blocker in result["blockers"]}
+    assert result["status"] == "blocked"
+    assert result["exit_code"] == 2
+    assert result["evidence"] is None
+    assert (
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_CHANGED"
+        if remove_residue
+        else "GODIESEL_ROUTE_GENERATION_RECOVERY_PENDING"
+    ) in blocker_codes
+    receipt = json.loads((tmp_path / result["receipt"]["path"]).read_text())
+    assert receipt["outcome"] == "incomplete"
+
+
+def test_route_share_verify_observes_recovery_changes_before_proof_snapshot(
+    tmp_path: Path,
+    monkeypatch,
+):
+    install_evidence_contract(tmp_path)
+    staging = tmp_path / "app/public/data/.routes-staging-interrupted"
+    original_snapshot = godiesel_route_share._focused_proof_snapshot
+    calls = 0
+
+    def racing_snapshot(root, environ):
+        nonlocal calls
+        if calls == 0:
+            staging.mkdir()
+            staging.rmdir()
+        calls += 1
+        return original_snapshot(root, environ)
+
+    monkeypatch.setattr(godiesel_route_share, "_focused_proof_snapshot", racing_snapshot)
+
+    result = execute_route_share(
+        tmp_path,
+        "verify",
+        slug="route-1",
+        runner=RecordingRunner(completed([], stdout="verified\n")),
+    )
+
+    assert result["status"] == "blocked"
+    assert result["exit_code"] == 2
+    assert {blocker["code"] for blocker in result["blockers"]} >= {
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_CHANGED"
+    }
+    receipt = json.loads((tmp_path / result["receipt"]["path"]).read_text())
+    assert receipt["outcome"] == "incomplete"
+    evidence = json.loads((tmp_path / result["evidence"]["path"]).read_text())
+    assert evidence["status"] == "blocked"
+
+
 def test_verify_blocks_when_the_evidence_contract_is_missing(tmp_path: Path):
     system = tmp_path / "system"
     system.mkdir()
@@ -240,7 +589,7 @@ def test_verify_blocks_when_the_capability_manifest_is_missing(tmp_path: Path):
     )
 
     assert result["status"] == "blocked"
-    assert result["blockers"][0]["code"] == "GODIESEL_MANIFEST_UNAVAILABLE"
+    assert result["blockers"][0]["code"] == "GODIESEL_MANIFEST_SCHEMA_MISSING"
     assert result["evidence"] is None
     assert runner.calls == []
     assert_valid_result(result)
@@ -345,6 +694,39 @@ def test_apply_preserves_idempotent_creation_report_and_links_proposal(tmp_path:
     assert receipt["route_slug"] == "route-1"
 
 
+def test_apply_blocks_while_catalogue_mutation_lock_is_held(tmp_path: Path):
+    proposal_path = tmp_path / "proposal.json"
+    proposal_path.write_text('{"proposal_id":"proposal-1"}\n', encoding="utf-8")
+    runner = RecordingRunner(
+        completed(
+            [],
+            returncode=2,
+            stderr=json.dumps(
+                {
+                    "ok": False,
+                    "error": {
+                        "code": "repository.mutation_busy",
+                        "message": "another catalogue mutation is in progress",
+                    },
+                }
+            ),
+        )
+    )
+
+    with owner_mutation_lock(tmp_path):
+        result = execute_route_share(
+            tmp_path,
+            "apply",
+            proposal_path=proposal_path,
+            authority="canonical-local",
+            runner=runner,
+        )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_ROUTE_MUTATION_BUSY"
+    assert len(runner.calls) == 1
+
+
 @pytest.mark.parametrize(
     ("preview", "detach", "expected"),
     [
@@ -359,8 +741,7 @@ def test_verify_maps_check_and_loopback_preview_modes(
     detach: bool,
     expected: list[str],
 ):
-    if not preview:
-        install_evidence_contract(tmp_path)
+    install_evidence_contract(tmp_path)
     runner = RecordingRunner(completed([], stdout="verified\n"))
 
     result = execute_route_share(
@@ -424,7 +805,7 @@ def test_release_requires_exact_authority_and_preserves_replacement_guard(tmp_pa
     output = "\n".join(
         [
             "4/4 Publishing https://share-ridge.godiesel.pages.dev/",
-            "Deployment complete: https://a1b2c3.godiesel.pages.dev",
+            release_output().strip(),
             "Published route guide: https://share-ridge.godiesel.pages.dev/#/routes/route-1",
         ]
     )
@@ -463,6 +844,10 @@ def test_release_requires_exact_authority_and_preserves_replacement_guard(tmp_pa
         "publish",
         "route-1",
         "ridge",
+        "--authorize-target",
+        "ridge",
+        "--authorize-replacement",
+        "ridge",
         "--replace-existing",
     ]
     assert runner.calls == [
@@ -484,6 +869,10 @@ def test_release_requires_exact_authority_and_preserves_replacement_guard(tmp_pa
             "publish",
             "route-1",
             "ridge",
+            "--authorize-target",
+            "ridge",
+            "--authorize-replacement",
+            "ridge",
             "--replace-existing",
         ]
     ]
@@ -496,6 +885,10 @@ def test_release_requires_exact_authority_and_preserves_replacement_guard(tmp_pa
         "authorized_share_name": "ridge",
         "replacement_authorized": True,
         "smoke_status": "passed",
+        "commit": "a" * 40,
+        "tree": "b" * 40,
+        "build_id": "12345678-1234-4234-8234-123456789abc",
+        "artifact_manifest_sha256": "c" * 64,
     }
     assert_valid_result(released)
     Draft202012Validator(
@@ -535,6 +928,7 @@ def test_release_without_immutable_url_is_incomplete_and_blocks_handoff(tmp_path
         share_name="ridge",
         authority="external-durable",
         target_authority="ridge",
+        replacement_authority="ridge",
         runner=runner,
     )
 
@@ -547,6 +941,334 @@ def test_release_without_immutable_url_is_incomplete_and_blocks_handoff(tmp_path
     assert_valid_result(result)
 
 
+def test_release_records_ambiguous_external_state_before_any_retry(tmp_path: Path):
+    runner = RecordingRunner()
+    establish_route_lineage(tmp_path, runner)
+    runner.results.append(
+        completed([], returncode=1, stdout=release_observed_output())
+    )
+
+    result = execute_route_share(
+        tmp_path,
+        "release",
+        slug="route-1",
+        share_name="ridge",
+        authority="external-durable",
+        target_authority="ridge",
+        replacement_authority="ridge",
+        runner=runner,
+    )
+
+    assert result["status"] == "blocked"
+    assert "GODIESEL_RELEASE_EXTERNAL_STATE_UNKNOWN" in {
+        issue["code"] for issue in result["blockers"]
+    }
+    receipt = json.loads((tmp_path / result["receipt"]["path"]).read_text())
+    assert receipt["release_target"]["external_status"] == "externally-unknown"
+    assert receipt["release_target"]["immutable_deployment_url"] == (
+        "https://a1b2c3.godiesel.pages.dev/"
+    )
+    assert_valid_result(result)
+
+
+def test_release_records_an_attempt_when_upload_fails_before_a_url_is_known(
+    tmp_path: Path,
+):
+    runner = RecordingRunner()
+    establish_route_lineage(tmp_path, runner)
+    runner.results.append(
+        completed([], returncode=1, stdout=release_attempted_output())
+    )
+
+    result = execute_route_share(
+        tmp_path,
+        "release",
+        slug="route-1",
+        share_name="ridge",
+        authority="external-durable",
+        target_authority="ridge",
+        replacement_authority="ridge",
+        runner=runner,
+    )
+
+    assert result["status"] == "blocked"
+    assert "GODIESEL_RELEASE_EXTERNAL_STATE_UNKNOWN" in {
+        issue["code"] for issue in result["blockers"]
+    }
+    receipt = json.loads((tmp_path / result["receipt"]["path"]).read_text())
+    assert receipt["outcome"] == "incomplete"
+    assert receipt["release_target"] == {
+        "stable_alias": "https://share-ridge.godiesel.pages.dev/",
+        "external_status": "externally-unknown",
+        "authorized_share_name": "ridge",
+        "replacement_authorized": True,
+    }
+
+
+def test_release_observes_transient_recovery_changes_during_publication(tmp_path: Path):
+    lineage_runner = RecordingRunner()
+    establish_route_lineage(tmp_path, lineage_runner)
+    staging = tmp_path / "app/public/data/.routes-staging-interrupted"
+
+    def mutating_release(command, **kwargs):
+        staging.mkdir()
+        staging.rmdir()
+        return completed(
+            command,
+            stdout=release_output(),
+        )
+
+    result = execute_route_share(
+        tmp_path,
+        "release",
+        slug="route-1",
+        share_name="ridge",
+        authority="external-durable",
+        target_authority="ridge",
+        replacement_authority="ridge",
+        runner=mutating_release,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == (
+        "GODIESEL_ROUTE_GENERATION_RECOVERY_CHANGED"
+    )
+    receipt = json.loads((tmp_path / result["receipt"]["path"]).read_text())
+    assert receipt["outcome"] == "incomplete"
+
+
+def test_release_observes_transient_covered_input_changes_during_publication(
+    tmp_path: Path,
+):
+    implementation = tmp_path / "godiesel_route_share.py"
+    implementation.write_text("stable\n", encoding="utf-8")
+    lineage_runner = RecordingRunner()
+    establish_route_lineage(tmp_path, lineage_runner)
+
+    def mutating_release(command, **kwargs):
+        implementation.write_text("transient\n", encoding="utf-8")
+        implementation.write_text("stable\n", encoding="utf-8")
+        return completed(
+            command,
+            stdout=release_output(),
+        )
+
+    result = execute_route_share(
+        tmp_path,
+        "release",
+        slug="route-1",
+        share_name="ridge",
+        authority="external-durable",
+        target_authority="ridge",
+        replacement_authority="ridge",
+        runner=mutating_release,
+    )
+
+    assert result["status"] == "blocked"
+    assert any(
+        issue["code"] == "GODIESEL_VERIFICATION_INPUTS_CHANGED"
+        for issue in result["blockers"]
+    )
+    receipt = json.loads((tmp_path / result["receipt"]["path"]).read_text())
+    assert receipt["outcome"] == "incomplete"
+
+
+def test_release_monitors_the_reused_evidence_artifact_during_publication(
+    tmp_path: Path,
+):
+    lineage_runner = RecordingRunner()
+    establish_route_lineage(tmp_path, lineage_runner)
+    evidence_path = sorted((tmp_path / ".godiesel/evidence").glob("*.json"))[-1]
+    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    artifact = tmp_path / evidence["artifacts"][0]["path"]
+    original = artifact.read_bytes()
+
+    def mutating_release(command, **kwargs):
+        artifact.write_bytes(b"transient release artifact\n")
+        artifact.write_bytes(original)
+        return completed(command, stdout=release_output())
+
+    result = execute_route_share(
+        tmp_path,
+        "release",
+        slug="route-1",
+        share_name="ridge",
+        authority="external-durable",
+        target_authority="ridge",
+        replacement_authority="ridge",
+        runner=mutating_release,
+    )
+
+    assert result["status"] == "blocked"
+    assert "GODIESEL_VERIFICATION_INPUTS_CHANGED" in {
+        issue["code"] for issue in result["blockers"]
+    }
+    receipt = json.loads((tmp_path / result["receipt"]["path"]).read_text())
+    assert receipt["outcome"] == "incomplete"
+
+
+def test_release_monitor_stays_live_through_receipt_finalization(
+    tmp_path: Path,
+    monkeypatch,
+):
+    lineage_runner = RecordingRunner()
+    establish_route_lineage(tmp_path, lineage_runner)
+    evidence_path = sorted((tmp_path / ".godiesel/evidence").glob("*.json"))[-1]
+    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    artifact = tmp_path / evidence["artifacts"][0]["path"]
+    original_artifact = artifact.read_bytes()
+    original_write = godiesel_route_share._write_receipt
+
+    def mutating_write(*args, **kwargs):
+        summary = original_write(*args, **kwargs)
+        artifact.write_bytes(b"transient finalization artifact\n")
+        artifact.write_bytes(original_artifact)
+        return summary
+
+    monkeypatch.setattr(godiesel_route_share, "_write_receipt", mutating_write)
+
+    result = execute_route_share(
+        tmp_path,
+        "release",
+        slug="route-1",
+        share_name="ridge",
+        authority="external-durable",
+        target_authority="ridge",
+        replacement_authority="ridge",
+        runner=RecordingRunner(completed([], stdout=release_output())),
+    )
+
+    assert result["status"] == "blocked"
+    assert "GODIESEL_VERIFICATION_INPUTS_CHANGED" in {
+        issue["code"] for issue in result["blockers"]
+    }
+    receipt = json.loads((tmp_path / result["receipt"]["path"]).read_text())
+    assert receipt["outcome"] == "incomplete"
+
+
+def test_release_monitor_stays_live_for_lineage_receipt_finalization(
+    tmp_path: Path,
+    monkeypatch,
+):
+    lineage_runner = RecordingRunner()
+    establish_route_lineage(tmp_path, lineage_runner)
+    plan_receipt = sorted((tmp_path / ".route-share/runs").glob("*.json"))[0]
+    original_receipt = plan_receipt.read_bytes()
+    original_write = godiesel_route_share._write_receipt
+
+    def mutating_write(*args, **kwargs):
+        summary = original_write(*args, **kwargs)
+        plan_receipt.write_bytes(b"{}\n")
+        plan_receipt.write_bytes(original_receipt)
+        return summary
+
+    monkeypatch.setattr(godiesel_route_share, "_write_receipt", mutating_write)
+    result = execute_route_share(
+        tmp_path,
+        "release",
+        slug="route-1",
+        share_name="ridge",
+        authority="external-durable",
+        target_authority="ridge",
+        replacement_authority="ridge",
+        runner=RecordingRunner(completed([], stdout=release_output())),
+    )
+
+    assert result["status"] == "blocked"
+    assert "GODIESEL_VERIFICATION_INPUTS_CHANGED" in {
+        issue["code"] for issue in result["blockers"]
+    }
+
+
+def test_verify_late_recovery_invalidates_transition_and_general_evidence(
+    tmp_path: Path,
+    monkeypatch,
+):
+    install_evidence_contract(tmp_path)
+    original_write = godiesel_route_share._write_receipt
+
+    def recovering_write(*args, **kwargs):
+        summary = original_write(*args, **kwargs)
+        recovery = tmp_path / ".route-share/recovery/unresolved.json"
+        recovery.parent.mkdir(parents=True, exist_ok=True)
+        recovery.write_text("{}\n", encoding="utf-8")
+        return summary
+
+    monkeypatch.setattr(godiesel_route_share, "_write_receipt", recovering_write)
+
+    result = execute_route_share(
+        tmp_path,
+        "verify",
+        slug="route-1",
+        runner=RecordingRunner(completed([], stdout="verified\n")),
+    )
+
+    assert result["status"] == "blocked"
+    assert result["evidence"] is None
+    receipt = json.loads((tmp_path / result["receipt"]["path"]).read_text())
+    assert receipt["outcome"] == "incomplete"
+    evidence_receipts = [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in (tmp_path / ".godiesel/evidence").glob("*.json")
+    ]
+    assert evidence_receipts
+    assert all(item["status"] != "passed" for item in evidence_receipts)
+    reused = reuse_verification(
+        tmp_path,
+        "route-share",
+        slug="route-1",
+        environ={},
+    )
+    assert reused["status"] == "blocked"
+
+
+def test_route_share_verify_blocks_when_covered_inputs_change_during_gate(
+    tmp_path: Path,
+):
+    install_evidence_contract(tmp_path)
+    implementation = tmp_path / "godiesel_route_share.py"
+    implementation.write_text("before\n", encoding="utf-8")
+
+    def mutating_runner(command, **kwargs):
+        implementation.write_text("after\n", encoding="utf-8")
+        return completed(command, stdout="verified\n")
+
+    result = execute_route_share(
+        tmp_path,
+        "verify",
+        slug="route-1",
+        runner=mutating_runner,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_VERIFICATION_INPUTS_CHANGED"
+    receipt = json.loads(
+        (tmp_path / result["evidence"]["path"]).read_text(encoding="utf-8")
+    )
+    assert receipt["status"] == "blocked"
+
+
+def test_route_share_verify_blocks_transient_covered_input_change(tmp_path: Path):
+    install_evidence_contract(tmp_path)
+    implementation = tmp_path / "godiesel_route_share.py"
+    implementation.write_text("before\n", encoding="utf-8")
+
+    def mutating_runner(command, **kwargs):
+        implementation.write_text("during\n", encoding="utf-8")
+        implementation.write_text("before\n", encoding="utf-8")
+        return completed(command, stdout="verified\n")
+
+    result = execute_route_share(
+        tmp_path,
+        "verify",
+        slug="route-1",
+        runner=mutating_runner,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blockers"][0]["code"] == "GODIESEL_VERIFICATION_INPUTS_CHANGED"
+
+
 def test_release_requires_complete_passed_route_transition_lineage(tmp_path: Path):
     runner = RecordingRunner()
 
@@ -557,6 +1279,7 @@ def test_release_requires_complete_passed_route_transition_lineage(tmp_path: Pat
         share_name="ridge",
         authority="external-durable",
         target_authority="ridge",
+        replacement_authority="ridge",
         runner=runner,
     )
 
@@ -589,6 +1312,7 @@ def test_release_blocks_when_the_verification_proof_is_invalidated(tmp_path: Pat
         share_name="ridge",
         authority="external-durable",
         target_authority="ridge",
+        replacement_authority="ridge",
         runner=runner,
     )
 
@@ -610,6 +1334,7 @@ def test_release_blocks_when_the_evidence_contract_is_missing(tmp_path: Path):
         share_name="ridge",
         authority="external-durable",
         target_authority="ridge",
+        replacement_authority="ridge",
         runner=runner,
     )
 
@@ -640,6 +1365,7 @@ def test_release_rejects_corrupted_lineage_result_artifact(tmp_path: Path):
         share_name="ridge",
         authority="external-durable",
         target_authority="ridge",
+        replacement_authority="ridge",
         runner=runner,
     )
 
@@ -666,6 +1392,7 @@ def test_release_rejects_corrupted_plan_proposal_artifact(tmp_path: Path):
         share_name="ridge",
         authority="external-durable",
         target_authority="ridge",
+        replacement_authority="ridge",
         runner=runner,
     )
 
@@ -692,6 +1419,7 @@ def test_release_rejects_lineage_link_that_does_not_match_its_receipt(tmp_path: 
         share_name="ridge",
         authority="external-durable",
         target_authority="ridge",
+        replacement_authority="ridge",
         runner=runner,
     )
 
@@ -724,6 +1452,7 @@ def test_release_rejects_fabricated_receipts_without_linked_artifacts(tmp_path: 
         share_name="ridge",
         authority="external-durable",
         target_authority="ridge",
+        replacement_authority="ridge",
         runner=runner,
     )
 
@@ -745,12 +1474,12 @@ def test_release_receipt_links_the_complete_route_transition_lineage(tmp_path: P
         "slug": "route-1",
         "result": "created",
     }
-    release_output = "Deployment complete: https://a1b2c3.godiesel.pages.dev\n"
+    published_output = release_output()
     runner = RecordingRunner(
         completed([], stdout=json.dumps(proposal)),
         completed([], stdout=json.dumps(creation)),
         completed([], stdout="verified\n"),
-        completed([], stdout=release_output),
+        completed([], stdout=published_output),
     )
     request_path = tmp_path / "request.json"
     request_path.write_text("{}\n", encoding="utf-8")
@@ -782,6 +1511,7 @@ def test_release_receipt_links_the_complete_route_transition_lineage(tmp_path: P
         share_name="ridge",
         authority="external-durable",
         target_authority="ridge",
+        replacement_authority="ridge",
         runner=runner,
     )
 

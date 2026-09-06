@@ -1,11 +1,29 @@
 """Validated owner-curation writes for the local Admin service."""
 
 import copy
+import fcntl
 import json
 import os
+import stat
+import subprocess
+import sys
+from contextlib import contextmanager
 from pathlib import Path
 
-from curation_publish import CurationPublishError, CurationRecoveryError
+from godiesel_evidence import (
+    ensure_local_directory,
+    read_local_bytes,
+    replace_local_file,
+    unlink_local_file,
+    write_local_bytes_atomic,
+    write_local_text_atomic,
+)
+
+from curation_publish import (
+    CurationPublishError,
+    CurationRecoveryError,
+    publish_curation,
+)
 from quest_meta import (
     CURATION_LIST_FIELDS,
     CURATION_TEXT_FIELDS,
@@ -17,6 +35,219 @@ REQUIRED_CURATION_FIELDS = (*CURATION_TEXT_FIELDS, *CURATION_LIST_FIELDS)
 
 class SourceRollbackError(RuntimeError):
     """Canonical curation source could not be restored after publication failed."""
+
+    def __init__(self, message, *, recovery_paths=()):
+        super().__init__(message)
+        self.recovery_paths = tuple(Path(path) for path in recovery_paths)
+
+
+class OwnerMutationBusyError(RuntimeError):
+    """Another process currently owns the canonical owner-mutation boundary."""
+
+
+def _capture_generated_projection(root):
+    root = Path(root).absolute()
+    details_directory = Path("app/public/data/routes")
+    generated_directory = Path("app/src/data/generated")
+    details_path = root / details_directory
+    details = {}
+    if os.path.lexists(details_path):
+        if details_path.is_symlink() or not details_path.is_dir():
+            raise OSError("generated route detail directory is unsafe")
+        with os.scandir(details_path) as entries:
+            for entry in entries:
+                if (
+                    entry.name.startswith(".")
+                    or not entry.name.endswith(".json")
+                    or entry.is_symlink()
+                    or not entry.is_file(follow_symlinks=False)
+                ):
+                    raise OSError("generated route detail entry is unsafe")
+                details[entry.name] = read_local_bytes(
+                    root,
+                    details_directory,
+                    entry.name,
+                )
+
+    metadata = {}
+    for name in ("routes.manifest.json", "route-stats.json"):
+        path = root / generated_directory / name
+        if not os.path.lexists(path):
+            metadata[name] = None
+            continue
+        if path.is_symlink() or not path.is_file():
+            raise OSError("generated route metadata entry is unsafe")
+        metadata[name] = read_local_bytes(root, generated_directory, name)
+    return {"details": details, "metadata": metadata}
+
+
+def _restore_generated_projection(root, snapshot):
+    root = Path(root).absolute()
+    details_directory = Path("app/public/data/routes")
+    generated_directory = Path("app/src/data/generated")
+    details_path = ensure_local_directory(root, details_directory)
+    with os.scandir(details_path) as entries:
+        current_names = set()
+        for entry in entries:
+            if entry.is_symlink() or not entry.is_file(follow_symlinks=False):
+                raise OSError("generated route detail entry is unsafe")
+            current_names.add(entry.name)
+    for name, content in snapshot["details"].items():
+        write_local_bytes_atomic(root, details_directory, name, content)
+    for name in current_names - set(snapshot["details"]):
+        unlink_local_file(root, details_directory, name)
+
+    ensure_local_directory(root, generated_directory)
+    for name, content in snapshot["metadata"].items():
+        if content is None:
+            unlink_local_file(root, generated_directory, name, missing_ok=True)
+        else:
+            write_local_bytes_atomic(root, generated_directory, name, content)
+
+
+@contextmanager
+def owner_mutation_lock(checkout_root):
+    """Serialize owner curation across the Admin server and local CLI processes."""
+
+    root = Path(checkout_root).resolve()
+    directory_fd = None
+    lock_fd = None
+    try:
+        lock_directory = ensure_local_directory(root, ".godiesel")
+        directory_fd = os.open(
+            lock_directory,
+            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+        )
+        lock_fd = os.open(
+            "owner-mutation.lock",
+            os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW,
+            0o600,
+            dir_fd=directory_fd,
+        )
+        if not stat.S_ISREG(os.fstat(lock_fd).st_mode):
+            raise OSError("owner mutation lock is not a regular file")
+        opened_directory = os.fstat(directory_fd)
+
+        def directory_is_still_pinned():
+            try:
+                current_directory = lock_directory.lstat()
+            except OSError:
+                return False
+            return (
+                stat.S_ISDIR(current_directory.st_mode)
+                and not stat.S_ISLNK(current_directory.st_mode)
+                and current_directory.st_dev == opened_directory.st_dev
+                and current_directory.st_ino == opened_directory.st_ino
+            )
+
+        if not directory_is_still_pinned():
+            raise OSError("owner mutation lock directory changed during acquisition")
+    except OSError as error:
+        if lock_fd is not None:
+            os.close(lock_fd)
+        if directory_fd is not None:
+            os.close(directory_fd)
+        raise OwnerMutationBusyError(
+            "owner mutation lock boundary is unavailable"
+        ) from error
+    try:
+        with os.fdopen(lock_fd, "a+", encoding="utf-8") as lock_file:
+            try:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as error:
+                raise OwnerMutationBusyError(
+                    "another owner mutation is in progress"
+                ) from error
+            if not directory_is_still_pinned():
+                raise OwnerMutationBusyError(
+                    "owner mutation lock directory changed during acquisition"
+                )
+            try:
+                yield
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+    finally:
+        os.close(directory_fd)
+
+
+def run_owner_mutation(checkout_root, local_lock, mutation):
+    """Run one Admin mutation behind both process-local and checkout-wide locks."""
+    if not local_lock.acquire(blocking=False):
+        raise OwnerMutationBusyError("another owner mutation is in progress")
+    try:
+        with owner_mutation_lock(checkout_root):
+            return mutation()
+    finally:
+        local_lock.release()
+
+
+def save_owner_curation(
+    checkout_root,
+    activity_id,
+    curation,
+    runner=subprocess.run,
+    *,
+    acquire_lock=True,
+    precondition=None,
+    publication_validator=None,
+    commit_validator=None,
+):
+    """Apply one owner-approved curation change through the canonical writers."""
+    root = Path(checkout_root).resolve()
+
+    def validate_incremental_publication():
+        if precondition is not None:
+            precondition()
+        if publication_validator is not None:
+            publication_validator()
+
+    def validate_commit():
+        if precondition is not None:
+            precondition()
+        if commit_validator is not None:
+            commit_validator()
+
+    def full_rebuild():
+        if precondition is not None:
+            precondition()
+        runner(
+            [sys.executable, str(root / "build.py")],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    def publish():
+        publish_curation_or_rebuild(
+            lambda: publish_curation(
+                root,
+                activity_id,
+                curation,
+                postcondition=validate_incremental_publication,
+            ),
+            full_rebuild,
+        )
+
+    def save():
+        projection_snapshot = _capture_generated_projection(root)
+        return save_curation_and_rebuild(
+            root / "quests.json",
+            activity_id,
+            curation,
+            publish,
+            precondition=precondition,
+            postcondition=validate_commit,
+            recover_publication=lambda: _restore_generated_projection(
+                root,
+                projection_snapshot,
+            ),
+        )
+
+    if not acquire_lock:
+        return save()
+    with owner_mutation_lock(root):
+        return save()
 
 
 def publish_curation_or_rebuild(publish, full_rebuild):
@@ -66,7 +297,16 @@ def update_route_curation(config, activity_id, value):
     return updated
 
 
-def save_curation_and_rebuild(config_path, activity_id, value, rebuild):
+def save_curation_and_rebuild(
+    config_path,
+    activity_id,
+    value,
+    rebuild,
+    *,
+    precondition=None,
+    postcondition=None,
+    recover_publication=None,
+):
     """Persist one route, rebuild generated data, and roll back source on failure."""
     config_path = Path(config_path)
     recovery_path = config_path.with_name(f".{config_path.name}.rollback")
@@ -75,24 +315,49 @@ def save_curation_and_rebuild(config_path, activity_id, value, rebuild):
     updated = update_route_curation(config, activity_id, value)
     serialized = json.dumps(updated, indent=2) + "\n"
 
+    if precondition is not None:
+        precondition()
     write_atomic(recovery_path, original)
     try:
+        if precondition is not None:
+            precondition()
         write_atomic(config_path, serialized)
     except Exception:
         _unlink_best_effort(recovery_path)
         raise
 
+    publication_completed = False
     try:
         rebuild()
+        publication_completed = True
+        if postcondition is not None:
+            postcondition()
     except Exception as publication_error:
         try:
-            os.replace(recovery_path, config_path)
+            replace_local_file(
+                config_path.parent,
+                ".",
+                recovery_path.name,
+                config_path.name,
+            )
         except Exception as rollback_error:
             raise SourceRollbackError(
                 f"publication failed: {publication_error}; "
                 f"source rollback failed: {rollback_error}; "
-                f"recovery copy: {recovery_path}"
+                f"recovery copy: {recovery_path}",
+                recovery_paths=[recovery_path],
             ) from rollback_error
+        if publication_completed and recover_publication is not None:
+            try:
+                recover_publication()
+            except Exception as recovery_error:
+                write_atomic(recovery_path, original)
+                raise SourceRollbackError(
+                    f"publication validation failed: {publication_error}; "
+                    f"generated rollback failed: {recovery_error}; "
+                    f"recovery copy: {recovery_path}",
+                    recovery_paths=[recovery_path],
+                ) from recovery_error
         raise
     else:
         _unlink_best_effort(recovery_path)
@@ -106,9 +371,8 @@ def save_curation_and_rebuild(config_path, activity_id, value, rebuild):
 
 def write_atomic(path, content):
     """Replace a text file without exposing a partially written destination."""
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(content, encoding="utf-8")
-    os.replace(temporary, path)
+    path = Path(path)
+    write_local_text_atomic(path.parent, ".", path.name, content)
 
 
 def _unlink_best_effort(path):

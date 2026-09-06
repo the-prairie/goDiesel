@@ -1,15 +1,91 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 import { viteStaticCopy } from "vite-plugin-static-copy";
 
 const cesiumBuild = "node_modules/cesium/Build/Cesium";
 const cesiumBaseUrl = "/cesiumStatic";
-export default defineConfig(({ mode }) => {
+
+function gitOutput(args: string[]) {
+  return execFileSync("git", args, {
+    cwd: path.resolve(__dirname, ".."),
+    encoding: "utf8",
+  }).trim();
+}
+
+function buildIdentity(command: string) {
+  const configuredCommit = (
+    process.env.GODIESEL_BUILD_COMMIT || process.env.CF_PAGES_COMMIT_SHA
+  )?.trim();
+  let checkoutCommit: string;
+  let tree: string;
+  let status: string;
+  try {
+    checkoutCommit = gitOutput(["rev-parse", "HEAD"]);
+    tree = gitOutput(["rev-parse", "HEAD^{tree}"]);
+    status = gitOutput(["status", "--porcelain=v1", "--untracked-files=all"]);
+  } catch {
+    throw new Error(
+      "goDiesel build identity requires an available Git checkout.",
+    );
+  }
+  const unverifiedWorkingTreeBuildAllowed =
+    process.env.GODIESEL_ALLOW_UNVERIFIED_WORKING_TREE_BUILD === "1";
+  if (command === "build" && status && !unverifiedWorkingTreeBuildAllowed) {
+    throw new Error("Production build identity requires a clean Git checkout.");
+  }
+  if (configuredCommit && configuredCommit !== checkoutCommit) {
+    throw new Error(
+      "Configured build commit does not match the checked-out Git commit.",
+    );
+  }
+  if (!/^[a-f0-9]{40}$/.test(checkoutCommit) || !/^[a-f0-9]{40}$/.test(tree)) {
+    throw new Error("goDiesel build identity requires full Git object IDs.");
+  }
+  return {
+    schema_version: 1,
+    document_type: "godiesel-build-identity",
+    artifact_kind:
+      command !== "build"
+        ? "development-server"
+        : status
+          ? "unverified-working-tree-artifact"
+          : "built-artifact",
+    commit: checkoutCommit,
+    tree,
+    build_id: randomUUID(),
+  } as const;
+}
+
+function buildIdentityPlugin(command: string): Plugin {
+  const identity = JSON.stringify(buildIdentity(command));
+  return {
+    name: "godiesel-build-identity",
+    configureServer(server) {
+      server.middlewares.use("/build-identity.json", (_request, response) => {
+        response.setHeader("Content-Type", "application/json; charset=utf-8");
+        response.setHeader("Cache-Control", "no-store");
+        response.end(identity);
+      });
+    },
+    generateBundle() {
+      this.emitFile({
+        type: "asset",
+        fileName: "build-identity.json",
+        source: identity,
+      });
+    },
+  };
+}
+
+export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, path.resolve(__dirname, ".."), "");
-  const liveProvidersDisabled = process.env.GODIESEL_DISABLE_LIVE_PROVIDERS === "1";
+  const liveProvidersDisabled =
+    process.env.GODIESEL_DISABLE_LIVE_PROVIDERS === "1";
   const googleMapsApiKey = liveProvidersDisabled
     ? ""
     : env.VITE_GOOGLE_MAPS_API_KEY ||
@@ -27,6 +103,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
+      buildIdentityPlugin(command),
       {
         name: "godiesel-single-route-manifest",
         enforce: "pre" as const,
@@ -41,7 +118,9 @@ export default defineConfig(({ mode }) => {
         },
         load(id: string) {
           if (id !== virtualRouteManifestId) return;
-          const manifest = JSON.parse(fs.readFileSync(routeManifestPath, "utf8")) as {
+          const manifest = JSON.parse(
+            fs.readFileSync(routeManifestPath, "utf8"),
+          ) as {
             routes?: Array<{ slug?: string }>;
           };
           const routes = (manifest.routes ?? []).filter(
@@ -59,17 +138,20 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       viteStaticCopy({
         targets: [
-          ...["Workers", "Assets", "Widgets", "ThirdParty"].map((directory) => ({
-            src: `${cesiumBuild}/${directory}/**/*`,
-            dest: `cesiumStatic/${directory}`,
-            rename: { stripBase: 5 },
-          })),
+          ...["Workers", "Assets", "Widgets", "ThirdParty"].map(
+            (directory) => ({
+              src: `${cesiumBuild}/${directory}/**/*`,
+              dest: `cesiumStatic/${directory}`,
+              rename: { stripBase: 5 },
+            }),
+          ),
         ],
       }),
     ],
     define: {
       CESIUM_BASE_URL: JSON.stringify(cesiumBaseUrl),
-      "import.meta.env.VITE_GOOGLE_MAPS_API_KEY": JSON.stringify(googleMapsApiKey),
+      "import.meta.env.VITE_GOOGLE_MAPS_API_KEY":
+        JSON.stringify(googleMapsApiKey),
       "import.meta.env.VITE_SINGLE_ROUTE_SLUG": JSON.stringify(singleRouteSlug),
     },
     server: {
@@ -97,7 +179,9 @@ export default defineConfig(({ mode }) => {
           find: "@/app/router",
           replacement: path.resolve(
             __dirname,
-            singleRouteSlug ? "./src/app/router.single.tsx" : "./src/app/router.tsx",
+            singleRouteSlug
+              ? "./src/app/router.single.tsx"
+              : "./src/app/router.tsx",
           ),
         },
         { find: "@", replacement: path.resolve(__dirname, "./src") },

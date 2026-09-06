@@ -1,13 +1,16 @@
 """Validated metadata for route files that are not recorded Strava activities."""
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
+import csv
 import hashlib
 from pathlib import Path
 import re
 
 
 SUPPORTED_ACTIVITY_TYPES = frozenset(("Run", "Ride"))
+DEFAULT_DIESEL_DIARIES_ROOT = Path("/Users/laurenzary/Desktop/DieselDiaries")
+STRAVA_ACTIVITY_SUFFIXES = (".gpx", ".fit.gz", ".fit")
 
 
 @dataclass(frozen=True)
@@ -107,6 +110,19 @@ def route_source_kind(spec: dict[str, object]) -> str:
     return IMPORTED_GPX if spec.get("source_gpx") else STRAVA_EXPORT
 
 
+def find_strava_activity_file(
+    activity_id: str,
+    data_root: Path = DEFAULT_DIESEL_DIARIES_ROOT,
+) -> Path | None:
+    """Resolve the exact exported geometry file used by the route generator."""
+    source_root = data_root / "strava_export" / "activities"
+    for suffix in STRAVA_ACTIVITY_SUFFIXES:
+        candidate = source_root / f"{activity_id}{suffix}"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 @dataclass(frozen=True)
 class RouteMetadata:
     """Display metadata for a route, from whichever source owns it."""
@@ -117,6 +133,35 @@ class RouteMetadata:
     date: str
     description: str
     source_path: Path | None
+
+
+def load_strava_route_metadata(
+    metadata_path: Path = DEFAULT_DIESEL_DIARIES_ROOT / "activities.csv",
+) -> dict[str, RouteMetadata]:
+    """Read the Strava export metadata used by generation and verification."""
+    metadata: dict[str, RouteMetadata] = {}
+    with metadata_path.open(encoding="utf-8-sig", newline="") as source:
+        for row in csv.DictReader(source):
+            match = re.search(r"(?:^|/)(\d+)", row.get("Filename", ""))
+            if not match:
+                continue
+            raw_date = row.get("Activity Date", "").rsplit(", ", 1)[0]
+            parsed_date = None
+            for date_format in ("%b %d, %Y", "%B %d, %Y"):
+                try:
+                    parsed_date = datetime.strptime(raw_date, date_format)
+                    break
+                except ValueError:
+                    continue
+            metadata[match.group(1)] = RouteMetadata(
+                source_kind=STRAVA_EXPORT,
+                name=row.get("Activity Name") or "(unnamed)",
+                activity_type=row.get("Activity Type") or "",
+                date=parsed_date.strftime("%Y-%m-%d") if parsed_date else "",
+                description=row.get("Activity Description") or "",
+                source_path=None,
+            )
+    return metadata
 
 
 def route_metadata(
@@ -143,6 +188,9 @@ def route_metadata(
 
     if activity_row is None:
         return None
+
+    if isinstance(activity_row, RouteMetadata):
+        return activity_row
 
     return RouteMetadata(
         source_kind=STRAVA_EXPORT,

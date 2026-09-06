@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://godiesel.local/system/owner-curation-plan.schema.json",
+  "title": "goDiesel owner curation plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "document_type", "activity_id", "curation", "observed_state_sha256", "context", "change_summary", "publication_strategy", "intended_writes", "external_effects", "verification_requirements", "warnings", "blockers", "plan_digest"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "document_type": { "const": "owner-curation-plan" },
+    "activity_id": { "type": "string", "minLength": 1 },
+    "observed_state_sha256": { "$ref": "#/$defs/sha256" },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "implementation_sha256", "external_sources_sha256"],
+      "properties": {
+        "implementation_sha256": { "$ref": "#/$defs/sha256" },
+        "external_sources_sha256": { "$ref": "#/$defs/sha256" },
+        "repository": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["commit", "branch", "worktree_sha256", "dirty_state"],
+          "properties": {
+            "commit": { "oneOf": [{ "type": "null" }, { "type": "string", "pattern": "^[a-f0-9]{40}$" }] },
+            "branch": { "oneOf": [{ "type": "null" }, { "type": "string", "minLength": 1 }] },
+            "worktree_sha256": { "$ref": "#/$defs/sha256" },
+            "dirty_state": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["clean", "sha256"],
+              "properties": {
+                "clean": { "type": "boolean" },
+                "sha256": { "$ref": "#/$defs/sha256" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "change_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changed_fields", "review_status_before", "review_status_after"],
+      "properties": {
+        "changed_fields": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "review_status_before": { "enum": ["unset", "draft", "reviewed", "published"] },
+        "review_status_after": { "enum": ["draft", "reviewed", "published"] }
+      }
+    },
+    "publication_strategy": { "const": "incremental-with-full-generation-fallback" },
+    "intended_writes": {
+      "const": [".godiesel/owner-mutation.lock", "quests.json", "quests.json.tmp", ".quests.json.rollback", ".quests.json.rollback.tmp", "app/src/data/generated/routes.manifest.json", "app/src/data/generated/.routes.manifest.json.tmp", "app/src/data/generated/.routes.manifest.json.recovery", "app/src/data/generated/route-stats.json", "app/src/data/generated/.route-stats.json.tmp", "app/src/data/generated/.route-stats.json.recovery", "app/src/data/generated/.*.rollback", "app/public/data/routes/**", "app/public/data/routes/.*.rollback", "app/public/data/.route-generation-backup/**", "app/public/data/.routes-staging-*/**"]
+    },
+    "external_effects": { "const": [] },
+    "verification_requirements": {
+      "const": ["python -m pytest -q -p no:cacheprovider test_godiesel_local_capabilities.py test_admin_curation.py test_curation_publish.py test_route_provenance.py"]
+    },
+    "warnings": { "const": [] },
+    "blockers": { "const": [] },
+    "plan_digest": { "$ref": "#/$defs/sha256" },
+    "curation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["review_status"],
+      "properties": {
+        "vibe": { "type": "string" },
+        "ideal_use": { "type": "string" },
+        "terrain": { "$ref": "#/$defs/string_list" },
+        "difficulty": { "type": "string" },
+        "highlights": { "$ref": "#/$defs/string_list" },
+        "caveats": { "$ref": "#/$defs/string_list" },
+        "seasonality": { "type": "string" },
+        "editorial_note": { "type": "string" },
+        "review_status": { "enum": ["draft", "reviewed", "published"] }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "string_list": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    }
+  }
+}

@@ -10,9 +10,17 @@ is a narrow, provable exception for the one field the curator edits.
 """
 
 import json
-import os
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+
+from godiesel_evidence import (
+    read_local_bytes,
+    replace_local_file,
+    unlink_local_file,
+    write_local_bytes_atomic,
+    write_local_text_atomic,
+)
 
 from quest_meta import build_route_curation, route_guide_preview
 from route_annotations import build_route_annotations
@@ -25,10 +33,14 @@ class CurationPublishError(RuntimeError):
 class CurationRecoveryError(CurationPublishError):
     """Publication failed and at least one prior artifact needs recovery."""
 
+    def __init__(self, message, *, recovery_paths=()):
+        super().__init__(message)
+        self.recovery_paths = tuple(Path(path) for path in recovery_paths)
+
 
 def generated_paths(checkout_root):
     """The tracked artifacts that carry curation, in write order."""
-    root = Path(checkout_root)
+    root = Path(checkout_root).absolute()
     return {
         "detail": root / "app" / "public" / "data" / "routes",
         "manifest": root / "app" / "src" / "data" / "generated" / "routes.manifest.json",
@@ -46,12 +58,12 @@ def publish_annotations(checkout_root, activity_id, annotations):
     activity_id = str(activity_id)
     paths = generated_paths(checkout_root)
     detail_path = paths["detail"] / f"{activity_id}.json"
-    if not detail_path.is_file():
+    try:
+        detail = _read_generated_json(checkout_root, detail_path)
+    except (FileNotFoundError, NotADirectoryError):
         raise CurationPublishError(
             f"route {activity_id} has no generated record; run a full rebuild first"
-        )
-
-    detail = json.loads(detail_path.read_text(encoding="utf-8"))
+        ) from None
     route = detail.get("route") or []
     if not route:
         raise CurationPublishError(f"route {activity_id} has no recorded geometry")
@@ -67,15 +79,15 @@ def publish_annotations(checkout_root, activity_id, annotations):
 
     # The manifest is the summary tier and carries no annotations (ADR-0004),
     # but its timestamp stays in step with the detail tier.
-    manifest = json.loads(paths["manifest"].read_text(encoding="utf-8"))
+    manifest = _read_generated_json(checkout_root, paths["manifest"])
     manifest["generated_at"] = generated_at
     staged.append((paths["manifest"], json.dumps(manifest, ensure_ascii=False)))
 
-    _publish_staged_with_rollback(staged)
+    _publish_staged_with_rollback(checkout_root, staged)
     return normalized
 
 
-def publish_curation(checkout_root, activity_id, curation):
+def publish_curation(checkout_root, activity_id, curation, *, postcondition=None):
     """Rewrite the generated artifacts for one route's curation.
 
     Every file is staged before any file is replaced, and each replacement is
@@ -89,14 +101,15 @@ def publish_curation(checkout_root, activity_id, curation):
     paths = generated_paths(checkout_root)
 
     detail_path = paths["detail"] / f"{activity_id}.json"
-    if not detail_path.is_file():
+    try:
+        detail = _read_generated_json(checkout_root, detail_path)
+    except (FileNotFoundError, NotADirectoryError):
         raise CurationPublishError(
             f"route {activity_id} has no generated record; run a full rebuild first"
-        )
+        ) from None
 
     staged = []
 
-    detail = json.loads(detail_path.read_text(encoding="utf-8"))
     staged.append(
         (detail_path, json.dumps(_with_curation(detail, normalized), ensure_ascii=False))
     )
@@ -104,7 +117,7 @@ def publish_curation(checkout_root, activity_id, curation):
     # A rebuild stamps both tiers with one timestamp. Match that here.
     generated_at = _now()
 
-    manifest = json.loads(paths["manifest"].read_text(encoding="utf-8"))
+    manifest = _read_generated_json(checkout_root, paths["manifest"])
     manifest["generated_at"] = generated_at
     _replace_route(
         manifest.get("routes", []),
@@ -114,12 +127,24 @@ def publish_curation(checkout_root, activity_id, curation):
     )
     staged.append((paths["manifest"], json.dumps(manifest, ensure_ascii=False)))
 
-    _publish_staged_with_rollback(staged)
+    _publish_staged_with_rollback(
+        checkout_root,
+        staged,
+        postcondition=postcondition,
+    )
     return normalized
 
 
 def _now():
     return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _read_generated_json(checkout_root, path):
+    root = Path(checkout_root).absolute()
+    relative_directory = path.parent.relative_to(root)
+    return json.loads(
+        read_local_bytes(root, relative_directory, path.name).decode("utf-8")
+    )
 
 
 def _with_annotations(record, normalized):
@@ -164,45 +189,60 @@ def _replace_route(routes, activity_id, apply_change, artifact):
     apply_change(matching[0])
 
 
-def _publish_staged_with_rollback(staged):
+def _publish_staged_with_rollback(checkout_root, staged, *, postcondition=None):
     """Stage every file and roll back completed replacements on failure.
 
     Replacement is the only step that mutates a published artifact, and each
     replace is atomic. Staging first keeps the failure window to the replace
     loop rather than the much longer serialize-and-write step.
     """
+    root = Path(checkout_root).absolute()
     temporaries = []
     try:
         for path, content in staged:
-            temporary = path.with_name(f".{path.name}.tmp")
-            temporaries.append((temporary, path))
-            temporary.write_text(content, encoding="utf-8")
+            relative_directory = path.parent.relative_to(root)
+            temporary_name = f".{path.name}.{uuid.uuid4().hex}.tmp"
+            temporaries.append((relative_directory, temporary_name, path))
+            write_local_text_atomic(
+                root,
+                relative_directory,
+                temporary_name,
+                content,
+            )
     except Exception:
-        _cleanup_files([temporary for temporary, _ in temporaries])
+        _cleanup_files(root, [(directory, name) for directory, name, _ in temporaries])
         raise
 
     backups = []
     replaced = []
     preserved_backups = set()
     try:
-        for _, path in temporaries:
-            backup = path.with_name(f".{path.name}.rollback")
-            backups.append((backup, path))
-            backup.write_bytes(path.read_bytes())
+        for relative_directory, _, path in temporaries:
+            backup_name = f".{path.name}.{uuid.uuid4().hex}.rollback"
+            backups.append((relative_directory, backup_name, path))
+            write_local_bytes_atomic(
+                root,
+                relative_directory,
+                backup_name,
+                read_local_bytes(root, relative_directory, path.name),
+            )
 
-        for temporary, path in temporaries:
-            os.replace(temporary, path)
+        for relative_directory, temporary_name, path in temporaries:
+            replace_local_file(root, relative_directory, temporary_name, path.name)
             replaced.append(path)
+        if postcondition is not None:
+            postcondition()
     except Exception as publication_error:
         rollback_failures = []
-        for backup, path in reversed(backups):
+        for relative_directory, backup_name, path in reversed(backups):
             if path not in replaced:
                 continue
             try:
-                os.replace(backup, path)
+                replace_local_file(root, relative_directory, backup_name, path.name)
             except Exception as error:
+                backup = root / relative_directory / backup_name
                 rollback_failures.append((backup, path, error))
-                preserved_backups.add(backup)
+                preserved_backups.add((relative_directory, backup_name))
         if rollback_failures:
             failure_details = "; ".join(
                 f"{path}: {error}" for _, path, error in rollback_failures
@@ -213,21 +253,27 @@ def _publish_staged_with_rollback(staged):
             raise CurationRecoveryError(
                 f"generated publication failed: {publication_error}; "
                 f"rollback failed: {failure_details}; "
-                f"recovery copies: {recovery_paths}"
+                f"recovery copies: {recovery_paths}",
+                recovery_paths=[backup for backup, _, _ in rollback_failures],
             ) from rollback_failures[0][2]
         raise
     finally:
         _cleanup_files(
-            [temporary for temporary, _ in temporaries]
-            + [backup for backup, _ in backups if backup not in preserved_backups]
+            root,
+            [(directory, name) for directory, name, _ in temporaries]
+            + [
+                (directory, name)
+                for directory, name, _ in backups
+                if (directory, name) not in preserved_backups
+            ],
         )
 
 
-def _cleanup_files(paths):
+def _cleanup_files(root, paths):
     """Remove every disposable file without changing publication outcome."""
-    for path in paths:
+    for directory, name in paths:
         try:
-            path.unlink(missing_ok=True)
+            unlink_local_file(root, directory, name, missing_ok=True)
         except Exception:
             # Cleanup cannot turn a committed publication into a reported
             # failure or hide the exception that triggered rollback.

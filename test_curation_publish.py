@@ -50,6 +50,46 @@ def _first_generated_slug():
 
 
 class CurationPublishTest(unittest.TestCase):
+    def test_fixed_name_staging_symlinks_are_never_followed(self):
+        slug = _first_generated_slug()
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory) / "checkout"
+            _copy_workspace(workspace)
+            paths = generated_paths(workspace)
+            external = Path(directory) / "outside.json"
+            external.write_text("outside\n", encoding="utf-8")
+            traps = [
+                paths["detail"] / f".{slug}.json.tmp",
+                paths["detail"] / f".{slug}.json.rollback",
+                paths["manifest"].with_name(".routes.manifest.json.tmp"),
+                paths["manifest"].with_name(".routes.manifest.json.rollback"),
+            ]
+            for trap in traps:
+                trap.symlink_to(external)
+
+            publish_curation(workspace, slug, REVIEWED_CURATION)
+
+            self.assertEqual(external.read_text(encoding="utf-8"), "outside\n")
+            self.assertTrue(all(trap.is_symlink() for trap in traps))
+
+    def test_generated_target_symlink_is_rejected_without_external_write(self):
+        slug = _first_generated_slug()
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory) / "checkout"
+            _copy_workspace(workspace)
+            detail = generated_paths(workspace)["detail"] / f"{slug}.json"
+            external = Path(directory) / "outside.json"
+            original = detail.read_bytes()
+            external.write_bytes(original)
+            detail.unlink()
+            detail.symlink_to(external)
+
+            with self.assertRaises(OSError):
+                publish_curation(workspace, slug, REVIEWED_CURATION)
+
+            self.assertTrue(detail.is_symlink())
+            self.assertEqual(external.read_bytes(), original)
+
     def test_incremental_publication_equals_a_full_rebuild(self):
         """The whole justification for this module.
 
@@ -120,18 +160,22 @@ class CurationPublishTest(unittest.TestCase):
             workspace = Path(directory) / "checkout"
             _copy_workspace(workspace)
             before = _artifact_text(workspace)
-            real_write_text = Path.write_text
+            real_write_text = curation_publish.write_local_text_atomic
             failed = False
 
-            def write_part_then_fail(path, content, *args, **kwargs):
+            def write_part_then_fail(root, directory, name, content):
                 nonlocal failed
-                if path.name.endswith(".tmp") and not failed:
+                result = real_write_text(root, directory, name, content)
+                if name.endswith(".tmp") and not failed:
                     failed = True
-                    real_write_text(path, content[:16], *args, **kwargs)
                     raise OSError("injected partial staging write")
-                return real_write_text(path, content, *args, **kwargs)
+                return result
 
-            with mock.patch.object(Path, "write_text", new=write_part_then_fail):
+            with mock.patch.object(
+                curation_publish,
+                "write_local_text_atomic",
+                side_effect=write_part_then_fail,
+            ):
                 with self.assertRaisesRegex(OSError, "partial staging write"):
                     publish_curation(workspace, slug, REVIEWED_CURATION)
 
@@ -144,18 +188,22 @@ class CurationPublishTest(unittest.TestCase):
             workspace = Path(directory) / "checkout"
             _copy_workspace(workspace)
             before = _artifact_text(workspace)
-            real_write_bytes = Path.write_bytes
+            real_write_bytes = curation_publish.write_local_bytes_atomic
             failed = False
 
-            def write_part_then_fail(path, content):
+            def write_part_then_fail(root, directory, name, content):
                 nonlocal failed
-                if path.name.endswith(".rollback") and not failed:
+                result = real_write_bytes(root, directory, name, content)
+                if name.endswith(".rollback") and not failed:
                     failed = True
-                    real_write_bytes(path, content[:16])
                     raise OSError("injected partial backup write")
-                return real_write_bytes(path, content)
+                return result
 
-            with mock.patch.object(Path, "write_bytes", new=write_part_then_fail):
+            with mock.patch.object(
+                curation_publish,
+                "write_local_bytes_atomic",
+                side_effect=write_part_then_fail,
+            ):
                 with self.assertRaisesRegex(OSError, "partial backup write"):
                     publish_curation(workspace, slug, REVIEWED_CURATION)
 
@@ -169,19 +217,19 @@ class CurationPublishTest(unittest.TestCase):
             workspace = Path(directory) / "checkout"
             _copy_workspace(workspace)
             before = _artifact_text(workspace)
-            real_replace = curation_publish.os.replace
+            real_replace = curation_publish.replace_local_file
             failed = False
 
-            def fail_first_publication(source, destination):
+            def fail_first_publication(root, directory, source, destination):
                 nonlocal failed
-                if Path(source).name.endswith(".tmp") and not failed:
+                if source.endswith(".tmp") and not failed:
                     failed = True
                     raise OSError("injected first-replace failure")
-                return real_replace(source, destination)
+                return real_replace(root, directory, source, destination)
 
             with mock.patch.object(
-                curation_publish.os,
-                "replace",
+                curation_publish,
+                "replace_local_file",
                 side_effect=fail_first_publication,
             ):
                 with self.assertRaisesRegex(OSError, "first-replace failure"):
@@ -197,20 +245,20 @@ class CurationPublishTest(unittest.TestCase):
             workspace = Path(directory) / "checkout"
             _copy_workspace(workspace)
             before = _artifact_text(workspace)
-            real_replace = curation_publish.os.replace
+            real_replace = curation_publish.replace_local_file
             publication_replaces = 0
 
-            def fail_second_publication(source, destination):
+            def fail_second_publication(root, directory, source, destination):
                 nonlocal publication_replaces
-                if Path(source).name.endswith(".tmp"):
+                if source.endswith(".tmp"):
                     publication_replaces += 1
                     if publication_replaces == 2:
                         raise OSError("injected second-replace failure")
-                return real_replace(source, destination)
+                return real_replace(root, directory, source, destination)
 
             with mock.patch.object(
-                curation_publish.os,
-                "replace",
+                curation_publish,
+                "replace_local_file",
                 side_effect=fail_second_publication,
             ):
                 with self.assertRaisesRegex(OSError, "injected second-replace"):
@@ -228,23 +276,22 @@ class CurationPublishTest(unittest.TestCase):
             paths = generated_paths(workspace)
             detail_path = paths["detail"] / f"{slug}.json"
             original_detail = detail_path.read_bytes()
-            real_replace = curation_publish.os.replace
+            real_replace = curation_publish.replace_local_file
             publication_replaces = 0
 
-            def fail_publication_and_rollback(source, destination):
+            def fail_publication_and_rollback(root, directory, source, destination):
                 nonlocal publication_replaces
-                source = Path(source)
-                if source.name.endswith(".tmp"):
+                if source.endswith(".tmp"):
                     publication_replaces += 1
                     if publication_replaces == 2:
                         raise OSError("injected second-replace failure")
-                if source.name.endswith(".rollback"):
+                if source.endswith(".rollback"):
                     raise OSError("injected rollback failure")
-                return real_replace(source, destination)
+                return real_replace(root, directory, source, destination)
 
             with mock.patch.object(
-                curation_publish.os,
-                "replace",
+                curation_publish,
+                "replace_local_file",
                 side_effect=fail_publication_and_rollback,
             ):
                 with self.assertRaises(CurationPublishError) as caught:
@@ -264,20 +311,24 @@ class CurationPublishTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             workspace = Path(directory) / "checkout"
             _copy_workspace(workspace)
-            real_unlink = Path.unlink
+            real_unlink = curation_publish.unlink_local_file
             failed = False
 
-            def fail_one_cleanup(path, *args, **kwargs):
+            def fail_one_cleanup(root, directory, name, *, missing_ok):
                 nonlocal failed
                 if (
-                    path.name.endswith((".tmp", ".rollback"))
+                    name.endswith((".tmp", ".rollback"))
                     and not failed
                 ):
                     failed = True
                     raise OSError("injected post-commit cleanup failure")
-                return real_unlink(path, *args, **kwargs)
+                return real_unlink(root, directory, name, missing_ok=missing_ok)
 
-            with mock.patch.object(Path, "unlink", new=fail_one_cleanup):
+            with mock.patch.object(
+                curation_publish,
+                "unlink_local_file",
+                side_effect=fail_one_cleanup,
+            ):
                 result = publish_curation(
                     workspace,
                     slug,
@@ -300,30 +351,39 @@ class CurationPublishTest(unittest.TestCase):
             workspace = Path(directory) / "checkout"
             _copy_workspace(workspace)
             before = _artifact_text(workspace)
-            real_write_text = Path.write_text
-            real_unlink = Path.unlink
+            real_write_text = curation_publish.write_local_text_atomic
+            real_unlink = curation_publish.unlink_local_file
             staging_writes = 0
             cleanup_calls = []
 
-            def fail_second_staging_write(path, content, *args, **kwargs):
+            def fail_second_staging_write(root, directory, name, content):
                 nonlocal staging_writes
-                if path.name.endswith(".tmp"):
+                result = real_write_text(root, directory, name, content)
+                if name.endswith(".tmp"):
                     staging_writes += 1
                     if staging_writes == 2:
-                        real_write_text(path, content[:16], *args, **kwargs)
                         raise OSError("injected partial staging failure")
-                return real_write_text(path, content, *args, **kwargs)
+                return result
 
-            def fail_first_cleanup(path, *args, **kwargs):
-                if path.name.endswith(".tmp"):
+            def fail_first_cleanup(root, directory, name, *, missing_ok):
+                if name.endswith(".tmp"):
+                    path = Path(root) / directory / name
                     cleanup_calls.append(path)
                     if len(cleanup_calls) == 1:
                         raise OSError("injected cleanup failure")
-                return real_unlink(path, *args, **kwargs)
+                return real_unlink(root, directory, name, missing_ok=missing_ok)
 
             with (
-                mock.patch.object(Path, "write_text", new=fail_second_staging_write),
-                mock.patch.object(Path, "unlink", new=fail_first_cleanup),
+                mock.patch.object(
+                    curation_publish,
+                    "write_local_text_atomic",
+                    side_effect=fail_second_staging_write,
+                ),
+                mock.patch.object(
+                    curation_publish,
+                    "unlink_local_file",
+                    side_effect=fail_first_cleanup,
+                ),
             ):
                 with self.assertRaisesRegex(OSError, "partial staging failure"):
                     publish_curation(workspace, slug, REVIEWED_CURATION)

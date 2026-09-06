@@ -10,6 +10,11 @@ if [[ -n "$SINGLE_ROUTE_SLUG" && ! "$SINGLE_ROUTE_SLUG" =~ ^[A-Za-z0-9._-]+$ ]];
   exit 1
 fi
 
+if [[ -L app/dist || ( -e app/dist && ! -d app/dist ) ]]; then
+  echo "Refusing unsafe app/dist build path." >&2
+  exit 1
+fi
+
 if [[ -n "$SINGLE_ROUTE_SLUG" ]]; then
   VITE_SINGLE_ROUTE_SLUG="$SINGLE_ROUTE_SLUG" npm --prefix app run build
 else
@@ -18,8 +23,17 @@ fi
 npm --prefix app run test:bundle
 node scripts/check-provider-key.mjs
 
-rm -rf dist
+if [[ -L app/dist || ! -d app/dist ]]; then
+  echo "Refusing unsafe app/dist build output." >&2
+  exit 1
+fi
+
+if [[ -L dist || ( -e dist && ! -d dist ) ]]; then
+  echo "Refusing unsafe dist output path." >&2
+  exit 1
+fi
 mkdir -p dist
+find dist -mindepth 1 -delete
 cp -R app/dist/. dist/
 
 if [[ -n "$SINGLE_ROUTE_SLUG" ]]; then
@@ -85,7 +99,9 @@ else
 EOF
 fi
 
+node app/scripts/finalize-build-identity.mjs dist
+
 SIZE=$(du -sh dist | awk '{print $1}')
 FILES=$(find dist -type f | wc -l | tr -d ' ')
 echo "React dist ready: ${SIZE}, ${FILES} files"
-echo "Deploy with: npx wrangler pages deploy dist --project-name=godiesel --branch=production"
+echo "Production publication remains unavailable until the Phase 5 release capability is implemented."

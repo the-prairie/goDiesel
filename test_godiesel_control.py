@@ -4,6 +4,7 @@ import subprocess
 from hashlib import sha256
 from pathlib import Path
 
+import pytest
 from jsonschema import Draft202012Validator
 
 from godiesel_control import doctor_system, inspect_system, main
@@ -122,6 +123,8 @@ def test_capability_manifest_is_valid_and_declares_the_system_boundaries():
     assert set(capabilities) == {
         "application-release",
         "owner-curation",
+        "planned-route-persistence",
+        "provider-readiness",
         "route-generation",
         "route-share",
     }
@@ -130,12 +133,83 @@ def test_capability_manifest_is_valid_and_declares_the_system_boundaries():
     assert capabilities["route-share"]["authority"]["release"] == "external-durable"
     assert capabilities["route-share"]["commands"]["release"][0]["command"] == (
         "./scripts/godiesel release route-share <slug> <share-name> "
-        "--authorize external-durable --authorize-target <share-name> --json"
+        "--authorize external-durable --authorize-target <share-name> "
+        "--authorize-replacement <share-name> --json"
     )
-    assert capabilities["application-release"]["commands"]["release"][0]["command"] == (
-        "npx wrangler pages deploy dist --project-name=godiesel --branch=production"
+    route_share_verify_commands = {
+        command["command"]
+        for command in capabilities["route-share"]["commands"]["verify"]
+    }
+    assert "./scripts/godiesel verify route-share <slug> --preview --json" in (
+        route_share_verify_commands
     )
+    assert (
+        "./scripts/godiesel verify route-share <slug> --preview --detach --json"
+        in route_share_verify_commands
+    )
+    assert capabilities["application-release"]["verbs"] == ["inspect", "verify"]
+    assert "release" not in capabilities["application-release"]["commands"]
+    assert capabilities["application-release"]["external_effects"] == []
+    assert capabilities["route-generation"]["commands"]["apply"][0]["command"] == (
+        "./scripts/godiesel apply route-generation --authorize canonical-local --json"
+    )
+    assert capabilities["owner-curation"]["commands"]["apply"][0]["command"] == (
+        "./scripts/godiesel apply owner-curation --plan <plan-path> "
+        "--authorize canonical-local --json"
+    )
+    assert capabilities["planned-route-persistence"]["writes"] == []
+    assert capabilities["provider-readiness"]["authority"]["inspect"] == "read-only"
+    assert capabilities["provider-readiness"]["authority"]["verify"] == "ephemeral-local"
+    assert "app/public/data/.route-generation-backup/**" in capabilities[
+        "route-share"
+    ]["writes"]
+    assert any(
+        artifact["kind"] == "route-generation-recovery"
+        and artifact["location"] == "app/public/data/.route-generation-backup/**"
+        for artifact in capabilities["route-share"]["artifacts"]
+    )
+    for capability_id in ("route-share", "route-generation", "owner-curation"):
+        assert "app/public/data/.routes-staging-*/**" in capabilities[
+            capability_id
+        ]["writes"]
+        assert any(
+            artifact["kind"] == "route-generation-staging"
+            for artifact in capabilities[capability_id]["artifacts"]
+        )
+        artifact_locations = {
+            artifact["location"] for artifact in capabilities[capability_id]["artifacts"]
+        }
+        assert "app/src/data/generated/.*.tmp" in artifact_locations
+        assert "app/src/data/generated/.*.recovery" in artifact_locations
+        proof_paths = {
+            path
+            for proof_input in capabilities[capability_id]["verification"]["focused"][0][
+                "proof_inputs"
+            ]
+            for path in proof_input["paths"]
+        }
+        assert "app/public/data/.route-generation-backup/**" in proof_paths
+        assert "app/public/data/.routes-staging-*/**" in proof_paths
+    assert ".quests.json.rollback" in capabilities["owner-curation"]["writes"]
+    for path in (
+        "quests.json.tmp",
+        ".quests.json.rollback.tmp",
+        "app/src/data/generated/.routes.manifest.json.tmp",
+        "app/src/data/generated/.routes.manifest.json.recovery",
+        "app/src/data/generated/.route-stats.json.tmp",
+        "app/src/data/generated/.route-stats.json.recovery",
+    ):
+        assert path in capabilities["owner-curation"]["writes"]
+    assert "app/public/data/.route-generation-backup/**" in capabilities[
+        "owner-curation"
+    ]["writes"]
+    assert "$GIT_COMMON_DIR/godiesel-provider-preview.lock" in capabilities[
+        "provider-readiness"
+    ]["writes"]
     assert "/app/public/data/.route-generation-backup/" in (
+        ROOT / ".gitignore"
+    ).read_text(encoding="utf-8").splitlines()
+    assert "/app/public/data/.routes-staging-*/" in (
         ROOT / ".gitignore"
     ).read_text(encoding="utf-8").splitlines()
     for capability in capabilities.values():
@@ -145,6 +219,23 @@ def test_capability_manifest_is_valid_and_declares_the_system_boundaries():
         assert set(capability["inputs"]) == verbs
         assert set(capability["idempotency"]) == verbs
         assert set(capability["recovery"]) == verbs
+
+
+def test_capability_schema_requires_exact_per_verb_mappings():
+    schema = json.loads((ROOT / "system/capabilities.schema.json").read_text())
+    manifest = json.loads((ROOT / "system/capabilities.json").read_text())
+    route_share = next(
+        capability
+        for capability in manifest["capabilities"]
+        if capability["id"] == "route-share"
+    )
+    for mapping in ("authority", "inputs", "commands", "idempotency", "recovery"):
+        route_share[mapping].pop("release")
+
+    errors = list(Draft202012Validator(schema).iter_errors(manifest))
+
+    assert errors
+    assert all("release" in error.message for error in errors)
 
 
 def test_release_cli_forwards_exact_target_authority(monkeypatch, capsys):
@@ -169,6 +260,8 @@ def test_release_cli_forwards_exact_target_authority(monkeypatch, capsys):
             "external-durable",
             "--authorize-target",
             "ridge",
+            "--authorize-replacement",
+            "ridge",
             "--json",
         ]
     )
@@ -177,7 +270,24 @@ def test_release_cli_forwards_exact_target_authority(monkeypatch, capsys):
     assert captured["verb"] == "release"
     assert captured["authority"] == "external-durable"
     assert captured["target_authority"] == "ridge"
+    assert captured["replacement_authority"] == "ridge"
     assert json.loads(capsys.readouterr().out)["status"] == "passed"
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["inspect", "route-share", "--preview"],
+        ["plan", "route-share", "--request", "request.json", "--detach"],
+        ["apply", "route-share", "--proposal", "proposal.json", "--preview"],
+        ["release", "route-share", "route-1", "ridge", "--preview"],
+    ],
+)
+def test_preview_controls_only_support_route_share_verification(arguments):
+    with pytest.raises(SystemExit) as raised:
+        main(arguments)
+
+    assert raised.value.code == 2
 
 
 def test_inspect_system_returns_a_redacted_operator_view():
@@ -194,6 +304,8 @@ def test_inspect_system_returns_a_redacted_operator_view():
     assert {item["id"] for item in result["capabilities"]} == {
         "application-release",
         "owner-curation",
+        "planned-route-persistence",
+        "provider-readiness",
         "route-generation",
         "route-share",
     }
@@ -412,6 +524,55 @@ def test_schema_invalid_manifest_returns_the_stable_manifest_blocker(tmp_path):
     }
 
 
+@pytest.mark.parametrize("malformation", ["numeric-schema", "duplicate-invariant"])
+def test_json_schema_invalid_manifest_returns_the_stable_manifest_blocker(
+    tmp_path,
+    malformation,
+):
+    root = _make_repository_fixture(tmp_path / "repository")
+    manifest_path = root / "system" / "capabilities.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if malformation == "numeric-schema":
+        manifest["$schema"] = 1
+    else:
+        manifest["impact_rules"][0]["invariants"].append(
+            dict(manifest["impact_rules"][0]["invariants"][0])
+        )
+    _write_json(manifest_path, manifest)
+
+    result = inspect_system(root)
+
+    assert result["status"] == "blocked"
+    assert result["capabilities"] == []
+    assert {issue["code"] for issue in result["blockers"]} == {
+        "GODIESEL_MANIFEST_INVALID"
+    }
+
+
+def test_manifest_semantics_reject_duplicate_invariant_when_schema_is_weakened(
+    tmp_path,
+):
+    root = _make_repository_fixture(tmp_path / "repository")
+    schema_path = root / "system" / "capabilities.schema.json"
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    schema["$defs"]["impactRule"]["properties"]["invariants"].pop("uniqueItems")
+    _write_json(schema_path, schema)
+    manifest_path = root / "system" / "capabilities.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["impact_rules"][0]["invariants"].append(
+        dict(manifest["impact_rules"][0]["invariants"][0])
+    )
+    _write_json(manifest_path, manifest)
+
+    result = inspect_system(root)
+
+    assert result["status"] == "blocked"
+    assert result["capabilities"] == []
+    assert {issue["code"] for issue in result["blockers"]} == {
+        "GODIESEL_MANIFEST_INVALID"
+    }
+
+
 def test_missing_manifest_schema_returns_a_stable_blocker(tmp_path):
     root = _make_repository_fixture(tmp_path / "repository")
     (root / "system" / "capabilities.schema.json").unlink()
@@ -422,6 +583,22 @@ def test_missing_manifest_schema_returns_a_stable_blocker(tmp_path):
     assert result["capabilities"] == []
     assert {issue["code"] for issue in result["blockers"]} == {
         "GODIESEL_MANIFEST_SCHEMA_MISSING"
+    }
+
+
+def test_metaschema_invalid_manifest_schema_returns_a_stable_blocker(tmp_path):
+    root = _make_repository_fixture(tmp_path / "repository")
+    schema_path = root / "system" / "capabilities.schema.json"
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    schema["required"] = "not-an-array"
+    _write_json(schema_path, schema)
+
+    result = inspect_system(root)
+
+    assert result["status"] == "blocked"
+    assert result["capabilities"] == []
+    assert {issue["code"] for issue in result["blockers"]} == {
+        "GODIESEL_MANIFEST_SCHEMA_INVALID"
     }
 
 

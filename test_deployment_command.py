@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import subprocess
@@ -5,12 +6,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).parent
-PRODUCTION_DEPLOY_COMMAND = (
-    "npx wrangler pages deploy dist --project-name=godiesel --branch=production"
-)
 
 
-def test_canonical_pages_deploy_targets_the_production_branch():
+def test_canonical_production_deploy_is_not_exposed_before_phase_five():
     readme_lines = (ROOT / "README.md").read_text(encoding="utf-8").splitlines()
     packaging_lines = (ROOT / "make-dist.sh").read_text(encoding="utf-8").splitlines()
 
@@ -25,9 +23,10 @@ def test_canonical_pages_deploy_targets_the_production_branch():
         if "Deploy with: npx wrangler pages deploy dist" in line
     ]
 
-    assert documented_commands == [PRODUCTION_DEPLOY_COMMAND]
-    assert len(printed_commands) == 1
-    assert PRODUCTION_DEPLOY_COMMAND in printed_commands[0]
+    assert documented_commands == []
+    assert printed_commands == []
+    assert "Phase 5 release capability" in "\n".join(readme_lines)
+    assert "Phase 5 release capability" in "\n".join(packaging_lines)
 
 
 def test_required_provider_key_rejects_a_keyless_build(tmp_path):
@@ -53,6 +52,44 @@ def test_required_provider_key_rejects_a_keyless_build(tmp_path):
     assert "a Google Maps key is required" in result.stderr
 
 
+def test_packaging_rejects_redirected_app_dist_before_build(tmp_path):
+    script = tmp_path / "make-dist.sh"
+    shutil.copy2(ROOT / "make-dist.sh", script)
+    script.chmod(0o755)
+    app = tmp_path / "app"
+    app.mkdir()
+    external = tmp_path / "external-build"
+    external.mkdir()
+    sentinel = external / "sentinel.txt"
+    sentinel.write_text("preserve", encoding="utf-8")
+    (app / "dist").symlink_to(external, target_is_directory=True)
+    binaries = tmp_path / "bin"
+    binaries.mkdir()
+    npm = binaries / "npm"
+    npm.write_text(
+        '#!/bin/bash\nprintf "invoked" > "$GODIESEL_NPM_MARKER"\n',
+        encoding="utf-8",
+    )
+    npm.chmod(0o755)
+    environment = os.environ.copy()
+    environment["PATH"] = f"{binaries}:{environment['PATH']}"
+    environment["GODIESEL_NPM_MARKER"] = str(tmp_path / "npm-invoked")
+
+    result = subprocess.run(
+        [str(script)],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "unsafe app/dist build path" in result.stderr
+    assert sentinel.read_text(encoding="utf-8") == "preserve"
+    assert not (tmp_path / "npm-invoked").exists()
+
+
 def test_public_route_publish_requires_the_provider_key():
     publish_script = (ROOT / "scripts" / "publish-route-microsite.sh").read_text(
         encoding="utf-8"
@@ -61,3 +98,86 @@ def test_public_route_publish_requires_the_provider_key():
     assert 'REQUIRE_PROVIDER_KEY=1' in publish_script
     assert 'REQUIRE_PROVIDER_KEY=0' in publish_script
     assert 'GODIESEL_REQUIRE_PROVIDER_KEY="$REQUIRE_PROVIDER_KEY"' in publish_script
+
+
+def test_route_share_documentation_uses_the_manifest_release_command():
+    manifest = json.loads(
+        (ROOT / "system/capabilities.json").read_text(encoding="utf-8")
+    )
+    route_share = next(
+        capability
+        for capability in manifest["capabilities"]
+        if capability["id"] == "route-share"
+    )
+    release_command = route_share["commands"]["release"][0]["command"]
+    documentation = (ROOT / "docs/agents/route-share.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert f"`{release_command}`" in documentation
+
+
+def test_live_pipeline_requires_independent_stable_alias_authority():
+    pipeline = (ROOT / "scripts/verify-live-pipeline.sh").read_text(encoding="utf-8")
+
+    assert "GODIESEL_PIPELINE_TARGET_AUTHORITY" in pipeline
+    assert "GODIESEL_PIPELINE_REPLACEMENT_AUTHORITY" in pipeline
+    assert "./scripts/publish-live-pipeline-proof.sh" in pipeline
+
+
+def test_live_pipeline_repeated_target_requires_explicit_replacement_intent(tmp_path):
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    wrapper = scripts / "publish-live-pipeline-proof.sh"
+    shutil.copy2(ROOT / "scripts/publish-live-pipeline-proof.sh", wrapper)
+    wrapper.chmod(0o755)
+    publisher = scripts / "publish-route-microsite.sh"
+    publisher.write_text(
+        '#!/bin/bash\nprintf "%s\\n" "$@" > "$GODIESEL_TEST_CAPTURE"\n',
+        encoding="utf-8",
+    )
+    publisher.chmod(0o755)
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "GODIESEL_PIPELINE_SHARE_NAME": "pipeline-proof",
+            "GODIESEL_PIPELINE_TARGET_AUTHORITY": "pipeline-proof",
+            "GODIESEL_PIPELINE_REPLACEMENT_AUTHORITY": "pipeline-proof",
+            "GODIESEL_TEST_CAPTURE": str(tmp_path / "arguments.txt"),
+        }
+    )
+
+    missing_intent = subprocess.run(
+        [str(wrapper)],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    publisher_was_not_called = not (tmp_path / "arguments.txt").exists()
+    environment["GODIESEL_PIPELINE_REPLACE_EXISTING"] = "1"
+    repeated = subprocess.run(
+        [str(wrapper)],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    repeated_arguments = (
+        (tmp_path / "arguments.txt").read_text(encoding="utf-8").splitlines()
+    )
+
+    assert missing_intent.returncode == 2
+    assert publisher_was_not_called
+    assert repeated.returncode == 0
+    assert repeated_arguments[-1] == "--replace-existing"
+    assert repeated_arguments[:6] == [
+        "3519505225411091950",
+        "pipeline-proof",
+        "--authorize-target",
+        "pipeline-proof",
+        "--authorize-replacement",
+        "pipeline-proof",
+    ]

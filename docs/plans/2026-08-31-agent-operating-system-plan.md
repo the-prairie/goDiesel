@@ -1,6 +1,6 @@
 ---
 status: in-progress
-last_updated: 2026-09-01
+last_updated: 2026-09-02
 architecture: docs/architecture/agent-operating-system.md
 decision: docs/adr/0016-agent-control-plane-is-manifest-driven.md
 ---
@@ -77,7 +77,7 @@ This plan does not introduce:
 | 1. Manifest and doctor | Complete | Phase 0 |
 | 2. Route-share adapter | Complete | Phase 1 manifest accuracy |
 | 3. Proof receipts and impact graph | Complete | Phase 2 result envelope |
-| 4. Canonical local adapters | Pending | Phase 3 verification contract |
+| 4. Canonical local adapters | Complete | Phase 3 verification contract |
 | 5. Release adapters | Pending | Phase 4 ownership coverage |
 | 6. Mechanical accretion | Pending | Stable manifest and receipts |
 | 7. Interface consolidation | Pending | Proven parity and at least two real capability adapters |
@@ -165,8 +165,8 @@ Implemented by `test_godiesel_control.py` and the focused commands documented in
 - The unified interface exercises the same route-share invariants and errors as the existing interface.
 - Reapplying an approved proposal remains idempotent.
 - Preview remains loopback-only and never invokes Wrangler.
-- Release still refuses an existing alias without explicit replacement authority.
-- A live release receipt records both immutable deployment URL and stable alias.
+- Release always requires exact replacement-risk authority for the stable alias and still requires explicit replacement intent when the alias is already present.
+- A live release receipt records the immutable deployment URL, stable alias, expected commit and tree, build ID, artifact-manifest digest, and successful smoke result.
 - The compatibility path and unified path produce equivalent observable results for the acceptance fixtures.
 
 ### Verification
@@ -213,6 +213,16 @@ Route release validates that reusable proof before any external effect.
 
 ## Phase 4: Add canonical local capability adapters
 
+Status: implemented on 2026-09-02, pending merge.
+
+The implemented interface delegates full generation to `rebuild.sh` and `build.py`, delegates curation to the same owner-writer service used by the loopback endpoint, reports browser-local planned-route state without inventing a repository projection, and separates provider configuration from explicit live success.
+Owner curation uses a deterministic plan schema bound to route state, checkout identity, and implementation state, and generation, curation, and named provider checks emit reusable Phase 3 evidence receipts.
+Route creation, generation, curation, and every competing Admin writer own the same cross-process catalogue lock at their retained writer entry points.
+Command-specific provider inputs select proportionate live proof, invalidate exact receipts, and fail safe to the full tier for an unrecognized provider path.
+Repository-local import closure makes transitive executable dependencies participate in proof fingerprints and gate selection.
+Named provider proof requires one origin-root identity to match the same clean local commit and tree and immutable build instance before and after execution and again during reuse.
+Generated-route readiness validates the strict public projection structure and canonical annotation and replay choices before reporting current state.
+
 ### Work
 
 - Add generation as a capability owned by the existing Python writer.
@@ -242,7 +252,7 @@ Route release validates that reusable proof before any external effect.
 
 - Model route microsite publication and production application deployment as separate release targets.
 - Require an immutable built artifact digest before release.
-- Record explicit target, replacement intent, remote result, stable alias, and immutable deployment id.
+- Record explicit target, replacement intent, remote result, stable alias, commit, tree, immutable build ID, and artifact-manifest digest.
 - Re-inspect remote state after ambiguous failures.
 - Add provider-specific live review requirements to release results without claiming headless proof of hardware rendering.
 
@@ -250,7 +260,7 @@ Route release validates that reusable proof before any external effect.
 
 - Release cannot rebuild a different artifact after approval without invalidating the plan.
 - Production and route-share targets cannot be confused by a default branch.
-- Existing stable aliases require exact replacement authority.
+- Every stable-alias upload requires exact replacement-risk authority because the provider has no atomic create-if-absent operation.
 - Ambiguous remote failures block blind retries and trigger remote inspection.
 - A successful release reports what is live and what remains unverified.
 

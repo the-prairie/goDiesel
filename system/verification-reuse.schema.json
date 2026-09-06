@@ -53,7 +53,7 @@
   "$defs": {
     "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "category": {
-      "enum": ["implementation", "contract", "fixture", "configuration", "data", "provider"]
+      "enum": ["implementation", "contract", "fixture", "configuration", "data", "provider", "artifact"]
     },
     "coveredInput": {
       "type": "object",
@@ -62,7 +62,7 @@
       "properties": {
         "category": { "$ref": "#/$defs/category" },
         "name": { "type": "string", "minLength": 1 },
-        "state": { "enum": ["matched", "absent", "present", "missing", "target"] },
+        "state": { "enum": ["matched", "absent", "present", "missing", "target", "observed"] },
         "sha256": { "$ref": "#/$defs/sha256" }
       }
     }
