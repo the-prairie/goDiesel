@@ -1,0 +1,29 @@
+name: Export terrain continuity source
+on:
+  push:
+    branches: [codex/pr130-refinement-inspection]
+    paths: [.github/workflows/pr130-continuity-source.yml]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ca75ff90e32f0c3fe1ab1bf7a3472bc4adacfb05
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Export tracked baseline only
+        shell: bash
+        run: |
+          mkdir -p proof
+          git rev-parse HEAD > proof/commit.txt
+          git ls-files -s > proof/files.txt
+          git diff --binary 237006bc0face615b8f0214c030a31e2de3e66bf HEAD > proof/report-v2.patch
+      - uses: actions/upload-artifact@v4
+        with:
+          name: continuity-source
+          path: proof/
+          retention-days: 3
