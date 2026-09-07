@@ -33,19 +33,21 @@ jobs:
           parts=[]
           for i,sha in enumerate(shas):
               req=urllib.request.Request('https://api.github.com/repos/the-prairie/goDiesel/git/blobs/'+sha,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
-              data=base64.b64decode(json.load(urllib.request.urlopen(req))['content'])
-              text=base64.b64encode(data).decode()
-              for start,end,replacement in reversed(fixes[i]):
-                  text=text[:start]+replacement+text[end:]
+              text=base64.b64encode(base64.b64decode(json.load(urllib.request.urlopen(req))['content'])).decode()
+              for start,end,replacement in reversed(fixes[i]): text=text[:start]+replacement+text[end:]
               parts.append(base64.b64decode(text))
           data=b''.join(parts)
-          assert hashlib.sha256(data).hexdigest()=='938b32fce972c50685223884c572aedca7ba569232d9247ee40f58a6afd82f05','Source transport differs; refusing to apply it'
+          assert hashlib.sha256(data).hexdigest()=='938b32fce972c50685223884c572aedca7ba569232d9247ee40f58a6afd82f05'
           patch=gzip.decompress(data)
           pathlib.Path('proof/candidate.patch').write_bytes(patch)
           subprocess.run(['git','apply','--check','proof/candidate.patch'],check=True)
           subprocess.run(['git','apply','proof/candidate.patch'],check=True)
           paths=[line[6:] for line in patch.decode().splitlines() if line.startswith('+++ b/')]
           pathlib.Path('proof/paths.json').write_text(json.dumps(paths))
+          p=pathlib.Path('app/e2e/cinematic-world-prepared.spec.ts')
+          old='    await page.getByRole("button",{name:"Chase",exact:true}).click();'
+          new='    await page.getByRole("button",{name:"Replay settings",exact:true}).click();\n'+old+'\n    await page.getByRole("button",{name:"Replay settings",exact:true}).click();'
+          text=p.read_text();assert text.count(old)==1;p.write_text(text.replace(old,new))
           PY
       - run: npm ci --prefix app
       - name: Typecheck and all unit tests
@@ -71,8 +73,7 @@ jobs:
           entries=[]
           for path in json.loads(pathlib.Path('proof/paths.json').read_text()):
               content=pathlib.Path(path).read_text()
-              payload=json.dumps({'content':content,'encoding':'utf-8'}).encode()
-              req=urllib.request.Request('https://api.github.com/repos/the-prairie/goDiesel/git/blobs',data=payload,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','Content-Type':'application/json'})
+              req=urllib.request.Request('https://api.github.com/repos/the-prairie/goDiesel/git/blobs',data=json.dumps({'content':content,'encoding':'utf-8'}).encode(),headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','Content-Type':'application/json'})
               result=json.load(urllib.request.urlopen(req))
               entries.append({'path':path,'mode':'100644','type':'blob','sha':result['sha']})
           pathlib.Path('proof/source-blobs.json').write_text(json.dumps(entries,indent=2))
