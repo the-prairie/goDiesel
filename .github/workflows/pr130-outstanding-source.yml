@@ -1,0 +1,29 @@
+name: Recover outstanding Replay source
+on:
+  push:
+    branches: [codex/pr130-refinement-inspection]
+    paths: [.github/workflows/pr130-outstanding-source.yml]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 279accd05fd027a1c04f96af5b128d4f4ea55fdc
+          persist-credentials: false
+      - name: Export exact tracked source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p proof
+          git rev-parse HEAD > proof/commit.txt
+          git ls-files -s > proof/files.txt
+          git archive --format=tar.gz HEAD app docs .github AGENTS.md CONTEXT.md README.md STRATEGY.md > proof/source.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: outstanding-replay-source
+          path: proof/
+          retention-days: 3
