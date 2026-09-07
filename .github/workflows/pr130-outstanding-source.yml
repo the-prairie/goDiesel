@@ -1,29 +1,82 @@
-name: Recover outstanding Replay source
+name: Validate outstanding Replay repair
 on:
   push:
     branches: [codex/pr130-refinement-inspection]
     paths: [.github/workflows/pr130-outstanding-source.yml]
 permissions:
-  contents: read
+  contents: write
+# This preparation only writes Git blob objects after validation. No branch,
+# preview, provider secret or production target is mutated by this workflow.
+defaults:
+  run:
+    shell: bash
 jobs:
   source:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
         with:
           ref: 279accd05fd027a1c04f96af5b128d4f4ea55fdc
           persist-credentials: false
-      - name: Export exact tracked source
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p proof
-          git rev-parse HEAD > proof/commit.txt
-          git ls-files -s > proof/files.txt
-          git archive --format=tar.gz HEAD app docs .github AGENTS.md CONTEXT.md README.md STRATEGY.md > proof/source.tar.gz
-      - uses: actions/upload-artifact@v4
+      - uses: actions/setup-node@v4
         with:
-          name: outstanding-replay-source
-          path: proof/
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Apply exact locally verified patch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p proof
+          git rev-parse HEAD > proof/base.txt
+          python3 - <<'PY'
+          import base64,gzip,hashlib,json,os,subprocess,urllib.request
+          from pathlib import Path
+          req=urllib.request.Request('https://api.github.com/repos/the-prairie/goDiesel/git/blobs/872fb8a8e20e997989186033fcfc68ec095f75a4',headers={'Authorization':'Bearer '+os.environ['GH_TOKEN']})
+          with urllib.request.urlopen(req) as response: encoded=base64.b64decode(json.load(response)['content'])
+          patch=gzip.decompress(base64.b64decode(encoded))
+          assert hashlib.sha256(patch).hexdigest()=='1f819853d16718db67c127bfe9e6f8eaf3ae56703077b14ebd1205d4d2652200'
+          subprocess.run(['git','apply','--check','-'],input=patch,check=True)
+          subprocess.run(['git','apply','-'],input=patch,check=True)
+          subprocess.run(['git','add','app','docs/architecture/cinematic-world-replay.md','.github/workflows/verify-cinematic-world.yml'],check=True)
+          subprocess.run(['git','diff','--cached','--check'],check=True)
+          PY
+      - run: npm ci --prefix app
+      - name: Typecheck and units
+        working-directory: app
+        run: |
+          npm run typecheck 2>&1 | tee ../proof/typecheck.txt
+          npm run test:unit 2>&1 | tee ../proof/unit.txt
+      - run: cd app && npx playwright install --with-deps chromium
+      - name: Real renderer coarse frontier regression
+        working-directory: app
+        run: npx playwright test e2e/cinematic-world-refinement.spec.ts --project=chromium 2>&1 | tee ../proof/browser.txt
+      - name: Publish verified source blobs only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import base64,hashlib,json,os,subprocess,urllib.request
+          from pathlib import Path
+          paths=subprocess.check_output(['git','diff','--cached','--name-only','-z']).decode().strip('\0').split('\0')
+          assert len(paths)==8,paths
+          entries=[]
+          for path in paths:
+            assert path.startswith(('app/','docs/architecture/')) or path=='.github/workflows/verify-cinematic-world.yml'
+            data=Path(path).read_bytes()
+            expected=hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
+            req=urllib.request.Request('https://api.github.com/repos/the-prairie/goDiesel/git/blobs',data=json.dumps({'content':base64.b64encode(data).decode(),'encoding':'base64'}).encode(),headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Content-Type':'application/json'})
+            with urllib.request.urlopen(req) as response: actual=json.load(response)['sha']
+            assert actual==expected
+            entries.append({'path':path,'mode':'100644','type':'blob','sha':actual})
+          Path('proof/source-blobs.json').write_text(json.dumps(entries,indent=2)+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: outstanding-replay-candidate
+          path: |
+            proof/
+            app/test-results/
           retention-days: 3
