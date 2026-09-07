@@ -1,0 +1,27 @@
+name: Export Seamless Replay baseline
+on:
+  push:
+    branches: [codex/pr130-refinement-inspection]
+    paths: [.github/workflows/pr130-seamless-source.yml]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 6a104f3a56812111733a2b4679805e54d4157ac1
+          persist-credentials: false
+      - name: Export tracked baseline and identity
+        run: |
+          mkdir -p proof
+          git rev-parse HEAD > proof/commit.txt
+          git ls-files -s > proof/files.txt
+          git archive --format=tar.gz HEAD > proof/source.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: seamless-replay-baseline
+          path: proof/
+          retention-days: 3
