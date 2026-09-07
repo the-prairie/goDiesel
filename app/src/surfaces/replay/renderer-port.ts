@@ -2,6 +2,7 @@ import type { QuestRoute } from "@/domain/route";
 import { MapLibreAtlasReplayEngine } from "@/surfaces/replay/renderers/maplibre-replay-engine";
 import type { RouteThreadStyle } from "@/domain/geometry/route-thread-style";
 import { CesiumReplayEngine } from "@/surfaces/replay/renderers/cesium-replay-engine";
+import { NotebookReplayEngine } from "@/surfaces/replay/renderers/notebook-replay-engine";
 import type { ReplayPose } from "@/surfaces/replay/playback/replay-controller";
 
 export type ReplayStatus =
@@ -34,9 +35,9 @@ declare global {
   }
 }
 
-export function createReplayEngine(mode: ReplayEngineMode) {
+export function createReplayEngine(mode: ReplayEngineMode, presentation?: "notebook") {
   return (
     window.__GODIESEL_REPLAY_ENGINE_FACTORY__?.(mode) ??
-    (mode === "earth" ? new CesiumReplayEngine() : new MapLibreAtlasReplayEngine())
+    (mode === "earth" ? new CesiumReplayEngine() : presentation === "notebook" ? new NotebookReplayEngine() : new MapLibreAtlasReplayEngine())
   );
 }

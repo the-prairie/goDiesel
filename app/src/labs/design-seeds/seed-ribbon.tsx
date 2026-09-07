@@ -1,8 +1,9 @@
 import { useCallback, useMemo, useRef } from "react";
 
-import { lookupAtProgress } from "@/labs/design-seeds/seed-geometry";
+import { recordedPointAt, recordedThreadSegments } from "@/domain/geometry/recorded-thread";
+import { sampleElevationProfile } from "@/domain/geometry/route-visualization";
 import type { ThreadPhoto } from "@/labs/design-seeds/seed-relief-map";
-import type { RoutePoint } from "@/domain/route";
+import type { RoutePoint, RouteDiscontinuityEvidence } from "@/domain/route";
 
 /**
  * The climb, as the second grip on the same thread.
@@ -22,6 +23,7 @@ const SAMPLES = 180;
 
 export interface SeedRibbonProps {
   trace: RoutePoint[];
+  gaps?: RouteDiscontinuityEvidence[];
   progress?: number;
   onProgress?: (progress: number | undefined) => void;
   photos?: ThreadPhoto[];
@@ -40,6 +42,7 @@ export interface SeedRibbonProps {
 
 export function SeedRibbon({
   trace,
+  gaps = [],
   progress,
   onProgress,
   photos = [],
@@ -57,23 +60,27 @@ export function SeedRibbon({
   const hostRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
 
+  const gapsKey = JSON.stringify(gaps);
   const shape = useMemo(() => {
     if (trace.length < 2) return null;
     const total = trace[trace.length - 1].d ?? 0;
     if (!(total > 0)) return null;
-    const points: { x: number; elev: number }[] = [];
-    for (let i = 0; i <= SAMPLES; i += 1) {
-      const at = lookupAtProgress(trace, i / SAMPLES);
-      if (at) points.push({ x: (i / SAMPLES) * 100, elev: at.elev });
-    }
-    const elevations = points.map((p) => p.elev);
+    const segments = recordedThreadSegments(trace, JSON.parse(gapsKey));
+    const elevations = trace.map(p => p.elev);
     const min = Math.min(...elevations);
     const max = Math.max(...elevations);
     const span = max - min || 1;
     const y = (elev: number) => 100 - ((elev - min) / span) * 88 - 6;
-    const line = points.map((p) => `${p.x.toFixed(2)},${y(p.elev).toFixed(2)}`).join(" ");
-    return { line, min, max, total, y, points };
-  }, [trace]);
+    const paths = segments.map(segment => {
+      const points = sampleElevationProfile(segment, SAMPLES);
+      return {
+        line: points.map(p => `${(p.d / total * 100).toFixed(2)},${y(p.elev).toFixed(2)}`).join(" "),
+        start: segment[0].d / total * 100,
+        end: segment.at(-1)!.d / total * 100,
+      };
+    });
+    return { paths, min, max, total, y };
+  }, [trace, gapsKey]);
 
   const report = useCallback(
     (next: number) => onProgress?.(Math.min(1, Math.max(0, next))),
@@ -90,7 +97,7 @@ export function SeedRibbon({
   );
 
   if (!shape) return null;
-  const at = progress === undefined ? null : lookupAtProgress(trace, progress);
+  const at = progress === undefined ? null : recordedPointAt(trace, progress * shape.total, gaps);
   const cut = progress === undefined ? 0 : Math.min(1, Math.max(0, progress));
 
   return (
@@ -176,23 +183,19 @@ export function SeedRibbon({
               <rect x="0" y="0" width={cut * 100} height="100" />
             </clipPath>
           </defs>
-          {/* The whole climb, hypsometric so height reads as height. */}
-          <polygon points={`0,100 ${shape.line} 100,100`} fill="url(#seed-ribbon-fill)" />
-          {/* The part already inspected, in the travelled value. */}
-          <polygon
-            points={`0,100 ${shape.line} 100,100`}
-            fill={travelled}
-            opacity="0.34"
-            clipPath="url(#seed-ribbon-travelled)"
-          />
-          <polyline
-            points={shape.line}
-            fill="none"
-            stroke={ink}
-            strokeWidth="0.9"
-            strokeOpacity="0.5"
-            vectorEffect="non-scaling-stroke"
-          />
+          {shape.paths.map((path, index) => (
+            <g key={index}>
+              <polygon points={`${path.start},100 ${path.line} ${path.end},100`} fill="url(#seed-ribbon-fill)" />
+              <polygon points={`${path.start},100 ${path.line} ${path.end},100`} fill={travelled} opacity="0.34" clipPath="url(#seed-ribbon-travelled)" />
+              <polyline points={path.line} fill="none" stroke={ink} strokeWidth="0.9" strokeOpacity="0.5" vectorEffect="non-scaling-stroke" />
+            </g>
+          ))}
+          {gaps.map((gap, index) => (
+            <line key={`gap-${index}`} x1={(gap.startD + gap.endD) / 2 / shape.total * 100} x2={(gap.startD + gap.endD) / 2 / shape.total * 100}
+              y1="4" y2="98" stroke={inkSoft} strokeWidth="1" strokeDasharray="2 3" vectorEffect="non-scaling-stroke">
+              <title>Recording gap</title>
+            </line>
+          ))}
           {at ? (
             <line
               x1={cut * 100} y1="0" x2={cut * 100} y2="100"
@@ -205,7 +208,7 @@ export function SeedRibbon({
         {/* Photographs at their recorded distances. Real positions, real media. */}
         {photos.map((photo) => {
           const x = Math.min(1, photo.atDistanceM / shape.total);
-          const point = lookupAtProgress(trace, x);
+          const point = recordedPointAt(trace, x * shape.total, gaps);
           if (!point) return null;
           return (
             <button
@@ -223,11 +226,15 @@ export function SeedRibbon({
         })}
 
         {at ? (
-          <span
-            aria-hidden="true"
-            className="seed-ribbon-playhead absolute"
-            style={{ left: `${cut * 100}%`, top: `${shape.y(at.elev)}%`, background: accent }}
-          />
+          <span aria-hidden="true" className="seed-ribbon-thumb absolute"
+            style={{ left: `${cut * 100}%`, top: `${shape.y(at.elev)}%` }}
+            onPointerDown={event => {
+              event.stopPropagation(); event.preventDefault();
+              dragging.current = true;
+              event.currentTarget.setPointerCapture(event.pointerId);
+            }}>
+            <span className="seed-ribbon-playhead" style={{ background: accent }} />
+          </span>
         ) : null}
       </div>
 

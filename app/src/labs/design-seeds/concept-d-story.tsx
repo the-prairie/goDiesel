@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { BookOpen, Compass } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { SeedReliefMap, type ThreadPhoto } from "@/labs/design-seeds/seed-relief-map";
@@ -11,7 +12,10 @@ import {
   guideAttribution, isExpressiveTitle, isMemory, movingTime, personalTitle,
   readableDate, routeNote,
 } from "@/labs/design-seeds/seed-content";
-import { lookupAtProgress } from "@/labs/design-seeds/seed-geometry";
+import { recordedPointAt } from "@/domain/geometry/recorded-thread";
+import { readDayContext, writeDayContext } from "@/labs/design-seeds/seed-day-context";
+import { useJournalPosition } from "@/labs/design-seeds/seed-return-context";
+import type { ReliefState } from "@/ui/maps/relief-world";
 import type { QuestRoute, RouteSummary } from "@/domain/route";
 
 /* =============================================================================
@@ -123,9 +127,26 @@ export function ConceptDStory({
 }) {
   const wide = useWideLayout(1024);
   const navigate = useNavigate();
-  const [progress, setProgress] = useState<number | undefined>(initialProgress);
+  const contextKey = `d-day|${route.slug}|${backPath}`;
+  const saved = readDayContext(contextKey);
+  const [progress, setProgress] = useState<number | undefined>(() => {
+    const raw = initialProgress ?? saved?.progress;
+    const total = route.route.at(-1)?.d ?? 0;
+    return raw === undefined || !total ? undefined : (recordedPointAt(route.route, raw * total, route.provenance.discontinuities)?.d ?? 0) / total;
+  });
   const [descending, setDescending] = useState(false);
-  const [leafOpen, setLeafOpen] = useState(true);
+  const [leafOpen, setLeafOpen] = useState(saved?.leafOpen ?? true);
+  const [exploring, setExploring] = useState(false);
+  const [terrainState, setTerrainState] = useState<ReliefState>("loading");
+  const [selectedPhoto, setSelectedPhoto] = useState(saved?.photoUrl);
+  const leafRef = useRef<HTMLElement | null>(null);
+  useJournalPosition(`${contextKey}|${wide ? "wide" : "narrow"}`, leafRef);
+  useEffect(() => {
+    writeDayContext(contextKey, { leafOpen, progress, photoUrl: selectedPhoto });
+  }, [contextKey, leafOpen, progress, selectedPhoto]);
+  // Resolve Replay's lazy module while the reader is with the page, not during
+  // the handover. The renderer still mounts only when Replay takes ownership.
+  useEffect(() => { void import("@/surfaces/replay/replay-page"); }, []);
 
   const title = personalTitle(route);
   const expressive = isExpressiveTitle(route);
@@ -159,7 +180,16 @@ export function ConceptDStory({
     [route.annotations],
   );
 
-  const at = progress === undefined ? null : lookupAtProgress(route.route, progress);
+  const totalM = route.route.at(-1)?.d ?? 0;
+  const at = progress === undefined ? null : recordedPointAt(route.route, progress * totalM, route.provenance.discontinuities);
+  const inspect = (next: number | undefined) => {
+    if (descending) return;
+    let requested = next === undefined ? undefined : next * totalM;
+    const gap = requested === undefined ? undefined : route.provenance.discontinuities.find(gap => requested! > gap.startD && requested! < gap.endD);
+    if (gap && progress !== undefined) requested = next! > progress ? gap.endD : gap.startD;
+    const point = requested === undefined ? null : recordedPointAt(route.route, requested, route.provenance.discontinuities);
+    setProgress(point && totalM ? point.d / totalM : undefined);
+  };
   const heldPhoto = useMemo(() => {
     if (!at || !photos.length) return null;
     /* Within 400 m of a recorded photograph, that photograph is what you are
@@ -173,7 +203,14 @@ export function ConceptDStory({
     return best;
   }, [at, photos]);
 
+  const displayedPhoto = heldPhoto ?? photos.find(photo => photo.url === selectedPhoto) ?? photos[0];
+  useEffect(() => { if (heldPhoto) setSelectedPhoto(heldPhoto.url); }, [heldPhoto]);
   const enter = () => {
+    setExploring(false);
+    // Replace this history entry with the held distance before pushing Replay,
+    // so browser Back restores exactly the same point as the visible link.
+    const from = new URL(replayHref(at?.d), "http://local").searchParams.get("from");
+    if (from) navigate(from, { replace: true });
     setDescending(true);
   };
   const afterDescent = () => {
@@ -187,8 +224,11 @@ export function ConceptDStory({
       selectedTrace={route.route}
       focusSelected
       progress={progress}
-      onProgress={setProgress}
+      onProgress={inspect}
       photos={photos}
+      gaps={route.provenance.discontinuities}
+      exploring={exploring}
+      onTerrainState={setTerrainState}
       pitch={wide ? 54 : 46}
       padding={
         wide
@@ -198,7 +238,7 @@ export function ConceptDStory({
            * frame the route into the band that is actually visible. Framing it
            * into the whole viewport put the recorded line behind the page.
            */
-          : { top: 96, right: 34, bottom: 452, left: 34 }
+          : { top: 96, right: 34, bottom: leafOpen ? Math.round(window.innerHeight * 0.52 + 14) : 190, left: 34 }
       }
       descend={descending ? { progress: progress ?? 0 } : null}
       onDescended={afterDescent}
@@ -210,9 +250,10 @@ export function ConceptDStory({
     <SeedRibbon
       trace={route.route}
       progress={progress}
-      onProgress={setProgress}
+      onProgress={inspect}
       photos={photos}
       label={title}
+      gaps={route.provenance.discontinuities}
       height={wide ? 96 : 78}
       ink={INK}
       inkSoft={INK_3}
@@ -238,7 +279,7 @@ export function ConceptDStory({
     <button
       type="button"
       onClick={enter}
-      disabled={descending}
+      disabled={descending || terrainState !== "ready"}
       className="seed-control seed-focus flex w-full items-center justify-between"
       style={{
         minHeight: 52, paddingInline: 20, background: FOREST, color: IVORY,
@@ -246,7 +287,7 @@ export function ConceptDStory({
       }}
     >
       <span style={{ fontFamily: "var(--font-interface)", fontSize: 16.5, letterSpacing: "0.01em" }}>
-        {descending ? "Going down…" : entryLabel}
+        {descending ? "Going down…" : terrainState === "ready" ? entryLabel : terrainState === "loading" ? "The landscape is loading…" : "Landscape unavailable"}
       </span>
       <span aria-hidden="true" style={{ fontSize: 15, opacity: 0.85 }}>▾</span>
     </button>
@@ -289,26 +330,30 @@ export function ConceptDStory({
         </div>
       ) : null}
 
-      {/*
-        The photograph the thread is standing on.
-
-        A day with pictures has them pinned along the recorded line at the
-        distance recorded in the file. Holding the thread near one raises it
-        here - the picture arrives because the reader walked to it, which is
-        also why a day without pictures loses nothing: there is simply nothing
-        pinned on its line.
-      */}
-      {heldPhoto ? (
+      {/* Real photographs are readable immediately; their route positions remain explicit. */}
+      {photos.length > 1 ? (
+        <div className="seed-photo-index" aria-label="Photographs from this day">
+          {photos.map(photo => (
+            <button key={photo.url} type="button" className="seed-focus"
+              aria-label={`Open photograph: ${photo.title}`} aria-pressed={displayedPhoto?.url === photo.url}
+              onClick={() => { setSelectedPhoto(photo.url); inspect(photo.atDistanceM / totalM); }}>
+              <img src={photo.url} alt="" />
+              <span>{photo.title}<small>{(photo.atDistanceM / 1000).toFixed(1)} km in</small></span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {displayedPhoto ? (
         <figure className="m-0" style={{ marginTop: 22 }}>
           <img
-            src={heldPhoto.url}
-            alt={heldPhoto.title}
+            src={displayedPhoto.url}
+            alt={displayedPhoto.title}
             style={{ width: "100%", height: "auto", display: "block" }}
           />
           <figcaption style={{ fontFamily: "var(--font-interface)", fontSize: 11.5, color: INK_2, marginTop: 8 }}>
-            {heldPhoto.title}
+            {displayedPhoto.title}
             <span style={{ color: INK_3 }}>
-              {" "}· taken {(heldPhoto.atDistanceM / 1000).toFixed(1)} km in
+              {" "}· taken {(displayedPhoto.atDistanceM / 1000).toFixed(1)} km in
             </span>
           </figcaption>
         </figure>
@@ -343,23 +388,32 @@ export function ConceptDStory({
         >
           <span aria-hidden="true">←</span> {backLabel}
         </Link>
-        {wide ? (
-          <button
-            type="button"
-            onClick={() => setLeafOpen((open) => !open)}
-            aria-pressed={!leafOpen}
-            className={`seed-control seed-focus seed-leaf pointer-events-auto inline-flex items-center px-4 ${descending ? "seed-descending" : ""}`}
-            style={{ fontFamily: "var(--font-interface)", fontSize: 12.5, color: INK, border: 0 }}
-          >
-            {leafOpen ? "Set the page aside" : "Open the page"}
+        <div className="flex gap-2">
+          <button type="button" onClick={() => setExploring(value => !value)}
+            aria-pressed={exploring} aria-label={exploring ? "Finish exploring the landscape" : "Explore the landscape"}
+            className={`seed-control seed-focus seed-leaf pointer-events-auto inline-flex items-center gap-2 px-3 ${descending ? "seed-descending" : ""}`}
+            style={{ fontSize: 12.5, border: 0 }}>
+            <Compass size={16} aria-hidden="true" />{exploring ? "Done" : "Explore"}
           </button>
-        ) : null}
+          <button type="button" onClick={() => setLeafOpen(open => !open)}
+            aria-pressed={!leafOpen} aria-label={leafOpen ? "Set the page aside" : "Open the page"}
+            className={`seed-control seed-focus seed-leaf pointer-events-auto inline-flex items-center gap-2 px-3 ${descending ? "seed-descending" : ""}`}
+            style={{ fontSize: 12.5, border: 0 }}>
+            {!wide ? <BookOpen size={16} aria-hidden="true" /> : null}
+            {wide ? leafOpen ? "Set the page aside" : "Open the page" : "Page"}
+          </button>
+        </div>
       </header>
 
+      {!leafOpen && !descending ? (
+        <div className="seed-leaf absolute inset-x-5 bottom-6 z-20 mx-auto max-w-sm">{entry}</div>
+      ) : null}
       {wide ? (
         <>
           {/* The leaf. Push it aside and the whole place is there. */}
           <aside
+            ref={leafRef}
+            inert={!leafOpen || descending}
             className={`seed-leaf seed-scroll absolute z-20 ${descending ? "seed-descending" : ""}`}
             style={{
               left: 0, top: 0, bottom: 0, width: 430,
@@ -377,7 +431,7 @@ export function ConceptDStory({
           <div
             className={`seed-leaf absolute z-20 ${descending ? "seed-descending" : ""}`}
             style={{
-              right: 28, bottom: 26, left: leafOpen ? 474 : 28,
+              right: 28, bottom: leafOpen ? 26 : 96, left: leafOpen ? 474 : 28,
               padding: "14px 22px 12px",
               transition: "left 420ms var(--ease-interface)",
             }}
@@ -389,10 +443,15 @@ export function ConceptDStory({
         <>
           {/* Narrow: the landform holds the upper screen, the page slides up. */}
           <div
+            ref={leafRef as React.RefObject<HTMLDivElement>}
+            inert={!leafOpen || descending}
+            aria-hidden={!leafOpen || undefined}
             className={`seed-leaf-sheet seed-scroll absolute inset-x-0 z-20 ${descending ? "seed-descending" : ""}`}
             style={{
               bottom: 0,
               top: "52%",
+              transform: leafOpen ? "translateY(0)" : "translateY(100%)",
+              transition: "transform 420ms var(--ease-interface)",
               overflowY: "auto",
               padding: "0 20px calc(22px + var(--safe-area-bottom))",
             }}

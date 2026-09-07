@@ -54,10 +54,10 @@ export function RouteContextHud({
       )}
     >
       <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2 text-caption font-semibold uppercase text-route">
+        {label ? <div className="flex min-w-0 items-center gap-2 text-caption font-semibold uppercase text-route">
           {icon ?? <Route className="size-4 shrink-0" aria-hidden="true" />}
           <span className="truncate">{label}</span>
-        </div>
+        </div> : null}
         <div className="flex shrink-0 items-center gap-1">
           <Button asChild variant="ghost" size="icon" className="size-9">
             <Link to={backPath} aria-label={backLabel} title={backLabel}>

@@ -250,6 +250,7 @@ function StoryRoute({
     };
     return (
       <ConceptDStory
+        key={detail.route.slug}
         route={detail.route}
         regionRoutes={regionsFor(summary.region)}
         backPath={returnTo.path}
@@ -265,9 +266,7 @@ function StoryRoute({
          * `from` and Replay opened at 0.
          */
         replayHref={(metres) =>
-          `${replayPath(summary.slug, storyWithAt(metres))}${
-            GOOGLE_3D_AVAILABLE ? "" : "&renderer=atlas"
-          }&theme=journal${metres && metres > 0 ? `&at=${Math.round(metres)}` : ""}`
+          `${replayPath(summary.slug, storyWithAt(metres))}&renderer=atlas&landscape=notebook${metres && metres > 0 ? `&at=${Math.round(metres)}` : ""}`
         }
       />
     );

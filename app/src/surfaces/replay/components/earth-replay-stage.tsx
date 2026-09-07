@@ -82,6 +82,7 @@ export function EarthReplayStage({
   allowEarthMode = true,
   threadStyle,
   initialProgressM,
+  presentation,
 }: {
   route: QuestRoute;
   pickerRoutes: RouteSummary[];
@@ -99,6 +100,7 @@ export function EarthReplayStage({
    * instead of starting the day again.
    */
   initialProgressM?: number;
+  presentation?: "notebook";
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const elevationScrubberRef = useRef<
@@ -106,7 +108,7 @@ export function EarthReplayStage({
   >(null);
   const engineRef = useRef<ReplayEngine | undefined>(undefined);
   const mountedRouteRef = useRef<string | undefined>(undefined);
-  const controlRef = useRef(initialReplayState());
+  const controlRef = useRef(seekReplay(initialReplayState(), initialProgressM ?? 0, routeDistanceM(route)));
   const [status, setStatus] = useState<ReplayStatus>(() =>
     initialReplayStatus(initialEngineMode),
   );
@@ -127,9 +129,6 @@ export function EarthReplayStage({
     control.progressM,
   );
 
-  /* Applied once per route, after the engine reports it can draw. */
-  const seededRouteRef = useRef<string | undefined>(undefined);
-
   const commitControl = useCallback(
     (update: (current: ReplayControlState) => ReplayControlState) => {
       const next = update(controlRef.current);
@@ -142,13 +141,6 @@ export function EarthReplayStage({
   );
 
   useEffect(() => {
-    if (initialProgressM === undefined || !operational) return;
-    if (seededRouteRef.current === route.slug) return;
-    seededRouteRef.current = route.slug;
-    commitControl((current) => seekReplay(current, initialProgressM, totalDistanceM));
-  }, [commitControl, initialProgressM, operational, route.slug, totalDistanceM]);
-
-  useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     const routeChanged = mountedRouteRef.current !== route.slug;
@@ -156,30 +148,37 @@ export function EarthReplayStage({
       setEngineMode(initialEngineMode);
       return;
     }
-    const engine = createReplayEngine(engineMode);
+    const engine = createReplayEngine(engineMode, presentation);
     engineRef.current = engine;
-    const initialControl = routeChanged ? initialReplayState() : controlRef.current;
+    const initialControl = routeChanged ? seekReplay(initialReplayState(), initialProgressM ?? 0, totalDistanceM) : controlRef.current;
     mountedRouteRef.current = route.slug;
     controlRef.current = initialControl;
     setControl(initialControl);
     setStatus(initialReplayStatus(engineMode));
-    void engine.mount({
-      container,
-      route,
-      threadStyle,
-      onStatus: (nextStatus) => {
-        if (engineRef.current !== engine) return;
-        setStatus(nextStatus);
-        if (nextStatus.state === "ready" || nextStatus.state === "partial") {
-          engine.setPose(replayPose(route, controlRef.current));
-        }
-      },
-    });
+    const mount = () => {
+      if (engineRef.current !== engine) return;
+      void engine.mount({
+        container,
+        route,
+        threadStyle,
+        onStatus: (nextStatus) => {
+          if (engineRef.current !== engine) return;
+          setStatus(nextStatus);
+          if (nextStatus.state === "ready" || nextStatus.state === "partial") {
+            engine.setPose(replayPose(route, controlRef.current));
+          }
+        },
+      });
+    };
+    // Strict Mode probes effects with setup → cleanup → setup. A carried
+    // canvas must be claimed only by the setup that survives that probe.
+    if (presentation === "notebook") queueMicrotask(mount);
+    else mount();
     return () => {
       engine.destroy();
       if (engineRef.current === engine) engineRef.current = undefined;
     };
-  }, [engineMode, initialEngineMode, route]);
+  }, [engineMode, initialEngineMode, route, presentation, initialProgressM, totalDistanceM, threadStyle]);
 
   useEffect(() => {
     if (!operational || !control.playing) return;
@@ -230,9 +229,9 @@ export function EarthReplayStage({
 
   return (
     <section
-      aria-label={engineMode === "earth" ? "Earth Replay" : "Atlas Replay"}
+      aria-label={presentation === "notebook" ? "Along the recorded route" : engineMode === "earth" ? "Earth Replay" : "Atlas Replay"}
       data-testid="replay-stage"
-      data-engine={engineMode === "earth" ? "cesium-bundled" : "maplibre-atlas"}
+      data-engine={presentation === "notebook" ? "maplibre-notebook" : engineMode === "earth" ? "cesium-bundled" : "maplibre-atlas"}
       data-state={status.state}
       data-route-slug={route.slug}
       data-progress={control.progressM.toFixed(2)}
@@ -253,12 +252,12 @@ export function EarthReplayStage({
         aria-label={engineMode === "earth" ? "Earth Replay world" : "Atlas Replay map"}
         className="absolute inset-0"
       />
-      <RecordedLightLayer light={recordedLight} reducedMotion={reducedMotion} />
+      {presentation !== "notebook" ? <RecordedLightLayer light={recordedLight} reducedMotion={reducedMotion} /> : null}
 
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-4 p-3 sm:p-5">
         <RouteContextHud
           route={route}
-          label={engineMode === "earth" ? "Earth Replay" : "Atlas Replay"}
+          label={presentation === "notebook" ? "" : engineMode === "earth" ? "Earth Replay" : "Atlas Replay"}
           testId="replay-context"
           detailsTestId="replay-context-details"
           state={contextState}
@@ -268,9 +267,7 @@ export function EarthReplayStage({
           onStateChange={setContextState}
           summary={
             <>
-            <div className="mt-1.5">
-              <RecordedLightLabel light={recordedLight} />
-            </div>
+            {presentation !== "notebook" ? <div className="mt-1.5"><RecordedLightLabel light={recordedLight} /></div> : null}
             {route.curation.vibe ? (
               <p className="mt-3 max-w-sm font-editorial text-base italic leading-5 text-ink-secondary">
                 {route.curation.vibe}
@@ -280,16 +277,7 @@ export function EarthReplayStage({
               <div role="status" className="mt-3 border-l-2 border-amber-300 pl-3">
                 <div className="text-sm font-semibold">{status.title}</div>
                 <p className="mt-1 text-xs text-muted-foreground">{status.message}</p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="mt-3"
-                  onClick={() => setEngineMode("atlas")}
-                >
-                  <Map aria-hidden="true" />
-                  Use Atlas replay
-                </Button>
+                {presentation !== "notebook" ? <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => setEngineMode("atlas")}><Map aria-hidden="true" />Use Atlas replay</Button> : null}
               </div>
             ) : null}
             {engineMode === "atlas" && allowEarthMode ? (
@@ -306,7 +294,7 @@ export function EarthReplayStage({
             ) : null}
             </>
           }
-          actions={
+          actions={presentation === "notebook" ? undefined :
             <div className="grid grid-cols-2 gap-2">
               {route.replay.replayEligible ? (
                 <Button asChild size="sm" className="w-full bg-forest text-white hover:bg-forest/90">
@@ -349,7 +337,7 @@ export function EarthReplayStage({
                   </Button>
                 ) : null}
                 <Button asChild variant={engineMode === "earth" ? "outline" : "default"}>
-                  <Link to={routeDetailPath(route.slug)}>Return to route guide</Link>
+                  <Link to={presentation === "notebook" ? backPath : routeDetailPath(route.slug)}>Return to route guide</Link>
                 </Button>
               </div>
             ) : null}
@@ -387,6 +375,7 @@ export function EarthReplayStage({
             </div>
             <ReplayElevationScrubber
               ref={elevationScrubberRef}
+            tone={presentation === "notebook" ? "notebook" : "default"}
               route={route}
               progressM={control.progressM}
               totalDistanceM={totalDistanceM}
@@ -484,6 +473,7 @@ export function EarthReplayStage({
           </div>
           <ReplayElevationScrubber
             ref={elevationScrubberRef}
+            tone={presentation === "notebook" ? "notebook" : "default"}
             route={route}
             progressM={control.progressM}
             totalDistanceM={totalDistanceM}

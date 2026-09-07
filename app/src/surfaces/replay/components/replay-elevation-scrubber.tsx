@@ -42,7 +42,7 @@ export const ReplayElevationScrubber = forwardRef<
     totalDistanceM: number;
     disabled?: boolean;
     compact?: boolean;
-    tone?: "default" | "intelligence";
+    tone?: "default" | "intelligence" | "notebook";
     className?: string;
     onSeek: (progressM: number) => void;
   }
@@ -88,11 +88,11 @@ export const ReplayElevationScrubber = forwardRef<
   const repairYRatio = (distanceRatio: number) =>
     profileYAtRatio(profile.points, distanceRatio) / PROFILE_HEIGHT;
   const traveledColor =
-    tone === "intelligence" ? INTELLIGENCE_TRAVELED_COLOR : TRAVELED_COLOR;
+    tone === "notebook" ? "#8d2f14" : tone === "intelligence" ? INTELLIGENCE_TRAVELED_COLOR : TRAVELED_COLOR;
   const futureColor =
-    tone === "intelligence" ? INTELLIGENCE_FUTURE_COLOR : FUTURE_COLOR;
+    tone === "notebook" ? "#b3a699" : tone === "intelligence" ? INTELLIGENCE_FUTURE_COLOR : FUTURE_COLOR;
   const playheadColor =
-    tone === "intelligence" ? INTELLIGENCE_PLAYHEAD_COLOR : PLAYHEAD_COLOR;
+    tone === "notebook" ? "#c34a24" : tone === "intelligence" ? INTELLIGENCE_PLAYHEAD_COLOR : PLAYHEAD_COLOR;
 
   const sync = (nextProgressM: number) => {
     const ratio = Math.min(1, Math.max(0, nextProgressM / totalDistanceM));
@@ -174,7 +174,7 @@ export const ReplayElevationScrubber = forwardRef<
         />
         <path
           d={profile.area}
-          fill={tone === "intelligence" ? "#253a3a" : "#dfe5ee"}
+          fill={tone === "notebook" ? "#ded6c6" : tone === "intelligence" ? "#253a3a" : "#dfe5ee"}
           opacity={tone === "intelligence" ? "0.6" : "0.72"}
         />
         <polyline

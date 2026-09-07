@@ -1,23 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import maplibregl, { type LngLatBoundsLike, type Map as MapLibreMap } from "maplibre-gl";
 
-import {
-  DEM_SOURCE_ID,
-  RELIEF_PALETTE,
-  applyReliefCartography,
-  applyReliefSky,
-  attachRelief,
-  clearReliefSky,
-  type ReliefPalette,
-} from "@/labs/design-seeds/seed-relief";
+import { RELIEF_PALETTE, type ReliefPalette } from "@/ui/maps/relief-style";
+import { ReliefWorld, carryReliefWorld, type ReliefState } from "@/ui/maps/relief-world";
+import { reliefCamera } from "@/ui/maps/relief-camera";
+import { nearestProjectedDistance, recordedPointAt } from "@/domain/geometry/recorded-thread";
 import { lookupAtProgress } from "@/labs/design-seeds/seed-geometry";
-import type { RoutePoint, RouteSummary } from "@/domain/route";
-
-const STYLE = "https://tiles.openfreemap.org/styles/liberty";
-
-const SRC_HISTORY = "relief-history";
-const SRC_ROUTE = "relief-route";
-const SRC_ENDS = "relief-ends";
+import type { RoutePoint, RouteSummary, RouteDiscontinuityEvidence } from "@/domain/route";
 
 export interface ThreadPhoto {
   /** Where along the recorded distance the photograph was taken. Real data. */
@@ -45,6 +34,10 @@ export interface SeedReliefMapProps {
   /** Run the descent, then call back. Set to null when not descending. */
   descend?: { progress: number } | null;
   onDescended?: () => void;
+  gaps?: RouteDiscontinuityEvidence[];
+  exploring?: boolean;
+  onDragChange?: (dragging: boolean) => void;
+  onTerrainState?: (state: ReliefState) => void;
   palette?: ReliefPalette;
   /** Label for the thread control, spoken by assistive technology. */
   threadLabel?: string;
@@ -65,48 +58,6 @@ function boundsOf(points: RoutePoint[]): LngLatBoundsLike | null {
     [minLng, minLat],
     [maxLng, maxLat],
   ];
-}
-
-const lineFeature = (points: RoutePoint[], properties: Record<string, unknown> = {}) => ({
-  type: "Feature" as const,
-  properties,
-  geometry: {
-    type: "LineString" as const,
-    coordinates: points.map((p) => [p.lng, p.lat] as [number, number]),
-  },
-});
-
-const pointFeature = (point: RoutePoint, properties: Record<string, unknown> = {}) => ({
-  type: "Feature" as const,
-  properties,
-  geometry: { type: "Point" as const, coordinates: [point.lng, point.lat] as [number, number] },
-});
-
-type AnyFeature = ReturnType<typeof lineFeature> | ReturnType<typeof pointFeature>;
-
-const collection = (features: AnyFeature[]) => ({
-  type: "FeatureCollection" as const,
-  features,
-});
-
-/** Nearest recorded vertex to a map point, as a fraction of recorded distance. */
-function progressAtLngLat(trace: RoutePoint[], lng: number, lat: number) {
-  if (trace.length < 2) return 0;
-  let best = 0;
-  let bestGap = Infinity;
-  // Scale longitude by latitude so the comparison is not stretched near the poles.
-  const scale = Math.cos((lat * Math.PI) / 180) || 1;
-  for (let i = 0; i < trace.length; i += 1) {
-    const dx = (trace[i].lng - lng) * scale;
-    const dy = trace[i].lat - lat;
-    const gap = dx * dx + dy * dy;
-    if (gap < bestGap) {
-      bestGap = gap;
-      best = i;
-    }
-  }
-  const total = trace[trace.length - 1].d ?? 0;
-  return total > 0 ? (trace[best].d ?? 0) / total : best / (trace.length - 1);
 }
 
 /**
@@ -134,6 +85,10 @@ export function SeedReliefMap({
   padding = 64,
   descend = null,
   onDescended,
+  gaps = [],
+  exploring = false,
+  onDragChange,
+  onTerrainState,
   palette = RELIEF_PALETTE,
   threadLabel = "recorded route",
   className,
@@ -141,9 +96,22 @@ export function SeedReliefMap({
   const hostRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const readyRef = useRef(false);
+  const worldRef = useRef<ReliefWorld | null>(null);
+  const carryRef = useRef(false);
+  const [terrainState, setTerrainState] = useState<ReliefState>("loading");
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
+  const gapsRef = useRef(gaps);
+  gapsRef.current = gaps;
+  const selectedSlugRef = useRef(selectedSlug);
+  selectedSlugRef.current = selectedSlug;
+  const draggingRef = useRef(false);
+  const lastPointer = useRef<{ x: number; y: number } | null>(null);
   const onProgressRef = useRef(onProgress);
   const onSelectRef = useRef(onSelect);
   const onDescendedRef = useRef(onDescended);
+  const onTerrainStateRef = useRef(onTerrainState);
+  onTerrainStateRef.current = onTerrainState;
   onProgressRef.current = onProgress;
   onSelectRef.current = onSelect;
   onDescendedRef.current = onDescended;
@@ -172,220 +140,46 @@ export function SeedReliefMap({
       focusSelected && trace.length ? trace : routes.flatMap((r) => r.trace),
     );
 
-    const map = new maplibregl.Map({
-      container: host,
-      style: STYLE,
-      ...(initialBounds
-        ? { bounds: initialBounds, fitBoundsOptions: { padding, animate: false } }
-        : {}),
-      /*
-       * Pitched from construction, not eased into afterwards.
-       *
-       * Applying the pitch after load re-tiled the terrain a second time and
-       * pushed the first frame of the recorded route from ~900ms to ~1.7s. The
-       * first painted frame is now already the right camera.
-       */
+    const world = new ReliefWorld(host, {
+      ...(initialBounds ? { bounds: initialBounds, fitBoundsOptions: { padding, animate: false } } : {}),
       pitch,
-      attributionControl: false,
-      dragRotate: false,
-      pitchWithRotate: false,
-      /*
-       * The thread is the gesture on this surface. Left at MapLibre's defaults
-       * a drag that begins on the map pans the map instead - measured on the
-       * baseline at 390x844, a flick starting on the map scrolled the page 0px
-       * where the same flick on the prose scrolled 658px. Here the reader drags
-       * the recorded line, and the page keeps its scroll.
-       */
-      dragPan: false,
-      scrollZoom: false,
-      touchZoomRotate: false,
-      doubleClickZoom: false,
-      keyboard: false,
-      maxPitch: 70,
-      canvasContextAttributes: { preserveDrawingBuffer: true },
-    });
+    }, palette);
+    worldRef.current = world;
+    const map = world.map;
     mapRef.current = map;
-
-    map.addControl(
-      new maplibregl.AttributionControl({ compact: true }),
-      "bottom-right",
-    );
-
-    const build = () => {
-      if (map.getSource(SRC_ROUTE)) return;
-      applyReliefCartography(map, palette);
-      attachRelief(map, palette);
-
-      map.addSource(SRC_HISTORY, { type: "geojson", data: collection([]) });
-      /* lineMetrics lets the travelled length be a gradient stop rather than a
-         second geometry re-sent on every pointer move. */
-      map.addSource(SRC_ROUTE, { type: "geojson", lineMetrics: true, data: collection([]) });
-      map.addSource(SRC_ENDS, { type: "geojson", data: collection([]) });
-
-      /*
-       * The rest of the visit. Drawn with its own casing: at 1.1px in a
-       * translucent grey the other seven Crete days were invisible on hillshaded
-       * ground, which defeated the whole point of showing the collection.
-       */
-      map.addLayer({
-        id: "relief-history-casing",
-        type: "line",
-        source: SRC_HISTORY,
-        layout: { "line-cap": "round", "line-join": "round" },
-        paint: {
-          "line-color": palette.routeCasing,
-          "line-width": ["interpolate", ["linear"], ["zoom"], 8, 4, 13, 7],
-          "line-opacity": 0.75,
-        },
-      });
-      map.addLayer({
-        id: "relief-history-line",
-        type: "line",
-        source: SRC_HISTORY,
-        layout: { "line-cap": "round", "line-join": "round" },
-        paint: {
-          "line-color": palette.routeHistory,
-          "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.9, 13, 3.4],
-        },
-      });
-      map.addLayer({
-        id: "relief-route-casing",
-        type: "line",
-        source: SRC_ROUTE,
-        layout: { "line-cap": "round", "line-join": "round" },
-        paint: {
-          "line-color": palette.routeCasing,
-          "line-width": ["interpolate", ["linear"], ["zoom"], 8, 5.5, 13, 9],
-          "line-opacity": 0.92,
-        },
-      });
-      map.addLayer({
-        id: "relief-route-line",
-        type: "line",
-        source: SRC_ROUTE,
-        layout: { "line-cap": "round", "line-join": "round" },
-        paint: {
-          "line-width": ["interpolate", ["linear"], ["zoom"], 8, 2.4, 13, 5],
-          "line-gradient": [
-            "interpolate",
-            ["linear"],
-            ["line-progress"],
-            0,
-            palette.route,
-            1,
-            palette.route,
-          ],
-        },
-      });
-      map.addLayer({
-        id: "relief-ends",
-        type: "circle",
-        source: SRC_ENDS,
-        paint: {
-          "circle-radius": 5,
-          "circle-color": palette.routeCasing,
-          "circle-stroke-width": 2,
-          "circle-stroke-color": palette.route,
-        },
-      });
-
-      const canvas = map.getCanvas();
-      canvas.setAttribute("tabindex", "-1");
-      canvas.setAttribute("aria-hidden", "true");
-      canvas.removeAttribute("aria-label");
-      canvas.removeAttribute("role");
-
-      readyRef.current = true;
-      map.resize();
-      // @ts-expect-error lab probe: lets a capture script read the live camera.
-      window.__reliefMap = map;
-      /* A click on another day's line selects it: the collection is navigable. */
-      map.on("click", "relief-history-line", (event) => {
-        const slug = event.features?.[0]?.properties?.slug;
-        if (typeof slug === "string") onSelectRef.current?.(slug);
-      });
-      map.on("mouseenter", "relief-history-line", () => {
-        map.getCanvas().style.cursor = "pointer";
-      });
-      map.on("mouseleave", "relief-history-line", () => {
-        map.getCanvas().style.cursor = "";
-      });
+    readyRef.current = true;
+    // Lab probe retained for route / camera evidence, never product state.
+    // @ts-expect-error lab probe
+    window.__reliefMap = map;
+    const unsubscribe = world.subscribe(state => { setTerrainState(state); onTerrainStateRef.current?.(state); });
+    const selectDay = (event: maplibregl.MapLayerMouseEvent) => {
+      const slug = event.features?.[0]?.properties?.slug;
+      if (typeof slug === "string") onSelectRef.current?.(slug);
     };
-
-    map.on("styledata", build);
-    map.on("load", build);
-
-    const observer = new ResizeObserver(() => map.resize());
-    observer.observe(host);
-
+    map.on("click", "relief-history-line", selectDay);
     return () => {
-      observer.disconnect();
-      map.off("styledata", build);
-      map.off("load", build);
+      unsubscribe();
+      map.off("click", "relief-history-line", selectDay);
       readyRef.current = false;
       mapRef.current = null;
-      map.remove();
+      worldRef.current = null;
+      if (carryRef.current && selectedSlugRef.current) carryReliefWorld(world, selectedSlugRef.current);
+      else world.destroy();
     };
-    // The renderer outlives day changes on purpose; data and camera update below.
+    // The world outlives data and camera updates. D alone may hand it to Replay.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [palette]);
 
-  /* -------------------------------- The data ------------------------------- */
+  const gapsKey = JSON.stringify(gaps);
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    const push = () => {
-      if (!readyRef.current) return;
-      const history = map.getSource(SRC_HISTORY) as maplibregl.GeoJSONSource | undefined;
-      const route = map.getSource(SRC_ROUTE) as maplibregl.GeoJSONSource | undefined;
-      const ends = map.getSource(SRC_ENDS) as maplibregl.GeoJSONSource | undefined;
-      history?.setData(
-        collection(
-          routes
-            .filter((r) => r.slug !== selectedSlug && r.trace.length > 1)
-            .map((r) => lineFeature(r.trace, { slug: r.slug })),
-        ),
-      );
-      route?.setData(collection(trace.length > 1 ? [lineFeature(trace)] : []));
-      ends?.setData(
-        collection(
-          trace.length > 1
-            ? [
-                pointFeature(trace[0], { role: "start" }),
-                pointFeature(trace[trace.length - 1], { role: "finish" }),
-              ]
-            : [],
-        ),
-      );
-    };
-    push();
-    map.on("styledata", push);
-    return () => {
-      map.off("styledata", push);
-    };
-  }, [routes, selectedSlug, trace]);
+    worldRef.current?.setRoutes(routes, selectedSlug, trace, JSON.parse(gapsKey));
+  }, [routes, selectedSlug, trace, gapsKey]);
 
-  /* ----------------------------- Travelled length -------------------------- */
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !readyRef.current || !map.getLayer("relief-route-line")) return;
-    const at = progress ?? -1;
-    if (at < 0) {
-      map.setPaintProperty("relief-route-line", "line-gradient", [
-        "interpolate", ["linear"], ["line-progress"],
-        0, palette.route, 1, palette.route,
-      ]);
-      return;
-    }
-    const stop = Math.min(0.999, Math.max(0.001, at));
-    map.setPaintProperty("relief-route-line", "line-gradient", [
-      "interpolate", ["linear"], ["line-progress"],
-      0, palette.routeTravelled,
-      stop, palette.routeTravelled,
-      Math.min(1, stop + 0.001), palette.route,
-      1, palette.route,
-    ]);
-  }, [progress, palette]);
+    worldRef.current?.setProgress(progress === undefined ? undefined : progress * totalM);
+  }, [progress, totalM]);
+
+  useEffect(() => { worldRef.current?.explore(exploring); }, [exploring]);
 
   /* --------------------------------- Camera -------------------------------- */
   /*
@@ -404,6 +198,7 @@ export function SeedReliefMap({
     const map = mapRef.current;
     if (!map || !framingKey) return;
     const target = JSON.parse(framingKey) as LngLatBoundsLike;
+    if (exploring) return;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const settle = () => {
       const camera = map.cameraForBounds(target, { padding: JSON.parse(paddingKey) });
@@ -425,53 +220,31 @@ export function SeedReliefMap({
     if (readyRef.current) settle();
     /* `idle` on a terrain map can be seconds away; the style is enough. */
     else map.once("styledata", settle);
-  }, [framingKey, paddingKey, pitch]);
+  }, [framingKey, paddingKey, pitch, exploring]);
 
-  /*
-   * Terrain only when the camera is pitched, and never before the route has
-   * painted.
-   *
-   * Measured on a cold day: layers and route geometry were in at 916ms, the
-   * same as the flat baseline, but the recorded line did not appear until
-   * ~1.7s - because a line draped on terrain waits for the DEM tiles under it,
-   * and 21 elevation tiles were still arriving. Draping it after the first idle
-   * keeps the route-first guarantee: the line lands on the right camera at
-   * ~900ms, then the ground rises to meet it.
-   */
-  const terrainSeeded = useRef(false);
+  // Geographic bounds alone do not frame raised terrain. Once the DEM settles,
+  // place its projected trace inside the page's actual open pane. Never move the
+  // camera beneath an active route drag or deliberate geographic exploration.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
-    const apply = () => {
-      if (!readyRef.current || !map.getSource(DEM_SOURCE_ID)) return;
-      if (pitch > 4) {
-        map.setTerrain({ source: DEM_SOURCE_ID, exaggeration: 1.35 });
-        applyReliefSky(map);
-      } else {
-        map.setTerrain(null);
-        clearReliefSky(map);
-      }
+    if (!map || terrainState !== "ready" || exploring || descend || !trace.length || draggingRef.current) return;
+    let stopped = false;
+    const frame = () => {
+      if (stopped || draggingRef.current) return;
+      const points = (focusSelected ? trace : routes.flatMap(r => r.trace)).map(p => map.project([p.lng, p.lat]));
+      const pad = JSON.parse(paddingKey);
+      const edge = (side: string) => typeof pad === "number" ? pad : pad[side] ?? 0;
+      const width = map.getCanvas().clientWidth, height = map.getCanvas().clientHeight;
+      const x = (Math.min(...points.map(p => p.x)) + Math.max(...points.map(p => p.x))) / 2;
+      const y = (Math.min(...points.map(p => p.y)) + Math.max(...points.map(p => p.y))) / 2;
+      const dx = x - (edge("left") + width - edge("right")) / 2;
+      const dy = y - (edge("top") + height - edge("bottom")) / 2;
+      if (Math.hypot(dx, dy) > 8) map.panBy([dx, dy], { duration: 0 });
     };
-    if (terrainSeeded.current) {
-      apply();
-      map.on("styledata", apply);
-      return () => {
-        map.off("styledata", apply);
-      };
-    }
-    /* Nothing may drape until the line has painted, including a styledata
-       handler - binding it early was why the first attempt changed nothing. */
-    const seed = () => {
-      terrainSeeded.current = true;
-      apply();
-      map.on("styledata", apply);
-    };
-    map.once("idle", seed);
-    return () => {
-      map.off("idle", seed);
-      map.off("styledata", apply);
-    };
-  }, [pitch]);
+    // Wait out the existing geographic fit before correcting its projection.
+    const timer = window.setTimeout(frame, 950);
+    return () => { stopped = true; clearTimeout(timer); };
+  }, [terrainState, framingKey, paddingKey, exploring, focusSelected, trace, routes, descend]);
 
   /* ------------------------ Overlay screen positions ----------------------- */
   /*
@@ -487,7 +260,7 @@ export function SeedReliefMap({
     const map = mapRef.current;
     if (!map) return;
 
-    const at = progress === undefined ? null : lookupAtProgress(trace, progress);
+    const at = progress === undefined ? null : recordedPointAt(trace, progress * totalM, gapsRef.current);
     const next = at
       ? (() => {
           const p = map.project([at.lng, at.lat]);
@@ -535,45 +308,52 @@ export function SeedReliefMap({
   }, [reproject]);
 
   /* -------------------------------- Descent -------------------------------- */
+  const descendingProgress = descend?.progress;
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !descend || !trace.length) return;
+    if (!map || descendingProgress === undefined || !trace.length) return;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const at = lookupAtProgress(trace, descend.progress);
-    if (reduced || !at) {
+    const camera = reliefCamera(map, trace, descendingProgress * totalM, gapsRef.current);
+    if (!camera) return;
+    if (worldRef.current) worldRef.current.viewBearing = camera.options.bearing;
+    // A frozen physical target prevents terrain arrival from pulling the eye off
+    // the held point midway through the descent. Playback uses the same solver.
+    map.stop();
+    map.setCenterClampedToGround(false);
+    const finish = () => {
+      carryRef.current = true;
       onDescendedRef.current?.();
-      return;
-    }
-    /*
-     * Look along the line, not straight down at it.
-     *
-     * The first descent zoomed to ~15 and kept the camera's bearing, which
-     * arrived nose-down on a patch of ground past the DEM's z15 detail - flat,
-     * pale, and nowhere. Turning to the direction of travel and stopping at
-     * z13.8 arrives standing on the route looking the way she was going, which
-     * is the whole claim of the transition.
-     */
-    const ahead = lookupAtProgress(trace, Math.min(1, descend.progress + 0.03));
-    const bearing =
-      ahead && (ahead.lng !== at.lng || ahead.lat !== at.lat)
-        ? (Math.atan2(
-            (ahead.lng - at.lng) * Math.cos((at.lat * Math.PI) / 180),
-            ahead.lat - at.lat,
-          ) *
-            180) /
-          Math.PI
-        : map.getBearing();
-    map.easeTo({
-      center: [at.lng, at.lat],
-      zoom: Math.min(Math.max(map.getZoom() + 1.2, 13.4), 13.8),
-      pitch: 70,
-      bearing,
-      duration: 1250,
-      essential: true,
-    });
-    const timer = window.setTimeout(() => onDescendedRef.current?.(), 1300);
-    return () => window.clearTimeout(timer);
-  }, [descend, trace]);
+    };
+    // MapLibre 5's easeTo ignores explicit elevation. Interpolate all camera
+    // terms together through jumpTo, whose elevation is part of the contract.
+    const start = { center: map.getCenter(), zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing(), elevation: map.getCenterElevation(), padding: map.getPadding() };
+    const target = camera.options;
+    const end = maplibregl.LngLat.convert(target.center!);
+    const turn = ((target.bearing! - start.bearing + 540) % 360) - 180;
+    const begin = performance.now();
+    const duration = reduced ? 0 : 1800;
+    let frame = 0;
+    const tick = (now: number) => {
+      const t = duration ? Math.min(1, (now - begin) / duration) : 1;
+      // First bring the chosen point into the open landscape. Then turn and
+      // approach around it. Rotating around the old overview centre can swing
+      // the selected ridge off screen even when both endpoint cameras fit.
+      const settle = Math.min(1, t / 0.42);
+      const approach = Math.max(0, (t - 0.42) / 0.58);
+      const ease = settle * settle * (3 - 2 * settle);
+      const move = approach * approach * (3 - 2 * approach);
+      const mix = (a: number, b: number) => a + (b - a) * ease;
+      map.jumpTo({ center: [mix(start.center.lng, end.lng), mix(start.center.lat, end.lat)],
+        zoom: start.zoom + (target.zoom! - start.zoom) * move, pitch: start.pitch + (target.pitch! - start.pitch) * move,
+        bearing: start.bearing + turn * move, elevation: mix(start.elevation, target.elevation!),
+        padding: { top: mix(start.padding.top ?? 0, 80), right: mix(start.padding.right ?? 0, 0), bottom: mix(start.padding.bottom ?? 0, 0), left: mix(start.padding.left ?? 0, 0) },
+      });
+      if (t < 1) frame = requestAnimationFrame(tick);
+      else finish();
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [descendingProgress, trace, totalM]);
 
   /* ------------------------------- The thread ------------------------------ */
   const report = useCallback(
@@ -591,39 +371,73 @@ export function SeedReliefMap({
       const host = hostRef.current;
       if (!map || !host || trace.length < 2) return;
       const box = host.getBoundingClientRect();
-      const lngLat = map.unproject([clientX - box.left, clientY - box.top]);
-      report(progressAtLngLat(trace, lngLat.lng, lngLat.lat));
+      const projected = trace.map(point => ({ ...map.project([point.lng, point.lat]), d: point.d }));
+      const held = progressRef.current === undefined ? null : recordedPointAt(trace, progressRef.current * totalM, gapsRef.current);
+      const anchor = held ? map.project([held.lng, held.lat]) : null;
+      // Move relative to the held point's current projection. If a DEM tile
+      // arrives under a held thumb, its next move must not select another ridge.
+      const x = anchor && lastPointer.current ? anchor.x + clientX - lastPointer.current.x : clientX - box.left;
+      const y = anchor && lastPointer.current ? anchor.y + clientY - lastPointer.current.y : clientY - box.top;
+      lastPointer.current = { x: clientX, y: clientY };
+      const nearest = nearestProjectedDistance(projected, x, y,
+        progressRef.current === undefined ? undefined : progressRef.current * totalM, gapsRef.current);
+      if (nearest.distanceM !== undefined) report(nearest.distanceM / totalM);
     },
-    [trace, report],
+    [trace, report, totalM],
   );
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || exploring || descendingProgress !== undefined) return;
+    const inspect = (event: maplibregl.MapMouseEvent) => {
+      if ((event.originalEvent.target as HTMLElement)?.closest("button, [role=slider]")) return;
+      const points = trace.map(point => ({ ...map.project([point.lng, point.lat]), d: point.d }));
+      const nearest = nearestProjectedDistance(points, event.point.x, event.point.y,
+        progressRef.current === undefined ? undefined : progressRef.current * totalM, gapsRef.current);
+      if (nearest.distanceM !== undefined && nearest.pixelDistance <= 24) report(nearest.distanceM / totalM);
+    };
+    map.on("click", inspect);
+    return () => { map.off("click", inspect); };
+  }, [trace, totalM, report, exploring, descendingProgress]);
 
   const onHandleDown = (event: React.PointerEvent) => {
     event.preventDefault();
-    (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+    lastPointer.current = { x: event.clientX, y: event.clientY };
+    (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+    draggingRef.current = true;
     setDragging(true);
+    onDragChange?.(true);
   };
   const onHandleMove = (event: React.PointerEvent) => {
-    if (!dragging) return;
+    if (!draggingRef.current) return;
     event.preventDefault();
     pointerToProgress(event.clientX, event.clientY);
   };
   const onHandleUp = (event: React.PointerEvent) => {
-    if (!dragging) return;
-    (event.target as HTMLElement).releasePointerCapture?.(event.pointerId);
+    if (!draggingRef.current) return;
+    (event.currentTarget as HTMLElement).releasePointerCapture?.(event.pointerId);
+    draggingRef.current = false;
+    lastPointer.current = null;
     setDragging(false);
+    onDragChange?.(false);
   };
 
   const step = (delta: number) => report((progress ?? 0) + delta);
-  const at = progress !== undefined && trace.length ? lookupAtProgress(trace, progress) : null;
+  const at = progress !== undefined && trace.length ? recordedPointAt(trace, progress * totalM, gapsRef.current) : null;
 
   return (
-    <div ref={hostRef} className={`relative h-full w-full ${className ?? ""}`}>
+    <div ref={hostRef} data-terrain-state={terrainState} className={`relative h-full w-full ${className ?? ""}`}>
+      {terrainState !== "ready" ? (
+        <p role="status" className="seed-terrain-status">
+          {terrainState === "loading" ? "The land is taking shape…" : terrainState === "partial" ? "Elevation tiles are unavailable in places. The recorded route is still here." : "The map could not load. You can still inspect the climb."}
+        </p>
+      ) : null}
       {/*
         The overlay carries the thread. It is transparent to pointer events
         except on its own controls, so the map beneath stays clickable and the
         page keeps its scroll.
       */}
-      <div className="pointer-events-none absolute inset-0">
+      <div className="pointer-events-none absolute inset-0 z-10">
         {photoPoints.map(({ x, y, photo }) => (
           <button
             key={photo.url}
@@ -637,7 +451,7 @@ export function SeedReliefMap({
           </button>
         ))}
 
-        {handlePoint ? (
+        {handlePoint && !exploring ? (
           <div
             className="seed-thread-handle pointer-events-auto absolute"
             style={{ left: handlePoint.x, top: handlePoint.y }}
@@ -660,6 +474,7 @@ export function SeedReliefMap({
               onPointerMove={onHandleMove}
               onPointerUp={onHandleUp}
               onPointerCancel={onHandleUp}
+              onLostPointerCapture={() => { draggingRef.current = false; setDragging(false); onDragChange?.(false); }}
               onKeyDown={(event) => {
                 const fine = event.shiftKey ? 0.002 : 0.02;
                 if (event.key === "ArrowRight" || event.key === "ArrowUp") { event.preventDefault(); step(fine); }

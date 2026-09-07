@@ -35,7 +35,7 @@ const check = (name, ok, detail = "") => {
   if (!ok) failures.push(name);
 };
 
-const browser = await chromium.launch();
+const browser = await chromium.launch({ headless: process.env.HEADLESS === "1" || process.platform !== "darwin" });
 
 /* -------------------------------- 1. the thread ------------------------------ */
 {
@@ -128,27 +128,27 @@ const browser = await chromium.launch();
   const label = await entry.innerText().catch(() => "");
   check("the entry action names the chosen place", /Enter at/.test(label), label.replace(/\s+/g, " "));
 
-  const pitchBefore = await page.evaluate(() =>
-    window.__reliefMap ? Math.round(window.__reliefMap.getPitch()) : null,
-  );
+  const exactHeld = Number(await ribbon.getAttribute("aria-valuenow"));
+  const world = await page.locator("[data-relief-world]").getAttribute("data-relief-world");
+  await page.evaluate(() => {
+    const map = window.__reliefMap;
+    window.__dFrames = [];
+    window.__dMove = () => window.__dFrames.push({ zoom: map.getZoom(), pitch: map.getPitch() });
+    map.on("move", window.__dMove);
+  });
   await entry.click();
-  await page.waitForTimeout(560);
-  const pitchDuring = await page.evaluate(() =>
-    window.__reliefMap ? Math.round(window.__reliefMap.getPitch()) : null,
-  );
-  check(
-    "the camera descends",
-    pitchDuring !== null && pitchBefore !== null && pitchDuring > pitchBefore,
-    `${pitchBefore} -> ${pitchDuring}`,
-  );
+  await page.getByTestId("replay-stage").waitFor();
+  const descent = await page.evaluate(() => { window.__reliefMap.off("move", window.__dMove); return window.__dFrames; });
+  check("the camera descends through intermediate positions", descent.length > 3 && Math.abs(descent.at(-1).zoom - descent[0].zoom) > 0.1);
 
-  await page.waitForTimeout(12000);
   check("Replay is reached", page.url().includes(`#/replay/${BANFF_SLUG}`));
   const entered = Number(new URL(page.url().replace("#", "?hash=")).searchParams.get("at"));
   const atFromHash = Number((page.url().match(/[?&]at=(\d+)/) ?? [])[1]);
   check("carrying the entry distance", Number.isFinite(atFromHash) && atFromHash > 0, `at=${atFromHash || entered}`);
 
-  await page.getByRole("button", { name: /^Play route$/ }).click().catch(() => {});
+  check("initial Replay position equals the held distance", Number(await page.getByTestId("replay-stage").getAttribute("data-progress")) === exactHeld);
+  check("Replay keeps the entered terrain world", world === await page.locator("[data-relief-world]").getAttribute("data-relief-world"));
+  await page.getByRole("button", { name: /^Play route$/ }).click();
   await page.waitForTimeout(4500);
   const progress = await page
     .locator("text=/\\d+\\.\\d+ \\/ \\d+\\.\\d+ km/")

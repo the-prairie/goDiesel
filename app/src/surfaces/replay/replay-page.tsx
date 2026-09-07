@@ -78,8 +78,9 @@ export function ReplayPage() {
    * the same identity as the route story it was entered from. Absent the
    * parameter nothing changes.
    */
+  const notebook = searchParams.get("landscape") === "notebook";
   const journalPresentation = searchParams.get("theme") === "journal";
-  const presentation = journalPresentation ? "seed-replay-warm" : undefined;
+  const presentation = notebook ? "seed-theme-journal seed-type-role seed-replay-notebook" : journalPresentation ? "seed-replay-warm" : undefined;
   // The route keeps its identity across Atlas, story and Replay. Only the
   // journal presentation opts in; every other caller keeps the shared default.
   const threadStyle = journalPresentation ? JOURNAL_REPLAY_THREAD_STYLE : undefined;
@@ -94,7 +95,7 @@ export function ReplayPage() {
   const initialProgressM =
     Number.isFinite(requestedAt) && requestedAt > 0 ? requestedAt : undefined;
 
-  if (!useLegacyEarth && !atlasFallback) {
+  if (!notebook && !useLegacyEarth && !atlasFallback) {
     return (
       <div className={presentation}>
         <GoogleRouteNavigatorStage
@@ -116,9 +117,10 @@ export function ReplayPage() {
         pickerRoutes={pickerRoutes}
         backPath={backPath}
         backLabel={backLabel}
-        initialEngineMode={atlasFallback ? "atlas" : "earth"}
+        initialEngineMode={notebook || atlasFallback ? "atlas" : "earth"}
         initialProgressM={initialProgressM}
-        allowEarthMode={useLegacyEarth}
+        allowEarthMode={!notebook && useLegacyEarth}
+        presentation={notebook ? "notebook" : undefined}
         threadStyle={threadStyle}
       />
     </div>
