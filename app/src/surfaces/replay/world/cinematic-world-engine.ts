@@ -1,10 +1,10 @@
-import { WorldRefinement } from "./world-refinement";
+import { WorldSurfaceIndex } from "./world-surface";
 import { WorldContinuity } from "./world-continuity";
 import type { TilesRenderer } from "3d-tiles-renderer/three";
 import { GoogleCloudAuthPlugin } from "3d-tiles-renderer/core/plugins";
 import { GLTFExtensionsPlugin, TilesFadePlugin } from "3d-tiles-renderer/three/plugins";
 import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree } from "three-mesh-bvh";
-import { AgXToneMapping, Color, Matrix4, Vector2, Mesh, PerspectiveCamera, Raycaster, Scene, SRGBColorSpace, WebGLRenderer, NoToneMapping } from "three";
+import { AgXToneMapping, Color, Matrix4, Vector2, Mesh, PerspectiveCamera, Scene, SRGBColorSpace, WebGLRenderer, NoToneMapping } from "three";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import type { GoogleRouteNavigatorEngine, GoogleRouteNavigatorStatus } from "@/surfaces/replay/renderers/google-route-navigator-engine";
@@ -36,6 +36,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
   private renderer?: WebGLRenderer;
   private tiles?: TilesRenderer;
   private frame?: WorldFrame;
+  private surfaces?: WorldSurfaceIndex;
   private scene = new Scene();
   private camera = new PerspectiveCamera(54, 1, 0.5, 100_000);
   private controls?: OrbitControls;
@@ -55,7 +56,6 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
   private readyTimer = 0;
   private layers: WorldLayers = { terrain: "loading", atmosphere: "loading", labels: "loading", route: "loading" };
   private environment = DEFAULT_WORLD_ENVIRONMENT;
-  private readonly refinement = new WorldRefinement(WORLD_QUALITY.balanced.errorTarget);
   private lastStatus = "";
   private following = true;
   private pose?: GoogleRouteCameraPose;
@@ -66,10 +66,14 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
   private lastAttribution = "";
   private effectiveQuality = this.environment.quality;
   private slowFrames = 0;
-  private raycaster = new Raycaster();
   private measuredTarget: number | null = null;
   private lastTargetSample = -Infinity;
   private lastCameraCorrection = 0;
+  private targetSurfaceErrorM: number | null = null;
+  private targetCorrectionM = 0;
+  private cameraHeightM: number | null = null;
+  private cameraGroundHeightM: number | null = null;
+  private cameraClearanceM: number | null = null;
   private clearanceState: "measured" | "unknown" = "unknown";
   private downloadBudget?: WorldDownloadQueue;
   private lookAhead?: WorldLookAhead;
@@ -115,6 +119,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
       container.replaceChildren(renderer.domElement);
       const frame = new WorldFrame(route.centerLat, route.centerLng);
       this.frame = frame;
+      this.surfaces = new WorldSurfaceIndex(frame.ecefToWorld);
       this.trace = new WorldRoute(route, frame);
       this.scene.add(this.trace.group);
       this.layers.route = this.trace.grounded ? "ready" : "loading";
@@ -133,7 +138,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
       tiles.group.matrixAutoUpdate = false;
       this.scene.add(tiles.group);
       tiles.setCamera(this.camera);
-      tiles.addEventListener("load-model", ({ scene }) => {
+      tiles.addEventListener("load-model", ({ scene, tile }) => {
         scene.traverse((object) => {
           if (!(object instanceof Mesh)) return;
           // Bound synchronous BVH work to modest tile meshes; no global prototype mutation.
@@ -144,18 +149,21 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
           const previous = object.onAfterRender;
           object.onAfterRender = (...args) => { previous.apply(object, args); this.renderedTiles += 1; };
         });
+        this.surfaces?.add(scene, tile.geometricError);
         this.trace?.invalidate();
       });
-      tiles.addEventListener("dispose-model", ({ scene }) => scene.traverse((object) => {
-        if (object instanceof Mesh && object.geometry.boundsTree) disposeBoundsTree.call(object.geometry);
-      }));
+      tiles.addEventListener("dispose-model", ({ scene }) => {
+        this.surfaces?.remove(scene);
+        scene.traverse((object) => {
+          if (object instanceof Mesh && object.geometry.boundsTree) disposeBoundsTree.call(object.geometry);
+        });
+      });
       tiles.addEventListener("tile-visibility-change", () => this.trace?.invalidate());
       tiles.addEventListener("load-error", ({ tile }) => {
         if (this.abort.signal.aborted) return;
         if (!tile) this.fail("Google 3D terrain could not load. Check Map Tiles API access, billing and this browser origin.");
         else { this.terrainGaps = true; this.publish(); }
       });
-      this.raycaster.firstHitOnly = true;
       const initial = options.initialCamera;
       if (initial) this.setCamera(initial);
       const controls = new OrbitControls(this.camera, renderer.domElement);
@@ -221,7 +229,6 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
           // Keep input/camera rendering immediate, but do not repeatedly cancel and
           // requeue entire tile trees at 120 Hz during a continuous scrub.
           if (now - this.latestSeek > 90 || now - this.lastTraversal >= 90) {
-            tiles.errorTarget = this.refinement.errorTarget;
             tiles.update(); this.lastTraversal = now;
             this.discardedStaleParses += pruneWorldStaleWork(tiles);
           }
@@ -289,8 +296,6 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
             } catch { this.focusProbe = { ...emptyTerrainFocus(), sampledAtMs: this.recorder.time(now), reason: "sample-error" }; }
             this.recorder.sample(now, this.reportState(now));
           }
-          this.refinement.update(now, this.renderedTiles, this.coverage,
-            this.focusProbe.sampledAtMs !== null && this.recorder.time(now) - this.focusProbe.sampledAtMs < 1250 ? this.focusProbe.estimatedScreenErrorPx : null);
           this.updateAttribution(); this.publish();
         } catch (error) {
           const message = error instanceof Error ? error.message : "Unexpected renderer error";
@@ -325,6 +330,8 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
         requestedRangeM: this.pose?.rangeM ?? null,
         actualRangeM: this.controls ? this.camera.position.distanceTo(this.controls.target) : null,
         fovDeg: this.camera.fov, nearM: this.camera.near, farM: this.camera.far, meshCorrectionM: this.lastCameraCorrection, clearanceState: this.clearanceState,
+        targetSurfaceErrorM: this.targetSurfaceErrorM, targetCorrectionM: this.targetCorrectionM,
+        heightM: this.cameraHeightM, groundHeightM: this.cameraGroundHeightM, clearanceM: this.cameraClearanceM,
       },
       layers: { ...this.layers },
       quality: {
@@ -339,7 +346,6 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
         focusErrorM: this.focusProbe.geometricErrorM,
         progress: this.tiles?.loadProgress ?? 0, cachedBytes: cache?.cachedBytes ?? 0,
         errorTargetPx: this.tiles?.errorTarget ?? WORLD_QUALITY[this.effectiveQuality].errorTarget,
-        refinement: this.refinement.snapshot(),
         focus: {
           ...this.focusProbe,
           ageMs: this.focusProbe.sampledAtMs === null ? null : Math.max(0, this.recorder.time(now) - this.focusProbe.sampledAtMs),
@@ -347,7 +353,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
         },
         queues: { downloading: stats?.downloading ?? 0, parsing: stats?.parsing ?? 0, failed: stats?.failed ?? 0 },
         view: { state: this.viewState, buffering: this.isPlaybackBuffering(), coverage: { ...this.coverage, sampledAtMs: this.coverage.sampledAtMs === null ? null : this.recorder.time(this.coverage.sampledAtMs) } },
-        streaming: { pendingLimit: WORLD_PENDING_LIMIT, backpressured: this.downloadBudget?.blocked ?? false, discardedStaleParses: this.discardedStaleParses, lookAhead: this.lookAhead?.mode ?? "off", lookAheadProgressM: this.lookAhead?.progressM ?? null },
+        streaming: { pendingLimit: WORLD_PENDING_LIMIT, backpressured: this.downloadBudget?.blocked ?? false, discardedStaleParses: this.discardedStaleParses, lookAhead: this.lookAhead?.mode ?? "off", lookAheadProgressM: this.lookAhead?.progressM ?? null, cameraSupport: this.lookAhead?.cameraSupport, indexedSurfaceModels: this.surfaces?.size ?? 0 },
       },
       visibleRoadLabels: this.labels?.visibleLabelCount ?? 0,
       contextLost: this.renderer?.getContext().isContextLost() ?? false,
@@ -365,7 +371,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
     };
     if (previous) {
       if (previous.playing !== context.playing) this.markReport(context.playing ? "play" : "pause");
-      if (previous.cameraMode !== context.cameraMode) { this.refinement.reset(); this.markReport("camera-mode"); }
+      if (previous.cameraMode !== context.cameraMode) this.markReport("camera-mode");
       if (previous.following !== context.following) this.markReport(context.following ? "recenter" : "free-camera");
       if (previous.rangeScale !== context.rangeScale) this.markReport("zoom");
       if (previous.speed !== context.speed) this.markReport("speed");
@@ -375,9 +381,8 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
     if (intent === "seek") {
       this.latestSeek = performance.now();
       this.lookAhead?.seek(this.latestSeek);
-      this.refinement.reset();
-      this.focusProbe = emptyTerrainFocus(); this.lastDiagnosticSample = -Infinity;
       this.measuredTarget = null; this.measuredProgressM = -Infinity;
+      this.targetSurfaceErrorM = this.focusErrorM = null;
       this.lastTargetSample = -Infinity;
       this.coverage = { ...EMPTY_VIEW_COVERAGE };
       this.markReport("seek");
@@ -415,30 +420,28 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
     this.trace?.resize(width, height); this.atmosphere?.resize(width, height);
   };
   private sampleHeight = (lat: number, lng: number, seed: number, focus = false): number | null => {
-    if (!this.frame || !this.tiles?.visibleTiles.size) return null;
-    this.raycaster.set(this.frame.position(lat, lng, Math.max(10_000, seed + 2000)), this.frame.normal(lat, lng).negate());
-    const hit = this.raycaster.intersectObject(this.tiles.group, true)[0];
-    if (focus) {
-      const error: unknown = hit?.object.userData.tile?.geometricError;
-      this.focusErrorM = typeof error === "number" && Number.isFinite(error) ? error : null;
-    }
+    if (!this.frame || !this.surfaces) return null;
+    const hit = this.surfaces.cast(this.frame.position(lat, lng, Math.max(10_000, seed + 2000)), this.frame.normal(lat, lng).negate());
+    if (focus) this.targetSurfaceErrorM = this.focusErrorM = hit?.geometricErrorM ?? null;
     return hit ? this.frame.height(hit.point) : null;
   };
   setCamera(pose: GoogleRouteCameraPose) {
     // An old surface height cannot follow the camera kilometres through a scrub.
-    if (Math.abs(this.measuredProgressM - pose.progressM) > 80) this.measuredTarget = null;
+    if (Math.abs(this.measuredProgressM - pose.progressM) > 80) {
+      this.measuredTarget = null; this.targetSurfaceErrorM = this.focusErrorM = null;
+    }
     this.pose = pose;
     if (!this.frame || !this.following || !this.options) return;
     const recorded = this.options.route.elevationStatus !== "unavailable";
     const height = recorded ? pose.center.altitude ?? this.options.route.route[0].elev : this.measuredTarget ?? pose.center.altitude ?? 0;
     const correction = recorded && this.measuredTarget !== null ? Math.max(-120, Math.min(120, this.measuredTarget - height)) : 0;
+    this.targetCorrectionM = correction;
     const target = this.frame.camera(this.camera, pose, height + correction);
     this.controls?.target.copy(target);
     // Mesh clearance at the actual camera footprint is a rendering correction, not a recorded value.
     const position = this.camera.position.clone();
     const up = this.frame.normal(pose.center.lat, pose.center.lng);
-    this.raycaster.set(position.clone().addScaledVector(up, 1500), up.clone().negate());
-    const hit = this.tiles?.visibleTiles.size ? this.raycaster.intersectObject(this.tiles.group, true)[0] : undefined;
+    const hit = this.surfaces?.cast(position.clone().addScaledVector(up, 1500), up.clone().negate());
     this.clearanceState = hit ? "measured" : "unknown";
     const clearance = hit ? position.sub(hit.point).dot(up) : Infinity;
     this.lastCameraCorrection = Math.max(0, 18 - clearance);
@@ -446,6 +449,10 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
       this.camera.position.addScaledVector(up, this.lastCameraCorrection);
       this.camera.lookAt(target); this.camera.updateMatrixWorld();
     }
+    this.cameraHeightM = this.frame.height(this.camera.position);
+    this.cameraGroundHeightM = hit ? this.frame.height(hit.point) : null;
+    this.cameraClearanceM = hit ? clearance + this.lastCameraCorrection : null;
+    this.lookAhead?.updateCameraSupport(performance.now(), this.camera.position, up, height + correction, pose.rangeM, this.following);
   }
   isPlaybackBuffering() { return Boolean(this.playback?.playing && this.following && this.continuity.holding); }
   setFollowing(following: boolean) { this.following = following; }
@@ -467,8 +474,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
     const ratio = Math.min(window.devicePixelRatio || 1, quality.pixelRatio);
     const resized = this.renderer?.getPixelRatio() !== ratio;
     if (resized) this.renderer?.setPixelRatio(ratio);
-    this.refinement.setTarget(quality.errorTarget);
-    if (this.tiles) this.tiles.errorTarget = this.refinement.errorTarget;
+    if (this.tiles) this.tiles.errorTarget = quality.errorTarget;
     this.atmosphere?.update(settings); this.labels?.update(settings);
     this.layers.labels = this.environment.labels ? this.labelState : "off";
     if (this.options) {
@@ -542,7 +548,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
     document.removeEventListener("visibilitychange", this.onVisibility);
     this.abort.abort(); cancelAnimationFrame(this.animation); window.clearTimeout(this.readyTimer);
     this.resizeObserver?.disconnect(); this.controls?.stopListenToKeyEvents(); this.controls?.dispose();
-    this.lookAhead?.dispose(); this.labels?.dispose(); this.atmosphere?.dispose(); this.tiles?.dispose(); this.draco?.dispose(); this.trace?.dispose();
+    this.lookAhead?.dispose(); this.surfaces?.clear(); this.labels?.dispose(); this.atmosphere?.dispose(); this.tiles?.dispose(); this.draco?.dispose(); this.trace?.dispose();
     this.renderer?.domElement.removeEventListener("webglcontextlost", this.onContextLost);
     this.renderer?.domElement.removeEventListener("keydown", this.onKey);
     this.renderer?.dispose(); this.renderer?.forceContextLoss(); this.renderer?.domElement.remove();

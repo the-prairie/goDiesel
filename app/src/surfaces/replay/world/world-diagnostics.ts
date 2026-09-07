@@ -30,6 +30,8 @@ export interface WorldReportState {
     requestedMode: string | null; directedMode: string | null; owner: "following" | "free";
     requestedRangeM: number | null; actualRangeM: number | null; fovDeg: number;
     nearM: number; farM: number; meshCorrectionM: number; clearanceState?: "measured" | "unknown";
+    targetSurfaceErrorM?: number | null; targetCorrectionM?: number;
+    heightM?: number | null; groundHeightM?: number | null; clearanceM?: number | null;
   };
   layers: WorldLayers;
   quality: {
@@ -39,11 +41,10 @@ export interface WorldReportState {
   terrain: {
     renderedMeshes: number; visibleTiles: number; focusErrorM: number | null;
     progress: number; cachedBytes: number; errorTargetPx: number;
-    refinement?: { phase: "coverage" | "detail" | "settled"; nominalTargetPx: number; selectionTargetPx: number; resets: number };
     focus: TerrainFocusSample & { ageMs: number | null; cameraChangedSinceSample: boolean };
     queues: { downloading: number; parsing: number; failed: number };
     view?: { state: WorldViewState; coverage: WorldViewCoverage; buffering?: boolean };
-    streaming?: { pendingLimit: number; backpressured: boolean; discardedStaleParses: number; lookAhead: string; lookAheadProgressM: number | null };
+    streaming?: { pendingLimit: number; backpressured: boolean; discardedStaleParses: number; lookAhead: string; lookAheadProgressM: number | null; cameraSupport?: { active: boolean; radiusM: number; errorTargetM: number }; indexedSurfaceModels?: number };
   };
   visibleRoadLabels: number;
   contextLost: boolean;

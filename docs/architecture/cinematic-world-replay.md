@@ -279,26 +279,37 @@ submitted cloud frames. These are callback-budget decisions, not measured GPU
 presentation times. A clear sky still submits no volume or shadow work. Pointer
 interaction with clouds enabled is verified independently of cloud-off rendering.
 
-### Coverage-first refinement
 
-`WorldRefinement` separates the selected quality's nominal screen-error target
-from the temporary selection target used to establish a new view. Entering a
-world, seeking, changing camera mode, or sustained loss of surface coverage starts
-a bounded coarse frontier. After current-view probes have full coverage and the
-center surface meets that stage's detail target for 500 ms, the target tightens
-by a factor of two, down to the exact selected quality target. Missing or stale
-samples do not qualify as recovered terrain.
+### Close-camera terrain support
 
-This uses the pinned renderer's existing REPLACE traversal: once a coarse parent
-has actually been selected, it remains drawable until its finer replacements are
-ready. It does not load every globe ancestor, synthesize terrain, introduce a
-second terrain scene, or lower the user's stored quality choice. Diagnostics
-expose both `terrain.refinement.nominalTargetPx` and `selectionTargetPx`, plus the
-phase. Live Runner acceptance requires the nominal target to be restored as well
-as sustained coverage and distributed image texture; a fast coarse-only picture
-is not an accepted result.
+Camera and route grounding query already-loaded physical geometry independently
+of render-frustum membership. `WorldSurfaceIndex` maintains query-only mesh
+proxies with shared geometry/materials and fixed Earth-to-local matrices. These
+proxies never enter the render scene or count as drawn/visible terrain. AABB
+filtering uses actual mesh bounds, and the finest intersecting surface wins;
+coarse fallbacks above eight metres geometric error cannot reposition the close
+camera. Per-tile disposal releases the query references without disposing shared
+GPU resources. Recorded route elevations remain immutable.
 
-The delayed-detail browser regression uses the actual GLB decoder, tile traversal
-and WebGL renderer with explicitly authored synthetic terrain. It proves a coarse
-frontier remains drawable while the fine response is blocked, then is replaced
-at nominal detail. Google imagery acceptance remains a separate live journey.
+A small non-masking support region under the close following camera requests
+terrain that may lie behind the visible frustum. It remains useful while paused,
+is bounded to a 90–140 metre radius and a four-metre geometric-error target, uses
+the same 24-body download/parse limit, and is removed for free camera and views
+above 800 metres range. Missing recorded elevations disable this request rather
+than inventing a ground plane. The region is a loading envelope, not claimed
+terrain. Its local distance priority gives collision support precedence over
+unrelated distant detail; ordinary route look-ahead remains speculative.
+
+Reports add camera height, qualified target correction/error, actual measured
+clearance and support/index counters—no geographic coordinates or provider URLs.
+Current-view coverage still uses only the renderer's selected terrain, independently
+of this physical-query index. Live Runner acceptance requires measured clearance,
+a qualified target surface, the exact effective quality's nominal target, and the
+existing sustained coverage/texture checks within the unchanged recovery deadline.
+
+The earlier global coarse-frontier experiment was removed after live evidence
+showed a continent-scale parent delaying close-view refinement. No temporary
+coarsening remains in this implementation. The synthetic real-renderer regression
+now blocks fine terrain while a deliberately misleading coarse surface is drawn,
+verifies the camera does not follow that coarse height, then verifies actual fine
+surface grounding and clearance after the response arrives.

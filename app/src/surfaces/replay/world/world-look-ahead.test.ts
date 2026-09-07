@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planWorldLookAhead } from "./world-look-ahead";
+import { cameraSupportRadius, planWorldLookAhead } from "./world-look-ahead";
 import type { QuestRoute } from "@/domain/route";
 import type { WorldPlaybackContext } from "./world-diagnostics";
 import { initialGoogleRouteNavigatorState } from "../playback/route-navigator-controller";
@@ -28,5 +28,19 @@ describe("route-aware loading", () => {
       const broken = { ...route, provenance: {...route.provenance, discontinuities: [{startD:9850,endD}]} } as QuestRoute;
       expect(planWorldLookAhead(broken, context, 179, 0, 0.5, false)).toBeNull();
     }
+  });
+});
+
+describe("bounded support under the close camera",()=>{
+  it("supports paused close views without loading a full route or an overview",()=>{
+    expect(cameraSupportRadius(179,true,true)).toBeCloseTo(107.4);
+    expect(cameraSupportRadius(512,true,true)).toBe(140);
+    expect(cameraSupportRadius(10,true,true)).toBe(90);
+    expect(cameraSupportRadius(801,true,true)).toBeNull();
+  });
+  it("does not speculate from missing elevations or take free-camera ownership",()=>{
+    expect(cameraSupportRadius(179,false,true)).toBeNull();
+    expect(cameraSupportRadius(179,true,false)).toBeNull();
+    expect(cameraSupportRadius(NaN,true,true)).toBeNull();
   });
 });
