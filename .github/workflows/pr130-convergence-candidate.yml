@@ -1,0 +1,81 @@
+name: Validate Replay convergence candidate
+on:
+  push:
+    branches: [codex/pr130-refinement-inspection]
+    paths: [.github/workflows/pr130-convergence-candidate.yml]
+permissions:
+  contents: write
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 3f89e97bc1964553e2f2fe24792b18ff0429d2c9
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply verified exact source patch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p proof
+          git rev-parse HEAD > proof/commit.txt
+          python - <<'PY'
+          import os,json,base64,gzip,hashlib,urllib.request,pathlib,subprocess
+          def blob(sha):
+              request=urllib.request.Request('https://api.github.com/repos/the-prairie/goDiesel/git/blobs/'+sha,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
+              return base64.b64decode(json.load(urllib.request.urlopen(request))['content']).decode()
+          first=blob('7182c7dbeede496dda18005b003e4b620b64c745')
+          second=blob('ed6ae2c0382c0c156198af4b9a78a9373a9f3ebf').replace('FglMcXU/QA','FglMcX/QA')
+          patch=gzip.decompress(base64.b64decode(first+second))
+          assert hashlib.sha256(patch).hexdigest()=='7e42b9cd6dc197f0d451693cb6f8060036f6fcb4663937d43a3bb6d47d98b7aa'
+          pathlib.Path('proof/candidate.patch').write_bytes(patch)
+          subprocess.run(['git','apply','--check','proof/candidate.patch'],check=True)
+          subprocess.run(['git','apply','proof/candidate.patch'],check=True)
+          paths=sorted({line[6:] for line in patch.decode().splitlines() if line.startswith('+++ b/')})
+          pathlib.Path('proof/paths.json').write_text(json.dumps(paths))
+          PY
+      - run: npm ci --prefix app
+      - name: Typecheck and unit tests
+        working-directory: app
+        run: |
+          npm run typecheck 2>&1 | tee ../proof/typecheck.txt
+          npm run test:unit 2>&1 | tee ../proof/unit.txt
+          node --test scripts/replay-verification-receipt.test.mjs 2>&1 | tee ../proof/receipt-tests.txt
+      - name: Install Chromium
+        working-directory: app
+        run: npx playwright install --with-deps chromium
+      - name: Exercise actual renderer handoff and optional clouds
+        working-directory: app
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_FILE: ../proof/browser-results.json
+        run: npx playwright test e2e/cinematic-world-prepared.spec.ts e2e/cinematic-world-surface.spec.ts e2e/cinematic-world-report.spec.ts --grep 'real prepared destination|cancelled cold|coarse terrain|Cinema clouds' --project=chromium --reporter=line,json 2>&1 | tee ../proof/browser.txt
+      - name: Create exact verified source blobs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import os,json,urllib.request,pathlib,hashlib
+          entries=[]
+          for path in json.loads(pathlib.Path('proof/paths.json').read_text()):
+              raw=pathlib.Path(path).read_bytes()
+              request=urllib.request.Request('https://api.github.com/repos/the-prairie/goDiesel/git/blobs',data=json.dumps({'content':raw.decode(),'encoding':'utf-8'}).encode(),headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','Content-Type':'application/json'})
+              result=json.load(urllib.request.urlopen(request))
+              assert result['sha']==hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()
+              entries.append({'path':path,'mode':'100644','type':'blob','sha':result['sha']})
+          pathlib.Path('proof/source-blobs.json').write_text(json.dumps(entries,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: replay-convergence-candidate
+          path: |
+            proof/
+            app/test-results/
+          retention-days: 3
