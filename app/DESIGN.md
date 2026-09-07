@@ -210,22 +210,96 @@ Four checks keep this honest, each needing a running server:
 
 ## Exploration: the carried notebook (design-seed direction D)
 
-Not the baseline. An ambitious reading of the same idea, alongside the accepted
-journal presentation, at `/lab/design-seeds/d/*`. Recorded here because two of
-its findings are worth keeping whatever happens to the direction.
+### Overview
 
-Relief is available after all. The cartography note above is right that
-Liberty's only relief source is unusable at these framings; it was wrong to
-conclude that shaded relief was unavailable. Mapzen Terrain Tiles on the AWS
-Open Data registry are public-domain terrarium DEMs served to z15, and give
-real hillshade and real 3D terrain. Credit them in the attribution control.
+**Creative North Star: "The carried notebook."** D remains a lab-only
+exploration at `/lab/design-seeds/d/*`, alongside the accepted Direction B.
+This section governs D only; it does not replace B or the production contract.
+Production Atlas search and activity-filter findability remain follow-on work.
 
-A line draped on terrain waits for the DEM tiles under it. Measured: layers and
-route geometry were in at 916ms, the same as the flat baseline, but the route
-did not paint until ~1.7s because 21 elevation tiles were still arriving.
-Applying `setTerrain` after the first idle keeps route-first ordering - the line
-lands at ~900ms on the correct camera, then the ground rises to meet it. Nothing
-may drape before that, including a `styledata` handler.
+### Colors
+
+D inherits the journal's warm paper, dark ink and forest actions. Terracotta
+marks the selected route against pale casing; quieter neighbouring recordings
+keep the place's history visible. The same warm notebook treatment continues
+into D's Replay presentation, scoped to its explicit notebook opt-in.
+
+### Typography
+
+Keep the inherited role split: Cormorant Garamond for titles, Source Serif 4 for
+note prose, Inter for controls and tabular measurements. Preserve personal
+wording and capitalization; expressive titles use Inter. Long titles step down
+in size instead of being shortened. Replay keeps the day's title with place
+and date beneath it, without a redundant Replay eyebrow.
+
+### Layout
+
+The geography fills the viewport; the notebook rests over it. At 1024px and
+wider the reading leaf is 430px wide with the climb alongside its lower edge.
+Below that breakpoint the independently scrolling page begins at 52% of the
+viewport, with the climb at its top and safe-area clearance below.
+
+**The Open Pane Rule.** Frame the raised route for the space actually visible
+around the page and climb. Geographic bounds establish the overview; after
+terrain settles, a projected-trace correction centres the route in that pane.
+Do not run that correction during route dragging, Explore or descent.
+
+### Elevation & Depth
+
+Translucent warm paper and soft directional shadows make the geography read as
+continuing beneath the leaf. Relief comes from attributed Mapzen elevation
+tiles over the OpenFreeMap basemap. Draw the recorded route before attaching
+terrain: the route's first render can start terrain, with first idle as the
+fallback. Historical timing measurements are not current performance budgets.
+
+### Shapes
+
+The page and climb use broad, quiet paper surfaces. Small position and photo
+marks retain larger interaction areas: controls are at least 44px on both axes
+and 48px below 768px; the route grip is 48px throughout. Provider attribution
+retains its inline-credit exception.
+
+### Components
+
+- **Photographs:** show the first real annotation image immediately when
+  present. A thumbnail index selects additional photographs; captions retain
+  their recorded distances. Route and climb photo marks offer the same access.
+  Missing photographs never produce invented imagery or an empty hero.
+- **One held distance:** the route grip and climb inspect the same recorded
+  position. Discontinuities stay split in the line and profile; seeking skips
+  their unrecorded interiors rather than interpolating invented geography.
+- **Explore and Page:** Explore explicitly enables geographic gestures; Done
+  returns to route inspection. Setting the page aside exposes the landscape
+  while retaining entry access; the hidden page is inert. Reopening restores
+  the reading leaf, not a new route selection.
+- **Descent into Replay:** centre the held point before turning and approaching.
+  The camera evaluates the upcoming recorded corridor and terrain sightlines,
+  then holds the chosen geographic bearing through playback. Missing elevation
+  samples use an approximation, not a claim of measured clearance. Reduced
+  motion skips the animated descent.
+- **Continuity:** transfer the same canvas, loaded terrain and final camera pose
+  into the existing Replay controller and dock. Preserve held distance and
+  neighbouring route context; do not create another player. A direct Replay
+  opening may create its own world. The visible return URL and browser history
+  carry the entry distance; scoped day context retains page state, selected
+  photograph and reading position.
+- **Readiness:** distinguish loading, ready, partial and unavailable. DEM tile
+  evidence determines readiness; a style event alone does not. Entry is enabled
+  only when ready. Partial terrain keeps the recorded route available and says
+  that elevation is incomplete; an unavailable map leaves climb inspection.
+
+### Do's and Don'ts
+
+- **Do** keep route evidence, personal attribution and provider credits intact.
+- **Do** keep D's notebook renderer and presentation explicitly scoped.
+- **Don't** promote lab probes or decorative glyph controls into reusable
+  product conventions.
+- **Don't** treat the four resolved visual findings—route-ahead legibility,
+  overview composition, 48px phone controls and the redundant Replay eyebrow—
+  as whole-product certification. They do not establish live Google imagery,
+  real-device touch, deployment or a completed release gate. See
+  `docs/direction-d-handoff.md` for the historical checkpoint; current source
+  and current verification evidence supersede its implementation details.
 
 ## Shell Behavior
 
