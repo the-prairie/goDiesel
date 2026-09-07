@@ -38,5 +38,14 @@
     }
   ],
   "implementation_commit": "be8028d6c0c8fbe57d741805cfa72eff503b99e8",
-  "source_matches_commit_except_documented_nonvisual_changes": true
+  "source_matches_commit_except_documented_nonvisual_changes": true,
+  "settled_baseline": {
+    "commit": "a7b377c56de76422be47c0080c0da8432efbff3f",
+    "server": "http://localhost:8787",
+    "route": "15573295095",
+    "state": "ready",
+    "progress_m": 12000,
+    "file": "before-replay.png",
+    "sha256": "2ad96347e335f88f05e31db69a19e80d23af314ebff9e962a5c0e4e0ba613e2b"
+  }
 }
