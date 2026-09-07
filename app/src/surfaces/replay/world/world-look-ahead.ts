@@ -41,6 +41,7 @@ export class WorldLookAhead {
   private readonly region = new SphereRegion();
   private readonly support = new CameraSupportRegion({ errorTarget: 4 });
   private supportAttached = false;
+  private readonly targetSupport = new CameraSupportRegion({errorTarget:2});
   private nextSupportUpdate = 0;
   get cameraSupport() { return { active: this.supportAttached, radiusM: this.supportAttached ? this.support.sphere.radius : 0, errorTargetM: 4 }; }
   private nextUpdate = 0;
@@ -69,7 +70,7 @@ export class WorldLookAhead {
     if (!this.attached) { this.plugin.addRegion(this.region); this.attached = true; }
     this.mode = plan.mode; this.progressM = plan.progressM;
   }
-  updateCameraSupport(now: number, position: Vector3, up: Vector3, groundHeightM: number, rangeM: number, following: boolean) {
+  updateCameraSupport(now: number, position: Vector3, up: Vector3, groundHeightM: number, rangeM: number, following: boolean, target?: Vector3) {
     const radius = cameraSupportRadius(rangeM, this.route.elevationStatus !== "unavailable", following);
     if (radius === null || !Number.isFinite(groundHeightM)) { this.clearSupport(); return; }
     if (now < this.nextSupportUpdate) return;
@@ -78,9 +79,15 @@ export class WorldLookAhead {
     // plane. The bounded sphere tolerates local relief; it isn't a terrain height.
     this.support.sphere.center.copy(position).addScaledVector(up, groundHeightM - this.frame.height(position)).applyMatrix4(this.frame.worldToECEF);
     this.support.sphere.radius = radius;
+    if (target) {
+      this.targetSupport.sphere.center.copy(target).applyMatrix4(this.frame.worldToECEF);
+      this.targetSupport.sphere.radius = 180;
+      this.plugin.addRegion(this.targetSupport);
+    }
     if (!this.supportAttached) { this.plugin.addRegion(this.support); this.supportAttached = true; }
   }
   private clearSupport() {
+    this.plugin.removeRegion(this.targetSupport);
     if (this.supportAttached) this.plugin.removeRegion(this.support);
     this.supportAttached = false;
   }

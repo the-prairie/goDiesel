@@ -1,3 +1,4 @@
+import type { PreparedViewReport } from "./world-prepared-view";
 import type { CloudBudgetReport } from "./world-cloud-budget";
 import type { GoogleRouteNavigatorState } from "@/surfaces/replay/playback/route-navigator-controller";
 import type { WorldEnvironment, WorldLayers } from "./world-model";
@@ -26,11 +27,14 @@ export const WORLD_BUILD: WorldBuildIdentity = typeof __GODIESEL_BUILD__ === "un
 
 export interface WorldReportState {
   playback: WorldPlaybackContext | null;
+  preparation?: PreparedViewReport;
   camera: {
     requestedMode: string | null; directedMode: string | null; owner: "following" | "free";
+    displayedProgressM?: number | null;
     requestedRangeM: number | null; actualRangeM: number | null; fovDeg: number;
     nearM: number; farM: number; meshCorrectionM: number; clearanceState?: "measured" | "unknown";
     targetSurfaceErrorM?: number | null; targetCorrectionM?: number;
+    sightline?: "clear" | "blocked" | "unknown";
     heightM?: number | null; groundHeightM?: number | null; clearanceM?: number | null;
   };
   layers: WorldLayers;
@@ -49,7 +53,7 @@ export interface WorldReportState {
   visibleRoadLabels: number;
   contextLost: boolean;
 }
-export type WorldReportEvent = "mount" | "play" | "pause" | "seek" | "camera-mode" | "free-camera" | "recenter" | "zoom" | "speed" | "grounding" | "settings-open" | "settings-close" | "quality" | "environment" | "layers" | "hidden" | "visible" | "context-lost" | "failure" | "buffer-start" | "buffer-end";
+export type WorldReportEvent = "mount" | "play" | "pause" | "seek" | "camera-mode" | "free-camera" | "recenter" | "zoom" | "speed" | "grounding" | "settings-open" | "settings-close" | "quality" | "environment" | "layers" | "hidden" | "visible" | "context-lost" | "failure" | "buffer-start" | "buffer-end" | "view-prepare" | "view-ready" | "view-blocked" | "view-commit";
 
 /** All retained state is numeric/enumerated. No route geometry, resource names or payloads. */
 export class WorldFlightRecorder {

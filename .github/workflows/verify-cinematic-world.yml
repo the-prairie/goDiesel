@@ -10,6 +10,7 @@ on:
       - 'app/package*.json'
       - 'app/vite.config.ts'
       - 'app/scripts/build-identity.ts'
+      - 'app/scripts/replay-verification-receipt*'
       - 'app/playwright.cinematic-live.config.ts'
 permissions:
   contents: read
@@ -42,18 +43,26 @@ jobs:
           node --version > proof/node.txt
       - name: Install dependencies
         run: npm ci --prefix app
-      - name: Typecheck and all unit tests
+      - name: Typecheck
+        id: typecheck
+        working-directory: app
+        run: npx tsc -b 2>&1 | tee ../proof/typecheck.txt
+      - name: All unit and verification-receipt tests
+        id: unit
         working-directory: app
         run: |
-          npx tsc -b 2>&1 | tee ../proof/typecheck.txt
           npm run test:unit 2>&1 | tee ../proof/unit.txt
+          node --test scripts/replay-verification-receipt.test.mjs 2>&1 | tee ../proof/receipt-tests.txt
       - name: Install browser
         working-directory: app
         run: npx playwright install --with-deps chromium
       - name: Production build, controls and real shader pipeline
+        id: browser
         working-directory: app
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_FILE: ../proof/browser-results.json
         run: |
-          npx playwright test e2e/cinematic-world.spec.ts e2e/cinematic-world-renderer.spec.ts e2e/cinematic-world-report.spec.ts e2e/cinematic-world-continuity.spec.ts e2e/cinematic-world-surface.spec.ts e2e/google-replay-production.spec.ts --project=chromium 2>&1 | tee ../proof/browser.txt
+          npx playwright test e2e/cinematic-world.spec.ts e2e/cinematic-world-renderer.spec.ts e2e/cinematic-world-report.spec.ts e2e/cinematic-world-continuity.spec.ts e2e/cinematic-world-surface.spec.ts e2e/cinematic-world-prepared.spec.ts e2e/google-replay-production.spec.ts --project=chromium --reporter=line,json 2>&1 | tee ../proof/browser.txt
       - name: Build live-key PR preview
         id: livebuild
         if: ${{ success() && github.event.pull_request.number == 130 && github.head_ref == 'codex/cinematic-world-replay' && github.event.pull_request.head.repo.full_name == github.repository }}
@@ -109,14 +118,27 @@ jobs:
           echo "$preview_url" | tee ../proof/cloudflare-preview-url.txt
           echo "preview_url=$preview_url" >> "$GITHUB_OUTPUT"
       - name: Live Google Map Tiles proof on deployed preview
+        id: live
         if: ${{ always() && steps.cloudflare.outcome == 'success' }}
         working-directory: app
         env:
+          PLAYWRIGHT_JSON_OUTPUT_FILE: ../proof/live-results.json
           GODIESEL_WORLD_PREVIEW_URL: ${{ steps.cloudflare.outputs.preview_url }}
           GODIESEL_WORLD_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           echo "Testing $GODIESEL_WORLD_PREVIEW_URL" | tee ../proof/live-provider.txt
-          npm run test:e2e:cinematic-live 2>&1 | tee -a ../proof/live-provider.txt
+          npm run test:e2e:cinematic-live -- --reporter=line,json 2>&1 | tee -a ../proof/live-provider.txt
+      - name: Write exact completed verification receipt
+        if: always()
+        working-directory: app
+        env:
+          REPLAY_TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
+          REPLAY_UNIT_OUTCOME: ${{ steps.unit.outcome }}
+          REPLAY_BROWSER_OUTCOME: ${{ steps.browser.outcome }}
+          REPLAY_LIVE_BUILD_OUTCOME: ${{ steps.livebuild.outcome }}
+          REPLAY_CLOUDFLARE_OUTCOME: ${{ steps.cloudflare.outcome }}
+          REPLAY_LIVE_OUTCOME: ${{ steps.live.outcome }}
+        run: node scripts/replay-verification-receipt.mjs ../proof
       - uses: actions/upload-artifact@v4
         if: always()
         with:

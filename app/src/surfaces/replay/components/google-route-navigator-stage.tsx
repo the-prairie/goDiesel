@@ -1,3 +1,4 @@
+import { ReplayViewHandoff, type PendingReplayView, type ReplayPreparedView } from "../playback/replay-view-handoff";
 import {
   ArrowLeft,
   Eye,
@@ -73,6 +74,8 @@ import { WorldControls, type ReplayWorldMode } from "@/surfaces/replay/world/wor
 import { DEFAULT_WORLD_ENVIRONMENT, isWorldPlayable } from "@/surfaces/replay/world/world-model";
 import type { CinematicWorldEnginePort } from "@/surfaces/replay/world/cinematic-world-engine";
 
+type ViewDestination = Pick<GoogleRouteNavigatorState, "progressM" | "cameraMode" | "rangeScale" | "following">;
+
 const INITIAL_STATUS: GoogleRouteNavigatorStatus = {
   state: "loading",
   message: "Preparing the native Google 3D route world.",
@@ -134,6 +137,10 @@ export function GoogleRouteNavigatorStage({
   environmentRef.current = { ...environment, reducedMotion };
   const controlRef = useRef(initialGoogleRouteNavigatorState());
   const [control, setControl] = useState(controlRef.current);
+  const [pendingView, setPendingView] = useState<PendingReplayView<ViewDestination> | null>(null);
+  const handoffRef = useRef<ReplayViewHandoff<ViewDestination> | null>(null);
+  if (!handoffRef.current) handoffRef.current = new ReplayViewHandoff(setPendingView);
+  const lastHintAt = useRef(0);
   const [status, setStatus] =
     useState<GoogleRouteNavigatorStatus>(INITIAL_STATUS);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -215,9 +222,10 @@ export function GoogleRouteNavigatorStage({
     [],
   );
 
-  const commitControl = useCallback(
+  const applyControl = useCallback(
     (
       update: (current: GoogleRouteNavigatorState) => GoogleRouteNavigatorState,
+      prepared?: ReplayPreparedView,
     ) => {
       const current = controlRef.current;
       const next = update(current);
@@ -231,9 +239,9 @@ export function GoogleRouteNavigatorStage({
         next.rangeScale !== current.rangeScale;
       if (
         next.following &&
-        (!reducedMotionRef.current || explicitCameraChange)
+        (!reducedMotionRef.current || explicitCameraChange || prepared)
       ) {
-        renderCamera(resolveCamera(next));
+        renderCamera(resolveCamera(next), performance.now(), prepared?.transition === "cut" || Boolean(prepared && reducedMotionRef.current));
       }
       engineRef.current?.setCinematicRoute(
         googleRouteThreadTreatment(route, next),
@@ -243,6 +251,39 @@ export function GoogleRouteNavigatorStage({
     },
     [publishPlaybackContext, renderCamera, resolveCamera, route],
   );
+
+  const requestView = useCallback((destination: ViewDestination, automatic = false) => {
+    const engine = engineRef.current;
+    if (!engine?.prepareView) { applyControl(current => ({...current,...destination})); return; }
+    setChromeVisible(true);
+    handoffRef.current!.request(destination,
+      options => engine.prepareView!(resolveCamera({...controlRef.current,...destination}), {...options,automatic}),
+      (selected, result) => {
+        if (engineRef.current !== engine || !engine.commitPreparedView?.(result.requestId)) return false;
+        applyControl(current => ({...current,...selected}), result);
+        return true;
+      },automatic,automatic ? 0 : 90);
+  }, [applyControl, resolveCamera]);
+
+  const commitControl = useCallback((update: (current: GoogleRouteNavigatorState) => GoogleRouteNavigatorState) => {
+    const current = controlRef.current;
+    const pending = handoffRef.current!.pending;
+    const selected = {...current,...pending?.destination};
+    const next = update(selected);
+    const viewChanged = next.progressM !== selected.progressM || next.cameraMode !== selected.cameraMode || next.rangeScale !== selected.rangeScale || next.following !== selected.following;
+    if (!next.following) { handoffRef.current!.cancel(); engineRef.current?.cancelPreparedView?.(); applyControl(value=>({...value,following:false,playing:next.playing,speed:next.speed})); return; }
+    if (viewChanged && engineRef.current?.prepareView) {
+      if(next.playing!==current.playing || next.speed!==current.speed || next.groundingMode!==current.groundingMode)
+        applyControl(value=>({...value,playing:next.playing,speed:next.speed,groundingMode:next.groundingMode}));
+      requestView({progressM:next.progressM,cameraMode:next.cameraMode,rangeScale:next.rangeScale,following:next.following});
+    } else if (pending) {
+      // Pause/speed changes remain immediate and are read again at commit. Never
+      // replace displayed telemetry with the destination that is still loading.
+      applyControl(value=>({...value,playing:next.playing,speed:next.speed,groundingMode:next.groundingMode}));
+    } else applyControl(()=>next);
+  }, [applyControl, requestView]);
+
+  const cancelView = useCallback(() => { handoffRef.current!.cancel(); engineRef.current?.cancelPreparedView?.(); }, []);
 
   const takeCameraOwnership = useCallback(() => {
     if (!controlRef.current.following) return;
@@ -266,6 +307,7 @@ export function GoogleRouteNavigatorStage({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    handoffRef.current!.cancel(false); setPendingView(null);
     let cancelled = false;
     let engine: GoogleRouteNavigatorEngine | undefined;
     const newRoute = mountedRouteRef.current !== route.slug;
@@ -313,6 +355,7 @@ export function GoogleRouteNavigatorStage({
     });
     return () => {
       cancelled = true;
+      handoffRef.current!.cancel(false);
       engine?.destroy();
       cameraMotionRef.current = undefined;
       cameraTargetRef.current = undefined;
@@ -414,6 +457,7 @@ export function GoogleRouteNavigatorStage({
     ) {
       return;
     }
+    if (handoffRef.current!.pending) return;
     chromeTimerRef.current = window.setTimeout(() => {
       chromeTimerRef.current = undefined;
       // Never hide/inert a control while someone is hovering or using
@@ -450,7 +494,7 @@ export function GoogleRouteNavigatorStage({
       const current = controlRef.current;
       const next = advanceGoogleRouteNavigator(
         current,
-        engineRef.current?.isPlaybackBuffering?.() ? 0 : (now - previous) / 1_000,
+        handoffRef.current!.pending || engineRef.current?.isPlaybackBuffering?.() ? 0 : (now - previous) / 1_000,
         totalDistanceM,
       );
       previous = now;
@@ -476,6 +520,19 @@ export function GoogleRouteNavigatorStage({
       const progressChanged = next.progressM !== current.progressM;
       const playbackChanged = next.playing !== current.playing;
       const cameraSettling = cameraSettlingRef.current;
+      if (!handoffRef.current!.pending && next.following && next.playing && next.cameraMode === "auto" && engineRef.current?.prepareView) {
+        const desired = resolveCamera(next);
+        if (cameraTargetRef.current && desired.directedMode !== cameraTargetRef.current.directedMode) {
+          requestView({progressM:next.progressM,cameraMode:next.cameraMode,rangeScale:next.rangeScale,following:true},true);
+          animationFrame=requestAnimationFrame(tick); return;
+        }
+      }
+      if (!handoffRef.current!.pending && next.playing && next.following && now-lastHintAt.current>1200) {
+        lastHintAt.current=now;
+        const ahead={...next,progressM:Math.min(totalDistanceM,next.progressM+Math.min(200,totalDistanceM/210*next.speed*1.5))};
+        if(!route.provenance.discontinuities.some(gap=>next.progressM<gap.endD&&ahead.progressM>gap.startD))
+          engineRef.current?.hintNextView?.(resolveCamera(ahead));
+      }
       if (
         next.following &&
         !reducedMotionRef.current &&
@@ -504,11 +561,11 @@ export function GoogleRouteNavigatorStage({
     };
     animationFrame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animationFrame);
-  }, [publishPlaybackContext, renderCamera, resolveCamera, route, status.state, totalDistanceM]);
+  }, [publishPlaybackContext, renderCamera, resolveCamera, requestView, route, status.state, totalDistanceM]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") navigate(backPath);
+      if (event.key === "Escape") { if (handoffRef.current!.pending) cancelView(); else navigate(backPath); }
       if (event.key === " " && event.target === document.body) {
         event.preventDefault();
         commitControl((current) => ({ ...current, playing: !current.playing }));
@@ -516,7 +573,7 @@ export function GoogleRouteNavigatorStage({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [backPath, commitControl, navigate]);
+  }, [backPath, cancelView, commitControl, navigate]);
 
   const togglePlayback = () =>
     commitControl((current) => ({
@@ -542,7 +599,10 @@ export function GoogleRouteNavigatorStage({
           ? "left-0"
           : "bottom-0 left-0",
       )}
-      data-camera-mode={control.cameraMode}
+      data-camera-mode={pendingView?.destination.cameraMode ?? control.cameraMode}
+      data-displayed-camera-mode={control.cameraMode}
+      data-selected-progress-m={pendingView?.destination.progressM ?? control.progressM}
+      data-view-phase={pendingView?.phase ?? "displaying"}
       data-camera-clearance-m={cameraPose.clearanceM?.toFixed(2)}
       data-minimum-camera-clearance-m={cameraPose.minimumClearanceM?.toFixed(2)}
       data-camera-protection={cameraPose.protection?.join(" ") ?? "manual"}
@@ -757,7 +817,16 @@ export function GoogleRouteNavigatorStage({
         />
       ) : null}
 
-      {status.state === "partial" ? (
+      {pendingView ? (
+        <div role="status" aria-live="polite" data-testid="replay-view-preparation"
+          className="pointer-events-auto absolute bottom-[calc(var(--world-dock-height,180px)+3rem)] left-3 z-40 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-3 rounded-md border border-white/40 bg-surface px-3 py-2 text-xs text-ink shadow-lg">
+          <span>{pendingView.phase === "blocked" ? "This view is not ready yet" : pendingView.phase === "selecting" ? "Selected" : "Preparing"} <strong>{(pendingView.destination.progressM/1000).toFixed(2)} km</strong>
+            <span className="ml-2 text-ink-secondary">Viewing {(control.progressM/1000).toFixed(2)} km</span></span>
+          {pendingView.phase === "blocked" ? <Button type="button" size="sm" onClick={()=>requestView(pendingView.destination)}>Try this view again</Button> : null}
+          <Button type="button" size="sm" variant="outline" onClick={cancelView}>Stay here</Button>
+        </div>
+      ) : null}
+      {status.state === "partial" && !pendingView ? (
         <p role="status" className="pointer-events-none absolute bottom-[calc(var(--world-dock-height,180px)+5rem)] left-3 z-30 max-w-[calc(100%-1.5rem)] rounded bg-black/80 px-3 py-2 text-xs text-white" data-testid="replay-partial-status">{status.message}</p>
       ) : null}
       {!isWorldPlayable(status.state) ? (
@@ -818,6 +887,9 @@ export function GoogleRouteNavigatorStage({
             control={control}
             disabled={!isWorldPlayable(status.state)}
             elevationScrubberRef={elevationScrubberRef}
+            selectedProgressM={pendingView?.destination.progressM}
+            selectedCameraMode={pendingView?.destination.cameraMode}
+            onScrubEnd={()=>handoffRef.current!.flush()}
             onCommit={commitControl}
             onSelectCamera={selectCamera}
             onTogglePlayback={togglePlayback}

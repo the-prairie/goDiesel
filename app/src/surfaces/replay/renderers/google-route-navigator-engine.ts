@@ -1,3 +1,4 @@
+import type { ReplayPreparedView, ReplayViewRequestOptions } from "@/surfaces/replay/playback/replay-view-handoff";
 import type { WorldPlaybackContext } from "@/surfaces/replay/world/world-diagnostics";
 import type { QuestRoute } from "@/domain/route";
 import {
@@ -43,6 +44,11 @@ interface MountOptions {
 export interface GoogleRouteNavigatorEngine {
   mount(options: MountOptions): Promise<void>;
   setCamera(pose: GoogleRouteCameraPose): void;
+  /** Optional cinematic view staging. Transport/selection remain in the stage. */
+  prepareView?(pose: GoogleRouteCameraPose, options: ReplayViewRequestOptions): Promise<ReplayPreparedView>;
+  commitPreparedView?(requestId: number): boolean;
+  cancelPreparedView?(): void;
+  hintNextView?(pose: GoogleRouteCameraPose): void;
   /** Optional observation only; the owning controller remains the playback authority. */
   setPlaybackContext?(context: WorldPlaybackContext, intent?: "seek"): void;
   /** Optional renderer backpressure. The controller retains play intent and distance authority. */

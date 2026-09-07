@@ -313,3 +313,50 @@ coarsening remains in this implementation. The synthetic real-renderer regressio
 now blocks fine terrain while a deliberately misleading coarse surface is drawn,
 verifies the camera does not follow that coarse height, then verifies actual fine
 surface grounding and clearance after the response arrives.
+
+## Seamless Replay: selected intent and displayed place
+
+Cinematic Replay separates the selected destination from the place currently on
+screen. The owning stage's `ReplayViewHandoff` coalesces scrub updates, cancels old
+requests and checks request identity at commit. Selection is immediately visible
+on the elevation profile; the displayed distance and telemetry continue to describe
+the outgoing view. Pointer/key release flushes the short debounce. Pause, speed and
+settings remain immediate. Completion merges the latest Play/Pause intent rather
+than restoring an earlier copy. Escape/Stay here, free camera, route changes and
+renderer teardown invalidate pending work. Native has no preparation port and
+retains its existing transport semantics.
+
+`WorldPreparedViews` uses the existing renderer and tile cache, not a second world.
+One distant destination or at most three short camera-path samples are prepared.
+Non-masking target/support regions and preparation cameras share the existing
+24-body download/parse limit and memory ceiling. Long seeks and moves across
+recorded discontinuities cut to the verified destination; they do not fly through
+an unverified corridor or manufacture intervening route geometry. Close candidate
+views require qualified target geometry, measured lens clearance and a clear
+camera-to-route sightline. The bounded vertical sightline correction keeps the
+selected Runner/Chase mode; it does not substitute a distant overview. The route's
+source elevations and coordinates are never overwritten.
+
+Shader and texture preparation uses the pinned renderer's `initTexture` and
+`compileAsync`, with at most two model preparations in flight. A 160x90 transient
+render target checks actual terrain-material coverage independently of HUD, route
+and annotation geometry. Three successive checks permit the handoff. This raster
+is a blank-ground guard, not an imagery-sharpness or composition-quality score.
+No imagery is persisted or exported by preparation. Unknown/insufficient terrain
+never passes merely because a timer expires: a request has a 27-second preparation
+deadline and then exposes Retry/Stay here. The five-second speculative warm-up
+budget cannot block explicit input; a newer request always supersedes it.
+
+Auto's existing route director remains the source of desired shots. A directed
+mode change uses the same preparation contract. Small upcoming route hints are
+only admitted with low pending work and memory pressure. Free-camera control is
+never taken back automatically, and recentering prepares the current destination
+without treating the last follow-camera pose as the user's free-camera position.
+
+Reports keep their local v2 whitelist and add preparation phase, selected route
+distance, cancellation/completion totals, bounded preparation durations, sparse
+coverage, raster coverage, shader-preparation counters and sightline state. These
+observations do not establish owner-device input latency or visually approve a
+live journey. The CI receipt explicitly records per-step outcomes, exact source,
+immutable preview and individual browser/live results, including missing/skipped
+results. A green automated receipt never automatically grants visual approval.

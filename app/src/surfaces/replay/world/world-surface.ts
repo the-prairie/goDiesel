@@ -1,6 +1,7 @@
 import { Box3, Matrix4, Mesh, Raycaster, Vector3, type Object3D } from "three";
 
 interface SurfaceModel {
+  source: Object3D;
   errorM: number;
   meshes: Array<{ query: Mesh; bounds: Box3 }>;
 }
@@ -19,11 +20,12 @@ export class WorldSurfaceIndex {
   private dirty = false;
   private readonly ray = new Raycaster();
   constructor(private readonly tilesToWorld: Matrix4) { this.ray.firstHitOnly = true; }
+  revision = 0;
   get size() { return this.models.size; }
 
   add(scene: Object3D, errorM: number) {
     if (!Number.isFinite(errorM) || errorM < 0) return;
-    const model: SurfaceModel = { errorM, meshes: [] };
+    const model: SurfaceModel = { source: scene, errorM, meshes: [] };
     const visit = (node: Object3D, parentWorld: Matrix4) => {
       if (node.matrixAutoUpdate) node.updateMatrix();
       const world = new Matrix4().multiplyMatrices(parentWorld, node.matrix);
@@ -41,10 +43,29 @@ export class WorldSurfaceIndex {
       for (const child of node.children) visit(child, world);
     };
     visit(scene, this.tilesToWorld);
-    this.models.set(scene, model); this.dirty = true;
+    this.models.set(scene, model); this.dirty = true; this.revision++;
   }
-  remove(scene: Object3D) { if (this.models.delete(scene)) this.dirty = true; }
+  remove(scene: Object3D) { if (this.models.delete(scene)) { this.dirty = true; this.revision++; } }
   clear() { this.models.clear(); this.ordered = []; this.dirty = false; }
+
+  /** Sightlines use nearest physical geometry; they must not skip a wall to find a finer distant tile. */
+  obstruction(origin: Vector3, target: Vector3, maximumErrorM = 4, endMarginM = 4): number | null {
+    const distance = origin.distanceTo(target);
+    if (!Number.isFinite(distance) || distance <= endMarginM) return null;
+    this.ray.set(origin, target.clone().sub(origin).normalize());
+    this.ray.near = 0.05; this.ray.far = distance - endMarginM;
+    let nearest = Infinity;
+    for (const model of this.models.values()) {
+      if (model.errorM > maximumErrorM) continue;
+      for (const {query, bounds} of model.meshes) {
+        if (!this.ray.ray.intersectsBox(bounds)) continue;
+        const hit = this.ray.intersectObject(query, false)[0];
+        if (hit) nearest = Math.min(nearest, hit.distance);
+      }
+    }
+    this.ray.near = 0; this.ray.far = Infinity;
+    return Number.isFinite(nearest) ? nearest : null;
+  }
 
   cast(origin: Vector3, direction: Vector3, maximumErrorM = 8): WorldSurfaceHit | null {
     if (!Number.isFinite(maximumErrorM) || maximumErrorM < 0 ||

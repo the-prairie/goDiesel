@@ -1,3 +1,6 @@
+import { WorldPreparedViews } from "./world-prepared-view";
+import { solveWorldCamera } from "./world-camera-solution";
+import type { ReplayViewRequestOptions } from "../playback/replay-view-handoff";
 import { WorldSurfaceIndex } from "./world-surface";
 import { WorldContinuity } from "./world-continuity";
 import type { TilesRenderer } from "3d-tiles-renderer/three";
@@ -37,6 +40,10 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
   private tiles?: TilesRenderer;
   private frame?: WorldFrame;
   private surfaces?: WorldSurfaceIndex;
+  private preparedViews?: WorldPreparedViews;
+  private nextHint = 0;
+  private hintGeneration = 0;
+  private sightline: "clear" | "blocked" | "unknown" = "unknown";
   private scene = new Scene();
   private camera = new PerspectiveCamera(54, 1, 0.5, 100_000);
   private controls?: OrbitControls;
@@ -66,7 +73,6 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
   private lastAttribution = "";
   private effectiveQuality = this.environment.quality;
   private slowFrames = 0;
-  private measuredTarget: number | null = null;
   private lastTargetSample = -Infinity;
   private lastCameraCorrection = 0;
   private targetSurfaceErrorM: number | null = null;
@@ -84,7 +90,6 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
   private latestSeek = -Infinity;
   private lastTraversal = -Infinity;
   private readonly continuity = new WorldContinuity();
-  private measuredProgressM = -Infinity;
   private readonly recorder = new WorldFlightRecorder(performance.now(), !document.hidden);
   private playback: WorldPlaybackContext | null = null;
   private focusProbe = emptyTerrainFocus();
@@ -127,6 +132,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
       this.tiles = tiles;
       this.downloadBudget = configureWorldStreaming(tiles);
       this.lookAhead = new WorldLookAhead(tiles, route, frame);
+      this.preparedViews = new WorldPreparedViews(tiles, frame, this.surfaces, renderer, this.scene, route);
       tiles.fetchOptions = { signal: this.abort.signal };
       tiles.registerPlugin(new GoogleCloudAuthPlugin({ apiToken: key }));
       const draco = new DRACOLoader().setWorkerLimit(2).setDecoderPath(`${import.meta.env.BASE_URL}world-assets/draco/`);
@@ -150,10 +156,12 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
           object.onAfterRender = (...args) => { previous.apply(object, args); this.renderedTiles += 1; };
         });
         this.surfaces?.add(scene, tile.geometricError);
+        this.preparedViews?.modelLoaded(scene);
         this.trace?.invalidate();
       });
       tiles.addEventListener("dispose-model", ({ scene }) => {
         this.surfaces?.remove(scene);
+        this.preparedViews?.modelDisposed(scene);
         scene.traverse((object) => {
           if (object instanceof Mesh && object.geometry.boundsTree) disposeBoundsTree.call(object.geometry);
         });
@@ -226,6 +234,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
           const pending = (tiles as unknown as { stats: { downloading: number; parsing: number } }).stats;
           this.lookAhead?.update(now, this.playback, this.pose?.rangeM ?? 1000, this.camera.fov,
             renderer.getSize(new Vector2()).y, pending.downloading + pending.parsing);
+          this.preparedViews?.update(now);
           // Keep input/camera rendering immediate, but do not repeatedly cancel and
           // requeue entire tile trees at 120 Hz during a continuous scrub.
           if (now - this.latestSeek > 90 || now - this.lastTraversal >= 90) {
@@ -233,14 +242,14 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
             this.discardedStaleParses += pruneWorldStaleWork(tiles);
           }
           this.scene.updateMatrixWorld(true);
+          phase = "view-preparation";
+          this.preparedViews?.afterTraversal(now);
           phase = "route-grounding";
           this.trace?.settle(this.sampleHeight, now);
           if (this.trace?.grounded) this.layers.route = "ready";
           phase = "camera-grounding";
           if (this.pose && this.following && now - this.lastTargetSample > 500) {
             this.lastTargetSample = now;
-            this.measuredTarget = this.sampleHeight(this.pose.center.lat, this.pose.center.lng, this.pose.center.altitude ?? 0, true);
-            this.measuredProgressM = this.pose.progressM;
             this.setCamera(this.pose);
           }
           this.trace?.projectMarker(this.camera, renderer.getSize(new Vector2()).y);
@@ -323,15 +332,17 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
     const stats = (this.tiles as unknown as { stats?: { downloading: number; parsing: number; failed: number } } | undefined)?.stats;
     return {
       playback: this.playback ? { ...this.playback } : null,
+      preparation: this.preparedViews?.report(now),
       camera: {
         requestedMode: this.playback?.cameraMode ?? null,
         directedMode: this.following ? this.pose?.directedMode ?? this.playback?.cameraMode ?? null : null,
         owner: this.following ? "following" : "free",
+        displayedProgressM: this.following ? this.pose?.progressM ?? null : null,
         requestedRangeM: this.pose?.rangeM ?? null,
         actualRangeM: this.controls ? this.camera.position.distanceTo(this.controls.target) : null,
         fovDeg: this.camera.fov, nearM: this.camera.near, farM: this.camera.far, meshCorrectionM: this.lastCameraCorrection, clearanceState: this.clearanceState,
         targetSurfaceErrorM: this.targetSurfaceErrorM, targetCorrectionM: this.targetCorrectionM,
-        heightM: this.cameraHeightM, groundHeightM: this.cameraGroundHeightM, clearanceM: this.cameraClearanceM,
+        sightline: this.sightline, heightM: this.cameraHeightM, groundHeightM: this.cameraGroundHeightM, clearanceM: this.cameraClearanceM,
       },
       layers: { ...this.layers },
       quality: {
@@ -381,7 +392,6 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
     if (intent === "seek") {
       this.latestSeek = performance.now();
       this.lookAhead?.seek(this.latestSeek);
-      this.measuredTarget = null; this.measuredProgressM = -Infinity;
       this.targetSurfaceErrorM = this.focusErrorM = null;
       this.lastTargetSample = -Infinity;
       this.coverage = { ...EMPTY_VIEW_COVERAGE };
@@ -426,36 +436,45 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
     return hit ? this.frame.height(hit.point) : null;
   };
   setCamera(pose: GoogleRouteCameraPose) {
-    // An old surface height cannot follow the camera kilometres through a scrub.
-    if (Math.abs(this.measuredProgressM - pose.progressM) > 80) {
-      this.measuredTarget = null; this.targetSurfaceErrorM = this.focusErrorM = null;
-    }
     this.pose = pose;
-    if (!this.frame || !this.following || !this.options) return;
-    const recorded = this.options.route.elevationStatus !== "unavailable";
-    const height = recorded ? pose.center.altitude ?? this.options.route.route[0].elev : this.measuredTarget ?? pose.center.altitude ?? 0;
-    const correction = recorded && this.measuredTarget !== null ? Math.max(-120, Math.min(120, this.measuredTarget - height)) : 0;
-    this.targetCorrectionM = correction;
-    const target = this.frame.camera(this.camera, pose, height + correction);
-    this.controls?.target.copy(target);
-    // Mesh clearance at the actual camera footprint is a rendering correction, not a recorded value.
-    const position = this.camera.position.clone();
-    const up = this.frame.normal(pose.center.lat, pose.center.lng);
-    const hit = this.surfaces?.cast(position.clone().addScaledVector(up, 1500), up.clone().negate());
-    this.clearanceState = hit ? "measured" : "unknown";
-    const clearance = hit ? position.sub(hit.point).dot(up) : Infinity;
-    this.lastCameraCorrection = Math.max(0, 18 - clearance);
-    if (Number.isFinite(this.lastCameraCorrection) && this.lastCameraCorrection > 0) {
-      this.camera.position.addScaledVector(up, this.lastCameraCorrection);
-      this.camera.lookAt(target); this.camera.updateMatrixWorld();
-    }
-    this.cameraHeightM = this.frame.height(this.camera.position);
-    this.cameraGroundHeightM = hit ? this.frame.height(hit.point) : null;
-    this.cameraClearanceM = hit ? clearance + this.lastCameraCorrection : null;
-    this.lookAhead?.updateCameraSupport(performance.now(), this.camera.position, up, height + correction, pose.rangeM, this.following);
+    if (!this.frame || !this.surfaces || !this.following || !this.options) return;
+    const solution = solveWorldCamera(this.frame, this.surfaces, pose, this.camera, this.options.route.elevationStatus !== "unavailable");
+    this.controls?.target.copy(solution.target);
+    this.targetSurfaceErrorM = this.focusErrorM = solution.targetErrorM;
+    this.targetCorrectionM = solution.targetCorrectionM;
+    this.lastCameraCorrection = solution.liftM;
+    this.cameraHeightM = solution.heightM;
+    this.cameraGroundHeightM = solution.groundHeightM;
+    this.cameraClearanceM = solution.clearanceM;
+    this.clearanceState = solution.clearanceM === null ? "unknown" : "measured";
+    this.sightline = solution.sightline;
+    this.lookAhead?.updateCameraSupport(performance.now(), this.camera.position, this.frame.normal(pose.center.lat, pose.center.lng),
+      this.frame.height(solution.target), pose.rangeM, this.following, solution.target);
+  }
+  prepareView(pose: GoogleRouteCameraPose, options: ReplayViewRequestOptions) {
+    if (!this.preparedViews || this.abort.signal.aborted) return Promise.resolve({ready:false,requestId:options.requestId,reason:"unavailable" as const,transition:"cut" as const,preparationMs:0});
+    this.markReport("view-prepare");
+    return this.preparedViews.request(pose, options, this.following && !this.playback?.reducedMotion ? this.pose : undefined).then(result => {
+      if (!options.signal.aborted) this.markReport(result.ready ? "view-ready" : "view-blocked");
+      return result;
+    });
+  }
+  commitPreparedView(requestId: number) {
+    const committed = this.preparedViews?.commit(requestId) ?? false;
+    if (committed) this.markReport("view-commit");
+    return committed;
+  }
+  cancelPreparedView() { this.preparedViews?.cancel(); }
+  hintNextView(pose: GoogleRouteCameraPose) {
+    const now=performance.now();
+    const stats=(this.tiles as unknown as {stats?:{downloading:number;parsing:number}})?.stats;
+    const cache=this.tiles?.lruCache as unknown as {cachedBytes:number;maxBytesSize:number}|undefined;
+    if (!this.preparedViews || this.preparedViews.busy || !this.following || now<this.nextHint || pose.rangeM>2500 || !stats || stats.downloading+stats.parsing>=8 || !cache || cache.cachedBytes/cache.maxBytesSize>.75) return;
+    this.nextHint=now+5000;
+    void this.preparedViews.request(pose,{requestId:--this.hintGeneration,signal:this.abort.signal,automatic:true},undefined,true);
   }
   isPlaybackBuffering() { return Boolean(this.playback?.playing && this.following && this.continuity.holding); }
-  setFollowing(following: boolean) { this.following = following; }
+  setFollowing(following: boolean) { this.following = following; if (!following) this.preparedViews?.cancel(); }
   setGrounding(mode: GoogleRouteGroundingMode) { this.trace?.grounding(mode === "mesh"); }
   setCinematicRoute(treatment: CinematicRouteTreatment) {
     this.trace?.update(treatment.focusRatio * (this.options ? routeDistanceM(this.options.route) : 1), treatment.rangeM);
@@ -548,7 +567,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
     document.removeEventListener("visibilitychange", this.onVisibility);
     this.abort.abort(); cancelAnimationFrame(this.animation); window.clearTimeout(this.readyTimer);
     this.resizeObserver?.disconnect(); this.controls?.stopListenToKeyEvents(); this.controls?.dispose();
-    this.lookAhead?.dispose(); this.surfaces?.clear(); this.labels?.dispose(); this.atmosphere?.dispose(); this.tiles?.dispose(); this.draco?.dispose(); this.trace?.dispose();
+    this.preparedViews?.dispose(); this.lookAhead?.dispose(); this.surfaces?.clear(); this.labels?.dispose(); this.atmosphere?.dispose(); this.tiles?.dispose(); this.draco?.dispose(); this.trace?.dispose();
     this.renderer?.domElement.removeEventListener("webglcontextlost", this.onContextLost);
     this.renderer?.domElement.removeEventListener("keydown", this.onKey);
     this.renderer?.dispose(); this.renderer?.forceContextLoss(); this.renderer?.domElement.remove();

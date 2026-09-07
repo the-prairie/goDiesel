@@ -31,6 +31,9 @@ interface StoryFlightReplayHudProps {
   chapters: ReplayStoryChapter[];
   control: GoogleRouteNavigatorState;
   disabled: boolean;
+  selectedProgressM?: number;
+  selectedCameraMode?: GoogleRouteCameraMode;
+  onScrubEnd?: () => void;
   elevationScrubberRef?: Ref<ReplayElevationScrubberHandle>;
   onCommit: (
     update: (current: GoogleRouteNavigatorState) => GoogleRouteNavigatorState,
@@ -47,6 +50,7 @@ export function StoryFlightReplayHud({
   chapters,
   control,
   disabled,
+  selectedProgressM, selectedCameraMode, onScrubEnd,
   elevationScrubberRef,
   onCommit,
   onSelectCamera,
@@ -229,6 +233,8 @@ export function StoryFlightReplayHud({
                 )
               }
               progressM={control.progressM}
+              selectedProgressM={selectedProgressM}
+              onScrubEnd={onScrubEnd}
               route={route}
               totalDistanceM={totalDistanceM}
             />
@@ -238,7 +244,7 @@ export function StoryFlightReplayHud({
         <div className="flex items-center gap-2">
           <div className="hidden lg:block">
             <ReplayCameraControls
-              active={control.cameraMode}
+              active={selectedCameraMode ?? control.cameraMode}
               disabled={disabled}
               onSelect={onSelectCamera}
               tone="story"
