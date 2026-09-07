@@ -1,0 +1,88 @@
+name: Validate close camera surface repair
+on:
+  push:
+    branches: [codex/pr130-refinement-inspection]
+    paths: [.github/workflows/pr130-surface-candidate.yml]
+permissions:
+  contents: write
+# Source-object preparation only. No ref changes, deployments, or provider secrets.
+defaults:
+  run:
+    shell: bash
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 279accd05fd027a1c04f96af5b128d4f4ea55fdc
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Apply exact reviewed patch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p proof
+          git rev-parse HEAD > proof/base.txt
+          python3 - <<'PY'
+          import base64,gzip,hashlib,json,os,subprocess,urllib.request
+          from pathlib import Path
+          data=b''
+          for sha in ['f295b91811454c7f475f0cb68b21ed1b8ecada2f','5dc78b1f139234a95c8ff07ef8f22f14e3cec463']:
+            request=urllib.request.Request('https://api.github.com/repos/the-prairie/goDiesel/git/blobs/'+sha,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN']})
+            with urllib.request.urlopen(request) as response: data+=base64.b64decode(json.load(response)['content'])
+          patch=gzip.decompress(base64.b64decode(data))
+          assert hashlib.sha256(patch).hexdigest()=='f66c55f1cd22928121db971b3e2a17ba308deeb28e88faaa3875c70b83eb5f12'
+          subprocess.run(['git','apply','--check','-'],input=patch,check=True)
+          subprocess.run(['git','apply','-'],input=patch,check=True)
+          subprocess.run(['git','add','app','docs/architecture/cinematic-world-replay.md','.github/workflows/verify-cinematic-world.yml'],check=True)
+          subprocess.run(['git','diff','--cached','--check'],check=True)
+          PY
+      - run: npm ci --prefix app
+      - name: Typecheck and all units
+        working-directory: app
+        run: |
+          npm run typecheck 2>&1 | tee ../proof/typecheck.txt
+          npm run test:unit 2>&1 | tee ../proof/unit.txt
+      - run: cd app && npx playwright install --with-deps chromium
+      - name: Delayed terrain cannot corrupt camera height
+        working-directory: app
+        run: npx playwright test e2e/cinematic-world-surface.spec.ts --project=chromium 2>&1 | tee ../proof/browser.txt
+      - name: Create verified Git blobs only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import base64,hashlib,json,os,subprocess,urllib.request
+          from pathlib import Path
+          paths=subprocess.check_output(['git','diff','--cached','--name-only','-z']).decode().strip('\0').split('\0')
+          assert len(paths)==10,paths
+          entries=[]
+          for path in paths:
+            assert path.startswith(('app/','docs/architecture/')) or path=='.github/workflows/verify-cinematic-world.yml'
+            content=Path(path).read_bytes()
+            expected=hashlib.sha1(b'blob '+str(len(content)).encode()+b'\0'+content).hexdigest()
+            req=urllib.request.Request('https://api.github.com/repos/the-prairie/goDiesel/git/blobs',data=json.dumps({'content':base64.b64encode(content).decode(),'encoding':'base64'}).encode(),headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Content-Type':'application/json'})
+            with urllib.request.urlopen(req) as response: actual=json.load(response)['sha']
+            assert actual==expected
+            entries.append({'path':path,'mode':'100644','type':'blob','sha':actual})
+          # e01634f experiment files are absent from this tested source; delete them
+          # when applying these exact objects forward on the PR's e01634f tree.
+          for path in ['app/e2e/cinematic-world-refinement.spec.ts','app/src/surfaces/replay/world/world-refinement.ts','app/src/surfaces/replay/world/world-refinement.test.ts']:
+            assert not Path(path).exists()
+            entries.append({'path':path,'mode':'100644','type':'blob','sha':None})
+          Path('proof/source-blobs.json').write_text(json.dumps(entries,indent=2)+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: camera-surface-candidate
+          path: |
+            proof/
+            app/test-results/
+          retention-days: 3
