@@ -28,12 +28,14 @@ jobs:
           git rev-parse HEAD > proof/commit.txt
           python - <<'PY'
           import os,json,base64,gzip,hashlib,urllib.request,pathlib,subprocess
+          def blob(sha):
+              req=urllib.request.Request('https://api.github.com/repos/the-prairie/goDiesel/git/blobs/'+sha,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
+              return base64.b64decode(json.load(urllib.request.urlopen(req))['content'])
           shas=['42405ff9b26cf60cb4fe0be79dfb052ca959fd8f','93f1ae1751f07c216817eb8b0ec44428d84d5751']
           fixes=[[[6175,6176,''],[6373,6374,''],[7151,7152,''],[16986,16988,'V']],[[2342,3831,''],[3855,3857,''],[18475,18476,'']]]
           parts=[]
           for i,sha in enumerate(shas):
-              req=urllib.request.Request('https://api.github.com/repos/the-prairie/goDiesel/git/blobs/'+sha,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
-              text=base64.b64encode(base64.b64decode(json.load(urllib.request.urlopen(req))['content'])).decode()
+              text=base64.b64encode(blob(sha)).decode()
               for start,end,replacement in reversed(fixes[i]): text=text[:start]+replacement+text[end:]
               parts.append(base64.b64decode(text))
           data=b''.join(parts)
@@ -42,12 +44,22 @@ jobs:
           pathlib.Path('proof/candidate.patch').write_bytes(patch)
           subprocess.run(['git','apply','--check','proof/candidate.patch'],check=True)
           subprocess.run(['git','apply','proof/candidate.patch'],check=True)
-          paths=[line[6:] for line in patch.decode().splitlines() if line.startswith('+++ b/')]
-          pathlib.Path('proof/paths.json').write_text(json.dumps(paths))
+          paths={line[6:] for line in patch.decode().splitlines() if line.startswith('+++ b/')}
           p=pathlib.Path('app/e2e/cinematic-world-prepared.spec.ts')
           old='    await page.getByRole("button",{name:"Chase",exact:true}).click();'
           new='    await page.getByRole("button",{name:"Replay settings",exact:true}).click();\n'+old+'\n    await page.getByRole("button",{name:"Replay settings",exact:true}).click();'
           text=p.read_text();assert text.count(old)==1;p.write_text(text.replace(old,new))
+          extra=blob('09db8002dbfd3d82b91e5f74fe0ccfb7859d5ac4')
+          assert hashlib.sha256(extra).hexdigest()=='bfe7303b945abb360c899b846bd6ab9361a5f236f82060d4fad6bac7b8bf0ddf'
+          pathlib.Path('proof/extra.patch').write_bytes(extra)
+          subprocess.run(['git','apply','--check','proof/extra.patch'],check=True)
+          subprocess.run(['git','apply','proof/extra.patch'],check=True)
+          paths.update(line[6:] for line in extra.decode().splitlines() if line.startswith('+++ b/'))
+          p=pathlib.Path('app/src/surfaces/replay/world/cinematic-world-engine.ts')
+          old='this.preparedViews.request(pose, options, this.following ? this.pose : undefined)'
+          new='this.preparedViews.request(pose, options, this.following && !this.playback?.reducedMotion ? this.pose : undefined)'
+          text=p.read_text();assert text.count(old)==1;p.write_text(text.replace(old,new))
+          pathlib.Path('proof/paths.json').write_text(json.dumps(sorted(paths)))
           PY
       - run: npm ci --prefix app
       - name: Typecheck and all unit tests
