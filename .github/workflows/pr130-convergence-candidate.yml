@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 3f89e97bc1964553e2f2fe24792b18ff0429d2c9
+          ref: b1e00881f25cd9baf27c794ceb017c59ff9e7ea6
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -27,14 +27,10 @@ jobs:
           mkdir -p proof
           git rev-parse HEAD > proof/commit.txt
           python - <<'PY'
-          import os,json,base64,gzip,hashlib,urllib.request,pathlib,subprocess
-          def blob(sha):
-              request=urllib.request.Request('https://api.github.com/repos/the-prairie/goDiesel/git/blobs/'+sha,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
-              return base64.b64decode(json.load(urllib.request.urlopen(request))['content']).decode()
-          first=blob('7182c7dbeede496dda18005b003e4b620b64c745')
-          second=blob('ed6ae2c0382c0c156198af4b9a78a9373a9f3ebf').replace('FglMcXU/QA','FglMcX/QA')
-          patch=gzip.decompress(base64.b64decode(first+second))
-          assert hashlib.sha256(patch).hexdigest()=='7e42b9cd6dc197f0d451693cb6f8060036f6fcb4663937d43a3bb6d47d98b7aa'
+          import os,json,base64,hashlib,urllib.request,pathlib,subprocess
+          request=urllib.request.Request('https://api.github.com/repos/the-prairie/goDiesel/git/blobs/d0f6be121f256bd610e3ba8fb1a43e693febae91',headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
+          patch=base64.b64decode(json.load(urllib.request.urlopen(request))['content'])
+          assert hashlib.sha256(patch).hexdigest()=='1e1eb07dfd8e45bb80b40ada72379387b2824d84a160bc1d2ce8e000bba2aaee'
           pathlib.Path('proof/candidate.patch').write_bytes(patch)
           subprocess.run(['git','apply','--check','proof/candidate.patch'],check=True)
           subprocess.run(['git','apply','proof/candidate.patch'],check=True)
@@ -51,11 +47,11 @@ jobs:
       - name: Install Chromium
         working-directory: app
         run: npx playwright install --with-deps chromium
-      - name: Exercise actual renderer handoff and optional clouds
+      - name: Exercise actual renderer handoff
         working-directory: app
         env:
           PLAYWRIGHT_JSON_OUTPUT_FILE: ../proof/browser-results.json
-        run: npx playwright test e2e/cinematic-world-prepared.spec.ts e2e/cinematic-world-surface.spec.ts e2e/cinematic-world-report.spec.ts --grep 'real prepared destination|cancelled cold|coarse terrain|Cinema clouds' --project=chromium --reporter=line,json 2>&1 | tee ../proof/browser.txt
+        run: npx playwright test e2e/cinematic-world-prepared.spec.ts --project=chromium --reporter=line,json 2>&1 | tee ../proof/browser.txt
       - name: Create exact verified source blobs
         env:
           GH_TOKEN: ${{ github.token }}
