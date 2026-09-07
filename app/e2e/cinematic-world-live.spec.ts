@@ -253,6 +253,8 @@ test("live Runner revisits sharpest turn and high point with bounded terrain wor
         const coverage=state.terrain.view?.coverage;
         const usable=coverage && coverage.tested>=10 && coverage.centerHit &&
           coverage.hits>=Math.ceil(coverage.tested*.93) && state.terrain.renderedMeshes>0 &&
+          state.terrain.refinement?.phase === "settled" &&
+          state.terrain.errorTargetPx === state.terrain.refinement.nominalTargetPx &&
           (state.camera.actualRangeM ?? Infinity)<600 && pixels.flatFraction<.18 && pixels.textureVariation>.015;
         stableSamples=usable ? stableSamples+1 : 0;
         return stableSamples;

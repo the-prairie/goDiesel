@@ -1,3 +1,4 @@
+import { WorldRefinement } from "./world-refinement";
 import { WorldContinuity } from "./world-continuity";
 import type { TilesRenderer } from "3d-tiles-renderer/three";
 import { GoogleCloudAuthPlugin } from "3d-tiles-renderer/core/plugins";
@@ -54,6 +55,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
   private readyTimer = 0;
   private layers: WorldLayers = { terrain: "loading", atmosphere: "loading", labels: "loading", route: "loading" };
   private environment = DEFAULT_WORLD_ENVIRONMENT;
+  private readonly refinement = new WorldRefinement(WORLD_QUALITY.balanced.errorTarget);
   private lastStatus = "";
   private following = true;
   private pose?: GoogleRouteCameraPose;
@@ -219,6 +221,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
           // Keep input/camera rendering immediate, but do not repeatedly cancel and
           // requeue entire tile trees at 120 Hz during a continuous scrub.
           if (now - this.latestSeek > 90 || now - this.lastTraversal >= 90) {
+            tiles.errorTarget = this.refinement.errorTarget;
             tiles.update(); this.lastTraversal = now;
             this.discardedStaleParses += pruneWorldStaleWork(tiles);
           }
@@ -286,6 +289,8 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
             } catch { this.focusProbe = { ...emptyTerrainFocus(), sampledAtMs: this.recorder.time(now), reason: "sample-error" }; }
             this.recorder.sample(now, this.reportState(now));
           }
+          this.refinement.update(now, this.renderedTiles, this.coverage,
+            this.focusProbe.sampledAtMs !== null && this.recorder.time(now) - this.focusProbe.sampledAtMs < 1250 ? this.focusProbe.estimatedScreenErrorPx : null);
           this.updateAttribution(); this.publish();
         } catch (error) {
           const message = error instanceof Error ? error.message : "Unexpected renderer error";
@@ -334,6 +339,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
         focusErrorM: this.focusProbe.geometricErrorM,
         progress: this.tiles?.loadProgress ?? 0, cachedBytes: cache?.cachedBytes ?? 0,
         errorTargetPx: this.tiles?.errorTarget ?? WORLD_QUALITY[this.effectiveQuality].errorTarget,
+        refinement: this.refinement.snapshot(),
         focus: {
           ...this.focusProbe,
           ageMs: this.focusProbe.sampledAtMs === null ? null : Math.max(0, this.recorder.time(now) - this.focusProbe.sampledAtMs),
@@ -359,7 +365,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
     };
     if (previous) {
       if (previous.playing !== context.playing) this.markReport(context.playing ? "play" : "pause");
-      if (previous.cameraMode !== context.cameraMode) this.markReport("camera-mode");
+      if (previous.cameraMode !== context.cameraMode) { this.refinement.reset(); this.markReport("camera-mode"); }
       if (previous.following !== context.following) this.markReport(context.following ? "recenter" : "free-camera");
       if (previous.rangeScale !== context.rangeScale) this.markReport("zoom");
       if (previous.speed !== context.speed) this.markReport("speed");
@@ -369,6 +375,8 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
     if (intent === "seek") {
       this.latestSeek = performance.now();
       this.lookAhead?.seek(this.latestSeek);
+      this.refinement.reset();
+      this.focusProbe = emptyTerrainFocus(); this.lastDiagnosticSample = -Infinity;
       this.measuredTarget = null; this.measuredProgressM = -Infinity;
       this.lastTargetSample = -Infinity;
       this.coverage = { ...EMPTY_VIEW_COVERAGE };
@@ -459,7 +467,8 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
     const ratio = Math.min(window.devicePixelRatio || 1, quality.pixelRatio);
     const resized = this.renderer?.getPixelRatio() !== ratio;
     if (resized) this.renderer?.setPixelRatio(ratio);
-    if (this.tiles) this.tiles.errorTarget = quality.errorTarget;
+    this.refinement.setTarget(quality.errorTarget);
+    if (this.tiles) this.tiles.errorTarget = this.refinement.errorTarget;
     this.atmosphere?.update(settings); this.labels?.update(settings);
     this.layers.labels = this.environment.labels ? this.labelState : "off";
     if (this.options) {

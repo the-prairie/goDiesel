@@ -278,3 +278,27 @@ The report includes actual cloud tier, ceiling, resolution scale, shadow size an
 submitted cloud frames. These are callback-budget decisions, not measured GPU
 presentation times. A clear sky still submits no volume or shadow work. Pointer
 interaction with clouds enabled is verified independently of cloud-off rendering.
+
+### Coverage-first refinement
+
+`WorldRefinement` separates the selected quality's nominal screen-error target
+from the temporary selection target used to establish a new view. Entering a
+world, seeking, changing camera mode, or sustained loss of surface coverage starts
+a bounded coarse frontier. After current-view probes have full coverage and the
+center surface meets that stage's detail target for 500 ms, the target tightens
+by a factor of two, down to the exact selected quality target. Missing or stale
+samples do not qualify as recovered terrain.
+
+This uses the pinned renderer's existing REPLACE traversal: once a coarse parent
+has actually been selected, it remains drawable until its finer replacements are
+ready. It does not load every globe ancestor, synthesize terrain, introduce a
+second terrain scene, or lower the user's stored quality choice. Diagnostics
+expose both `terrain.refinement.nominalTargetPx` and `selectionTargetPx`, plus the
+phase. Live Runner acceptance requires the nominal target to be restored as well
+as sustained coverage and distributed image texture; a fast coarse-only picture
+is not an accepted result.
+
+The delayed-detail browser regression uses the actual GLB decoder, tile traversal
+and WebGL renderer with explicitly authored synthetic terrain. It proves a coarse
+frontier remains drawable while the fine response is blocked, then is replaced
+at nominal detail. Google imagery acceptance remains a separate live journey.

@@ -39,6 +39,7 @@ export interface WorldReportState {
   terrain: {
     renderedMeshes: number; visibleTiles: number; focusErrorM: number | null;
     progress: number; cachedBytes: number; errorTargetPx: number;
+    refinement?: { phase: "coverage" | "detail" | "settled"; nominalTargetPx: number; selectionTargetPx: number; resets: number };
     focus: TerrainFocusSample & { ageMs: number | null; cameraChangedSinceSample: boolean };
     queues: { downloading: number; parsing: number; failed: number };
     view?: { state: WorldViewState; coverage: WorldViewCoverage; buffering?: boolean };
