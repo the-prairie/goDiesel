@@ -132,7 +132,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
       this.tiles = tiles;
       this.downloadBudget = configureWorldStreaming(tiles);
       this.lookAhead = new WorldLookAhead(tiles, route, frame);
-      this.preparedViews = new WorldPreparedViews(tiles, frame, this.surfaces, renderer, this.scene, route);
+      this.preparedViews = new WorldPreparedViews(tiles, frame, this.surfaces, renderer, this.scene, route, this.camera);
       tiles.fetchOptions = { signal: this.abort.signal };
       tiles.registerPlugin(new GoogleCloudAuthPlugin({ apiToken: key }));
       const draco = new DRACOLoader().setWorkerLimit(2).setDecoderPath(`${import.meta.env.BASE_URL}world-assets/draco/`);
@@ -260,11 +260,15 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
             this.atmosphereStarted = true;
           }
           phase = this.atmosphereReady && this.atmosphereStarted ? "atmosphere" : "terrain-render";
-          if (phase === "atmosphere") {
-            renderer.toneMapping = NoToneMapping;
-            this.atmosphere?.render(Math.min(0.1, elapsed / 1000), elapsed);
-            this.layers.atmosphere = "ready";
-          } else renderer.render(this.scene, this.camera);
+          const renderMain = () => {
+            if (phase === "atmosphere") {
+              renderer.toneMapping = NoToneMapping;
+              this.atmosphere?.render(Math.min(0.1, elapsed / 1000), elapsed);
+              this.layers.atmosphere = "ready";
+            } else renderer.render(this.scene, this.camera);
+          };
+          if (this.preparedViews) { const retainedDraws = this.preparedViews.renderDisplayed(renderMain); this.renderedTiles += retainedDraws; }
+          else renderMain();
           if (this.shaderFailed) { this.shaderFailed = false; throw new Error("World shader could not compile"); }
           // Background refinement is not a failure to draw. A visible, still-refining
           // landscape is playable with a partial status; an empty canvas is not.
@@ -273,7 +277,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
           container.dataset.terrainRefining = String(this.terrainReadiness.refining);
           if (now - this.lastCoverageSample >= 250) {
             this.lastCoverageSample = now;
-            this.coverage = sampleWorldView(tiles, this.camera, now);
+            this.coverage = this.preparedViews?.displayedCoverage(now) ?? sampleWorldView(tiles, this.camera, now);
           }
           this.viewState = currentWorldView(this.terrainReadiness.ready, this.renderedTiles, this.coverage, now, this.terrainReadiness.refining);
           const wasHolding = this.continuity.holding;

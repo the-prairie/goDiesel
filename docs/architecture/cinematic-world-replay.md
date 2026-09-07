@@ -360,3 +360,37 @@ observations do not establish owner-device input latency or visually approve a
 live journey. The CI receipt explicitly records per-step outcomes, exact source,
 immutable preview and individual browser/live results, including missing/skipped
 results. A green automated receipt never automatically grants visual approval.
+
+
+### Finite preparation and displayed-terrain residency
+
+Preparing a destination owns a finite terrain manifest once its qualified camera
+and sparse view coverage are available. New refinement no longer grows the set
+whose materials must finish compiling. The manifest shares original GLTF geometry
+and textures, uses fixed local transforms and independent material instances (not
+the source tile's mutable fade uniforms), and is raster-tested before handoff.
+Compilation remains limited to two meshes in flight. Cancelled compilation keeps
+only its material properties alive until the pending compiler promise settles;
+shared provider geometry and texture disposal remain owned by the tile cache.
+
+The outgoing view may retain its actual drawable terrain while another view is
+prepared. This is resident 3D geometry, not a screenshot, fabricated scenery or a
+claim to have reached the selected destination. The outgoing lease is bounded to
+160 MiB; all preparation/display leases together use a conservative 288 MiB budget
+inside the unchanged 384 MiB cache ceiling. The terrain set is marked used through
+traversal and released when the actual replacement selection has sustained sparse
+coverage plus raster coverage. A failed preparation leaves selection visibly
+pending/blocked and never restarts a paused transport. Forced disposal invalidates
+a lease; no released buffer can be certified as a usable view.
+
+Preparation requests camera/target support with narrow, finite vertical columns
+instead of spheres tied to the route elevation. The footprint is 90 metres in
+half-width and the vertical half-extent is 1,500 metres. This loading envelope can
+include an adjacent elevated hillside without requesting a kilometre-wide disk;
+it is not a measured surface and never changes recorded elevation.
+
+Preparation reports expose the finite/remaining mesh counts, conservative pinned
+bytes, retained displayed-mesh count and camera/target qualification. They contain
+no new provider URLs, credentials or route coordinates. Runner checkpoints have
+independent live verdicts; cloud settings also have an independent live journey.
+Existing recovery deadlines and selected quality targets remain in force.

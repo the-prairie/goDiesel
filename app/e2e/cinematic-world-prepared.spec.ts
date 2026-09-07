@@ -52,6 +52,9 @@ test("real prepared destination keeps the outgoing view, latest scrub and Pause 
     await expect.poll(async()=>(await read(page)).preparation?.phase).toBe("preparing");
     expect(gate.eastRequested).toBe(true);const displayed=(await read(page)).playback!.progressM;
     await page.waitForTimeout(600);expect((await read(page)).playback!.progressM).toBe(displayed);
+    const preparing=await read(page);
+    expect(preparing.preparation?.retainedDisplayModels).toBeGreaterThan(0);
+    expect(preparing.preparation?.pinnedBytes).toBeLessThanOrEqual(288*1024*1024);
     await expect(slider).toHaveValue("1500");await expect(page.getByTestId("replay-selected-position")).toBeVisible();
     await page.screenshot({path:info.outputPath("02-synthetic-selected-not-yet-displayed.png")});
     await slider.fill("1800");await page.getByRole("button",{name:"Pause route",exact:true}).click();

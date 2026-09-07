@@ -57,6 +57,7 @@ test("live playback report preserves a full minute, controller context and exact
     expect(await page.evaluate(() => Boolean(window.__GODIESEL_CINEMATIC_WORLD_FACTORY__))).toBe(false);
     await expect(page.locator("[data-world-terrain]")).toHaveAttribute("data-world-terrain", "ready", { timeout: 60_000 });
     await page.getByRole("button", { name: "Chase", exact: true }).press("Enter");
+    await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-displayed-camera-mode", "chase", {timeout:30_000});
     await page.getByRole("button", { name: "Play route", exact: true }).press("Enter");
     await expect(page.getByRole("button", { name: "Pause route", exact: true })).toBeVisible();
     await page.waitForTimeout(61_000);
@@ -141,7 +142,7 @@ for (const journey of [
 
       // Exercise normal keyboard activation on the live world; no forced clicks.
       await page.getByRole("button", { name: "Chase", exact: true }).press("Enter");
-      await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-camera-mode", "chase");
+      await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-displayed-camera-mode", "chase", {timeout:30_000});
       // Preserve a failing label verdict, but still collect playback and lighting evidence.
       await expect.configure({ soft: true }).poll(async () => Number(await world.getAttribute("data-world-label-count")), { timeout: 45_000 }).toBeGreaterThan(0);
       await page.waitForTimeout(1500);
@@ -222,7 +223,7 @@ for (const journey of [
 
 // The owner's failed Runner checkpoints: real provider data, ordinary controls,
 // and current coverage rather than a startup latch or a successful HTTP status.
-test("live Runner revisits sharpest turn and high point with bounded terrain work", async ({page},testInfo) => {
+for (const checkpointM of [9850,12620]) test(`live Runner checkpoint ${checkpointM} with bounded terrain work`, async ({page},testInfo) => {
   page.setDefaultTimeout(15_000);
   await page.setViewportSize({width:1280,height:720});
   const receipts: Array<{distanceM:number;report:WorldDiagnostics;pixels:ReturnType<typeof landscapePixels>;stableSamples:number}>=[];
@@ -239,7 +240,7 @@ test("live Runner revisits sharpest turn and high point with bounded terrain wor
     const progress=page.getByRole("slider",{name:"Route progress",exact:true});
     // Real range input changes, no force click or controller state mutation.
     for(const value of ["12000","9500","11000","9700"]) await progress.fill(value);
-    for(const distanceM of [9850,12620]) {
+    for(const distanceM of [checkpointM]) {
       await progress.fill(String(distanceM));
       let stableSamples = 0;
       // A textured corner plus a historical ready latch passed the documented
@@ -283,5 +284,31 @@ test("live Runner revisits sharpest turn and high point with bounded terrain wor
     const final=await rendererEvidence(page).catch(()=>null);
     writeFileSync(testInfo.outputPath("runner-continuity-evidence.json"),JSON.stringify({models,receipts,attempts,final},null,2));
     await page.screenshot({path:testInfo.outputPath("runner-final.png")}).catch(()=>{});
+  }
+});
+
+// Cloud controls have an independent verdict even when a transport journey fails.
+test("live Cinema settings remain operable without depending on a prepared Chase",async({page},testInfo)=>{
+  page.setDefaultTimeout(15_000);await page.setViewportSize({width:1280,height:720});
+  try {
+    await page.goto("/#/replay/14130782031?renderer=cinematic");
+    expect(await page.evaluate(()=>Boolean(window.__GODIESEL_CINEMATIC_WORLD_FACTORY__))).toBe(false);
+    await expect(page.locator("[data-world-terrain]")).toHaveAttribute("data-world-terrain","ready",{timeout:60_000});
+    await page.getByRole("button",{name:"Replay settings",exact:true}).click();
+    await page.getByRole("button",{name:"Cinema",exact:true}).click();
+    await page.getByRole("button",{name:"Golden hour",exact:true}).click();
+    await page.getByRole("slider",{name:"Cloud cover",exact:true}).fill("55");
+    await expect.poll(async()=>((await rendererEvidence(page)).report as WorldDiagnostics)?.quality.cloudPassSubmissions).toBeGreaterThan(0);
+    await page.getByRole("button",{name:"Replay settings",exact:true}).click();
+    await expect(page.getByRole("button",{name:"Golden hour",exact:true})).not.toBeVisible();
+    await page.screenshot({path:testInfo.outputPath("live-independent-golden-clouds.png")});
+    await page.getByRole("button",{name:"Replay settings",exact:true}).click();
+    await page.getByRole("slider",{name:"Cloud cover",exact:true}).fill("0");
+    const off=((await rendererEvidence(page)).report as WorldDiagnostics).quality.cloudPassSubmissions;
+    await page.waitForTimeout(700);
+    expect(((await rendererEvidence(page)).report as WorldDiagnostics).quality.cloudPassSubmissions).toBe(off);
+  }finally{
+    writeFileSync(testInfo.outputPath("cloud-settings-evidence.json"),JSON.stringify(await rendererEvidence(page).catch(()=>null),null,2));
+    await page.screenshot({path:testInfo.outputPath("cloud-settings-final.png")}).catch(()=>{});
   }
 });

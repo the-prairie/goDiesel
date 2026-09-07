@@ -16,6 +16,10 @@ export function sampleWorldView(tiles: TilesRenderer, camera: PerspectiveCamera,
   tiles.forEachLoadedModel((model, tile) => {
     if (tiles.visibleTiles.has(tile)) model.traverseVisible(object => { if (object instanceof Mesh) meshes.push(object); });
   });
+  return sampleWorldMeshes(meshes, camera, now);
+}
+
+export function sampleWorldMeshes(meshes: Mesh[], camera: PerspectiveCamera, now: number): WorldViewCoverage {
   const ray = new Raycaster(); ray.firstHitOnly = true;
   // Keep the probes around the route subject, not the intentional sky/horizon.
   const probes = [[0, 0], ...[-0.45, 0, 0.4].flatMap(y =>
