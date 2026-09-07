@@ -8,7 +8,7 @@ permissions:
 jobs:
   candidate:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 18
     defaults:
       run:
         shell: bash
@@ -20,22 +20,27 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Apply verified exact source patch
+      - name: Apply exact candidate patches
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p proof
-          git rev-parse HEAD > proof/commit.txt
+          git rev-parse HEAD > proof/base-commit.txt
           python - <<'PY'
           import os,json,base64,hashlib,urllib.request,pathlib,subprocess
-          request=urllib.request.Request('https://api.github.com/repos/the-prairie/goDiesel/git/blobs/d0f6be121f256bd610e3ba8fb1a43e693febae91',headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
-          patch=base64.b64decode(json.load(urllib.request.urlopen(request))['content'])
-          assert hashlib.sha256(patch).hexdigest()=='1e1eb07dfd8e45bb80b40ada72379387b2824d84a160bc1d2ce8e000bba2aaee'
-          pathlib.Path('proof/candidate.patch').write_bytes(patch)
-          subprocess.run(['git','apply','--check','proof/candidate.patch'],check=True)
-          subprocess.run(['git','apply','proof/candidate.patch'],check=True)
-          paths=sorted({line[6:] for line in patch.decode().splitlines() if line.startswith('+++ b/')})
-          pathlib.Path('proof/paths.json').write_text(json.dumps(paths))
+          paths=set()
+          for i,(sha,digest) in enumerate([
+            ('d0f6be121f256bd610e3ba8fb1a43e693febae91','1e1eb07dfd8e45bb80b40ada72379387b2824d84a160bc1d2ce8e000bba2aaee'),
+            ('64c56bfef24e2fc872ac491174ab85a2232c89f0','e0dd403ea76ca01b5500e128fc25ed4918ac202e79b13d1db14de253f2854cc8')]):
+              request=urllib.request.Request('https://api.github.com/repos/the-prairie/goDiesel/git/blobs/'+sha,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
+              patch=base64.b64decode(json.load(urllib.request.urlopen(request))['content'])
+              assert hashlib.sha256(patch).hexdigest()==digest
+              file='proof/candidate-'+str(i)+'.patch'
+              pathlib.Path(file).write_bytes(patch)
+              subprocess.run(['git','apply','--check',file],check=True)
+              subprocess.run(['git','apply',file],check=True)
+              paths.update(line[6:] for line in patch.decode().splitlines() if line.startswith('+++ b/'))
+          pathlib.Path('proof/paths.json').write_text(json.dumps(sorted(paths)))
           PY
       - run: npm ci --prefix app
       - name: Typecheck and unit tests
@@ -52,7 +57,7 @@ jobs:
         env:
           PLAYWRIGHT_JSON_OUTPUT_FILE: ../proof/browser-results.json
         run: npx playwright test e2e/cinematic-world-prepared.spec.ts --project=chromium --reporter=line,json 2>&1 | tee ../proof/browser.txt
-      - name: Create exact verified source blobs
+      - name: Create exact validated source blobs
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -67,6 +72,24 @@ jobs:
               entries.append({'path':path,'mode':'100644','type':'blob','sha':result['sha']})
           pathlib.Path('proof/source-blobs.json').write_text(json.dumps(entries,indent=2))
           PY
+      - name: Build authorized local live-provider candidate
+        working-directory: app
+        env:
+          VITE_WORLD_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_WORLD_GOOGLE_MAPS_API_KEY }}
+        run: |
+          test -n "$VITE_WORLD_GOOGLE_MAPS_API_KEY"
+          npm run build 2>&1 | tee ../proof/live-build.txt
+      - name: Inspect independent live checkpoints without external deployment
+        working-directory: app
+        env:
+          GODIESEL_WORLD_PREVIEW_URL: http://localhost:8788
+          PLAYWRIGHT_JSON_OUTPUT_FILE: ../proof/live-results.json
+        run: |
+          npx vite preview --host 0.0.0.0 --port 8788 > /tmp/replay-preview.log 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do curl -fsS http://localhost:8788/ > /dev/null && break || sleep 1; done
+          npm run test:e2e:cinematic-live -- --grep 'live Google world|live Runner|live Cinema' --reporter=line,json 2>&1 | tee ../proof/live-provider.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
