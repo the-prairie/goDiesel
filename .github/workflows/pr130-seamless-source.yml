@@ -29,12 +29,15 @@ jobs:
           python - <<'PY'
           import os,json,base64,gzip,hashlib,urllib.request,pathlib,subprocess
           shas=['42405ff9b26cf60cb4fe0be79dfb052ca959fd8f','93f1ae1751f07c216817eb8b0ec44428d84d5751']
+          fixes=[[[6175,6176,''],[6373,6374,''],[7151,7152,''],[16986,16988,'V']],[[2342,3831,''],[3855,3857,''],[18475,18476,'']]]
           parts=[]
           for i,sha in enumerate(shas):
               req=urllib.request.Request('https://api.github.com/repos/the-prairie/goDiesel/git/blobs/'+sha,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
               data=base64.b64decode(json.load(urllib.request.urlopen(req))['content'])
-              pathlib.Path(f'proof/part{i}.b64').write_text(base64.b64encode(data).decode())
-              parts.append(data)
+              text=base64.b64encode(data).decode()
+              for start,end,replacement in reversed(fixes[i]):
+                  text=text[:start]+replacement+text[end:]
+              parts.append(base64.b64decode(text))
           data=b''.join(parts)
           assert hashlib.sha256(data).hexdigest()=='938b32fce972c50685223884c572aedca7ba569232d9247ee40f58a6afd82f05','Source transport differs; refusing to apply it'
           patch=gzip.decompress(data)
