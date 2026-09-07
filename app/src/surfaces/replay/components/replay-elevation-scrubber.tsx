@@ -39,6 +39,8 @@ export const ReplayElevationScrubber = forwardRef<
   {
     route: QuestRoute;
     progressM: number;
+    selectedProgressM?: number;
+    onScrubEnd?: () => void;
     totalDistanceM: number;
     disabled?: boolean;
     compact?: boolean;
@@ -50,6 +52,7 @@ export const ReplayElevationScrubber = forwardRef<
   {
     route,
     progressM,
+    selectedProgressM, onScrubEnd,
     totalDistanceM,
     disabled = false,
     compact = false,
@@ -264,13 +267,20 @@ export const ReplayElevationScrubber = forwardRef<
         />
       ) : null}
 
+      {selectedProgressM !== undefined ? <div aria-hidden="true" data-testid="replay-selected-position"
+        className="pointer-events-none absolute inset-y-0 z-10 border-l-2 border-dashed border-ink-secondary"
+        style={{left:`${Math.max(0,Math.min(1,selectedProgressM/totalDistanceM))*100}%`}} /> : null}
       <input
         aria-label="Route progress"
         type="range"
         min={0}
         max={totalDistanceM}
         step={1}
-        value={progressM}
+        value={selectedProgressM ?? progressM}
+        aria-valuetext={selectedProgressM === undefined ? undefined : `${(selectedProgressM/1000).toFixed(2)} kilometres selected; viewing ${(progressM/1000).toFixed(2)} kilometres`}
+        onPointerUp={onScrubEnd}
+        onKeyUp={onScrubEnd}
+        onBlur={onScrubEnd}
         disabled={disabled}
         onChange={(event) => onSeek(Number(event.target.value))}
         className="absolute inset-0 z-20 h-full w-full cursor-ew-resize opacity-0 disabled:cursor-not-allowed"

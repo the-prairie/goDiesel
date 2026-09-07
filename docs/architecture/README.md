@@ -26,3 +26,9 @@ They do not replace executable contracts, live status commands, or run evidence.
 | What is the live state now? | A read-only status or inspection command |
 
 When documents disagree, prefer executable state and accepted ADRs, then repair the stale document in the same change.
+
+## Renderer implementation guides
+
+[Cinematic world Replay](cinematic-world-replay.md) describes the opt-in Three.js terrain,
+road-label and atmosphere renderer, its configuration, and its separate live acceptance gate.
+Native Google Replay remains the default under ADR-0009.

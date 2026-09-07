@@ -24,7 +24,7 @@ export function ReplayRoutePicker({
 }: {
   compact?: boolean;
   currentSlug: string;
-  renderer?: "atlas" | "cesium";
+  renderer?: "atlas" | "cesium" | "cinematic";
   routes: RouteSummary[];
   returnPath?: string;
 }) {
@@ -156,7 +156,7 @@ function RouteGroup({
   routes: RouteSummary[];
   currentSlug: string;
   onSelect: () => void;
-  renderer?: "atlas" | "cesium";
+  renderer?: "atlas" | "cesium" | "cinematic";
   returnPath?: string;
 }) {
   return (

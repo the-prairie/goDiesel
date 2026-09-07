@@ -26,7 +26,8 @@
     "perf:runtime:baseline": "vitest run --config vitest.runtime-perf.config.ts && playwright test --config playwright.runtime-perf.config.ts",
     "perf:runtime:statistics": "node scripts/run-runtime-statistics.mjs",
     "perf:runtime:statistics:smoke": "GODIESEL_PERF_NODE_SAMPLES=5 GODIESEL_PERF_BROWSER_WARMUPS=1 GODIESEL_PERF_BROWSER_REPETITIONS=2 GODIESEL_PERF_LIFECYCLE_REPETITIONS=1 GODIESEL_PERF_PROFILE_REPETITIONS=1 node scripts/run-runtime-statistics.mjs",
-    "perf:runtime:live": "node scripts/run-runtime-statistics.mjs --live"
+    "perf:runtime:live": "node scripts/run-runtime-statistics.mjs --live",
+    "test:e2e:cinematic-live": "playwright test --config playwright.cinematic-live.config.ts"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
@@ -35,16 +36,23 @@
     "@radix-ui/react-separator": "^1.1.11",
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-tooltip": "^1.2.12",
+    "@takram/three-atmosphere": "0.19.1",
+    "@takram/three-clouds": "0.7.6",
+    "@takram/three-geospatial": "0.9.1",
+    "3d-tiles-renderer": "0.5.2",
     "cesium": "^1.143.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "embla-carousel-react": "^8.6.0",
     "lucide-react": "^0.562.0",
     "maplibre-gl": "^5.24.0",
+    "postprocessing": "6.39.4",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-router-dom": "^7.18.1",
-    "tailwind-merge": "^3.4.0"
+    "tailwind-merge": "^3.4.0",
+    "three": "0.185.1",
+    "three-mesh-bvh": "0.9.11"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
@@ -54,6 +62,7 @@
     "@types/pngjs": "^6.0.5",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
+    "@types/three": "0.185.0",
     "@vitejs/plugin-react": "^6.0.3",
     "pngjs": "^7.0.0",
     "tailwindcss": "^4.1.18",
