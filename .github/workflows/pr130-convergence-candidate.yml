@@ -33,7 +33,8 @@ jobs:
             ('d0f6be121f256bd610e3ba8fb1a43e693febae91','1e1eb07dfd8e45bb80b40ada72379387b2824d84a160bc1d2ce8e000bba2aaee',False),
             ('64c56bfef24e2fc872ac491174ab85a2232c89f0','e0dd403ea76ca01b5500e128fc25ed4918ac202e79b13d1db14de253f2854cc8',False),
             ('908555d3424d073b3b7287e0d614a2d1d5fe419b','37b52f96751def304e7fa7802aa2a7dec9cdba990d7d6a5c008985f4a82420e5',True),
-            ('ab8b232629b475491bf6ada330dea4c396279358','f8dd51f38f5422f6ecae9075b8e1035fc4c107f206c0cd1a29b58d283ada7e47',False)]):
+            ('ab8b232629b475491bf6ada330dea4c396279358','f8dd51f38f5422f6ecae9075b8e1035fc4c107f206c0cd1a29b58d283ada7e47',False),
+            ('bdfe6105f22fb2b99899e1df2a20dab00daf5b3b','7723b23d64de737a6e42116a4e519afe126ad11ad33716645883bd03f524d8f9',False)]):
               request=urllib.request.Request('https://api.github.com/repos/the-prairie/goDiesel/git/blobs/'+sha,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
               patch=base64.b64decode(json.load(urllib.request.urlopen(request))['content'])
               if compressed: patch=gzip.decompress(base64.b64decode(patch))
