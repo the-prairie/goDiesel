@@ -48,14 +48,37 @@ jobs:
               subprocess.run(['git','apply','--check',file],check=True)
               subprocess.run(['git','apply',file],check=True)
               paths.update(line[6:] for line in patch.decode().splitlines() if line.startswith('+++ b/'))
-          sha='6fa8ca186be620fc16b8e4b6005bec93a5f3f8a5'
-          request=urllib.request.Request('https://api.github.com/repos/the-prairie/goDiesel/git/blobs/'+sha,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
-          patch=base64.b64decode(json.load(urllib.request.urlopen(request))['content'])
-          file='proof/candidate-adaptive-shot.patch'
-          pathlib.Path(file).write_bytes(patch)
-          subprocess.run(['git','apply','--check',file],check=True)
-          subprocess.run(['git','apply',file],check=True)
-          paths.update(line[6:] for line in patch.decode().splitlines() if line.startswith('+++ b/'))
+
+          target=pathlib.Path('app/src/surfaces/replay/world/world-prepared-view.ts')
+          text=target.read_text()
+          def replace_once(old,new):
+              global text
+              count=text.count(old)
+              assert count==1,(count,old[:100])
+              text=text.replace(old,new,1)
+          replace_once(
+              '  focus?: WorldSupportRegion;\n  solution?: WorldCameraSolution;',
+              '  focus?: WorldSupportRegion;\n  focusActive?: boolean;\n  solution?: WorldCameraSolution;')
+          replace_once(
+              '      this.regions.addRegion(target);this.regions.addRegion(support);if(focus)this.regions.addRegion(focus);\n      return {pose:p,camera,target,support,focus};',
+              '      this.regions.addRegion(target);this.regions.addRegion(support);\n      return {pose:p,camera,target,support,focus,focusActive:false};')
+          replace_once(
+              '        if(c.focus) {\n          // Temporary shot acquisition covers the route foreground at the same',
+              '        if(c.focus && c.focusActive) {\n          // Temporary shot acquisition covers the route foreground at the same')
+          replace_once(
+              '      focusRegions:c.focus && this.regions.hasRegion(c.focus)?[c.focus]:[],',
+              '      focusRegions:c.focus && c.focusActive && this.regions.hasRegion(c.focus)?[c.focus]:[],')
+          replace_once(
+              '    if(now>=active.deadline && !active.ready) {\n      this.reportValue.blocked+=active.warming?0:1;this.reportValue.preparationMs=now-active.startedAt;\n      active.resolve({ready:false,requestId:active.options.requestId,reason:"timeout",transition:"cut",preparationMs:now-active.startedAt});\n      this.release(active.warming?"idle":"blocked",!active.warming);return;\n    }\n',
+              '')
+          replace_once(
+              '      if(!view.centerHit||coverage<.93){reason="coverage";break;}',
+              '      if(!view.centerHit||coverage<.93){\n        if(!a.warming && c.focus && !c.focusActive && c.pose.rangeM<=800 && now-a.startedAt>=4000 && coverage<=.1) {\n          c.focusActive=true;this.regions.addRegion(c.focus);this.nextCheck=0;\n        }\n        reason="coverage";break;\n      }')
+          replace_once(
+              '      if(a.warming)a.releaseAt=now+1000;\n    }\n  }',
+              '      if(a.warming)a.releaseAt=now+1000;\n    } else if(now>=a.deadline) {\n      // Deadline arbitration happens after traversal so a fully drawable view\n      // gets its final stability sample before timeout can reject it.\n      this.reportValue.blocked+=a.warming?0:1;this.reportValue.preparationMs=now-a.startedAt;\n      a.resolve({ready:false,requestId:a.options.requestId,reason:"timeout",transition:"cut",preparationMs:now-a.startedAt});\n      this.release(a.warming?"idle":"blocked",!a.warming);\n    }\n  }')
+          target.write_text(text)
+          paths.add(str(target))
           pathlib.Path('proof/paths.json').write_text(json.dumps(sorted(paths)))
           PY
       - run: npm ci --prefix app
