@@ -18,7 +18,7 @@ import { WorldFrame } from "./world-frame";
 import { WorldTilesRenderer } from "./world-tiles";
 import { bindWorldDiagnostics, WorldFlightRecorder, WORLD_BUILD, type WorldDiagnostics, type WorldPlaybackContext, type WorldReportState, type WorldReportEvent } from "./world-diagnostics";
 import { emptyTerrainFocus, sampleTerrainFocus } from "./world-terrain-diagnostics";
-import { configureWorldStreaming, canStartWorldAtmosphere, nextSlowFrameDebt, worldFarPlane } from "./world-streaming";
+import { configureWorldStreaming, canStartAtmosphereForView, nextSlowFrameDebt, worldFarPlane } from "./world-streaming";
 import { WorldLookAhead } from "./world-look-ahead";
 import { WorldDownloadQueue, WORLD_PENDING_LIMIT } from "./world-download-budget";
 import { pruneWorldStaleWork } from "./world-stale-work";
@@ -253,10 +253,21 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
             this.setCamera(this.pose);
           }
           this.trace?.projectMarker(this.camera, renderer.getSize(new Vector2()).y);
+          // Camera-current visible detail is independent of collision-grade ground.
+          // This observation never changes the selected terrain quality.
+          const sampledDetail = now - this.lastDiagnosticSample >= 1000;
+          if (sampledDetail) {
+            this.lastDiagnosticSample = now;
+            try {
+              this.focusProbe = sampleTerrainFocus(tiles, this.camera, this.recorder.time(now), renderer.getSize(new Vector2()).y);
+              this.probeView.copy(this.camera.matrixWorld);
+              this.probeProjection.copy(this.camera.projectionMatrix);
+            } catch { this.focusProbe = { ...emptyTerrainFocus(), sampledAtMs: this.recorder.time(now), reason: "sample-error" }; }
+          }
           this.renderedTiles = 0;
           // Draw terrain first. Expensive optional cloud shaders must not delay the first landscape.
-          if (!this.atmosphereStarted && this.layers.terrain === "ready" &&
-            canStartWorldAtmosphere(this.focusErrorM, this.pose?.rangeM ?? 1000, tiles.loadProgress)) {
+          if (!this.atmosphereStarted && this.layers.terrain === "ready" && sampledDetail &&
+            canStartAtmosphereForView(this.focusProbe, tiles.loadProgress)) {
             this.atmosphereStarted = true;
           }
           phase = this.atmosphereReady && this.atmosphereStarted ? "atmosphere" : "terrain-render";
@@ -299,16 +310,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
           container.dataset.worldLabelCount = String(this.labels?.visibleLabelCount ?? 0);
           container.dataset.cameraMeshCorrectionM = this.lastCameraCorrection.toFixed(1);
           this.recorder.submitted(performance.now(), this.renderedTiles);
-          // Diagnostics observe at most once a second; never change detail selection.
-          if (now - this.lastDiagnosticSample >= 1000) {
-            this.lastDiagnosticSample = now;
-            try {
-              this.focusProbe = sampleTerrainFocus(tiles, this.camera, this.recorder.time(now), renderer.getSize(new Vector2()).y);
-              this.probeView.copy(this.camera.matrixWorld);
-              this.probeProjection.copy(this.camera.projectionMatrix);
-            } catch { this.focusProbe = { ...emptyTerrainFocus(), sampledAtMs: this.recorder.time(now), reason: "sample-error" }; }
-            this.recorder.sample(now, this.reportState(now));
-          }
+          if (sampledDetail) this.recorder.sample(now, this.reportState(now));
           this.updateAttribution(); this.publish();
         } catch (error) {
           const message = error instanceof Error ? error.message : "Unexpected renderer error";
@@ -371,6 +373,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
         streaming: { pendingLimit: WORLD_PENDING_LIMIT, backpressured: this.downloadBudget?.blocked ?? false, discardedStaleParses: this.discardedStaleParses, lookAhead: this.lookAhead?.mode ?? "off", lookAheadProgressM: this.lookAhead?.progressM ?? null, cameraSupport: this.lookAhead?.cameraSupport, indexedSurfaceModels: this.surfaces?.size ?? 0 },
       },
       visibleRoadLabels: this.labels?.visibleLabelCount ?? 0,
+      labelActivity: this.labels?.diagnostics,
       contextLost: this.renderer?.getContext().isContextLost() ?? false,
     };
   }

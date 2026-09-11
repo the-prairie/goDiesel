@@ -6,6 +6,20 @@ import { labelFeature, labelText, WORLD_QUALITY, type WorldEnvironment, type Lay
 import { bindWorldGlyphCamera } from "./world-glyph-camera";
 import { observeWorldLabelSettling } from "./world-label-settling";
 
+export interface WorldLabelDiagnostics {
+  decodedFeatures: number;
+  namedFeatures: number;
+  acceptedFeatures: number;
+  updateCalls: number;
+  addedLabels: number;
+  removedLabels: number;
+  visibleLabels: number;
+  budgetMs: number;
+  anchors?: number;
+  readyAnchors?: number;
+  rejectionReasons?: Record<string, number>;
+}
+
 class RoadLabels extends DefaultMVTAnnotationsDriver {
   constructor(camera: PerspectiveCamera, private readonly onDecoded: () => void) {
     super();
@@ -13,16 +27,31 @@ class RoadLabels extends DefaultMVTAnnotationsDriver {
     bindWorldGlyphCamera(this.labels, camera);
   }
   enabled = true;
+  budgetMs = 0;
+  decodedFeatures = 0;
+  namedFeatures = 0;
+  acceptedFeatures = 0;
+  updateCalls = 0;
+  addedLabels = 0;
+  removedLabels = 0;
   readonly visibleLabels = new Set<object>();
   override onLabelsUpdate(added: object[], removed: object[]) {
+    this.updateCalls++;this.addedLabels+=added.length;this.removedLabels+=removed.length;
     for (const item of removed) this.visibleLabels.delete(item);
     for (const item of added) this.visibleLabels.add(item);
     super.onLabelsUpdate(added, removed);
   }
   override filterAnnotation(layer: string, properties: Record<string, unknown>, type: number) {
-    this.onDecoded();
-    return labelFeature(layer, properties, type);
+    this.onDecoded();this.decodedFeatures++;
+    if(labelText(properties))this.namedFeatures++;
+    const accepted=labelFeature(layer, properties, type);if(accepted)this.acceptedFeatures++;
+    return accepted;
   }
+  diagnostics(): WorldLabelDiagnostics { return {
+    decodedFeatures:this.decodedFeatures,namedFeatures:this.namedFeatures,acceptedFeatures:this.acceptedFeatures,
+    updateCalls:this.updateCalls,addedLabels:this.addedLabels,removedLabels:this.removedLabels,
+    visibleLabels:this.visibleLabels.size,budgetMs:this.budgetMs,
+  }; }
   override getText(properties: Record<string, unknown>) { return labelText(properties); }
   override isAnnotationEnabled() { return this.enabled; }
   override getAnnotationRank(annotation: object) {
@@ -75,10 +104,11 @@ export async function createWorldLabels(
     }
   };
   const driver = new RoadLabels(camera, () => { if (!signal.aborted) onState("ready"); });
-  const plugin = new MVTAnnotationsPlugin({ overlay, camera, driver, resolution: 128 });
+  const plugin = new MVTAnnotationsPlugin({ overlay, camera, driver, resolution: 128, horizonCutoff: 0 });
   const stopObservingSettling = observeWorldLabelSettling(plugin);
   const update = (next: WorldEnvironment) => {
     const budget = WORLD_QUALITY[next.quality].labelBudget;
+    driver.budgetMs=budget;
     plugin.maxSettleTimeMs = budget;
     plugin.maxOccupancyUpdateTimeMs = budget / 2;
     plugin.maxParseTimeMs = budget;
@@ -105,7 +135,16 @@ export async function createWorldLabels(
     driver.dispose(); overlay.imageSource.dispose(); throw error;
   }
   let disposed = false;
-  return { update, attribution, defaultSource: !import.meta.env.VITE_WORLD_VECTOR_SOURCE, get visibleLabelCount() { return driver.visibleLabels.size; }, dispose: () => {
+  const diagnostics = () => {
+    const internals=plugin as unknown as {anchorManager?:{anchors?:Set<{ready?:boolean;rejectionReason?:number}>}};
+    const anchors=[...(internals.anchorManager?.anchors ?? [])];
+    const names=["none","notReady","noFit","depth","occupancy","spacing","angle","facing"];
+    const rejectionReasons:Record<string,number>={};
+    for(const anchor of anchors){const name=names[anchor.rejectionReason ?? 0] ?? "other";rejectionReasons[name]=(rejectionReasons[name] ?? 0)+1;}
+    return {...driver.diagnostics(),anchors:anchors.length,readyAnchors:anchors.filter(anchor=>anchor.ready).length,rejectionReasons};
+  };
+  return { update, attribution, defaultSource: !import.meta.env.VITE_WORLD_VECTOR_SOURCE,
+    get visibleLabelCount() { return driver.visibleLabels.size; }, get diagnostics() { return diagnostics(); }, dispose: () => {
     if (disposed) return;
     disposed = true;
     stopObservingSettling();

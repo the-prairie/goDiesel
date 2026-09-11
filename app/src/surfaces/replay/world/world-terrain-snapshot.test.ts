@@ -46,6 +46,21 @@ describe("finite terrain view residency",()=>{
     snapshot.dispose();snapshot.dispose();
     expect(geometry).not.toHaveBeenCalled();expect(texture).not.toHaveBeenCalled();expect(material).not.toHaveBeenCalled();f.dispose();
   });
+  it("charges shared terrain once across overlapping prepared views",()=>{
+    const f=fixture(),first=WorldTerrainSnapshot.capture(f.renderer,f.camera,1000)!;
+    const resident=WorldTerrainSnapshot.residency(f.renderer,[first]);
+    expect(resident.bytes).toBe(1000);
+    const second=WorldTerrainSnapshot.capture(f.renderer,f.camera,0,resident.tiles)!;
+    expect(second).not.toBeNull();expect(second.bytes).toBe(1000);
+    expect(WorldTerrainSnapshot.residency(f.renderer,[first,second]).bytes).toBe(1000);
+    first.dispose();expect(WorldTerrainSnapshot.residency(f.renderer,[second]).bytes).toBe(1000);
+    second.dispose();expect(WorldTerrainSnapshot.residency(f.renderer,[first,second]).bytes).toBe(0);f.dispose();
+  });
+  it("rejects non-finite and negative budgets instead of admitting unlimited terrain",()=>{
+    const f=fixture();
+    for(const budget of [NaN,Infinity,-1])expect(WorldTerrainSnapshot.capture(f.renderer,f.camera,budget)).toBeNull();
+    f.dispose();
+  });
   it("defers cloned-material disposal until in-flight compilation settles",()=>{
     const f=fixture(),snapshot=WorldTerrainSnapshot.capture(f.renderer,f.camera,2000)!;
     const material=vi.spyOn(snapshot.meshes[0].material as MeshBasicMaterial,"dispose");

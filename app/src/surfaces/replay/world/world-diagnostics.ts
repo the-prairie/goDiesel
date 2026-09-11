@@ -4,6 +4,7 @@ import type { GoogleRouteNavigatorState } from "@/surfaces/replay/playback/route
 import type { WorldEnvironment, WorldLayers } from "./world-model";
 import type { WorldViewCoverage, WorldViewState } from "./world-view-health";
 import type { TerrainFocusSample } from "./world-terrain-diagnostics";
+import type { WorldLabelDiagnostics } from "./world-labels";
 import { WorldFrameHistory, WORLD_HISTORY_MS } from "./world-frame-history";
 export { WorldFrameHistory } from "./world-frame-history";
 
@@ -51,6 +52,7 @@ export interface WorldReportState {
     streaming?: { pendingLimit: number; backpressured: boolean; discardedStaleParses: number; lookAhead: string; lookAheadProgressM: number | null; cameraSupport?: { active: boolean; radiusM: number; errorTargetM: number }; indexedSurfaceModels?: number };
   };
   visibleRoadLabels: number;
+  labelActivity?: WorldLabelDiagnostics;
   contextLost: boolean;
 }
 export type WorldReportEvent = "mount" | "play" | "pause" | "seek" | "camera-mode" | "free-camera" | "recenter" | "zoom" | "speed" | "grounding" | "settings-open" | "settings-close" | "quality" | "environment" | "layers" | "hidden" | "visible" | "context-lost" | "failure" | "buffer-start" | "buffer-end" | "view-prepare" | "view-ready" | "view-blocked" | "view-commit";

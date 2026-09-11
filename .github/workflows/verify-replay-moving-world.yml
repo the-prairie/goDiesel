@@ -1,0 +1,88 @@
+name: Verify moving Replay world
+on:
+  push:
+    branches: [codex/pr130-moving-world-20260911]
+permissions:
+  contents: read
+concurrency:
+  group: replay-moving-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Archive exact clean source for reproducible local review
+        run: |
+          mkdir -p /tmp/replay-source
+          git rev-parse HEAD > /tmp/replay-source/commit.txt
+          git ls-files -s > /tmp/replay-source/files.txt
+          python - <<'PY'
+          import pathlib,subprocess,tarfile
+          paths=subprocess.check_output(['git','ls-files','-z']).decode().split('\0')
+          omitted={'.png','.jpg','.jpeg','.webp','.woff','.woff2','.ttf','.otf','.zip','.mp4','.webm'}
+          with tarfile.open('/tmp/replay-source/source.tar.gz','w:gz') as archive:
+              for name in paths:
+                  path=pathlib.Path(name)
+                  if name and path.is_file() and path.suffix.lower() not in omitted:
+                      archive.add(path,arcname=name,recursive=False)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moving-replay-source
+          path: /tmp/replay-source/
+          retention-days: 7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --prefix app
+      - name: Typecheck and unit tests
+        working-directory: app
+        run: |
+          mkdir -p ../proof
+          git rev-parse HEAD > ../proof/source-commit.txt
+          npm run typecheck 2>&1 | tee ../proof/typecheck.txt
+          npm run test:unit 2>&1 | tee ../proof/unit.txt
+          node --test scripts/replay-verification-receipt.test.mjs 2>&1 | tee ../proof/receipt-tests.txt
+      - name: Install Chromium
+        working-directory: app
+        run: npx playwright install --with-deps chromium
+      - name: Actual renderer regression
+        working-directory: app
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_FILE: ../proof/browser-results.json
+        run: npx playwright test e2e/cinematic-world-prepared.spec.ts e2e/cinematic-world-surface.spec.ts e2e/cinematic-world-continuity.spec.ts --project=chromium --reporter=line,json 2>&1 | tee ../proof/browser.txt
+      - name: Clean build with authorized live provider
+        working-directory: app
+        env:
+          VITE_WORLD_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_WORLD_GOOGLE_MAPS_API_KEY }}
+        run: |
+          test -n "$VITE_WORLD_GOOGLE_MAPS_API_KEY"
+          git diff --exit-code
+          npm run build 2>&1 | tee ../proof/live-build.txt
+      - name: Live provider acceptance without external deployment
+        working-directory: app
+        env:
+          GODIESEL_WORLD_PREVIEW_URL: http://localhost:8788
+          GODIESEL_WORLD_SOURCE_SHA: ${{ github.sha }}
+          PLAYWRIGHT_JSON_OUTPUT_FILE: ../proof/live-results.json
+        run: |
+          npx vite preview --host 0.0.0.0 --port 8788 >/tmp/replay-preview.log 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do curl -fsS http://localhost:8788/ >/dev/null && break || sleep 1; done
+          npm run test:e2e:cinematic-live -- --reporter=line,json 2>&1 | tee ../proof/live-provider.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: moving-replay-proof
+          path: |
+            proof/
+            app/test-results/
+          retention-days: 7
