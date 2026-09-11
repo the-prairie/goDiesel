@@ -49,6 +49,8 @@ jobs:
               subprocess.run(['git','apply',file],check=True)
               paths.update(line[6:] for line in patch.decode().splitlines() if line.startswith('+++ b/'))
 
+          # Adaptive shot acquisition: start with the requested camera itself and
+          # only add a bounded support corridor after a close shot proves stalled.
           target=pathlib.Path('app/src/surfaces/replay/world/world-prepared-view.ts')
           text=target.read_text()
           def replace_once(old,new):
@@ -63,16 +65,38 @@ jobs:
               '      this.regions.addRegion(target);this.regions.addRegion(support);if(focus)this.regions.addRegion(focus);\n      return {pose:p,camera,target,support,focus};',
               '      this.regions.addRegion(target);this.regions.addRegion(support);\n      return {pose:p,camera,target,support,focus,focusActive:false};')
           replace_once(
-              '        if(c.focus) {\n          // Temporary shot acquisition covers the route foreground at the same',
-              '        if(c.focus && c.focusActive) {\n          // Temporary shot acquisition covers the route foreground at the same')
+              '        if(c.focus) {\n          // Temporary shot acquisition covers the route foreground at the same\n          // visual error target as Balanced. It is bounded by the existing cache\n          // and disappears as soon as this destination resolves or is cancelled.\n          const radius=Math.min(480,Math.max(140,c.pose.rangeM*.8));\n          c.focus.locate(this.frame,targetPosition,radius,800);\n        }',
+              '        if(c.focus && c.focusActive) {\n          // Load the visual corridor between the requested route subject and the\n          // ground beneath the camera. A target-only disk can leave foreground\n          // holes even while spending work behind the subject.\n          const focusCenter=targetPosition.clone().lerp(support,0.5);\n          const focusRadius=Math.min(360,Math.max(160,targetPosition.distanceTo(support)*0.65));\n          c.focus.locate(this.frame,focusCenter,focusRadius,800);\n        }')
           replace_once(
               '      focusRegions:c.focus && this.regions.hasRegion(c.focus)?[c.focus]:[],',
               '      focusRegions:c.focus && c.focusActive && this.regions.hasRegion(c.focus)?[c.focus]:[],')
           replace_once(
               '      if(!view.centerHit||coverage<.93){reason="coverage";break;}',
               '      if(!view.centerHit||coverage<.93){\n        if(!a.warming && c.focus && !c.focusActive && c.pose.rangeM<=800 && now-a.startedAt>=4000 && coverage<=.1) {\n          c.focusActive=true;this.regions.addRegion(c.focus);this.nextCheck=0;\n        }\n        reason="coverage";break;\n      }')
-          target.write_text(text)
-          paths.add(str(target))
+          target.write_text(text);paths.add(str(target))
+
+          # Low-angle road names are valuable in Chase. The pinned annotations
+          # plugin's default horizon cutoff can reject every line in a dense,
+          # nearly tangent city view. Depth, fit, curvature and occupancy checks
+          # still apply; only the additional near-horizon cutoff is disabled.
+          labels=pathlib.Path('app/src/surfaces/replay/world/world-labels.ts')
+          lt=labels.read_text()
+          old='  const plugin = new MVTAnnotationsPlugin({ overlay, camera, driver, resolution: 128 });'
+          new='  const plugin = new MVTAnnotationsPlugin({ overlay, camera, driver, resolution: 128, horizonCutoff: 0 });'
+          assert lt.count(old)==1
+          lt=lt.replace(old,new,1)
+          # Add internal-but-non-sensitive rejection telemetry so a zero-label
+          # result tells us whether anchors are unsettled or rejected by layout.
+          old='  visibleLabels: number;\n  budgetMs: number;\n}'
+          new='  visibleLabels: number;\n  budgetMs: number;\n  anchors?: number;\n  readyAnchors?: number;\n  rejectionReasons?: Record<string, number>;\n}'
+          assert lt.count(old)==1
+          lt=lt.replace(old,new,1)
+          old='  let disposed = false;\n  return { update, attribution, defaultSource: !import.meta.env.VITE_WORLD_VECTOR_SOURCE,\n    get visibleLabelCount() { return driver.visibleLabels.size; }, get diagnostics() { return driver.diagnostics(); }, dispose: () => {'
+          new='  let disposed = false;\n  const diagnostics = () => {\n    const internals=plugin as unknown as {anchorManager?:{anchors?:Set<{ready?:boolean;rejectionReason?:number}>}};\n    const anchors=[...(internals.anchorManager?.anchors ?? [])];\n    const names=["none","notReady","noFit","depth","occupancy","spacing","angle","facing"];\n    const rejectionReasons:Record<string,number>={};\n    for(const anchor of anchors){const name=names[anchor.rejectionReason ?? 0] ?? "other";rejectionReasons[name]=(rejectionReasons[name] ?? 0)+1;}\n    return {...driver.diagnostics(),anchors:anchors.length,readyAnchors:anchors.filter(anchor=>anchor.ready).length,rejectionReasons};\n  };\n  return { update, attribution, defaultSource: !import.meta.env.VITE_WORLD_VECTOR_SOURCE,\n    get visibleLabelCount() { return driver.visibleLabels.size; }, get diagnostics() { return diagnostics(); }, dispose: () => {'
+          assert lt.count(old)==1
+          lt=lt.replace(old,new,1)
+          labels.write_text(lt);paths.add(str(labels))
+
           pathlib.Path('proof/paths.json').write_text(json.dumps(sorted(paths)))
           PY
       - run: npm ci --prefix app
