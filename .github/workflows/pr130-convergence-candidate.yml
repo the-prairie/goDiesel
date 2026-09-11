@@ -48,6 +48,17 @@ jobs:
               subprocess.run(['git','apply','--check',file],check=True)
               subprocess.run(['git','apply',file],check=True)
               paths.update(line[6:] for line in patch.decode().splitlines() if line.startswith('+++ b/'))
+          # Adaptive shot acquisition is stored as an ordinary text blob. The git
+          # blob SHA is itself content-addressed, so applying this exact object is
+          # sufficient to bind the candidate without another mutable file lookup.
+          sha='56590d17e0b90b1341290fbbd501139d103997a5'
+          request=urllib.request.Request('https://api.github.com/repos/the-prairie/goDiesel/git/blobs/'+sha,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
+          patch=base64.b64decode(json.load(urllib.request.urlopen(request))['content'])
+          file='proof/candidate-adaptive-shot.patch'
+          pathlib.Path(file).write_bytes(patch)
+          subprocess.run(['git','apply','--check',file],check=True)
+          subprocess.run(['git','apply',file],check=True)
+          paths.update(line[6:] for line in patch.decode().splitlines() if line.startswith('+++ b/'))
           pathlib.Path('proof/paths.json').write_text(json.dumps(sorted(paths)))
           PY
       - run: npm ci --prefix app
