@@ -54,7 +54,7 @@ jobs:
           def replace_once(old,new):
               global text
               count=text.count(old)
-              assert count==1,(count,old[:100])
+              assert count==1,(count,old[:120])
               text=text.replace(old,new,1)
           replace_once(
               '  focus?: WorldSupportRegion;\n  solution?: WorldCameraSolution;',
@@ -69,14 +69,21 @@ jobs:
               '      focusRegions:c.focus && this.regions.hasRegion(c.focus)?[c.focus]:[],',
               '      focusRegions:c.focus && c.focusActive && this.regions.hasRegion(c.focus)?[c.focus]:[],')
           replace_once(
-              '    if(now>=active.deadline && !active.ready) {\n      this.reportValue.blocked+=active.warming?0:1;this.reportValue.preparationMs=now-active.startedAt;\n      active.resolve({ready:false,requestId:active.options.requestId,reason:"timeout",transition:"cut",preparationMs:now-active.startedAt});\n      this.release(active.warming?"idle":"blocked",!active.warming);return;\n    }\n',
-              '')
-          replace_once(
               '      if(!view.centerHit||coverage<.93){reason="coverage";break;}',
               '      if(!view.centerHit||coverage<.93){\n        if(!a.warming && c.focus && !c.focusActive && c.pose.rangeM<=800 && now-a.startedAt>=4000 && coverage<=.1) {\n          c.focusActive=true;this.regions.addRegion(c.focus);this.nextCheck=0;\n        }\n        reason="coverage";break;\n      }')
-          replace_once(
-              '      if(a.warming)a.releaseAt=now+1000;\n    }\n  }',
-              '      if(a.warming)a.releaseAt=now+1000;\n    } else if(now>=a.deadline) {\n      // Deadline arbitration happens after traversal so a fully drawable view\n      // gets its final stability sample before timeout can reject it.\n      this.reportValue.blocked+=a.warming?0:1;this.reportValue.preparationMs=now-a.startedAt;\n      a.resolve({ready:false,requestId:a.options.requestId,reason:"timeout",transition:"cut",preparationMs:now-a.startedAt});\n      this.release(a.warming?"idle":"blocked",!a.warming);\n    }\n  }')
+
+          pre='    if(now>=active.deadline && !active.ready) {'
+          post='    } else if(now>=a.deadline) {'
+          assert text.count(pre)+text.count(post)==1,(text.count(pre),text.count(post))
+          if pre in text:
+              start=text.index(pre)
+              end=text.index('    if(now>=this.nextCheck',start)
+              text=text[:start]+text[end:]
+              marker='      if(a.warming)a.releaseAt=now+1000;\n    }\n  }\n  commit(requestId: number) {'
+              replacement='      if(a.warming)a.releaseAt=now+1000;\n    } else if(now>=a.deadline) {\n      this.reportValue.blocked+=a.warming?0:1;this.reportValue.preparationMs=now-a.startedAt;\n      a.resolve({ready:false,requestId:a.options.requestId,reason:"timeout",transition:"cut",preparationMs:now-a.startedAt});\n      this.release(a.warming?"idle":"blocked",!a.warming);\n    }\n  }\n  commit(requestId: number) {'
+              assert text.count(marker)==1
+              text=text.replace(marker,replacement,1)
+          assert text.count(post)==1
           target.write_text(text)
           paths.add(str(target))
           pathlib.Path('proof/paths.json').write_text(json.dumps(sorted(paths)))
