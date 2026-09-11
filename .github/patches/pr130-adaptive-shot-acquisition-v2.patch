@@ -1,0 +1,63 @@
+diff --git a/app/src/surfaces/replay/world/world-prepared-view.ts b/app/src/surfaces/replay/world/world-prepared-view.ts
+--- a/app/src/surfaces/replay/world/world-prepared-view.ts
++++ b/app/src/surfaces/replay/world/world-prepared-view.ts
+@@ -47,6 +47,7 @@ interface Candidate {
+   target: WorldSupportRegion;
+   support: WorldSupportRegion;
+   focus?: WorldSupportRegion;
++  focusActive?: boolean;
+   solution?: WorldCameraSolution;
+   snapshot?: WorldTerrainSnapshot;
+   critical?: Mesh[];
+@@ -142,4 +143,4 @@ export class WorldPreparedViews {
+       const focus=!warming && index===path.length-1 ? new WorldSupportRegion(10) : undefined;
+-      this.regions.addRegion(target);this.regions.addRegion(support);if(focus)this.regions.addRegion(focus);
+-      return {pose:p,camera,target,support,focus};
++      this.regions.addRegion(target);this.regions.addRegion(support);
++      return {pose:p,camera,target,support,focus,focusActive:false};
+     });
+@@ -174,7 +175,7 @@ export class WorldPreparedViews {
+         const up=this.frame.normal(c.pose.center.lat,c.pose.center.lng);
+         const support=c.camera.position.clone().addScaledVector(up,(c.pose.center.altitude ?? 0)+c.solution.targetCorrectionM-this.frame.height(c.camera.position));
+         c.support.locate(this.frame,support,16);
+-        if(c.focus) {
++        if(c.focus && c.focusActive) {
+           // Temporary shot acquisition covers the route foreground at the same
+           // visual error target as Balanced. It is bounded by the existing cache
+           // and disappears as soon as this destination resolves or is cancelled.
+@@ -188,5 +189,5 @@ export class WorldPreparedViews {
+     this.priority.update(active.warming ? [] : active.candidates.map(c=>({
+       camera:c.camera,
+       criticalRegions:[c.target,c.support].filter(r=>this.regions.hasRegion(r)),
+-      focusRegions:c.focus && this.regions.hasRegion(c.focus)?[c.focus]:[],
++      focusRegions:c.focus && c.focusActive && this.regions.hasRegion(c.focus)?[c.focus]:[],
+     })), this.tiles.group.matrixWorld);
+@@ -203,7 +204,2 @@ export class WorldPreparedViews {
+     if(active.releaseAt!==null) return; // Release only after the actual displayed selection can take over.
+-    if(now>=active.deadline && !active.ready) {
+-      this.reportValue.blocked+=active.warming?0:1;this.reportValue.preparationMs=now-active.startedAt;
+-      active.resolve({ready:false,requestId:active.options.requestId,reason:"timeout",transition:"cut",preparationMs:now-active.startedAt});
+-      this.release(active.warming?"idle":"blocked",!active.warming);return;
+-    }
+     if(now>=this.nextCheck && !active.ready) this.updateCameras();
+@@ -293,4 +289,9 @@ export class WorldPreparedViews {
+       const view=c.snapshot ? sampleWorldMeshes(c.snapshot.meshes,c.camera,now) : sampleWorldView(this.tiles,c.camera,now);
+       coverage=index===0 ? (view.tested?view.hits/view.tested:0) : Math.min(coverage,view.tested?view.hits/view.tested:0);
+-      if(!view.centerHit||coverage<.93){reason="coverage";break;}
++      if(!view.centerHit||coverage<.93){
++        if(!a.warming && c.focus && !c.focusActive && c.pose.rangeM<=800 && now-a.startedAt>=4000 && coverage<=.1) {
++          c.focusActive=true;this.regions.addRegion(c.focus);this.nextCheck=0;
++        }
++        reason="coverage";break;
++      }
+       if(!c.snapshot) {
+@@ -329,3 +330,10 @@ export class WorldPreparedViews {
+       if(a.warming)a.releaseAt=now+1000;
++    } else if(now>=a.deadline) {
++      // Deadline arbitration happens after traversal so a fully drawable view
++      // gets its final stability sample before timeout can reject it.
++      this.reportValue.blocked+=a.warming?0:1;this.reportValue.preparationMs=now-a.startedAt;
++      a.resolve({ready:false,requestId:a.options.requestId,reason:"timeout",transition:"cut",preparationMs:now-a.startedAt});
++      this.release(a.warming?"idle":"blocked",!a.warming);
+     }
+   }
