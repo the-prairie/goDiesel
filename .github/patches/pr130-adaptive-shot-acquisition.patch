@@ -1,0 +1,77 @@
+diff --git a/app/src/surfaces/replay/world/world-prepared-view.ts b/app/src/surfaces/replay/world/world-prepared-view.ts
+index a2b0909..c4be9dd 100644
+--- a/app/src/surfaces/replay/world/world-prepared-view.ts
++++ b/app/src/surfaces/replay/world/world-prepared-view.ts
+@@ -47,6 +47,7 @@ interface Candidate {
+   target: WorldSupportRegion;
+   support: WorldSupportRegion;
+   focus?: WorldSupportRegion;
++  focusActive?: boolean;
+   solution?: WorldCameraSolution;
+   snapshot?: WorldTerrainSnapshot;
+   critical?: Mesh[];
+@@ -140,8 +141,8 @@ export class WorldPreparedViews {
+       // Only the final requested shot gets a visual-footprint region. Intermediate
+       // cameras remain validation waypoints rather than extra streaming horizons.
+       const focus=!warming && index===path.length-1 ? new WorldSupportRegion(10) : undefined;
+-      this.regions.addRegion(target);this.regions.addRegion(support);if(focus)this.regions.addRegion(focus);
+-      return {pose:p,camera,target,support,focus};
++      this.regions.addRegion(target);this.regions.addRegion(support);
++      return {pose:p,camera,target,support,focus,focusActive:false};
+     });
+@@ -172,7 +173,7 @@ export class WorldPreparedViews {
+         const up=this.frame.normal(c.pose.center.lat,c.pose.center.lng);
+         const support=c.camera.position.clone().addScaledVector(up,(c.pose.center.altitude ?? 0)+c.solution.targetCorrectionM-this.frame.height(c.camera.position));
+         c.support.locate(this.frame,support,16);
+-        if(c.focus) {
++        if(c.focus && c.focusActive) {
+           // Temporary shot acquisition covers the route foreground at the same
+           // visual error target as Balanced. It is bounded by the existing cache
+           // and disappears as soon as this destination resolves or is cancelled.
+@@ -186,7 +187,7 @@ export class WorldPreparedViews {
+     this.priority.update(active.warming ? [] : active.candidates.map(c=>({
+       camera:c.camera,
+       criticalRegions:[c.target,c.support].filter(r=>this.regions.hasRegion(r)),
+-      focusRegions:c.focus && this.regions.hasRegion(c.focus)?[c.focus]:[],
++      focusRegions:c.focus && c.focusActive && this.regions.hasRegion(c.focus)?[c.focus]:[],
+     })), this.tiles.group.matrixWorld);
+   }
+@@ -202,11 +203,6 @@ export class WorldPreparedViews {
+     }
+     if(active.releaseAt!==null) return; // Release only after the actual displayed selection can take over.
+-    if(now>=active.deadline && !active.ready) {
+-      this.reportValue.blocked+=active.warming?0:1;this.reportValue.preparationMs=now-active.startedAt;
+-      active.resolve({ready:false,requestId:active.options.requestId,reason:"timeout",transition:"cut",preparationMs:now-active.startedAt});
+-      this.release(active.warming?"idle":"blocked",!active.warming);return;
+-    }
+     if(now>=this.nextCheck && !active.ready) this.updateCameras();
+@@ -293,7 +289,17 @@ export class WorldPreparedViews {
+       const view=c.snapshot ? sampleWorldMeshes(c.snapshot.meshes,c.camera,now) : sampleWorldView(this.tiles,c.camera,now);
+       coverage=index===0 ? (view.tested?view.hits/view.tested:0) : Math.min(coverage,view.tested?view.hits/view.tested:0);
+-      if(!view.centerHit||coverage<.93){reason="coverage";break;}
++      if(!view.centerHit||coverage<.93){
++        // Start with the actual requested camera. A broad load region can steal
++        // scarce parse slots from useful on-screen terrain, so only escalate when
++        // a close destination is genuinely stalled at almost no coverage. This
++        // preserves fast rural Runner acquisition while still rescuing dense urban
++        // shots such as Tokyo where the camera traversal alone made no progress.
++        if(!a.warming && c.focus && !c.focusActive && c.pose.rangeM<=800 &&
++          now-a.startedAt>=4000 && coverage<=.1) {
++          c.focusActive=true;this.regions.addRegion(c.focus);this.nextCheck=0;
++        }
++        reason="coverage";break;
++      }
+@@ -326,10 +332,16 @@ export class WorldPreparedViews {
+     if(a.stableSamples>=3) {
+       a.ready=true;this.reportValue.phase=a.warming?"warming":"ready";this.reportValue.preparationMs=now-a.startedAt;
+       a.resolve({ready:true,requestId:a.options.requestId,transition:a.candidates.length>1?"flight":"cut",preparationMs:now-a.startedAt});
+       if(a.warming)a.releaseAt=now+1000;
++    } else if(now>=a.deadline) {
++      // The readiness probe observes the post-traversal scene, so it gets the
++      // final say at the deadline. Timing out in update() used to pre-empt the
++      // third stable sample even when the destination had become fully drawable.
++      this.reportValue.blocked+=a.warming?0:1;this.reportValue.preparationMs=now-a.startedAt;
++      a.resolve({ready:false,requestId:a.options.requestId,reason:"timeout",transition:"cut",preparationMs:now-a.startedAt});
++      this.release(a.warming?"idle":"blocked",!a.warming);
+     }
+   }
