@@ -71,19 +71,6 @@ jobs:
           replace_once(
               '      if(!view.centerHit||coverage<.93){reason="coverage";break;}',
               '      if(!view.centerHit||coverage<.93){\n        if(!a.warming && c.focus && !c.focusActive && c.pose.rangeM<=800 && now-a.startedAt>=4000 && coverage<=.1) {\n          c.focusActive=true;this.regions.addRegion(c.focus);this.nextCheck=0;\n        }\n        reason="coverage";break;\n      }')
-
-          pre='    if(now>=active.deadline && !active.ready) {'
-          post='    } else if(now>=a.deadline) {'
-          assert text.count(pre)+text.count(post)==1,(text.count(pre),text.count(post))
-          if pre in text:
-              start=text.index(pre)
-              end=text.index('    if(now>=this.nextCheck',start)
-              text=text[:start]+text[end:]
-              marker='      if(a.warming)a.releaseAt=now+1000;\n    }\n  }\n  commit(requestId: number) {'
-              replacement='      if(a.warming)a.releaseAt=now+1000;\n    } else if(now>=a.deadline) {\n      this.reportValue.blocked+=a.warming?0:1;this.reportValue.preparationMs=now-a.startedAt;\n      a.resolve({ready:false,requestId:a.options.requestId,reason:"timeout",transition:"cut",preparationMs:now-a.startedAt});\n      this.release(a.warming?"idle":"blocked",!a.warming);\n    }\n  }\n  commit(requestId: number) {'
-              assert text.count(marker)==1
-              text=text.replace(marker,replacement,1)
-          assert text.count(post)==1
           target.write_text(text)
           paths.add(str(target))
           pathlib.Path('proof/paths.json').write_text(json.dumps(sorted(paths)))
