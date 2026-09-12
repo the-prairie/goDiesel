@@ -1,0 +1,30 @@
+name: Materialize reviewed Replay continuity source
+on:
+  push:
+    branches: [codex/pr130-refinement-inspection]
+    paths: [.github/workflows/pr130-materialize-continuity.yml]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Recover transport for exact-byte verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p transport
+          python - <<'PY'
+          import os, json, base64, pathlib, urllib.request
+          url='https://api.github.com/repos/the-prairie/goDiesel/git/blobs/da0419eca8bad29a34341a6643b2a485bb1d7ae2'
+          request=urllib.request.Request(url,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
+          payload=json.load(urllib.request.urlopen(request))
+          raw=base64.b64decode(payload['content'])
+          pathlib.Path('transport/continuity.gz').write_bytes(raw)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: replay-continuity-transport
+          path: transport/
+          retention-days: 1
