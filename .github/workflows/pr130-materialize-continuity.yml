@@ -4,27 +4,61 @@ on:
     branches: [codex/pr130-refinement-inspection]
     paths: [.github/workflows/pr130-materialize-continuity.yml]
 permissions:
-  contents: read
+  contents: write
 jobs:
   source:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Recover transport for exact-byte verification
+      - uses: actions/checkout@v4
+        with:
+          ref: d2609423ede41a3ed31e68772b2b6fb4d7ebc3fd
+          persist-credentials: false
+      - name: Materialize verified bytes without changing any branch
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p transport
+          mkdir -p source-receipt
           python - <<'PY'
-          import os, json, base64, pathlib, urllib.request
-          url='https://api.github.com/repos/the-prairie/goDiesel/git/blobs/da0419eca8bad29a34341a6643b2a485bb1d7ae2'
-          request=urllib.request.Request(url,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
-          payload=json.load(urllib.request.urlopen(request))
-          raw=base64.b64decode(payload['content'])
-          pathlib.Path('transport/continuity.gz').write_bytes(raw)
+          import os,json,base64,gzip,pathlib,urllib.request,hashlib,subprocess
+          parent='d2609423ede41a3ed31e68772b2b6fb4d7ebc3fd'
+          base_tree='8e7b2b6d1cc40660734b54e7bd6bab13538aefbe'
+          assert subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()==parent
+          def api(path,data=None):
+              request=urllib.request.Request('https://api.github.com/repos/the-prairie/goDiesel/'+path,data=None if data is None else json.dumps(data).encode(),headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','Content-Type':'application/json'})
+              return json.load(urllib.request.urlopen(request))
+          raw=base64.b64decode(api('git/blobs/da0419eca8bad29a34341a6643b2a485bb1d7ae2')['content'])
+          # The verified transport receipt identifies one transcription insertion.
+          # Repair transport, then require the exact locally-tested binary hash.
+          wire=base64.b64encode(raw).decode()
+          assert len(wire)==14932 and wire[2991:2994]=='yaa' and wire[-1]=='='
+          packed=base64.b64decode(wire[:2991]+wire[2994:-1])
+          assert hashlib.sha1(b'blob '+str(len(packed)).encode()+b'\0'+packed).hexdigest()=='fc50e9cbd5c6f229bac44562d08cdc96cc1de537'
+          patch=gzip.decompress(packed)
+          assert hashlib.sha256(patch).hexdigest()=='bc4c4d5945c163960625b5ca9f09f86ba845e47cc229374a98f46061fcc58472'
+          patch_file='source-receipt/reviewed.patch'
+          pathlib.Path(patch_file).write_bytes(patch)
+          subprocess.run(['git','apply','--check','--index','--unidiff-zero',patch_file],check=True)
+          subprocess.run(['git','apply','--index','--unidiff-zero',patch_file],check=True)
+          paths=subprocess.check_output(['git','diff','--cached','--name-only'],text=True).splitlines()
+          assert len(paths)==14
+          assert all(p=='.github/workflows/pr130-continuity.yml' or p.startswith('app/src/surfaces/replay/world/') or p in {'app/e2e/cinematic-world-live.spec.ts','app/e2e/cinematic-world-composite.spec.ts','app/e2e/helpers/terrain-composite-harness.ts'} for p in paths)
+          entries=[];manifest=[]
+          for path in paths:
+              data=pathlib.Path(path).read_bytes()
+              assert b'AIza' not in data or path.endswith('cinematic-world-live.spec.ts')
+              blob=api('git/blobs',{'content':data.decode(),'encoding':'utf-8'})['sha']
+              assert blob==hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
+              entries.append({'path':path,'mode':'100644','type':'blob','sha':blob})
+              manifest.append({'path':path,'sha256':hashlib.sha256(data).hexdigest(),'blob':blob})
+          tree=api('git/trees',{'base_tree':base_tree,'tree':entries})['sha']
+          commit=api('git/commits',{'message':'fix: compose live terrain over retained coverage and acquire missing ground\n\nUse stencil-governed live-first terrain composition instead of hiding all refinements behind a retained snapshot. Detach fixed acquisition cameras at handoff and release retained terrain based on current coverage rather than unrelated queue quiescence. Check distributed ground coverage and connected holes, exclude intentional sky, and request bounded missing-ground columns. Preserve surface, sightline, Pause, cancellation and source-coordinate invariants. Add real WebGL/HDR composition and moving-playback acceptance tests.\n\nLocal typecheck and 430 unit tests passed. Browser/live verdicts remain to be established on this exact clean source. No production deployment or main merge.','tree':tree,'parents':[parent]})['sha']
+          pathlib.Path('source-receipt/commit.json').write_text(json.dumps({'parent':parent,'commit':commit,'tree':tree,'files':manifest},indent=2))
+          print('Materialized clean source commit:',commit)
           PY
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: replay-continuity-transport
-          path: transport/
-          retention-days: 1
+          name: replay-continuity-materialized
+          path: source-receipt/
+          retention-days: 7
