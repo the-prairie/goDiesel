@@ -54,3 +54,11 @@ export function nextSlowFrameDebt(debtMs: number, elapsedMs: number, visible: bo
   if (!visible || !Number.isFinite(elapsedMs) || elapsedMs <= 0) return 0;
   return elapsedMs > 50 ? Math.min(5000, debtMs + Math.min(elapsedMs, 1000)) : Math.max(0, debtMs - elapsedMs * 2);
 }
+
+/** View detail can be sufficient for effects without being collision-grade ground. */
+export function canStartAtmosphereForView(focus: { reason: string; estimatedScreenErrorPx: number | null; selectionTargetPx: number | null }, loadProgress: number) {
+  const error=focus.estimatedScreenErrorPx,target=focus.selectionTargetPx;
+  return (focus.reason === "available" && error !== null && target !== null &&
+    Number.isFinite(error) && Number.isFinite(target) && error>=0 && target>0 && error<=target) ||
+    (Number.isFinite(loadProgress) && loadProgress>=.9);
+}

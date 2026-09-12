@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { TilesRenderer } from "3d-tiles-renderer/three";
-import { canStartWorldAtmosphere, configureWorldStreaming, nextSlowFrameDebt, worldFarPlane } from "./world-streaming";
+import { canStartWorldAtmosphere, canStartAtmosphereForView, configureWorldStreaming, nextSlowFrameDebt, worldFarPlane } from "./world-streaming";
 
 describe("local terrain streaming", () => {
   it("isolates queues and memory without changing another renderer's shared defaults", () => {
@@ -30,6 +30,14 @@ describe("local terrain streaming", () => {
     expect(canStartWorldAtmosphere(8, 200, 0.3)).toBe(true);
     expect(canStartWorldAtmosphere(48, 3000, 0.3)).toBe(true);
     expect(canStartWorldAtmosphere(null, 200, 1)).toBe(true);
+  });
+  it("starts effects from camera-local projected detail, not collision-grade height",()=>{
+    // Live Crete overview: 64.2038 m geometry is about 5.49 px at 10.8 km.
+    // The physical ground query correctly rejects that error; effects need not.
+    expect(canStartAtmosphereForView({reason:"available",estimatedScreenErrorPx:5.49,selectionTargetPx:10},.7)).toBe(true);
+    expect(canStartAtmosphereForView({reason:"available",estimatedScreenErrorPx:200,selectionTargetPx:10},.7)).toBe(false);
+    expect(canStartAtmosphereForView({reason:"no-center-ray-hit",estimatedScreenErrorPx:1,selectionTargetPx:10},.7)).toBe(false);
+    expect(canStartAtmosphereForView({reason:"available",estimatedScreenErrorPx:NaN,selectionTargetPx:10},.7)).toBe(false);
   });
   it("responds to the worst visible stalls, not just moderately slow frames", () => {
     let debt = 0;

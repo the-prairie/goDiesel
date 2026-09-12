@@ -14,7 +14,9 @@ export class WorldTerrainSnapshot {
   bytes = 0;
   valid = true;
 
-  static capture(renderer: TilesRenderer, camera: PerspectiveCamera, maximumBytes: number) {
+  static capture(renderer: TilesRenderer, camera: PerspectiveCamera, maximumBytes: number, residentTiles: ReadonlySet<Tile> = new Set()) {
+    if (!Number.isFinite(maximumBytes) || maximumBytes < 0) return null;
+    let additionalBytes = 0;
     const result = new WorldTerrainSnapshot();
     const frustum = new Frustum().setFromProjectionMatrix(new Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
     renderer.group.updateMatrixWorld(true);
@@ -22,8 +24,9 @@ export class WorldTerrainSnapshot {
       if (!renderer.visibleTiles.has(tile) || !frustum.intersectsBox(new Box3().setFromObject(model))) return;
       const bytes = renderer.lruCache.getMemoryUsage(tile) ?? 0;
       // No partial lease masquerading as a complete one when the budget is exhausted.
-      if (!Number.isFinite(bytes) || result.bytes + bytes > maximumBytes) { result.valid = false; return; }
-      result.bytes += bytes;
+      const additional = residentTiles.has(tile) ? 0 : bytes;
+      if (!Number.isFinite(bytes) || additionalBytes + additional > maximumBytes) { result.valid = false; return; }
+      additionalBytes += additional; result.bytes += bytes;
       result.tiles.add(tile); result.sources.add(model);
       model.traverseVisible(object => {
         if (!(object instanceof Mesh)) return;
@@ -53,6 +56,15 @@ export class WorldTerrainSnapshot {
     if (!result.valid || !result.meshes.length) { result.dispose(); return null; }
     result.retain(renderer);
     return result;
+  }
+
+  /** Overlapping camera views share the same tile allocations, so charge their union once. */
+  static residency(renderer: TilesRenderer, snapshots: Iterable<WorldTerrainSnapshot | undefined>) {
+    const tiles = new Set<Tile>();
+    for (const snapshot of snapshots) if (snapshot?.valid) for (const tile of snapshot.tiles) tiles.add(tile);
+    let bytes = 0;
+    for (const tile of tiles) bytes += renderer.lruCache.getMemoryUsage(tile) ?? 0;
+    return { tiles, bytes };
   }
 
   /** Mark the finite dependencies used each traversal; this does not grow the cache ceiling. */

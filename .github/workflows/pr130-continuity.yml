@@ -1,0 +1,77 @@
+name: Verify Replay continuity source
+on:
+  push:
+    branches: [codex/pr130-continuity-source]
+permissions:
+  contents: read
+concurrency:
+  group: replay-continuity-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Preserve exact clean source before any build
+        run: |
+          mkdir -p proof source-receipt
+          git rev-parse HEAD | tee proof/commit.txt source-receipt/commit.txt
+          git archive HEAD -o source-receipt/source.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: replay-continuity-source
+          path: source-receipt/
+          retention-days: 7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --prefix app
+      - name: Typecheck and unit regressions
+        working-directory: app
+        run: |
+          npm run typecheck 2>&1 | tee ../proof/typecheck.txt
+          npm run test:unit 2>&1 | tee ../proof/unit.txt
+          node --test scripts/replay-verification-receipt.test.mjs 2>&1 | tee ../proof/receipt-tests.txt
+      - name: Install Chromium
+        working-directory: app
+        run: npx playwright install --with-deps chromium
+      - name: Real-renderer deterministic handoff regressions
+        working-directory: app
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_FILE: ../proof/browser-results.json
+        run: npx playwright test e2e/cinematic-world-prepared.spec.ts e2e/cinematic-world-surface.spec.ts --project=chromium --reporter=line,json 2>&1 | tee ../proof/browser.txt
+      - name: Build clean live-provider revision
+        working-directory: app
+        env:
+          VITE_WORLD_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_WORLD_GOOGLE_MAPS_API_KEY }}
+        run: |
+          test -n "$VITE_WORLD_GOOGLE_MAPS_API_KEY"
+          git diff --exit-code
+          git diff --cached --exit-code
+          npm run build 2>&1 | tee ../proof/live-build.txt
+      - name: Six independent live-provider journeys
+        working-directory: app
+        env:
+          GODIESEL_WORLD_PREVIEW_URL: http://localhost:8788
+          GODIESEL_WORLD_SOURCE_SHA: ${{ github.sha }}
+          PLAYWRIGHT_JSON_OUTPUT_FILE: ../proof/live-results.json
+        run: |
+          npx vite preview --host 0.0.0.0 --port 8788 > /tmp/replay-preview.log 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do curl -fsS http://localhost:8788/ > /dev/null && break || sleep 1; done
+          npm run test:e2e:cinematic-live -- --reporter=line,json 2>&1 | tee ../proof/live-provider.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: replay-continuity-evidence
+          path: |
+            proof/
+            app/test-results/
+          retention-days: 7

@@ -54,6 +54,7 @@ test("real prepared destination keeps the outgoing view, latest scrub and Pause 
     await page.waitForTimeout(600);expect((await read(page)).playback!.progressM).toBe(displayed);
     const preparing=await read(page);
     expect(preparing.preparation?.retainedDisplayModels).toBeGreaterThan(0);
+    expect(preparing.preparation?.displayTraversalPaused).toBe(true);
     expect(preparing.preparation?.pinnedBytes).toBeLessThanOrEqual(288*1024*1024);
     await expect(slider).toHaveValue("1500");await expect(page.getByTestId("replay-selected-position")).toBeVisible();
     await page.screenshot({path:info.outputPath("02-synthetic-selected-not-yet-displayed.png")});
@@ -63,7 +64,7 @@ test("real prepared destination keeps the outgoing view, latest scrub and Pause 
     gate.release();
     await expect.poll(async()=>(await read(page)).playback?.progressM,{timeout:30000}).toBe(1800);
     await expect.poll(async()=>(await read(page)).camera.displayedProgressM).toBe(1800);
-    const arrived=await read(page);expect(arrived.playback?.playing).toBe(false);expect(arrived.preparation?.completed).toBeGreaterThanOrEqual(2);
+    const arrived=await read(page);expect(arrived.preparation?.displayTraversalPaused).toBe(false);expect(arrived.playback?.playing).toBe(false);expect(arrived.preparation?.completed).toBeGreaterThanOrEqual(2);
     expect(arrived.preparation?.cancelled).toBeGreaterThanOrEqual(1);expect(arrived.camera.sightline).toBe("clear");expect(arrived.contextLost).toBe(false);
     await expect(page.getByTestId("replay-selected-position")).toHaveCount(0);
     await page.screenshot({path:info.outputPath("03-synthetic-prepared-arrival.png")});
@@ -86,7 +87,7 @@ test("a cancelled cold destination cannot move the scene when its delayed terrai
     await expect.poll(async()=>(await read(page)).preparation?.phase).toBe("preparing");
     await page.getByRole("button",{name:"Stay here",exact:true}).click();
     gate.release();await page.waitForTimeout(1500);
-    const after=await read(page);expect(after.playback!.progressM).toBe(before);expect(after.playback!.playing).toBe(false);expect(after.preparation?.candidateCameras).toBe(0);
+    const after=await read(page);expect(after.playback!.progressM).toBe(before);expect(after.playback!.playing).toBe(false);expect(after.preparation?.candidateCameras).toBe(0);expect(after.preparation?.displayTraversalPaused).toBe(false);
     await page.screenshot({path:info.outputPath("cancelled-destination-keeps-original-scene.png")});
   }finally{gate.release();}
 });

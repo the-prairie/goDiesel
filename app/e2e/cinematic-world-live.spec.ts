@@ -142,7 +142,11 @@ for (const journey of [
 
       // Exercise normal keyboard activation on the live world; no forced clicks.
       await page.getByRole("button", { name: "Chase", exact: true }).press("Enter");
-      await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-displayed-camera-mode", "chase", {timeout:30_000});
+      await expect.poll(async () => {
+        const sample = await rendererEvidence(page);
+        evidence.snapshots.push({ phase: "chase-preparation", ...sample });
+        return (sample.report as WorldDiagnostics)?.playback?.cameraMode;
+      }, {timeout:30_000, intervals:[500,750,1000]}).toBe("chase");
       // Preserve a failing label verdict, but still collect playback and lighting evidence.
       await expect.configure({ soft: true }).poll(async () => Number(await world.getAttribute("data-world-label-count")), { timeout: 45_000 }).toBeGreaterThan(0);
       await page.waitForTimeout(1500);
@@ -298,6 +302,7 @@ test("live Cinema settings remain operable without depending on a prepared Chase
     await page.getByRole("button",{name:"Cinema",exact:true}).click();
     await page.getByRole("button",{name:"Golden hour",exact:true}).click();
     await page.getByRole("slider",{name:"Cloud cover",exact:true}).fill("55");
+    await expect(page.locator("[data-world-terrain]")).toHaveAttribute("data-world-atmosphere","ready",{timeout:45_000});
     await expect.poll(async()=>((await rendererEvidence(page)).report as WorldDiagnostics)?.quality.cloudPassSubmissions).toBeGreaterThan(0);
     await page.getByRole("button",{name:"Replay settings",exact:true}).click();
     await expect(page.getByRole("button",{name:"Golden hour",exact:true})).not.toBeVisible();
