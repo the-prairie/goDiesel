@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AlwaysStencilFunc, Group, Mesh, MeshBasicMaterial, NotEqualStencilFunc, PlaneGeometry, ReplaceStencilOp } from "three";
+import { AlwaysStencilFunc, Group, KeepStencilOp, Mesh, MeshBasicMaterial, NotEqualStencilFunc, PlaneGeometry, ReplaceStencilOp } from "three";
 import { withWorldTerrainFallback } from "./world-terrain-composite";
 
 describe("resident terrain fills holes without hiding replacements", () => {
@@ -9,7 +9,8 @@ describe("resident terrain fills holes without hiding replacements", () => {
     nested.add(new Mesh(geometry,fine));live.add(nested);retained.add(new Mesh(geometry,coarse));
     const result=withWorldTerrainFallback(live,retained,()=>{
       expect(fine.stencilFunc).toBe(AlwaysStencilFunc);expect(fine.stencilZPass).toBe(ReplaceStencilOp);
-      expect(coarse.stencilFunc).toBe(NotEqualStencilFunc);expect(coarse.stencilWriteMask).toBe(0);
+      expect(coarse.stencilFunc).toBe(NotEqualStencilFunc);expect(coarse.stencilWriteMask).toBe(1);
+      expect(coarse.stencilFail).toBe(KeepStencilOp);expect(coarse.stencilZFail).toBe(KeepStencilOp);expect(coarse.stencilZPass).toBe(KeepStencilOp);
       expect(nested.renderOrder).toBeLessThan(retained.renderOrder);expect(live.visible).toBe(true);
       return 123;
     });

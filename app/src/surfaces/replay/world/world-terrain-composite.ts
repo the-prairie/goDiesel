@@ -34,7 +34,10 @@ export function withWorldTerrainFallback<T>(live: Object3D, retained: Group, dra
         const previous = Object.fromEntries(stencilKeys.map(key => [key, material[key]])) as Pick<Material, typeof stencilKeys[number]>;
         materials.set(material, previous);
         material.stencilWrite = true;
-        material.stencilWriteMask = fallback ? 0 : TERRAIN_BIT;
+        // KEEP operations make fallback draws read-only. Retain a writable bit
+        // so the next render pass can clear it: WebGL clear respects the current
+        // stencil write mask even when stencil testing is disabled.
+        material.stencilWriteMask = TERRAIN_BIT;
         material.stencilFuncMask = TERRAIN_BIT;
         material.stencilRef = TERRAIN_BIT;
         material.stencilFunc = fallback ? NotEqualStencilFunc : AlwaysStencilFunc;
