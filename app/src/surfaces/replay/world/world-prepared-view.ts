@@ -1,3 +1,6 @@
+import { planWorldGapAcquisition } from "./world-gap-acquisition";
+import { withWorldTerrainFallback } from "./world-terrain-composite";
+import { measureWorldRaster, type WorldRasterCoverage } from "./world-raster-coverage";
 import { WorldPreparationPriority } from "./world-preparation-priority";
 import { AgXToneMapping, Color, Group, Mesh, MeshBasicMaterial, PerspectiveCamera, Texture, Vector4, WebGLRenderTarget, type Object3D, type Scene, type WebGLRenderer } from "three";
 import type { TilesRenderer } from "3d-tiles-renderer/three";
@@ -43,6 +46,9 @@ export interface PreparedViewReport {
   handoffShielded: boolean;
   handoffStableSamples: number;
   handoffPendingWork: number;
+  displayRaster: (WorldRasterCoverage & { sampledAtMs: number }) | null;
+  candidateRaster: WorldRasterCoverage | null;
+  gapRegions: number;
   candidates: Array<{targetErrorM: number | null; clearanceM: number | null; frozen: boolean; rangeM?: number; heightM?: number; liftM?: number; targetAvailableErrorM?: number | null; cameraAvailableErrorM?: number | null}>;
 }
 interface Candidate {
@@ -52,6 +58,7 @@ interface Candidate {
   support: WorldSupportRegion;
   focus?: WorldSupportRegion;
   focusActive?: boolean;
+  gapRegions?: WorldSupportRegion[];
   solution?: WorldCameraSolution;
   snapshot?: WorldTerrainSnapshot;
   critical?: Mesh[];
@@ -72,7 +79,6 @@ interface Preparation {
 const PREPARATION_DEADLINE_MS = 27_000;
 const PREPARATION_PROOF_GRACE_MS = 900;
 const HANDOFF_MIN_RESIDENCY_MS = 1_200;
-const HANDOFF_PENDING_LIMIT = 6;
 const HANDOFF_STABLE_SAMPLES = 6;
 const copyPose = (pose: GoogleRouteCameraPose) => ({ ...pose, center: { ...pose.center } });
 /** Short local camera moves get intermediate checks; distant seeks never fly through unverified land. */
@@ -110,9 +116,10 @@ export class WorldPreparedViews {
   private readonly pinnedLimit = 288 * 1024 * 1024;
   private closed = false;
   private nextCheck = 0;
-  private readonly target = new WebGLRenderTarget(160,90);
+  private nextRaster = 0;
+  private readonly target = new WebGLRenderTarget(160,90,{stencilBuffer:true});
   private readonly pixels = new Uint8Array(160*90*4);
-  private reportValue: PreparedViewReport = {phase:"idle",requestId:null,selectedProgressM:null,preparationMs:0,reason:null,candidateCameras:0,coverage:0,rasterCoverage:0,broadRasterCoverage:0,stableSamples:0,compiledModels:0,completed:0,cancelled:0,blocked:0,recentPreparationsMs:[],manifestModels:0,remainingModels:0,retainedDisplayModels:0,pinnedBytes:0,geometryCoverage:0,displayTraversalPaused:false,cohortRestarts:0,materialFailures:0,warmInFlight:0,criticalModels:0,criticalRemainingModels:0,handoffShielded:false,handoffStableSamples:0,handoffPendingWork:0,candidates:[]};
+  private reportValue: PreparedViewReport = {phase:"idle",requestId:null,selectedProgressM:null,preparationMs:0,reason:null,candidateCameras:0,coverage:0,rasterCoverage:0,broadRasterCoverage:0,stableSamples:0,compiledModels:0,completed:0,cancelled:0,blocked:0,recentPreparationsMs:[],manifestModels:0,remainingModels:0,retainedDisplayModels:0,pinnedBytes:0,geometryCoverage:0,displayTraversalPaused:false,cohortRestarts:0,materialFailures:0,warmInFlight:0,criticalModels:0,criticalRemainingModels:0,handoffShielded:false,handoffStableSamples:0,handoffPendingWork:0,displayRaster:null,candidateRaster:null,gapRegions:0,candidates:[]};
   constructor(private readonly tiles: TilesRenderer, private readonly frame: WorldFrame, private readonly surfaces: WorldSurfaceIndex,
     private readonly renderer: WebGLRenderer, private readonly scene: Scene, private readonly route: QuestRoute, private readonly displayCamera: PerspectiveCamera) {
     this.priority = new WorldPreparationPriority(tiles);
@@ -135,9 +142,10 @@ export class WorldPreparedViews {
       pinnedBytes:this.residency().bytes,
       displayTraversalPaused:this.displayTraversalPaused,
       warmInFlight:this.inFlight,
+      gapRegions:this.active?.candidates.reduce((n,c)=>n+(c.gapRegions?.length ?? 0),0) ?? 0,
       criticalModels:this.active?.candidates.reduce((n,c)=>n+(c.critical?.length ?? 0),0) ?? 0,
       criticalRemainingModels:this.active?.candidates.reduce((n,c)=>n+(c.critical?.filter(m=>!this.compiled.has(m)).length ?? 0),0) ?? 0,
-      handoffShielded:Boolean(this.active?.releaseAt!==null && this.display?.valid),
+      handoffShielded:Boolean(this.active && this.active.releaseAt!==null && this.display?.valid),
       handoffStableSamples:this.releaseSamples,
       handoffPendingWork:(this.tiles as TilesRenderer & {stats?:{downloading:number;parsing:number}}).stats ? ((this.tiles as TilesRenderer & {stats:{downloading:number;parsing:number}}).stats.downloading + (this.tiles as TilesRenderer & {stats:{downloading:number;parsing:number}}).stats.parsing) : 0,
       candidates:this.active?.candidates.map(c=>({targetErrorM:c.solution?.targetErrorM ?? null,clearanceM:c.solution?.clearanceM ?? null,frozen:Boolean(c.snapshot), rangeM:c.pose.rangeM,heightM:c.solution?.heightM,liftM:c.solution?.liftM, ...this.surfaceAvailability(c)})) ?? [],
@@ -182,7 +190,7 @@ export class WorldPreparedViews {
     const resident=this.residency();
     const snapshot=WorldTerrainSnapshot.capture(this.tiles,this.displayCamera,Math.min(160*1024*1024,this.pinnedLimit-resident.bytes),resident.tiles);
     if(snapshot){
-      if(this.rasterCoverage(this.displayCamera,snapshot,true).ground>=.94){this.outgoing=snapshot;this.display=snapshot;}
+      if(this.rasterCoverage(this.displayCamera,snapshot,true).usable){this.outgoing=snapshot;this.display=snapshot;}
       else snapshot.dispose();
     }
   }
@@ -228,7 +236,7 @@ export class WorldPreparedViews {
     this.priority.update(active.warming ? [] : active.candidates.map(c=>({
       camera:c.camera,
       criticalRegions:[c.target,c.support].filter(r=>this.regions.hasRegion(r)),
-      focusRegions:c.focus && c.focusActive && this.regions.hasRegion(c.focus)?[c.focus]:[],
+      focusRegions:[...(c.gapRegions ?? []),...(c.focus && c.focusActive && this.regions.hasRegion(c.focus)?[c.focus]:[])],
     })), this.tiles.group.matrixWorld);
   }
   /** Called before tiles.update so selection is aimed at the actual corrected candidates. */
@@ -285,43 +293,76 @@ export class WorldPreparedViews {
     if(!display?.valid) { draw(); return 0; }
     let draws=0;
     for(const mesh of display.meshes)mesh.onAfterRender=()=>{draws++;};
-    const visible=this.tiles.group.visible;
-    this.tiles.group.visible=false; this.scene.add(display.group);
-    try { draw(); } finally { display.group.removeFromParent(); this.tiles.group.visible=visible; }
+    this.scene.add(display.group);
+    try { withWorldTerrainFallback(this.tiles.group, display.group, draw); }
+    finally { display.group.removeFromParent(); }
     return draws;
   }
   displayedCoverage(now: number) {
-    return this.display?.valid ? sampleWorldMeshes(this.display.meshes,this.displayCamera,now) : null;
+    if(!this.display?.valid)return null;
+    const meshes=[...this.display.meshes];
+    this.tiles.group.traverseVisible(object=>{if(object instanceof Mesh)meshes.push(object);});
+    return sampleWorldMeshes(meshes,this.displayCamera,now);
   }
   /** Tiny real-material raster probe; only terrain, no HUD/labels/route able to fake coverage.
    * `ground` preserves the route-subject band. `broad` prevents a detailed island
    * in the middle from certifying a close shot whose surrounding landscape is missing. */
-  private rasterCoverage(camera: PerspectiveCamera, snapshot?: WorldTerrainSnapshot, silhouette=false) {
+  private rasterCoverage(camera: PerspectiveCamera, snapshot?: WorldTerrainSnapshot, silhouette=false, composite=false) {
     const r=this.renderer, oldTarget=r.getRenderTarget(),viewport=r.getViewport(new Vector4()),scissor=r.getScissor(new Vector4()),scissorTest=r.getScissorTest();
     const color=r.getClearColor(new Color()),alpha=r.getClearAlpha(),tone=r.toneMapping,autoClear=r.autoClear;
     const override=this.scene.overrideMaterial;
     const visibility=[...this.scene.children].map(child=>[child,child.visible] as const);
     try {
-      for(const child of this.scene.children)child.visible=!snapshot && child===this.tiles.group;
+      for(const child of this.scene.children)child.visible=(!snapshot || composite) && child===this.tiles.group;
       if(snapshot)this.scene.add(snapshot.group);
       if(silhouette)this.scene.overrideMaterial=this.silhouetteMaterial;
       r.toneMapping=AgXToneMapping;r.autoClear=true;r.setRenderTarget(this.target);r.setScissorTest(false);r.setClearColor(color,0);
-      r.render(this.scene,camera);r.readRenderTargetPixels(this.target,0,0,160,90,this.pixels);
-      let groundFilled=0,groundTotal=0,broadFilled=0,broadTotal=0;
-      // WebGL rows start at the bottom. The old route-subject band remains a hard
-      // requirement, while a wider lower/middle field catches the owner's torn
-      // Runner frames without treating intentional high sky as missing terrain.
-      for(let y=10;y<76;y++)for(let x=8;x<152;x++){
-        broadTotal++;if(this.pixels[(y*160+x)*4+3]>240)broadFilled++;
-        if(y>=25&&y<61&&x>=10&&x<150){groundTotal++;if(this.pixels[(y*160+x)*4+3]>240)groundFilled++;}
-      }
-      return {ground:groundFilled/groundTotal,broad:broadFilled/broadTotal};
+      const draw=()=>r.render(this.scene,camera);
+      if(composite && snapshot)withWorldTerrainFallback(this.tiles.group,snapshot.group,draw);
+      else draw();
+      r.readRenderTargetPixels(this.target,0,0,160,90,this.pixels);
+      return measureWorldRaster(this.pixels,160,90,camera);
     } finally {
       this.scene.overrideMaterial=override;
       snapshot?.group.removeFromParent();
       for(const [child,visible]of visibility)child.visible=visible;
       r.toneMapping=tone;r.autoClear=autoClear;r.setClearColor(color,alpha);r.setRenderTarget(oldTarget);r.setViewport(viewport);r.setScissor(scissor);r.setScissorTest(scissorTest);
     }
+  }
+
+  /** Current composed terrain, independent of the original destination certificate. */
+  currentRaster(now: number) {
+    if(now>=this.nextRaster) {
+      this.nextRaster=now+500;
+      const snapshot=this.display?.valid ? this.display : undefined;
+      this.reportValue.displayRaster={...this.rasterCoverage(this.displayCamera,snapshot,false,Boolean(snapshot)),sampledAtMs:now};
+    }
+    return this.reportValue.displayRaster;
+  }
+
+  private acquireMissingGround(c: Candidate, mask: WorldRasterCoverage) {
+    const active=this.active;
+    if(!active || active.warming || c!==active.candidates.at(-1) || !c.solution || c.pose.rangeM>1500)return;
+    const subject=this.frame.position(c.pose.center.lat,c.pose.center.lng,(c.pose.center.altitude ?? 0)+c.solution.targetCorrectionM);
+    const interests=planWorldGapAcquisition(mask,c.camera,subject,this.renderer.domElement.clientHeight,this.tiles.errorTarget);
+    const regions=c.gapRegions ?? [];
+    while(regions.length>interests.length)this.regions.removeRegion(regions.pop()!);
+    interests.forEach((interest,index)=>{
+      const region=regions[index] ?? (regions[index]=new WorldSupportRegion());
+      region.errorTarget=interest.errorTargetM;
+      region.locate(this.frame,interest.position,interest.radiusM,1500);
+      this.regions.addRegion(region);
+    });
+    c.gapRegions=regions;
+    // Keep the 200 ms probe cadence; a gap must not turn raster readback into per-frame work.
+  }
+
+  private detachAcquisition(c: Candidate) {
+    this.tiles.deleteCamera(c.camera);
+    this.regions.removeRegion(c.target);this.regions.removeRegion(c.support);
+    if(c.focus)this.regions.removeRegion(c.focus);
+    for(const region of c.gapRegions ?? [])this.regions.removeRegion(region);
+    c.gapRegions=[];
   }
 
   afterTraversal(now: number) {
@@ -332,16 +373,14 @@ export class WorldPreparedViews {
     if(!a || a.releaseAt!==null) {
       if(a?.warming) { if(now>=a.releaseAt!)this.release("idle");return; }
       // A successful prepared shot is a handoff shield, not a one-frame certificate.
-      // Keep its finite resident geometry until the live replacement is both broad
-      // enough and no longer churning under a full decode backlog. This prevents a
-      // briefly complete tile set from exposing holes as its refinements replace it.
+      // Pixel coverage, not global queue silence, owns the handoff. Unrelated
+      // downloads may remain busy throughout a perfectly complete moving view.
+      // Until takeover, live terrain already draws; the retained set fills holes.
       if(this.display && (!a || now>=a.releaseAt!)) {
         const view=sampleWorldView(this.tiles,this.displayCamera,now);
         const liveRaster=this.rasterCoverage(this.displayCamera);
-        const stats=(this.tiles as TilesRenderer & {stats?:{downloading:number;parsing:number}}).stats;
-        const pending=(stats?.downloading ?? 0)+(stats?.parsing ?? 0);
         const usable=view.centerHit && view.hits>=Math.ceil(view.tested*.93) &&
-          liveRaster.ground>=.94 && liveRaster.broad>=.82 && pending<=HANDOFF_PENDING_LIMIT;
+          liveRaster.ground>=.94 && liveRaster.usable;
         this.releaseSamples=usable ? this.releaseSamples+1 : 0;
         if(this.releaseSamples>=HANDOFF_STABLE_SAMPLES) {
           if(a)this.release("arrived");
@@ -354,12 +393,13 @@ export class WorldPreparedViews {
     if(!a.warming)this.captureOutgoing(now);
     let reason:ReplayPreparationReason|undefined,coverage=0,raster=0,broadRaster=0;
     for(const [index,c] of a.candidates.entries()) {
-      const s=c.solution!;const close=c.pose.rangeM<=800,visualClose=c.pose.rangeM<=1500;
+      const s=c.solution!;const close=c.pose.rangeM<=800;
       if(close&&(s.targetErrorM===null||s.targetErrorM>8||s.clearanceM===null||s.clearanceM<17.9)) {reason="surface";break;}
       if(close&&s.sightline!=="clear"){reason="sightline";break;}
       const view=c.snapshot ? sampleWorldMeshes(c.snapshot.meshes,c.camera,now) : sampleWorldView(this.tiles,c.camera,now);
       coverage=index===0 ? (view.tested?view.hits/view.tested:0) : Math.min(coverage,view.tested?view.hits/view.tested:0);
       if(!view.centerHit||coverage<.93){
+        this.acquireMissingGround(c,this.rasterCoverage(c.camera,undefined,true));
         if(!a.warming && c.focus && !c.focusActive && c.pose.rangeM<=800 && now-a.startedAt>=4000 && coverage<=.1) {
           c.focusActive=true;this.regions.addRegion(c.focus);this.nextCheck=0;
         }
@@ -375,11 +415,12 @@ export class WorldPreparedViews {
           this.reportValue.geometryCoverage=geometry.ground;
           broadRaster=index===0 ? geometry.broad : Math.min(broadRaster,geometry.broad);
           this.reportValue.broadRasterCoverage=broadRaster;
-          if(geometry.ground>=.94 && (!visualClose || geometry.broad>=.82)){
+          this.reportValue.candidateRaster=geometry;
+          if(geometry.ground>=.94 && geometry.usable){
             c.snapshot=snapshot;
             c.critical=collectWorldVisualCriticalMeshes(snapshot.meshes,c.camera,24).meshes;
             if(!c.critical.length){snapshot.dispose();c.snapshot=undefined;reason="coverage";break;}
-          } else {snapshot.dispose();reason="coverage";break;}
+          } else {this.acquireMissingGround(c,geometry);snapshot.dispose();reason="coverage";break;}
         }
       }
       if(!c.snapshot?.valid){reason="materials";break;}
@@ -389,7 +430,8 @@ export class WorldPreparedViews {
       const materialRaster=this.rasterCoverage(c.camera,c.snapshot);
       raster=index===0 ? materialRaster.ground : Math.min(raster,materialRaster.ground);
       broadRaster=index===0 ? materialRaster.broad : Math.min(broadRaster,materialRaster.broad);
-      if(raster<.94 || (visualClose && broadRaster<.82)){reason="coverage";break;}
+      this.reportValue.candidateRaster=materialRaster;
+      if(raster<.94 || !materialRaster.usable){reason="coverage";break;}
     }
     a.stableSamples=reason?0:a.stableSamples+1;
     Object.assign(this.reportValue,{coverage,rasterCoverage:raster,broadRasterCoverage:broadRaster,reason:reason??null,stableSamples:a.stableSamples});
@@ -404,9 +446,8 @@ export class WorldPreparedViews {
     // a short proof-settling grace for async shader completion and the three
     // consecutive validation samples; an incomplete destination still fails at
     // the original deadline.
-    const broadRequired=a.candidates.some(c=>c.pose.rangeM<=1500);
     const proofQualified=a.candidates.length>0 && a.candidates.every(c=>Boolean(c.snapshot?.valid)) &&
-      coverage>=.93 && this.reportValue.geometryCoverage>=.94 && (!broadRequired || broadRaster>=.82);
+      coverage>=.93 && this.reportValue.geometryCoverage>=.94 && Boolean(this.reportValue.candidateRaster?.usable);
     if(now>=a.deadline && (!proofQualified || now>=a.deadline+PREPARATION_PROOF_GRACE_MS)) {
       this.reportValue.blocked+=a.warming?0:1;this.reportValue.preparationMs=now-a.startedAt;
       a.resolve({ready:false,requestId:a.options.requestId,reason:"timeout",transition:"cut",preparationMs:now-a.startedAt});
@@ -417,6 +458,10 @@ export class WorldPreparedViews {
     const a=this.active;if(!a||!a.ready||a.options.requestId!==requestId||a.options.signal.aborted)return false;
     a.options.signal.removeEventListener("abort",a.abort);
     this.restoreDisplayedTraversal();this.priority.clear();
+    // A committed destination is no longer a loading camera. Keeping its fixed
+    // frustum and support regions competes with the moving display indefinitely.
+    for(const c of a.candidates)this.detachAcquisition(c);
+    this.nextRaster=0;
     this.outgoing?.dispose();this.outgoing=undefined;this.display=a.candidates.at(-1)?.snapshot;
     a.releaseAt=performance.now()+HANDOFF_MIN_RESIDENCY_MS;this.reportValue.phase="transitioning";this.reportValue.completed++;
     this.reportValue.recentPreparationsMs.push(this.reportValue.preparationMs);
@@ -431,7 +476,7 @@ export class WorldPreparedViews {
       this.outgoing?.dispose(); this.outgoing=this.display;
     }
     for(const c of a.candidates){
-      this.tiles.deleteCamera(c.camera);this.regions.removeRegion(c.target);this.regions.removeRegion(c.support);if(c.focus)this.regions.removeRegion(c.focus);
+      this.detachAcquisition(c);
       if(c.snapshot!==this.outgoing)c.snapshot?.dispose();
     }
     if(!keepOutgoing){this.outgoing?.dispose();this.outgoing=undefined;}

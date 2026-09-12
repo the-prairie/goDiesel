@@ -110,7 +110,7 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
     const key = import.meta.env.VITE_WORLD_GOOGLE_MAPS_API_KEY || options.apiKey;
     if (!key) { this.fail("Cinematic world needs a browser key with Google Map Tiles API enabled. Native Replay and Atlas remain available."); return; }
     try {
-      const renderer = new WebGLRenderer({ antialias: false, alpha: false, powerPreference: "high-performance" });
+      const renderer = new WebGLRenderer({ antialias: false, alpha: false, stencil: true, powerPreference: "high-performance" });
       this.renderer = renderer;
       renderer.debug.onShaderError = () => { this.shaderFailed = true; };
       renderer.outputColorSpace = SRGBColorSpace;
@@ -288,12 +288,13 @@ export class CinematicWorldEngine implements CinematicWorldEnginePort {
           container.dataset.terrainRefining = String(this.terrainReadiness.refining);
           if (now - this.lastCoverageSample >= 250) {
             this.lastCoverageSample = now;
+            this.preparedViews?.currentRaster(now);
             this.coverage = this.preparedViews?.displayedCoverage(now) ?? sampleWorldView(tiles, this.camera, now);
           }
           this.viewState = currentWorldView(this.terrainReadiness.ready, this.renderedTiles, this.coverage, now, this.terrainReadiness.refining);
           const wasHolding = this.continuity.holding;
           this.continuity.update(now, Boolean(this.playback?.playing && this.following),
-            this.renderedTiles > 0 && this.coverage.centerHit && this.coverage.hits >= Math.ceil(this.coverage.tested * 0.8) && this.coverage.sampledAtMs !== null && now - this.coverage.sampledAtMs < 800);
+            this.renderedTiles > 0 && this.coverage.centerHit && this.coverage.hits >= Math.ceil(this.coverage.tested * 0.8) && this.coverage.sampledAtMs !== null && now - this.coverage.sampledAtMs < 800 && Boolean(this.preparedViews?.currentRaster(now)?.usable));
           if (wasHolding !== this.continuity.holding) {
             if (this.continuity.holding) this.lookAhead?.seek(now);
             this.markReport(this.continuity.holding ? "buffer-start" : "buffer-end");

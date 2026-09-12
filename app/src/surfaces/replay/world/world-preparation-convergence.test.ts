@@ -28,7 +28,7 @@ function fixture() {
     readRenderTargetPixels:(_t:unknown,_x:number,_y:number,_w:number,_h:number,pixels:Uint8Array)=>{
       pixels.fill(0);
       const sample=(x:number,y:number,value:number)=>((x*37+y*19)%997)/997<value;
-      for(let y=10;y<76;y++)for(let x=8;x<152;x++)if(sample(x,y,broadCoverage))pixels[(y*160+x)*4+3]=255;
+      for(let y=0;y<90;y++)for(let x=0;x<160;x++)if(sample(x,y,broadCoverage))pixels[(y*160+x)*4+3]=255;
       // The route-subject band can independently expose a central hole even if
       // surrounding terrain is present.
       for(let y=25;y<61;y++)for(let x=10;x<150;x++)pixels[(y*160+x)*4+3]=sample(x,y,coverage)?255:0;
@@ -123,15 +123,17 @@ describe("preparation convergence (simulated GPU readback)",()=>{
     expect(f.manager.report(now+27700).phase).toBe("ready");expect(await pending).toMatchObject({ready:true,requestId:7});f.dispose();
   });
 
-  it("keeps the prepared handoff resident while live replacement work is still churning",async()=>{
+  it("releases loading cameras at commit and accepts complete live replacement despite unrelated queued work",async()=>{
     const f=fixture(),now=performance.now();f.setCoverage(1);
     const pending=f.manager.request(f.pose,{requestId:8,automatic:false,signal:new AbortController().signal});
     for(const t of [1,300,600,900,1200]){f.manager.update(now+t);f.manager.afterTraversal(now+t);await Promise.resolve();await Promise.resolve();await Promise.resolve();}
     expect(await pending).toMatchObject({ready:true,requestId:8});expect(f.manager.commit(8)).toBe(true);
+    expect(f.tiles.cameras).toEqual([f.camera]);
     Object.assign((f.tiles as TilesRenderer & {stats:{downloading:number;parsing:number}}).stats,{downloading:3,parsing:12});
-    f.manager.afterTraversal(now+3000);
+    f.setCoverage(.70);f.manager.afterTraversal(now+3000);
     expect(f.manager.report(now+3000)).toMatchObject({phase:"transitioning",handoffShielded:true,handoffStableSamples:0,handoffPendingWork:15});
-    Object.assign((f.tiles as TilesRenderer & {stats:{downloading:number;parsing:number}}).stats,{downloading:0,parsing:0});
+    // The queue stays busy: only current visible replacement coverage matters.
+    f.setCoverage(1);
     for(const t of [3300,3550,3800,4050,4300,4550])f.manager.afterTraversal(now+t);
     expect(f.manager.report(now+4550).phase).toBe("arrived");f.dispose();
   });

@@ -102,7 +102,7 @@ export class WorldAtmosphere {
         aerial.shadow = clouds.atmosphereShadow;
         aerial.shadowLength = clouds.atmosphereShadowLength;
       });
-      const composer = new EffectComposer(this.renderer, { frameBufferType: HalfFloatType, multisampling: 0 });
+      const composer = new EffectComposer(this.renderer, { frameBufferType: HalfFloatType, multisampling: 0, stencilBuffer: true });
       this.composer = composer;
       this.renderer.toneMapping = NoToneMapping;
       composer.addPass(new RenderPass(this.scene, this.camera));

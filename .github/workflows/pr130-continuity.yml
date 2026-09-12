@@ -45,7 +45,7 @@ jobs:
         working-directory: app
         env:
           PLAYWRIGHT_JSON_OUTPUT_FILE: ../proof/browser-results.json
-        run: npx playwright test e2e/cinematic-world-prepared.spec.ts e2e/cinematic-world-surface.spec.ts --project=chromium --reporter=line,json 2>&1 | tee ../proof/browser.txt
+        run: npx playwright test e2e/cinematic-world-composite.spec.ts e2e/cinematic-world-prepared.spec.ts e2e/cinematic-world-surface.spec.ts --project=chromium --reporter=line,json 2>&1 | tee ../proof/browser.txt
       - name: Build clean live-provider revision
         working-directory: app
         env:

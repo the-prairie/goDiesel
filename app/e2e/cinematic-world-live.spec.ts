@@ -263,6 +263,7 @@ for (const checkpointM of [9850,12620]) test(`live Runner checkpoint ${checkpoin
           coverage.hits>=Math.ceil(coverage.tested*.93) && state.terrain.renderedMeshes>0 &&
           state.terrain.errorTargetPx===nominal && state.camera.clearanceState==="measured" &&
           (state.camera.clearanceM ?? -Infinity)>=17.9 && (state.camera.targetSurfaceErrorM ?? Infinity)<=8 &&
+          state.preparation?.displayRaster?.usable===true &&
           (state.camera.actualRangeM ?? Infinity)<600 && pixels.flatFraction<.18 && pixels.textureVariation>.015;
         stableSamples=usable ? stableSamples+1 : 0;
         return stableSamples;
@@ -282,6 +283,15 @@ for (const checkpointM of [9850,12620]) test(`live Runner checkpoint ${checkpoin
     await page.getByRole("button",{name:"Play route",exact:true}).click();
     await page.getByRole("button",{name:"Pause route",exact:true}).hover();
     await expect.poll(async()=>(await read()).playback!.progressM,{timeout:15_000}).toBeGreaterThan(before+10);
+    const moving=[];
+    for(let i=0;i<6;i++) {
+      await page.waitForTimeout(500);
+      const state=await read();moving.push(state);
+      expect.soft(state.preparation?.displayRaster?.usable, "moving camera must retain complete ground").toBe(true);
+      expect.soft(state.terrain.view?.coverage.centerHit).toBe(true);
+    }
+    writeFileSync(testInfo.outputPath("runner-moving-coverage.json"),JSON.stringify(moving,null,2));
+    await page.screenshot({path:testInfo.outputPath(`runner-${checkpointM}-moving.png`)});
     await page.getByRole("button",{name:"Pause route",exact:true}).click();
     await expect.poll(async()=>(await read()).playback!.playing).toBe(false);
   } finally {
