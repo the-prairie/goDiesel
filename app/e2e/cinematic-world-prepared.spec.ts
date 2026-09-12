@@ -9,7 +9,7 @@ function halfPlane(east:boolean){
   const source=syntheticGlb(),length=source.readUInt32LE(12),gltf=JSON.parse(source.subarray(20,20+length).toString());
   // Extend each half beyond the 20 km camera far plane. The initial shot
   // looks west, away from the deliberately withheld eastern destination.
-  gltf.nodes[0].scale=[3,6,1];gltf.nodes[0].translation=[east?12000:-12000,0,0];
+  gltf.nodes[0].scale=[3,1,6];gltf.nodes[0].translation=[east?12000:-12000,0,0];
   const text=Buffer.from(JSON.stringify(gltf)),json=Buffer.concat([text,Buffer.alloc((4-text.length%4)%4,32)]),binary=source.subarray(28+length),header=Buffer.alloc(20),bh=Buffer.alloc(8);
   header.writeUInt32LE(0x46546c67,0);header.writeUInt32LE(2,4);header.writeUInt32LE(28+json.length+binary.length,8);header.writeUInt32LE(json.length,12);header.writeUInt32LE(0x4e4f534a,16);bh.writeUInt32LE(binary.length,0);bh.writeUInt32LE(0x004e4942,4);
   return Buffer.concat([header,json,bh,binary]);
@@ -23,7 +23,7 @@ async function fixture(page:Page){
     route:Array.from({length:41},(_,i)=>({lat:51,lng:i<4?-114.01-i*.0005:-114.01+(i-4)*.00065,elev:1000,d:i*50,elapsed_s:i*20}))});
   route.provenance.discontinuities=[];route.replay.point_count=41;
   await page.route("**/data/routes/14130782031.json",r=>r.fulfill({json:route}));
-  const base=syntheticTileset();const tiles={...base,geometricError:512,root:{...base.root,geometricError:512,content:undefined,
+  const base=syntheticTileset();const tiles={...base,geometricError:512,root:{...base.root,boundingVolume:{box:[0,0,1000,24000,0,0,0,24000,0,0,0,20]},geometricError:512,content:undefined,
     children:[false,true].map(east=>({boundingVolume:{box:[east?12000:-12000,0,1000,12000,0,0,0,24000,0,0,0,20]},geometricError:0,content:{uri:`${east?'east':'west'}.glb?session=synthetic`}}))}};
   let release!:()=>void;const deferred=new Promise<void>(resolve=>release=resolve);let eastRequested=false;
   await page.route("https://tile.googleapis.com/**",async r=>{
