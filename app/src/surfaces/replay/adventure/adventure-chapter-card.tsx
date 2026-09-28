@@ -81,7 +81,7 @@ export function AdventureChapterCard({
             <button
               type="button"
               className="adv-icon-button"
-              disabled={!previous && !current}
+              disabled={!previous && (!current || progressM < 1)}
               aria-label={previous ? `Previous chapter: ${previous.title}` : "Back to the start of this recording"}
               onClick={() => onSeek(previous?.atDistanceM ?? 0)}
             >

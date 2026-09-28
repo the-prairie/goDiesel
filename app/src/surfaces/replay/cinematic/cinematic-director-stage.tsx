@@ -10,7 +10,7 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/ui/button";
@@ -23,6 +23,9 @@ import type { GoogleRouteNavigatorStatus } from "@/surfaces/replay/renderers/goo
 import {
   CINEMATIC_CUT_LABELS,
   cinematicFrame,
+  cinematicShotPlan,
+  type CinematicAnchor,
+  type CinematicShotPlan,
   cinematicProfile,
   cinematicShotTimeline,
   type CinematicCut,
@@ -81,14 +84,22 @@ function recordedGrade(phase: ReturnType<typeof recordedLightAt>["phase"]) {
   }[phase];
 }
 
+const NO_ANCHORS: CinematicAnchor[] = [];
+
 export function CinematicDirectorStage({
   initialCut = "feature",
   renderMode = false,
   route,
+  anchors = NO_ANCHORS,
+  showPlan = false,
 }: {
   initialCut?: CinematicCut;
   renderMode?: boolean;
   route: QuestRoute;
+  /** Owner-placed chapters the director may build hero shots around. */
+  anchors?: CinematicAnchor[];
+  /** Show the inspectable shot plan beside the film. */
+  showPlan?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<NativeCinematicRenderer | undefined>(undefined);
@@ -97,7 +108,7 @@ export function CinematicDirectorStage({
   const playingRef = useRef(false);
   const [cut, setCut] = useState<CinematicCut>(initialCut);
   const [frame, setFrame] = useState(() =>
-    cinematicFrame(route, initialCut, 0),
+    cinematicFrame(route, initialCut, 0, anchors),
   );
   const [playing, setPlaying] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -119,7 +130,7 @@ export function CinematicDirectorStage({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const initial = cinematicFrame(route, cut, 0);
+    const initial = cinematicFrame(route, cut, 0, anchors);
     const renderer = new NativeCinematicRenderer();
     const sound = new CinematicSoundscape();
     rendererRef.current = renderer;
@@ -151,11 +162,11 @@ export function CinematicDirectorStage({
         ?.seconds;
       if (typeof seconds !== "number" || !Number.isFinite(seconds)) return;
       setPlayback(false);
-      commitFrame(cinematicFrame(route, cut, seconds));
+      commitFrame(cinematicFrame(route, cut, seconds, anchors));
     };
     window.addEventListener("godiesel:route-film-seek", seek);
     return () => window.removeEventListener("godiesel:route-film-seek", seek);
-  }, [cut, renderMode, route, soundEnabled]);
+  }, [anchors, cut, renderMode, route, soundEnabled]);
 
   useEffect(() => {
     if (status.state !== "ready" && status.state !== "partial") return;
@@ -166,7 +177,7 @@ export function CinematicDirectorStage({
       const delta = Math.min(0.08, (now - previous) / 1_000);
       previous = now;
       if (playingRef.current) {
-        const next = cinematicFrame(route, cut, elapsedRef.current + delta);
+        const next = cinematicFrame(route, cut, elapsedRef.current + delta, anchors);
         elapsedRef.current = next.elapsedSeconds;
         rendererRef.current?.setFrame(next);
         soundRef.current?.update(next, soundEnabled);
@@ -180,22 +191,22 @@ export function CinematicDirectorStage({
     };
     animationFrame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animationFrame);
-  }, [cut, route, soundEnabled, status.state]);
+  }, [anchors, cut, route, soundEnabled, status.state]);
 
   const selectCut = (nextCut: CinematicCut) => {
     setPlayback(false);
     setCut(nextCut);
-    commitFrame(cinematicFrame(route, nextCut, 0));
+    commitFrame(cinematicFrame(route, nextCut, 0, anchors));
   };
 
   const play = async () => {
-    if (frame.showDecision) commitFrame(cinematicFrame(route, cut, 0));
+    if (frame.showDecision) commitFrame(cinematicFrame(route, cut, 0, anchors));
     if (soundEnabled) await soundRef.current?.start();
     setPlayback(true);
   };
 
   const restart = async () => {
-    commitFrame(cinematicFrame(route, cut, 0));
+    commitFrame(cinematicFrame(route, cut, 0, anchors));
     if (soundEnabled) await soundRef.current?.start();
     setPlayback(true);
   };
@@ -203,7 +214,7 @@ export function CinematicDirectorStage({
   const scrub = (progress: number) => {
     setPlayback(false);
     commitFrame(
-      cinematicFrame(route, cut, frame.durationSeconds * progress),
+      cinematicFrame(route, cut, frame.durationSeconds * progress, anchors),
     );
   };
 
@@ -218,6 +229,7 @@ export function CinematicDirectorStage({
     frame.routeProgressM,
   );
   const grade = recordedGrade(recordedLight.phase);
+  const plan = useMemo(() => cinematicShotPlan(route, cut, anchors), [route, cut, anchors]);
 
   return (
     <section
@@ -231,7 +243,8 @@ export function CinematicDirectorStage({
       data-render-mode={renderMode ? "true" : "false"}
       data-shot-count={frame.shotCount}
       data-shot-kind={frame.shotKind}
-      data-shot-timeline={JSON.stringify(cinematicShotTimeline(route, cut))}
+      data-shot-timeline={JSON.stringify(cinematicShotTimeline(route, cut, anchors))}
+      data-shot-plan-digest={plan.digest}
       data-state={status.state}
       data-terrain-character={profile.character}
       data-terrain-relief={frame.terrainReliefM.toFixed(1)}
@@ -533,6 +546,46 @@ export function CinematicDirectorStage({
           </Link>
         </div>
       ) : null}
+      {showPlan ? <ShotPlanPanel plan={plan} currentIndex={frame.shotIndex} /> : null}
     </section>
+  );
+}
+
+/** The plan behind the film, readable while it plays. */
+function ShotPlanPanel({ plan, currentIndex }: { plan: CinematicShotPlan; currentIndex: number }) {
+  const km = (metres: number) => (metres / 1_000).toFixed(1);
+  const steering = new Set(plan.shots.flatMap((shot) => (shot.anchorId ? [shot.anchorId] : []))).size;
+  return (
+    <aside
+      aria-label="Shot plan"
+      data-testid="cinematic-shot-plan"
+      data-digest={plan.digest}
+      className="absolute right-4 top-16 z-[70] max-h-[calc(100%-8rem)] w-[min(26rem,calc(100%-2rem))] overflow-y-auto border border-white/20 bg-black/72 p-4 text-xs backdrop-blur-md"
+    >
+      <p className="font-semibold text-white">
+        {plan.cut} cut · {plan.shots.length} shots · {plan.durationSeconds.toFixed(1)} s
+      </p>
+      <p className="mt-1 text-white/70">
+        Plan {plan.digest}
+        {steering ? ` · ${steering} of ${plan.anchors.length} owner chapters steer it` : " · terrain signals only"}
+      </p>
+      <ol className="mt-3 grid gap-2">
+        {plan.shots.map((shot) => (
+          <li
+            key={shot.index}
+            aria-current={shot.index === currentIndex ? "step" : undefined}
+            className="border-l-2 border-white/15 pl-3 aria-[current=step]:border-[#ef684e]"
+          >
+            <p className="font-medium text-white">
+              {shot.index + 1}. {shot.kind} · {km(shot.fromM)}–{km(shot.toM)} km · {shot.startSeconds.toFixed(1)}–{shot.endSeconds.toFixed(1)} s
+            </p>
+            <p className="mt-0.5 text-white/75">{shot.reason}</p>
+            <p className="mt-0.5 text-white/55 tabular-nums">
+              range {Math.round(shot.rangeM[0])}→{Math.round(shot.rangeM[1])} m · pitch {shot.pitchDeg[0]}→{shot.pitchDeg[1]}° · {shot.lensMm[0]}→{shot.lensMm[1]} mm
+            </p>
+          </li>
+        ))}
+      </ol>
+    </aside>
   );
 }
