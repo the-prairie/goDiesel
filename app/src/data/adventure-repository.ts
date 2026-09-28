@@ -69,3 +69,47 @@ export async function loadAdventureForRoute(slug: string) {
 export function adventureMediaUrl(adventure: Adventure, relative: string) {
   return storeUrl(`${encodeURIComponent(adventure.id)}/${relative.split("/").map(encodeURIComponent).join("/")}`);
 }
+
+/** Every adventure in the local store, for the owner's workspace. */
+export async function loadAdventureIndex() {
+  return loadIndex();
+}
+
+export async function loadAdventureById(id: string, fresh = false) {
+  if (fresh) adventureRequests.delete(id);
+  return loadAdventure(id);
+}
+
+const writerUrl = (relative = "") => storeUrl(relative).replace("adventures/", "__adventure-writer/");
+
+/** The owner's writer exists only on the local dev server. */
+export async function adventureWriterAvailable() {
+  try {
+    const response = await fetch(writerUrl(), { method: "GET" });
+    if (!response.headers.get("content-type")?.includes("json")) return false;
+    const body = (await response.json()) as { error?: string };
+    return response.status === 403 && body.error === "Only PUT is accepted.";
+  } catch {
+    return false;
+  }
+}
+
+async function put(relative: string, body: unknown) {
+  const response = await fetch(writerUrl(relative), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const result = (await response.json().catch(() => ({}))) as { error?: string };
+  if (!response.ok) throw new Error(result.error ?? `The writer answered ${response.status}.`);
+}
+
+export async function saveAdventure(adventure: Adventure) {
+  await put(encodeURIComponent(adventure.id), adventure);
+  adventureRequests.delete(adventure.id);
+  indexRequest = undefined;
+}
+
+export async function savePublicationPlan(id: string, plan: unknown) {
+  await put(`${encodeURIComponent(id)}/publication-plan`, plan);
+}

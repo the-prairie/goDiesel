@@ -119,6 +119,22 @@ export function placeAdventureOnRoute(adventure: Adventure, route: QuestRoute): 
   };
 }
 
+/**
+ * An owner moving an anchor along its recording. The new placement takes the
+ * recorded point at that distance as its coordinate, clamped to the recording
+ * and snapped out of any gap, so it confirms against the geometry it was
+ * placed on.
+ */
+export function moveAnchor(route: QuestRoute, anchor: AdventureAnchor, distanceM: number): AdventureAnchor {
+  const point = recordedPointAt(route.route, distanceM, route.provenance.discontinuities);
+  if (!point) return anchor;
+  return {
+    slug: anchor.slug,
+    atDistanceM: Math.round(point.d * 10) / 10,
+    source: { lat: Math.round(point.lat * 1e6) / 1e6, lng: Math.round(point.lng * 1e6) / 1e6 },
+  };
+}
+
 /** The chapter the reader is in: the last one at or behind the held distance. */
 export function chapterAt(chapters: PlacedChapter[], progressM: number) {
   let current: PlacedChapter | undefined;

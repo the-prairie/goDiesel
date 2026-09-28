@@ -5,3 +5,4 @@ export { parseAdventure, parseAdventureIndex } from "@/domain/adventure/parse";
 export { haversineM, projectOntoRecording } from "@/domain/adventure/projection";
 export * from "@/domain/adventure/placement";
 export * from "@/domain/adventure/timeline";
+export { checkAdventureEdit } from "@/domain/adventure/edit";
