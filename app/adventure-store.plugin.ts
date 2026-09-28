@@ -171,6 +171,9 @@ function writer(store: string, base: string): Connect.NextHandleFunction {
 
 export function adventureStore(store: string): Plugin {
   const root = path.resolve(store);
+  // Repository gates set this so their result never depends on ignored local
+  // owner content: with it, the servers behave exactly like a build.
+  if (process.env.GODIESEL_LOCAL_ADVENTURES === "0") return { name: "godiesel-adventure-store" };
   return {
     name: "godiesel-adventure-store",
     configureServer(server) {

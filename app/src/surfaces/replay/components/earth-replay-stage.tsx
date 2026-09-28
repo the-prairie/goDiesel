@@ -23,6 +23,7 @@ import {
   type ReplayAdventureControls,
 } from "@/surfaces/replay/adventure/replay-adventure-layer";
 import { holdReplay, releaseReplayHold, type ReplayHold } from "@/surfaces/replay/playback/replay-hold";
+import { useReplayResume } from "@/surfaces/replay/adventure/use-replay-resume";
 import {
   ReplayElevationScrubber,
   type ReplayElevationScrubberHandle,
@@ -163,7 +164,7 @@ export function EarthReplayStage({
       commitControl(() => held.control);
       return held.hold;
     },
-    release: (hold) => commitControl(() => releaseReplayHold(hold, totalDistanceM)),
+    release: (hold) => commitControl(() => releaseReplayHold(hold as ReplayHold, totalDistanceM)),
     seek: (distanceM) => commitControl((current) => seekReplay(current, distanceM, totalDistanceM)),
     routePass: (fraction) => {
       // Per-frame like playback: the engine and scrubber move every frame,
@@ -197,33 +198,14 @@ export function EarthReplayStage({
     ...adventure.chapters.map((chapter) => ({ id: chapter.id, kind: "chapter" as const, ...chapter.anchor.source })),
     ...adventure.scenes.map((scene) => ({ id: scene.id, kind: "scene" as const, ...scene.anchor.source })),
   ] : [], [adventure]);
-  /*
-   * Inspecting another chapter mid-playback pauses and offers the way back to
-   * where the reader was. Pressing play yourself answers that question.
-   */
-  const resumeRef = useRef<ReplayHold | undefined>(undefined);
-  const [resume, setResumeState] = useState<ReplayHold>();
-  const releasingResume = useRef(false);
-  const setResume = useCallback((hold: ReplayHold | undefined) => {
-    resumeRef.current = hold;
-    setResumeState(hold);
-  }, []);
-  const inspect = useCallback((distanceM: number) => {
-    if (controlRef.current.playing && !resumeRef.current) setResume(adventureControls.hold("inspect"));
-    commitControl((current) => seekReplay(current, distanceM, totalDistanceM));
-  }, [adventureControls, commitControl, setResume, totalDistanceM]);
-  const resumeHeld = useCallback(() => {
-    const hold = resumeRef.current;
-    if (!hold) return;
-    setResume(undefined);
-    releasingResume.current = hold.control.playing;
-    commitControl(() => releaseReplayHold(hold, totalDistanceM));
-  }, [commitControl, setResume, totalDistanceM]);
-  useEffect(() => {
-    if (!control.playing) return;
-    if (releasingResume.current) releasingResume.current = false;
-    else setResume(undefined);
-  }, [control.playing, setResume]);
+  const { resume, inspect, resumeHeld, dismiss: dismissResume } = useReplayResume<ReplayHold>({
+    playing: control.playing,
+    isPlaying: useCallback(() => controlRef.current.playing, []),
+    hold: useCallback(() => adventureControls.hold("inspect") as ReplayHold, [adventureControls]),
+    release: adventureControls.release,
+    seek: adventureControls.seek,
+  });
+
 
   useEffect(() => {
     const container = containerRef.current;
@@ -475,7 +457,7 @@ export function EarthReplayStage({
               resume={resume}
               onInspect={inspect}
               onResume={resumeHeld}
-              onDismissResume={() => setResume(undefined)}
+              onDismissResume={dismissResume}
               onPresenting={setPresenting}
             />
           </div>

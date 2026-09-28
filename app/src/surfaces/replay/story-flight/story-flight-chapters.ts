@@ -1,11 +1,35 @@
+import type { RouteAdventure } from "@/domain/adventure";
 import type { QuestRoute } from "@/domain/route";
 import { cinematicMoments } from "@/surfaces/replay/cinematic/route-cinematic-director";
 
 export interface ReplayStoryChapter {
-  kind: ReturnType<typeof cinematicMoments>[number]["kind"];
+  kind: ReturnType<typeof cinematicMoments>[number]["kind"] | "chapter";
   label: string;
   progressM: number;
   progressRatio: number;
+  /** An owner chapter's place in its whole adventure, which may span recordings. */
+  ordinal?: number;
+  ordinalOf?: number;
+}
+
+/**
+ * When an adventure covers this recording, its owner-placed chapters are the
+ * story, in place of the moments derived from the track. A recording that
+ * begins before its first chapter opens on an unnumbered start.
+ */
+export function adventureStoryChapters(adventure: RouteAdventure, totalDistanceM: number): ReplayStoryChapter[] {
+  const chapters: ReplayStoryChapter[] = adventure.chapters.map((chapter) => ({
+    kind: "chapter",
+    label: chapter.title,
+    progressM: chapter.atDistanceM,
+    progressRatio: totalDistanceM > 0 ? Math.min(1, chapter.atDistanceM / totalDistanceM) : 0,
+    ordinal: chapter.ordinal,
+    ordinalOf: adventure.chapterCount,
+  }));
+  if (!chapters.length || chapters[0].progressM > totalDistanceM * 0.01) {
+    chapters.unshift({ kind: "origin", label: "Start", progressM: 0, progressRatio: 0 });
+  }
+  return chapters;
 }
 
 export function replayStoryChapters(

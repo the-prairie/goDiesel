@@ -40,6 +40,8 @@ interface StoryFlightReplayHudProps {
   route: QuestRoute;
   telemetry: GoogleRouteTelemetry;
   totalDistanceM: number;
+  /** When set, chapter navigation goes through it so an interruption can be held. */
+  onSeekChapter?: (progressM: number) => void;
 }
 
 export function StoryFlightReplayHud({
@@ -54,6 +56,7 @@ export function StoryFlightReplayHud({
   route,
   telemetry,
   totalDistanceM,
+  onSeekChapter,
 }: StoryFlightReplayHudProps) {
   const repairCount = routeRepairs(route, totalDistanceM).length;
   const elevationAvailable = route.elevationStatus !== "unavailable";
@@ -63,6 +66,7 @@ export function StoryFlightReplayHud({
   const seekChapter = (index: number) => {
     const chapter = chapters[index];
     if (!chapter) return;
+    if (onSeekChapter) return onSeekChapter(chapter.progressM);
     onCommit((current) =>
       seekGoogleRouteNavigator(current, chapter.progressM, totalDistanceM),
     );
@@ -147,7 +151,11 @@ export function StoryFlightReplayHud({
               data-testid="story-flight-chapter-status"
             >
               <div className="truncate text-xs font-semibold text-[#1d2946]">
-                {activeChapterIndex + 1} of {chapters.length}
+                {activeChapter?.ordinal
+                  ? `${activeChapter.ordinal} of ${activeChapter.ordinalOf}`
+                  : activeChapter?.kind === "origin" && chapters.some((chapter) => chapter.ordinal)
+                    ? "Before the first chapter"
+                    : `${activeChapterIndex + 1} of ${chapters.length}`}
                 {activeChapter ? ` · ${activeChapter.label}` : ""}
               </div>
               {repairCount > 0 ? (
@@ -186,9 +194,9 @@ export function StoryFlightReplayHud({
                   aria-current={
                     activeChapterIndex === index ? "step" : undefined
                   }
-                  aria-label={`Chapter ${index + 1} of ${chapters.length}: Go to ${chapter.label} at ${(chapter.progressM / 1_000).toFixed(1)} km`}
+                  aria-label={`${chapter.ordinal ? `Chapter ${chapter.ordinal} of ${chapter.ordinalOf}` : `Chapter ${index + 1} of ${chapters.length}`}: Go to ${chapter.label} at ${(chapter.progressM / 1_000).toFixed(1)} km`}
                   className="group pointer-events-auto absolute top-0 grid min-h-11 w-11 justify-items-center gap-0.5 rounded-sm px-0.5 text-[#60708e] outline-none hover:text-[#1d2946] focus-visible:ring-2 focus-visible:ring-[#d86f9e] aria-[current=step]:text-[#b94f83] lg:w-24"
-                  key={chapter.kind}
+                  key={`${chapter.kind}-${chapter.progressM}`}
                   onClick={() => seekChapter(index)}
                   style={{
                     left: `${chapter.progressRatio * 100}%`,

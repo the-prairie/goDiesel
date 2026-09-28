@@ -1734,3 +1734,13 @@ a {
 .seed-adventure-name small { display: block; margin-top: 3px; font-size: 12px; line-height: 1.35; color: var(--seed-ink-3); }
 /* Sketchfab's own mark sits at the lower left of its frame; keep it uncovered. */
 .adv-film[data-scene-shown="true"] .adv-film-story { bottom: 150px; }
+/* In the Google stage the card sits above its own dock, clear of the metrics. */
+.adv-card-slot-google { padding: 0 16px 8px; }
+[data-testid="replay-stage"][data-presenting="film"] > header,
+[data-testid="replay-stage"][data-presenting="film"] [data-testid="replay-active-chapter"] {
+  opacity: 0;
+  visibility: hidden;
+}
+/* The route beat shows a provider's imagery; its required marks stay visible. */
+.adv-film-route .adv-film-bottom { bottom: 48px; }
+.adv-film-route .adv-film-story { bottom: 140px; }

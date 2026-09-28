@@ -10,7 +10,7 @@ import {
   type RouteAdventure,
 } from "@/domain/adventure";
 import { kilometres } from "@/surfaces/replay/adventure/adventure-format";
-import type { ReplayHold } from "@/surfaces/replay/playback/replay-hold";
+import type { AdventureHold } from "@/surfaces/replay/playback/replay-hold";
 import { cn } from "@/ui/utils";
 
 /** The scene that belongs to a chapter: the first one before the next chapter. */
@@ -26,6 +26,7 @@ export function AdventureChapterCard({
   compact,
   listOpen,
   resume,
+  titleHidden = false,
   legPath,
   onToggleList,
   onSeek,
@@ -39,7 +40,8 @@ export function AdventureChapterCard({
   progressM: number;
   compact: boolean;
   listOpen: boolean;
-  resume?: ReplayHold;
+  resume?: AdventureHold;
+  titleHidden?: boolean;
   legPath: (slug: string, atM?: number) => string;
   onToggleList: () => void;
   onSeek: (distanceM: number) => void;
@@ -67,7 +69,7 @@ export function AdventureChapterCard({
     >
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <h2 id="adventure-chapter-title" className="adv-card-title" aria-live="polite">
+          <h2 id="adventure-chapter-title" className={titleHidden ? "sr-only" : "adv-card-title"} aria-live="polite">
             {current ? current.title : adventure.adventure.title}
           </h2>
           <p className="adv-card-meta">
@@ -110,7 +112,7 @@ export function AdventureChapterCard({
         <div className="adv-resume" role="status">
           <button type="button" className="adv-button adv-button-primary" onClick={onResume}>
             <Undo2 aria-hidden="true" />
-            Resume at {kilometres(resume.control.progressM)}
+            Resume at {kilometres(resume.progressM)}
           </button>
           <button type="button" className="adv-icon-button" aria-label="Stay here instead" onClick={onDismissResume}>
             <X aria-hidden="true" />

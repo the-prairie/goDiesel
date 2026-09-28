@@ -19,7 +19,7 @@ export default defineConfig({
   },
   webServer: {
     command:
-      `GODIESEL_DISABLE_LIVE_PROVIDERS=1 npm run typecheck && npx vite build --config vite.runtime-perf.config.ts && npx vite preview --config vite.runtime-perf.config.ts --host 0.0.0.0 --port ${port}`,
+      `GODIESEL_DISABLE_LIVE_PROVIDERS=1 npm run typecheck && GODIESEL_LOCAL_ADVENTURES=0 npx vite build --config vite.runtime-perf.config.ts && GODIESEL_LOCAL_ADVENTURES=0 npx vite preview --config vite.runtime-perf.config.ts --host 0.0.0.0 --port ${port}`,
     url: baseURL,
     reuseExistingServer: false,
     timeout: 240_000,

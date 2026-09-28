@@ -17,7 +17,7 @@ export default defineConfig({
   },
   webServer: {
     command:
-      "GODIESEL_DISABLE_LIVE_PROVIDERS=0 npm run build && npm run preview -- --port 8796",
+      "GODIESEL_DISABLE_LIVE_PROVIDERS=0 GODIESEL_LOCAL_ADVENTURES=0 npm run build && GODIESEL_LOCAL_ADVENTURES=0 npm run preview -- --port 8796",
     url: "http://127.0.0.1:8796",
     reuseExistingServer: false,
     timeout: 240_000,

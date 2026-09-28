@@ -9,14 +9,22 @@ import {
  * returns to exactly that distance, playing state and camera, whatever moved
  * in between (the film's route pass moves all three).
  */
-export interface ReplayHold {
-  control: ReplayControlState;
-  reason: "footage" | "scene" | "film" | "inspect";
+export type ReplayHoldReason = "footage" | "scene" | "film" | "inspect";
+
+/** What any Replay stage's hold exposes to the adventure layer. */
+export interface AdventureHold {
+  reason: ReplayHoldReason;
+  progressM: number;
+  playing: boolean;
 }
 
-export function holdReplay(control: ReplayControlState, reason: ReplayHold["reason"]) {
+export interface ReplayHold extends AdventureHold {
+  control: ReplayControlState;
+}
+
+export function holdReplay(control: ReplayControlState, reason: ReplayHoldReason) {
   return {
-    hold: { control, reason } satisfies ReplayHold,
+    hold: { control, reason, progressM: control.progressM, playing: control.playing } satisfies ReplayHold,
     control: { ...control, playing: false },
   };
 }

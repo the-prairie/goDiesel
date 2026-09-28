@@ -7,7 +7,7 @@ import { AdventureFilm } from "@/surfaces/replay/adventure/adventure-film";
 import { AdventureFootageDialog } from "@/surfaces/replay/adventure/adventure-footage-dialog";
 import { adventureLegPath } from "@/surfaces/replay/adventure/adventure-paths";
 import { AdventureSceneDialog } from "@/surfaces/replay/adventure/adventure-scene-dialog";
-import type { ReplayHold } from "@/surfaces/replay/playback/replay-hold";
+import type { AdventureHold, ReplayHoldReason } from "@/surfaces/replay/playback/replay-hold";
 
 /** The chapter a scene sits in, when that chapter has footage to fall back to. */
 function footageChapterFor(adventure: RouteAdventure, scene: PlacedScene) {
@@ -24,8 +24,8 @@ type Overlay =
 
 export interface ReplayAdventureControls {
   /** Pause and remember exactly where and how the route was playing. */
-  hold: (reason: ReplayHold["reason"]) => ReplayHold;
-  release: (hold: ReplayHold) => void;
+  hold: (reason: ReplayHoldReason) => AdventureHold;
+  release: (hold: AdventureHold) => void;
   seek: (distanceM: number) => void;
   /** The film's route beat: a fraction of this recording, seen from above. */
   routePass: (fraction: number) => void;
@@ -43,6 +43,7 @@ export function ReplayAdventureLayer({
   onResume,
   onDismissResume,
   onPresenting,
+  titleHidden = false,
 }: {
   adventure: RouteAdventure;
   progressM: number;
@@ -50,18 +51,20 @@ export function ReplayAdventureLayer({
   reducedMotion: boolean;
   container: HTMLElement | null;
   controls: ReplayAdventureControls;
-  resume?: ReplayHold;
+  resume?: AdventureHold;
   onInspect: (distanceM: number) => void;
   onResume: () => void;
   onDismissResume: () => void;
   /** Which representation owns the stage, so Replay can step its chrome back. */
   onPresenting: (kind: "footage" | "scene" | "film" | undefined) => void;
+  /** The stage already shows the chapter title large; keep it for assistive tech only. */
+  titleHidden?: boolean;
 }) {
   const location = useLocation();
   const [overlay, setOverlay] = useState<Overlay>();
   const [listOpen, setListOpen] = useState(false);
   const [sound, setSound] = useState(false);
-  const overlayHold = useRef<ReplayHold | undefined>(undefined);
+  const overlayHold = useRef<AdventureHold | undefined>(undefined);
 
   // While the route plays, a chapter's note is read as it arrives and then
   // recedes to its title, so the geography keeps the screen. Paused, it stays.
@@ -74,7 +77,7 @@ export function ReplayAdventureLayer({
   }, [currentId]);
   const compact = playing && freshChapter !== currentId;
 
-  const open = useCallback((next: Overlay, reason: ReplayHold["reason"]) => {
+  const open = useCallback((next: Overlay, reason: ReplayHoldReason) => {
     // Moving between overlays keeps the first hold: the way back stays the
     // distance the reader left the route at, not wherever the film moved it.
     overlayHold.current ??= controls.hold(reason);
@@ -96,7 +99,7 @@ export function ReplayAdventureLayer({
     [location.search, adventure.leg.slug],
   );
 
-  const returnM = overlayHold.current?.control.progressM ?? progressM;
+  const returnM = overlayHold.current?.progressM ?? progressM;
 
   return (
     <>
@@ -104,6 +107,7 @@ export function ReplayAdventureLayer({
         adventure={adventure}
         progressM={progressM}
         compact={compact && !listOpen}
+        titleHidden={titleHidden}
         listOpen={listOpen}
         resume={resume}
         legPath={legPath}

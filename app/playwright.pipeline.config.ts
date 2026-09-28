@@ -17,7 +17,7 @@ export default defineConfig({
   },
   webServer: {
     command:
-      "VITE_ADMIN_API_URL=http://127.0.0.1:8876 npm run dev",
+      "VITE_ADMIN_API_URL=http://127.0.0.1:8876 GODIESEL_LOCAL_ADVENTURES=0 npm run dev",
     url: "http://127.0.0.1:8787",
     reuseExistingServer: false,
     timeout: 120_000,

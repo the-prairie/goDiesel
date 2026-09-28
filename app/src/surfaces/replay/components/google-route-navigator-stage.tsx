@@ -59,9 +59,17 @@ import {
 import type { GoogleRouteCameraPose } from "@/surfaces/replay/playback/route-navigator-controller";
 import {
   activeReplayStoryChapter,
+  adventureStoryChapters,
   replayStoryChapters,
 } from "@/surfaces/replay/story-flight/story-flight-chapters";
 import { StoryFlightReplayHud } from "@/surfaces/replay/story-flight/story-flight-replay-hud";
+import { useRouteAdventure } from "@/data/use-route-adventure";
+import {
+  ReplayAdventureLayer,
+  type ReplayAdventureControls,
+} from "@/surfaces/replay/adventure/replay-adventure-layer";
+import { useReplayResume } from "@/surfaces/replay/adventure/use-replay-resume";
+import type { AdventureHold } from "@/surfaces/replay/playback/replay-hold";
 import {
   frameReplayCamera,
   replaySubjectBand,
@@ -127,9 +135,12 @@ export function GoogleRouteNavigatorStage({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chromeVisible, setChromeVisible] = useState(true);
   const totalDistanceM = routeDistanceM(route);
+  // An adventure's owner-placed chapters are the story when one covers this
+  // recording; otherwise the moments derived from the track, as before.
+  const adventure = useRouteAdventure(route);
   const storyChapters = useMemo(
-    () => replayStoryChapters(route, totalDistanceM),
-    [route, totalDistanceM],
+    () => (adventure ? adventureStoryChapters(adventure, totalDistanceM) : replayStoryChapters(route, totalDistanceM)),
+    [adventure, route, totalDistanceM],
   );
   const telemetry = useMemo(
     () => googleRouteTelemetry(route, control.progressM),
@@ -232,6 +243,54 @@ export function GoogleRouteNavigatorStage({
     setChromeVisible(true);
     commitControl((current) => ({ ...current, following: false }));
   }, [commitControl]);
+
+  /*
+   * The adventure layer drives this stage through the same hold contract as
+   * every Replay: an interruption snapshots the whole navigator state and
+   * releases it exactly; the film's route pass flies the live camera.
+   */
+  type GoogleHold = AdventureHold & { control: GoogleRouteNavigatorState };
+  const [stageElement, setStageElement] = useState<HTMLElement | null>(null);
+  const [presenting, setPresenting] = useState<"footage" | "scene" | "film">();
+  const presentingRef = useRef(presenting);
+  presentingRef.current = presenting;
+  const routePassPainted = useRef(0);
+  const adventureControls = useMemo<ReplayAdventureControls>(() => ({
+    hold: (reason) => {
+      const control = controlRef.current;
+      commitControl((current) => ({ ...current, playing: false }));
+      return { reason, progressM: control.progressM, playing: control.playing, control } satisfies GoogleHold;
+    },
+    release: (hold) => {
+      const { control } = hold as GoogleHold;
+      commitControl(() => seekGoogleRouteNavigator({ ...control, playing: false }, control.progressM, totalDistanceM));
+      if (control.playing) commitControl((current) => ({ ...current, playing: current.progressM < totalDistanceM }));
+    },
+    seek: (distanceM) => commitControl((current) => seekGoogleRouteNavigator(current, distanceM, totalDistanceM)),
+    routePass: (fraction) => {
+      const next = {
+        ...seekGoogleRouteNavigator({ ...controlRef.current, playing: false }, fraction * totalDistanceM, totalDistanceM),
+        following: true,
+        cameraMode: "auto" as const,
+      };
+      controlRef.current = next;
+      renderCamera(resolveCamera(next));
+      engineRef.current?.setCinematicRoute(googleRouteThreadTreatment(route, next));
+      elevationScrubberRef.current?.sync(next.progressM);
+      const now = performance.now();
+      if (now - routePassPainted.current >= 90 || fraction >= 1) {
+        routePassPainted.current = now;
+        setControl(next);
+      }
+    },
+  }), [commitControl, renderCamera, resolveCamera, route, totalDistanceM]);
+  const { resume, inspect, resumeHeld, dismiss: dismissResume } = useReplayResume<GoogleHold>({
+    playing: control.playing,
+    isPlaying: useCallback(() => controlRef.current.playing, []),
+    hold: useCallback(() => adventureControls.hold("inspect") as GoogleHold, [adventureControls]),
+    release: adventureControls.release,
+    seek: adventureControls.seek,
+  });
 
   const recenterCamera = useCallback(() => {
     cameraMotionRef.current = undefined;
@@ -464,7 +523,8 @@ export function GoogleRouteNavigatorStage({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") navigate(backPath);
+      // Escape closes an open adventure overlay; it must not also leave Replay.
+      if (event.key === "Escape" && !presentingRef.current) navigate(backPath);
       if (event.key === " " && event.target === document.body) {
         event.preventDefault();
         commitControl((current) => ({ ...current, playing: !current.playing }));
@@ -512,10 +572,16 @@ export function GoogleRouteNavigatorStage({
       data-route-slug={route.slug}
       data-state={status.state}
       data-testid={productionReplay ? "replay-stage" : "google-route-navigator"}
+      data-adventure={adventure?.adventure.id}
+      data-presenting={presenting}
+      data-progress={control.progressM.toFixed(2)}
       onFocusCapture={revealChrome}
       onPointerDown={revealChrome}
       onPointerMove={revealChrome}
-      ref={stageRef}
+      ref={(element) => {
+        stageRef.current = element;
+        setStageElement(element);
+      }}
     >
       <div
         aria-label={`Google photorealistic 3D view of ${route.name}`}
@@ -685,10 +751,14 @@ export function GoogleRouteNavigatorStage({
           data-testid="replay-active-chapter"
         >
           <div className="text-[10px] font-semibold uppercase text-white/72 sm:text-xs">
-            Chapter {activeChapterIndex + 1} · {route.region}
+            {activeChapter.kind === "chapter"
+              ? `Chapter ${activeChapter.ordinal} of ${activeChapter.ordinalOf} · ${route.region}`
+              : adventure
+                ? route.region
+                : `Chapter ${activeChapterIndex + 1} · ${route.region}`}
           </div>
           <h2 className="mt-1 font-editorial text-5xl font-medium leading-[0.88] drop-shadow-lg sm:text-7xl lg:text-8xl">
-            {activeChapter.label}
+            {adventure && activeChapter.kind === "origin" ? adventure.adventure.title : activeChapter.label}
           </h2>
           <p className="mt-3 font-editorial text-lg italic text-[#ffd6e9] sm:text-2xl">
             {(control.progressM / 1_000).toFixed(1)} km ·{" "}
@@ -757,8 +827,27 @@ export function GoogleRouteNavigatorStage({
         inert={productionReplay && !chromeVisible ? true : undefined}
         ref={controlsRef}
       >
+        {productionReplay && adventure && status.state === "ready" ? (
+          <div className="adv-card-slot adv-card-slot-google">
+            <ReplayAdventureLayer
+              adventure={adventure}
+              progressM={control.progressM}
+              playing={control.playing}
+              reducedMotion={reducedMotion}
+              container={stageElement}
+              controls={adventureControls}
+              resume={resume}
+              onInspect={inspect}
+              onResume={resumeHeld}
+              onDismissResume={dismissResume}
+              onPresenting={setPresenting}
+              titleHidden
+            />
+          </div>
+        ) : null}
         {productionReplay ? (
           <StoryFlightReplayHud
+            onSeekChapter={adventure ? inspect : undefined}
             activeChapterIndex={activeChapterIndex}
             chapters={storyChapters}
             control={control}

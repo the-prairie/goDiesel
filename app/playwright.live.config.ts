@@ -18,7 +18,7 @@ export default defineConfig({
   webServer: previewUrl
     ? undefined
     : {
-        command: "npm run dev",
+        command: "GODIESEL_LOCAL_ADVENTURES=0 npm run dev",
         url: localPreviewUrl,
         reuseExistingServer: true,
         timeout: 120_000,
