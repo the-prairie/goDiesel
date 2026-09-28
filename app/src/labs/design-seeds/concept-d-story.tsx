@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { SeedReliefMap, type ThreadPhoto } from "@/labs/design-seeds/seed-relief-map";
 import { SeedRibbon } from "@/labs/design-seeds/seed-ribbon";
+import { SeedAdventure } from "@/labs/design-seeds/seed-adventure";
 import { RELIEF_PALETTE } from "@/labs/design-seeds/seed-relief";
 import { useWideLayout } from "@/labs/design-seeds/seed-media";
 import { JOURNAL, JOURNAL_SURFACES } from "@/labs/design-seeds/concept-b-tokens";
@@ -368,6 +369,7 @@ export function ConceptDStory({
         </p>
       ) : null}
       <div style={{ marginTop: 20 }}>{entry}</div>
+      <SeedAdventure route={route} heldM={at?.d} onHold={(distanceM) => inspect(totalM ? distanceM / totalM : undefined)} />
     </>
   );
 

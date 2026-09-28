@@ -21,9 +21,21 @@ export interface ReplayEngineMountOptions {
   threadStyle?: RouteThreadStyle;
 }
 
+/** An editorial anchor drawn on the route: a chapter or a captured scene. */
+export interface ReplayMark {
+  id: string;
+  kind: "chapter" | "scene";
+  lat: number;
+  lng: number;
+}
+
 export interface ReplayEngine {
   mount(options: ReplayEngineMountOptions): Promise<void>;
   setPose(pose: ReplayPose): void;
+  /** Optional: engines that cannot draw marks leave the scrubber to carry them. */
+  setMarks?(marks: ReplayMark[]): void;
+  /** Optional: chrome covering the lower edge, so the held point stays visible. */
+  setBottomInset?(pixels: number): void;
   destroy(): void;
 }
 

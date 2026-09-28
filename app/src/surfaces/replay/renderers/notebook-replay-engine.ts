@@ -1,7 +1,7 @@
 import { LngLatBounds } from "maplibre-gl";
 import { ReliefWorld, takeReliefWorld, type ReliefState } from "@/ui/maps/relief-world";
 import { reliefCamera } from "@/ui/maps/relief-camera";
-import type { ReplayEngine, ReplayEngineMountOptions } from "@/surfaces/replay/renderer-port";
+import type { ReplayEngine, ReplayEngineMountOptions, ReplayMark } from "@/surfaces/replay/renderer-port";
 import type { ReplayPose } from "@/surfaces/replay/playback/replay-controller";
 
 /** A renderer adapter for the existing Replay controller and dock. */
@@ -12,6 +12,7 @@ export class NotebookReplayEngine implements ReplayEngine {
   private firstPose = true;
   private carried = false;
   private previous?: ReplayPose;
+  private bottomInset = 0;
 
   async mount({ container, route, onStatus }: ReplayEngineMountOptions) {
     this.route = route;
@@ -53,13 +54,26 @@ export class NotebookReplayEngine implements ReplayEngine {
       const camera = reliefCamera(world.map, route.route, pose.progressM, route.provenance.discontinuities, scale, world.viewBearing);
       if (camera) {
         world.viewBearing ??= camera.options.bearing;
-        world.map.jumpTo(camera.options);
+        world.map.jumpTo({ ...camera.options, padding: { top: 80, right: 0, left: 0, bottom: this.bottomInset } });
         world.host.dataset.cameraEyeElevation = camera.eyeElevation.toFixed(1);
         world.host.dataset.cameraSamples = String(camera.sampled);
       }
     }
     this.firstPose = false;
     this.previous = pose;
+  }
+
+  setBottomInset(pixels: number) {
+    const inset = Math.max(0, Math.round(pixels));
+    if (inset === this.bottomInset) return;
+    this.bottomInset = inset;
+    const last = this.previous;
+    this.previous = undefined;
+    if (last) this.setPose(last);
+  }
+
+  setMarks(marks: ReplayMark[]) {
+    this.world?.setMarks(marks);
   }
 
   destroy() {

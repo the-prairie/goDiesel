@@ -36,6 +36,9 @@ tmp/
 *.tmp
 .route-share/
 .godiesel/
+# Imported adventure packs: owner media and copy, served only by local dev and
+# preview. Publication is a separate, audience-specific decision.
+.adventures/
 
 # Node dependencies (app/ has its own ignore; this covers the repository root)
 node_modules/

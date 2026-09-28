@@ -5,6 +5,8 @@ import { applyReliefCartography, applyReliefSky, attachRelief, DEM_SOURCE_ID, RE
 
 export type ReliefState = "loading" | "ready" | "partial" | "unavailable";
 export interface ReliefRoute { slug: string; trace: RoutePoint[] }
+/** An editorial anchor on the selected route, placed by recorded distance upstream. */
+export interface ReliefMark { id: string; kind: "chapter" | "scene"; lat: number; lng: number }
 export const RELIEF_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 const empty = () => ({ type: "FeatureCollection" as const, features: [] });
 let nextWorldId = 0;
@@ -30,6 +32,7 @@ export class ReliefWorld {
   private trace: RoutePoint[] = [];
   private gaps: RouteDiscontinuityEvidence[] = [];
   private progressM?: number;
+  private marks: ReliefMark[] = [];
   private position: RoutePoint | null = null;
   private marker: HTMLDivElement;
   private markerTransform = "";
@@ -117,7 +120,7 @@ export class ReliefWorld {
     this.built = true; // Set before style mutations: styledata can be synchronous.
     applyReliefCartography(map, palette);
     attachRelief(map, palette);
-    for (const id of ["relief-history", "relief-route", "relief-travelled", "relief-ends", "relief-position"]) {
+    for (const id of ["relief-history", "relief-route", "relief-travelled", "relief-ends", "relief-position", "relief-marks"]) {
       map.addSource(id, { type: "geojson", data: empty() });
     }
     const addLine = (id: string, source: string, color: string, low: number, high: number, opacity = 1) => {
@@ -134,12 +137,40 @@ export class ReliefWorld {
     map.addLayer({ id: "relief-ends", type: "circle", source: "relief-ends",
       paint: { "circle-radius": 5, "circle-color": palette.routeCasing, "circle-stroke-width": 2, "circle-stroke-color": palette.route },
     });
+    // Chapters are filled with the route's own colour; a captured scene is an
+    // open ink ring, because it is another author's capture, not the recording.
+    map.addLayer({ id: "relief-marks", type: "circle", source: "relief-marks",
+      paint: {
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 4, 14, 6.5],
+        "circle-color": ["match", ["get", "kind"], "scene", palette.routeCasing, palette.route],
+        "circle-stroke-width": ["match", ["get", "kind"], "scene", 2.5, 2],
+        "circle-stroke-color": ["match", ["get", "kind"], "scene", "#1d1b16", palette.routeCasing],
+        "circle-pitch-alignment": "viewport",
+      },
+    });
     const canvas = map.getCanvas();
     canvas.setAttribute("tabindex", "-1"); canvas.setAttribute("aria-hidden", "true");
     canvas.removeAttribute("aria-label"); canvas.removeAttribute("role");
     this.pushRoutes();
     this.pushProgress();
+    this.pushMarks();
   };
+
+  setMarks(marks: ReliefMark[]) {
+    this.marks = marks;
+    this.pushMarks();
+  }
+
+  private pushMarks() {
+    if (!this.built) return;
+    (this.map.getSource("relief-marks") as maplibregl.GeoJSONSource).setData({
+      type: "FeatureCollection",
+      features: this.marks.map(mark => ({
+        type: "Feature" as const, properties: { id: mark.id, kind: mark.kind },
+        geometry: { type: "Point" as const, coordinates: [mark.lng, mark.lat] },
+      })),
+    });
+  }
 
   setRoutes(routes: ReliefRoute[], selectedSlug?: string, selectedTrace?: RoutePoint[], gaps: RouteDiscontinuityEvidence[] = []) {
     this.routes = routes;

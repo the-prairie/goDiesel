@@ -30,6 +30,14 @@ const INTELLIGENCE_TRAVELED_COLOR = "#ef684e";
 const INTELLIGENCE_FUTURE_COLOR = "#f6f3ed";
 const INTELLIGENCE_PLAYHEAD_COLOR = "#ef684e";
 
+/** An editorial anchor on the climb: a chapter or a captured scene. */
+export interface ReplayScrubberMark {
+  id: string;
+  kind: "chapter" | "scene";
+  distanceM: number;
+  label: string;
+}
+
 export interface ReplayElevationScrubberHandle {
   sync(progressM: number): void;
 }
@@ -44,7 +52,10 @@ export const ReplayElevationScrubber = forwardRef<
     compact?: boolean;
     tone?: "default" | "intelligence" | "notebook";
     className?: string;
+    marks?: ReplayScrubberMark[];
     onSeek: (progressM: number) => void;
+    /** Marks seek through this instead, so an interruption can be held. */
+    onMark?: (progressM: number) => void;
   }
 >(function ReplayElevationScrubber(
   {
@@ -55,7 +66,9 @@ export const ReplayElevationScrubber = forwardRef<
     compact = false,
     tone = "default",
     className,
+    marks = [],
     onSeek,
+    onMark,
   },
   ref,
 ) {
@@ -254,6 +267,42 @@ export const ReplayElevationScrubber = forwardRef<
             }}
             onClick={() => setActiveRepairs(group)}
           />
+        );
+      })}
+
+      {marks.map((mark) => {
+        const ratio = Math.min(1, Math.max(0, mark.distanceM / totalDistanceM));
+        const position = { left: `${ratio * 100}%`, top: `${repairYRatio(ratio) * 100}%` };
+        // A scene belongs to the chapter it sits in and is opened from that
+        // chapter, so its mark is drawn but never competes for the pointer.
+        return mark.kind === "scene" ? (
+          <span
+            key={mark.id}
+            aria-hidden="true"
+            data-testid="replay-adventure-mark"
+            data-mark-kind="scene"
+            data-mark-distance-m={mark.distanceM.toFixed(1)}
+            className="replay-adventure-mark pointer-events-none absolute z-20 size-3 -translate-x-1/2 -translate-y-1/2"
+            style={position}
+          >
+            <span data-kind="scene" />
+          </span>
+        ) : (
+          <button
+            key={mark.id}
+            type="button"
+            data-testid="replay-adventure-mark"
+            data-mark-kind="chapter"
+            data-mark-distance-m={mark.distanceM.toFixed(1)}
+            aria-label={mark.label}
+            title={mark.label}
+            disabled={disabled}
+            className="replay-adventure-mark absolute z-30 size-11 -translate-x-1/2 -translate-y-1/2 outline-none"
+            style={position}
+            onClick={() => (onMark ?? onSeek)(mark.distanceM)}
+          >
+            <span aria-hidden="true" data-kind="chapter" />
+          </button>
         );
       })}
 
