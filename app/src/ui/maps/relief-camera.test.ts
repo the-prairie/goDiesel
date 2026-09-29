@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Map as MapLibreMap } from "maplibre-gl";
-import { reliefCamera, reliefCameraGeometry } from "@/ui/maps/relief-camera";
+import { carriedLift, needsSightlineResample, reliefCamera, reliefCameraFollow, reliefCameraGeometry } from "@/ui/maps/relief-camera";
 
 const trace = [0, 1, 2, 3, 4].map(i => ({ d: i * 500, lat: 51 + i * 0.0045, lng: -115, elev: 1000 + i * 150 }));
 
@@ -30,5 +30,34 @@ describe("notebook landscape camera", () => {
   it("reports no terrain samples when only the recorded envelope is available", () => {
     const map = { queryTerrainElevation: () => null, calculateCameraOptionsFromTo: () => ({}) } as unknown as MapLibreMap;
     expect(reliefCamera(map, trace, 1000)!.sampled).toBe(0);
+  });
+});
+
+describe("carried lift between sightline samples", () => {
+  it("re-samples when the held point moves 40 m or 250 ms have passed", () => {
+    expect(needsSightlineResample(undefined, 0, 0)).toBe(true);
+    const last = { progressM: 1000, atMs: 0 };
+    expect(needsSightlineResample(last, 1030, 100)).toBe(false);
+    expect(needsSightlineResample(last, 1041, 100)).toBe(true);
+    expect(needsSightlineResample(last, 1010, 251)).toBe(true);
+  });
+
+  it("follows with one terrain query and the carried lift", () => {
+    let queries = 0;
+    let eye = 0;
+    const map = {
+      queryTerrainElevation: () => { queries += 1; return 1500; },
+      calculateCameraOptionsFromTo: (_from: unknown, eyeElevation: number) => { eye = eyeElevation; return { zoom: 13 }; },
+    } as unknown as MapLibreMap;
+    const camera = reliefCameraFollow(map, trace, 1000, [], 1, 20, 640)!;
+    expect(queries).toBe(1);
+    expect(eye).toBe(2140);
+    expect(camera.options.bearing).toBeUndefined();
+  });
+
+  it("rises at once and eases down, so clearance never lags a ridge", () => {
+    expect(carriedLift(undefined, 500)).toBe(500);
+    expect(carriedLift(400, 700)).toBe(700);
+    expect(carriedLift(700, 400)).toBeCloseTo(625, 5);
   });
 });

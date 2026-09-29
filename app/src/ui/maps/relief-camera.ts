@@ -69,5 +69,46 @@ export function reliefCamera(map: MapLibreMap, trace: RoutePoint[], distanceM: n
   });
   const view = views.reduce((best, candidate) => candidate.score < best.score ? candidate : best);
   const options = map.calculateCameraOptionsFromTo(view.from, view.eyeElevation, target, targetElevation);
-  return { ...geometry, ...view, options: { ...options, padding: { top: 80, right: 0, bottom: 0, left: 0 } } };
+  return { ...geometry, ...view, targetElevation, options: { ...options, padding: { top: 80, right: 0, bottom: 0, left: 0 } } };
+}
+
+/*
+ * Sightline sampling is the expensive part of the camera: some thirty terrain
+ * queries a frame, a quarter of the main thread during playback. The ground
+ * ahead changes little between frames, so the full sample runs when the held
+ * point has moved 40 m or 250 ms have passed, and frames in between carry its
+ * lift above the target.
+ */
+const RESAMPLE_DISTANCE_M = 40;
+const RESAMPLE_INTERVAL_MS = 250;
+
+export function needsSightlineResample(last: { progressM: number; atMs: number } | undefined, progressM: number, nowMs: number) {
+  return !last || Math.abs(progressM - last.progressM) >= RESAMPLE_DISTANCE_M || nowMs - last.atMs >= RESAMPLE_INTERVAL_MS;
+}
+
+/** Rise at once, ease down: the camera never sits below the sampled clearance. */
+export function carriedLift(current: number | undefined, sampled: number) {
+  if (current === undefined || sampled >= current) return sampled;
+  return current + (sampled - current) * 0.25;
+}
+
+/** The camera between full samples: same geometry and bearing, one terrain query. */
+export function reliefCameraFollow(
+  map: MapLibreMap,
+  trace: RoutePoint[],
+  distanceM: number,
+  gaps: RouteDiscontinuityEvidence[],
+  rangeScale: number,
+  bearing: number,
+  liftM: number,
+) {
+  const geometry = reliefCameraGeometry(trace, distanceM, gaps, rangeScale);
+  if (!geometry) return null;
+  const { at, rangeM } = geometry;
+  const target = new LngLat(at.lng, at.lat);
+  const targetElevation = map.queryTerrainElevation(target) ?? at.elev * 1.35;
+  const from = offset(at, bearing + 180, rangeM);
+  const eyeElevation = targetElevation + liftM;
+  const options = map.calculateCameraOptionsFromTo(from, eyeElevation, target, targetElevation);
+  return { ...geometry, from, eyeElevation, targetElevation, sampled: 0, options };
 }
