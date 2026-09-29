@@ -22,6 +22,29 @@ rm -rf dist
 mkdir -p dist
 cp -R app/dist/. dist/
 
+# Adventures are local owner content and are never part of a build by default.
+# One approved adventure can be staged into the full site; it needs every
+# recording it covers, so a single-route microsite cannot carry one.
+ADVENTURE_ID="${GODIESEL_PUBLISH_ADVENTURE:-}"
+if [[ -e dist/adventures ]]; then
+  echo "The build contains dist/adventures before staging; refusing." >&2
+  exit 1
+fi
+if [[ -n "$ADVENTURE_ID" ]]; then
+  if [[ ! "$ADVENTURE_ID" =~ ^[a-z0-9][a-z0-9_-]*$ ]]; then
+    echo "Invalid GODIESEL_PUBLISH_ADVENTURE: $ADVENTURE_ID" >&2
+    exit 1
+  fi
+  if [[ -n "$SINGLE_ROUTE_SLUG" ]]; then
+    echo "An adventure is published with the full site only, not a single-route microsite." >&2
+    exit 1
+  fi
+  mkdir -p .godiesel/evidence
+  node app/scripts/adventure-publication.mjs "$ADVENTURE_ID" dist \
+    --manifest ".godiesel/evidence/adventure-publication-${ADVENTURE_ID}.json" >/dev/null
+  echo "Adventure ${ADVENTURE_ID} staged (manifest: .godiesel/evidence/adventure-publication-${ADVENTURE_ID}.json)"
+fi
+
 if [[ -n "$SINGLE_ROUTE_SLUG" ]]; then
   ROUTES_DIR="dist/data/routes"
   ROUTE_FILE="${ROUTES_DIR}/${SINGLE_ROUTE_SLUG}.json"
@@ -70,6 +93,9 @@ else
   cat > dist/_headers <<'EOF'
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+/adventures/*
+  Cache-Control: public, max-age=3600, must-revalidate
 
 /cesiumStatic/*
   Cache-Control: public, max-age=31536000, immutable
