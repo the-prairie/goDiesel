@@ -204,7 +204,10 @@ Four checks keep this honest, each needing a running server:
 - `npm run verify:journal-return` - the visible link, Back/Forward, the Replay
   round trip, a directly opened day, and journey scoping
 - `npm run verify:journal-replay` - playback actually advancing, pause holding,
-  the journal thread on the dark surface, and the return through visible links
+  the journal thread on the dark surface, and the return through visible links.
+  The renderer is explicit: `EXPECT_RENDERER=atlas` (default, serve with
+  `GODIESEL_DISABLE_LIVE_PROVIDERS=1`) proves the MapLibre Atlas replay;
+  `EXPECT_RENDERER=google` proves Story Flight on live imagery. A mismatch fails
 - `npm run verify:journal-mobile` - the five real content shapes at 390x844
 - `npm run audit:journal-controls` - the agreed control sizes
 
