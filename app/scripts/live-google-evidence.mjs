@@ -39,11 +39,19 @@ export function watchGoogleTiles(page) {
  */
 export async function imageryVariance(page, mapSelector = "[aria-label^='Google photorealistic 3D view']") {
   const viewport = page.viewportSize();
-  const candidates = [
-    { x: 0.55, y: 0.2, width: 0.4, height: 0.3 },
-    { x: 0.05, y: 0.45, width: 0.35, height: 0.2 },
-    { x: 0.3, y: 0.55, width: 0.4, height: 0.12 },
-  ].map((c) => ({ x: Math.round(c.x * viewport.width), y: Math.round(c.y * viewport.height), width: Math.round(c.width * viewport.width), height: Math.round(c.height * viewport.height) }));
+  // Search a grid of patches, largest first, for one that is unobstructed:
+  // phone and desktop layouts cover different parts of the map.
+  const candidates = [];
+  for (const [w, h] of [[0.4, 0.3], [0.3, 0.15], [0.25, 0.1]]) {
+    for (let y = 0.1; y + h <= 0.9; y += h / 2) {
+      for (let x = 0.02; x + w <= 0.98; x += w / 2) {
+        candidates.push({
+          x: Math.round(x * viewport.width), y: Math.round(y * viewport.height),
+          width: Math.round(w * viewport.width), height: Math.round(h * viewport.height),
+        });
+      }
+    }
+  }
   for (const clip of candidates) {
     const mapShare = await page.evaluate(({ clip, mapSelector }) => {
       const map = document.querySelector(mapSelector);
