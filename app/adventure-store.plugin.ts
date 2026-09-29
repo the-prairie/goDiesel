@@ -10,6 +10,9 @@ import type { Adventure } from "./src/domain/adventure/contract";
 import { checkAdventureEdit } from "./src/domain/adventure/edit";
 import { parseAdventure, parseAdventureIndex } from "./src/domain/adventure/parse";
 
+const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
 const TYPES: Record<string, string> = {
   ".json": "application/json; charset=utf-8",
   ".mp4": "video/mp4",
@@ -21,12 +24,36 @@ const TYPES: Record<string, string> = {
   ".m4a": "audio/mp4",
 };
 
+/** The only files the runtime reads: the index, each adventure, and its media. */
+const SERVED_PATH = /^(?:index\.json|[a-z0-9][a-z0-9_-]*\/adventure\.json|[a-z0-9][a-z0-9_-]*\/media\/[A-Za-z0-9][A-Za-z0-9._-]*)$/;
+
+/**
+ * The store holds restricted owner content (copy, footage) and private
+ * import and publication reports, while the dev and preview servers listen on
+ * the network by default. Reads are for this machine only, through a loopback
+ * Host, and only for the files the runtime needs.
+ */
+export function storeReadProblem(request: { remoteAddress?: string; host?: string; relative: string }) {
+  if (!request.remoteAddress || !LOOPBACK.has(request.remoteAddress)) return "The adventure store is served to this machine only.";
+  const hostName = request.host?.replace(/:\d+$/, "");
+  if (!hostName || !LOOPBACK_HOSTS.has(hostName)) return "The request host must be loopback.";
+  if (!SERVED_PATH.test(request.relative) || request.relative.split("/").includes("..")) return "That file is not served.";
+  return undefined;
+}
+
 function middleware(store: string, base: string): Connect.NextHandleFunction {
   const prefix = `${base.replace(/\/?$/, "/")}adventures/`;
   return (request, response, next) => {
     const url = request.url?.split("?")[0] ?? "";
     if (!url.startsWith(prefix)) return next();
     const relative = decodeURIComponent(url.slice(prefix.length));
+    const refused = storeReadProblem({ remoteAddress: request.socket.remoteAddress, host: request.headers.host, relative });
+    if (refused) {
+      response.statusCode = refused.includes("not served") ? 404 : 403;
+      response.setHeader("Content-Type", "application/json; charset=utf-8");
+      response.end(JSON.stringify({ error: refused }));
+      return;
+    }
     const file = path.resolve(store, relative);
     if (!file.startsWith(`${store}${path.sep}`) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
       response.statusCode = 404;
@@ -60,8 +87,6 @@ function middleware(store: string, base: string): Connect.NextHandleFunction {
   };
 }
 
-const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
-const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const WRITE_LIMIT_BYTES = 2_000_000;
 
 /**
