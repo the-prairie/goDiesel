@@ -1,0 +1,51 @@
+{
+  "recording_source": "uncommitted continuation tree; source hashes below identify the implementation captured",
+  "base_commit": "a7b377c56de76422be47c0080c0da8432efbff3f",
+  "source_sha256": {
+    "app/src/domain/geometry/recorded-thread.test.ts": "d48eca02f43bb9ce46d2f86bfed5f62c821ba002cf75c6f8cf951da38e6b2696",
+    "app/src/domain/geometry/recorded-thread.ts": "8d4a7d3f19750fc93e8429bc9bcb6fd290b6ec132b17e82c5d5e11c14c930eb4",
+    "app/src/labs/design-seeds/seed-day-context.ts": "330bec03a9efbb82e935ace841b3398e69ecb35c47eca492561f7b9d1ad3ef73",
+    "app/src/surfaces/replay/renderers/notebook-replay-engine.ts": "d52c0d5d924071673407e48ff1dad728b36f698bba8eb4eb76b768cd49f88489",
+    "app/src/ui/maps/relief-camera.test.ts": "a32d1347863e53104f852ffa3a0c5034bc771f0abffdedc9fb03ef4d9da76d2d",
+    "app/src/ui/maps/relief-camera.ts": "8ad87ecb9ba9fe51784307e97289bdf9e3276789cfee02f31ceb8b5dc09450cd",
+    "app/src/ui/maps/relief-style.ts": "b8c7974c838034357313fc1e9bb6a6d3c57fbbaa2e5817ac9888d29e1407ea96",
+    "app/src/ui/maps/relief-world.ts": "ab19185e99b5ec5d90f84498b498babf1494e6b87c6010a7eefaa4ce9582e2f4",
+    "app/src/index.css": "9d72815871c7f6810b26ba51baae6249c30c256ef13c2b87d0e972e65a32dbae",
+    "app/src/labs/design-seeds/concept-d-story.tsx": "9a53992f760ac2abbae5fad6fe57cf42062894743fe4670a495b1d99dcb54118",
+    "app/src/labs/design-seeds/design-seeds-lab-page.tsx": "f2a48139840b69cc3d74321e85d26354d6df5b8c717a961a2bbfb98e90f794d2",
+    "app/src/labs/design-seeds/seed-relief-map.tsx": "2c2e4376634394a690a2e92f63adb40fd52e7b46fdf4815d1faeff1c2180d2fe",
+    "app/src/labs/design-seeds/seed-relief.ts": "38fa9168c265d1855b6d753acacb436e2995daaeb5b82355a67c2049cfd89089",
+    "app/src/labs/design-seeds/seed-ribbon.tsx": "98bef9a558afe2801eed3c6358139021b358a26a06608538ba4ff2ced9c291a5",
+    "app/src/surfaces/replay/components/earth-replay-stage.tsx": "dc35501f00768ebd75d2b0f4c0fac4cf50ad2462b5da42e022372ec3617571cb",
+    "app/src/surfaces/replay/components/replay-elevation-scrubber.tsx": "a4842053c9e2c2056deb3f0c776e432a3a0f260857fc44810cc97493612ad1bf",
+    "app/src/surfaces/replay/components/route-context-hud.tsx": "b7a185acf9fb2de98af909fb52c26f70fd28bf18600de06b04c2040e6860e1ff",
+    "app/src/surfaces/replay/renderer-port.ts": "d67e02b8d80c77fbf6a039765dcf5b6e0cf0793b145728915a004532e9743d73",
+    "app/src/surfaces/replay/replay-page.tsx": "e2011628cde9995e41c9f402b65cb9246a7df36a9606dd1eb0c632ab84abda27"
+  },
+  "files_sha256": {
+    "kyoto-journey.mp4": "cea78927035ae4883a39a726fc4c49800299554bdfb10ed6eb6d97b2a9c4c7eb",
+    "desktop-journey.webm": "b62733f0420eb02de6863cf88c50622a3208f40b5816aab7bbfab9d1158c7fbe",
+    "mobile-journey.mp4": "5a8fbdee79af798a58d379e3399f55ec49e66d398d5ef3d1af146f280e2e5625",
+    "kyoto-journey.webm": "e864fd7d83ffa91d8289a2ab2552c72694c78f981378165f75bbb586583a8ce8",
+    "desktop-journey.mp4": "3c10274bd45b6482b3696a57dbf52f895888af69b29a46e0bee7660e5d6aaecd",
+    "mobile-journey.webm": "dc3de95de594ba059e2f71ae778fdfc929766faed029bf8ced107b84535c29fd"
+  },
+  "post_capture_changes": [
+    {
+      "path": "app/src/surfaces/replay/components/earth-replay-stage.tsx",
+      "change": "Restore the nonvisual accessible name on the D Replay region; reindent engine mount. No visual or camera changes.",
+      "final_sha256": "da559d6a4e44547ee5046c41973694c0333cfeb6a8f4bf6965477cab2e74f222"
+    }
+  ],
+  "implementation_commit": "be8028d6c0c8fbe57d741805cfa72eff503b99e8",
+  "source_matches_commit_except_documented_nonvisual_changes": true,
+  "settled_baseline": {
+    "commit": "a7b377c56de76422be47c0080c0da8432efbff3f",
+    "server": "http://localhost:8787",
+    "route": "15573295095",
+    "state": "ready",
+    "progress_m": 12000,
+    "file": "before-replay.png",
+    "sha256": "2ad96347e335f88f05e31db69a19e80d23af314ebff9e962a5c0e4e0ba613e2b"
+  }
+}

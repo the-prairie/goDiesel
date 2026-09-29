@@ -82,11 +82,227 @@ Cards must not be nested inside other cards.
 - Selected routes use a `4px` cobalt line with a `2px` pale halo outside Atlas.
 - The selected Atlas route uses a `4px` coral line with a restrained pale halo.
 - Replay routes use a `5px` cobalt line.
+- The journal Replay presentation instead carries the selected route's terracotta
+  identity across Atlas, route story and Replay. Because Replay is a dark
+  surface, the hue is kept and the value lifted: `#c34a24` measures 2.27-3.15:1
+  against the replay basemap's terrain range, below the 3:1 a line needs, while
+  `#e2673c` measures 3.27-4.54:1 across the same range, with a warmed `#f2e4d2`
+  casing. This is a named variant (`JOURNAL_REPLAY_THREAD_STYLE`), opted into by
+  the journal presentation; surfaces outside that direction keep the shared
+  cobalt default (`ROUTE_THREAD_STYLE`).
 - Automatic cinematic replay may replace the baseline route with a layered filament: a restrained coral travelled thread, pale future guide, and narrow white focus glint. The treatment must remain terrain-seated and visually lighter than the baseline replay route.
 - Waypoints use a `28px` coral circle, `2px` white border, and a white numeric label.
 - Current replay position uses an `18px` coral point with a `3px` white ring.
 - Region labels use editorial uppercase type between `28px` and `36px` with `0.22em` tracking.
 - Only selected or editorially featured routes receive coral markers.
+
+## Journal presentation (design-seed direction B)
+
+Typography is role-based, not one family:
+
+- Cormorant Garamond for titles and journal entries. Its narrower metrics fit
+  long personal titles whole in the Atlas index where a wider serif truncated
+  them, and its lighter caps keep an all-uppercase title engraved rather than
+  shouted.
+- Source Serif 4 for note and description prose only, through `--font-prose`.
+  At the same 26px it has the larger x-height and lower stroke contrast, and its
+  lining default figures match the tabular data figures below.
+- Inter for controls and measurements, with tabular figures.
+
+There is no user-facing typography or theme setting. Single-family variants are
+reachable by `?type=` for review only.
+
+Attribution never puts the owner's name to text she did not write. A curated
+`vibe` is a description of the route whatever the lifecycle; only `description`
+on one of her own recordings is her voice.
+
+A day page has two compositions, chosen by what its content wants:
+
+- The **reading column** for a page you settle into - a photograph to look at,
+  or prose long enough to be a paragraph (past roughly two lines at the
+  introduction's measure, currently 120 characters).
+- The **compact introduction** for everything else: no note, or a note of a
+  sentence or two. The introduction is a band the height of its own content -
+  date, title, the note when there is one with its byline, and the recorded
+  details read across in one line - and the geography takes the full width with
+  the climb along its lower edge.
+
+Both are primary. 57 of 68 routes have no note and none of those has a
+photograph; of the 11 that do have a note, 9 are a single sentence. A
+full-height column holding fourteen characters is the same reserved-empty
+rectangle as a column holding nothing. The threshold is a property of the
+composition, never a named route, and nothing is ever shortened to fit.
+
+The absence itself stays in the small print beside the recording's other
+caveats. It is never the emotional focus.
+
+The two compositions share the header, type scale, rules, elevation strip,
+Replay bar and unframed geography; only the reading area changes shape. The map
+camera is framed for the pane it is given, not a nominal one - the full-width
+sparse pane is height-bound where the tall column is width-bound.
+
+Every surface has a narrow composition, picked by `useWideLayout` so only one
+mounts and there is never a second MapLibre instance.
+
+The narrow Atlas is for choosing a day, so the days get the screen. Its two
+leaves stack inside one scroller below the header - region header, plate with
+its framing control, caption, climb and action - and that geographic
+introduction scrolls away, leaving the list the full viewport. It must not pin
+the preview and give the list an inner scroller: that left about 153px, under
+two rows.
+
+On a phone a journal row is a link to its day, not a selector. Two panes can
+afford select-then-read because choosing a row repaints the plate beside it;
+stacked, the plate is above the fold you are browsing in, so selecting asked the
+reader to scroll back up to an action that had left the screen.
+
+The reading position is stored against whichever element the composition
+scrolls, never the other way round.
+
+A selection that arrives from the URL is scrolled into view; a selection the
+reader clicked is not. Two rules, one distinction: where the change came from.
+
+On a phone the day's Replay action is in flow beneath the climb, not pinned. A
+fixed bar put the lower third of the elevation curve - playhead and readout
+included - underneath itself during scrubbing. The geography and the climb are
+one inspection unit and are brought into view together when scrubbing starts,
+but only when they are not already both visible.
+
+Replay headlines the day's own name, with place and date one step down.
+Format that date in place rather than importing `formatRouteDate`: importing it
+- from the `@/domain/route` barrel or from its own module - puts the HUD into
+the entry's chunk group and takes lucide-react with it, moving the initial shell
+from 235.9 KiB to 336.9 KiB and dissolving the per-icon chunks.
+`route.name` is the generated region label, so headlining it read "Crete,
+Greece" for a route she called "the final boss" - the same erasure the route
+story and the Atlas index were corrected for. The rule is the one
+`route-card.tsx` already uses. The journal cast restates `--route` so the
+route accent on that dark surface matches the thread rather than the shared
+cobalt.
+
+Controls meet the application's agreed sizes - 44px minimum, 48px on mobile, on
+both axes - through `.seed-control`. That is a stricter rule than the WCAG 2.5.8
+24px floor and is checked separately by `npm run audit:journal-controls`.
+Provider attribution is exempt: MapLibre's required credit is its own control
+with inline text links, and padding it to 48px would put a band of chrome over
+the geography on every surface.
+
+The journal's return context is scoped and its own. The visible in-page return
+link is a real URL, never a history gesture, so a directly opened day still
+lands on the journal with its own route selected and visible. The reading
+position is stored per journey - concept, region and presentation - restored
+before paint, and never inherited by an unrelated journey.
+
+The route is drawn as soon as the style is parsed, not when tiles finish, so on
+a cold load the recorded line is on screen before the basemap. Do not guard that
+work with `isStyleLoaded()`: it also requires every source cache to be loaded
+and so stays false until `load`.
+
+Four checks keep this honest, each needing a running server:
+
+- `npm run perf:journal-paint` - ground, route and basemap-tile paint order
+- `npm run verify:journal-return` - the visible link, Back/Forward, the Replay
+  round trip, a directly opened day, and journey scoping
+- `npm run verify:journal-replay` - playback actually advancing, pause holding,
+  the journal thread on the dark surface, and the return through visible links.
+  The renderer is explicit: `EXPECT_RENDERER=atlas` (default, serve with
+  `GODIESEL_DISABLE_LIVE_PROVIDERS=1`) proves the MapLibre Atlas replay;
+  `EXPECT_RENDERER=google` proves Story Flight on live imagery. A mismatch fails
+- `npm run verify:journal-mobile` - the five real content shapes at 390x844
+- `npm run audit:journal-controls` - the agreed control sizes
+
+## Exploration: the carried notebook (design-seed direction D)
+
+### Overview
+
+**Creative North Star: "The carried notebook."** D remains a lab-only
+exploration at `/lab/design-seeds/d/*`, alongside the accepted Direction B.
+This section governs D only; it does not replace B or the production contract.
+Production Atlas search and activity-filter findability remain follow-on work.
+
+### Colors
+
+D inherits the journal's warm paper, dark ink and forest actions. Terracotta
+marks the selected route against pale casing; quieter neighbouring recordings
+keep the place's history visible. The same warm notebook treatment continues
+into D's Replay presentation, scoped to its explicit notebook opt-in.
+
+### Typography
+
+Keep the inherited role split: Cormorant Garamond for titles, Source Serif 4 for
+note prose, Inter for controls and tabular measurements. Preserve personal
+wording and capitalization; expressive titles use Inter. Long titles step down
+in size instead of being shortened. Replay keeps the day's title with place
+and date beneath it, without a redundant Replay eyebrow.
+
+### Layout
+
+The geography fills the viewport; the notebook rests over it. At 1024px and
+wider the reading leaf is 430px wide with the climb alongside its lower edge.
+Below that breakpoint the independently scrolling page begins at 52% of the
+viewport, with the climb at its top and safe-area clearance below.
+
+**The Open Pane Rule.** Frame the raised route for the space actually visible
+around the page and climb. Geographic bounds establish the overview; after
+terrain settles, a projected-trace correction centres the route in that pane.
+Do not run that correction during route dragging, Explore or descent.
+
+### Elevation & Depth
+
+Translucent warm paper and soft directional shadows make the geography read as
+continuing beneath the leaf. Relief comes from attributed Mapzen elevation
+tiles over the OpenFreeMap basemap. Draw the recorded route before attaching
+terrain: the route's first render can start terrain, with first idle as the
+fallback. Historical timing measurements are not current performance budgets.
+
+### Shapes
+
+The page and climb use broad, quiet paper surfaces. Small position and photo
+marks retain larger interaction areas: controls are at least 44px on both axes
+and 48px below 768px; the route grip is 48px throughout. Provider attribution
+retains its inline-credit exception.
+
+### Components
+
+- **Photographs:** show the first real annotation image immediately when
+  present. A thumbnail index selects additional photographs; captions retain
+  their recorded distances. Route and climb photo marks offer the same access.
+  Missing photographs never produce invented imagery or an empty hero.
+- **One held distance:** the route grip and climb inspect the same recorded
+  position. Discontinuities stay split in the line and profile; seeking skips
+  their unrecorded interiors rather than interpolating invented geography.
+- **Explore and Page:** Explore explicitly enables geographic gestures; Done
+  returns to route inspection. Setting the page aside exposes the landscape
+  while retaining entry access; the hidden page is inert. Reopening restores
+  the reading leaf, not a new route selection.
+- **Descent into Replay:** centre the held point before turning and approaching.
+  The camera evaluates the upcoming recorded corridor and terrain sightlines,
+  then holds the chosen geographic bearing through playback. Missing elevation
+  samples use an approximation, not a claim of measured clearance. Reduced
+  motion skips the animated descent.
+- **Continuity:** transfer the same canvas, loaded terrain and final camera pose
+  into the existing Replay controller and dock. Preserve held distance and
+  neighbouring route context; do not create another player. A direct Replay
+  opening may create its own world. The visible return URL and browser history
+  carry the entry distance; scoped day context retains page state, selected
+  photograph and reading position.
+- **Readiness:** distinguish loading, ready, partial and unavailable. DEM tile
+  evidence determines readiness; a style event alone does not. Entry is enabled
+  only when ready. Partial terrain keeps the recorded route available and says
+  that elevation is incomplete; an unavailable map leaves climb inspection.
+
+### Do's and Don'ts
+
+- **Do** keep route evidence, personal attribution and provider credits intact.
+- **Do** keep D's notebook renderer and presentation explicitly scoped.
+- **Don't** promote lab probes or decorative glyph controls into reusable
+  product conventions.
+- **Don't** treat the four resolved visual findings—route-ahead legibility,
+  overview composition, 48px phone controls and the redundant Replay eyebrow—
+  as whole-product certification. They do not establish live Google imagery,
+  real-device touch, deployment or a completed release gate. See
+  `docs/direction-d-handoff.md` for the historical checkpoint; current source
+  and current verification evidence supersede its implementation details.
 
 ## Shell Behavior
 

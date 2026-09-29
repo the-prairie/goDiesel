@@ -3,7 +3,8 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import { APP_PATHS } from "@/app/route-paths";
-import type { DiscoveryCandidate, PlannedRoute } from "@/domain/planning";
+import type { DiscoveryCandidate, FinderIntent, PlannedRoute } from "@/domain/planning";
+import { groundedComparison, NOT_JUDGED_FROM_A_RECORDING } from "@/domain/planning-evidence";
 import { RouteSatelliteThumbnail } from "@/ui/route-satellite-thumbnail";
 import { Button } from "@/ui/button";
 import { cn } from "@/ui/utils";
@@ -14,6 +15,7 @@ export function CandidateRoute({
   selected = false,
   committed = false,
   matchReason,
+  intent,
   onSelect,
   onPreview,
   onSave,
@@ -23,12 +25,15 @@ export function CandidateRoute({
   selected?: boolean;
   committed?: boolean;
   matchReason?: string;
+  /** The plan it is being compared with; measured comparisons need one. */
+  intent?: FinderIntent;
   onSelect?: () => void;
   onPreview?: (previewing: boolean) => void;
   onSave: () => boolean;
 }) {
   const route = candidate.route;
   const [saveError, setSaveError] = useState(false);
+  const evidence = groundedComparison(candidate, intent ?? { place: "", activity: route.type === "Ride" ? "Ride" : "Run", distanceKm: 0, terrain: "any", vibe: "" });
 
   function save() {
     setSaveError(!onSave());
@@ -76,15 +81,18 @@ export function CandidateRoute({
           </span>
         </div>
 
-        <dl className="grid grid-cols-3 divide-x divide-line border-y border-line py-1.5 text-sm">
-          <Metric label="Distance" value={`${route.distanceKm.toFixed(1)} km`} />
-          <Metric label="Climb" value={route.elevationStatus === "unavailable" ? "Unavailable" : `${route.elevationGainM!.toLocaleString()} m`} />
-          <Metric label="Surface" value={candidate.terrain[0] ?? "recorded"} />
+        {/* Measured values only. Terrain and feeling words are the owner's tags. */}
+        <dl className="grid grid-cols-3 divide-x divide-line border-y border-line py-1.5 text-sm" data-testid="candidate-measured">
+          {evidence.measured.map((item) => (
+            <Metric key={item.label} label={item.label} value={item.value} evidence={item.evidence} explanation={item.explanation} />
+          ))}
         </dl>
+        <p className="sr-only">Not judged from the recording: {NOT_JUDGED_FROM_A_RECORDING.join(", ")}.</p>
 
         {matchReason ? (
-          <p className="hidden line-clamp-1 text-control leading-5 text-ink-secondary sm:block">
+          <p className="hidden truncate text-control leading-5 text-ink-secondary sm:block" title={matchReason}>
             <strong className="font-semibold text-ink">Why it matches:</strong> {matchReason}
+            {evidence.ownerTags.length ? <span data-testid="candidate-owner-tags"> Owner's tags: {evidence.ownerTags.join(" · ")}.</span> : null}
           </p>
         ) : null}
         <p className="sr-only">{candidate.sourceLabel}</p>
@@ -138,11 +146,14 @@ export function CandidateRoute({
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({ label, value, evidence, explanation }: { label: string; value: string; evidence?: "derived"; explanation: string }) {
   return (
-    <div className="min-w-0 px-1.5 first:pl-0 last:pr-0 sm:px-2">
+    <div className="min-w-0 px-1.5 first:pl-0 last:pr-0 sm:px-2" data-evidence={evidence ?? "unavailable"}>
       <dt className="text-[0.62rem] uppercase text-ink-muted sm:text-[0.68rem]">{label}</dt>
-      <dd className="truncate font-semibold capitalize text-ink">{value}</dd>
+      <dd className="truncate font-semibold text-ink" title={explanation}>
+        {value}
+        <span className="sr-only"> ({explanation})</span>
+      </dd>
     </div>
   );
 }

@@ -295,6 +295,26 @@ provider fails. Replay status is exactly one of `loading`, `ready`, `partial`,
 or `unavailable`. `partial` means the replay continues with known gaps. The
 product never presents a degraded scene as a complete one.
 
+### Adventure
+
+An **adventure** is editorial content over one or more canonical recordings:
+chapters, the owner's footage, captured 3D scenes by other authors, and a short
+film. It has no geometry of its own. See proposed ADR-0017.
+
+- A **leg** is one canonical recording in an adventure, in travelled order.
+  Legs are never joined into one line.
+- A **chapter** is owner-placed at a recorded distance on one leg. Its
+  **anchor** keeps the prepared coordinate it was placed from, so the product
+  can confirm it still lands on the recording.
+- A **withheld** anchor no longer matches its recording (beyond its end,
+  inside a recording gap, or more than 75 m from its coordinate). It is listed
+  with its reason, never drawn elsewhere.
+- **Footage** carries no position; it is shown where the owner placed it.
+- A **captured scene** is another author's capture, always credited, never
+  presented as the recorded route or its terrain.
+- A **hold** is the Replay state saved when something interrupts the route;
+  releasing it returns to exactly that distance, playing state and camera.
+
 ## 8. Naming rules
 
 ### Route, not quest
@@ -354,6 +374,10 @@ These hold across the whole system. Breaking one is a defect, not a tradeoff.
 12. `domain/` imports no upward layer, and no surface imports another surface.
     Shared components live in `ui/`.
 
+13. An adventure carries no geometry. Its anchors are confirmed against the
+    canonical recording and withheld when they no longer match; no anchor sits
+    inside a discontinuity.
+
 Invariants 11 and 12 are enforced by `app/src/structure.test.ts`.
 
 ## 10. Where things live
@@ -382,6 +406,8 @@ Invariants 11 and 12 are enforced by `app/src/structure.test.ts`.
 | Route compatibility interface | `scripts/route.sh` |
 | Ignored route-share proposals, result artifacts, receipts, staging, and recovery evidence | `.route-share/` |
 | Ignored capability verification evidence receipts | `.godiesel/evidence/` |
+| Adventure contract (pure) | `app/src/domain/adventure/` |
+| Ignored local adventure store (owner copy and media) | `.adventures/`, written by `app/scripts/import-adventure.mjs` |
 
 ## 11. Domain-modeling gaps
 

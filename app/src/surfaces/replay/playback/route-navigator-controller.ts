@@ -101,6 +101,15 @@ export function seekGoogleRouteNavigator(
   };
 }
 
+/** The state Replay opens in: at an entry distance when one was carried in, paused. */
+export function googleEntryState(initialProgressM: number | undefined, totalDistanceM: number) {
+  return seekGoogleRouteNavigator(
+    initialGoogleRouteNavigatorState(),
+    Number.isFinite(initialProgressM) ? initialProgressM! : 0,
+    totalDistanceM,
+  );
+}
+
 export function cycleGoogleRouteSpeed(
   state: GoogleRouteNavigatorState,
 ) {

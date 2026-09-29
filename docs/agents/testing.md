@@ -146,6 +146,22 @@ Local native Google 3D verification must use `http://localhost:8787` rather
 than `http://127.0.0.1:8787`. The configured browser key authorizes the
 `localhost` origin, and Google treats the loopback IP as a different referrer.
 
+The adventure layer's live checks follow the same rule:
+`app/scripts/verify-adventure-cross-leg.mjs` and
+`app/scripts/verify-adventure-film-seek.mjs` default to `http://localhost:8787`
+and refuse a Google run on any other origin. For Google they also require
+successful Google tile responses and a non-uniform rendered frame, because
+`data-state=ready` alone is not live acceptance. Run the cinematic export spec
+against the same origin with `GODIESEL_ATLAS_PREVIEW_URL=http://localhost:8787`.
+
+When Playwright's pinned browser revision is not installed, a local run may
+point at an installed Chrome for Testing without changing the gate. Use an
+untracked config that spreads `playwright.live.config.ts` and sets
+`use.launchOptions.executablePath` from `PW_CHROMIUM`. For specs that spawn
+their own renderer (the film export), also pass `NODE_OPTIONS=--import <preload>`,
+where the preload sets the same `executablePath` on `chromium.launch`. Record
+the override with the result; it is not a substitute for a missing provider.
+
 ## Gate Validity
 
 Record the exact commands and results in the pull request.

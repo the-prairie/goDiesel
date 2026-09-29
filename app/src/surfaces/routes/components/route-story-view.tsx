@@ -24,6 +24,7 @@ import { RouteSatelliteThumbnail } from "@/ui/route-satellite-thumbnail";
 import { ElevationProfile } from "@/surfaces/routes/components/route-briefing";
 import { RouteGuide } from "@/surfaces/routes/components/route-guide";
 import { RouteLeafMap } from "@/surfaces/routes/components/route-leaf-map";
+import { RouteAdventureSection } from "@/surfaces/routes/components/route-adventure-section";
 import {
   distanceLabel,
   highestPoint,
@@ -359,6 +360,8 @@ export function RouteStoryView({
           </aside>
         </div>
       </section>
+
+      <RouteAdventureSection route={route} />
 
       <section className="grid items-center gap-8 bg-[#163b36] px-5 py-16 text-white sm:px-10 lg:grid-cols-[minmax(0,1fr)_auto] lg:px-[max(4rem,calc((100vw-72rem)/2))] lg:py-24">
         <div>

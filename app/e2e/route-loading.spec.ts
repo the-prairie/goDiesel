@@ -301,7 +301,9 @@ test("route story hands off to Replay and returns to the same story", async ({ p
 test("changing routes never flashes the previous route detail", async ({ page }) => {
   const nextSlug = "17665674778";
   await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
-  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+  // Replay headlines the day's own name, with place and date one step down.
+  await expect(page.getByRole("heading", { name: "🍑🍑🍑🍑💦💦💦💦" })).toBeVisible();
+  await expect(page.getByText("Kyoto, Japan · November 24, 2025")).toBeVisible();
   await expect(page.getByText(/^21\.3 km · 680 m up$/)).toBeVisible();
 
   await page.route(`**/data/routes/${nextSlug}.json`, async (route) => {
@@ -313,7 +315,9 @@ test("changing routes never flashes the previous route detail", async ({ page })
   }, nextSlug);
 
   await expect(page.getByRole("status")).toHaveText("Loading Earth Replay.");
-  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Tokyo, Japan" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "🍑🍑🍑🍑💦💦💦💦" })).toHaveCount(0);
+  await expect(page.getByText("Kyoto, Japan · November 24, 2025")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "crosswalk sprints" })).toBeVisible();
+  await expect(page.getByText("Tokyo, Japan · November 26, 2025")).toBeVisible();
   await expect(page.getByText(/^21\.8 km · 286 m up$/)).toBeVisible();
 });

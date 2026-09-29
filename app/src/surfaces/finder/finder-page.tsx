@@ -15,6 +15,7 @@ import type {
   PlannedRoute,
 } from "@/domain/planning";
 import { CandidateRoute } from "@/surfaces/finder/components/candidate-route";
+import { groundedComparison } from "@/domain/planning-evidence";
 import { FinderForm } from "@/surfaces/finder/components/finder-form";
 import { FinderRouteMap } from "@/surfaces/finder/components/finder-route-map";
 import { Button } from "@/ui/button";
@@ -232,7 +233,8 @@ function FinderResults({
               candidate={candidate}
               selected={candidate.id === selectedCandidate?.id}
               committed={candidate.sourceRouteSlug === searchParams.get("candidate")}
-              matchReason={matchReason(candidate, submittedIntent!)}
+              matchReason={groundedComparison(candidate, submittedIntent!).matchReason}
+              intent={submittedIntent!}
               plannedRoute={plannedRoutes.find((route) => route.planning.candidateId === candidate.id)}
               onSelect={() => onSelect(candidate)}
               onPreview={(previewing) => onPreview(previewing ? candidate.sourceRouteSlug : undefined)}
@@ -305,16 +307,6 @@ function FinderState({
       </div>
     </div>
   );
-}
-
-function matchReason(candidate: DiscoveryCandidate, intent: FinderIntent) {
-  const parts = [
-    intent.place,
-    `${candidate.route.distanceKm.toFixed(1)} km near your ${intent.distanceKm} km target`,
-    intent.terrain !== "any" ? `${intent.terrain} terrain` : "recorded terrain",
-    intent.vibe ? `the ${intent.vibe} feeling` : candidate.vibes[0],
-  ];
-  return `${parts.filter(Boolean).join(", ")}.`;
 }
 
 function savedPlanAsCandidate(plan: PlannedRoute): DiscoveryCandidate | undefined {

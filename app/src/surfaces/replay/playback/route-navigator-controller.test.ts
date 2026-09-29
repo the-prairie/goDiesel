@@ -152,3 +152,17 @@ describe("Google route navigator controller", () => {
     expect(googleRouteTelemetry(untimed, 1_000).elapsedS).toBeCloseTo(300);
   });
 });
+
+describe("Google Replay entry distance", () => {
+  it("opens at the requested distance, paused, within the route", async () => {
+    const { googleEntryState } = await import("@/surfaces/replay/playback/route-navigator-controller");
+    expect(googleEntryState(6_762, 15_058)).toMatchObject({ progressM: 6_762, playing: false, following: true });
+    expect(googleEntryState(99_999, 15_058).progressM).toBe(15_058);
+  });
+
+  it("opens at the start without one", async () => {
+    const { googleEntryState } = await import("@/surfaces/replay/playback/route-navigator-controller");
+    expect(googleEntryState(undefined, 15_058).progressM).toBe(0);
+    expect(googleEntryState(-5, 15_058).progressM).toBe(0);
+  });
+});

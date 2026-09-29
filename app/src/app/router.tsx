@@ -34,6 +34,11 @@ const DesignSystemLabPage = lazy(() =>
     default: module.DesignSystemLabPage,
   })),
 );
+const DesignSeedsLabPage = lazy(() =>
+  import("@/labs/design-seeds/design-seeds-lab-page").then((module) => ({
+    default: module.DesignSeedsLabPage,
+  })),
+);
 const RouteIntelligenceLabPage = lazy(() =>
   import("@/labs/route-intelligence/route-intelligence-lab-page").then((module) => ({
     default: module.RouteIntelligenceLabPage,
@@ -72,6 +77,8 @@ const router = createHashRouter([
       { path: "lab/playable-earth/:routeSlug", element: <PlayableEarthLabPage /> },
       { path: "lab/design-system", element: <DesignSystemLabPage /> },
       { path: "lab/route-intelligence", element: <RouteIntelligenceLabPage /> },
+      { path: "lab/design-seeds/:concept/story/:routeSlug", element: <DesignSeedsLabPage /> },
+      { path: "lab/design-seeds/:concept/:view", element: <DesignSeedsLabPage /> },
       {
         path: "lab/google-route-navigator/:routeSlug",
         element: <GoogleRouteNavigatorLabPage />,

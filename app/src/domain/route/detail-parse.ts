@@ -2,8 +2,8 @@
 
 import type { RouteLifecycle } from "@/domain/route/lifecycle";
 import type { RouteElevationStatus } from "@/domain/route/contract";
-import type { RouteAnnotation, RouteAnnotationMedia, GeneratedQuestRoute, QuestRoute, ReplayMetadata, RouteCuration, RouteGeometryStatus, RoutePoint, RouteProvenance, RouteDiscontinuityKind, RouteDiscontinuitySource, RouteTemporalProvenance } from "@/domain/route/contract";
-import { curationFieldSet, curationFields, generatedRoute, optionalCurationList, optionalCurationText, parsedRoutePoints, requiredSlug, validTimeZone } from "@/domain/route/parse-shared";
+import type { RouteAnnotation, RouteAnnotationMedia, GeneratedQuestRoute, QuestRoute, ReplayMetadata, RouteCuration, RouteGeometryStatus, RoutePoint, RouteProvenance, RouteTemporalProvenance } from "@/domain/route/contract";
+import { curationFieldSet, curationFields, generatedRoute, parsedDiscontinuities, optionalCurationList, optionalCurationText, parsedRoutePoints, requiredSlug, validTimeZone } from "@/domain/route/parse-shared";
 
 function validatedElevationStatus(value: unknown): RouteElevationStatus {
   const status = value ?? "recorded";
@@ -146,62 +146,7 @@ function validatedProvenance(
   if (!Array.isArray(source.discontinuities)) {
     throw new Error("provenance.discontinuities must be an array");
   }
-  const totalDistance = route.at(-1)?.d ?? 0;
-  const expectedSources: Record<RouteDiscontinuityKind, RouteDiscontinuitySource> = {
-    segment_boundary: "recorded_track_segment",
-    recording_gap: "recorded_timestamps",
-    missing_position_records: "recorded_position_absence",
-  };
-  const discontinuities = source.discontinuities.map((item) => {
-    if (!item || typeof item !== "object" || Array.isArray(item)) {
-      throw new Error("provenance discontinuity must be an object");
-    }
-    const record = item as Record<string, unknown>;
-    const kind = record.kind as RouteDiscontinuityKind;
-    const evidenceSource = record.source as RouteDiscontinuitySource;
-    if (!(kind in expectedSources) || expectedSources[kind] !== evidenceSource) {
-      throw new Error("provenance discontinuity kind and source do not agree");
-    }
-    const startD = record.start_d;
-    const endD = record.end_d;
-    if (
-      typeof startD !== "number" ||
-      !Number.isFinite(startD) ||
-      typeof endD !== "number" ||
-      !Number.isFinite(endD) ||
-      startD < 0 ||
-      endD < startD
-    ) {
-      throw new Error("provenance discontinuity distance is invalid");
-    }
-    if (route.length > 0 && endD > totalDistance) {
-      throw new Error("provenance discontinuity exceeds route distance");
-    }
-    const elapsedTimeS = record.elapsed_time_s;
-    if (
-      elapsedTimeS !== undefined &&
-      (typeof elapsedTimeS !== "number" || !Number.isFinite(elapsedTimeS) || elapsedTimeS < 0)
-    ) {
-      throw new Error("provenance discontinuity elapsed time is invalid");
-    }
-    const missingRecordCount = record.missing_record_count;
-    if (
-      missingRecordCount !== undefined &&
-      (typeof missingRecordCount !== "number" ||
-        !Number.isInteger(missingRecordCount) ||
-        missingRecordCount < 1)
-    ) {
-      throw new Error("provenance missing record count is invalid");
-    }
-    return {
-      kind,
-      source: evidenceSource,
-      startD,
-      endD,
-      ...(elapsedTimeS !== undefined ? { elapsedTimeS } : {}),
-      ...(missingRecordCount !== undefined ? { missingRecordCount } : {}),
-    };
-  });
+  const discontinuities = parsedDiscontinuities(source.discontinuities, route.length > 0 ? route.at(-1)?.d ?? 0 : undefined);
 
   return {
     temporal,

@@ -17,6 +17,9 @@ export function AppShell() {
   const isAtlas = location.pathname === APP_PATHS.atlas;
   const isFinder = location.pathname === APP_PATHS.finder;
   const isReplayLab = location.pathname.startsWith("/lab/");
+  // Isolated design exploration: the seed frames carry their own shell so the
+  // three directions can be compared without legacy chrome on top of them.
+  const isDesignSeedLab = location.pathname.startsWith("/lab/design-seeds/");
   const isRouteDetail = /^\/routes\/[^/]+$/.test(location.pathname);
   const isRoutesLibrary = section.id === "routes" && !isRouteDetail;
   const isReplay = section.id === "replay";
@@ -31,7 +34,7 @@ export function AppShell() {
 
   return (
     <div className="weathered-atlas field-guide-theme relative flex min-h-dvh bg-background text-foreground">
-      {singleRouteMicrosite || isReplay ? null : (
+      {singleRouteMicrosite || isReplay || isDesignSeedLab ? null : (
         <AtlasSpine hideDesktop={isAtlas || isFinder || isRoutesLibrary || isRouteDetail} />
       )}
       {(isAtlas || isFinder || isRoutesLibrary) && !singleRouteMicrosite ? (
@@ -44,6 +47,7 @@ export function AppShell() {
           "flex min-h-dvh min-w-0 flex-1 flex-col",
           !singleRouteMicrosite &&
             !isReplay &&
+            !isDesignSeedLab &&
             "pb-[var(--mobile-navigation-height)] md:pb-0",
             !singleRouteMicrosite &&
             !isAtlas &&
@@ -51,6 +55,7 @@ export function AppShell() {
             !isRoutesLibrary &&
             !isRouteDetail &&
             !isReplay &&
+            !isDesignSeedLab &&
             "md:pl-[var(--spine-rail-width)] lg:pl-[var(--spine-width)]",
         )}
       >

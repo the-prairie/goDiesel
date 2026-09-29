@@ -2,6 +2,7 @@ import { Circle, Database, LockKeyhole, Search, SearchX } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { RouteEditor } from "@/surfaces/admin/components/route-editor";
+import { AdventureWorkspace } from "@/surfaces/admin/components/adventure-workspace";
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
 import {
@@ -294,6 +295,16 @@ export function AdminPage() {
           </div>
         </>
       )}
+
+      <section aria-labelledby="admin-adventures-title" className="mt-6 grid gap-3 border-t border-line pt-5">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <h2 id="admin-adventures-title" className="text-xl font-semibold text-ink">Adventures</h2>
+          <p className="max-w-xl text-caption text-ink-secondary">
+            Chapters, footage and captured scenes over your recordings. Adjust them here; publishing is a separate decision.
+          </p>
+        </div>
+        <AdventureWorkspace />
+      </section>
     </section>
   );
 }

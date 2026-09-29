@@ -92,6 +92,16 @@ interface Shot {
   threadAhead: number;
   look: CinematicLook;
   kind: CinematicShotKind;
+  /** Why this shot exists, in the plan's own words. Filled after composition. */
+  reason?: string;
+  anchorId?: string;
+}
+
+/** An owner-placed editorial moment the director may build a shot around. */
+export interface CinematicAnchor {
+  id: string;
+  title: string;
+  atDistanceM: number;
 }
 
 interface CoverageFraming {
@@ -152,7 +162,7 @@ const profileCache = new WeakMap<QuestRoute, CinematicProfile>();
 const visualMomentCache = new WeakMap<QuestRoute, CinematicVisualMoment[]>();
 const shotPlanCache = new WeakMap<
   QuestRoute,
-  Map<CinematicCut, readonly Shot[]>
+  Map<string, readonly Shot[]>
 >();
 
 export const CINEMATIC_CUT_LABELS: Record<CinematicCut, string> = {
@@ -585,7 +595,7 @@ function looks(cut: CinematicCut): Record<string, CinematicLook> {
   };
 }
 
-function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
+function buildShotPlan(route: QuestRoute, cut: CinematicCut, anchors: readonly CinematicAnchor[]): Shot[] {
   const totalDistanceM = routeDistanceM(route);
   const profile = cinematicProfile(route);
   const terrainScale =
@@ -601,11 +611,66 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
   const turn = moments.find((moment) => moment.kind === "turn")?.progressRatio ?? 0.38;
   const climb = moments.find((moment) => moment.kind === "climb")?.progressRatio ?? 0.3;
   const visualSequence = cinematicVisualMoments(route);
-  const firstHero = visualSequence[0]?.progressRatio ?? climb;
-  const middleHero =
-    visualSequence[Math.floor((visualSequence.length - 1) / 2)]
-      ?.progressRatio ?? turn;
-  const finalHero = visualSequence.at(-1)?.progressRatio ?? summit;
+  /*
+   * Hero moments: owner-placed chapters when there are any, otherwise the
+   * strongest terrain signals, otherwise the route's measured moments. Each
+   * keeps the reason it was chosen so the plan can say so.
+   */
+  const placed = [...anchors]
+    .map((anchor) => ({ anchor, ratio: clamp(anchor.atDistanceM / Math.max(1, totalDistanceM)) }))
+    .filter(({ ratio }) => ratio > 0.03 && ratio < 0.97)
+    .sort((a, b) => a.ratio - b.ratio);
+  const visualNote = (moment: CinematicVisualMoment | undefined, fallback: string) =>
+    moment
+      ? `Strongest terrain signal near ${kilometres(moment.progressRatio * totalDistanceM)}: ${Math.round(moment.localReliefM)} m local relief, ${moment.gradePct.toFixed(0)}% grade`
+      : fallback;
+  type Hero = { ratio: number; reason: string; anchorId?: string };
+  const fromAnchor = ({ anchor, ratio }: (typeof placed)[number]): Hero => ({
+    ratio,
+    reason: `Owner chapter "${anchor.title}" at ${kilometres(anchor.atDistanceM)}`,
+    anchorId: anchor.id,
+  });
+  const heroes: Hero[] = [
+    { ratio: visualSequence[0]?.progressRatio ?? climb, reason: visualNote(visualSequence[0], `Hardest rise at ${kilometres(climb * totalDistanceM)}`) },
+    {
+      ratio: visualSequence[Math.floor((visualSequence.length - 1) / 2)]?.progressRatio ?? turn,
+      reason: visualNote(visualSequence[Math.floor((visualSequence.length - 1) / 2)], `Sharpest turn at ${kilometres(turn * totalDistanceM)}`),
+    },
+    { ratio: visualSequence.at(-1)?.progressRatio ?? summit, reason: visualNote(visualSequence.at(-1), `Recorded high point at ${kilometres(summit * totalDistanceM)}`) },
+  ];
+  if (placed.length >= 3) {
+    heroes[0] = fromAnchor(placed[0]);
+    heroes[1] = fromAnchor(placed[Math.floor((placed.length - 1) / 2)]);
+    heroes[2] = fromAnchor(placed.at(-1)!);
+  } else {
+    // Fewer chapters than hero slots: each takes the slot nearest it, and the
+    // terrain keeps the others, so one chapter is never the whole film.
+    const free = new Set([0, 1, 2]);
+    for (const chosen of placed) {
+      const slot = [...free].sort((a, b) => Math.abs(heroes[a].ratio - chosen.ratio) - Math.abs(heroes[b].ratio - chosen.ratio))[0];
+      free.delete(slot);
+      heroes[slot] = fromAnchor(chosen);
+    }
+  }
+  const [firstHero, middleHero, finalHero] = heroes.map((item) => item.ratio);
+  const annotate = (shots: Shot[]): Shot[] =>
+    shots.map((shot) => {
+      const centre = (shot.fromProgress + shot.toProgress) / 2;
+      const match = shot.kind === "establishing" || shot.kind === "release" || shot.kind === "reveal"
+        ? undefined
+        : heroes
+            .map((item) => ({ item, distance: Math.abs(item.ratio - centre) }))
+            .filter(({ distance }) => distance < 0.045)
+            .sort((a, b) => a.distance - b.distance)[0]?.item;
+      const reason = match?.reason ?? {
+        establishing: "Whole-route establishing view",
+        reveal: "The recorded line begins",
+        release: "Closing on the finish",
+        tracking: `Following the route near ${kilometres(centre * totalDistanceM)}`,
+        summit: `Holding on the route near ${kilometres(centre * totalDistanceM)}`,
+      }[shot.kind];
+      return { ...shot, reason, ...(match && "anchorId" in match ? { anchorId: match.anchorId } : {}) };
+    });
   const activeLook = looks(cut).active;
 
   if (cut === "feature") {
@@ -741,11 +806,11 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         kind: "summit",
       });
     }
-    return directShotPlan(route, featureShots, profile);
+    return annotate(directShotPlan(route, featureShots, profile));
   }
 
   if (cut === "kinetic") {
-    return directShotPlan(route, [
+    return annotate(directShotPlan(route, [
       {
         chapter: "No more waiting",
         duration: 3.2,
@@ -818,11 +883,11 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         look: activeLook,
         kind: "release",
       },
-    ], profile);
+    ], profile));
   }
 
   if (cut === "intimate") {
-    return directShotPlan(route, [
+    return annotate(directShotPlan(route, [
       {
         chapter: "The quiet before movement",
         duration: 5.2,
@@ -895,10 +960,10 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
         look: activeLook,
         kind: "release",
       },
-    ], profile);
+    ], profile));
   }
 
-  return directShotPlan(route, [
+  return annotate(directShotPlan(route, [
     {
       chapter: "First, the world",
       duration: 7,
@@ -971,7 +1036,7 @@ function buildShotPlan(route: QuestRoute, cut: CinematicCut): Shot[] {
       look: activeLook,
       kind: "release",
     },
-  ], profile);
+  ], profile));
 }
 
 function directShotPlan(
@@ -1030,17 +1095,130 @@ function directShotPlan(
   });
 }
 
-function shotPlan(route: QuestRoute, cut: CinematicCut): readonly Shot[] {
+function shotPlan(route: QuestRoute, cut: CinematicCut, anchors: readonly CinematicAnchor[] = []): readonly Shot[] {
+  const key = `${cut}|${anchors.map((anchor) => `${anchor.id}@${Math.round(anchor.atDistanceM)}`).join(",")}`;
   const routePlans = shotPlanCache.get(route);
-  const cached = routePlans?.get(cut);
+  const cached = routePlans?.get(key);
   if (cached) return cached;
-  const plan = buildShotPlan(route, cut);
+  const plan = guardRecordingGaps(route, buildShotPlan(route, cut, anchors));
   if (routePlans) {
-    routePlans.set(cut, plan);
+    routePlans.set(key, plan);
   } else {
-    shotPlanCache.set(route, new Map([[cut, plan]]));
+    shotPlanCache.set(route, new Map([[key, plan]]));
   }
   return plan;
+}
+
+const kilometres = (distanceM: number) => `${(distanceM / 1_000).toFixed(1)} km`;
+
+/**
+ * A shot travels along the route between two distances. Where that travel
+ * would sweep across a recording gap, hold it on the side where most of the
+ * shot lies: the camera never glides through geography that was not recorded.
+ */
+function guardRecordingGaps(route: QuestRoute, shots: Shot[]): Shot[] {
+  const gaps = route.provenance?.discontinuities ?? [];
+  const totalDistanceM = routeDistanceM(route);
+  if (!gaps.length || totalDistanceM <= 0) return shots;
+  return shots.map((shot) => {
+    let fromM = shot.fromProgress * totalDistanceM;
+    let toM = shot.toProgress * totalDistanceM;
+    let held: number | undefined;
+    for (const gap of gaps) {
+      const low = Math.min(fromM, toM);
+      const high = Math.max(fromM, toM);
+      if (!(low < gap.endD && high > gap.startD)) continue;
+      const before = (fromM + toM) / 2 < (gap.startD + gap.endD) / 2;
+      const clampM = (value: number) => (before ? Math.min(value, gap.startD) : Math.max(value, gap.endD));
+      fromM = clampM(fromM);
+      toM = clampM(toM);
+      held = gap.startD;
+    }
+    if (held === undefined) return shot;
+    return {
+      ...shot,
+      fromProgress: clamp(fromM / totalDistanceM),
+      toProgress: clamp(toM / totalDistanceM),
+      reason: `${shot.reason ?? "Along the route"} · held to one side of the recording gap at ${kilometres(held)}`,
+    };
+  });
+}
+
+export interface InspectableShot {
+  index: number;
+  kind: CinematicShotKind;
+  chapter: string;
+  reason: string;
+  anchorId?: string;
+  startSeconds: number;
+  endSeconds: number;
+  fromM: number;
+  toM: number;
+  rangeM: [number, number];
+  pitchDeg: [number, number];
+  lensMm: [number, number];
+}
+
+export interface CinematicShotPlan {
+  slug: string;
+  cut: CinematicCut;
+  anchors: string[];
+  durationSeconds: number;
+  /** FNV-1a over the rounded plan: equal digests mean an identical film. */
+  digest: string;
+  shots: InspectableShot[];
+}
+
+function fnv1a(text: string) {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
+}
+
+/**
+ * The director's plan, inspectable and reproducible: what each shot shows,
+ * where along the recording, with what camera, and why it was chosen. It is a
+ * pure function of the route, the cut and the anchors; nothing in it runs per
+ * frame or calls out to a model.
+ */
+export function cinematicShotPlan(
+  route: QuestRoute,
+  cut: CinematicCut,
+  anchors: readonly CinematicAnchor[] = [],
+): CinematicShotPlan {
+  const totalDistanceM = routeDistanceM(route);
+  const round = (value: number) => Math.round(value * 10) / 10;
+  let startSeconds = 0;
+  const shots = shotPlan(route, cut, anchors).map((shot, index): InspectableShot => {
+    const item: InspectableShot = {
+      index,
+      kind: shot.kind,
+      chapter: shot.chapter,
+      reason: shot.reason ?? "Along the route",
+      ...(shot.anchorId ? { anchorId: shot.anchorId } : {}),
+      startSeconds: round(startSeconds),
+      endSeconds: round(startSeconds + shot.duration),
+      fromM: round(shot.fromProgress * totalDistanceM),
+      toM: round(shot.toProgress * totalDistanceM),
+      rangeM: [round(shot.fromRangeM), round(shot.toRangeM)],
+      pitchDeg: [round(shot.fromPitchDeg), round(shot.toPitchDeg)],
+      lensMm: [round(shot.lensFromMm), round(shot.lensToMm)],
+    };
+    startSeconds += shot.duration;
+    return item;
+  });
+  const durationSeconds = startSeconds;
+  return {
+    slug: route.slug,
+    cut,
+    anchors: anchors.map((anchor) => anchor.id),
+    durationSeconds,
+    digest: fnv1a(JSON.stringify([cut, shots])),
+    shots,
+  };
 }
 
 function cameraResponseSeconds(kind: CinematicShotKind) {
@@ -1171,20 +1349,21 @@ export function cinematicCameraRig(
   };
 }
 
-export function cinematicDuration(route: QuestRoute, cut: CinematicCut) {
-  return shotPlan(route, cut).reduce((total, shot) => total + shot.duration, 0);
+export function cinematicDuration(route: QuestRoute, cut: CinematicCut, anchors: readonly CinematicAnchor[] = []) {
+  return shotPlan(route, cut, anchors).reduce((total, shot) => total + shot.duration, 0);
 }
 
 export function cinematicShotTimeline(
   route: QuestRoute,
   cut: CinematicCut,
+  anchors: readonly CinematicAnchor[] = [],
 ): Array<{
   endSeconds: number;
   kind: CinematicShotKind;
   startSeconds: number;
 }> {
   let startSeconds = 0;
-  return shotPlan(route, cut).map((shot) => {
+  return shotPlan(route, cut, anchors).map((shot) => {
     const timing = {
       endSeconds: startSeconds + shot.duration,
       kind: shot.kind,
@@ -1199,8 +1378,9 @@ export function cinematicFrame(
   route: QuestRoute,
   cut: CinematicCut,
   elapsedSeconds: number,
+  anchors: readonly CinematicAnchor[] = [],
 ): CinematicFrame {
-  const shots = shotPlan(route, cut);
+  const shots = shotPlan(route, cut, anchors);
   const durationSeconds = shots.reduce((total, shot) => total + shot.duration, 0);
   const elapsed = clamp(elapsedSeconds, 0, durationSeconds);
   let shotStart = 0;

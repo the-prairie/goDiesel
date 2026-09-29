@@ -1,0 +1,63 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "godiesel-adventure",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "app",
+        "run",
+        "dev:loopback",
+        "--",
+        "--port",
+        "8789",
+        "--strictPort"
+      ],
+      "port": 8789
+    },
+    {
+      "name": "godiesel-preview-build",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "app",
+        "run",
+        "preview:loopback",
+        "--",
+        "--port",
+        "8790",
+        "--strictPort"
+      ],
+      "port": 8790
+    },
+    {
+      "name": "godiesel-dev-no-live",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "GODIESEL_DISABLE_LIVE_PROVIDERS=1",
+        "npm",
+        "--prefix",
+        "app",
+        "run",
+        "dev:loopback",
+        "--",
+        "--port",
+        "8792",
+        "--strictPort"
+      ],
+      "port": 8792
+    },
+    {
+      "name": "godiesel-live-google",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "app",
+        "run",
+        "dev:loopback"
+      ],
+      "port": 8787
+    }
+  ]
+}

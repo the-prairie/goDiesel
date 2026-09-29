@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Captured scene</title>
+<style>html,body,iframe{width:100%;height:100%;margin:0;border:0;display:block;overflow:hidden;background:#2a2823}</style>
+</head>
+<body>
+<iframe id="scene" title="Captured 3D scene on Sketchfab" allow="autoplay; fullscreen; xr-spatial-tracking" allowfullscreen></iframe>
+<script src="https://static.sketchfab.com/api/sketchfab-viewer-1.12.1.js"></script>
+<script>
+// goDiesel's bridge to the official Sketchfab Viewer API. The SDK lives in this
+// disposable same-origin frame so its listeners leave with the scene, and the
+// parent only ever exchanges validated camera poses with it. Ported from the
+// adventure player's scene viewer.
+(() => {
+  const channel = "godiesel-sketchfab";
+  const origin = location.origin;
+  const model = new URLSearchParams(location.search).get("model");
+  const send = (type, value) => parent.postMessage({ channel, type, value }, origin);
+  const vector = (v) => Array.isArray(v) && v.length === 3 && v.every(Number.isFinite);
+  let api;
+  if (!/^[a-f0-9]{32}$/.test(model || "")) { send("error", "model"); return; }
+  if (typeof Sketchfab !== "function") { send("error", "sdk"); return; }
+  window.addEventListener("message", (event) => {
+    if (event.source !== parent || event.origin !== origin || event.data?.channel !== channel || !api) return;
+    const { type, value } = event.data;
+    if (type === "camera" && vector(value?.position) && vector(value?.target)) api.setCameraLookAt(value.position, value.target, 0);
+    if (type === "interaction" && typeof value === "boolean") api.setUserInteraction(value);
+    if (type === "fov" && Number.isFinite(value) && value >= 25 && value <= 90) api.setFov(value);
+  });
+  try {
+    new Sketchfab(document.querySelector("#scene")).init(model, {
+      autostart: 1, preload: 0, camera: 0, dnt: 1,
+      ui_infos: 0, ui_hint: 0, ui_controls: 0, ui_stop: 0,
+      success(viewer) {
+        api = viewer;
+        api.addEventListener("viewerready", () => {
+          api.setUserInteraction(false);
+          api.getCameraLookAt((error, camera) => (error ? send("error", "camera") : send("ready", camera)));
+        });
+        api.addEventListener("modelLoadProgress", (progress) => send("progress", progress?.progress ?? progress));
+        api.start();
+      },
+      error() { send("error", "init"); },
+    });
+  } catch (error) { send("error", `exception: ${error?.message ?? error}`); }
+})();
+</script>
+</body>
+</html>

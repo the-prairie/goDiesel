@@ -30,6 +30,14 @@ const INTELLIGENCE_TRAVELED_COLOR = "#ef684e";
 const INTELLIGENCE_FUTURE_COLOR = "#f6f3ed";
 const INTELLIGENCE_PLAYHEAD_COLOR = "#ef684e";
 
+/** An editorial anchor on the climb: a chapter or a captured scene. */
+export interface ReplayScrubberMark {
+  id: string;
+  kind: "chapter" | "scene";
+  distanceM: number;
+  label: string;
+}
+
 export interface ReplayElevationScrubberHandle {
   sync(progressM: number): void;
 }
@@ -42,9 +50,12 @@ export const ReplayElevationScrubber = forwardRef<
     totalDistanceM: number;
     disabled?: boolean;
     compact?: boolean;
-    tone?: "default" | "intelligence";
+    tone?: "default" | "intelligence" | "notebook";
     className?: string;
+    marks?: ReplayScrubberMark[];
     onSeek: (progressM: number) => void;
+    /** Marks seek through this instead, so an interruption can be held. */
+    onMark?: (progressM: number) => void;
   }
 >(function ReplayElevationScrubber(
   {
@@ -55,7 +66,9 @@ export const ReplayElevationScrubber = forwardRef<
     compact = false,
     tone = "default",
     className,
+    marks = [],
     onSeek,
+    onMark,
   },
   ref,
 ) {
@@ -88,11 +101,11 @@ export const ReplayElevationScrubber = forwardRef<
   const repairYRatio = (distanceRatio: number) =>
     profileYAtRatio(profile.points, distanceRatio) / PROFILE_HEIGHT;
   const traveledColor =
-    tone === "intelligence" ? INTELLIGENCE_TRAVELED_COLOR : TRAVELED_COLOR;
+    tone === "notebook" ? "#8d2f14" : tone === "intelligence" ? INTELLIGENCE_TRAVELED_COLOR : TRAVELED_COLOR;
   const futureColor =
-    tone === "intelligence" ? INTELLIGENCE_FUTURE_COLOR : FUTURE_COLOR;
+    tone === "notebook" ? "#b3a699" : tone === "intelligence" ? INTELLIGENCE_FUTURE_COLOR : FUTURE_COLOR;
   const playheadColor =
-    tone === "intelligence" ? INTELLIGENCE_PLAYHEAD_COLOR : PLAYHEAD_COLOR;
+    tone === "notebook" ? "#c34a24" : tone === "intelligence" ? INTELLIGENCE_PLAYHEAD_COLOR : PLAYHEAD_COLOR;
 
   const sync = (nextProgressM: number) => {
     const ratio = Math.min(1, Math.max(0, nextProgressM / totalDistanceM));
@@ -174,7 +187,7 @@ export const ReplayElevationScrubber = forwardRef<
         />
         <path
           d={profile.area}
-          fill={tone === "intelligence" ? "#253a3a" : "#dfe5ee"}
+          fill={tone === "notebook" ? "#ded6c6" : tone === "intelligence" ? "#253a3a" : "#dfe5ee"}
           opacity={tone === "intelligence" ? "0.6" : "0.72"}
         />
         <polyline
@@ -254,6 +267,42 @@ export const ReplayElevationScrubber = forwardRef<
             }}
             onClick={() => setActiveRepairs(group)}
           />
+        );
+      })}
+
+      {marks.map((mark) => {
+        const ratio = Math.min(1, Math.max(0, mark.distanceM / totalDistanceM));
+        const position = { left: `${ratio * 100}%`, top: `${repairYRatio(ratio) * 100}%` };
+        // A scene belongs to the chapter it sits in and is opened from that
+        // chapter, so its mark is drawn but never competes for the pointer.
+        return mark.kind === "scene" ? (
+          <span
+            key={mark.id}
+            aria-hidden="true"
+            data-testid="replay-adventure-mark"
+            data-mark-kind="scene"
+            data-mark-distance-m={mark.distanceM.toFixed(1)}
+            className="replay-adventure-mark pointer-events-none absolute z-20 size-3 -translate-x-1/2 -translate-y-1/2"
+            style={position}
+          >
+            <span data-kind="scene" />
+          </span>
+        ) : (
+          <button
+            key={mark.id}
+            type="button"
+            data-testid="replay-adventure-mark"
+            data-mark-kind="chapter"
+            data-mark-distance-m={mark.distanceM.toFixed(1)}
+            aria-label={mark.label}
+            title={mark.label}
+            disabled={disabled}
+            className="replay-adventure-mark absolute z-30 size-11 -translate-x-1/2 -translate-y-1/2 outline-none"
+            style={position}
+            onClick={() => (onMark ?? onSeek)(mark.distanceM)}
+          >
+            <span aria-hidden="true" data-kind="chapter" />
+          </button>
         );
       })}
 

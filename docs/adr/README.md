@@ -53,6 +53,7 @@ not by recollection.
 | [0014](0014-app-src-is-organised-by-surface.md) | app/src is organised by surface, with labs separated | accepted |
 | [0015](0015-imported-route-identity-is-allocated-once.md) | Imported route identity is allocated once | accepted |
 | [0016](0016-agent-control-plane-is-manifest-driven.md) | The agent control plane is manifest-driven | proposed |
+| [0017](0017-adventures-are-an-editorial-layer-over-canonical-recordings.md) | Adventures are an editorial layer over canonical recordings | proposed |
 
 ## Renderer history
 

@@ -11,13 +11,23 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import type { RouteThreadStyle } from "@/domain/geometry/route-thread-style";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/ui/button";
+import { useRouteAdventure } from "@/data/use-route-adventure";
+import {
+  ReplayAdventureLayer,
+  type ReplayAdventureControls,
+} from "@/surfaces/replay/adventure/replay-adventure-layer";
+import { holdReplay, releaseReplayHold, type ReplayHold } from "@/surfaces/replay/playback/replay-hold";
+import { useReplayResume } from "@/surfaces/replay/adventure/use-replay-resume";
 import {
   ReplayElevationScrubber,
   type ReplayElevationScrubberHandle,
+  type ReplayScrubberMark,
 } from "@/surfaces/replay/components/replay-elevation-scrubber";
 import { ReplayRoutePicker } from "@/surfaces/replay/components/replay-route-picker";
 import {
@@ -54,6 +64,7 @@ import {
   createReplayEngine,
   type ReplayEngine,
   type ReplayEngineMode,
+  type ReplayMark,
   type ReplayStatus,
 } from "@/surfaces/replay/renderer-port";
 
@@ -78,6 +89,9 @@ export function EarthReplayStage({
   backLabel,
   initialEngineMode = "earth",
   allowEarthMode = true,
+  threadStyle,
+  initialProgressM,
+  presentation,
 }: {
   route: QuestRoute;
   pickerRoutes: RouteSummary[];
@@ -85,6 +99,17 @@ export function EarthReplayStage({
   backLabel: string;
   initialEngineMode?: ReplayEngineMode;
   allowEarthMode?: boolean;
+  /** Optional thread treatment. Omitted means the shared default. */
+  threadStyle?: RouteThreadStyle;
+  /**
+   * Begin at this distance along the route rather than at the start.
+   *
+   * Omitted, playback opens at 0 exactly as before. A caller that entered from
+   * a held position on the route passes it so arrival continues the motion
+   * instead of starting the day again.
+   */
+  initialProgressM?: number;
+  presentation?: "notebook";
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const elevationScrubberRef = useRef<
@@ -92,7 +117,7 @@ export function EarthReplayStage({
   >(null);
   const engineRef = useRef<ReplayEngine | undefined>(undefined);
   const mountedRouteRef = useRef<string | undefined>(undefined);
-  const controlRef = useRef(initialReplayState());
+  const controlRef = useRef(seekReplay(initialReplayState(), initialProgressM ?? 0, routeDistanceM(route)));
   const [status, setStatus] = useState<ReplayStatus>(() =>
     initialReplayStatus(initialEngineMode),
   );
@@ -124,6 +149,64 @@ export function EarthReplayStage({
     [route],
   );
 
+  /*
+   * The adventure layer: chapters, footage, a captured scene and a film,
+   * present only when a local adventure includes this recording. Every
+   * interruption holds the whole playback state and releases it exactly.
+   */
+  const adventure = useRouteAdventure(route);
+  const [stageElement, setStageElement] = useState<HTMLElement | null>(null);
+  const [presenting, setPresenting] = useState<"footage" | "scene" | "film">();
+  const routePassPainted = useRef(0);
+  const adventureControls = useMemo<ReplayAdventureControls>(() => ({
+    hold: (reason) => {
+      const held = holdReplay(controlRef.current, reason);
+      commitControl(() => held.control);
+      return held.hold;
+    },
+    release: (hold) => commitControl(() => releaseReplayHold(hold as ReplayHold, totalDistanceM)),
+    seek: (distanceM) => commitControl((current) => seekReplay(current, distanceM, totalDistanceM)),
+    routePass: (fraction) => {
+      // Per-frame like playback: the engine and scrubber move every frame,
+      // React state at most every 80 ms.
+      const next = {
+        ...seekReplay({ ...controlRef.current, playing: false }, fraction * totalDistanceM, totalDistanceM),
+        following: true,
+        cameraRangeM: REPLAY_CAMERA_RANGES_M.at(-1)!,
+      };
+      controlRef.current = next;
+      engineRef.current?.setPose(replayPose(route, next));
+      elevationScrubberRef.current?.sync(next.progressM);
+      const now = performance.now();
+      if (now - routePassPainted.current >= 80 || fraction >= 1) {
+        routePassPainted.current = now;
+        setControl(next);
+      }
+    },
+  }), [commitControl, route, totalDistanceM]);
+  const scrubberMarks = useMemo<ReplayScrubberMark[]>(() => adventure ? [
+    ...adventure.chapters.map((chapter) => ({
+      id: `chapter-${chapter.id}`, kind: "chapter" as const, distanceM: chapter.atDistanceM,
+      label: `Chapter ${chapter.ordinal}: ${chapter.title}, ${(chapter.atDistanceM / 1_000).toFixed(2)} km`,
+    })),
+    ...adventure.scenes.map((scene) => ({
+      id: `scene-${scene.id}`, kind: "scene" as const, distanceM: scene.atDistanceM,
+      label: `Captured scene: ${scene.title}, ${(scene.atDistanceM / 1_000).toFixed(2)} km`,
+    })),
+  ] : [], [adventure]);
+  const engineMarks = useMemo<ReplayMark[]>(() => adventure ? [
+    ...adventure.chapters.map((chapter) => ({ id: chapter.id, kind: "chapter" as const, ...chapter.anchor.source })),
+    ...adventure.scenes.map((scene) => ({ id: scene.id, kind: "scene" as const, ...scene.anchor.source })),
+  ] : [], [adventure]);
+  const { resume, inspect, resumeHeld, dismiss: dismissResume } = useReplayResume<ReplayHold>({
+    playing: control.playing,
+    isPlaying: useCallback(() => controlRef.current.playing, []),
+    hold: useCallback(() => adventureControls.hold("inspect") as ReplayHold, [adventureControls]),
+    release: adventureControls.release,
+    seek: adventureControls.seek,
+  });
+
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -132,29 +215,66 @@ export function EarthReplayStage({
       setEngineMode(initialEngineMode);
       return;
     }
-    const engine = createReplayEngine(engineMode);
+    const engine = createReplayEngine(engineMode, presentation);
     engineRef.current = engine;
-    const initialControl = routeChanged ? initialReplayState() : controlRef.current;
+    const initialControl = routeChanged ? seekReplay(initialReplayState(), initialProgressM ?? 0, totalDistanceM) : controlRef.current;
     mountedRouteRef.current = route.slug;
     controlRef.current = initialControl;
     setControl(initialControl);
     setStatus(initialReplayStatus(engineMode));
-    void engine.mount({
-      container,
-      route,
-      onStatus: (nextStatus) => {
-        if (engineRef.current !== engine) return;
-        setStatus(nextStatus);
-        if (nextStatus.state === "ready" || nextStatus.state === "partial") {
-          engine.setPose(replayPose(route, controlRef.current));
-        }
-      },
-    });
+    const mount = () => {
+      if (engineRef.current !== engine) return;
+      void engine.mount({
+        container,
+        route,
+        threadStyle,
+        onStatus: (nextStatus) => {
+          if (engineRef.current !== engine) return;
+          setStatus(nextStatus);
+          if (nextStatus.state === "ready" || nextStatus.state === "partial") {
+            engine.setPose(replayPose(route, controlRef.current));
+          }
+        },
+      });
+    };
+    // Strict Mode probes effects with setup → cleanup → setup. A carried
+    // canvas must be claimed only by the setup that survives that probe.
+    if (presentation === "notebook") queueMicrotask(mount);
+    else mount();
     return () => {
       engine.destroy();
       if (engineRef.current === engine) engineRef.current = undefined;
     };
-  }, [engineMode, initialEngineMode, route]);
+  }, [engineMode, initialEngineMode, route, presentation, initialProgressM, totalDistanceM, threadStyle]);
+
+  useEffect(() => {
+    if (operational) engineRef.current?.setMarks?.(engineMarks);
+  }, [operational, engineMarks]);
+
+  /*
+   * The dock always covers the lower edge; the chapter card does too when it
+   * spans the width (a phone). The camera frames the held point in the map
+   * that remains, instead of behind the card.
+   */
+  const bottomStackRef = useRef<HTMLDivElement>(null);
+  const dockRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const stack = bottomStackRef.current;
+    const stage = stageElement;
+    if (!stack || !stage || !operational) return;
+    const measure = () => {
+      const card = stack.querySelector<HTMLElement>(".adv-card-slot");
+      const dockHeight = dockRef.current?.offsetHeight ?? 0;
+      const cardSpans = card && card.offsetWidth > stage.offsetWidth * 0.6 ? card.offsetHeight : 0;
+      // Capped, so an open chapter list never shoves the route off the top.
+      engineRef.current?.setBottomInset?.(adventure ? Math.min(dockHeight + cardSpans, stage.offsetHeight * 0.55) : 0);
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(stack);
+    observer.observe(stage);
+    measure();
+    return () => observer.disconnect();
+  }, [adventure, operational, stageElement]);
 
   useEffect(() => {
     if (!operational || !control.playing) return;
@@ -205,9 +325,12 @@ export function EarthReplayStage({
 
   return (
     <section
-      aria-label={engineMode === "earth" ? "Earth Replay" : "Atlas Replay"}
+      ref={setStageElement}
+      data-adventure={adventure?.adventure.id}
+      data-presenting={presenting}
+      aria-label={presentation === "notebook" ? "Along the recorded route" : engineMode === "earth" ? "Earth Replay" : "Atlas Replay"}
       data-testid="replay-stage"
-      data-engine={engineMode === "earth" ? "cesium-bundled" : "maplibre-atlas"}
+      data-engine={presentation === "notebook" ? "maplibre-notebook" : engineMode === "earth" ? "cesium-bundled" : "maplibre-atlas"}
       data-state={status.state}
       data-route-slug={route.slug}
       data-progress={control.progressM.toFixed(2)}
@@ -228,12 +351,12 @@ export function EarthReplayStage({
         aria-label={engineMode === "earth" ? "Earth Replay world" : "Atlas Replay map"}
         className="absolute inset-0"
       />
-      <RecordedLightLayer light={recordedLight} reducedMotion={reducedMotion} />
+      {presentation !== "notebook" ? <RecordedLightLayer light={recordedLight} reducedMotion={reducedMotion} /> : null}
 
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-4 p-3 sm:p-5">
         <RouteContextHud
           route={route}
-          label={engineMode === "earth" ? "Earth Replay" : "Atlas Replay"}
+          label={presentation === "notebook" ? "" : engineMode === "earth" ? "Earth Replay" : "Atlas Replay"}
           testId="replay-context"
           detailsTestId="replay-context-details"
           state={contextState}
@@ -243,9 +366,7 @@ export function EarthReplayStage({
           onStateChange={setContextState}
           summary={
             <>
-            <div className="mt-1.5">
-              <RecordedLightLabel light={recordedLight} />
-            </div>
+            {presentation !== "notebook" ? <div className="mt-1.5"><RecordedLightLabel light={recordedLight} /></div> : null}
             {route.curation.vibe ? (
               <p className="mt-3 max-w-sm font-editorial text-base italic leading-5 text-ink-secondary">
                 {route.curation.vibe}
@@ -255,16 +376,7 @@ export function EarthReplayStage({
               <div role="status" className="mt-3 border-l-2 border-amber-300 pl-3">
                 <div className="text-sm font-semibold">{status.title}</div>
                 <p className="mt-1 text-xs text-muted-foreground">{status.message}</p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="mt-3"
-                  onClick={() => setEngineMode("atlas")}
-                >
-                  <Map aria-hidden="true" />
-                  Use Atlas replay
-                </Button>
+                {presentation !== "notebook" ? <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => setEngineMode("atlas")}><Map aria-hidden="true" />Use Atlas replay</Button> : null}
               </div>
             ) : null}
             {engineMode === "atlas" && allowEarthMode ? (
@@ -281,7 +393,7 @@ export function EarthReplayStage({
             ) : null}
             </>
           }
-          actions={
+          actions={presentation === "notebook" ? undefined :
             <div className="grid grid-cols-2 gap-2">
               {route.replay.replayEligible ? (
                 <Button asChild size="sm" className="w-full bg-forest text-white hover:bg-forest/90">
@@ -324,7 +436,7 @@ export function EarthReplayStage({
                   </Button>
                 ) : null}
                 <Button asChild variant={engineMode === "earth" ? "outline" : "default"}>
-                  <Link to={routeDetailPath(route.slug)}>Return to route guide</Link>
+                  <Link to={presentation === "notebook" ? backPath : routeDetailPath(route.slug)}>Return to route guide</Link>
                 </Button>
               </div>
             ) : null}
@@ -332,8 +444,26 @@ export function EarthReplayStage({
         </div>
       ) : null}
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center">
+      <div ref={bottomStackRef} className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-col items-stretch">
+        {adventure && operational ? (
+          <div className="adv-card-slot">
+            <ReplayAdventureLayer
+              adventure={adventure}
+              progressM={control.progressM}
+              playing={control.playing}
+              reducedMotion={reducedMotion}
+              container={stageElement}
+              controls={adventureControls}
+              resume={resume}
+              onInspect={inspect}
+              onResume={resumeHeld}
+              onDismissResume={dismissResume}
+              onPresenting={setPresenting}
+            />
+          </div>
+        ) : null}
         <div
+          ref={dockRef}
           data-testid="replay-controls"
           className="pointer-events-auto w-full border-t border-line bg-surface/96 p-2 text-ink shadow-sheet backdrop-blur sm:flex sm:items-center sm:gap-2 sm:px-3 sm:py-2"
         >
@@ -362,11 +492,14 @@ export function EarthReplayStage({
             </div>
             <ReplayElevationScrubber
               ref={elevationScrubberRef}
+            tone={presentation === "notebook" ? "notebook" : "default"}
               route={route}
               progressM={control.progressM}
               totalDistanceM={totalDistanceM}
               disabled={!operational}
               compact
+              marks={scrubberMarks}
+              onMark={adventure ? inspect : undefined}
               onSeek={(progressM) =>
                 commitControl((current) =>
                   seekReplay(current, progressM, totalDistanceM),
@@ -459,11 +592,14 @@ export function EarthReplayStage({
           </div>
           <ReplayElevationScrubber
             ref={elevationScrubberRef}
+            tone={presentation === "notebook" ? "notebook" : "default"}
             route={route}
             progressM={control.progressM}
             totalDistanceM={totalDistanceM}
             disabled={!operational}
             className="min-w-48 flex-[2]"
+            marks={scrubberMarks}
+            onMark={adventure ? inspect : undefined}
             onSeek={(progressM) =>
               commitControl((current) =>
                 seekReplay(current, progressM, totalDistanceM),
