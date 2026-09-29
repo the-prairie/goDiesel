@@ -304,7 +304,7 @@
     },
     {
       "id": "route-generation-implementation",
-      "paths": ["build.py", "quest_meta.py", "route_manifest.py", "rebuild.sh", "test_react_app.py", "test_route_manifest.py"],
+      "paths": ["build.py", "quest_meta.py", "rebuild.sh", "test_react_app.py"],
       "capabilities": ["route-generation"],
       "category": "implementation",
       "gates": [{ "capability": "route-generation", "tier": "focused" }],

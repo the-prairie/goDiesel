@@ -409,7 +409,6 @@ def _copy_workspace(workspace):
         "route_imports.py",
         "route_annotations.py",
         "route_timezones.py",
-        "route_manifest.py",
         ".env",
     ):
         source = ROOT / name
