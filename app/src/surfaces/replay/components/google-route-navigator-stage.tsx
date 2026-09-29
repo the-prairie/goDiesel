@@ -38,8 +38,8 @@ import {
   googleRouteCameraPose,
   googleRouteThreadTreatment,
   googleRouteTelemetry,
-  initialGoogleRouteNavigatorState,
   seekGoogleRouteNavigator,
+  googleEntryState,
   zoomGoogleRouteNavigator,
   type GoogleRouteCameraMode,
   type GoogleRouteNavigatorState,
@@ -90,6 +90,8 @@ interface GoogleRouteNavigatorStageProps {
   backLabel?: string;
   onUseAtlas?: () => void;
   fieldTestRoutes?: ReadonlyArray<{ slug: string; label: string }>;
+  /** Open at this distance along the recording (Replay's ?at=), not the start. */
+  initialProgressM?: number;
 }
 
 export function GoogleRouteNavigatorStage({
@@ -100,6 +102,7 @@ export function GoogleRouteNavigatorStage({
   backLabel = "Back to route intelligence",
   onUseAtlas,
   fieldTestRoutes = [],
+  initialProgressM,
 }: GoogleRouteNavigatorStageProps) {
   const navigate = useNavigate();
   const productionReplay = variant === "replay";
@@ -128,7 +131,9 @@ export function GoogleRouteNavigatorStage({
     top: 0,
     width: 0,
   });
-  const controlRef = useRef(initialGoogleRouteNavigatorState());
+  const initialProgressMRef = useRef(initialProgressM);
+  initialProgressMRef.current = initialProgressM;
+  const controlRef = useRef(googleEntryState(initialProgressM, routeDistanceM(route)));
   const [control, setControl] = useState(controlRef.current);
   const [status, setStatus] =
     useState<GoogleRouteNavigatorStatus>(INITIAL_STATUS);
@@ -304,7 +309,9 @@ export function GoogleRouteNavigatorStage({
     const container = containerRef.current;
     if (!container) return;
     const engine = createGoogleRouteNavigatorEngine();
-    const initial = initialGoogleRouteNavigatorState();
+    // Each recording opens at its entry distance, so a chapter on another
+    // recording lands where it was chosen rather than at the start.
+    const initial = googleEntryState(initialProgressMRef.current, routeDistanceM(route));
     engineRef.current = engine;
     cameraMotionRef.current = undefined;
     cameraTargetRef.current = undefined;

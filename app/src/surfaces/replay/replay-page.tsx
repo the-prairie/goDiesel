@@ -105,6 +105,7 @@ export function ReplayPage() {
           backPath={backPath}
           backLabel={backLabel}
           onUseAtlas={() => setAtlasFallback(true)}
+          initialProgressM={initialProgressM}
         />
       </div>
     );
