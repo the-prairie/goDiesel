@@ -14,20 +14,26 @@ const candidate = (route: Partial<DiscoveryCandidate["route"]>) =>
 describe("groundedComparison", () => {
   it("compares measured distance against the plan", () => {
     const [distance] = groundedComparison(candidate({}), intent).measured;
-    expect(distance).toMatchObject({ label: "Distance", value: "12.1 km", evidence: "recorded" });
+    expect(distance).toMatchObject({ label: "Distance", value: "12.1 km", evidence: "derived" });
+    expect(distance.explanation).toMatch(/from the recorded track's coordinates/);
     expect(distance.note).toBe("2.1 km longer than your 10 km");
   });
 
-  it("derives a climb rate only from recorded climb and distance", () => {
+  it("labels every value as derived from the recording, with its own explanation", () => {
     const measured = groundedComparison(candidate({}), intent).measured;
-    expect(measured[1]).toMatchObject({ label: "Climb", value: "868 m", evidence: "recorded" });
+    expect(measured[1]).toMatchObject({ label: "Climb", value: "868 m", evidence: "derived" });
+    expect(measured[1].explanation).toMatch(/from the recorded elevations/);
     expect(measured[2]).toMatchObject({ label: "Climb rate", value: "72 m/km", evidence: "derived" });
+    expect(measured[2].explanation).toMatch(/from climb and distance/);
   });
 
   it("says unavailable instead of inventing a climb", () => {
     const measured = groundedComparison(candidate({ elevationStatus: "unavailable", elevationGainM: null }), intent).measured;
     expect(measured[1].value).toBe("Unavailable");
+    expect(measured[1].evidence).toBeUndefined();
     expect(measured[2].value).toBe("Unavailable");
+    expect(measured[2].evidence).toBeUndefined();
+    expect(measured[1].explanation).toMatch(/no recorded elevation/);
   });
 
   it("keeps the owner's terrain and feeling words as tags, not measurements", () => {

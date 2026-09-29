@@ -63,6 +63,9 @@ test("Finder searches explicit route-backed candidates and saves a durable plan"
   // Terrain is the owner's tag, never presented as a measured surface.
   await expect(candidate).toContainText(/owner tagged it mixed/i);
   await expect(candidate.getByTestId("candidate-measured")).not.toContainText(/surface/i);
+  // Distance and climb are computed from the track, so they are labelled derived.
+  await expect(candidate.getByTestId("candidate-measured")).toContainText("Derived from the recorded track's coordinates.");
+  await expect(candidate.locator("[data-evidence='recorded']")).toHaveCount(0);
   await candidate.getByRole("button", { name: "Save planned route" }).click();
   await expect(candidate.getByRole("status")).toContainText("Saved to Planned routes");
 

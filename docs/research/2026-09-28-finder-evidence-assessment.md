@@ -16,8 +16,8 @@ measured it, and the match reason said "the <vibe> feeling".
 
 | Attribute | Coverage (68 routes) | Evidence class | Finder use |
 | --- | --- | --- | --- |
-| Distance | 68 | recorded | compare with the plan (implemented) |
-| Climb (elevation gain) | 68 recorded elevation | recorded | shown (implemented) |
+| Distance | 68 | derived (build.py accumulates coordinate steps) | compare with the plan (implemented) |
+| Climb (elevation gain) | 68 recorded elevation | derived (build.py sums elevation deltas) | shown (implemented) |
 | Climb rate (m/km) | 68 | derived from recorded climb and distance | shown (implemented) |
 | Steepest sustained grade | 68 | derived; the manifest trace is sampled, so needs route detail | deferred |
 | Recording gaps | 53 routes have discontinuities | recorded | not a quality signal; not used |
@@ -28,8 +28,9 @@ measured it, and the match reason said "the <vibe> feeling".
 
 ## Changed
 
-- `app/src/domain/planning-evidence.ts`: measured comparison (distance delta,
-  climb, climb rate) with evidence classes; owner tags kept as tags; the
+- `app/src/domain/planning-evidence.ts`: comparison computed from the
+  recording (distance delta, climb, climb rate), each labelled derived with its
+  own explanation; owner tags kept as tags; the
   attributes a recording cannot establish are listed.
 - The candidate card's metric row is measured values only; "Surface" is gone;
   the match reason says what matched without claiming a feeling.

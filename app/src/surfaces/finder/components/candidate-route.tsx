@@ -84,7 +84,7 @@ export function CandidateRoute({
         {/* Measured values only. Terrain and feeling words are the owner's tags. */}
         <dl className="grid grid-cols-3 divide-x divide-line border-y border-line py-1.5 text-sm" data-testid="candidate-measured">
           {evidence.measured.map((item) => (
-            <Metric key={item.label} label={item.label} value={item.value} evidence={item.evidence} />
+            <Metric key={item.label} label={item.label} value={item.value} evidence={item.evidence} explanation={item.explanation} />
           ))}
         </dl>
         <p className="sr-only">Not judged from the recording: {NOT_JUDGED_FROM_A_RECORDING.join(", ")}.</p>
@@ -146,13 +146,13 @@ export function CandidateRoute({
   );
 }
 
-function Metric({ label, value, evidence }: { label: string; value: string; evidence?: "recorded" | "derived" }) {
+function Metric({ label, value, evidence, explanation }: { label: string; value: string; evidence?: "derived"; explanation: string }) {
   return (
-    <div className="min-w-0 px-1.5 first:pl-0 last:pr-0 sm:px-2" data-evidence={evidence}>
+    <div className="min-w-0 px-1.5 first:pl-0 last:pr-0 sm:px-2" data-evidence={evidence ?? "unavailable"}>
       <dt className="text-[0.62rem] uppercase text-ink-muted sm:text-[0.68rem]">{label}</dt>
-      <dd className="truncate font-semibold text-ink" title={evidence ? `${evidence} from the GPX` : "Not recorded"}>
+      <dd className="truncate font-semibold text-ink" title={explanation}>
         {value}
-        {evidence === "derived" ? <span className="sr-only"> (derived from recorded climb and distance)</span> : null}
+        <span className="sr-only"> ({explanation})</span>
       </dd>
     </div>
   );

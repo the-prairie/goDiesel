@@ -13,7 +13,10 @@ export const NOT_JUDGED_FROM_A_RECORDING = ["surface", "difficulty", "safety", "
 export interface MeasuredComparison {
   label: string;
   value: string;
-  evidence?: Extract<RouteAnnotationEvidence, "recorded" | "derived">;
+  /** Every value here is computed from the recording by build.py, so "derived". */
+  evidence?: Extract<RouteAnnotationEvidence, "derived">;
+  /** How this value was obtained, for assistive technology and tooltips. */
+  explanation: string;
   note?: string;
 }
 
@@ -28,14 +31,26 @@ export function groundedComparison(candidate: DiscoveryCandidate, intent: Finder
   const route = candidate.route;
   const climbKnown = route.elevationStatus !== "unavailable" && typeof route.elevationGainM === "number";
   const note = distanceNote(route.distanceKm, intent.distanceKm);
+  // build.py derives distance from the accumulated coordinate steps and climb
+  // from elevation deltas; neither is a value the recording itself states.
+  const unavailable = "Unavailable: this recording has no recorded elevation.";
   const measured: MeasuredComparison[] = [
-    { label: "Distance", value: `${route.distanceKm.toFixed(1)} km`, evidence: "recorded", note },
+    {
+      label: "Distance", value: `${route.distanceKm.toFixed(1)} km`, evidence: "derived", note,
+      explanation: "Derived from the recorded track's coordinates.",
+    },
     climbKnown
-      ? { label: "Climb", value: `${Math.round(route.elevationGainM!).toLocaleString()} m`, evidence: "recorded" }
-      : { label: "Climb", value: "Unavailable" },
+      ? {
+          label: "Climb", value: `${Math.round(route.elevationGainM!).toLocaleString()} m`, evidence: "derived",
+          explanation: "Derived from the recorded elevations.",
+        }
+      : { label: "Climb", value: "Unavailable", explanation: unavailable },
     climbKnown && route.distanceKm > 0
-      ? { label: "Climb rate", value: `${Math.round(route.elevationGainM! / route.distanceKm)} m/km`, evidence: "derived" }
-      : { label: "Climb rate", value: "Unavailable" },
+      ? {
+          label: "Climb rate", value: `${Math.round(route.elevationGainM! / route.distanceKm)} m/km`, evidence: "derived",
+          explanation: "Derived from climb and distance.",
+        }
+      : { label: "Climb rate", value: "Unavailable", explanation: unavailable },
   ];
   const ownerTags = [...new Set([...candidate.terrain, ...candidate.vibes])];
   const reasons = [
