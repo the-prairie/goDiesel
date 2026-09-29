@@ -128,13 +128,18 @@ export interface RouteSummary {
   theme: string;
   xp: number;
   trace: RoutePoint[];
+  /**
+   * Recorded gaps in `trace`, when the generator provided them. Undefined
+   * means unknown (an older manifest), never "no gaps".
+   */
+  discontinuities?: RouteDiscontinuityEvidence[];
   centerLat: number;
   centerLng: number;
   replay: ReplayMetadata;
   guide: RouteGuidePreview;
 }
 
-export interface QuestRoute extends Omit<RouteSummary, "trace" | "guide"> {
+export interface QuestRoute extends Omit<RouteSummary, "trace" | "guide" | "discontinuities"> {
   route: RoutePoint[];
   midIdx: number;
   curation: RouteCuration;
@@ -162,6 +167,7 @@ export interface GeneratedQuestRoute {
   theme?: unknown;
   xp?: unknown;
   trace?: unknown;
+  discontinuities?: unknown;
   route?: unknown;
   center_lat?: unknown;
   center_lng?: unknown;

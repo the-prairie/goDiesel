@@ -2,7 +2,7 @@
 
 import { normalizeRouteLifecycle, type RouteLifecycle } from "@/domain/route/lifecycle";
 import type { GeneratedQuestRoute, ReplayMetadata, RouteElevationStatus, RouteGeometryStatus, RouteGuidePreview, RouteSummary } from "@/domain/route/contract";
-import { generatedRoute, numberValue, parsedRoutePoints, requiredSlug, stringValue } from "@/domain/route/parse-shared";
+import { generatedRoute, numberValue, parsedDiscontinuities, parsedRoutePoints, requiredSlug, stringValue } from "@/domain/route/parse-shared";
 
 function validatedGuidePreview(value: unknown): RouteGuidePreview {
   if (value === undefined) return { reviewStatus: "draft" };
@@ -98,6 +98,19 @@ function commonRouteFields(
   };
 }
 
+/**
+ * Recorded gaps, when the generator provided them. Absent or malformed means
+ * unknown: the overview then draws the line as it is and invents nothing.
+ */
+function summaryDiscontinuities(value: unknown, totalDistance: number | undefined) {
+  if (!Array.isArray(value)) return undefined;
+  try {
+    return parsedDiscontinuities(value, totalDistance);
+  } catch {
+    return undefined;
+  }
+}
+
 export function parseRouteSummary(value: unknown): RouteSummary {
   const input = generatedRoute(value, "Route summary");
   const slug = requiredSlug(input, "Route summary");
@@ -115,6 +128,7 @@ export function parseRouteSummary(value: unknown): RouteSummary {
   return {
     ...commonRouteFields(input, slug, geometryStatus),
     trace,
+    discontinuities: summaryDiscontinuities(input.discontinuities, trace.at(-1)?.d),
     guide: validatedGuidePreview(input.guide_preview),
     centerLat: numberValue(input.center_lat, trace[0]?.lat ?? 0),
     centerLng: numberValue(input.center_lng, trace[0]?.lng ?? 0),

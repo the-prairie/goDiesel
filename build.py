@@ -15,6 +15,7 @@ from quest_meta import (
 from route_provenance import build_route_provenance, load_source_route_points
 from route_annotations import build_route_annotations
 from route_imports import route_metadata
+from route_manifest import manifest_discontinuities, simplify_route_for_manifest
 from route_timezones import route_time_zone
 
 # ── Paths ──
@@ -241,18 +242,6 @@ def react_route_record(route):
         ),
     }
 
-def simplify_route_for_manifest(points, max_points=96):
-    if len(points) <= max_points:
-        simplified = points
-    else:
-        last = len(points) - 1
-        indices = [round(index * last / (max_points - 1)) for index in range(max_points)]
-        simplified = [points[index] for index in indices]
-    return [
-        [point['lat'], point['lng'], point.get('elev'), point.get('d', 0)]
-        for point in simplified
-    ]
-
 def react_route_manifest_record(route):
     record = react_route_record(route)
     guide_preview = route_guide_preview(record.get('curation'))
@@ -277,7 +266,10 @@ def react_route_manifest_record(route):
         'xp': record['xp'],
         'center_lat': record['center_lat'],
         'center_lng': record['center_lng'],
-        'trace': simplify_route_for_manifest(record.get('route', [])),
+        'trace': simplify_route_for_manifest(
+            record.get('route', []), manifest_discontinuities(record)
+        ),
+        'discontinuities': manifest_discontinuities(record),
         'replay': record['replay'],
         'guide_preview': guide_preview,
     }

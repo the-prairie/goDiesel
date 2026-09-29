@@ -1,6 +1,6 @@
 // Primitives shared by both parse tiers (ADR-0004).
 
-import type { GeneratedQuestRoute, RouteElevationStatus, RoutePoint } from "@/domain/route/contract";
+import type { GeneratedQuestRoute, RouteDiscontinuityEvidence, RouteDiscontinuityKind, RouteDiscontinuitySource, RouteElevationStatus, RoutePoint } from "@/domain/route/contract";
 
 export const curationFields = [
   "vibe",
@@ -118,4 +118,68 @@ export function generatedRoute(value: unknown, context: string): GeneratedQuestR
     throw new Error(`${context} must be an object`);
   }
   return value as GeneratedQuestRoute;
+}
+
+/**
+ * Recorded discontinuities, with kind and source required to agree. Shared by
+ * both tiers: the detail tier throws on a bad entry, the summary tier treats
+ * the whole list as unknown instead.
+ */
+export function parsedDiscontinuities(items: unknown[], totalDistance: number | undefined): RouteDiscontinuityEvidence[] {
+  const expectedSources: Record<RouteDiscontinuityKind, RouteDiscontinuitySource> = {
+    segment_boundary: "recorded_track_segment",
+    recording_gap: "recorded_timestamps",
+    missing_position_records: "recorded_position_absence",
+  };
+  return items.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error("provenance discontinuity must be an object");
+    }
+    const record = item as Record<string, unknown>;
+    const kind = record.kind as RouteDiscontinuityKind;
+    const evidenceSource = record.source as RouteDiscontinuitySource;
+    if (!(kind in expectedSources) || expectedSources[kind] !== evidenceSource) {
+      throw new Error("provenance discontinuity kind and source do not agree");
+    }
+    const startD = record.start_d;
+    const endD = record.end_d;
+    if (
+      typeof startD !== "number" ||
+      !Number.isFinite(startD) ||
+      typeof endD !== "number" ||
+      !Number.isFinite(endD) ||
+      startD < 0 ||
+      endD < startD
+    ) {
+      throw new Error("provenance discontinuity distance is invalid");
+    }
+    if (totalDistance !== undefined && endD > totalDistance) {
+      throw new Error("provenance discontinuity exceeds route distance");
+    }
+    const elapsedTimeS = record.elapsed_time_s;
+    if (
+      elapsedTimeS !== undefined &&
+      (typeof elapsedTimeS !== "number" || !Number.isFinite(elapsedTimeS) || elapsedTimeS < 0)
+    ) {
+      throw new Error("provenance discontinuity elapsed time is invalid");
+    }
+    const missingRecordCount = record.missing_record_count;
+    if (
+      missingRecordCount !== undefined &&
+      (typeof missingRecordCount !== "number" ||
+        !Number.isInteger(missingRecordCount) ||
+        missingRecordCount < 1)
+    ) {
+      throw new Error("provenance missing record count is invalid");
+    }
+    return {
+      kind,
+      source: evidenceSource,
+      startD,
+      endD,
+      ...(elapsedTimeS !== undefined ? { elapsedTimeS } : {}),
+      ...(missingRecordCount !== undefined ? { missingRecordCount } : {}),
+    };
+  });
+
 }

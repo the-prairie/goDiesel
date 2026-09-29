@@ -1,10 +1,11 @@
 import maplibregl, { type MapOptions } from "maplibre-gl";
 import type { RouteDiscontinuityEvidence, RoutePoint } from "@/domain/route";
 import { recordedPointAt, recordedThreadSegments } from "@/domain/geometry/recorded-thread";
+import { reliefHistoryLines, type ReliefLineRoute } from "@/ui/maps/relief-lines";
 import { applyReliefCartography, applyReliefSky, attachRelief, DEM_SOURCE_ID, RELIEF_PALETTE, type ReliefPalette } from "@/ui/maps/relief-style";
 
 export type ReliefState = "loading" | "ready" | "partial" | "unavailable";
-export interface ReliefRoute { slug: string; trace: RoutePoint[] }
+export type ReliefRoute = ReliefLineRoute;
 /** An editorial anchor on the selected route, placed by recorded distance upstream. */
 export interface ReliefMark { id: string; kind: "chapter" | "scene"; lat: number; lng: number }
 export const RELIEF_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
@@ -186,7 +187,7 @@ export class ReliefWorld {
     const data = (id: string, features: ReturnType<typeof line>[] | ReturnType<typeof point>[]) => {
       (this.map.getSource(id) as maplibregl.GeoJSONSource).setData({ type: "FeatureCollection", features });
     };
-    data("relief-history", this.routes.filter(r => r.slug !== this.selectedSlug && r.trace.length > 1).map(r => line(r.trace, { slug: r.slug })));
+    data("relief-history", reliefHistoryLines(this.routes, this.selectedSlug).map(r => line(r.trace, { slug: r.slug })));
     data("relief-route", recordedThreadSegments(this.trace, this.gaps).map(segment => line(segment)));
     data("relief-ends", this.trace.length ? [point(this.trace[0]), point(this.trace.at(-1)!)] : []);
   }

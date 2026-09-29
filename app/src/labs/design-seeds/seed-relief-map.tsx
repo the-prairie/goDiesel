@@ -6,6 +6,7 @@ import { ReliefWorld, carryReliefWorld, type ReliefState } from "@/ui/maps/relie
 import { reliefCamera } from "@/ui/maps/relief-camera";
 import { nearestProjectedDistance, recordedPointAt } from "@/domain/geometry/recorded-thread";
 import { lookupAtProgress } from "@/labs/design-seeds/seed-geometry";
+import { useResolvedRouteGaps } from "@/labs/design-seeds/use-resolved-route-gaps";
 import type { RoutePoint, RouteSummary, RouteDiscontinuityEvidence } from "@/domain/route";
 
 export interface ThreadPhoto {
@@ -85,7 +86,7 @@ export function SeedReliefMap({
   padding = 64,
   descend = null,
   onDescended,
-  gaps = [],
+  gaps: gapsProp,
   exploring = false,
   onDragChange,
   onTerrainState,
@@ -101,6 +102,14 @@ export function SeedReliefMap({
   const [terrainState, setTerrainState] = useState<ReliefState>("loading");
   const progressRef = useRef(progress);
   progressRef.current = progress;
+  // Recorded gaps for every overview line, and for the selected one when the
+  // caller has not supplied its detail's (the region view draws summaries).
+  const resolvedRoutes = useResolvedRouteGaps(routes);
+  const selectedGapsKnown = gapsProp !== undefined || resolvedRoutes.some((route) => route.slug === selectedSlug);
+  const gaps = useMemo(
+    () => gapsProp ?? resolvedRoutes.find((route) => route.slug === selectedSlug)?.discontinuities ?? [],
+    [gapsProp, resolvedRoutes, selectedSlug],
+  );
   const gapsRef = useRef(gaps);
   gapsRef.current = gaps;
   const selectedSlugRef = useRef(selectedSlug);
@@ -172,8 +181,9 @@ export function SeedReliefMap({
 
   const gapsKey = JSON.stringify(gaps);
   useEffect(() => {
-    worldRef.current?.setRoutes(routes, selectedSlug, trace, JSON.parse(gapsKey));
-  }, [routes, selectedSlug, trace, gapsKey]);
+    // A line is drawn only once its gaps are known: never a bridge in the meantime.
+    worldRef.current?.setRoutes(resolvedRoutes, selectedSlug, selectedGapsKnown ? trace : [], JSON.parse(gapsKey));
+  }, [resolvedRoutes, selectedSlug, trace, gapsKey, selectedGapsKnown]);
 
   useEffect(() => {
     worldRef.current?.setProgress(progress === undefined ? undefined : progress * totalM);
