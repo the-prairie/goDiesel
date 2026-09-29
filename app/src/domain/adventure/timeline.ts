@@ -25,6 +25,13 @@ export function filmPosition(film: AdventureFilm, seconds: number) {
   throw new Error("adventure film has no beats");
 }
 
+/** Where along the recording the film's route beat is at this time, 0..1. */
+export function routeBeatFraction(film: AdventureFilm, seconds: number) {
+  const position = filmPosition(film, seconds);
+  if (position.beat.kind !== "route" || seconds >= position.start + position.duration) return undefined;
+  return Math.min(1, Math.max(0, position.elapsed / position.duration));
+}
+
 type Vec3 = [number, number, number];
 
 export function tourDuration(shots: AdventureSceneShot[]) {

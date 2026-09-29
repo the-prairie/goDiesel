@@ -104,6 +104,9 @@ export function AdventureSceneDialog({
           data-scene-state={frame.state}
           data-tour-mode={mode}
           className="adv-stage adv-scene"
+          // Escape closes this overlay and stops there: a Replay stage that leaves on
+          // Escape (Google 3D) must not also receive it.
+          onEscapeKeyDown={(event) => event.stopPropagation()}
           onOpenAutoFocus={(event) => {
             event.preventDefault();
             (event.currentTarget as HTMLElement).querySelector<HTMLElement>("[data-autofocus]")?.focus();

@@ -7,6 +7,7 @@ import {
   filmDuration,
   filmPosition,
   formatClock,
+  routeBeatFraction,
   type AdventureClip,
   type PlacedScene,
   type RouteAdventure,
@@ -151,6 +152,11 @@ export function AdventureFilm({
     const next = Math.max(0, Math.min(duration, seconds));
     clock.current = next;
     setTime(next);
+    // An explicit seek moves the geography with the film, paused or playing.
+    // Under reduced motion too: a chosen jump is one cut, not animation; only
+    // playing through the route beat stays stationary there.
+    const fraction = routeBeatFraction(film, next);
+    if (fraction !== undefined) onRoutePass(fraction);
     setPlaying(resume);
     setMediaError(false);
     setSeekVersion((version) => version + 1);
@@ -183,6 +189,9 @@ export function AdventureFilm({
           data-playing={playing && !finished}
           data-finished={finished}
           className={cn("adv-film", beat.kind === "route" && !finished && "adv-film-route")}
+          // Escape closes this overlay and stops there: a Replay stage that leaves on
+          // Escape (Google 3D) must not also receive it.
+          onEscapeKeyDown={(event) => event.stopPropagation()}
           onOpenAutoFocus={(event) => {
             event.preventDefault();
             (event.currentTarget as HTMLElement).querySelector<HTMLElement>("[data-autofocus]")?.focus();

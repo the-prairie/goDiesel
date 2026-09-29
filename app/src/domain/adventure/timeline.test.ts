@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { syntheticAdventureJson } from "@/domain/adventure/adventure-fixtures";
 import { parseAdventure } from "@/domain/adventure/parse";
 import {
+  routeBeatFraction,
   beatDuration,
   filmDuration,
   filmPosition,
@@ -35,6 +36,20 @@ describe("film timeline", () => {
     const end = filmPosition(film, 99);
     expect(end.index).toBe(2);
     expect(end.elapsed).toBe(5);
+  });
+});
+
+describe("route beat position", () => {
+  // Beats: footage 0-4 s, route 4-7 s, scene 7-12 s.
+  it("gives the fraction along the recording for a time inside the route beat", () => {
+    expect(routeBeatFraction(film, 4)).toBe(0);
+    expect(routeBeatFraction(film, 5.5)).toBeCloseTo(0.5, 6);
+    expect(routeBeatFraction(film, 6.999)).toBeCloseTo(1, 2);
+  });
+
+  it("has none outside the route beat", () => {
+    expect(routeBeatFraction(film, 2)).toBeUndefined();
+    expect(routeBeatFraction(film, 7)).toBeUndefined();
   });
 });
 
