@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 
 
-SUPPORTED_ACTIVITY_TYPES = frozenset(("Run", "Ride"))
+SUPPORTED_ACTIVITY_TYPES = frozenset(("Run", "Ride", "Hike"))
 
 
 @dataclass(frozen=True)
@@ -51,7 +51,7 @@ def imported_route_from_spec(spec: dict[str, object], checkout_root: Path) -> Im
     name = _required_string(spec, "activity_name")
     activity_type = _required_string(spec, "activity_type")
     if activity_type not in SUPPORTED_ACTIVITY_TYPES:
-        raise ValueError("activity_type must be Run or Ride")
+        raise ValueError("activity_type must be Run, Ride or Hike")
 
     return ImportedRoute(
         path=source_path,

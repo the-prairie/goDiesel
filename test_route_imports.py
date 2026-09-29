@@ -37,6 +37,24 @@ class ImportedRouteTest(unittest.TestCase):
             self.assertEqual(route.name, "Appian Way")
             self.assertEqual(route.activity_type, "Run")
 
+    def test_accepts_a_hike_and_still_rejects_unknown_activity_types(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "route_sources" / "supplied" / "route.gpx"
+            source.parent.mkdir(parents=True)
+            source.write_text("<gpx />")
+            spec = {
+                "source_gpx": "route_sources/supplied/route.gpx",
+                "activity_name": "Arnica Lake Trail",
+                "activity_type": "Hike",
+                "date": "",
+                "description": "A supplied trail line.",
+            }
+
+            self.assertEqual(imported_route_from_spec(spec, root).activity_type, "Hike")
+            with self.assertRaises(ValueError):
+                imported_route_from_spec({**spec, "activity_type": "Swim"}, root)
+
     def test_rejects_sources_outside_route_sources(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

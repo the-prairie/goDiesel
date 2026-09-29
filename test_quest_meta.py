@@ -119,6 +119,32 @@ class QuestMetaTests(unittest.TestCase):
         self.assertEqual(meta["xp"], 1240)
         self.assertIn("1,240 m of climbing", meta["completion_rule"])
 
+    def test_hike_is_on_foot_and_named_a_hike(self):
+        meta = build_quest_meta(
+            activity_type="Hike",
+            distance_km=9.6,
+            elevation_gain=640,
+            region_label="Banff, Alberta",
+            activity_name="Arnica Lake Trail",
+        )
+
+        self.assertIn("Complete a 9.6 km hike in Banff, Alberta", meta["completion_rule"])
+        self.assertEqual(meta["difficulty"], "Moderate")
+        self.assertEqual(meta["theme"], "Trail Myth")
+        self.assertEqual(meta["xp"], 290)
+
+    def test_hike_outside_named_regions_does_not_become_a_run_theme(self):
+        meta = build_quest_meta(
+            activity_type="Hike",
+            distance_km=5.0,
+            elevation_gain=120,
+            region_label="Somewhere, Nowhere",
+            activity_name="short walk",
+        )
+
+        self.assertNotIn("Run", meta["theme"])
+        self.assertIn("hike", meta["completion_rule"])
+
     def test_unavailable_elevation_does_not_create_a_zero_climb_claim(self):
         meta = build_quest_meta(
             activity_type="Run",

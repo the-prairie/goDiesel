@@ -1,3 +1,4 @@
+import { activityNoun, isOnFoot } from "@/domain/route/activity";
 import type { QuestRoute, RouteSummary } from "@/domain/route";
 
 /**
@@ -155,9 +156,10 @@ export function movingTime(route: QuestRoute): string | null {
  * which both mix runs and rides. The claim now follows the data.
  */
 export function coverageLine(routes: RouteSummary[]): string {
-  const types = new Set(routes.map((route) => route.type));
-  if (types.size === 1 && types.has("Run")) return "on foot";
-  if (types.size === 1 && types.has("Ride")) return "by bike";
+  const onFoot = routes.some((route) => isOnFoot(route.type));
+  const byBike = routes.some((route) => !isOnFoot(route.type));
+  if (onFoot && !byBike) return "on foot";
+  if (byBike && !onFoot) return "by bike";
   return "on foot and by bike";
 }
 
@@ -167,7 +169,8 @@ export function totalDistanceLabel(routes: RouteSummary[]): string {
   return `${km.toFixed(1)} km`;
 }
 
-/** Run or Ride, as a word. Activity type is never carried by colour alone. */
+/** Run, Ride or Hike, as a word. Activity type is never carried by colour alone. */
 export function activityLabel(route: RouteSummary | QuestRoute): string {
-  return route.type === "Ride" ? "Ride" : "Run";
+  const noun = activityNoun(route.type);
+  return noun[0].toUpperCase() + noun.slice(1);
 }

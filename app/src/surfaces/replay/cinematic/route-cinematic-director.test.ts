@@ -9,6 +9,7 @@ import {
   cinematicProfile,
   cinematicShotTimeline,
   cinematicVisualMoments,
+  routeNoun,
   type CinematicCut,
 } from "@/surfaces/replay/cinematic/route-cinematic-director";
 
@@ -328,5 +329,12 @@ describe("route cinematic director", () => {
       return Math.hypot(northM, eastM);
     });
     expect(Math.max(...targetStepsM)).toBeLessThan(95);
+  });
+});
+
+describe("route noun", () => {
+  it("calls a hike a hike", () => {
+    expect(routeNoun({ ...route, type: "Hike" } as QuestRoute)).toBe("hike");
+    expect(routeNoun({ ...route, type: "Ride" } as QuestRoute)).toBe("ride");
   });
 });

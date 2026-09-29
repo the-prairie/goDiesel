@@ -1,5 +1,6 @@
 import type { QuestRoute } from "@/domain/route";
 import { bearingDegrees, routeDistanceM, routePathPose } from "@/domain/geometry/route-path";
+import { activityNoun } from "@/domain/route/activity";
 
 export type CinematicCut = "feature" | "monumental" | "kinetic" | "intimate";
 export type CinematicShotKind =
@@ -110,8 +111,8 @@ interface CoverageFraming {
   widePitchFloorDeg: number;
 }
 
-function routeNoun(route: QuestRoute) {
-  return route.type?.toLowerCase().includes("ride") ? "ride" : "run";
+export function routeNoun(route: QuestRoute) {
+  return activityNoun(route.type);
 }
 
 function chapterSubtitle(

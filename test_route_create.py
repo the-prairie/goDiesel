@@ -32,6 +32,16 @@ NO_ELEVATION_GPX = """<?xml version="1.0" encoding="UTF-8"?>
 </gpx>
 """
 
+UNTIMED_GPX = """<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="test" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><trkseg>
+    <trkpt lat="51.2411" lon="-116.0357"><ele>1691</ele></trkpt>
+    <trkpt lat="51.2400" lon="-116.0300"><ele>1650</ele></trkpt>
+    <trkpt lat="51.2380" lon="-116.0200"><ele>1700</ele></trkpt>
+  </trkseg></trk>
+</gpx>
+"""
+
 PARTIAL_ELEVATION_GPX = """<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="goDiesel test" xmlns="http://www.topografix.com/GPX/1/1">
   <trk><name>Broken Ridge</name><trkseg>
@@ -122,6 +132,17 @@ class RouteCreateTest(unittest.TestCase):
         self.assertEqual(proposal["observations"]["elevation"], {"status": "unavailable"})
         self.assertNotIn("elevation_gain_m", proposal["observations"])
 
+    def test_an_untimed_hike_is_proposed_as_a_discovered_hike_without_time(self):
+        self.source.write_text(UNTIMED_GPX, encoding="utf-8")
+
+        proposal = propose_request(self.request(activity_type="Hike"), self.root)
+
+        self.assertEqual(proposal["route_spec"]["activity_type"], "Hike")
+        self.assertEqual(proposal["route_spec"]["lifecycle"], "discovered")
+        self.assertEqual(proposal["route_spec"]["date"], "")
+        self.assertEqual(proposal["observations"]["temporal"], {"status": "unavailable"})
+        self.assertEqual(proposal["blocking_errors"], [])
+
     def test_partial_elevation_is_rejected_before_canonical_writes(self):
         self.source.write_text(PARTIAL_ELEVATION_GPX, encoding="utf-8")
 
@@ -140,7 +161,7 @@ class RouteCreateTest(unittest.TestCase):
     def test_invalid_activity_date_and_activity_type_are_rejected(self):
         for request, code in (
             (self.request(activity_date="2026-02-30"), "request.invalid_date"),
-            (self.request(activity_type="Hike"), "request.invalid_activity_type"),
+            (self.request(activity_type="Swim"), "request.invalid_activity_type"),
         ):
             with self.subTest(code=code), self.assertRaises(RouteCreateError) as raised:
                 propose_request(request, self.root)
