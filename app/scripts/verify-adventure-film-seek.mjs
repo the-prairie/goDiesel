@@ -6,15 +6,18 @@
  * progress follows the beat while the film stays paused, then that closing
  * returns to the held distance. Runs on the notebook and on live Google 3D.
  *
- *   BASE=http://127.0.0.1:8789 PW_CHROMIUM=<Chrome for Testing> node scripts/verify-adventure-film-seek.mjs
+ *   Google runs must use http://localhost:8787 (docs/agents/testing.md).
+ *   BASE=http://localhost:8787 PW_CHROMIUM=<Chrome for Testing> node scripts/verify-adventure-film-seek.mjs
  */
 import { chromium } from "@playwright/test";
 
 import { adventureExpectations } from "./adventure-expectations.mjs";
+import { imageryVariance, requireLiveGoogleBase, watchGoogleTiles } from "./live-google-evidence.mjs";
 
-const BASE = process.env.BASE ?? "http://127.0.0.1:8789";
+const BASE = process.env.BASE ?? "http://localhost:8787";
 const SLUG = process.env.SLUG ?? "14130782031";
 const renderers = (process.env.RENDERERS ?? "notebook,google").split(",");
+if (renderers.includes("google")) requireLiveGoogleBase(BASE);
 const expected = adventureExpectations(SLUG);
 const beats = expected.adventure.film.beats;
 const length = (beat) => (beat.kind === "footage" ? beat.outS - beat.inS : beat.durationS);
@@ -33,10 +36,16 @@ for (const renderer of renderers) for (const reducedMotion of ["reduce", "no-pre
   console.log(`\n=== ${renderer}, reduced motion: ${reducedMotion}`);
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion });
   const page = await context.newPage();
+  const tiles = renderer === "google" ? watchGoogleTiles(page) : undefined;
   await page.goto(`${BASE}/#/replay/${SLUG}${renderer === "notebook" ? "?landscape=notebook" : ""}`, { waitUntil: "load" });
   await page.waitForFunction(() => document.querySelector("[data-testid='replay-stage']")?.dataset.state === "ready", null, { timeout: 60_000 });
   await page.waitForSelector("[data-testid='adventure-chapter-card']", { timeout: 20_000 });
   const stage = page.getByTestId("replay-stage");
+  if (tiles) {
+    await page.waitForTimeout(1500);
+    check("Google map tiles arrived", tiles.ok > 0, `${tiles.ok} ok, ${tiles.failed} failed`);
+    check("the rendered frame is imagery, not a blank canvas", (await imageryVariance(page)) > 12);
+  }
   const total = (await page.evaluate(() => Number(document.querySelector("[data-testid='replay-stage']")?.dataset.progress))) ;
   const held = Number(await stage.getAttribute("data-progress"));
   await page.getByRole("button", { name: "All chapters" }).click();

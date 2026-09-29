@@ -6,15 +6,19 @@
  * at that distance, not at the start, on the notebook renderer and on Google
  * photorealistic 3D. Expectations come from the local store (no copy here).
  *
- *   BASE=http://127.0.0.1:8789 PW_CHROMIUM=<Chrome for Testing> node scripts/verify-adventure-cross-leg.mjs
+ *   Google runs must use http://localhost:8787 (docs/agents/testing.md); the
+ *   script refuses another origin for them.
+ *   BASE=http://localhost:8787 PW_CHROMIUM=<Chrome for Testing> node scripts/verify-adventure-cross-leg.mjs
  *   RENDERERS=notebook   (skip the live Google run)
  */
 import { chromium } from "@playwright/test";
 
 import { adventureExpectations } from "./adventure-expectations.mjs";
+import { imageryVariance, requireLiveGoogleBase, watchGoogleTiles } from "./live-google-evidence.mjs";
 
-const BASE = process.env.BASE ?? "http://127.0.0.1:8789";
+const BASE = process.env.BASE ?? "http://localhost:8787";
 const renderers = (process.env.RENDERERS ?? "notebook,google").split(",");
+if (renderers.includes("google")) requireLiveGoogleBase(BASE);
 const FROM = process.env.FROM ?? "14130772463";
 const expected = adventureExpectations(FROM);
 const target = expected.elsewhere.find((chapter) => chapter.anchor.atDistanceM > 0);
@@ -29,6 +33,7 @@ const browser = await chromium.launch({ executablePath: process.env.PW_CHROMIUM 
 for (const renderer of renderers) {
   console.log(`\n=== ${renderer}: ${FROM} -> chapter ${target.ordinal} on ${target.anchor.slug} at ${target.anchor.atDistanceM} m`);
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const tiles = renderer === "google" ? watchGoogleTiles(page) : undefined;
   const query = renderer === "notebook" ? "?landscape=notebook" : "";
   await page.goto(`${BASE}/#/replay/${FROM}${query}`, { waitUntil: "load" });
   await page.waitForFunction(() => document.querySelector("[data-testid='replay-stage']")?.dataset.state === "ready", null, { timeout: 60_000 });
@@ -47,6 +52,12 @@ for (const renderer of renderers) {
   check("the other recording opened", (await stage.getAttribute("data-route-slug")) === target.anchor.slug);
   check(`at the chapter's distance on ${engine}`, Math.abs(progress - target.anchor.atDistanceM) < 1, `${progress} m`);
   check("with that chapter's card", (await page.getByTestId("adventure-chapter-card").getAttribute("data-chapter-id")) === target.id);
+  if (tiles) {
+    // Provider readiness beyond data-state: tiles arrived and the frame is imagery.
+    check("Google map tiles arrived", tiles.ok > 0, `${tiles.ok} ok, ${tiles.failed} failed`);
+    const variance = await imageryVariance(page);
+    check("the rendered frame is imagery, not a blank canvas", variance > 12, `luminance spread ${variance.toFixed(1)}`);
+  }
   check("the presentation carried over", renderer === "google" ? engine === "google-3d-maps" : engine === "maplibre-notebook", engine ?? "");
   await page.close();
 }

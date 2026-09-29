@@ -100,7 +100,8 @@ function commonRouteFields(
 
 /**
  * Recorded gaps, when the generator provided them. Absent or malformed means
- * unknown: the overview then draws the line as it is and invents nothing.
+ * unknown, never "no gaps": an overview resolves them from the route's detail
+ * record and withholds the line until they are known (use-resolved-route-gaps).
  */
 function summaryDiscontinuities(value: unknown, totalDistance: number | undefined) {
   if (!Array.isArray(value)) return undefined;
