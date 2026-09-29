@@ -92,9 +92,24 @@ for (const viewport of [{ width: 1440, height: 900, name: "desktop" }, { width: 
   await shot("05-returned");
 
   if (other) {
+    // Review finding: the held distance here (at=<target>) must not ride along
+    // to another recording's day; each link targets its own chapter.
     await page.getByTestId("seed-adventure").getByRole("link", { name: new RegExp(expected.escape(other.title)) }).click();
     await page.waitForTimeout(6000);
     check("a chapter on the other recording opens that day", page.url().includes(`/d/story/${OTHER}`));
+    const heldThere = Number(await page.locator(".seed-ribbon").first().getAttribute("aria-valuenow"));
+    check("held at that chapter's own distance", Math.abs(heldThere - other.anchor.atDistanceM) < 1, `${heldThere} m (chapter ${other.anchor.atDistanceM} m)`);
+    check("and its row shows it is held", (await page.getByTestId("seed-adventure").getByRole("button", { name: new RegExp(`chapter ${other.ordinal}, `) }).getAttribute("aria-pressed")) === "true");
+    // From there, chapters back on the first recording, at distinct distances.
+    const back = adventureExpectations(OTHER).elsewhere.filter((chapter) => chapter.anchor.slug === SLUG).slice(0, 2);
+    for (const chapter of back) {
+      await page.getByTestId("seed-adventure").getByRole("link", { name: new RegExp(expected.escape(chapter.title)) }).click();
+      await page.waitForTimeout(5000);
+      const held = Number(await page.locator(".seed-ribbon").first().getAttribute("aria-valuenow"));
+      check(`link to chapter ${chapter.ordinal} holds ${chapter.anchor.atDistanceM} m`, page.url().includes(`/d/story/${SLUG}`) && Math.abs(held - chapter.anchor.atDistanceM) < 1, `${held} m`);
+      await page.goBack();
+      await page.waitForTimeout(4000);
+    }
     await page.goBack();
     await page.waitForTimeout(6000);
   }

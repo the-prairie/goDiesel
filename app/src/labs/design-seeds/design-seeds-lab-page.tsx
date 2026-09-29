@@ -237,8 +237,9 @@ function StoryRoute({
      * address carries the same `at` so returning puts the handle back on the
      * ridge they left it on. A direct link without `at` simply opens unheld.
      */
-    const atMetres = Number(atParam);
-    const held = Number.isFinite(atMetres) && atMetres > 0 ? atMetres : undefined;
+    // An explicit at=0 holds the start (a chapter can sit there); no `at` holds nothing.
+    const atMetres = atParam === null || atParam === "" ? Number.NaN : Number(atParam);
+    const held = Number.isFinite(atMetres) && atMetres >= 0 ? atMetres : undefined;
     const total = detail.route.route.length
       ? (detail.route.route[detail.route.route.length - 1].d ?? 0)
       : 0;
@@ -255,7 +256,7 @@ function StoryRoute({
         regionRoutes={regionsFor(summary.region)}
         backPath={returnTo.path}
         backLabel={backLabel}
-        initialProgress={held && total > 0 ? Math.min(1, held / total) : undefined}
+        initialProgress={held !== undefined && total > 0 ? Math.min(1, held / total) : undefined}
         /*
          * `at` twice, deliberately, because it answers two questions.
          *

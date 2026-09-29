@@ -1,6 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 
 import { useRouteAdventure } from "@/data/use-route-adventure";
+import { adventureStoryPath } from "@/labs/design-seeds/seed-adventure-paths";
 import { filmDuration, formatClock } from "@/domain/adventure";
 import type { QuestRoute } from "@/domain/route";
 
@@ -31,7 +32,7 @@ export function SeedAdventure({
   const placed = new Set(adventure.chapters.map((chapter) => chapter.id));
   const withheld = new Map(adventure.withheld.map((item) => [item.id, item.reason]));
   const clips = source.chapters.filter((chapter) => chapter.footageId).length;
-  const storyOf = (slug: string) => `${location.pathname.replace(/[^/]+$/, encodeURIComponent(slug))}${location.search}`;
+
 
   return (
     <section className="seed-adventure" aria-labelledby="seed-adventure-title" data-testid="seed-adventure">
@@ -74,7 +75,7 @@ export function SeedAdventure({
               ) : withheld.has(chapter.id) ? (
                 <div className="seed-adventure-row" title={withheld.get(chapter.id)} aria-disabled="true">{body}</div>
               ) : (
-                <Link className="seed-adventure-row seed-focus" to={storyOf(chapter.anchor.slug)}>{body}</Link>
+                <Link className="seed-adventure-row seed-focus" to={adventureStoryPath(location.pathname, location.search, chapter.anchor.slug, chapter.anchor.atDistanceM)}>{body}</Link>
               )}
             </li>
           );
