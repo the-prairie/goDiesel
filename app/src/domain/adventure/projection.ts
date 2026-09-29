@@ -61,3 +61,25 @@ export function projectOntoRecording(
   }
   return best;
 }
+
+/**
+ * Place a prepared coordinate on one of an adventure's recordings. A pack
+ * distance names its recording (`legIndex`), and that choice holds even where
+ * recordings overlap, as an out-and-back's outbound and return legs do. With
+ * no pack distance, the nearest recording wins and an exact tie keeps the
+ * earlier one.
+ */
+export function placeOnLegs(
+  legs: { trace: RoutePoint[]; gaps: RouteDiscontinuityEvidence[] }[],
+  coordinate: AdventureCoordinate,
+  hintM?: number,
+  legIndex?: number,
+) {
+  const candidates = legIndex === undefined ? legs.map((_, index) => index) : [legIndex];
+  let best: { legIndex: number; hit: { atDistanceM: number; offsetM: number } } | undefined;
+  for (const index of candidates) {
+    const hit = projectOntoRecording(legs[index].trace, legs[index].gaps, coordinate, hintM);
+    if (hit && (!best || hit.offsetM < best.hit.offsetM)) best = { legIndex: index, hit };
+  }
+  return best;
+}

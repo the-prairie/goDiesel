@@ -8,7 +8,7 @@ import {
 } from "@/domain/adventure/adventure-fixtures";
 import { parseAdventure } from "@/domain/adventure/parse";
 import { chapterAt, placeAdventureOnRoute } from "@/domain/adventure/placement";
-import { projectOntoRecording } from "@/domain/adventure/projection";
+import { placeOnLegs, projectOntoRecording } from "@/domain/adventure/projection";
 
 const adventure = parseAdventure(syntheticAdventureJson());
 
@@ -100,5 +100,25 @@ describe("chapterAt", () => {
     expect(chapterAt(chapters, 1000)?.id).toBe("saddle");
     expect(chapterAt(chapters, 2999)?.id).toBe("saddle");
     expect(chapterAt(chapters, 3600)?.id).toBe("top");
+  });
+});
+
+describe("placeOnLegs", () => {
+  // Out and back as two recordings over the same line: leg 0 north, leg 1 south.
+  const out = syntheticTrace(3000);
+  const back = [...out].reverse().map((point, index) => ({ ...point, d: index * 100 }));
+  const legs = [{ trace: out, gaps: [] }, { trace: back, gaps: [] }];
+  const coordinate = coordinateAt(1000);
+
+  it("keeps an anchor on the leg its pack distance names, even where the legs overlap", () => {
+    const placed = placeOnLegs(legs, coordinate, 2000, 1)!;
+    expect(placed.legIndex).toBe(1);
+    expect(placed.hit.atDistanceM).toBeCloseTo(2000, 0);
+  });
+
+  it("without a pack distance, takes the nearest leg, and the first on an exact tie", () => {
+    const placed = placeOnLegs(legs, coordinate)!;
+    expect(placed.legIndex).toBe(0);
+    expect(placed.hit.atDistanceM).toBeCloseTo(1000, 0);
   });
 });

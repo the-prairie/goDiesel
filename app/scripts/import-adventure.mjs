@@ -17,7 +17,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { parseAdventure, parseAdventureIndex } from "../src/domain/adventure/parse.ts";
-import { projectOntoRecording } from "../src/domain/adventure/projection.ts";
+import { placeOnLegs } from "../src/domain/adventure/projection.ts";
 
 const APP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const STORE = path.resolve(APP, "..", ".adventures");
@@ -127,16 +127,11 @@ function packCoordinate(m) {
 const report = [];
 
 function place(kind, id, coordinate, hintM, legIndex) {
-  const candidates = legIndex === undefined ? legs.map((_, index) => index) : [legIndex];
-  let best;
-  for (const index of candidates) {
-    const hit = projectOntoRecording(legs[index].trace, legs[index].gaps, coordinate, hintM);
-    if (hit && (!best || hit.offsetM < best.hit.offsetM)) best = { index, hit };
-  }
+  const best = placeOnLegs(legs, coordinate, hintM, legIndex);
   const entry = {
     kind,
     id,
-    slug: best && legs[best.index].slug,
+    slug: best && legs[best.legIndex].slug,
     atDistanceM: best && Math.round(best.hit.atDistanceM * 10) / 10,
     offsetM: best && Math.round(best.hit.offsetM * 10) / 10,
   };
@@ -201,7 +196,9 @@ const scenes = (pack.worlds ?? []).filter((world) => world.approved && world.kin
     poster: world.photo ?? place_.photo,
     posterAlt: place_.alt ?? `Captured 3D scene: ${world.tour.title}`,
     attribution: { author: world.attribution.author, url: world.attribution.url },
-    anchor: place("scene", world.id, { lat: world.anchor.lat, lng: world.anchor.lng }, located?.hintM),
+    // A pack distance names the recording, as for chapters; without one the
+    // nearest recording is used (see placeOnLegs).
+    anchor: place("scene", world.id, { lat: world.anchor.lat, lng: world.anchor.lng }, located?.hintM, located?.segment),
     tour: {
       title: world.tour.title,
       fovDeg: world.tour.fov,
