@@ -77,9 +77,15 @@ treats the absence as the normal state of a route without an adventure.
   covered by a stall-based fallback, not a product guarantee.
 - `app/public/scene-viewer.html` is tracked and content-agnostic; it loads the
   Sketchfab Viewer API only when a scene is opened.
-- The Google Replay stage (ADR-0009) does not yet render the adventure layer;
-  it is implemented in the shared Replay stage used by the notebook, Atlas and
-  Cesium engines.
+- Both Replay stages render the layer: the Google photorealistic stage
+  (ADR-0009), where owner chapters replace the track-derived moments, and the
+  shared stage used by the notebook, Atlas and Cesium engines.
+- Owner edits go through a writer in the Vite dev server only. It writes only
+  the ignored store, accepts loopback, same-Host, same-Origin JSON PUTs, and
+  refuses changes to legs, media, digests or scene credits. It does not
+  replace ADR-0010's writer for canonical route state.
+- Repository gates run with `GODIESEL_LOCAL_ADVENTURES=0`, so their result
+  never depends on ignored local content.
 - The World Pack work on `feat/sovereign-adventure-worlds` numbers its own ADR
   0015. If both land, one of the two records needs renumbering.
 
