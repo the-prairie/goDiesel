@@ -57,7 +57,8 @@ Shot plan: `#/lab/cinematic-director/14130782031?plan=1`.
 | Finder no longer presents a code tag as a measured surface | `e2e/finder-planning.spec.ts` |
 | Runtime: layer adds no measurable cost; camera optimisation | `scripts/measure-adventure-runtime.mjs`; numbers in the perf commit |
 | Repository gates | typecheck, unit, build, bundle budget (initial shell 235.3 KiB), core e2e 105/105 |
-| No regressions in D and journal checks | D 22, resilience 31, manipulation 6, journal Replay (with live providers off) |
+| No regressions in D and journal checks | D 22, resilience 31, manipulation 6 |
+| Journal Replay, renderer explicit (`EXPECT_RENDERER`) | atlas: 32 checks, `maplibre-atlas` (live providers off); google: 30 checks, `google-3d-maps`; a mismatch fails and says why |
 
 ## Not verified
 
@@ -68,30 +69,42 @@ Shot plan: `#/lab/cinematic-director/14130782031?plan=1`.
 - Sketchfab availability, which is third-party. The stall fallback is exercised
   only when Sketchfab refuses the browser.
 
+## What is production and what is lab
+
+- **The complete showcase entry is still lab-only.** The day leaf that lists
+  chapters, holding the thread at a chapter, and the descent into Replay are
+  Direction D at `#/lab/design-seeds/d/*`.
+- **Integrated in production surfaces:** Replay (`#/replay/<slug>`) on both
+  stages: Google 3D by default when a key is built in, and the shared stage
+  for `?landscape=notebook`, `?renderer=atlas` and Cesium. Admin has the
+  adventure workspace (saving works on the dev server only).
+- **Not integrated:** production Atlas (`#/atlas`) and the production route
+  story (`#/routes/<slug>`) do not mention an adventure. The story's
+  "Cinematic replay" link does reach Replay with the adventure layer active.
+- **Adventure content itself is local-only.** No build contains it.
+
 ## Deferred or blocked
 
-- **Arnica reuse proof: blocked on owner decisions.** No canonical Arnica route
-  exists. Creating one needs (1) an activity type for a hike (the contract
-  allows only `Run` and `Ride`), (2) the GPX's origin, which the pack does not
-  record, and (3) explicit creation approval under `docs/agents/route-share.md`.
-  Reuse without route-specific code is shown instead on the adventure's other
-  recording and by synthetic fixtures.
+- **Arnica: prepared, waiting on owner decisions.** See
+  `app/docs/arnica-intake-proposal.md`. Provenance is traced: the geometry is
+  an AllTrails export, point-identical through the Earth Studio bundle to the
+  pack. The Hike type (`95cdd44e`) and footage origin (`7e7f100d`) are
+  committed for review. The route-share plan passed as proposal `43e50ae4…`,
+  and the import is rehearsed (all 8 chapters at 0.00 m). Creation is not run.
 - **Publication.** Adventures are local-only. Publishing needs an audience
   decision per adventure and a scoped publisher that copies only its media
   (ADR-0011). The workspace records a publication plan; it publishes nothing.
-- **Soundtrack.** The Arnica pack's music is a commercial recording; not imported.
+- **Soundtrack.** Optional by design: outside the adventure contract, never
+  imported, never blocks reuse.
 - **Experiential Finder comparisons.** Only 2 of 68 routes have reviewed
   curation. See `docs/research/2026-09-28-finder-evidence-assessment.md`.
 - **The film route beat's p95** is still 17.4 ms, with one long frame per run.
-- `verify-journal-replay.mjs` assumes the keyless Replay fallback. With a Google
-  key it lands on the Google stage and fails its HUD checks; pin its renderer.
 
 ## Release steps (each needs explicit owner authority)
 
-1. Review the six commits on `feat/adventure-showcase` and accept or amend ADR-0017.
-2. Decide Arnica: hike activity type, GPX provenance, then the route-share
-   plan → approval → `apply --authorize canonical-local`, then
-   `npm run import:adventure -- <arnica pack> --legs <slug>`.
+1. Review the commits on `feat/adventure-showcase` and accept or amend ADR-0017.
+2. Decide Arnica (`app/docs/arnica-intake-proposal.md`): AllTrails geometry,
+   the Hike type, then approval to apply proposal `43e50ae4…`.
 3. Push the branch and open a PR (not done).
 4. Per adventure, choose an audience before any deployment; the current Sites
    and their audiences are unchanged.
