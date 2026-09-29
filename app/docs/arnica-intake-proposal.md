@@ -69,8 +69,9 @@ Warnings: none
 Proposal id: 43e50ae4dbb44d46bb8cfb6cc60d06f8
 ```
 
-It depends on the Hike contract change (commit `95cdd44e`); without it the plan
-rejects `activity_type`.
+It depends on the Hike contract change. That change is isolated from the
+Final Boss release (reverted by `12a3ffe7`) and preserved on the local branch
+`feat/hike-activity-type`; without it the plan rejects `activity_type`.
 
 ## Adventure reuse, rehearsed
 
@@ -106,7 +107,9 @@ an Arnica-shaped path. That is a verifier change, not a product change.
    with real timestamps); or replace the line with openly licensed geometry
    (for example OpenStreetMap, with attribution), which would change the
    geometry and need a new proposal.
-2. **Accept the Hike activity type** (`95cdd44e`) as a contract change.
+2. **Accept the Hike activity type** (branch `feat/hike-activity-type`) as a
+   contract change, including whether a hike should be scored exactly like a
+   run, and finish its Atlas/Finder/planning support.
 3. **Approve creation** of proposal `43e50ae4…` under `canonical-local`, if 1
    and 2 allow.
 4. **Audience**, before any deployment. The Arnica Site's own audience is unchanged.

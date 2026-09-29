@@ -68,10 +68,12 @@ treats the absence as the normal state of a route without an adventure.
   rather than silently misplacing them.
 - The shared runtime is content-driven: no route-specific code. A second
   adventure is an import, not a build.
-- Publication is deliberately unsolved. Serving adventures from a deployed
-  goDiesel needs an audience decision per adventure and a scoped publisher
-  (ADR-0011) that copies only that adventure's media. Until then adventures are
-  local-only, which is a real limitation for sharing.
+- Publication is opt-in per adventure. `make-dist.sh` stages one adventure
+  into the full-site build only with `GODIESEL_PUBLISH_ADVENTURE=<id>` and the
+  owner's approval `GODIESEL_ADVENTURE_PUBLICATION_APPROVED=<id>`, copying just
+  its document, referenced media (digest-checked) and a one-entry index; every
+  leg must be in the bundle, so single-route microsites cannot carry one. The
+  deploy target and audience remain an owner decision outside the build.
 - Captured scenes depend on Sketchfab's hosted viewer and its browser support
   (it rejects Playwright's headless shell). That is third-party availability,
   covered by a stall-based fallback, not a product guarantee.

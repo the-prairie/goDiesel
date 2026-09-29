@@ -71,40 +71,53 @@ Shot plan: `#/lab/cinematic-director/14130782031?plan=1`.
 
 ## What is production and what is lab
 
-- **The complete showcase entry is still lab-only.** The day leaf that lists
-  chapters, holding the thread at a chapter, and the descent into Replay are
-  Direction D at `#/lab/design-seeds/d/*`.
-- **Integrated in production surfaces:** Replay (`#/replay/<slug>`) on both
-  stages: Google 3D by default when a key is built in, and the shared stage
-  for `?landscape=notebook`, `?renderer=atlas` and Cesium. Admin has the
-  adventure workspace (saving works on the dev server only).
-- **Not integrated:** production Atlas (`#/atlas`) and the production route
-  story (`#/routes/<slug>`) do not mention an adventure. The story's
-  "Cinematic replay" link does reach Replay with the adventure layer active.
-- **Adventure content itself is local-only.** No build contains it.
+- **Production entry paths (verified on live Google 3D, localhost:8787,
+  1440x900 and 390x844):** Atlas region -> Open route -> Replay with the
+  adventure layer -> Back to Atlas; and the route story's Adventure section ->
+  Replay from here at a chapter -> back to the story.
+- **Production surfaces carrying the adventure:** Replay (both stages), the
+  route story, Admin (owner workspace; saving on the dev server only).
+- **Lab only:** Direction D's day leaf and descent (`#/lab/design-seeds/d/*`).
+- **Content:** absent from builds unless one approved adventure is staged by
+  `make-dist.sh` (see ADR-0017). No deploy target is chosen.
+
+## Isolated from this release (preserved, local branches)
+
+- `feat/hike-activity-type`: the Hike activity type. Needs a scoring review
+  and Atlas/Finder/planning support.
+- `feat/manifest-gap-enrichment`: build.py emitting summary discontinuities.
+  Optional; needs a regeneration with the owner's private export. Today's gaps
+  are handled at runtime from canonical route details.
+
+## Observed, not resolved
+
+- A reviewer saw "Landscape unavailable" with entry disabled on the first
+  leg's D story after a successful render. Eight later cold loads all reached
+  ready (3.1-4.8 s). Not reproduced; still open. The label is shown for
+  `partial` as well as `unavailable`, so a single DEM tile failure is enough to
+  produce it.
 
 ## Deferred or blocked
 
-- **Arnica: prepared, waiting on owner decisions.** See
-  `app/docs/arnica-intake-proposal.md`. Provenance is traced: the geometry is
-  an AllTrails export, point-identical through the Earth Studio bundle to the
-  pack. The Hike type (`95cdd44e`) and footage origin (`7e7f100d`) are
-  committed for review. The route-share plan passed as proposal `43e50ae4…`,
-  and the import is rehearsed (all 8 chapters at 0.00 m). Creation is not run.
-- **Publication.** Adventures are local-only. Publishing needs an audience
-  decision per adventure and a scoped publisher that copies only its media
-  (ADR-0011). The workspace records a publication plan; it publishes nothing.
-- **Soundtrack.** Optional by design: outside the adventure contract, never
-  imported, never blocks reuse.
-- **Experiential Finder comparisons.** Only 2 of 68 routes have reviewed
-  curation. See `docs/research/2026-09-28-finder-evidence-assessment.md`.
-- **The film route beat's p95** is still 17.4 ms, with one long frame per run.
+- **Arnica:** prepared, waiting on owner decisions
+  (`app/docs/arnica-intake-proposal.md`). Its geometry is an AllTrails export
+  and stays out of the public repository unless its redistribution basis is
+  resolved.
+- **Private-export tests:** `test_pipeline_verification` (3) and the curation
+  parity tests (2) need `/Users/laurenzary/Desktop/DieselDiaries/activities.csv`,
+  which is absent here. Blocked on that real source; not synthesised.
+- **Soundtrack:** optional by design; not imported.
+- **Experiential Finder comparisons:** see the Finder research note.
+- **Not verified:** physical devices, Safari.
 
 ## Release steps (each needs explicit owner authority)
 
-1. Review the commits on `feat/adventure-showcase` and accept or amend ADR-0017.
-2. Decide Arnica (`app/docs/arnica-intake-proposal.md`): AllTrails geometry,
-   the Hike type, then approval to apply proposal `43e50ae4…`.
-3. Push the branch and open a PR (not done).
-4. Per adventure, choose an audience before any deployment; the current Sites
-   and their audiences are unchanged.
+1. Owner decision: the audience and target for the Final Boss adventure (keep
+   it on its restricted Site, or publish it on public goDiesel).
+2. Reviews of the final head; CI green on it; then merge PR
+   the-prairie/goDiesel#131.
+3. Only for public goDiesel:
+   `GODIESEL_PUBLISH_ADVENTURE=final-boss GODIESEL_ADVENTURE_PUBLICATION_APPROVED=final-boss ./make-dist.sh`,
+   review `.godiesel/evidence/adventure-publication-final-boss.json`, then the
+   existing deploy command printed by make-dist, and a public smoke check.
+   Otherwise deploy without an adventure (the default).
