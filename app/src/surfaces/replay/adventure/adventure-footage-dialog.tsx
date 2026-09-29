@@ -90,13 +90,14 @@ export function AdventureFootageDialog({
 
           <div className="adv-footage-text">
             <Dialog.Title className="adv-stage-title">{chapter.title}</Dialog.Title>
-            <p className="adv-stage-kind">{footageKind(footage.title, chapter.title)}</p>
+            <p className="adv-stage-kind">{footageKind(footage, chapter.title)}</p>
             {chapter.note ? <Dialog.Description className="adv-stage-note">{chapter.note}</Dialog.Description> : (
               <Dialog.Description className="sr-only">Footage placed with this chapter of the route.</Dialog.Description>
             )}
             <p className="adv-provenance adv-provenance-dark">
-              Placed with chapter {chapter.ordinal} at {kilometres(chapter.atDistanceM)}. The clip carries no position of
-              its own.
+              {footage.origin === "rendered"
+                ? `A flyover rendered from ${footage.credit} imagery, placed with chapter ${chapter.ordinal} at ${kilometres(chapter.atDistanceM)}. It is not the owner's footage or a recording of the route.`
+                : `Placed with chapter ${chapter.ordinal} at ${kilometres(chapter.atDistanceM)}. The clip carries no position of its own.`}
             </p>
 
             <div className="adv-transport">

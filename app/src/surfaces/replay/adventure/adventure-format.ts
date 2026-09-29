@@ -4,7 +4,15 @@ export function kilometres(distanceM: number) {
 
 const comparable = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
-/** "Footage", naming the clip only when it says something the heading does not. */
-export function footageKind(clipTitle: string | undefined, heading: string) {
-  return clipTitle && comparable(clipTitle) !== comparable(heading) ? `Footage · ${clipTitle}` : "Footage";
+/**
+ * What a clip is. The owner's footage is "Footage", naming the clip only when
+ * it says something the heading does not; a rendered flyover is named as one,
+ * with its credit, and never called footage.
+ */
+export function footageKind(
+  clip: { title?: string; origin?: "recorded" | "rendered"; credit?: string } | undefined,
+  heading: string,
+) {
+  if (clip?.origin === "rendered") return `Rendered flyover · ${clip.credit}`;
+  return clip?.title && comparable(clip.title) !== comparable(heading) ? `Footage · ${clip.title}` : "Footage";
 }

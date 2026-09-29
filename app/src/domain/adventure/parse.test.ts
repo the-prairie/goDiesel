@@ -89,6 +89,19 @@ describe("parseAdventure", () => {
   });
 });
 
+describe("footage origin", () => {
+  it("treats footage without an origin as the owner's recording", () => {
+    expect(parseAdventure(syntheticAdventureJson()).footage[0].origin).toBe("recorded");
+  });
+
+  it("accepts a rendered flyover only with a credit", () => {
+    const rendered = parseAdventure(mutate((value) => { value.footage[1].origin = "rendered"; value.footage[1].credit = "Google Earth Studio"; }));
+    expect(rendered.footage[1]).toMatchObject({ origin: "rendered", credit: "Google Earth Studio" });
+    expect(() => parseAdventure(mutate((value) => { value.footage[1].origin = "rendered"; }))).toThrow(/footage\[1\]\.credit/);
+    expect(() => parseAdventure(mutate((value) => { value.footage[1].origin = "generated"; }))).toThrow(/footage\[1\]\.origin/);
+  });
+});
+
 describe("parseAdventureIndex", () => {
   it("lists adventures by the recordings they cover", () => {
     const index = parseAdventureIndex({

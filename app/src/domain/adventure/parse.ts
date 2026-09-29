@@ -110,11 +110,17 @@ function leg(value: unknown, path: string): AdventureLeg {
 }
 
 function footage(value: unknown, path: string): AdventureFootage {
-  const source = object(value, path, ["id", "kind", "title", "description", "src", "poster", "sha256"]);
+  const source = object(value, path, ["id", "kind", "origin", "credit", "title", "description", "src", "poster", "sha256"]);
   if (source.kind !== "video") fail(`${path}.kind`, "must be video");
+  const origin = source.origin ?? "recorded";
+  if (origin !== "recorded" && origin !== "rendered") fail(`${path}.origin`, "must be recorded or rendered");
+  const credit = optionalText(source.credit, `${path}.credit`);
+  if (origin === "rendered" && !credit) fail(`${path}.credit`, "is required for rendered footage");
   return {
     id: identifier(source.id, `${path}.id`),
     kind: "video",
+    origin,
+    ...(credit ? { credit } : {}),
     title: text(source.title, `${path}.title`),
     description: optionalText(source.description, `${path}.description`),
     src: mediaPath(source.src, `${path}.src`),

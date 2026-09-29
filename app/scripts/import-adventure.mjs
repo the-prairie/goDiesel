@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 // Import a prepared adventure pack into the local, ignored adventure store.
 //
-//   node scripts/import-adventure.mjs <pack-dir> [--legs slug,slug] [--dry-run]
+//   node scripts/import-adventure.mjs <pack-dir> [--legs slug,slug] [--rendered id=credit] [--dry-run]
+//
+// --rendered marks a clip made from someone else's imagery (an Earth Studio
+// flyover, say). A pack cannot tell the importer that, so the owner does.
 //
 // The pack's own track is used only to locate its editorial anchors. Every
 // chapter and scene is projected onto the canonical goDiesel recordings, the
@@ -24,7 +27,7 @@ const PLACEMENT_LIMIT_M = 75;
 
 function usage(message) {
   if (message) console.error(`import-adventure: ${message}`);
-  console.error("usage: node scripts/import-adventure.mjs <pack-dir> [--legs slug,slug] [--dry-run]");
+  console.error("usage: node scripts/import-adventure.mjs <pack-dir> [--legs slug,slug] [--rendered id=credit] [--dry-run]");
   process.exit(2);
 }
 
@@ -32,7 +35,14 @@ const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
 const legsFlag = args.indexOf("--legs");
 const explicitLegs = legsFlag >= 0 ? args[legsFlag + 1]?.split(",").filter(Boolean) : undefined;
-const packDir = args.find((arg, index) => !arg.startsWith("--") && !(legsFlag >= 0 && index === legsFlag + 1));
+const valueIndexes = new Set(args.flatMap((arg, index) => (arg === "--legs" || arg === "--rendered" ? [index + 1] : [])));
+const rendered = new Map(args.flatMap((arg, index) => {
+  if (arg !== "--rendered") return [];
+  const [id, ...credit] = (args[index + 1] ?? "").split("=");
+  if (!id || !credit.join("=").trim()) usage("--rendered needs id=credit");
+  return [[id, credit.join("=").trim()]];
+}));
+const packDir = args.find((arg, index) => !arg.startsWith("--") && !valueIndexes.has(index));
 if (!packDir) usage("a pack directory is required");
 
 const packFile = path.resolve(packDir, "adventure.json");
@@ -143,6 +153,9 @@ function place(kind, id, coordinate, hintM, legIndex) {
 const identifier = (value) => String(value).toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
 const packMedia = (url) => path.resolve(packDir, url.replace(`/adventures/${pack.id}/`, ""));
 
+for (const id of rendered.keys()) {
+  if (!pack.footage.some((clip) => clip.id === id)) usage(`--rendered names ${id}, which the pack does not have`);
+}
 const footage = pack.footage.map((clip) => {
   const file = packMedia(clip.url);
   if (!existsSync(file)) throw new Error(`footage ${clip.id} is missing ${file}`);
@@ -151,6 +164,8 @@ const footage = pack.footage.map((clip) => {
     entry: {
       id: identifier(clip.id),
       kind: "video",
+      origin: rendered.has(clip.id) ? "rendered" : "recorded",
+      credit: rendered.get(clip.id),
       title: clip.title,
       description: clip.description || undefined,
       src: `media/${path.basename(file)}`,

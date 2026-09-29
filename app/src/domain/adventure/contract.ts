@@ -33,6 +33,13 @@ export interface AdventureLeg {
 export interface AdventureFootage {
   id: string;
   kind: "video";
+  /**
+   * `recorded`: the owner's own footage (the default). `rendered`: made from
+   * someone else's imagery, such as an Earth Studio flyover; it carries a
+   * credit and is never presented as footage of the day.
+   */
+  origin: "recorded" | "rendered";
+  credit?: string;
   title: string;
   description?: string;
   /** Path relative to the adventure's own directory. */

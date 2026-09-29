@@ -168,8 +168,8 @@ export function AdventureFilm({
       : showScene && scene
         ? `Captured scene by ${scene.attribution.author} on Sketchfab`
         : beat.kind === "scene"
-          ? `${footageKind(media?.title, beat.title)}, in place of the captured scene`
-          : footageKind(media?.title, beat.title);
+          ? `${footageKind(media, beat.title)}, in place of the captured scene`
+          : footageKind(media, beat.title);
   const captionVisible = !playing || finished || elapsed < CAPTION_S;
 
   return (

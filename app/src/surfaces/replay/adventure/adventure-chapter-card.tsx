@@ -124,7 +124,7 @@ export function AdventureChapterCard({
         {current?.footage ? (
           <button type="button" className="adv-button adv-button-primary" onClick={() => onWatch(current)}>
             <Play aria-hidden="true" />
-            Watch this moment
+            {current.footage.origin === "rendered" ? "Watch the flyover" : "Watch this moment"}
           </button>
         ) : null}
         {!compact && scene ? (
