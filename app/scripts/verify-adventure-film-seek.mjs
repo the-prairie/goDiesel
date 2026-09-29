@@ -43,8 +43,9 @@ for (const renderer of renderers) for (const reducedMotion of ["reduce", "no-pre
   const stage = page.getByTestId("replay-stage");
   if (tiles) {
     await page.waitForTimeout(1500);
-    check("Google map tiles arrived", tiles.ok > 0, `${tiles.ok} ok, ${tiles.failed} failed`);
-    check("the rendered frame is imagery, not a blank canvas", (await imageryVariance(page)) > 12);
+    check("photorealistic tile content arrived", tiles.ok > 0, `${tiles.ok} NodeData ok, ${tiles.failed} failed`);
+    const imagery = await imageryVariance(page);
+    check("an unobstructed patch of the map is imagery, not blank", Boolean(imagery && imagery.spread > 12), imagery ? `spread ${imagery.spread.toFixed(1)}, ${Math.round(imagery.mapShare * 100)}% map` : "no unobstructed map patch found");
   }
   const total = (await page.evaluate(() => Number(document.querySelector("[data-testid='replay-stage']")?.dataset.progress))) ;
   const held = Number(await stage.getAttribute("data-progress"));

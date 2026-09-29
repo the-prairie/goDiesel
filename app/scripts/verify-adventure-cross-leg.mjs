@@ -54,9 +54,9 @@ for (const renderer of renderers) {
   check("with that chapter's card", (await page.getByTestId("adventure-chapter-card").getAttribute("data-chapter-id")) === target.id);
   if (tiles) {
     // Provider readiness beyond data-state: tiles arrived and the frame is imagery.
-    check("Google map tiles arrived", tiles.ok > 0, `${tiles.ok} ok, ${tiles.failed} failed`);
-    const variance = await imageryVariance(page);
-    check("the rendered frame is imagery, not a blank canvas", variance > 12, `luminance spread ${variance.toFixed(1)}`);
+    check("photorealistic tile content arrived", tiles.ok > 0, `${tiles.ok} NodeData ok, ${tiles.failed} failed`);
+    const imagery = await imageryVariance(page);
+    check("an unobstructed patch of the map is imagery, not blank", Boolean(imagery && imagery.spread > 12), imagery ? `spread ${imagery.spread.toFixed(1)} over ${imagery.clip.width}x${imagery.clip.height} at ${imagery.clip.x},${imagery.clip.y}, ${Math.round(imagery.mapShare * 100)}% map` : "no unobstructed map patch found");
   }
   check("the presentation carried over", renderer === "google" ? engine === "google-3d-maps" : engine === "maplibre-notebook", engine ?? "");
   await page.close();
