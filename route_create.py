@@ -20,7 +20,6 @@ from PIL import Image
 
 from quest_meta import build_route_curation
 from route_annotations import build_route_annotations
-from route_imports import SUPPORTED_ACTIVITY_TYPES
 from route_media import publish_photo, read_photo_metadata, read_video_metadata
 from route_provenance import build_route_provenance, load_source_route_points
 
@@ -1119,10 +1118,10 @@ def _validate_proposal_semantics(
                 "proposal.semantic_mismatch",
                 "created route title must match the approved route name",
             )
-        if route_spec.get("activity_type") not in SUPPORTED_ACTIVITY_TYPES:
+        if route_spec.get("activity_type") not in {"Run", "Ride"}:
             raise RouteCreateError(
                 "proposal.semantic_mismatch",
-                "created route activity type must be Run, Ride or Hike",
+                "created route activity type must be Run or Ride",
             )
         try:
             normalized_curation = _curation(route_spec.get("curation"))

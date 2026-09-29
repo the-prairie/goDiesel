@@ -3,8 +3,7 @@
 import type { RouteLifecycle } from "@/domain/route/lifecycle";
 import { curationFields } from "@/domain/route/parse-shared";
 
-/** Recorded activity types, plus Hike for on-foot routes that are not runs. */
-export type RouteActivityType = "Run" | "Ride" | "Hike" | string;
+export type RouteActivityType = "Run" | "Ride" | string;
 export type RouteGeometryStatus = "ready" | "missing" | "invalid";
 export type RouteElevationStatus = "recorded" | "unavailable";
 

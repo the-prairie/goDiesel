@@ -125,8 +125,6 @@ def _theme(activity_type, distance_km, elevation_gain, region_label, activity_na
         return "Trail Myth"
     if activity_type == "Ride":
         return "Scenic Spin"
-    if activity_type == "Hike":
-        return "Wander Hike"
     if any(word in text for word in ("tokyo", "kyoto", "madrid", "city", "crosswalk")):
         return "Local Spark"
     return "Wander Run"
@@ -137,8 +135,7 @@ def build_quest_meta(activity_type, distance_km, elevation_gain, region_label, a
     scoring_elevation = elevation_gain if recorded_elevation else 0
     difficulty = _difficulty(activity_type, distance_km, scoring_elevation)
     theme = _theme(activity_type, distance_km, scoring_elevation, region_label, activity_name)
-    # A hike is scored on foot like a run; only its name differs.
-    verb = {"Ride": "ride", "Hike": "hike"}.get(activity_type, "run")
+    verb = "ride" if activity_type == "Ride" else "run"
     xp = _round_to_10(
         (120 if activity_type == "Ride" else 50)
         + distance_km * (7 if activity_type == "Ride" else 8)
