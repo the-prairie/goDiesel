@@ -16,6 +16,7 @@ from pathlib import Path
 
 from quest_meta import build_route_curation, route_guide_preview
 from route_annotations import build_route_annotations
+from owner_publication import owner_publication, recover_owner_publication
 
 
 class CurationPublishError(RuntimeError):
@@ -40,6 +41,7 @@ def publish_annotations(checkout_root, activity_id, annotations):
     anchor is validated against the route's own recorded distance, so an
     annotation can never be published off the end of the route.
     """
+    recover_owner_publication(checkout_root)
     activity_id = str(activity_id)
     paths = generated_paths(checkout_root)
     detail_path = paths["detail"] / f"{activity_id}.json"
@@ -78,17 +80,13 @@ def publish_annotations(checkout_root, activity_id, annotations):
     manifest["generated_at"] = generated_at
     staged.append((paths["manifest"], json.dumps(manifest, ensure_ascii=False)))
 
-    _write_all_atomic(staged)
+    _replace_generated_files(checkout_root, staged)
     return normalized
 
 
 def publish_curation(checkout_root, activity_id, curation):
-    """Rewrite the generated artifacts for one route's curation.
-
-    Every file is staged before any file is replaced, so a failure part way
-    through cannot leave the manifest describing a guide the detail record does
-    not have.
-    """
+    """Rewrite one route's curation with rollback and interruption recovery."""
+    recover_owner_publication(checkout_root)
     activity_id = str(activity_id)
     normalized = build_route_curation(curation or {})
     preview = route_guide_preview(normalized)
@@ -131,7 +129,7 @@ def publish_curation(checkout_root, activity_id, curation):
     )
     staged.append((paths["payload"], json.dumps(payload, ensure_ascii=False)))
 
-    _write_all_atomic(staged)
+    _replace_generated_files(checkout_root, staged)
     return normalized
 
 
@@ -195,23 +193,16 @@ def _replace_in_place(routes, activity_id, transform, artifact):
     routes[indexes[0]] = transform(routes[indexes[0]])
 
 
-def _write_all_atomic(staged):
-    """Stage every file, then replace every file.
-
-    Replacement is the only step that mutates a published artifact, and each
-    replace is atomic. Staging first keeps the failure window to the replace
-    loop rather than the much longer serialize-and-write step.
-    """
+def _replace_generated_files(checkout_root, staged):
     temporaries = []
     try:
-        for path, content in staged:
-            temporary = path.with_name(f".{path.name}.tmp")
-            temporary.write_text(content, encoding="utf-8")
-            temporaries.append((temporary, path))
-    except Exception:
+        with owner_publication(checkout_root):
+            for path, content in staged:
+                temporary = path.with_name(f".{path.name}.tmp")
+                temporaries.append((temporary, path))
+                temporary.write_text(content, encoding="utf-8")
+            for temporary, path in temporaries:
+                os.replace(temporary, path)
+    finally:
         for temporary, _ in temporaries:
             temporary.unlink(missing_ok=True)
-        raise
-
-    for temporary, path in temporaries:
-        os.replace(temporary, path)

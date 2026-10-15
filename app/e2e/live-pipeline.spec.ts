@@ -24,13 +24,6 @@ const matrixSlugs = [
   "14736711660",
   "3519505225411091950",
 ] as const;
-// Every top-level Python module, not a hand-kept subset.
-//
-// A fixed list silently rots: admin.py grew imports for curation_publish and
-// route_media, which transitively need route_annotations and quest_meta, and
-// the isolated workspace failed with ModuleNotFoundError at stage 3 of the live
-// gate. Deriving the list means adding a module can never break this again.
-// Test modules are excluded because the workspace only has to run the app.
 async function adminWorkspaceFiles() {
   const entries = await readdir(repositoryRoot);
   const modules = entries.filter(

@@ -100,7 +100,6 @@ export function splayPlacement(
   return { x, y, rotationDeg, zIndex: index };
 }
 
-/** Place every card. */
 export function splayFan(count: number, options: SplayOptions): SplayPlacement[] {
   return Array.from({ length: count }, (_, index) =>
     splayPlacement(index, count, options),

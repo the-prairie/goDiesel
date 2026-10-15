@@ -76,5 +76,8 @@ def save_curation_and_rebuild(config_path, activity_id, value, rebuild):
 def write_atomic(path, content):
     """Replace a text file without exposing a partially written destination."""
     temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(content, encoding="utf-8")
-    os.replace(temporary, path)
+    try:
+        temporary.write_text(content, encoding="utf-8")
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)

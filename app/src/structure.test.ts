@@ -3,10 +3,6 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-// Structural guards for the app/src layout. The reorganization removed two
-// import cycles and two layering violations; nothing else in the repository
-// prevents them from coming back. See PROPOSED_CODE_FILE_REORGANIZATION_PLAN.md
-// and ADR-0008.
 
 const SRC = path.resolve(__dirname);
 

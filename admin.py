@@ -37,6 +37,12 @@ from curation_publish import (
     publish_annotations,
     publish_curation,
 )
+from owner_publication import (
+    PublicationRecoveryError,
+    owner_publication,
+    owner_publication_subprocess_options,
+    recover_owner_publication,
+)
 from route_imports import route_metadata
 from route_media import (
     match_photo_to_route,
@@ -52,6 +58,7 @@ except ImportError:
 QUESTS = Path(
     os.environ.get("GODIESEL_CHECKOUT_ROOT", Path(__file__).resolve().parent)
 ).resolve()
+recover_owner_publication(QUESTS)
 DD = Path(
     os.environ.get("GODIESEL_DIESEL_DIARIES_ROOT", "/Users/laurenzary/Desktop/DieselDiaries")
 ).resolve()
@@ -430,7 +437,6 @@ def load_polyline_points(fp):
                         lat = lat * (180 / 2**31)
                         lng = lng * (180 / 2**31)
                     pts.append((lat, lng))
-    # Downsample for preview rendering
     if len(pts) > 200:
         step = max(1, len(pts) // 200)
         pts = pts[::step] + [pts[-1]]
@@ -557,7 +563,6 @@ def routes_summary():
         for field in CURATION_TEXT_FIELDS:
             item[field] = r.get(field) or ''
         out.append(item)
-    # Sort newest first within each status
     out.sort(key=lambda r: r['date'] or '', reverse=True)
     return out
 
@@ -707,7 +712,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(409, {'error': 'another owner mutation is in progress'})
                 return
             try:
+                recover_owner_publication(QUESTS)
                 self._handle_media_upload()
+            except (PublicationRecoveryError, OSError) as error:
+                self._send(503, {'error': str(error)})
             finally:
                 OWNER_MUTATION_LOCK.release()
             return
@@ -732,6 +740,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(409, {'error': 'another owner mutation is in progress'})
                 return
             try:
+                recover_owner_publication(QUESTS)
                 data = json.loads(body)
                 if not isinstance(data, dict) or not isinstance(data.get('routes', []), list):
                     raise ValueError('request must contain a routes list')
@@ -779,6 +788,9 @@ class Handler(BaseHTTPRequestHandler):
             except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
                 self._send(400, {'error': str(error)})
                 return
+            except (PublicationRecoveryError, OSError) as error:
+                self._send(503, {'error': str(error)})
+                return
             finally:
                 OWNER_MUTATION_LOCK.release()
             self._send(200, {'ok': True, 'updated': updated})
@@ -806,11 +818,13 @@ class Handler(BaseHTTPRequestHandler):
                             check=True,
                             capture_output=True,
                             text=True,
+                            **owner_publication_subprocess_options(QUESTS),
                         )
 
-                route = save_curation_and_rebuild(
-                    QUESTS / 'quests.json', activity_id, curation, rebuild
-                )
+                with owner_publication(QUESTS, include_source=True):
+                    route = save_curation_and_rebuild(
+                        QUESTS / 'quests.json', activity_id, curation, rebuild
+                    )
             except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
                 self._send(400, {'error': str(error)})
                 return
@@ -818,6 +832,15 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(500, {
                     'error': 'Route generation failed; the curation source was rolled back.',
                     'detail': error.stderr[-1000:] if error.stderr else '',
+                })
+                return
+            except PublicationRecoveryError as error:
+                self._send(503, {'error': str(error)})
+                return
+            except OSError as error:
+                self._send(500, {
+                    'error': 'Publication failed; previous source and route data restored.',
+                    'detail': str(error),
                 })
                 return
             finally:
@@ -837,25 +860,32 @@ class Handler(BaseHTTPRequestHandler):
                 data = json.loads(body)
                 activity_id = str(data['activity_id'])
                 annotations = data['annotations']
-                config_path = QUESTS / 'quests.json'
-                original = config_path.read_text(encoding='utf-8')
-                config = json.loads(original)
-                matching = [
-                    route for route in config.get('routes', [])
-                    if str(route.get('activity_id')) == activity_id
-                ]
-                if len(matching) != 1:
-                    raise ValueError(f'route {activity_id} was not found')
-                # Publish first, so an invalid anchor is refused before the
-                # source of truth changes.
-                published = publish_annotations(QUESTS, activity_id, annotations)
-                matching[0]['annotations'] = published
-                write_atomic(config_path, json.dumps(config, indent=2) + '\n')
+                with owner_publication(QUESTS, include_source=True):
+                    config_path = QUESTS / 'quests.json'
+                    config = json.loads(config_path.read_text(encoding='utf-8'))
+                    matching = [
+                        route for route in config.get('routes', [])
+                        if str(route.get('activity_id')) == activity_id
+                    ]
+                    if len(matching) != 1:
+                        raise ValueError(f'route {activity_id} was not found')
+                    published = publish_annotations(QUESTS, activity_id, annotations)
+                    matching[0]['annotations'] = published
+                    write_atomic(config_path, json.dumps(config, indent=2) + '\n')
             except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
                 self._send(400, {'error': str(error)})
                 return
             except CurationPublishError as error:
                 self._send(409, {'error': str(error)})
+                return
+            except PublicationRecoveryError as error:
+                self._send(503, {'error': str(error)})
+                return
+            except OSError as error:
+                self._send(500, {
+                    'error': 'Publication failed; previous source and route data restored.',
+                    'detail': str(error),
+                })
                 return
             finally:
                 OWNER_MUTATION_LOCK.release()
@@ -868,6 +898,12 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/rebuild':
             if not OWNER_MUTATION_LOCK.acquire(blocking=False):
                 self._send(409, {'error': 'another owner mutation is in progress'})
+                return
+            try:
+                recover_owner_publication(QUESTS)
+            except (PublicationRecoveryError, OSError) as error:
+                OWNER_MUTATION_LOCK.release()
+                self._send(503, {'error': str(error)})
                 return
 
             def rebuild_in_background():

@@ -6,7 +6,7 @@ Writes:   <checkout>/index.html
 
 Edit quests.json to add/remove routes. Re-run this script (or rebuild.sh).
 """
-import base64, io, json, math, re, shutil, tempfile, textwrap
+import base64, io, json, math, os, re, shutil, tempfile, textwrap
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -25,14 +25,15 @@ from route_provenance import build_route_provenance, load_source_route_points
 from route_annotations import build_route_annotations
 from route_imports import route_metadata, route_source_kind
 from route_timezones import route_time_zone
+from owner_publication import recover_owner_publication, TOKEN_ENV, FD_ENV
 
 try: import imagehash
 except ImportError: imagehash = None
 
 # ── Paths ──
-DD = Path('/Users/laurenzary/Desktop/DieselDiaries')
-TRAVEL = Path('/Users/laurenzary/Desktop/Travel')
 QUESTS = Path(__file__).resolve().parent
+DD = Path(os.environ.get('GODIESEL_DIESEL_DIARIES_ROOT', QUESTS.parent / 'DieselDiaries')).resolve()
+TRAVEL = Path(os.environ.get('GODIESEL_TRAVEL_ROOT', QUESTS.parent / 'Travel')).resolve()
 CARDS = QUESTS / 'cards'
 CARDS.mkdir(exist_ok=True)
 REACT_DATA = QUESTS / 'app' / 'src' / 'data'
@@ -80,6 +81,9 @@ def recover_interrupted_route_publication():
     shutil.rmtree(ROUTE_GENERATION_BACKUP)
 
 
+recover_owner_publication(
+    QUESTS, inherited_token=os.environ.get(TOKEN_ENV), inherited_fd=os.environ.get(FD_ENV)
+)
 recover_interrupted_route_publication()
 
 # ── API key ──

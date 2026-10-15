@@ -38,8 +38,6 @@ export function RouteAnnotations({
   annotations: RouteAnnotation[];
   className?: string;
 }) {
-  // Image annotations are shown by the polaroid fan, which owns their
-  // presentation. The margin carries the written ones.
   const written = annotations.filter((annotation) => annotation.kind !== "image");
   if (written.length === 0) return null;
 
