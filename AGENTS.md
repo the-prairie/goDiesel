@@ -35,3 +35,9 @@ Run the complete release gate only for production cutover or changes to shared a
 A successful gate remains valid unless subsequent edits touch behavior covered by that gate.
 
 See `docs/agents/testing.md` for the verification matrix and commands.
+
+### State management
+
+Use pure reducers for coordinated lifecycle state and preserve existing behavior
+through characterization tests. Keep IO in the owning component, hook, or engine.
+Follow `docs/adr/0016-explicit-state-transitions-at-lifecycle-boundaries.md`.
