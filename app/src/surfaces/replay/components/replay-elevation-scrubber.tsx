@@ -23,12 +23,12 @@ import { cn } from "@/ui/utils";
 
 const PROFILE_WIDTH = 720;
 const PROFILE_HEIGHT = 92;
-const TRAVELED_COLOR = "#315fb4";
-const FUTURE_COLOR = "#aebad0";
-const PLAYHEAD_COLOR = "#d95d45";
-const INTELLIGENCE_TRAVELED_COLOR = "#ef684e";
-const INTELLIGENCE_FUTURE_COLOR = "#f6f3ed";
-const INTELLIGENCE_PLAYHEAD_COLOR = "#ef684e";
+const TRAVELED_COLOR = "#ffffff";
+const FUTURE_COLOR = "#808080";
+const PLAYHEAD_COLOR = "#ffffff";
+const INTELLIGENCE_TRAVELED_COLOR = "#ffffff";
+const INTELLIGENCE_FUTURE_COLOR = "#808080";
+const INTELLIGENCE_PLAYHEAD_COLOR = "#ffffff";
 
 export interface ReplayElevationScrubberHandle {
   sync(progressM: number): void;
@@ -42,6 +42,7 @@ export const ReplayElevationScrubber = forwardRef<
     totalDistanceM: number;
     disabled?: boolean;
     compact?: boolean;
+    showDiagnostics?: boolean;
     tone?: "default" | "intelligence";
     className?: string;
     onSeek: (progressM: number) => void;
@@ -53,6 +54,7 @@ export const ReplayElevationScrubber = forwardRef<
     totalDistanceM,
     disabled = false,
     compact = false,
+    showDiagnostics = false,
     tone = "default",
     className,
     onSeek,
@@ -66,8 +68,8 @@ export const ReplayElevationScrubber = forwardRef<
     [route, totalDistanceM],
   );
   const repairs = useMemo(
-    () => routeRepairs(route, totalDistanceM),
-    [route, totalDistanceM],
+    () => showDiagnostics ? routeRepairs(route, totalDistanceM) : [],
+    [route, totalDistanceM, showDiagnostics],
   );
   const [activeRepairs, setActiveRepairs] = useState<RouteRepair[]>([]);
   const repairGroups = useMemo(() => {
@@ -163,7 +165,7 @@ export const ReplayElevationScrubber = forwardRef<
         />
         <path
           d={profile.area}
-          fill={tone === "intelligence" ? "#253a3a" : "#dfe5ee"}
+          fill={tone === "intelligence" ? "#303030" : "#303030"}
           opacity={tone === "intelligence" ? "0.6" : "0.72"}
         />
         <polyline
@@ -190,15 +192,15 @@ export const ReplayElevationScrubber = forwardRef<
         aria-hidden="true"
         className={cn(
           "pointer-events-none absolute inset-y-0 left-[var(--replay-progress)] z-10 w-px -translate-x-1/2",
-          tone === "intelligence" ? "bg-[#ef684e]" : "bg-coral",
+          tone === "intelligence" ? "bg-[#ffffff]" : "bg-white",
         )}
       >
         <span
           className={cn(
-            "absolute left-1/2 top-2 size-3 -translate-x-1/2 rounded-full border-2 shadow-sm",
+            "absolute left-1/2 top-2 size-3 -translate-x-1/2 rounded-full border-2",
             tone === "intelligence"
-              ? "border-black bg-[#ef684e]"
-              : "border-surface bg-coral",
+              ? "border-black bg-[#ffffff]"
+              : "border-surface bg-white",
           )}
         />
       </span>
@@ -209,7 +211,7 @@ export const ReplayElevationScrubber = forwardRef<
           data-testid="replay-repair-mark"
           data-repair-distance-m={repair.distanceM.toFixed(2)}
           aria-hidden="true"
-          className="pointer-events-none absolute z-30 size-2 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-surface bg-repair shadow-sm"
+          className="pointer-events-none absolute z-30 size-2 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-surface bg-repair"
           style={{
             left: `${repair.distanceRatio * 100}%`,
             top: `${repairYRatio(repair.distanceRatio) * 100}%`,

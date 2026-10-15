@@ -29,6 +29,7 @@ interface MountOptions {
   routeStyle?: {
     color: string;
     mode?: "filament" | "hidden" | "solid";
+    palette?: "neutral";
     outerColor: string;
     outerWidth: number;
     width: number;
@@ -97,7 +98,8 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
   private map?: google.maps.maps3d.Map3DElement;
   private routeLine?: google.maps.maps3d.Polyline3DElement;
   private filamentLayers: FilamentLayer[] = [];
-  private routePath: Array<{ lat: number; lng: number }> = [];
+  private routePath: Array<{ lat: number; lng: number; d: number }> = [];
+  private interactiveThread = false;
   private routeDistanceM = 1;
   private routeWidth = 8;
   private following = true;
@@ -119,6 +121,7 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
     const generation = ++this.generation;
     onStatus({ state: "loading", message: "Loading Google photorealistic 3D." });
     this.headingSmoothing = headingSmoothing ?? 0.14;
+    this.interactiveThread = routeStyle?.palette === "neutral";
     if (!apiKey) {
       onStatus({
         state: "unavailable",
@@ -287,10 +290,13 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
         layer.startRatio = style.startRatio;
         layer.endRatio = style.endRatio;
       }
-      layer.element.strokeColor = style.color;
-      layer.element.strokeWidth = style.width;
-      layer.element.outerColor = style.outerColor;
-      layer.element.outerWidth = style.outerWidth;
+      const interactive = this.interactiveThread;
+      const colors = { guide: "#a7b5bc", future: "#a7b5bc", thread: "#f5f5f5", glint: "#ffffff" };
+      const widths = { guide: 2, future: 2, thread: 3.5, glint: 4.5 };
+      layer.element.strokeColor = interactive ? colors[layer.role] : style.color;
+      layer.element.strokeWidth = interactive ? widths[layer.role] : style.width;
+      layer.element.outerColor = interactive ? "#182126" : style.outerColor;
+      layer.element.outerWidth = interactive ? 0.22 : style.outerWidth;
       setLineVisibility(layer.element, style.opacity > 0.01);
       layer.element.style.opacity = String(style.opacity);
     }

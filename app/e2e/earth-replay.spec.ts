@@ -290,8 +290,8 @@ test("Replay uses the elevation profile as its single distance-based timeline", 
   await expect(dock).toBeVisible();
   await expect(scrubber).toBeVisible();
   await expect(scrubber).toHaveAttribute("data-distance-axis", "route-metres");
-  await expect(scrubber).toHaveAttribute("data-traveled-color", "#315fb4");
-  await expect(scrubber).toHaveAttribute("data-playhead-color", "#d95d45");
+  await expect(scrubber).toHaveAttribute("data-traveled-color", "#ffffff");
+  await expect(scrubber).toHaveAttribute("data-playhead-color", "#ffffff");
   await expect(range).toHaveAttribute("max", /[1-9][0-9]+/);
 
   await range.focus();

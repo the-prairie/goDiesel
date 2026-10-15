@@ -4,6 +4,11 @@ export type FinderActivity = "Run" | "Ride";
 export type FinderTerrain = "any" | "road" | "trail" | "mixed" | "mountain";
 
 export interface FinderIntent {
+  query?: string;
+  minDistanceKm?: number;
+  maxDistanceKm?: number;
+  maxElevationM?: number;
+  similarPlace?: string;
   place: string;
   activity: FinderActivity;
   distanceKm: number;
@@ -12,6 +17,8 @@ export interface FinderIntent {
 }
 
 export interface DiscoveryCandidate {
+  displayTitle?: string;
+  matchEvidence?: string;
   id: string;
   sourceRouteSlug: string;
   sourceLabel: "Owner-curated from recorded GPX";

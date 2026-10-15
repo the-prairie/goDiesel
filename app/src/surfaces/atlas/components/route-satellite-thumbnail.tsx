@@ -3,8 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import type { RoutePoint, RouteSummary } from "@/domain/route";
 import { cn } from "@/ui/utils";
 
-const thumbnailWidth = 640;
-const thumbnailHeight = 224;
+const thumbnailWidth = 160;
+const thumbnailHeight = 160;
 const maximumPathPoints = 36;
 
 type RouteThumbnailState =
@@ -65,7 +65,7 @@ export function RouteSatelliteThumbnail({
           onLoad={() => setState("loaded")}
           onError={() => setState("failed")}
           className={cn(
-            "size-full object-cover transition-opacity duration-200 motion-reduce:transition-none",
+            "size-full object-contain transition-opacity duration-200 motion-reduce:transition-none",
             state === "loaded" ? "opacity-100" : "opacity-0",
           )}
         />
@@ -106,7 +106,7 @@ export function routeSatelliteThumbnailUrl(
     scale: "2",
     maptype: "satellite",
     format: "png",
-    path: `color:0x63d6cfff|weight:4|${path
+    path: `color:0xf5f5f5ff|weight:3|${path
       .map((point) => `${point.lat.toFixed(5)},${point.lng.toFixed(5)}`)
       .join("|")}`,
     key: apiKey,

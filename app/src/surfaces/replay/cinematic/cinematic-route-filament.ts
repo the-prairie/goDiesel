@@ -85,7 +85,7 @@ export function buildCinematicThreadStyles(
   ];
 }
 
-export function slicePathByRatio<T extends { lat: number; lng: number }>(
+export function slicePathByRatio<T extends { lat: number; lng: number; d?: number }>(
   path: T[],
   startRatio: number,
   endRatio: number,
@@ -94,8 +94,26 @@ export function slicePathByRatio<T extends { lat: number; lng: number }>(
   const start = clamp(startRatio);
   const end = clamp(endRatio, start, 1);
   const lastIndex = path.length - 1;
-  const startPosition = start * lastIndex;
-  const endPosition = end * lastIndex;
+  // Google paths retain recorded distances. Vertex density is not distance:
+  // GPS sampling and per-segment densification both vary along the route.
+  const positionAt = (ratio: number) => {
+    const first = path[0].d;
+    const last = path[lastIndex].d;
+    if (first === undefined || last === undefined || last <= first) return ratio * lastIndex;
+    const distance = first + ratio * (last - first);
+    let low = 0;
+    let high = lastIndex;
+    while (low + 1 < high) {
+      const middle = Math.floor((low + high) / 2);
+      if ((path[middle].d ?? 0) <= distance) low = middle;
+      else high = middle;
+    }
+    const from = path[low].d ?? first;
+    const to = path[high].d ?? last;
+    return low + (to > from ? (distance - from) / (to - from) : 0);
+  };
+  const startPosition = positionAt(start);
+  const endPosition = positionAt(end);
   const points: Array<{ lat: number; lng: number }> = [
     interpolatePathPoint(path, startPosition),
   ];

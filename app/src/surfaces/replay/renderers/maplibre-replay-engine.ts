@@ -1,4 +1,5 @@
-import maplibregl, {
+import maplibregl from "@/providers/maplibre";
+import {
   LngLatBounds,
   Map as MapLibreMap,
 } from "maplibre-gl";

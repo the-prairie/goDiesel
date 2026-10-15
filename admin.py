@@ -60,7 +60,7 @@ QUESTS = Path(
 ).resolve()
 recover_owner_publication(QUESTS)
 DD = Path(
-    os.environ.get("GODIESEL_DIESEL_DIARIES_ROOT", "/Users/laurenzary/Desktop/DieselDiaries")
+    os.environ.get("GODIESEL_DIESEL_DIARIES_ROOT", Path(__file__).resolve().parent.parent / "DieselDiaries")
 ).resolve()
 ACTIVITY_DIR = DD / 'strava_export' / 'activities'
 GEO_CACHE_PATH = QUESTS / '.geo_cache.json'

@@ -9,7 +9,6 @@ import {
   Navigation,
   Pause,
   Play,
-  Route,
   ScanLine,
   Settings2,
   Sparkles,
@@ -175,11 +174,14 @@ export function GoogleRouteNavigatorStage({
       container,
       route,
       groundingMode: initial.groundingMode,
+      // The time-based motion controller owns smoothing; avoid a second, FPS-dependent filter.
+      headingSmoothing: 1,
       initialCamera: googleRouteCameraPose(route, initial),
       routeStyle: {
-        color: "#ef684e",
+        color: "#f5f5f5",
         mode: "filament",
-        outerColor: "#15100d",
+        palette: "neutral",
+        outerColor: "#111111",
         outerWidth: 0.14,
         width: 3,
       },
@@ -212,7 +214,6 @@ export function GoogleRouteNavigatorStage({
     if (status.state !== "ready") return;
     let animationFrame = 0;
     let previous = performance.now();
-    let lastCameraUpdate = previous;
     let lastRouteUpdate = previous;
     let lastUiUpdate = previous;
     const tick = (now: number) => {
@@ -229,28 +230,20 @@ export function GoogleRouteNavigatorStage({
       const cameraSettling = cameraSettlingRef.current;
       if (
         next.following &&
-        (progressChanged || cameraSettling) &&
-        (playbackChanged || now - lastCameraUpdate >= 32)
+        (progressChanged || cameraSettling)
       ) {
         const desired = progressChanged
           ? googleRouteCameraPose(route, next)
           : cameraTargetRef.current;
         if (desired) renderCamera(desired, now);
-        lastCameraUpdate = now;
       }
-      if (
-        progressChanged &&
-        (playbackChanged || now - lastRouteUpdate >= 40)
-      ) {
+      if (progressChanged && (playbackChanged || now - lastRouteUpdate >= 40)) {
         engineRef.current?.setCinematicRoute(
           googleRouteThreadTreatment(route, next),
         );
         lastRouteUpdate = now;
       }
-      if (
-        playbackChanged ||
-        (progressChanged && now - lastUiUpdate >= 90)
-      ) {
+      if (playbackChanged || (progressChanged && now - lastUiUpdate >= 90)) {
         setControl(next);
         lastUiUpdate = now;
       }
@@ -291,10 +284,10 @@ export function GoogleRouteNavigatorStage({
         productionReplay ? "Google 3D Replay" : "Google route navigator lab"
       }
       className={cn(
-        "fixed right-0 top-0 z-[100] min-h-[34rem] overflow-hidden bg-[#081112]",
+        "fixed right-0 top-0 min-h-0 overflow-hidden bg-canvas",
         productionReplay
-          ? "bottom-[var(--mobile-navigation-height)] left-0 md:bottom-0 md:left-[var(--spine-rail-width)] lg:left-[var(--spine-width)]"
-          : "bottom-0 left-0",
+          ? "z-[var(--z-map-controls)] bottom-[var(--mobile-navigation-height)] left-0 md:bottom-0 md:left-[var(--spine-rail-width)] lg:left-[var(--spine-width)]"
+          : "z-[100] bottom-0 left-0",
       )}
       data-camera-mode={control.cameraMode}
       data-camera-clearance-m={cameraPose.clearanceM?.toFixed(2)}
@@ -337,9 +330,9 @@ export function GoogleRouteNavigatorStage({
             </div>
           </div>
         </div>
-        <div className="pointer-events-auto flex items-center gap-2">
+        <div className="pointer-events-auto flex shrink-0 items-center gap-1 sm:gap-2">
           <div className="hidden items-center gap-2 border-r border-white/15 pr-3 text-[10px] font-semibold uppercase text-white/62 sm:flex">
-            <ScanLine aria-hidden="true" className="size-3.5 text-[#ef684e]" />
+            <ScanLine aria-hidden="true" className="size-3.5 text-accent-foreground" />
             {productionReplay ? "Google 3D Replay" : "Field replay"}
           </div>
           <div className="flex items-center gap-1.5 text-[11px] text-white/72">
@@ -367,7 +360,7 @@ export function GoogleRouteNavigatorStage({
             <Settings2 aria-hidden="true" />
           </Button>
           {productionReplay && pickerRoutes.length > 0 ? (
-            <div className="min-w-36 text-ink">
+            <div className="min-w-0 text-ink">
               <ReplayRoutePicker
                 currentSlug={route.slug}
                 routes={pickerRoutes}
@@ -393,12 +386,12 @@ export function GoogleRouteNavigatorStage({
         <div className="absolute inset-0 z-20 grid place-items-center bg-black/58 p-6">
           <div
             aria-live="polite"
-            className="max-w-md border border-white/20 bg-[#0b1112]/94 p-6 text-center text-white shadow-2xl"
+            className="max-w-md border border-white/20 bg-surface p-6 text-center text-white"
             role={status.state === "unavailable" ? "alert" : "status"}
           >
             <ScanLine
               aria-hidden="true"
-              className="mx-auto size-5 text-[#ef684e]"
+              className="mx-auto size-5 text-accent-foreground"
             />
             <h2 className="mt-3 font-editorial text-2xl font-semibold">
               {status.state === "loading"
@@ -408,7 +401,7 @@ export function GoogleRouteNavigatorStage({
             <p className="mt-2 text-sm text-white/62">{status.message}</p>
             {status.state === "unavailable" && onUseAtlas ? (
               <Button
-                className="mt-5 bg-white text-black hover:bg-white/90"
+                className="mt-5 bg-primary text-primary-foreground hover:bg-primary-hover"
                 onClick={onUseAtlas}
                 type="button"
               >
@@ -472,23 +465,19 @@ function ExpandedReplayHud({
 }: ReplayHudProps) {
   return (
     <div
-      className="pointer-events-auto mx-auto w-full border-t border-white/15 bg-[#071011]/94 text-white shadow-2xl backdrop-blur-xl"
+      className="pointer-events-auto mx-auto w-full border-t border-white/15 bg-surface/98 text-white backdrop-blur"
       data-testid="google-route-controls"
     >
-      <div className="grid grid-cols-[10rem_minmax(0,1fr)] md:min-h-28 md:grid-cols-[15rem_minmax(18rem,1fr)_auto]">
+      <div className="grid grid-cols-[12rem_minmax(0,1fr)] md:grid-cols-[13rem_minmax(0,1fr)] lg:min-h-28 2xl:grid-cols-[13rem_minmax(14rem,1fr)_auto]">
         <div className="flex min-w-0 items-center gap-2 border-r border-white/12 px-3 py-2 md:gap-3 md:px-4 md:py-3">
           <ReplayButton
             disabled={disabled}
             onClick={onTogglePlayback}
             playing={control.playing}
           />
-          <Route
-            aria-hidden="true"
-            className="hidden size-4 text-[#ef684e] md:block"
-          />
           <div className="min-w-0">
-            <div className="text-[9px] font-semibold uppercase text-[#ef684e]">
-              Route telemetry
+            <div className="text-xs font-semibold uppercase text-accent-foreground">
+              Route progress
             </div>
             <div
               className="mt-0.5 truncate text-[11px] font-semibold tabular-nums md:text-sm"
@@ -514,8 +503,8 @@ function ExpandedReplayHud({
           totalDistanceM={totalDistanceM}
         />
 
-        <div className="col-span-2 flex min-w-0 items-center justify-between gap-2 border-t border-white/12 px-3 py-2 md:col-span-1 md:min-w-[27rem] md:gap-4 md:border-l md:border-t-0 md:px-4 md:py-3">
-          <div className="grid min-w-0 flex-1 grid-cols-4 gap-x-2 md:gap-x-5 md:gap-y-2">
+        <div className="col-span-2 flex min-w-0 flex-wrap items-center justify-between gap-3 border-t border-white/12 px-3 py-2 2xl:col-span-1 2xl:min-w-[27rem] 2xl:border-l 2xl:border-t-0 2xl:px-4">
+          <div className="replay-metrics grid min-w-0 flex-1 grid-cols-4 gap-x-2 sm:gap-x-5">
             <Metric
               label="Elapsed"
               value={formatDuration(telemetry.elapsedS)}
@@ -534,11 +523,13 @@ function ExpandedReplayHud({
             />
           </div>
           <div className="flex items-center gap-2">
-            <CameraControls
-              active={control.cameraMode}
-              disabled={disabled}
-              onSelect={onSelectCamera}
-            />
+            <div className="hidden sm:block">
+              <CameraControls
+                active={control.cameraMode}
+                disabled={disabled}
+                onSelect={onSelectCamera}
+              />
+            </div>
             <Button
               aria-label={`Playback speed ${control.speed}x`}
               className="border-white/20 bg-transparent text-white hover:bg-white/10"
@@ -573,11 +564,11 @@ function ReplaySettings({
   return (
     <aside
       aria-label="Replay settings panel"
-      className="absolute right-3 top-14 z-40 w-[min(21rem,calc(100%-1.5rem))] border border-white/18 bg-[#081011]/94 p-4 text-white shadow-2xl backdrop-blur-xl sm:right-5"
+      className="absolute right-3 top-14 z-40 w-[min(21rem,calc(100%-1.5rem))] max-h-[calc(100%-4.5rem)] overflow-y-auto rounded-2xl border border-white/18 bg-surface p-4 text-white backdrop-blur sm:right-5"
     >
       <div className="flex items-center justify-between">
         <div>
-          <div className="text-[9px] font-semibold uppercase text-[#ef684e]">
+          <div className="text-xs font-semibold uppercase text-accent-foreground">
             Replay settings
           </div>
           <div className="mt-1 text-sm font-semibold">{route.region}</div>
@@ -586,12 +577,26 @@ function ReplaySettings({
       </div>
 
       <div className="mt-4 grid gap-4">
+        <div className="sm:hidden">
+          <p className="mb-2 text-xs text-white/70">Camera perspective</p>
+          <CameraControls
+            active={control.cameraMode}
+            disabled={false}
+            onSelect={(cameraMode) =>
+              onCommit((current) => ({
+                ...current,
+                cameraMode,
+                following: true,
+              }))
+            }
+          />
+        </div>
         <SettingGroup icon={Mountain} label="Route placement">
           {(["ground", "mesh"] as const).map((mode) => (
             <SettingButton
               active={control.groundingMode === mode}
               key={mode}
-              label={mode}
+              label={mode === "ground" ? "On terrain" : "On 3D surface"}
               onClick={() =>
                 onCommit((current) => ({ ...current, groundingMode: mode }))
               }
@@ -599,24 +604,25 @@ function ReplaySettings({
           ))}
         </SettingGroup>
 
-        <SettingGroup icon={LocateFixed} label="Camera lock">
+        <p className="-mt-2 text-xs leading-5 text-ink-muted">On terrain follows the ground. On 3D surface follows the available buildings and terrain model.</p>
+        <SettingGroup icon={LocateFixed} label="Camera movement">
           <SettingButton
             active={control.following}
-            label="Locked"
+            label="Follow route"
             onClick={() =>
               onCommit((current) => ({ ...current, following: true }))
             }
           />
           <SettingButton
             active={!control.following}
-            label="Free"
+            label="Explore freely"
             onClick={() =>
               onCommit((current) => ({ ...current, following: false }))
             }
           />
         </SettingGroup>
 
-        <SettingGroup icon={Gauge} label="Lens range">
+        <SettingGroup icon={Gauge} label="Zoom">
           <Button
             aria-label="Zoom in"
             className="border-white/20 bg-transparent text-white hover:bg-white/10"
@@ -647,7 +653,7 @@ function ReplaySettings({
 
         {showFieldRoutes ? (
           <div className="border-t border-white/12 pt-3">
-            <div className="text-[9px] font-semibold uppercase text-white/42">
+            <div className="text-xs font-semibold uppercase text-ink-muted">
               Field routes
             </div>
             <div className="mt-2 flex gap-2">
@@ -657,7 +663,7 @@ function ReplaySettings({
                   className={cn(
                     "h-8 border-white/20 bg-transparent text-white hover:bg-white/10",
                     candidate.slug === route.slug &&
-                      "border-[#ef684e] text-[#ff8a73]",
+                      "border-[#f5f5f5] text-[#ffffff]",
                   )}
                   key={candidate.slug}
                   size="sm"
@@ -686,12 +692,12 @@ function SettingGroup({
   label: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3">
+    <div className="grid gap-2">
       <div className="flex items-center gap-2 text-xs text-white/58">
         <Icon aria-hidden="true" className="size-3.5" />
         {label}
       </div>
-      <div className="flex border border-white/15 bg-black/25 p-0.5">
+      <div className="ember-segments">
         {children}
       </div>
     </div>
@@ -709,11 +715,10 @@ function SettingButton({
 }) {
   return (
     <button
-      aria-label={label === "Locked" ? "Resume following" : label}
+      aria-label={label}
       aria-pressed={active}
       className={cn(
-        "min-h-7 px-2.5 text-[11px] font-medium capitalize",
-        active ? "bg-white text-black" : "text-white/58 hover:bg-white/10",
+        "min-h-11 rounded-md px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-3px]",
       )}
       onClick={onClick}
       type="button"
@@ -735,7 +740,7 @@ function CameraControls({
   return (
     <div
       aria-label="Camera perspective"
-      className="flex border border-white/15 bg-black/25 p-0.5"
+      className="ember-segments ember-camera"
       role="group"
     >
       {CAMERA_MODES.map(({ mode, label, icon: Icon }) => (
@@ -743,9 +748,7 @@ function CameraControls({
           aria-label={label}
           aria-pressed={active === mode}
           className={cn(
-            "grid size-11 place-items-center text-white/55 hover:bg-white/10 hover:text-white",
-            active === mode &&
-              "bg-white text-black hover:bg-white hover:text-black",
+            "flex min-h-11 min-w-11 flex-col items-center justify-center gap-1 rounded-md px-2 text-ink-secondary focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-3px]",
           )}
           disabled={disabled}
           key={mode}
@@ -754,6 +757,7 @@ function CameraControls({
           type="button"
         >
           <Icon aria-hidden="true" className="size-3.5" />
+          <span className="text-xs">{mode === "auto" ? "Auto" : label}</span>
         </button>
       ))}
     </div>
@@ -772,7 +776,7 @@ function ReplayButton({
   return (
     <Button
       aria-label={playing ? "Pause route" : "Play route"}
-      className="border border-[#ef684e] bg-[#ef684e] text-black hover:bg-[#ff826c]"
+      className="border border-primary bg-primary text-primary-foreground hover:bg-primary-hover"
       disabled={disabled}
       onClick={onClick}
       size="icon"
@@ -786,10 +790,10 @@ function ReplayButton({
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
-      <div className="whitespace-nowrap text-[11px] font-semibold tabular-nums">
+      <div className="whitespace-nowrap text-[10px] sm:text-[11px] font-semibold tabular-nums">
         {value}
       </div>
-      <div className="whitespace-nowrap text-[8px] font-semibold uppercase text-white/38">
+      <div className="whitespace-nowrap text-[10px] font-medium text-white/65">
         {label}
       </div>
     </div>

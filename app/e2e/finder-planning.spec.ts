@@ -4,12 +4,13 @@ const plannedRouteStorageKey = "godiesel.planned-routes.v1";
 
 async function searchKyoto(page: Page) {
   const form = page.getByRole("form", { name: "Find a route" });
-  await form.getByLabel("Place").fill("Kyoto");
+  await form.getByLabel("Describe your next route").fill("Kyoto");
+  if (await form.getByRole("button", { name: "Edit filters", exact: true }).isVisible()) await form.getByRole("button", { name: "Edit filters", exact: true }).click();
   await form.getByLabel("Activity").selectOption("Run");
   await form.getByLabel("Distance").fill("21");
   await form.getByLabel("Terrain").selectOption("mixed");
   await form.getByLabel("Vibe").fill("exploratory climbing");
-  await form.getByRole("button", { name: "Find curated routes" }).click();
+  await form.getByRole("button", { name: "Find routes" }).click();
 }
 
 test.beforeEach(async ({ page }) => {
@@ -23,7 +24,8 @@ test("Finder searches explicit route-backed candidates and saves a durable plan"
   await page.goto("/#/finder");
 
   await expect(page.getByRole("heading", { name: "Plan the next day." })).toBeVisible();
-  await expect(page.getByText("Finder does not generate routes.")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Choose a starting place" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Finder route map" })).toHaveCount(0);
   await searchKyoto(page);
 
   await expect(page).toHaveURL(/#\/finder\?.*place=Kyoto/);
@@ -37,11 +39,10 @@ test("Finder searches explicit route-backed candidates and saves a durable plan"
   await expect(map).toHaveAttribute("data-selected-route", "17654151284");
 
   const candidate = page.getByRole("article", { name: "Kyoto, Japan candidate" });
-  await expect(candidate).toContainText("Owner-curated from recorded GPX");
+  await expect(candidate.getByRole("heading")).not.toHaveText("Kyoto, Japan");
   await expect(candidate).toContainText("21.3 km");
-  await expect(candidate).toContainText("Why it matches");
-  await expect(candidate).toContainText(/mixed terrain/i);
-  await page.getByLabel("Place").fill("Patagonia");
+  await expect(page.getByLabel("Active Finder filters")).toContainText("mixed");
+  await page.getByLabel("Describe your next route").fill("Patagonia");
   await candidate.getByRole("button", { name: "Save planned route" }).click();
   await expect(candidate.getByRole("status")).toContainText("Saved to Planned routes");
 
@@ -77,23 +78,23 @@ test("Finder explains source limits instead of fabricating an unsupported result
 }) => {
   await page.goto("/#/finder");
   const form = page.getByRole("form", { name: "Find a route" });
-  await form.getByLabel("Place").fill("Patagonia");
+  await form.getByLabel("Describe your next route").fill("Patagonia");
+  if (await form.getByRole("button", { name: "Edit filters", exact: true }).isVisible()) await form.getByRole("button", { name: "Edit filters", exact: true }).click();
   await form.getByLabel("Activity").selectOption("Run");
   await form.getByLabel("Distance").fill("42");
   await form.getByLabel("Terrain").selectOption("trail");
   await form.getByLabel("Vibe").fill("remote");
-  await form.getByRole("button", { name: "Find curated routes" }).click();
+  await form.getByRole("button", { name: "Find routes" }).click();
 
   const status = page.getByRole("region", { name: "Finder results" }).getByRole("status");
-  await expect(status).toContainText("No owner-curated route matches this search yet");
+  await expect(status).toContainText("No collection routes match these filters");
   await expect(page.getByRole("article")).toHaveCount(0);
   expect(await page.evaluate((key) => localStorage.getItem(key), plannedRouteStorageKey)).toBeNull();
 });
 
 test("a planned route never changes completed Atlas totals", async ({ page }) => {
   await page.goto("/#/atlas");
-  await page.getByRole("button", { name: "Open application navigation" }).click();
-  const initialNavigation = page.getByRole("dialog", { name: "goDiesel navigation" });
+  const initialNavigation = page.getByTestId("atlas-spine");
   const initialTotals = (await initialNavigation.locator("p").allTextContents()).filter((text) =>
     /^(\d+ routes|\d+ km inked)$/.test(text),
   );
@@ -104,8 +105,7 @@ test("a planned route never changes completed Atlas totals", async ({ page }) =>
   await page.getByRole("button", { name: "Save planned route" }).click();
 
   await page.goto("/#/atlas");
-  await page.getByRole("button", { name: "Open application navigation" }).click();
-  const navigation = page.getByRole("dialog", { name: "goDiesel navigation" });
+  const navigation = page.getByTestId("atlas-spine");
   const finalTotals = (await navigation.locator("p").allTextContents()).filter((text) =>
     /^(\d+ routes|\d+ km inked)$/.test(text),
   );
@@ -143,7 +143,7 @@ test("Finder restores submitted intent through history and exposes removable mob
   await page.goBack();
   await page.getByRole("button", { name: "Edit filters" }).click();
   const form = page.getByRole("form", { name: "Find a route" });
-  await expect(form.getByLabel("Place")).toHaveValue("Kyoto");
+  await expect(form.getByLabel("Describe your next route")).toHaveValue("Kyoto");
   await expect(form.getByLabel("Terrain")).toHaveValue("mixed");
   await expect(page.getByRole("article", { name: "Kyoto, Japan candidate" })).toBeVisible();
 
@@ -153,4 +153,26 @@ test("Finder restores submitted intent through history and exposes removable mob
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
     390,
   );
+});
+
+test("Finder exposes applied preferences and edits distance without pretending to remove it", async ({ page }) => {
+  for (const width of [390, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/#/finder");
+    await expect(page.getByLabel("Search preferences")).toHaveText("Search for: Run · around 20 km");
+    await page.getByRole("button", { name: "Kyoto", exact: true }).click();
+    const filters = page.getByLabel("Active Finder filters");
+    await expect(filters).toBeVisible();
+    await expect(filters).toContainText("Run");
+    await expect(page.getByRole("button", { name: "Remove distance filter" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Edit distance target" }).click();
+    const distance = page.getByRole("spinbutton", { name: "Distance km", exact: true });
+    await expect(distance).toBeFocused();
+    await distance.fill("25");
+    await expect(page.getByLabel("Search preferences")).toContainText("Not applied yet: Run · around 25 km");
+    await expect(filters).toContainText("Around 21 km");
+    await page.getByRole("button", { name: "Find routes" }).click();
+    await expect(page).toHaveURL(/distance=25/);
+    await expect(filters).toContainText("Around 25 km");
+  }
 });

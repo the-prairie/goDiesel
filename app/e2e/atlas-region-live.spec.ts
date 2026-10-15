@@ -18,24 +18,22 @@ async function expectSelectedRouteContrast(
   canvas: import("@playwright/test").Locator,
 ) {
   const screenshot = PNG.sync.read(await canvas.screenshot());
-  let coralPixels = 0;
+  let routeInkPixels = 0;
   for (let index = 0; index < screenshot.data.length; index += 4) {
     const red = screenshot.data[index];
     const green = screenshot.data[index + 1];
     const blue = screenshot.data[index + 2];
     if (
-      red > 150 &&
-      green > 35 &&
-      green < 150 &&
-      blue < 135 &&
-      red - green > 45 &&
-      red - blue > 45
+      red > 220 &&
+      green > 220 &&
+      blue > 220 &&
+      Math.max(red, green, blue) - Math.min(red, green, blue) < 12
     ) {
-      coralPixels += 1;
+      routeInkPixels += 1;
     }
   }
-  expect(coralPixels).toBeGreaterThan(20);
-  return coralPixels;
+  expect(routeInkPixels).toBeGreaterThan(20);
+  return routeInkPixels;
 }
 
 test.describe("live regional Atlas terrain", () => {
@@ -55,6 +53,22 @@ test.describe("live regional Atlas terrain", () => {
     });
     await expect(canvas).toHaveAttribute("data-heat-lines", "66");
 
+    const renderer = await canvas.evaluate((element) => {
+      const gl = (element as HTMLCanvasElement).getContext("webgl2");
+      if (!gl) return "WebGL2 unavailable";
+      const debug = gl.getExtension("WEBGL_debug_renderer_info");
+      return String(
+        gl.getParameter(debug ? debug.UNMASKED_RENDERER_WEBGL : gl.RENDERER),
+      );
+    });
+    await testInfo.attach("atlas-gpu-renderer", {
+      body: Buffer.from(renderer),
+      contentType: "text/plain",
+    });
+    expect(renderer, "Live FPS requires hardware WebGL, not software emulation").not.toMatch(
+      /SwiftShader|llvmpipe|software|unavailable/i,
+    );
+
     await page.evaluate(() => {
       const sample = { frames: 0, fps: 0, startedAt: performance.now() };
       (window as typeof window & { __atlasFrameSample?: typeof sample }).__atlasFrameSample =
@@ -67,31 +81,33 @@ test.describe("live regional Atlas terrain", () => {
       };
       requestAnimationFrame(tick);
     });
-    await page.getByRole("combobox", { name: "Browse route regions" }).selectOption({
-      label: "Kyoto, Japan",
-    });
-    await expect
-      .poll(
+    await page.getByRole("button", { name: "Open Atlas options" }).click();
+    await page.getByRole("option", { name: "Kyoto, Japan", exact: true }).click();
+    try {
+      await expect
+        .poll(
+          () =>
+            page.evaluate(
+              () =>
+                (window as typeof window & {
+                  __atlasFrameSample?: { fps: number };
+                }).__atlasFrameSample?.fps ?? 0,
+            ),
+          { timeout: 10_000 },
+        )
+        .toBeGreaterThanOrEqual(30);
+    } finally {
+      const frameSample = await page.evaluate(
         () =>
-          page.evaluate(
-            () =>
-              (window as typeof window & {
-                __atlasFrameSample?: { fps: number };
-              }).__atlasFrameSample?.fps ?? 0,
-          ),
-        { timeout: 10_000 },
-      )
-      .toBeGreaterThanOrEqual(30);
-    const frameSample = await page.evaluate(
-      () =>
-        (window as typeof window & {
-          __atlasFrameSample?: { frames: number; fps: number };
-        }).__atlasFrameSample,
-    );
-    await testInfo.attach("atlas-frame-sample", {
-      body: Buffer.from(JSON.stringify(frameSample, null, 2)),
-      contentType: "application/json",
-    });
+          (window as typeof window & {
+            __atlasFrameSample?: { frames: number; fps: number };
+          }).__atlasFrameSample,
+      );
+      await testInfo.attach("atlas-frame-sample", {
+        body: Buffer.from(JSON.stringify(frameSample, null, 2)),
+        contentType: "application/json",
+      });
+    }
 
     await page.keyboard.press("Escape");
     await expect(world).toHaveAttribute("data-atlas-status", "ready", {
@@ -147,9 +163,9 @@ test.describe("live regional Atlas terrain", () => {
         .getAttribute("data-route-slug");
       await expect(canvas).toHaveAttribute("data-selected-route", selectedSlug!);
       await expectNonblankCanvas(canvas);
-      const coralPixels = await expectSelectedRouteContrast(canvas);
+      const routeInkPixels = await expectSelectedRouteContrast(canvas);
       await testInfo.attach(`${scenario.name}-selected-route-contrast`, {
-        body: Buffer.from(JSON.stringify({ coralPixels }, null, 2)),
+        body: Buffer.from(JSON.stringify({ routeInkPixels }, null, 2)),
         contentType: "application/json",
       });
       await testInfo.attach(scenario.name.toLowerCase().replaceAll(/[^a-z]+/g, "-"), {

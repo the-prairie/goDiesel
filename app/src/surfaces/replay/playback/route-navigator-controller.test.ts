@@ -85,8 +85,8 @@ describe("Google route navigator controller", () => {
   it("densifies long recorded segments for terrain following", () => {
     const path = densifyGoogleRoutePath(route, 20);
     expect(path.length).toBeGreaterThan(90);
-    expect(path[0]).toEqual({ lat: 51, lng: -1 });
-    expect(path.at(-1)).toEqual({ lat: 51.01, lng: -0.99 });
+    expect(path[0]).toEqual({ lat: 51, lng: -1, d: 0 });
+    expect(path.at(-1)).toEqual({ lat: 51.01, lng: -0.99, d: 2000 });
   });
 
   it("derives recorded telemetry at the current route distance", () => {

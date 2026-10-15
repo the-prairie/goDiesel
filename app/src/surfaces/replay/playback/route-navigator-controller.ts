@@ -224,7 +224,7 @@ function mix(start: number, end: number, amount: number) {
 }
 
 export function densifyGoogleRoutePath(route: QuestRoute, intervalM = 12) {
-  const path: Array<{ lat: number; lng: number }> = [];
+  const path: Array<{ lat: number; lng: number; d: number }> = [];
   for (let index = 0; index < route.route.length - 1; index += 1) {
     const start = route.route[index];
     const end = route.route[index + 1];
@@ -233,12 +233,13 @@ export function densifyGoogleRoutePath(route: QuestRoute, intervalM = 12) {
     for (let step = 0; step < steps; step += 1) {
       const ratio = step / steps;
       path.push({
+        d: start.d + distance * ratio,
         lat: start.lat + (end.lat - start.lat) * ratio,
         lng: start.lng + (end.lng - start.lng) * ratio,
       });
     }
   }
   const last = route.route.at(-1);
-  if (last) path.push({ lat: last.lat, lng: last.lng });
+  if (last) path.push({ lat: last.lat, lng: last.lng, d: last.d });
   return path;
 }

@@ -7,6 +7,7 @@ import csv
 import hashlib
 import json
 import math
+import os
 import re
 import shutil
 import subprocess
@@ -26,7 +27,9 @@ from route_provenance import build_route_provenance, load_source_route_points
 
 
 ROOT = Path(__file__).resolve().parent
-DEFAULT_DIESEL_DIARIES = Path("/Users/laurenzary/Desktop/DieselDiaries")
+DEFAULT_DIESEL_DIARIES = Path(
+    os.environ.get("GODIESEL_DIESEL_DIARIES_ROOT", ROOT.parent / "DieselDiaries")
+).resolve()
 OUTPUT_REQUIRED_FIELDS = frozenset(
     {
         "activity_id",
@@ -244,6 +247,15 @@ def compare_regeneration(root: Path, python: Path) -> dict[str, Any]:
         result = subprocess.run(
             [str(python), "build.py"],
             cwd=workspace,
+            env={
+                **os.environ,
+                "GODIESEL_DIESEL_DIARIES_ROOT": os.environ.get(
+                    "GODIESEL_DIESEL_DIARIES_ROOT", str(root.parent / "DieselDiaries")
+                ),
+                "GODIESEL_TRAVEL_ROOT": os.environ.get(
+                    "GODIESEL_TRAVEL_ROOT", str(root.parent / "Travel")
+                ),
+            },
             check=False,
             capture_output=True,
             text=True,

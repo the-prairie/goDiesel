@@ -1,3 +1,6 @@
+import { useExternalPlans } from "@/data/external-plan-store";
+import { filterExternalPlans } from "@/surfaces/routes/external-plan-filters";
+import { ExternalPlanCard } from "./components/external-plan-card";
 import { ChevronDown, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
@@ -46,15 +49,16 @@ export function RoutesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const externalPlans = useExternalPlans();
   const localPlans = usePlannedRoutes();
   const libraryRoutes = useMemo(() => [...routes, ...localPlans], [localPlans]);
   const activityOptions = useMemo(
-    () => uniqueValues(libraryRoutes.map((route) => route.type)),
-    [libraryRoutes],
+    () => uniqueValues([...libraryRoutes.map((route) => route.type), ...externalPlans.map(p=>p.route.activity)]),
+    [libraryRoutes, externalPlans],
   );
   const regionOptions = useMemo(
-    () => uniqueValues(libraryRoutes.map((route) => route.region)),
-    [libraryRoutes],
+    () => uniqueValues([...libraryRoutes.map((route) => route.region), ...externalPlans.map(p=>p.place)]),
+    [libraryRoutes, externalPlans],
   );
   const vibeOptions = useMemo(
     () => uniqueValues(libraryRoutes.map((route) => route.theme)),
@@ -65,6 +69,7 @@ export function RoutesPage() {
     regions: regionOptions,
     vibes: vibeOptions,
   });
+  const matchingExternalPlans = filterExternalPlans(externalPlans, filters);
   const matchingRoutes = filterRoutes(libraryRoutes, filters);
   const maximumPage = Math.max(1, Math.ceil(matchingRoutes.length / routesPerPage));
   const page = Math.min(pageFromParams(searchParams), maximumPage);
@@ -99,12 +104,12 @@ export function RoutesPage() {
   return (
     <section className="grid content-start gap-6">
       <PageTitle
-        eyebrow="Routes"
-        title="Your route library."
-        copy="Find a remembered day by place, effort, or feeling, then open its canonical guide."
+        eyebrow="Your collection"
+        title="Places worth returning to."
+        copy="Your runs, rides, and plans. Find a place and revisit the day."
       />
 
-      {libraryRoutes.length === 0 ? (
+      {libraryRoutes.length + externalPlans.length === 0 ? (
         <LibraryState
           title="No routes yet"
           copy="Imported and planned routes will appear here when the library has data."
@@ -113,7 +118,7 @@ export function RoutesPage() {
         <>
           <form
             aria-label="Route filters"
-            className="grid gap-4 border-y border-border py-5"
+            className="grid gap-4 rounded-2xl border border-line bg-surface p-3 sm:p-4"
             onSubmit={(event) => event.preventDefault()}
           >
             <div className="flex max-w-2xl gap-2">
@@ -126,7 +131,7 @@ export function RoutesPage() {
                   type="search"
                   aria-label="Search routes"
                   value={filters.query}
-                  placeholder="Search places, memories, or route vibes"
+                  placeholder="Search your routes"
                   className="pl-9"
                   onChange={(event) => updateFilter("query", event.target.value)}
                 />
@@ -136,7 +141,7 @@ export function RoutesPage() {
                 variant="outline"
                 aria-expanded={showMobileFilters}
                 aria-controls="route-filter-options"
-                className="sm:hidden"
+                className="shrink-0"
                 onClick={() => setShowMobileFilters((visible) => !visible)}
               >
                 <SlidersHorizontal aria-hidden="true" />
@@ -150,10 +155,10 @@ export function RoutesPage() {
 
             <div
               id="route-filter-options"
-              className={`${showMobileFilters ? "grid" : "hidden"} gap-3 sm:grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6`}
+              className={`${showMobileFilters ? "grid" : "hidden"} gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6`}
             >
               <FilterSelect
-                label="Lifecycle"
+                label="Status"
                 value={filters.lifecycle}
                 options={lifecycleOptions}
                 onChange={(value) =>
@@ -206,10 +211,10 @@ export function RoutesPage() {
             >
               <span className="font-medium text-foreground">
                 {visibleRoutes.length === matchingRoutes.length
-                  ? matchingRoutes.length
-                  : `Showing ${visibleRoutes.length} of ${matchingRoutes.length}`}
+                  ? matchingRoutes.length + matchingExternalPlans.length
+                  : `Showing ${visibleRoutes.length + matchingExternalPlans.length} of ${matchingRoutes.length + matchingExternalPlans.length}`}
               </span>{" "}
-              {matchingRoutes.length === 1 ? "route" : "routes"}
+              {matchingRoutes.length + matchingExternalPlans.length === 1 ? "route" : "routes"}
             </p>
             {hasFilters ? (
               <Button
@@ -225,7 +230,7 @@ export function RoutesPage() {
           </div>
 
           <section aria-label="Route results" data-testid="route-ledger">
-            {matchingRoutes.length === 0 ? (
+            {matchingRoutes.length + matchingExternalPlans.length === 0 ? (
               <LibraryState
                 title="No routes found"
                 copy="Try a broader place, effort, or vibe."
@@ -243,20 +248,11 @@ export function RoutesPage() {
               />
             ) : (
               <div className="grid gap-5">
-                <div className="overflow-hidden border-x border-t border-line bg-surface">
-                  <div
-                    data-testid="route-ledger-head"
-                    className="hidden grid-cols-[minmax(20rem,2.2fr)_7rem_5.5rem_6rem_6.5rem_minmax(9rem,1fr)_7.5rem_4.5rem] border-b border-line bg-surface-muted text-micro font-semibold uppercase text-ink-muted md:grid"
-                  >
-                    <span className="px-4 py-2">Route</span>
-                    <span className="border-l border-line px-3 py-2">Date</span>
-                    <span className="border-l border-line px-3 py-2">Activity</span>
-                    <span className="border-l border-line px-3 py-2">Distance</span>
-                    <span className="border-l border-line px-3 py-2">Climb</span>
-                    <span className="border-l border-line px-3 py-2">Vibe</span>
-                    <span className="border-l border-line px-3 py-2">Lifecycle</span>
-                    <span className="border-l border-line px-3 py-2 text-center">Action</span>
-                  </div>
+                {matchingExternalPlans.length ? <section aria-label="Saved discoveries" className="grid gap-3">
+                  <h2 className="text-lg">Saved discoveries</h2>
+                  <div className="grid items-start gap-4 lg:grid-cols-2">{matchingExternalPlans.map(plan=><ExternalPlanCard key={plan.route.id} plan={plan}/>)}</div>
+                </section> : null}
+                <div className="field-notes-grid">
                   {visibleRoutes.map((route) => (
                     <RouteCard
                       key={route.slug}
@@ -311,7 +307,7 @@ function FilterSelect({
       {label}
       <select
         value={value}
-        className="h-10 min-w-0 rounded-md border border-border bg-card px-3 text-sm text-foreground outline-none transition-colors hover:border-primary/50 focus-visible:ring-2 focus-visible:ring-ring"
+        className="h-11 min-w-0 rounded-[var(--radius-control)] border border-border bg-card px-3 text-sm text-foreground outline-none transition-colors hover:border-line-strong focus-visible:ring-2 focus-visible:ring-ring"
         onChange={(event) => onChange(event.target.value)}
       >
         {options.map(([optionValue, optionLabel]) => (

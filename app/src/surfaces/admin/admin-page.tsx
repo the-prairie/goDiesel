@@ -56,7 +56,9 @@ export function AdminPage() {
   const selectedRoute = workspace?.routes.find(
     (route) => route.activityId === effectiveSelectedId,
   );
-  const draft = selectedRoute ? (drafts[selectedRoute.activityId] ?? null) : null;
+  const draft = selectedRoute
+    ? (drafts[selectedRoute.activityId] ?? selectedRoute.curation)
+    : null;
   const selectedSaveState = selectedRoute
     ? saveStates[selectedRoute.activityId]
     : undefined;
@@ -140,7 +142,7 @@ export function AdminPage() {
       <header className="flex flex-wrap items-end justify-between gap-3 border-b border-line pb-4">
         <div>
           <p className="text-micro font-semibold uppercase text-forest">Owner workspace</p>
-          <h1 className="mt-1 text-2xl font-semibold text-ink">Curation ledger</h1>
+          <h1 className="mt-1 font-editorial text-4xl font-semibold text-ink">Curation ledger</h1>
         </div>
         <p className="max-w-xl text-caption text-ink-secondary">
           Review route readiness, shape the experience, and regenerate source-backed guide data.
@@ -166,7 +168,7 @@ export function AdminPage() {
           >
             {workspace.mode === "editable" ? (
               <Database
-                className="mt-0.5 size-4 shrink-0 text-primary"
+                className="mt-0.5 size-4 shrink-0 text-accent-foreground"
                 aria-hidden="true"
               />
             ) : (
@@ -182,7 +184,7 @@ export function AdminPage() {
             </p>
           </div>
 
-          <div className="grid min-w-0 items-start border border-line bg-surface lg:grid-cols-[22rem_minmax(0,1fr)]">
+          <div className="grid min-w-0 items-start rounded-2xl border border-line bg-surface lg:grid-cols-[22rem_minmax(0,1fr)]">
             <aside
               aria-label="Owner route list"
               className="grid min-w-0 content-start border-b border-line lg:sticky lg:top-[4.75rem] lg:max-h-[calc(100dvh-6rem)] lg:border-b-0 lg:border-r"
@@ -214,13 +216,13 @@ export function AdminPage() {
                     key={route.activityId}
                     type="button"
                     aria-pressed={route.activityId === effectiveSelectedId}
-                    className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-3 border-b border-line px-3 py-3 text-left last:border-b-0 hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-pressed:bg-forest-soft"
+                    className="group grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-3 border-b border-line px-3 py-3 text-left last:border-b-0 hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-pressed:bg-forest-soft"
                     onClick={() => {
                       setSelectedId(route.activityId);
                     }}
                   >
                     <Circle
-                      className="mt-1 size-3 text-line-strong aria-pressed:fill-forest"
+                      className="mt-1 size-3 text-line-strong group-aria-pressed:fill-ink group-aria-pressed:text-ink"
                       aria-hidden="true"
                     />
                     <span className="grid min-w-0 gap-1">
@@ -228,7 +230,9 @@ export function AdminPage() {
                         {route.name}
                       </span>
                       <span className="flex min-w-0 items-center justify-between gap-3 text-micro text-ink-muted">
-                        <span className="truncate">{route.region}</span>
+                        <span className="truncate tabular-nums">
+                          {route.date || "Date unknown"} · {route.distanceKm.toFixed(1)} km
+                        </span>
                         <span className="shrink-0 capitalize">
                           {route.curation.reviewStatus}
                         </span>

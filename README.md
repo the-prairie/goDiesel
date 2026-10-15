@@ -6,8 +6,36 @@ The React application is the canonical product and opens directly into the Atlas
 Route source data comes from Lauren's Strava export and the owner-curated records in `quests.json`.
 Generated route summaries live in `app/src/data/generated`, while full route records are loaded lazily from `app/public/data/routes`.
 Private Strava and travel inputs remain outside this repository under `../DieselDiaries` and `../Travel`.
+The Python tools also accept `GODIESEL_DIESEL_DIARIES_ROOT` and the generator
+accepts `GODIESEL_TRAVEL_ROOT` to override these locations.
 
 ## Prerequisites
+
+### This Mac (migration setup, 2026-10-11)
+
+The active checkout is `/Users/larry/Documents/ChatGPT/goDiesel`.
+The original transfer remains under `/Users/larry/Personal-Projects-Transfer-20260928`.
+Sibling `DieselDiaries` and `Travel` symlinks point to the transferred private inputs;
+keep those targets available when rebuilding or curating routes.
+
+Node 22 is installed under `~/.local/share/node`, with commands in `~/.local/bin`.
+Python 3.12 is managed by `uv`, and this checkout has a fresh `.venv`.
+Open a new terminal to load the updated PATH, then run:
+
+```bash
+cd /Users/larry/Documents/ChatGPT/goDiesel
+./admin.sh
+```
+
+This starts the app and local owner writer. Stop them with Ctrl+C.
+For the app alone, use `npm --prefix app run dev`.
+
+Migration validation evidence is in `app/artifacts/migration/`; detailed setup
+and test logs are in `~/.local/share/godiesel-migration/`.
+Cloudflare deployment access, Earth Engine authentication, and live Google 3D
+Replay are separate checks and were not validated during local setup.
+
+### Required versions
 
 - Node.js 22 or newer.
 - Python 3.12 or newer.
@@ -74,11 +102,15 @@ Run the complete release gate:
 
 ```bash
 npm --prefix app run verify
-.venv/bin/python -m pytest -q
+GODIESEL_DIESEL_DIARIES_ROOT="$(cd ../DieselDiaries && pwd)" \
+GODIESEL_TRAVEL_ROOT="$(cd ../Travel && pwd)" \
+.venv/bin/python -m pytest -q --ignore=tmp
 ```
 
 The JavaScript gate includes type checking, unit tests, production build, bundle budgets, and Playwright journeys.
 The Python gate covers generation, curation validation, atomic publication, and rollback behavior.
+The explicit input paths also support tests that rebuild in temporary checkouts.
+Ignore `tmp/` because it may contain archived experimental checkouts with their own tests.
 
 ### Complete live pipeline proof
 

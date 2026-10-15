@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 
 import { AtlasSpine } from "@/surfaces/atlas/components/atlas-spine";
-import { AtlasImmersiveNavigation } from "@/surfaces/atlas/components/atlas-immersive-navigation";
 import { singleRouteMicrosite } from "@/app/single-route-microsite";
 import { APP_PATHS } from "@/app/route-paths";
 import { appSectionForPath } from "@/app/app-sections";
@@ -22,20 +21,17 @@ export function AppShell() {
     isRouteDetail ||
     section.id === "finder" ||
     section.id === "replay";
-  const isUtility =
-    isRoutesLibrary || section.id === "admin";
+  const isUtility = section.id === "admin";
 
   return (
     <div className="weathered-atlas field-guide-theme relative flex min-h-dvh bg-background text-foreground">
-      {singleRouteMicrosite ? null : <AtlasSpine hideDesktop={isAtlas} />}
-      {isAtlas && !singleRouteMicrosite ? <AtlasImmersiveNavigation /> : null}
+      {singleRouteMicrosite ? null : <AtlasSpine />}
       <div
         className={cn(
           "flex min-h-dvh min-w-0 flex-1 flex-col",
           !singleRouteMicrosite &&
             "pb-[var(--mobile-navigation-height)] md:pb-0",
           !singleRouteMicrosite &&
-            !isAtlas &&
             "md:pl-[var(--spine-rail-width)] lg:pl-[var(--spine-width)]",
         )}
       >
@@ -66,7 +62,7 @@ export function AppShell() {
             isImmersive
               ? "min-h-0 overflow-hidden"
               : isWideUtility
-                ? "grid gap-6 p-4 sm:p-6"
+                ? "mx-auto grid max-w-[90rem] gap-6 p-4 sm:p-8 lg:p-10"
                 : "mx-auto grid max-w-7xl gap-6 p-4 sm:p-6",
           )}
         >

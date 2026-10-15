@@ -1,6 +1,7 @@
 """The incremental curation publisher must equal a full rebuild."""
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -16,6 +17,15 @@ from curation_publish import (
 )
 
 ROOT = Path(__file__).resolve().parent
+BUILD_ENV = {
+    **os.environ,
+    "GODIESEL_DIESEL_DIARIES_ROOT": os.environ.get(
+        "GODIESEL_DIESEL_DIARIES_ROOT", str(ROOT.parent / "DieselDiaries")
+    ),
+    "GODIESEL_TRAVEL_ROOT": os.environ.get(
+        "GODIESEL_TRAVEL_ROOT", str(ROOT.parent / "Travel")
+    ),
+}
 
 # A complete guide, so the saved record can reach the reviewed state.
 REVIEWED_CURATION = {
@@ -76,6 +86,7 @@ class CurationPublishTest(unittest.TestCase):
             result = subprocess.run(
                 [sys.executable, str(workspace / "build.py")],
                 cwd=str(workspace),
+                env=BUILD_ENV,
                 capture_output=True,
                 text=True,
             )
@@ -146,6 +157,7 @@ class AnnotationPublishTest(unittest.TestCase):
             result = subprocess.run(
                 [sys.executable, str(workspace / "build.py")],
                 cwd=str(workspace),
+                env=BUILD_ENV,
                 capture_output=True,
                 text=True,
             )

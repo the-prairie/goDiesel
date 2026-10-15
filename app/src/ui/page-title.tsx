@@ -9,9 +9,9 @@ export function PageTitle({
 }) {
   return (
     <div className="max-w-3xl">
-      <div className="mb-3 text-xs font-semibold text-primary">{eyebrow}</div>
-      <h1 className="text-3xl font-bold sm:text-5xl">{title}</h1>
-      <p className="mt-4 text-base leading-7 text-muted-foreground">{copy}</p>
+      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-accent-foreground">{eyebrow}</div>
+      <h1 className="font-editorial text-4xl font-semibold tracking-tight sm:text-5xl">{title}</h1>
+      <p className="story-copy mt-2 max-w-xl text-muted-foreground">{copy}</p>
     </div>
   );
 }

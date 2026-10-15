@@ -5,8 +5,8 @@ import {
   Compass,
   Minus,
 } from "lucide-react";
-import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useRef, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import { ElevationProfile } from "@/surfaces/routes/components/route-briefing";
 import { RouteAnnotations } from "@/surfaces/routes/components/route-annotations";
@@ -22,19 +22,29 @@ import { useRouteDetail, type RouteDetailState } from "@/data/use-route-detail";
 import type { QuestRoute } from "@/domain/route";
 import { useIsMobile } from "@/ui/use-mobile";
 import { cn } from "@/ui/utils";
-import { APP_PATHS, decodedRouteSlug, replayPath } from "@/app/route-paths";
+import {
+  APP_PATHS,
+  atlasReturnPath,
+  decodedRouteSlug,
+  replayPath,
+} from "@/app/route-paths";
 
 type RouteMarginPosition = "peek" | "half" | "expanded";
 
 export function RouteDetailPage() {
   const { routeSlug } = useParams();
+  const [searchParams] = useSearchParams();
   const decodedSlug = decodedRouteSlug(routeSlug);
   const summary = decodedSlug ? findRouteBySlug(decodedSlug) : undefined;
   const [requestKey, setRequestKey] = useState(0);
   const detail = useRouteDetail(summary?.slug, requestKey);
-  const routesPath = summary
-    ? (routeLibraryReturnPath(summary.slug) ?? APP_PATHS.routes)
-    : APP_PATHS.routes;
+  const finderOrigin = searchParams.get("from");
+  const finderReturn = finderOrigin === APP_PATHS.finder || finderOrigin?.startsWith(`${APP_PATHS.finder}?`) ? finderOrigin : undefined;
+  const routesPath =
+    finderReturn ?? atlasReturnPath(searchParams) ??
+    (summary
+      ? (routeLibraryReturnPath(summary.slug) ?? APP_PATHS.routes)
+      : APP_PATHS.routes);
 
   if (!summary) return <RouteNotFound />;
 
@@ -84,7 +94,9 @@ function RouteDetailContent({
 
   if (state.status !== "ready") {
     const message =
-      state.status === "not-found" ? "Route data could not be found." : state.message;
+      state.status === "not-found"
+        ? "Route data could not be found."
+        : state.message;
     return (
       <RouteLeafState routesPath={routesPath}>
         <div role="alert">
@@ -93,7 +105,12 @@ function RouteDetailContent({
           </p>
           <p className="mt-2 text-control text-ink-muted">{message}</p>
           {state.status === "error" ? (
-            <Button type="button" variant="outline" className="mt-5" onClick={onRetry}>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-5"
+              onClick={onRetry}
+            >
               Retry
             </Button>
           ) : null}
@@ -105,7 +122,13 @@ function RouteDetailContent({
   return <RouteLeaf route={state.route} routesPath={routesPath} />;
 }
 
-function RouteLeaf({ route, routesPath }: { route: QuestRoute; routesPath: string }) {
+function RouteLeaf({
+  route,
+  routesPath,
+}: {
+  route: QuestRoute;
+  routesPath: string;
+}) {
   const isMobile = useIsMobile();
   const [position, setPosition] = useState<RouteMarginPosition>("peek");
 
@@ -113,9 +136,11 @@ function RouteLeaf({ route, routesPath }: { route: QuestRoute; routesPath: strin
     <div
       role="region"
       aria-label="Route briefing"
-      className="relative grid h-full min-h-0 overflow-hidden lg:grid-cols-[minmax(0,2fr)_minmax(24rem,1fr)]"
+      className="relative grid h-full min-h-0 overflow-hidden md:grid-cols-[minmax(0,1fr)_minmax(20rem,1fr)] lg:grid-cols-[minmax(0,2fr)_minmax(24rem,1fr)]"
     >
-      <RouteLeafMap route={route} />
+      <div className="min-h-0 max-md:pb-64">
+        <RouteLeafMap route={route} />
+      </div>
       <RouteMargin
         route={route}
         routesPath={routesPath}
@@ -140,8 +165,19 @@ function RouteMargin({
   position: RouteMarginPosition;
   onPositionChange: (position: RouteMarginPosition) => void;
 }) {
+  const guideRef = useRef<HTMLDivElement>(null);
+  function readGuide() {
+    onPositionChange("expanded");
+    requestAnimationFrame(() => {
+      guideRef.current?.scrollIntoView({ block: "start" });
+      guideRef.current?.focus({ preventScroll: true });
+    });
+  }
   const hasDetails = !isMobile || position !== "peek";
-  const premise = route.description || route.completionRule;
+  const premise =
+    route.curation.vibe
+      ? route.curation.vibe
+      : route.description || route.completionRule;
 
   return (
     <aside
@@ -149,37 +185,62 @@ function RouteMargin({
       data-snap={isMobile ? position : undefined}
       className={cn(
         "z-20 flex min-h-0 flex-col overflow-hidden border-line bg-surface/97 text-ink shadow-panel backdrop-blur transition-[height] duration-[var(--duration-standard)]",
-        isMobile && position === "peek" &&
-          "absolute inset-x-3 bottom-0 h-[13rem] rounded-t-sm border",
-        isMobile && position === "half" &&
-          "absolute inset-x-3 bottom-0 h-[58dvh] rounded-t-sm border",
-        isMobile && position === "expanded" &&
-          "absolute inset-x-3 bottom-0 h-[calc(100dvh-0.75rem)] rounded-t-sm border",
+        isMobile &&
+          position === "peek" &&
+          "absolute inset-x-3 bottom-0 h-[16rem] rounded-t-[var(--radius-sheet)] border",
+        isMobile &&
+          position === "half" &&
+          "absolute inset-x-3 bottom-0 h-[58dvh] rounded-t-[var(--radius-sheet)] border",
+        isMobile &&
+          position === "expanded" &&
+          "absolute inset-x-3 bottom-0 h-[calc(100%-0.75rem)] rounded-t-[var(--radius-sheet)] border",
         !isMobile && "relative h-full border-l",
       )}
     >
       {isMobile ? (
-        <div className="flex min-h-6 items-center justify-center border-b border-line">
-          <span className="h-1 w-10 rounded-full bg-ink-faint" aria-hidden="true" />
+        <div className="flex min-h-6 shrink-0 items-center justify-center border-b border-line">
+          <span
+            className="h-1 w-10 rounded-full bg-ink-muted"
+            aria-hidden="true"
+          />
         </div>
       ) : null}
 
-      <div className={cn("border-b border-line", isMobile ? "p-3" : "p-6")}>
+      <div
+        className={cn(
+          "shrink-0 border-b border-line",
+          isMobile ? "p-3" : "p-6",
+        )}
+      >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             {singleRouteMicrosite ? null : (
-              <Button asChild variant="ghost" size="sm" className="-ml-2 mb-2 w-fit">
+              <Button
+                asChild
+                variant="ghost"
+                size="sm"
+                className="-ml-2 mb-2 w-fit"
+              >
                 <Link to={routesPath}>
                   <ArrowLeft aria-hidden="true" />
-                  All routes
+                  {routesPath.startsWith(APP_PATHS.atlas)
+                    ? "Back to Atlas"
+                    : routesPath.startsWith(APP_PATHS.finder) ? "Back to Finder" : "All routes"}
                 </Link>
               </Button>
             )}
-            <p className="text-caption font-semibold uppercase text-cobalt">
-              {route.region}
-            </p>
+            {route.region !==
+            (route.lifecycle === "discovered"
+              ? route.activityName
+              : route.name) ? (
+              <p className="text-caption font-semibold uppercase text-forest">
+                {route.region}
+              </p>
+            ) : null}
             <h1 className="mt-1 font-editorial text-3xl font-semibold leading-none text-ink">
-              {route.lifecycle === "discovered" ? route.activityName : route.name}
+              {route.lifecycle === "discovered"
+                ? route.activityName
+                : route.name}
             </h1>
           </div>
           {isMobile ? (
@@ -219,59 +280,87 @@ function RouteMargin({
           ) : null}
         </div>
 
-        {hasDetails ? (
-          <>
-            <p className="mt-4 font-editorial text-lg italic leading-6 text-ink-secondary">
-              {premise}
+        {!hasDetails ? (
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <p className="text-caption text-ink-secondary">
+              {route.type} · {route.distanceKm.toFixed(1)} km · {route.elevationGainM.toLocaleString()} m up
             </p>
+            <Button type="button" variant="ghost" size="sm" onClick={readGuide}>Read guide</Button>
+          </div>
+        ) : null}
+      </div>
+
+      {hasDetails ? (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="p-4 pb-24 sm:p-6 sm:pb-24">
+            {!route.curation.vibe ? (
+              <p className="story-copy mt-4 text-ink-secondary">{premise}</p>
+            ) : null}
+            {route.curation.vibe ? <Button type="button" variant="outline" size="sm" onClick={readGuide}>Read guide</Button> : null}
             <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-y border-line py-4">
-              <LeafMetric label="Distance" value={`${route.distanceKm.toFixed(1)} km`} />
-              <LeafMetric label="Climb" value={`${route.elevationGainM.toLocaleString()} m`} />
+              <LeafMetric
+                label="Distance"
+                value={`${route.distanceKm.toFixed(1)} km`}
+              />
+              <LeafMetric
+                label="Climb"
+                value={`${route.elevationGainM.toLocaleString()} m`}
+              />
               <LeafMetric label="Activity" value={route.type} />
               <LeafMetric
                 label={routeDateLabel(route.lifecycle)}
                 value={formatRouteDate(route.date)}
               />
             </dl>
-          </>
-        ) : null}
-      </div>
-
-      {hasDetails ? (
-        <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-24">
-          {route.route.length > 1 ? (
-            <section aria-label="Elevation" className="border-b border-line pb-6">
-              <p className="text-caption font-semibold uppercase text-ink-muted">
-                Elevation
-              </p>
-              <div className="mt-2 overflow-hidden border border-line bg-surface-muted">
-                <ElevationProfile route={route} />
+            {route.route.length > 1 ? (
+              <section
+                aria-label="Elevation"
+                className="border-b border-line pb-6"
+              >
+                <p className="text-caption font-semibold uppercase text-ink-muted">
+                  Elevation
+                </p>
+                <div className="mt-2 overflow-hidden border border-line bg-surface-muted">
+                  <ElevationProfile route={route} />
+                </div>
+              </section>
+            ) : (
+              <div
+                role="status"
+                className="border-b border-line pb-6 text-control text-ink-muted"
+              >
+                Elevation profile unavailable. Climb distribution needs recorded
+                route points.
               </div>
-            </section>
-          ) : (
-            <div role="status" className="border-b border-line pb-6 text-control text-ink-muted">
-              Elevation profile unavailable. Climb distribution needs recorded route points.
+            )}
+            <PolaroidFan
+              annotations={route.annotations}
+              seed={route.slug}
+              className="border-b border-line py-6"
+            />
+            <RouteAnnotations
+              annotations={route.annotations}
+              className="border-b border-line py-6"
+            />
+            <div ref={guideRef} tabIndex={-1} aria-label="Route guide content" className="pt-6 focus:outline-none">
+              <RouteGuide curation={route.curation} compact />
             </div>
-          )}
-          <PolaroidFan
-            annotations={route.annotations}
-            seed={route.slug}
-            className="border-b border-line py-6"
-          />
-          <RouteAnnotations
-            annotations={route.annotations}
-            className="border-b border-line py-6"
-          />
-          <div className="pt-6">
-            <RouteGuide curation={route.curation} compact />
           </div>
         </div>
       ) : null}
 
-      <div className="mt-auto border-t border-line bg-surface p-3 sm:p-4">
+      <div className="mt-auto shrink-0 border-t border-line bg-surface p-3 sm:p-4">
         {route.replay.replayEligible ? (
-          <Button asChild className="w-full bg-forest text-white hover:bg-forest/90">
-            <Link to={replayPath(route.slug)}>
+          <Button
+            asChild
+            className="w-full bg-primary text-primary-foreground hover:bg-primary-hover"
+          >
+            <Link
+              to={replayPath(
+                route.slug,
+                routesPath.startsWith(APP_PATHS.atlas) ? routesPath : undefined,
+              )}
+            >
               <Compass aria-hidden="true" />
               Open replay
             </Link>
@@ -290,7 +379,9 @@ function RouteMargin({
 function LeafMetric({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-caption font-semibold uppercase text-ink-muted">{label}</dt>
+      <dt className="text-caption font-semibold uppercase text-ink-muted">
+        {label}
+      </dt>
       <dd className="mt-1 font-editorial text-xl text-ink">{value}</dd>
     </div>
   );

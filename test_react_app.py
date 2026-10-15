@@ -47,7 +47,7 @@ def test_app_shell_defines_expected_navigation_and_hash_route_support():
     assert 'appSectionForPath(location.pathname)' in spine
     assert 'aria-current={isActive ? "page" : undefined}' in spine
     assert "singleRouteMicrosite ? null" in shell
-    assert '<AtlasSpine hideDesktop={isAtlas} />' in shell
+    assert '<AtlasSpine />' in shell
     assert '<Outlet />' in shell
 
 

@@ -68,6 +68,12 @@ Live Atlas provider verification is:
 GODIESEL_ATLAS_PREVIEW_URL=<preview-url> npm run test:e2e:atlas-live
 ```
 
+The live configuration uses full Chromium (`npx playwright install chromium`)
+and the Metal backend on macOS. The default headless shell uses SwiftShader on
+this Mac, so it does not represent hardware-backed Atlas frame rates. The FPS
+test records its GPU renderer and rejects software rendering while retaining
+the 30 FPS threshold. Run performance checks without concurrent browser suites.
+
 Live Earth Replay provider verification is:
 
 ```sh

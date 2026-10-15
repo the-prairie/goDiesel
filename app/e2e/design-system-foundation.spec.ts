@@ -9,12 +9,12 @@ test("field-guide fixture exposes the approved semantic foundation", async ({
   await expect(
     page.getByRole("heading", { name: "Field guide foundation" }),
   ).toBeVisible();
-  await expect(fixture).toHaveCSS("color-scheme", "light");
+  await expect(fixture).toHaveCSS("color-scheme", "dark");
 
   const tokens = await fixture.evaluate((element) => {
     const styles = getComputedStyle(element);
     return {
-      canvas: styles.getPropertyValue("--canvas").trim(),
+      canvas: styles.getPropertyValue("--canvas").trim().replace(/^#([a-f\d])([a-f\d])([a-f\d])$/i, "#$1$1$2$2$3$3"),
       forest: styles.getPropertyValue("--forest").trim(),
       route: styles.getPropertyValue("--route").trim(),
       coral: styles.getPropertyValue("--coral").trim(),
@@ -25,21 +25,25 @@ test("field-guide fixture exposes the approved semantic foundation", async ({
   });
 
   expect(tokens).toEqual({
-    canvas: "#f5f4ef",
-    forest: "#0e4039",
-    route: "#3379df",
-    coral: "#d95737",
-    primary: "#0e4039",
+    canvas: "#000000",
+    forest: "#c6c6c6",
+    route: "#d9d9d9",
+    coral: "#ef947e",
+    primary: "#343755",
     interfaceFont: '"Inter Variable", Inter, system-ui, sans-serif',
-    editorialFont: '"Cormorant Garamond", Georgia, serif',
+    editorialFont: '"Inter Variable", Inter, system-ui, sans-serif',
   });
 
   const primaryAction = page.getByRole("button", { name: "Start route" });
   await expect(primaryAction).toBeEnabled();
   await expect(primaryAction).toHaveCSS("min-height", "44px");
+  await expect(primaryAction).toHaveCSS("color", "rgb(255, 255, 255)");
+  await expect(primaryAction).toHaveCSS("background-color", "rgb(52, 55, 85)");
+  await primaryAction.hover();
+  await expect(primaryAction).toHaveCSS("background-color", "rgb(69, 73, 104)");
   const activeAction = page.getByRole("button", { name: "Active route" });
   await expect(activeAction).toHaveAttribute("aria-pressed", "true");
-  await expect(activeAction).toHaveCSS("background-color", "rgb(8, 47, 42)");
+  await expect(activeAction).toHaveCSS("background-color", "rgb(52, 52, 52)");
   const iconAction = page.getByRole("button", { name: "Route information" });
   await expect(iconAction).toHaveCSS("min-width", "44px");
   await expect(iconAction).toHaveCSS("min-height", "44px");
@@ -70,6 +74,9 @@ test("field-guide fixture is responsive and honors reduced motion", async ({
   ]) {
     await page.setViewportSize(viewport);
     await page.goto("/#/lab/design-system");
+    await expect(page.getByTestId("field-guide-foundation")).toBeVisible();
+    // Font swapping changes paragraph wrapping; measure the rendered design.
+    await page.evaluate(() => document.fonts.ready);
 
     const layout = await page.evaluate(() => ({
       viewportWidth: window.innerWidth,

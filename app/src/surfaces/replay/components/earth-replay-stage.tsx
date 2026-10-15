@@ -247,7 +247,7 @@ export function EarthReplayStage({
               <RecordedLightLabel light={recordedLight} />
             </div>
             {route.curation.vibe ? (
-              <p className="mt-3 max-w-sm font-editorial text-base italic leading-5 text-ink-secondary">
+              <p className="mt-3 max-w-sm text-base leading-5 text-ink-secondary">
                 {route.curation.vibe}
               </p>
             ) : null}
@@ -284,7 +284,7 @@ export function EarthReplayStage({
           actions={
             <div className="grid grid-cols-2 gap-2">
               {route.replay.replayEligible ? (
-                <Button asChild size="sm" className="w-full bg-forest text-white hover:bg-forest/90">
+                <Button asChild size="sm" className="w-full bg-primary text-primary-foreground hover:bg-primary-hover">
                   <Link to={playableEarthLabPath(route.slug, "replay")}>
                     <Gamepad2 aria-hidden="true" />
                     Enter route

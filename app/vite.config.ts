@@ -1,12 +1,12 @@
+import { discoveryPlugin } from "./server/discovery-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import fs from "node:fs";
 import path from "node:path";
 import { defineConfig, loadEnv } from "vite";
-import { viteStaticCopy } from "vite-plugin-static-copy";
 
-const cesiumBuild = "node_modules/cesium/Build/Cesium";
 const cesiumBaseUrl = "/cesiumStatic";
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, path.resolve(__dirname, ".."), "");
   const liveProvidersDisabled = process.env.GODIESEL_DISABLE_LIVE_PROVIDERS === "1";
@@ -27,6 +27,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
+      discoveryPlugin(),
       {
         name: "godiesel-single-route-manifest",
         enforce: "pre" as const,
@@ -38,6 +39,13 @@ export default defineConfig(({ mode }) => {
           ) {
             return virtualRouteManifestId;
           }
+        },
+        writeBundle(options: { dir?: string }) {
+          if (!singleRouteSlug) return;
+          const indexPath = path.join(options.dir ?? path.resolve(__dirname, "dist"), "search/collection.json");
+          const index = JSON.parse(fs.readFileSync(indexPath, "utf8"));
+          index.documents = index.documents.filter((doc: { slug: string }) => doc.slug === singleRouteSlug);
+          fs.writeFileSync(indexPath, JSON.stringify(index));
         },
         load(id: string) {
           if (id !== virtualRouteManifestId) return;
@@ -57,21 +65,13 @@ export default defineConfig(({ mode }) => {
       },
       react(),
       tailwindcss(),
-      viteStaticCopy({
-        targets: [
-          ...["Workers", "Assets", "Widgets", "ThirdParty"].map((directory) => ({
-            src: `${cesiumBuild}/${directory}/**/*`,
-            dest: `cesiumStatic/${directory}`,
-            rename: { stripBase: 5 },
-          })),
-        ],
-      }),
     ],
     define: {
       CESIUM_BASE_URL: JSON.stringify(cesiumBaseUrl),
       "import.meta.env.VITE_GOOGLE_MAPS_API_KEY": JSON.stringify(googleMapsApiKey),
       "import.meta.env.VITE_SINGLE_ROUTE_SLUG": JSON.stringify(singleRouteSlug),
     },
+    worker: { format: "es" },
     server: {
       port: 8787,
     },

@@ -56,9 +56,9 @@ export function ReplayRoutePicker({
       }}
     >
       <SheetTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="w-full">
+        <Button type="button" variant="outline" size="sm" aria-label="Change route" className="w-full">
           <Search aria-hidden="true" />
-          Change route
+          <span className="hidden sm:inline">Change route</span>
         </Button>
       </SheetTrigger>
       <SheetContent
@@ -153,7 +153,7 @@ function RouteGroup({
   return (
     <section aria-label={label} className="mt-5 first:mt-0">
       <div className="mb-2">
-        <h2 className="text-xs font-semibold uppercase text-primary">{label}</h2>
+        <h2 className="text-xs font-semibold uppercase text-accent-foreground">{label}</h2>
         {description ? (
           <p className="mt-1 text-xs text-muted-foreground">{description}</p>
         ) : null}
@@ -179,7 +179,7 @@ function RouteGroup({
                   {route.region} · {route.type} · {route.distanceKm.toFixed(1)} km
                 </span>
               </span>
-              <span className="flex items-center gap-1 text-xs font-medium text-primary">
+              <span className="flex items-center gap-1 text-xs font-medium text-accent-foreground">
                 {selected ? <Check className="size-3.5" aria-hidden="true" /> : null}
                 {route.replay.bestInEarth ? "Best in Earth" : "Replay ready"}
               </span>

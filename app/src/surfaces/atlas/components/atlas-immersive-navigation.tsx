@@ -25,12 +25,12 @@ export function AtlasImmersiveNavigation() {
     <>
       <header
         data-testid="atlas-compact-navigation"
-        className="fixed left-5 top-5 z-[var(--z-navigation)] hidden h-[54px] items-center border border-white/40 bg-[#07151c]/94 text-white shadow-lg backdrop-blur-md md:flex"
+        className="fixed left-5 top-5 z-[var(--z-navigation)] hidden h-[54px] items-center rounded-xl border border-line bg-surface/95 text-ink shadow-panel backdrop-blur-md md:flex"
       >
         <Link
           to={APP_PATHS.atlas}
           aria-label="Return to global Atlas"
-          className="flex h-full items-center gap-2.5 px-3 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#63d6cf]"
+          className="flex h-full items-center gap-2.5 px-3 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         >
           <span className="atlas-spine-mark shrink-0" aria-hidden="true" />
           <span className="font-editorial text-lg font-semibold">goDiesel</span>
@@ -44,7 +44,7 @@ export function AtlasImmersiveNavigation() {
               size="icon"
               aria-label="Open application navigation"
               title="Open navigation"
-              className="mr-1 size-11 border-l border-white/20 text-white hover:bg-white/12 hover:text-white focus-visible:ring-[#63d6cf]"
+              className="mr-1 size-11 border-l border-line text-ink hover:bg-surface-muted hover:text-forest focus-visible:ring-ring"
             >
               <Menu aria-hidden="true" />
             </Button>
@@ -105,20 +105,20 @@ export function AtlasImmersiveNavigation() {
       <nav
         aria-label="Atlas mode"
         data-testid="atlas-mode-navigation"
-        className="fixed right-5 top-5 z-[var(--z-navigation)] hidden h-[54px] items-center border border-white/40 bg-[#07151c]/94 p-1 text-white shadow-lg backdrop-blur-md md:flex"
+        className="fixed right-5 top-5 z-[var(--z-navigation)] hidden h-[54px] items-center rounded-xl border border-line bg-surface/95 p-1 text-ink shadow-panel backdrop-blur-md md:flex"
       >
         <Link
           to={APP_PATHS.atlas}
           aria-current="page"
-          className="inline-flex h-11 items-center bg-white px-4 text-sm font-semibold text-[#15221e] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#63d6cf]"
+          className="inline-flex h-11 items-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         >
-          Memories
+          Atlas
         </Link>
         <Link
           to={APP_PATHS.finder}
-          className="inline-flex h-11 items-center px-4 text-sm text-white/78 outline-none hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#63d6cf]"
+          className="inline-flex h-11 items-center rounded-lg px-4 text-sm text-ink-secondary outline-none hover:bg-surface-muted hover:text-forest focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         >
-          Plan
+          Finder
         </Link>
       </nav>
     </>

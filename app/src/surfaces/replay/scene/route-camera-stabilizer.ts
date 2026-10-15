@@ -39,6 +39,9 @@ export function advanceRouteCameraMotion(
   responseSeconds = 0.48,
 ): RouteCameraMotionState {
   const elapsed = Math.min(0.1, Math.max(0, elapsedSeconds));
+  // Mode changes can share a timestamp with the animation frame. No time
+  // elapsed means no integration (and avoids Infinity * 0 for unbounded axes).
+  if (elapsed === 0) return state;
   const headingTarget =
     state.pose.headingDeg +
     (((desired.headingDeg - state.pose.headingDeg + 540) % 360) - 180);
@@ -68,21 +71,25 @@ export function advanceRouteCameraMotion(
     headingTarget,
     state.velocity.heading,
     elapsed,
-    responseSeconds,
+    Math.max(1.25, responseSeconds),
+    30,
+    45,
   );
   const range = smoothDamp(
     state.pose.rangeM,
     desired.rangeM,
     state.velocity.range,
     elapsed,
-    responseSeconds,
+    Math.max(0.8, responseSeconds),
   );
   const tilt = smoothDamp(
     state.pose.tiltDeg,
     desired.tiltDeg,
     state.velocity.tilt,
     elapsed,
-    responseSeconds,
+    Math.max(1.1, responseSeconds),
+    10,
+    18,
   );
   const fov = smoothDamp(
     state.pose.fovDeg,
@@ -133,6 +140,8 @@ function smoothDamp(
   velocity: number,
   elapsedSeconds: number,
   responseSeconds: number,
+  maxSpeed = Infinity,
+  maxAcceleration = Infinity,
 ) {
   const smoothTime = Math.max(0.12, responseSeconds);
   const omega = 2 / smoothTime;
@@ -140,9 +149,17 @@ function smoothDamp(
   const decay = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
   const change = current - target;
   const temporary = (velocity + omega * change) * elapsedSeconds;
+  const nextVelocity = (velocity - omega * temporary) * decay;
+  const boundedVelocity = Math.max(-maxSpeed, Math.min(maxSpeed,
+    Math.max(velocity - maxAcceleration * elapsedSeconds,
+      Math.min(velocity + maxAcceleration * elapsedSeconds, nextVelocity))));
+  // Integrate bounded angular velocity rather than clipping the position: turns
+  // retain momentum through changing GPS bearings without a visible snap.
   return {
-    value: target + (change + temporary) * decay,
-    velocity: (velocity - omega * temporary) * decay,
+    value: Number.isFinite(maxSpeed)
+      ? current + (velocity + boundedVelocity) * 0.5 * elapsedSeconds
+      : target + (change + temporary) * decay,
+    velocity: boundedVelocity,
   };
 }
 

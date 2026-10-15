@@ -53,12 +53,11 @@ test("Atlas remains the default home while Routes stays secondary", async ({ pag
   await page.goto("/");
 
   await expect(page).toHaveURL(/#\/atlas$/);
-  await expect(page.getByRole("link", { name: "Memories", exact: true })).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "Atlas", exact: true })).toHaveAttribute(
     "aria-current",
     "page",
   );
-  await page.getByRole("button", { name: "Open application navigation" }).click();
-  const navigation = page.getByRole("dialog", { name: "goDiesel navigation" });
+  const navigation = page.getByTestId("atlas-spine");
   await expect(navigation.getByRole("link", { name: "Atlas", exact: true })).toHaveAttribute(
     "aria-current",
     "page",
@@ -98,7 +97,7 @@ test("Routes progressively reveals all summaries without fetching route detail J
   expect(detailRequests).toEqual([]);
 });
 
-test("Routes presents an editorial comparison ledger on desktop and compact entries on mobile", async ({
+test("Routes presents aerial field notes on desktop and mobile", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -106,18 +105,16 @@ test("Routes presents an editorial comparison ledger on desktop and compact entr
 
   const ledger = page.getByTestId("route-ledger");
   await expect(ledger).toBeVisible();
-  await expect(page.getByTestId("route-ledger-head")).toContainText(
-    "DateActivityDistanceClimbVibeLifecycleAction",
-  );
+  await expect(ledger.getByRole("img", { name: /recorded route trace/ }).first()).toBeVisible();
   const desktopRow = routeCards(page).first();
   const desktopBox = await desktopRow.boundingBox();
   expect(desktopBox).not.toBeNull();
-  expect(desktopBox!.width).toBeGreaterThan(900);
-  expect(desktopBox!.height).toBeLessThan(190);
+  expect(desktopBox!.width).toBeLessThan(650);
+  expect(desktopBox!.height).toBeLessThan(460);
   await expect(desktopRow).toContainText("Run");
   await expect(desktopRow).toContainText("21.3 km");
   await expect(desktopRow).toContainText("680 m up");
-  await expect(desktopRow).toContainText("Completed");
+  await expect(desktopRow).toContainText("Recorded Run");
   await expect(desktopRow).toContainText(/long, exploratory Kyoto run/i);
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -126,7 +123,7 @@ test("Routes presents an editorial comparison ledger on desktop and compact entr
   const mobileBox = await mobileRow.boundingBox();
   expect(mobileBox).not.toBeNull();
   expect(mobileBox!.width).toBeLessThanOrEqual(358);
-  expect(mobileBox!.height).toBeLessThan(280);
+  expect(mobileBox!.height).toBeLessThan(480);
   await expect(page.getByTestId("route-ledger-head")).toBeHidden();
 });
 
@@ -137,7 +134,8 @@ test("search and every route filter update the URL", async ({ page }) => {
   await filters.getByRole("searchbox", { name: "Search routes" }).fill("kyoto");
   await expect.poll(() => routeSearchParam(page, "q")).toBe("kyoto");
 
-  await filters.getByRole("combobox", { name: "Lifecycle" }).selectOption("completed");
+  await filters.getByRole("button", { name: "Filters", exact: true }).click();
+  await filters.getByRole("combobox", { name: "Status" }).selectOption("completed");
   await expect.poll(() => routeSearchParam(page, "lifecycle")).toBe("completed");
 
   await filters.getByRole("combobox", { name: "Activity" }).selectOption("Run");
@@ -160,12 +158,13 @@ test("combined route filters persist through reload", async ({ page }) => {
   await page.goto(
     "/#/routes?q=exploratory&lifecycle=completed&activity=Run&region=Kyoto%2C+Japan&distance=20-50&climb=250-750&vibe=Big+Day",
   );
+  await page.getByRole("button", { name: "Filters", exact: true }).click();
   const filters = page.getByRole("form", { name: "Route filters" });
 
   await expect(filters.getByRole("searchbox", { name: "Search routes" })).toHaveValue(
     "exploratory",
   );
-  await expect(filters.getByRole("combobox", { name: "Lifecycle" })).toHaveValue(
+  await expect(filters.getByRole("combobox", { name: "Status" })).toHaveValue(
     "completed",
   );
   await expect(filters.getByRole("combobox", { name: "Activity" })).toHaveValue("Run");
@@ -179,6 +178,7 @@ test("combined route filters persist through reload", async ({ page }) => {
   await expect(routeCards(page).first()).toContainText("Kyoto, Japan");
 
   await page.reload();
+  await page.getByRole("button", { name: "Filters", exact: true }).click();
 
   await expect(filters.getByRole("searchbox", { name: "Search routes" })).toHaveValue(
     "exploratory",
@@ -259,7 +259,7 @@ test("reviewed Kyoto card opens its canonical guide and fetches only that detail
 
   const kyotoCard = routeCardWithText(page, /long, exploratory Kyoto run/i);
   await expect(kyotoCard).toHaveCount(1);
-  await expect(kyotoCard).toContainText("Reviewed");
+  await expect(kyotoCard).toContainText("Based on Esri imagery");
   await expect(kyotoCard).toContainText(/long, exploratory Kyoto run/i);
   expect(detailRequests).toEqual([]);
 
@@ -277,12 +277,14 @@ test("reviewed Kyoto card opens its canonical guide and fetches only that detail
   );
 });
 
-test("draft cards identify themselves without invented reviewed copy", async ({ page }) => {
+test("route cards omit editorial and AI badges while retaining imagery credit", async ({ page }) => {
   await page.goto("/#/routes?q=crosswalk+sprints");
 
-  const draftCard = routeCardWithText(page, "crosswalk sprints");
+  const draftCard = routeCardWithText(page, "Tokyo, Japan");
   await expect(draftCard).toHaveCount(1);
-  await expect(draftCard).toContainText("Draft guide");
+  await expect(draftCard).not.toContainText("Draft guide");
+  await expect(draftCard).not.toContainText("AI-enhanced");
+  await expect(draftCard).toContainText("Based on Esri imagery");
   await expect(draftCard).not.toContainText("Reviewed");
   await expect(draftCard).not.toContainText("What it feels like");
   await expect(
@@ -299,6 +301,7 @@ test("invalid and unknown filter parameters are removed from the shared URL", as
 
   await expect(page).toHaveURL(/#\/routes$/);
   await expect(routeCards(page)).toHaveCount(24);
+  await page.getByRole("button", { name: "Filters", exact: true }).click();
   await expect(page.getByRole("combobox", { name: "Activity" })).toHaveValue("all");
   await expect(page.getByRole("button", { name: "Reset filters" })).toHaveCount(0);
 });
@@ -313,12 +316,13 @@ for (const viewport of [
     await page.setViewportSize(viewport);
     await page.goto("/#/finder");
     const finder = page.getByRole("form", { name: "Find a route" });
-    await finder.getByLabel("Place").fill("Kyoto");
+    await finder.getByLabel("Describe your next route").fill("Kyoto");
+    await finder.getByRole("button", { name: "Edit filters", exact: true }).click();
     await finder.getByLabel("Activity").selectOption("Run");
     await finder.getByLabel("Distance").fill("21");
     await finder.getByLabel("Terrain").selectOption("mixed");
     await finder.getByLabel("Vibe").fill("exploratory climbing");
-    await finder.getByRole("button", { name: "Find curated routes" }).click();
+    await finder.getByRole("button", { name: "Find routes", exact: true }).click();
     await page.getByRole("button", { name: "Save planned route" }).click();
 
     await page.goto("/#/routes?lifecycle=planned");
@@ -378,7 +382,7 @@ for (const viewport of [
       expect(cardBoxes[0].y).toBeLessThan(viewport.height);
       await filterButton.click();
       await expect(filterButton).toHaveAttribute("aria-expanded", "true");
-      await expect(page.getByRole("combobox", { name: "Lifecycle" })).toBeVisible();
+      await expect(page.getByRole("combobox", { name: "Status" })).toBeVisible();
     }
   });
 }
@@ -406,3 +410,72 @@ test("invalid and malformed route links remain intentional unavailable states", 
   }
   expect(detailRequests).toEqual([]);
 });
+
+
+test("cached cover failure leaves the recorded trace and guide usable", async ({ page }) => {
+  await page.route("**/route-covers/*", route => route.abort());
+  await page.goto("/#/routes?q=exploratory");
+  const card = routeCards(page).first();
+  await expect(card.getByRole("img", { name: /route trace/ })).toBeVisible();
+  await expect(card.getByText("AI-enhanced illustration")).toHaveCount(0);
+  await card.getByRole("link").click();
+  await expect(page).toHaveURL(/#\/routes\/17654151284$/);
+});
+
+test("covers are cached and lazy loaded without live map or AI requests", async ({ page }) => {
+  const remote: string[] = [];
+  page.on("request", request => {
+    if (/arcgisonline|staticmap|openai/.test(request.url())) remote.push(request.url());
+  });
+  await page.goto("/#/routes");
+  const image = routeCards(page).first().getByRole("img");
+  await expect(image).toHaveAttribute("loading", "lazy");
+  await expect.poll(() => image.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true);
+  expect(remote).toEqual([]);
+});
+
+test("Field notes use reviewed prose and factual summaries for draft guides", async ({ page }) => {
+  await page.goto("/#/routes");
+  const tokyo = page.getByRole("link", { name: "Open Tokyo, Japan route from 2025-11-26, 21.8 km", exact: true });
+  await expect(tokyo.locator(".field-note-summary")).toHaveText("21.8 km run with 286 m of climbing.");
+  await expect(tokyo).not.toContainText("Tokyo opens toward the water");
+  const kyoto = page.getByRole("link", { name: "Open Kyoto, Japan route from 2025-11-24, 21.3 km", exact: true });
+  await expect(kyoto.locator(".field-note-summary")).toHaveText("A long, exploratory Kyoto run that moves from the city into sustained climbing before returning.");
+});
+
+for (const width of [320, 390, 768, 1280]) {
+  test(`Field notes preserve every route trace within aligned imagery at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto("/#/routes?page=3");
+    await expect(routeCards(page)).toHaveCount(67);
+    const violations = await page.locator(".route-cover").evaluateAll((covers, viewportWidth) => covers.flatMap((cover) => {
+      const image = cover.querySelector<HTMLImageElement>(".route-cover-image")!;
+      const svg = cover.querySelector<SVGSVGElement>(".route-cover-art")!;
+      const line = svg.querySelector("polyline")!;
+      const matrix = line.getScreenCTM()!;
+      const bounds = cover.getBoundingClientRect();
+      const imageBox = image.getBoundingClientRect();
+      const svgBox = svg.getBoundingClientRect();
+      const name = cover.closest("a")!.getAttribute("aria-label");
+      const failures: string[] = [];
+      // Test the rendered coordinates, so a future cover/slice regression fails
+      // even when the image and route still share an identically cropped box.
+      for (let i = 0; i < line.points.numberOfItems; i++) {
+        const point = line.points.getItem(i);
+        const rendered = new DOMPoint(point.x, point.y).matrixTransform(matrix);
+        if (rendered.x < bounds.left + 8 || rendered.x > bounds.right - 8 || rendered.y < bounds.top + 8 || rendered.y > bounds.bottom - 8) {
+          failures.push(`${name}: route reaches the media edge`);
+          break;
+        }
+      }
+      if (["x", "y", "width", "height"].some((key) => Math.abs(imageBox[key as keyof DOMRect] as number - (svgBox[key as keyof DOMRect] as number)) > .5)
+        || getComputedStyle(image).objectFit !== "contain"
+        || svg.getAttribute("preserveAspectRatio") !== "xMidYMid meet") failures.push(`${name}: image/route transforms differ`);
+      if (viewportWidth <= 390 && bounds.height > 209) failures.push(`${name}: mobile media grew beyond its compact height`);
+      return failures;
+    }), width);
+    expect(violations).toEqual([]);
+    await expect.poll(() => page.locator(".route-cover-image").first().evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
+    await page.screenshot({ path: `e2e/evidence/field-notes-independent/routes-fixed-${width}.png` });
+  });
+}

@@ -23,7 +23,7 @@ export function RouteBriefing({ route }: { route: QuestRoute }) {
     >
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase text-primary">
+          <p className="text-xs font-semibold uppercase text-accent-foreground">
             Route briefing
           </p>
           <h2 className="mt-1 text-xl font-semibold">
@@ -39,7 +39,7 @@ export function RouteBriefing({ route }: { route: QuestRoute }) {
         <figure className="grid min-w-0 grid-rows-[auto_1fr] overflow-hidden rounded-md border border-border bg-card">
           <figcaption className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
             <span className="inline-flex items-center gap-2 text-sm font-semibold">
-              <RouteIcon className="size-4 text-primary" aria-hidden="true" />
+              <RouteIcon className="size-4 text-accent-foreground" aria-hidden="true" />
               Recorded path
             </span>
             <span className="text-xs text-muted-foreground">
@@ -59,7 +59,7 @@ export function RouteBriefing({ route }: { route: QuestRoute }) {
         <figure className="grid min-w-0 grid-rows-[auto_1fr] overflow-hidden rounded-md border border-border bg-card">
           <figcaption className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
             <span className="inline-flex items-center gap-2 text-sm font-semibold">
-              <Mountain className="size-4 text-primary" aria-hidden="true" />
+              <Mountain className="size-4 text-accent-foreground" aria-hidden="true" />
               Elevation character
             </span>
             <span className="text-xs text-muted-foreground">
@@ -98,17 +98,17 @@ function RouteTrace({ route }: { route: QuestRoute }) {
         <polyline
           points={points.map(({ x, y }) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ")}
           fill="none"
-          stroke="var(--primary)"
+          stroke="var(--route)"
           strokeWidth="4"
           strokeLinecap="round"
           strokeLinejoin="round"
           vectorEffect="non-scaling-stroke"
         />
-        <circle cx={first.x} cy={first.y} r="7" fill="var(--primary)" />
+        <circle cx={first.x} cy={first.y} r="7" fill="var(--route)" />
         <circle cx={last.x} cy={last.y} r="7" fill="#f5c451" />
       </svg>
       <div className="absolute inset-x-4 bottom-3 flex items-center justify-between text-xs font-medium">
-        <span className="text-primary">Start</span>
+        <span className="text-accent-foreground">Start</span>
         <span className="inline-flex items-center gap-1 text-[#f5c451]">
           <Flag className="size-3.5" aria-hidden="true" />
           Finish
@@ -153,12 +153,12 @@ export function ElevationProfile({ route }: { route: QuestRoute }) {
         />
         <path
           d={area}
-          fill="color-mix(in srgb, var(--primary) 16%, transparent)"
+          fill="color-mix(in srgb, var(--route) 16%, transparent)"
         />
         <polyline
           points={line}
           fill="none"
-          stroke="var(--primary)"
+          stroke="var(--route)"
           strokeWidth="3"
           strokeLinecap="round"
           strokeLinejoin="round"

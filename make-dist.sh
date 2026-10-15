@@ -62,8 +62,11 @@ if [[ -n "$SINGLE_ROUTE_SLUG" ]]; then
 /data/routes/*
   Cache-Control: public, max-age=3600, must-revalidate
 
+/
+  Cache-Control: no-cache
+
 /index.html
-  Cache-Control: public, max-age=60, must-revalidate
+  Cache-Control: no-cache
 EOF
 else
   cat > dist/_headers <<'EOF'
@@ -79,8 +82,11 @@ else
 /data/routes/*
   Cache-Control: public, max-age=3600, must-revalidate
 
+/
+  Cache-Control: no-cache
+
 /index.html
-  Cache-Control: public, max-age=60, must-revalidate
+  Cache-Control: no-cache
 EOF
 fi
 

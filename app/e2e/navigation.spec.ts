@@ -10,10 +10,10 @@ test("root opens Atlas and primary navigation follows browser history", async ({
 
   await expect(page).toHaveURL(/#\/atlas$/);
   await expect(
-    page.getByRole("link", { name: "Memories", exact: true }),
+    page.getByRole("link", { name: "Atlas", exact: true }),
   ).toHaveAttribute("aria-current", "page");
 
-  await page.getByRole("link", { name: "Plan", exact: true }).click();
+  await page.getByRole("link", { name: "Finder", exact: true }).click();
   await expect(page).toHaveURL(/#\/finder$/);
   await expect(page.getByRole("heading", { name: /plan/i })).toBeVisible();
 
@@ -24,32 +24,25 @@ test("root opens Atlas and primary navigation follows browser history", async ({
   await expect(page).toHaveURL(/#\/finder$/);
 });
 
-test("compact Atlas navigation supports keyboard entry and restores focus", async ({
-  page,
-}) => {
+test("compact Atlas navigation stays consistent across product surfaces", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/#/atlas");
-
-  const trigger = page.getByRole("button", {
-    name: "Open application navigation",
-  });
-  await trigger.focus();
-  await page.keyboard.press("Enter");
-
-  const navigation = page.getByRole("dialog", { name: "goDiesel navigation" });
-  await expect(navigation).toBeVisible();
-  await expect(navigation.getByRole("link", { name: "Atlas" })).toBeFocused();
+  const nav = page.getByTestId("atlas-spine");
+  const atlas = nav.getByRole("link", { name: "Atlas", exact: true });
+  await atlas.focus();
   await page.keyboard.press("Tab");
-  await expect(navigation.getByRole("link", { name: "Finder" })).toBeFocused();
-  await page.keyboard.press("Escape");
-  await expect(navigation).toBeHidden();
-  await expect(trigger).toBeFocused();
+  const finder = nav.getByRole("link", { name: "Finder", exact: true });
+  await expect(finder).toBeFocused();
+  const before = await nav.boundingBox();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/#\/finder$/);
+  expect(await nav.boundingBox()).toEqual(before);
+  await expect(finder).toHaveAttribute("aria-current", "page");
 });
 
 test("every product surface has a canonical URL", async ({ page }) => {
   await page.goto("/#/atlas");
 
-  await page.getByRole("button", { name: "Open application navigation" }).click();
 
   for (const [label, path] of [
     ["Routes", "routes"],
@@ -79,16 +72,7 @@ test("canonical product and selected-route URLs load directly", async ({
   ] as const) {
     await page.goto(`/#/${path}`);
     await expect(page).toHaveURL(new RegExp(`#/${path}$`));
-    if (path === "atlas") {
-      await page.getByRole("button", { name: "Open application navigation" }).click();
-    }
-    await expect(
-      path === "atlas"
-        ? page
-            .getByRole("dialog", { name: "goDiesel navigation" })
-            .getByRole("link", { name: activeNavigation, exact: true })
-        : page.getByRole("link", { name: activeNavigation, exact: true }),
-    ).toHaveAttribute("aria-current", "page");
+    await expect(page.getByRole("link", { name: activeNavigation, exact: true })).toHaveAttribute("aria-current", "page");
   }
 });
 
@@ -265,7 +249,7 @@ test("mobile Replay reserves the safe area below navigation", async ({
     };
   });
 
-  expect(layout.navigationHeight).toBeGreaterThanOrEqual(106);
+  expect(layout.navigationHeight).toBe(80); // 56px navigation + 24px safe area
   expect(layout.navigationPaddingBottom).toBe("24px");
   expect(layout.controlsBottom).toBeLessThanOrEqual(layout.navigationTop + 1);
 });
@@ -281,7 +265,6 @@ test("mobile spine keeps every primary destination legible", async ({
       ["finder", "Finder"],
       ["routes", "Routes"],
       ["replay", "Replay"],
-      ["admin", "Admin"],
     ] as const) {
       await page.goto(`/#/${path}`);
       const spine = page.getByTestId("atlas-spine-mobile");
@@ -300,13 +283,16 @@ test("mobile spine keeps every primary destination legible", async ({
   }
 });
 
-test("utility surfaces retain the product subtitle on desktop", async ({
+test("Admin retains the product subtitle while Routes has one editorial title", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/#/routes");
 
-  await expect(page.getByTestId("app-page-title")).toHaveText("Routes");
+  await expect(page.getByTestId("app-header")).toBeHidden();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Places worth returning to.");
+  await page.goto("/#/admin");
+  await expect(page.getByTestId("app-page-title")).toHaveText("Admin");
   await expect(page.getByTestId("global-product-subtitle")).toHaveText(
     "Relive where you have been. Discover where to go next.",
   );
@@ -325,34 +311,16 @@ test("Finder uses the map shell without global header chrome", async ({
   await expect(page.getByRole("heading", { name: "Plan the next day." })).toBeVisible();
 });
 
-test("immersive Atlas replaces the content spine with compact navigation", async ({
-  page,
-}) => {
+test("Atlas keeps all destinations in the shared navigation", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/#/atlas?region=Kyoto%2C+Japan");
-
-  await expect(page.getByTestId("atlas-spine")).toHaveCount(0);
-  await expect(page.getByTestId("atlas-compact-navigation")).toBeVisible();
-  await expect(page.getByTestId("app-header")).toBeHidden();
-
-  await expect(page.getByRole("link", { name: "Memories" })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
-  await expect(page.getByRole("link", { name: "Plan" })).toHaveAttribute(
-    "href",
-    "#/finder",
-  );
-
-  await page.getByRole("button", { name: "Open application navigation" }).click();
-  const navigation = page.getByRole("dialog", { name: "goDiesel navigation" });
+  const navigation = page.getByTestId("atlas-spine");
   await expect(navigation).toBeVisible();
+  await expect(page.getByTestId("app-header")).toBeHidden();
   for (const destination of ["Atlas", "Finder", "Routes", "Replay", "Admin"]) {
-    await expect(navigation.getByRole("link", { name: destination })).toBeVisible();
+    await expect(navigation.getByRole("link", { name: destination, exact: true })).toBeVisible();
   }
-  await page.keyboard.press("Escape");
-  await expect(navigation).toBeHidden();
-
+  await expect(navigation.getByRole("link", { name: "Atlas", exact: true })).toHaveAttribute("aria-current", "page");
   await page.getByRole("link", { name: "Return to global Atlas" }).click();
   await expect(page).toHaveURL(/#\/atlas$/);
 });
@@ -364,8 +332,12 @@ test("field-guide shell has stable desktop and mobile compositions", async ({
   await page.goto("/#/routes");
   await expect(page.getByTestId("atlas-spine")).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Your route library." }),
+    page.getByRole("heading", { name: "Places worth returning to." }),
   ).toBeVisible();
+  await expect.poll(() => page.locator(".route-cover-image").evaluateAll((images) =>
+    images.filter((image) => image.getBoundingClientRect().top < innerHeight)
+      .every((image) => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0)
+  )).toBe(true);
   await expect(page).toHaveScreenshot("field-guide-shell-desktop.png", {
     animations: "disabled",
   });
@@ -374,8 +346,12 @@ test("field-guide shell has stable desktop and mobile compositions", async ({
   await page.goto("/#/routes");
   await expect(page.getByTestId("atlas-spine-mobile")).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Your route library." }),
+    page.getByRole("heading", { name: "Places worth returning to." }),
   ).toBeVisible();
+  await expect.poll(() => page.locator(".route-cover-image").evaluateAll((images) =>
+    images.filter((image) => image.getBoundingClientRect().top < innerHeight)
+      .every((image) => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0)
+  )).toBe(true);
   await expect(page).toHaveScreenshot("field-guide-shell-mobile.png", {
     animations: "disabled",
   });

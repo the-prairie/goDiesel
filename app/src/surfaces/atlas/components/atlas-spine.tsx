@@ -36,7 +36,7 @@ export function AtlasSpine({ className, hideDesktop = false }: AtlasSpineProps) 
                 goDiesel
               </span>
               <span className="truncate text-caption text-ink-muted">
-                Weathered atlas
+                Personal atlas
               </span>
             </span>
           </Link>
@@ -48,15 +48,15 @@ export function AtlasSpine({ className, hideDesktop = false }: AtlasSpineProps) 
         >
           <div
             aria-hidden="true"
-            className="atlas-spine-rule absolute bottom-3 left-[1.6875rem] top-3 lg:left-[1.875rem]"
+            className="hidden atlas-spine-rule absolute bottom-3 left-[1.6875rem] top-3 lg:left-[1.875rem]"
           />
-          <ul className="relative flex flex-1 flex-col gap-1 px-2 lg:px-3">
+          <ul className="relative flex flex-1 flex-col gap-2 px-2 lg:px-3">
             {APP_SECTIONS.map((section) => {
               const Icon = section.icon;
               const isActive = activeSection.id === section.id;
 
               return (
-                <li key={section.path}>
+                <li key={section.path} className={section.id === "admin" ? "mt-auto border-t border-line pt-3" : undefined}>
                   <Link
                     to={section.path}
                     aria-current={isActive ? "page" : undefined}
@@ -72,10 +72,10 @@ export function AtlasSpine({ className, hideDesktop = false }: AtlasSpineProps) 
                     {isActive ? (
                       <span
                         aria-hidden="true"
-                        className="absolute -left-1 top-1/2 size-1.5 -translate-y-1/2 rounded-full bg-coral lg:-left-0.5"
+                        className="absolute -left-1 top-1/2 size-1.5 -translate-y-1/2 rounded-full bg-ink lg:-left-0.5"
                       />
                     ) : null}
-                    <Icon className="size-4 shrink-0" aria-hidden="true" />
+                    <Icon className="size-[18px] shrink-0" aria-hidden="true" />
                     <span className="hidden truncate lg:inline">
                       {section.label}
                     </span>
@@ -99,9 +99,9 @@ export function AtlasSpine({ className, hideDesktop = false }: AtlasSpineProps) 
       <nav
         data-testid="atlas-spine-mobile"
         aria-label="Primary"
-        className="atlas-spine-mobile fixed inset-x-0 bottom-0 z-[var(--z-navigation)] grid h-[var(--mobile-navigation-height)] grid-cols-5 md:hidden"
+        className="atlas-spine-mobile fixed inset-x-0 bottom-0 z-[var(--z-navigation)] grid h-[var(--mobile-navigation-height)] grid-cols-4 md:hidden"
       >
-        {APP_SECTIONS.map((section) => {
+        {APP_SECTIONS.filter(section => section.id !== "admin").map((section) => {
           const Icon = section.icon;
           const isActive = activeSection.id === section.id;
 
@@ -111,18 +111,18 @@ export function AtlasSpine({ className, hideDesktop = false }: AtlasSpineProps) 
               to={section.path}
               aria-current={isActive ? "page" : undefined}
               className={cn(
-                "relative flex min-h-12 flex-col items-center justify-center gap-1 px-1 text-micro outline-none transition-colors duration-[var(--duration-standard)] ease-[var(--ease-interface)]",
+                "relative flex min-h-12 flex-col items-center justify-center gap-0.5 px-1 text-[11px] leading-[14px] outline-none transition-colors duration-[var(--duration-standard)] ease-[var(--ease-interface)]",
                 "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-                isActive ? "text-forest" : "text-ink-muted",
+                isActive ? "font-semibold text-ink" : "text-ink-muted",
               )}
             >
               {isActive ? (
                 <span
                   aria-hidden="true"
-                  className="absolute top-1.5 size-1 rounded-full bg-coral"
+                  className="absolute top-0 h-0.5 w-6 rounded-full bg-ink"
                 />
               ) : null}
-              <Icon className="size-4" aria-hidden="true" />
+              <Icon className="size-[18px]" aria-hidden="true" />
               <span className="truncate">{section.label}</span>
             </Link>
           );

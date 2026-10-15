@@ -134,7 +134,9 @@ for (const route of ROUTES) {
       "data-camera-protection",
       /recorded-terrain-envelope.*horizon-guard/,
     );
-    await page.waitForTimeout(2_000);
+    await expect.poll(async () => page.locator("gmp-map-3d").evaluate(element =>
+      (element as google.maps.maps3d.Map3DElement).range ?? Infinity),
+      { timeout: 10_000 }).toBeLessThanOrEqual(780);
     const automaticCamera = await page
       .locator("gmp-map-3d")
       .evaluate((element) => {
@@ -155,11 +157,11 @@ for (const route of ROUTES) {
     await expect(
       page.getByRole("complementary", { name: "Replay settings panel" }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Mesh" }).click();
+    await page.getByRole("button", { name: "On 3D surface", exact: true }).click();
     await expect(navigator).toHaveAttribute("data-grounding-mode", "mesh");
-    await page.getByRole("button", { name: "Free" }).click();
+    await page.getByRole("button", { name: "Explore freely" }).click();
     await expect(navigator).toHaveAttribute("data-following", "false");
-    await page.getByRole("button", { name: "Resume following" }).click();
+    await page.getByRole("button", { name: "Follow route" }).click();
     await expect(navigator).toHaveAttribute("data-following", "true");
 
     expectNoRuntimeErrors(consoleErrors, pageErrors);
@@ -210,7 +212,9 @@ for (const route of ROUTES) {
     await expect(
       page.getByRole("button", { name: "Play route" }),
     ).toBeVisible();
-    await expect(page.getByRole("button", { name: "Chase" })).toBeVisible();
+    await page.getByRole("button", { name: "Replay settings" }).click();
+    await expect(page.getByRole("button", { name: "Chase", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Replay settings" }).click();
     await page.getByRole("button", { name: "Play route" }).click();
     await expect(navigator).toHaveAttribute("data-hud-state", "expanded");
     await expect(page.getByTestId("replay-elevation-scrubber")).toBeVisible();

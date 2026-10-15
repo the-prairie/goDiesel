@@ -72,7 +72,7 @@ export function RouteEditor({
             Review status
             <select
               value={draft.reviewStatus}
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="h-11 rounded-[var(--radius-control)] border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onChange={(event) =>
                 onChange({
                   ...draft,
@@ -124,7 +124,7 @@ export function RouteEditor({
       <div
         data-testid="curation-action-bar"
         data-dirty={dirty ? "true" : "false"}
-        className="sticky bottom-[calc(var(--mobile-navigation-height)+0.75rem)] z-10 -mx-4 mt-1 flex min-h-16 flex-wrap items-center justify-between gap-3 border-t border-line bg-surface-raised/96 px-4 py-3 shadow-[0_-8px_20px_rgb(21_31_29_/_0.08)] backdrop-blur sm:-mx-5 sm:px-5 md:bottom-0"
+        className="sticky bottom-[calc(var(--mobile-navigation-height)+0.75rem)] z-10 -mx-4 mt-1 flex min-h-16 flex-wrap items-center justify-between gap-3 border-t border-line bg-black/95 px-4 py-3 backdrop-blur sm:-mx-5 sm:px-5 md:bottom-0"
       >
         <div className="grid gap-0.5">
           <p className={dirty ? "text-caption font-medium text-warning" : "text-caption font-medium text-ink-secondary"}>

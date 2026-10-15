@@ -51,7 +51,7 @@ function routeMatchesQuery(route: RouteSummary, query: string) {
   ].some((value) => value?.toLowerCase().includes(query));
 }
 
-function routeMatchesDistance(distanceKm: number, filter: RouteFilters["distance"]) {
+export function routeMatchesDistance(distanceKm: number, filter: RouteFilters["distance"]) {
   switch (filter) {
     case "all":
       return true;
@@ -66,7 +66,7 @@ function routeMatchesDistance(distanceKm: number, filter: RouteFilters["distance
   }
 }
 
-function routeMatchesClimb(elevationGainM: number, filter: RouteFilters["climb"]) {
+export function routeMatchesClimb(elevationGainM: number, filter: RouteFilters["climb"]) {
   switch (filter) {
     case "all":
       return true;

@@ -23,18 +23,24 @@
     "test:bundle": "node scripts/check-bundle-budget.mjs",
     "verify:ticket": "npm run typecheck && npm run build && npm run test:unit && playwright test e2e/navigation.spec.ts --grep \"root opens Atlas|compact Atlas navigation|every product surface|mobile bottom spine\"",
     "verify": "npm run typecheck && npm run test:unit && npm run build && npm run test:bundle && npm run test:e2e",
-    "verify:live-pipeline": "../scripts/verify-live-pipeline.sh"
+    "verify:live-pipeline": "../scripts/verify-live-pipeline.sh",
+    "predev": "node scripts/prepare-cesium-assets.mjs",
+    "prebuild": "node scripts/prepare-cesium-assets.mjs && npm run search:check",
+    "search:index": "node scripts/build-search-index.mjs",
+    "search:check": "node scripts/check-search-index.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
+    "@fontsource/barlow-condensed": "^5.2.8",
     "@fontsource/cormorant-garamond": "^5.2.11",
+    "@huggingface/transformers": "^4.3.1",
     "@radix-ui/react-slot": "^1.2.4",
     "cesium": "^1.143.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "embla-carousel-react": "^8.6.0",
     "lucide-react": "^0.562.0",
-    "maplibre-gl": "^5.24.0",
+    "maplibre-gl": "^6.14.0",
     "radix-ui": "^1.6.2",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
@@ -54,7 +60,6 @@
     "tailwindcss": "^4.1.18",
     "typescript": "^5.9.3",
     "vite": "^8.1.4",
-    "vite-plugin-static-copy": "^4.1.1",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }

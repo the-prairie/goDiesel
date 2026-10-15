@@ -46,6 +46,18 @@ identifier and appears in every canonical URL.
 A route is **not** a segment, a plan, a workout, or a performance. Metrics exist
 to describe the experience, not to score it.
 
+### Discovery candidate
+
+Finder can preview an external **discovery candidate**: a named OpenStreetMap
+route relation with real member geometry and a source link. It is not yet a route
+in the owner's library, has no canonical route slug, and is never replayable.
+Source-tagged distance and derived mapped-path length are labelled separately;
+unknown climb or surface cannot satisfy an explicit filter. A candidate can be
+saved as an external plan on this device, retaining its source link and separate
+mapped sections. External plans appear in Planned routes, never in completed
+Atlas totals or Replay. GPX export preserves sections without inventing a
+recorded activity. Canonical import remains explicit. See ADR-0015.
+
 ### Activity record
 
 A row in the private Strava export (`../DieselDiaries/activities.csv`, 103
@@ -176,8 +188,18 @@ The schema is closed. Unknown fields are rejected rather than ignored.
 
 Current data: 66 `draft`, 1 `reviewed`.
 
-An unreviewed route shows the neutral label "Guide not yet reviewed". It must
-never be given invented claims to fill the space.
+An unreviewed route guide discloses its draft status. Authorship/process notes
+stay in curation metadata rather than the reader-facing guide. Library cards use factual
+distance, activity, and climb summaries until prose is reviewed; they do not
+show editorial workflow badges or publish draft prose as finished guidance.
+Never invent claims to fill the space.
+
+Route-library covers omit AI badges and generation labels by product choice.
+They retain a quiet imagery-source credit; generation provenance stays in asset metadata.
+It is generated from each route's aerial source image; the recorded GPS trace is
+rendered separately. Full geography and trace share a fitted frame on mobile and
+desktop. Real maps and Replay retain their original geographic providers. See
+`scripts/route-covers/README.md` for assets, source metadata, and prompts.
 
 ## 6. Surfaces
 

@@ -77,97 +77,515 @@
     {
       "activity_id": "13134774070",
       "status": "approved",
-      "region": "Crete, Greece"
+      "region": "Crete, Greece",
+      "curation": {
+        "vibe": "A clean city-to-foothills arc south of Chania, with a single rising middle that is easy to read in the profile. The 24.1 km route links the Perivolia side of the city with the inland corridor near Panagia, then closes through Krio Nero and Mournies. Instead of stacking many detours, it gives the day a clear shape: leave the city, climb into the interior, and return by a different side.",
+        "ideal_use": "A longer Chania outing for someone drawn to a sustained climb and a distinct return leg rather than a coastal circuit.",
+        "terrain": [
+          "Chania urban approach",
+          "Inland foothill corridor",
+          "Different outward and return legs through Perivolia and Mournies"
+        ],
+        "difficulty": "24.1 km with 460 m of recorded climbing. The ascent builds toward one main high point before a long descending return.",
+        "highlights": [
+          "The nearly triangular inland circuit",
+          "The contrast between city streets and rising interior ground",
+          "A single main climb that shapes the whole outing"
+        ],
+        "caveats": [
+          "Check the road and path connections south of the city before repeating."
+        ],
+        "seasonality": "Recorded in mid-December. Choose a day that leaves enough light for the full inland leg and return.",
+        "editorial_note": "AI-written from the recorded route, its elevation profile, the original activity notes and a visual map review. The suggested experience is interpretation, not a firsthand account.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "14080158961",
       "status": "approved",
-      "region": "Crete, Greece"
+      "region": "Crete, Greece",
+      "curation": {
+        "vibe": "This is the Chania outing the owner explicitly says not to repeat. On the map, its 30.6 km make a striking contrast: a low sweep past Souda Bay and a much higher inland crossing through the Malaxa area before closing in Chania. That contrast makes the recording worth revisiting, but the original warning belongs at the centre of the guide, ahead of the route’s attractive shape.",
+        "ideal_use": "Replay and remember the experience. Use the geography for context, not as a ready-made route recommendation.",
+        "terrain": [
+          "Chania and Souda urban approaches",
+          "Low corridor beside Souda Bay",
+          "A pronounced inland climb near Malaxa"
+        ],
+        "difficulty": "30.6 km and 746 m of recorded climbing, including one dominant high section. The owner’s negative assessment outweighs any distance-based rating.",
+        "highlights": [
+          "The contrast between Souda Bay and the inland high ground",
+          "The broad loop back to Chania",
+          "A clear record of an outing the owner would change"
+        ],
+        "caveats": [
+          "The original activity title explicitly warns never to follow this route. Preserve that recommendation unless the owner revises it.",
+          "The title does not identify the exact problem section, so a safe alternative cannot be inferred from this trace alone."
+        ],
+        "seasonality": "Recorded in late December. No season is recommended for repeating this exact route while the owner’s warning remains unresolved.",
+        "editorial_note": "AI-written from the recorded route, its elevation profile, the original activity notes and a visual map review. The suggested experience is interpretation, not a firsthand account.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "13935098460",
       "status": "approved",
-      "region": "Mainland Greece"
+      "region": "Mainland Greece",
+      "curation": {
+        "vibe": "A long westward reach from central Athens, with the city giving way to the hills beyond Chaidari before the route turns home. The 28.4 km recording has a clear contrast between a direct urban approach through Egaleo and a more irregular loop on the western high ground. The owner’s warning about barbed-wire fences changes how to use it: a revealing exploration, but not a line to copy blindly.",
+        "ideal_use": "Replay the city-to-hills transition or use it to identify an area for a newly verified outing.",
+        "terrain": [
+          "Long urban approach west from Athens",
+          "Climbing loop beyond Chaidari",
+          "Largely shared corridor back through Egaleo"
+        ],
+        "difficulty": "28.4 km and 493 m of recorded climbing. The length is substantial, and the owner-reported barriers add a separate navigation problem.",
+        "highlights": [
+          "The westward crossing of Athens neighbourhoods",
+          "The compact hill loop beyond Chaidari",
+          "The contrast between the direct city corridor and wandering western section"
+        ],
+        "caveats": [
+          "The owner explicitly mentions climbing barbed-wire fences and recommends against it. Replan around confirmed legal access rather than following those crossings.",
+          "The recording does not identify a validated alternative through the barrier sections."
+        ],
+        "seasonality": "Recorded in December. Current access is the first question to resolve before choosing a season or day for a repeat.",
+        "editorial_note": "AI-written from the recorded route, its elevation profile, the original activity notes and a visual map review. The suggested experience is interpretation, not a firsthand account.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "14415835303",
       "status": "approved",
-      "region": "Canary Islands"
+      "region": "Canary Islands",
+      "curation": {
+        "vibe": "A northern Fuerteventura circuit on an ambitious scale. The trace links the Corralejo side of the island with Lajares and El Cotillo, then follows the northern shoreline through Los Lagos and Majanicho back toward Corralejo. At 46.7 km, the coast is a long chapter rather than a quick reward: this is an long northern circuit whose changing outline is part of the appeal.",
+        "ideal_use": "An ultra-distance exploration for someone already comfortable with a long day on foot. Use the named settlements to structure a deliberate resupply plan.",
+        "terrain": [
+          "Inland crossing through the Lajares area",
+          "Western and northern coastal sections",
+          "Return through Corralejo"
+        ],
+        "difficulty": "46.7 km and 688 m of recorded climbing. Distance and time on feet dominate the commitment.",
+        "highlights": [
+          "The inland-to-coast contrast at El Cotillo",
+          "The long northern shoreline through Majanicho",
+          "A near-circuit of the island’s northern end"
+        ],
+        "caveats": [
+          "Start and finish are roughly 900 m apart in a straight line.",
+          "Confirm resupply opportunities before setting out; the map alone does not establish what is open."
+        ],
+        "seasonality": "Recorded on February 1. The length makes daylight and the forecast more important than matching the original month.",
+        "editorial_note": "AI-written from the recorded route, its elevation profile, the original activity notes and a visual map review. The suggested experience is interpretation, not a firsthand account.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "8767788731",
       "status": "approved",
-      "region": "Costa Brava, Spain"
+      "region": "Costa Brava, Spain",
+      "curation": {
+        "vibe": "Girona is the launch point for a ride with the Costa Brava as its long centrepiece. The 113.1 km circuit links inland towns with Tossa de Mar, follows the intricately bending coast to Sant Feliu de Guíxols and Platja d’Aro, then closes the loop inland. The profile’s repeated coastal rises help explain the scale: this is a full ride built around the transition from country roads to the sea.",
+        "ideal_use": "A full-day cycling itinerary to study for a coast-focused endurance ride, with planned stops and energy left for the inland return.",
+        "terrain": [
+          "Inland town-to-town approaches",
+          "A winding coastal section between Tossa and Sant Feliu",
+          "Repeated short rises within a long circuit"
+        ],
+        "difficulty": "113.1 km and 1,382 m of recorded climbing. The distance and accumulated coastal climbing make this a substantial ride.",
+        "highlights": [
+          "The winding coast between Tossa de Mar and Sant Feliu de Guíxols",
+          "The reach to Platja d’Aro",
+          "A large loop beginning and ending in Girona"
+        ],
+        "caveats": [
+          "Confirm the exact roads and current cycling access before following the record.",
+          "Plan resupply for the entire circuit rather than counting the coast as the end of the ride."
+        ],
+        "seasonality": "Recorded in late November. Daylight is a useful constraint when planning a ride of this length.",
+        "editorial_note": "AI-written from the recorded route, its elevation profile, the original activity notes and a visual map review. The suggested experience is interpretation, not a firsthand account.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "8762819138",
       "status": "approved",
-      "region": "Costa Brava, Spain"
+      "region": "Costa Brava, Spain",
+      "curation": {
+        "vibe": "This Girona ride explores the country behind the Costa Brava rather than reaching the beach. The 91.7 km trace follows the eastern corridor through Celrà, Bordils and Flaçà, opens into a broad loop through Verges, Torroella de Montgrí and Ullastret, then returns inland. It is a ride of linked towns and changing directions, with a lower overall profile than the coastal outing recorded the following day.",
+        "ideal_use": "A long inland cycling day when village-to-village variety appeals more than a coastal destination.",
+        "terrain": [
+          "Eastern corridor from Girona",
+          "Broad inland loop around Torroella and Ullastret",
+          "Rolling rather than sustained mountain climbing"
+        ],
+        "difficulty": "91.7 km with 815 m of recorded climbing. A significant endurance ride even without a long high ascent.",
+        "highlights": [
+          "The extended corridor east from Girona",
+          "The large loop through Torroella de Montgrí and Ullastret",
+          "Different outward and return connections around the inland towns"
+        ],
+        "caveats": [
+          "Check the precise road choices and resupply stops before a repeat."
+        ],
+        "seasonality": "Recorded in late November, with autumn foliage mentioned in the owner’s title. Treat that as the memory of this ride rather than a guaranteed seasonal display.",
+        "editorial_note": "AI-written from the recorded route, its elevation profile, the original activity notes and a visual map review. The suggested experience is interpretation, not a firsthand account.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "5650407638",
       "status": "approved",
-      "region": "Victoria, BC"
+      "region": "Victoria, BC",
+      "curation": {
+        "vibe": "A full Saanich Peninsula circuit carries this ride far beyond Victoria’s streets. The outward leg runs north along the eastern side toward Sidney, then folds around the peninsula’s northern end before returning through Central Saanich on a more westerly line. The profile saves many of its larger undulations for the second half, so the change of direction also changes the work. It is a long regional loop with a satisfying sense of travelling somewhere and coming home another way.",
+        "ideal_use": "A substantial day ride for seeing the peninsula as a whole rather than repeating the same north-south corridor.",
+        "terrain": [
+          "Urban departure and return",
+          "Peninsula road and path connections",
+          "Rolling western-side return"
+        ],
+        "difficulty": "84.6 km with 651 m of recorded climbing. The later rolling section means the homeward half is not simply an easy finish.",
+        "highlights": [
+          "The northward journey toward Sidney",
+          "Turning around the peninsula’s northern end",
+          "Returning through Central Saanich on a different line"
+        ],
+        "caveats": [
+          "Check exact cycling connections where the route runs alongside major roads.",
+          "Plan food and water for the full peninsula circuit, with energy left for the western return."
+        ],
+        "seasonality": "Recorded in July. A full-day plan gives room for distance, stops and the more rolling second half.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. Suggested experience is interpretation, not a firsthand account; current access and path conditions have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "9845102380",
       "status": "approved",
-      "region": "Banff/Kananaskis"
+      "region": "Banff/Kananaskis",
+      "curation": {
+        "vibe": "A near-200-kilometre ride with Canmore as the bookend and the Bow valley as its long spine. The line travels northwest through Banff, follows the valley deep into the mountains and adds a higher southwestern excursion near the far end before retracing much of the approach. The elevation profile builds slowly, then concentrates its largest climb around the middle. It reads as a journey across the region, with the return distance every bit as important as the outward destination.",
+        "ideal_use": "An ambitious endurance ride when the whole day can revolve around distance, climbing and a long return through the valley.",
+        "terrain": [
+          "Long Bow valley corridor",
+          "Town and road connections through Banff",
+          "A higher excursion near the far turnaround"
+        ],
+        "difficulty": "191.9 km and 2,064 m of recorded climbing make this a major endurance outing. The route still has roughly half its distance left after the highest section.",
+        "highlights": [
+          "Linking Canmore and Banff within one continuous ride",
+          "The long northwest progression through the valley",
+          "The concentrated climb near the far end"
+        ],
+        "caveats": [
+          "Plan food, water and return timing for the full distance; the far end is a long way from Canmore.",
+          "Confirm the exact road and path connections rather than treating this overview as turn-by-turn navigation."
+        ],
+        "seasonality": "Recorded in late May. Check current access to the higher western section before building a day around this trace.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. Suggested experience is interpretation, not a firsthand account; current access and path conditions have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "9934715694",
       "status": "approved",
-      "region": "Highwood Pass"
+      "region": "Highwood Pass",
+      "curation": {
+        "vibe": "Highwood Pass becomes a two-sided journey on this long out-and-back ride. The trace climbs northwest from its southern start, crosses the high section, then drops into the valley beyond before turning around. That means the big ascent is not finished at the first crest: the return asks for another climb before the long homeward descent. The mirrored elevation profile gives the ride a clear story, with two high chapters and a shared road linking them.",
+        "ideal_use": "A full-distance climbing ride for a day when you want the pass itself to organise the journey.",
+        "terrain": [
+          "Long mountain-road corridor",
+          "Two crossings of the high section",
+          "Extended climbs and descents"
+        ],
+        "difficulty": "A demanding 109.1 km ride with 1,689 m of recorded climbing. Budget effort for climbing back over the pass after the turnaround.",
+        "highlights": [
+          "The long approach from the southeast",
+          "Descending beyond the first crest before turning",
+          "A second high crossing on the way home"
+        ],
+        "caveats": [
+          "The turnaround is well beyond the first high point; reaching the top does not mean the climbing is over.",
+          "Check current road access and mountain conditions before planning the full out-and-back."
+        ],
+        "seasonality": "Recorded in mid-June. Road access and conditions at the high section need checking for the intended date.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. Suggested experience is interpretation, not a firsthand account; current access and path conditions have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "17636880071",
       "status": "approved",
-      "region": "Kyoto, Japan"
+      "region": "Kyoto, Japan",
+      "curation": {
+        "vibe": "A generous cross-city loop that reaches well beyond central Kyoto. The opening leg runs west across the grid to the river and wooded western edge, where the trace folds into its main climb. It then works east along the northern side of the city before dropping south toward the start. At 32.6 km, this is a route for seeing Kyoto change character over hours rather than collecting a quick landmark circuit.",
+        "ideal_use": "A destination-scale long run with a distinct western turning point and a different route home.",
+        "terrain": [
+          "Long urban connectors",
+          "Western river corridor",
+          "Wooded hillside section",
+          "Northern city streets"
+        ],
+        "difficulty": "The longest of these Kyoto outings: 32.6 km with 557 m recorded gain. The profile concentrates its largest rise in the western part, so reserve effort for that section.",
+        "highlights": [
+          "A complete west-to-north arc around Kyoto",
+          "The abrupt shift from city grid to wooded slopes",
+          "Returning through a different set of neighbourhoods"
+        ],
+        "caveats": [
+          "The hill section and city connectors have different navigation demands; follow the detailed trace at the western turns.",
+          "The loop is long even before adding sightseeing stops."
+        ],
+        "seasonality": "Recorded in late November. Plan the outing as a substantial part of the day rather than assuming the straight city legs make it a quick run.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. The suggested experience is interpretation, not a firsthand account; current access and exact surfaces have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "17569931129",
       "status": "approved",
-      "region": "Tokyo, Japan"
+      "region": "Tokyo, Japan",
+      "curation": {
+        "vibe": "Two green spaces structure this long Tokyo circuit, but the western one gets more attention. The trace reaches the Harajuku–Shibuya side of the city and adds a small internal loop before heading east to the Imperial Palace perimeter. The palace circuit gives the second half a clear shape, then a northwestern connector returns toward the start. At 21.9 km, it is an extended city outing with room to linger rather than a single park lap.",
+        "ideal_use": "A half-marathon-sized tour that combines western park paths with the palace district.",
+        "terrain": [
+          "Urban connectors",
+          "Western park loop",
+          "Imperial Palace perimeter"
+        ],
+        "difficulty": "21.9 km with 307 m recorded gain. The recorded heights vary within a modest range; the total distance and city crossings are the more useful planning cues.",
+        "highlights": [
+          "The extra loop inside the western green space",
+          "The change from Harajuku-side streets to the palace district",
+          "Two distinct park-led chapters in one run"
+        ],
+        "caveats": [
+          "The start and finish sit on slightly different streets; check the final pin.",
+          "Interior park paths and access may differ from the recorded line."
+        ],
+        "seasonality": "Recorded in November. Leave time for the western park loop and the full palace circuit rather than treating either as a short stop.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. The suggested experience is interpretation, not a firsthand account; current access and exact surfaces have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "17576988805",
       "status": "approved",
-      "region": "Tokyo, Japan"
+      "region": "Tokyo, Japan",
+      "curation": {
+        "vibe": "This Tokyo run stretches west into Nakano instead of heading toward the palace or bay. A long southern leg carries the trace across Shinjuku, then a knot of smaller turns at the western end changes its rhythm. The return uses a more northerly line, making a broad, almost rectangular circuit. Its appeal is the scale of neighbourhood-to-neighbourhood exploration: a substantial slice of western Tokyo joined together on foot.",
+        "ideal_use": "A long urban wander for a day when the neighbourhoods themselves are the destination.",
+        "terrain": [
+          "Shinjuku street corridors",
+          "Nakano neighbourhood turns",
+          "Northern return connector"
+        ],
+        "difficulty": "19.8 km with 236 m recorded gain. Distance and frequent street navigation are the main commitments; the profile does not show a major mountain-style ascent.",
+        "highlights": [
+          "The long westward crossing of Shinjuku",
+          "A more intricate turning section around Nakano",
+          "A separate northern route home"
+        ],
+        "caveats": [
+          "Expect to manage street junctions rather than hold one uninterrupted line.",
+          "The western turning section has several closely spaced changes of direction; inspect that part of the map before the run."
+        ],
+        "seasonality": "Recorded in mid-November. Keep time for the western detour, which is the route’s most intricate section.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. The suggested experience is interpretation, not a firsthand account; current access and exact surfaces have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "17626995684",
       "status": "approved",
-      "region": "Japan"
+      "region": "Japan",
+      "curation": {
+        "vibe": "This route uses Kyoto’s north–south river corridor as a spine, then opens into a loop across the northern city. The outward line follows the eastern branch toward Sakyo Ward and curls around a green basin before crossing west to return down the other side. That broad northern triangle gives the run a clear destination, while the shared lower approach makes the last kilometres feel like a return along familiar ground.",
+        "ideal_use": "A half-marathon-length exploration with a straightforward river-led approach and a more varied northern loop.",
+        "terrain": [
+          "River corridor",
+          "Northern Kyoto street connections",
+          "Green-space perimeter"
+        ],
+        "difficulty": "21.2 km with 211 m recorded gain. The broad profile rises gradually toward the northern turn and falls on the return, rather than presenting one large hill.",
+        "highlights": [
+          "The split into two northern river branches",
+          "A green-space loop in Sakyo Ward",
+          "The long return toward central Kyoto"
+        ],
+        "caveats": [
+          "Check the northern turns carefully where the route leaves the main river corridor.",
+          "The start and finish are nearby but on different points of the eastern street approach."
+        ],
+        "seasonality": "Recorded in late November. Choose your timing around a full half-marathon distance, with optional pauses concentrated around the northern loop.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. The suggested experience is interpretation, not a firsthand account; current access and exact surfaces have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "17665674778",
       "status": "approved",
-      "region": "Tokyo, Japan"
+      "region": "Tokyo, Japan",
+      "curation": {
+        "vibe": "Tokyo opens toward the water on this 21.8 km circuit. The trace leaves the dense streets east of Chiyoda, bends south through the river-and-canal districts, then stretches onto the bay islands of Tokyo Bay. A small loop at the southern end turns the run back toward the city on a different line. The interest is in that expanding scale: tight street turns give way to long crossings and broad waterfront geography.",
+        "ideal_use": "A long exploratory run built around Tokyo Bay, with time to navigate the connections between islands.",
+        "terrain": [
+          "City street grid",
+          "Waterway crossings",
+          "Bay islands"
+        ],
+        "difficulty": "The distance makes this a substantial outing. The recorded profile stays within a narrow height range; navigation and accumulated kilometres matter more than a major climb.",
+        "highlights": [
+          "The transition from central Tokyo to the bay islands",
+          "A southern island loop before the return",
+          "Different outward and homeward approaches to the city"
+        ],
+        "caveats": [
+          "The original activity note reports difficulty finding a bridge crossing; inspect pedestrian access before following the same line.",
+          "Several short reversals appear in the southern section. Treat them as part of this recording, not a recommended shortcut."
+        ],
+        "seasonality": "Recorded in late November. For another attempt, choose a start time that leaves room for the full distance and any crossing detours.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. The suggested experience is interpretation, not a firsthand account; current access and exact surfaces have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "9953403673",
       "status": "approved",
-      "region": "Bali, Indonesia"
+      "region": "Bali, Indonesia",
+      "curation": {
+        "vibe": "A compact inland-and-coast circuit around Canggu, with a small northern loop giving the first half its shape. The trace heads up through Tibubeneng, curls above Canggu and returns south on a different line toward the water. A shorter shoreline section then leads into the final local streets. At 14.3 km, it keeps the variety of a larger Bali loop while staying much closer to its starting neighbourhood.",
+        "ideal_use": "A medium-length exploratory run combining inland streets with a coastal section.",
+        "terrain": [
+          "Tibubeneng streets",
+          "Northern Canggu loop",
+          "Short shoreline passage",
+          "Local street finish"
+        ],
+        "difficulty": "14.3 km with 89 m recorded gain. A modest inland rise gives way to a lower coastal section; this is principally a distance-and-navigation outing.",
+        "highlights": [
+          "The small loop north of Canggu",
+          "Using separate inland lines outward and back",
+          "The change from streets to shoreline near the finish"
+        ],
+        "caveats": [
+          "The coastal leg adds distance after you return south; include it when planning the full loop.",
+          "Check the shoreline connection instead of assuming the map line is a continuous footpath."
+        ],
+        "seasonality": "Recorded in late September. Plan for the coastal section as well as the inland loop when choosing the day’s timing.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. The suggested experience is interpretation, not a firsthand account; current access and exact surfaces have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "9945324433",
       "status": "approved",
-      "region": "Bali, Indonesia"
+      "region": "Bali, Indonesia",
+      "curation": {
+        "vibe": "This Bukit Peninsula circuit leaves the northern coastal edge and sweeps west toward Uluwatu before turning across the southern side of Pecatu. The long eastern arc climbs onto higher ground, then drops back toward the start. The result is a broad loop with a clear change in elevation and setting, rather than a beach-hopping route. The western turn supplies a destination; the rising inland middle gives the run its work.",
+        "ideal_use": "A substantial peninsula loop with a western landmark area and an inland climbing section.",
+        "terrain": [
+          "Pecatu road network",
+          "Uluwatu-area turn",
+          "Southern peninsula uplands"
+        ],
+        "difficulty": "18.5 km with 329 m recorded gain. The profile rises through the middle of the outing and descends late, so the eastern arc is more than a flat return.",
+        "highlights": [
+          "The western turn at Uluwatu",
+          "A long southern arc across the peninsula",
+          "The contrast between the lower start and higher inland section"
+        ],
+        "caveats": [
+          "Check admission and opening arrangements separately if adding a temple visit.",
+          "This is mainly an inland circuit, not continuous access to the cliffs or beaches."
+        ],
+        "seasonality": "Recorded in September. Choose timing and conditions for an 18.5 km outing with a sustained middle climb.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. The suggested experience is interpretation, not a firsthand account; current access and exact surfaces have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "9959792315",
       "status": "approved",
-      "region": "Bali, Indonesia"
+      "region": "Bali, Indonesia",
+      "curation": {
+        "vibe": "The coast is the payoff on this broad loop west of Canggu. The trace first heads inland through Tibubeneng and across toward Munggu, then turns through Cemagi to reach the sea. From there, a long diagonal shoreline leg carries it southeast before it bends back to the starting area. The route’s two halves have distinct shapes: a network of inland streets followed by the much simpler line of the coast.",
+        "ideal_use": "A coast-and-villages run when you want more variety than an out-and-back along the same beach.",
+        "terrain": [
+          "Tibubeneng and Canggu-area streets",
+          "Munggu–Cemagi connection",
+          "Long shoreline section"
+        ],
+        "difficulty": "17.3 km with 142 m recorded gain. The inland section rises modestly before the route drops toward the coast; distance matters more than climbing.",
+        "highlights": [
+          "The inland arc through Munggu toward Cemagi",
+          "The long southeastward coastal return",
+          "A loop that reaches farther west than the shorter Canggu outing"
+        ],
+        "caveats": [
+          "The original title mentions barefoot beach running, but footwear and current shoreline passability should be chosen for the conditions you find.",
+          "A coastal trace does not guarantee an unbroken maintained path."
+        ],
+        "seasonality": "Recorded at the start of October. Check shoreline conditions before treating the coastal half as a fixed connection.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. The suggested experience is interpretation, not a firsthand account; current access and exact surfaces have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "10075093128",
       "status": "approved",
-      "region": "Bali, Indonesia"
+      "region": "Bali, Indonesia",
+      "curation": {
+        "vibe": "This Bali outing goes across the uplands rather than straight up them. From Muncan, it follows a long eastward line through the Peringsari and Selat area toward Duda, with a short loop near the far end before returning. The profile rolls through several rises around the turnaround, never building into the sustained ascent of the neighbouring mountainward route. Its character is a linked village journey: a long outward thread, a small variation, then familiar ground home.",
+        "ideal_use": "A rolling long run connecting upland settlements without making a high climb the central objective.",
+        "terrain": [
+          "Village road connections",
+          "Rolling upland corridor",
+          "Small eastern loop"
+        ],
+        "difficulty": "22.7 km with 328 m recorded gain. The profile’s more noticeable rises cluster toward the eastern half; there is still a long return after them.",
+        "highlights": [
+          "The Muncan-to-Duda eastward connection",
+          "A small loop that separates the two lines at the far end",
+          "Rolling terrain instead of one prolonged climb"
+        ],
+        "caveats": [
+          "Most of the route is an out-and-back; the eastern loop does not create a separate route home.",
+          "Plan supplies around the distance rather than assuming facilities from village labels alone."
+        ],
+        "seasonality": "Recorded in October. Allow time for the entire return leg after the eastern loop, especially if you pause along the way.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. The suggested experience is interpretation, not a firsthand account; current access and exact surfaces have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "10082410891",
       "status": "approved",
-      "region": "Bali, Indonesia"
+      "region": "Bali, Indonesia",
+      "curation": {
+        "vibe": "A single rising line gives this Bali run its purpose. From the Muncan area, the trace heads north toward the uplands below Besakih, climbing steadily to its farthest point before turning back. The return mostly parallels the outward route, with a separate line through the middle section. The profile builds from roughly 500 m to above 1,100 m: a sustained uphill journey followed by an equally substantial descent, rather than a collection of short village loops.",
+        "ideal_use": "A focused climbing day with a clear turnaround and a long descent home.",
+        "terrain": [
+          "Muncan-area roads",
+          "Upland ascent toward Besakih",
+          "Partly separate return line"
+        ],
+        "difficulty": "19.8 km with 715 m recorded gain. A long continuous rise dominates the profile; manage effort for both the climb and the descent.",
+        "highlights": [
+          "The sustained northward ascent",
+          "A high turnaround below the Besakih area",
+          "Seeing the same upland corridor from the opposite direction"
+        ],
+        "caveats": [
+          "The recording stops on the lower uplands; it is not a volcano summit route.",
+          "The return shares much of the outward corridor, so shortening the day requires an earlier turnaround."
+        ],
+        "seasonality": "Recorded in October. Choose conditions appropriate for a prolonged climb and descent, and plan the turnaround before committing to the full ascent.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. The suggested experience is interpretation, not a firsthand account; current access and exact surfaces have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "19631700716",
@@ -1097,22 +1515,111 @@
     {
       "activity_id": "17616195995",
       "status": "approved",
-      "region": "Okayama, Japan"
+      "region": "Okayama, Japan",
+      "curation": {
+        "vibe": "The map places this outing in Tamano, on Okayama’s coast, and its shape is more varied than a simple waterfront run. From the town, it heads into the hills and around inland water before crossing east for another short climb. The return drops toward the harbour and adds a compact coastal loop. Two distinct rises break up the 21 km, with the shoreline providing a different final chapter.",
+        "ideal_use": "A varied long run that combines inland climbing with a coastal return to Tamano.",
+        "terrain": [
+          "Town streets",
+          "Hillside connections",
+          "Reservoir-side section",
+          "Harbour and coastal loop"
+        ],
+        "difficulty": "21 km and 514 m recorded gain. The profile shows two substantial climbing phases, so this asks more than a flat run of the same length.",
+        "highlights": [
+          "The inland water and hill section northwest of town",
+          "A second climb above the eastern coast",
+          "The final loop beside Tamano’s harbour"
+        ],
+        "caveats": [
+          "Several branches lead away from the main loop, including a northern spur; preview those turns before starting.",
+          "Allow time for the climbs rather than judging the day only by distance."
+        ],
+        "seasonality": "Recorded in November. A daylight window that covers both the hills and the coastal return suits the route’s varied shape.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. The suggested experience is interpretation, not a firsthand account; current access and exact surfaces have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "17606492777",
       "status": "approved",
-      "region": "Hiroshima, Japan"
+      "region": "Hiroshima, Japan",
+      "curation": {
+        "vibe": "Hiroshima’s waterways lead this route out of the city and into the bay. After a short urban opening, the trace follows the delta south, crosses onto Ujinashima and makes a full circuit of its small wooded outline. It returns through a different part of the river-and-street network. The island is the natural centrepiece: a compact coastal turn set inside a much longer journey from the city.",
+        "ideal_use": "A city-to-water long run with an unmistakable island turning point.",
+        "terrain": [
+          "Urban streets",
+          "River-delta corridors",
+          "Ujinashima coastal circuit"
+        ],
+        "difficulty": "19.3 km with 272 m recorded gain. Most of the trace stays near the delta; isolated elevation spikes should not be read as major sustained climbs.",
+        "highlights": [
+          "Following the city’s water network toward the bay",
+          "The complete Ujinashima circuit",
+          "A different urban line on the way back"
+        ],
+        "caveats": [
+          "The route changes between streets, crossings and waterfront sections; it is not one continuous promenade.",
+          "Start and finish are close, but not exactly coincident."
+        ],
+        "seasonality": "Recorded in late November. Leave space in the schedule for the island circuit rather than making the outward city leg the whole outing.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. The suggested experience is interpretation, not a firsthand account; current access and exact surfaces have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "17597564971",
       "status": "approved",
-      "region": "Hiroshima, Japan"
+      "region": "Hiroshima, Japan",
+      "curation": {
+        "vibe": "The opening kilometres move east through Hiroshima’s urban fabric, but the route’s real destination lies in the hills beyond Fuchu. There the street-like lines give way to a tightly bending climb and a short high-point spur. A different descent completes the hill circuit before the long return west. It is a useful contrast to the city’s bay routes: the same urban starting point, but a distinctly uphill middle.",
+        "ideal_use": "A long run with a concentrated climbing objective, reached directly from central Hiroshima.",
+        "terrain": [
+          "Urban approach",
+          "Hills east of Fuchu",
+          "Winding ascent and descent"
+        ],
+        "difficulty": "22.2 km with 497 m recorded gain. The profile has one dominant middle climb followed by a steep drop; save energy for that central hill section.",
+        "highlights": [
+          "The transition beyond Fuchu into the hills",
+          "A winding high section with a short spur",
+          "Separate ascending and descending sides of the hill loop"
+        ],
+        "caveats": [
+          "The northern tip is an out-and-back spur, not a through connection.",
+          "The map confirms hillside geometry but not the surface or technical difficulty of the upper section."
+        ],
+        "seasonality": "Recorded in November. Plan enough daylight for the hill section as well as the urban kilometres on either side.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. The suggested experience is interpretation, not a firsthand account; current access and exact surfaces have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "17586941421",
       "status": "approved",
-      "region": null
+      "region": null,
+      "curation": {
+        "vibe": "A wide Tokyo loop linking two very different green anchors. The trace heads southwest from the northern starting area, skirts the large wooded park area on the Shibuya side, then crosses east through the city to circle the Imperial Palace perimeter. The final leg closes the loop from Chiyoda. Long connectors give the run its scale, while the park edges and palace outline keep it from becoming an arbitrary tour of the grid.",
+        "ideal_use": "A 20 km city exploration that pairs western Tokyo with the palace district in one circuit.",
+        "terrain": [
+          "City streets",
+          "Western park perimeter",
+          "Imperial Palace perimeter"
+        ],
+        "difficulty": "A substantial 20 km run with repeated urban direction changes. Leave room for crossings and route-finding between the two green anchors.",
+        "highlights": [
+          "The large western green-space perimeter",
+          "The recognizable palace circuit",
+          "Connecting Shibuya-side streets with Chiyoda"
+        ],
+        "caveats": [
+          "The trace goes around major green spaces; it does not establish entry into their interior grounds.",
+          "Allow for crossings on the long city connectors."
+        ],
+        "seasonality": "Recorded in November. Pick a start time for a full city circuit rather than assuming the park sections make the whole route uninterrupted.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. The suggested experience is interpretation, not a firsthand account; current access and exact surfaces have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "17553452786",
@@ -1747,7 +2254,29 @@
     {
       "activity_id": "16366737881",
       "status": "approved",
-      "region": "Bragg Creek, AB"
+      "region": "Bragg Creek, AB",
+      "curation": {
+        "vibe": "A long, wandering forest run west of Bragg Creek, built from a broad northern loop and a smaller western excursion. The opening kilometres roll gently before the route gains height through its middle section, reaching its highest ground roughly two-thirds of the way through. The return unwinds toward the southern approach, but finishes farther east than it began. This is a route for settling into the woods and letting the distance accumulate.",
+        "ideal_use": "An exploratory long run with enough time for the western extension and an unhurried return.",
+        "terrain": [
+          "Forested loops west of Bragg Creek",
+          "Rolling ground with a higher middle section",
+          "A shared southern approach"
+        ],
+        "difficulty": "A demanding 24.1 km outing with 668 m of recorded climbing. Save some energy for the climb in the middle-to-late part of the route.",
+        "highlights": [
+          "The broad northern circuit",
+          "A western spur reaching the highest part of the recording",
+          "A long descent toward the southern finish"
+        ],
+        "caveats": [
+          "The finish lies about a kilometre east of the start; arrange the return before setting off.",
+          "The original activity note mentions falling into a swamp; check present ground conditions rather than assuming a dry route."
+        ],
+        "seasonality": "Recorded in early August. Ground conditions matter here: the owner’s summer note describes a wet section.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. Suggested experience is interpretation, not a firsthand account; current access and path conditions have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "16366732835",
@@ -2232,12 +2761,56 @@
     {
       "activity_id": "15573295095",
       "status": "approved",
-      "region": null
+      "region": null,
+      "curation": {
+        "vibe": "Banff provides the starting point, but the centrepiece is the large climb south of town. The route crosses the Bow River, takes a long western approach and then rises steadily toward its high point around halfway. A tightly turning descent drops down the eastern side before the line returns to town. The contrast is the attraction: an easy-to-read valley opening, a sustained mountain middle and a long release back toward the river.",
+        "ideal_use": "A substantial mountain run when climbing is the main event and you can give the descent as much attention as the ascent.",
+        "terrain": [
+          "Town approach and Bow River crossing",
+          "Long climbing leg south of Banff",
+          "A switchback descent on the eastern return"
+        ],
+        "difficulty": "A hard 22.0 km run with 965 m of recorded climbing and a high point above 2,200 m. The sustained ascent is much more significant than the town start suggests.",
+        "highlights": [
+          "The western approach beside the Bow valley",
+          "One dominant ascent through the middle of the route",
+          "The change from broad climbing line to tight descending turns"
+        ],
+        "caveats": [
+          "The mountain section commits you well beyond the town loop; plan supplies for the full distance.",
+          "Check current trail and upper-mountain conditions before reusing this May recording."
+        ],
+        "seasonality": "Recorded in late May, with the route reaching above 2,200 m. Choose a day on the basis of current mountain conditions.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. Suggested experience is interpretation, not a firsthand account; current access and path conditions have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "15562324390",
       "status": "approved",
-      "region": null
+      "region": null,
+      "curation": {
+        "vibe": "A wide-ranging Banff circuit that explores the eastern valley rather than heading for a summit. A small opening loop south of town leads across the Bow, then the route stretches northeast toward Anthracite before curling back beside the river corridor. Its appeal is the changing scale: streets and bridges give way to a generous sweep of green space, with Banff drawing back into view at the end.",
+        "ideal_use": "A sightseeing long run that links Banff with the valley to its east, with room to pause rather than chase an even pace.",
+        "terrain": [
+          "Town streets and river crossings",
+          "Green-space circuit east of Banff",
+          "A northern arc near Anthracite"
+        ],
+        "difficulty": "A substantial 23.3 km distance day. The elevation profile stays within roughly 100 m of vertical range, so the recorded 620 m cumulative total should not be read as a single mountain ascent.",
+        "highlights": [
+          "The opening loop south of the river",
+          "The long eastern reach toward Anthracite",
+          "Returning through the Bow River corridor"
+        ],
+        "caveats": [
+          "The start is south of the river and the finish is in town; they are not the same meeting point.",
+          "Allow time for junctions and changes of direction across the larger eastern loop."
+        ],
+        "seasonality": "Recorded in late May. Plan this as a valley route and check the conditions of the riverside connections for your day.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. Suggested experience is interpretation, not a firsthand account; current access and path conditions have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "15560275734",
@@ -2402,7 +2975,29 @@
     {
       "activity_id": "15182597704",
       "status": "approved",
-      "region": "Calgary, AB"
+      "region": "Calgary, AB",
+      "curation": {
+        "vibe": "Two long circuits turn the edge of Calgary’s large northern park into a full-distance outing. The trace repeatedly follows the green space between Shaganappi Trail and John Laurie Boulevard, rising and falling around its perimeter instead of cutting straight across the middle. Familiar landmarks come around again on the second pass, but the accumulated distance changes the feel: this is a local loop stretched into a purposeful long day.",
+        "ideal_use": "A long run built around repeatable laps, useful when you want a substantial outing without travelling far from the same park.",
+        "terrain": [
+          "Large urban-park perimeter",
+          "Repeated rolling circuits",
+          "Short connecting variations near the southern end"
+        ],
+        "difficulty": "27.6 km makes this one of the longer runs in the collection. Repeated rises add work even though the route stays in one park.",
+        "highlights": [
+          "Two recognisable circuits of the same green space",
+          "Long park edges framed by Calgary neighbourhoods",
+          "A familiar southern return after each lap"
+        ],
+        "caveats": [
+          "Several lines overlap around the perimeter; use the recorded order if recreating the full distance.",
+          "The cumulative climb includes repeated terrain and should not suggest a continuous 692 m ascent."
+        ],
+        "seasonality": "Recorded in April. Choose footwear and timing for the current park surface conditions rather than the calendar alone.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. Suggested experience is interpretation, not a firsthand account; current access and path conditions have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "15182597694",
@@ -2467,7 +3062,30 @@
     {
       "activity_id": "14736711660",
       "status": "approved",
-      "region": null
+      "region": null,
+      "curation": {
+        "vibe": "This is San Francisco drawn with a playful detour: a row of repeated block-sized teeth interrupts the westward leg through the Richmond District. Beyond that “zipper,” the route reaches the Pacific, turns south along Ocean Beach and runs back east through Golden Gate Park. The final city section continues north to the bay waterfront. It is a 28.5 km crossing of the city’s width, with the ocean and bay as separate rewards.",
+        "ideal_use": "A big exploratory run with an unusual street pattern, a park traverse and a waterfront finish.",
+        "terrain": [
+          "Richmond District streets",
+          "Pacific coastal section",
+          "Golden Gate Park",
+          "Urban finish toward the bay"
+        ],
+        "difficulty": "28.5 km with 493 m recorded gain. The repeated turns and several broad rises add work to an already long route.",
+        "highlights": [
+          "The deliberate zipper pattern across Richmond blocks",
+          "Turning from the Pacific into Golden Gate Park",
+          "Finishing on the northern waterfront"
+        ],
+        "caveats": [
+          "The finish is at the bay, not at the inland starting point.",
+          "The zipper adds turns and distance; follow it deliberately if you want to reproduce this particular route."
+        ],
+        "seasonality": "Recorded in March. Set aside a long-run block with room for both the Pacific section and the final journey to the bay.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. The suggested experience is interpretation, not a firsthand account; current access and exact surfaces have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "14709927531",
@@ -2587,7 +3205,29 @@
     {
       "activity_id": "14486170630",
       "status": "approved",
-      "region": "London, UK"
+      "region": "London, UK",
+      "curation": {
+        "vibe": "A half-marathon-sized sweep through London, with the Thames as its long middle chapter. From Somers Town, the recorded route heads south through Holborn to the river, follows it past Westminster toward Chelsea, then turns north to Kensington Gardens. The return links Bayswater and Paddington with the eastern side of Regent’s Park and Camden: a city-scale outing that keeps changing its setting.",
+        "ideal_use": "An exploratory long run when you want a cross-section of London rather than repeated laps. Give the river and parks room in the day; this route rewards looking around.",
+        "terrain": [
+          "City streets",
+          "Thames-side sections",
+          "Kensington Gardens and the edge of Regent’s Park"
+        ],
+        "difficulty": "A substantial 21.4 km run. Treat it as a distance day, with room for stops at crossings and changes of direction.",
+        "highlights": [
+          "The long Thames arc from Westminster toward Chelsea",
+          "The shift from the river to Kensington Gardens",
+          "A return through Paddington, Regent’s Park and Camden"
+        ],
+        "caveats": [
+          "The finish is near the start, but at a different point in Somers Town; check both pins when planning your return.",
+          "Allow for city crossings rather than expecting an uninterrupted pace."
+        ],
+        "seasonality": "Recorded on a February morning. Choose the day for the distance and the weather; the recording does not establish year-round park access.",
+        "editorial_note": "AI-written from a review of the recorded route and map. Place sequence follows the trace; the suggested experience is interpretation, not a firsthand account. Path surfaces and current access have not been checked.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "14478559092",
@@ -2617,7 +3257,29 @@
     {
       "activity_id": "14422331296",
       "status": "approved",
-      "region": null
+      "region": null,
+      "curation": {
+        "vibe": "Corralejo’s dune country gives this run its shape: a long oval reaching south from Geafond, with one side farther inland and the other closer to the eastern shore. The 17.9 km trace trades a single big climb for small rises and falls, then climbs back toward town. It is a broad exploration of the land behind the coast, rather than a waterfront promenade.",
+        "ideal_use": "A longer exploratory run for a day when the dune landscape is the destination. Leave enough energy for the rising return toward Geafond.",
+        "terrain": [
+          "Dune-country circuit south of Corralejo",
+          "Low rolling profile",
+          "Town-edge approach and finish"
+        ],
+        "difficulty": "17.9 km with 282 m of recorded climbing: a substantial outing, with the final rise arriving after most of the distance.",
+        "highlights": [
+          "The elongated loop through the dune belt",
+          "Different inland and coastward legs",
+          "A return toward Geafond after the southern turn"
+        ],
+        "caveats": [
+          "The finish is about 1 km from the start in a straight line; it is not a closed doorstep loop.",
+          "Choose established permitted paths through the dunes rather than treating every recorded line as a signed route."
+        ],
+        "seasonality": "Recorded in early February. For a repeat, plan the exposed middle of the outing around the day’s sun and wind.",
+        "editorial_note": "AI-written from the recorded route, its elevation profile, the original activity notes and a visual map review. The suggested experience is interpretation, not a firsthand account.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "14411624533",
@@ -2627,7 +3289,29 @@
     {
       "activity_id": "14394581660",
       "status": "approved",
-      "region": null
+      "region": null,
+      "curation": {
+        "vibe": "This route draws two different coastlines into one Corralejo run. From the Geafond area it reaches the town and the northern shore, stretching west along the coast before returning, while an eastern shoreline section adds another perspective. The 27.4 km recording stays close to low ground, but repeated changes of direction and the final rise back inland give it more shape than a simple beachside out-and-back.",
+        "ideal_use": "A coastal long-run idea with room to shorten the western excursion if the day calls for less distance.",
+        "terrain": [
+          "Town streets and coastal corridors",
+          "Repeated shoreline sections",
+          "Low recorded elevation profile with a rising finish"
+        ],
+        "difficulty": "27.4 km with 441 m of recorded climbing. Treat the full version as a long run even though it lacks a large sustained ascent.",
+        "highlights": [
+          "Corralejo seen from both its northern and eastern shores",
+          "The westward coastal spur",
+          "Return to almost the same point in Geafond"
+        ],
+        "caveats": [
+          "The original activity title specifically mentions strong wind; that is an account of this outing, not a measured forecast.",
+          "Expect repeated sections rather than a continuous loop."
+        ],
+        "seasonality": "Recorded in late January. Check wind conditions when choosing how far to commit along the coast.",
+        "editorial_note": "AI-written from the recorded route, its elevation profile, the original activity notes and a visual map review. The suggested experience is interpretation, not a firsthand account.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "14384959859",
@@ -2652,7 +3336,29 @@
     {
       "activity_id": "14349820520",
       "status": "approved",
-      "region": null
+      "region": null,
+      "curation": {
+        "vibe": "Lajares is the hinge of this wide loop to Fuerteventura’s western edge. The route reaches El Cotillo, follows the coast south, and bends inland into a more elevated return, including a small extra loop away from the main circuit. Its 32.9 km combine a long coastal sweep with a noticeably hillier second act: an outing with two distinct settings rather than one prolonged shoreline.",
+        "ideal_use": "A demanding coastal-and-inland long day, with the later climbing kept in mind when pacing the opening kilometres.",
+        "terrain": [
+          "Lajares and El Cotillo approaches",
+          "Western coastal section",
+          "Rolling inland return with a higher late climb"
+        ],
+        "difficulty": "32.9 km and 862 m of recorded climbing. The elevation profile puts substantial work later in the route.",
+        "highlights": [
+          "The turn from El Cotillo onto the western coast",
+          "The broad southern arc",
+          "The inland climbing section before returning to Lajares"
+        ],
+        "caveats": [
+          "The small inland detour is part of the recording; review it before treating it as an essential destination.",
+          "Confirm current access and supplies for the coastal and inland stretches."
+        ],
+        "seasonality": "Recorded in late January. Pick a day with enough daylight for the full circuit and a forecast suited to both coast and hills.",
+        "editorial_note": "AI-written from the recorded route, its elevation profile, the original activity notes and a visual map review. The suggested experience is interpretation, not a firsthand account.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "14339208157",
@@ -2702,7 +3408,29 @@
     {
       "activity_id": "14262327221",
       "status": "approved",
-      "region": null
+      "region": null,
+      "curation": {
+        "vibe": "Las Palmas becomes a much larger city on this inland sweep. The recording leaves the Ciudad Jardín area, passes the eastern city and Triana, and works through rising neighbourhoods toward Lomo Blanco and Tamaraceite before returning toward Guanarteme. It is a 25.9 km portrait of the city beyond its beachfront, though the owner’s note about an awkward overpass detour makes it a route to edit before repeating.",
+        "ideal_use": "Explore the recorded city circuit in Replay, or use its neighbourhood sequence as a starting point for a freshly checked long-run plan.",
+        "terrain": [
+          "Urban streets and neighbourhood connectors",
+          "An extended elevated inland section",
+          "Descent toward the Guanarteme side of the city"
+        ],
+        "difficulty": "25.9 km with 625 m of recorded climbing; the middle of the run contains most of the elevated terrain.",
+        "highlights": [
+          "The transition from the eastern city to inland neighbourhoods",
+          "The long arc through Lomo Blanco and Tamaraceite",
+          "A return toward the western waterfront side of Las Palmas"
+        ],
+        "caveats": [
+          "The owner’s original description reports being routed up a dirt pile under an overpass. Rework that connection before repeating the line.",
+          "The finish is about 1.3 km from the start in a straight line."
+        ],
+        "seasonality": "Recorded in mid-January. Any repeat should be planned around current city connections and the day’s conditions, rather than copied turn for turn.",
+        "editorial_note": "AI-written from the recorded route, its elevation profile, the original activity notes and a visual map review. The suggested experience is interpretation, not a firsthand account.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "14258926646",
@@ -2777,7 +3505,29 @@
     {
       "activity_id": "14160295943",
       "status": "approved",
-      "region": null
+      "region": null,
+      "curation": {
+        "vibe": "A 37.2 km sweep from Las Palmas into the country around Arucas, with a coastline start and finish framing a long inland middle. The trace threads Tamaraceite, Santidad Baja and the Arucas area, then crosses the folded ground around Los Giles on its return. The scale is compelling; the owner’s freeway-routing warning is equally important, making this a record to learn from rather than follow unedited.",
+        "ideal_use": "Relive the inland excursion, or build a new route around its town-to-country contrast after checking every major-road connection.",
+        "terrain": [
+          "Urban departure from Las Palmas",
+          "Inland settlement links around Arucas",
+          "Repeated climbs and descents west of the city"
+        ],
+        "difficulty": "37.2 km and 1,036 m of recorded climbing. This is a demanding distance day with repeated climbing rather than one isolated hill.",
+        "highlights": [
+          "The reach from Las Palmas to Arucas",
+          "The rolling inland section around Los Giles",
+          "The descent back toward the coast"
+        ],
+        "caveats": [
+          "The original activity title reports a routing suggestion onto a freeway; do not assume the recorded connections are suitable pedestrian routes.",
+          "Start and finish are about 500 m apart in a straight line."
+        ],
+        "seasonality": "Recorded in early January. Allow a generous daylight window if using the geography to design a checked alternative.",
+        "editorial_note": "AI-written from the recorded route, its elevation profile, the original activity notes and a visual map review. The suggested experience is interpretation, not a firsthand account.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "14154376146",
@@ -2797,17 +3547,83 @@
     {
       "activity_id": "14130782031",
       "status": "approved",
-      "region": null
+      "region": null,
+      "curation": {
+        "vibe": "From the sea at Loutro to the plateau at Anopoli, this recording is defined by a dramatic change in height. It wraps west around the coast through Finikas and Likos before turning inland toward Aradena and climbing to its finish. The 15.1 km are only part of the story: the owner describes extensive rock-wall scrambling, so its striking coastal-to-mountain shape should not be mistaken for an ordinary runnable loop.",
+        "ideal_use": "A vivid route to revisit in Replay. Consider any repeat only after a separate, current assessment of the scrambling sections and access.",
+        "terrain": [
+          "Coastal opening west of Loutro",
+          "Inland ascent through the Aradena area",
+          "High finish at Anopoli"
+        ],
+        "difficulty": "15.1 km with 868 m of recorded ascent and a finish roughly 600 m above the start in the recording. Owner-reported scrambling adds difficulty beyond the metrics.",
+        "highlights": [
+          "The coastal arc through Finikas and Likos",
+          "The sustained rise from the sea toward Aradena",
+          "Finishing on the Anopoli plateau"
+        ],
+        "caveats": [
+          "The owner’s description reports scaling rock walls for much of the outing; do not present this as a conventional trail run.",
+          "This is point-to-point. It ends in Anopoli, not back in Loutro."
+        ],
+        "seasonality": "Recorded on January 2. Conditions on the coastal and climbing sections need their own current assessment; the date is not a recommendation of a season.",
+        "editorial_note": "AI-written from the recorded route, its elevation profile, the original activity notes and a visual map review. The suggested experience is interpretation, not a firsthand account.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "14130772463",
       "status": "approved",
-      "region": null
+      "region": null,
+      "curation": {
+        "vibe": "The short distance disguises the scale of this descent. Starting at Anopoli, the recording crosses the slopes below the village, includes an eastward spur, and then drops through a tightly turning line to Loutro and its bay. At 7.4 km it reads as one chapter of a bigger day: the original title says the watch was stopped partway through, and the companion recording starts near this coastal finish.",
+        "ideal_use": "Revisit the plateau-to-sea transition, or examine it alongside the separate Loutro-to-Anopoli recording before planning a complete outing.",
+        "terrain": [
+          "High village start",
+          "Sloping traverse with an eastward spur",
+          "Sustained descent to Loutro Bay"
+        ],
+        "difficulty": "7.4 km with 187 m of recorded climbing, but nearly 600 m of net descent in the recording. It is not an easy route simply because ascent is low.",
+        "highlights": [
+          "The height difference between Anopoli and the bay",
+          "The compact descending turns above Loutro",
+          "A finish beside the coast"
+        ],
+        "caveats": [
+          "The owner says the recording was stopped partway through; this file should not be treated as the complete day.",
+          "Arrange the separate start and finish rather than expecting a loop."
+        ],
+        "seasonality": "Recorded in early January. Plan any descent around current footing and visibility, not the relatively short distance alone.",
+        "editorial_note": "AI-written from the recorded route, its elevation profile, the original activity notes and a visual map review. The suggested experience is interpretation, not a firsthand account.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "14130768855",
       "status": "approved",
-      "region": null
+      "region": null,
+      "curation": {
+        "vibe": "A New Year’s circuit through the inland villages west of Rethymno, shaped by a lower middle and a climbing return. The 29.1 km recording connects the Moundros area with Roustika, Agios Konstantinos, Koufi, Argyroupoli and Kato Poros, closing near its southern start. Its appeal is the succession of villages and connecting folds of land, rather than a single summit or beach.",
+        "ideal_use": "A village-to-village long-run idea for a day when exploring the inland landscape matters more than maintaining an even pace.",
+        "terrain": [
+          "Inland village connections",
+          "Rolling countryside",
+          "A sustained rise toward the finish"
+        ],
+        "difficulty": "29.1 km and 803 m of recorded climbing, with meaningful uphill work after the low point late in the route.",
+        "highlights": [
+          "A circuit connecting several distinct inland villages",
+          "The northern arc around Koufi",
+          "The climbing return toward Moundros"
+        ],
+        "caveats": [
+          "The original activity title mentions mud on this outing; do not assume the same footing in another season.",
+          "Review the small spurs and backtracking around the villages before repeating the trace."
+        ],
+        "seasonality": "Recorded on January 1. The owner’s mud reference makes recent rainfall a useful part of planning a repeat.",
+        "editorial_note": "AI-written from the recorded route, its elevation profile, the original activity notes and a visual map review. The suggested experience is interpretation, not a firsthand account.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "14130758379",
@@ -2852,7 +3668,29 @@
     {
       "activity_id": "14064880083",
       "status": "approved",
-      "region": null
+      "region": null,
+      "curation": {
+        "vibe": "A Christmas Day recording with two very different halves: climbing and detours around Paleochora and the slopes toward Anydri, followed by a long eastward coastal reach. The map suggests a varied 21.2 km day, but the owner’s account adds the essential texture: much of it involved climbing up and down rock walls. It is an adventurous memory with a difficult line, not a simple seaside half marathon.",
+        "ideal_use": "Revisit the coastal scenery and the day’s unusual route in Replay. A repeat needs a newly checked plan, especially around the climbing sections.",
+        "terrain": [
+          "Paleochora town and peninsula",
+          "Hillside detours below Anydri",
+          "An extended coastal out-and-back east of town"
+        ],
+        "difficulty": "21.2 km and 880 m of recorded climbing. Owner-reported rock-wall climbing makes the usual running-distance comparison misleading.",
+        "highlights": [
+          "The shift from climbing inland to the low coastal section",
+          "The eastward reach along Crete’s southern shore",
+          "Returning to Paleochora after a varied circuit"
+        ],
+        "caveats": [
+          "The owner reports extensive rock-wall climbing in the original activity title. Do not treat the whole recording as a runnable path.",
+          "The map does not identify which obstacles remain or where a suitable bypass lies."
+        ],
+        "seasonality": "Recorded on December 25. Review current conditions and access before considering an alternative through this area.",
+        "editorial_note": "AI-written from the recorded route, its elevation profile, the original activity notes and a visual map review. The suggested experience is interpretation, not a firsthand account.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "14064872191",
@@ -2892,12 +3730,56 @@
     {
       "activity_id": "14030669837",
       "status": "approved",
-      "region": null
+      "region": null,
+      "curation": {
+        "vibe": "Stavros anchors this broad loop through the northern Akrotiri peninsula. The route leaves the small coastal settlement, crosses the high ground to the east, and draws a second inland arc before returning from the south. Two clear climbs give the 21.4 km recording its rhythm. This is the inland side of a coastal place, with a compact start and finish and a much wider middle.",
+        "ideal_use": "An exploratory peninsula run to study for a day with time for route-finding and pauses, rather than a predictable coastal jog.",
+        "terrain": [
+          "Stavros settlement approach",
+          "Northern peninsula slopes",
+          "A broad inland return"
+        ],
+        "difficulty": "21.4 km with 658 m of recorded climbing. Two distinct rises make the outing more demanding than a flat half marathon.",
+        "highlights": [
+          "A loop reaching east from Stavros into the peninsula",
+          "The contrast between the coastal start and interior high ground",
+          "Two pronounced climbs in the recorded profile"
+        ],
+        "caveats": [
+          "The original activity title describes awkward travel past animal remains; it is an owner account, not evidence of present-day conditions.",
+          "Check the inland connections before treating this record as an established trail itinerary."
+        ],
+        "seasonality": "Recorded in late December. A repeat should be chosen for current ground conditions and available daylight.",
+        "editorial_note": "AI-written from the recorded route, its elevation profile, the original activity notes and a visual map review. The suggested experience is interpretation, not a firsthand account.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "14023448720",
       "status": "approved",
-      "region": null
+      "region": null,
+      "curation": {
+        "vibe": "Balos is the turn-around chapter of this long peninsula run. The recording stretches north from the Kaliviani side, follows the eastern flank of the Gramvousa peninsula, and drops to the lagoon area before climbing back out and retracing much of the approach. Its 21.5 km earn the coastal destination twice: first through the outward approach, then through the return climb away from the water.",
+        "ideal_use": "A destination-focused long-run idea where the lagoon is the midpoint of the day, not the finish.",
+        "terrain": [
+          "Peninsula approach above the coast",
+          "Descent toward the lagoon",
+          "A largely shared outward and return corridor"
+        ],
+        "difficulty": "21.5 km and 606 m of recorded climbing. Save energy for the climb after the low point around the lagoon.",
+        "highlights": [
+          "The long northward peninsula approach",
+          "The small loop at the Balos end of the route",
+          "The repeated coastal perspective on the return"
+        ],
+        "caveats": [
+          "Most of the route is out-and-back; reaching Balos still leaves the return journey.",
+          "Confirm current visitor access and the permitted route to the lagoon before going."
+        ],
+        "seasonality": "Recorded in December. Check current access arrangements and plan the return within the day’s daylight.",
+        "editorial_note": "AI-written from the recorded route, its elevation profile, the original activity notes and a visual map review. The suggested experience is interpretation, not a firsthand account.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "14023440545",
@@ -2957,7 +3839,29 @@
     {
       "activity_id": "13971753429",
       "status": "approved",
-      "region": null
+      "region": null,
+      "curation": {
+        "vibe": "Delphi is the low anchor of a route that quickly commits to the high ground above it. A long climbing stem opens into a northern loop toward the Kalyvia Livadiou area, then returns to the same descent into town. Across 26.2 km, the profile rises from roughly 535 m to above 1,300 m: the central experience is time spent high above the starting point.",
+        "ideal_use": "A substantial mountain-day idea to examine carefully before repeating, with climbing fitness and enough time for the descending return.",
+        "terrain": [
+          "Steeply rising approach from Delphi",
+          "High inland loop",
+          "A shared ascent and descent corridor near town"
+        ],
+        "difficulty": "26.2 km and 982 m of recorded climbing. The prolonged ascent and high middle section make this a demanding outing.",
+        "highlights": [
+          "The long rise directly above Delphi",
+          "The loop across higher ground north of town",
+          "Returning down the same mountain approach"
+        ],
+        "caveats": [
+          "The owner’s description mentions a large crevice; the recording does not establish its exact location or a suitable bypass.",
+          "The high point exceeds 1,300 m in the recording, so town conditions are not enough to plan the upper route."
+        ],
+        "seasonality": "Recorded in December. Check current mountain conditions before considering the upper section.",
+        "editorial_note": "AI-written from the recorded route, its elevation profile, the original activity notes and a visual map review. The suggested experience is interpretation, not a firsthand account.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "13971739292",
@@ -2987,7 +3891,29 @@
     {
       "activity_id": "13941094274",
       "status": "approved",
-      "region": null
+      "region": null,
+      "curation": {
+        "vibe": "A Hydra island run that trades the harbour and coast for a climbing return through the interior. From Hydra town the recording follows the northern coast through Vlychos and Palamidas, reaches the Episkopi side of the island, then climbs across the interior before returning toward town. The 19.7 km are unusually varied for their length: a low coastal opening gives way to a much higher, climbing second half.",
+        "ideal_use": "A full island outing to study for its coast-to-interior contrast, with more time and climbing effort than a coastal distance run would suggest.",
+        "terrain": [
+          "Northern coast through Vlychos and Palamidas",
+          "Interior island crossing",
+          "High return above Hydra town"
+        ],
+        "difficulty": "19.7 km with 931 m of recorded climbing. The large late climb is the main commitment.",
+        "highlights": [
+          "The coastal link between Hydra town and Vlychos",
+          "The western reach toward Episkopi",
+          "The climb into the island interior before returning"
+        ],
+        "caveats": [
+          "The finish is uphill from the harbour-side start and roughly 350 m away in a straight line.",
+          "Plan island transport around the full outing and the uphill finish above the harbour."
+        ],
+        "seasonality": "Recorded in early December. Check island transport and conditions for the higher inland section when planning another visit.",
+        "editorial_note": "AI-written from the recorded route, its elevation profile, the original activity notes and a visual map review. The suggested experience is interpretation, not a firsthand account.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "13935089699",
@@ -3102,7 +4028,30 @@
     {
       "activity_id": "13835672113",
       "status": "approved",
-      "region": null
+      "region": null,
+      "curation": {
+        "vibe": "San Francisco’s hill country is the centre of this run, reached from a start near the bay. The trace crosses downtown, climbs through the central neighbourhoods and bends around the city’s prominent southern hill cluster. It then works north through the eastern edge of Golden Gate Park before finishing back in the street grid. The route trades a waterfront beginning for an inland high point, making elevation the organising feature of the day.",
+        "ideal_use": "A city long run for a day when you want a sustained climb and several different neighbourhoods.",
+        "terrain": [
+          "Downtown street approach",
+          "Central hills",
+          "Eastern Golden Gate Park",
+          "Northern street return"
+        ],
+        "difficulty": "21.5 km with 397 m recorded gain. The largest ascent arrives before the midpoint; the return is longer than the downhill section alone suggests.",
+        "highlights": [
+          "Climbing away from the bay into the central hills",
+          "The winding high section south of the park",
+          "A northward passage through Golden Gate Park’s eastern end"
+        ],
+        "caveats": [
+          "This is point-to-point: the finish is inland and well west of the waterfront start.",
+          "Plan the return journey before choosing a starting location."
+        ],
+        "seasonality": "Recorded in March. Match the outing to a full long-run window, allowing extra time for the central climb.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. The suggested experience is interpretation, not a firsthand account; current access and exact surfaces have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "13830622683",
@@ -3147,7 +4096,30 @@
     {
       "activity_id": "13807396994",
       "status": "approved",
-      "region": null
+      "region": null,
+      "curation": {
+        "vibe": "The Golden Gate Bridge is the unmistakable spine of this 25.5 km outing. From San Francisco’s northern street grid, the trace reaches the Presidio and waterfront, crosses the bridge and adds a small loop on the Marin side before returning. Different city approaches keep it from being a simple retracing exercise. The bridge crossing is the destination, but the two waterfront passages and the extra northern loop make this a complete long-run journey.",
+        "ideal_use": "A destination long run centred on crossing the Golden Gate and returning to the city.",
+        "terrain": [
+          "San Francisco streets",
+          "Presidio and waterfront connections",
+          "Golden Gate Bridge",
+          "Marin-side loop"
+        ],
+        "difficulty": "25.5 km with 407 m recorded gain. The distance includes both bridge crossings and extra climbing on either side, so budget beyond the crossing itself.",
+        "highlights": [
+          "Crossing the Golden Gate in both directions",
+          "The small loop beyond the northern bridge end",
+          "Different city approaches around the waterfront and Presidio"
+        ],
+        "caveats": [
+          "Check current pedestrian bridge access and opening arrangements before following this recording.",
+          "The route turns back south of Sausalito; it is not a run into the town centre."
+        ],
+        "seasonality": "Recorded in March. Allow enough daylight for the bridge crossing, the Marin section and the return.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. The suggested experience is interpretation, not a firsthand account; current access and exact surfaces have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "13800132705",
@@ -3322,7 +4294,29 @@
     {
       "activity_id": "13534813116",
       "status": "approved",
-      "region": null
+      "region": null,
+      "curation": {
+        "vibe": "Saskatoon’s river gives this loop its shape, with neighbourhood streets and the university side providing the contrast. From east of the South Saskatchewan River, the line first swings south, then follows a long northward riverside arc past the centre. A crossing leads into the university area before the final streets bring it back toward its starting neighbourhood. The result is an expansive city run that keeps returning to the water without simply retracing one bank.",
+        "ideal_use": "A city-scale long run combining river scenery with a look across Saskatoon’s neighbourhoods and university area.",
+        "terrain": [
+          "Riverside sections",
+          "Urban streets and bridge connections",
+          "University-area paths and roads"
+        ],
+        "difficulty": "18.4 km with 189 m of recorded climbing: the length is the main commitment, with changes of direction and crossings breaking up the rhythm.",
+        "highlights": [
+          "The long South Saskatchewan River arc",
+          "A shift from the city centre toward the university side",
+          "A near-loop finish in the starting neighbourhood"
+        ],
+        "caveats": [
+          "The route combines riverside stretches with city streets, so allow for crossings.",
+          "Check the precise bridge and connecting-path choices before trying to follow it continuously."
+        ],
+        "seasonality": "Recorded in October. For another autumn visit, plan around available daylight and the day’s riverside conditions.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. Suggested experience is interpretation, not a firsthand account; current access and path conditions have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "13525338283",
@@ -3447,7 +4441,29 @@
     {
       "activity_id": "13358070690",
       "status": "approved",
-      "region": null
+      "region": null,
+      "curation": {
+        "vibe": "A near-half-marathon that lets Banff’s valley do the work of keeping things interesting. The route leaves town along the Bow River corridor and reaches an eastern loop within a broad river bend, revisiting parts of that green pocket before returning on the shared approach. Its low overall elevation range makes a useful counterpoint to the mountain routes nearby: the distance expands, while the route stays close to the valley floor.",
+        "ideal_use": "A longer Banff run when you want river-valley distance rather than a summit objective.",
+        "terrain": [
+          "Bow River corridor",
+          "Repeated eastern loops",
+          "A shared approach from Banff"
+        ],
+        "difficulty": "20.7 km with 175 m of recorded climbing. This is a distance-focused outing with much less vertical commitment than the collection’s mountain circuit.",
+        "highlights": [
+          "The Bow River as a constant geographical anchor",
+          "A broad eastern river-bend loop",
+          "A return to almost the same point in Banff"
+        ],
+        "caveats": [
+          "The eastern section includes repeated lines; a single loop there will not reproduce the full recorded distance.",
+          "Keep enough energy for the shared return leg into town."
+        ],
+        "seasonality": "Recorded in late September. The recording supports an autumn outing, but present path conditions still determine the best timing.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. Suggested experience is interpretation, not a firsthand account; current access and path conditions have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "13358068963",
@@ -6072,7 +7088,29 @@
     {
       "activity_id": "9915035779",
       "status": "approved",
-      "region": "Los Angeles, CA"
+      "region": "Los Angeles, CA",
+      "curation": {
+        "vibe": "A long one-way sweep along Los Angeles’ coast, starting at Hermosa Beach and finishing in Santa Monica. The trace follows the shoreline north through Manhattan Beach and El Segundo, then detours inland around Marina del Rey before regaining the coast through Venice. With very little recorded height change, the route is organised by the sequence of beach communities and the marina detour. The finish is a destination, not the halfway point of a return.",
+        "ideal_use": "A point-to-point coastal long run with transport arranged at the far end.",
+        "terrain": [
+          "Coastal corridor",
+          "Marina del Rey inland detour",
+          "Venice and Santa Monica waterfront"
+        ],
+        "difficulty": "23.2 km with only 56 m recorded gain. The challenge is sustained distance rather than climbing.",
+        "highlights": [
+          "Linking Hermosa, Manhattan Beach and El Segundo",
+          "The change of direction around Marina del Rey",
+          "A final coastal leg through Venice into Santa Monica"
+        ],
+        "caveats": [
+          "The route does not return to Hermosa Beach; arrange a pickup or other return plan.",
+          "The marina forces an inland detour, so following the shoreline blindly will not reproduce the route."
+        ],
+        "seasonality": "Recorded in September. Pick a long-run window and a practical finish arrangement before setting out north.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. The suggested experience is interpretation, not a firsthand account; current access and exact surfaces have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "9899367059",
@@ -6172,7 +7210,29 @@
     {
       "activity_id": "9844581410",
       "status": "approved",
-      "region": "New York, NY"
+      "region": "New York, NY",
+      "curation": {
+        "vibe": "Prospect Park is the destination of this Brooklyn run. A street approach from the northwest brings the trace to the park’s northern entrance area, then a winding internal line leads south toward the lake. The route curls around the lake and returns through the eastern side before retracing much of the urban approach. The park section is more intricate than a single perimeter lap, giving a familiar out-and-back structure a varied middle.",
+        "ideal_use": "A park-focused run that begins and ends in the surrounding Brooklyn neighbourhoods.",
+        "terrain": [
+          "Brooklyn street approach",
+          "Prospect Park internal paths",
+          "Lake circuit"
+        ],
+        "difficulty": "13.3 km with 142 m recorded gain. The profile includes two broad rises, but the total distance and the park’s many junctions are the main planning considerations.",
+        "highlights": [
+          "The change from street grid to park paths",
+          "A complete loop around the lake area",
+          "Different internal lines on the outward and returning park legs"
+        ],
+        "caveats": [
+          "The route uses several internal park turns rather than simply following the perimeter.",
+          "The street approach is largely retraced, so allow for it on both sides of the park section."
+        ],
+        "seasonality": "Recorded in May. Plan for both the lake circuit and the street kilometres back to the start.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. The suggested experience is interpretation, not a firsthand account; current access and exact surfaces have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "9844578592",
@@ -7192,7 +8252,29 @@
     {
       "activity_id": "8836227189",
       "status": "approved",
-      "region": "Rome, Italy"
+      "region": "Rome, Italy",
+      "curation": {
+        "vibe": "Rome unfolds on a southeast axis from the Vatican area toward the Appian Way side of the city. The beginning skirts the southern side of Vatican City, then the line crosses toward the centre and continues into the greener ground beyond. It is a broad urban exploration rather than a compact monuments loop, with much of the return close to the outward corridor. The original activity title calls out the Appian Way, giving this recorded run its historical direction without promising a fully verified sightseeing itinerary.",
+        "ideal_use": "A starting point for planning a long Rome exploration that moves beyond the central streets toward the city’s southeastern green corridor.",
+        "terrain": [
+          "Streets around Vatican City",
+          "Central-city river crossing",
+          "Southeastern urban and green-space sections"
+        ],
+        "difficulty": "18.3 km with 139 m of recorded climbing. The distance and urban connections matter more than a sustained ascent.",
+        "highlights": [
+          "Starting beside Vatican City before heading southeast",
+          "The move from central Rome toward the southeast",
+          "An outward-and-return structure anchored near the same start"
+        ],
+        "caveats": [
+          "A long section of the return is not fully recorded; choose a current mapped connection before following this as a route.",
+          "The activity name references the Appian Way, but the recording does not establish the surface or access of every section."
+        ],
+        "seasonality": "Recorded in December. Plan the southeastern extension around daylight and the access information available for your chosen day.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. Suggested experience is interpretation, not a firsthand account; current access and path conditions have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "8836227089",
@@ -7202,17 +8284,82 @@
     {
       "activity_id": "8836227016",
       "status": "approved",
-      "region": "Bologna, Italy"
+      "region": "Bologna, Italy",
+      "curation": {
+        "vibe": "Bologna’s southern hills sit close enough to the centre to become the middle of a 17 km run. This trace links the city’s eastern side and Murri with Barbiano and Monte Donato, then returns to the central streets. The profile builds toward a clear hill section rather than repeating short urban rises, giving the outing a satisfying change of scale between city blocks and the elevated southern fringe.",
+        "ideal_use": "A city-break long run with a proper hill chapter, suited to exploring beyond central Bologna without spending the whole day out.",
+        "terrain": [
+          "Central and eastern Bologna streets",
+          "Southern hill connections",
+          "A loop through Barbiano and Monte Donato"
+        ],
+        "difficulty": "17 km with 367 m of recorded climbing. Expect the central hill section to set the effort level.",
+        "highlights": [
+          "The transition from Bologna’s centre into its southern hills",
+          "The Barbiano and Monte Donato loop",
+          "A return to nearly the same central starting area"
+        ],
+        "caveats": [
+          "Allow for urban crossings on the approach and return."
+        ],
+        "seasonality": "Recorded in early December. Leave room in the timing for the hill section rather than judging the run by city distance alone.",
+        "editorial_note": "AI-written from the recorded route, its elevation profile, the original activity notes and a visual map review. The suggested experience is interpretation, not a firsthand account.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "8836226791",
       "status": "approved",
-      "region": "Bologna, Italy"
+      "region": "Bologna, Italy",
+      "curation": {
+        "vibe": "A different side of Bologna from the hill routes: this 20 km recording stretches north through Bolognina toward Corticella, then adds a broad southern circuit around the centre. Its map is an elongated city loop, taking in outer neighbourhoods before returning to familiar central streets. With only 136 m of recorded climbing, the interest comes from the changing neighbourhoods and the overall sweep rather than a summit.",
+        "ideal_use": "A relatively low-climb urban long run for seeing more of Bologna than the historic centre alone.",
+        "terrain": [
+          "Urban neighbourhood streets",
+          "Northern excursion toward Corticella",
+          "A southern arc around central Bologna"
+        ],
+        "difficulty": "20 km with 136 m of recorded climbing. Distance and city navigation are the main demands.",
+        "highlights": [
+          "The long northern arm through Bolognina",
+          "The turn near Corticella",
+          "A contrasting southern circuit through the Galvani and Murri side"
+        ],
+        "caveats": [
+          "The route crosses the city’s railway and road corridors; check the exact connections rather than relying on the overview.",
+          "The original title mentions fog during this recording, not a typical condition to expect."
+        ],
+        "seasonality": "Recorded on December 7. Match the urban outing to current visibility and leave flexibility for crossings.",
+        "editorial_note": "AI-written from the recorded route, its elevation profile, the original activity notes and a visual map review. The suggested experience is interpretation, not a firsthand account.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "8836226736",
       "status": "approved",
-      "region": "Bologna, Italy"
+      "region": "Bologna, Italy",
+      "curation": {
+        "vibe": "From central Bologna, this route reaches southeast into a loop around Ponticella, Croara and Rastignano before coming back through Murri. The 17.9 km recording puts its main climbing in that outer loop, with city streets bookending the more elevated middle. It is an appealing city-to-edge progression: the farther end of the run supplies the contrast, rather than circling the same central landmarks.",
+        "ideal_use": "A longer Bologna run that combines a city departure with a distinct hill loop beyond the southeast edge.",
+        "terrain": [
+          "Central Bologna approach",
+          "Southeastern hill loop around Croara",
+          "Return corridor through Rastignano and Murri"
+        ],
+        "difficulty": "17.9 km and 269 m of recorded climbing. The main rise is concentrated away from the city centre.",
+        "highlights": [
+          "The link from city streets to Ponticella",
+          "The higher loop around Croara",
+          "Returning by the Rastignano side rather than exactly retracing the outward leg"
+        ],
+        "caveats": [
+          "The finish is about 400 m from the start in a straight line.",
+          "Review the outer loop’s path connections before treating the recorded line as a signed route."
+        ],
+        "seasonality": "Recorded in early December. Choose a daylight window that includes the outer loop as well as both city approaches.",
+        "editorial_note": "AI-written from the recorded route, its elevation profile, the original activity notes and a visual map review. The suggested experience is interpretation, not a firsthand account.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "8836226639",
@@ -7222,17 +8369,82 @@
     {
       "activity_id": "8790922344",
       "status": "approved",
-      "region": "Veneto, Italy"
+      "region": "Veneto, Italy",
+      "curation": {
+        "vibe": "A half-marathon-sized ramble through the smaller settlements north of the Piave. Starting near Camalò di Vidor, the route swings east toward Mosnigo, turns back through Colbertaldo and explores a more intricate northern loop before dropping toward Vidor and the river. The changing shape is part of its appeal: long linking legs give way to little folds and turns, while the modest rise in the middle adds texture without turning the outing into a mountain objective.",
+        "ideal_use": "An exploratory countryside run linking several Veneto settlements in one varied, unhurried outing.",
+        "terrain": [
+          "Village and connecting roads",
+          "Rolling ground north of Vidor",
+          "A lower section near the Piave"
+        ],
+        "difficulty": "21.5 km with 274 m of recorded climbing. Allow for the full half-marathon distance and the more intricate middle section.",
+        "highlights": [
+          "The eastern reach toward Mosnigo",
+          "The return through Colbertaldo",
+          "The transition from the northern loop toward the Piave"
+        ],
+        "caveats": [
+          "The finish is west of the start near Vidor; plan the connection back.",
+          "The recording does not establish continuous sidewalks on the village-to-village links."
+        ],
+        "seasonality": "Recorded in December; the original activity title describes a wet outing. Use current conditions to choose the day.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. Suggested experience is interpretation, not a firsthand account; current access and path conditions have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "8788969453",
       "status": "approved",
-      "region": "Verona, Italy"
+      "region": "Verona, Italy",
+      "curation": {
+        "vibe": "Verona is the launch point for a run that reaches beyond the city and into the rising ground north of Avesa. The outward line threads along the Adige-side neighbourhoods before narrowing into a long northern spur. One distinct climb gives the middle its shape, followed by a return toward the river and a different finish in the city. It is a useful change of perspective: the urban setting opens into hills, then closes around the final kilometres again.",
+        "ideal_use": "A longer city-and-hills run when you want Verona to be the beginning and end of a wider exploration.",
+        "terrain": [
+          "Verona streets and river connections",
+          "Northern approach through Avesa",
+          "One principal climbing spur"
+        ],
+        "difficulty": "16.8 km with 234 m of recorded climbing. The climb is concentrated in the northern extension rather than spread evenly across the run.",
+        "highlights": [
+          "Leaving the city for Avesa",
+          "The high point on the northern spur",
+          "The return toward the Adige and central Verona"
+        ],
+        "caveats": [
+          "The route ends well west of its starting point; it is not a closed loop."
+        ],
+        "seasonality": "Recorded in early December. Allow daylight for the northern extension and the separate city finish.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. Suggested experience is interpretation, not a firsthand account; current access and path conditions have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "8788967538",
       "status": "approved",
-      "region": "Treviso, Italy"
+      "region": "Treviso, Italy",
+      "curation": {
+        "vibe": "This Treviso run makes a broad arc through the settlements northeast of the centre. From the southern side of town it heads north past Santa Maria del Rovere, bends across to Carbonera, then returns through Lanzago and Silea before finishing east of where it began. The nearly level profile leaves the interest in the geography: a series of local places linked into one continuous outing, with the Sile corridor appearing toward the end.",
+        "ideal_use": "A moderate-distance exploration of Treviso’s outer neighbourhoods, planned around practical road connections rather than a single landmark.",
+        "terrain": [
+          "Town streets",
+          "Village-to-village road links",
+          "Low-lying ground near the Sile"
+        ],
+        "difficulty": "14.8 km with only 54 m of recorded climbing. Road crossings and the chosen pedestrian connections are more consequential than the elevation.",
+        "highlights": [
+          "The northward departure through Santa Maria del Rovere",
+          "Linking Carbonera with Silea",
+          "Finishing near the river corridor east of central Treviso"
+        ],
+        "caveats": [
+          "The owner’s activity title says “zero sidewalks”; check pedestrian provision on the connecting roads before following it.",
+          "Start and finish are separated across town, so include the return in your plan."
+        ],
+        "seasonality": "Recorded in December. Prioritise daylight for the road-link sections if using this route as a planning reference.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. Suggested experience is interpretation, not a firsthand account; current access and path conditions have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "8788966192",
@@ -7252,7 +8464,29 @@
     {
       "activity_id": "8761568343",
       "status": "approved",
-      "region": null
+      "region": null,
+      "curation": {
+        "vibe": "Casa de Campo is the spacious middle of this Madrid run. From the central city, the recording crosses west into the park, makes a broad circuit around its northern and western interior, and returns past the lake before threading back through Madrid toward the Atocha area. At 25.7 km, it combines a proper park exploration with two urban chapters instead of finishing where it began.",
+        "ideal_use": "A long city-and-park run for a day when Casa de Campo is the main destination and a different finish is useful.",
+        "terrain": [
+          "Central Madrid approach and finish",
+          "Large park circuit",
+          "Rolling ground within Casa de Campo"
+        ],
+        "difficulty": "25.7 km with 315 m of recorded climbing. The length matters more than any single climb.",
+        "highlights": [
+          "The broad northern and western circuit inside Casa de Campo",
+          "The return past the park’s lake",
+          "The contrast between the park middle and city finish"
+        ],
+        "caveats": [
+          "The finish lies about 2.7 km from the start in a straight line; plan the onward journey from the Atocha side.",
+          "Allow for street crossings on the urban sections."
+        ],
+        "seasonality": "Recorded in late November. Plan the park circuit for the day’s daylight and current access.",
+        "editorial_note": "AI-written from the recorded route, its elevation profile, the original activity notes and a visual map review. The suggested experience is interpretation, not a firsthand account.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "8761565251",
@@ -10647,7 +11881,29 @@
     {
       "activity_id": "6496900063",
       "status": "approved",
-      "region": "Ucluelet, BC"
+      "region": "Ucluelet, BC",
+      "curation": {
+        "vibe": "Ucluelet’s two waterfronts give this compact run more variety than its distance suggests. The trace starts on the ocean-facing side, links across the peninsula and reaches southeast along the inlet before working back through town. A western coastal excursion adds the most intricate section, with small turns close to the shoreline before the finish returns near the start. It is a run built around contrasts: open water, town connections and green edges squeezed into one narrow peninsula.",
+        "ideal_use": "A shorter exploratory run that samples both sides of Ucluelet without committing to a full long-run distance.",
+        "terrain": [
+          "Ocean-facing coastal sections",
+          "Town connections",
+          "An inlet-side extension"
+        ],
+        "difficulty": "11.3 km with 236 m of recorded climbing. The profile shows repeated small changes rather than a long climb, so expect an uneven rhythm.",
+        "highlights": [
+          "Switching between the Pacific-facing shore and Ucluelet Inlet",
+          "The winding western coastal section",
+          "A near-loop finish close to the starting shore"
+        ],
+        "caveats": [
+          "The line mixes town links with coastal sections; do not assume one continuous trail surface.",
+          "Follow the mapped turns carefully where the route folds back along the western shore."
+        ],
+        "seasonality": "Recorded in October. Choose the day around current coastal weather and path conditions.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. Suggested experience is interpretation, not a firsthand account; current access and path conditions have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "6492590772",
@@ -10667,7 +11923,29 @@
     {
       "activity_id": "6477420224",
       "status": "approved",
-      "region": "Nanaimo, BC"
+      "region": "Nanaimo, BC",
+      "curation": {
+        "vibe": "A broad north-Nanaimo circuit that uses the city’s roads and green corridors to assemble a half-marathon. From near Lost Lake Road, the line drops south toward the lake district, swings west around the highway corridor and reaches north toward Dover Road before turning home. The profile gradually gives away height, then asks for a climb back at the end. Its character is purposeful and local: a long tour of connected neighbourhoods with a proper homeward leg.",
+        "ideal_use": "A substantial urban long run with a broad circuit and a clear return to north Nanaimo.",
+        "terrain": [
+          "Residential and connecting roads",
+          "Lake-district edges",
+          "A rolling northern return"
+        ],
+        "difficulty": "21.2 km with 312 m of recorded climbing. The finish is among the higher parts of the route, so leave room for the late uphill return.",
+        "highlights": [
+          "The large circuit through north Nanaimo",
+          "The northern reach near Dover Road",
+          "Climbing back toward the starting neighbourhood"
+        ],
+        "caveats": [
+          "Several links run close to major road corridors; check the exact pedestrian route at crossings.",
+          "The visible lakes help orientation, but this is not a continuous lakeshore route."
+        ],
+        "seasonality": "Recorded in October. An earlier start leaves more flexibility for a full-distance run and the final climb.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. Suggested experience is interpretation, not a firsthand account; current access and path conditions have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "6471841737",
@@ -10782,7 +12060,29 @@
     {
       "activity_id": "5981399261",
       "status": "approved",
-      "region": "Nanaimo, BC"
+      "region": "Nanaimo, BC",
+      "curation": {
+        "vibe": "A compact tangle of green-space loops south of Lost Lake Road gives this Nanaimo run its identity. After leaving the neighbourhood, the line crosses the wooded belt, circles the small lake and reaches farther southeast before folding back through the interior. The elevation drops sharply in the first half, then recovers through a noticeable climb. It feels like a route for exploration rather than repetition, with each return line revealing another part of the same pocket of terrain.",
+        "ideal_use": "A mid-length run for exploring the green belt without taking on the collection’s longer Nanaimo circuits.",
+        "terrain": [
+          "Wooded green-space connections",
+          "A small-lake loop",
+          "Neighbourhood approach and return"
+        ],
+        "difficulty": "12.1 km with 300 m of recorded climbing. The central drop and climb make this more substantial than a flat neighbourhood run of the same length.",
+        "highlights": [
+          "The small loop around the lake near Lost Lake Road",
+          "Several distinct lines through the wooded interior",
+          "Returning close to the start after a varied middle section"
+        ],
+        "caveats": [
+          "The route crosses and revisits itself; review the sequence before trying to reproduce the distance.",
+          "The map does not establish trail surfaces or the condition of the smaller connections."
+        ],
+        "seasonality": "Recorded in September. Choose conditions that suit the wooded interior and its changes in height.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. Suggested experience is interpretation, not a firsthand account; current access and path conditions have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "5980270707",
@@ -10812,7 +12112,29 @@
     {
       "activity_id": "5944474545",
       "status": "approved",
-      "region": null
+      "region": null,
+      "curation": {
+        "vibe": "A westward climb from the neighbourhoods north of Departure Bay leads into Nanaimo’s green belt near the lake area south of Lost Lake Road. The approach is largely shared on the way home, while a cluster of smaller loops gives the far end its variety. The profile rises into the middle of the run and then releases back toward the start. At 10.5 km, it offers a contained outing with a clear destination: reach the wooded lake area, explore it, and turn back.",
+        "ideal_use": "A shorter Nanaimo run with a purposeful climb and a wooded turnaround section.",
+        "terrain": [
+          "Neighbourhood approach",
+          "Green-space loops near the lake area south of Lost Lake Road",
+          "A shared outward and return corridor"
+        ],
+        "difficulty": "10.5 km with 225 m of recorded climbing. Most of the elevation work is concentrated toward the middle of the outing.",
+        "highlights": [
+          "The westward progression from the Departure Bay side",
+          "The little loops in the green belt",
+          "A descending return close to the starting point"
+        ],
+        "caveats": [
+          "Check the detailed turns around the lake area; the route includes more than a single turnaround.",
+          "Use the actual Nanaimo start pin when planning this outing."
+        ],
+        "seasonality": "Recorded in September. The wooded section is the part to assess when choosing suitable ground conditions.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. Suggested experience is interpretation, not a firsthand account; current access and path conditions have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "5942498436",
@@ -10847,7 +12169,29 @@
     {
       "activity_id": "5868096334",
       "status": "approved",
-      "region": "Nanaimo, BC"
+      "region": "Nanaimo, BC",
+      "curation": {
+        "vibe": "A long sweep through north Nanaimo carries this run from the Lost Lake Road area toward Northfield Road and back through the neighbourhoods west of the main highway corridor. The map draws a generous southern loop rather than a lakeside circuit, with long direct links balanced by residential turns. Its profile is comparatively restrained, descending into the first half before an uneven climb back. The finish stops short of the original start, giving the day an open-ended shape.",
+        "ideal_use": "A distance-focused neighbourhood run, with the option to plan a separate final connection after the recorded finish.",
+        "terrain": [
+          "Urban connecting roads",
+          "Residential loops",
+          "Low rolling terrain around the lake district"
+        ],
+        "difficulty": "18.4 km with 158 m of recorded climbing. The main challenge is sustained distance across a spread-out urban circuit.",
+        "highlights": [
+          "The long southern reach toward Northfield Road",
+          "A broad return through neighbourhood streets",
+          "The changing relationship to the lakes and highway corridor"
+        ],
+        "caveats": [
+          "The finish is southwest of the start, rather than back at the same pin.",
+          "Plan road crossings and pedestrian connections on the longer direct links."
+        ],
+        "seasonality": "Recorded in late August. Leave time for the unrecorded connection home if you need to return to the starting point.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. Suggested experience is interpretation, not a firsthand account; current access and path conditions have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "5864419368",
@@ -10867,7 +12211,29 @@
     {
       "activity_id": "5837509151",
       "status": "approved",
-      "region": "Nanaimo, BC"
+      "region": "Nanaimo, BC",
+      "curation": {
+        "vibe": "This Nanaimo circuit links the wooded interior with the low ground around Departure Bay. It first works through the green belt south of Lost Lake Road, then drops toward the bay before swinging northeast and climbing back through the Hammond Bay side. That broad change in setting is matched by the profile: an early high section, a long descent toward sea level and a substantial late return uphill. The route makes a full local journey out of forest edges, neighbourhoods and coast.",
+        "ideal_use": "A varied long run when you want both the inland green belt and a coastal chapter in the same outing.",
+        "terrain": [
+          "Wooded interior connections",
+          "Departure Bay-side roads",
+          "Hilly neighbourhood return"
+        ],
+        "difficulty": "18.4 km with 453 m of recorded climbing. The final rise back from the lower coastal section deserves as much planning as the early climb.",
+        "highlights": [
+          "The green-space opening near Lost Lake Road",
+          "The low coastal section around Departure Bay",
+          "A different return through the Hammond Bay area"
+        ],
+        "caveats": [
+          "Keep effort in reserve for the late climb back toward the start.",
+          "The coastal and inland sections use different kinds of connections; verify current path and road choices."
+        ],
+        "seasonality": "Recorded in August. Choose a day that suits both the wooded interior and the more open coastal leg.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. Suggested experience is interpretation, not a firsthand account; current access and path conditions have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "5826181303",
@@ -10892,7 +12258,29 @@
     {
       "activity_id": "5786313644",
       "status": "approved",
-      "region": null
+      "region": null,
+      "curation": {
+        "vibe": "Water keeps reappearing on this Victoria run, but from a succession of different angles. The route heads south from the city toward the shoreline, wraps west around the peninsula and follows the Inner Harbour before reaching north toward the Gorge. Bridge connections and short detours turn it into a sequence of linked waterfront chapters rather than one simple lap. The finish returns close to the start, bringing a broad sample of the city into a manageable 15.4 km.",
+        "ideal_use": "A waterfront-oriented city run with enough distance to link the southern shore, harbour and Gorge in one outing.",
+        "terrain": [
+          "Southern coastal roads and paths",
+          "Inner Harbour connections",
+          "Urban bridge and Gorge-side sections"
+        ],
+        "difficulty": "15.4 km with 108 m of recorded climbing. The largely low-lying profile makes distance and city connections the main considerations.",
+        "highlights": [
+          "The long southern shoreline arc",
+          "Seeing the Inner Harbour from several sides",
+          "The northern extension toward the Gorge"
+        ],
+        "caveats": [
+          "Several harbour lines overlap, so check the sequence at the bridge connections.",
+          "Allow for city crossings and other waterfront users rather than expecting uninterrupted pace."
+        ],
+        "seasonality": "Recorded in August. Plan the length of the outing around the time you want to spend along the waterfront.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. Suggested experience is interpretation, not a firsthand account; current access and path conditions have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "5755969508",
@@ -11067,7 +12455,29 @@
     {
       "activity_id": "5460495850",
       "status": "approved",
-      "region": null
+      "region": null,
+      "curation": {
+        "vibe": "Victoria’s southern and eastern shoreline supplies the whole shape of this half-marathon-distance run. From the city, the trace drops south, follows the coast east through the succession of bays and reaches north along Oak Bay before turning back. Much of the homeward leg follows the same corridor, making the water a familiar guide in the second half. This June recording is slightly longer than the nearby June 5 version, but shares its essential coastal rhythm.",
+        "ideal_use": "A coastal long run with a clear turnaround and the reassurance of a familiar return line.",
+        "terrain": [
+          "Southern Victoria shoreline",
+          "Oak Bay coastal connections",
+          "A shared outward-and-return corridor"
+        ],
+        "difficulty": "21.2 km with 175 m of recorded climbing. The cumulative small rises matter over a half-marathon distance even though there is no major sustained climb.",
+        "highlights": [
+          "The long eastward sweep from the southern shore",
+          "The northward extension along Oak Bay",
+          "Retracing the bays on the way back to Victoria"
+        ],
+        "caveats": [
+          "This is an out-and-back, not a coastal loop; save enough energy for the full return.",
+          "The June 5 and June 13 recordings are close variants, not different destinations."
+        ],
+        "seasonality": "Recorded in June. Choose your turnaround timing so the return along the same coast fits comfortably into the day.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. Suggested experience is interpretation, not a firsthand account; current access and path conditions have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "5459909285",
@@ -11087,7 +12497,29 @@
     {
       "activity_id": "5420668682",
       "status": "approved",
-      "region": null
+      "region": null,
+      "curation": {
+        "vibe": "An early-June coastal out-and-back links central Victoria with the eastern edge of Oak Bay. The run heads south to the shore, works east around the bays and then turns north before retracing the coastline home. Its appeal is the continuity of the journey: each bend passed on the outward leg becomes a marker on the return. At 21.0 km, this recording captures almost a half-marathon of shoreline-led running with no large climb dominating the day.",
+        "ideal_use": "A steady coastal distance day, or a reference for choosing a shorter turnaround along the same corridor.",
+        "terrain": [
+          "Victoria’s southern shoreline",
+          "Bay-to-bay coastal links",
+          "Oak Bay outward and return leg"
+        ],
+        "difficulty": "21.0 km with 176 m of recorded climbing. Treat it as a long run with repeated small rises rather than a flat, uninterrupted course.",
+        "highlights": [
+          "Reaching the shore from the city start",
+          "The linked bays on the eastward leg",
+          "A northward Oak Bay turnaround before the shared return"
+        ],
+        "caveats": [
+          "Plan the full return distance before extending farther north at the turnaround.",
+          "This shares almost the same line as the June 13 recording; choose by preferred distance rather than expecting a different route."
+        ],
+        "seasonality": "Recorded in early June. Leave enough time to enjoy the return coastline instead of using all the day on the outward leg.",
+        "editorial_note": "AI-written from the recorded route, elevation profile and a visual review of its map. Suggested experience is interpretation, not a firsthand account; current access and path conditions have not been verified.",
+        "review_status": "draft"
+      }
     },
     {
       "activity_id": "5414881666",

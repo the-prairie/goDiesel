@@ -1,4 +1,7 @@
-import maplibregl, {
+import { LocateFixed, Minus, Plus } from "lucide-react";
+import { Button } from "@/ui/button";
+import maplibregl from "@/providers/maplibre";
+import {
   GeoJSONSource,
   LngLatBounds,
   Map as MapLibreMap,
@@ -13,17 +16,19 @@ const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 export function FinderRouteMap({
   route,
   selectedSlug,
+  lines,
 }: {
   route?: QuestRoute;
   selectedSlug?: string;
+  lines?: [number, number][][];
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
-  const routeRef = useRef(route);
+  const routeRef = useRef({route, lines});
   const [status, setStatus] = useState<"loading" | "ready" | "unavailable">(
     "loading",
   );
-  routeRef.current = route;
+  routeRef.current = {route, lines};
 
   useEffect(() => {
     const host = hostRef.current;
@@ -39,7 +44,17 @@ export function FinderRouteMap({
       attributionControl: { compact: true },
     });
     mapRef.current = map;
-    const resizeObserver = new ResizeObserver(() => map.resize());
+    let previousWidth = host.clientWidth;
+    let previousHeight = host.clientHeight;
+    const resizeObserver = new ResizeObserver(() => {
+      const width = host.clientWidth, height = host.clientHeight;
+      map.resize();
+      if (width > 0 && height > 0 && (width !== previousWidth || height !== previousHeight) && map.getSource("finder-route")) {
+        showRoute(map, routeRef.current.route, routeRef.current.lines, 0);
+      }
+      previousWidth = width;
+      previousHeight = height;
+    });
     resizeObserver.observe(host);
     const timer = window.setTimeout(() => {
       if (active && !map.loaded()) setStatus("unavailable");
@@ -52,7 +67,7 @@ export function FinderRouteMap({
     map.once("load", () => {
       if (!active) return;
       addRouteLayers(map);
-      showRoute(map, routeRef.current);
+      showRoute(map, routeRef.current.route, routeRef.current.lines);
       map.once("idle", () => {
         if (!active) return;
         window.clearTimeout(timer);
@@ -71,29 +86,31 @@ export function FinderRouteMap({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map?.isStyleLoaded()) return;
-    showRoute(map, route);
-  }, [route]);
+    // Tile loading can make isStyleLoaded false after initial load. The route
+    // source already exists then; dropping this update would leave a stale path.
+    if (!map?.getSource("finder-route")) return;
+    showRoute(map, route, lines);
+  }, [route, lines]);
 
   return (
     <section
       aria-label="Finder route map"
       data-map-status={status}
       data-selected-route={selectedSlug}
-      className="relative min-h-0 overflow-hidden bg-[#d9ddd2]"
+      className="relative h-full min-h-0 overflow-hidden bg-canvas"
     >
       <div ref={hostRef} className="h-full w-full" />
       {status === "loading" ? (
-        <div role="status" className="absolute left-4 top-4 border border-line bg-surface/94 px-3 py-2 text-caption text-ink-secondary shadow-panel">
+        <div role="status" className="absolute inset-0 grid place-items-center bg-canvas p-6 text-caption text-ink-secondary">
           Opening planning map.
         </div>
       ) : null}
       {status === "unavailable" ? (
-        <div role="status" className="absolute inset-0 grid place-items-center bg-surface-muted/94 p-6 text-center">
+        <div role="status" className="absolute inset-0 grid place-items-center bg-canvas p-6 text-center">
           <div className="max-w-sm">
             <p className="font-semibold text-ink">Planning map unavailable</p>
             <p className="mt-2 text-control leading-6 text-ink-muted">
-              Candidate records remain available, but source-backed map tiles could not load in this session.
+              The map could not load. You can still browse and save the routes beside it.
             </p>
           </div>
         </div>
@@ -103,12 +120,11 @@ export function FinderRouteMap({
           Recorded geometry is unavailable for this candidate. Finder will not invent a path.
         </div>
       ) : null}
-      {!selectedSlug && status === "ready" ? (
-        <div className="absolute bottom-4 left-4 max-w-sm border-l-2 border-l-route bg-surface/94 p-4 shadow-panel">
-          <p className="font-editorial text-xl font-semibold text-ink">Choose the day first.</p>
-          <p className="mt-1 text-control leading-6 text-ink-secondary">
-            Source-backed candidate geometry will appear here after a search.
-          </p>
+      {status === "ready" && (route || lines) ? (
+        <div role="group" aria-label="Finder map controls" className="absolute bottom-10 right-3 grid rounded-[var(--radius-control)] border border-line bg-black/90 p-1 backdrop-blur">
+          <Button type="button" variant="ghost" size="icon" aria-label="Fit route to map" onClick={() => { if (mapRef.current) showRoute(mapRef.current, route, lines); }}><LocateFixed aria-hidden="true" /></Button>
+          <Button type="button" variant="ghost" size="icon" aria-label="Zoom planning map in" onClick={() => mapRef.current?.zoomIn()}><Plus aria-hidden="true" /></Button>
+          <Button type="button" variant="ghost" size="icon" aria-label="Zoom planning map out" onClick={() => mapRef.current?.zoomOut()}><Minus aria-hidden="true" /></Button>
         </div>
       ) : null}
     </section>
@@ -125,21 +141,22 @@ function addRouteLayers(map: MapLibreMap) {
     type: "line",
     source: "finder-route",
     layout: { "line-cap": "round", "line-join": "round" },
-    paint: { "line-color": "#f6f2e8", "line-width": 10, "line-opacity": 0.92 },
+    paint: { "line-color": "#ffffff", "line-width": 5, "line-opacity": 0.92 },
   });
   map.addLayer({
     id: "finder-route-thread",
     type: "line",
     source: "finder-route",
     layout: { "line-cap": "round", "line-join": "round" },
-    paint: { "line-color": "#315fb4", "line-width": 5, "line-opacity": 1 },
+    paint: { "line-color": "#30343b", "line-width": 3, "line-opacity": 1 },
   });
 }
 
-function showRoute(map: MapLibreMap, route?: QuestRoute) {
+function showRoute(map: MapLibreMap, route?: QuestRoute, lines?: [number, number][][], duration = 600) {
+  const geometry = lines ?? (route ? [route.route.map(point => [point.lng, point.lat] as [number, number])] : []);
   const source = map.getSource("finder-route") as GeoJSONSource | undefined;
   if (!source) return;
-  if (!route || route.route.length < 2) {
+  if (!geometry.some(line => line.length >= 2)) {
     source.setData(emptyFeatureCollection());
     return;
   }
@@ -148,16 +165,16 @@ function showRoute(map: MapLibreMap, route?: QuestRoute) {
     type: "Feature",
     properties: {},
     geometry: {
-      type: "LineString",
-      coordinates: route.route.map((point) => [point.lng, point.lat]),
+      type: "MultiLineString",
+      coordinates: geometry,
     },
   });
   const bounds = new LngLatBounds();
-  route.route.forEach((point) => bounds.extend([point.lng, point.lat]));
+  geometry.flat().forEach((point) => bounds.extend(point));
   map.fitBounds(bounds, {
-    padding: { top: 72, right: 56, bottom: 72, left: 56 },
+    padding: { top: 40, right: 76, bottom: 48, left: 40 },
     maxZoom: 13,
-    duration: 600,
+    duration,
   });
 }
 

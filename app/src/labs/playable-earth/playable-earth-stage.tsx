@@ -247,7 +247,7 @@ export function PlayableEarthStage({
           onStateChange={setContextState}
           summary={
             new URLSearchParams(window.location.search).get("debugGrounding") === "1" ? (
-              <div className="mt-3 text-xs font-semibold uppercase text-primary">
+              <div className="mt-3 text-xs font-semibold uppercase text-accent-foreground">
                 Grounding: {grounding.source}
                 {grounding.offsetM === undefined
                   ? ""
@@ -284,7 +284,7 @@ export function PlayableEarthStage({
           {isMobile ? (
             <div className="grid gap-2">
               <div className="flex items-center gap-2">
-                <Route className="size-4 shrink-0 text-primary" aria-hidden="true" />
+                <Route className="size-4 shrink-0 text-accent-foreground" aria-hidden="true" />
                 <div className="min-w-0 flex-1 text-sm text-muted-foreground">
                   {(control.progressM / 1_000).toFixed(2)} / {route.distanceKm.toFixed(1)} km
                 </div>
@@ -464,9 +464,9 @@ export function PlayableEarthStage({
             </div>
           ) : (
             <>
-          <Route className="size-4 shrink-0 text-primary" aria-hidden="true" />
+          <Route className="size-4 shrink-0 text-accent-foreground" aria-hidden="true" />
           <div className="min-w-28 flex-1">
-            <div className="text-xs font-semibold uppercase text-primary">
+            <div className="text-xs font-semibold uppercase text-accent-foreground">
               {status.state === "ready" ? "Route thread ready" : "Route world loading"}
             </div>
             <div aria-live="off" className="truncate text-sm text-muted-foreground">

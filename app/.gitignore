@@ -3,3 +3,7 @@ node_modules
 .DS_Store
 test-results
 playwright-report
+.prototype-reviews
+
+# Recreated from the installed Cesium package before dev/build.
+/public/cesiumStatic/

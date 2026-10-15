@@ -40,7 +40,7 @@ describe("region route carousel geometry", () => {
     expect(ROUTE_CAROUSEL_SLIDE_CLASS).toContain("flex-[0_0_84%]");
     expect(ROUTE_CAROUSEL_SLIDE_CLASS).toContain("sm:basis-[44%]");
     expect(ROUTE_CAROUSEL_SLIDE_CLASS).toContain(
-      "xl:basis-[calc((100%-2rem)/3)]",
+      "xl:basis-1/3",
     );
   });
 

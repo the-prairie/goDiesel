@@ -9,6 +9,12 @@ export default defineConfig({
   retries: 0,
   reporter: "list",
   use: {
+    // Use full Chromium's GPU-capable headless mode for live 3D measurements.
+    // The default headless shell renders WebGL through SwiftShader on macOS.
+    channel: "chromium",
+    launchOptions: {
+      args: process.platform === "darwin" ? ["--use-angle=metal"] : [],
+    },
     baseURL: previewUrl ?? "http://127.0.0.1:8787",
     screenshot: "only-on-failure",
     trace: "retain-on-failure",

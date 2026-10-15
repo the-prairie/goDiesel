@@ -98,6 +98,8 @@ export const CesiumAtlasGlobe = forwardRef<
   }, [selectedRoute]);
 
   useEffect(() => {
+    if (status.state !== "ready") return;
+    let animationFrame = 0;
     const updateLabels = () => {
       const projections = engineRef.current?.projectRegions() ?? [];
       const projectionByName = new Map(
@@ -115,8 +117,8 @@ export const CesiumAtlasGlobe = forwardRef<
             if (!projection || !label) return [];
             return [{
               ...projection,
-              width: label.offsetWidth || 130,
-              height: label.offsetHeight || 28,
+              width: label.offsetWidth,
+              height: label.offsetHeight,
               priority:
                 (selectedRegion?.name === region.name ? 100 : 0) +
                 region.routes.length,
@@ -132,14 +134,16 @@ export const CesiumAtlasGlobe = forwardRef<
         if (!label || !projection) return;
         label.style.left = `${projection.x}px`;
         label.style.top = `${projection.y}px`;
-        label.style.display = visible.has(region.name) ? "flex" : "none";
+        // Keep rejected labels measurable. display:none makes the next pass
+        // use an undersized box, repeatedly showing and hiding dense labels.
+        label.style.visibility = visible.has(region.name) ? "visible" : "hidden";
         label.dataset.active = String(selectedRegion?.name === region.name);
       });
+      animationFrame = window.requestAnimationFrame(updateLabels);
     };
     updateLabels();
-    const interval = window.setInterval(updateLabels, 80);
-    return () => window.clearInterval(interval);
-  }, [regions, selectedRegion]);
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [regions, selectedRegion, status.state]);
 
   return (
     <div
@@ -191,10 +195,10 @@ export const CesiumAtlasGlobe = forwardRef<
             data-globe-region={region.name}
             aria-label={`Select ${region.name} on globe`}
             onClick={() => onSelectRegion(region)}
-            className="pointer-events-auto absolute hidden -translate-x-1/2 -translate-y-1/2 items-center gap-2 whitespace-nowrap rounded-sm border border-white/30 bg-[#f6f2e8]/90 px-3 py-1.5 text-[11px] font-semibold uppercase text-[#24322d] shadow-lg backdrop-blur transition-colors hover:border-[#315fb4] hover:text-[#183a76] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#315fb4] focus-visible:ring-offset-2 focus-visible:ring-offset-[#02070a] data-[active=true]:border-[#df674b] data-[active=true]:text-[#9b321f]"
+            className="atlas-world-label invisible pointer-events-auto absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 whitespace-nowrap rounded-md border border-line bg-surface/95 px-2.5 py-2 text-xs font-medium text-ink shadow-lg transition-colors hover:bg-surface-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring data-[active=true]:border-primary"
           >
-            <span className="size-1.5 rounded-full bg-[#df674b]" />
-            {region.name} · {region.routes.length}
+            <span className="size-1.5 rounded-full bg-ink" />
+            {region.name}<span className="rounded bg-black/5 px-1.5 py-0.5 text-[10px] text-ink-secondary">{region.routes.length} {region.routes.length === 1 ? "route" : "routes"}</span>
           </button>
         ))}
       </div>
@@ -214,7 +218,7 @@ export const CesiumAtlasGlobe = forwardRef<
         <div
           role="status"
           aria-live="polite"
-          className="pointer-events-none absolute bottom-24 left-4 z-20 max-w-sm border border-white/25 bg-[#f6f2e8]/96 px-3 py-2 text-xs text-[#24322d] shadow-lg xl:left-5"
+          className="pointer-events-none absolute bottom-24 left-4 z-20 max-w-sm border border-white/25 bg-surface px-3 py-2 text-xs text-ink shadow-lg xl:left-5"
         >
           {status.message} Search and navigation remain available.
         </div>

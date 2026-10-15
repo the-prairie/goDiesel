@@ -6,6 +6,7 @@ import {
   useParams,
 } from "react-router-dom";
 
+import { RouteError } from "@/app/route-error";
 import { AppShell } from "@/app/app-shell";
 import { singleRouteMicrosite } from "@/app/single-route-microsite";
 import { APP_PATHS, canonicalizeLegacyQuestHash } from "@/app/route-paths";
@@ -132,6 +133,7 @@ const micrositeRoutes = singleRouteMicrosite
 const router = createHashRouter([
   {
     element: <AppShell />,
+    errorElement: <RouteError />,
     children: micrositeRoutes ?? productRoutes,
   },
 ]);

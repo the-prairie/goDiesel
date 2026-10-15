@@ -77,7 +77,7 @@ test("Atlas selection becomes a Retrace, then restores its place", async ({
   await expect(routeCarousel).toBeVisible({ timeout: 15_000 });
   const reviewedRoute = routeCarousel
     .getByRole("article")
-    .filter({ hasText: "A long, exploratory Kyoto run" });
+    .filter({ has: page.locator('a[href*="/routes/17654151284"]') });
   await expect(reviewedRoute).toHaveCount(1);
   await reviewedRoute.getByRole("button", { name: /Select / }).click();
 
@@ -86,7 +86,7 @@ test("Atlas selection becomes a Retrace, then restores its place", async ({
   );
   const selectedAtlasUrl = page.url();
   const replayPath = await reviewedRoute
-    .getByRole("link", { name: "Open route" })
+    .getByRole("link", { name: "Open replay" })
     .getAttribute("href");
   expect(replayPath).not.toBeNull();
   await page.goto(`${replayPath}&renderer=cesium`);
@@ -123,7 +123,7 @@ test("Atlas selection becomes a Retrace, then restores its place", async ({
   await expect(page).toHaveURL(/#\/atlas\?q=kyoto&region=Kyoto%2C\+Japan$/);
   await expect(routeCarousel).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("textbox", {
-    name: "Search this place",
+    name: "Search places and routes",
   })).toHaveValue("kyoto");
   await expect(
     page.getByRole("heading", { level: 2, name: "Kyoto, Japan", exact: true }),

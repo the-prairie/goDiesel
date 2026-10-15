@@ -1,11 +1,17 @@
-import maplibregl, { Map as MapLibreMap } from "maplibre-gl";
+import maplibregl from "@/providers/maplibre";
+import { Map as MapLibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { atlasViewportInsets } from "@/surfaces/atlas/atlas-region-camera";
 import type { RouteRegion } from "@/data/route-regions";
 import type { RoutePoint, RouteSummary } from "@/domain/route";
-import { ROUTE_THREAD_STYLE } from "@/domain/geometry/route-thread-style";
+
+const ROUTE_THREAD_STYLE = {
+  marker: "#30343b",
+  color: "#667078",
+  halo: "#ffffff",
+};
 
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 const LOAD_TIMEOUT_MS = 10_000;
@@ -173,13 +179,17 @@ export function AtlasRegionalFallback({
   const hostRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | undefined>(undefined);
   const onSelectRouteRef = useRef(onSelectRoute);
-  const onReadyRef = useRef(onReady);
   const [status, setStatus] = useState<MapStatus>("loading");
   const [routePaths, setRoutePaths] = useState<string[]>([]);
   const routes = useMemo(() => regionalRouteCollection(region), [region]);
   const bounds = useMemo(() => regionalFitBounds(region), [region]);
   onSelectRouteRef.current = onSelectRoute;
-  onReadyRef.current = onReady;
+  // A history transition can reuse a loaded fallback while the world engine
+  // resets presentation readiness. Reconcile the visible map with each new
+  // presentation callback, rather than only notifying on its first load.
+  useEffect(() => {
+    if (status === "ready") onReady?.();
+  }, [onReady, status]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -194,8 +204,8 @@ export function AtlasRegionalFallback({
     map.setPaintProperty("regional-route-thread", "line-width", [
       "case",
       ["==", ["get", "slug"], selectedSlug],
-      7,
-      3,
+      3.5,
+      2,
     ]);
     map.setPaintProperty("regional-route-thread", "line-opacity", [
       "case",
@@ -271,8 +281,8 @@ export function AtlasRegionalFallback({
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
           "line-color": ROUTE_THREAD_STYLE.halo,
-          "line-width": 9,
-          "line-opacity": 0.88,
+          "line-width": 4.5,
+          "line-opacity": 0.9,
         },
       });
       map.addLayer({
@@ -290,8 +300,8 @@ export function AtlasRegionalFallback({
           "line-width": [
             "case",
             ["==", ["get", "slug"], selectedRoute?.slug ?? ""],
-            7,
-            3,
+            3.5,
+            2,
           ],
           "line-opacity": [
             "case",
@@ -333,7 +343,6 @@ export function AtlasRegionalFallback({
       ready = true;
       if (loadTimer !== undefined) window.clearTimeout(loadTimer);
       setStatus("ready");
-      onReadyRef.current?.();
     };
 
     map.on("error", handleError);
@@ -375,7 +384,7 @@ export function AtlasRegionalFallback({
       data-atlas-engine="maplibre-regional-fallback"
       data-map-status={status}
       data-region-route-count={routes.features.length}
-      className="relative h-full min-h-[420px] w-full overflow-hidden bg-[#d9ddd2]"
+      className="relative h-full min-h-[420px] w-full overflow-hidden bg-canvas"
     >
       <div
         ref={hostRef}
@@ -383,6 +392,7 @@ export function AtlasRegionalFallback({
         aria-label={`${region.name} regional route map`}
         className="absolute inset-0"
       />
+      {status === "loading" ? <div className="absolute inset-0 z-[2] bg-canvas" /> : null}
       <svg
         aria-hidden="true"
         data-regional-route-overlay="true"
@@ -411,16 +421,16 @@ export function AtlasRegionalFallback({
               d={path}
               fill="none"
               stroke={ROUTE_THREAD_STYLE.halo}
-              strokeWidth="9"
+              strokeWidth={active ? "4.5" : "3"}
               strokeLinecap="round"
               strokeLinejoin="round"
-              opacity={active ? "1" : selectedRoute ? "0.45" : "0.88"}
+              opacity={active ? "0.9" : "0.6"}
             />
             <path
               d={path}
               fill="none"
               stroke={active ? ROUTE_THREAD_STYLE.marker : ROUTE_THREAD_STYLE.color}
-              strokeWidth={active ? "7" : "3"}
+              strokeWidth={active ? "3.5" : "2"}
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -431,7 +441,7 @@ export function AtlasRegionalFallback({
       <div
         role="status"
         aria-live="polite"
-        className="pointer-events-none absolute bottom-20 left-4 z-10 border border-white/25 bg-[#071019]/88 px-3 py-2 text-xs text-white shadow-lg"
+        className="pointer-events-none absolute bottom-20 left-4 z-10 border border-white/25 bg-surface px-3 py-2 text-xs text-white"
       >
         {statusCopy}
       </div>

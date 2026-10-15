@@ -13,7 +13,7 @@ import {
   HeadingPitchRange,
   ImageryLayer,
   PerspectiveFrustum,
-  PolylineGlowMaterialProperty,
+  PolylineOutlineMaterialProperty,
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
   SceneTransforms,
@@ -41,14 +41,31 @@ import {
   GOOGLE_3D_TILES_RENDER_OPTIONS,
 } from "@/providers/cesium-render-quality";
 
+import { atlasOrbitalPitchLimit, atlasResolutionScale } from "@/surfaces/atlas/atlas-render-quality";
+import { installAtlasAttribution } from "@/surfaces/atlas/atlas-attribution";
+
 const DEFAULT_VIEW = { lat: 24, lng: 12, heightM: 18_500_000 };
 const GLOBAL_SELECTION_HEIGHT_M = DEFAULT_VIEW.heightM;
-const ROUTE_COLOR = Color.fromCssColorString("#62a7ff");
-const SELECTED_ROUTE_COLOR = Color.fromCssColorString("#df674b");
+const ROUTE_COLOR = Color.fromCssColorString("#b8c4c0");
+const SELECTED_ROUTE_COLOR = Color.fromCssColorString("#f5f5f5");
+const ROUTE_CASING_COLOR = Color.fromCssColorString("#18221f");
 const TILE_FAILURE_THRESHOLD = 8;
 const TERRAIN_READY_TIMEOUT_MS = 8_000;
 const TERRAIN_DIAGNOSTIC_INTERVAL_MS = 4_000;
 const REGIONAL_CAMERA_PITCH_RADIANS = -1.02;
+
+export function guardAtlasCameraRotation(camera: Pick<Viewer["camera"], "rotate">) {
+  const rotate = camera.rotate.bind(camera);
+  camera.rotate = (axis, angle) => {
+    // Cesium 1.143's centered pinch can compute identical target/center normals
+    // whose dot product rounds below 1, then rotate around their zero cross
+    // product. That rotation is a no-op; normalizing its axis stops rendering.
+    // Leave every nonzero axis (and invalid/nonfinite input) to Cesium.
+    if (axis.x === 0 && axis.y === 0 && axis.z === 0 &&
+      (angle === undefined || Number.isFinite(angle))) return;
+    rotate(axis, angle);
+  };
+}
 
 interface RegionRouteEntity {
   regionName: string;
@@ -115,6 +132,8 @@ function webglAvailable() {
 
 export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   private viewer?: Viewer;
+  private resizeObserver?: ResizeObserver;
+  private removeAttribution?: () => void;
   private regions: RouteRegion[] = [];
   private routeEntities: RegionRouteEntity[] = [];
   private removeRenderErrorListener?: () => void;
@@ -168,6 +187,9 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
         infoBox: false,
         navigationHelpButton: false,
         sceneModePicker: false,
+        scene3DOnly: true,
+        skyBox: false,
+        useBrowserRecommendedResolution: true,
         selectionIndicator: false,
         timeline: false,
         requestRenderMode: false,
@@ -178,12 +200,28 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
         return;
       }
       this.viewer = viewer;
+      guardAtlasCameraRotation(viewer.camera);
+      this.removeAttribution = installAtlasAttribution(viewer.bottomContainer);
       viewer.camera.percentageChanged = 0.001;
-      viewer.scene.backgroundColor = Color.fromCssColorString("#28443a");
+      viewer.scene.backgroundColor = Color.fromCssColorString("#030609");
+      const updateResolution = () => {
+        viewer.resolutionScale = atlasResolutionScale(
+          container.clientWidth, container.clientHeight, window.devicePixelRatio,
+        );
+        viewer.canvas.dataset.renderScale = viewer.resolutionScale.toFixed(2);
+      };
+      updateResolution();
+      this.resizeObserver = new ResizeObserver(updateResolution);
+      this.resizeObserver.observe(container);
+      viewer.scene.postProcessStages.fxaa.enabled = true;
+      if (viewer.scene.skyAtmosphere) {
+        viewer.scene.skyAtmosphere.atmosphereLightIntensity = 30;
+      }
       viewer.scene.globe.show = true;
       viewer.scene.globe.baseColor = Color.fromCssColorString("#28443a");
-      viewer.scene.globe.enableLighting = true;
+      viewer.scene.globe.enableLighting = false;
       viewer.scene.screenSpaceCameraController.enableCollisionDetection = true;
+      viewer.scene.screenSpaceCameraController.maximumZoomDistance = 26_000_000;
       viewer.canvas.setAttribute("aria-label", "Interactive route globe");
       viewer.canvas.setAttribute(
         "aria-keyshortcuts",
@@ -200,7 +238,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
       viewer.canvas.dataset.heatLines = String(
         regions.reduce((count, region) => count + region.routes.length, 0),
       );
-      viewer.canvas.dataset.routePalette = "cobalt";
+      viewer.canvas.dataset.routePalette = "monochrome";
       viewer.canvas.dataset.atlasState = "global";
       viewer.canvas.dataset.cameraState = "settled";
       viewer.canvas.dataset.terrainState = "global";
@@ -225,13 +263,10 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
               positions: points.map((point) =>
                 Cartesian3.fromDegrees(point.lng, point.lat),
               ),
-              width: 4,
+              width: 2,
               ...CESIUM_GROUND_ROUTE_OPTIONS,
               classificationType: ClassificationType.BOTH,
-              material: new PolylineGlowMaterialProperty({
-                color: ROUTE_COLOR.withAlpha(0.92),
-                glowPower: 0.16,
-              }),
+              material: new ColorMaterialProperty(ROUTE_COLOR.withAlpha(0.8)),
             },
           });
           return [{ regionName: region.name, route, entity }];
@@ -241,6 +276,14 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
       this.installKeyboardControls(viewer);
       this.installRouteSelection(viewer);
       this.removeCameraChangedListener = viewer.camera.changed.addEventListener(() => {
+        const height = viewer.camera.positionCartographic.height;
+        const pitchLimit = atlasOrbitalPitchLimit(height);
+        if (height > 1_000_000 && viewer.camera.pitch > pitchLimit + 0.001 &&
+          viewer.canvas.dataset.cameraState !== "transitioning") {
+          viewer.camera.setView({ orientation: {
+            heading: viewer.camera.heading, pitch: pitchLimit, roll: 0,
+          } });
+        }
         viewer.canvas.dataset.cameraHeight =
           viewer.camera.positionCartographic.height.toFixed(0);
         viewer.canvas.dataset.cameraTarget =
@@ -365,6 +408,10 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
 
   destroy() {
     this.generation += 1;
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = undefined;
+    this.removeAttribution?.();
+    this.removeAttribution = undefined;
     this.regionGeneration += 1;
     this.leaveRegionalTerrain();
     this.removeRenderErrorListener?.();
@@ -396,7 +443,6 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     this.leaveRegionalTerrain();
     viewer.useDefaultRenderLoop = true;
     viewer.scene.globe.show = true;
-    if (this.baseImageryLayer) this.baseImageryLayer.show = false;
     viewer.canvas.dataset.atlasState = "region-loading";
     viewer.canvas.dataset.cameraState = "transitioning";
     viewer.canvas.dataset.terrainState = "loading";
@@ -433,7 +479,10 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
         height: Math.max(1, viewer.canvas.clientHeight),
       };
       const frame = atlasCameraFrame(sphere.radius, viewport, verticalFov);
-      this.applyFrustumOffsets(frame.horizontalOffsetRatio, frame.verticalOffsetRatio);
+      // Cesium's globe/atmosphere passes do not share a stable off-axis
+      // projection at planetary distances. Keep a symmetric frustum; reserve
+      // room for controls through the fit range instead of shifting projection.
+      this.resetFrustumOffsets();
       const reducedMotion = window.matchMedia(
         "(prefers-reduced-motion: reduce)",
       ).matches;
@@ -477,6 +526,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
       }
       this.tileset = tileset;
       viewer.scene.primitives.add(tileset);
+      viewer.bottomContainer.setAttribute("data-google", "true");
       this.removeTerrainFailureListener = tileset.tileFailed.addEventListener(() => {
         this.terrainFailureTimes = recordTileFailure(
           this.terrainFailureTimes,
@@ -495,7 +545,10 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
         this.reportRegionalFallback(region, regionGeneration);
         return;
       }
-      viewer.scene.globe.show = true;
+      // Photorealistic tiles already supply the earth surface. A second
+      // ellipsoid can intersect that mesh along the horizon and sea level.
+      viewer.scene.globe.show = false;
+      if (this.baseImageryLayer) this.baseImageryLayer.show = false;
       viewer.canvas.dataset.atlasState = "region-ready";
       viewer.canvas.dataset.cameraState = "settled";
       viewer.canvas.dataset.terrainState = "ready";
@@ -544,15 +597,17 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
       const inSelectedRegion = regionName === this.selectedRegionName;
       const active =
         inSelectedRegion && route.slug === this.selectedRouteSlug;
-      entity.polyline.width = new ConstantProperty(active ? 8 : inSelectedRegion ? 5 : 4);
+      entity.polyline.width = new ConstantProperty(active ? 3.5 : 2);
+      entity.polyline.zIndex = new ConstantProperty(active ? 11 : 10);
       entity.polyline.material = active
-        ? new PolylineGlowMaterialProperty({
-            color: SELECTED_ROUTE_COLOR.withAlpha(1),
-            glowPower: 0.24,
+        ? new PolylineOutlineMaterialProperty({
+            color: SELECTED_ROUTE_COLOR,
+            outlineColor: ROUTE_CASING_COLOR.withAlpha(0.7),
+            outlineWidth: 0.65,
           })
         : new ColorMaterialProperty(
             ROUTE_COLOR.withAlpha(
-              this.selectedRegionName ? (inSelectedRegion ? 0.48 : 0.2) : 0.92,
+              this.selectedRegionName ? (inSelectedRegion ? 0.65 : 0.2) : 0.8,
             ),
           );
     });
@@ -632,6 +687,8 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     this.clearRegionalTiles();
     const viewer = this.viewer;
     if (!viewer || viewer.isDestroyed()) return;
+    viewer.bottomContainer.setAttribute("data-google", "false");
+    viewer.bottomContainer.setAttribute("data-sources-open", "false");
     viewer.useDefaultRenderLoop = true;
     viewer.scene.globe.show = true;
     if (this.baseImageryLayer) this.baseImageryLayer.show = true;
@@ -656,20 +713,6 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     this.blankFrameCount = 0;
   }
 
-  private applyFrustumOffsets(horizontalRatio: number, verticalRatio: number) {
-    const frustum = this.viewer?.camera.frustum;
-    if (!(frustum instanceof PerspectiveFrustum)) return;
-    const verticalFov = frustum.fovy ?? CesiumMath.toRadians(60);
-    const aspectRatio =
-      frustum.aspectRatio ??
-      Math.max(1, this.viewer?.canvas.clientWidth ?? 1) /
-        Math.max(1, this.viewer?.canvas.clientHeight ?? 1);
-    const verticalTangent = Math.tan(verticalFov / 2);
-    const horizontalTangent = verticalTangent * aspectRatio;
-    frustum.xOffset = horizontalRatio * frustum.near * horizontalTangent;
-    frustum.yOffset = verticalRatio * frustum.near * verticalTangent;
-  }
-
   private resetFrustumOffsets() {
     const frustum = this.viewer?.camera.frustum;
     if (!(frustum instanceof PerspectiveFrustum)) return;
@@ -680,9 +723,13 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   private zoomBy(factor: number) {
     const viewer = this.viewer;
     if (!viewer || viewer.isDestroyed()) return;
+    viewer.camera.cancelFlight();
     const height = viewer.camera.positionCartographic.height;
-    if (factor < 1) viewer.camera.zoomIn(height * (1 - factor));
-    else viewer.camera.zoomOut(height * (factor - 1));
+    const controller = viewer.scene.screenSpaceCameraController;
+    const targetHeight = Math.max(controller.minimumZoomDistance,
+      Math.min(controller.maximumZoomDistance, height * factor));
+    if (targetHeight < height) viewer.camera.zoomIn(height - targetHeight);
+    else viewer.camera.zoomOut(targetHeight - height);
     viewer.canvas.dataset.cameraTarget = viewer.camera.positionCartographic.height.toFixed(0);
   }
 

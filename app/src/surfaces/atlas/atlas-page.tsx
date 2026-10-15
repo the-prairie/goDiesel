@@ -6,10 +6,11 @@ import {
   useRef,
   useState,
 } from "react";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 
 import {
   AtlasControls,
+  AtlasActivityFilter,
   type AtlasActivityMode,
 } from "@/surfaces/atlas/components/atlas-controls";
 import {
@@ -33,7 +34,9 @@ export function AtlasPage() {
   const [regionPresentationReady, setRegionPresentationReady] = useState(false);
   const activityParam = searchParams.get("activity");
   const mode: AtlasActivityMode =
-    activityParam === "runs" || activityParam === "rides" ? activityParam : "all";
+    activityParam === "runs" || activityParam === "rides"
+      ? activityParam
+      : "all";
   const visibleRoutes = useMemo(
     () =>
       completedRoutes.filter((route) => {
@@ -43,27 +46,34 @@ export function AtlasPage() {
       }),
     [mode],
   );
-  const routeRegions = useMemo(() => buildRouteRegions(visibleRoutes), [visibleRoutes]);
+  const routeRegions = useMemo(
+    () => buildRouteRegions(visibleRoutes),
+    [visibleRoutes],
+  );
   const selection = resolveAtlasSelection(searchParams, routeRegions);
   const { selectedRegion, selectedRoute } = selection;
   const presentedRoute = selectedRoute ?? selectedRegion?.routes[0];
   const query = searchParams.get("q") ?? "";
 
-  const updateSearchParams = useCallback(function updateSearchParams(
-    update: (next: URLSearchParams) => void,
-    replace = false,
-  ) {
-    const next = new URLSearchParams(searchParamsRef.current);
-    update(next);
-    searchParamsRef.current = next;
-    setSearchParams(next, { replace });
-  }, [setSearchParams]);
+  const updateSearchParams = useCallback(
+    function updateSearchParams(
+      update: (next: URLSearchParams) => void,
+      replace = false,
+    ) {
+      const next = new URLSearchParams(searchParamsRef.current);
+      update(next);
+      searchParamsRef.current = next;
+      setSearchParams(next, { replace });
+    },
+    [setSearchParams],
+  );
 
   useEffect(() => {
     if (!selection.invalidRegion && !selection.invalidRoute) return;
     updateSearchParams((next) => {
       if (selection.invalidRegion) next.delete("region");
-      if (selection.invalidRegion || selection.invalidRoute) next.delete("route");
+      if (selection.invalidRegion || selection.invalidRoute)
+        next.delete("route");
     }, true);
   }, [selection.invalidRegion, selection.invalidRoute, updateSearchParams]);
 
@@ -113,7 +123,10 @@ export function AtlasPage() {
     const returnParams = new URLSearchParams(searchParams);
     returnParams.set("region", route.region);
     returnParams.set("route", route.slug);
-    return replayPath(route.slug, `${location.pathname}?${returnParams.toString()}`);
+    return replayPath(
+      route.slug,
+      `${location.pathname}?${returnParams.toString()}`,
+    );
   }
 
   function clearRegion() {
@@ -145,7 +158,10 @@ export function AtlasPage() {
   }
 
   return (
-    <section className="relative isolate h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 overflow-hidden bg-background md:h-dvh">
+    <section
+      data-region-selected={Boolean(selectedRegion)}
+      className="atlas-layout relative isolate h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 overflow-hidden bg-background md:h-dvh"
+    >
       <AtlasGlobe
         ref={globeRef}
         regions={routeRegions}
@@ -157,23 +173,23 @@ export function AtlasPage() {
         className="absolute inset-0 min-h-0 rounded-none border-0"
       />
 
-      <AtlasSearch
-        routes={visibleRoutes}
-        regions={routeRegions}
-        query={query}
-        onQueryChange={setQuery}
-        selectedRegion={selectedRegion}
-        onSelectRegion={selectRegion}
-        selectedRoute={selectedRoute}
-        onSelectRoute={selectRoute}
-        className={`atlas-search-panel absolute left-4 right-4 top-20 z-30 max-h-[56dvh] overflow-y-auto md:left-[15.5rem] md:right-5 md:top-[5.25rem] md:min-h-[54px] md:p-1 xl:left-[26.5rem] xl:right-auto xl:top-5 xl:w-[340px] ${selectedRegion ? "atlas-search-panel--selected [@media(max-height:500px)]:hidden" : ""}`}
-      />
+      <div className="atlas-discovery absolute z-30 grid gap-2">
+        <AtlasSearch
+          routes={visibleRoutes}
+          regions={routeRegions}
+          query={query}
+          onQueryChange={setQuery}
+          selectedRegion={selectedRegion}
+          onSelectRegion={selectRegion}
+          selectedRoute={selectedRoute}
+          onSelectRoute={selectRoute}
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <AtlasActivityFilter mode={mode} onModeChange={setMode} />
+          {selectedRegion ? <Link aria-label="Return to global Atlas" to="/atlas" className="atlas-return inline-flex min-h-11 items-center rounded-md bg-surface px-3 text-sm text-ink-secondary focus-visible:outline-2 focus-visible:outline-ring">All places</Link> : null}
+        </div>
+      </div>
       <AtlasControls
-        regions={routeRegions}
-        selectedRegion={selectedRegion}
-        onSelectRegion={selectRegion}
-        mode={mode}
-        onModeChange={setMode}
         onZoomIn={() => globeRef.current?.zoomIn()}
         onZoomOut={() => globeRef.current?.zoomOut()}
         onResetView={() => globeRef.current?.resetView()}

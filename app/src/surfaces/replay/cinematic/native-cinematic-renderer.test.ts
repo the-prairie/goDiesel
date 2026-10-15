@@ -172,3 +172,41 @@ describe("cinematic route filament", () => {
     ]);
   });
 });
+
+
+describe("interactive camera comfort", () => {
+  it("keeps a finite pose for rapid controls sharing a frame timestamp", () => {
+    const motion = createRouteCameraMotionState(start);
+    expect(advanceRouteCameraMotion(motion, target, 0)).toEqual(motion);
+    expect(advanceRouteCameraMotion(motion, target, -0.001)).toEqual(motion);
+    const next = advanceRouteCameraMotion(motion, target, 1 / 60);
+    expect(Number.isFinite(next.pose.center.lat)).toBe(true);
+  });
+  it("bounds turn speed and acceleration through reversals at different frame rates", () => {
+    for (const fps of [20, 30, 60, 120]) {
+      let motion = createRouteCameraMotionState({ ...start, headingDeg: 0 });
+      for (let frame = 0; frame < fps * 10; frame += 1) {
+        const previous = motion;
+        motion = advanceRouteCameraMotion(motion,
+          { ...target, headingDeg: frame < fps * 4 ? 150 : 300 }, 1 / fps);
+        const delta = ((motion.pose.headingDeg - previous.pose.headingDeg + 540) % 360) - 180;
+        expect(Math.abs(delta) * fps).toBeLessThanOrEqual(30.001);
+        expect(Math.abs(motion.velocity.heading - previous.velocity.heading) * fps).toBeLessThanOrEqual(45.001);
+        expect(Math.abs(motion.velocity.tilt)).toBeLessThanOrEqual(10.001);
+      }
+    }
+  });
+  it("settles on a new heading without oscillating after a sharp turn", () => {
+    let motion = createRouteCameraMotionState({ ...start, headingDeg: 0 });
+    for (let frame = 0; frame < 60 * 15; frame += 1) {
+      motion = advanceRouteCameraMotion(motion, { ...target, headingDeg: 150 }, 1 / 60);
+    }
+    expect(motion.pose.headingDeg).toBeCloseTo(150, 1);
+    expect(Math.abs(motion.velocity.heading)).toBeLessThan(0.1);
+  });
+  it("places the thread head by recorded distance with uneven GPS samples", () => {
+    const path = [{ lat: 0, lng: 0, d: 0 }, { lat: 0, lng: 1, d: 10 }, { lat: 0, lng: 10, d: 100 }];
+    expect(slicePathByRatio(path, 0, 0.5).at(-1)).toEqual({lat: 0, lng: 5});
+    expect(slicePathByRatio(path, 0.5, 1)[0]).toEqual({lat: 0, lng: 5});
+  });
+});

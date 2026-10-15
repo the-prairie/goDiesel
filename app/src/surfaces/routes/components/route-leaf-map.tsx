@@ -1,5 +1,6 @@
 import { LocateFixed, Minus, Plus } from "lucide-react";
-import maplibregl, { LngLatBounds, Map as MapLibreMap } from "maplibre-gl";
+import maplibregl from "@/providers/maplibre";
+import { LngLatBounds, Map as MapLibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -13,8 +14,9 @@ import {
 import type { QuestRoute } from "@/domain/route";
 
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
-const ROUTE_COLOR = "#315fb4";
-const ROUTE_HALO = "#f6f2e8";
+const ROUTE_COLOR = "#30343b";
+const ROUTE_HALO = "#ffffff";
+const ENDPOINT_COLORS = { start: "#ed916b", finish: "#88c6a1" };
 
 function routeFeature(route: QuestRoute) {
   return {
@@ -27,13 +29,13 @@ function routeFeature(route: QuestRoute) {
   };
 }
 
-export function RouteLeafMap({ route }: { route: QuestRoute }) {
+export function RouteLeafMap({ route, showDiagnostics = false }: { route: QuestRoute; showDiagnostics?: boolean }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | undefined>(undefined);
   const [status, setStatus] = useState<"loading" | "ready" | "unavailable">(
     route.route.length > 1 ? "loading" : "unavailable",
   );
-  const repairs = useMemo(() => routeRepairs(route), [route]);
+  const repairs = useMemo(() => showDiagnostics ? routeRepairs(route) : [], [route, showDiagnostics]);
   const [activeRepairs, setActiveRepairs] = useState<RouteRepair[]>([]);
   const [repairPositions, setRepairPositions] = useState<
     Array<{ id: string; x: number; y: number }>
@@ -91,7 +93,7 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
           "line-color": ROUTE_HALO,
-          "line-width": 10,
+          "line-width": 5,
           "line-opacity": 0.9,
         },
       });
@@ -102,7 +104,7 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
           "line-color": ROUTE_COLOR,
-          "line-width": 5,
+          "line-width": 3,
           "line-opacity": 1,
         },
       });
@@ -133,7 +135,7 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
         filter: ["==", ["get", "kind"], "start"],
         paint: {
           "circle-radius": 7,
-          "circle-color": "#d95d45",
+          "circle-color": ENDPOINT_COLORS.start,
           "circle-stroke-color": ROUTE_HALO,
           "circle-stroke-width": 3,
         },
@@ -145,7 +147,7 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
         filter: ["==", ["get", "kind"], "finish"],
         paint: {
           "circle-radius": 7,
-          "circle-color": "#174f46",
+          "circle-color": ENDPOINT_COLORS.finish,
           "circle-stroke-color": ROUTE_HALO,
           "circle-stroke-width": 3,
         },
@@ -198,7 +200,7 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
       data-geometry-points={route.route.length}
       data-route-color={ROUTE_COLOR}
       data-route-halo={ROUTE_HALO}
-      className="relative min-h-0 overflow-hidden bg-[#d9ddd2]"
+      className="relative h-full min-h-0 overflow-hidden bg-canvas"
     >
       <div
         ref={hostRef}
@@ -255,13 +257,13 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
       {status === "loading" ? (
         <div
           role="status"
-          className="absolute left-4 top-4 rounded-sm border border-line bg-surface/92 px-3 py-2 text-caption text-ink-secondary shadow-panel"
+          className="absolute inset-0 grid place-items-center bg-canvas p-6 text-caption text-ink-secondary"
         >
           Opening route geography.
         </div>
       ) : null}
       {status === "unavailable" ? (
-        <div className="absolute inset-0 grid place-items-center bg-surface-muted/92 p-6 text-center">
+        <div className="absolute inset-0 grid place-items-center bg-canvas p-6 text-center">
           <div className="max-w-sm">
             <p className="font-semibold text-ink">
               {route.route.length > 1 ? "Map tiles unavailable" : "Recorded path unavailable"}
@@ -279,11 +281,11 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
         <>
           <div className="absolute right-4 top-4 z-10 flex gap-3 rounded-sm border border-line bg-surface/92 px-3 py-2 text-caption font-semibold text-ink-secondary shadow-panel backdrop-blur">
             <span className="inline-flex items-center gap-1.5">
-              <span className="size-2 rounded-full bg-coral" aria-hidden="true" />
+              <span className="size-2 rounded-full" style={{ backgroundColor: ENDPOINT_COLORS.start }} aria-hidden="true" />
               Start
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="size-2 rounded-full bg-forest" aria-hidden="true" />
+              <span className="size-2 rounded-full" style={{ backgroundColor: ENDPOINT_COLORS.finish }} aria-hidden="true" />
               Finish
             </span>
           </div>
