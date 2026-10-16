@@ -609,6 +609,9 @@ a {
 .atlas-world-label { border-radius: 6px; }
 .atlas-layout { --atlas-tray-height: 12rem; --atlas-card-accent: var(--forest); }
 .atlas-layout[data-region-selected="true"] .atlas-map-tools { bottom: calc(var(--atlas-tray-height) + 0.75rem); }
+@media (min-height: 701px) {
+  .atlas-layout:has([data-atlas-engine="maplibre-regional-fallback"]) .atlas-map-tools { bottom: calc(var(--atlas-tray-height) + 2.75rem); }
+}
 .atlas-route-carousel, .atlas-route-loading { min-height: var(--atlas-tray-height); }
 .atlas-route-carousel { background: rgb(0 0 0 / 84%); backdrop-filter: blur(4px); border-top: 1px solid rgb(247 249 250 / 14%); box-shadow: none; }
 /* Cesium writes an inline bottom offset when its viewer resizes. */

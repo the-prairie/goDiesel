@@ -3,9 +3,9 @@ import { PNG } from "pngjs";
 
 import { installDeterministicCesiumAtlas } from "./helpers/deterministic-atlas";
 
-for (const width of [390, 1440]) {
+for (const { width, height } of [{ width: 390, height: 900 }, { width: 1440, height: 900 }, { width: 844, height: 390 }]) {
   test(`regional fallback recovers after its deadline and reconciles history at ${width}px`, async ({ page }) => {
-    await page.setViewportSize({ width, height: 900 });
+    await page.setViewportSize({ width, height });
     let pendingStyle: Route | undefined;
     await page.route("**/styles/liberty", route => { pendingStyle = route; });
     await page.addInitScript(() => { window.__GODIESEL_ATLAS_REGION_OUTCOME__ = "fallback"; });
@@ -26,6 +26,32 @@ for (const width of [390, 1440]) {
     await expect(page.getByText("3D terrain partially unavailable.", { exact: true })).toBeVisible();
     const carousel = page.getByRole("region", { name: "Kyoto, Japan recorded routes", exact: true });
     await expect(carousel).toBeVisible();
+    const mapHost = fallback.getByRole("img", { name: "Kyoto, Japan regional route map", exact: true });
+    const hostBounds = (await mapHost.boundingBox())!;
+    expect(hostBounds.height).toBeGreaterThan(height / 2);
+    expect(hostBounds.y + hostBounds.height).toBeLessThanOrEqual(height);
+    const notice = fallback.getByRole("status");
+    const noticeBounds = (await notice.boundingBox())!;
+    const trayBounds = (await page.getByRole("region", { name: "Kyoto, Japan routes", exact: true }).boundingBox())!;
+    expect(noticeBounds.y + noticeBounds.height).toBeLessThanOrEqual(trayBounds.y);
+    const routePath = fallback.locator("path[data-route-hit-target]").first();
+    for (const path of await fallback.locator("path[data-route-hit-target]").all()) {
+      const bounds = (await path.boundingBox())!;
+      expect(bounds.y + bounds.height).toBeLessThan(trayBounds.y);
+    }
+    const initialPath = await routePath.getAttribute("d");
+    const controls = page.getByRole("group", { name: "Map controls" });
+    await controls.getByRole("button", { name: "Zoom in", exact: true }).click();
+    await page.clock.runFor(1000);
+    await expect(routePath).not.toHaveAttribute("d", initialPath!);
+    const zoomedPath = await routePath.getAttribute("d");
+    await controls.getByRole("button", { name: "Zoom out", exact: true }).click();
+    await page.clock.runFor(1000);
+    await expect(routePath).not.toHaveAttribute("d", zoomedPath!);
+    await controls.getByRole("button", { name: "Zoom in", exact: true }).click();
+    await page.clock.runFor(1000);
+    await controls.getByRole("button", { name: "Reset globe view", exact: true }).click();
+    await expect(routePath).toHaveAttribute("d", initialPath!);
     const cards = carousel.locator("article[data-route-slug]");
     await page.getByRole("button", { name: "Next route", exact: true }).click();
     await expect(cards.nth(1)).toHaveAttribute("data-selected", "true");
