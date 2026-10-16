@@ -12,6 +12,12 @@ import type {
 } from "@/surfaces/replay/renderer-port";
 import type { ReplayPose } from "@/surfaces/replay/playback/replay-controller";
 
+import {
+  initialMapLibreReplayState,
+  reduceMapLibreReplay,
+  mapLibreReplayStatus,
+} from "./maplibre-replay-state";
+
 const STYLE_URL = "https://tiles.openfreemap.org/styles/fiord";
 
 function routeFeature(route: ReplayEngineMountOptions["route"]) {
@@ -35,9 +41,8 @@ function zoomForRange(cameraRangeM: number) {
 export class MapLibreAtlasReplayEngine implements ReplayEngine {
   private map?: MapLibreMap;
   private host?: HTMLDivElement;
-  private ready = false;
+  private lifecycle = initialMapLibreReplayState();
   private loadTimer?: number;
-  private errorCount = 0;
   private generation = 0;
 
   async mount({
@@ -46,6 +51,10 @@ export class MapLibreAtlasReplayEngine implements ReplayEngine {
     onStatus,
   }: ReplayEngineMountOptions) {
     const generation = ++this.generation;
+    this.lifecycle = reduceMapLibreReplay(this.lifecycle, {
+      type: "mapStarted",
+      operationId: generation,
+    });
     onStatus({
       state: "loading",
       title: "Opening Atlas replay",
@@ -78,23 +87,23 @@ export class MapLibreAtlasReplayEngine implements ReplayEngine {
     map.addControl(new maplibregl.NavigationControl({ showCompass: true }), "bottom-right");
     const handleError = () => {
       if (generation !== this.generation) return;
-      this.errorCount += 1;
-      if (!this.ready && this.errorCount >= 4) {
-        onStatus({
-          state: "unavailable",
-          title: "Atlas replay unavailable",
-          message: "The fallback map could not load in this browser session.",
-        });
+      this.lifecycle = reduceMapLibreReplay(this.lifecycle, {
+        type: "mapError",
+        operationId: generation,
+      });
+      if (this.lifecycle.phase === "unavailable" && this.lifecycle.reason === "errors") {
+        onStatus(mapLibreReplayStatus(this.lifecycle)!);
       }
     };
     map.on("error", handleError);
     this.loadTimer = window.setTimeout(() => {
-      if (generation === this.generation && !this.ready) {
-        onStatus({
-          state: "unavailable",
-          title: "Atlas replay timed out",
-          message: "The fallback map did not become ready in time.",
-        });
+      if (generation !== this.generation) return;
+      this.lifecycle = reduceMapLibreReplay(this.lifecycle, {
+        type: "deadlineReached",
+        operationId: generation,
+      });
+      if (this.lifecycle.phase === "unavailable") {
+        onStatus(mapLibreReplayStatus(this.lifecycle)!);
       }
     }, 15_000);
 
@@ -135,18 +144,17 @@ export class MapLibreAtlasReplayEngine implements ReplayEngine {
         maxZoom: 15,
         duration: 0,
       });
-      this.ready = true;
-      onStatus({
-        state: "ready",
-        title: "Atlas replay ready",
-        message: "The fallback route thread is ready to move.",
+      this.lifecycle = reduceMapLibreReplay(this.lifecycle, {
+        type: "mapLoaded",
+        operationId: generation,
       });
+      onStatus(mapLibreReplayStatus(this.lifecycle)!);
     });
   }
 
   setPose(pose: ReplayPose) {
     const map = this.map;
-    if (!map || !this.ready) return;
+    if (!map || this.lifecycle.phase !== "ready") return;
     if (!pose.following) return;
     map.jumpTo({
       center: [pose.lng, pose.lat],
@@ -163,8 +171,7 @@ export class MapLibreAtlasReplayEngine implements ReplayEngine {
     this.host?.remove();
     this.map = undefined;
     this.host = undefined;
-    this.ready = false;
+    this.lifecycle = reduceMapLibreReplay(this.lifecycle, { type: "disposed" });
     this.loadTimer = undefined;
-    this.errorCount = 0;
   }
 }
