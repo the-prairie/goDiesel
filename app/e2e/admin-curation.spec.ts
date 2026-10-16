@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Request } from "@playwright/test";
+import { expect, test, type Page, type Request, type Route } from "@playwright/test";
 
 const adminApi = "http://127.0.0.1:8766";
 
@@ -167,6 +167,7 @@ for (const viewport of [
 test("Admin is explicitly read-only without the local writer", async ({
   page,
 }) => {
+  await page.route(`${adminApi}/**`, (route) => route.abort());
   await page.goto("/#/admin");
 
   await expect(page.getByText("Read-only mode.")).toBeVisible();
@@ -341,3 +342,97 @@ for (const viewport of [
     expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth + 1);
   });
 }
+
+
+test("drafts survive filtering and selection while clearing search restores the preferred route", async ({ page }) => {
+  await mockEditableAdmin(page, () => undefined);
+  await page.route(`${adminApi}/api/routes`, (route) => route.fulfill({ json: [
+    { ...adminRoute, activity_id: "a", name: "Calgary River Path", region: "Calgary" },
+    { ...adminRoute, activity_id: "b", name: "Kyoto Temple Climb" },
+  ] }));
+  await page.goto("/#/admin");
+  const editor = page.getByRole("region", { name: "Route curation editor" });
+  const search = page.getByRole("searchbox", { name: "Search owner routes" });
+  await editor.getByLabel("Vibe").fill("Calgary draft retained.");
+  await search.fill("Kyoto");
+  await editor.getByLabel("Vibe").fill("Kyoto draft retained.");
+  await search.fill("");
+  await expect(editor.getByRole("heading")).toHaveText("Calgary River Path");
+  await expect(editor.getByLabel("Vibe")).toHaveValue("Calgary draft retained.");
+  await page.getByRole("button", { name: /Kyoto Temple Climb/ }).click();
+  await expect(editor.getByLabel("Vibe")).toHaveValue("Kyoto draft retained.");
+  await search.fill("Calgary");
+  await search.fill("");
+  await expect(editor.getByRole("heading")).toHaveText("Kyoto Temple Climb");
+  await expect(editor.getByLabel("Vibe")).toHaveValue("Kyoto draft retained.");
+});
+
+test("concurrent saves retain captured drafts and independent failure and retry feedback", async ({ page }) => {
+  const saves: Route[] = [];
+  await mockEditableAdmin(page, () => undefined);
+  await page.route(`${adminApi}/api/routes`, (route) => route.fulfill({ json: [
+    { ...adminRoute, activity_id: "a", name: "Calgary River Path", region: "Calgary", generation_status: "failed" },
+    { ...adminRoute, activity_id: "b", name: "Kyoto Temple Climb" },
+  ] }));
+  await page.route(`${adminApi}/api/curation/save`, (route) => { saves.push(route); });
+  await page.clock.install();
+  await page.goto("/#/admin");
+  const editor = page.getByRole("region", { name: "Route curation editor" });
+  const save = editor.getByRole("button", { name: "Save and regenerate" });
+  const actionBar = page.getByTestId("curation-action-bar");
+  await expect(actionBar).toHaveAttribute("data-dirty", "false");
+  await expect(save).toBeEnabled();
+  await editor.getByLabel("Vibe").fill("Captured Calgary draft.");
+  await save.click();
+  await expect.poll(() => saves.length).toBe(1);
+  await expect(editor.getByLabel("Vibe")).toBeDisabled();
+  await page.clock.fastForward(120_000);
+  await expect(editor.getByRole("button", { name: "Saving and rebuilding..." })).toBeDisabled();
+  await page.getByRole("button", { name: /Kyoto Temple Climb/ }).click();
+  await expect(editor.getByLabel("Vibe")).toBeEnabled();
+  await editor.getByLabel("Vibe").fill("Captured Kyoto draft.");
+  await save.click();
+  await expect.poll(() => saves.length).toBe(2);
+  expect(saves.map((route) => route.request().postDataJSON())).toMatchObject([
+    { activity_id: "a", curation: { vibe: "Captured Calgary draft." } },
+    { activity_id: "b", curation: { vibe: "Captured Kyoto draft." } },
+  ]);
+  await saves[0].fulfill({ json: { ok: true } });
+  await expect(editor.getByRole("button", { name: "Saving and rebuilding..." })).toBeDisabled();
+  await saves[1].fulfill({ status: 500, json: { error: "Fixture regeneration failed." } });
+  await expect(editor.getByText("Fixture regeneration failed.")).toBeVisible();
+  await expect(editor.getByLabel("Vibe")).toBeEnabled();
+  await expect(actionBar).toHaveAttribute("data-dirty", "true");
+  await page.getByRole("button", { name: /Calgary River Path/ }).click();
+  await expect(actionBar).toHaveAttribute("data-dirty", "false");
+  await expect(editor.getByText("Manifest and route detail regenerated")).toBeVisible();
+  await expect(editor.getByLabel("Vibe")).toHaveValue("Captured Calgary draft.");
+  await page.getByRole("button", { name: /Kyoto Temple Climb/ }).click();
+  await expect(editor.getByText("Fixture regeneration failed.")).toBeVisible();
+  await editor.getByLabel("Vibe").fill("Retry Kyoto draft.");
+  await expect(editor.getByText("Fixture regeneration failed.")).toHaveCount(0);
+  await save.click();
+  await expect.poll(() => saves.length).toBe(3);
+  expect(saves[2].request().postDataJSON().curation.vibe).toBe("Retry Kyoto draft.");
+  await saves[2].fulfill({ json: { ok: true } });
+  await expect(actionBar).toHaveAttribute("data-dirty", "false");
+});
+
+test("failed writer probe and bundled detail stay read-only without automatic retry", async ({ page }) => {
+  let probes = 0;
+  await page.route(`${adminApi}/**`, (route) => {
+    probes += 1;
+    return route.abort();
+  });
+  await page.route("**/data/routes/*.json", (route) => route.abort());
+  await page.goto("/#/admin");
+  await expect(page.getByText("Read-only mode.")).toBeVisible();
+  const editor = page.getByRole("region", { name: "Route curation editor" });
+  await expect(editor.getByLabel("Vibe")).toBeDisabled();
+  await expect(editor.getByRole("heading")).not.toBeEmpty();
+  await expect(editor.getByRole("button", { name: "Save and regenerate" })).toHaveCount(0);
+  await page.getByRole("searchbox").fill("no matching route");
+  await page.getByRole("button", { name: "Clear search" }).click();
+  await expect(editor.getByLabel("Vibe")).toBeDisabled();
+  expect(probes).toBe(2);
+});
