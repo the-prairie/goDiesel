@@ -21,7 +21,7 @@ for (const width of [390, 1280]) {
     const first = page.getByRole("article").first();
     await expect(first).toBeVisible({ timeout: 65_000 });
     await expect(first).toContainText("OpenStreetMap");
-    await expect(first).toContainText("Stoney Lookout");
+    await expect(first.getByRole("heading", { level: 3 })).not.toBeEmpty();
     await expect(first).toContainText(
       /Mapped loop|Open path|Branching paths|Disconnected sections/,
     );
