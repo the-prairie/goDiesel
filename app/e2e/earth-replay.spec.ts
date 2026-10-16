@@ -9,6 +9,7 @@ async function installReplayStatusEngines(
   await page.addInitScript((state) => {
     const replayWindow = window as typeof window & {
       __replayModes?: string[];
+      __replayStatusCallbacks?: Array<(status: { state: "loading" | "ready" | "partial" | "unavailable"; title: string; message: string }) => void>;
       __replayDestroyCount?: number;
       __GODIESEL_REPLAY_ENGINE_FACTORY__?: (mode: "earth" | "atlas") => {
         mount(options: {
@@ -23,10 +24,12 @@ async function installReplayStatusEngines(
       };
     };
     replayWindow.__replayModes = [];
+    replayWindow.__replayStatusCallbacks = [];
     replayWindow.__replayDestroyCount = 0;
     replayWindow.__GODIESEL_REPLAY_ENGINE_FACTORY__ = (mode) => ({
       async mount(options) {
         replayWindow.__replayModes?.push(mode);
+        replayWindow.__replayStatusCallbacks?.push(options.onStatus);
         if (mode === "atlas") {
           options.onStatus({
             state: "ready",
@@ -750,3 +753,62 @@ test("missing Replay geometry remains intentional and navigable", async ({ page 
   await page.getByRole("link", { name: "Return to route guide" }).click();
   await expect(page).toHaveURL(new RegExp(`#\/routes\/${routeSlug}$`));
 });
+
+async function publishReplayStatus(page: Page, state: string, index = 0) {
+  await page.evaluate(({ state, index }) => {
+    const callbacks = (window as typeof window & {
+      __replayStatusCallbacks: Array<(status: { state: string; title: string; message: string }) => void>;
+    }).__replayStatusCallbacks;
+    callbacks[index]({ state, title: "Renderer outcome", message: "Renderer lifecycle fixture." });
+  }, { state, index });
+}
+
+for (const width of [390, 1440]) {
+  test(`legacy session preserves controls across renderer loading at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await installReplayStatusEngines(page, "partial");
+    await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
+    const replay = page.getByTestId("replay-stage");
+    await expect(replay).toHaveAttribute("data-state", "partial");
+    await page.getByLabel("Route progress").fill("10000");
+    if (width < 768) await page.getByRole("button", { name: "Show more controls" }).click();
+    await page.getByRole("button", { name: "Playback speed 1x" }).click();
+    await page.getByRole("button", { name: "Release camera" }).click();
+    await page.getByRole("button", { name: "Zoom out from route" }).click();
+    await page.getByRole("button", { name: "Play route" }).click();
+    await expect.poll(async () => Number(await replay.getAttribute("data-progress"))).toBeGreaterThan(10000);
+    await publishReplayStatus(page, "loading");
+    await expect(replay).toHaveAttribute("data-state", "loading");
+    await expect(page.getByRole("button", { name: "Pause route" })).toBeDisabled();
+    const frozen = await replay.getAttribute("data-progress");
+    await page.waitForTimeout(200);
+    await expect(replay).toHaveAttribute("data-progress", frozen!);
+    await publishReplayStatus(page, "partial");
+    await expect.poll(async () => Number(await replay.getAttribute("data-progress"))).toBeGreaterThan(Number(frozen));
+    await page.getByRole("button", { name: "Pause route" }).click();
+    const paused = await replay.getAttribute("data-progress");
+    await page.getByRole("button", { name: "Show route details" }).click();
+    await page.getByRole("button", { name: "Use Atlas replay" }).click();
+    await expect(replay).toHaveAttribute("data-engine", "maplibre-atlas");
+    await expect(replay).toHaveAttribute("data-state", "ready");
+    await expect(replay).toHaveAttribute("data-progress", paused!);
+    await expect(replay).toHaveAttribute("data-speed", "2");
+    await expect(replay).toHaveAttribute("data-following", "false");
+    await expect(replay).toHaveAttribute("data-camera-range", "720");
+    await publishReplayStatus(page, "unavailable");
+    await expect(replay).toHaveAttribute("data-state", "ready");
+    await page.getByRole("button", { name: "Try Earth replay" }).click();
+    await expect(replay).toHaveAttribute("data-state", "partial");
+    await expect(replay).toHaveAttribute("data-progress", paused!);
+    await page.getByRole("button", { name: "Change route" }).click();
+    const chooser = page.getByRole("dialog", { name: "Choose a replay route" });
+    await chooser.getByRole("searchbox", { name: "Search replay routes" }).fill("Victoria");
+    await chooser.locator("a[href$='/replay/5650407638?renderer=cesium']").click();
+    await expect(replay).toHaveAttribute("data-route-slug", "5650407638");
+    await expect(replay).toHaveAttribute("data-progress", "0.00");
+    await expect(replay).toHaveAttribute("data-speed", "1");
+    await expect(replay).toHaveAttribute("data-following", "true");
+    await expect(replay).toHaveAttribute("data-camera-range", "240");
+    await expect(page.getByRole("button", { name: "Play route" })).toBeEnabled();
+  });
+}
