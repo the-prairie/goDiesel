@@ -69,7 +69,7 @@ const FILAMENT_CLEARANCE_M: Record<CinematicFilamentRole, number> = {
 
 const GOOGLE_SCENE_READY_TIMEOUT_MS = 30_000;
 
-function waitForGoogleSceneReady(map: google.maps.maps3d.Map3DElement) {
+function waitForGoogleSceneReady(map: google.maps.maps3d.Map3DElement, signal: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       cleanup();
@@ -84,13 +84,19 @@ function waitForGoogleSceneReady(map: google.maps.maps3d.Map3DElement) {
       cleanup();
       reject(new ProviderError("Google photorealistic 3D could not render this scene."));
     };
+    const onAbort = () => {
+      cleanup();
+      reject(new DOMException("Google scene disposed.", "AbortError"));
+    };
     const cleanup = () => {
       window.clearTimeout(timeout);
       map.removeEventListener("gmp-steadychange", onSteady);
       map.removeEventListener("gmp-error", onError);
+      signal.removeEventListener("abort", onAbort);
     };
     map.addEventListener("gmp-steadychange", onSteady);
     map.addEventListener("gmp-error", onError, { once: true });
+    signal.addEventListener("abort", onAbort, { once: true });
   });
 }
 
@@ -106,7 +112,7 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
   private headingDeg?: number;
   private headingSmoothing = 0.14;
   private generation = 0;
-  private authFailure?: () => void;
+  private mountController?: AbortController;
 
   async mount({
     apiKey,
@@ -118,6 +124,7 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
     routeStyle,
     headingSmoothing,
   }: MountOptions) {
+    this.destroy();
     const generation = ++this.generation;
     onStatus({ state: "loading", message: "Loading Google photorealistic 3D." });
     this.headingSmoothing = headingSmoothing ?? 0.14;
@@ -135,7 +142,10 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
     }
 
     try {
-      this.authFailure = () => {
+      const controller = new AbortController();
+      this.mountController = controller;
+      const authFailure = () => {
+        if (generation !== this.generation) return;
         onStatus({
           state: "unavailable",
           message:
@@ -144,7 +154,8 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
       };
       window.addEventListener(
         "godiesel:google-maps-auth-failure",
-        this.authFailure,
+        authFailure,
+        { signal: controller.signal },
       );
       await loadGoogleMaps(apiKey);
       const {
@@ -173,12 +184,13 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
       map.style.height = "100%";
       map.dataset.testid = "google-route-map";
       map.addEventListener("gmp-error", () => {
+        if (generation !== this.generation) return;
         onStatus({
           state: "unavailable",
           message:
             "This browser could not start Google photorealistic 3D. Try a hardware-accelerated Chrome window.",
         });
-      });
+      }, { signal: controller.signal });
 
       const routePath = densifyGoogleRoutePath(route);
       const altitudeMode =
@@ -215,7 +227,7 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
       this.routePath = routePath;
       this.routeDistanceM = Math.max(1, routeDistanceM(route));
       this.routeWidth = routeStyle?.width ?? 8;
-      await waitForGoogleSceneReady(map);
+      await waitForGoogleSceneReady(map, controller.signal);
       if (generation !== this.generation) return;
       onStatus({ state: "ready", message: "Native Google 3D route world ready." });
     } catch (error) {
@@ -323,6 +335,8 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
 
   destroy() {
     this.generation += 1;
+    this.mountController?.abort();
+    this.mountController = undefined;
     this.map?.remove();
     this.map = undefined;
     this.routeLine = undefined;
@@ -330,13 +344,6 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
     this.routePath = [];
     this.routeDistanceM = 1;
     this.headingDeg = undefined;
-    if (this.authFailure) {
-      window.removeEventListener(
-        "godiesel:google-maps-auth-failure",
-        this.authFailure,
-      );
-      this.authFailure = undefined;
-    }
   }
 }
 
