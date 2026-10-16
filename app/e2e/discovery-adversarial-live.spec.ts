@@ -13,9 +13,9 @@ for(const width of [390,1280]) {
   await page.goto('/#/finder');
   await expect(page.getByRole('region',{name:'Choose a starting place'})).toBeVisible();
   await capture('finder-start');
-  await page.getByRole('button',{name:'Kyoto',exact:true}).click();
+  await page.getByRole('button',{name:'Kyoto, Japan, 2 routes',exact:true}).click();
   await expect(page.getByRole('region',{name:'Finder route map'})).toHaveAttribute('data-map-status','ready',{timeout:30_000});
-  const card=page.getByRole('article',{name:'Kyoto, Japan candidate'});
+  const card=page.getByRole('article',{name:'Kyoto, Japan candidate'}).filter({hasText:'680 m'});
   await expect(card.getByText('680 m',{exact:true})).toBeVisible();
   await capture('finder-map');
   await card.getByRole('link',{name:'Route guide',exact:true}).scrollIntoViewIfNeeded();
@@ -24,7 +24,7 @@ for(const width of [390,1280]) {
   await page.getByRole('button',{name:'Read guide',exact:true}).click();
   await expect(page.getByRole('heading',{name:'What it feels like'})).toBeInViewport();
   await page.getByRole('link',{name:'Back to Finder'}).click();
-  await expect(page).toHaveURL(/finder\?place=Kyoto&activity=Run&distance=21$/);
+  await expect(page).toHaveURL(/finder\?place=Kyoto%2C\+Japan&activity=Any&distance=0/);
   await page.goto('/#/routes/9844581410');
   await expect(page.getByRole('region',{name:'Route geography'})).toHaveAttribute('data-map-status','ready',{timeout:30_000});
   await page.getByRole('button',{name:'Read guide',exact:true}).click();

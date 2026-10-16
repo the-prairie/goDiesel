@@ -38,10 +38,10 @@ for (const viewport of [
       form.getByRole("button", { name: "Edit filters" }),
     ).toHaveAttribute("aria-expanded", "false");
     await expect(form.getByLabel("Terrain")).toBeHidden();
-    await page.getByRole("button", { name: "Kyoto", exact: true }).click();
+    await page.getByRole("button", { name: "Kyoto, Japan, 2 routes", exact: true }).click();
     await expect(
       page.getByRole("article", { name: "Kyoto, Japan candidate" }),
-    ).toBeVisible();
+    ).toHaveCount(2);
     await expect(page).toHaveURL(/place=Kyoto/);
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth),

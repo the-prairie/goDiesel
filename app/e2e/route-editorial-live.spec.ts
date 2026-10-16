@@ -13,7 +13,7 @@ for(const width of [390,1280]) {
   await page.goto('/#/finder');
   await expect(page.getByRole('region',{name:'Choose a starting place'})).toBeVisible();
   await capture('finder-start');
-  await page.getByRole('button',{name:'Kyoto',exact:true}).click();
+  await page.getByRole('button',{name:'Kyoto, Japan, 2 routes',exact:true}).click();
   await expect(page.getByRole('region',{name:'Finder route map'})).toHaveAttribute('data-map-status','ready',{timeout:30_000});
   await page.getByRole('button',{name:'Zoom planning map in'}).click();
   await page.getByRole('button',{name:'Zoom planning map out'}).click();
