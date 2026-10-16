@@ -89,3 +89,12 @@ test("named-route similarity uses indexed vectors without starting inference", a
   await expect(page.getByRole("article").first()).toBeVisible();
   expect(await page.evaluate(() => window.__searchWorkers.length)).toBe(0);
 });
+
+test("single mobile collection result uses a singular count", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await fakeEmbeddings(page);
+  await page.goto("/#/finder?activity=Run&distance=0&q=Westminster%20Kensington%20Gardens");
+  await expect(page.getByRole("article")).toHaveCount(1);
+  await expect(page.getByLabel("Results view")).toContainText("1 route");
+  await expect(page.getByLabel("Results view")).not.toContainText("1 routes", { timeout: 2000 });
+});

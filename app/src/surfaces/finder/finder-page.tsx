@@ -140,7 +140,7 @@ export function FinderPage() {
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
           {result?.status === "matches" ? <div role="group" aria-label="Results view" className="flex shrink-0 items-center justify-between border-b border-line px-4 py-2 lg:hidden">
-            <span aria-live="polite" className="text-sm text-ink-secondary">{result.candidates.length} routes</span>
+            <span aria-live="polite" className="text-sm text-ink-secondary">{result.candidates.length} {result.candidates.length === 1 ? "route" : "routes"}</span>
             <div className="flex gap-1">
               <Button size="sm" variant={view === "list" ? "secondary" : "ghost"} aria-pressed={view === "list"} onClick={() => setView("list")}><List />List</Button>
               <Button size="sm" variant={view === "map" ? "secondary" : "ghost"} aria-pressed={view === "map"} onClick={() => setView("map")}><MapIcon />Map</Button>
