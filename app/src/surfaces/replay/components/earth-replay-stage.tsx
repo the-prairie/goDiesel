@@ -203,12 +203,12 @@ export function EarthReplayStage({
       data-light-phase={recordedLight.phase}
       onPointerMove={() => setChromeVisible(true)}
       onFocusCapture={() => setChromeVisible(true)}
-      className={`relative h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 overflow-hidden bg-[#02070a] md:h-dvh md:min-h-[36rem] ${engineMode === "atlas" ? "grid grid-rows-[minmax(0,1fr)_auto]" : ""}`}
+      className="relative grid h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden bg-[#02070a] md:h-dvh md:min-h-[36rem]"
     >
       <div
         ref={containerRef}
         aria-label={engineMode === "earth" ? "Earth Replay world" : "Atlas Replay map"}
-        className={engineMode === "atlas" ? "relative row-start-1 min-h-0" : "absolute inset-0"}
+        className="relative row-start-1 min-h-0"
       />
       <RecordedLightLayer light={recordedLight} reducedMotion={reducedMotion} />
 
@@ -314,7 +314,7 @@ export function EarthReplayStage({
         </div>
       ) : null}
 
-      <div className={`pointer-events-none z-20 flex justify-center ${engineMode === "atlas" ? "relative row-start-2" : "absolute inset-x-0 bottom-0"}`}>
+      <div className="pointer-events-none relative row-start-2 z-20 flex justify-center">
         <div
           data-testid="replay-controls"
           className="pointer-events-auto w-full border-t border-line bg-surface/96 p-2 text-ink shadow-sheet backdrop-blur sm:flex sm:items-center sm:gap-2 sm:px-3 sm:py-2"

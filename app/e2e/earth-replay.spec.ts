@@ -95,8 +95,8 @@ async function installUnavailableEarthWithRealAtlas(page: Page) {
   });
 }
 
-async function installDeterministicReplayEngine(page: Page) {
-  await page.addInitScript(() => {
+async function installDeterministicReplayEngine(page: Page, showCredits = false) {
+  await page.addInitScript((credits) => {
     const replayWindow = window as typeof window & {
       __replayMounts?: string[];
       __replayPoses?: Array<{
@@ -146,6 +146,13 @@ async function installDeterministicReplayEngine(page: Page) {
           routeThread.dataset.testid = "route-thread";
           routeThread.textContent = "Visible route thread";
           options.container.append(routeThread);
+          if (credits) {
+            const credit = document.createElement("a");
+            credit.href = "https://cesium.com/";
+            credit.textContent = "Provider attribution fixture";
+            credit.style.cssText = "position:absolute;bottom:5px;left:5px;font-size:12px";
+            options.container.append(credit);
+          }
           options.onStatus({
             state: "ready",
             title: "Earth Replay ready",
@@ -164,7 +171,7 @@ async function installDeterministicReplayEngine(page: Page) {
         },
       };
     };
-  });
+  }, showCredits);
 }
 
 test("bundled React Replay mounts, plays, pauses, and cleans up", async ({ page }) => {
@@ -182,7 +189,8 @@ test("bundled React Replay mounts, plays, pauses, and cleans up", async ({ page 
     .getByLabel("Earth Replay world")
     .boundingBox();
   expect(stageBox?.height).toBeGreaterThan(600);
-  expect(worldBox?.height).toBe(stageBox?.height);
+  const dockBox = await page.getByTestId("replay-controls").boundingBox();
+  expect((worldBox?.height ?? 0) + (dockBox?.height ?? 0)).toBe(stageBox?.height);
   await expect
     .poll(() =>
       page.evaluate(() =>
@@ -862,3 +870,30 @@ test("Atlas map controls and attribution stay usable above the playback dock", a
     }
   }
 });
+
+
+for (const viewport of [
+  { width: 1280, height: 720 },
+  { width: 390, height: 844 },
+  { width: 320, height: 640 },
+]) {
+  test(`Earth attribution stays above the dock at ${viewport.width}px`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await installDeterministicReplayEngine(page, true);
+    await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
+    await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-state", "ready");
+    const credit = page.getByRole("link", { name: "Provider attribution fixture" });
+    for (const expanded of viewport.width < 768 ? [false, true] : [false]) {
+      if (expanded) await page.getByRole("button", { name: "Show more controls" }).click();
+      const creditBox = await credit.boundingBox();
+      const dockBox = await page.getByTestId("replay-controls").boundingBox();
+      expect(creditBox).not.toBeNull();
+      expect(dockBox).not.toBeNull();
+      expect(creditBox!.y + creditBox!.height).toBeLessThanOrEqual(dockBox!.y);
+      await credit.click({ trial: true });
+      await page.getByRole("button", { name: "Play route", exact: true }).click();
+      await page.getByRole("button", { name: "Pause route", exact: true }).click();
+      if (expanded) await page.getByRole("button", { name: "Hide more controls" }).click();
+    }
+  });
+}
