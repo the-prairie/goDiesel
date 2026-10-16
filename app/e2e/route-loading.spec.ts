@@ -377,3 +377,24 @@ test("changing routes never flashes the previous route detail", async ({
   ).toBeVisible();
   await expect(page.getByText(/^21\.8 km · 286 m up$/)).toBeVisible();
 });
+
+test("narrow Leaf titles keep Open replay above the bottom navigation", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 844 });
+  await page.goto("/#/routes/17665674778");
+  const margin = page.getByRole("complementary", { name: "Route margin" });
+  await expect(margin).toHaveAttribute("data-snap", "peek");
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
+  await margin.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
+  const replay = page.getByRole("link", { name: "Open replay", exact: true });
+  const replayBox = (await replay.boundingBox())!;
+  const navigationBox = (await page.getByRole("navigation", { name: "Primary" }).boundingBox())!;
+  const marginBox = (await margin.boundingBox())!;
+  expect(replayBox.y + replayBox.height).toBeLessThanOrEqual(navigationBox.y);
+  expect(replayBox.y + replayBox.height).toBeLessThanOrEqual(marginBox.y + marginBox.height);
+  await page.getByRole("button", { name: "Read guide", exact: true }).click();
+  await expect(margin).toHaveAttribute("data-snap", "expanded");
+  await page.getByRole("button", { name: "Collapse route margin", exact: true }).click();
+  await expect(margin).toHaveAttribute("data-snap", "peek");
+  await replay.click();
+  await expect(page).toHaveURL(/#\/replay\/17665674778$/);
+});

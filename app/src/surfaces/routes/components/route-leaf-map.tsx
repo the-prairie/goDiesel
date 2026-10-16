@@ -2,7 +2,7 @@ import { LocateFixed, Minus, Plus } from "lucide-react";
 import maplibregl from "@/providers/maplibre";
 import { LngLatBounds, Map as MapLibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 
 import { RepairEvidence } from "@/ui/repair-evidence";
 import { Button } from "@/ui/button";
@@ -12,6 +12,8 @@ import {
   type RouteRepair,
 } from "@/domain/geometry/route-repairs";
 import type { QuestRoute } from "@/domain/route";
+
+import { initialRouteLeafMapState, reduceRouteLeafMap } from "./route-leaf-map-state";
 
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 const ROUTE_COLOR = "#30343b";
@@ -32,9 +34,8 @@ function routeFeature(route: QuestRoute) {
 export function RouteLeafMap({ route, showDiagnostics = false }: { route: QuestRoute; showDiagnostics?: boolean }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | undefined>(undefined);
-  const [status, setStatus] = useState<"loading" | "ready" | "unavailable">(
-    route.route.length > 1 ? "loading" : "unavailable",
-  );
+  const [{ status }, dispatch] = useReducer(reduceRouteLeafMap, route.route.length, initialRouteLeafMapState);
+  const sessionRef = useRef(0);
   const repairs = useMemo(() => showDiagnostics ? routeRepairs(route) : [], [route, showDiagnostics]);
   const [activeRepairs, setActiveRepairs] = useState<RouteRepair[]>([]);
   const [repairPositions, setRepairPositions] = useState<
@@ -46,8 +47,8 @@ export function RouteLeafMap({ route, showDiagnostics = false }: { route: QuestR
     if (!host || route.route.length < 2) return;
 
     let active = true;
-    let errorCount = 0;
-    let ready = false;
+    const sessionId = ++sessionRef.current;
+    dispatch({ type: "sessionStarted", sessionId });
     const bounds = new LngLatBounds();
     route.route.forEach((point) => bounds.extend([point.lng, point.lat]));
     const map = new maplibregl.Map({
@@ -63,12 +64,11 @@ export function RouteLeafMap({ route, showDiagnostics = false }: { route: QuestR
     const resizeObserver = new ResizeObserver(() => map.resize());
     resizeObserver.observe(host);
     const loadTimer = window.setTimeout(() => {
-      if (active && !ready) setStatus("unavailable");
+      if (active) dispatch({ type: "deadlineReached", sessionId });
     }, 8_000);
 
     const handleError = () => {
-      errorCount += 1;
-      if (active && errorCount >= 4 && !ready) setStatus("unavailable");
+      if (active) dispatch({ type: "sourceError", sessionId });
     };
     const syncRepairPositions = () => {
       setRepairPositions(
@@ -161,9 +161,8 @@ export function RouteLeafMap({ route, showDiagnostics = false }: { route: QuestR
       map.getCanvas().setAttribute("aria-label", `${route.name} interactive route map`);
       map.once("idle", () => {
         if (!active) return;
-        ready = true;
         window.clearTimeout(loadTimer);
-        setStatus("ready");
+        dispatch({ type: "mapIdle", sessionId });
       });
     });
 
@@ -289,7 +288,7 @@ export function RouteLeafMap({ route, showDiagnostics = false }: { route: QuestR
               Finish
             </span>
           </div>
-          <div className="absolute bottom-4 left-4 z-10 flex gap-1 rounded-sm border border-line bg-surface/92 p-1 shadow-panel backdrop-blur">
+          <div className="absolute bottom-16 left-4 z-10 flex gap-1 md:bottom-4 rounded-sm border border-line bg-surface/92 p-1 shadow-panel backdrop-blur">
             <Button
               type="button"
               variant="ghost"

@@ -208,7 +208,8 @@ function RouteMargin({
 
       <div
         className={cn(
-          "shrink-0 border-b border-line",
+          "border-b border-line",
+          hasDetails ? "shrink-0" : "min-h-0 flex-1 overflow-y-auto",
           isMobile ? "p-3" : "p-6",
         )}
       >
