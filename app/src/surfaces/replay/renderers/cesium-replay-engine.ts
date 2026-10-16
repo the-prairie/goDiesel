@@ -24,7 +24,7 @@ import type {
   ReplayEngineMountOptions,
 } from "@/surfaces/replay/renderer-port";
 import type { ReplayPose } from "@/surfaces/replay/playback/replay-controller";
-import { recordTileFailure, rgbaPixelsLookBlank } from "@/providers/render-health";
+import { rgbaPixelsLookBlank } from "@/providers/render-health";
 import { bearingDegrees, routePathPose } from "@/domain/geometry/route-path";
 import type { QuestRoute } from "@/domain/route";
 import {
@@ -43,12 +43,17 @@ import {
   reduceSurfaceSampling,
   surfaceSampleRetryDelay,
 } from "./surface-sampling-state";
+import {
+  cesiumFidelityStatus,
+  initialCesiumFidelityState,
+  reduceCesiumFidelity,
+  type CesiumFidelityEvent,
+} from "./cesium-fidelity-state";
 
 const SURFACE_VISUAL_OFFSET_M = 3;
 const MAX_STALE_SAMPLE_DISTANCE_M = 500;
 const MAX_STALE_CAMERA_SAMPLE_DISTANCE_M = 150;
 const MAX_CAMERA_EASING_DISTANCE_M = 500;
-const TILE_FAILURE_THRESHOLD = 8;
 
 interface CameraTarget {
   lat: number;
@@ -139,9 +144,7 @@ export class CesiumReplayEngine implements ReplayEngine {
   private removeTileFailureListener?: () => void;
   private cancelInitialTileWait?: () => void;
   private diagnosticsTimer?: number;
-  private tileFailureTimes: number[] = [];
-  private blankFrameCount = 0;
-  private partial = false;
+  private fidelity = initialCesiumFidelityState();
   private onStatus?: ReplayEngineMountOptions["onStatus"];
   private container?: HTMLElement;
   private generation = 0;
@@ -152,6 +155,10 @@ export class CesiumReplayEngine implements ReplayEngine {
 
   async mount({ container, route, onStatus }: ReplayEngineMountOptions) {
     const generation = ++this.generation;
+    this.fidelity = reduceCesiumFidelity(this.fidelity, {
+      type: "sessionStarted",
+      operationId: generation,
+    });
     this.surfaceSampling = reduceSurfaceSampling(this.surfaceSampling, {
       type: "sessionStarted",
     });
@@ -225,15 +232,11 @@ export class CesiumReplayEngine implements ReplayEngine {
       }
       viewer.scene.primitives.add(tileset);
       this.removeTileFailureListener = tileset.tileFailed.addEventListener(() => {
-        this.tileFailureTimes = recordTileFailure(
-          this.tileFailureTimes,
-          performance.now(),
-        );
-        if (this.tileFailureTimes.length >= TILE_FAILURE_THRESHOLD) {
-          this.reportPartial(
-            "Several photorealistic tiles failed to load. Replay can continue with gaps.",
-          );
-        }
+        this.observeFidelity({
+          type: "tileFailed",
+          operationId: generation,
+          atMs: performance.now(),
+        });
       });
 
       const routeEntity = viewer.entities.add({
@@ -271,16 +274,11 @@ export class CesiumReplayEngine implements ReplayEngine {
       if (generation !== this.generation) return;
       const initialTiles = await this.waitForInitialTiles(tileset);
       if (generation !== this.generation) return;
-      if (!this.partial) {
-        onStatus({
-          state: "ready",
-          title: "Earth Replay ready",
-          message:
-            initialTiles === "loaded"
-              ? "The route thread is ready to move."
-              : "The route is ready while finer tile detail continues loading.",
-        });
-      }
+      this.observeFidelity({
+        type: "initialTilesSettled",
+        operationId: generation,
+        result: initialTiles,
+      });
       this.startRenderDiagnostics(generation);
     } catch (error) {
       if (generation !== this.generation) return;
@@ -319,26 +317,24 @@ export class CesiumReplayEngine implements ReplayEngine {
 
   private startRenderDiagnostics(generation: number) {
     this.diagnosticsTimer = window.setInterval(() => {
-      if (generation !== this.generation || this.partial) return;
+      if (generation !== this.generation || this.fidelity.phase === "partial")
+        return;
       const canvas = this.viewer?.canvas;
       if (!canvas || canvas.width < 2 || canvas.height < 2) return;
-      this.blankFrameCount = canvasLooksBlank(canvas) ? this.blankFrameCount + 1 : 0;
-      if (this.blankFrameCount >= 2) {
-        this.reportPartial(
-          "The 3D scene is not rendering fully. Replay can continue in Atlas instead.",
-        );
-      }
+      this.observeFidelity({
+        type: "frameObserved",
+        operationId: generation,
+        blank: canvasLooksBlank(canvas),
+      });
     }, 8_000);
   }
 
-  private reportPartial(message: string) {
-    if (this.partial) return;
-    this.partial = true;
-    this.onStatus?.({
-      state: "partial",
-      title: "3D tiles partially unavailable",
-      message,
-    });
+  private observeFidelity(event: CesiumFidelityEvent) {
+    const previous = this.fidelity;
+    this.fidelity = reduceCesiumFidelity(previous, event);
+    if (this.fidelity.phase === previous.phase) return;
+    const status = cesiumFidelityStatus(this.fidelity);
+    if (status) this.onStatus?.(status);
   }
 
   setPose(pose: ReplayPose) {
@@ -701,9 +697,7 @@ export class CesiumReplayEngine implements ReplayEngine {
     this.removeTileFailureListener = undefined;
     this.cancelInitialTileWait = undefined;
     this.diagnosticsTimer = undefined;
-    this.tileFailureTimes = [];
-    this.blankFrameCount = 0;
-    this.partial = false;
+    this.fidelity = reduceCesiumFidelity(this.fidelity, { type: "disposed" });
     this.onStatus = undefined;
     this.container = undefined;
   }
