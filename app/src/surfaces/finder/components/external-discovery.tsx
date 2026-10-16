@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { saveExternalPlan, useExternalPlans } from "@/data/external-plan-store";
 import { useExternalRanking } from "@/data/search/use-external-ranking";
 import { ExternalRouteEvidence } from "@/ui/external-route-evidence";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useReducer } from "react";
 import { ExternalLink, MapPin } from "lucide-react";
 import type { FinderIntent } from "@/domain/planning";
 import type { DiscoveryPlace, ExternalRoute } from "@/domain/search/external";
@@ -12,94 +12,80 @@ import { routes } from "@/data/routes";
 import { Input } from "@/ui/input";
 import { Button } from "@/ui/button";
 import { FinderRouteMap } from "@/ui/planning-route-map";
+import { discoveryMessage, initialDiscoveryState, reduceDiscovery } from "../discovery-state";
+
+const emptyRoutes: ExternalRoute[] = [];
 
 export function ExternalDiscovery({ intent }: { intent: FinderIntent }) {
   const plans = useExternalPlans();
   const [params, setParams] = useSearchParams();
-  const [destination, setDestination] = useState(params.get("near") ?? intent.place);
-  const [view, setView] = useState<"list" | "map">("list");
-  const [saveMessage, setSaveMessage] = useState<{
-    id: string;
-    text: string;
-  }>();
-  const [places, setPlaces] = useState<DiscoveryPlace[]>([]);
-  const [place, setPlace] = useState<DiscoveryPlace>();
-  const [results, setResults] = useState<ExternalRoute[]>([]);
-  const [selected, setSelected] = useState<string>();
-  const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">(
-    "idle",
+  const [state, dispatch] = useReducer(
+    reduceDiscovery,
+    params.get("near") ?? intent.place,
+    initialDiscoveryState,
   );
-  const [message, setMessage] = useState("");
+  const { destination, view, selected, saveMessage, request } = state;
+  const results = request.phase === "results" ? request.routes : emptyRoutes;
+  const place = request.phase === "results" ? request.place : undefined;
+  const places = request.phase === "choosing-place" ? request.places : [];
+  const loading = request.phase === "resolving-place" || request.phase === "loading-routes";
+  const ready = request.phase === "results" || request.phase === "no-places";
+  const message = discoveryMessage(request);
   const requestRef = useRef<AbortController | null>(null);
+  const requestIdRef = useRef(0);
   useEffect(() => () => requestRef.current?.abort(), []);
   async function discover(selectedPlace?: DiscoveryPlace) {
     if (!selectedPlace && !destination.trim()) return;
     const nextParams = new URLSearchParams(params);
     nextParams.set("near", destination.trim());
     setParams(nextParams, { replace: true });
-    setView("list");
     requestRef.current?.abort();
     const controller = new AbortController();
     requestRef.current = controller;
-    setStatus("loading");
-    setMessage("Looking for mapped routes…");
-    setResults([]);
-    setPlaces([]);
+    const submission = {
+      id: ++requestIdRef.current,
+      destination: destination.trim(),
+      activity: intent.activity,
+    };
+    const known = routes.find(
+      (r) =>
+        r.region.toLowerCase() === submission.destination.toLowerCase() ||
+        r.region.split(",")[0].toLowerCase() === submission.destination.toLowerCase(),
+    );
+    const location = selectedPlace ?? (known
+      ? { name: known.region, lat: known.centerLat, lng: known.centerLng }
+      : undefined);
+    dispatch({ type: "searchStarted", submission, place: location });
     try {
-      const known = routes.find(
-        (r) =>
-          r.region.toLowerCase() === destination.trim().toLowerCase() ||
-          r.region.split(",")[0].toLowerCase() === destination.trim().toLowerCase(),
-      );
-      let location =
-        selectedPlace ??
-        (known
-          ? { name: known.region, lat: known.centerLat, lng: known.centerLng }
-          : undefined);
       if (!location) {
         const data = await api(
-          new URLSearchParams({ place: destination.trim() }),
+          new URLSearchParams({ place: submission.destination }),
           controller.signal,
         );
         if (controller.signal.aborted) return;
-        if (!data.places?.length) {
-          setStatus("ready");
-          setMessage("No places found. Try a town or region name.");
-          return;
-        }
-        // Let the user disambiguate; never silently search a different same-named city.
-        setPlaces(
-          (data.places as DiscoveryPlace[]).filter(
-            (p, i, all) =>
-              all.findIndex((other) => other.name === p.name) === i,
-          ),
+        const places = !data.places?.length ? [] : (data.places as DiscoveryPlace[]).filter(
+          (place, index, all) => all.findIndex((other) => other.name === place.name) === index,
         );
-        setStatus("idle");
-        setMessage("Choose the place you mean.");
+        dispatch({ type: "placesReceived", requestId: submission.id, places });
         return;
       }
-      setPlace(location);
       const data = await api(
         new URLSearchParams({
           lat: String(location.lat),
           lng: String(location.lng),
-          activity: intent.activity,
+          activity: submission.activity,
         }),
         controller.signal,
       );
       if (controller.signal.aborted) return;
-      setResults(data.routes ?? []);
-      setSelected(undefined);
-      setStatus("ready");
-      setMessage("");
+      dispatch({ type: "routesReceived", requestId: submission.id, routes: data.routes ?? [] });
     } catch (error) {
       if (controller.signal.aborted) return;
-      setStatus("error");
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Discovery unavailable. Please try again.",
-      );
+      dispatch({
+        type: "requestFailed",
+        requestId: submission.id,
+        message: error instanceof Error ? error.message : "Discovery unavailable. Please try again.",
+      });
     }
   }
   const candidates = useMemo(() => results.filter(r => matchesExternalRoute(r,intent)), [results,intent]);
@@ -133,9 +119,9 @@ export function ExternalDiscovery({ intent }: { intent: FinderIntent }) {
         </div>
         <form className="mt-4 flex items-end gap-2" onSubmit={e => { e.preventDefault(); discover(); }}>
           <label className="grid min-w-0 flex-1 gap-1 text-sm">Near where?
-            <Input required value={destination} placeholder="Town or region" onChange={e => { setDestination(e.target.value); setPlaces([]); }} />
+            <Input required value={destination} placeholder="Town or region" onChange={e => { dispatch({ type: "destinationEdited", destination: e.target.value }); }} />
           </label>
-          <Button type="submit" disabled={!destination.trim() || status === "loading"}>{status === "loading" ? "Searching…" : status === "error" ? "Try again" : results.length ? "Search again" : "Search new routes"}</Button>
+          <Button type="submit" disabled={!destination.trim() || loading}>{loading ? "Searching…" : request.phase === "failed" ? "Try again" : results.length ? "Search again" : "Search new routes"}</Button>
         </form>
         {preference ? <p className="mt-2 text-sm text-ink-secondary">Looking for: {preference}.{destination.trim() ? " Matching themes are ranked first." : " Choose a location to explore nearby routes."}</p> : null}
         {intent.maxElevationM != null || intent.terrain !== "any" ? (
@@ -164,7 +150,7 @@ export function ExternalDiscovery({ intent }: { intent: FinderIntent }) {
           </div>
         ) : null}
       </div>
-      {status === "ready" && !candidates.length ? (
+      {ready && !candidates.length ? (
         <div role="status" className="p-6">
           <h3 className="text-xl">No mapped routes match these filters</h3>
           <p className="mt-2 text-sm text-ink-secondary">
@@ -174,8 +160,8 @@ export function ExternalDiscovery({ intent }: { intent: FinderIntent }) {
         </div>
       ) : null}
       {active ? <div role="group" aria-label="Discovery results view" className="flex shrink-0 justify-end gap-1 border-b border-line px-4 py-2 lg:hidden">
-        <Button size="sm" variant={view === "list" ? "secondary" : "ghost"} aria-pressed={view === "list"} onClick={() => setView("list")}>List</Button>
-        <Button size="sm" variant={view === "map" ? "secondary" : "ghost"} aria-pressed={view === "map"} onClick={() => setView("map")}>Map</Button>
+        <Button size="sm" variant={view === "list" ? "secondary" : "ghost"} aria-pressed={view === "list"} onClick={() => dispatch({ type: "viewChanged", view: "list" })}>List</Button>
+        <Button size="sm" variant={view === "map" ? "secondary" : "ghost"} aria-pressed={view === "map"} onClick={() => dispatch({ type: "viewChanged", view: "map" })}>Map</Button>
       </div> : null}
       {active ? (
         <div className="grid min-h-[24rem] flex-1 lg:min-h-0 lg:grid-cols-[minmax(22rem,0.9fr)_minmax(0,1.4fr)]">
@@ -230,15 +216,9 @@ export function ExternalDiscovery({ intent }: { intent: FinderIntent }) {
                           place?.name ?? destination,
                           { ...intent, place: destination },
                         );
-                        setSaveMessage({
-                          id: r.id,
-                          text: "Saved on this device.",
-                        });
+                        dispatch({ type: "planSaved", id: r.id });
                       } catch {
-                        setSaveMessage({
-                          id: r.id,
-                          text: "Could not save. Device storage is full or unavailable. Try again after freeing space.",
-                        });
+                        dispatch({ type: "planSaveFailed", id: r.id });
                       }
                     }}
                   >
@@ -249,7 +229,7 @@ export function ExternalDiscovery({ intent }: { intent: FinderIntent }) {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => { setSelected(r.id); setView("map"); }}
+                    onClick={() => { dispatch({ type: "candidateSelected", id: r.id }); }}
                     aria-pressed={r.id === active.id}
                   >
                     {r.id === active.id ? "On map" : "Preview route"}
