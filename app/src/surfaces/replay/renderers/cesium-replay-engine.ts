@@ -38,9 +38,13 @@ import {
   CESIUM_GROUND_ROUTE_OPTIONS,
   GOOGLE_3D_TILES_RENDER_OPTIONS,
 } from "@/providers/cesium-render-quality";
+import {
+  initialSurfaceSamplingState,
+  reduceSurfaceSampling,
+  surfaceSampleRetryDelay,
+} from "./surface-sampling-state";
 
 const SURFACE_VISUAL_OFFSET_M = 3;
-const SURFACE_SAMPLE_INTERVAL_MS = 250;
 const MAX_STALE_SAMPLE_DISTANCE_M = 500;
 const MAX_STALE_CAMERA_SAMPLE_DISTANCE_M = 150;
 const MAX_CAMERA_EASING_DISTANCE_M = 500;
@@ -130,8 +134,7 @@ export class CesiumReplayEngine implements ReplayEngine {
   private pendingGroundingObservation?: RouteGroundingObservation;
   private latestPose?: ReplayPose;
   private lastGroundingUpdateMs?: number;
-  private lastSurfaceSampleMs = Number.NEGATIVE_INFINITY;
-  private surfaceSampleInFlight = false;
+  private surfaceSampling = initialSurfaceSamplingState();
   private surfaceSampleRetryTimer?: number;
   private removeTileFailureListener?: () => void;
   private cancelInitialTileWait?: () => void;
@@ -149,6 +152,9 @@ export class CesiumReplayEngine implements ReplayEngine {
 
   async mount({ container, route, onStatus }: ReplayEngineMountOptions) {
     const generation = ++this.generation;
+    this.surfaceSampling = reduceSurfaceSampling(this.surfaceSampling, {
+      type: "sessionStarted",
+    });
     this.container = container;
     this.route = route;
     this.onStatus = onStatus;
@@ -391,7 +397,6 @@ export class CesiumReplayEngine implements ReplayEngine {
         ((desiredHeadingDeg - this.cameraHeadingDeg + 540) % 360) - 180;
       this.cameraHeadingDeg = (this.cameraHeadingDeg + delta * 0.08 + 360) % 360;
     }
-    const heading = (this.cameraHeadingDeg * Math.PI) / 180;
     this.latestCameraTarget = { lat: cameraLat, lng: cameraLng };
     this.requestSurfaceSample(pose, cameraLat, cameraLng, now);
     if (!pose.following) {
@@ -463,9 +468,6 @@ export class CesiumReplayEngine implements ReplayEngine {
       renderedCameraTarget.lat,
       cameraAltitudeM,
     );
-    const easing = this.cameraInitialized
-      ? Math.min(1, Math.max(0.04, 1 - Math.exp(-5 * cameraElapsedSeconds)))
-      : 1;
     const currentCameraTarget = {
       lat: (viewer.camera.positionCartographic.latitude * 180) / Math.PI,
       lng: (viewer.camera.positionCartographic.longitude * 180) / Math.PI,
@@ -474,8 +476,14 @@ export class CesiumReplayEngine implements ReplayEngine {
       currentCameraTarget,
       renderedCameraTarget,
     );
-    let destination =
-      !this.cameraInitialized || cameraJumpDistanceM > MAX_CAMERA_EASING_DISTANCE_M
+    const snapCamera =
+      !this.cameraInitialized || cameraJumpDistanceM > MAX_CAMERA_EASING_DISTANCE_M;
+    if (snapCamera) this.cameraHeadingDeg = desiredHeadingDeg;
+    const heading = (this.cameraHeadingDeg * Math.PI) / 180;
+    const easing = snapCamera
+      ? 1
+      : Math.min(1, Math.max(0.04, 1 - Math.exp(-5 * cameraElapsedSeconds)));
+    let destination = snapCamera
         ? desiredDestination
         : Cartesian3.lerp(
             viewer.camera.positionWC,
@@ -556,14 +564,14 @@ export class CesiumReplayEngine implements ReplayEngine {
     now: number,
   ) {
     const scene = this.viewer?.scene;
-    if (
-      !scene ||
-      this.surfaceSampleInFlight ||
-      now - this.lastSurfaceSampleMs < SURFACE_SAMPLE_INTERVAL_MS
-    ) {
-      return;
-    }
-    this.lastSurfaceSampleMs = now;
+    if (!scene) return;
+    const nextSampling = reduceSurfaceSampling(this.surfaceSampling, {
+      type: "sampleRequested",
+      atMs: now,
+      supported: scene.sampleHeightSupported,
+    });
+    if (nextSampling === this.surfaceSampling) return;
+    this.surfaceSampling = nextSampling;
     if (this.surfaceSampleRetryTimer !== undefined) {
       window.clearTimeout(this.surfaceSampleRetryTimer);
       this.surfaceSampleRetryTimer = undefined;
@@ -577,8 +585,7 @@ export class CesiumReplayEngine implements ReplayEngine {
     const requestGeneration = this.generation;
     const requestProgressM = pose.progressM;
     const requestCameraTarget = { lat: cameraLat, lng: cameraLng };
-    let retryLatestPose = false;
-    this.surfaceSampleInFlight = true;
+    const requestId = this.surfaceSampling.requestId;
     void scene
       .sampleHeightMostDetailed(
         [
@@ -614,7 +621,11 @@ export class CesiumReplayEngine implements ReplayEngine {
             ? { kind: "sample", heightM: sampledCameraHeightM }
             : { kind: "missing" };
         this.pendingCameraSurfaceTarget = requestCameraTarget;
-        retryLatestPose = progressSampleIsStale || cameraSampleIsStale;
+        this.surfaceSampling = reduceSurfaceSampling(this.surfaceSampling, {
+          type: "sampleObserved",
+          requestId,
+          retryLatest: progressSampleIsStale || cameraSampleIsStale,
+        });
         if (this.latestPose) this.setPose(this.latestPose);
       })
       .catch(() => {
@@ -622,18 +633,27 @@ export class CesiumReplayEngine implements ReplayEngine {
           this.pendingGroundingObservation = { kind: "missing" };
           this.pendingCameraSurfaceObservation = { kind: "missing" };
           this.pendingCameraSurfaceTarget = requestCameraTarget;
-          retryLatestPose = true;
+          this.surfaceSampling = reduceSurfaceSampling(this.surfaceSampling, {
+            type: "sampleFailed",
+            requestId,
+          });
         }
       })
       .finally(() => {
         if (requestGeneration === this.generation) {
-          this.surfaceSampleInFlight = false;
+          const retryLatestPose =
+            this.surfaceSampling.phase === "sampling" &&
+            this.surfaceSampling.requestId === requestId &&
+            this.surfaceSampling.retryLatest;
+          this.surfaceSampling = reduceSurfaceSampling(this.surfaceSampling, {
+            type: "sampleCompleted",
+            requestId,
+          });
           if (retryLatestPose && this.latestPose) {
             this.setPose(this.latestPose);
-            const retryDelayMs = Math.max(
-              0,
-              SURFACE_SAMPLE_INTERVAL_MS -
-                (performance.now() - this.lastSurfaceSampleMs),
+            const retryDelayMs = surfaceSampleRetryDelay(
+              this.surfaceSampling,
+              performance.now(),
             );
             this.surfaceSampleRetryTimer = window.setTimeout(() => {
               this.surfaceSampleRetryTimer = undefined;
@@ -674,8 +694,9 @@ export class CesiumReplayEngine implements ReplayEngine {
     this.pendingGroundingObservation = undefined;
     this.latestPose = undefined;
     this.lastGroundingUpdateMs = undefined;
-    this.lastSurfaceSampleMs = Number.NEGATIVE_INFINITY;
-    this.surfaceSampleInFlight = false;
+    this.surfaceSampling = reduceSurfaceSampling(this.surfaceSampling, {
+      type: "disposed",
+    });
     this.surfaceSampleRetryTimer = undefined;
     this.removeTileFailureListener = undefined;
     this.cancelInitialTileWait = undefined;
