@@ -133,3 +133,15 @@ every feature can be implemented by adding one state.
 - [Browser characterization](../../app/e2e/discovery-state.spec.ts).
 - [Persistence and export integration](../../app/e2e/discovery-planning.spec.ts).
 - [Finder domain policy](0015-finder-hybrid-search-and-sourced-discovery.md).
+
+### Standalone Python Admin
+
+The unbundled `admin.html` adapter imports pure TypeScript modules from `admin-ui/`
+through checked-in generated JavaScript. The Python server serves an explicit
+asset allowlist. Its standalone launch needs no Node build step. Application
+verification rejects stale generated modules. See the [module workflow](../../admin-ui/README.md).
+
+The reducer conventions above apply unchanged. Browser IO remains in the existing
+module script. The first boundary extraction moves only `escapeHtml` to prove the
+module delivery path. Mutation and classification state remain separate follow-up
+migrations with their own characterization tests.

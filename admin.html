@@ -342,7 +342,9 @@
 
 <div class="toast" id="toast"></div>
 
-<script>
+<script type="module">
+import { escapeHtml } from "/admin-assets/presentation.js";
+
 const STATE = {
   routes: [],         // server data
   dirty: new Map(),   // activity_id → patch
@@ -354,10 +356,6 @@ const STATE = {
 };
 const UNMAPPED = '— UNMAPPED —';
 
-function escapeHtml(s) {
-  return String(s || '').replace(/[&<>"']/g, c => (
-    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
 
 function effectiveStatus(r) {
   const patch = STATE.dirty.get(r.activity_id);
