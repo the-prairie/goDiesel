@@ -275,7 +275,7 @@ export function GoogleRouteNavigatorStage({
         productionReplay ? "Google 3D Replay" : "Google route navigator lab"
       }
       className={cn(
-        "fixed right-0 top-0 min-h-0 overflow-hidden bg-canvas",
+        "fixed right-0 top-0 grid min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden bg-canvas",
         productionReplay
           ? "z-[var(--z-map-controls)] bottom-[var(--mobile-navigation-height)] left-0 md:bottom-0 md:left-[var(--spine-rail-width)] lg:left-[var(--spine-width)]"
           : "z-[100] bottom-0 left-0",
@@ -295,7 +295,7 @@ export function GoogleRouteNavigatorStage({
     >
       <div
         aria-label={`Google photorealistic 3D view of ${route.name}`}
-        className="absolute inset-0"
+        className="relative min-h-0"
         ref={containerRef}
       />
 
@@ -405,7 +405,7 @@ export function GoogleRouteNavigatorStage({
       ) : null}
 
       <div
-        className="pointer-events-none absolute inset-x-0 bottom-0 z-30"
+        className="pointer-events-none relative z-30"
         data-testid={productionReplay ? "replay-controls" : undefined}
       >
         <ExpandedReplayHud
