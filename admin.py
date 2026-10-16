@@ -567,6 +567,11 @@ def routes_summary():
     return out
 
 
+ADMIN_ASSETS = {
+    "/admin-assets/presentation.js": "admin-ui/generated/presentation.js",
+}
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         return  # silent
@@ -609,6 +614,10 @@ class Handler(BaseHTTPRequestHandler):
         if path in ('/', '/admin.html'):
             html = (QUESTS / 'admin.html').read_text()
             self._send(200, html, 'text/html; charset=utf-8')
+            return
+        if path in ADMIN_ASSETS:
+            asset = (QUESTS / ADMIN_ASSETS[path]).read_bytes()
+            self._send(200, asset, 'text/javascript; charset=utf-8')
             return
         if path == '/api/routes':
             self._send(200, routes_summary())
