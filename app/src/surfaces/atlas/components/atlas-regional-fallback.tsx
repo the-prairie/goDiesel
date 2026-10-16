@@ -1,11 +1,13 @@
 import maplibregl from "@/providers/maplibre";
 import { Map as MapLibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useReducer, forwardRef, useImperativeHandle } from "react";
 
+import type { AtlasGlobeHandle } from "@/surfaces/atlas/atlas-world";
 import { atlasViewportInsets } from "@/surfaces/atlas/atlas-region-camera";
 import type { RouteRegion } from "@/data/route-regions";
 import type { RoutePoint, RouteSummary } from "@/domain/route";
+import { initialRegionalFallbackState, reduceRegionalFallback } from "../regional-fallback-state";
 
 const ROUTE_THREAD_STYLE = {
   marker: "#30343b",
@@ -29,7 +31,6 @@ type RegionalRouteBoundsInput = Omit<RegionalRouteBounds, "spanLng"> & {
   spanLng?: number;
   longitudeSpan?: number;
 };
-type MapStatus = "loading" | "ready" | "unavailable";
 type ProjectedPoint = { x: number; y: number };
 
 export function unwrapLongitudeAroundCenter(lng: number, centerLng: number) {
@@ -145,7 +146,9 @@ export function projectedRegionalRoutePaths(
 }
 
 export function regionalMapPadding(width: number, height: number) {
-  return atlasViewportInsets(Math.max(1, width), Math.max(1, height));
+  const trayHeight = height <= 400 ? 144 : 192;
+  const insets = atlasViewportInsets(Math.max(1, width), Math.max(1, height));
+  return { ...insets, bottom: Math.max(insets.bottom, trayHeight + 24) };
 }
 
 function fitRegionalRoutes(
@@ -170,19 +173,30 @@ interface AtlasRegionalFallbackProps {
   onReady?: () => void;
 }
 
-export function AtlasRegionalFallback({
+export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalFallbackProps>(function AtlasRegionalFallback({
   region,
   selectedRoute,
   onSelectRoute,
   onReady,
-}: AtlasRegionalFallbackProps) {
+}, forwardedRef) {
   const hostRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | undefined>(undefined);
   const onSelectRouteRef = useRef(onSelectRoute);
-  const [status, setStatus] = useState<MapStatus>("loading");
+  const [lifecycle, dispatch] = useReducer(reduceRegionalFallback, undefined, initialRegionalFallbackState);
+  const status = lifecycle.phase;
+  const sessionRef = useRef(0);
   const [routePaths, setRoutePaths] = useState<string[]>([]);
   const routes = useMemo(() => regionalRouteCollection(region), [region]);
   const bounds = useMemo(() => regionalFitBounds(region), [region]);
+  useImperativeHandle(forwardedRef, () => ({
+    zoomIn: () => mapRef.current?.zoomIn(),
+    zoomOut: () => mapRef.current?.zoomOut(),
+    resetView: () => {
+      if (mapRef.current && hostRef.current && bounds) {
+        fitRegionalRoutes(mapRef.current, hostRef.current, bounds);
+      }
+    },
+  }), [bounds]);
   onSelectRouteRef.current = onSelectRoute;
   // A history transition can reuse a loaded fallback while the world engine
   // resets presentation readiness. Reconcile the visible map with each new
@@ -217,18 +231,15 @@ export function AtlasRegionalFallback({
 
   useEffect(() => {
     const host = hostRef.current;
-    if (!host || !bounds || routes.features.length === 0) {
-      setStatus("unavailable");
-      return;
-    }
+    const session = ++sessionRef.current;
+    const hasGeometry = Boolean(host && bounds && routes.features.length);
+    dispatch({ type: "sessionStarted", session, hasGeometry });
+    if (!host || !bounds || routes.features.length === 0) return;
 
     let active = true;
-    let ready = false;
-    let errorCount = 0;
     let loadTimer: number | undefined;
     let resizeObserver: ResizeObserver | undefined;
     let map: MapLibreMap;
-    setStatus("loading");
     setRoutePaths([]);
 
     try {
@@ -244,16 +255,15 @@ export function AtlasRegionalFallback({
       mapRef.current = map;
     } catch {
       host.replaceChildren();
-      setStatus("unavailable");
+      dispatch({ type: "constructionFailed", session });
       return;
     }
 
     const markUnavailable = () => {
-      if (active && !ready) setStatus("unavailable");
+      if (active) dispatch({ type: "loadTimedOut", session });
     };
     const handleError = () => {
-      errorCount += 1;
-      if (errorCount >= 4) markUnavailable();
+      if (active) dispatch({ type: "mapErrored", session });
     };
     const updateRouteOverlay = () => {
       setRoutePaths(
@@ -340,18 +350,13 @@ export function AtlasRegionalFallback({
         "aria-label",
         `${region.name} recorded routes on a regional map`,
       );
-      ready = true;
       if (loadTimer !== undefined) window.clearTimeout(loadTimer);
-      setStatus("ready");
+      dispatch({ type: "mapLoaded", session });
     };
 
     map.on("error", handleError);
     map.on("moveend", updateRouteOverlay);
     map.once("load", handleLoad);
-    map.addControl(
-      new maplibregl.NavigationControl({ showCompass: false }),
-      "bottom-right",
-    );
     loadTimer = window.setTimeout(markUnavailable, LOAD_TIMEOUT_MS);
 
     if (typeof ResizeObserver !== "undefined") {
@@ -384,13 +389,13 @@ export function AtlasRegionalFallback({
       data-atlas-engine="maplibre-regional-fallback"
       data-map-status={status}
       data-region-route-count={routes.features.length}
-      className="relative h-full min-h-[420px] w-full overflow-hidden bg-canvas"
+      className="relative h-full w-full overflow-hidden bg-canvas"
     >
       <div
         ref={hostRef}
         role="img"
         aria-label={`${region.name} regional route map`}
-        className="absolute inset-0"
+        className="h-full w-full"
       />
       {status === "loading" ? <div className="absolute inset-0 z-[2] bg-canvas" /> : null}
       <svg
@@ -441,10 +446,10 @@ export function AtlasRegionalFallback({
       <div
         role="status"
         aria-live="polite"
-        className="pointer-events-none absolute bottom-20 left-4 z-10 border border-white/25 bg-surface px-3 py-2 text-xs text-white"
+        className="pointer-events-none absolute bottom-[calc(var(--atlas-tray-height,12rem)+2.75rem)] left-4 z-10 max-w-[calc(100%-6rem)] border border-white/25 bg-surface px-3 py-2 text-xs text-white"
       >
         {statusCopy}
       </div>
     </div>
   );
-}
+});

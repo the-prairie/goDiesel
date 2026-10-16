@@ -29,6 +29,7 @@ export const CesiumAtlasGlobe = forwardRef<
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
   const labelRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const fallbackRef = useRef<AtlasGlobeHandle>(null);
   const engineRef = useRef<AtlasWorldEngine | undefined>(undefined);
   const readyEngineRef = useRef<AtlasWorldEngine | undefined>(undefined);
   const selectedRegionRef = useRef(selectedRegion);
@@ -40,9 +41,9 @@ export const CesiumAtlasGlobe = forwardRef<
   });
 
   useImperativeHandle(forwardedRef, () => ({
-    zoomIn: () => engineRef.current?.zoomIn(),
-    zoomOut: () => engineRef.current?.zoomOut(),
-    resetView: () => engineRef.current?.resetView(),
+    zoomIn: () => (fallbackRef.current ?? engineRef.current)?.zoomIn(),
+    zoomOut: () => (fallbackRef.current ?? engineRef.current)?.zoomOut(),
+    resetView: () => (fallbackRef.current ?? engineRef.current)?.resetView(),
   }));
 
   selectedRegionRef.current = selectedRegion;
@@ -173,6 +174,7 @@ export const CesiumAtlasGlobe = forwardRef<
       />
       {status.state === "region-fallback" && selectedRegion ? (
         <AtlasRegionalFallback
+          ref={fallbackRef}
           region={selectedRegion}
           selectedRoute={selectedRoute}
           onSelectRoute={(route) => onSelectRouteRef.current?.(route)}
