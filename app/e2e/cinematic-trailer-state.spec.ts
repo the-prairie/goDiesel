@@ -133,3 +133,14 @@ test("trailer completes naturally and stops at the final frame", async ({ page }
   await expect(page.getByTestId("route-trailer-progress")).toHaveAttribute("style", "width: 100%;");
   await expect(page.getByTestId("route-trailer-decision")).toBeVisible();
 });
+
+for (const width of [390, 1280]) {
+  test(`unavailable trailer can return to route intelligence at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await installTrailer(page, "unavailable");
+    await page.goto(url);
+    await expect(page.getByRole("alert")).toBeVisible();
+    await page.getByRole("link", { name: "Back to route intelligence" }).click({ timeout: 1500 });
+    await expect(page).toHaveURL(/#\/lab\/route-intelligence$/);
+  });
+}

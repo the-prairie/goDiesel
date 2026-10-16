@@ -182,7 +182,7 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
       <div aria-hidden="true" className="absolute inset-x-0 top-0 h-3 bg-black" />
       <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-3 bg-black" />
 
-      <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-4 px-5 pt-7 sm:px-8 sm:pt-9">
+      <div className="absolute inset-x-0 top-0 z-40 flex items-center justify-between gap-4 px-5 pt-7 sm:px-8 sm:pt-9">
         <Link
           aria-label="Back to route intelligence"
           className="inline-flex size-10 items-center justify-center border border-white/30 bg-black/35 text-white backdrop-blur-md transition-colors hover:bg-black/60"
