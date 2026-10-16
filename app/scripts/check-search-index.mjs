@@ -1,3 +1,4 @@
+import { routeMetadata } from "../src/domain/search/metadata.ts";
 import fs from "node:fs/promises";
 import { createHash } from "node:crypto";
 const manifest = JSON.parse(
@@ -32,6 +33,7 @@ for (const summary of manifest.routes) {
   const doc = index.documents.find((d) => d.slug === summary.slug);
   if (
     !doc ||
+    JSON.stringify(doc.metadata) !== JSON.stringify(routeMetadata(route)) ||
     doc.hash !== createHash("sha256").update(text).digest("hex") ||
     doc.vector.length !== 384 ||
     doc.vector.some((v) => !Number.isFinite(v))

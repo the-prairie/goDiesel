@@ -9,26 +9,28 @@ export function interpretQuery(
   base: FinderIntent,
   regions: string[],
 ): FinderIntent {
+  const preferences = base;
+  if (base.explicitFilters) base = { ...base, place: "", activity: "Run", distanceKm: 0, minDistanceKm: undefined, maxDistanceKm: undefined, maxElevationM: undefined, terrain: "any", vibe: "" };
   const q = query.trim().slice(0, 300);
   const number = "(\\d+(?:\\.\\d+)?)";
   const range = q.match(
     new RegExp(
-      `${number}\\s*(?:-|–|to)\\s*${number}\\s*(?:km|kilomet(?:er|re)s?)`,
+      `${number}\\s*(?:-|–|to)\\s*${number}\\s*(?:km|kilomet(?:er|re)s?)\\b(?!\\s*(?:/|per\\b))`,
       "i",
     ),
   );
   const distance = q.match(
-    new RegExp(`${number}\\s*(?:km|kilomet(?:er|re)s?)`, "i"),
+    new RegExp(`${number}\\s*(?:km|kilomet(?:er|re)s?)\\b(?!\\s*(?:/|per\\b))`, "i"),
   );
   const minimum = q.match(
     new RegExp(
-      `(?:over|at least|more than)\\s*${number}\\s*(?:km|kilomet(?:er|re)s?)`,
+      `(?:over|at least|more than)\\s*${number}\\s*(?:km|kilomet(?:er|re)s?)\\b(?!\\s*(?:/|per\\b))`,
       "i",
     ),
   );
   const maximum = q.match(
     new RegExp(
-      `(?:under|less than|below|at most)\\s*${number}\\s*(?:km|kilomet(?:er|re)s?)`,
+      `(?:under|less than|below|at most)\\s*${number}\\s*(?:km|kilomet(?:er|re)s?)\\b(?!\\s*(?:/|per\\b))`,
       "i",
     ),
   );
@@ -57,10 +59,10 @@ export function interpretQuery(
       q,
     );
   const target = distance ? Number(distance[1]) : isProse ? 0 : base.distanceKm;
-  return {
+  const inferred: FinderIntent = {
     ...base,
     query: q,
-    place: similar ? "" : (city ?? near ?? (isProse || isExperienceQuery(q) ? "" : q)),
+    place: similar ? "" : (city ?? near ?? ""),
     activity: /\b(ride|cycling|cycle|bike)\b/i.test(q)
       ? "Ride"
       : /\b(run|running|hike|hiking)\b/i.test(q)
@@ -87,6 +89,13 @@ export function interpretQuery(
           : base.terrain,
     similarPlace: similar ? city : undefined,
   };
+  const explicit = new Set(preferences.explicitFilters);
+  if ((["distanceKm", "minDistanceKm", "maxDistanceKm"] as const).some(key => explicit.has(key))) {
+    explicit.add("distanceKm");
+    explicit.add("minDistanceKm");
+    explicit.add("maxDistanceKm");
+  }
+  return Object.assign(inferred, Object.fromEntries([...explicit].map(key => [key, preferences[key]])));
 }
 
 export function distanceBounds(intent: FinderIntent): [number, number] {
