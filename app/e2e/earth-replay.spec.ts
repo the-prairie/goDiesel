@@ -497,7 +497,7 @@ test("Change route searches every replay-ready route and updates the world", asy
     "data-route-slug",
     "5650407638",
   );
-  await expect(page.getByRole("heading", { name: "Victoria, BC" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tour de farm" })).toBeVisible();
 
   await page.getByRole("button", { name: "Change route" }).click();
   await expect(chooser.getByRole("searchbox", { name: "Search replay routes" })).toHaveValue(

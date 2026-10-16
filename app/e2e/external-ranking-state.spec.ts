@@ -80,7 +80,7 @@ test("leaving discovery terminates ranking and ignores its late response", async
   await start(page);
   await expect.poll(() => page.evaluate(() => window.__rankingWorkers.length)).toBe(1);
   await page.getByRole("button", { name: /My collection/ }).click();
-  expect(await page.evaluate(() => window.__rankingWorkers[0].terminated)).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__rankingWorkers[0].terminated)).toBe(true);
   await page.evaluate(() => window.__rankingWorkers[0].onmessage?.({ data: { error: true } }));
   await expect(page.getByRole("region", { name: "New route discovery" })).toHaveCount(0);
   await expect(page.getByText(notice, { exact: true })).toHaveCount(0);

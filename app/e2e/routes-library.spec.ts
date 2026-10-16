@@ -448,6 +448,9 @@ for (const width of [320, 390, 768, 1280]) {
     await page.setViewportSize({ width, height: 844 });
     await page.goto("/#/routes?page=3");
     await expect(routeCards(page)).toHaveCount(67);
+    await expect.poll(() => page.locator(".field-note-title").evaluateAll(titles =>
+      titles.every(title => title.scrollWidth <= title.clientWidth)
+    )).toBe(true);
     const violations = await page.locator(".route-cover").evaluateAll((covers, viewportWidth) => covers.flatMap((cover) => {
       const image = cover.querySelector<HTMLImageElement>(".route-cover-image")!;
       const svg = cover.querySelector<SVGSVGElement>(".route-cover-art")!;
