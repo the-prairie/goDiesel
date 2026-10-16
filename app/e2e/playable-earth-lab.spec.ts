@@ -175,7 +175,7 @@ test("changing lab routes destroys the previous viewer and resets route state", 
 
   const lab = page.getByRole("region", { name: "Playable Earth Lab" });
   await expect(lab).toHaveAttribute("data-route-slug", secondRouteSlug);
-  await expect(page.getByRole("heading", { name: "Tokyo, Japan" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "crosswalk sprints" })).toBeVisible();
   await expect
     .poll(() =>
       page.evaluate(() => ({

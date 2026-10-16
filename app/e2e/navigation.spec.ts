@@ -123,7 +123,7 @@ test("browser history restores the selected Replay route", async ({ page }) => {
   await page.locator(`a[href="#/replay/${historyRouteSlug}"]`).click();
   await expect(page).toHaveURL(new RegExp(`#\/replay\/${historyRouteSlug}$`));
   await expect(
-    page.getByRole("heading", { name: "Tokyo, Japan" }),
+    page.getByRole("heading", { name: "crosswalk sprints" }),
   ).toBeVisible();
 
   await page.goBack();
@@ -135,7 +135,7 @@ test("browser history restores the selected Replay route", async ({ page }) => {
   await page.goForward();
   await expect(page).toHaveURL(new RegExp(`#\/replay\/${historyRouteSlug}$`));
   await expect(
-    page.getByRole("heading", { name: "Tokyo, Japan" }),
+    page.getByRole("heading", { name: "crosswalk sprints" }),
   ).toBeVisible();
 });
 

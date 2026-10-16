@@ -63,7 +63,7 @@ test("replacing a pending Leaf disposes its map and loads the next recorded rout
   await page.route(styleUrl, (route) => route.fulfill({ json: style }));
   await page.goto(`/#/routes/${nextSlug}`);
   await request.fulfill({ json: style }).catch(() => {});
-  await expect(page.getByRole("heading", { name: "Tokyo, Japan" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "crosswalk sprints" })).toBeVisible();
   await expect(geography(page)).toHaveAttribute("data-map-status", "ready");
   await expect(page.getByRole("img", { name: "Tokyo, Japan recorded path on a real map" })).toBeVisible();
   await page.getByRole("button", { name: "Reset route map" }).click();
