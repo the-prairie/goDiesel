@@ -1,11 +1,12 @@
 import maplibregl from "@/providers/maplibre";
 import { Map as MapLibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useReducer } from "react";
 
 import { atlasViewportInsets } from "@/surfaces/atlas/atlas-region-camera";
 import type { RouteRegion } from "@/data/route-regions";
 import type { RoutePoint, RouteSummary } from "@/domain/route";
+import { initialRegionalFallbackState, reduceRegionalFallback } from "../regional-fallback-state";
 
 const ROUTE_THREAD_STYLE = {
   marker: "#30343b",
@@ -29,7 +30,6 @@ type RegionalRouteBoundsInput = Omit<RegionalRouteBounds, "spanLng"> & {
   spanLng?: number;
   longitudeSpan?: number;
 };
-type MapStatus = "loading" | "ready" | "unavailable";
 type ProjectedPoint = { x: number; y: number };
 
 export function unwrapLongitudeAroundCenter(lng: number, centerLng: number) {
@@ -179,7 +179,9 @@ export function AtlasRegionalFallback({
   const hostRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | undefined>(undefined);
   const onSelectRouteRef = useRef(onSelectRoute);
-  const [status, setStatus] = useState<MapStatus>("loading");
+  const [lifecycle, dispatch] = useReducer(reduceRegionalFallback, undefined, initialRegionalFallbackState);
+  const status = lifecycle.phase;
+  const sessionRef = useRef(0);
   const [routePaths, setRoutePaths] = useState<string[]>([]);
   const routes = useMemo(() => regionalRouteCollection(region), [region]);
   const bounds = useMemo(() => regionalFitBounds(region), [region]);
@@ -217,18 +219,15 @@ export function AtlasRegionalFallback({
 
   useEffect(() => {
     const host = hostRef.current;
-    if (!host || !bounds || routes.features.length === 0) {
-      setStatus("unavailable");
-      return;
-    }
+    const session = ++sessionRef.current;
+    const hasGeometry = Boolean(host && bounds && routes.features.length);
+    dispatch({ type: "sessionStarted", session, hasGeometry });
+    if (!host || !bounds || routes.features.length === 0) return;
 
     let active = true;
-    let ready = false;
-    let errorCount = 0;
     let loadTimer: number | undefined;
     let resizeObserver: ResizeObserver | undefined;
     let map: MapLibreMap;
-    setStatus("loading");
     setRoutePaths([]);
 
     try {
@@ -244,16 +243,15 @@ export function AtlasRegionalFallback({
       mapRef.current = map;
     } catch {
       host.replaceChildren();
-      setStatus("unavailable");
+      dispatch({ type: "constructionFailed", session });
       return;
     }
 
     const markUnavailable = () => {
-      if (active && !ready) setStatus("unavailable");
+      if (active) dispatch({ type: "loadTimedOut", session });
     };
     const handleError = () => {
-      errorCount += 1;
-      if (errorCount >= 4) markUnavailable();
+      if (active) dispatch({ type: "mapErrored", session });
     };
     const updateRouteOverlay = () => {
       setRoutePaths(
@@ -340,9 +338,8 @@ export function AtlasRegionalFallback({
         "aria-label",
         `${region.name} recorded routes on a regional map`,
       );
-      ready = true;
       if (loadTimer !== undefined) window.clearTimeout(loadTimer);
-      setStatus("ready");
+      dispatch({ type: "mapLoaded", session });
     };
 
     map.on("error", handleError);

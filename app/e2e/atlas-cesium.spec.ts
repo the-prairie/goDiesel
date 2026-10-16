@@ -1,7 +1,43 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Route } from "@playwright/test";
 import { PNG } from "pngjs";
 
 import { installDeterministicCesiumAtlas } from "./helpers/deterministic-atlas";
+
+for (const width of [390, 1440]) {
+  test(`regional fallback recovers after its deadline and reconciles history at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    let pendingStyle: Route | undefined;
+    await page.route("**/styles/liberty", route => { pendingStyle = route; });
+    await page.addInitScript(() => { window.__GODIESEL_ATLAS_REGION_OUTCOME__ = "fallback"; });
+    await installDeterministicCesiumAtlas(page);
+    await page.goto("/#/atlas?region=Kyoto%2C+Japan");
+    const fallback = page.locator('[data-atlas-engine="maplibre-regional-fallback"]');
+    await expect(fallback).toHaveAttribute("data-map-status", "loading");
+    await expect.poll(() => Boolean(pendingStyle)).toBe(true);
+    await page.clock.install();
+    await page.clock.fastForward(10_001);
+    await expect(fallback).toHaveAttribute("data-map-status", "unavailable");
+    await expect(page.getByText("Regional map unavailable.", { exact: true })).toBeVisible();
+    await pendingStyle!.fulfill({ json: {
+      version: 8, sources: {},
+      layers: [{ id: "background", type: "background", paint: { "background-color": "#d9ddd2" } }],
+    } });
+    await expect(fallback).toHaveAttribute("data-map-status", "ready");
+    await expect(page.getByText("3D terrain partially unavailable.", { exact: true })).toBeVisible();
+    const carousel = page.getByRole("region", { name: "Kyoto, Japan recorded routes", exact: true });
+    await expect(carousel).toBeVisible();
+    const cards = carousel.locator("article[data-route-slug]");
+    await page.getByRole("button", { name: "Next route", exact: true }).click();
+    await expect(cards.nth(1)).toHaveAttribute("data-selected", "true");
+    await page.goBack();
+    await expect(carousel).toBeVisible();
+    await expect(cards.first()).toHaveAttribute("data-selected", "true");
+    await page.clock.fastForward(10_001);
+    await expect(fallback).toHaveAttribute("data-map-status", "ready");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await page.screenshot({ path: `artifacts/state-migration/t04/fallback-${width}.png` });
+  });
+}
 
 for (const viewport of [
   { name: "desktop", width: 1440, height: 900 },
