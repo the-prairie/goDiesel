@@ -716,7 +716,7 @@ for (const earthState of ["partial", "unavailable"] as const) {
   });
 }
 
-test("real Atlas adapter fills the stage and advances the route", async ({ page }) => {
+test("real Atlas adapter fills the space above the dock and advances the route", async ({ page }) => {
   await installUnavailableEarthWithRealAtlas(page);
   await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
   await page.getByRole("button", { name: "Use Atlas replay" }).click();
@@ -731,7 +731,8 @@ test("real Atlas adapter fills the stage and advances the route", async ({ page 
   const stageBox = await replay.boundingBox();
   const mapBox = await page.getByLabel("Atlas Replay map").boundingBox();
   expect(mapBox?.width).toBe(stageBox?.width);
-  expect(mapBox?.height).toBe(stageBox?.height);
+  const dockBox = await page.getByTestId("replay-controls").boundingBox();
+  expect((mapBox?.height ?? 0) + (dockBox?.height ?? 0)).toBe(stageBox?.height);
   const initialProgress = Number(await replay.getAttribute("data-progress"));
   await page.getByRole("button", { name: "Play route" }).click();
   await expect
@@ -812,3 +813,52 @@ for (const width of [390, 1440]) {
     await expect(page.getByRole("button", { name: "Play route" })).toBeEnabled();
   });
 }
+
+
+test("Atlas map controls and attribution stay usable above the playback dock", async ({ page }) => {
+  await installUnavailableEarthWithRealAtlas(page);
+  await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
+  await page.getByRole("button", { name: "Use Atlas replay" }).click();
+  await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-state", "ready");
+
+  for (const viewport of [
+    { width: 1280, height: 720 },
+    { width: 390, height: 844 },
+    { width: 320, height: 640 },
+  ]) {
+    await page.setViewportSize(viewport);
+    for (const expanded of viewport.width < 768 ? [false, true] : [false]) {
+      if (viewport.width < 768 && expanded) {
+        await page.getByRole("button", { name: "Show more controls" }).click();
+      }
+      const dock = page.getByTestId("replay-controls");
+      const map = page.getByLabel("Atlas Replay map");
+      await expect.poll(async () => {
+        const canvasBox = await map.locator("canvas").boundingBox();
+        const mapBox = await map.boundingBox();
+        return Math.abs((canvasBox?.height ?? 0) - (mapBox?.height ?? 0));
+      }).toBeLessThan(1);
+      const dockBox = await dock.boundingBox();
+      for (const name of ["Zoom in", "Zoom out", "Drag to rotate map, click to reset north"]) {
+        const button = map.getByRole("button", { name, exact: true });
+        const box = await button.boundingBox();
+        expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(dockBox!.y);
+        await button.click();
+      }
+      const attribution = map.getByLabel("Toggle attribution");
+      const credit = map.getByRole("link", { name: "OpenFreeMap", exact: true });
+      if (!(await credit.isVisible())) await attribution.click();
+      await expect(credit).toBeVisible();
+      const creditBox = await credit.boundingBox();
+      expect((creditBox?.y ?? 0) + (creditBox?.height ?? 0)).toBeLessThanOrEqual(dockBox!.y);
+      await credit.click({ trial: true });
+      await attribution.click();
+      await expect(credit).toBeHidden();
+      await attribution.click();
+      await expect(credit).toBeVisible();
+      if (viewport.width < 768 && expanded) {
+        await page.getByRole("button", { name: "Hide more controls" }).click();
+      }
+    }
+  }
+});
