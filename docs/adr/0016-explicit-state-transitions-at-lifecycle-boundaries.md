@@ -113,6 +113,18 @@ covered behavior. Provider, terrain, imagery, and camera changes require their
 applicable live checks. A local reducer extraction does not require the complete
 release or live-pipeline gate.
 
+Each backlog ticket also requires an agent to use the affected product through
+actual browser controls. Exercise the main flow, failure or retry paths where
+available, navigation and responsive layouts. Inspect rendered screenshots as
+well as accessible state. Automated browser tests supplement this review.
+
+Record the tested commit, viewport, interactions, screenshots, fixture boundaries
+and any live-provider limitations. An independent reviewer checks meaningful
+state or architecture changes and repeats the affected product interactions.
+Reproduce discovered bugs before fixing them. Keep behavior corrections in a
+separate commit from the state extraction, add a focused regression, and repeat
+the affected clicks. A passing test suite alone does not complete a ticket.
+
 ## Consequences
 
 Request state can no longer claim both pending work and settled results.

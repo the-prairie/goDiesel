@@ -50,7 +50,7 @@ export function FinderPage() {
   }
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [view, setView] = useState<"list" | "map">("list");
-  const { result, mode } = useCollectionSearch(scope === "collection" ? submittedIntent : null);
+  const { result, limited } = useCollectionSearch(scope === "collection" ? submittedIntent : null);
 
   const plannedRoutes = usePlannedRoutes();
   const selectedCandidate =
@@ -140,7 +140,7 @@ export function FinderPage() {
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
           {result?.status === "matches" ? <div role="group" aria-label="Results view" className="flex shrink-0 items-center justify-between border-b border-line px-4 py-2 lg:hidden">
-            <span aria-live="polite" className="text-sm text-ink-secondary">{result.candidates.length} routes</span>
+            <span aria-live="polite" className="text-sm text-ink-secondary">{result.candidates.length} {result.candidates.length === 1 ? "route" : "routes"}</span>
             <div className="flex gap-1">
               <Button size="sm" variant={view === "list" ? "secondary" : "ghost"} aria-pressed={view === "list"} onClick={() => setView("list")}><List />List</Button>
               <Button size="sm" variant={view === "map" ? "secondary" : "ghost"} aria-pressed={view === "map"} onClick={() => setView("map")}><MapIcon />Map</Button>
@@ -148,7 +148,7 @@ export function FinderPage() {
           </div> : null}
           <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(22rem,0.9fr)_minmax(0,1.4fr)]">
             <div className={`${view === "list" || result?.status !== "matches" ? "flex" : "hidden"} min-h-0 flex-col lg:flex`}>
-              <FinderResults limited={mode.includes("unavailable")} result={result} submittedIntent={submittedIntent} selectedCandidate={selectedCandidate}
+              <FinderResults limited={limited} result={result} submittedIntent={submittedIntent} selectedCandidate={selectedCandidate}
                 plannedRoutes={plannedRoutes} onSelect={(candidate) => { const params = new URLSearchParams(searchParams); params.set("selected", candidate.sourceRouteSlug); setSearchParams(params, {replace: true}); setView("map"); }} />
             </div>
             {result?.status === "matches" ? <div className={`${view === "map" ? "flex" : "hidden"} min-h-0 flex-col border-line lg:flex lg:border-l`}>

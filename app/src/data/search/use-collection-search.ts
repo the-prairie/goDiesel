@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useReducer, useRef } from "react";
 import type { FinderIntent } from "@/domain/planning";
 import type { SearchDocument } from "@/domain/search/ranking";
 import { searchCollection } from "../discovery-provider";
+import { initialCollectionSearchState, reduceCollectionSearch, selectCollectionSearch } from "./collection-search-state";
 let documents: Promise<SearchDocument[]> | undefined;
 function loadDocuments() {
   documents ??= fetch("/search/collection.json")
@@ -17,34 +18,27 @@ function loadDocuments() {
   return documents;
 }
 export function useCollectionSearch(intent: FinderIntent | null) {
-  const [state, setState] = useState<{
-    key: string;
-    docs: SearchDocument[];
-    vector?: number[];
-    mode: string;
-  }>({ key: "", docs: [], mode: "" });
+  const [state, dispatch] = useReducer(reduceCollectionSearch, undefined, initialCollectionSearchState);
+  const sequence = useRef(0);
   const key = JSON.stringify(intent);
   useEffect(() => {
     if (!intent) return;
+    const requestId = ++sequence.current;
+    dispatch({ type: "searchStarted", key, requestId });
     let active = true;
     let worker: Worker | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
     loadDocuments()
       .then((docs) => {
         if (!active) return;
-        setState({ key, docs, mode: "Keyword search" });
-        if ((!intent.query && !intent.vibe) || intent.similarPlace) return;
-        setState({ key, docs, mode: "Finding related guide themes…" });
+        const refine = Boolean((intent.query || intent.vibe) && !intent.similarPlace);
+        dispatch({ type: "indexReceived", requestId, docs, refine });
+        if (!refine) return;
         worker = new Worker(new URL("./embedding.worker.ts", import.meta.url), {
           type: "module",
         });
         const fallback = () => {
-          if (active)
-            setState({
-              key,
-              docs,
-              mode: "Keyword search · related-theme search unavailable",
-            });
+          if (active) dispatch({ type: "embeddingFailed", requestId });
           worker?.terminate();
         };
         timer = setTimeout(fallback, 60_000);
@@ -52,14 +46,7 @@ export function useCollectionSearch(intent: FinderIntent | null) {
         worker.onmessage = ({ data }) => {
           clearTimeout(timer);
           if (active)
-            setState({
-              key,
-              docs,
-              vector: data.vector,
-              mode: data.error
-                ? "Keyword search · related-theme search unavailable"
-                : "Keyword + related-theme search",
-            });
+            dispatch({ type: "embeddingReceived", requestId, vector: data.vector, failed: Boolean(data.error) });
           worker?.terminate();
         };
         worker.postMessage({
@@ -68,12 +55,7 @@ export function useCollectionSearch(intent: FinderIntent | null) {
         });
       })
       .catch(() => {
-        if (active)
-          setState({
-            key,
-            docs: [],
-            mode: "Basic search · full guide index unavailable",
-          });
+        if (active) dispatch({ type: "indexFailed", requestId });
       });
     return () => {
       active = false;
@@ -81,14 +63,12 @@ export function useCollectionSearch(intent: FinderIntent | null) {
       clearTimeout(timer);
     };
   }, [key]); // intent is serialized so equivalent URL state does not restart inference.
-  const current =
-    state.key === key
-      ? state
-      : { docs: [], vector: undefined, mode: "Searching guides…" };
+  const current = selectCollectionSearch(state, key);
   return {
     result: intent
       ? searchCollection(intent, current.docs, current.vector)
       : null,
     mode: current.mode,
+    limited: current.limited,
   };
 }
