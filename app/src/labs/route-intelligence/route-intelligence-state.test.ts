@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildRouteGenome } from "./route-genome";
-import { initialRouteIntelligenceState, reduceRouteIntelligence, type LabRoute } from "./route-intelligence-state";
+import { initialRouteIntelligenceState, reduceRouteIntelligence, selectedRouteIntelligenceEntry, type LabRoute } from "./route-intelligence-state";
 import { parseRouteDetail } from "@/domain/route";
 import fixture from "../../../public/data/routes/14736711660.json";
 
@@ -34,5 +34,20 @@ describe("route intelligence loading", () => {
       const state = reduceRouteIntelligence(initialRouteIntelligenceState(), event);
       expect(reduceRouteIntelligence(state, settle([]))).toBe(state);
     }
+  });
+});
+
+
+describe("route intelligence selection", () => {
+  it("uses the preferred route when available and the surviving route otherwise", () => {
+    const other = { ...entry, route: { ...route, activityId: "other" } };
+    const complete = reduceRouteIntelligence(initialRouteIntelligenceState(), settle([entry, other]));
+    expect(selectedRouteIntelligenceEntry(complete, "other")).toBe(other);
+    const partial = reduceRouteIntelligence(initialRouteIntelligenceState(), settle([other]));
+    expect(selectedRouteIntelligenceEntry(partial, route.activityId)).toBe(other);
+  });
+  it("does not invent selection while loading or after no routes load", () => {
+    expect(selectedRouteIntelligenceEntry(initialRouteIntelligenceState(), route.activityId)).toBeUndefined();
+    expect(selectedRouteIntelligenceEntry({ status: "failed" }, route.activityId)).toBeUndefined();
   });
 });

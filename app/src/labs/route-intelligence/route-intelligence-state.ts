@@ -40,3 +40,11 @@ export function reduceRouteIntelligence(
     }
   }
 }
+
+export function selectedRouteIntelligenceEntry(
+  state: RouteIntelligenceState,
+  preferredId: string,
+): LabRoute | undefined {
+  if (!("routes" in state)) return undefined;
+  return state.routes.find(({ route }) => route.activityId === preferredId) ?? state.routes[0];
+}

@@ -13,7 +13,7 @@ for (const missing of [first, second]) {
     await expect(page.getByTestId(`route-genome-${missing === first ? second : first}`)).toBeVisible();
     await expect(page.getByRole("alert")).toHaveCount(0);
     if (missing === first) {
-      await expect(page.locator('[data-testid^="journey-strip-"]')).toHaveCount(0);
+      await expect(page.getByTestId(`journey-strip-${second}`)).toBeVisible();
       await page.getByRole("button", { name: "Crete", exact: true }).click();
       await expect(page.getByTestId(`journey-strip-${second}`)).toBeVisible();
     } else {
@@ -54,4 +54,14 @@ test("leaving a pending route-intelligence load prevents late content from repla
   release();
   await expect(page).toHaveURL(/#\/finder$/);
   await expect(page.getByTestId("route-intelligence-lab")).toHaveCount(0);
+});
+
+test("partial loading selects the available route for journey and all entry links", async ({ page }) => {
+  await page.route(`**/data/routes/${first}.json`, route => route.fulfill({ status: 503 }));
+  await page.goto(url);
+  await expect(page.getByRole("button", { name: "Crete", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId(`journey-strip-${second}`)).toBeVisible();
+  for (const [name, path] of [["Original trailer", "route-trailer"], ["Director cut", "cinematic-director"], ["Enter native 3D", "google-route-navigator"]]) {
+    await expect(page.getByRole("link", { name, exact: true })).toHaveAttribute("href", `#/lab/${path}/${second}`);
+  }
 });
