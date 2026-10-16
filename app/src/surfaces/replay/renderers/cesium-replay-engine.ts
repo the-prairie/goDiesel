@@ -397,7 +397,6 @@ export class CesiumReplayEngine implements ReplayEngine {
         ((desiredHeadingDeg - this.cameraHeadingDeg + 540) % 360) - 180;
       this.cameraHeadingDeg = (this.cameraHeadingDeg + delta * 0.08 + 360) % 360;
     }
-    const heading = (this.cameraHeadingDeg * Math.PI) / 180;
     this.latestCameraTarget = { lat: cameraLat, lng: cameraLng };
     this.requestSurfaceSample(pose, cameraLat, cameraLng, now);
     if (!pose.following) {
@@ -469,9 +468,6 @@ export class CesiumReplayEngine implements ReplayEngine {
       renderedCameraTarget.lat,
       cameraAltitudeM,
     );
-    const easing = this.cameraInitialized
-      ? Math.min(1, Math.max(0.04, 1 - Math.exp(-5 * cameraElapsedSeconds)))
-      : 1;
     const currentCameraTarget = {
       lat: (viewer.camera.positionCartographic.latitude * 180) / Math.PI,
       lng: (viewer.camera.positionCartographic.longitude * 180) / Math.PI,
@@ -480,8 +476,14 @@ export class CesiumReplayEngine implements ReplayEngine {
       currentCameraTarget,
       renderedCameraTarget,
     );
-    let destination =
-      !this.cameraInitialized || cameraJumpDistanceM > MAX_CAMERA_EASING_DISTANCE_M
+    const snapCamera =
+      !this.cameraInitialized || cameraJumpDistanceM > MAX_CAMERA_EASING_DISTANCE_M;
+    if (snapCamera) this.cameraHeadingDeg = desiredHeadingDeg;
+    const heading = (this.cameraHeadingDeg * Math.PI) / 180;
+    const easing = snapCamera
+      ? 1
+      : Math.min(1, Math.max(0.04, 1 - Math.exp(-5 * cameraElapsedSeconds)));
+    let destination = snapCamera
         ? desiredDestination
         : Cartesian3.lerp(
             viewer.camera.positionWC,
