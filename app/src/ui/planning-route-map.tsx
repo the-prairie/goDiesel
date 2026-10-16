@@ -111,7 +111,7 @@ export function FinderRouteMap({
           <div className="max-w-sm">
             <p className="font-semibold text-ink">Planning map unavailable</p>
             <p className="mt-2 text-control leading-6 text-ink-muted">
-              The map could not load. You can still browse and save the routes beside it.
+              The map could not load. You can still browse and save routes in the list.
             </p>
           </div>
         </div>

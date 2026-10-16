@@ -90,3 +90,16 @@ test("leaving a pending map and returning starts a usable replacement", async ({
   await expect(planningMap(page)).toHaveAttribute("data-map-status", "ready");
   await page.getByRole("button", { name: "Fit route to map" }).click();
 });
+
+test("mobile map failure explains that the route list remains usable", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route(styleUrl, (route) => route.abort());
+  await page.goto(finder);
+  await page.getByRole("button", { name: "Preview Bali, Indonesia on map" }).click();
+  await expect(planningMap(page)).toHaveAttribute("data-map-status", "unavailable", { timeout: 10_000 });
+  await expect(planningMap(page)).toContainText("You can still browse and save routes in the list.", { timeout: 1_000 });
+  await page.getByRole("button", { name: "List", exact: true }).click();
+  const candidate = page.getByRole("article", { name: "Bali, Indonesia candidate" });
+  await candidate.getByRole("button", { name: "Save planned route" }).click();
+  await expect(candidate).toContainText("Saved to Planned routes");
+});
