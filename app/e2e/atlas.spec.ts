@@ -316,7 +316,7 @@ test("global search focuses a completed route memory", async ({ page }) => {
   await search.fill("crosswalk sprints");
   const result = page
     .getByRole("region", { name: "Atlas search" })
-    .getByRole("button", { name: /Tokyo, JapanRun · 21\.8 km/i });
+    .getByRole("button", { name: /crosswalk sprintsRun · 21\.8 km/i });
   await expect(result).toBeVisible();
   await result.click();
 
