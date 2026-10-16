@@ -15,7 +15,7 @@ async function run() {
 }
 it("discovers source geometry from the healthy primary without asking the fallback", async () => {
   upstream.mockImplementation(async (input) =>
-    String(input) === "https://maps.mail.ru/osm/tools/overpass/api/interpreter"
+    String(input).split("?")[0] === "https://maps.mail.ru/osm/tools/overpass/api/interpreter"
       ? Response.json(body)
       : new Response("Busy", { status: 503 }),
   );
@@ -24,12 +24,27 @@ it("discovers source geometry from the healthy primary without asking the fallba
   expect(await response.json()).toMatchObject({ routes: [{ name: "Forest loop", sourceUrl: "https://www.openstreetmap.org/relation/123", lines: [[[-115.57, 51.17], [-115.56, 51.18]]] }] });
   expect(upstream).toHaveBeenCalledTimes(1);
 });
+it("sends the bounded route query through the provider's GET interface", async () => {
+  upstream.mockImplementation(async (input, init) => {
+    const sent = new Request(input, init);
+    if (sent.method !== "GET") return new Response("Gateway timeout", { status: 504 });
+    expect(new URL(sent.url).searchParams.get("data")).toBe(
+      '[out:json][timeout:20][maxsize:8388608];rel(around:18000,51.17840,-115.57080)[type=route][route~"^(hiking|foot|running)$"][name];out geom 60;way(r);out tags;',
+    );
+    expect(sent.body).toBeNull();
+    return Response.json(body);
+  });
+  const response = await run();
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ routes: [{ name: "Forest loop" }] });
+  expect(upstream).toHaveBeenCalledTimes(1);
+});
 it("fails over once from an overloaded provider, preserving source geometry and caching success", async () => {
   upstream.mockResolvedValueOnce(new Response("Busy", { status: 502 })).mockResolvedValueOnce(Response.json(body));
   const response = await run();
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ routes: [{ name: "Forest loop", sourceUrl: "https://www.openstreetmap.org/relation/123", lines: [[[-115.57, 51.17], [-115.56, 51.18]]] }] });
-  expect(upstream.mock.calls.map(call => call[0])).toEqual(["https://maps.mail.ru/osm/tools/overpass/api/interpreter", "https://overpass.private.coffee/api/interpreter"]);
+  expect(upstream.mock.calls.map(call => String(call[0]).split("?")[0])).toEqual(["https://maps.mail.ru/osm/tools/overpass/api/interpreter", "https://overpass.private.coffee/api/interpreter"]);
   const { discoveryResponse } = await import("../../../server/discovery");
   expect((await discoveryResponse(request())).status).toBe(200);
   expect(upstream).toHaveBeenCalledTimes(2);
