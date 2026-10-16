@@ -10,7 +10,7 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef } from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/ui/button";
@@ -19,8 +19,9 @@ import { recordedLightAt } from "@/domain/geometry/recorded-light";
 import type { QuestRoute } from "@/domain/route";
 import { CinematicSoundscape } from "@/surfaces/replay/cinematic/cinematic-soundscape";
 import {
-  type CinematicRendererStatus,
-} from "@/surfaces/replay/cinematic/cesium-cinematic-renderer";
+  initialCinematicDirectorState,
+  reduceCinematicDirector,
+} from "@/surfaces/replay/cinematic/cinematic-director-state";
 import { NativeCinematicRenderer } from "@/surfaces/replay/cinematic/native-cinematic-renderer";
 import {
   CINEMATIC_CUT_LABELS,
@@ -35,11 +36,6 @@ const CUT_DESCRIPTIONS: Record<CinematicCut, string> = {
   monumental: "Scale, silence, and the full weight of the landscape.",
   kinetic: "A faster line built from speed, turns, and release.",
   intimate: "Closer to the ground, with the effort left in the frame.",
-};
-
-const INITIAL_STATUS: CinematicRendererStatus = {
-  state: "loading",
-  message: "Scouting the route.",
 };
 
 function routeLogline(route: QuestRoute) {
@@ -97,25 +93,30 @@ export function CinematicDirectorStage({
   const soundRef = useRef<CinematicSoundscape | undefined>(undefined);
   const elapsedRef = useRef(0);
   const playingRef = useRef(false);
-  const [cut, setCut] = useState<CinematicCut>(initialCut);
-  const [frame, setFrame] = useState(() =>
-    cinematicFrame(route, initialCut, 0),
+  const playRequestRef = useRef(0);
+  const [state, dispatch] = useReducer(
+    reduceCinematicDirector,
+    undefined,
+    () => initialCinematicDirectorState(cinematicFrame(route, initialCut, 0)),
   );
-  const [playing, setPlaying] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const [status, setStatus] =
-    useState<CinematicRendererStatus>(INITIAL_STATUS);
+  const { frame, soundEnabled, status } = state;
+  const cut = frame.cut;
+  const playing = state.playback === "playing";
 
-  const commitFrame = (nextFrame: typeof frame) => {
+  const commitFrame = (
+    nextFrame: typeof frame,
+    type: "cutSelected" | "seeked" | "restartRequested",
+  ) => {
     elapsedRef.current = nextFrame.elapsedSeconds;
     rendererRef.current?.setFrame(nextFrame, renderMode);
     soundRef.current?.update(nextFrame, soundEnabled);
-    setFrame(nextFrame);
+    dispatch({ type, frame: nextFrame });
   };
 
-  const setPlayback = (next: boolean) => {
-    playingRef.current = next;
-    setPlaying(next);
+  const pause = () => {
+    playRequestRef.current += 1;
+    playingRef.current = false;
+    dispatch({ type: "playbackPaused" });
   };
 
   useEffect(() => {
@@ -127,18 +128,17 @@ export function CinematicDirectorStage({
     rendererRef.current = renderer;
     soundRef.current = sound;
     elapsedRef.current = 0;
-    setFrame(initial);
-    setStatus(INITIAL_STATUS);
+    dispatch({ type: "sessionStarted", frame: initial });
 
     void renderer.mount({
       container,
       frame: initial,
       route,
-      onStatus: setStatus,
+      onStatus: (status) => dispatch({ type: "rendererStatusReceived", status }),
     });
 
     return () => {
-      setPlayback(false);
+      pause();
       renderer.destroy();
       sound.destroy();
       if (rendererRef.current === renderer) rendererRef.current = undefined;
@@ -152,8 +152,9 @@ export function CinematicDirectorStage({
       const seconds = (event as CustomEvent<{ seconds?: number }>).detail
         ?.seconds;
       if (typeof seconds !== "number" || !Number.isFinite(seconds)) return;
-      setPlayback(false);
-      commitFrame(cinematicFrame(route, cut, seconds));
+      playRequestRef.current += 1;
+      playingRef.current = false;
+      commitFrame(cinematicFrame(route, cut, seconds), "seeked");
     };
     window.addEventListener("godiesel:route-film-seek", seek);
     return () => window.removeEventListener("godiesel:route-film-seek", seek);
@@ -173,10 +174,10 @@ export function CinematicDirectorStage({
         rendererRef.current?.setFrame(next);
         soundRef.current?.update(next, soundEnabled);
         if (now - lastUiUpdate > 70 || next.showDecision) {
-          setFrame(next);
+          dispatch({ type: "framePublished", frame: next });
           lastUiUpdate = now;
         }
-        if (next.elapsedSeconds >= next.durationSeconds) setPlayback(false);
+        if (next.elapsedSeconds >= next.durationSeconds) pause();
       }
       animationFrame = requestAnimationFrame(tick);
     };
@@ -185,27 +186,32 @@ export function CinematicDirectorStage({
   }, [cut, route, soundEnabled, status.state]);
 
   const selectCut = (nextCut: CinematicCut) => {
-    setPlayback(false);
-    setCut(nextCut);
-    commitFrame(cinematicFrame(route, nextCut, 0));
+    playRequestRef.current += 1;
+    playingRef.current = false;
+    commitFrame(cinematicFrame(route, nextCut, 0), "cutSelected");
   };
 
-  const play = async () => {
-    if (frame.showDecision) commitFrame(cinematicFrame(route, cut, 0));
-    if (soundEnabled) await soundRef.current?.start();
-    setPlayback(true);
-  };
-
-  const restart = async () => {
-    commitFrame(cinematicFrame(route, cut, 0));
-    if (soundEnabled) await soundRef.current?.start();
-    setPlayback(true);
+  const play = async (restart = frame.showDecision) => {
+    if (restart) commitFrame(cinematicFrame(route, cut, 0), "restartRequested");
+    const requestId = ++playRequestRef.current;
+    dispatch({ type: "playRequested", requestId });
+    try {
+      if (soundEnabled) await soundRef.current?.start();
+    } catch (error) {
+      dispatch({ type: "audioStartFailed", requestId });
+      throw error;
+    }
+    if (playRequestRef.current !== requestId) return;
+    playingRef.current = true;
+    dispatch({ type: "audioStarted", requestId });
   };
 
   const scrub = (progress: number) => {
-    setPlayback(false);
+    playRequestRef.current += 1;
+    playingRef.current = false;
     commitFrame(
       cinematicFrame(route, cut, frame.durationSeconds * progress),
+      "seeked",
     );
   };
 
@@ -242,7 +248,7 @@ export function CinematicDirectorStage({
     >
       <div
         aria-label={`Photorealistic cinematic view of ${route.name}`}
-        className="absolute inset-0"
+        className="absolute inset-x-0 bottom-[calc(7dvh+8px)] top-[7dvh]"
         data-route-points={route.route.length}
         data-testid="cinematic-world"
         ref={containerRef}
@@ -257,51 +263,56 @@ export function CinematicDirectorStage({
           ].join(" "),
         }}
       />
-      <RecordedLightLayer light={recordedLight} reducedMotion={renderMode} />
       <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 z-[2] bg-[linear-gradient(180deg,rgba(3,5,5,0.62)_0%,transparent_24%,transparent_64%,rgba(3,5,5,0.92)_100%)]"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 z-[3]"
-        style={{
-          boxShadow: `inset 0 0 ${8 + frame.look.vignette * 18}rem rgba(0,0,0,${0.28 + frame.look.vignette * 0.82})`,
-        }}
-      />
-      <div
-        aria-hidden="true"
-        className={`pointer-events-none absolute inset-0 z-[4] mix-blend-color ${
-          cut === "kinetic"
-            ? "bg-[#2f6f77]/7"
-            : cut === "intimate"
-              ? "bg-[#8b704e]/12"
-              : "bg-[#2c4251]/11"
-        }`}
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 z-[5] mix-blend-screen"
-        style={{
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.04) 18%, transparent 48%)",
-          opacity: frame.look.bloom,
-        }}
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 z-[6] mix-blend-soft-light"
-        style={{
-          background:
-            "repeating-conic-gradient(from 12deg at 50% 50%, rgba(255,255,255,0.025) 0deg 0.08deg, rgba(0,0,0,0.022) 0.08deg 0.16deg)",
-          opacity: 0.14,
-        }}
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 z-10 bg-black transition-opacity duration-75"
-        style={{ opacity: frame.showDecision ? 0 : frame.cutPulse * 0.88 }}
-      />
+        className="pointer-events-none absolute inset-0"
+        style={{ clipPath: "inset(0 0 calc(7dvh + 40px) 0)" }}
+      >
+        <RecordedLightLayer light={recordedLight} reducedMotion={renderMode} />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-[2] bg-[linear-gradient(180deg,rgba(3,5,5,0.62)_0%,transparent_24%,transparent_64%,rgba(3,5,5,0.92)_100%)]"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-[3]"
+          style={{
+            boxShadow: `inset 0 0 ${8 + frame.look.vignette * 18}rem rgba(0,0,0,${0.28 + frame.look.vignette * 0.82})`,
+          }}
+        />
+        <div
+          aria-hidden="true"
+          className={`pointer-events-none absolute inset-0 z-[4] mix-blend-color ${
+            cut === "kinetic"
+              ? "bg-[#2f6f77]/7"
+              : cut === "intimate"
+                ? "bg-[#8b704e]/12"
+                : "bg-[#2c4251]/11"
+          }`}
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-[5] mix-blend-screen"
+          style={{
+            background:
+              "linear-gradient(180deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.04) 18%, transparent 48%)",
+            opacity: frame.look.bloom,
+          }}
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-[6] mix-blend-soft-light"
+          style={{
+            background:
+              "repeating-conic-gradient(from 12deg at 50% 50%, rgba(255,255,255,0.025) 0deg 0.08deg, rgba(0,0,0,0.022) 0.08deg 0.16deg)",
+            opacity: 0.14,
+          }}
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-10 bg-black transition-opacity duration-75"
+          style={{ opacity: frame.showDecision ? 0 : frame.cutPulse * 0.88 }}
+        />
+      </div>
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-0 top-0 z-20 h-[7dvh] bg-black"
@@ -312,7 +323,7 @@ export function CinematicDirectorStage({
       />
 
       {!renderMode ? (
-        <div className="absolute inset-x-0 top-0 z-30 flex items-center justify-between px-5 pt-6 sm:px-8 sm:pt-8">
+        <div className="absolute inset-x-0 top-0 z-50 flex items-center justify-between px-5 pt-6 sm:px-8 sm:pt-8">
         <Link
           aria-label="Back to route intelligence"
           className="grid size-10 place-items-center border border-white/28 bg-black/38 backdrop-blur-md transition-colors hover:bg-black/68"
@@ -330,10 +341,10 @@ export function CinematicDirectorStage({
 
       {preRoll ? (
         <div
-          className="absolute inset-0 z-20 grid place-items-center bg-black/44 px-5 py-24 backdrop-blur-[2px]"
+          className="absolute inset-x-0 bottom-[calc(7dvh+40px)] top-0 z-20 flex overflow-y-auto bg-black/44 px-5 py-24 backdrop-blur-[2px]"
           data-testid="cinematic-preroll"
         >
-          <div className="w-full max-w-5xl">
+          <div className="m-auto w-full max-w-5xl shrink-0">
             <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-end">
               <div>
                 <p className="text-[0.67rem] font-semibold uppercase tracking-[0.24em] text-[#ff896d]">
@@ -420,7 +431,7 @@ export function CinematicDirectorStage({
 
       {frame.showDecision ? (
         <div
-          className="absolute inset-x-0 bottom-12 z-20 border-y border-white/20 bg-black/72 px-5 py-6 backdrop-blur-md sm:bottom-14 sm:px-8 sm:py-8"
+          className="absolute inset-x-0 bottom-[calc(7dvh+40px)] z-20 border-y border-white/20 bg-black/72 px-5 py-6 backdrop-blur-md sm:px-8 sm:py-8"
           data-testid="cinematic-decision"
         >
           <div className="mx-auto grid max-w-7xl gap-6 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
@@ -441,7 +452,7 @@ export function CinematicDirectorStage({
               <div className="flex flex-wrap gap-2">
               <Button
                 className="border-white/34 bg-transparent text-white hover:bg-white/12"
-                onClick={() => void restart()}
+                onClick={() => void play(true)}
                 variant="outline"
               >
                 <RotateCcw aria-hidden="true" />
@@ -484,7 +495,7 @@ export function CinematicDirectorStage({
           <button
             aria-label={playing ? "Pause cinematic" : "Play cinematic"}
             className="grid size-9 shrink-0 place-items-center border border-white/28 bg-black/45 backdrop-blur-md hover:bg-black/72"
-            onClick={() => (playing ? setPlayback(false) : void play())}
+            onClick={() => (playing ? pause() : void play())}
             type="button"
           >
             {playing ? (
@@ -512,7 +523,7 @@ export function CinematicDirectorStage({
             className="grid size-9 shrink-0 place-items-center border border-white/28 bg-black/45 backdrop-blur-md hover:bg-black/72"
             onClick={() => {
               const next = !soundEnabled;
-              setSoundEnabled(next);
+              dispatch({ type: "soundToggled" });
               soundRef.current?.update(frame, next);
             }}
             type="button"
