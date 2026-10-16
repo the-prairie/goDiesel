@@ -7,7 +7,8 @@ import {
   Map as MapLibreMap,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef } from "react";
+import { initialPlanningMapState, reducePlanningMap } from "./planning-map-state";
 
 import type { QuestRoute } from "@/domain/route";
 
@@ -25,16 +26,17 @@ export function FinderRouteMap({
   const hostRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const routeRef = useRef({route, lines});
-  const [status, setStatus] = useState<"loading" | "ready" | "unavailable">(
-    "loading",
-  );
+  const operationRef = useRef(0);
+  const [state, dispatch] = useReducer(reducePlanningMap, undefined, initialPlanningMapState);
+  const { status } = state;
   routeRef.current = {route, lines};
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
     let active = true;
-    let errors = 0;
+    const operationId = ++operationRef.current;
+    dispatch({ type: "mapStarted", operationId });
     const map = new maplibregl.Map({
       container: host,
       style: STYLE_URL,
@@ -57,12 +59,11 @@ export function FinderRouteMap({
     });
     resizeObserver.observe(host);
     const timer = window.setTimeout(() => {
-      if (active && !map.loaded()) setStatus("unavailable");
+      if (active) dispatch({ type: "deadlineReached", operationId, loaded: map.loaded() });
     }, 8_000);
 
     map.on("error", () => {
-      errors += 1;
-      if (active && errors >= 4 && !map.loaded()) setStatus("unavailable");
+      if (active) dispatch({ type: "mapError", operationId, loaded: map.loaded() });
     });
     map.once("load", () => {
       if (!active) return;
@@ -71,7 +72,7 @@ export function FinderRouteMap({
       map.once("idle", () => {
         if (!active) return;
         window.clearTimeout(timer);
-        setStatus("ready");
+        dispatch({ type: "mapIdle", operationId });
       });
     });
 
@@ -110,7 +111,7 @@ export function FinderRouteMap({
           <div className="max-w-sm">
             <p className="font-semibold text-ink">Planning map unavailable</p>
             <p className="mt-2 text-control leading-6 text-ink-muted">
-              The map could not load. You can still browse and save the routes beside it.
+              The map could not load. You can still browse and save routes in the list.
             </p>
           </div>
         </div>

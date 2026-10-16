@@ -174,7 +174,7 @@ export function ExternalDiscovery({ intent }: { intent: FinderIntent }) {
             className={`${view === "list" ? "block" : "hidden"} min-h-0 overflow-y-auto border-line p-4 lg:block lg:border-r`}
           >
             <p className="mb-3 text-sm text-ink-muted">
-              {candidates.length} mapped routes · Not recorded by you
+              {candidates.length} mapped {candidates.length === 1 ? "route" : "routes"} · Not recorded by you
             </p>
             {limited ? <p role="status" className="mb-3 text-xs text-ink-secondary">Related matches may be limited right now.</p> : null}
             {ranked.map(({ route: r, reason }) => (

@@ -33,6 +33,9 @@ for (const width of [390, 1280])
       .getByRole("button", { name: "Search new routes", exact: true })
       .click();
     const candidate = page.getByRole("article", { name: "Creek paths" });
+    await expect(candidate).toBeVisible();
+    await expect(page.getByLabel("Discovered routes"))
+      .toContainText("1 mapped route · Not recorded by you", { timeout: 1_000 });
     await expect(candidate).toContainText("Disconnected sections");
     await expect(candidate).toContainText("Climb unknown");
     await candidate
