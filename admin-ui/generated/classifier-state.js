@@ -1,5 +1,5 @@
 export function initialClassifierState() {
-    return { start: 'idle', poll: { phase: 'idle' }, notice: { kind: 'empty' } };
+    return { start: { phase: 'idle' }, pollId: 0, poll: { phase: 'idle' }, notice: { kind: 'empty' } };
 }
 export function classifierShouldRefresh(state, status) {
     const lastUpdatedCount = state.poll.phase === 'running' ? state.poll.lastUpdatedCount : 0;
@@ -8,16 +8,28 @@ export function classifierShouldRefresh(state, status) {
 export function reduceClassifier(state, event) {
     switch (event.type) {
         case 'startRequested':
-            return { ...state, start: 'starting' };
+            if (classifierBusy(state))
+                return state;
+            return { ...state, start: { phase: 'starting', requestId: event.requestId } };
         case 'startSettled':
-            return { ...state, start: 'idle' };
+            if (state.start.phase !== 'starting' || state.start.requestId !== event.requestId)
+                return state;
+            return { ...state, start: { phase: 'idle' } };
         case 'pollStarted':
-            return { ...state, poll: { phase: 'checking' } };
+            if (event.pollId <= state.pollId)
+                return state;
+            return { ...state, pollId: event.pollId, poll: { phase: 'checking' } };
         case 'checkFailed':
+            if (!classifierAcceptsStatus(state, event.pollId))
+                return state;
             return { ...state, poll: { phase: 'failed' }, notice: { kind: 'failed' } };
         case 'noticeExpired':
+            if (state.pollId !== event.pollId || state.poll.phase !== 'complete' || state.start.phase !== 'idle')
+                return state;
             return { ...state, notice: { kind: 'empty' } };
         case 'statusReceived': {
+            if (!classifierAcceptsStatus(state, event.pollId))
+                return state;
             const status = event.status;
             if (status.running) {
                 const previous = state.poll.phase === 'running' ? state.poll.lastUpdatedCount : 0;
@@ -43,4 +55,10 @@ export function classifierPresentation(state) {
         case 'complete': return { text: `✓ CLASSIFIED ${notice.progress.updated} / ${notice.progress.total}` +
                 (notice.progress.unmapped ? ` · ${notice.progress.unmapped} still unmapped` : ''), active: false };
     }
+}
+export function classifierBusy(state) {
+    return state.start.phase === 'starting' || state.poll.phase === 'checking' || state.poll.phase === 'running';
+}
+export function classifierAcceptsStatus(state, pollId) {
+    return state.pollId === pollId && (state.poll.phase === 'checking' || state.poll.phase === 'running');
 }

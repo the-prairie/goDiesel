@@ -240,3 +240,44 @@ test('classifier start network failure retains its notice and allows retry', asy
   await page.locator('#autoClassifyBtn').click();
   await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 1 / 2');
 });
+
+test('classifier completion fade cannot erase a newer run', async ({ page, request, adminUrl }) => {
+  await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-01T00:00:00Z'));
+  await request.post(`${adminUrl}/fixture/classification`, { data: { running: false, total: 2, done: 2, updated: 2, unmapped: 0 } });
+  await page.goto(adminUrl);
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFIED 2 / 2');
+  await page.locator('#autoClassifyBtn').click();
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 1 / 2');
+  await page.route('**/api/classify-status', () => {});
+  await page.clock.fastForward(8000);
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 1 / 2');
+  await expect(page.locator('#autoClassifyBtn')).toBeDisabled();
+});
+
+test('classifier start is single-flight while the server responds', async ({ page, request, adminUrl }) => {
+  await request.post(`${adminUrl}/fixture/classifier-options`, { data: { holdStarts: true } });
+  await page.goto(adminUrl);
+  await expect(page.locator('#classifyStatus')).toContainText('1 unmapped');
+  await page.locator('#autoClassifyBtn').click();
+  await expect(page.locator('#autoClassifyBtn')).toBeDisabled();
+  expect((await (await request.get(`${adminUrl}/fixture/calls`)).json()).starts).toBe(1);
+  await request.post(`${adminUrl}/fixture/release-starts`);
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 1 / 2');
+});
+
+test('classifier reports HTTP start and poll failures and permits retry', async ({ page, request, adminUrl }) => {
+  await page.goto(adminUrl);
+  await expect(page.locator('#classifyStatus')).toContainText('1 unmapped');
+  await request.post(`${adminUrl}/fixture/classifier-options`, { data: { startStatus: 503 } });
+  await page.locator('#autoClassifyBtn').click();
+  await expect(page.locator('#toast')).toHaveText('AUTO-CLASSIFY FAILED');
+  await expect(page.locator('#classifyStatus')).toContainText('1 unmapped');
+  await request.post(`${adminUrl}/fixture/classifier-options`, { data: { pollStatus: 503 } });
+  await page.locator('#autoClassifyBtn').click();
+  await expect(page.locator('#classifyStatus')).toHaveText('CHECK FAILED');
+  await expect(page.locator('#autoClassifyBtn')).toBeEnabled();
+  await request.post(`${adminUrl}/fixture/classifier-options`, { data: {} });
+  await page.locator('#autoClassifyBtn').click();
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 1 / 2');
+});

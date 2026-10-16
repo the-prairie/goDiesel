@@ -12,6 +12,8 @@ export async function startStandaloneAdminFixture(port = 0) {
   let routes = structuredClone(initialRoutes);
   let classification = { running: false, total: 0, done: 0, updated: 0, unmapped: 1 };
   let mutations = {};
+  let classifierOptions = {};
+  const pendingStarts = [];
   const pendingSaves = [];
   const calls = { saves: [], rebuilds: 0, starts: 0, polls: 0, routeReads: 0 };
   const server = createServer(async (request, response) => {
@@ -25,11 +27,15 @@ export async function startStandaloneAdminFixture(port = 0) {
     if (path === '/fixture/reset') {
       routes = structuredClone(initialRoutes);
       mutations = {};
+      classifierOptions = {};
+      pendingStarts.splice(0).forEach(resolve => resolve());
       pendingSaves.splice(0).forEach(resolve => resolve());
       classification = { running: false, total: 0, done: 0, updated: 0, unmapped: 1, ...JSON.parse(body || '{}') };
       calls.saves = []; calls.rebuilds = 0; calls.starts = 0; calls.polls = 0; calls.routeReads = 0;
       return send({ ok: true });
     }
+    if (path === '/fixture/classifier-options') { classifierOptions = JSON.parse(body); return send({ ok: true }); }
+    if (path === '/fixture/release-starts') { classifierOptions.holdStarts = false; pendingStarts.splice(0).forEach(resolve => resolve()); return send({ ok: true }); }
     if (path === '/fixture/mutations') { mutations = JSON.parse(body); return send({ ok: true }); }
     if (path === '/fixture/release-saves') { mutations.holdSaves = false; pendingSaves.splice(0).forEach(resolve => resolve()); return send({ ok: true }); }
     if (path === '/fixture/classification') { classification = JSON.parse(body); return send({ ok: true }); }
@@ -46,10 +52,17 @@ export async function startStandaloneAdminFixture(port = 0) {
     if (path === '/api/rebuild') { calls.rebuilds++; return send({ ok: !mutations.rebuildStatus }, 'application/json', mutations.rebuildStatus || 200); }
     if (path === '/api/auto-classify') {
       calls.starts++;
+      if (classifierOptions.holdStarts) await new Promise(resolve => pendingStarts.push(resolve));
+      if (classifierOptions.startStatus) return send({ error: 'Classification unavailable' }, 'application/json', classifierOptions.startStatus);
       classification = { running: true, total: 2, done: 1, updated: 1, unmapped: 1, last_label: 'Test valley' };
       return send({ ok: true });
     }
-    if (path === '/api/classify-status') { calls.polls++; return send(classification); }
+    if (path === '/api/classify-status') {
+      calls.polls++;
+      if (classifierOptions.pollDelay) await new Promise(resolve => setTimeout(resolve, classifierOptions.pollDelay));
+      if (classifierOptions.pollStatus) return send({ error: 'Check unavailable' }, 'application/json', classifierOptions.pollStatus);
+      return send(classification);
+    }
     const assets = { '/admin-assets/classifier-state.js': 'admin-ui/generated/classifier-state.js', '/admin-assets/mutation-state.js': 'admin-ui/generated/mutation-state.js', '/': 'admin.html', '/admin.html': 'admin.html', '/admin-assets/presentation.js': 'admin-ui/generated/presentation.js' };
     if (assets[path]) {
       try { return send(await readFile(new URL(assets[path], root)), path.endsWith('.js') ? 'text/javascript' : 'text/html'); }

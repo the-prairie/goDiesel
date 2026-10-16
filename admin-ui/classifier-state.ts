@@ -15,7 +15,8 @@ type ClassifierNotice =
   | { kind: 'failed' };
 
 export type ClassifierState = {
-  start: 'idle' | 'starting';
+  start: { phase: 'idle' } | { phase: 'starting'; requestId: number };
+  pollId: number;
   poll:
     | { phase: 'idle' | 'checking' | 'failed' }
     | { phase: 'running'; lastUpdatedCount: number }
@@ -24,15 +25,15 @@ export type ClassifierState = {
 };
 
 export type ClassifierEvent =
-  | { type: 'startRequested' }
-  | { type: 'startSettled' }
-  | { type: 'pollStarted' }
-  | { type: 'statusReceived'; status: ClassifierStatus }
-  | { type: 'checkFailed' }
-  | { type: 'noticeExpired' };
+  | { type: 'startRequested'; requestId: number }
+  | { type: 'startSettled'; requestId: number }
+  | { type: 'pollStarted'; pollId: number }
+  | { type: 'statusReceived'; pollId: number; status: ClassifierStatus }
+  | { type: 'checkFailed'; pollId: number }
+  | { type: 'noticeExpired'; pollId: number };
 
 export function initialClassifierState(): ClassifierState {
-  return { start: 'idle', poll: { phase: 'idle' }, notice: { kind: 'empty' } };
+  return { start: { phase: 'idle' }, pollId: 0, poll: { phase: 'idle' }, notice: { kind: 'empty' } };
 }
 
 export function classifierShouldRefresh(state: ClassifierState, status: ClassifierStatus): boolean {
@@ -43,16 +44,22 @@ export function classifierShouldRefresh(state: ClassifierState, status: Classifi
 export function reduceClassifier(state: ClassifierState, event: ClassifierEvent): ClassifierState {
   switch (event.type) {
     case 'startRequested':
-      return { ...state, start: 'starting' };
+      if (classifierBusy(state)) return state;
+      return { ...state, start: { phase: 'starting', requestId: event.requestId } };
     case 'startSettled':
-      return { ...state, start: 'idle' };
+      if (state.start.phase !== 'starting' || state.start.requestId !== event.requestId) return state;
+      return { ...state, start: { phase: 'idle' } };
     case 'pollStarted':
-      return { ...state, poll: { phase: 'checking' } };
+      if (event.pollId <= state.pollId) return state;
+      return { ...state, pollId: event.pollId, poll: { phase: 'checking' } };
     case 'checkFailed':
+      if (!classifierAcceptsStatus(state, event.pollId)) return state;
       return { ...state, poll: { phase: 'failed' }, notice: { kind: 'failed' } };
     case 'noticeExpired':
+      if (state.pollId !== event.pollId || state.poll.phase !== 'complete' || state.start.phase !== 'idle') return state;
       return { ...state, notice: { kind: 'empty' } };
     case 'statusReceived': {
+      if (!classifierAcceptsStatus(state, event.pollId)) return state;
       const status = event.status;
       if (status.running) {
         const previous = state.poll.phase === 'running' ? state.poll.lastUpdatedCount : 0;
@@ -79,4 +86,12 @@ export function classifierPresentation(state: ClassifierState): { text: string; 
     case 'complete': return { text: `✓ CLASSIFIED ${notice.progress.updated} / ${notice.progress.total}` +
       (notice.progress.unmapped ? ` · ${notice.progress.unmapped} still unmapped` : ''), active: false };
   }
+}
+
+export function classifierBusy(state: ClassifierState): boolean {
+  return state.start.phase === 'starting' || state.poll.phase === 'checking' || state.poll.phase === 'running';
+}
+
+export function classifierAcceptsStatus(state: ClassifierState, pollId: number): boolean {
+  return state.pollId === pollId && (state.poll.phase === 'checking' || state.poll.phase === 'running');
 }

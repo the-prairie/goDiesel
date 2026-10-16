@@ -358,7 +358,7 @@
 <div class="toast" id="toast"></div>
 
 <script type="module">
-import { initialClassifierState, reduceClassifier, classifierPresentation, classifierShouldRefresh } from "/admin-assets/classifier-state.js";
+import { initialClassifierState, reduceClassifier, classifierPresentation, classifierShouldRefresh, classifierBusy, classifierAcceptsStatus } from "/admin-assets/classifier-state.js";
 import { escapeHtml } from "/admin-assets/presentation.js";
 import { initialMutationState, reduceMutation } from "/admin-assets/mutation-state.js";
 
@@ -721,6 +721,9 @@ document.getElementById('rebuildBtn').addEventListener('click', async () => {
 
 // === Auto-classify (reverse-geocoding) ===
 let classifyPollTimer = null;
+let classifyFadeTimer = null;
+let classifyController = null;
+let classifyRequestId = 0;
 let classifier = initialClassifierState();
 function dispatchClassifier(event) {
   classifier = reduceClassifier(classifier, event);
@@ -748,39 +751,57 @@ function setClassifyStatus(text, active) {
   el.textContent = text || '';
   el.classList.toggle('active', !!active);
   const btn = document.getElementById('autoClassifyBtn');
-  btn.toggleAttribute('disabled', !!active);
+  btn.toggleAttribute('disabled', classifierBusy(classifier));
 }
 
 async function pollClassifyStatus() {
-  dispatchClassifier({ type: 'pollStarted' });
+  if (classifyPollTimer) clearTimeout(classifyPollTimer);
+  if (classifyFadeTimer) clearTimeout(classifyFadeTimer);
+  classifyController?.abort();
+  const controller = new AbortController();
+  classifyController = controller;
+  const pollId = ++classifyRequestId;
+  dispatchClassifier({ type: 'pollStarted', pollId });
   const tick = async () => {
+    classifyPollTimer = null;
     let status;
-    try { status = await fetch('/api/classify-status').then(r => r.json()); }
-    catch { dispatchClassifier({ type: 'checkFailed' }); return; }
+    try {
+      const response = await fetch('/api/classify-status', { signal: controller.signal });
+      if (!response.ok) throw new Error('Classification check failed');
+      status = await response.json();
+    } catch {
+      if (!controller.signal.aborted) dispatchClassifier({ type: 'checkFailed', pollId });
+      return;
+    }
+    if (controller.signal.aborted || !classifierAcceptsStatus(classifier, pollId)) return;
     const refresh = classifierShouldRefresh(classifier, status);
-    dispatchClassifier({ type: 'statusReceived', status });
+    dispatchClassifier({ type: 'statusReceived', pollId, status });
     if (refresh) refreshRoutes();
     if (classifier.poll.phase === 'running') {
       classifyPollTimer = setTimeout(tick, 2000);
-    } else {
-      classifyPollTimer = null;
-      if (status.total > 0) {
-        setTimeout(() => dispatchClassifier({ type: 'noticeExpired' }), 8000);
-      }
+    } else if (status.total > 0) {
+      classifyFadeTimer = setTimeout(() => {
+        classifyFadeTimer = null;
+        dispatchClassifier({ type: 'noticeExpired', pollId });
+      }, 8000);
     }
   };
-  if (classifyPollTimer) clearTimeout(classifyPollTimer);
   tick();
 }
 
 document.getElementById('autoClassifyBtn').addEventListener('click', async () => {
-  dispatchClassifier({ type: 'startRequested' });
+  if (classifierBusy(classifier)) return;
+  const requestId = ++classifyRequestId;
+  dispatchClassifier({ type: 'startRequested', requestId });
+  if (classifyFadeTimer) clearTimeout(classifyFadeTimer);
+  classifyFadeTimer = null;
   try {
-    await fetch('/api/auto-classify', { method: 'POST' });
-    dispatchClassifier({ type: 'startSettled' });
+    const response = await fetch('/api/auto-classify', { method: 'POST' });
+    if (!response.ok) throw new Error('Classification start failed');
+    dispatchClassifier({ type: 'startSettled', requestId });
     pollClassifyStatus();
   } catch {
-    dispatchClassifier({ type: 'startSettled' });
+    dispatchClassifier({ type: 'startSettled', requestId });
     showToast('AUTO-CLASSIFY FAILED', 'var(--reject)');
   }
 });
