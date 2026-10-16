@@ -90,6 +90,11 @@ async function installDeterministicEarthRenderer(
             context.stroke();
           }
           options.container.appendChild(canvas);
+          const credits = document.createElement("button");
+          credits.textContent = "Provider credits fixture";
+          Object.assign(credits.style, { position: "absolute", bottom: "0", left: "5px", width: "138px", height: "36px" });
+          credits.onclick = () => { credits.textContent = "Provider credits opened"; };
+          options.container.appendChild(credits);
           options.onStatus({
             state: "ready",
             title: "Playable Earth ready",
@@ -491,3 +496,23 @@ test("details can reopen during playback and viewport changes reset presentation
   await expect(page.getByTestId("playable-secondary-controls")).toHaveCount(0);
   await page.getByRole("button", { name: "Pause route" }).click();
 });
+
+for (const viewport of [{ width: 320, height: 640 }, { width: 390, height: 844 }, { width: 1280, height: 720 }]) {
+  test(`provider credits remain visible above controls at ${viewport.width}px`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await installDeterministicEarthRenderer(page);
+    await page.goto(`/#/lab/playable-earth/${routeSlug}`);
+    await expect(page.getByRole("region", { name: "Playable Earth Lab" })).toHaveAttribute("data-state", "ready");
+    if (viewport.width < 768) await page.getByRole("button", { name: "Show more controls" }).click();
+    const credits = page.getByRole("button", { name: "Provider credits fixture" });
+    const creditBox = await credits.boundingBox();
+    const controlsBox = await page.getByTestId("playable-controls").boundingBox();
+    expect(creditBox).not.toBeNull();
+    expect(controlsBox).not.toBeNull();
+    expect(creditBox!.y + creditBox!.height).toBeLessThanOrEqual(controlsBox!.y);
+    await credits.click();
+    await expect(page.getByRole("button", { name: "Provider credits opened" })).toBeVisible();
+    await page.getByRole("button", { name: "Play route" }).click();
+    await page.getByRole("button", { name: "Pause route" }).click();
+  });
+}

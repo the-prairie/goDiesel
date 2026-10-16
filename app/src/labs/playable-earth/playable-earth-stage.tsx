@@ -214,12 +214,12 @@ export function PlayableEarthStage({
       data-grounding-source={grounding.source}
       data-grounding-reason={grounding.reason}
       data-grounding-offset={grounding.offsetM?.toFixed(2) ?? ""}
-      className="relative h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 overflow-hidden bg-[#02070a] md:h-dvh md:min-h-[36rem]"
+      className="relative grid grid-rows-[minmax(0,1fr)_auto] h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 overflow-hidden bg-[#02070a] md:h-dvh md:min-h-[36rem]"
     >
       <div
         ref={containerRef}
         aria-label="Playable Earth world"
-        className="absolute inset-0"
+        className="relative row-start-1 min-h-0"
       />
 
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start p-3 sm:p-5">
@@ -266,7 +266,7 @@ export function PlayableEarthStage({
         </div>
       ) : null}
 
-      <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex justify-center sm:inset-x-6 sm:bottom-6">
+      <div className="pointer-events-none relative row-start-2 z-20 flex justify-center px-3 pb-3 pt-2 sm:px-6 sm:pb-6">
         <div
           data-testid="playable-controls"
           className="pointer-events-auto w-full max-w-5xl rounded-md border border-border bg-background/92 p-2 shadow-2xl backdrop-blur sm:flex sm:flex-wrap sm:items-center sm:gap-2 sm:px-3 sm:py-3"
