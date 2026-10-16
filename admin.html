@@ -358,6 +358,7 @@
 <div class="toast" id="toast"></div>
 
 <script type="module">
+import { initialClassifierState, reduceClassifier, classifierPresentation, classifierShouldRefresh } from "/admin-assets/classifier-state.js";
 import { escapeHtml } from "/admin-assets/presentation.js";
 import { initialMutationState, reduceMutation } from "/admin-assets/mutation-state.js";
 
@@ -720,6 +721,12 @@ document.getElementById('rebuildBtn').addEventListener('click', async () => {
 
 // === Auto-classify (reverse-geocoding) ===
 let classifyPollTimer = null;
+let classifier = initialClassifierState();
+function dispatchClassifier(event) {
+  classifier = reduceClassifier(classifier, event);
+  const { text, active } = classifierPresentation(classifier);
+  setClassifyStatus(text, active);
+}
 
 async function refreshRoutes() {
   const requestId = ++mutationRequestId;
@@ -745,32 +752,20 @@ function setClassifyStatus(text, active) {
 }
 
 async function pollClassifyStatus() {
-  let lastUpdatedCount = 0;
+  dispatchClassifier({ type: 'pollStarted' });
   const tick = async () => {
-    let s;
-    try { s = await fetch('/api/classify-status').then(r => r.json()); }
-    catch { setClassifyStatus('CHECK FAILED', false); return; }
-    if (s.running) {
-      setClassifyStatus(`✦ CLASSIFYING ${s.done} / ${s.total}` +
-                        (s.last_label ? ` · ${s.last_label}` : ''), true);
-      // Refresh data periodically so user sees regions populate as it goes.
-      if (s.updated > lastUpdatedCount + 4) {
-        lastUpdatedCount = s.updated;
-        refreshRoutes();
-      }
+    let status;
+    try { status = await fetch('/api/classify-status').then(r => r.json()); }
+    catch { dispatchClassifier({ type: 'checkFailed' }); return; }
+    const refresh = classifierShouldRefresh(classifier, status);
+    dispatchClassifier({ type: 'statusReceived', status });
+    if (refresh) refreshRoutes();
+    if (classifier.poll.phase === 'running') {
       classifyPollTimer = setTimeout(tick, 2000);
     } else {
       classifyPollTimer = null;
-      if (s.total > 0) {
-        setClassifyStatus(`✓ CLASSIFIED ${s.updated} / ${s.total}` +
-                          (s.unmapped ? ` · ${s.unmapped} still unmapped` : ''), false);
-        refreshRoutes();
-        // Fade after a bit
-        setTimeout(() => setClassifyStatus('', false), 8000);
-      } else if (s.unmapped > 0) {
-        setClassifyStatus(`${s.unmapped} unmapped — click AUTO-CLASSIFY`, false);
-      } else {
-        setClassifyStatus('', false);
+      if (status.total > 0) {
+        setTimeout(() => dispatchClassifier({ type: 'noticeExpired' }), 8000);
       }
     }
   };
@@ -779,10 +774,13 @@ async function pollClassifyStatus() {
 }
 
 document.getElementById('autoClassifyBtn').addEventListener('click', async () => {
+  dispatchClassifier({ type: 'startRequested' });
   try {
     await fetch('/api/auto-classify', { method: 'POST' });
+    dispatchClassifier({ type: 'startSettled' });
     pollClassifyStatus();
   } catch {
+    dispatchClassifier({ type: 'startSettled' });
     showToast('AUTO-CLASSIFY FAILED', 'var(--reject)');
   }
 });

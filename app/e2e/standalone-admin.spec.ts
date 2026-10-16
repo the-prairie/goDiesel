@@ -182,3 +182,61 @@ test('standalone save settles after a failed refresh and allows a later edit', a
   await page.reload();
   await expect(page.getByPlaceholder('Custom title')).toHaveValue('Retry after failure');
 });
+
+test('classifier refreshes after five new updates and resets the threshold on reconnect', async ({ page, request, adminUrl }) => {
+  await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-01T00:00:00Z'));
+  await request.post(`${adminUrl}/fixture/classification`, { data: { running: true, total: 20, done: 4, updated: 4 } });
+  await page.goto(adminUrl);
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 4 / 20');
+  expect((await (await request.get(`${adminUrl}/fixture/calls`)).json()).routeReads).toBe(1);
+  for (const [count, reads] of [[5, 2], [9, 2], [10, 3]]) {
+    await request.post(`${adminUrl}/fixture/classification`, { data: { running: true, total: 20, done: count, updated: count } });
+    await page.clock.fastForward(2000);
+    await expect(page.locator('#classifyStatus')).toContainText(`CLASSIFYING ${count} / 20`);
+    await expect.poll(async () => (await (await request.get(`${adminUrl}/fixture/calls`)).json()).routeReads).toBe(reads);
+  }
+  await page.reload();
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 10 / 20');
+  await expect.poll(async () => (await (await request.get(`${adminUrl}/fixture/calls`)).json()).routeReads).toBe(5);
+});
+
+test('classifier completion fades after eight seconds and stops polling', async ({ page, request, adminUrl }) => {
+  await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-01T00:00:00Z'));
+  await request.post(`${adminUrl}/fixture/classification`, { data: { running: false, total: 8, done: 8, updated: 7, unmapped: 1 } });
+  await page.goto(adminUrl);
+  await expect(page.locator('#classifyStatus')).toHaveText('✓ CLASSIFIED 7 / 8 · 1 still unmapped');
+  await expect.poll(async () => (await (await request.get(`${adminUrl}/fixture/calls`)).json()).routeReads).toBe(2);
+  await page.clock.fastForward(7999);
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFIED');
+  await page.clock.fastForward(1);
+  await expect(page.locator('#classifyStatus')).toBeEmpty();
+  expect((await (await request.get(`${adminUrl}/fixture/calls`)).json()).polls).toBe(1);
+});
+
+test('classifier poll failure stops until a new start retries', async ({ page, request, adminUrl }) => {
+  await page.clock.install();
+  await page.route('**/api/classify-status', route => route.abort());
+  await page.goto(adminUrl);
+  await expect(page.locator('#classifyStatus')).toHaveText('CHECK FAILED');
+  await expect(page.locator('#autoClassifyBtn')).toBeEnabled();
+  await page.clock.fastForward(10000);
+  expect((await (await request.get(`${adminUrl}/fixture/calls`)).json()).polls).toBe(0);
+  await page.unroute('**/api/classify-status');
+  await page.locator('#autoClassifyBtn').click();
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 1 / 2');
+});
+
+test('classifier start network failure retains its notice and allows retry', async ({ page, adminUrl }) => {
+  await page.goto(adminUrl);
+  await expect(page.locator('#classifyStatus')).toContainText('1 unmapped');
+  await page.route('**/api/auto-classify', route => route.abort());
+  await page.locator('#autoClassifyBtn').click();
+  await expect(page.locator('#toast')).toHaveText('AUTO-CLASSIFY FAILED');
+  await expect(page.locator('#classifyStatus')).toContainText('1 unmapped');
+  await expect(page.locator('#autoClassifyBtn')).toBeEnabled();
+  await page.unroute('**/api/auto-classify');
+  await page.locator('#autoClassifyBtn').click();
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 1 / 2');
+});
