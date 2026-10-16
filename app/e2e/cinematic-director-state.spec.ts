@@ -204,7 +204,7 @@ test("audio completion after route replacement does not start the new route", as
   await open(page);
   await page.getByRole("button", { name: "Play Route Film", exact: true }).click();
   await page.evaluate(() => { window.location.hash = "/lab/cinematic-director/14023448720"; });
-  await expect(page.getByRole("region", { name: "Cinematic director for Crete, Greece" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Cinematic director for holy balos batman" })).toBeVisible();
   await completeAudio(page);
   await expect(page.getByTestId("cinematic-preroll")).toBeVisible();
   await expect(page.getByTestId("cinematic-director")).toHaveAttribute("data-frame-seconds", "0.000");

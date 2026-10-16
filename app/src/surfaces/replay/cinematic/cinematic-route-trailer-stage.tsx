@@ -80,7 +80,7 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
       apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
       container,
       route,
-      groundingMode: "mesh",
+      groundingMode: "ground",
       onStatus: (next) => {
         if (sessionIdRef.current !== sessionId) return;
         if (next.state !== "ready") {

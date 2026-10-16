@@ -14,7 +14,7 @@ export function RouteCard({
 }) {
   const planned = isPlannedRoute(route);
   const reviewed = route.guide.reviewStatus === "reviewed" || route.guide.reviewStatus === "published";
-  const summary = (reviewed ? route.guide.vibe?.split(/(?<=[.!?])\s/)[0] : undefined)
+  const summary = route.description || (reviewed ? route.guide.vibe?.split(/(?<=[.!?])\s/)[0] : undefined)
     || `${route.distanceKm.toFixed(1)} km ${route.type.toLowerCase()} with ${route.elevationGainM.toLocaleString()} m of climbing.`;
   return (
     <article aria-label={planned ? `Planned route ${route.region}` : undefined} className="route-preview field-note-card group">
@@ -26,7 +26,7 @@ export function RouteCard({
       >
         <RouteCover key={route.slug} route={route} />
         <div className="field-note-copy">
-          <p className="field-note-eyebrow">{planned ? "Planned" : route.lifecycle === "completed" ? "Recorded" : "Discovered"} {route.type}</p>
+          <p className="field-note-eyebrow">{planned ? "Planned" : route.lifecycle === "completed" ? "Recorded" : "Discovered"} {route.type} · {route.region}</p>
           <h2 className="field-note-title">{route.name}</h2>
           <p className="field-note-summary">{planned ? route.planning.sourceLabel : summary}</p>
           <div className="field-note-metrics">

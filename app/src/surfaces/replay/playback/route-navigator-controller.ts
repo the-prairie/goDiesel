@@ -63,7 +63,7 @@ export function initialGoogleRouteNavigatorState(): GoogleRouteNavigatorState {
     progressM: 0,
     speed: 1,
     cameraMode: "auto",
-    groundingMode: "mesh",
+    groundingMode: "ground",
     following: true,
     rangeScale: 1,
   };

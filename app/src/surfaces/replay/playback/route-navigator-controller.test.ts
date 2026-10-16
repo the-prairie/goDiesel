@@ -64,7 +64,7 @@ describe("Google route navigator controller", () => {
     expect(chase.rangeM).toBeGreaterThan(200);
     expect(chase.tiltDeg).toBeLessThan(70);
     expect(initial.cameraMode).toBe("auto");
-    expect(initial.groundingMode).toBe("mesh");
+    expect(initial.groundingMode).toBe("ground");
     expect(overview.rangeM).toBeGreaterThan(1_000);
     expect(overview.center).toMatchObject({ lat: 51, lng: -1 });
     expect(overview.center.altitude).toBeCloseTo(31.67, 1);

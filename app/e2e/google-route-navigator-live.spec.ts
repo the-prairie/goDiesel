@@ -110,6 +110,7 @@ for (const route of ROUTES) {
     await expect(page.getByTestId("google-route-controls")).toBeVisible();
     await expect(navigator).toHaveAttribute("data-hud-state", "expanded");
     await expect(navigator).toHaveAttribute("data-camera-mode", "auto");
+    await expect(navigator).toHaveAttribute("data-grounding-mode", "ground");
     await expect(navigator).toHaveAttribute("data-directed-camera", "overview");
     await page.waitForTimeout(2_500);
     await captureEvidence(page, `${route.slug}-desktop-overview.png`);
@@ -159,6 +160,8 @@ for (const route of ROUTES) {
     ).toBeVisible();
     await page.getByRole("button", { name: "On 3D surface", exact: true }).click();
     await expect(navigator).toHaveAttribute("data-grounding-mode", "mesh");
+    await page.getByRole("button", { name: "On terrain", exact: true }).click();
+    await expect(navigator).toHaveAttribute("data-grounding-mode", "ground");
     await page.getByRole("button", { name: "Explore freely" }).click();
     await expect(navigator).toHaveAttribute("data-following", "false");
     await page.getByRole("button", { name: "Follow route" }).click();

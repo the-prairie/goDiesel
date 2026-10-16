@@ -1,8 +1,10 @@
+import { finderFilters } from "@/domain/planning";
 import { ExternalDiscovery } from "./components/external-discovery";
 import { interpretQuery, isExperienceQuery } from "@/domain/search/intent";
 import { useCollectionSearch } from "@/data/search/use-collection-search";
 import { List, Map as MapIcon, SearchX, X, Pencil, ArrowUpRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { flushSync } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 
 import { CandidateRoute } from "@/surfaces/finder/components/candidate-route";
@@ -23,7 +25,8 @@ import type {
 const initialIntent: FinderIntent = {
   place: "",
   activity: "Run",
-  distanceKm: 20,
+  distanceKm: 0,
+  explicitFilters: [],
   terrain: "any",
   vibe: "",
 };
@@ -65,7 +68,7 @@ export function FinderPage() {
 
 
   function search() {
-    writeIntent(intent.query && intent.query !== submittedIntent?.query ? interpretQuery(intent.query, intent, routes.map(r => r.region)) : intent);
+    writeIntent(interpretQuery(intent.query ?? "", intent, routes.map(r => r.region)));
     setFiltersOpen(false);
     setView("list");
   }
@@ -74,7 +77,8 @@ export function FinderPage() {
     if (!submittedIntent) return;
     const next: FinderIntent = {
       ...submittedIntent,
-      ...(filter === "place" ? { place: "", query: submittedIntent.query?.replace(new RegExp(submittedIntent.place.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), "").trim() } : {}),
+      explicitFilters: [...new Set([...(submittedIntent.explicitFilters ?? []), ...(filter === "query" ? [] : [filter])])],
+      ...(filter === "place" ? { place: "" } : {}),
       ...(filter === "query" ? { query: "", similarPlace: undefined } : {}),
       ...(filter === "terrain" ? { terrain: "any" as const } : {}),
       ...(filter === "vibe" ? { vibe: "" } : {}),
@@ -101,13 +105,13 @@ export function FinderPage() {
           intent={intent}
           submitted={Boolean(submittedIntent)}
           preferencesChanged={Boolean(submittedIntent && paramsForIntent(intent).toString() !== paramsForIntent(submittedIntent).toString())}
-          onChange={setIntent}
+          onChange={(next) => setIntent({ ...next, explicitFilters: [...new Set([...(intent.explicitFilters ?? []), ...finderFilters.filter(key => next[key] !== intent[key])])] })}
           onSubmit={search}
           expanded={filtersOpen}
           onToggleFilters={() => setFiltersOpen((open) => !open)}
         />
         {submittedIntent ? (
-          <ActiveFilterChips intent={submittedIntent} onRemove={removeFilter} onEditDistance={() => { setFiltersOpen(true); requestAnimationFrame(() => document.getElementById("finder-distance")?.focus()); }} />
+          <ActiveFilterChips intent={submittedIntent} onRemove={removeFilter} onEditDistance={() => { flushSync(() => setFiltersOpen(true)); document.getElementById("finder-distance")?.focus(); }} />
         ) : null}
         <div role="group" aria-label="Search scope" className="mt-3 flex gap-2">
           <Button type="button" variant={scope === "collection" ? "secondary" : "ghost"} size="sm" aria-pressed={scope === "collection"} onClick={() => setScope("collection")}>My collection · {routes.length}</Button>
@@ -126,7 +130,7 @@ export function FinderPage() {
               return (
                 <button key={place} type="button" aria-label={place}
                   className="group grid grid-cols-[6rem_1fr] overflow-hidden rounded-[var(--radius-panel)] border border-line text-left transition-colors hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-ring sm:grid-cols-1"
-                  onClick={() => { const next = { ...initialIntent, place, activity: preview?.type === "Ride" ? "Ride" as const : "Run" as const, distanceKm: preview ? Math.round(preview.distanceKm) : 20 }; setIntent(next); writeIntent(next); setFiltersOpen(false); }}>
+                  onClick={() => { const next: FinderIntent = { ...initialIntent, explicitFilters: ["place", "activity", "distanceKm"], place, activity: preview?.type === "Ride" ? "Ride" as const : "Run" as const, distanceKm: preview ? Math.round(preview.distanceKm) : 20 }; setIntent(next); writeIntent(next); setFiltersOpen(false); }}>
                   {preview ? <RouteThread route={preview} className="h-24 border-b-0 border-r sm:h-36 sm:border-b sm:border-r-0" /> : null}
                   <span className="flex items-center gap-3 p-4">
                     <span className="flex-1"><span className="block text-lg text-ink">{place}</span><span className="mt-1 block text-xs text-ink-muted">{preview?.type} · around {preview ? Math.round(preview.distanceKm) : 20} km</span></span>
@@ -149,7 +153,7 @@ export function FinderPage() {
           <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(22rem,0.9fr)_minmax(0,1.4fr)]">
             <div className={`${view === "list" || result?.status !== "matches" ? "flex" : "hidden"} min-h-0 flex-col lg:flex`}>
               <FinderResults limited={limited} result={result} submittedIntent={submittedIntent} selectedCandidate={selectedCandidate}
-                plannedRoutes={plannedRoutes} onSelect={(candidate) => { const params = new URLSearchParams(searchParams); params.set("selected", candidate.sourceRouteSlug); setSearchParams(params, {replace: true}); setView("map"); }} />
+                plannedRoutes={plannedRoutes} onWiden={() => { const next: FinderIntent = { ...submittedIntent, place: "", distanceKm: 0, minDistanceKm: undefined, maxDistanceKm: undefined, explicitFilters: [...new Set([...(submittedIntent.explicitFilters ?? []), ...(["place", "distanceKm", "minDistanceKm", "maxDistanceKm"] as const)])] }; setIntent(next); writeIntent(next); }} onSelect={(candidate) => { const params = new URLSearchParams(searchParams); params.set("selected", candidate.sourceRouteSlug); setSearchParams(params, {replace: true}); setView("map"); }} />
             </div>
             {result?.status === "matches" ? <div className={`${view === "map" ? "flex" : "hidden"} min-h-0 flex-col border-line lg:flex lg:border-l`}>
               <div aria-label="Selected map route" className="shrink-0 border-b border-line bg-surface px-4 py-3">
@@ -173,6 +177,7 @@ function FinderResults({
   selectedCandidate,
   plannedRoutes,
   onSelect,
+  onWiden,
 }: {
   limited: boolean;
   result: DiscoveryResult | null;
@@ -180,6 +185,7 @@ function FinderResults({
   selectedCandidate?: DiscoveryCandidate;
   plannedRoutes: ReturnType<typeof usePlannedRoutes>;
   onSelect: (candidate: DiscoveryCandidate) => void;
+  onWiden: () => void;
 }) {
   return (
     <section
@@ -204,11 +210,14 @@ function FinderResults({
             copy="Choose a place above to find recorded routes. Refine the distance and terrain when you need to."
           />
         ) : result.status === "unsupported" ? (
+          <>
           <FinderState
             title="No matching routes"
             copy={result.message}
             role="status"
           />
+          {submittedIntent && (submittedIntent.place || submittedIntent.distanceKm || submittedIntent.minDistanceKm != null || submittedIntent.maxDistanceKm != null) ? <Button variant="outline" onClick={onWiden}>Search all places and distances</Button> : null}
+          </>
         ) : (
           result.candidates.map((candidate) => (
             <CandidateRoute
@@ -343,17 +352,19 @@ function intentFromSearchParams(params: URLSearchParams): FinderIntent | null {
   )
     ? (terrainValue as FinderIntent["terrain"])
     : "any";
-  return {
+  const parsed: FinderIntent = {
     place, query: query || undefined,
     minDistanceKm: optionalNumber(params, "min"),
     maxDistanceKm: optionalNumber(params, "max"),
     maxElevationM: optionalNumber(params, "climb"),
     similarPlace: params.get("like") ?? undefined,
     activity,
-    distanceKm: Number.isFinite(distance) && distance >= 0 ? distance : 20,
+    distanceKm: Number.isFinite(distance) && distance >= 0 ? distance : 0,
     terrain,
     vibe: params.get("vibe")?.trim() ?? "",
+    explicitFilters: params.has("filters") ? finderFilters.filter(key => params.get("filters")!.split(",").includes(key)) : finderFilters.filter(key => params.has(({ distanceKm: "distance", minDistanceKm: "min", maxDistanceKm: "max", maxElevationM: "climb" } as Record<string, string>)[key] ?? key)),
   };
+  return params.has("filters") ? interpretQuery(query, parsed, routes.map(r => r.region)) : parsed;
 }
 
 function paramsForIntent(intent: FinderIntent) {
@@ -362,6 +373,7 @@ function paramsForIntent(intent: FinderIntent) {
     activity: intent.activity,
     distance: String(intent.distanceKm),
   });
+  if (intent.explicitFilters) params.set("filters", intent.explicitFilters.join(","));
   if (intent.query) params.set("q", intent.query);
   if (intent.minDistanceKm != null) params.set("min", String(intent.minDistanceKm));
   if (intent.maxDistanceKm != null) params.set("max", String(intent.maxDistanceKm));

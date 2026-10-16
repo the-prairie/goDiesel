@@ -2,7 +2,7 @@
 
 import { normalizeRouteLifecycle, type RouteLifecycle } from "@/domain/route/lifecycle";
 import type { GeneratedQuestRoute, ReplayMetadata, RouteGeometryStatus, RouteGuidePreview, RouteSummary } from "@/domain/route/contract";
-import { generatedRoute, numberValue, parsedRoutePoints, requiredSlug, stringValue } from "@/domain/route/parse-shared";
+import { generatedRoute, numberValue, parsedRoutePoints, requiredSlug, routeName, stringValue } from "@/domain/route/parse-shared";
 
 function validatedGuidePreview(value: unknown): RouteGuidePreview {
   if (value === undefined) return { reviewStatus: "draft" };
@@ -75,7 +75,7 @@ function commonRouteFields(
     slug,
     activityId: stringValue(input.activity_id, slug),
     lifecycle,
-    name: stringValue(input.name, "Untitled route"),
+    name: routeName(stringValue(input.name, "Untitled route"), stringValue(input.activity_name), lifecycle),
     subtitle: stringValue(input.subtitle),
     activityName: stringValue(input.activity_name),
     region: stringValue(input.region, "Unknown region"),

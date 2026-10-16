@@ -18,7 +18,7 @@ function generatedRoute(slug: string) {
       path.resolve(process.cwd(), `public/data/routes/${slug}.json`),
       "utf8",
     ),
-  ) as { curation?: { review_status?: string } };
+  ) as { activity_name: string; curation?: { review_status?: string } };
 }
 
 function guideBadge(slug: string) {
@@ -43,7 +43,7 @@ test("Atlas does not fetch full route records before selection", async ({
 
   await page.goto(`/#/routes/${routeSlug}`);
   await expect(
-    page.getByRole("heading", { name: "Kyoto, Japan" }),
+    page.getByRole("heading", { name: generatedRoute(routeSlug).activity_name }),
   ).toBeVisible();
   expect(detailRequests).toHaveLength(1);
   expect(detailRequests[0]).toMatch(
@@ -57,7 +57,7 @@ test("reviewed route guide loads directly and survives refresh", async ({
   await page.goto(`/#/routes/${routeSlug}`);
 
   await expect(
-    page.getByRole("heading", { name: "Kyoto, Japan" }),
+    page.getByRole("heading", { name: generatedRoute(routeSlug).activity_name }),
   ).toBeVisible();
   const briefing = page.getByRole("region", { name: "Route briefing" });
   await expect(briefing).toBeVisible();
@@ -158,7 +158,7 @@ test("route detail is a geography-first Leaf with a bounded editorial margin", a
   );
 
   await expect(
-    margin.getByRole("heading", { name: "Kyoto, Japan" }),
+    margin.getByRole("heading", { name: generatedRoute(routeSlug).activity_name }),
   ).toBeVisible();
   await expect(
     margin
@@ -181,9 +181,10 @@ test("mobile route Leaf preserves geography and Replay across sheet positions", 
   await expect(geography).toBeVisible();
   await expect(margin).toHaveAttribute("data-snap", "peek");
   await expect(
-    margin.getByRole("heading", { name: "Kyoto, Japan" }),
+    margin.getByRole("heading", { name: generatedRoute(routeSlug).activity_name }),
   ).toBeVisible();
   await expect(margin.getByRole("link", { name: "Open replay" })).toBeVisible();
+  await margin.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
   const mapBox = (await geography.boundingBox())!;
   expect(mapBox.height).toBeGreaterThan(400);
   expect(mapBox.y + mapBox.height).toBeLessThanOrEqual((await margin.boundingBox())!.y + 1);
@@ -298,7 +299,7 @@ test("missing geometry disables one route without crashing detail", async ({
   await page.goto(`/#/routes/${routeSlug}`);
 
   await expect(
-    page.getByRole("heading", { name: "Kyoto, Japan" }),
+    page.getByRole("heading", { name: "Kyoto run" }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Replay unavailable" }),
@@ -356,7 +357,7 @@ test("changing routes never flashes the previous route detail", async ({
   const nextSlug = "17665674778";
   await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
   await expect(
-    page.getByRole("heading", { name: "Kyoto, Japan" }),
+    page.getByRole("heading", { name: generatedRoute(routeSlug).activity_name }),
   ).toBeVisible();
   await expect(page.getByText(/^21\.3 km · 680 m up$/)).toBeVisible();
 
@@ -369,18 +370,18 @@ test("changing routes never flashes the previous route detail", async ({
   }, nextSlug);
 
   await expect(page.getByRole("status")).toHaveText("Loading Earth Replay.");
-  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toHaveCount(
+  await expect(page.getByRole("heading", { name: generatedRoute(routeSlug).activity_name })).toHaveCount(
     0,
   );
   await expect(
-    page.getByRole("heading", { name: "Tokyo, Japan" }),
+    page.getByRole("heading", { name: "crosswalk sprints" }),
   ).toBeVisible();
   await expect(page.getByText(/^21\.8 km · 286 m up$/)).toBeVisible();
 });
 
 test("narrow Leaf titles keep Open replay above the bottom navigation", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 844 });
-  await page.goto("/#/routes/17665674778");
+  await page.goto("/#/routes/14080158961");
   const margin = page.getByRole("complementary", { name: "Route margin" });
   await expect(margin).toHaveAttribute("data-snap", "peek");
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
@@ -396,5 +397,20 @@ test("narrow Leaf titles keep Open replay above the bottom navigation", async ({
   await page.getByRole("button", { name: "Collapse route margin", exact: true }).click();
   await expect(margin).toHaveAttribute("data-snap", "peek");
   await replay.click();
-  await expect(page).toHaveURL(/#\/replay\/17665674778$/);
+  await expect(page).toHaveURL(/#\/replay\/14080158961$/);
 });
+
+for (const width of [1440, 390]) {
+  test(`Strava title and description survive guide curation at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/#/routes/17665674778");
+    const margin = page.getByRole("complementary", { name: "Route margin" });
+    await expect(margin.getByRole("heading", { name: "crosswalk sprints", exact: true })).toBeVisible();
+    if (width === 390) await margin.getByRole("button", { name: "Expand route margin" }).click();
+    await expect(margin.getByText("could not figure out how to cross the bridge 💀💀💀💀", { exact: true })).toBeVisible();
+    await expect(margin.getByRole("article", { name: "Route guide" })).toBeVisible();
+    await expect(margin.getByRole("link", { name: "Open replay" })).toBeVisible();
+    await page.reload();
+    await expect(margin.getByRole("heading", { name: "crosswalk sprints", exact: true })).toBeVisible();
+  });
+}

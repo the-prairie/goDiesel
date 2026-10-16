@@ -102,7 +102,7 @@ test("fresh route resets the previous trailer decision", async ({ page }) => {
   await page.goto("/#/lab/route-trailer/14023448720");
   await expect(page.getByTestId("route-trailer")).toHaveAttribute(
     "aria-label",
-    /Crete/,
+    /holy balos batman/,
   );
   await expect(
     page.getByRole("button", { name: "Pause trailer" }),

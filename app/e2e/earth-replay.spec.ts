@@ -181,7 +181,7 @@ test("bundled React Replay mounts, plays, pauses, and cleans up", async ({ page 
   const replay = page.getByTestId("replay-stage");
   await expect(replay).toHaveAttribute("data-engine", "cesium-bundled");
   await expect(replay).toHaveAttribute("data-state", "ready");
-  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "🍑🍑🍑🍑💦💦💦💦" })).toBeVisible();
   await expect(replay.locator("canvas[data-replay-canvas='true']")).toHaveCount(1);
   await expect(page.getByTestId("route-thread")).toBeVisible();
   const stageBox = await replay.boundingBox();
@@ -497,7 +497,7 @@ test("Change route searches every replay-ready route and updates the world", asy
     "data-route-slug",
     "5650407638",
   );
-  await expect(page.getByRole("heading", { name: "Victoria, BC" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tour de farm" })).toBeVisible();
 
   await page.getByRole("button", { name: "Change route" }).click();
   await expect(chooser.getByRole("searchbox", { name: "Search replay routes" })).toHaveValue(

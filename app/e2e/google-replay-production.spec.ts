@@ -1,5 +1,58 @@
 import { expect, test, type Page } from "@playwright/test";
 
+async function expectMarkerOnProfile(page: Page, duringPlayback = false) {
+  await expect.poll(() => page.getByTestId("replay-elevation-scrubber").evaluate((host, duringPlayback) => {
+    const line = host.querySelector("polyline")!;
+    const svg = line.ownerSVGElement!;
+    const marker = host.querySelector(":scope > span > span")!.getBoundingClientRect();
+    const input = host.querySelector("input")!;
+    const center = new DOMPoint(marker.x + marker.width / 2, marker.y + marker.height / 2);
+    const x = duringPlayback
+      ? center.matrixTransform(svg.getScreenCTM()!.inverse()).x
+      : Number(input.value) / Number(input.max) * svg.viewBox.baseVal.width;
+    const points = Array.from({ length: line.points.numberOfItems }, (_, index) => line.points.getItem(index));
+    const nextIndex = points.findIndex(point => point.x >= x);
+    const end = points[nextIndex < 0 ? points.length - 1 : nextIndex];
+    const start = points[Math.max(0, nextIndex - 1)];
+    const y = end.x === start.x ? end.y : start.y + (end.y - start.y) * (x - start.x) / (end.x - start.x);
+    const expected = new DOMPoint(x, y).matrixTransform(svg.getScreenCTM()!);
+    return Math.hypot(marker.x + marker.width / 2 - expected.x, marker.y + marker.height / 2 - expected.y);
+  }, duringPlayback)).toBeLessThan(1);
+}
+
+for (const renderer of ["google", "cesium"]) {
+  for (const width of [390, 1280]) {
+    test(`elevation marker follows the profile in ${renderer} at ${width}px`, async ({ page }) => {
+      await installGoogleReplay(page, "ready");
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`/#/replay/14736711660${renderer === "cesium" ? "?renderer=cesium" : ""}`);
+      const slider = page.getByRole("slider", { name: "Route progress", exact: true });
+      await expect(slider).toBeEnabled();
+      await slider.fill("7700");
+      await expectMarkerOnProfile(page);
+      await page.getByRole("button", { name: "Play route", exact: true }).click();
+      await expect.poll(async () => Number(await slider.inputValue())).toBeGreaterThan(7700);
+      await expectMarkerOnProfile(page, true);
+      await page.getByRole("button", { name: "Pause route", exact: true }).click();
+      await expectMarkerOnProfile(page);
+      for (const distance of [3000, 14250, 22000]) {
+        await slider.fill(String(distance));
+        await expectMarkerOnProfile(page);
+      }
+      await slider.press("End");
+      await expectMarkerOnProfile(page);
+      await slider.press("Home");
+      await expectMarkerOnProfile(page);
+      await page.setViewportSize({ width: width === 390 ? 1280 : 390, height: 844 });
+      await expectMarkerOnProfile(page);
+      await page.goto(`/#/replay/14023448720${renderer === "cesium" ? "?renderer=cesium" : ""}`);
+      await expect(slider).toBeEnabled();
+      await slider.fill("3000");
+      await expectMarkerOnProfile(page);
+    });
+  }
+}
+
 async function installGoogleReplay(page: Page, state: "ready" | "unavailable" | "loading") {
   await page.addInitScript((providerState) => {
     const replayWindow = window as typeof window & {
@@ -113,6 +166,8 @@ for (const routeSlug of ["14023448720", "14736711660"] as const) {
     await expect(replay).toHaveAttribute("data-engine", "google-3d-maps");
     await expect(replay).toHaveAttribute("data-state", "ready");
     await expect(replay).toHaveAttribute("data-camera-mode", "auto");
+    await expect(replay).toHaveAttribute("data-grounding-mode", "ground");
+    if (routeSlug === "14736711660") await expect(page.getByRole("heading", { name: "just here for the zipper", exact: true })).toBeVisible();
     await expect(replay).toHaveAttribute("data-directed-camera", "overview");
     await expect(
       page.getByRole("button", { name: "Auto director" }),
@@ -458,7 +513,7 @@ for (const width of [390, 1280]) {
     await dialog.locator('a[href="#/replay/17665674778"]').click();
     await expect(stage).toHaveAttribute("data-route-slug", "17665674778");
     await expect(stage).toHaveAttribute("data-camera-mode", "auto");
-    await expect(stage).toHaveAttribute("data-grounding-mode", "mesh");
+    await expect(stage).toHaveAttribute("data-grounding-mode", "ground");
     await expect(stage).toHaveAttribute("data-following", "true");
     await expect(page.getByRole("button", { name: "Play route" })).toBeVisible();
     await expect(page.getByTestId("google-route-progress")).toContainText("0.00 /");

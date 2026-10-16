@@ -22,7 +22,7 @@ describe("native Replay session commands", () => {
       speed: 1,
       cameraMode: "auto",
       following: true,
-      groundingMode: "mesh",
+      groundingMode: "ground",
       rangeScale: 1,
     });
   });

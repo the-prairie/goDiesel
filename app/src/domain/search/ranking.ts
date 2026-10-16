@@ -1,18 +1,15 @@
 import type { DiscoveryCandidate, FinderIntent } from "../planning";
 import { distanceBounds } from "./intent";
+import { literalTokens, matchMetadata, routeMetadata, type MetadataField } from "./metadata";
 export interface SearchDocument {
   slug: string;
+  metadata?: MetadataField[];
   text: string;
   terrain: string[];
   highlights: string[];
   vector: number[];
 }
-export const tokens = (text: string) =>
-  text
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .match(/[a-z0-9]+/g) ?? [];
+export const tokens = literalTokens;
 const stop = new Set(
   "a an the my me i want would something like similar to with and or of in near around past through along some find please for less than under at most km m run running ride cycling route routes".split(
     " ",
@@ -65,6 +62,8 @@ export function rankCollection(
     .flatMap((candidate, i) => {
       const r = candidate.route;
       const doc = bySlug.get(candidate.sourceRouteSlug);
+      const literalQuery = intent.similarPlace ? intent.vibe : `${intent.query ?? ""} ${intent.vibe}`.trim();
+      const metadataMatch = matchMetadata(doc?.metadata ?? routeMetadata({ ...r }), literalQuery);
       if (
         r.type !== intent.activity ||
         r.distanceKm < min ||
@@ -87,7 +86,7 @@ export function rankCollection(
       if (intent.terrain !== "any" && !terrainText.includes(intent.terrain))
         return [];
       const text = texts[i];
-      const beachRequest = query.includes("beach");
+      const beachRequest = query.some(word => word.length >= 4 && ("beach".startsWith(word) || word === "beaches")) && !/\b(not|without|no|rather than|instead of)\b/i.test(literalQuery);
       if (beachRequest && !text.includes("beach") && !text.includes("beaches")) return [];
       let lexical = 0;
       const hits = query.filter((w) => text.includes(w));
@@ -107,7 +106,9 @@ export function rankCollection(
           ? doc.vector.reduce((sum, v, j) => sum + v * semantic[j], 0)
           : 0;
       // Never fill an unrelated search with arbitrary nearest neighbours.
-      if (query.length && !hits.length && cosine < 0.38) return [];
+      const literalOnly = /^[\p{N}\p{Extended_Pictographic}\p{P}\p{Z}\p{M}]+$/u.test(literalQuery);
+      if (literalOnly && literalTokens(literalQuery).length && !metadataMatch) return [];
+      if (query.length && !metadataMatch && !hits.length && cosine < 0.38) return [];
       const evidence = [
         ...(seed
           ? [
@@ -131,8 +132,9 @@ export function rankCollection(
       else if (cosine >= 0.38) evidence.push("Related guide themes");
       return [
         {
-          candidate: { ...candidate, displayTitle: doc?.highlights[0], matchEvidence: excerpt ? `Guide: ${excerpt}` : evidence.join(" · ") },
+          candidate: { ...candidate, displayTitle: r.name, matchEvidence: metadataMatch ? `${metadataMatch.label}: ${metadataMatch.text.slice(0, 200)}` : excerpt ? `Guide: ${excerpt}` : evidence.join(" · ") },
           score:
+            (metadataMatch ? metadataMatch.label === "Title" ? 2 : 1 : 0) +
             (lexical / (lexical + 4)) * 0.6 +
             Math.max(0, cosine) * 0.4 +
             (intent.distanceKm

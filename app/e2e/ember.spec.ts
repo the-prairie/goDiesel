@@ -7,8 +7,8 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
     for (const [name, path, heading] of [
       ["finder", "finder?place=Kyoto&activity=Run&distance=20", "Plan the next day."],
       ["routes", "routes", "Places worth returning to."],
-      ["guide", "routes/17654151284", "Kyoto, Japan"],
-      ["replay", "replay/17654151284", "Kyoto, Japan"],
+      ["guide", "routes/17654151284", "🍑🍑🍑🍑💦💦💦💦"],
+      ["replay", "replay/17654151284", "🍑🍑🍑🍑💦💦💦💦"],
     ]) {
       await page.goto(`${process.env.EMBER_PREVIEW_URL ?? ""}/#/${path}`);
       await expect(page.getByRole("heading", { name: heading, exact: true }).first()).toBeVisible();
