@@ -63,7 +63,11 @@ async function installGoogleReplay(page: Page, state: "ready" | "unavailable" | 
         canvas.style.background = "rgb(30, 80, 96)";
         canvas.style.width = "100%";
         canvas.style.height = "100%";
-        container.replaceChildren(canvas);
+        const credits = document.createElement("button");
+        credits.textContent = "Provider information fixture";
+        credits.style.cssText = "position:absolute;bottom:4px;right:10px;height:24px";
+        credits.onclick = () => { credits.textContent = "Provider information opened"; };
+        container.replaceChildren(canvas, credits);
         onStatus({ state: providerState, message: `Google 3D fixture ${providerState}.` });
       },
       setCamera(pose: {
@@ -480,3 +484,30 @@ test("renderer replacement starts a fresh native Replay session", async ({ page 
   await expect(page.getByTestId("google-route-progress")).toContainText("0.00 /");
   await expect(page.getByRole("button", { name: "Replay settings", exact: true })).toHaveAttribute("aria-expanded", "false");
 });
+
+for (const viewport of [
+  { width: 1440, height: 900 },
+  { width: 390, height: 844 },
+  { width: 844, height: 390 },
+]) {
+  test(`native Replay leaves provider information accessible at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await installGoogleReplay(page, "ready");
+    await page.goto("/#/replay/17654151284");
+    const credits = page.getByRole("button", { name: "Provider information fixture" });
+    const controls = page.getByTestId("replay-controls");
+    const stage = await page.getByTestId("replay-stage").boundingBox();
+    const map = await page.getByLabel(/Google photorealistic 3D view/).boundingBox();
+    const creditBox = await credits.boundingBox();
+    const controlsBox = await controls.boundingBox();
+    expect(map!.width).toBe(stage!.width);
+    expect(map!.height).toBeGreaterThan(100);
+    expect(creditBox!.y + creditBox!.height).toBeLessThanOrEqual(controlsBox!.y);
+    await credits.click();
+    await expect(page.getByRole("button", { name: "Provider information opened" })).toBeVisible();
+    await page.getByRole("button", { name: "Play route" }).click();
+    await page.getByRole("button", { name: "Pause route" }).click();
+    await page.getByLabel("Route progress").fill("7000");
+    await expect(page.getByTestId("google-route-progress")).toContainText("7.00 /");
+  });
+}
