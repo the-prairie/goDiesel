@@ -529,9 +529,10 @@ test("mobile Atlas carousel preserves map context and exposes a route peek", asy
 
 test("mobile globe supports two-finger pinch without losing region state", async ({
   browser,
+  baseURL,
 }) => {
   const context = await browser.newContext({
-    baseURL: "http://127.0.0.1:8791",
+    baseURL,
     hasTouch: true,
     isMobile: true,
     viewport: { width: 430, height: 844 },
@@ -543,6 +544,7 @@ test("mobile globe supports two-finger pinch without losing region state", async
     await expect(
       page.locator('div[data-atlas-engine="cesium"]'),
     ).toHaveAttribute("data-atlas-status", "ready");
+    await expect(canvas).toHaveAttribute("data-camera-height", "18500000");
     const before = Number(await canvas.getAttribute("data-camera-target"));
     const box = (await canvas.boundingBox())!;
     const centerX = box.x + box.width / 2;
