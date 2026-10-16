@@ -288,7 +288,7 @@ export function RouteLeafMap({ route, showDiagnostics = false }: { route: QuestR
               Finish
             </span>
           </div>
-          <div className="absolute bottom-4 left-4 z-10 flex gap-1 rounded-sm border border-line bg-surface/92 p-1 shadow-panel backdrop-blur">
+          <div className="absolute bottom-16 left-4 z-10 flex gap-1 md:bottom-4 rounded-sm border border-line bg-surface/92 p-1 shadow-panel backdrop-blur">
             <Button
               type="button"
               variant="ghost"

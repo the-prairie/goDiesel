@@ -69,3 +69,21 @@ test("replacing a pending Leaf disposes its map and loads the next recorded rout
   await page.getByRole("button", { name: "Reset route map" }).click();
   await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toHaveCount(0);
 });
+
+test("mobile Leaf map controls leave expanded attribution readable", async ({ page }) => {
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto(`/#/routes/${slug}`);
+    await expect(geography(page)).toHaveAttribute("data-map-status", "ready");
+    const attribution = geography(page).locator(".maplibregl-ctrl-attrib");
+    const expanded = await attribution.evaluate((element) => element.hasAttribute("open"));
+    if (!expanded) await geography(page).getByLabel("Toggle attribution").click();
+    const attributionBox = (await attribution.boundingBox())!;
+    const controlsBox = (await page.getByRole("button", { name: "Reset route map" }).locator("..").boundingBox())!;
+    expect(controlsBox.y + controlsBox.height).toBeLessThanOrEqual(attributionBox.y);
+    await page.getByRole("button", { name: "Zoom route map in" }).click();
+    await page.getByRole("button", { name: "Zoom route map out" }).click();
+    await page.getByRole("button", { name: "Reset route map" }).click();
+    await expect(geography(page).getByRole("link", { name: "OpenFreeMap", exact: true })).toBeVisible();
+  }
+});
