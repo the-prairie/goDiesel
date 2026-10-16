@@ -90,7 +90,7 @@ export function ExternalDiscovery({ intent }: { intent: FinderIntent }) {
   }
   const candidates = useMemo(() => results.filter(r => matchesExternalRoute(r,intent)), [results,intent]);
   const preference = discoveryPreference(intent);
-  const { ranked, mode } = useExternalRanking(candidates, preference);
+  const { ranked, limited } = useExternalRanking(candidates, preference);
   const active = candidates.find((r) => r.id === selected) ?? ranked[0]?.route;
   return (
     <section
@@ -176,7 +176,7 @@ export function ExternalDiscovery({ intent }: { intent: FinderIntent }) {
             <p className="mb-3 text-sm text-ink-muted">
               {candidates.length} mapped routes · Not recorded by you
             </p>
-            {mode.includes("unavailable") ? <p role="status" className="mb-3 text-xs text-ink-secondary">Related matches may be limited right now.</p> : null}
+            {limited ? <p role="status" className="mb-3 text-xs text-ink-secondary">Related matches may be limited right now.</p> : null}
             {ranked.map(({ route: r, reason }) => (
               <article
                 key={r.id}

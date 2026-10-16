@@ -32,7 +32,7 @@ const start = async (page: Page, query = "quiet coastal") => {
 };
 const notice = "Related matches may be limited right now.";
 
-for (const outcome of ["success", "error", "timeout"] as const) {
+for (const outcome of ["success", "error", "timeout", "workerError"] as const) {
   test(`external ranking ${outcome} retains usable lexical results`, async ({ page }) => {
     await rankingFixture(page);
     if (outcome === "timeout") await page.clock.install();
@@ -40,6 +40,7 @@ for (const outcome of ["success", "error", "timeout"] as const) {
     await expect(page.getByRole("article").first()).toHaveAccessibleName("Coastal path");
     await expect.poll(() => page.evaluate(() => window.__rankingWorkers.length)).toBe(1);
     if (outcome === "timeout") await page.clock.fastForward(90_001);
+    else if (outcome === "workerError") await page.evaluate(() => window.__rankingWorkers[0].onerror?.());
     else await page.evaluate(outcome => window.__rankingWorkers[0].onmessage?.({ data: outcome === "success" ? { vectors: [[1],[0],[1]] } : { error: true } }), outcome);
     await expect.poll(() => page.evaluate(() => window.__rankingWorkers[0].terminated)).toBe(true);
     await expect(page.getByRole("article").first()).toHaveAccessibleName(outcome === "success" ? "Forest loop" : "Coastal path");
@@ -59,4 +60,28 @@ test("external worker construction failure preserves ranked results", async ({ p
   await start(page);
   await expect(page.getByRole("article").first()).toHaveAccessibleName("Coastal path");
   await expect(page.getByText(notice, { exact: true })).toBeVisible();
+});
+
+test("replaced discovery ignores late ranking and uses the current route set", async ({ page }) => {
+  await rankingFixture(page);
+  await start(page);
+  await expect.poll(() => page.evaluate(() => window.__rankingWorkers.length)).toBe(1);
+  await page.getByRole("button", { name: "Search again", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__rankingWorkers.length)).toBe(2);
+  expect(await page.evaluate(() => window.__rankingWorkers[0].terminated)).toBe(true);
+  await page.evaluate(() => window.__rankingWorkers[0].onmessage?.({ data: { vectors: [[1],[0],[1]] } }));
+  await expect(page.getByRole("article").first()).toHaveAccessibleName("Coastal path");
+  await page.evaluate(() => window.__rankingWorkers[1].onmessage?.({ data: { vectors: [[1],[0],[1]] } }));
+  await expect(page.getByRole("article").first()).toHaveAccessibleName("Forest loop");
+});
+
+test("leaving discovery terminates ranking and ignores its late response", async ({ page }) => {
+  await rankingFixture(page);
+  await start(page);
+  await expect.poll(() => page.evaluate(() => window.__rankingWorkers.length)).toBe(1);
+  await page.getByRole("button", { name: /My collection/ }).click();
+  expect(await page.evaluate(() => window.__rankingWorkers[0].terminated)).toBe(true);
+  await page.evaluate(() => window.__rankingWorkers[0].onmessage?.({ data: { error: true } }));
+  await expect(page.getByRole("region", { name: "New route discovery" })).toHaveCount(0);
+  await expect(page.getByText(notice, { exact: true })).toHaveCount(0);
 });
