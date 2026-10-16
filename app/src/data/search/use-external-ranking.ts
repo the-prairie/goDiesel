@@ -17,10 +17,16 @@ export function useExternalRanking(routes: ExternalRoute[], query: string) {
   useEffect(() => {
     if (!query.trim() || !routes.length) return;
     let active = true;
-    const worker = new Worker(
-      new URL("./embedding.worker.ts", import.meta.url),
-      { type: "module" },
-    );
+    let worker: Worker;
+    try {
+      worker = new Worker(
+        new URL("./embedding.worker.ts", import.meta.url),
+        { type: "module" },
+      );
+    } catch {
+      setState({ key, mode: "Keyword ranking · related-theme search unavailable" });
+      return;
+    }
     setState({ key, mode: "Refining matches…" });
     const fail = () => {
       if (active)
