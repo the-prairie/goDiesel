@@ -10,7 +10,7 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef } from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/ui/button";
@@ -19,8 +19,9 @@ import { recordedLightAt } from "@/domain/geometry/recorded-light";
 import type { QuestRoute } from "@/domain/route";
 import { CinematicSoundscape } from "@/surfaces/replay/cinematic/cinematic-soundscape";
 import {
-  type CinematicRendererStatus,
-} from "@/surfaces/replay/cinematic/cesium-cinematic-renderer";
+  initialCinematicDirectorState,
+  reduceCinematicDirector,
+} from "@/surfaces/replay/cinematic/cinematic-director-state";
 import { NativeCinematicRenderer } from "@/surfaces/replay/cinematic/native-cinematic-renderer";
 import {
   CINEMATIC_CUT_LABELS,
@@ -35,11 +36,6 @@ const CUT_DESCRIPTIONS: Record<CinematicCut, string> = {
   monumental: "Scale, silence, and the full weight of the landscape.",
   kinetic: "A faster line built from speed, turns, and release.",
   intimate: "Closer to the ground, with the effort left in the frame.",
-};
-
-const INITIAL_STATUS: CinematicRendererStatus = {
-  state: "loading",
-  message: "Scouting the route.",
 };
 
 function routeLogline(route: QuestRoute) {
@@ -97,25 +93,28 @@ export function CinematicDirectorStage({
   const soundRef = useRef<CinematicSoundscape | undefined>(undefined);
   const elapsedRef = useRef(0);
   const playingRef = useRef(false);
-  const [cut, setCut] = useState<CinematicCut>(initialCut);
-  const [frame, setFrame] = useState(() =>
-    cinematicFrame(route, initialCut, 0),
+  const [state, dispatch] = useReducer(
+    reduceCinematicDirector,
+    undefined,
+    () => initialCinematicDirectorState(cinematicFrame(route, initialCut, 0)),
   );
-  const [playing, setPlaying] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const [status, setStatus] =
-    useState<CinematicRendererStatus>(INITIAL_STATUS);
+  const { frame, soundEnabled, status } = state;
+  const cut = frame.cut;
+  const playing = state.playback === "playing";
 
-  const commitFrame = (nextFrame: typeof frame) => {
+  const commitFrame = (
+    nextFrame: typeof frame,
+    type: "framePublished" | "cutSelected" | "seeked" | "restartRequested" = "framePublished",
+  ) => {
     elapsedRef.current = nextFrame.elapsedSeconds;
     rendererRef.current?.setFrame(nextFrame, renderMode);
     soundRef.current?.update(nextFrame, soundEnabled);
-    setFrame(nextFrame);
+    dispatch({ type, frame: nextFrame });
   };
 
   const setPlayback = (next: boolean) => {
     playingRef.current = next;
-    setPlaying(next);
+    dispatch({ type: next ? "playbackStarted" : "playbackPaused" });
   };
 
   useEffect(() => {
@@ -127,14 +126,13 @@ export function CinematicDirectorStage({
     rendererRef.current = renderer;
     soundRef.current = sound;
     elapsedRef.current = 0;
-    setFrame(initial);
-    setStatus(INITIAL_STATUS);
+    dispatch({ type: "sessionStarted", frame: initial });
 
     void renderer.mount({
       container,
       frame: initial,
       route,
-      onStatus: setStatus,
+      onStatus: (status) => dispatch({ type: "rendererStatusReceived", status }),
     });
 
     return () => {
@@ -152,8 +150,8 @@ export function CinematicDirectorStage({
       const seconds = (event as CustomEvent<{ seconds?: number }>).detail
         ?.seconds;
       if (typeof seconds !== "number" || !Number.isFinite(seconds)) return;
-      setPlayback(false);
-      commitFrame(cinematicFrame(route, cut, seconds));
+      playingRef.current = false;
+      commitFrame(cinematicFrame(route, cut, seconds), "seeked");
     };
     window.addEventListener("godiesel:route-film-seek", seek);
     return () => window.removeEventListener("godiesel:route-film-seek", seek);
@@ -173,7 +171,7 @@ export function CinematicDirectorStage({
         rendererRef.current?.setFrame(next);
         soundRef.current?.update(next, soundEnabled);
         if (now - lastUiUpdate > 70 || next.showDecision) {
-          setFrame(next);
+          dispatch({ type: "framePublished", frame: next });
           lastUiUpdate = now;
         }
         if (next.elapsedSeconds >= next.durationSeconds) setPlayback(false);
@@ -185,27 +183,27 @@ export function CinematicDirectorStage({
   }, [cut, route, soundEnabled, status.state]);
 
   const selectCut = (nextCut: CinematicCut) => {
-    setPlayback(false);
-    setCut(nextCut);
-    commitFrame(cinematicFrame(route, nextCut, 0));
+    playingRef.current = false;
+    commitFrame(cinematicFrame(route, nextCut, 0), "cutSelected");
   };
 
   const play = async () => {
-    if (frame.showDecision) commitFrame(cinematicFrame(route, cut, 0));
+    if (frame.showDecision) commitFrame(cinematicFrame(route, cut, 0), "restartRequested");
     if (soundEnabled) await soundRef.current?.start();
     setPlayback(true);
   };
 
   const restart = async () => {
-    commitFrame(cinematicFrame(route, cut, 0));
+    commitFrame(cinematicFrame(route, cut, 0), "restartRequested");
     if (soundEnabled) await soundRef.current?.start();
     setPlayback(true);
   };
 
   const scrub = (progress: number) => {
-    setPlayback(false);
+    playingRef.current = false;
     commitFrame(
       cinematicFrame(route, cut, frame.durationSeconds * progress),
+      "seeked",
     );
   };
 
@@ -512,7 +510,7 @@ export function CinematicDirectorStage({
             className="grid size-9 shrink-0 place-items-center border border-white/28 bg-black/45 backdrop-blur-md hover:bg-black/72"
             onClick={() => {
               const next = !soundEnabled;
-              setSoundEnabled(next);
+              dispatch({ type: "soundToggled" });
               soundRef.current?.update(frame, next);
             }}
             type="button"
