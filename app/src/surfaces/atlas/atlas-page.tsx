@@ -4,7 +4,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
-  useState,
+  useReducer,
 } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 
@@ -21,6 +21,11 @@ import { RegionRouteCarousel } from "@/surfaces/atlas/components/region-route-ca
 import { AtlasSearch } from "@/surfaces/atlas/components/atlas-search";
 import { completedRoutes } from "@/data/routes";
 import { buildRouteRegions, type RouteRegion } from "@/data/route-regions";
+import {
+  initialAtlasPresentationState,
+  isAtlasRegionPresented,
+  reduceAtlasPresentation,
+} from "@/surfaces/atlas/atlas-presentation-state";
 import { resolveAtlasSelection } from "@/surfaces/atlas/atlas-selection";
 import type { RouteSummary } from "@/domain/route";
 import { replayPath } from "@/app/route-paths";
@@ -31,7 +36,6 @@ export function AtlasPage() {
   const searchParamsRef = useRef(searchParams);
   searchParamsRef.current = searchParams;
   const globeRef = useRef<AtlasGlobeHandle>(null);
-  const [regionPresentationReady, setRegionPresentationReady] = useState(false);
   const activityParam = searchParams.get("activity");
   const mode: AtlasActivityMode =
     activityParam === "runs" || activityParam === "rides"
@@ -52,6 +56,11 @@ export function AtlasPage() {
   );
   const selection = resolveAtlasSelection(searchParams, routeRegions);
   const { selectedRegion, selectedRoute } = selection;
+  const [presentation, dispatchPresentation] = useReducer(
+    reduceAtlasPresentation,
+    selectedRegion?.name,
+    initialAtlasPresentationState,
+  );
   const presentedRoute = selectedRoute ?? selectedRegion?.routes[0];
   const query = searchParams.get("q") ?? "";
 
@@ -78,7 +87,10 @@ export function AtlasPage() {
   }, [selection.invalidRegion, selection.invalidRoute, updateSearchParams]);
 
   useLayoutEffect(() => {
-    setRegionPresentationReady(false);
+    dispatchPresentation({
+      type: "selectionChanged",
+      regionName: selectedRegion?.name,
+    });
   }, [selectedRegion?.name]);
 
   useEffect(() => {
@@ -167,7 +179,8 @@ export function AtlasPage() {
         selectedRoute={presentedRoute}
         onSelectRegion={selectRegion}
         onSelectRoute={selectRoute}
-        onRegionPresentationReady={setRegionPresentationReady}
+        presentation={presentation}
+        onPresentationEvent={dispatchPresentation}
         className="absolute inset-0 min-h-0 rounded-none border-0"
       />
 
@@ -200,7 +213,7 @@ export function AtlasPage() {
             onClear={clearRegion}
             onSelectRoute={selectRoute}
             replayPathForRoute={replayPathForRoute}
-            presentationReady={regionPresentationReady}
+            presentationReady={isAtlasRegionPresented(presentation, selectedRegion.name)}
           />
         </div>
       ) : null}
