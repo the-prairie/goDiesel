@@ -358,6 +358,7 @@
 <div class="toast" id="toast"></div>
 
 <script type="module">
+import { initialClassifierState, reduceClassifier, classifierPresentation, classifierShouldRefresh, classifierBusy, classifierAcceptsStatus } from "/admin-assets/classifier-state.js";
 import { escapeHtml } from "/admin-assets/presentation.js";
 import { initialMutationState, reduceMutation } from "/admin-assets/mutation-state.js";
 
@@ -720,6 +721,15 @@ document.getElementById('rebuildBtn').addEventListener('click', async () => {
 
 // === Auto-classify (reverse-geocoding) ===
 let classifyPollTimer = null;
+let classifyFadeTimer = null;
+let classifyController = null;
+let classifyRequestId = 0;
+let classifier = initialClassifierState();
+function dispatchClassifier(event) {
+  classifier = reduceClassifier(classifier, event);
+  const { text, active } = classifierPresentation(classifier);
+  setClassifyStatus(text, active);
+}
 
 async function refreshRoutes() {
   const requestId = ++mutationRequestId;
@@ -741,48 +751,57 @@ function setClassifyStatus(text, active) {
   el.textContent = text || '';
   el.classList.toggle('active', !!active);
   const btn = document.getElementById('autoClassifyBtn');
-  btn.toggleAttribute('disabled', !!active);
+  btn.toggleAttribute('disabled', classifierBusy(classifier));
 }
 
 async function pollClassifyStatus() {
-  let lastUpdatedCount = 0;
+  if (classifyPollTimer) clearTimeout(classifyPollTimer);
+  if (classifyFadeTimer) clearTimeout(classifyFadeTimer);
+  classifyController?.abort();
+  const controller = new AbortController();
+  classifyController = controller;
+  const pollId = ++classifyRequestId;
+  dispatchClassifier({ type: 'pollStarted', pollId });
   const tick = async () => {
-    let s;
-    try { s = await fetch('/api/classify-status').then(r => r.json()); }
-    catch { setClassifyStatus('CHECK FAILED', false); return; }
-    if (s.running) {
-      setClassifyStatus(`✦ CLASSIFYING ${s.done} / ${s.total}` +
-                        (s.last_label ? ` · ${s.last_label}` : ''), true);
-      // Refresh data periodically so user sees regions populate as it goes.
-      if (s.updated > lastUpdatedCount + 4) {
-        lastUpdatedCount = s.updated;
-        refreshRoutes();
-      }
+    classifyPollTimer = null;
+    let status;
+    try {
+      const response = await fetch('/api/classify-status', { signal: controller.signal });
+      if (!response.ok) throw new Error('Classification check failed');
+      status = await response.json();
+    } catch {
+      if (!controller.signal.aborted) dispatchClassifier({ type: 'checkFailed', pollId });
+      return;
+    }
+    if (controller.signal.aborted || !classifierAcceptsStatus(classifier, pollId)) return;
+    const refresh = classifierShouldRefresh(classifier, status);
+    dispatchClassifier({ type: 'statusReceived', pollId, status });
+    if (refresh) refreshRoutes();
+    if (classifier.poll.phase === 'running') {
       classifyPollTimer = setTimeout(tick, 2000);
-    } else {
-      classifyPollTimer = null;
-      if (s.total > 0) {
-        setClassifyStatus(`✓ CLASSIFIED ${s.updated} / ${s.total}` +
-                          (s.unmapped ? ` · ${s.unmapped} still unmapped` : ''), false);
-        refreshRoutes();
-        // Fade after a bit
-        setTimeout(() => setClassifyStatus('', false), 8000);
-      } else if (s.unmapped > 0) {
-        setClassifyStatus(`${s.unmapped} unmapped — click AUTO-CLASSIFY`, false);
-      } else {
-        setClassifyStatus('', false);
-      }
+    } else if (status.total > 0) {
+      classifyFadeTimer = setTimeout(() => {
+        classifyFadeTimer = null;
+        dispatchClassifier({ type: 'noticeExpired', pollId });
+      }, 8000);
     }
   };
-  if (classifyPollTimer) clearTimeout(classifyPollTimer);
   tick();
 }
 
 document.getElementById('autoClassifyBtn').addEventListener('click', async () => {
+  if (classifierBusy(classifier)) return;
+  const requestId = ++classifyRequestId;
+  dispatchClassifier({ type: 'startRequested', requestId });
+  if (classifyFadeTimer) clearTimeout(classifyFadeTimer);
+  classifyFadeTimer = null;
   try {
-    await fetch('/api/auto-classify', { method: 'POST' });
+    const response = await fetch('/api/auto-classify', { method: 'POST' });
+    if (!response.ok) throw new Error('Classification start failed');
+    dispatchClassifier({ type: 'startSettled', requestId });
     pollClassifyStatus();
   } catch {
+    dispatchClassifier({ type: 'startSettled', requestId });
     showToast('AUTO-CLASSIFY FAILED', 'var(--reject)');
   }
 });
