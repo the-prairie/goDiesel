@@ -76,7 +76,7 @@
   }
   .tab.active .count { background: rgba(0,241,159,0.15); color: var(--teal); }
 
-  .filters { display: flex; gap: 12px; align-items: center; padding: 12px 0 16px; }
+  .filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 12px 0 16px; }
   .filters input[type="search"] {
     flex: 1; max-width: 360px;
     background: var(--bg-card); border: 1px solid var(--border);
@@ -239,6 +239,21 @@
     opacity: 0; transform: translateY(8px); transition: all 0.2s;
   }
   .toast.show { opacity: 1; transform: translateY(0); }
+  @media (max-width: 700px) {
+    header { position: static; padding: 16px 16px 0; }
+    .head-row { flex-direction: column; align-items: stretch; gap: 16px; }
+    .head-actions .btn { flex: 1; justify-content: center; }
+    .tabs { gap: 0; }
+    .tab { flex: 1; padding: 10px 6px; font-size: 10px; }
+    .filters { gap: 8px; }
+    .filters input[type="search"] { flex-basis: 100%; max-width: none; min-width: 0; }
+    .region-select { max-width: 100%; }
+    .classify-status { flex-basis: 100%; padding: 4px 0; overflow-wrap: anywhere; }
+    main { padding: 16px 16px 120px; }
+    .grid { grid-template-columns: minmax(0, 1fr); }
+    .save-bar { max-width: calc(100% - 32px); white-space: nowrap; }
+    .toast { max-width: calc(100% - 32px); right: 16px; }
+  }
 </style>
 </head>
 <body>

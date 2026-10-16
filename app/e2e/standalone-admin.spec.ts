@@ -78,3 +78,25 @@ test('standalone admin starts classification and filters the preserved route lis
   await page.locator('#search').fill('hill');
   await expect(page.getByText('Synthetic hill ride', { exact: true })).toBeVisible();
 });
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 320, height: 640 }]) {
+  test(`standalone admin keeps mobile controls within ${viewport.width}px`, async ({ page, adminUrl }) => {
+    await page.setViewportSize(viewport);
+    await page.goto(adminUrl);
+    await expect(page.getByText('Synthetic river run', { exact: true })).toBeVisible();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+    expect(overflow).toBeLessThanOrEqual(1);
+    for (const selector of ['#saveBtn', '#rebuildBtn', '#autoClassifyBtn', '#regionSelect', '#search']) {
+      const box = await page.locator(selector).boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width);
+    }
+    await page.getByPlaceholder('Custom title').fill('Mobile visible controls');
+    await page.locator('#saveBtn').click();
+    await expect(page.locator('#toast')).toHaveText('SAVED 1 CHANGE');
+    await page.locator('#autoClassifyBtn').click();
+    await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 1 / 2');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+  });
+}
