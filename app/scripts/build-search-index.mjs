@@ -1,6 +1,7 @@
 // Derived search cache only. Canonical route records remain owned by build.py.
 import fs from "node:fs/promises";
 import { createHash } from "node:crypto";
+import { routeMetadata } from "../src/domain/search/metadata.ts";
 import { pipeline } from "@huggingface/transformers";
 const manifest = JSON.parse(
   await fs.readFile(
@@ -8,7 +9,8 @@ const manifest = JSON.parse(
   ),
 );
 const model = "Xenova/all-MiniLM-L6-v2";
-const embed = await pipeline("feature-extraction", model, { dtype: "q8" });
+let embed;
+const previous = JSON.parse(await fs.readFile(new URL("../public/search/collection.json", import.meta.url))).documents;
 const documents = [];
 for (const summary of manifest.routes) {
   const route = JSON.parse(
@@ -27,14 +29,18 @@ for (const summary of manifest.routes) {
     ...(c.highlights ?? []),
   ].filter(Boolean);
   const text = sections.join(". ");
-  const output = await embed(text, { pooling: "mean", normalize: true });
+  const hash = createHash("sha256").update(text).digest("hex");
+  const cached = previous.find(doc => doc.slug === route.slug && doc.hash === hash && doc.vector.length === 384 && doc.vector.every(Number.isFinite));
+  if (!cached) embed ??= await pipeline("feature-extraction", model, { dtype: "q8" });
+  const vector = cached?.vector ?? Array.from((await embed(text, { pooling: "mean", normalize: true })).data, x => Math.round(x * 1e6) / 1e6);
   documents.push({
     slug: route.slug,
     text,
+    metadata: routeMetadata(route),
     terrain: c.terrain ?? [],
     highlights: c.highlights ?? [],
-    hash: createHash("sha256").update(text).digest("hex"),
-    vector: Array.from(output.data, (x) => Math.round(x * 1e6) / 1e6),
+    hash,
+    vector,
   });
 }
 await fs.writeFile(

@@ -18,6 +18,67 @@ const docs = JSON.parse(
   readFileSync("public/search/collection.json", "utf8"),
 ).documents;
 describe("Finder hybrid search", () => {
+  it("keeps an unknown title fragment as text instead of a place", () => {
+    expect(interpretQuery("zip", { ...base, distanceKm: 0 }, routes.map(r => r.region))).toMatchObject({ place: "", query: "zip", distanceKm: 0 });
+  });
+  it("finds partial original titles with and without the full index", () => {
+    for (const index of [docs, []]) {
+      expect(searchCollection({ ...base, place: "", distanceKm: 0, query: "zip" }, index).candidates[0]?.sourceRouteSlug).toBe("14736711660");
+    }
+  });
+  it("searches numeric activity IDs and emoji titles literally", () => {
+    for (const [query, slug] of [["14736711660", "14736711660"], ["🍑🍑", "17654151284"]]) {
+      expect(searchCollection({ ...base, distanceKm: 0, query }, docs).candidates.map(c => c.sourceRouteSlug)).toEqual([slug]);
+    }
+  });
+  it("indexes the original description independently of guide interpretation", () => {
+    expect(docs.find((doc: { slug: string }) => doc.slug === "17665674778").metadata).toContainEqual({ label: "Description", text: "could not figure out how to cross the bridge 💀💀💀💀" });
+  });
+  it("preserves explicit filters but replaces inferred constraints when the query changes", () => {
+    const inferred = interpretQuery("a run in Kyoto 10–15 km under 500 m", { ...base, explicitFilters: [] }, curatedDiscoveryCandidates.map(c => c.route.region));
+    const changed = interpretQuery("zip", inferred, curatedDiscoveryCandidates.map(c => c.route.region));
+    expect(changed).toMatchObject({ place: "", distanceKm: 0, minDistanceKm: undefined, maxDistanceKm: undefined, maxElevationM: undefined });
+    const manual = interpretQuery("zip", { ...inferred, place: "Tokyo", maxElevationM: 100, explicitFilters: ["place", "maxElevationM"] }, curatedDiscoveryCandidates.map(c => c.route.region));
+    expect(manual).toMatchObject({ place: "Tokyo", maxElevationM: 100 });
+  });
+  it("matches original descriptions, dates and metadata across fields", () => {
+    for (const [query, slug] of [["could not figure out how to cross", "17665674778"], ["2025-03-05", "14736711660"], ["zip bay", "14736711660"]]) {
+      expect(searchCollection({ ...base, distanceKm: 0, query }, docs).candidates[0]?.sourceRouteSlug).toBe(slug);
+    }
+  });
+  it("keeps explicit distance limits for a title search", () => {
+    expect(searchCollection({ ...base, query: "zip" }, docs).candidates).toEqual([]);
+    expect(searchCollection({ ...base, distanceKm: 0, query: "zip" }, docs).candidates[0]?.route.name).toBe("just here for the zipper");
+  });
+  it("does not return unrelated routes for unmatched Unicode text", () => {
+    expect(searchCollection({ ...base, distanceKm: 0, query: "完全不存在的詞" }, docs).candidates).toEqual([]);
+  });
+  it("keeps manual distance constraints ahead of new prose ranges", () => {
+    const intent = interpretQuery("a run 10–15 km", { ...base, distanceKm: 40, explicitFilters: ["distanceKm"] }, []);
+    expect(intent).toMatchObject({ distanceKm: 40, minDistanceKm: undefined, maxDistanceKm: undefined });
+  });
+  it("does not interpret a speed in a Strava title as a route distance", () => {
+    const route = curatedDiscoveryCandidates.find(c => c.sourceRouteSlug === "14394581660")!.route;
+    const intent = interpretQuery(route.name, { ...base, distanceKm: 0, explicitFilters: [] }, curatedDiscoveryCandidates.map(c => c.route.region));
+    expect(intent.distanceKm).toBe(0);
+    expect(searchCollection(intent, docs).candidates.some(c => c.sourceRouteSlug === route.slug)).toBe(true);
+  });
+  it("does not recommend negated beach claims for partial experience words", () => {
+    const slugs = searchCollection({ ...base, distanceKm: 0, query: "beac" }, docs).candidates.map(c => c.sourceRouteSlug);
+    expect(slugs).not.toContain("9945324433");
+    expect(slugs).not.toContain("14130768855");
+    expect(slugs).toContain("9915035779");
+  });
+  it("retrieves every original title with its activity selected", () => {
+    for (const candidate of curatedDiscoveryCandidates) {
+      const intent = interpretQuery(candidate.route.name, { ...base, activity: candidate.route.type as "Run" | "Ride", distanceKm: 0, explicitFilters: ["activity"] }, curatedDiscoveryCandidates.map(c => c.route.region));
+      expect(searchCollection(intent, docs).candidates.map(c => c.sourceRouteSlug), candidate.route.name).toContain(candidate.sourceRouteSlug);
+    }
+  });
+  it("searches annotations independently of the positive guide", () => {
+    const result = searchCollection({ ...base, distanceKm: 0, query: "stone stairway" }, docs);
+    expect(result.candidates.find(c => c.sourceRouteSlug === "17654151284")?.matchEvidence).toMatch(/^Annotation:/);
+  });
   it("treats beach as an experience and keeps the distance target", () => {
     expect(interpretQuery("beach", base, [])).toMatchObject({place: "", query: "beach", distanceKm: 20});
     expect(interpretQuery("beach near Banff", base, ["Banff, AB"]).place).toBe("Banff");

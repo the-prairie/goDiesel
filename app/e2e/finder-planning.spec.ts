@@ -159,7 +159,7 @@ test("Finder exposes applied preferences and edits distance without pretending t
   for (const width of [390, 1280]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/#/finder");
-    await expect(page.getByLabel("Search preferences")).toHaveText("Search for: Run · around 20 km");
+    await expect(page.getByLabel("Search preferences")).toHaveText("Search for: Run · any distance");
     await page.getByRole("button", { name: "Kyoto", exact: true }).click();
     const filters = page.getByLabel("Active Finder filters");
     await expect(filters).toBeVisible();

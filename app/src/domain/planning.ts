@@ -3,7 +3,11 @@ import type { RouteSummary } from "@/domain/route";
 export type FinderActivity = "Run" | "Ride";
 export type FinderTerrain = "any" | "road" | "trail" | "mixed" | "mountain";
 
+export const finderFilters = ["place", "activity", "distanceKm", "minDistanceKm", "maxDistanceKm", "maxElevationM", "terrain", "vibe"] as const;
+export type FinderFilter = typeof finderFilters[number];
+
 export interface FinderIntent {
+  explicitFilters?: FinderFilter[];
   query?: string;
   minDistanceKm?: number;
   maxDistanceKm?: number;

@@ -42,7 +42,7 @@ export function CandidateRoute({
         </div>
         <div aria-hidden="true" className="finder-result-cover size-20 shrink-0 overflow-hidden rounded-lg"><RouteCover route={route} /></div>
       </div>
-      {matchReason?.startsWith("Guide:") && matchReason.slice(7) !== candidate.displayTitle ? <p className="mt-3 text-xs leading-relaxed text-ink-secondary">{matchReason}</p> : null}
+      {matchReason && matchReason !== `Title: ${candidate.displayTitle}` ? <p className="mt-3 text-xs leading-relaxed text-ink-secondary">{matchReason}</p> : null}
       <div className="mt-3 flex flex-wrap items-center gap-1 border-t border-line pt-2">
         <Button asChild variant="ghost" size="sm"><Link to={guidePath}>Route guide</Link></Button>
         {onSelect ? <Button type="button" variant="ghost" size="sm" aria-label={`Preview ${route.region} on map`} aria-pressed={selected} onClick={onSelect}><Eye />{selected ? "On map" : "Map"}</Button> : null}
