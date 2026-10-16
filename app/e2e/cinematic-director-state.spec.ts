@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-async function installDirector(page: Page, deferredAudio = false) {
+async function installDirector(page: Page, deferredAudio: boolean | "reject" = false) {
   await page.addInitScript((deferred) => {
     const fixture = window as typeof window & {
       directorFixture: {
@@ -12,6 +12,7 @@ async function installDirector(page: Page, deferredAudio = false) {
     fixture.directorFixture = { audio: [], status() {}, destroys: 0 };
     const resume = AudioContext.prototype.resume;
     AudioContext.prototype.resume = function () {
+      if (deferred === "reject") return Promise.reject(new Error("Audio start rejected."));
       if (!deferred) return resume.call(this);
       return new Promise<void>((resolve) => fixture.directorFixture.audio.push(resolve));
     };
@@ -34,7 +35,11 @@ async function installDirector(page: Page, deferredAudio = false) {
 }
 
 async function completeAudio(page: Page) {
-  await page.evaluate(() => (window as typeof window & { directorFixture: { audio: Array<() => void> } }).directorFixture.audio.shift()?.());
+  await page.evaluate(async () => {
+    (window as typeof window & { directorFixture: { audio: Array<() => void> } }).directorFixture.audio.shift()?.();
+    await new Promise(requestAnimationFrame);
+    await new Promise(requestAnimationFrame);
+  });
 }
 
 async function status(page: Page, next: "loading" | "ready" | "partial" | "unavailable") {
@@ -75,7 +80,7 @@ test("cut, playback, pause, seek, sound, decision, and restart retain their beha
   await expect(page.getByRole("slider")).toHaveValue("1");
 });
 
-test("pending audio completion currently starts the newly selected cut", async ({ page }) => {
+test("a cut cancels a pending audio start", async ({ page }) => {
   await installDirector(page, true);
   await open(page);
   await page.getByRole("button", { name: "Play Route Film" }).click();
@@ -83,10 +88,11 @@ test("pending audio completion currently starts the newly selected cut", async (
   await page.getByRole("button", { name: "Intimate Closer" }).click();
   await expect(page.getByTestId("cinematic-director")).toHaveAttribute("data-cut", "intimate");
   await completeAudio(page);
-  await expect(page.getByRole("button", { name: "Pause cinematic" })).toBeVisible();
+  await expect(page.getByTestId("cinematic-preroll")).toBeVisible();
+  await expect(page.getByTestId("cinematic-director")).toHaveAttribute("data-frame-seconds", "0.000");
 });
 
-test("pending audio completion currently resumes after a newer seek", async ({ page }) => {
+test("a newer seek cancels a pending audio start", async ({ page }) => {
   await installDirector(page, true);
   await open(page);
   await page.getByRole("button", { name: "Play Route Film" }).click();
@@ -97,8 +103,8 @@ test("pending audio completion currently resumes after a newer seek", async ({ p
   await seek(page, "0.75");
   await expect(page.getByRole("button", { name: "Play cinematic" })).toBeVisible();
   await completeAudio(page);
-  await expect(page.getByRole("button", { name: "Pause cinematic" })).toBeVisible();
-  await expect.poll(async () => Number(await page.getByRole("slider").inputValue())).toBeGreaterThan(0.75);
+  await expect(page.getByRole("button", { name: "Play cinematic" })).toBeVisible();
+  await expect(page.getByRole("slider")).toHaveValue("0.75");
 });
 
 test("provider status interrupts advancement and recovers retained playback intent", async ({ page }) => {
@@ -139,4 +145,15 @@ test("route replacement disposes the renderer and opens the new route paused", a
   await expect(page.getByTestId("cinematic-director")).toHaveAttribute("data-cut", "intimate");
   await expect(page.getByTestId("cinematic-preroll")).toBeVisible();
   await expect.poll(() => page.evaluate(() => (window as typeof window & { directorFixture: { destroys: number } }).directorFixture.destroys)).toBeGreaterThan(0);
+});
+
+test("rejected audio leaves playback paused and reports the existing error", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await installDirector(page, "reject");
+  await open(page);
+  await page.getByRole("button", { name: "Play Route Film", exact: true }).click();
+  await expect.poll(() => errors).toContain("Audio start rejected.");
+  await expect(page.getByTestId("cinematic-preroll")).toBeVisible();
+  await expect(page.getByTestId("cinematic-director")).toHaveAttribute("data-frame-seconds", "0.000");
 });

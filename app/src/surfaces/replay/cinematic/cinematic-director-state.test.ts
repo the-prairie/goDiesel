@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { QuestRoute } from "@/domain/route";
 import { cinematicFrame } from "@/surfaces/replay/cinematic/route-cinematic-director";
-import { initialCinematicDirectorState, reduceCinematicDirector } from "@/surfaces/replay/cinematic/cinematic-director-state";
+import { initialCinematicDirectorState, reduceCinematicDirector, type CinematicDirectorState } from "@/surfaces/replay/cinematic/cinematic-director-state";
 
 const route = {
   distanceKm: 2,
@@ -12,20 +12,22 @@ const route = {
 } as QuestRoute;
 const opening = cinematicFrame(route, "feature", 0);
 const initial = () => initialCinematicDirectorState(opening);
+function start(state: CinematicDirectorState) {
+  return reduceCinematicDirector(reduceCinematicDirector(state, { type: "playRequested", requestId: 1 }), { type: "audioStarted", requestId: 1 });
+}
 
 describe("cinematic director transitions", () => {
   it("starts paused with sound enabled and loading status", () => {
-    expect(initial()).toEqual({ frame: opening, playback: "paused", soundEnabled: true, status: { state: "loading", message: "Scouting the route." } });
+    expect(initial()).toEqual({ frame: opening, playback: "paused", audioStart: { state: "idle" }, soundEnabled: true, status: { state: "loading", message: "Scouting the route." } });
   });
 
   it("selects a cut and pauses in one transition", () => {
-    const playing = reduceCinematicDirector(initial(), { type: "playbackStarted" });
     const frame = cinematicFrame(route, "intimate", 0);
-    expect(reduceCinematicDirector(playing, { type: "cutSelected", frame })).toMatchObject({ playback: "paused", frame });
+    expect(reduceCinematicDirector(start(initial()), { type: "cutSelected", frame })).toMatchObject({ playback: "paused", frame });
   });
 
   it("seek pauses while a published animation frame retains playback", () => {
-    const playing = reduceCinematicDirector(initial(), { type: "playbackStarted" });
+    const playing = start(initial());
     const frame = cinematicFrame(route, "feature", 4);
     expect(reduceCinematicDirector(playing, { type: "framePublished", frame })).toMatchObject({ playback: "playing", frame });
     expect(reduceCinematicDirector(playing, { type: "seeked", frame })).toMatchObject({ playback: "paused", frame });
@@ -35,18 +37,42 @@ describe("cinematic director transitions", () => {
     const paused = reduceCinematicDirector(initial(), { type: "seeked", frame: cinematicFrame(route, "feature", 10) });
     const restarting = reduceCinematicDirector(paused, { type: "restartRequested", frame: opening });
     expect(restarting).toMatchObject({ playback: "paused", frame: opening });
-    expect(reduceCinematicDirector(restarting, { type: "playbackStarted" }).playback).toBe("playing");
+    expect(start(restarting).playback).toBe("playing");
   });
 
-  it("preserves the characterized late audio completion after a cut or seek", () => {
-    for (const type of ["cutSelected", "seeked"] as const) {
-      const changed = reduceCinematicDirector(initial(), { type, frame: cinematicFrame(route, "kinetic", 2) });
-      expect(reduceCinematicDirector(changed, { type: "playbackStarted" })).toMatchObject({ playback: "playing", frame: changed.frame });
+  for (const type of ["cutSelected", "seeked", "sessionStarted"] as const) {
+    it(`rejects late audio after ${type}`, () => {
+      const pending = reduceCinematicDirector(initial(), { type: "playRequested", requestId: 1 });
+      const changed = reduceCinematicDirector(pending, { type, frame: cinematicFrame(route, "kinetic", 2) });
+      expect(reduceCinematicDirector(changed, { type: "audioStarted", requestId: 1 })).toBe(changed);
+    });
+  }
+
+  it("pause cancels an audio start and rejects its later completion", () => {
+    const pending = reduceCinematicDirector(initial(), { type: "playRequested", requestId: 1 });
+    const paused = reduceCinematicDirector(pending, { type: "playbackPaused" });
+    expect(reduceCinematicDirector(paused, { type: "audioStarted", requestId: 1 })).toBe(paused);
+  });
+
+  it("accepts only the newest start and ignores duplicate completion", () => {
+    let state = reduceCinematicDirector(initial(), { type: "playRequested", requestId: 1 });
+    state = reduceCinematicDirector(state, { type: "playRequested", requestId: 2 });
+    expect(reduceCinematicDirector(state, { type: "audioStarted", requestId: 1 })).toBe(state);
+    state = reduceCinematicDirector(state, { type: "audioStarted", requestId: 2 });
+    expect(state.playback).toBe("playing");
+    expect(reduceCinematicDirector(state, { type: "audioStarted", requestId: 2 })).toBe(state);
+  });
+
+  it("failed audio settles the matching request without changing prior playback", () => {
+    for (const state of [initial(), start(initial())]) {
+      const pending = reduceCinematicDirector(state, { type: "playRequested", requestId: 2 });
+      expect(reduceCinematicDirector(pending, { type: "audioStartFailed", requestId: 1 })).toBe(pending);
+      expect(reduceCinematicDirector(pending, { type: "audioStartFailed", requestId: 2 })).toMatchObject({ playback: state.playback, audioStart: { state: "idle" } });
     }
   });
 
   it("retains playback intent during provider failure and partial recovery", () => {
-    let state = reduceCinematicDirector(initial(), { type: "playbackStarted" });
+    let state = start(initial());
     for (const providerState of ["unavailable", "partial", "ready"] as const) {
       state = reduceCinematicDirector(state, { type: "rendererStatusReceived", status: { state: providerState, message: providerState } });
       expect(state.playback).toBe("playing");
@@ -56,7 +82,7 @@ describe("cinematic director transitions", () => {
 
   it("sound preference is independent of playback, seeking, and session reset", () => {
     let state = reduceCinematicDirector(initial(), { type: "soundToggled" });
-    state = reduceCinematicDirector(state, { type: "playbackStarted" });
+    state = start(state);
     state = reduceCinematicDirector(state, { type: "seeked", frame: opening });
     state = reduceCinematicDirector(state, { type: "sessionStarted", frame: opening });
     expect(state.soundEnabled).toBe(false);

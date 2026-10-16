@@ -93,6 +93,7 @@ export function CinematicDirectorStage({
   const soundRef = useRef<CinematicSoundscape | undefined>(undefined);
   const elapsedRef = useRef(0);
   const playingRef = useRef(false);
+  const playRequestRef = useRef(0);
   const [state, dispatch] = useReducer(
     reduceCinematicDirector,
     undefined,
@@ -112,9 +113,10 @@ export function CinematicDirectorStage({
     dispatch({ type, frame: nextFrame });
   };
 
-  const setPlayback = (next: boolean) => {
-    playingRef.current = next;
-    dispatch({ type: next ? "playbackStarted" : "playbackPaused" });
+  const pause = () => {
+    playRequestRef.current += 1;
+    playingRef.current = false;
+    dispatch({ type: "playbackPaused" });
   };
 
   useEffect(() => {
@@ -136,7 +138,7 @@ export function CinematicDirectorStage({
     });
 
     return () => {
-      setPlayback(false);
+      pause();
       renderer.destroy();
       sound.destroy();
       if (rendererRef.current === renderer) rendererRef.current = undefined;
@@ -150,6 +152,7 @@ export function CinematicDirectorStage({
       const seconds = (event as CustomEvent<{ seconds?: number }>).detail
         ?.seconds;
       if (typeof seconds !== "number" || !Number.isFinite(seconds)) return;
+      playRequestRef.current += 1;
       playingRef.current = false;
       commitFrame(cinematicFrame(route, cut, seconds), "seeked");
     };
@@ -174,7 +177,7 @@ export function CinematicDirectorStage({
           dispatch({ type: "framePublished", frame: next });
           lastUiUpdate = now;
         }
-        if (next.elapsedSeconds >= next.durationSeconds) setPlayback(false);
+        if (next.elapsedSeconds >= next.durationSeconds) pause();
       }
       animationFrame = requestAnimationFrame(tick);
     };
@@ -183,23 +186,28 @@ export function CinematicDirectorStage({
   }, [cut, route, soundEnabled, status.state]);
 
   const selectCut = (nextCut: CinematicCut) => {
+    playRequestRef.current += 1;
     playingRef.current = false;
     commitFrame(cinematicFrame(route, nextCut, 0), "cutSelected");
   };
 
-  const play = async () => {
-    if (frame.showDecision) commitFrame(cinematicFrame(route, cut, 0), "restartRequested");
-    if (soundEnabled) await soundRef.current?.start();
-    setPlayback(true);
-  };
-
-  const restart = async () => {
-    commitFrame(cinematicFrame(route, cut, 0), "restartRequested");
-    if (soundEnabled) await soundRef.current?.start();
-    setPlayback(true);
+  const play = async (restart = frame.showDecision) => {
+    if (restart) commitFrame(cinematicFrame(route, cut, 0), "restartRequested");
+    const requestId = ++playRequestRef.current;
+    dispatch({ type: "playRequested", requestId });
+    try {
+      if (soundEnabled) await soundRef.current?.start();
+    } catch (error) {
+      dispatch({ type: "audioStartFailed", requestId });
+      throw error;
+    }
+    if (playRequestRef.current !== requestId) return;
+    playingRef.current = true;
+    dispatch({ type: "audioStarted", requestId });
   };
 
   const scrub = (progress: number) => {
+    playRequestRef.current += 1;
     playingRef.current = false;
     commitFrame(
       cinematicFrame(route, cut, frame.durationSeconds * progress),
@@ -439,7 +447,7 @@ export function CinematicDirectorStage({
               <div className="flex flex-wrap gap-2">
               <Button
                 className="border-white/34 bg-transparent text-white hover:bg-white/12"
-                onClick={() => void restart()}
+                onClick={() => void play(true)}
                 variant="outline"
               >
                 <RotateCcw aria-hidden="true" />
@@ -482,7 +490,7 @@ export function CinematicDirectorStage({
           <button
             aria-label={playing ? "Pause cinematic" : "Play cinematic"}
             className="grid size-9 shrink-0 place-items-center border border-white/28 bg-black/45 backdrop-blur-md hover:bg-black/72"
-            onClick={() => (playing ? setPlayback(false) : void play())}
+            onClick={() => (playing ? pause() : void play())}
             type="button"
           >
             {playing ? (
