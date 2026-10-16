@@ -1,3 +1,7 @@
+import type {
+  AtlasPresentationEvent,
+  AtlasPresentationState,
+} from "@/surfaces/atlas/atlas-presentation-state";
 import type { RouteRegion } from "@/data/route-regions";
 import { isValidCoordinate } from "@/domain/geometry/geographic-bounds";
 import type { RoutePoint, RouteSummary } from "@/domain/route";
@@ -8,8 +12,8 @@ export interface AtlasGlobeProps {
   selectedRoute?: RouteSummary;
   onSelectRegion: (region: RouteRegion) => void;
   onSelectRoute?: (route: RouteSummary) => void;
-  onStatusChange?: (status: AtlasWorldStatus) => void;
-  onRegionPresentationReady?: (ready: boolean) => void;
+  presentation: AtlasPresentationState;
+  onPresentationEvent: (event: AtlasPresentationEvent) => void;
   className?: string;
 }
 
