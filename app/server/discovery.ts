@@ -175,7 +175,7 @@ class ProviderFailure extends Error {
 // One sequential failover, never a retry loop or a request to a user-supplied host.
 async function routeQuery(query: string) {
   const providers = [
-    "https://overpass-api.de/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
   ];
   for (const [index, provider] of providers.entries()) {
