@@ -1,4 +1,5 @@
 import { Save } from "lucide-react";
+import { useState } from "react";
 
 import { CurationStatus } from "@/surfaces/admin/components/curation-status";
 import { Button } from "@/ui/button";
@@ -214,20 +215,19 @@ function ListField({
   placeholder: string;
   onChange: (value: string[]) => void;
 }) {
+  const [buffer, setBuffer] = useState<{ value: string[]; text: string } | null>(null);
+
   return (
     <TextAreaField
       label={label}
-      value={value.join("\n")}
+      value={buffer?.value === value ? buffer.text : value.join("\n")}
       rows={3}
       placeholder={placeholder}
-      onChange={(next) =>
-        onChange(
-          next
-            .split("\n")
-            .map((item) => item.trim())
-            .filter(Boolean),
-        )
-      }
+      onChange={(text) => {
+        const next = text.split("\n").map((item) => item.trim()).filter(Boolean);
+        setBuffer({ value: next, text });
+        onChange(next);
+      }}
     />
   );
 }

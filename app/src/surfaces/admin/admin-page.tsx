@@ -1,5 +1,5 @@
 import { Circle, Database, LockKeyhole, Search, SearchX } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef } from "react";
 
 import { RouteEditor } from "@/surfaces/admin/components/route-editor";
 import { Button } from "@/ui/button";
@@ -8,132 +8,58 @@ import {
   loadAdminWorkspace,
   loadBundledCuration,
   saveAdminCuration,
-  type AdminWorkspace,
 } from "@/data/admin-repository";
-import type { CurationDraft } from "@/surfaces/admin/admin-curation";
-
-interface RouteSaveState {
-  saving: boolean;
-  message: string | null;
-}
+import {
+  initialAdminWorkspaceState,
+  reduceAdminWorkspace,
+  selectAdminWorkspace,
+} from "./workspace-state";
 
 export function AdminPage() {
-  const [workspace, setWorkspace] = useState<AdminWorkspace | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [drafts, setDrafts] = useState<Record<string, CurationDraft>>({});
-  const [query, setQuery] = useState("");
-  const [saveStates, setSaveStates] = useState<Record<string, RouteSaveState>>(
-    {},
-  );
+  const [state, dispatch] = useReducer(reduceAdminWorkspace, undefined, initialAdminWorkspaceState);
+  const requestId = useRef(0);
+  const {
+    workspace, query, matchingRoutes, visibleRoutes, effectiveSelectedId,
+    selectedRoute, draft, dirty, saving, saveMessage, canSave,
+  } = useMemo(() => selectAdminWorkspace(state), [state]);
 
   useEffect(() => {
     let active = true;
     void loadAdminWorkspace().then((loaded) => {
-      if (!active) return;
-      setWorkspace(loaded);
-      setSelectedId(loaded.routes[0]?.activityId ?? null);
+      if (active) dispatch({ type: "workspaceLoaded", workspace: loaded });
     });
     return () => {
       active = false;
     };
   }, []);
 
-  const matchingRoutes = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
-    if (!workspace || !normalized) return workspace?.routes ?? [];
-    return workspace.routes.filter((route) =>
-      [route.name, route.region, route.type, route.date].some((value) =>
-        value.toLowerCase().includes(normalized),
-      ),
-    );
-  }, [query, workspace]);
-  const visibleRoutes = matchingRoutes.slice(0, 200);
-  const effectiveSelectedId = matchingRoutes.some(
-    (route) => route.activityId === selectedId,
-  )
-    ? selectedId
-    : (matchingRoutes[0]?.activityId ?? null);
-  const selectedRoute = workspace?.routes.find(
-    (route) => route.activityId === effectiveSelectedId,
-  );
-  const draft = selectedRoute
-    ? (drafts[selectedRoute.activityId] ?? selectedRoute.curation)
-    : null;
-  const selectedSaveState = selectedRoute
-    ? saveStates[selectedRoute.activityId]
-    : undefined;
-  const dirty = Boolean(
-    selectedRoute &&
-      draft &&
-      JSON.stringify(draft) !== JSON.stringify(selectedRoute.curation),
-  );
-
   useEffect(() => {
-    if (!selectedRoute || !workspace) {
-      return;
-    }
+    if (!selectedRoute || workspace?.mode !== "read-only") return;
     let active = true;
     const routeId = selectedRoute.activityId;
-    setDrafts((current) =>
-      current[routeId]
-        ? current
-        : { ...current, [routeId]: selectedRoute.curation },
-    );
-    if (workspace.mode === "read-only") {
-      void loadBundledCuration(selectedRoute).then((curation) => {
-        if (active) {
-          setDrafts((current) => ({ ...current, [routeId]: curation }));
-        }
-      });
-    }
+    const id = ++requestId.current;
+    dispatch({ type: "detailStarted", routeId, requestId: id });
+    void loadBundledCuration(selectedRoute).then((curation) => {
+      if (active) dispatch({ type: "detailReceived", routeId, requestId: id, draft: curation });
+    });
     return () => {
       active = false;
     };
   }, [selectedRoute?.activityId, workspace?.mode]);
 
   async function save() {
-    if (
-      !selectedRoute ||
-      !draft ||
-      workspace?.mode !== "editable"
-    ) {
-      return;
-    }
+    if (!selectedRoute || !draft || !canSave) return;
     const routeId = selectedRoute.activityId;
-    setSaveStates((current) => ({
-      ...current,
-      [routeId]: { saving: true, message: null },
-    }));
+    const id = ++requestId.current;
+    dispatch({ type: "saveStarted", routeId, requestId: id, draft });
     try {
       await saveAdminCuration(routeId, draft);
-      setWorkspace((current) =>
-        current?.mode === "editable"
-          ? {
-              ...current,
-              generationStatus: "ready",
-              routes: current.routes.map((route) =>
-                route.activityId === routeId
-                  ? { ...route, curation: draft, generationStatus: "ready" }
-                  : route,
-              ),
-            }
-          : current,
-      );
-      setSaveStates((current) => ({
-        ...current,
-        [routeId]: {
-          saving: false,
-          message: "Saved. Manifest and route detail regenerated.",
-        },
-      }));
+      dispatch({ type: "saveSucceeded", routeId, requestId: id });
     } catch (error) {
-      setSaveStates((current) => ({
-        ...current,
-        [routeId]: {
-          saving: false,
-          message: error instanceof Error ? error.message : "Save failed.",
-        },
-      }));
+      dispatch({
+        type: "saveFailed", routeId, requestId: id,
+        message: error instanceof Error ? error.message : "Save failed.",
+      });
     }
   }
 
@@ -201,7 +127,7 @@ export function AdminPage() {
                     value={query}
                     placeholder="Search route library"
                     className="pl-9"
-                    onChange={(event) => setQuery(event.target.value)}
+                    onChange={(event) => dispatch({ type: "queryEdited", query: event.target.value })}
                   />
                 </div>
                 <p className="text-micro text-ink-muted">
@@ -218,7 +144,7 @@ export function AdminPage() {
                     aria-pressed={route.activityId === effectiveSelectedId}
                     className="group grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-3 border-b border-line px-3 py-3 text-left last:border-b-0 hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-pressed:bg-forest-soft"
                     onClick={() => {
-                      setSelectedId(route.activityId);
+                      dispatch({ type: "routeSelected", routeId: route.activityId });
                     }}
                   >
                     <Circle
@@ -245,24 +171,15 @@ export function AdminPage() {
 
             {selectedRoute && draft ? (
               <RouteEditor
+                key={selectedRoute.activityId}
                 route={selectedRoute}
                 draft={draft}
                 readOnly={workspace.mode === "read-only"}
                 dirty={dirty}
-                saving={selectedSaveState?.saving ?? false}
-                saveMessage={selectedSaveState?.message ?? null}
+                saving={saving}
+                saveMessage={saveMessage}
                 onChange={(nextDraft) => {
-                  setDrafts((current) => ({
-                    ...current,
-                    [selectedRoute.activityId]: nextDraft,
-                  }));
-                  setSaveStates((current) => ({
-                    ...current,
-                    [selectedRoute.activityId]: {
-                      saving: current[selectedRoute.activityId]?.saving ?? false,
-                      message: null,
-                    },
-                  }));
+                  dispatch({ type: "draftEdited", routeId: selectedRoute.activityId, draft: nextDraft });
                 }}
                 onSave={save}
               />
@@ -284,7 +201,7 @@ export function AdminPage() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setQuery("")}
+                    onClick={() => dispatch({ type: "queryEdited", query: "" })}
                   >
                     Clear search
                   </Button>
