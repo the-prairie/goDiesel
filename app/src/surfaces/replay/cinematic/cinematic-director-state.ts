@@ -18,7 +18,9 @@ export type CinematicDirectorEvent =
   | { type: "playbackPaused" }
   | { type: "soundToggled" };
 
-export function initialCinematicDirectorState(frame: CinematicFrame): CinematicDirectorState {
+export function initialCinematicDirectorState(
+  frame: CinematicFrame,
+): CinematicDirectorState {
   return {
     frame,
     playback: "paused",
@@ -34,20 +36,36 @@ export function reduceCinematicDirector(
 ): CinematicDirectorState {
   switch (event.type) {
     case "sessionStarted":
-      return { ...state, frame: event.frame, audioStart: { state: "idle" }, status: initialCinematicDirectorState(event.frame).status };
+      return {
+        ...state,
+        frame: event.frame,
+        audioStart: { state: "idle" },
+        status: initialCinematicDirectorState(event.frame).status,
+      };
     case "rendererStatusReceived":
       return { ...state, status: event.status };
     case "cutSelected":
     case "seeked":
-      return { ...state, frame: event.frame, playback: "paused", audioStart: { state: "idle" } };
+      return {
+        ...state,
+        frame: event.frame,
+        playback: "paused",
+        audioStart: { state: "idle" },
+      };
     case "framePublished":
     case "restartRequested":
       return { ...state, frame: event.frame };
     case "playRequested":
-      return { ...state, audioStart: { state: "pending", requestId: event.requestId } };
+      return {
+        ...state,
+        audioStart: { state: "pending", requestId: event.requestId },
+      };
     case "audioStarted":
     case "audioStartFailed":
-      if (state.audioStart.state !== "pending" || state.audioStart.requestId !== event.requestId) return state;
+      if (
+        state.audioStart.state !== "pending" ||
+        state.audioStart.requestId !== event.requestId
+      ) return state;
       return {
         ...state,
         playback: event.type === "audioStarted" ? "playing" : state.playback,

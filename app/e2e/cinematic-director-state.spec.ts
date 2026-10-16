@@ -21,6 +21,11 @@ async function installDirector(page: Page, deferredAudio: boolean | "reject" = f
         const canvas = document.createElement("canvas");
         canvas.style.cssText = "width:100%;height:100%;background:#345058";
         container.replaceChildren(canvas);
+        const credits = document.createElement("button");
+        credits.textContent = "Provider information";
+        credits.style.cssText = "position:absolute;bottom:0;right:0;height:24px";
+        credits.onclick = () => { credits.textContent = "Provider information opened"; };
+        container.append(credits);
         fixture.directorFixture.status = (state) => onStatus({ state, message: `Director fixture ${state}.` });
         fixture.directorFixture.status("ready");
       },
@@ -157,3 +162,67 @@ test("rejected audio leaves playback paused and reports the existing error", asy
   await expect(page.getByTestId("cinematic-preroll")).toBeVisible();
   await expect(page.getByTestId("cinematic-director")).toHaveAttribute("data-frame-seconds", "0.000");
 });
+
+for (const viewport of [{ width: 320, height: 640 }, { width: 390, height: 844 }]) {
+  test(`all director cuts and Play remain reachable at ${viewport.width}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await installDirector(page);
+    await open(page);
+    const preroll = page.getByTestId("cinematic-preroll");
+    await preroll.hover();
+    await page.mouse.wheel(0, 900);
+    const play = page.getByRole("button", { name: "Play Route Film", exact: true });
+    await expect(play).toBeInViewport();
+    await play.click();
+    await expect(page.getByRole("button", { name: "Pause cinematic" })).toBeVisible();
+  });
+}
+
+for (const state of ["loading", "unavailable"] as const) {
+  test(`Back remains usable while the renderer is ${state}`, async ({ page }) => {
+    await installDirector(page);
+    await open(page);
+    await status(page, state);
+    await page.getByRole("link", { name: "Back to route intelligence" }).click({ timeout: 2_000 });
+    await expect(page).toHaveURL(/#\/lab\/route-intelligence$/);
+  });
+}
+
+test("only the newest audio start can begin playback", async ({ page }) => {
+  await installDirector(page, true);
+  await open(page);
+  await page.getByRole("button", { name: "Play Route Film", exact: true }).click();
+  await page.getByRole("button", { name: "Play Route Film", exact: true }).click();
+  await completeAudio(page);
+  await expect(page.getByTestId("cinematic-preroll")).toBeVisible();
+  await completeAudio(page);
+  await expect(page.getByRole("button", { name: "Pause cinematic" })).toBeVisible();
+});
+
+test("audio completion after route replacement does not start the new route", async ({ page }) => {
+  await installDirector(page, true);
+  await open(page);
+  await page.getByRole("button", { name: "Play Route Film", exact: true }).click();
+  await page.evaluate(() => { window.location.hash = "/lab/cinematic-director/14023448720"; });
+  await expect(page.getByRole("region", { name: "Cinematic director for Crete, Greece" })).toBeVisible();
+  await completeAudio(page);
+  await expect(page.getByTestId("cinematic-preroll")).toBeVisible();
+  await expect(page.getByTestId("cinematic-director")).toHaveAttribute("data-frame-seconds", "0.000");
+});
+
+for (const viewport of [{ width: 320, height: 640 }, { width: 1280, height: 720 }]) {
+  test(`provider footer remains usable through preroll and decision at ${viewport.width}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await installDirector(page);
+    await open(page);
+    const credits = page.getByRole("button", { name: "Provider information", exact: true });
+    await credits.click({ timeout: 2_000 });
+    await expect(page.getByRole("button", { name: "Provider information opened" })).toBeVisible();
+    await page.getByRole("button", { name: "Play Route Film", exact: true }).click();
+    await seek(page, "1");
+    await page.getByRole("button", { name: "Provider information opened" }).click({ timeout: 2_000 });
+    const world = await page.getByTestId("cinematic-world").boundingBox();
+    const playback = await page.getByRole("button", { name: "Play cinematic" }).boundingBox();
+    expect(world!.y + world!.height).toBeLessThan(playback!.y);
+  });
+}
