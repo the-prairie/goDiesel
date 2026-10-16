@@ -50,6 +50,24 @@ function validRouteDetail(overrides: Record<string, unknown> = {}) {
   };
 }
 
+describe("recorded route identity", () => {
+  it.each([
+    ["completed", "just here for the zipper", "just here for the zipper"],
+    ["completed", "", "Bay Area, CA"],
+    ["completed", "   ", "Bay Area, CA"],
+    ["planned", "Morning Run", "Bay Area, CA"],
+    ["discovered", "Morning Run", "Bay Area, CA"],
+  ])("preserves %s identity with activity name %j", (lifecycle, activityName, expected) => {
+    const input = validRouteDetail({ lifecycle, name: "Bay Area, CA", activity_name: activityName });
+    for (const parse of [parseRouteSummary, parseRouteDetail]) {
+      const route = parse(input);
+      expect(route.name).toBe(expected);
+      expect(route.region).toBe("Calgary, Canada");
+      expect(route.description).toBe(input.description);
+    }
+  });
+});
+
 describe("parseRouteDetail", () => {
   it("validates every generated full route record", () => {
     const detailDirectory = new URL("../../public/data/routes/", import.meta.url);
