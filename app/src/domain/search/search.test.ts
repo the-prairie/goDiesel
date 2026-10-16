@@ -18,6 +18,22 @@ const docs = JSON.parse(
   readFileSync("public/search/collection.json", "utf8"),
 ).documents;
 describe("Finder hybrid search", () => {
+  it("keeps an unknown title fragment as text instead of a place", () => {
+    expect(interpretQuery("zip", { ...base, distanceKm: 0 }, routes.map(r => r.region))).toMatchObject({ place: "", query: "zip", distanceKm: 0 });
+  });
+  it("finds partial original titles with and without the full index", () => {
+    for (const index of [docs, []]) {
+      expect(searchCollection({ ...base, place: "", distanceKm: 0, query: "zip" }, index).candidates[0]?.sourceRouteSlug).toBe("14736711660");
+    }
+  });
+  it("searches numeric activity IDs and emoji titles literally", () => {
+    for (const [query, slug] of [["14736711660", "14736711660"], ["🍑🍑", "17654151284"]]) {
+      expect(searchCollection({ ...base, distanceKm: 0, query }, docs).candidates.map(c => c.sourceRouteSlug)).toEqual([slug]);
+    }
+  });
+  it("indexes the original description independently of guide interpretation", () => {
+    expect(docs.find((doc: { slug: string }) => doc.slug === "17665674778").metadata).toContainEqual({ label: "Description", text: "could not figure out how to cross the bridge 💀💀💀💀" });
+  });
   it("treats beach as an experience and keeps the distance target", () => {
     expect(interpretQuery("beach", base, [])).toMatchObject({place: "", query: "beach", distanceKm: 20});
     expect(interpretQuery("beach near Banff", base, ["Banff, AB"]).place).toBe("Banff");
