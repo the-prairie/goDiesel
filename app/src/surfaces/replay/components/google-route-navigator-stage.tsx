@@ -25,17 +25,17 @@ import { Button } from "@/ui/button";
 import type { QuestRoute, RouteSummary } from "@/domain/route";
 import { cn } from "@/ui/utils";
 import {
-  advanceGoogleRouteNavigator,
-  cycleGoogleRouteSpeed,
   googleRouteCameraPose,
   googleRouteThreadTreatment,
   googleRouteTelemetry,
-  initialGoogleRouteNavigatorState,
-  seekGoogleRouteNavigator,
-  zoomGoogleRouteNavigator,
   type GoogleRouteCameraMode,
   type GoogleRouteNavigatorState,
 } from "@/surfaces/replay/playback/route-navigator-controller";
+import {
+  initialReplaySessionState,
+  reduceReplaySession,
+  type ReplaySessionEvent,
+} from "@/surfaces/replay/playback/replay-session-state";
 import {
   createGoogleRouteNavigatorEngine,
   type GoogleRouteNavigatorEngine,
@@ -95,7 +95,7 @@ export function GoogleRouteNavigatorStage({
   const cameraTargetRef = useRef<GoogleRouteCameraPose | undefined>(undefined);
   const cameraSettlingRef = useRef(false);
   const lastCameraAtRef = useRef<number | undefined>(undefined);
-  const controlRef = useRef(initialGoogleRouteNavigatorState());
+  const controlRef = useRef(initialReplaySessionState());
   const [control, setControl] = useState(controlRef.current);
   const [status, setStatus] =
     useState<GoogleRouteNavigatorStatus>(INITIAL_STATUS);
@@ -136,10 +136,8 @@ export function GoogleRouteNavigatorStage({
   );
 
   const commitControl = useCallback(
-    (
-      update: (current: GoogleRouteNavigatorState) => GoogleRouteNavigatorState,
-    ) => {
-      const next = update(controlRef.current);
+    (event: ReplaySessionEvent) => {
+      const next = reduceReplaySession(controlRef.current, event);
       controlRef.current = next;
       setControl(next);
       engineRef.current?.setFollowing(next.following);
@@ -158,7 +156,7 @@ export function GoogleRouteNavigatorStage({
     const container = containerRef.current;
     if (!container) return;
     const engine = createGoogleRouteNavigatorEngine();
-    const initial = initialGoogleRouteNavigatorState();
+    const initial = reduceReplaySession(controlRef.current, { type: "routeReplaced" });
     engineRef.current = engine;
     cameraMotionRef.current = undefined;
     cameraTargetRef.current = undefined;
@@ -218,11 +216,11 @@ export function GoogleRouteNavigatorStage({
     let lastUiUpdate = previous;
     const tick = (now: number) => {
       const current = controlRef.current;
-      const next = advanceGoogleRouteNavigator(
-        current,
-        (now - previous) / 1_000,
+      const next = reduceReplaySession(current, {
+        type: "frameElapsed",
+        elapsedSeconds: (now - previous) / 1_000,
         totalDistanceM,
-      );
+      });
       previous = now;
       controlRef.current = next;
       const progressChanged = next.progressM !== current.progressM;
@@ -258,7 +256,7 @@ export function GoogleRouteNavigatorStage({
       if (event.key === "Escape") navigate(backPath);
       if (event.key === " " && event.target === document.body) {
         event.preventDefault();
-        commitControl((current) => ({ ...current, playing: !current.playing }));
+        commitControl({ type: "playbackToggled" });
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -266,17 +264,10 @@ export function GoogleRouteNavigatorStage({
   }, [backPath, commitControl, navigate]);
 
   const togglePlayback = () =>
-    commitControl((current) => ({
-      ...current,
-      playing: !current.playing,
-    }));
+    commitControl({ type: "playbackToggled" });
 
   const selectCamera = (mode: GoogleRouteCameraMode) =>
-    commitControl((current) => ({
-      ...current,
-      cameraMode: mode,
-      following: true,
-    }));
+    commitControl({ type: "cameraSelected", cameraMode: mode });
 
   return (
     <section
@@ -493,9 +484,7 @@ function ExpandedReplayHud({
           className="h-[4.75rem] border-0 md:h-[6.25rem]"
           disabled={disabled}
           onSeek={(progressM) =>
-            onCommit((current) =>
-              seekGoogleRouteNavigator(current, progressM, totalDistanceM),
-            )
+            onCommit({ type: "progressSelected", progressM, totalDistanceM })
           }
           progressM={control.progressM}
           route={route}
@@ -534,7 +523,7 @@ function ExpandedReplayHud({
               aria-label={`Playback speed ${control.speed}x`}
               className="border-white/20 bg-transparent text-white hover:bg-white/10"
               disabled={disabled}
-              onClick={() => onCommit(cycleGoogleRouteSpeed)}
+              onClick={() => onCommit({ type: "speedCycled" })}
               size="sm"
               title="Change playback speed"
               type="button"
@@ -583,11 +572,7 @@ function ReplaySettings({
             active={control.cameraMode}
             disabled={false}
             onSelect={(cameraMode) =>
-              onCommit((current) => ({
-                ...current,
-                cameraMode,
-                following: true,
-              }))
+              onCommit({ type: "cameraSelected", cameraMode })
             }
           />
         </div>
@@ -598,7 +583,7 @@ function ReplaySettings({
               key={mode}
               label={mode === "ground" ? "On terrain" : "On 3D surface"}
               onClick={() =>
-                onCommit((current) => ({ ...current, groundingMode: mode }))
+                onCommit({ type: "groundingSelected", groundingMode: mode })
               }
             />
           ))}
@@ -610,14 +595,14 @@ function ReplaySettings({
             active={control.following}
             label="Follow route"
             onClick={() =>
-              onCommit((current) => ({ ...current, following: true }))
+              onCommit({ type: "followingChanged", following: true })
             }
           />
           <SettingButton
             active={!control.following}
             label="Explore freely"
             onClick={() =>
-              onCommit((current) => ({ ...current, following: false }))
+              onCommit({ type: "followingChanged", following: false })
             }
           />
         </SettingGroup>
@@ -627,7 +612,7 @@ function ReplaySettings({
             aria-label="Zoom in"
             className="border-white/20 bg-transparent text-white hover:bg-white/10"
             onClick={() =>
-              onCommit((current) => zoomGoogleRouteNavigator(current, "in"))
+              onCommit({ type: "zoomRequested", direction: "in" })
             }
             size="icon-sm"
             title="Zoom in"
@@ -640,7 +625,7 @@ function ReplaySettings({
             aria-label="Zoom out"
             className="border-white/20 bg-transparent text-white hover:bg-white/10"
             onClick={() =>
-              onCommit((current) => zoomGoogleRouteNavigator(current, "out"))
+              onCommit({ type: "zoomRequested", direction: "out" })
             }
             size="icon-sm"
             title="Zoom out"
@@ -803,9 +788,7 @@ function Metric({ label, value }: { label: string; value: string }) {
 interface ReplayHudProps {
   control: GoogleRouteNavigatorState;
   disabled: boolean;
-  onCommit: (
-    update: (current: GoogleRouteNavigatorState) => GoogleRouteNavigatorState,
-  ) => void;
+  onCommit: (event: ReplaySessionEvent) => void;
   onSelectCamera: (mode: GoogleRouteCameraMode) => void;
   onTogglePlayback: () => void;
   route: QuestRoute;

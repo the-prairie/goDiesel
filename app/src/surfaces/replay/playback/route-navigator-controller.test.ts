@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import type { QuestRoute } from "@/domain/route";
 import {
   advanceGoogleRouteNavigator,
+  seekGoogleRouteNavigator,
+  cycleGoogleRouteSpeed,
+  zoomGoogleRouteNavigator,
   densifyGoogleRoutePath,
   googleRouteCameraPose,
   googleRouteThreadTreatment,
@@ -150,5 +153,46 @@ describe("Google route navigator controller", () => {
     } as QuestRoute;
 
     expect(googleRouteTelemetry(untimed, 1_000).elapsedS).toBeCloseTo(300);
+  });
+});
+
+
+describe("native Replay command math contract", () => {
+  it("uses 210 seconds at normal speed and clamps each frame to 100 ms", () => {
+    const playing = { ...initialGoogleRouteNavigatorState(), playing: true };
+    expect(advanceGoogleRouteNavigator(playing, 0.1, 2_100).progressM).toBe(1);
+    expect(advanceGoogleRouteNavigator(playing, 10, 2_100).progressM).toBe(1);
+    expect(advanceGoogleRouteNavigator(playing, -1, 2_100).progressM).toBe(0);
+    expect(advanceGoogleRouteNavigator({ ...playing, speed: 4 }, 0.1, 2_100).progressM).toBe(4);
+  });
+
+  it("preserves playback intent when seeking to either boundary", () => {
+    for (const playing of [false, true]) {
+      const state = { ...initialGoogleRouteNavigatorState(), playing };
+      expect(seekGoogleRouteNavigator(state, -10, 2_000)).toMatchObject({ playing, progressM: 0 });
+      expect(seekGoogleRouteNavigator(state, 3_000, 2_000)).toMatchObject({ playing, progressM: 2_000 });
+    }
+  });
+
+  it("keeps endpoint play at the end and pauses on the next tick", () => {
+    const state = { ...initialGoogleRouteNavigatorState(), playing: true, progressM: 2_000 };
+    expect(advanceGoogleRouteNavigator(state, 0, 2_000)).toMatchObject({ progressM: 2_000, playing: false });
+  });
+
+  it("cycles playback speed in the existing order", () => {
+    let state = initialGoogleRouteNavigatorState();
+    for (const speed of [2, 4, 0.5, 1]) {
+      state = cycleGoogleRouteSpeed(state);
+      expect(state.speed).toBe(speed);
+    }
+  });
+
+  it("clamps zoom without claiming camera ownership", () => {
+    let state = { ...initialGoogleRouteNavigatorState(), following: false };
+    for (let index = 0; index < 20; index += 1) state = zoomGoogleRouteNavigator(state, "in");
+    expect(state.rangeScale).toBe(0.55);
+    for (let index = 0; index < 20; index += 1) state = zoomGoogleRouteNavigator(state, "out");
+    expect(state.rangeScale).toBe(2.4);
+    expect(state.following).toBe(false);
   });
 });
