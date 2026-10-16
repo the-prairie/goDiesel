@@ -9,15 +9,27 @@ for (const width of [390, 684, 1440]) {
     await page.goto(`${process.env.GODIESEL_ATLAS_PREVIEW_URL}/#/atlas?region=New+York%2C+NY`);
     await expect(page.locator('[data-atlas-engine="cesium"]').first())
       .toHaveAttribute("data-atlas-status", "region-ready", { timeout: 60_000 });
+    const attribution = page.locator(".atlas-attribution");
     const sources = page.getByRole("region", { name: "Map data sources", includeHidden: true });
     const toggle = page.getByRole("button", { name: "Data sources", exact: true });
     await expect(sources).toContainText("Google", { timeout: 15_000 });
     await expect(page.getByRole("link", { name: "Cesium ion" })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await expect(attribution.locator(".cesium-widget-credits")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
     if (width < 1000) {
       await expect(sources).toBeHidden();
       await expect(page.getByText("Google Maps", { exact: true })).toBeVisible();
       await expect(toggle).toHaveAttribute("aria-expanded", "false");
+      await expect(toggle).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+      await expect(attribution.locator(".atlas-attribution-brand")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+      const strip = (await attribution.boundingBox())!;
+      const logo = (await page.getByRole("link", { name: "Cesium ion" }).boundingBox())!;
+      const brand = (await attribution.locator(".atlas-attribution-brand").boundingBox())!;
+      const disclosure = (await toggle.boundingBox())!;
+      expect(strip.height).toBeLessThanOrEqual(32);
+      expect(strip.width).toBeLessThan(300);
+      expect(brand.x - (logo.x + logo.width)).toBeGreaterThanOrEqual(10);
+      expect(disclosure.x).toBeGreaterThan(brand.x + brand.width);
       await page.screenshot({ path: `artifacts/atlas-attribution/compact-${width}.png` });
       const creditText = await sources.textContent();
       await toggle.click();
@@ -35,6 +47,12 @@ for (const width of [390, 684, 1440]) {
       await page.getByRole("textbox", { name: "Search places and routes" }).click();
       await expect(sources).toBeHidden();
       await page.getByRole("textbox", { name: "Search places and routes" }).press("Escape");
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await expect(toggle).toBeHidden();
+      await expect(sources).toBeVisible();
+      await page.setViewportSize({ width, height: 844 });
+      await expect(toggle).toBeVisible();
+      await expect(sources).toBeHidden();
       await page.getByRole("link", { name: "Return to global Atlas" }).click();
       await expect(toggle).toBeHidden();
       await expect(page.getByText("Google Maps", { exact: true })).toBeHidden();

@@ -42,7 +42,7 @@ export function installAtlasAttribution(container: Element) {
     container.setAttribute("data-compact", String(entry.contentRect.width < 1000));
     setOpen(false);
   });
-  resize.observe(container);
+  resize.observe(container.parentElement ?? container);
   const providerChange = new MutationObserver(() => setOpen(false));
   providerChange.observe(container, { attributes: true, attributeFilter: ["data-google"] });
   toggle.addEventListener("click", onClick);
