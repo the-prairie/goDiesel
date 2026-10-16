@@ -13,14 +13,11 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/ui/button";
-import {
-  RouteContextHud,
-  type RouteContextHudState,
-} from "@/surfaces/replay/components/route-context-hud";
+import { RouteContextHud } from "@/surfaces/replay/components/route-context-hud";
 import type { QuestRoute } from "@/domain/route";
 import { useIsMobile } from "@/ui/use-mobile";
 import {
@@ -39,21 +36,13 @@ import {
 } from "@/labs/playable-earth/playable-earth-controller";
 import {
   createPlayableEarthViewer,
-  type PlayableEarthGroundingDebug,
-  type PlayableEarthStatus,
   type PlayableEarthViewer,
 } from "@/labs/playable-earth/playable-earth-viewer";
 
-const INITIAL_STATUS: PlayableEarthStatus = {
-  state: "loading",
-  title: "Building your route world",
-  message: "Preparing the experimental Earth viewer.",
-};
-
-const INITIAL_GROUNDING: PlayableEarthGroundingDebug = {
-  source: "fallback",
-  reason: "recorded",
-};
+import {
+  initialPlayableEarthSessionState,
+  reducePlayableEarthSession,
+} from "./playable-earth-session-state";
 
 export function PlayableEarthStage({
   route,
@@ -66,13 +55,14 @@ export function PlayableEarthStage({
   const viewerRef = useRef<PlayableEarthViewer | undefined>(undefined);
   const controlRef = useRef(initialPlayableEarthState());
   const inputRef = useRef<PlayableEarthInput>({ steer: 0, look: 0 });
-  const [status, setStatus] = useState<PlayableEarthStatus>(INITIAL_STATUS);
-  const [grounding, setGrounding] =
-    useState<PlayableEarthGroundingDebug>(INITIAL_GROUNDING);
-  const [control, setControl] = useState(controlRef.current);
-  const [contextState, setContextState] =
-    useState<RouteContextHudState>("preview");
-  const [mobileControlsExpanded, setMobileControlsExpanded] = useState(false);
+  const sessionIdRef = useRef(0);
+  const [session, dispatch] = useReducer(
+    reducePlayableEarthSession,
+    undefined,
+    initialPlayableEarthSessionState,
+  );
+  const { status, grounding, control, contextState, mobileControlsExpanded } =
+    session;
   const isMobile = useIsMobile();
   const totalDistanceM = routeDistanceM(route);
 
@@ -82,7 +72,7 @@ export function PlayableEarthStage({
     ) => {
       const next = update(controlRef.current);
       controlRef.current = next;
-      setControl(next);
+      dispatch({ type: "controlPublished", control: next });
       viewerRef.current?.setPose(playableEarthPose(route, next));
     },
     [route],
@@ -93,23 +83,26 @@ export function PlayableEarthStage({
     if (!container) return;
     const viewer = createPlayableEarthViewer();
     viewerRef.current = viewer;
-    const initialControl = initialPlayableEarthState();
-    controlRef.current = initialControl;
-    setControl(initialControl);
-    setStatus(INITIAL_STATUS);
-    setGrounding(INITIAL_GROUNDING);
+    const sessionId = ++sessionIdRef.current;
+    controlRef.current = initialPlayableEarthState();
+    dispatch({ type: "sessionStarted", sessionId });
     void viewer.mount({
       container,
       route,
-      onGroundingChange: setGrounding,
+      onGroundingChange: (grounding) => {
+        if (sessionId !== sessionIdRef.current) return;
+        dispatch({ type: "groundingReported", sessionId, grounding });
+      },
       onStatus: (nextStatus) => {
-        setStatus(nextStatus);
+        if (sessionId !== sessionIdRef.current) return;
+        dispatch({ type: "providerReported", sessionId, status: nextStatus });
         if (nextStatus.state === "ready") {
           viewer.setPose(playableEarthPose(route, controlRef.current));
         }
       },
     });
     return () => {
+      ++sessionIdRef.current;
       viewer.destroy();
       if (viewerRef.current === viewer) viewerRef.current = undefined;
     };
@@ -131,7 +124,7 @@ export function PlayableEarthStage({
       controlRef.current = next;
       viewerRef.current?.setPose(playableEarthPose(route, next));
       if (now - lastUiUpdate >= 80) {
-        setControl(next);
+        dispatch({ type: "controlPublished", control: next });
         lastUiUpdate = now;
       }
       frame = requestAnimationFrame(tick);
@@ -141,13 +134,8 @@ export function PlayableEarthStage({
   }, [route, status.state, totalDistanceM]);
 
   useEffect(() => {
-    setContextState(isMobile ? "compact" : "preview");
-    setMobileControlsExpanded(false);
+    dispatch({ type: "presentationReset", isMobile });
   }, [isMobile, route.slug]);
-
-  useEffect(() => {
-    if (control.playing) setContextState("compact");
-  }, [control.playing]);
 
   useEffect(() => {
     const editableTarget = (target: EventTarget | null) =>
@@ -226,15 +214,15 @@ export function PlayableEarthStage({
       data-grounding-source={grounding.source}
       data-grounding-reason={grounding.reason}
       data-grounding-offset={grounding.offsetM?.toFixed(2) ?? ""}
-      className="relative h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 overflow-hidden bg-[#02070a] md:h-dvh md:min-h-[36rem]"
+      className="relative grid grid-rows-[minmax(0,1fr)_auto] h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 overflow-hidden bg-[#02070a] md:h-dvh md:min-h-[36rem]"
     >
       <div
         ref={containerRef}
         aria-label="Playable Earth world"
-        className="absolute inset-0"
+        className="relative row-start-1 min-h-0"
       />
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start p-3 sm:p-5">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-40 flex items-start p-3 sm:p-5">
         <RouteContextHud
           route={route}
           label="Playable Earth"
@@ -244,7 +232,9 @@ export function PlayableEarthStage({
           backPath={exitPath}
           backLabel="Exit lab"
           icon={<Gamepad2 className="size-4 shrink-0" aria-hidden="true" />}
-          onStateChange={setContextState}
+          onStateChange={(contextState) =>
+            dispatch({ type: "contextChanged", contextState })
+          }
           summary={
             new URLSearchParams(window.location.search).get("debugGrounding") === "1" ? (
               <div className="mt-3 text-xs font-semibold uppercase text-accent-foreground">
@@ -259,11 +249,11 @@ export function PlayableEarthStage({
       </div>
 
       {status.state !== "ready" ? (
-        <div className="absolute inset-0 z-10 grid place-items-center bg-background/72 p-6">
+        <div className="pointer-events-none absolute inset-0 z-30 grid place-items-center bg-background/72 p-6">
           <div
             role={status.state === "unavailable" ? "alert" : "status"}
             aria-live="polite"
-            className="max-w-md rounded-md border border-border bg-card p-6 text-center shadow-2xl"
+            className="pointer-events-auto max-w-md rounded-md border border-border bg-card p-6 text-center shadow-2xl"
           >
             <div className="text-sm font-semibold">{status.title}</div>
             <p className="mt-2 text-sm text-muted-foreground">{status.message}</p>
@@ -276,7 +266,7 @@ export function PlayableEarthStage({
         </div>
       ) : null}
 
-      <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex justify-center sm:inset-x-6 sm:bottom-6">
+      <div className="pointer-events-none relative row-start-2 z-20 flex justify-center px-3 pb-3 pt-2 sm:px-6 sm:pb-6">
         <div
           data-testid="playable-controls"
           className="pointer-events-auto w-full max-w-5xl rounded-md border border-border bg-background/92 p-2 shadow-2xl backdrop-blur sm:flex sm:flex-wrap sm:items-center sm:gap-2 sm:px-3 sm:py-3"
@@ -297,7 +287,7 @@ export function PlayableEarthStage({
                     mobileControlsExpanded ? "Hide more controls" : "Show more controls"
                   }
                   aria-expanded={mobileControlsExpanded}
-                  onClick={() => setMobileControlsExpanded((expanded) => !expanded)}
+                  onClick={() => dispatch({ type: "controlsToggled" })}
                 >
                   <Settings2 aria-hidden="true" />
                 </Button>

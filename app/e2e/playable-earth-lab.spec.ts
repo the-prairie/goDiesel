@@ -5,11 +5,12 @@ const secondRouteSlug = "17665674778";
 
 async function installDeterministicEarthRenderer(
   page: Page,
-  state: "ready" | "unavailable" = "ready",
+  state: "loading" | "ready" | "unavailable" = "ready",
   grounding: "fallback" | "sampled" = "fallback",
 ) {
   await page.addInitScript(({ rendererState, groundingState }) => {
     const labWindow = window as typeof window & {
+      __earthLabReport?: (state: "loading" | "ready" | "unavailable") => void;
       __earthLabMounts?: string[];
       __earthLabDestroyCount?: number;
       __earthLabPoses?: Array<{
@@ -27,7 +28,7 @@ async function installDeterministicEarthRenderer(
             route: Array<{ lat: number; lng: number }>;
           };
           onStatus(status: {
-            state: "ready" | "unavailable";
+            state: "loading" | "ready" | "unavailable";
             title: string;
             message: string;
           }): void;
@@ -55,6 +56,10 @@ async function installDeterministicEarthRenderer(
         async mount(options) {
           container = options.container;
           labWindow.__earthLabMounts?.push(options.route.slug);
+          labWindow.__earthLabReport = (state) => options.onStatus({
+            state, title: `Fixture ${state}`, message: `Provider is ${state}.`,
+          });
+          if (rendererState === "loading") return;
           if (rendererState === "unavailable") {
             options.onStatus({
               state: "unavailable",
@@ -85,6 +90,11 @@ async function installDeterministicEarthRenderer(
             context.stroke();
           }
           options.container.appendChild(canvas);
+          const credits = document.createElement("button");
+          credits.textContent = "Provider credits fixture";
+          Object.assign(credits.style, { position: "absolute", bottom: "0", left: "5px", width: "138px", height: "36px" });
+          credits.onclick = () => { credits.textContent = "Provider credits opened"; };
+          options.container.appendChild(credits);
           options.onStatus({
             state: "ready",
             title: "Playable Earth ready",
@@ -417,5 +427,105 @@ for (const width of [320, 430]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       width,
     );
+  });
+}
+
+test("loading keyboard intent survives readiness and failure freezes progress until recovery", async ({
+  page,
+}) => {
+  await installDeterministicEarthRenderer(page, "loading");
+  await page.goto(`/#/lab/playable-earth/${routeSlug}`);
+  const lab = page.getByRole("region", { name: "Playable Earth Lab" });
+  const progress = page.getByRole("slider", { name: "Route progress" });
+  await expect(lab).toHaveAttribute("data-state", "loading");
+  await expect(page.getByRole("button", { name: "Play route" })).toBeDisabled();
+  await page.keyboard.press("t");
+  await page.keyboard.press("Space");
+  await expect(lab).toHaveAttribute("data-control-mode", "guided");
+  await expect(
+    page.getByRole("button", { name: "Pause route" }),
+  ).toBeDisabled();
+  const report = (state: "loading" | "ready" | "unavailable") =>
+    page.evaluate((value) => {
+      (
+        window as typeof window & {
+          __earthLabReport?: (state: typeof value) => void;
+        }
+      ).__earthLabReport?.(value);
+    }, state);
+  await report("ready");
+  await expect
+    .poll(async () => Number(await progress.inputValue()))
+    .toBeGreaterThan(10);
+  await report("unavailable");
+  await expect(page.getByRole("alert")).toContainText("Fixture unavailable");
+  await expect(
+    page.getByRole("button", { name: "Pause route" }),
+  ).toBeDisabled();
+  const frozen = await progress.inputValue();
+  await page.waitForTimeout(250);
+  expect(await progress.inputValue()).toBe(frozen);
+  await report("ready");
+  await expect
+    .poll(async () => Number(await progress.inputValue()))
+    .toBeGreaterThan(Number(frozen));
+  await page.getByRole("button", { name: "Pause route" }).click();
+  await progress.fill((await progress.getAttribute("max")) ?? "0");
+  await page.getByRole("button", { name: "Play route" }).click();
+  await expect(page.getByRole("button", { name: "Play route" })).toBeVisible();
+  expect(await progress.inputValue()).toBe(await progress.getAttribute("max"));
+});
+
+test("details can reopen during playback and viewport changes reset presentation", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installDeterministicEarthRenderer(page);
+  await page.goto(`/#/lab/playable-earth/${routeSlug}`);
+  const context = page.getByTestId("playable-context");
+  await page.getByRole("button", { name: "Play route" }).click();
+  await page.getByRole("button", { name: "Show route details" }).click();
+  await expect(context).toHaveAttribute("data-context-state", "expanded");
+  await page.getByRole("button", { name: "Show more controls" }).click();
+  await page.waitForTimeout(250);
+  await expect(context).toHaveAttribute("data-context-state", "expanded");
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await expect(context).toHaveAttribute("data-context-state", "preview");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(context).toHaveAttribute("data-context-state", "compact");
+  await expect(page.getByTestId("playable-secondary-controls")).toHaveCount(0);
+  await page.getByRole("button", { name: "Pause route" }).click();
+});
+
+for (const viewport of [{ width: 320, height: 640 }, { width: 390, height: 844 }, { width: 1280, height: 720 }]) {
+  test(`provider credits remain visible above controls at ${viewport.width}px`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await installDeterministicEarthRenderer(page);
+    await page.goto(`/#/lab/playable-earth/${routeSlug}`);
+    await expect(page.getByRole("region", { name: "Playable Earth Lab" })).toHaveAttribute("data-state", "ready");
+    if (viewport.width < 768) await page.getByRole("button", { name: "Show more controls" }).click();
+    const credits = page.getByRole("button", { name: "Provider credits fixture" });
+    const creditBox = await credits.boundingBox();
+    const controlsBox = await page.getByTestId("playable-controls").boundingBox();
+    expect(creditBox).not.toBeNull();
+    expect(controlsBox).not.toBeNull();
+    expect(creditBox!.y + creditBox!.height).toBeLessThanOrEqual(controlsBox!.y);
+    await credits.click();
+    await expect(page.getByRole("button", { name: "Provider credits opened" })).toBeVisible();
+    await page.getByRole("button", { name: "Play route" }).click();
+    await page.getByRole("button", { name: "Pause route" }).click();
+  });
+}
+
+for (const viewport of [{ width: 320, height: 640 }, { width: 390, height: 844 }]) {
+  test(`provider failure keeps its return link usable with expanded controls at ${viewport.width}px`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await installDeterministicEarthRenderer(page, "unavailable");
+    await page.goto(`/#/lab/playable-earth/${routeSlug}`);
+    await page.getByRole("button", { name: "Show more controls" }).click();
+    const returnLink = page.getByRole("link", { name: "Return to route", exact: true });
+    await expect(returnLink).toBeVisible();
+    await returnLink.click({ timeout: 2_000 });
+    await expect(page).toHaveURL(new RegExp(`#/routes/${routeSlug}$`));
   });
 }
