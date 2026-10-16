@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useReducer, useState } from "react";
 import {
   ArrowLeft,
   Building2,
@@ -25,9 +25,13 @@ import {
   type RouteJourneyFrame,
   type RouteVisualScene,
 } from "@/labs/route-intelligence/route-genome";
-import type { QuestRoute } from "@/domain/route";
 import { loadRouteDetail } from "@/data/route-repository";
 import { cn } from "@/ui/utils";
+import {
+  initialRouteIntelligenceState,
+  reduceRouteIntelligence,
+  type LabRoute,
+} from "@/labs/route-intelligence/route-intelligence-state";
 
 const ROUTE_IDS = ["14736711660", "14023448720"] as const;
 const SCENE_KEYS: RouteVisualScene["key"][] = [
@@ -50,10 +54,7 @@ const SCENE_NAMES: Record<RouteVisualScene["key"], string> = {
   terrain: "Terrain",
 };
 
-interface LabRoute {
-  route: QuestRoute;
-  genome: RouteGenome;
-}
+
 
 async function loadEnrichment(routeId: string) {
   try {
@@ -574,9 +575,9 @@ function RoutePortrait({ entry, active }: { entry: LabRoute; active: boolean }) 
 }
 
 export function RouteIntelligenceLabPage() {
-  const [routes, setRoutes] = useState<LabRoute[]>([]);
+  const [loadState, dispatch] = useReducer(reduceRouteIntelligence, undefined, initialRouteIntelligenceState);
+  const routes = "routes" in loadState ? loadState.routes : [];
   const [activeId, setActiveId] = useState<(typeof ROUTE_IDS)[number]>(ROUTE_IDS[0]);
-  const [error, setError] = useState<string>();
   const [sceneKey, setSceneKey] = useState<RouteVisualScene["key"]>("portrait");
 
   useEffect(() => {
@@ -593,8 +594,12 @@ export function RouteIntelligenceLabPage() {
             }]
           : [],
       );
-      if (ready.length !== ROUTE_IDS.length) setError("One or more field-test routes could not be loaded.");
-      setRoutes(ready);
+      dispatch({
+        type: "routesSettled",
+        routes: ready,
+        expectedCount: ROUTE_IDS.length,
+        hasRequestFailure: results.some(({ detail }) => detail.status === "error"),
+      });
     });
     return () => {
       cancelled = true;
@@ -606,8 +611,10 @@ export function RouteIntelligenceLabPage() {
     entry.genome.environmental.every((signal) => signal.status === "earth-engine-ready"),
   );
 
-  if (error && routes.length === 0) return <div role="alert" className="p-8">{error}</div>;
-  if (routes.length === 0) return <div role="status" className="p-8">Reading both landscapes.</div>;
+  if (loadState.status === "empty" || loadState.status === "failed") {
+    return <div role="alert" className="p-8">One or more field-test routes could not be loaded.</div>;
+  }
+  if (loadState.status === "loading") return <div role="status" className="p-8">Reading both landscapes.</div>;
 
   return (
     <div className="min-h-full overflow-y-auto bg-[var(--canvas)] text-[var(--ink)]" data-testid="route-intelligence-lab">
