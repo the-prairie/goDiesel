@@ -10,6 +10,7 @@ for (const width of [390, 684, 1440]) {
     await expect(page.locator('[data-atlas-engine="cesium"]').first())
       .toHaveAttribute("data-atlas-status", "region-ready", { timeout: 60_000 });
     const attribution = page.locator(".atlas-attribution");
+    await expect(attribution).toHaveCSS("display", "flex");
     const sources = page.getByRole("region", { name: "Map data sources", includeHidden: true });
     const toggle = page.getByRole("button", { name: "Data sources", exact: true });
     await expect(sources).toContainText("Google", { timeout: 15_000 });
