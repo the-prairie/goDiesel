@@ -598,3 +598,14 @@ test("compact route strip keeps the selected route visible after a mobile resize
     await expect(selected.getByRole("link", { name: "Route guide" })).toBeInViewport();
   }
 });
+
+test("reselecting the current ready region retains its carousel", async ({ page }) => {
+  await installDeterministicCesiumAtlas(page);
+  await page.goto("/#/atlas?region=Kyoto%2C+Japan");
+  const carousel = page.getByRole("region", { name: "Kyoto, Japan recorded routes", exact: true });
+  await expect(carousel).toBeVisible();
+  await page.getByRole("textbox", { name: "Search places and routes" }).fill("Kyoto");
+  await page.getByRole("option", { name: "Kyoto, Japan", exact: true }).click();
+  await expect(page.locator('div[data-atlas-engine="cesium"]')).toHaveAttribute("data-atlas-status", "region-ready");
+  await expect(carousel).toBeVisible({ timeout: 2000 });
+});

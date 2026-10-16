@@ -105,7 +105,6 @@ export function AtlasPage() {
   }, [selectedRegion, updateSearchParams]);
 
   function selectRegion(region: RouteRegion) {
-    setRegionPresentationReady(false);
     updateSearchParams((next) => {
       next.set("region", region.name);
       next.delete("route");
@@ -130,7 +129,6 @@ export function AtlasPage() {
   }
 
   function clearRegion() {
-    setRegionPresentationReady(false);
     updateSearchParams((next) => {
       next.delete("region");
       next.delete("route");
