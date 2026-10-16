@@ -14,6 +14,10 @@ async function installTrailer(
     window.__GODIESEL_GOOGLE_ROUTE_NAVIGATOR_FACTORY__ = () => ({
       async mount({ container, onStatus }) {
         container.style.background = "#234b58";
+        const credits = document.createElement("button");
+        credits.textContent = "Provider information fixture";
+        credits.style.cssText = "position:absolute;bottom:4px;left:10px;height:24px;z-index:1";
+        container.replaceChildren(credits);
         window.__TRAILER_STATUS__ = onStatus;
         onStatus({ state, message: "Controlled trailer provider" });
       },
@@ -142,5 +146,20 @@ for (const width of [390, 1280]) {
     await expect(page.getByRole("alert")).toBeVisible();
     await page.getByRole("link", { name: "Back to route intelligence" }).click({ timeout: 1500 });
     await expect(page).toHaveURL(/#\/lab\/route-intelligence$/);
+  });
+}
+
+for (const width of [320, 390, 1280]) {
+  test(`trailer decision leaves provider footer clear at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await installTrailer(page);
+    await page.goto(url);
+    await page.getByRole("button", { name: "Skip", exact: true }).click();
+    const footer = await page.getByRole("button", { name: "Provider information fixture" }).boundingBox();
+    const decision = await page.getByTestId("route-trailer-decision").boundingBox();
+    const play = await page.getByRole("button", { name: "Play trailer" }).boundingBox();
+    expect(decision!.y + decision!.height).toBeLessThanOrEqual(footer!.y);
+    expect(footer!.y + footer!.height).toBeLessThanOrEqual(play!.y);
+    await page.getByRole("button", { name: "Provider information fixture" }).click();
   });
 }

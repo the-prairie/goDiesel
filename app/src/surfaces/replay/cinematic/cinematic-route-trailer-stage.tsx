@@ -171,13 +171,13 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
     >
       <div
         aria-label={`Google photorealistic 3D trailer of ${route.name}`}
-        className="absolute inset-0"
+        className="absolute inset-x-0 top-3 bottom-16"
         ref={containerRef}
       />
 
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.72)_0%,transparent_22%,transparent_68%,rgba(0,0,0,0.88)_100%)]"
+        className="pointer-events-none absolute inset-x-0 top-0 bottom-[104px] bg-[linear-gradient(180deg,rgba(0,0,0,0.72)_0%,transparent_22%,transparent_68%,rgba(0,0,0,0.88)_100%)]"
       />
       <div aria-hidden="true" className="absolute inset-x-0 top-0 h-3 bg-black" />
       <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-3 bg-black" />
@@ -222,7 +222,7 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
 
       {frame.showDecision ? (
         <div
-          className="absolute inset-x-0 bottom-12 z-20 border-y border-white/22 bg-black/72 px-5 py-5 backdrop-blur-md sm:bottom-14 sm:px-8 sm:py-7"
+          className="absolute inset-x-0 bottom-[104px] z-20 border-y border-white/22 bg-black/72 px-5 py-5 backdrop-blur-md sm:px-8 sm:py-7"
           data-testid="route-trailer-decision"
         >
           <div className="mx-auto grid max-w-7xl gap-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
