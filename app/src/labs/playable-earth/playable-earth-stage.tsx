@@ -222,7 +222,7 @@ export function PlayableEarthStage({
         className="relative row-start-1 min-h-0"
       />
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start p-3 sm:p-5">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-40 flex items-start p-3 sm:p-5">
         <RouteContextHud
           route={route}
           label="Playable Earth"
@@ -249,11 +249,11 @@ export function PlayableEarthStage({
       </div>
 
       {status.state !== "ready" ? (
-        <div className="absolute inset-0 z-10 grid place-items-center bg-background/72 p-6">
+        <div className="pointer-events-none absolute inset-0 z-30 grid place-items-center bg-background/72 p-6">
           <div
             role={status.state === "unavailable" ? "alert" : "status"}
             aria-live="polite"
-            className="max-w-md rounded-md border border-border bg-card p-6 text-center shadow-2xl"
+            className="pointer-events-auto max-w-md rounded-md border border-border bg-card p-6 text-center shadow-2xl"
           >
             <div className="text-sm font-semibold">{status.title}</div>
             <p className="mt-2 text-sm text-muted-foreground">{status.message}</p>

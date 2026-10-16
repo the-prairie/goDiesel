@@ -516,3 +516,16 @@ for (const viewport of [{ width: 320, height: 640 }, { width: 390, height: 844 }
     await page.getByRole("button", { name: "Pause route" }).click();
   });
 }
+
+for (const viewport of [{ width: 320, height: 640 }, { width: 390, height: 844 }]) {
+  test(`provider failure keeps its return link usable with expanded controls at ${viewport.width}px`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await installDeterministicEarthRenderer(page, "unavailable");
+    await page.goto(`/#/lab/playable-earth/${routeSlug}`);
+    await page.getByRole("button", { name: "Show more controls" }).click();
+    const returnLink = page.getByRole("link", { name: "Return to route", exact: true });
+    await expect(returnLink).toBeVisible();
+    await returnLink.click({ timeout: 2_000 });
+    await expect(page).toHaveURL(new RegExp(`#/routes/${routeSlug}$`));
+  });
+}
