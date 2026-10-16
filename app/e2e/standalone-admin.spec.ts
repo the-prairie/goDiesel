@@ -100,3 +100,40 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 320, height: 640 }
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
   });
 }
+
+test('standalone mutation failures retain patches for retry', async ({ page, adminUrl }) => {
+  await page.goto(adminUrl);
+  await page.getByPlaceholder('Custom title').fill('Retained draft');
+  await page.route('**/api/save', route => route.fulfill({ json: { ok: false } }));
+  await page.locator('#saveBtn').click();
+  await expect(page.locator('#toast')).toHaveText('SAVE FAILED');
+  await expect(page.locator('#dirtyCount')).toHaveText('1');
+  await expect(page.getByPlaceholder('Custom title')).toHaveValue('Retained draft');
+  await page.unroute('**/api/save');
+  await page.locator('#saveBtn').click();
+  await expect(page.locator('#toast')).toHaveText('SAVED 1 CHANGE');
+});
+
+test('standalone save preserves current completion and refresh behavior', async ({ page, adminUrl }) => {
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/api/save', async route => { await held; await route.continue(); });
+  await page.goto(adminUrl);
+  await page.getByPlaceholder('Custom title').fill('Submitted draft');
+  const sent = page.waitForRequest('**/api/save');
+  await page.locator('#saveBtn').click();
+  await sent;
+  await page.getByPlaceholder('Custom title').fill('Newer draft');
+  await page.getByPlaceholder('Custom title').blur();
+  release();
+  await expect(page.locator('#toast')).toHaveText('SAVED 1 CHANGE');
+  await expect(page.getByPlaceholder('Custom title')).toHaveValue('Submitted draft');
+  await expect(page.locator('#dirtyCount')).toHaveText('0');
+});
+
+test('standalone rebuild currently treats resolved HTTP errors as started', async ({ page, adminUrl }) => {
+  await page.route('**/api/rebuild', route => route.fulfill({ status: 503, json: { error: 'Unavailable' } }));
+  await page.goto(adminUrl);
+  await page.locator('#rebuildBtn').click();
+  await expect(page.locator('#toast')).toContainText('REBUILD STARTED');
+});

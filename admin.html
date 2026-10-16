@@ -359,10 +359,15 @@
 
 <script type="module">
 import { escapeHtml } from "/admin-assets/presentation.js";
+import { initialMutationState, reduceMutation } from "/admin-assets/mutation-state.js";
+
+let mutation = initialMutationState();
+let mutationRequestId = 0;
+function dispatchMutation(event) {
+  mutation = reduceMutation(mutation, event);
+}
 
 const STATE = {
-  routes: [],         // server data
-  dirty: new Map(),   // activity_id → patch
   tab: 'pending',
   type: 'all',
   region: 'all',
@@ -373,31 +378,29 @@ const UNMAPPED = '— UNMAPPED —';
 
 
 function effectiveStatus(r) {
-  const patch = STATE.dirty.get(r.activity_id);
+  const patch = mutation.dirty.get(r.activity_id);
   return patch?.status ?? r.status;
 }
 
 function effectiveRegion(r) {
-  const patch = STATE.dirty.get(r.activity_id);
+  const patch = mutation.dirty.get(r.activity_id);
   return patch?.region ?? r.region;
 }
 
 function effectiveField(r, key) {
-  const patch = STATE.dirty.get(r.activity_id);
+  const patch = mutation.dirty.get(r.activity_id);
   return patch?.[key] ?? r[key] ?? '';
 }
 
 function setPatch(id, key, value) {
-  const existing = STATE.dirty.get(id) || {};
-  existing[key] = value;
-  STATE.dirty.set(id, existing);
+  dispatchMutation({ type: 'fieldEdited', routeId: id, field: key, value });
   renderCounts();
   renderSaveBar();
 }
 
 function renderCounts() {
   const counts = { pending: 0, approved: 0, archived: 0 };
-  STATE.routes.forEach(r => {
+  mutation.routes.forEach(r => {
     const s = effectiveStatus(r);
     if (counts[s] !== undefined) counts[s]++;
   });
@@ -410,7 +413,7 @@ function populateRegionDropdown() {
   // Count per auto_region within the currently-active tab so the dropdown
   // reflects what the user is actually triaging.
   const counts = {};
-  STATE.routes.forEach(r => {
+  mutation.routes.forEach(r => {
     if (effectiveStatus(r) !== STATE.tab) return;
     const reg = r.auto_region || UNMAPPED;
     counts[reg] = (counts[reg] || 0) + 1;
@@ -428,7 +431,7 @@ function populateRegionDropdown() {
 }
 
 function renderSaveBar() {
-  const n = STATE.dirty.size;
+  const n = mutation.dirty.size;
   const bar = document.getElementById('saveBar');
   const btn = document.getElementById('saveBtn');
   document.getElementById('dirtyCount').textContent = n;
@@ -471,7 +474,7 @@ function cardHtml(r) {
   const blurb = effectiveField(r, 'blurb');
   const completionRule = effectiveField(r, 'completion_rule');
   const visibility = effectiveField(r, 'visibility') || 'public';
-  const dirty = STATE.dirty.has(r.activity_id);
+  const dirty = mutation.dirty.has(r.activity_id);
   const stravaUrl = `https://www.strava.com/activities/${r.activity_id}`;
   const placeholder = r.auto_region
     ? `auto: ${r.auto_region}`
@@ -557,7 +560,7 @@ function cardHtml(r) {
 
 function filteredRoutes() {
   const s = STATE.search.toLowerCase().trim();
-  return STATE.routes.filter(r => {
+  return mutation.routes.filter(r => {
     if (effectiveStatus(r) !== STATE.tab) return false;
     if (STATE.type !== 'all' && r.type !== STATE.type) return false;
     if (r.distance_km < STATE.minKm) return false;
@@ -614,7 +617,7 @@ document.addEventListener('click', e => {
   if (act) {
     const id = act.dataset.id;
     const action = act.dataset.action;
-    const route = STATE.routes.find(r => r.activity_id === id);
+    const route = mutation.routes.find(r => r.activity_id === id);
     const current = effectiveStatus(route);
     let next;
     if (action === 'approve') next = current === 'approved' ? 'pending' : 'approved';
@@ -667,7 +670,9 @@ function showToast(msg, color) {
 }
 
 document.getElementById('saveBtn').addEventListener('click', async () => {
-  const updates = Array.from(STATE.dirty.entries()).map(([aid, patch]) => ({
+  const requestId = ++mutationRequestId;
+  dispatchMutation({ type: 'saveStarted', requestId });
+  const updates = Array.from(mutation.saves.get(requestId).patches.entries()).map(([aid, patch]) => ({
     activity_id: aid, ...patch
   }));
   try {
@@ -678,7 +683,7 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
     });
     const j = await r.json();
     if (j.ok) {
-      STATE.dirty.clear();
+      dispatchMutation({ type: 'saveAccepted', requestId });
       renderSaveBar();
       await refreshRoutes();
       showToast(`SAVED ${j.updated} CHANGE${j.updated === 1 ? '' : 'S'}`);
@@ -687,19 +692,25 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
     }
   } catch (err) {
     showToast('SAVE FAILED', 'var(--reject)');
+  } finally {
+    dispatchMutation({ type: 'saveSettled', requestId });
   }
 });
 
 document.getElementById('rebuildBtn').addEventListener('click', async () => {
-  if (STATE.dirty.size > 0) {
+  if (mutation.dirty.size > 0) {
     showToast('SAVE FIRST', 'var(--warn)');
     return;
   }
+  const requestId = ++mutationRequestId;
+  dispatchMutation({ type: 'rebuildStarted', requestId });
   try {
     await fetch('/api/rebuild', { method: 'POST' });
     showToast('REBUILD STARTED — CHECK TERMINAL');
   } catch (err) {
     showToast('REBUILD FAILED', 'var(--reject)');
+  } finally {
+    dispatchMutation({ type: 'rebuildSettled', requestId });
   }
 });
 
@@ -707,8 +718,15 @@ document.getElementById('rebuildBtn').addEventListener('click', async () => {
 let classifyPollTimer = null;
 
 async function refreshRoutes() {
-  const data = await fetch('/api/routes').then(r => r.json());
-  STATE.routes = data;
+  const requestId = ++mutationRequestId;
+  dispatchMutation({ type: 'refreshStarted', requestId });
+  try {
+    const routes = await fetch('/api/routes').then(r => r.json());
+    dispatchMutation({ type: 'routesReceived', requestId, routes });
+  } catch (error) {
+    dispatchMutation({ type: 'refreshFailed', requestId });
+    throw error;
+  }
   renderCounts();
   populateRegionDropdown();
   render();
@@ -766,11 +784,7 @@ document.getElementById('autoClassifyBtn').addEventListener('click', async () =>
 });
 
 // Initial load
-fetch('/api/routes').then(r => r.json()).then(data => {
-  STATE.routes = data;
-  renderCounts();
-  populateRegionDropdown();
-  render();
+refreshRoutes().then(() => {
   // Check if the server is already classifying in the background.
   pollClassifyStatus();
 });

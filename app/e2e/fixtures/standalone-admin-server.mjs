@@ -43,7 +43,7 @@ export async function startStandaloneAdminFixture(port = 0) {
       return send({ ok: true });
     }
     if (path === '/api/classify-status') { calls.polls++; return send(classification); }
-    const assets = { '/': 'admin.html', '/admin.html': 'admin.html', '/admin-assets/presentation.js': 'admin-ui/generated/presentation.js' };
+    const assets = { '/admin-assets/mutation-state.js': 'admin-ui/generated/mutation-state.js', '/': 'admin.html', '/admin.html': 'admin.html', '/admin-assets/presentation.js': 'admin-ui/generated/presentation.js' };
     if (assets[path]) {
       try { return send(await readFile(new URL(assets[path], root)), path.endsWith('.js') ? 'text/javascript' : 'text/html'); }
       catch { return send({ error: 'missing fixture asset' }, 'application/json', 404); }
