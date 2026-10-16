@@ -107,10 +107,11 @@ export const ReplayElevationScrubber = forwardRef<
     const host = hostRef.current;
     host?.style.setProperty("--replay-progress", `${ratio * 100}%`);
     host?.style.setProperty("--replay-progress-scale", `${ratio}`);
+    host?.style.setProperty("--replay-progress-y", `${profileYAtRatio(profile.points, ratio) / PROFILE_HEIGHT * 100}%`);
   };
 
-  useImperativeHandle(ref, () => ({ sync }), [totalDistanceM]);
-  useEffect(() => sync(progressM), [progressM, totalDistanceM]);
+  useImperativeHandle(ref, () => ({ sync }), [totalDistanceM, profile]);
+  useEffect(() => sync(progressM), [progressM, totalDistanceM, profile]);
 
   return (
     <div
@@ -197,7 +198,7 @@ export const ReplayElevationScrubber = forwardRef<
       >
         <span
           className={cn(
-            "absolute left-1/2 top-2 size-3 -translate-x-1/2 rounded-full border-2",
+            "absolute left-1/2 top-[var(--replay-progress-y)] size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2",
             tone === "intelligence"
               ? "border-black bg-[#ffffff]"
               : "border-surface bg-white",

@@ -1,12 +1,15 @@
 import { expect, test, type Page } from "@playwright/test";
 
-async function expectMarkerOnProfile(page: Page) {
-  await expect.poll(() => page.getByTestId("replay-elevation-scrubber").evaluate(host => {
+async function expectMarkerOnProfile(page: Page, duringPlayback = false) {
+  await expect.poll(() => page.getByTestId("replay-elevation-scrubber").evaluate((host, duringPlayback) => {
     const line = host.querySelector("polyline")!;
     const svg = line.ownerSVGElement!;
     const marker = host.querySelector(":scope > span > span")!.getBoundingClientRect();
     const input = host.querySelector("input")!;
-    const x = Number(input.value) / Number(input.max) * svg.viewBox.baseVal.width;
+    const center = new DOMPoint(marker.x + marker.width / 2, marker.y + marker.height / 2);
+    const x = duringPlayback
+      ? center.matrixTransform(svg.getScreenCTM()!.inverse()).x
+      : Number(input.value) / Number(input.max) * svg.viewBox.baseVal.width;
     const points = Array.from({ length: line.points.numberOfItems }, (_, index) => line.points.getItem(index));
     const nextIndex = points.findIndex(point => point.x >= x);
     const end = points[nextIndex < 0 ? points.length - 1 : nextIndex];
@@ -14,7 +17,7 @@ async function expectMarkerOnProfile(page: Page) {
     const y = end.x === start.x ? end.y : start.y + (end.y - start.y) * (x - start.x) / (end.x - start.x);
     const expected = new DOMPoint(x, y).matrixTransform(svg.getScreenCTM()!);
     return Math.hypot(marker.x + marker.width / 2 - expected.x, marker.y + marker.height / 2 - expected.y);
-  })).toBeLessThan(1);
+  }, duringPlayback)).toBeLessThan(1);
 }
 
 for (const renderer of ["google", "cesium"]) {
@@ -29,6 +32,7 @@ for (const renderer of ["google", "cesium"]) {
       await expectMarkerOnProfile(page);
       await page.getByRole("button", { name: "Play route", exact: true }).click();
       await expect.poll(async () => Number(await slider.inputValue())).toBeGreaterThan(7700);
+      await expectMarkerOnProfile(page, true);
       await page.getByRole("button", { name: "Pause route", exact: true }).click();
       await expectMarkerOnProfile(page);
       for (const distance of [3000, 14250, 22000]) {
