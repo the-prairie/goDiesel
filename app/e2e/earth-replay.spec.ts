@@ -189,7 +189,8 @@ test("bundled React Replay mounts, plays, pauses, and cleans up", async ({ page 
     .getByLabel("Earth Replay world")
     .boundingBox();
   expect(stageBox?.height).toBeGreaterThan(600);
-  expect(worldBox?.height).toBe(stageBox?.height);
+  const dockBox = await page.getByTestId("replay-controls").boundingBox();
+  expect((worldBox?.height ?? 0) + (dockBox?.height ?? 0)).toBe(stageBox?.height);
   await expect
     .poll(() =>
       page.evaluate(() =>
