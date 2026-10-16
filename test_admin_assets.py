@@ -63,6 +63,14 @@ class AdminAssetTests(unittest.TestCase):
         self.assertEqual(body, (Path(__file__).parent / 'admin-ui/generated/presentation.js').read_bytes())
         self.assertIn(b'export function escapeHtml', body)
 
+    def test_mutation_module_is_served_without_a_node_process(self):
+        with patch.object(self.admin.subprocess, 'Popen', side_effect=AssertionError('No runtime build')):
+            status, headers, body = self.get('/admin-assets/mutation-state.js')
+        self.assertEqual(status, 200)
+        self.assertEqual(headers['Content-Type'], 'text/javascript; charset=utf-8')
+        self.assertEqual(headers['Cache-Control'], 'no-store')
+        self.assertEqual(body, (Path(__file__).parent / 'admin-ui/generated/mutation-state.js').read_bytes())
+
     def test_unlisted_assets_and_traversal_are_not_served(self):
         for path in (
             '/admin-assets/', '/admin-assets/presentation.ts',

@@ -100,3 +100,85 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 320, height: 640 }
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
   });
 }
+
+test('standalone mutation failures retain patches for retry', async ({ page, adminUrl }) => {
+  await page.goto(adminUrl);
+  await page.getByPlaceholder('Custom title').fill('Retained draft');
+  await page.route('**/api/save', route => route.fulfill({ json: { ok: false } }));
+  await page.locator('#saveBtn').click();
+  await expect(page.locator('#toast')).toHaveText('SAVE FAILED');
+  await expect(page.locator('#dirtyCount')).toHaveText('1');
+  await expect(page.getByPlaceholder('Custom title')).toHaveValue('Retained draft');
+  await page.unroute('**/api/save');
+  await page.locator('#saveBtn').click();
+  await expect(page.locator('#toast')).toHaveText('SAVED 1 CHANGE');
+});
+
+test('standalone save retains edits made while saving and allows a second save', async ({ page, adminUrl }) => {
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/api/save', async route => { await held; await route.continue(); });
+  await page.goto(adminUrl);
+  await page.getByPlaceholder('Custom title').fill('Submitted draft');
+  const sent = page.waitForRequest('**/api/save');
+  await page.locator('#saveBtn').click();
+  await sent;
+  await page.getByPlaceholder('Custom title').fill('Newer draft');
+  await page.getByPlaceholder('Custom title').blur();
+  release();
+  await expect(page.locator('#toast')).toHaveText('SAVED 1 CHANGE');
+  await expect(page.getByPlaceholder('Custom title')).toHaveValue('Newer draft');
+  await expect(page.locator('#dirtyCount')).toHaveText('1');
+  await page.locator('#saveBtn').click();
+  await expect(page.locator('#dirtyCount')).toHaveText('0');
+  await page.reload();
+  await expect(page.getByPlaceholder('Custom title')).toHaveValue('Newer draft');
+});
+
+test('standalone rebuild reports HTTP errors and permits retry', async ({ page, adminUrl }) => {
+  await page.route('**/api/rebuild', route => route.fulfill({ status: 503, json: { error: 'Unavailable' } }));
+  await page.goto(adminUrl);
+  await page.locator('#rebuildBtn').click();
+  await expect(page.locator('#toast')).toHaveText('REBUILD FAILED');
+  await page.unroute('**/api/rebuild');
+  await page.locator('#rebuildBtn').click();
+  await expect(page.locator('#toast')).toContainText('REBUILD STARTED');
+});
+
+test('standalone pending save survives classifier refresh and rejects duplicate submission', async ({ page, request, adminUrl }) => {
+  await request.post(`${adminUrl}/fixture/mutations`, { data: { holdSaves: true } });
+  await page.clock.install();
+  await page.goto(adminUrl);
+  await page.getByPlaceholder('Custom title').fill('Saved snapshot');
+  await page.locator('#saveBtn').click();
+  await expect(page.locator('#saveBtn')).toBeDisabled();
+  await page.getByPlaceholder('Custom title').fill('Retained while classifier refreshes');
+  await page.getByPlaceholder('Custom title').blur();
+  await page.locator('#autoClassifyBtn').click();
+  await request.post(`${adminUrl}/fixture/classification`, { data: { running: false, total: 2, updated: 2, done: 2, unmapped: 0 } });
+  await page.clock.fastForward(2000);
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFIED 2 / 2');
+  await expect.poll(async () => (await (await request.get(`${adminUrl}/fixture/calls`)).json()).routeReads).toBe(2);
+  await expect(page.getByPlaceholder('Custom title')).toHaveValue('Retained while classifier refreshes');
+  await expect(page.locator('#saveBtn')).toBeDisabled();
+  await request.post(`${adminUrl}/fixture/release-saves`);
+  await expect(page.locator('#saveBtn')).toBeEnabled();
+  await expect(page.getByPlaceholder('Custom title')).toHaveValue('Retained while classifier refreshes');
+  expect((await (await request.get(`${adminUrl}/fixture/calls`)).json()).saves).toHaveLength(1);
+});
+
+test('standalone save settles after a failed refresh and allows a later edit', async ({ page, adminUrl }) => {
+  await page.goto(adminUrl);
+  await page.getByPlaceholder('Custom title').fill('Persisted before refresh failure');
+  await page.route('**/api/routes', route => route.abort());
+  await page.locator('#saveBtn').click();
+  await expect(page.locator('#toast')).toHaveText('SAVE FAILED');
+  await expect(page.locator('#dirtyCount')).toHaveText('0');
+  await page.getByPlaceholder('Custom title').fill('Retry after failure');
+  await expect(page.locator('#saveBtn')).toBeEnabled();
+  await page.unroute('**/api/routes');
+  await page.locator('#saveBtn').click();
+  await expect(page.locator('#toast')).toHaveText('SAVED 1 CHANGE');
+  await page.reload();
+  await expect(page.getByPlaceholder('Custom title')).toHaveValue('Retry after failure');
+});

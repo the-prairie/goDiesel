@@ -568,6 +568,7 @@ def routes_summary():
 
 
 ADMIN_ASSETS = {
+    '/admin-assets/mutation-state.js': 'admin-ui/generated/mutation-state.js',
     "/admin-assets/presentation.js": "admin-ui/generated/presentation.js",
 }
 
