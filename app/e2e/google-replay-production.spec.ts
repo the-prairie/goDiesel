@@ -113,6 +113,8 @@ for (const routeSlug of ["14023448720", "14736711660"] as const) {
     await expect(replay).toHaveAttribute("data-engine", "google-3d-maps");
     await expect(replay).toHaveAttribute("data-state", "ready");
     await expect(replay).toHaveAttribute("data-camera-mode", "auto");
+    await expect(replay).toHaveAttribute("data-grounding-mode", "ground");
+    if (routeSlug === "14736711660") await expect(page.getByRole("heading", { name: "just here for the zipper", exact: true })).toBeVisible();
     await expect(replay).toHaveAttribute("data-directed-camera", "overview");
     await expect(
       page.getByRole("button", { name: "Auto director" }),
@@ -458,7 +460,7 @@ for (const width of [390, 1280]) {
     await dialog.locator('a[href="#/replay/17665674778"]').click();
     await expect(stage).toHaveAttribute("data-route-slug", "17665674778");
     await expect(stage).toHaveAttribute("data-camera-mode", "auto");
-    await expect(stage).toHaveAttribute("data-grounding-mode", "mesh");
+    await expect(stage).toHaveAttribute("data-grounding-mode", "ground");
     await expect(stage).toHaveAttribute("data-following", "true");
     await expect(page.getByRole("button", { name: "Play route" })).toBeVisible();
     await expect(page.getByTestId("google-route-progress")).toContainText("0.00 /");

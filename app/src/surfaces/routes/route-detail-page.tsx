@@ -174,10 +174,7 @@ function RouteMargin({
     });
   }
   const hasDetails = !isMobile || position !== "peek";
-  const premise =
-    route.curation.vibe
-      ? route.curation.vibe
-      : route.description || route.completionRule;
+  const premise = route.description || (!route.curation.vibe ? route.completionRule : "");
 
   return (
     <aside
@@ -206,149 +203,144 @@ function RouteMargin({
         </div>
       ) : null}
 
-      <div
-        className={cn(
-          "border-b border-line",
-          hasDetails ? "shrink-0" : "min-h-0 flex-1 overflow-y-auto",
-          isMobile ? "p-3" : "p-6",
-        )}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            {singleRouteMicrosite ? null : (
-              <Button
-                asChild
-                variant="ghost"
-                size="sm"
-                className="-ml-2 mb-2 w-fit"
-              >
-                <Link to={routesPath}>
-                  <ArrowLeft aria-hidden="true" />
-                  {routesPath.startsWith(APP_PATHS.atlas)
-                    ? "Back to Atlas"
-                    : routesPath.startsWith(APP_PATHS.finder) ? "Back to Finder" : "All routes"}
-                </Link>
-              </Button>
-            )}
-            {route.region !==
-            (route.lifecycle === "discovered"
-              ? route.activityName
-              : route.name) ? (
-              <p className="text-caption font-semibold uppercase text-forest">
-                {route.region}
-              </p>
-            ) : null}
-            <h1 className="mt-1 font-editorial text-3xl font-semibold leading-none text-ink">
-              {route.lifecycle === "discovered"
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className={cn("border-b border-line", isMobile ? "p-3" : "p-6")}>
+
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              {singleRouteMicrosite ? null : (
+                <Button
+                  asChild
+                  variant="ghost"
+                  size="sm"
+                  className="-ml-2 mb-2 w-fit"
+                >
+                  <Link to={routesPath}>
+                    <ArrowLeft aria-hidden="true" />
+                    {routesPath.startsWith(APP_PATHS.atlas)
+                      ? "Back to Atlas"
+                      : routesPath.startsWith(APP_PATHS.finder) ? "Back to Finder" : "All routes"}
+                  </Link>
+                </Button>
+              )}
+              {route.region !==
+              (route.lifecycle === "discovered"
                 ? route.activityName
-                : route.name}
-            </h1>
+                : route.name) ? (
+                <p className="text-caption font-semibold uppercase text-forest">
+                  {route.region}
+                </p>
+              ) : null}
+              <h1 className={cn("mt-1 break-words font-editorial text-xl font-semibold leading-tight text-ink sm:text-3xl", !hasDetails && "line-clamp-2")}>
+                {route.lifecycle === "discovered"
+                  ? route.activityName
+                  : route.name}
+              </h1>
+            </div>
+            {isMobile ? (
+              <div className="flex shrink-0 gap-1">
+                {position !== "peek" ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Collapse route margin"
+                    onClick={() => onPositionChange("peek")}
+                  >
+                    <ChevronDown aria-hidden="true" />
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Set route margin to half"
+                  onClick={() => onPositionChange("half")}
+                >
+                  <Minus aria-hidden="true" />
+                </Button>
+                {position !== "expanded" ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Expand route margin"
+                    onClick={() => onPositionChange("expanded")}
+                  >
+                    <ChevronUp aria-hidden="true" />
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
-          {isMobile ? (
-            <div className="flex shrink-0 gap-1">
-              {position !== "peek" ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Collapse route margin"
-                  onClick={() => onPositionChange("peek")}
-                >
-                  <ChevronDown aria-hidden="true" />
-                </Button>
-              ) : null}
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label="Set route margin to half"
-                onClick={() => onPositionChange("half")}
-              >
-                <Minus aria-hidden="true" />
-              </Button>
-              {position !== "expanded" ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Expand route margin"
-                  onClick={() => onPositionChange("expanded")}
-                >
-                  <ChevronUp aria-hidden="true" />
-                </Button>
-              ) : null}
+
+          {!hasDetails ? (
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <p className="text-caption text-ink-secondary">
+                {route.type} · {route.distanceKm.toFixed(1)} km · {route.elevationGainM.toLocaleString()} m up
+              </p>
+              <Button type="button" variant="ghost" size="sm" onClick={readGuide}>Read guide</Button>
             </div>
           ) : null}
         </div>
 
-        {!hasDetails ? (
-          <div className="mt-3 flex items-center justify-between gap-2">
-            <p className="text-caption text-ink-secondary">
-              {route.type} · {route.distanceKm.toFixed(1)} km · {route.elevationGainM.toLocaleString()} m up
-            </p>
-            <Button type="button" variant="ghost" size="sm" onClick={readGuide}>Read guide</Button>
-          </div>
+        {hasDetails ? (
+            <div className="p-4 pb-24 sm:p-6 sm:pb-24">
+              {premise ? (
+                <p className="story-copy mt-4 whitespace-pre-line text-ink-secondary">{premise}</p>
+              ) : null}
+              {route.curation.vibe ? <Button type="button" variant="outline" size="sm" onClick={readGuide}>Read guide</Button> : null}
+              <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-y border-line py-4">
+                <LeafMetric
+                  label="Distance"
+                  value={`${route.distanceKm.toFixed(1)} km`}
+                />
+                <LeafMetric
+                  label="Climb"
+                  value={`${route.elevationGainM.toLocaleString()} m`}
+                />
+                <LeafMetric label="Activity" value={route.type} />
+                <LeafMetric
+                  label={routeDateLabel(route.lifecycle)}
+                  value={formatRouteDate(route.date)}
+                />
+              </dl>
+              {route.route.length > 1 ? (
+                <section
+                  aria-label="Elevation"
+                  className="border-b border-line pb-6"
+                >
+                  <p className="text-caption font-semibold uppercase text-ink-muted">
+                    Elevation
+                  </p>
+                  <div className="mt-2 overflow-hidden border border-line bg-surface-muted">
+                    <ElevationProfile route={route} />
+                  </div>
+                </section>
+              ) : (
+                <div
+                  role="status"
+                  className="border-b border-line pb-6 text-control text-ink-muted"
+                >
+                  Elevation profile unavailable. Climb distribution needs recorded
+                  route points.
+                </div>
+              )}
+              <PolaroidFan
+                annotations={route.annotations}
+                seed={route.slug}
+                className="border-b border-line py-6"
+              />
+              <RouteAnnotations
+                annotations={route.annotations}
+                className="border-b border-line py-6"
+              />
+              <div ref={guideRef} tabIndex={-1} aria-label="Route guide content" className="pt-6 focus:outline-none">
+                <RouteGuide curation={route.curation} compact />
+              </div>
+            </div>
         ) : null}
       </div>
-
-      {hasDetails ? (
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="p-4 pb-24 sm:p-6 sm:pb-24">
-            {!route.curation.vibe ? (
-              <p className="story-copy mt-4 text-ink-secondary">{premise}</p>
-            ) : null}
-            {route.curation.vibe ? <Button type="button" variant="outline" size="sm" onClick={readGuide}>Read guide</Button> : null}
-            <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-y border-line py-4">
-              <LeafMetric
-                label="Distance"
-                value={`${route.distanceKm.toFixed(1)} km`}
-              />
-              <LeafMetric
-                label="Climb"
-                value={`${route.elevationGainM.toLocaleString()} m`}
-              />
-              <LeafMetric label="Activity" value={route.type} />
-              <LeafMetric
-                label={routeDateLabel(route.lifecycle)}
-                value={formatRouteDate(route.date)}
-              />
-            </dl>
-            {route.route.length > 1 ? (
-              <section
-                aria-label="Elevation"
-                className="border-b border-line pb-6"
-              >
-                <p className="text-caption font-semibold uppercase text-ink-muted">
-                  Elevation
-                </p>
-                <div className="mt-2 overflow-hidden border border-line bg-surface-muted">
-                  <ElevationProfile route={route} />
-                </div>
-              </section>
-            ) : (
-              <div
-                role="status"
-                className="border-b border-line pb-6 text-control text-ink-muted"
-              >
-                Elevation profile unavailable. Climb distribution needs recorded
-                route points.
-              </div>
-            )}
-            <PolaroidFan
-              annotations={route.annotations}
-              seed={route.slug}
-              className="border-b border-line py-6"
-            />
-            <RouteAnnotations
-              annotations={route.annotations}
-              className="border-b border-line py-6"
-            />
-            <div ref={guideRef} tabIndex={-1} aria-label="Route guide content" className="pt-6 focus:outline-none">
-              <RouteGuide curation={route.curation} compact />
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       <div className="mt-auto shrink-0 border-t border-line bg-surface p-3 sm:p-4">
         {route.replay.replayEligible ? (

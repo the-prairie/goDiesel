@@ -248,7 +248,7 @@ test("blocked session storage never prevents opening a route guide", async ({ pa
 
   await routeCards(page).first().getByRole("link").click();
   await expect(page).toHaveURL(/#\/routes\/17654151284$/);
-  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "🍑🍑🍑🍑💦💦💦💦" })).toBeVisible();
 });
 
 test("reviewed Kyoto card opens its canonical guide and fetches only that detail", async ({
@@ -264,7 +264,7 @@ test("reviewed Kyoto card opens its canonical guide and fetches only that detail
   expect(detailRequests).toEqual([]);
 
   const canonicalGuide = kyotoCard.getByRole("link", {
-    name: "Open Kyoto, Japan route from 2025-11-24, 21.3 km",
+    name: "Open 🍑🍑🍑🍑💦💦💦💦 route from 2025-11-24, 21.3 km",
   });
   await expect(canonicalGuide).toHaveAttribute("href", `#/routes/${reviewedKyotoSlug}`);
   await canonicalGuide.click();
@@ -289,7 +289,7 @@ test("route cards omit editorial and AI badges while retaining imagery credit", 
   await expect(draftCard).not.toContainText("What it feels like");
   await expect(
     draftCard.getByRole("link", {
-      name: "Open Tokyo, Japan route from 2025-11-26, 21.8 km",
+      name: "Open crosswalk sprints route from 2025-11-26, 21.8 km",
     }),
   ).toHaveAttribute("href", `#/routes/${draftTokyoSlug}`);
 });
@@ -434,12 +434,12 @@ test("covers are cached and lazy loaded without live map or AI requests", async 
   expect(remote).toEqual([]);
 });
 
-test("Field notes use reviewed prose and factual summaries for draft guides", async ({ page }) => {
+test("Field notes preserve original descriptions before guide summaries", async ({ page }) => {
   await page.goto("/#/routes");
-  const tokyo = page.getByRole("link", { name: "Open Tokyo, Japan route from 2025-11-26, 21.8 km", exact: true });
-  await expect(tokyo.locator(".field-note-summary")).toHaveText("21.8 km run with 286 m of climbing.");
+  const tokyo = page.getByRole("link", { name: "Open crosswalk sprints route from 2025-11-26, 21.8 km", exact: true });
+  await expect(tokyo.locator(".field-note-summary")).toHaveText("could not figure out how to cross the bridge 💀💀💀💀");
   await expect(tokyo).not.toContainText("Tokyo opens toward the water");
-  const kyoto = page.getByRole("link", { name: "Open Kyoto, Japan route from 2025-11-24, 21.3 km", exact: true });
+  const kyoto = page.getByRole("link", { name: "Open 🍑🍑🍑🍑💦💦💦💦 route from 2025-11-24, 21.3 km", exact: true });
   await expect(kyoto.locator(".field-note-summary")).toHaveText("A long, exploratory Kyoto run that moves from the city into sustained climbing before returning.");
 });
 
@@ -448,6 +448,9 @@ for (const width of [320, 390, 768, 1280]) {
     await page.setViewportSize({ width, height: 844 });
     await page.goto("/#/routes?page=3");
     await expect(routeCards(page)).toHaveCount(67);
+    await expect.poll(() => page.locator(".field-note-title").evaluateAll(titles =>
+      titles.every(title => title.scrollWidth <= title.clientWidth)
+    )).toBe(true);
     const violations = await page.locator(".route-cover").evaluateAll((covers, viewportWidth) => covers.flatMap((cover) => {
       const image = cover.querySelector<HTMLImageElement>(".route-cover-image")!;
       const svg = cover.querySelector<SVGSVGElement>(".route-cover-art")!;

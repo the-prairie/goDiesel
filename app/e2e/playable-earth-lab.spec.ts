@@ -135,7 +135,7 @@ test("canonical completed route opens the isolated lab and exits cleanly", async
   const lab = page.getByRole("region", { name: "Playable Earth Lab" });
   await expect(lab).toHaveAttribute("data-state", "ready");
   await expect(lab).toHaveAttribute("data-route-slug", routeSlug);
-  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "🍑🍑🍑🍑💦💦💦💦" })).toBeVisible();
   await expect(page.getByText("Route thread ready")).toBeVisible();
   await expect(
     page.locator('canvas[aria-label="Deterministic photorealistic world"]'),
@@ -147,7 +147,7 @@ test("canonical completed route opens the isolated lab and exits cleanly", async
 
   await page.getByRole("link", { name: "Exit lab" }).click();
   await expect(page).toHaveURL(new RegExp(`#\/routes\/${routeSlug}$`));
-  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "🍑🍑🍑🍑💦💦💦💦" })).toBeVisible();
   await expect
     .poll(() =>
       page.evaluate(
@@ -175,7 +175,7 @@ test("changing lab routes destroys the previous viewer and resets route state", 
 
   const lab = page.getByRole("region", { name: "Playable Earth Lab" });
   await expect(lab).toHaveAttribute("data-route-slug", secondRouteSlug);
-  await expect(page.getByRole("heading", { name: "Tokyo, Japan" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "crosswalk sprints" })).toBeVisible();
   await expect
     .poll(() =>
       page.evaluate(() => ({
