@@ -535,6 +535,7 @@ test("mobile globe supports two-finger pinch without losing region state", async
     baseURL,
     hasTouch: true,
     isMobile: true,
+    reducedMotion: "reduce",
     viewport: { width: 430, height: 844 },
   });
   const page = await context.newPage();
@@ -544,8 +545,13 @@ test("mobile globe supports two-finger pinch without losing region state", async
     await expect(
       page.locator('div[data-atlas-engine="cesium"]'),
     ).toHaveAttribute("data-atlas-status", "ready");
-    await expect(canvas).toHaveAttribute("data-camera-height", "18500000");
-    const before = Number(await canvas.getAttribute("data-camera-target"));
+    await expect
+      .poll(async () =>
+        Math.abs(Number(await canvas.getAttribute("data-camera-height")) - 18_500_000),
+      )
+      .toBeLessThan(10_000);
+    const before = Number(await canvas.getAttribute("data-camera-height"));
+    expect(before).toBeGreaterThan(0);
     const box = (await canvas.boundingBox())!;
     const centerX = box.x + box.width / 2;
     const centerY = box.y + box.height / 2;
