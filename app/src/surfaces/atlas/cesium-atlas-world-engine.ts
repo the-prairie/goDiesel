@@ -35,7 +35,7 @@ import {
 } from "@/surfaces/atlas/atlas-region-camera";
 import type { RouteRegion } from "@/data/route-regions";
 import type { RouteSummary } from "@/domain/route";
-import { recordTileFailure, rgbaPixelsLookBlank } from "@/providers/render-health";
+import { rgbaPixelsLookBlank } from "@/providers/render-health";
 import {
   CESIUM_GROUND_ROUTE_OPTIONS,
   GOOGLE_3D_TILES_RENDER_OPTIONS,
@@ -43,13 +43,18 @@ import {
 
 import { atlasOrbitalPitchLimit, atlasResolutionScale } from "@/surfaces/atlas/atlas-render-quality";
 import { installAtlasAttribution } from "@/surfaces/atlas/atlas-attribution";
+import {
+  initialRegionalTransitionState,
+  reduceRegionalTransition,
+  regionalOperationIsCurrent,
+  type RegionalTransitionEvent,
+} from "@/surfaces/atlas/regional-transition-state";
 
 const DEFAULT_VIEW = { lat: 24, lng: 12, heightM: 18_500_000 };
 const GLOBAL_SELECTION_HEIGHT_M = DEFAULT_VIEW.heightM;
 const ROUTE_COLOR = Color.fromCssColorString("#b8c4c0");
 const SELECTED_ROUTE_COLOR = Color.fromCssColorString("#f5f5f5");
 const ROUTE_CASING_COLOR = Color.fromCssColorString("#18221f");
-const TILE_FAILURE_THRESHOLD = 8;
 const TERRAIN_READY_TIMEOUT_MS = 8_000;
 const TERRAIN_DIAGNOSTIC_INTERVAL_MS = 4_000;
 const REGIONAL_CAMERA_PITCH_RADIANS = -1.02;
@@ -147,11 +152,8 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   private removeTerrainFailureListener?: () => void;
   private cancelTerrainWait?: () => void;
   private terrainDiagnosticsTimer?: number;
-  private terrainFailureTimes: number[] = [];
-  private blankFrameCount = 0;
-  private selectedRegionName?: string;
+  private regionalState = initialRegionalTransitionState();
   private selectedRouteSlug?: string;
-  private regionGeneration = 0;
   private generation = 0;
   private surfaceNormal = new Cartesian3();
   private surfaceToCamera = new Cartesian3();
@@ -316,8 +318,10 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   setSelectedRegion(region?: RouteRegion) {
     const viewer = this.viewer;
     if (!viewer || viewer.isDestroyed()) return;
-    const regionGeneration = ++this.regionGeneration;
-    this.selectedRegionName = region?.name;
+    this.regionalState = reduceRegionalTransition(this.regionalState, region
+      ? { type: "regionSelected", regionName: region.name }
+      : { type: "selectionCleared" });
+    const operationId = this.regionalState.operationId;
     if (!region) this.selectedRouteSlug = undefined;
     this.styleRouteEntities();
     if (!region) {
@@ -334,7 +338,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
       return;
     }
     viewer.canvas.dataset.cameraRegion = region.name;
-    void this.enterRegionalTerrain(region, regionGeneration);
+    void this.enterRegionalTerrain(region, operationId);
   }
 
   setSelectedRoute(route?: RouteSummary) {
@@ -412,7 +416,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     this.resizeObserver = undefined;
     this.removeAttribution?.();
     this.removeAttribution = undefined;
-    this.regionGeneration += 1;
+    this.regionalState = reduceRegionalTransition(this.regionalState, { type: "disposed" });
     this.leaveRegionalTerrain();
     this.removeRenderErrorListener?.();
     this.removeCameraChangedListener?.();
@@ -430,13 +434,12 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     this.routeSelectionHandler = undefined;
     this.onStatus = undefined;
     this.onSelectRoute = undefined;
-    this.selectedRegionName = undefined;
     this.selectedRouteSlug = undefined;
   }
 
   private async enterRegionalTerrain(
     region: RouteRegion,
-    regionGeneration: number,
+    operationId: number,
   ) {
     const viewer = this.viewer;
     if (!viewer || viewer.isDestroyed()) return;
@@ -464,7 +467,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
         ),
       );
       if (routePositions.length < 2) {
-        this.reportRegionalFallback(region, regionGeneration);
+        this.transitionRegion({ type: "terrainFailed", operationId });
         return;
       }
 
@@ -510,7 +513,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
       const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
       if (!apiKey) {
         await cameraReady;
-        this.reportRegionalFallback(region, regionGeneration);
+        this.transitionRegion({ type: "terrainFailed", operationId });
         return;
       }
 
@@ -520,7 +523,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
         ...GOOGLE_3D_TILES_RENDER_OPTIONS,
         enableCollision: true,
       });
-      if (!this.regionIsCurrent(region, regionGeneration)) {
+      if (!this.regionIsCurrent(operationId)) {
         tileset.destroy();
         return;
       }
@@ -528,40 +531,18 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
       viewer.scene.primitives.add(tileset);
       viewer.bottomContainer.setAttribute("data-google", "true");
       this.removeTerrainFailureListener = tileset.tileFailed.addEventListener(() => {
-        this.terrainFailureTimes = recordTileFailure(
-          this.terrainFailureTimes,
-          performance.now(),
-        );
-        if (this.terrainFailureTimes.length >= TILE_FAILURE_THRESHOLD) {
-          this.reportRegionalFallback(region, regionGeneration);
-        }
+        this.transitionRegion({ type: "tileFailed", operationId, atMs: performance.now() });
       });
       const [, terrainReady] = await Promise.all([
         cameraReady,
         this.waitForUsefulTerrain(tileset),
       ]);
-      if (!this.regionIsCurrent(region, regionGeneration)) return;
-      if (!terrainReady) {
-        this.reportRegionalFallback(region, regionGeneration);
-        return;
-      }
-      // Photorealistic tiles already supply the earth surface. A second
-      // ellipsoid can intersect that mesh along the horizon and sea level.
-      viewer.scene.globe.show = false;
-      if (this.baseImageryLayer) this.baseImageryLayer.show = false;
-      viewer.canvas.dataset.atlasState = "region-ready";
-      viewer.canvas.dataset.cameraState = "settled";
-      viewer.canvas.dataset.terrainState = "ready";
-      this.onStatus?.({
-        state: "region-ready",
-        regionName: region.name,
-        message: `${region.name} terrain ready.`,
-      });
-      this.startTerrainDiagnostics(region, regionGeneration);
+      if (!this.regionIsCurrent(operationId)) return;
+      this.transitionRegion({ type: "transitionSettled", operationId, terrainReady });
     } catch (error) {
-      if (!this.regionIsCurrent(region, regionGeneration)) return;
+      if (!this.regionIsCurrent(operationId)) return;
       console.warn("Regional terrain unavailable", error);
-      this.reportRegionalFallback(region, regionGeneration);
+      this.transitionRegion({ type: "terrainFailed", operationId });
     }
   }
 
@@ -638,49 +619,56 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     });
   }
 
-  private startTerrainDiagnostics(
-    region: RouteRegion,
-    regionGeneration: number,
-  ) {
+  private get selectedRegionName() {
+    return "regionName" in this.regionalState ? this.regionalState.regionName : undefined;
+  }
+
+  private startTerrainDiagnostics(operationId: number) {
     this.terrainDiagnosticsTimer = window.setInterval(() => {
-      if (!this.regionIsCurrent(region, regionGeneration)) return;
+      if (!this.regionIsCurrent(operationId)) return;
       const canvas = this.viewer?.canvas;
       if (!canvas) return;
-      this.blankFrameCount = canvasLooksBlank(canvas)
-        ? this.blankFrameCount + 1
-        : 0;
-      if (this.blankFrameCount >= 2) {
-        this.reportRegionalFallback(region, regionGeneration);
-      }
+      this.transitionRegion({ type: "frameObserved", operationId, blank: canvasLooksBlank(canvas) });
     }, TERRAIN_DIAGNOSTIC_INTERVAL_MS);
   }
 
-  private reportRegionalFallback(
-    region: RouteRegion,
-    regionGeneration: number,
-  ) {
-    if (!this.regionIsCurrent(region, regionGeneration)) return;
+  private transitionRegion(event: RegionalTransitionEvent) {
     const viewer = this.viewer;
     if (!viewer || viewer.isDestroyed()) return;
-    this.regionGeneration += 1;
-    this.clearRegionalTiles();
-    viewer.useDefaultRenderLoop = false;
-    viewer.canvas.dataset.atlasState = "region-fallback";
-    viewer.canvas.dataset.cameraState = "settled";
-    viewer.canvas.dataset.terrainState = "fallback";
-    this.onStatus?.({
-      state: "region-fallback",
-      regionName: region.name,
-      message: "3D terrain partially unavailable",
-    });
+    const previous = this.regionalState;
+    const next = reduceRegionalTransition(previous, event);
+    this.regionalState = next;
+    if (previous.status === next.status) return;
+    if (next.status === "ready") {
+      // Photorealistic tiles supply the surface; an ellipsoid can intersect it.
+      viewer.scene.globe.show = false;
+      if (this.baseImageryLayer) this.baseImageryLayer.show = false;
+      viewer.canvas.dataset.atlasState = "region-ready";
+      viewer.canvas.dataset.cameraState = "settled";
+      viewer.canvas.dataset.terrainState = "ready";
+      this.onStatus?.({
+        state: "region-ready",
+        regionName: next.regionName,
+        message: `${next.regionName} terrain ready.`,
+      });
+      this.startTerrainDiagnostics(next.operationId);
+    } else if (next.status === "fallback") {
+      this.clearRegionalTiles();
+      viewer.useDefaultRenderLoop = false;
+      viewer.canvas.dataset.atlasState = "region-fallback";
+      viewer.canvas.dataset.cameraState = "settled";
+      viewer.canvas.dataset.terrainState = "fallback";
+      this.onStatus?.({
+        state: "region-fallback",
+        regionName: next.regionName,
+        message: "3D terrain partially unavailable",
+      });
+    }
   }
 
-  private regionIsCurrent(region: RouteRegion, regionGeneration: number) {
-    return (
-      this.regionGeneration === regionGeneration &&
-      this.selectedRegionName === region.name &&
-      Boolean(this.viewer && !this.viewer.isDestroyed())
-    );
+  private regionIsCurrent(operationId: number) {
+    return regionalOperationIsCurrent(this.regionalState, operationId) &&
+      Boolean(this.viewer && !this.viewer.isDestroyed());
   }
 
   private leaveRegionalTerrain() {
@@ -709,8 +697,6 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
       viewer.scene.primitives.remove(this.tileset);
     }
     this.tileset = undefined;
-    this.terrainFailureTimes = [];
-    this.blankFrameCount = 0;
   }
 
   private resetFrustumOffsets() {
