@@ -1,5 +1,6 @@
 // Primitives shared by both parse tiers (ADR-0004).
 
+import type { RouteLifecycle } from "@/domain/route/lifecycle";
 import type { GeneratedQuestRoute, RoutePoint } from "@/domain/route/contract";
 
 export const curationFields = [
@@ -110,4 +111,8 @@ export function generatedRoute(value: unknown, context: string): GeneratedQuestR
     throw new Error(`${context} must be an object`);
   }
   return value as GeneratedQuestRoute;
+}
+
+export function routeName(name: string, activityName: string, lifecycle: RouteLifecycle): string {
+  return lifecycle === "completed" && activityName.trim() ? activityName : name;
 }

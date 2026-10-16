@@ -2,7 +2,7 @@
 
 import type { RouteLifecycle } from "@/domain/route/lifecycle";
 import type { RouteAnnotation, RouteAnnotationMedia, GeneratedQuestRoute, QuestRoute, ReplayMetadata, RouteCuration, RouteGeometryStatus, RoutePoint, RouteProvenance, RouteDiscontinuityKind, RouteDiscontinuitySource, RouteTemporalProvenance } from "@/domain/route/contract";
-import { curationFieldSet, curationFields, generatedRoute, numberValue, optionalCurationList, optionalCurationText, parsedRoutePoints, requiredSlug, stringValue, validTimeZone } from "@/domain/route/parse-shared";
+import { curationFieldSet, curationFields, generatedRoute, numberValue, optionalCurationList, optionalCurationText, parsedRoutePoints, requiredSlug, routeName, stringValue, validTimeZone } from "@/domain/route/parse-shared";
 
 function validatedCuration(value: unknown): RouteCuration {
   if (value === undefined) return { reviewStatus: "draft" };
@@ -271,7 +271,7 @@ function validatedDetailFields(
     slug,
     activityId: requiredStringField(input, "activity_id", false),
     lifecycle,
-    name: requiredStringField(input, "name", false),
+    name: routeName(requiredStringField(input, "name", false), requiredStringField(input, "activity_name"), lifecycle),
     subtitle: requiredStringField(input, "subtitle"),
     activityName: requiredStringField(input, "activity_name"),
     region: requiredStringField(input, "region", false),

@@ -248,7 +248,7 @@ test("blocked session storage never prevents opening a route guide", async ({ pa
 
   await routeCards(page).first().getByRole("link").click();
   await expect(page).toHaveURL(/#\/routes\/17654151284$/);
-  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "🍑🍑🍑🍑💦💦💦💦" })).toBeVisible();
 });
 
 test("reviewed Kyoto card opens its canonical guide and fetches only that detail", async ({
@@ -264,7 +264,7 @@ test("reviewed Kyoto card opens its canonical guide and fetches only that detail
   expect(detailRequests).toEqual([]);
 
   const canonicalGuide = kyotoCard.getByRole("link", {
-    name: "Open Kyoto, Japan route from 2025-11-24, 21.3 km",
+    name: "Open 🍑🍑🍑🍑💦💦💦💦 route from 2025-11-24, 21.3 km",
   });
   await expect(canonicalGuide).toHaveAttribute("href", `#/routes/${reviewedKyotoSlug}`);
   await canonicalGuide.click();
@@ -439,7 +439,7 @@ test("Field notes use reviewed prose and factual summaries for draft guides", as
   const tokyo = page.getByRole("link", { name: "Open Tokyo, Japan route from 2025-11-26, 21.8 km", exact: true });
   await expect(tokyo.locator(".field-note-summary")).toHaveText("21.8 km run with 286 m of climbing.");
   await expect(tokyo).not.toContainText("Tokyo opens toward the water");
-  const kyoto = page.getByRole("link", { name: "Open Kyoto, Japan route from 2025-11-24, 21.3 km", exact: true });
+  const kyoto = page.getByRole("link", { name: "Open 🍑🍑🍑🍑💦💦💦💦 route from 2025-11-24, 21.3 km", exact: true });
   await expect(kyoto.locator(".field-note-summary")).toHaveText("A long, exploratory Kyoto run that moves from the city into sustained climbing before returning.");
 });
 

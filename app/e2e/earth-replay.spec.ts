@@ -181,7 +181,7 @@ test("bundled React Replay mounts, plays, pauses, and cleans up", async ({ page 
   const replay = page.getByTestId("replay-stage");
   await expect(replay).toHaveAttribute("data-engine", "cesium-bundled");
   await expect(replay).toHaveAttribute("data-state", "ready");
-  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "🍑🍑🍑🍑💦💦💦💦" })).toBeVisible();
   await expect(replay.locator("canvas[data-replay-canvas='true']")).toHaveCount(1);
   await expect(page.getByTestId("route-thread")).toBeVisible();
   const stageBox = await replay.boundingBox();

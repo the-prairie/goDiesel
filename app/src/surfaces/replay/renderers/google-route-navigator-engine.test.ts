@@ -99,6 +99,19 @@ afterEach(() => {
 });
 
 describe("Google renderer lifecycle adapter", () => {
+  it("keeps every filament layer on terrain and preserves the optional mesh mode", async () => {
+    const run = mount({ groundingMode: "ground", routeStyle: { mode: "filament", color: "#fff", outerColor: "#fff", outerWidth: 0, width: 2 } });
+    const map = await sceneCreated();
+    steady(map);
+    await run.done;
+    expect(map.children).toHaveLength(4);
+    for (const layer of map.children) expect(layer).toMatchObject({ altitudeMode: "ground" });
+    for (const mode of ["mesh", "ground"] as const) {
+      run.engine.setGrounding(mode);
+      for (const layer of map.children) expect(layer).toMatchObject({ altitudeMode: mode });
+    }
+  });
+
   it.each([
     { overrides: { apiKey: "" }, message: "A Google Maps JavaScript API browser key is required." },
     { overrides: { route: { ...route, route: [] } }, message: "Recorded route geometry is unavailable." },

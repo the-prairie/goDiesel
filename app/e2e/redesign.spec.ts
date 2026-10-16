@@ -19,7 +19,7 @@ for (const viewport of [
       await expect(margin).toHaveAttribute("data-snap", "expanded");
     }
     await expect(
-      page.getByRole("img", { name: /Kyoto, Japan elevation profile/ }).locator("polyline"),
+      page.getByRole("img", { name: /🍑🍑🍑🍑💦💦💦💦 elevation profile/ }).locator("polyline"),
     ).toHaveCSS("stroke", "rgb(217, 217, 217)");
     const box = await margin.boundingBox();
     expect(box!.y).toBeGreaterThanOrEqual(0);

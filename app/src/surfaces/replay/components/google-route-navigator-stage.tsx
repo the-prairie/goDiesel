@@ -314,7 +314,7 @@ export function GoogleRouteNavigatorStage({
             <ArrowLeft aria-hidden="true" />
           </Button>
           <div className="min-w-0">
-            <h1 className="truncate text-sm font-semibold">{route.region}</h1>
+            <h1 className="truncate text-sm font-semibold" title={route.name}>{route.name}</h1>
             <div className="truncate text-[11px] text-white/58">
               {route.distanceKm.toFixed(1)} km ·{" "}
               {Math.round(route.elevationGainM)} m up · {route.type}
