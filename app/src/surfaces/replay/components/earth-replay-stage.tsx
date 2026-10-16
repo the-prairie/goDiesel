@@ -38,38 +38,23 @@ import {
   routeDetailPath,
 } from "@/app/route-paths";
 import {
-  advanceReplay,
-  cycleReplaySpeed,
-  initialReplayState,
   REPLAY_CAMERA_RANGES_M,
   replayPose,
   routeDistanceM,
-  seekReplay,
-  toggleReplay,
-  toggleReplayFollowing,
-  zoomReplay,
-  type ReplayControlState,
 } from "@/surfaces/replay/playback/replay-controller";
 import {
   createReplayEngine,
   type ReplayEngine,
   type ReplayEngineMode,
-  type ReplayStatus,
 } from "@/surfaces/replay/renderer-port";
 
-function initialReplayStatus(mode: ReplayEngineMode): ReplayStatus {
-  return mode === "earth"
-    ? {
-        state: "loading",
-        title: "Building your route world",
-        message: "Preparing the bundled Earth engine.",
-      }
-    : {
-        state: "loading",
-        title: "Opening Atlas replay",
-        message: "Preparing the fallback route map.",
-      };
-}
+import {
+  earthReplayOperational,
+  initialEarthReplaySessionState,
+  reduceEarthReplaySession,
+  type EarthReplayControlEvent,
+  type EarthReplaySessionEvent,
+} from "@/surfaces/replay/playback/earth-replay-session-state";
 
 export function EarthReplayStage({
   route,
@@ -91,14 +76,9 @@ export function EarthReplayStage({
     ReplayElevationScrubberHandle | null
   >(null);
   const engineRef = useRef<ReplayEngine | undefined>(undefined);
-  const mountedRouteRef = useRef<string | undefined>(undefined);
-  const controlRef = useRef(initialReplayState());
-  const [status, setStatus] = useState<ReplayStatus>(() =>
-    initialReplayStatus(initialEngineMode),
-  );
-  const [engineMode, setEngineMode] =
-    useState<ReplayEngineMode>(initialEngineMode);
-  const [control, setControl] = useState(controlRef.current);
+  const sessionRef = useRef(initialEarthReplaySessionState(initialEngineMode));
+  const [session, setSession] = useState(sessionRef.current);
+  const { status, engineMode, control } = session;
   const [contextState, setContextState] =
     useState<RouteContextHudState>("preview");
   const [mobileControlsExpanded, setMobileControlsExpanded] = useState(false);
@@ -106,47 +86,48 @@ export function EarthReplayStage({
   const isMobile = useIsMobile();
   const reducedMotion = useReducedMotion();
   const totalDistanceM = routeDistanceM(route);
-  const operational = status.state === "ready" || status.state === "partial";
+  const operational = earthReplayOperational(status);
   const recordedLight = recordedLightAt(
     route.route,
     route.provenance.temporal,
     control.progressM,
   );
 
+  const dispatchSession = useCallback((event: EarthReplaySessionEvent) => {
+    const next = reduceEarthReplaySession(sessionRef.current, event);
+    sessionRef.current = next;
+    setSession(next);
+    return next;
+  }, []);
+
   const commitControl = useCallback(
-    (update: (current: ReplayControlState) => ReplayControlState) => {
-      const next = update(controlRef.current);
-      controlRef.current = next;
-      setControl(next);
+    (event: EarthReplayControlEvent) => {
+      const next = dispatchSession(event).control;
       engineRef.current?.setPose(replayPose(route, next));
       elevationScrubberRef.current?.sync(next.progressM);
     },
-    [route],
+    [dispatchSession, route],
   );
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const routeChanged = mountedRouteRef.current !== route.slug;
+    const routeChanged = sessionRef.current.routeSlug !== route.slug;
     if (routeChanged && engineMode !== initialEngineMode) {
-      setEngineMode(initialEngineMode);
+      dispatchSession({ type: "rendererSelected", mode: initialEngineMode });
       return;
     }
     const engine = createReplayEngine(engineMode);
     engineRef.current = engine;
-    const initialControl = routeChanged ? initialReplayState() : controlRef.current;
-    mountedRouteRef.current = route.slug;
-    controlRef.current = initialControl;
-    setControl(initialControl);
-    setStatus(initialReplayStatus(engineMode));
+    const { sessionId } = dispatchSession({ type: "rendererMounted", routeSlug: route.slug });
     void engine.mount({
       container,
       route,
       onStatus: (nextStatus) => {
         if (engineRef.current !== engine) return;
-        setStatus(nextStatus);
-        if (nextStatus.state === "ready" || nextStatus.state === "partial") {
-          engine.setPose(replayPose(route, controlRef.current));
+        dispatchSession({ type: "statusReceived", sessionId, status: nextStatus });
+        if (earthReplayOperational(nextStatus)) {
+          engine.setPose(replayPose(route, sessionRef.current.control));
         }
       },
     });
@@ -154,7 +135,7 @@ export function EarthReplayStage({
       engine.destroy();
       if (engineRef.current === engine) engineRef.current = undefined;
     };
-  }, [engineMode, initialEngineMode, route]);
+  }, [dispatchSession, engineMode, initialEngineMode, route]);
 
   useEffect(() => {
     if (!operational || !control.playing) return;
@@ -162,17 +143,18 @@ export function EarthReplayStage({
     let previous = performance.now();
     let lastUiUpdate = previous;
     const tick = (now: number) => {
-      const next = advanceReplay(
-        controlRef.current,
-        (now - previous) / 1_000,
+      const nextSession = reduceEarthReplaySession(sessionRef.current, {
+        type: "frameElapsed",
+        elapsedSeconds: (now - previous) / 1_000,
         totalDistanceM,
-      );
+      });
       previous = now;
-      controlRef.current = next;
+      sessionRef.current = nextSession;
+      const next = nextSession.control;
       engineRef.current?.setPose(replayPose(route, next));
       elevationScrubberRef.current?.sync(next.progressM);
       if (now - lastUiUpdate >= 80) {
-        setControl(next);
+        setSession(nextSession);
         lastUiUpdate = now;
       }
       frame = requestAnimationFrame(tick);
@@ -221,12 +203,12 @@ export function EarthReplayStage({
       data-light-phase={recordedLight.phase}
       onPointerMove={() => setChromeVisible(true)}
       onFocusCapture={() => setChromeVisible(true)}
-      className="relative h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 overflow-hidden bg-[#02070a] md:h-dvh md:min-h-[36rem]"
+      className={`relative h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 overflow-hidden bg-[#02070a] md:h-dvh md:min-h-[36rem] ${engineMode === "atlas" ? "grid grid-rows-[minmax(0,1fr)_auto]" : ""}`}
     >
       <div
         ref={containerRef}
         aria-label={engineMode === "earth" ? "Earth Replay world" : "Atlas Replay map"}
-        className="absolute inset-0"
+        className={engineMode === "atlas" ? "relative row-start-1 min-h-0" : "absolute inset-0"}
       />
       <RecordedLightLayer light={recordedLight} reducedMotion={reducedMotion} />
 
@@ -260,7 +242,7 @@ export function EarthReplayStage({
                   variant="outline"
                   size="sm"
                   className="mt-3"
-                  onClick={() => setEngineMode("atlas")}
+                  onClick={() => dispatchSession({ type: "rendererSelected", mode: "atlas" })}
                 >
                   <Map aria-hidden="true" />
                   Use Atlas replay
@@ -273,7 +255,7 @@ export function EarthReplayStage({
                 variant="outline"
                 size="sm"
                 className="mt-3"
-                onClick={() => setEngineMode("earth")}
+                onClick={() => dispatchSession({ type: "rendererSelected", mode: "earth" })}
               >
                 <Route aria-hidden="true" />
                 Try Earth replay
@@ -318,7 +300,7 @@ export function EarthReplayStage({
             {status.state === "unavailable" ? (
               <div className="mt-5 flex flex-wrap justify-center gap-2">
                 {engineMode === "earth" ? (
-                  <Button type="button" onClick={() => setEngineMode("atlas")}>
+                  <Button type="button" onClick={() => dispatchSession({ type: "rendererSelected", mode: "atlas" })}>
                     <Map aria-hidden="true" />
                     Use Atlas replay
                   </Button>
@@ -332,7 +314,7 @@ export function EarthReplayStage({
         </div>
       ) : null}
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center">
+      <div className={`pointer-events-none z-20 flex justify-center ${engineMode === "atlas" ? "relative row-start-2" : "absolute inset-x-0 bottom-0"}`}>
         <div
           data-testid="replay-controls"
           className="pointer-events-auto w-full border-t border-line bg-surface/96 p-2 text-ink shadow-sheet backdrop-blur sm:flex sm:items-center sm:gap-2 sm:px-3 sm:py-2"
@@ -368,9 +350,7 @@ export function EarthReplayStage({
               disabled={!operational}
               compact
               onSeek={(progressM) =>
-                commitControl((current) =>
-                  seekReplay(current, progressM, totalDistanceM),
-                )
+                commitControl({ type: "progressSelected", progressM, totalDistanceM })
               }
             />
             {mobileControlsExpanded ? (
@@ -387,7 +367,7 @@ export function EarthReplayStage({
                     !operational || control.cameraRangeM === REPLAY_CAMERA_RANGES_M[0]
                   }
                   aria-label="Zoom in to route"
-                  onClick={() => commitControl((current) => zoomReplay(current, "in"))}
+                  onClick={() => commitControl({ type: "zoomRequested", direction: "in" })}
                 >
                   <ZoomIn aria-hidden="true" />
                 </Button>
@@ -401,7 +381,7 @@ export function EarthReplayStage({
                     control.cameraRangeM === REPLAY_CAMERA_RANGES_M.at(-1)
                   }
                   aria-label="Zoom out from route"
-                  onClick={() => commitControl((current) => zoomReplay(current, "out"))}
+                  onClick={() => commitControl({ type: "zoomRequested", direction: "out" })}
                 >
                   <ZoomOut aria-hidden="true" />
                 </Button>
@@ -411,7 +391,7 @@ export function EarthReplayStage({
                   className="h-11"
                   disabled={!operational}
                   aria-label={`Playback speed ${control.speed}x`}
-                  onClick={() => commitControl(cycleReplaySpeed)}
+                  onClick={() => commitControl({ type: "speedCycled" })}
                 >
                   <Gauge aria-hidden="true" />
                   {control.speed}x
@@ -425,7 +405,7 @@ export function EarthReplayStage({
                 className="size-11"
                 disabled={!operational}
                 aria-label={control.playing ? "Pause route" : "Play route"}
-                onClick={() => commitControl(toggleReplay)}
+                onClick={() => commitControl({ type: "playbackToggled" })}
               >
                 {control.playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
               </Button>
@@ -435,7 +415,7 @@ export function EarthReplayStage({
                 className="h-11 flex-1"
                 disabled={!operational}
                 aria-label={control.following ? "Release camera" : "Follow route"}
-                onClick={() => commitControl(toggleReplayFollowing)}
+                onClick={() => commitControl({ type: "followingToggled" })}
               >
                 {control.following ? (
                   <LocateFixed aria-hidden="true" />
@@ -465,9 +445,7 @@ export function EarthReplayStage({
             disabled={!operational}
             className="min-w-48 flex-[2]"
             onSeek={(progressM) =>
-              commitControl((current) =>
-                seekReplay(current, progressM, totalDistanceM),
-              )
+              commitControl({ type: "progressSelected", progressM, totalDistanceM })
             }
           />
           <Button
@@ -477,7 +455,7 @@ export function EarthReplayStage({
             disabled={!operational}
             aria-label={control.playing ? "Pause route" : "Play route"}
             title={control.playing ? "Pause route" : "Play route"}
-            onClick={() => commitControl(toggleReplay)}
+            onClick={() => commitControl({ type: "playbackToggled" })}
           >
             {control.playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
           </Button>
@@ -487,7 +465,7 @@ export function EarthReplayStage({
             disabled={!operational}
             aria-label={control.following ? "Release camera" : "Follow route"}
             title={control.following ? "Release camera" : "Follow route"}
-            onClick={() => commitControl(toggleReplayFollowing)}
+            onClick={() => commitControl({ type: "followingToggled" })}
           >
             {control.following ? (
               <LocateFixed aria-hidden="true" />
@@ -508,7 +486,7 @@ export function EarthReplayStage({
             }
             aria-label="Zoom in to route"
             title="Zoom in to route"
-            onClick={() => commitControl((current) => zoomReplay(current, "in"))}
+            onClick={() => commitControl({ type: "zoomRequested", direction: "in" })}
           >
             <ZoomIn aria-hidden="true" />
           </Button>
@@ -522,7 +500,7 @@ export function EarthReplayStage({
             }
             aria-label="Zoom out from route"
             title="Zoom out from route"
-            onClick={() => commitControl((current) => zoomReplay(current, "out"))}
+            onClick={() => commitControl({ type: "zoomRequested", direction: "out" })}
           >
             <ZoomOut aria-hidden="true" />
           </Button>
@@ -532,7 +510,7 @@ export function EarthReplayStage({
             disabled={!operational}
             aria-label={`Playback speed ${control.speed}x`}
             title="Change playback speed"
-            onClick={() => commitControl(cycleReplaySpeed)}
+            onClick={() => commitControl({ type: "speedCycled" })}
           >
             <Gauge aria-hidden="true" />
             {control.speed}x
