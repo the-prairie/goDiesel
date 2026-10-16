@@ -13,6 +13,7 @@ export function FinderForm({
   onToggleFilters,
   preferencesChanged = false,
   submitted = false,
+  allowAnyActivity = false,
 }: {
   intent: FinderIntent;
   onChange: (intent: FinderIntent) => void;
@@ -20,6 +21,7 @@ export function FinderForm({
   expanded: boolean;
   preferencesChanged?: boolean;
   submitted?: boolean;
+  allowAnyActivity?: boolean;
   onToggleFilters: () => void;
 }) {
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -61,7 +63,7 @@ export function FinderForm({
           <span className="hidden sm:inline">{expanded ? "Hide filters" : "Edit filters"}</span>
         </Button>
       </div>
-      {!submitted || preferencesChanged ? <p className="text-sm text-ink-secondary" aria-label="Search preferences">{preferencesChanged ? "Not applied yet: " : "Search for: "}{intent.activity} · {intent.minDistanceKm != null || intent.maxDistanceKm != null ? `${intent.minDistanceKm ?? 0}–${intent.maxDistanceKm ?? "∞"} km` : intent.distanceKm ? `around ${intent.distanceKm} km` : "any distance"}{intent.terrain !== "any" ? ` · ${intent.terrain}` : ""}</p> : null}
+      {!submitted || preferencesChanged ? <p className="text-sm text-ink-secondary" aria-label="Search preferences">{preferencesChanged ? "Not applied yet: " : "Search for: "}{intent.activity === "Any" ? "All activities" : intent.activity} · {intent.minDistanceKm != null || intent.maxDistanceKm != null ? `${intent.minDistanceKm ?? 0}–${intent.maxDistanceKm ?? "∞"} km` : intent.distanceKm ? `around ${intent.distanceKm} km` : "any distance"}{intent.terrain !== "any" ? ` · ${intent.terrain}` : ""}</p> : null}
       <div
         id="finder-options"
         className={`${expanded ? "grid" : "hidden"} grid-cols-2 gap-3 border-t border-line pt-3 lg:grid-cols-4`}
@@ -71,6 +73,7 @@ export function FinderForm({
           label="Activity"
           value={intent.activity}
           options={[
+            ...(allowAnyActivity ? [["Any", "All activities"]] as const : []),
             ["Run", "Run"],
             ["Ride", "Ride"],
           ]}

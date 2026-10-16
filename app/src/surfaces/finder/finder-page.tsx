@@ -13,7 +13,7 @@ import { FinderRouteMap } from "@/ui/planning-route-map";
 import { routes } from "@/data/routes";
 import { RouteThread } from "@/ui/route-card";
 import { Button } from "@/ui/button";
-import { curatedDiscoveryCandidates } from "@/data/discovery-provider";
+import { collectionPlaces } from "@/domain/collection-places";
 import { savePlannedRoute, usePlannedRoutes } from "@/data/planned-route-store";
 import { useRouteDetail } from "@/data/use-route-detail";
 import type {
@@ -31,6 +31,8 @@ const initialIntent: FinderIntent = {
   vibe: "",
 };
 
+const places = collectionPlaces(routes);
+
 export function FinderPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const submittedIntent = useMemo(
@@ -41,7 +43,10 @@ export function FinderPage() {
   const scope = searchParams.get("scope") === "new" ? "new" : "collection";
   function setScope(value: "collection" | "new") {
     const next = new URLSearchParams(searchParams);
-    if (value === "new") next.set("scope", "new"); else next.delete("scope");
+    if (value === "new") {
+      next.set("scope", "new");
+      if (intent.activity === "Any") next.set("activity", "Run");
+    } else next.delete("scope");
     setSearchParams(next, { replace: true });
   }
   function writeIntent(next: FinderIntent) {
@@ -103,6 +108,7 @@ export function FinderPage() {
         </div>
         <FinderForm
           intent={intent}
+          allowAnyActivity={scope === "collection"}
           submitted={Boolean(submittedIntent)}
           preferencesChanged={Boolean(submittedIntent && paramsForIntent(intent).toString() !== paramsForIntent(submittedIntent).toString())}
           onChange={(next) => setIntent({ ...next, explicitFilters: [...new Set([...(intent.explicitFilters ?? []), ...finderFilters.filter(key => next[key] !== intent[key])])] })}
@@ -122,18 +128,17 @@ export function FinderPage() {
       {scope === "new" ? <ExternalDiscovery key={JSON.stringify(submittedIntent)} intent={submittedIntent ?? intent} /> : !submittedIntent ? (
         <section aria-label="Choose a starting place" className="mx-auto min-h-0 w-full max-w-5xl overflow-y-auto px-4 py-8 sm:p-8">
           <h2 className="font-editorial text-2xl text-ink">Where would you like to go?</h2>
-          <p className="mt-2 text-sm text-ink-secondary">Choose a place from your collection, or search above.</p>
+          <p className="mt-2 text-sm text-ink-secondary">{places.length} places · {places.reduce((count, place) => count + place.routes.length, 0)} routes in your collection.</p>
           <div className="mt-6 grid gap-3 sm:grid-cols-3">
-            {["Kyoto", "Banff", "Victoria"].map((place) => {
-              const records = routes.filter((route) => route.region.includes(place));
-              const preview = curatedDiscoveryCandidates.filter(c => ["17654151284", "13358070690", "5650407638"].includes(c.sourceRouteSlug)).find((candidate) => candidate.route.region.includes(place))?.route ?? records[0];
+            {places.map((place) => {
+              const preview = place.routes[0];
               return (
-                <button key={place} type="button" aria-label={place}
+                <button key={place.name} type="button" aria-label={`${place.name}, ${place.routes.length} ${place.routes.length === 1 ? "route" : "routes"}`}
                   className="group grid grid-cols-[6rem_1fr] overflow-hidden rounded-[var(--radius-panel)] border border-line text-left transition-colors hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-ring sm:grid-cols-1"
-                  onClick={() => { const next: FinderIntent = { ...initialIntent, explicitFilters: ["place", "activity", "distanceKm"], place, activity: preview?.type === "Ride" ? "Ride" as const : "Run" as const, distanceKm: preview ? Math.round(preview.distanceKm) : 20 }; setIntent(next); writeIntent(next); setFiltersOpen(false); }}>
+                  onClick={() => { const next: FinderIntent = { ...initialIntent, explicitFilters: ["place", "activity"], place: place.name, activity: "Any" }; setIntent(next); writeIntent(next); setFiltersOpen(false); setView("list"); }}>
                   {preview ? <RouteThread route={preview} className="h-24 border-b-0 border-r sm:h-36 sm:border-b sm:border-r-0" /> : null}
                   <span className="flex items-center gap-3 p-4">
-                    <span className="flex-1"><span className="block text-lg text-ink">{place}</span><span className="mt-1 block text-xs text-ink-muted">{preview?.type} · around {preview ? Math.round(preview.distanceKm) : 20} km</span></span>
+                    <span className="flex-1"><span className="block text-lg text-ink">{place.name}</span><span className="mt-1 block text-xs text-ink-muted">{place.routes.length} {place.routes.length === 1 ? "route" : "routes"}</span></span>
                     <ArrowUpRight className="size-4 text-ink-secondary" aria-hidden="true" />
                   </span>
                 </button>
@@ -283,7 +288,7 @@ function ActiveFilterChips({
       className="mt-2 flex flex-wrap items-center gap-1"
     >
 
-      <span className="px-2 text-sm text-ink-secondary">{intent.activity}</span>
+      <span className="px-2 text-sm text-ink-secondary">{intent.activity === "Any" ? "All activities" : intent.activity}</span>
       <Button type="button" variant="secondary" size="sm" aria-label="Edit distance target" onClick={onEditDistance}>{intent.minDistanceKm != null || intent.maxDistanceKm != null ? `${intent.minDistanceKm ?? 0}–${intent.maxDistanceKm ?? "∞"} km` : intent.distanceKm ? `Around ${intent.distanceKm} km` : "Any distance"} <Pencil aria-hidden="true" /></Button>
       {intent.maxElevationM != null ? <span className="text-sm text-ink-secondary">Up to {intent.maxElevationM} m climbing</span> : null}
       {chips.filter(chip => chip.label).map((chip) => (
@@ -344,7 +349,7 @@ function intentFromSearchParams(params: URLSearchParams): FinderIntent | null {
   const place = rawPlace === params.get("q") && isExperienceQuery(rawPlace) ? "" : rawPlace;
   const query = params.get("q") ?? "";
   if (!place && !query && !params.has("activity")) return null;
-  const activity = params.get("activity") === "Ride" ? "Ride" : "Run";
+  const activity = params.get("activity") === "Ride" ? "Ride" : params.get("activity") === "Any" && params.get("scope") !== "new" ? "Any" : "Run";
   const distance = Number(params.get("distance"));
   const terrainValue = params.get("terrain");
   const terrain = ["road", "trail", "mixed", "mountain"].includes(

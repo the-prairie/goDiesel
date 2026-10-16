@@ -32,7 +32,7 @@ for (const width of [390,1280]) {
     await expect(page.getByRole('region',{name:'Choose a starting place'})).toBeVisible();
     await expect(page.getByRole('region',{name:'Finder route map'})).toHaveCount(0);
     await expect(page.getByText('Source-backed candidate geometry',{exact:false})).toHaveCount(0);
-    await page.getByRole('button',{name:'Kyoto',exact:true}).click();
+    await page.getByRole('button',{name:'Kyoto, Japan, 2 routes',exact:true}).click();
     if (width < 1024) await page.getByRole('button',{name:'Map',exact:true}).click();
     const map = page.getByRole('region',{name:'Finder route map'});
     await expect(map).toHaveAttribute('data-map-status','ready');
@@ -50,11 +50,11 @@ for (const width of [390,1280]) {
   });
 }
 
-test('Victoria starting place uses its available ride and distance', async ({ page }) => {
+test('Victoria starting place shows every activity and distance', async ({ page }) => {
   await page.goto('/#/finder');
-  await page.getByRole('button', {name:'Victoria',exact:true}).click();
-  await expect(page).toHaveURL(/place=Victoria&activity=Ride&distance=85/);
-  await expect(page.getByRole('heading',{name:'1 route to explore'})).toBeVisible();
+  await page.getByRole('button', {name:'Victoria, BC, 4 routes',exact:true}).click();
+  await expect(page).toHaveURL(/place=Victoria%2C\+BC&activity=Any&distance=0/);
+  await expect(page.getByRole('heading',{name:'4 routes to explore'})).toBeVisible();
   await expect(page.getByRole('region',{name:'Finder route map'})).toHaveAttribute('data-map-status','ready');
 });
 

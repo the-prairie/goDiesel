@@ -24,6 +24,7 @@ export function rankCollection(
   vector?: number[],
 ) {
   const [min, max] = distanceBounds(intent);
+  const region = candidates.find(c => c.route.region.toLowerCase() === intent.place.trim().toLowerCase())?.route.region;
   const bySlug = new Map(docs.map((d) => [d.slug, d]));
   const query = words(
     intent.similarPlace ? intent.vibe : `${intent.query ?? ""} ${intent.vibe}`,
@@ -46,7 +47,7 @@ export function rankCollection(
   const seed = intent.similarPlace
     ? candidates.find(
         (c) =>
-          c.route.type === intent.activity &&
+          (intent.activity === "Any" || c.route.type === intent.activity) &&
           c.route.region
             .toLowerCase()
             .includes(intent.similarPlace!.toLowerCase()),
@@ -65,7 +66,7 @@ export function rankCollection(
       const literalQuery = intent.similarPlace ? intent.vibe : `${intent.query ?? ""} ${intent.vibe}`.trim();
       const metadataMatch = matchMetadata(doc?.metadata ?? routeMetadata({ ...r }), literalQuery);
       if (
-        r.type !== intent.activity ||
+        (intent.activity !== "Any" && r.type !== intent.activity) ||
         r.distanceKm < min ||
         r.distanceKm > max ||
         (intent.maxElevationM != null &&
@@ -74,9 +75,9 @@ export function rankCollection(
         return [];
       if (
         intent.place &&
-        !` ${tokens(`${r.region} ${doc?.text ?? r.guide.vibe ?? ""}`).join(" ")} `.includes(
+        (region ? r.region !== region : !` ${tokens(`${r.region} ${doc?.text ?? r.guide.vibe ?? ""}`).join(" ")} `.includes(
           ` ${tokens(intent.place).join(" ")} `,
-        )
+        ))
       )
         return [];
       if (seed?.sourceRouteSlug === candidate.sourceRouteSlug) return [];
