@@ -14,10 +14,14 @@ import { ProviderError, providerFailureMessage } from "@/providers/provider-erro
 import { loadGoogleMaps } from "@/providers/google-maps-loader";
 import { routeDistanceM } from "@/domain/geometry/route-path";
 
-export type GoogleRouteNavigatorStatus =
-  | { state: "loading"; message: string }
-  | { state: "ready"; message: string }
-  | { state: "unavailable"; message: string };
+import {
+  initialGoogleRendererState,
+  reduceGoogleRenderer,
+  type GoogleRendererEvent,
+  type GoogleRouteNavigatorStatus,
+} from "@/surfaces/replay/renderers/google-renderer-state";
+
+export type { GoogleRouteNavigatorStatus } from "@/surfaces/replay/renderers/google-renderer-state";
 
 interface MountOptions {
   apiKey: string;
@@ -111,7 +115,7 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
   private following = true;
   private headingDeg?: number;
   private headingSmoothing = 0.14;
-  private generation = 0;
+  private lifecycle = initialGoogleRendererState();
   private mountController?: AbortController;
 
   async mount({
@@ -125,19 +129,15 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
     headingSmoothing,
   }: MountOptions) {
     this.destroy();
-    const generation = ++this.generation;
-    onStatus({ state: "loading", message: "Loading Google photorealistic 3D." });
+    const { operationId } = this.transition({ type: "mountStarted" }, onStatus);
     this.headingSmoothing = headingSmoothing ?? 0.14;
     this.interactiveThread = routeStyle?.palette === "neutral";
     if (!apiKey) {
-      onStatus({
-        state: "unavailable",
-        message: "A Google Maps JavaScript API browser key is required.",
-      });
+      this.transition({ type: "inputsRejected", operationId, reason: "key" }, onStatus);
       return;
     }
     if (route.route.length < 2) {
-      onStatus({ state: "unavailable", message: "Recorded route geometry is unavailable." });
+      this.transition({ type: "inputsRejected", operationId, reason: "geometry" }, onStatus);
       return;
     }
 
@@ -145,12 +145,7 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
       const controller = new AbortController();
       this.mountController = controller;
       const authFailure = () => {
-        if (generation !== this.generation) return;
-        onStatus({
-          state: "unavailable",
-          message:
-            "Google Maps rejected this browser origin. Add the current localhost or preview URL to the key restrictions.",
-        });
+        this.transition({ type: "authenticationRejected", operationId }, onStatus);
       };
       window.addEventListener(
         "godiesel:google-maps-auth-failure",
@@ -165,7 +160,8 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
         MapMode,
         Polyline3DElement,
       } = (await google.maps.importLibrary("maps3d")) as google.maps.Maps3DLibrary;
-      if (generation !== this.generation) return;
+      this.transition({ type: "apiLoaded", operationId }, onStatus);
+      if (operationId !== this.lifecycle.operationId || this.lifecycle.phase !== "loadingScene") return;
 
       const first = route.route[0];
       const map = new Map3DElement({
@@ -184,12 +180,7 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
       map.style.height = "100%";
       map.dataset.testid = "google-route-map";
       map.addEventListener("gmp-error", () => {
-        if (generation !== this.generation) return;
-        onStatus({
-          state: "unavailable",
-          message:
-            "This browser could not start Google photorealistic 3D. Try a hardware-accelerated Chrome window.",
-        });
+        this.transition({ type: "sceneErrored", operationId }, onStatus);
       }, { signal: controller.signal });
 
       const routePath = densifyGoogleRoutePath(route);
@@ -228,18 +219,26 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
       this.routeDistanceM = Math.max(1, routeDistanceM(route));
       this.routeWidth = routeStyle?.width ?? 8;
       await waitForGoogleSceneReady(map, controller.signal);
-      if (generation !== this.generation) return;
-      onStatus({ state: "ready", message: "Native Google 3D route world ready." });
+      this.transition({ type: "sceneReady", operationId }, onStatus);
     } catch (error) {
-      if (generation !== this.generation) return;
-      onStatus({
-        state: "unavailable",
+      if (operationId !== this.lifecycle.operationId) return;
+      this.transition({
+        type: "operationFailed", operationId,
         message: providerFailureMessage(
           error,
           "Google photorealistic 3D could not start in this browser. Atlas replay works everywhere.",
         ),
-      });
+      }, onStatus);
     }
+  }
+
+  private transition(event: GoogleRendererEvent, onStatus?: MountOptions["onStatus"]) {
+    const previousStatus = this.lifecycle.status;
+    this.lifecycle = reduceGoogleRenderer(this.lifecycle, event);
+    if (this.lifecycle.status && this.lifecycle.status !== previousStatus) {
+      onStatus?.(this.lifecycle.status);
+    }
+    return this.lifecycle;
   }
 
   setCamera(pose: GoogleRouteCameraPose) {
@@ -334,7 +333,7 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
   }
 
   destroy() {
-    this.generation += 1;
+    this.transition({ type: "destroyed" });
     this.mountController?.abort();
     this.mountController = undefined;
     this.map?.remove();
