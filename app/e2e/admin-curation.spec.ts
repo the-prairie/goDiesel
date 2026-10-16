@@ -436,3 +436,58 @@ test("failed writer probe and bundled detail stay read-only without automatic re
   await expect(editor.getByLabel("Vibe")).toBeDisabled();
   expect(probes).toBe(2);
 });
+
+
+for (const width of [390, 1280]) {
+  test(`list fields preserve typed newlines and save their parsed values at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    let saveRequest: Request | undefined;
+    await mockEditableAdmin(page, (request) => { saveRequest = request; });
+    await page.route(`${adminApi}/api/routes`, (route) => route.fulfill({ json: [
+      { ...adminRoute, activity_id: "a", name: "Calgary River Path", region: "Calgary" },
+      { ...adminRoute, activity_id: "b", name: "Kyoto Temple Climb" },
+    ] }));
+    await page.goto("/#/admin");
+    const editor = page.getByRole("region", { name: "Route curation editor" });
+    const terrain = editor.getByLabel("Terrain");
+    await terrain.pressSequentially("Paved");
+    await terrain.press("Enter");
+    await terrain.press("Enter");
+    await terrain.pressSequentially("Hills");
+    await page.screenshot({ path: `artifacts/state-migration/t07/typed-terrain-${width}.png` });
+    await expect(terrain).toHaveValue("Paved\n\nHills");
+    for (let index = 0; index < 5; index += 1) await terrain.press("ArrowLeft");
+    await terrain.pressSequentially("Steep ");
+    await expect(terrain).toHaveValue("Paved\n\nSteep Hills");
+    await editor.getByRole("button", { name: "Save and regenerate" }).click();
+    await expect(editor.getByText("Manifest and route detail regenerated")).toBeVisible();
+    expect(saveRequest!.postDataJSON().curation.terrain).toEqual(["Paved", "Steep Hills"]);
+    await expect(page.getByTestId("curation-action-bar")).toHaveAttribute("data-dirty", "false");
+    await page.getByRole("button", { name: /Kyoto Temple Climb/ }).click();
+    await expect(editor.getByLabel("Terrain")).toHaveValue("");
+    await page.getByRole("button", { name: /Calgary River Path/ }).click();
+    await expect(editor.getByLabel("Terrain")).toHaveValue("Paved\nSteep Hills");
+    const search = page.getByRole("searchbox");
+    await search.fill("no matching route");
+    await page.getByRole("button", { name: "Clear search" }).click();
+    await expect(editor.getByLabel("Terrain")).toHaveValue("Paved\nSteep Hills");
+  });
+}
+
+
+test("read-only list fields hydrate from bundled detail after their initial summary", async ({ page }) => {
+  let detail: Route | undefined;
+  await page.route(`${adminApi}/**`, (route) => route.abort());
+  await page.route("**/data/routes/*.json", (route) => { detail = route; });
+  await page.goto("/#/admin");
+  const terrain = page.getByRole("region", { name: "Route curation editor" }).getByLabel("Terrain");
+  await expect(terrain).toBeDisabled();
+  await expect(terrain).toHaveValue("");
+  await expect.poll(() => detail).toBeTruthy();
+  const response = await detail!.fetch();
+  const body = await response.json();
+  body.curation.terrain = ["Bundled streets", "Bundled hills"];
+  await detail!.fulfill({ json: body });
+  await expect(terrain).toHaveValue("Bundled streets\nBundled hills");
+  await expect(terrain).toBeDisabled();
+});

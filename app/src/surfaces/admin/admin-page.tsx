@@ -171,6 +171,7 @@ export function AdminPage() {
 
             {selectedRoute && draft ? (
               <RouteEditor
+                key={selectedRoute.activityId}
                 route={selectedRoute}
                 draft={draft}
                 readOnly={workspace.mode === "read-only"}
