@@ -1,5 +1,5 @@
 export function initialMutationState() {
-    return { routes: [], dirty: new Map(), saves: new Map(), refreshes: new Set(), rebuilds: new Set() };
+    return { routes: [], dirty: new Map(), save: { status: 'idle' }, refreshes: new Set(), rebuilds: new Set() };
 }
 export function reduceMutation(state, event) {
     switch (event.type) {
@@ -9,25 +9,31 @@ export function reduceMutation(state, event) {
             return { ...state, dirty };
         }
         case 'saveStarted': {
-            if (state.saves.has(event.requestId))
+            if (state.save.status !== 'idle' || state.dirty.size === 0)
                 return state;
-            const saves = new Map(state.saves);
-            saves.set(event.requestId, { status: 'saving', patches: state.dirty });
-            return { ...state, saves };
+            return { ...state, save: { status: 'saving', requestId: event.requestId, patches: state.dirty } };
         }
         case 'saveAccepted': {
-            if (state.saves.get(event.requestId)?.status !== 'saving')
+            if (state.save.status !== 'saving' || state.save.requestId !== event.requestId)
                 return state;
-            const saves = new Map(state.saves);
-            saves.set(event.requestId, { status: 'refreshing' });
-            return { ...state, dirty: new Map(), saves };
+            const dirty = new Map(state.dirty);
+            for (const [routeId, submitted] of state.save.patches) {
+                const remaining = { ...dirty.get(routeId) };
+                for (const [field, value] of Object.entries(submitted)) {
+                    if (remaining[field] === value)
+                        delete remaining[field];
+                }
+                if (Object.keys(remaining).length)
+                    dirty.set(routeId, remaining);
+                else
+                    dirty.delete(routeId);
+            }
+            return { ...state, dirty, save: { status: 'refreshing', requestId: event.requestId } };
         }
         case 'saveSettled': {
-            if (!state.saves.has(event.requestId))
+            if (state.save.status === 'idle' || state.save.requestId !== event.requestId)
                 return state;
-            const saves = new Map(state.saves);
-            saves.delete(event.requestId);
-            return { ...state, saves };
+            return { ...state, save: { status: 'idle' } };
         }
         case 'refreshStarted':
             return { ...state, refreshes: new Set([...state.refreshes, event.requestId]) };

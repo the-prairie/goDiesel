@@ -437,7 +437,7 @@ function renderSaveBar() {
   document.getElementById('dirtyCount').textContent = n;
   document.getElementById('saveCount').textContent = n ? `(${n})` : '';
   if (n === 0) { bar.classList.add('hidden'); btn.disabled = true; }
-  else        { bar.classList.remove('hidden'); btn.disabled = false; }
+  else        { bar.classList.remove('hidden'); btn.disabled = mutation.save.status !== 'idle'; }
 }
 
 function typeIconHtml(t) {
@@ -670,9 +670,11 @@ function showToast(msg, color) {
 }
 
 document.getElementById('saveBtn').addEventListener('click', async () => {
+  if (mutation.save.status !== 'idle' || mutation.dirty.size === 0) return;
   const requestId = ++mutationRequestId;
   dispatchMutation({ type: 'saveStarted', requestId });
-  const updates = Array.from(mutation.saves.get(requestId).patches.entries()).map(([aid, patch]) => ({
+  renderSaveBar();
+  const updates = Array.from(mutation.save.patches.entries()).map(([aid, patch]) => ({
     activity_id: aid, ...patch
   }));
   try {
@@ -694,6 +696,7 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
     showToast('SAVE FAILED', 'var(--reject)');
   } finally {
     dispatchMutation({ type: 'saveSettled', requestId });
+    renderSaveBar();
   }
 });
 
@@ -705,7 +708,8 @@ document.getElementById('rebuildBtn').addEventListener('click', async () => {
   const requestId = ++mutationRequestId;
   dispatchMutation({ type: 'rebuildStarted', requestId });
   try {
-    await fetch('/api/rebuild', { method: 'POST' });
+    const response = await fetch('/api/rebuild', { method: 'POST' });
+    if (!response.ok) throw new Error('Rebuild request failed');
     showToast('REBUILD STARTED — CHECK TERMINAL');
   } catch (err) {
     showToast('REBUILD FAILED', 'var(--reject)');
