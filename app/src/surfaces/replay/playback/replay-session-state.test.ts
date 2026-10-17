@@ -30,9 +30,9 @@ describe("native Replay session commands", () => {
   it("advances only while playing and resumes from the paused distance", () => {
     expect(run(tick).progressM).toBe(0);
     const paused = run(play, tick, play, tick);
-    expect(paused).toMatchObject({ playing: false, progressM: 1 });
+    expect(paused).toMatchObject({ playing: false, progressM: 0.2 });
     expect(reduceReplaySession(reduceReplaySession(paused, play), tick)).toMatchObject({
-      playing: true, progressM: 2,
+      playing: true, progressM: 0.4,
     });
   });
 
@@ -55,21 +55,32 @@ describe("native Replay session commands", () => {
     let state = run(play, tick);
     for (const speed of [2, 4, 0.5, 1]) {
       state = reduceReplaySession(state, { type: "speedCycled" });
-      expect(state).toMatchObject({ speed, playing: true, progressM: 1 });
+      expect(state).toMatchObject({ speed, playing: true, progressM: 0.2 });
+    }
+  });
+
+  it("applies each selected speed to subsequent playback frames", () => {
+    let state = run(play);
+    for (const [speed, distanceM] of [[2, 0.4], [4, 0.8], [0.5, 0.1], [1, 0.2]]) {
+      state = reduceReplaySession(state, { type: "speedCycled" });
+      const next = reduceReplaySession(state, tick);
+      expect(next.speed).toBe(speed);
+      expect(next.progressM - state.progressM).toBeCloseTo(distanceM);
+      state = next;
     }
   });
 
   it("allows free exploration while playback continues", () => {
     const state = run(play, { type: "followingChanged", following: false }, tick);
-    expect(state).toMatchObject({ playing: true, following: false, progressM: 1, cameraMode: "auto" });
+    expect(state).toMatchObject({ playing: true, following: false, progressM: 0.2, cameraMode: "auto" });
     expect(reduceReplaySession(state, { type: "followingChanged", following: true })).toMatchObject({
-      playing: true, following: true, progressM: 1, cameraMode: "auto",
+      playing: true, following: true, progressM: 0.2, cameraMode: "auto",
     });
   });
 
   it.each(["auto", "runner", "chase", "overview"] as const)("selecting %s reclaims camera ownership", (cameraMode) => {
     const state = run(play, tick, { type: "followingChanged", following: false }, { type: "cameraSelected", cameraMode });
-    expect(state).toMatchObject({ playing: true, progressM: 1, following: true, cameraMode });
+    expect(state).toMatchObject({ playing: true, progressM: 0.2, following: true, cameraMode });
   });
 
   it("grounding and zoom do not reclaim camera ownership or change playback", () => {

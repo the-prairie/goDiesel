@@ -425,7 +425,7 @@ test("Ember Replay settings use clear labels and reachable controls on mobile", 
   await installGoogleReplay(page, "ready");
   await page.goto("/#/replay/14736711660");
   await page.getByRole("button", { name: "Replay settings", exact: true }).click();
-  const panel = page.getByRole("complementary", { name: "Replay settings panel" });
+  const panel = page.getByRole("dialog", { name: "Replay settings" });
   await expect(panel).toBeVisible();
   for (const name of ["On terrain", "On 3D surface", "Follow route", "Explore freely", "Runner", "Overview"]) {
     const control = panel.getByRole("button", { name, exact: true });
@@ -482,7 +482,7 @@ for (const width of [390, 1280]) {
     await expect(stage).toHaveAttribute("data-following", "false");
     const start = Number(await page.getByLabel("Route progress").inputValue());
     await expect.poll(async () => Number(await page.getByLabel("Route progress").inputValue())).toBeGreaterThan(start);
-    await expect(page.getByRole("button", { name: "Pause route" })).toBeVisible();
+    await expect(page.getByTestId("replay-controls").getByLabel("Pause route")).toBeVisible();
     await page.getByRole("button", { name: "Overview", exact: true }).click();
     await expect(stage).toHaveAttribute("data-camera-mode", "overview");
     await expect(stage).toHaveAttribute("data-following", "true");
@@ -490,7 +490,7 @@ for (const width of [390, 1280]) {
     await expect(stage).toHaveAttribute("data-grounding-mode", "ground");
     await page.getByRole("button", { name: "Zoom in", exact: true }).click();
     await page.getByRole("button", { name: "Zoom out", exact: true }).click();
-    await settings.click();
+    await page.getByRole("button", { name: "Close", exact: true }).click();
     for (const speed of [1, 2, 4, 0.5]) {
       await page.getByRole("button", { name: `Playback speed ${speed}x`, exact: true }).click();
     }
@@ -507,6 +507,7 @@ for (const width of [390, 1280]) {
     await expect(scrubber).toHaveValue(String(Math.floor(maximum)));
     await settings.click();
     await page.screenshot({ path: `artifacts/state-migration/t02/commands-${width}.png` });
+    await page.getByRole("button", { name: "Close", exact: true }).click();
     await page.getByRole("button", { name: "Change route", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Choose a replay route" });
     await dialog.getByRole("searchbox").fill("Tokyo");
@@ -557,12 +558,53 @@ for (const viewport of [
     const controlsBox = await controls.boundingBox();
     expect(map!.width).toBe(stage!.width);
     expect(map!.height).toBeGreaterThan(100);
-    expect(creditBox!.y + creditBox!.height).toBeLessThanOrEqual(controlsBox!.y);
+    expect(controlsBox!.y + controlsBox!.height).toBeLessThanOrEqual(creditBox!.y);
     await credits.click();
     await expect(page.getByRole("button", { name: "Provider information opened" })).toBeVisible();
     await page.getByRole("button", { name: "Play route" }).click();
     await page.getByRole("button", { name: "Pause route" }).click();
     await page.getByLabel("Route progress").fill("7000");
     await expect(page.getByTestId("google-route-progress")).toContainText("7.00 /");
+  });
+}
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000 }]) {
+  test(`immersive Replay restores controls and keyboard navigation at ${viewport.width}px`, async ({ page }) => {
+    await installGoogleReplay(page, "ready");
+    await page.setViewportSize(viewport);
+    await page.goto('/#/replay/14736711660?from=%2Froutes');
+    const stage = page.getByTestId("replay-stage");
+    await expect(stage).toHaveAttribute("data-state", "ready");
+    expect(await stage.boundingBox()).toMatchObject({ x: 0, y: 0, ...viewport });
+    await expect(page.getByRole("navigation", { name: "Primary" })).toHaveCount(0);
+    const settings = page.getByRole("button", { name: "Replay settings", exact: true });
+    await settings.click();
+    const panel = page.getByRole("dialog", { name: "Replay settings" });
+    for (const [name, mode] of [["Runner", "runner"], ["Chase", "chase"], ["Overview", "overview"], ["Auto director", "auto"]]) {
+      await panel.getByRole("button", { name, exact: true }).click();
+      await expect(stage).toHaveAttribute("data-camera-mode", mode);
+    }
+    await panel.getByRole("button", { name: "On 3D surface", exact: true }).click();
+    await expect(stage).toHaveAttribute("data-grounding-mode", "mesh");
+    await panel.getByRole("button", { name: "On terrain", exact: true }).click();
+    await expect(stage).toHaveAttribute("data-grounding-mode", "ground");
+    await panel.getByRole("button", { name: "Explore freely", exact: true }).click();
+    await expect(stage).toHaveAttribute("data-following", "false");
+    await panel.getByRole("button", { name: "Follow route", exact: true }).click();
+    await expect(stage).toHaveAttribute("data-following", "true");
+    await panel.getByRole("button", { name: "Zoom in", exact: true }).click();
+    await panel.getByRole("button", { name: "Zoom out", exact: true }).click();
+    await panel.press("Escape");
+    await expect(panel).toBeHidden();
+    await expect(settings).toBeFocused();
+    await expect(page).toHaveURL(/replay\/14736711660/);
+    await page.getByRole("button", { name: "Change route", exact: true }).click();
+    const picker = page.getByRole("dialog", { name: "Choose a replay route" });
+    await picker.press("Escape");
+    await expect(picker).toBeHidden();
+    await expect(page).toHaveURL(/replay\/14736711660/);
+    await page.getByRole("button", { name: "All routes", exact: true }).click();
+    await expect(page).toHaveURL(/#\/routes$/);
+    await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
   });
 }

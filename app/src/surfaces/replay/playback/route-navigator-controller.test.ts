@@ -62,7 +62,8 @@ describe("Google route navigator controller", () => {
     expect(runner.rangeM).toBe(160);
     expect(runner.tiltDeg).toBeLessThanOrEqual(65);
     expect(chase.rangeM).toBeGreaterThan(200);
-    expect(chase.tiltDeg).toBeLessThan(70);
+    expect(chase.tiltDeg).toBe(70);
+    expect(chase.fovDeg).toBe(52);
     expect(initial.cameraMode).toBe("auto");
     expect(initial.groundingMode).toBe("ground");
     expect(overview.rangeM).toBeGreaterThan(1_000);
@@ -146,6 +147,14 @@ describe("Google route navigator controller", () => {
     });
   });
 
+  it("does not move the position marker to the finish during the final release", () => {
+    const treatment = googleRouteThreadTreatment(route, {
+      ...initialGoogleRouteNavigatorState(), progressM: 1_995,
+    });
+    expect(treatment.shotKind).toBe("release");
+    expect(treatment.focusRatio).toBe(0.9975);
+  });
+
   it("falls back to total elapsed time when points are not timed", () => {
     const untimed = {
       ...route,
@@ -158,12 +167,12 @@ describe("Google route navigator controller", () => {
 
 
 describe("native Replay command math contract", () => {
-  it("uses 210 seconds at normal speed and clamps each frame to 100 ms", () => {
+  it("uses 1050 seconds at normal speed and clamps each frame to 100 ms", () => {
     const playing = { ...initialGoogleRouteNavigatorState(), playing: true };
-    expect(advanceGoogleRouteNavigator(playing, 0.1, 2_100).progressM).toBe(1);
-    expect(advanceGoogleRouteNavigator(playing, 10, 2_100).progressM).toBe(1);
-    expect(advanceGoogleRouteNavigator(playing, -1, 2_100).progressM).toBe(0);
-    expect(advanceGoogleRouteNavigator({ ...playing, speed: 4 }, 0.1, 2_100).progressM).toBe(4);
+    expect(advanceGoogleRouteNavigator(playing, 0.1, 10_500).progressM).toBe(1);
+    expect(advanceGoogleRouteNavigator(playing, 10, 10_500).progressM).toBe(1);
+    expect(advanceGoogleRouteNavigator(playing, -1, 10_500).progressM).toBe(0);
+    expect(advanceGoogleRouteNavigator({ ...playing, speed: 4 }, 0.1, 10_500).progressM).toBe(4);
   });
 
   it("preserves playback intent when seeking to either boundary", () => {
@@ -195,4 +204,15 @@ describe("native Replay command math contract", () => {
     expect(state.rangeScale).toBe(2.4);
     expect(state.following).toBe(false);
   });
+});
+
+it("reverses Chase zoom immediately at its visible camera floor", () => {
+  let state: ReturnType<typeof initialGoogleRouteNavigatorState> = { ...initialGoogleRouteNavigatorState(), cameraMode: "chase" };
+  for (let i = 0; i < 20; i += 1) state = zoomGoogleRouteNavigator(state, "in");
+  const close = googleRouteCameraPose(route, state);
+  expect(close.rangeM).toBe(230);
+  const farther = googleRouteCameraPose(route, zoomGoogleRouteNavigator(state, "out"));
+  expect(farther.rangeM).toBeGreaterThan(close.rangeM);
+  const switchedFromRunner = { ...state, rangeScale: 0.55 };
+  expect(googleRouteCameraPose(route, zoomGoogleRouteNavigator(switchedFromRunner, "out")).rangeM).toBeGreaterThan(230);
 });

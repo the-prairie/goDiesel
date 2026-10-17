@@ -1,0 +1,66 @@
+body:has(.immersive-replay) .atlas-spine,
+body:has(.immersive-replay) .atlas-spine-mobile {
+  display: none;
+}
+
+.immersive-replay .replay-header {
+  padding-top: max(1rem, env(safe-area-inset-top));
+  background: linear-gradient(#101820ba, #10182040 72%, transparent);
+  padding-bottom: 2rem;
+}
+
+.immersive-replay .replay-header > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.immersive-replay-dock {
+  position: absolute;
+  bottom: calc(3rem + env(safe-area-inset-bottom));
+  left: 50%;
+  width: min(48rem, calc(100% - 2rem));
+  transform: translateX(-50%);
+}
+
+.immersive-replay-hud {
+  border: 1px solid #ffffff30;
+  border-radius: 1.25rem;
+  padding: .75rem 1rem;
+  background: #151c23eb;
+  color: white;
+  box-shadow: 0 8px 32px #0004;
+  backdrop-filter: blur(16px);
+}
+
+.immersive-replay-hud button[aria-label="Play route"],
+.immersive-replay-hud button[aria-label="Pause route"] {
+  border-radius: 50%;
+  background: #f4dfac;
+  color: #19232b;
+  border-color: #f4dfac;
+}
+
+.immersive-replay-hud .ember-camera {
+  background: transparent;
+}
+
+.immersive-replay-hud .ember-camera button {
+  color: #ffffffb8;
+}
+
+.immersive-replay-hud .ember-camera button[aria-pressed="true"] {
+  background: #ffffff18;
+  color: white;
+}
+
+@media (max-width: 639px) {
+  .immersive-replay-dock { width: calc(100% - 1.5rem); }
+  .immersive-replay-hud { padding: .625rem .75rem; }
+  .immersive-replay .replay-header { padding-inline: .75rem; }
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .immersive-replay-dock { bottom: 2rem; width: min(44rem, calc(100% - 2rem)); }
+  .immersive-replay-hud { padding: .4rem .75rem; }
+  .immersive-replay-hud .replay-metrics { display: none; }
+}

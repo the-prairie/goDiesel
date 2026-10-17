@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { parseRouteDetail } from "@/domain/route";
 import { loadGoogleMaps } from "@/providers/google-maps-loader";
+import { googleRouteThreadTreatment, initialGoogleRouteNavigatorState } from "@/surfaces/replay/playback/route-navigator-controller";
 import { ProviderError } from "@/providers/provider-error";
 import {
   createGoogleRouteNavigatorEngine,
@@ -20,6 +21,7 @@ class FakeElement extends EventTarget {
   dataset: Record<string, string> = {};
   children: FakeElement[] = [];
   removed = false;
+  declare path: Array<{ lat: number; lng: number; altitude?: number }>;
 
   constructor(options: object) {
     super();
@@ -46,7 +48,7 @@ function deferred<T>() {
 }
 
 const library = {
-  AltitudeMode: { RELATIVE_TO_MESH: "mesh", CLAMP_TO_GROUND: "ground" },
+  AltitudeMode: { RELATIVE_TO_MESH: "mesh", CLAMP_TO_GROUND: "ground", RELATIVE_TO_GROUND: "relative-ground" },
   GestureHandling: { GREEDY: "greedy" },
   MapMode: { SATELLITE: "satellite" },
   Map3DElement: FakeMap,
@@ -110,6 +112,71 @@ describe("Google renderer lifecycle adapter", () => {
       run.engine.setGrounding(mode);
       for (const layer of map.children) expect(layer).toMatchObject({ altitudeMode: mode });
     }
+  });
+
+  it("renders a grounded immersive thread without changing recorded geometry", async () => {
+    const source = structuredClone(route.route);
+    const run = mount({
+      groundingMode: "ground",
+      routeStyle: { mode: "filament", palette: "immersive", color: "#fff", outerColor: "#fff", outerWidth: 0, width: 2 },
+    });
+    const map = await sceneCreated();
+    steady(map);
+    await run.done;
+    run.engine.setCinematicRoute(googleRouteThreadTreatment(route, {
+      ...initialGoogleRouteNavigatorState(), cameraMode: "chase", progressM: 26_000,
+    }));
+    const [guide, future, traveled, marker] = map.children;
+    expect(guide).toMatchObject({ strokeColor: "#70e1dc", style: { opacity: "0.45" } });
+    expect(future).toMatchObject({ strokeColor: "#70e1dc", strokeWidth: 3.5, style: { opacity: "1" } });
+    expect(traveled).toMatchObject({ strokeColor: "#ff9d54", strokeWidth: 7, style: { opacity: "1" } });
+    expect(marker).toMatchObject({ strokeColor: "#fff3d6", strokeWidth: 4.5 });
+    for (const layer of map.children) {
+      expect(layer).toMatchObject({ altitudeMode: "relative-ground", drawsOccludedSegments: false });
+      expect(layer.path.every(({ altitude }) => altitude === (layer === marker ? 1.6 : 1.25))).toBe(true);
+    }
+    run.engine.setGrounding("mesh");
+    for (const layer of map.children) expect(layer).toMatchObject({ altitudeMode: "mesh" });
+    run.engine.setGrounding("ground");
+    for (const layer of map.children) expect(layer).toMatchObject({ altitudeMode: "relative-ground" });
+    expect(route.route).toEqual(source);
+  });
+
+  it("keeps the position ring at the actual distance through start, seek, and finish", async () => {
+    const run = mount({ routeStyle: { mode: "filament", palette: "immersive", color: "#fff", outerColor: "#fff", outerWidth: 0, width: 2 } });
+    const map = await sceneCreated();
+    steady(map);
+    await run.done;
+    const marker = map.children[3];
+    for (const point of [route.route[0], route.route[250], route.route.at(-1)!]) {
+      run.engine.setCinematicRoute(googleRouteThreadTreatment(route, {
+        ...initialGoogleRouteNavigatorState(), cameraMode: "chase", progressM: point.d,
+      }));
+      expect(marker.dataset.routeVisible).toBe("true");
+      expect(marker.path).toHaveLength(33);
+      expect(marker.path[0]).toEqual(marker.path.at(-1));
+      for (const vertex of marker.path) {
+        const northM = (vertex.lat - point.lat) * Math.PI / 180 * 6_371_000;
+        const eastM = (vertex.lng - point.lng) * Math.PI / 180 * 6_371_000 * Math.cos(point.lat * Math.PI / 180);
+        expect(Math.hypot(northM, eastM)).toBeCloseTo(3, 2);
+      }
+    }
+    expect(map.children[1].dataset.routeVisible).toBe("false");
+    expect(map.children[2].dataset.routeVisible).toBe("true");
+  });
+
+  it.each([undefined, "neutral"] as const)("preserves the %s cinematic filament treatment", async (palette) => {
+    const run = mount({ groundingMode: "ground", routeStyle: { mode: "filament", palette, color: "#fff", outerColor: "#fff", outerWidth: 0, width: 2 } });
+    const map = await sceneCreated();
+    steady(map);
+    await run.done;
+    run.engine.setCinematicRoute(googleRouteThreadTreatment(route, {
+      ...initialGoogleRouteNavigatorState(), cameraMode: "chase", progressM: 26_000,
+    }));
+    const [, , traveled, glint] = map.children;
+    expect(traveled).toMatchObject({ strokeColor: palette === "neutral" ? "#f5f5f5" : "#f06b50", altitudeMode: "ground", style: { opacity: "0.92" } });
+    expect(traveled.path.every(({ altitude }) => altitude === 0.2)).toBe(true);
+    expect(glint.path[0]).not.toEqual(glint.path.at(-1));
   });
 
   it.each([

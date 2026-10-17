@@ -33,7 +33,7 @@ interface MountOptions {
   routeStyle?: {
     color: string;
     mode?: "filament" | "hidden" | "solid";
-    palette?: "neutral";
+    palette?: "neutral" | "immersive";
     outerColor: string;
     outerWidth: number;
     width: number;
@@ -70,6 +70,25 @@ const FILAMENT_CLEARANCE_M: Record<CinematicFilamentRole, number> = {
   thread: 0.2,
   glint: 0.24,
 };
+
+const INTERACTIVE_PALETTES = {
+  neutral: {
+    colors: { guide: "#a7b5bc", future: "#a7b5bc", thread: "#f5f5f5", glint: "#ffffff" },
+    widths: { guide: 2, future: 2, thread: 3.5, glint: 4.5 },
+    clearanceM: FILAMENT_CLEARANCE_M,
+    outerColor: "#182126",
+    outerWidth: 0.22,
+  },
+  immersive: {
+    colors: { guide: "#70e1dc", future: "#70e1dc", thread: "#ff9d54", glint: "#fff3d6" },
+    widths: { guide: 3.5, future: 3.5, thread: 7, glint: 4.5 },
+    clearanceM: { guide: 1.25, future: 1.25, thread: 1.25, glint: 1.6 },
+    outerColor: "#17222c",
+    outerWidth: 0.3,
+  },
+} as const;
+
+type InteractivePalette = keyof typeof INTERACTIVE_PALETTES;
 
 const GOOGLE_SCENE_READY_TIMEOUT_MS = 30_000;
 
@@ -109,7 +128,7 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
   private routeLine?: google.maps.maps3d.Polyline3DElement;
   private filamentLayers: FilamentLayer[] = [];
   private routePath: Array<{ lat: number; lng: number; d: number }> = [];
-  private interactiveThread = false;
+  private palette?: InteractivePalette;
   private routeDistanceM = 1;
   private routeWidth = 8;
   private following = true;
@@ -131,7 +150,7 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
     this.destroy();
     const { operationId } = this.transition({ type: "mountStarted" }, onStatus);
     this.headingSmoothing = headingSmoothing ?? 0.14;
-    this.interactiveThread = routeStyle?.palette === "neutral";
+    this.palette = routeStyle?.palette;
     if (!apiKey) {
       this.transition({ type: "inputsRejected", operationId, reason: "key" }, onStatus);
       return;
@@ -187,7 +206,9 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
       const altitudeMode =
         groundingMode === "mesh"
           ? AltitudeMode.RELATIVE_TO_MESH
-          : AltitudeMode.CLAMP_TO_GROUND;
+          : this.palette === "immersive"
+            ? AltitudeMode.RELATIVE_TO_GROUND
+            : AltitudeMode.CLAMP_TO_GROUND;
       let routeLine: google.maps.maps3d.Polyline3DElement | undefined;
       if (routeStyle?.mode === "hidden") {
         routeLine = undefined;
@@ -267,7 +288,9 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
     const altitudeMode =
       mode === "mesh"
         ? google.maps.maps3d.AltitudeMode.RELATIVE_TO_MESH
-        : google.maps.maps3d.AltitudeMode.CLAMP_TO_GROUND;
+        : this.palette === "immersive"
+          ? google.maps.maps3d.AltitudeMode.RELATIVE_TO_GROUND
+          : google.maps.maps3d.AltitudeMode.CLAMP_TO_GROUND;
     if (this.routeLine) this.routeLine.altitudeMode = altitudeMode;
     this.filamentLayers.forEach(({ element }) => {
       element.altitudeMode = altitudeMode;
@@ -276,17 +299,32 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
 
   setCinematicRoute(treatment: CinematicRouteTreatment) {
     if (this.filamentLayers.length === 0 || this.routePath.length < 2) return;
+    const firstDistanceM = this.routePath[0].d;
+    const recordedDistanceM = this.routePath.at(-1)!.d - firstDistanceM;
+    const pathRatio = (ratio: number) => recordedDistanceM > 0
+      ? Math.min(1, Math.max(0, (ratio * this.routeDistanceM - firstDistanceM) / recordedDistanceM))
+      : ratio;
+    const visibleTreatment = this.palette === "immersive" ? {
+      ...treatment,
+      startRatio: pathRatio(treatment.startRatio),
+      focusRatio: pathRatio(treatment.focusRatio),
+      endRatio: pathRatio(treatment.endRatio),
+    } : treatment;
     const styles = buildCinematicThreadStyles(
-      treatment,
+      visibleTreatment,
       this.routeDistanceM,
     );
+    const palette = this.palette ? INTERACTIVE_PALETTES[this.palette] : undefined;
     for (const layer of this.filamentLayers) {
       const style = styles.find(({ role }) => role === layer.role);
-      if (!style || style.endRatio <= style.startRatio) {
+      const positionRing = this.palette === "immersive" && layer.role === "glint";
+      if (!style || (!positionRing && style.endRatio <= style.startRatio)) {
         setLineVisibility(layer.element, false);
         continue;
       }
-      if (
+      if (positionRing) {
+        layer.element.path = currentPositionRing(this.routePath, visibleTreatment.focusRatio);
+      } else if (
         Math.abs(layer.startRatio - style.startRatio) > 0.0001 ||
         Math.abs(layer.endRatio - style.endRatio) > 0.0001
       ) {
@@ -296,20 +334,20 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
           style.endRatio,
         ).map((point) => ({
           ...point,
-          altitude: FILAMENT_CLEARANCE_M[layer.role],
+          altitude: palette?.clearanceM[layer.role] ?? FILAMENT_CLEARANCE_M[layer.role],
         }));
         layer.startRatio = style.startRatio;
         layer.endRatio = style.endRatio;
       }
-      const interactive = this.interactiveThread;
-      const colors = { guide: "#a7b5bc", future: "#a7b5bc", thread: "#f5f5f5", glint: "#ffffff" };
-      const widths = { guide: 2, future: 2, thread: 3.5, glint: 4.5 };
-      layer.element.strokeColor = interactive ? colors[layer.role] : style.color;
-      layer.element.strokeWidth = interactive ? widths[layer.role] : style.width;
-      layer.element.outerColor = interactive ? "#182126" : style.outerColor;
-      layer.element.outerWidth = interactive ? 0.22 : style.outerWidth;
-      setLineVisibility(layer.element, style.opacity > 0.01);
-      layer.element.style.opacity = String(style.opacity);
+      layer.element.strokeColor = palette?.colors[layer.role] ?? style.color;
+      layer.element.strokeWidth = palette?.widths[layer.role] ?? style.width;
+      layer.element.outerColor = palette?.outerColor ?? style.outerColor;
+      layer.element.outerWidth = palette?.outerWidth ?? style.outerWidth;
+      const opacity = this.palette === "immersive"
+        ? layer.role === "guide" ? 0.45 : 1
+        : style.opacity;
+      setLineVisibility(layer.element, opacity > 0.01);
+      layer.element.style.opacity = String(opacity);
     }
   }
 
@@ -379,6 +417,32 @@ function createFilamentLayers({
     element.style.display = "none";
     map.append(element);
     return { element, endRatio: -1, role, startRatio: -1 };
+  });
+}
+
+function currentPositionRing(
+  path: Array<{ lat: number; lng: number; d: number }>,
+  focusRatio: number,
+) {
+  const center = slicePathByRatio(path, focusRatio, focusRatio)[0];
+  const angularRadius = 3 / 6_371_000;
+  const latitude = center.lat * Math.PI / 180;
+  const longitude = center.lng * Math.PI / 180;
+  return Array.from({ length: 33 }, (_, index) => {
+    const bearing = (index % 32) * Math.PI * 2 / 32;
+    const lat = Math.asin(
+      Math.sin(latitude) * Math.cos(angularRadius) +
+      Math.cos(latitude) * Math.sin(angularRadius) * Math.cos(bearing),
+    );
+    const lng = longitude + Math.atan2(
+      Math.sin(bearing) * Math.sin(angularRadius) * Math.cos(latitude),
+      Math.cos(angularRadius) - Math.sin(latitude) * Math.sin(lat),
+    );
+    return {
+      lat: lat * 180 / Math.PI,
+      lng: ((lng * 180 / Math.PI + 540) % 360) - 180,
+      altitude: INTERACTIVE_PALETTES.immersive.clearanceM.glint,
+    };
   });
 }
 
