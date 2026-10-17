@@ -20,8 +20,9 @@ for (const width of [390, 1280]) {
     await expect(page.getByLabel('Interactive route globe')).toHaveAttribute('data-camera-state','settled');
     await capture('atlas');
     await page.goto('/#/finder?place=Banff&activity=Run&distance=20');
-    await expect(page.getByRole('region',{name:'Finder route map'})).toHaveAttribute('data-map-status','ready',{timeout:30_000});
     await expect(page.getByRole('article').first()).toBeVisible();
+    if (width < 768) await page.getByRole('group', { name: 'Results view' }).getByRole('button', { name: 'Map', exact: true }).click();
+    await expect(page.getByRole('region',{name:'Finder route map'})).toHaveAttribute('data-map-status','ready',{timeout:30_000});
     await capture('finder');
     await page.goto('/#/routes?q=London');
     await expect(page.getByRole('heading',{name:'Places worth returning to.'})).toBeVisible();
