@@ -3,6 +3,7 @@ import type { CinematicRouteTreatment } from "@/surfaces/replay/cinematic/cinema
 import { routeDistanceM } from "@/domain/geometry/route-path";
 import {
   createRouteSceneManifest,
+  minimumRouteCameraRangeScale,
   resolveRouteSceneFrame,
   type DirectedRouteSceneCameraMode,
   type RouteSceneCameraProtection,
@@ -42,7 +43,7 @@ export interface GoogleRouteCameraPose {
 export type GoogleRouteTelemetry = RouteSceneTelemetry;
 
 export const GOOGLE_ROUTE_SPEEDS = [0.5, 1, 2, 4] as const;
-const REPLAY_DURATION_SECONDS = 210;
+export const GOOGLE_ROUTE_REPLAY_DURATION_SECONDS = 1_050;
 const manifestCache = new WeakMap<QuestRoute, RouteSceneManifest>();
 
 function clamp(value: number, minimum: number, maximum: number) {
@@ -79,7 +80,7 @@ export function advanceGoogleRouteNavigator(
     ? Math.min(
         totalDistanceM,
         state.progressM +
-          (totalDistanceM / REPLAY_DURATION_SECONDS) * state.speed * elapsed,
+          (totalDistanceM / GOOGLE_ROUTE_REPLAY_DURATION_SECONDS) * state.speed * elapsed,
       )
     : state.progressM;
 
@@ -115,11 +116,12 @@ export function zoomGoogleRouteNavigator(
   state: GoogleRouteNavigatorState,
   direction: "in" | "out",
 ) {
+  const minimumScale = minimumRouteCameraRangeScale(state.cameraMode);
   return {
     ...state,
     rangeScale: clamp(
-      state.rangeScale * (direction === "in" ? 0.78 : 1.28),
-      0.55,
+      Math.max(minimumScale, state.rangeScale) * (direction === "in" ? 0.78 : 1.28),
+      minimumScale,
       2.4,
     ),
   };
@@ -176,7 +178,7 @@ export function googleRouteThreadTreatment(
   if (focusRatio >= 0.995) {
     return {
       endRatio: 1,
-      focusRatio: 1,
+      focusRatio,
       motionIntensity: 0.18,
       rangeM: googleRouteCameraPose(route, state).rangeM,
       shotKind: "release",

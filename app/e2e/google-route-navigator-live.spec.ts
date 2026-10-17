@@ -156,7 +156,7 @@ for (const route of ROUTES) {
 
     await page.getByRole("button", { name: "Replay settings" }).click();
     await expect(
-      page.getByRole("complementary", { name: "Replay settings panel" }),
+      page.getByRole("dialog", { name: "Replay settings" }),
     ).toBeVisible();
     await page.getByRole("button", { name: "On 3D surface", exact: true }).click();
     await expect(navigator).toHaveAttribute("data-grounding-mode", "mesh");
@@ -217,7 +217,7 @@ for (const route of ROUTES) {
     ).toBeVisible();
     await page.getByRole("button", { name: "Replay settings" }).click();
     await expect(page.getByRole("button", { name: "Chase", exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "Replay settings" }).click();
+    await page.getByRole("button", { name: "Close", exact: true }).click();
     await page.getByRole("button", { name: "Play route" }).click();
     await expect(navigator).toHaveAttribute("data-hud-state", "expanded");
     await expect(page.getByTestId("replay-elevation-scrubber")).toBeVisible();
@@ -282,3 +282,40 @@ test("keeps the San Francisco runner view above coarse mesh", async ({
   await captureEvidence(page, "14736711660-desktop-runner.png");
   expectNoRuntimeErrors(consoleErrors, pageErrors);
 });
+
+for (const width of [390, 1440]) {
+  test(`production immersive Replay uses real terrain and controls at ${width}px`, async ({ page }) => {
+    test.skip(process.env.GODIESEL_LIVE_GOOGLE_3D_E2E !== "1", "Live Google 3D verification is opt-in.");
+    test.setTimeout(90_000);
+    const errors: string[] = [];
+    page.on("pageerror", error => errors.push(error.message));
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
+    await page.goto('/#/replay/14736711660');
+    const stage = page.getByTestId("replay-stage");
+    await expect(stage).toHaveAttribute("data-state", "ready", { timeout: 40_000 });
+    await page.getByLabel("Route progress", { exact: true }).fill("26000");
+    await page.getByRole("button", { name: "Replay settings", exact: true }).click();
+    const settings = page.getByRole("dialog", { name: "Replay settings", exact: true });
+    await settings.getByRole("button", { name: "Chase", exact: true }).click();
+    for (let i = 0; i < 8; i += 1) await settings.getByRole("button", { name: "Zoom in", exact: true }).click();
+    const map = page.locator("gmp-map-3d");
+    await expect.poll(() => map.evaluate(element => (element as google.maps.maps3d.Map3DElement).range ?? 0)).toBeLessThan(231);
+    await settings.getByRole("button", { name: "Zoom out", exact: true }).click();
+    await expect.poll(() => map.evaluate(element => (element as google.maps.maps3d.Map3DElement).range ?? 0)).toBeGreaterThan(240);
+    await settings.getByRole("button", { name: "Close", exact: true }).click();
+    const thread = page.locator('gmp-polyline-3d[data-thread-layer="thread"]');
+    const ring = page.locator('gmp-polyline-3d[data-thread-layer="glint"]');
+    expect(await thread.evaluate(element => {
+      const line = element as google.maps.maps3d.Polyline3DElement;
+      return { color: line.strokeColor, altitudeMode: line.altitudeMode, occluded: line.drawsOccludedSegments };
+    })).toEqual({ color: "#ff9d54", altitudeMode: "RELATIVE_TO_GROUND", occluded: false });
+    await expect(ring).toHaveAttribute("data-route-visible", "true");
+    await page.getByRole("button", { name: "Play route", exact: true }).click();
+    await expect.poll(async () => Number(await page.getByLabel("Route progress", { exact: true }).inputValue())).toBeGreaterThan(26010);
+    await page.getByRole("button", { name: "Pause route", exact: true }).click();
+    await page.getByLabel("Route progress", { exact: true }).fill("18000");
+    await expect(ring).toHaveAttribute("data-route-visible", "true");
+    expect(errors).toEqual([]);
+    await captureEvidence(page, `production-immersive-${width}.png`);
+  });
+}

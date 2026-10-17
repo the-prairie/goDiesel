@@ -62,6 +62,22 @@ describe("route scene contract", () => {
     expect(frame.rendererPose.following).toBe(true);
   });
 
+  it("keeps Chase framing and clearance consistent at the closest zoom", () => {
+    const manifest = createRouteSceneManifest(route);
+    const frame = resolveRouteSceneFrame(manifest, {
+      cameraMode: "chase", following: true, progressM: 1_000, rangeScale: 0.55,
+    });
+    expect(frame.camera.rangeM).toBe(230);
+    expect(frame.camera.tiltDeg).toBe(70);
+    expect(frame.camera.fovDeg).toBe(52);
+    expect(frame.rendererPose.cameraRangeM).toBe(230);
+    expect(frame.camera.clearanceM).toBeGreaterThanOrEqual(frame.camera.minimumClearanceM);
+    const far = resolveRouteSceneFrame(manifest, {
+      cameraMode: "chase", following: true, progressM: 1_000, rangeScale: 2.4,
+    });
+    expect(far.camera.rangeM).toBe(624);
+  });
+
   it("keeps overview framing route-wide", () => {
     const frame = resolveRouteSceneFrame(createRouteSceneManifest(route), {
       cameraMode: "overview",

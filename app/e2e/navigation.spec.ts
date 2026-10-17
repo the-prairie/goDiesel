@@ -51,10 +51,13 @@ test("every product surface has a canonical URL", async ({ page }) => {
   ] as const) {
     await page.getByRole("link", { name: label }).click();
     await expect(page).toHaveURL(new RegExp(`#/${path}$`));
-    await expect(page.getByRole("link", { name: label })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
+    if (path === "replay") {
+      await expect(page.getByTestId("atlas-spine")).toBeHidden();
+      await page.getByRole("button", { name: "All routes", exact: true }).click();
+      await expect(page).toHaveURL(/#\/routes$/);
+    } else {
+      await expect(page.getByRole("link", { name: label })).toHaveAttribute("aria-current", "page");
+    }
   }
 });
 
@@ -72,7 +75,12 @@ test("canonical product and selected-route URLs load directly", async ({
   ] as const) {
     await page.goto(`/#/${path}`);
     await expect(page).toHaveURL(new RegExp(`#/${path}$`));
-    await expect(page.getByRole("link", { name: activeNavigation, exact: true })).toHaveAttribute("aria-current", "page");
+    if (activeNavigation === "Replay") {
+      await expect(page.getByRole("button", { name: "All routes", exact: true })).toBeVisible();
+      await expect(page.getByTestId("atlas-spine")).toBeHidden();
+    } else {
+      await expect(page.getByRole("link", { name: activeNavigation, exact: true })).toHaveAttribute("aria-current", "page");
+    }
   }
 });
 
@@ -218,40 +226,17 @@ test("navigation does not persistently overlap Replay across breakpoints", async
   }
 });
 
-test("mobile Replay reserves the safe area below navigation", async ({
-  page,
-}) => {
+test("mobile Replay leaves space for attribution and restores navigation on exit", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`/#/replay/${routeSlug}`);
   await expect(page.getByTestId("replay-controls")).toBeVisible();
-
-  await page.evaluate(() => {
-    document.documentElement.style.setProperty("--safe-area-bottom", "24px");
-  });
-
-  const layout = await page.evaluate(() => {
-    const navigation = document
-      .querySelector<HTMLElement>('[data-testid="atlas-spine-mobile"]')!
-      .getBoundingClientRect();
-    const controls = document
-      .querySelector<HTMLElement>('[data-testid="replay-controls"]')!
-      .getBoundingClientRect();
-
-    return {
-      navigationHeight: navigation.height,
-      navigationTop: navigation.top,
-      navigationPaddingBottom: getComputedStyle(
-        document.querySelector<HTMLElement>(
-          '[data-testid="atlas-spine-mobile"]',
-        )!,
-      ).paddingBottom,
-      controlsBottom: controls.bottom,
-    };
-  });
-
-  expect(layout.navigationHeight).toBe(80); // 56px navigation + 24px safe area
-  expect(layout.navigationPaddingBottom).toBe("24px");
-  expect(layout.controlsBottom).toBeLessThanOrEqual(layout.navigationTop + 1);
+  await expect(page.getByTestId("atlas-spine-mobile")).toBeHidden();
+  const dock = await page.locator(".immersive-replay-dock").boundingBox();
+  expect(dock).not.toBeNull();
+  expect(dock!.y + dock!.height).toBeLessThanOrEqual(844 - 48);
+  await page.getByRole("button", { name: "All routes", exact: true }).click();
+  await expect(page.getByTestId("atlas-spine-mobile")).toBeVisible();
+  await expect(page).toHaveURL(/#\/routes$/);
 });
 
 test("mobile spine keeps every primary destination legible", async ({
@@ -269,6 +254,13 @@ test("mobile spine keeps every primary destination legible", async ({
       await page.goto(`/#/${path}`);
       const spine = page.getByTestId("atlas-spine-mobile");
       const link = spine.getByRole("link", { name: label, exact: true });
+      if (path === "replay") {
+        await expect(page.getByRole("button", { name: "All routes", exact: true })).toBeVisible();
+        await expect(spine).toBeHidden();
+        await page.getByRole("button", { name: "All routes", exact: true }).click();
+        await expect(spine).toBeVisible();
+        continue;
+      }
       await expect(spine).toBeVisible();
       await expect(link).toBeVisible();
       await expect(link).toHaveAttribute("aria-current", "page");

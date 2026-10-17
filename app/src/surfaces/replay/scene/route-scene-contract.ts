@@ -98,6 +98,7 @@ const CAMERA_PROFILES = {
     clearanceM: 22,
     lookAheadM: 90,
     rangeM: 160,
+    minimumRangeM: 0,
     smoothingRadiusM: 70,
     tiltDeg: 64,
     fovDeg: 50,
@@ -106,14 +107,21 @@ const CAMERA_PROFILES = {
     clearanceM: 10,
     lookAheadM: 90,
     rangeM: 260,
+    minimumRangeM: 230,
     smoothingRadiusM: 55,
-    tiltDeg: 65,
-    fovDeg: 54,
+    tiltDeg: 70,
+    fovDeg: 52,
   },
 } as const;
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(maximum, Math.max(minimum, value));
+}
+
+export function minimumRouteCameraRangeScale(mode: RouteSceneCameraMode) {
+  if (mode === "auto" || mode === "overview") return 0.55;
+  const profile = CAMERA_PROFILES[mode];
+  return Math.max(0.55, profile.minimumRangeM / profile.rangeM);
 }
 
 export function createRouteSceneManifest(route: QuestRoute): RouteSceneManifest {
@@ -215,6 +223,7 @@ function resolveCamera(
   }
 
   const profile = CAMERA_PROFILES[request.cameraMode];
+  const rangeM = Math.max(profile.minimumRangeM, profile.rangeM * request.rangeScale);
   const current = smoothRouteTarget(
     manifest,
     progressM,
@@ -238,7 +247,7 @@ function resolveCamera(
             { ...current, d: current.progressM },
             { ...target, d: target.progressM },
           ),
-    rangeM: profile.rangeM * request.rangeScale,
+    rangeM,
     tiltDeg: profile.tiltDeg,
     fovDeg: profile.fovDeg,
     directedMode: request.cameraMode,
@@ -249,7 +258,7 @@ function resolveCamera(
     // occlusion-scaled one.
     ...cameraClearance(
       target.elev + profile.clearanceM,
-      profile.rangeM * request.rangeScale,
+      rangeM,
       profile.tiltDeg,
       localTerrainEnvelope(
         manifest.sourceRoute,

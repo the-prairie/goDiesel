@@ -14,7 +14,10 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 
       await expect(page.getByRole("heading", { name: heading, exact: true }).first()).toBeVisible();
       await page.evaluate(() => document.fonts.ready);
       const nav = page.getByTestId(viewport.width < 768 ? "atlas-spine-mobile" : "atlas-spine");
-      await expect(nav).toBeVisible();
+      if (name === "replay") {
+        await expect(nav).toBeHidden();
+        await expect(page.getByRole("button", { name: "All routes", exact: true })).toBeVisible();
+      } else await expect(nav).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
       await page.screenshot({ path: `artifacts/ember/${name}-${viewport.width}.png` });
     }
@@ -56,7 +59,7 @@ for (const width of [320, 390, 1280]) {
     await page.setViewportSize({ width, height: 844 });
     await page.goto(`${process.env.EMBER_PREVIEW_URL ?? ""}/#/replay/9844581410`);
     await page.getByRole("button", { name: "Replay settings", exact: true }).click();
-    const panel = page.getByRole("complementary", { name: "Replay settings panel" });
+    const panel = page.getByRole("dialog", { name: "Replay settings" });
     await expect(panel).toBeVisible();
     const controls = panel.getByRole("button");
     for (const button of await controls.all()) {

@@ -47,7 +47,7 @@ for (const width of [390, 1280]) {
     await expect(page.getByTestId('replay-elevation-scrubber')).toHaveAttribute('data-playhead-color','#ffffff');
     await capture('replay');
     await page.getByRole('button',{name:'Replay settings',exact:true}).click();
-    await expect(page.getByRole('complementary',{name:'Replay settings panel'})).toBeVisible();
+    await expect(page.getByRole('dialog',{name:'Replay settings'})).toBeVisible();
     await capture('replay-settings');
     await page.goto('/#/admin');
     await page.getByRole('searchbox',{name:'Search owner routes'}).fill('Kyoto');
