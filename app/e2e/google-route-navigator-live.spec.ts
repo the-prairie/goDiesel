@@ -299,9 +299,9 @@ for (const width of [390, 1440]) {
     await settings.getByRole("button", { name: "Chase", exact: true }).click();
     for (let i = 0; i < 8; i += 1) await settings.getByRole("button", { name: "Zoom in", exact: true }).click();
     const map = page.locator("gmp-map-3d");
-    await expect.poll(() => map.evaluate(element => (element as google.maps.maps3d.Map3DElement).range ?? 0)).toBeLessThan(231);
+    await expect.poll(() => map.evaluate(element => Math.abs(((element as google.maps.maps3d.Map3DElement).range ?? 0) - 230)), { timeout: 15_000 }).toBeLessThan(1.5);
     await settings.getByRole("button", { name: "Zoom out", exact: true }).click();
-    await expect.poll(() => map.evaluate(element => (element as google.maps.maps3d.Map3DElement).range ?? 0)).toBeGreaterThan(240);
+    await expect.poll(() => map.evaluate(element => Math.abs(((element as google.maps.maps3d.Map3DElement).range ?? 0) - 294.4)), { timeout: 15_000 }).toBeLessThan(1.5);
     await settings.getByRole("button", { name: "Close", exact: true }).click();
     const thread = page.locator('gmp-polyline-3d[data-thread-layer="thread"]');
     const ring = page.locator('gmp-polyline-3d[data-thread-layer="glint"]');
