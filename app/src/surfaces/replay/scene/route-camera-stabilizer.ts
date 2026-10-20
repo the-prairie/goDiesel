@@ -2,6 +2,7 @@ import type { GoogleRouteCameraPose } from "@/surfaces/replay/playback/route-nav
 
 export interface RouteCameraMotionState {
   pose: GoogleRouteCameraPose;
+  target: GoogleRouteCameraPose;
   velocity: {
     altitude: number;
     fov: number;
@@ -19,6 +20,7 @@ export function createRouteCameraMotionState(
 ): RouteCameraMotionState {
   return {
     pose,
+    target: pose,
     velocity: {
       altitude: 0,
       fov: 0,
@@ -37,11 +39,12 @@ export function advanceRouteCameraMotion(
   desired: GoogleRouteCameraPose,
   elapsedSeconds: number,
   responseSeconds = 0.48,
+  movement: "transition" | "tracking" = "transition",
 ): RouteCameraMotionState {
   const elapsed = Math.min(0.1, Math.max(0, elapsedSeconds));
-  // Mode changes can share a timestamp with the animation frame. No time
-  // elapsed means no integration (and avoids Infinity * 0 for unbounded axes).
-  if (elapsed === 0) return state;
+  if (elapsed === 0) return { ...state, target: desired };
+  const targetVelocity = (current: number, previous: number) =>
+    movement === "tracking" ? (current - previous) / elapsed : 0;
   const headingTarget =
     state.pose.headingDeg +
     (((desired.headingDeg - state.pose.headingDeg + 540) % 360) - 180);
@@ -51,6 +54,7 @@ export function advanceRouteCameraMotion(
     state.velocity.lat,
     elapsed,
     responseSeconds,
+    targetVelocity(desired.center.lat, state.target.center.lat),
   );
   const lng = smoothDamp(
     state.pose.center.lng,
@@ -58,6 +62,7 @@ export function advanceRouteCameraMotion(
     state.velocity.lng,
     elapsed,
     responseSeconds,
+    targetVelocity(desired.center.lng, state.target.center.lng),
   );
   const altitude = smoothDamp(
     state.pose.center.altitude ?? desired.center.altitude ?? 0,
@@ -65,6 +70,7 @@ export function advanceRouteCameraMotion(
     state.velocity.altitude,
     elapsed,
     responseSeconds,
+    targetVelocity(desired.center.altitude ?? 0, state.target.center.altitude ?? 0),
   );
   const heading = smoothDamp(
     state.pose.headingDeg,
@@ -72,6 +78,9 @@ export function advanceRouteCameraMotion(
     state.velocity.heading,
     elapsed,
     Math.max(1.25, responseSeconds),
+    movement === "tracking"
+      ? (((desired.headingDeg - state.target.headingDeg + 540) % 360) - 180) / elapsed
+      : 0,
     30,
     45,
   );
@@ -81,6 +90,7 @@ export function advanceRouteCameraMotion(
     state.velocity.range,
     elapsed,
     Math.max(0.8, responseSeconds),
+    targetVelocity(desired.rangeM, state.target.rangeM),
   );
   const tilt = smoothDamp(
     state.pose.tiltDeg,
@@ -88,6 +98,7 @@ export function advanceRouteCameraMotion(
     state.velocity.tilt,
     elapsed,
     Math.max(1.1, responseSeconds),
+    targetVelocity(desired.tiltDeg, state.target.tiltDeg),
     10,
     18,
   );
@@ -97,6 +108,7 @@ export function advanceRouteCameraMotion(
     state.velocity.fov,
     elapsed,
     responseSeconds,
+    targetVelocity(desired.fovDeg, state.target.fovDeg),
   );
   const progress = smoothDamp(
     state.pose.progressM,
@@ -104,9 +116,11 @@ export function advanceRouteCameraMotion(
     state.velocity.progress,
     elapsed,
     responseSeconds,
+    targetVelocity(desired.progressM, state.target.progressM),
   );
 
   return {
+    target: desired,
     pose: {
       ...desired,
       center: {
@@ -134,12 +148,35 @@ export function advanceRouteCameraMotion(
   };
 }
 
+export function routeCameraMotionHasSettled(state: RouteCameraMotionState) {
+  const { pose, target, velocity } = state;
+  const headingDelta = Math.abs(((target.headingDeg - pose.headingDeg + 540) % 360) - 180);
+  return (
+    Math.abs(pose.center.lat - target.center.lat) < 0.000_001 &&
+    Math.abs(pose.center.lng - target.center.lng) < 0.000_001 &&
+    Math.abs((pose.center.altitude ?? target.center.altitude ?? 0) -
+      (target.center.altitude ?? pose.center.altitude ?? 0)) < 0.5 &&
+    headingDelta < 0.2 &&
+    Math.abs(pose.rangeM - target.rangeM) < 1.5 &&
+    Math.abs(pose.tiltDeg - target.tiltDeg) < 0.1 &&
+    Math.abs(pose.fovDeg - target.fovDeg) < 0.1 &&
+    Math.abs(velocity.lat) < 0.000_001 &&
+    Math.abs(velocity.lng) < 0.000_001 &&
+    Math.abs(velocity.altitude) < 0.1 &&
+    Math.abs(velocity.range) < 0.5 &&
+    Math.abs(velocity.heading) < 0.1 &&
+    Math.abs(velocity.tilt) < 0.1 &&
+    Math.abs(velocity.fov) < 0.1
+  );
+}
+
 function smoothDamp(
   current: number,
   target: number,
   velocity: number,
   elapsedSeconds: number,
   responseSeconds: number,
+  targetVelocity: number,
   maxSpeed = Infinity,
   maxAcceleration = Infinity,
 ) {
@@ -147,14 +184,13 @@ function smoothDamp(
   const omega = 2 / smoothTime;
   const x = omega * elapsedSeconds;
   const decay = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
-  const change = current - target;
-  const temporary = (velocity + omega * change) * elapsedSeconds;
-  const nextVelocity = (velocity - omega * temporary) * decay;
+  const change = current - (target - targetVelocity * elapsedSeconds);
+  const relativeVelocity = velocity - targetVelocity;
+  const temporary = (relativeVelocity + omega * change) * elapsedSeconds;
+  const nextVelocity = targetVelocity + (relativeVelocity - omega * temporary) * decay;
   const boundedVelocity = Math.max(-maxSpeed, Math.min(maxSpeed,
     Math.max(velocity - maxAcceleration * elapsedSeconds,
       Math.min(velocity + maxAcceleration * elapsedSeconds, nextVelocity))));
-  // Integrate bounded angular velocity rather than clipping the position: turns
-  // retain momentum through changing GPS bearings without a visible snap.
   return {
     value: Number.isFinite(maxSpeed)
       ? current + (velocity + boundedVelocity) * 0.5 * elapsedSeconds

@@ -1,5 +1,59 @@
 import { expect, test, type Page } from "@playwright/test";
 
+test("manual map input releases camera ownership while playback continues", async ({ page }) => {
+  await installGoogleReplay(page, "ready");
+  await page.goto("/#/replay/14736711660");
+  const stage = page.getByTestId("replay-stage");
+  const progress = page.getByRole("slider", { name: "Route progress", exact: true });
+  await page.getByRole("button", { name: "Play route", exact: true }).click();
+  await page.locator('canvas[data-renderer="google-production"]').click({ position: { x: 200, y: 200 } });
+  await expect(stage).toHaveAttribute("data-following", "false");
+  const before = Number(await progress.inputValue());
+  await expect.poll(async () => Number(await progress.inputValue())).toBeGreaterThan(before);
+  await page.getByRole("button", { name: "Replay settings", exact: true }).click();
+  await page.getByRole("button", { name: "Follow route", exact: true }).click();
+  await expect(stage).toHaveAttribute("data-following", "true");
+  await page.keyboard.press("Escape");
+  await page.mouse.move(300, 300);
+  await page.mouse.wheel(0, 100);
+  await expect(stage).toHaveAttribute("data-following", "false");
+  await expect(page.getByRole("button", { name: "Pause route", exact: true })).toBeVisible();
+});
+
+test("follow resumes smoothly from the camera used for free exploration", async ({ page }) => {
+  await installGoogleReplay(page, "ready");
+  await page.goto("/#/replay/14736711660");
+  await page.locator('canvas[data-renderer="google-production"]').click({ position: { x: 200, y: 200 } });
+  await page.evaluate(() => {
+    const state = window as unknown as Record<string, unknown>;
+    state.__GODIESEL_MANUAL_CAMERA__ = {
+      center: { lat: 37.79, lng: -122.42, altitude: 90 },
+      headingDeg: 100, rangeM: 900, tiltDeg: 40, fovDeg: 54,
+    };
+    state.__GODIESEL_CAMERA_CALLS__ = [];
+  });
+  await page.getByRole("button", { name: "Replay settings", exact: true }).click();
+  await page.getByRole("button", { name: "Follow route", exact: true }).click();
+  const first = await page.evaluate(() => (window as unknown as {
+    __GODIESEL_CAMERA_CALLS__: Array<{ headingDeg: number; rangeM: number }>;
+  }).__GODIESEL_CAMERA_CALLS__[0]);
+  expect(Math.abs(first.headingDeg - 100)).toBeLessThan(1);
+  expect(Math.abs(first.rangeM - 900)).toBeLessThan(2);
+});
+
+test("wheel inertia releases follow only once", async ({ page }) => {
+  await installGoogleReplay(page, "ready");
+  await page.goto("/#/replay/14736711660");
+  await page.locator('canvas[data-renderer="google-production"]').click({ position: { x: 200, y: 200 } });
+  const writes = () => page.evaluate(() => (window as unknown as {
+    __GODIESEL_CINEMATIC_ROUTE_CALLS__: unknown[];
+  }).__GODIESEL_CINEMATIC_ROUTE_CALLS__.length);
+  const before = await writes();
+  await page.mouse.move(300, 300);
+  for (let i = 0; i < 5; i++) await page.mouse.wheel(0, 30);
+  expect(await writes()).toBe(before);
+});
+
 async function expectMarkerOnProfile(page: Page, duringPlayback = false) {
   await expect.poll(() => page.getByTestId("replay-elevation-scrubber").evaluate((host, duringPlayback) => {
     const line = host.querySelector("polyline")!;
@@ -57,6 +111,7 @@ async function installGoogleReplay(page: Page, state: "ready" | "unavailable" | 
   await page.addInitScript((providerState) => {
     const replayWindow = window as typeof window & {
       __GODIESEL_SET_PROVIDER_STATUS__?: (state: "ready" | "loading" | "unavailable") => void;
+      __GODIESEL_MANUAL_CAMERA__?: { center: { lat: number; lng: number; altitude: number }; headingDeg: number; rangeM: number; tiltDeg: number; fovDeg: number };
       __GODIESEL_CAMERA_CALLS__?: Array<{
         center: { lat: number; lng: number };
         headingDeg: number;
@@ -74,6 +129,7 @@ async function installGoogleReplay(page: Page, state: "ready" | "unavailable" | 
             message: string;
           }) => void;
         }): Promise<void>;
+        readCamera(): unknown;
         setCamera(): void;
         setFollowing(): void;
         setGrounding(): void;
@@ -129,6 +185,7 @@ async function installGoogleReplay(page: Page, state: "ready" | "unavailable" | 
       }) {
         replayWindow.__GODIESEL_CAMERA_CALLS__?.push(pose);
       },
+      readCamera() { return replayWindow.__GODIESEL_MANUAL_CAMERA__; },
       setFollowing() {},
       setGrounding() {},
       setCinematicRoute(treatment) {
@@ -168,7 +225,7 @@ for (const routeSlug of ["14023448720", "14736711660"] as const) {
     await expect(replay).toHaveAttribute("data-camera-mode", "auto");
     await expect(replay).toHaveAttribute("data-grounding-mode", "ground");
     if (routeSlug === "14736711660") await expect(page.getByRole("heading", { name: "just here for the zipper", exact: true })).toBeVisible();
-    await expect(replay).toHaveAttribute("data-directed-camera", "overview");
+    await expect(replay).toHaveAttribute("data-directed-camera", "chase");
     await expect(
       page.getByRole("button", { name: "Auto director" }),
     ).toHaveAttribute("aria-pressed", "true");
@@ -290,17 +347,25 @@ for (const routeSlug of ["14023448720", "14736711660"] as const) {
   });
 }
 
-test("falls back from Google 3D to Atlas replay", async ({ page }) => {
+test("loads legacy renderer bundles only when falling back from Google 3D to Atlas", async ({ page }) => {
+  const legacyBundles: string[] = [];
+  page.on("request", request => {
+    if (/\/(?:earth-replay-stage|render-health|maplibre-gl)-[^/]+\.js/.test(request.url())) {
+      legacyBundles.push(request.url());
+    }
+  });
   await installGoogleReplay(page, "unavailable");
   await page.goto("/#/replay/14023448720");
 
   await expect(page.getByRole("alert")).toContainText("3D world unavailable");
+  expect(legacyBundles).toEqual([]);
   await page.getByRole("button", { name: "Use Atlas replay" }).click();
 
   const replay = page.getByTestId("replay-stage");
   await expect(replay).toHaveAttribute("data-engine", "maplibre-atlas");
   await expect(replay).toHaveAttribute("data-state", "ready");
   await expect(page.locator('[data-renderer="atlas-fallback"]')).toBeVisible();
+  expect(legacyBundles.some(url => url.includes("earth-replay-stage-"))).toBe(true);
 });
 
 test("keeps playback telemetry visible on a phone", async ({ page }) => {

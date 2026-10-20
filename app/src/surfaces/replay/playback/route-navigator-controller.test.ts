@@ -31,6 +31,18 @@ const route = {
 } as unknown as QuestRoute;
 
 describe("Google route navigator controller", () => {
+  it.each([0.5, 1, 2, 4])("opens at tracking distance at %sx without advancing recorded progress", (speed) => {
+    const state = { ...initialGoogleRouteNavigatorState(), speed };
+    const before = structuredClone(route);
+    const pose = googleRouteCameraPose(route, state);
+    expect(pose.directedMode).toBe("chase");
+    expect(pose.overviewWeight).toBe(0);
+    expect(pose.rangeM).toBeLessThanOrEqual(780);
+    expect(pose.progressM).toBe(0);
+    expect(googleRouteTelemetry(route, 0).elapsedS).toBe(0);
+    expect(route).toEqual(before);
+  });
+
   it("advances playback and stops at the route end", () => {
     const state = { ...initialGoogleRouteNavigatorState(), playing: true };
     const advanced = advanceGoogleRouteNavigator(state, 1, 2_000);
