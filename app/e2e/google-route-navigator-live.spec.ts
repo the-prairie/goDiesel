@@ -111,9 +111,9 @@ for (const route of ROUTES) {
     await expect(navigator).toHaveAttribute("data-hud-state", "expanded");
     await expect(navigator).toHaveAttribute("data-camera-mode", "auto");
     await expect(navigator).toHaveAttribute("data-grounding-mode", "ground");
-    await expect(navigator).toHaveAttribute("data-directed-camera", "overview");
+    await expect(navigator).toHaveAttribute("data-directed-camera", "chase");
     await page.waitForTimeout(2_500);
-    await captureEvidence(page, `${route.slug}-desktop-overview.png`);
+    await captureEvidence(page, `${route.slug}-desktop-entry.png`);
 
     await page.getByRole("button", { name: "Play route" }).click();
     await expect(navigator).toHaveAttribute("data-hud-state", "expanded");
@@ -304,17 +304,17 @@ for (const width of [390, 1440]) {
     await expect.poll(() => map.evaluate(element => Math.abs(((element as google.maps.maps3d.Map3DElement).range ?? 0) - 294.4)), { timeout: 15_000 }).toBeLessThan(1.5);
     await settings.getByRole("button", { name: "Close", exact: true }).click();
     const thread = page.locator('gmp-polyline-3d[data-thread-layer="thread"]');
-    const ring = page.locator('gmp-polyline-3d[data-thread-layer="glint"]');
+    const tip = page.locator('gmp-polyline-3d[data-thread-layer="glint"]');
     expect(await thread.evaluate(element => {
       const line = element as google.maps.maps3d.Polyline3DElement;
-      return { color: line.strokeColor, altitudeMode: line.altitudeMode, occluded: line.drawsOccludedSegments };
-    })).toEqual({ color: "#ff9d54", altitudeMode: "RELATIVE_TO_GROUND", occluded: false });
-    await expect(ring).toHaveAttribute("data-route-visible", "true");
+      return { altitudeMode: line.altitudeMode, occluded: line.drawsOccludedSegments };
+    })).toEqual({ altitudeMode: "RELATIVE_TO_GROUND", occluded: false });
+    await expect(tip).toHaveAttribute("data-route-visible", "true");
     await page.getByRole("button", { name: "Play route", exact: true }).click();
     await expect.poll(async () => Number(await page.getByLabel("Route progress", { exact: true }).inputValue())).toBeGreaterThan(26010);
     await page.getByRole("button", { name: "Pause route", exact: true }).click();
     await page.getByLabel("Route progress", { exact: true }).fill("18000");
-    await expect(ring).toHaveAttribute("data-route-visible", "true");
+    await expect(tip).toHaveAttribute("data-route-visible", "true");
     expect(errors).toEqual([]);
     await captureEvidence(page, `production-immersive-${width}.png`);
   });

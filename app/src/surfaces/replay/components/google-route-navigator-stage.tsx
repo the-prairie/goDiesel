@@ -14,7 +14,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { ReplayElevationScrubber } from "@/surfaces/replay/components/replay-elevation-scrubber";
@@ -42,8 +42,11 @@ import {
   type GoogleRouteNavigatorStatus,
 } from "@/surfaces/replay/renderers/google-route-navigator-engine";
 import { routeDistanceM } from "@/domain/geometry/route-path";
+import { useReducedMotion } from "@/ui/use-reduced-motion";
+import { sustainedRouteCamera } from "@/surfaces/replay/scene/route-camera-score";
 import {
   advanceRouteCameraMotion,
+  routeCameraMotionHasSettled,
   createRouteCameraMotionState,
   type RouteCameraMotionState,
 } from "@/surfaces/replay/scene/route-camera-stabilizer";
@@ -89,6 +92,11 @@ export function GoogleRouteNavigatorStage({
 }: GoogleRouteNavigatorStageProps) {
   const navigate = useNavigate();
   const productionReplay = variant === "replay";
+  const stageRef = useRef<HTMLElement>(null);
+  const reducedMotion = useReducedMotion();
+  const reducedMotionRef = useRef(reducedMotion);
+  reducedMotionRef.current = reducedMotion;
+  const viewportWidthRef = useRef(window.innerWidth);
   const containerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<GoogleRouteNavigatorEngine | undefined>(undefined);
   const cameraMotionRef = useRef<RouteCameraMotionState | undefined>(undefined);
@@ -110,11 +118,19 @@ export function GoogleRouteNavigatorStage({
     [control, route],
   );
 
+  const desiredCamera = useCallback((state: GoogleRouteNavigatorState) => {
+    const base = googleRouteCameraPose(route, state);
+    return productionReplay
+      ? sustainedRouteCamera(route, state, base, viewportWidthRef.current)
+      : base;
+  }, [productionReplay, route]);
+
   const renderCamera = useCallback(
     (
       desired: GoogleRouteCameraPose,
       now = performance.now(),
       force = false,
+      movement: "transition" | "tracking" = "transition",
     ) => {
       const previous = cameraMotionRef.current;
       const previousAt = lastCameraAtRef.current;
@@ -125,32 +141,63 @@ export function GoogleRouteNavigatorStage({
       const motion =
         force || !previous
           ? createRouteCameraMotionState(desired)
-          : advanceRouteCameraMotion(previous, desired, elapsedSeconds, 0.48);
+          : advanceRouteCameraMotion(previous, desired, elapsedSeconds, 0.48, movement);
       cameraMotionRef.current = motion;
       cameraTargetRef.current = desired;
-      cameraSettlingRef.current = !cameraPoseHasSettled(motion.pose, desired);
+      cameraSettlingRef.current = !routeCameraMotionHasSettled(motion);
       lastCameraAtRef.current = now;
       engineRef.current?.setCamera(motion.pose);
     },
     [],
   );
 
+  useLayoutEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const measure = () => {
+      const width = stage.getBoundingClientRect().width;
+      if (!width) return;
+      viewportWidthRef.current = width;
+      if (engineRef.current && controlRef.current.following) {
+        renderCamera(desiredCamera(controlRef.current));
+      }
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(stage);
+    measure();
+    return () => observer.disconnect();
+  }, [desiredCamera, renderCamera]);
+
   const commitControl = useCallback(
     (event: ReplaySessionEvent) => {
-      const next = reduceReplaySession(controlRef.current, event);
+      const previous = controlRef.current;
+      const next = reduceReplaySession(previous, event);
       controlRef.current = next;
       setControl(next);
       engineRef.current?.setFollowing(next.following);
       engineRef.current?.setGrounding(next.groundingMode);
+      if (next.following && !previous.following) {
+        const actual = engineRef.current?.readCamera();
+        if (actual) {
+          cameraMotionRef.current = createRouteCameraMotionState({ ...actual, progressM: next.progressM });
+          lastCameraAtRef.current = performance.now();
+        }
+      }
       if (next.following) {
-        renderCamera(googleRouteCameraPose(route, next));
+        const reposition = event.type === "progressSelected" || event.type === "cameraSelected" ||
+          event.type === "zoomRequested" || event.type === "followingChanged";
+        renderCamera(desiredCamera(next), performance.now(), reducedMotionRef.current && reposition);
       }
       engineRef.current?.setCinematicRoute(
         googleRouteThreadTreatment(route, next),
       );
     },
-    [renderCamera, route],
+    [desiredCamera, renderCamera, route],
   );
+
+  const releaseCamera = useCallback(() => {
+    if (controlRef.current.following) commitControl({ type: "followingChanged", following: false });
+  }, [commitControl]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -172,9 +219,8 @@ export function GoogleRouteNavigatorStage({
       container,
       route,
       groundingMode: initial.groundingMode,
-      // The time-based motion controller owns smoothing; avoid a second, FPS-dependent filter.
       headingSmoothing: 1,
-      initialCamera: googleRouteCameraPose(route, initial),
+      initialCamera: desiredCamera(initial),
       routeStyle: {
         color: "#f5f5f5",
         mode: "filament",
@@ -184,14 +230,12 @@ export function GoogleRouteNavigatorStage({
         width: 3,
       },
       onStatus: (next) => {
+        if (engineRef.current !== engine) return;
         setStatus(next);
         if (next.state === "unavailable") setSettingsOpen(false);
         if (next.state === "ready") {
-          renderCamera(
-            googleRouteCameraPose(route, controlRef.current),
-            performance.now(),
-            true,
-          );
+          const readyTarget = desiredCamera(controlRef.current);
+          renderCamera(readyTarget, performance.now(), true);
           engine.setCinematicRoute(
             googleRouteThreadTreatment(route, controlRef.current),
           );
@@ -207,7 +251,13 @@ export function GoogleRouteNavigatorStage({
       lastCameraAtRef.current = undefined;
       if (engineRef.current === engine) engineRef.current = undefined;
     };
-  }, [productionReplay, renderCamera, route]);
+  }, [desiredCamera, productionReplay, renderCamera, route]);
+
+  useEffect(() => {
+    if (reducedMotion && status.state === "ready" && controlRef.current.following) {
+      renderCamera(desiredCamera(controlRef.current), performance.now(), true);
+    }
+  }, [desiredCamera, reducedMotion, renderCamera, status.state]);
 
   useEffect(() => {
     if (status.state !== "ready") return;
@@ -217,9 +267,10 @@ export function GoogleRouteNavigatorStage({
     let lastUiUpdate = previous;
     const tick = (now: number) => {
       const current = controlRef.current;
+      const elapsedSeconds = (now - previous) / 1_000;
       const next = reduceReplaySession(current, {
         type: "frameElapsed",
-        elapsedSeconds: (now - previous) / 1_000,
+        elapsedSeconds,
         totalDistanceM,
       });
       previous = now;
@@ -227,14 +278,9 @@ export function GoogleRouteNavigatorStage({
       const progressChanged = next.progressM !== current.progressM;
       const playbackChanged = next.playing !== current.playing;
       const cameraSettling = cameraSettlingRef.current;
-      if (
-        next.following &&
-        (progressChanged || cameraSettling)
-      ) {
-        const desired = progressChanged
-          ? googleRouteCameraPose(route, next)
-          : cameraTargetRef.current;
-        if (desired) renderCamera(desired, now);
+      if (next.following && (progressChanged || cameraSettling)) {
+        const desired = progressChanged ? desiredCamera(next) : cameraTargetRef.current;
+        if (desired) renderCamera(desired, now, false, progressChanged ? "tracking" : "transition");
       }
       if (progressChanged && (playbackChanged || now - lastRouteUpdate >= 40)) {
         engineRef.current?.setCinematicRoute(
@@ -250,7 +296,7 @@ export function GoogleRouteNavigatorStage({
     };
     animationFrame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animationFrame);
-  }, [renderCamera, route, status.state, totalDistanceM]);
+  }, [desiredCamera, renderCamera, route, status.state, totalDistanceM]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -274,6 +320,7 @@ export function GoogleRouteNavigatorStage({
 
   return (
     <section
+      ref={stageRef}
       aria-label={
         productionReplay ? "Google 3D Replay" : "Google route navigator lab"
       }
@@ -284,7 +331,9 @@ export function GoogleRouteNavigatorStage({
           : "z-[var(--z-navigation)] bottom-0 left-0",
       )}
       data-camera-mode={control.cameraMode}
+      data-camera-entrance={status.state === "ready" ? "tracking" : "waiting"}
       data-camera-clearance-m={cameraPose.clearanceM?.toFixed(2)}
+      data-camera-clearance-source="base-plan-recorded-terrain"
       data-minimum-camera-clearance-m={cameraPose.minimumClearanceM?.toFixed(2)}
       data-camera-protection={cameraPose.protection?.join(" ") ?? "manual"}
       data-directed-camera={cameraPose.directedMode ?? control.cameraMode}
@@ -298,6 +347,8 @@ export function GoogleRouteNavigatorStage({
     >
       <div
         aria-label={`Google photorealistic 3D view of ${route.name}`}
+        onPointerDownCapture={releaseCamera}
+        onWheelCapture={releaseCamera}
         className={productionReplay ? "absolute inset-0" : "relative min-h-0"}
         ref={containerRef}
       />
@@ -407,27 +458,6 @@ export function GoogleRouteNavigatorStage({
         />
       </div>
     </section>
-  );
-}
-
-function cameraPoseHasSettled(
-  current: GoogleRouteCameraPose,
-  desired: GoogleRouteCameraPose,
-) {
-  const headingDelta = Math.abs(
-    ((desired.headingDeg - current.headingDeg + 540) % 360) - 180,
-  );
-  return (
-    Math.abs(current.center.lat - desired.center.lat) < 0.000_001 &&
-    Math.abs(current.center.lng - desired.center.lng) < 0.000_001 &&
-    Math.abs(
-      (current.center.altitude ?? desired.center.altitude ?? 0) -
-        (desired.center.altitude ?? current.center.altitude ?? 0),
-    ) < 0.5 &&
-    headingDelta < 0.2 &&
-    Math.abs(current.rangeM - desired.rangeM) < 1.5 &&
-    Math.abs(current.tiltDeg - desired.tiltDeg) < 0.1 &&
-    Math.abs(current.fovDeg - desired.fovDeg) < 0.1
   );
 }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 
-import type { QuestRoute } from "@/domain/route";
+import { parseRouteDetail, type QuestRoute } from "@/domain/route";
 import {
   createRouteSceneManifest,
   resolveRouteSceneFrame,
@@ -29,6 +30,46 @@ const route = {
 } as unknown as QuestRoute;
 
 describe("route scene contract", () => {
+  it.each(["14736711660", "9953403673", "14023448720"])("keeps %s framed through its first minute and releases at the end", (slug) => {
+    const recorded = parseRouteDetail(JSON.parse(readFileSync(new URL(`../../../../public/data/routes/${slug}.json`, import.meta.url), "utf8")));
+    const source = structuredClone(recorded);
+    const manifest = createRouteSceneManifest(recorded);
+    for (const seconds of [0, 15, 30, 45, 60]) {
+      const frame = resolveRouteSceneFrame(manifest, {
+        cameraMode: "auto", following: true, progressM: manifest.totalDistanceM * seconds / 1050, rangeScale: 1,
+      });
+      const offsetM = Math.hypot(
+        (frame.camera.target.lat - frame.subject.lat) * 111_320,
+        (frame.camera.target.lng - frame.subject.lng) * 111_320 * Math.cos(frame.subject.lat * Math.PI / 180),
+      );
+      expect(offsetM).toBeLessThan(100);
+      expect(frame.camera.overviewWeight).toBe(0);
+      expect(frame.camera.clearanceM).toBeGreaterThanOrEqual(frame.camera.minimumClearanceM);
+    }
+    const finish = resolveRouteSceneFrame(manifest, {
+      cameraMode: "auto", following: true, progressM: manifest.totalDistanceM, rangeScale: 1,
+    });
+    expect(finish.camera.overviewWeight).toBe(1);
+    expect(finish.camera.target).toMatchObject(manifest.center);
+    expect(recorded).toEqual(source);
+  });
+
+  it("keeps Auto composition near the subject while anticipating a turn", () => {
+    const manifest = createRouteSceneManifest(route);
+    const frame = resolveRouteSceneFrame(manifest, {
+      cameraMode: "auto", following: true, progressM: 750, rangeScale: 1,
+    });
+    const { subject, camera } = frame;
+    const offsetM = Math.hypot(
+      (camera.target.lat - subject.lat) * 111_320,
+      (camera.target.lng - subject.lng) * 111_320 * Math.cos(subject.lat * Math.PI / 180),
+    );
+    expect(offsetM).toBeLessThan(70);
+    expect(camera.headingDeg).toBeGreaterThan(0);
+    expect(camera.headingDeg).toBeLessThan(80);
+    expect(camera.clearanceM).toBeGreaterThanOrEqual(camera.minimumClearanceM);
+  });
+
   it("preserves recorded route geometry and provenance", () => {
     const manifest = createRouteSceneManifest(route);
 
@@ -134,7 +175,7 @@ describe("route scene contract", () => {
     expect(frame.camera.fovDeg).toBeLessThanOrEqual(50);
   });
 
-  it("directs an automatic reveal into a protected chase view", () => {
+  it("opens directly in protected tracking and retains it through the route", () => {
     const manifest = createRouteSceneManifest(route);
     const reveal = resolveRouteSceneFrame(manifest, {
       cameraMode: "auto",
@@ -149,8 +190,9 @@ describe("route scene contract", () => {
       rangeScale: 1,
     });
 
-    expect(reveal.camera.directedMode).toBe("overview");
-    expect(reveal.camera.rangeM).toBeGreaterThan(1_000);
+    expect(reveal.camera.directedMode).toBe("chase");
+    expect(reveal.camera.overviewWeight).toBe(0);
+    expect(reveal.camera.rangeM).toBeLessThanOrEqual(780);
     expect(tracking.camera.directedMode).toBe("chase");
     expect(tracking.camera.rangeM).toBeGreaterThanOrEqual(390);
     expect(tracking.camera.tiltDeg).toBeLessThanOrEqual(58);

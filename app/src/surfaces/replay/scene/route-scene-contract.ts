@@ -320,11 +320,16 @@ function resolveAutomaticCamera(
     58,
   );
   const plannedClearanceM = 28 + occlusionRisk * 38;
+  const framingTarget = smoothRouteTarget(
+    manifest,
+    Math.min(totalDistanceM, progressM + Math.min(65, lookAheadM * 0.35)),
+    44,
+  );
   const trackingTarget = {
-    lat: target.lat,
-    lng: target.lng,
+    lat: framingTarget.lat,
+    lng: framingTarget.lng,
     altitude: Math.max(
-      target.elev + plannedClearanceM,
+      framingTarget.elev + plannedClearanceM,
       terrain.maximumM + 28 + occlusionRisk * 20,
     ),
   };
@@ -339,9 +344,7 @@ function resolveAutomaticCamera(
     route,
     totalDistanceM * 0.25,
   ).bearingDeg;
-  const revealWeight = 1 - smoothstep(0.012, 0.065, progressRatio);
-  const releaseWeight = smoothstep(0.92, 0.985, progressRatio);
-  const overviewWeight = Math.max(revealWeight, releaseWeight);
+  const overviewWeight = smoothstep(0.92, 0.985, progressRatio);
   const protection: RouteSceneCameraProtection[] = [
     "recorded-terrain-envelope",
     "horizon-guard",

@@ -12,6 +12,7 @@ async function installTrailer(
 ) {
   await page.addInitScript((state) => {
     window.__GODIESEL_GOOGLE_ROUTE_NAVIGATOR_FACTORY__ = () => ({
+      readCamera() { return undefined; },
       async mount({ container, onStatus }) {
         container.style.background = "#234b58";
         const credits = document.createElement("button");

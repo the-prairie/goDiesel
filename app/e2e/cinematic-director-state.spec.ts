@@ -17,6 +17,7 @@ async function installDirector(page: Page, deferredAudio: boolean | "reject" = f
       return new Promise<void>((resolve) => fixture.directorFixture.audio.push(resolve));
     };
     window.__GODIESEL_GOOGLE_ROUTE_NAVIGATOR_FACTORY__ = () => ({
+      readCamera() { return undefined; },
       async mount({ container, onStatus }) {
         const canvas = document.createElement("canvas");
         canvas.style.cssText = "width:100%;height:100%;background:#345058";

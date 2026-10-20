@@ -21,6 +21,7 @@ class FakeElement extends EventTarget {
   dataset: Record<string, string> = {};
   children: FakeElement[] = [];
   removed = false;
+  declare position: { lat: number; lng: number; altitude?: number };
   declare path: Array<{ lat: number; lng: number; altitude?: number }>;
 
   constructor(options: object) {
@@ -53,6 +54,7 @@ const library = {
   MapMode: { SATELLITE: "satellite" },
   Map3DElement: FakeMap,
   Polyline3DElement: FakeElement,
+  MarkerElement: FakeElement,
 };
 let runtime: EventTarget;
 let importLibrary: ReturnType<typeof vi.fn>;
@@ -90,6 +92,7 @@ beforeEach(() => {
     setTimeout, clearTimeout,
     google: { maps: { importLibrary, maps3d: library } },
   });
+  vi.stubGlobal("document", { createElement: () => new FakeElement({}) });
   vi.stubGlobal("window", runtime);
   vi.stubGlobal("google", { maps: { importLibrary, maps3d: library } });
 });
@@ -101,6 +104,25 @@ afterEach(() => {
 });
 
 describe("Google renderer lifecycle adapter", () => {
+  it("reads the provider camera after free exploration instead of returning its last app pose", async () => {
+    const run = mount();
+    expect(run.engine.readCamera()).toBeUndefined();
+    const map = await sceneCreated();
+    steady(map);
+    await run.done;
+    run.engine.setFollowing(false);
+    const actual = { center: { lat: 37.79, lng: -122.42, altitude: 90 }, heading: 100, range: 900, tilt: 40, fov: 54 };
+    Object.assign(map, actual);
+    expect(run.engine.readCamera()).toEqual({
+      center: actual.center, headingDeg: 100, rangeM: 900, tiltDeg: 40, fovDeg: 54,
+    });
+    run.engine.setFollowing(true);
+    run.engine.setCamera({ ...run.engine.readCamera()!, progressM: 0 });
+    expect(map).toMatchObject(actual);
+    run.engine.destroy();
+    expect(run.engine.readCamera()).toBeUndefined();
+  });
+
   it("keeps every filament layer on terrain and preserves the optional mesh mode", async () => {
     const run = mount({ groundingMode: "ground", routeStyle: { mode: "filament", color: "#fff", outerColor: "#fff", outerWidth: 0, width: 2 } });
     const map = await sceneCreated();
@@ -126,14 +148,14 @@ describe("Google renderer lifecycle adapter", () => {
     run.engine.setCinematicRoute(googleRouteThreadTreatment(route, {
       ...initialGoogleRouteNavigatorState(), cameraMode: "chase", progressM: 26_000,
     }));
-    const [guide, future, traveled, marker] = map.children;
-    expect(guide).toMatchObject({ strokeColor: "#70e1dc", style: { opacity: "0.45" } });
-    expect(future).toMatchObject({ strokeColor: "#70e1dc", strokeWidth: 3.5, style: { opacity: "1" } });
-    expect(traveled).toMatchObject({ strokeColor: "#ff9d54", strokeWidth: 7, style: { opacity: "1" } });
-    expect(marker).toMatchObject({ strokeColor: "#fff3d6", strokeWidth: 4.5 });
-    for (const layer of map.children) {
+    const [future, traveled, glint, marker] = map.children;
+    expect([future, traveled, glint].map(layer => layer.dataset.threadLayer)).toEqual(["future", "thread", "glint"]);
+    expect(glint.path.at(-1)).toEqual({ lat: marker.position.lat, lng: marker.position.lng, altitude: 1.25 });
+    expect(marker).toMatchObject({ altitudeMode: "relative-ground", anchorTop: "-50%", title: "Current route position" });
+    expect(marker.position.altitude).toBe(1.6);
+    for (const layer of [future, traveled, glint]) {
       expect(layer).toMatchObject({ altitudeMode: "relative-ground", drawsOccludedSegments: false });
-      expect(layer.path.every(({ altitude }) => altitude === (layer === marker ? 1.6 : 1.25))).toBe(true);
+      expect(layer.path.every(({ altitude }) => altitude === 1.25)).toBe(true);
     }
     run.engine.setGrounding("mesh");
     for (const layer of map.children) expect(layer).toMatchObject({ altitudeMode: "mesh" });
@@ -142,7 +164,7 @@ describe("Google renderer lifecycle adapter", () => {
     expect(route.route).toEqual(source);
   });
 
-  it("keeps the position ring at the actual distance through start, seek, and finish", async () => {
+  it("keeps the position marker at the actual distance through start, seek, and finish", async () => {
     const run = mount({ routeStyle: { mode: "filament", palette: "immersive", color: "#fff", outerColor: "#fff", outerWidth: 0, width: 2 } });
     const map = await sceneCreated();
     steady(map);
@@ -152,17 +174,33 @@ describe("Google renderer lifecycle adapter", () => {
       run.engine.setCinematicRoute(googleRouteThreadTreatment(route, {
         ...initialGoogleRouteNavigatorState(), cameraMode: "chase", progressM: point.d,
       }));
-      expect(marker.dataset.routeVisible).toBe("true");
-      expect(marker.path).toHaveLength(33);
-      expect(marker.path[0]).toEqual(marker.path.at(-1));
-      for (const vertex of marker.path) {
-        const northM = (vertex.lat - point.lat) * Math.PI / 180 * 6_371_000;
-        const eastM = (vertex.lng - point.lng) * Math.PI / 180 * 6_371_000 * Math.cos(point.lat * Math.PI / 180);
-        expect(Math.hypot(northM, eastM)).toBeCloseTo(3, 2);
-      }
+      expect(marker.position.lat).toBeCloseTo(point.lat, 8);
+      expect(marker.position.lng).toBeCloseTo(point.lng, 8);
+      expect(marker.position.altitude).toBe(1.6);
     }
-    expect(map.children[1].dataset.routeVisible).toBe("false");
-    expect(map.children[2].dataset.routeVisible).toBe("true");
+    expect(map.children[0].dataset.routeVisible).toBe("false");
+    expect(map.children[1].dataset.routeVisible).toBe("true");
+    expect(map.children[2].path.at(-1)).toEqual({ ...marker.position, altitude: 1.25 });
+  });
+
+  it("keeps the short position tail attached during sub-metre playback and reverse seek", async () => {
+    const run = mount({ routeStyle: { mode: "filament", palette: "immersive", color: "#fff", outerColor: "#fff", outerWidth: 0, width: 2 } });
+    const map = await sceneCreated();
+    steady(map);
+    await run.done;
+    const tail = map.children.find(layer => layer.dataset.threadLayer === "glint")!;
+    const marker = map.children[3];
+    for (const progressM of [1000, 1000.5, 1001, 2000, 1999.5, 1999]) {
+      run.engine.setCinematicRoute(googleRouteThreadTreatment(route, {
+        ...initialGoogleRouteNavigatorState(), cameraMode: "chase", progressM,
+      }));
+      expect(tail.dataset.routeVisible).toBe("true");
+      expect(tail.path.at(-1)).toEqual({ ...marker.position, altitude: 1.25 });
+    }
+    run.engine.setCinematicRoute(googleRouteThreadTreatment(route, initialGoogleRouteNavigatorState()));
+    expect(tail.dataset.routeVisible).toBe("false");
+    expect(marker.position.lat).toBe(route.route[0].lat);
+    expect(marker.position.lng).toBe(route.route[0].lng);
   });
 
   it.each([undefined, "neutral"] as const)("preserves the %s cinematic filament treatment", async (palette) => {

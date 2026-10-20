@@ -37,7 +37,7 @@ for (const width of [390, 1280]) {
     await page.waitForTimeout(1_000);
     await page.screenshot({path:`artifacts/replay-comfort/bali-${width}.png`});
     const thread = page.locator('gmp-polyline-3d[data-thread-layer="thread"]');
-    expect(await thread.evaluate(el => (el as google.maps.maps3d.Polyline3DElement).strokeColor)).toBe('#ff9d54');
+    await expect(thread).toHaveAttribute('data-route-visible', 'true');
     await page.getByRole('button',{name:'Replay settings',exact:true}).click();
     const settings = page.getByRole('dialog',{name:'Replay settings'});
     await expect(settings).toBeVisible();

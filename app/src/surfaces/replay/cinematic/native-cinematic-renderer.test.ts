@@ -177,8 +177,11 @@ describe("cinematic route filament", () => {
 describe("interactive camera comfort", () => {
   it("keeps a finite pose for rapid controls sharing a frame timestamp", () => {
     const motion = createRouteCameraMotionState(start);
-    expect(advanceRouteCameraMotion(motion, target, 0)).toEqual(motion);
-    expect(advanceRouteCameraMotion(motion, target, -0.001)).toEqual(motion);
+    for (const elapsed of [0, -0.001]) {
+      const unchanged = advanceRouteCameraMotion(motion, target, elapsed);
+      expect(unchanged.pose).toEqual(motion.pose);
+      expect(unchanged.velocity).toEqual(motion.velocity);
+    }
     const next = advanceRouteCameraMotion(motion, target, 1 / 60);
     expect(Number.isFinite(next.pose.center.lat)).toBe(true);
   });

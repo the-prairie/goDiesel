@@ -1,13 +1,18 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 
-import { EarthReplayStage } from "@/surfaces/replay/components/earth-replay-stage";
 import { GoogleRouteNavigatorStage } from "@/surfaces/replay/components/google-route-navigator-stage";
 import { RouteNotFound } from "@/ui/route-not-found";
 import { singleRouteMicrosite } from "@/app/single-route-microsite";
 import { completedRoutes, findRouteBySlug } from "@/data/routes";
 import { useRouteDetail } from "@/data/use-route-detail";
 import { APP_PATHS, atlasReturnPath, decodedRouteSlug } from "@/app/route-paths";
+
+const EarthReplayStage = lazy(() =>
+  import("@/surfaces/replay/components/earth-replay-stage").then((module) => ({
+    default: module.EarthReplayStage,
+  })),
+);
 
 const representativeRoute =
   completedRoutes.find(
@@ -77,13 +82,21 @@ export function ReplayPage() {
   }
 
   return (
-    <EarthReplayStage
-      route={detail.route}
-      pickerRoutes={pickerRoutes}
-      backPath={backPath}
-      backLabel={backLabel}
-      initialEngineMode={atlasFallback ? "atlas" : "earth"}
-      allowEarthMode={useLegacyEarth}
-    />
+    <Suspense
+      fallback={
+        <div role="status" aria-live="polite" className="grid min-h-[50dvh] place-items-center">
+          Loading Earth Replay.
+        </div>
+      }
+    >
+      <EarthReplayStage
+        route={detail.route}
+        pickerRoutes={pickerRoutes}
+        backPath={backPath}
+        backLabel={backLabel}
+        initialEngineMode={atlasFallback ? "atlas" : "earth"}
+        allowEarthMode={useLegacyEarth}
+      />
+    </Suspense>
   );
 }
