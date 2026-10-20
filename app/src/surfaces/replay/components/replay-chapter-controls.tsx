@@ -58,6 +58,7 @@ export function ReplayChapterControls({
   const lensProgressM = preview?.progressM ?? progressM;
   const lensElevationM = replayElevationAt(model, lensProgressM);
   const selectedLabel = selectedMoment?.label ?? selectedChapter?.label ?? "Route";
+  const storyChapter = selectedMoment ? undefined : selectedChapter;
   const featureM = selectedMoment?.valueM ?? Math.max(selectedChapter?.ascentM ?? 0, selectedChapter?.descentM ?? 0);
   const featureLabel = selectedMoment ? selectedMoment.kind === "descent" ? "descending" : "elevation" :
     (selectedChapter?.descentM ?? 0) > (selectedChapter?.ascentM ?? 0) ? "descending" : "climbing";
@@ -113,13 +114,31 @@ export function ReplayChapterControls({
           <div className="replay-chapter-title-row">
             <div>
               <p className="replay-chapter-kicker">{selectedMoment ? "Moment finder" : `Chapter ${String((selectedChapter?.index ?? 0) + 1).padStart(2, "0")} / ${String(model.chapters.length).padStart(2, "0")}`}</p>
-              <h2>{selectedLabel}<span>.</span></h2>
+              <h2>{selectedLabel}</h2>
               <p className="replay-chapter-span">{distance(selectedSpan.startM)} to {distance(selectedSpan.endM)} km</p>
             </div>
             <button type="button" className="replay-chapter-button" aria-label={presentation === "relief" ? "Inspect elevation profile" : "Show elevation relief"} aria-pressed={presentation === "profile"} onClick={() => setPresentation(presentation === "relief" ? "profile" : "relief")}>
               {presentation === "relief" ? "Inspect" : "Relief"}
             </button>
           </div>
+
+          {storyChapter?.story ? <div className="replay-chapter-story" data-testid="replay-chapter-story">
+            <p>{storyChapter.story.summary}</p>
+            <details key={storyChapter.id}>
+              <summary>Places along this chapter</summary>
+              <ul>
+                {storyChapter.story.places.map(place => <li key={place.sourceUrl}>
+                  <button type="button" disabled={disabled} aria-label={`Preview near ${place.name}`} onClick={event => {
+                    event.currentTarget.closest("details")?.removeAttribute("open");
+                    selectPreview({ type: "chapterSelected", chapter: storyChapter });
+                    onEvent({ type: "previewMoved", progressM: place.atDistanceM, totalDistanceM: model.totalDistanceM });
+                  }}><span>{place.name}</span><small>Near {distance(place.atDistanceM)} km</small></button>
+                  <a href={place.sourceUrl} target="_blank" rel="noreferrer" aria-label={`Map source for ${place.name}`}>Map ↗</a>
+                </li>)}
+              </ul>
+              <p className="replay-chapter-provenance">Nearby places matched to the recorded path. This does not imply a visit inside. Place data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>, ODbL.</p>
+            </details>
+          </div> : null}
 
           <div className="replay-chapter-context">
             <div><span>Whole route · {distance(model.totalDistanceM)} km</span><Profile model={model} span={wholeSpan} progressM={progressM} previewM={preview?.progressM} selectedSpan={selectedSpan} miniature testId="replay-context-profile" /></div>
@@ -152,7 +171,7 @@ export function ReplayChapterControls({
             ))}
           </div>
           {model.moments.length === 0 ? <p className="replay-chapter-explanation">No distinct elevation moments in the recorded samples.</p> : null}
-          <p className="replay-chapter-provenance">Chapters divide route distance. Moments and climb are derived from recorded elevation. Gaps remain visible.</p>
+          <p className="replay-chapter-provenance">{model.chapters.some(chapter => chapter.story) ? <>Map-based route story. Place data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>, ODbL. </> : "Chapters divide route distance. "}Moments and climb are derived from recorded elevation. Gaps remain visible.</p>
         </div>
       ) : null}
 
