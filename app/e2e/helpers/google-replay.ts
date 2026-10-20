@@ -104,4 +104,3 @@ export async function installGoogleReplay(page: Page, state: "ready" | "unavaila
     });
   }, state);
 }
-
