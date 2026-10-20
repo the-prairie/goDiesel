@@ -234,7 +234,15 @@ is not.
 **Replay** is immersive playback of a recorded route through real-world imagery.
 
 **Chapters** divide the route into distance intervals for navigation. Their
-terrain labels come from recorded elevation samples, not curated place names.
+default terrain labels come from recorded elevation samples. A reviewed
+**route story** can replace those intervals with geographic chapters. Its
+editorial summaries use sourced place names and anchors on recorded samples.
+Nearby landmarks do not imply that the athlete entered or visited them.
+
+Route stories live in `app/src/data/replay-stories/`. Each includes map source
+links, a review date, and a geometry signature covering coordinates, distances,
+and recording-gap boundaries. A changed recording or an unreviewed route uses
+the default terrain chapters. Story data adds no runtime provider request.
 
 **Moments** identify features in the recorded elevation profile, such as its
 high point, low point, or a sustained descent. A moment's explanation states
