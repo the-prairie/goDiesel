@@ -233,6 +233,18 @@ is not.
 
 **Replay** is immersive playback of a recorded route through real-world imagery.
 
+**Chapters** divide the route into distance intervals for navigation. Their
+terrain labels come from recorded elevation samples, not curated place names.
+
+**Moments** identify features in the recorded elevation profile, such as its
+high point, low point, or a sustained descent. A moment's explanation states
+the measured basis. Missing recordings remain gaps in the profile.
+
+**Chapter preview** pauses playback and inspects a separate position. Browsing
+does not move the replay camera or change the session's distance. **Play from
+here** commits the preview position to the existing replay session. **Back to
+replay** discards the preview without seeking.
+
 **Replay mode** describes the intended visual world for a route:
 
 | Value | Meaning |

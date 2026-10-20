@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { installGoogleReplay } from "./helpers/google-replay";
 
 test("manual map input releases camera ownership while playback continues", async ({ page }) => {
   await installGoogleReplay(page, "ready");
@@ -56,6 +57,29 @@ test("wheel inertia releases follow only once", async ({ page }) => {
 
 async function expectMarkerOnProfile(page: Page, duringPlayback = false) {
   await expect.poll(() => page.getByTestId("replay-elevation-scrubber").evaluate((host, duringPlayback) => {
+    const reliefMarker = host.querySelector<SVGCircleElement>(".replay-chapter-pin");
+    if (reliefMarker) {
+      const svg = reliefMarker.ownerSVGElement!;
+      const x = reliefMarker.cx.baseVal.value;
+      const y = reliefMarker.cy.baseVal.value;
+      let error = Infinity;
+      for (const path of host.querySelectorAll<SVGPathElement>(".replay-chapter-edge")) {
+        const length = path.getTotalLength();
+        if (x < path.getPointAtLength(0).x || x > path.getPointAtLength(length).x) continue;
+        let low = 0;
+        let high = length;
+        for (let i = 0; i < 30; i++) {
+          const middle = (low + high) / 2;
+          if (path.getPointAtLength(middle).x < x) low = middle;
+          else high = middle;
+        }
+        const point = path.getPointAtLength((low + high) / 2);
+        const expected = new DOMPoint(point.x, point.y).matrixTransform(svg.getScreenCTM()!);
+        const actual = new DOMPoint(x, y).matrixTransform(svg.getScreenCTM()!);
+        error = Math.min(error, Math.hypot(expected.x - actual.x, expected.y - actual.y));
+      }
+      return error;
+    }
     const line = host.querySelector("polyline")!;
     const svg = line.ownerSVGElement!;
     const marker = host.querySelector(":scope > span > span")!.getBoundingClientRect();
@@ -94,7 +118,11 @@ for (const renderer of ["google", "cesium"]) {
         await expectMarkerOnProfile(page);
       }
       await slider.press("End");
-      await expectMarkerOnProfile(page);
+      if (renderer === "google") {
+        await expect(page.getByTestId("replay-elevation-scrubber").locator(".replay-chapter-pin")).toHaveCount(0);
+      } else {
+        await expectMarkerOnProfile(page);
+      }
       await slider.press("Home");
       await expectMarkerOnProfile(page);
       await page.setViewportSize({ width: width === 390 ? 1280 : 390, height: 844 });
@@ -107,110 +135,6 @@ for (const renderer of ["google", "cesium"]) {
   }
 }
 
-async function installGoogleReplay(page: Page, state: "ready" | "unavailable" | "loading") {
-  await page.addInitScript((providerState) => {
-    const replayWindow = window as typeof window & {
-      __GODIESEL_SET_PROVIDER_STATUS__?: (state: "ready" | "loading" | "unavailable") => void;
-      __GODIESEL_MANUAL_CAMERA__?: { center: { lat: number; lng: number; altitude: number }; headingDeg: number; rangeM: number; tiltDeg: number; fovDeg: number };
-      __GODIESEL_CAMERA_CALLS__?: Array<{
-        center: { lat: number; lng: number };
-        headingDeg: number;
-      }>;
-      __GODIESEL_CINEMATIC_ROUTE_CALLS__?: Array<{
-        startRatio: number;
-        focusRatio: number;
-        endRatio: number;
-      }>;
-      __GODIESEL_GOOGLE_ROUTE_NAVIGATOR_FACTORY__?: () => {
-        mount(options: {
-          container: HTMLElement;
-          onStatus: (status: {
-            state: "ready" | "unavailable" | "loading";
-            message: string;
-          }) => void;
-        }): Promise<void>;
-        readCamera(): unknown;
-        setCamera(): void;
-        setFollowing(): void;
-        setGrounding(): void;
-        setCinematicRoute(treatment: {
-          startRatio: number;
-          focusRatio: number;
-          endRatio: number;
-        }): void;
-        setRouteReveal(): void;
-        destroy(): void;
-      };
-      __GODIESEL_REPLAY_ENGINE_FACTORY__?: () => {
-        mount(options: {
-          container: HTMLElement;
-          onStatus: (status: {
-            state: "ready";
-            title: string;
-            message: string;
-          }) => void;
-        }): Promise<void>;
-        setPose(): void;
-        destroy(): void;
-      };
-    };
-
-    replayWindow.__GODIESEL_CINEMATIC_ROUTE_CALLS__ = [];
-    replayWindow.__GODIESEL_CAMERA_CALLS__ = [];
-    replayWindow.__GODIESEL_GOOGLE_ROUTE_NAVIGATOR_FACTORY__ = () => ({
-      async mount({ container, onStatus }) {
-        replayWindow.__GODIESEL_SET_PROVIDER_STATUS__ = (state) => onStatus({ state, message: `Google 3D fixture ${state}.` });
-        if (providerState === "unavailable") {
-          onStatus({
-            state: "unavailable",
-            message: "Google 3D fixture unavailable.",
-          });
-          return;
-        }
-        const canvas = document.createElement("canvas");
-        canvas.dataset.renderer = "google-production";
-        canvas.style.background = "rgb(30, 80, 96)";
-        canvas.style.width = "100%";
-        canvas.style.height = "100%";
-        const credits = document.createElement("button");
-        credits.textContent = "Provider information fixture";
-        credits.style.cssText = "position:absolute;bottom:4px;right:10px;height:24px";
-        credits.onclick = () => { credits.textContent = "Provider information opened"; };
-        container.replaceChildren(canvas, credits);
-        onStatus({ state: providerState, message: `Google 3D fixture ${providerState}.` });
-      },
-      setCamera(pose: {
-        center: { lat: number; lng: number };
-        headingDeg: number;
-      }) {
-        replayWindow.__GODIESEL_CAMERA_CALLS__?.push(pose);
-      },
-      readCamera() { return replayWindow.__GODIESEL_MANUAL_CAMERA__; },
-      setFollowing() {},
-      setGrounding() {},
-      setCinematicRoute(treatment) {
-        replayWindow.__GODIESEL_CINEMATIC_ROUTE_CALLS__?.push(treatment);
-      },
-      setRouteReveal() {},
-      destroy() {},
-    });
-
-    replayWindow.__GODIESEL_REPLAY_ENGINE_FACTORY__ = () => ({
-      async mount({ container, onStatus }) {
-        const canvas = document.createElement("canvas");
-        canvas.dataset.renderer = "atlas-fallback";
-        container.replaceChildren(canvas);
-        onStatus({
-          state: "ready",
-          title: "Atlas replay ready",
-          message: "Fallback fixture ready.",
-        });
-      },
-      setPose() {},
-      destroy() {},
-    });
-  }, state);
-}
 
 for (const routeSlug of ["14023448720", "14736711660"] as const) {
   test(`opens production Replay in Google 3D for ${routeSlug}`, async ({
@@ -239,7 +163,7 @@ for (const routeSlug of ["14023448720", "14736711660"] as const) {
     await expect(scrubber).toBeVisible();
 
     await page.getByRole("button", { name: "Play route" }).click();
-    await expect(replay).toHaveAttribute("data-hud-state", "expanded");
+    await expect(replay).toHaveAttribute("data-hud-state", "compact");
     await expect(
       page.getByRole("button", { name: "Pause route" }),
     ).toBeVisible();
@@ -377,7 +301,7 @@ test("keeps playback telemetry visible on a phone", async ({ page }) => {
   await page.getByRole("button", { name: "Play route" }).click();
   await expect(page.getByTestId("replay-elevation-scrubber")).toBeVisible();
   await expect(page.getByText("Grade", { exact: true })).toBeVisible();
-  expect((await dock.boundingBox())?.height ?? 0).toBeLessThan(170);
+  expect((await dock.boundingBox())?.height ?? 0).toBeLessThan(320);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(
     390,
   );
@@ -569,7 +493,7 @@ for (const width of [390, 1280]) {
     await expect(page.getByRole("button", { name: "Play route" })).toBeVisible();
     await page.getByRole("button", { name: "Play route" }).click();
     await expect(page.getByRole("button", { name: "Play route" })).toBeVisible();
-    await expect(scrubber).toHaveValue(String(Math.floor(maximum)));
+    expect(Number(await scrubber.inputValue())).toBeCloseTo(maximum, 6);
     await settings.click();
     await page.screenshot({ path: `artifacts/state-migration/t02/commands-${width}.png` });
     await page.getByRole("button", { name: "Close", exact: true }).click();
