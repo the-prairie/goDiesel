@@ -14,10 +14,11 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { ReplayElevationScrubber } from "@/surfaces/replay/components/replay-elevation-scrubber";
+import { ReplayChapterControls } from "@/surfaces/replay/components/replay-chapter-controls";
 import { ReplayRoutePicker } from "@/surfaces/replay/components/replay-route-picker";
 import { Button } from "@/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/ui/sheet";
@@ -36,6 +37,11 @@ import {
   reduceReplaySession,
   type ReplaySessionEvent,
 } from "@/surfaces/replay/playback/replay-session-state";
+import {
+  initialReplayChapterControlsState,
+  reduceReplayChapterControls,
+  type ReplayChapterControlsEvent,
+} from "@/surfaces/replay/playback/replay-chapter-controls-state";
 import {
   createGoogleRouteNavigatorEngine,
   type GoogleRouteNavigatorEngine,
@@ -108,6 +114,8 @@ export function GoogleRouteNavigatorStage({
   const [status, setStatus] =
     useState<GoogleRouteNavigatorStatus>(INITIAL_STATUS);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [chaptersExpanded, setChaptersExpanded] = useState(false);
+  const [chapterControls, dispatchChapterControls] = useReducer(reduceReplayChapterControls, undefined, initialReplayChapterControlsState);
   const totalDistanceM = routeDistanceM(route);
   const telemetry = useMemo(
     () => googleRouteTelemetry(route, control.progressM),
@@ -199,6 +207,28 @@ export function GoogleRouteNavigatorStage({
     if (controlRef.current.following) commitControl({ type: "followingChanged", following: false });
   }, [commitControl]);
 
+  const togglePlayback = useCallback(() => {
+    dispatchChapterControls({ type: "replayReturned" });
+    commitControl({ type: "playbackToggled" });
+  }, [commitControl]);
+
+  const browseChapter = (event: ReplayChapterControlsEvent) => {
+    if (event.type === "chapterSelected" || event.type === "momentSelected" || event.type === "previewMoved") {
+      if (status.state !== "ready") return;
+      if (controlRef.current.playing) commitControl({ type: "playbackToggled" });
+    }
+    dispatchChapterControls(event);
+  };
+
+  const playFromPreview = () => {
+    if (status.state !== "ready" || chapterControls.mode !== "preview") return;
+    commitControl({ type: "progressSelected", progressM: chapterControls.progressM, totalDistanceM });
+    dispatchChapterControls({ type: "replayReturned" });
+    if (!controlRef.current.playing && controlRef.current.progressM < totalDistanceM) {
+      commitControl({ type: "playbackToggled" });
+    }
+  };
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -212,6 +242,8 @@ export function GoogleRouteNavigatorStage({
     controlRef.current = initial;
     setControl(initial);
     setSettingsOpen(false);
+    setChaptersExpanded(false);
+    dispatchChapterControls({ type: "routeReplaced" });
     setStatus(INITIAL_STATUS);
 
     void engine.mount({
@@ -302,18 +334,18 @@ export function GoogleRouteNavigatorStage({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || settingsOpen ||
         (event.target instanceof Element && event.target.closest('[role="dialog"]'))) return;
-      if (event.key === "Escape") navigate(backPath);
+      if (event.key === "Escape") {
+        if (chaptersExpanded) setChaptersExpanded(false);
+        else navigate(backPath);
+      }
       if (event.key === " " && event.target === document.body) {
         event.preventDefault();
-        commitControl({ type: "playbackToggled" });
+        togglePlayback();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [backPath, commitControl, navigate, settingsOpen]);
-
-  const togglePlayback = () =>
-    commitControl({ type: "playbackToggled" });
+  }, [backPath, chaptersExpanded, navigate, settingsOpen, togglePlayback]);
 
   const selectCamera = (mode: GoogleRouteCameraMode) =>
     commitControl({ type: "cameraSelected", cameraMode: mode });
@@ -339,7 +371,7 @@ export function GoogleRouteNavigatorStage({
       data-directed-camera={cameraPose.directedMode ?? control.cameraMode}
       data-following={control.following}
       data-grounding-mode={control.groundingMode}
-      data-hud-state="expanded"
+      data-hud-state={productionReplay && !chaptersExpanded ? "compact" : "expanded"}
       data-engine="google-3d-maps"
       data-route-slug={route.slug}
       data-state={status.state}
@@ -411,10 +443,10 @@ export function GoogleRouteNavigatorStage({
       </header>
 
       {status.state !== "ready" ? (
-        <div className="absolute inset-0 z-20 grid place-items-center bg-black/58 p-6">
+        <div className={cn("pointer-events-none absolute inset-0 grid place-items-center bg-black/58 p-6", status.state === "unavailable" ? "z-40" : "z-20")}>
           <div
             aria-live="polite"
-            className="max-w-md border border-white/20 bg-surface p-6 text-center text-white"
+            className="pointer-events-auto max-w-md border border-white/20 bg-surface p-6 text-center text-white"
             role={status.state === "unavailable" ? "alert" : "status"}
           >
             <ScanLine
@@ -445,8 +477,32 @@ export function GoogleRouteNavigatorStage({
         className={cn("pointer-events-none z-30", productionReplay ? "immersive-replay-dock" : "relative")}
         data-testid={productionReplay ? "replay-controls" : undefined}
       >
-        <ReplayHud
-          immersive={productionReplay}
+        {productionReplay ? <ReplayChapterControls
+          key={route.slug}
+          route={route}
+          state={chapterControls}
+          progressM={control.progressM}
+          playing={control.playing}
+          speed={control.speed}
+          disabled={status.state !== "ready"}
+          expanded={chaptersExpanded}
+          onExpandedChange={setChaptersExpanded}
+          onEvent={browseChapter}
+          onPlayFromPreview={playFromPreview}
+          onTogglePlayback={togglePlayback}
+          onSeek={progressM => {
+            dispatchChapterControls({ type: "replayReturned" });
+            commitControl({ type: "progressSelected", progressM, totalDistanceM });
+          }}
+          onCycleSpeed={() => commitControl({ type: "speedCycled" })}
+          cameraControls={<CameraControls active={control.cameraMode} disabled={status.state !== "ready"} onSelect={selectCamera} />}
+          metrics={<div className="replay-metrics grid grid-cols-4 gap-2">
+            <Metric label={route.route.some(point => point.elapsedS !== undefined) ? "Elapsed" : "Elapsed · derived"} value={route.provenance.temporal.status === "recorded" ? formatDuration(telemetry.elapsedS) : "Unavailable"} />
+            <Metric label={route.type.toLowerCase().includes("ride") ? "Speed" : "Pace"} value={route.provenance.temporal.status === "recorded" ? formatPace(telemetry.paceSPerKm, route.type) : "Unavailable"} />
+            <Metric label="Elevation" value={`${Math.round(telemetry.elevationM)} m`} />
+            <Metric label="Grade" value={`${telemetry.gradePercent >= 0 ? "+" : ""}${telemetry.gradePercent.toFixed(1)}%`} />
+          </div>}
+        /> : <ReplayHud
           control={control}
           disabled={status.state !== "ready"}
           onCommit={commitControl}
@@ -455,14 +511,13 @@ export function GoogleRouteNavigatorStage({
           route={route}
           telemetry={telemetry}
           totalDistanceM={totalDistanceM}
-        />
+        />}
       </div>
     </section>
   );
 }
 
 function ReplayHud({
-  immersive,
   control,
   disabled,
   onCommit,
@@ -471,31 +526,7 @@ function ReplayHud({
   route,
   telemetry,
   totalDistanceM,
-}: ReplayHudProps & { immersive: boolean }) {
-  if (immersive) return (
-    <div className="immersive-replay-hud pointer-events-auto" data-testid="google-route-controls">
-      <div className="flex min-w-0 items-center gap-3">
-        <ReplayButton disabled={disabled} onClick={onTogglePlayback} playing={control.playing} />
-        <div className="min-w-0 flex-1">
-          <div className="text-[10px] uppercase tracking-wider text-white/60">Route progress</div>
-          <div className="whitespace-nowrap text-sm font-semibold tabular-nums sm:text-base" data-testid="google-route-progress">
-            {(control.progressM / 1_000).toFixed(2)} / {route.distanceKm.toFixed(1)} km
-          </div>
-        </div>
-        <div className="hidden sm:block"><CameraControls active={control.cameraMode} disabled={disabled} onSelect={onSelectCamera} /></div>
-        <Button aria-label={`Playback speed ${control.speed}x`} disabled={disabled} onClick={() => onCommit({ type: "speedCycled" })} variant="ghost" className="min-w-11 px-2 text-white hover:bg-white/10" title="Change playback speed">
-          <Gauge aria-hidden="true" className="hidden sm:block" />{control.speed}x
-        </Button>
-      </div>
-      <ReplayElevationScrubber className="mt-2 h-11 border-0" disabled={disabled} onSeek={progressM => onCommit({ type: "progressSelected", progressM, totalDistanceM })} progressM={control.progressM} route={route} tone="intelligence" totalDistanceM={totalDistanceM} />
-      <div className="replay-metrics mt-2 grid grid-cols-4 gap-2">
-        <Metric label="Elapsed" value={formatDuration(telemetry.elapsedS)} />
-        <Metric label={route.type.toLowerCase().includes("ride") ? "Speed" : "Pace"} value={formatPace(telemetry.paceSPerKm, route.type)} />
-        <Metric label="Elevation" value={`${Math.round(telemetry.elevationM)} m`} />
-        <Metric label="Grade" value={`${telemetry.gradePercent >= 0 ? "+" : ""}${telemetry.gradePercent.toFixed(1)}%`} />
-      </div>
-    </div>
-  );
+}: ReplayHudProps) {
   return (
     <div
       className="pointer-events-auto mx-auto w-full border-t border-white/15 bg-surface/98 text-white backdrop-blur"

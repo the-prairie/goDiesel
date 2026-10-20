@@ -87,7 +87,6 @@ export function replayProfileInSpan(model: ReplayChapterModel, span: ReplaySpan)
   const optional = clipped.reduce((count, segment) => count + Math.max(0, segment.length - 4), 0);
   const available = Math.max(0, PROFILE_POINT_TARGET - required);
 
-  // Every segment keeps its boundaries and extrema even when the gaps exceed the drawing budget.
   return clipped.map((segment) => sampleSegment(segment, Math.min(4, segment.length) + (
     optional > 0 ? Math.floor(available * Math.max(0, segment.length - 4) / optional) : 0
   )));
