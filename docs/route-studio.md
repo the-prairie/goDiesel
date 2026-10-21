@@ -210,3 +210,33 @@ restoration. Evidence and rerunnable capture scripts are in the ignored
 `app/artifacts/course-dock/` directory. Mobile testing used browser emulation;
 physical-device evidence remains incomplete. The earlier full gate above applies
 to commit `4fdc1d2`; this HUD refinement was verified with focused checks.
+
+### Your marker
+
+Replay settings and course-preview settings share a photo editor. Choose a JPG,
+PNG, or WebP image, drag or adjust the crop with labeled sliders, then choose
+Use photo. The Google 3D marker displays the saved circular portrait across
+routes and course previews. Dot keeps the saved photo available; Remove photo
+clears it. Editing remains available while the map loads.
+
+The original image stays in memory during editing. Saving stores only a cropped
+256×256 JPEG in browser local storage. This is a browser preference, without
+account sync or a server upload. Input limits are 10 MB and 24 megapixels.
+Canceling or closing settings discards the draft. Failed storage writes preserve
+the crop for retry and leave the active marker unchanged. An unreadable stored
+portrait falls back to the dot. Legacy Atlas and Cesium replay markers retain
+their existing appearance.
+
+Focused verification passed typechecking, 40 unit tests, and the five marker
+browser scenarios. The latter cover desktop and mobile layouts, crop changes,
+cancel, removal, reload, route switching, invalid images, storage failure,
+focus restoration, and editing during map loading. Existing course-preview and
+replay interactions were also checked. Actual background Google-map interactions
+covered the saved Calgary course, San Francisco, and Bali at 1440×900 and
+390×844, with no page errors. Screenshots use an illustrated test portrait.
+
+Independent review checked crop/export pixel agreement and found the map-loading
+restriction, which was repaired and covered by a regression test. Evidence and
+the rerunnable live check are in the ignored `app/artifacts/your-marker/`
+directory. Mobile evidence is emulation; no physical phone test was performed.
+This feature and the corrected replay design remain unmerged and undeployed.

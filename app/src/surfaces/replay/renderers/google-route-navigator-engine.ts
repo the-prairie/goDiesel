@@ -1,3 +1,4 @@
+import { attachRoutePositionMarker } from "./route-position-marker";
 import {
   buildCinematicThreadStyles,
   slicePathByRatio,
@@ -126,6 +127,7 @@ function waitForGoogleSceneReady(map: google.maps.maps3d.Map3DElement, signal: A
 class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
   private map?: google.maps.maps3d.Map3DElement;
   private routeLine?: google.maps.maps3d.Polyline3DElement;
+  private disposeMarker?: () => void;
   private positionMarker?: google.maps.maps3d.MarkerElement;
   private filamentLayers: FilamentLayer[] = [];
   private routePath: Array<{ lat: number; lng: number; d: number }> = [];
@@ -231,9 +233,7 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
             anchorTop: "-50%",
             title: "Current route position",
           });
-          const light = document.createElement("span");
-          light.style.cssText = "display:block;width:10px;height:10px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#fffef8 30%,#f3e2af 100%);box-shadow:0 1px 3px 1px rgba(15,23,26,.65),0 0 9px 3px rgba(255,241,196,.38);pointer-events:none";
-          marker.append(light);
+          this.disposeMarker = attachRoutePositionMarker(marker);
           marker.style.pointerEvents = "none";
           marker.dataset.testid = "replay-position-marker";
           map.append(marker);
@@ -418,6 +418,8 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
     this.map?.remove();
     this.map = undefined;
     this.routeLine = undefined;
+    this.disposeMarker?.();
+    this.disposeMarker = undefined;
     this.positionMarker = undefined;
     this.filamentLayers = [];
     this.routePath = [];

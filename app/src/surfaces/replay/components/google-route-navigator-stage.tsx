@@ -1,3 +1,4 @@
+import { YourMarkerSettings } from "./your-marker-settings";
 import {
   ArrowLeft,
   Eye,
@@ -624,73 +625,75 @@ function ReplaySettings({
   telemetry: ReplayHudProps["telemetry"];
 }) {
   return (
-    <fieldset disabled={disabled} className="min-w-0 px-4 pb-6 disabled:opacity-50">
-      <legend className="sr-only">Replay controls</legend>
+    <div className="min-w-0 px-4 pb-6">
       <div className="grid gap-4">
-        <div>
-          <p className="mb-2 text-xs text-white/70">Camera perspective</p>
-          <CameraControls active={control.cameraMode} disabled={disabled} onSelect={cameraMode => onCommit({ type: "cameraSelected", cameraMode })} />
-        </div>
-        <SettingGroup icon={Mountain} label="Route placement">
-          {(["ground", "mesh"] as const).map((mode) => (
+        <fieldset disabled={disabled} className="grid min-w-0 gap-4 disabled:opacity-50">
+          <legend className="sr-only">Replay controls</legend>
+          <div>
+            <p className="mb-2 text-xs text-white/70">Camera perspective</p>
+            <CameraControls active={control.cameraMode} disabled={disabled} onSelect={cameraMode => onCommit({ type: "cameraSelected", cameraMode })} />
+          </div>
+          <SettingGroup icon={Mountain} label="Route placement">
+            {(["ground", "mesh"] as const).map((mode) => (
+              <SettingButton
+                active={control.groundingMode === mode}
+                key={mode}
+                label={mode === "ground" ? "On terrain" : "On 3D surface"}
+                onClick={() =>
+                  onCommit({ type: "groundingSelected", groundingMode: mode })
+                }
+              />
+            ))}
+          </SettingGroup>
+
+          <p className="-mt-2 text-xs leading-5 text-ink-muted">On terrain follows the ground. On 3D surface follows the available buildings and terrain model.</p>
+          <SettingGroup icon={LocateFixed} label="Camera movement">
             <SettingButton
-              active={control.groundingMode === mode}
-              key={mode}
-              label={mode === "ground" ? "On terrain" : "On 3D surface"}
+              active={control.following}
+              label="Follow route"
               onClick={() =>
-                onCommit({ type: "groundingSelected", groundingMode: mode })
+                onCommit({ type: "followingChanged", following: true })
               }
             />
-          ))}
-        </SettingGroup>
+            <SettingButton
+              active={!control.following}
+              label="Explore freely"
+              onClick={() =>
+                onCommit({ type: "followingChanged", following: false })
+              }
+            />
+          </SettingGroup>
 
-        <p className="-mt-2 text-xs leading-5 text-ink-muted">On terrain follows the ground. On 3D surface follows the available buildings and terrain model.</p>
-        <SettingGroup icon={LocateFixed} label="Camera movement">
-          <SettingButton
-            active={control.following}
-            label="Follow route"
-            onClick={() =>
-              onCommit({ type: "followingChanged", following: true })
-            }
-          />
-          <SettingButton
-            active={!control.following}
-            label="Explore freely"
-            onClick={() =>
-              onCommit({ type: "followingChanged", following: false })
-            }
-          />
-        </SettingGroup>
-
-        <SettingGroup icon={Gauge} label="Zoom">
-          <Button
-            aria-label="Zoom in"
-            className="border-white/20 bg-transparent text-white hover:bg-white/10"
-            onClick={() =>
-              onCommit({ type: "zoomRequested", direction: "in" })
-            }
-            size="icon-sm"
-            title="Zoom in"
-            type="button"
-            variant="outline"
-          >
-            <ZoomIn aria-hidden="true" />
-          </Button>
-          <Button
-            aria-label="Zoom out"
-            className="border-white/20 bg-transparent text-white hover:bg-white/10"
-            onClick={() =>
-              onCommit({ type: "zoomRequested", direction: "out" })
-            }
-            size="icon-sm"
-            title="Zoom out"
-            type="button"
-            variant="outline"
-          >
-            <ZoomOut aria-hidden="true" />
-          </Button>
-        </SettingGroup>
-
+          <SettingGroup icon={Gauge} label="Zoom">
+            <Button
+              aria-label="Zoom in"
+              className="border-white/20 bg-transparent text-white hover:bg-white/10"
+              onClick={() =>
+                onCommit({ type: "zoomRequested", direction: "in" })
+              }
+              size="icon-sm"
+              title="Zoom in"
+              type="button"
+              variant="outline"
+            >
+              <ZoomIn aria-hidden="true" />
+            </Button>
+            <Button
+              aria-label="Zoom out"
+              className="border-white/20 bg-transparent text-white hover:bg-white/10"
+              onClick={() =>
+                onCommit({ type: "zoomRequested", direction: "out" })
+              }
+              size="icon-sm"
+              title="Zoom out"
+              type="button"
+              variant="outline"
+            >
+              <ZoomOut aria-hidden="true" />
+            </Button>
+          </SettingGroup>
+        </fieldset>
+        <YourMarkerSettings />
         <div className="grid grid-cols-2 gap-3 border-t border-white/15 pt-4" aria-label="Recorded telemetry">
           <Metric label="Elapsed" value={formatDuration(telemetry.elapsedS)} />
           <Metric label={route.type.toLowerCase().includes("ride") ? "Speed" : "Pace"} value={formatPace(telemetry.paceSPerKm, route.type)} />
@@ -724,7 +727,7 @@ function ReplaySettings({
           </div>
         ) : null}
       </div>
-    </fieldset>
+    </div>
   );
 }
 

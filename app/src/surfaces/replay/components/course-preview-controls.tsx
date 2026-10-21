@@ -1,3 +1,4 @@
+import { YourMarkerSettings } from "./your-marker-settings";
 import { Gauge, LocateFixed, Pause, Play, Settings2 } from "lucide-react";
 import { useId, useMemo } from "react";
 
@@ -125,6 +126,7 @@ export function CoursePreviewControls({
               </SheetDescription>
             </SheetHeader>
             <div className="grid gap-6 px-4 pb-6">
+              <YourMarkerSettings />
               {segmented ? (
                 <div className="grid gap-2">
                   <SelectField
