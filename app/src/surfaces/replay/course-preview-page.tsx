@@ -1,4 +1,4 @@
-import { ArrowLeft, LocateFixed, Pause, Play, RotateCcw } from "lucide-react";
+import { ArrowLeft, RotateCcw } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -35,11 +35,9 @@ import {
   type RouteCameraMotionState,
 } from "@/surfaces/replay/scene/route-camera-stabilizer";
 import { Button } from "@/ui/button";
-import { SelectField } from "@/ui/select-field";
-import { SegmentedControl } from "@/ui/segmented-control";
 import { useReducedMotion } from "@/ui/use-reduced-motion";
 import "./components/immersive-replay.css";
-import "./course-preview.css";
+import { CoursePreviewControls } from "./components/course-preview-controls";
 
 export function CoursePreviewPage() {
   const { courseId = "" } = useParams();
@@ -389,132 +387,16 @@ function CoursePreviewStage({
           </div>
         </div>
       ) : null}
-      <div className="immersive-replay-dock z-20 rounded-[var(--radius-panel)] border border-line bg-[var(--surface-map-glass)] p-4 backdrop-blur-md">
-        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium">Distance-based preview</p>
-            <p className="text-xs text-ink-secondary">
-              Planned course. No recorded pace or elapsed time.
-            </p>
-          </div>
-          {course.segments.length > 1 ? (
-            <SelectField
-              label="Course section"
-              value={String(section.sectionNumber)}
-              options={sections.map(
-                (item) =>
-                  [
-                    String(item.sectionNumber),
-                    `Section ${item.sectionNumber} · ${item.distanceKm.toFixed(1)} km`,
-                  ] as const,
-              )}
-              onChange={(value) =>
-                onSection(
-                  sections.findIndex(
-                    (item) => item.sectionNumber === Number(value),
-                  ),
-                )
-              }
-            />
-          ) : null}
-        </div>
-        {course.segments.length > 1 ? (
-          <p className="mb-3 text-xs text-ink-secondary">
-            Sections preview separately. Gaps are not connected.
-            {sections.length < course.segments.length
-              ? " Sections with no path have no playback."
-              : ""}
-          </p>
-        ) : null}
-        {!section.completeElevation ? (
-          <p className="mb-3 text-xs text-ink-secondary">
-            Elevation is incomplete. The camera uses a high overview.
-          </p>
-        ) : null}
-        <label
-          className="flex items-center justify-between gap-3 text-xs text-ink-secondary"
-          htmlFor="course-preview-distance"
-        >
-          <span>
-            Distance along {course.segments.length > 1 ? "section" : "course"}
-          </span>
-          <output data-testid="course-preview-distance">
-            {(control.progressM / 1_000).toFixed(2)} /{" "}
-            {section.distanceKm.toFixed(2)} km
-          </output>
-        </label>
-        <input
-          id="course-preview-distance"
-          aria-label="Preview distance"
-          type="range"
-          min={0}
-          max={section.distanceM}
-          step={1}
-          value={control.progressM}
-          disabled={!ready}
-          onChange={(event) =>
-            requestControl({
-              type: "progressSelected",
-              progressM: Number(event.target.value),
-              totalDistanceM: section.distanceM,
-            })
-          }
-          className="course-preview-distance my-1 w-full"
-        />
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <Button
-              onClick={togglePlayback}
-              disabled={!ready}
-              size="icon"
-              aria-label={control.playing ? "Pause preview" : "Play preview"}
-            >
-              {control.playing ? (
-                <Pause aria-hidden="true" />
-              ) : (
-                <Play aria-hidden="true" />
-              )}
-            </Button>
-            <Button
-              onClick={() => requestControl({ type: "speedCycled" })}
-              disabled={!ready}
-              variant="outline"
-              aria-label={`Preview speed ${control.speed}×`}
-            >
-              {control.speed}×
-            </Button>
-            {!control.following ? (
-              <Button
-                onClick={() =>
-                  requestControl({ type: "followingChanged", following: true })
-                }
-                disabled={!ready}
-                variant="outline"
-              >
-                <LocateFixed aria-hidden="true" />
-                Follow
-              </Button>
-            ) : null}
-          </div>
-          {section.completeElevation ? (
-            <SegmentedControl
-              label="Preview camera"
-              value={control.cameraMode}
-              options={[
-                ["chase", "Follow"],
-                ["overview", "Overview"],
-              ]}
-              onChange={(value) =>
-                requestControl({
-                  type: "cameraSelected",
-                  cameraMode: value === "overview" ? "overview" : "chase",
-                })
-              }
-              disabled={!ready}
-            />
-          ) : null}
-        </div>
-      </div>
+      <CoursePreviewControls
+        course={course}
+        section={section}
+        sections={sections}
+        control={control}
+        ready={ready}
+        onSection={onSection}
+        onControl={requestControl}
+        onTogglePlayback={togglePlayback}
+      />
     </section>
   );
 }

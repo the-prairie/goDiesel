@@ -187,3 +187,26 @@ initial-shell bundle budget, 807 unit tests, and 418 browser scenarios. Five uni
 tests and 68 browser scenarios were skipped by their existing environment gates.
 No snapshot updates were needed for this refinement. The independent review found
 no remaining must-fix issues after the two repairs.
+
+### Compact course-preview controls
+
+The course preview now shares the replay dock styling, transport controls, and
+settings components. Its elevation scrubber uses the course's supplied samples;
+missing elevations remain gaps, and courses without elevation retain a labeled
+distance slider. Camera options, section selection, and explanatory copy live in
+a content-sized settings sheet. No camera or playback lifecycle behavior changed.
+
+Matched Calgary screenshots measured the dock at 133 px high, down from 228 px,
+at both 1440×900 and 390×844. The desktop width decreased from 768 to 640 px.
+All transport targets remain at least 44×44 px. Background interactions exercised
+play/pause, speed, seeking to 6.04 km, camera selection, manual-camera Follow,
+and return navigation with the actual Google map and no page errors.
+
+Focused verification passed typechecking, 13 unit tests, and eight browser
+scenarios, including 320×568 portrait and 844×390 landscape, keyboard seeking,
+round profile markers, missing elevation, and section switching. Independent
+review also checked sparse profiles, sheet sizing, Escape dismissal, and focus
+restoration. Evidence and rerunnable capture scripts are in the ignored
+`app/artifacts/course-dock/` directory. Mobile testing used browser emulation;
+physical-device evidence remains incomplete. The earlier full gate above applies
+to commit `4fdc1d2`; this HUD refinement was verified with focused checks.

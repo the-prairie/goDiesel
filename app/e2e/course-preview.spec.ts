@@ -63,6 +63,8 @@ async function installPreviewEngine(page: Page, unavailable = false) {
 for (const viewport of [
   { width: 1440, height: 900 },
   { width: 390, height: 844 },
+  { width: 320, height: 568 },
+  { width: 844, height: 390 },
 ]) {
   test(`previews saved course sections with distance controls at ${viewport.width}px`, async ({
     page,
@@ -75,9 +77,27 @@ for (const viewport of [
     await expect(
       page.getByRole("heading", { name: savedCourse.name }),
     ).toBeVisible();
-    await expect(
-      page.getByText("Planned course. No recorded pace or elapsed time."),
-    ).toBeVisible();
+    await expect(page.getByTestId("course-preview-controls")).toContainText(
+      "Section 1 · Paused",
+    );
+    const dock = await page
+      .getByTestId("course-preview-controls")
+      .boundingBox();
+    expect(dock?.height).toBeLessThan(145);
+    expect(dock!.y).toBeGreaterThan(140);
+    for (const button of await page
+      .getByTestId("course-preview-controls")
+      .getByRole("button")
+      .all()) {
+      const box = await button.boundingBox();
+      expect(box!.width).toBeGreaterThanOrEqual(44);
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width);
+    }
+    await expect(page.getByTestId("course-preview-profile")).toHaveAttribute(
+      "data-profile-kind",
+      "elevation",
+    );
     await page
       .getByRole("button", { name: "Play preview", exact: true })
       .click();
@@ -93,10 +113,37 @@ for (const viewport of [
     await page
       .getByRole("button", { name: "Pause preview", exact: true })
       .click();
+    const slider = page.getByRole("slider", { name: "Preview distance" });
+    const track = await slider.boundingBox();
+    await slider.click({
+      position: { x: track!.width / 2, y: track!.height / 2 },
+    });
+    expect(Number(await slider.inputValue())).toBeCloseTo(556, -1);
+    const pin = await page.getByTestId("course-preview-playhead").boundingBox();
+    expect(pin!.width).toBe(pin!.height);
+    expect(pin!.x + pin!.width / 2).toBeCloseTo(track!.x + track!.width / 2, 0);
+    expect(pin!.y + pin!.height / 2).toBeCloseTo(
+      track!.y + track!.height / 2,
+      0,
+    );
+    await slider.press("Home");
+    await expect(slider).toHaveValue("0");
+    await slider.press("ArrowRight");
+    await expect(slider).toHaveValue("1");
+    await page.getByRole("button", { name: "Preview speed 1×" }).click();
+    await expect(
+      page.getByRole("button", { name: "Preview speed 2×" }),
+    ).toBeVisible();
     await page.getByRole("slider", { name: "Preview distance" }).fill("500");
     await expect(page.getByTestId("course-preview-distance")).toHaveText(
       "0.50 / 1.11 km",
     );
+    await page
+      .getByRole("button", { name: "Preview settings", exact: true })
+      .click();
+    await expect(
+      page.getByText("Planned course. No recorded pace or elapsed time."),
+    ).toBeVisible();
     await page.getByRole("radio", { name: "Overview", exact: true }).click();
     await page
       .getByRole("combobox", { name: "Course section", exact: true })
@@ -108,11 +155,22 @@ for (const viewport of [
     await expect(
       page.getByRole("slider", { name: "Preview distance" }),
     ).toHaveValue("0");
+    await expect(page.getByTestId("course-preview-profile")).toHaveAttribute(
+      "data-profile-kind",
+      "distance",
+    );
+    await expect(
+      page.getByText("Elevation unavailable · Overview"),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Preview settings", exact: true })
+      .click();
     await expect(
       page.getByText(
         "Elevation is incomplete. The camera uses a high overview.",
       ),
     ).toBeVisible();
+    await page.getByRole("button", { name: "Close", exact: true }).click();
     const mounts = await page.evaluate(
       () =>
         (
@@ -204,7 +262,14 @@ test("settles camera changes while paused and hands free exploration back to Fol
       }
     ).__coursePreviewCameras = [];
   });
+  await page
+    .getByRole("button", { name: "Preview settings", exact: true })
+    .click();
+  await expect(
+    page.getByText("Planned course. No recorded pace or elapsed time."),
+  ).toBeVisible();
   await page.getByRole("radio", { name: "Overview", exact: true }).click();
+  await page.getByRole("button", { name: "Close", exact: true }).click();
   const cameras = () =>
     page.evaluate(
       () =>
@@ -268,6 +333,12 @@ test("applies camera changes immediately when reduced motion is requested", asyn
       }
     ).__coursePreviewCameras = [];
   });
+  await page
+    .getByRole("button", { name: "Preview settings", exact: true })
+    .click();
+  await expect(
+    page.getByText("Planned course. No recorded pace or elapsed time."),
+  ).toBeVisible();
   await page.getByRole("radio", { name: "Overview", exact: true }).click();
   const first = await page.evaluate(
     () =>
