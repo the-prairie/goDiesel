@@ -1,0 +1,17 @@
+.route-geography-map .maplibregl-ctrl-attrib.maplibregl-compact {
+  min-width: 44px;
+  min-height: 44px;
+  max-width: min(32rem, calc(100vw - 24px));
+  box-sizing: border-box;
+  padding: 10px 44px 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface-map-glass);
+  color: var(--ink-secondary);
+  font: 11px/22px var(--font-interface);
+}
+
+.route-geography-map .maplibregl-ctrl-attrib a { color: var(--ink); }
+.route-geography-map .maplibregl-ctrl-attrib.maplibregl-compact:not(.maplibregl-compact-show) { padding: 0; }
+.route-geography-map .maplibregl-ctrl-attrib .maplibregl-ctrl-attrib-button { width: 44px; height: 44px; background-color: transparent; background-repeat: no-repeat; background-position: center; filter: invert(1); }
+.route-geography-map .maplibregl-ctrl-attrib-button:focus-visible { outline: 2px solid var(--canvas); outline-offset: -3px; }

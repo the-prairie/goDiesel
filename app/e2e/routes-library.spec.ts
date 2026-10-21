@@ -259,7 +259,7 @@ test("reviewed Kyoto card opens its canonical guide and fetches only that detail
 
   const kyotoCard = routeCardWithText(page, /long, exploratory Kyoto run/i);
   await expect(kyotoCard).toHaveCount(1);
-  await expect(kyotoCard).toContainText("Based on Esri imagery");
+  await expect(page.getByRole("link", { name: "Esri World Imagery", exact: true })).toBeVisible();
   await expect(kyotoCard).toContainText(/long, exploratory Kyoto run/i);
   expect(detailRequests).toEqual([]);
 
@@ -277,14 +277,15 @@ test("reviewed Kyoto card opens its canonical guide and fetches only that detail
   );
 });
 
-test("route cards omit editorial and AI badges while retaining imagery credit", async ({ page }) => {
+test("route cards omit badges and share one gallery imagery credit", async ({ page }) => {
   await page.goto("/#/routes?q=crosswalk+sprints");
 
   const draftCard = routeCardWithText(page, "Tokyo, Japan");
   await expect(draftCard).toHaveCount(1);
   await expect(draftCard).not.toContainText("Draft guide");
   await expect(draftCard).not.toContainText("AI-enhanced");
-  await expect(draftCard).toContainText("Based on Esri imagery");
+  await expect(draftCard).not.toContainText("Based on Esri imagery");
+  await expect(page.getByRole("link", { name: "Esri World Imagery", exact: true })).toBeVisible();
   await expect(draftCard).not.toContainText("Reviewed");
   await expect(draftCard).not.toContainText("What it feels like");
   await expect(

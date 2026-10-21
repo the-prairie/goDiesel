@@ -14,6 +14,7 @@ import {
 import type { QuestRoute } from "@/domain/route";
 
 import { initialRouteLeafMapState, reduceRouteLeafMap } from "./route-leaf-map-state";
+import "./route-leaf-map.css";
 
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 const ROUTE_COLOR = "#30343b";
@@ -61,6 +62,9 @@ export function RouteLeafMap({ route, showDiagnostics = false }: { route: QuestR
       attributionControl: { compact: true },
     });
     mapRef.current = map;
+    let creditTimer: number | undefined;
+    const keepCreditsOpen = () => window.clearTimeout(creditTimer);
+    let attribution: HTMLElement | null = null;
     const resizeObserver = new ResizeObserver(() => map.resize());
     resizeObserver.observe(host);
     const loadTimer = window.setTimeout(() => {
@@ -163,12 +167,22 @@ export function RouteLeafMap({ route, showDiagnostics = false }: { route: QuestR
         if (!active) return;
         window.clearTimeout(loadTimer);
         dispatch({ type: "mapIdle", sessionId });
+        attribution = host.querySelector<HTMLElement>(".maplibregl-ctrl-attrib");
+        attribution?.addEventListener("pointerdown", keepCreditsOpen);
+        attribution?.addEventListener("focusin", keepCreditsOpen);
+        creditTimer = window.setTimeout(() => {
+          attribution?.classList.remove("maplibregl-compact-show");
+          attribution?.removeAttribute("open");
+        }, 5_000);
       });
     });
 
     return () => {
       active = false;
       window.clearTimeout(loadTimer);
+      window.clearTimeout(creditTimer);
+      attribution?.removeEventListener("pointerdown", keepCreditsOpen);
+      attribution?.removeEventListener("focusin", keepCreditsOpen);
       resizeObserver.disconnect();
       map.off("error", handleError);
       map.off("move", syncRepairPositions);
@@ -205,7 +219,7 @@ export function RouteLeafMap({ route, showDiagnostics = false }: { route: QuestR
         ref={hostRef}
         role="img"
         aria-label={`${route.name} recorded path on a real map`}
-        className="h-full w-full"
+        className="route-geography-map h-full w-full"
       />
 
       {status === "ready"
@@ -288,7 +302,7 @@ export function RouteLeafMap({ route, showDiagnostics = false }: { route: QuestR
               Finish
             </span>
           </div>
-          <div className="absolute bottom-16 left-4 z-10 flex gap-1 md:bottom-4 rounded-sm border border-line bg-surface/92 p-1 shadow-panel backdrop-blur">
+          <div className="absolute bottom-22 left-4 z-10 flex gap-1 md:bottom-4 rounded-sm border border-line bg-surface/92 p-1 shadow-panel backdrop-blur">
             <Button
               type="button"
               variant="ghost"
