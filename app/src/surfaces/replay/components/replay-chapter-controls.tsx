@@ -25,7 +25,6 @@ export interface ReplayChapterControlsProps {
   speed: number;
   disabled: boolean;
   expanded: boolean;
-  cameraControls: ReactNode;
   metrics: ReactNode;
   onExpandedChange: (expanded: boolean) => void;
   onEvent: (event: ReplayChapterControlsEvent) => void;
@@ -36,12 +35,12 @@ export interface ReplayChapterControlsProps {
 }
 
 export function ReplayChapterControls({
-  route, state, progressM, playing, speed, disabled, expanded, cameraControls, metrics,
+  route, state, progressM, playing, speed, disabled, expanded, metrics,
   onExpandedChange, onEvent, onPlayFromPreview, onTogglePlayback, onSeek, onCycleSpeed,
 }: ReplayChapterControlsProps) {
   const model = useMemo(() => buildReplayChapterModel(route), [route]);
   const [presentation, setPresentation] = useState<"relief" | "profile">("relief");
-  const [detailsOpen, setDetailsOpen] = useState(true);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [whyOpen, setWhyOpen] = useState(false);
   const browserId = useId();
   const explanationId = useId();
@@ -72,7 +71,7 @@ export function ReplayChapterControls({
     browser.scrollTop = browser.clientHeight < 300
       ? browser.scrollTop + lens.getBoundingClientRect().top - browser.getBoundingClientRect().top
       : 0;
-  }, [preview?.target]);
+  }, [expanded, preview?.target]);
 
   const selectPreview = (event: ReplayChapterControlsEvent) => {
     setWhyOpen(false);
@@ -99,15 +98,13 @@ export function ReplayChapterControls({
     <div className="replay-chapter-controls pointer-events-auto" data-testid="google-route-controls" data-preview-mode={state.mode} data-expanded={expanded}>
       <div className="replay-chapter-heading" data-testid="replay-chapter-controls">
         <div className="replay-chapter-summary">
-          <span className="replay-chapter-kicker">{preview ? "Preview" : `Chapter ${String((currentChapter?.index ?? 0) + 1).padStart(2, "0")}`}</span>
+          <span className="replay-chapter-kicker">{preview ? "Preview" : <><span className="replay-chapter-word">Chapter </span>{String((currentChapter?.index ?? 0) + 1).padStart(2, "0")}</>}</span>
           <span className="replay-chapter-current">{preview ? selectedLabel : currentChapter?.label ?? "Route"}</span>
         </div>
         <button type="button" className="replay-chapter-button replay-chapter-browse" aria-label={expanded ? "Collapse chapter browser" : "Browse chapters and moments"} aria-expanded={expanded} aria-controls={browserId} onClick={() => onExpandedChange(!expanded)}>
           {expanded ? "Close" : "Browse"}{expanded ? <ChevronDown aria-hidden="true" /> : <ChevronUp aria-hidden="true" />}
         </button>
       </div>
-
-      {!expanded ? <div className="replay-chapter-compact-lens">{lens}</div> : null}
 
       {expanded ? (
         <div ref={browserRef} className="replay-chapter-scroll" id={browserId} data-testid="replay-chapter-browser" role="region" aria-label="Chapter lens and moment finder" tabIndex={0}>
@@ -186,7 +183,6 @@ export function ReplayChapterControls({
       <div className="replay-chapter-transport">
         <button type="button" className="replay-chapter-play" aria-label={playing ? "Pause route" : "Play route"} disabled={disabled} onClick={onTogglePlayback}>{playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}</button>
         <div className="replay-chapter-progress"><strong data-testid="google-route-progress">{distance(progressM)} / {(model.totalDistanceM / 1_000).toFixed(1)} km</strong><small>{playing ? "Playing" : "Paused"}</small></div>
-        <div className="replay-chapter-camera">{cameraControls}</div>
         <button type="button" className="replay-chapter-button replay-chapter-speed" aria-label={`Playback speed ${speed}x`} disabled={disabled} onClick={onCycleSpeed} title="Change playback speed"><Gauge aria-hidden="true" />{speed}x</button>
         <button type="button" className="replay-chapter-button replay-chapter-quiet" aria-expanded={detailsOpen} aria-controls={metricsId} onClick={() => setDetailsOpen(!detailsOpen)}>Data</button>
       </div>
@@ -242,10 +238,11 @@ function Profile({ model, span, progressM, previewM, selectedSpan, relief = fals
     if (elevationM === undefined) return null;
     const px = x(meters);
     const py = y(elevationM);
-    return isPreview ? <path className="replay-chapter-preview-pin" data-testid={miniature ? undefined : "replay-preview-playhead"} d={`M ${px} ${py - 6} l 6 6 -6 6 -6 -6 Z`} /> :
-      <circle className="replay-chapter-pin" data-testid={miniature ? "replay-progress-playhead" : undefined} cx={px} cy={py} r={miniature ? 4 : 5} />;
+    return <span aria-hidden="true" className={isPreview ? "replay-chapter-preview-pin" : "replay-chapter-pin"}
+      data-testid={isPreview ? miniature ? undefined : "replay-preview-playhead" : miniature ? "replay-progress-playhead" : undefined}
+      style={{ left: `${px / width * 100}%`, top: `${py / height * 100}%` }} />;
   };
-  return <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${miniature ? "Whole-route elevation context" : relief ? "Chapter elevation relief, vertically exaggerated" : "Chapter elevation profile in meters"}. A filled dot marks replay and a diamond marks preview. Recorded gaps are unconnected.`} data-testid={testId} preserveAspectRatio="none">
+  return <div className="replay-chapter-profile"><svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${miniature ? "Whole-route elevation context" : relief ? "Chapter elevation relief, vertically exaggerated" : "Chapter elevation profile in meters"}. A filled dot marks replay and a diamond marks preview. Recorded gaps are unconnected.`} data-testid={testId} preserveAspectRatio="none">
     {!miniature && !relief ? [model.minimumElevationM, model.maximumElevationM].map((value, index) => <line key={index} className="replay-chapter-grid" x1={left} x2={right} y1={y(value)} y2={y(value)} />) : null}
     {selectedSpan ? <rect className="replay-chapter-highlight" x={x(selectedSpan.startM)} y={1} width={Math.max(0, x(selectedSpan.endM) - x(selectedSpan.startM))} height={height - 2} rx={3} /> : null}
     {segments.map((segment, index) => {
@@ -269,6 +266,5 @@ function Profile({ model, span, progressM, previewM, selectedSpan, relief = fals
         {relief ? <path className="replay-chapter-edge" d={line(back)} /> : null}
       </g>;
     })}
-    {marker(progressM, false)}{previewM === undefined ? null : marker(previewM, true)}
-  </svg>;
+  </svg>{marker(progressM, false)}{previewM === undefined ? null : marker(previewM, true)}</div>;
 }
