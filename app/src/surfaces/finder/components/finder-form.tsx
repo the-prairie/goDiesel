@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
+import { SelectField } from "@/ui/select-field";
 import type { FinderIntent } from "@/domain/planning";
 
 export function FinderForm({
@@ -153,35 +154,6 @@ function Field({
         ) : null}
       </span>
       {children}
-    </label>
-  );
-}
-
-function SelectField({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: readonly (readonly [string, string])[];
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className="grid min-w-0 gap-1.5 text-control font-medium">
-      {label}
-      <select
-        value={value}
-        className="h-11 min-w-0 rounded-sm border border-input bg-surface-raised px-3 text-control text-ink outline-none transition-colors hover:border-forest/50 focus-visible:ring-2 focus-visible:ring-ring"
-        onChange={(event) => onChange(event.target.value)}
-      >
-        {options.map(([optionValue, optionLabel]) => (
-          <option key={optionValue} value={optionValue}>
-            {optionLabel}
-          </option>
-        ))}
-      </select>
     </label>
   );
 }

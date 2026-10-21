@@ -251,7 +251,7 @@ describe("Google renderer lifecycle adapter", () => {
     await run.done;
     expect(run.statuses.at(-1)).toEqual({
       state: "unavailable",
-      message: "Google photorealistic 3D could not start in this browser. Atlas replay works everywhere.",
+      message: "Google photorealistic 3D could not start in this browser.",
     });
     expect(logged).toHaveBeenCalledWith("[goDiesel] provider failure:", error);
   });

@@ -9,6 +9,7 @@ import { PageTitle } from "@/ui/page-title";
 import { RouteCard } from "@/ui/route-card";
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
+import { SelectField } from "@/ui/select-field";
 import { usePlannedRoutes } from "@/data/planned-route-store";
 import {
   rememberRouteLibraryReturn,
@@ -308,20 +309,13 @@ function FilterSelect({
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
-      {label}
-      <select
-        value={value}
-        className="h-11 min-w-0 rounded-[var(--radius-control)] border border-border bg-card px-3 text-sm text-foreground outline-none transition-colors hover:border-line-strong focus-visible:ring-2 focus-visible:ring-ring"
-        onChange={(event) => onChange(event.target.value)}
-      >
-        {options.map(([optionValue, optionLabel]) => (
-          <option key={optionValue} value={optionValue}>
-            {optionLabel}
-          </option>
-        ))}
-      </select>
-    </label>
+    <SelectField
+      label={label}
+      value={value}
+      options={options}
+      onChange={onChange}
+      className="text-xs"
+    />
   );
 }
 

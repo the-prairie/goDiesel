@@ -13,12 +13,14 @@ export function AppShell() {
   const isAtlas = location.pathname === APP_PATHS.atlas;
   const isReplayLab = location.pathname.startsWith("/lab/");
   const isRouteDetail = /^\/routes\/[^/]+$/.test(location.pathname);
+  const isCoursePreview = /^\/courses\/[^/]+\/preview$/.test(location.pathname);
   const isRoutesLibrary = section.id === "routes" && !isRouteDetail;
   const isWideUtility = isRoutesLibrary || section.id === "admin";
   const isImmersive =
     isAtlas ||
     isReplayLab ||
     isRouteDetail ||
+    isCoursePreview ||
     section.id === "finder" ||
     section.id === "replay";
   const isUtility = section.id === "admin";

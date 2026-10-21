@@ -37,3 +37,36 @@ A second candidate extended the static Python import pipeline and rebuilt the si
 ## Scope limits
 
 This first version implements structured preferences, not unsupported claims about scenery or safety. It does not fabricate roads, timestamps, pace, or GPS activity history. The agent supplies a structured request after interpreting the person's natural language. Direct Suunto partner APIs and autonomous public sign-up are outside this change.
+
+## UI refinement and saved-course preview
+
+The follow-up separates creation from saved-course inspection and connects saved
+geometry to the existing 3D renderer. `Course` remains the canonical data shape;
+it is never converted into a completed `QuestRoute`. Section geometry and a pure
+preview-session reducer coordinate distance playback. IO stays in the page and
+renderer. Shared form primitives replace per-surface native selects.
+
+- [x] `how` over the affected subsystem.
+- [x] `architect` for parallel design exploration.
+- [x] Write the throughput checkpoint as four todo items.
+- [x] Delegate code-writing with disjoint ownership under the Balanced adapter.
+- [x] Verify on the matching surface.
+- [x] Commit the verified follow-up to the existing feature PR.
+- [x] Contested-design review: n/a; product semantics and shared-token direction are established.
+- [x] Update the open PR with final evidence. Do not merge or deploy.
+
+Throughput checkpoint:
+
+- **Blocking first steps.** Inspect current token precedence, saved-course state,
+  renderer geometry needs, and background desktop/mobile baseline.
+- **Independent workstreams.** Shared SelectField and its consumers; course-preview
+  geometry/session/renderer integration; parent-owned CourseForm and CoursePage.
+- **Shared mutable state.** Preserve Course and workspace lifecycle. Primitives
+  have agreed controlled-value contracts. Only the parent edits course composition.
+- **Smallest safe decomposition.** Two delegates own distinct integration risks;
+  a fresh reviewer examines the combined result. No additional implementation fan-out.
+
+Alternatives considered: reusing a fabricated activity would falsify telemetry;
+keeping the full creation form on every saved course repeats unrelated controls.
+The chosen preview accepts only renderer geometry, and saved detail exposes its
+map, preview, and GPX actions. Existing activity replay remains unchanged.

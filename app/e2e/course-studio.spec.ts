@@ -13,18 +13,16 @@ for (const viewport of [
     await page.setViewportSize(viewport);
     await page.goto("/#/courses");
     await expect(
-      page.getByRole("button", { name: "Import GPX", exact: true }),
+      page.getByRole("radio", { name: "Import GPX", exact: true }),
     ).toBeEnabled();
-    await page.getByRole("button", { name: "Import GPX", exact: true }).click();
-    await page.getByLabel("Activity", { exact: true }).selectOption("Ride");
+    await page.getByRole("radio", { name: "Import GPX", exact: true }).click();
+    await page.getByRole("radio", { name: "Ride", exact: true }).click();
     const name = `Park sections ${viewport.width} ${Date.now()}`;
-    await page
-      .getByLabel("Upload GPX")
-      .setInputFiles({
-        name: "park.gpx",
-        mimeType: "application/gpx+xml",
-        buffer: Buffer.from(gpx(name)),
-      });
+    await page.getByLabel("Upload GPX").setInputFiles({
+      name: "park.gpx",
+      mimeType: "application/gpx+xml",
+      buffer: Buffer.from(gpx(name)),
+    });
     const preview = page.getByRole("article", { name: "Course preview" });
     await expect(
       preview.getByRole("heading", { name, exact: true }),
@@ -36,6 +34,12 @@ for (const viewport of [
       .click();
     await expect(page).toHaveURL(/#\/courses\/course-/);
     await expect(preview).toContainText("Saved course");
+    await expect(
+      page.getByRole("region", { name: "Create a course", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      preview.getByRole("link", { name: "Open 3D preview" }),
+    ).toHaveAttribute("href", /#\/courses\/course-[^/]+\/preview$/);
     await page.reload();
     await expect(
       preview.getByRole("heading", { name, exact: true }),
@@ -69,7 +73,7 @@ test("drag and drop imports a GPX and malformed XML stays unsaved", async ({
   page,
 }) => {
   await page.goto("/#/courses");
-  await page.getByRole("button", { name: "Import GPX", exact: true }).click();
+  await page.getByRole("radio", { name: "Import GPX", exact: true }).click();
   await expect(page.getByLabel("Upload GPX")).toBeEnabled();
   const transfer = await page.evaluateHandle(
     (xml) => {
@@ -87,15 +91,13 @@ test("drag and drop imports a GPX and malformed XML stays unsaved", async ({
   await expect(
     page.getByRole("article", { name: "Course preview" }),
   ).toBeVisible();
-  await page
-    .getByLabel("Upload GPX")
-    .setInputFiles({
-      name: "bad.gpx",
-      mimeType: "application/gpx+xml",
-      buffer: Buffer.from(
-        '<!DOCTYPE gpx [<!ENTITY foo SYSTEM "file:///etc/passwd">]><gpx>&foo;</gpx>',
-      ),
-    });
+  await page.getByLabel("Upload GPX").setInputFiles({
+    name: "bad.gpx",
+    mimeType: "application/gpx+xml",
+    buffer: Buffer.from(
+      '<!DOCTYPE gpx [<!ENTITY foo SYSTEM "file:///etc/passwd">]><gpx>&foo;</gpx>',
+    ),
+  });
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page).toHaveURL(/#\/courses$/);
 });
@@ -127,8 +129,10 @@ for (const [activity, viewport] of [
     );
     await page.setViewportSize(viewport);
     await page.goto("/#/courses");
-    await expect(page.getByLabel("Activity", { exact: true })).toBeEnabled();
-    await page.getByLabel("Activity", { exact: true }).selectOption(activity);
+    await expect(
+      page.getByRole("radio", { name: activity, exact: true }),
+    ).toBeEnabled();
+    await page.getByRole("radio", { name: activity, exact: true }).click();
     await page
       .getByLabel("Start near a place or landmark")
       .fill("Golden Gate Park, San Francisco");
@@ -183,5 +187,74 @@ for (const [activity, viewport] of [
         () => document.documentElement.scrollWidth <= window.innerWidth,
       ),
     ).toBe(true);
+  });
+}
+
+for (const width of [1440, 390]) {
+  test(`course choices support keyboard and busy state at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.route("**/api/discovery?place=*", (route) =>
+      route.fulfill({
+        json: { places: [{ name: "Test park", lat: 37.77, lng: -122.48 }] },
+      }),
+    );
+    await page.goto("/#/courses");
+    const run = page.getByRole("radio", { name: "Run", exact: true });
+    await expect(run).toBeEnabled();
+    await run.focus();
+    await page.keyboard.down("ArrowRight");
+    await expect(
+      page.getByRole("radio", { name: "Walk", exact: true }),
+    ).toBeFocused();
+    await page.keyboard.up("ArrowRight");
+    await expect(
+      page.getByRole("radio", { name: "Walk", exact: true }),
+    ).toBeChecked();
+    await page.keyboard.down("ArrowRight");
+    await expect(
+      page.getByRole("radio", { name: "Ride", exact: true }),
+    ).toBeFocused();
+    await page.keyboard.up("ArrowRight");
+    await expect(
+      page.getByRole("radio", { name: "Ride", exact: true }),
+    ).toBeChecked();
+    await page.getByRole("radio", { name: "mi", exact: true }).click();
+    await expect(
+      page.getByRole("radio", { name: "mi", exact: true }),
+    ).toBeChecked();
+    await page.getByLabel("Start near a place or landmark").fill("Test park");
+    await page.getByRole("button", { name: "Find starting place" }).click();
+    await page.getByRole("button", { name: "Test park", exact: true }).click();
+    let finish: (() => void) | undefined;
+    await page.route("**/api/courses", async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      await route
+        .fulfill({ status: 503, json: { error: "Test provider unavailable" } })
+        .catch(() => {});
+    });
+    await page
+      .getByRole("button", { name: "Generate route", exact: true })
+      .click();
+    await expect(run).toBeDisabled();
+    await expect(
+      page.getByRole("radio", { name: "Import GPX", exact: true }),
+    ).toBeDisabled();
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    finish?.();
+    await expect(run).toBeEnabled();
+    await expect(
+      page.getByRole("radio", { name: "Ride", exact: true }),
+    ).toBeChecked();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    expect(await page.locator("select").count()).toBe(0);
   });
 }

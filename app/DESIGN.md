@@ -12,6 +12,25 @@ Replay chapter controls use those shared tokens, including `surface-map-glass`,
 The elevation relief stays neutral. Its filled playback point and hollow preview
 diamond distinguish recorded position from a preview without another palette.
 
+### Form and course controls
+
+Use `SelectField` from `src/ui/select-field.tsx` for longer option lists. It owns
+the label, trigger, keyboard navigation, selected checkmark, viewport-constrained
+menu, focus ring, and disabled state. Pass `disabled` explicitly when a parent
+fieldset is busy; portalled controls cannot rely on fieldset inheritance.
+
+Use `SegmentedControl` for short, mutually exclusive choices such as activity,
+units, creation method, or camera mode. It uses radio semantics and arrow-key
+navigation. Use `Button` with `aria-pressed` for independent preferences.
+Use `Disclosure` for optional instructions and connection details. Actionable
+route warnings stay visible.
+
+All three primitives use the current semantic tokens, Inter, and targets at
+least 44 px tall. Do not create local dropdown palettes or browser-styled selects.
+Saved-course details show their map and primary actions without a second
+creation form. The 3D course preview uses one map dock and distance-based controls;
+it must not present synthetic elapsed time or pace as recorded activity data.
+
 This document is the visual and interaction source of truth for goDiesel.
 
 The governing rule is:

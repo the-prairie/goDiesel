@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { chooseSelectOption } from "./helpers/select-field";
 
 const reviewedKyotoSlug = "17654151284";
 const draftTokyoSlug = "17665674778";
@@ -135,22 +136,22 @@ test("search and every route filter update the URL", async ({ page }) => {
   await expect.poll(() => routeSearchParam(page, "q")).toBe("kyoto");
 
   await filters.getByRole("button", { name: "Filters", exact: true }).click();
-  await filters.getByRole("combobox", { name: "Status" }).selectOption("completed");
+  await chooseSelectOption(filters.getByRole("combobox", { name: "Status" }), "Completed");
   await expect.poll(() => routeSearchParam(page, "lifecycle")).toBe("completed");
 
-  await filters.getByRole("combobox", { name: "Activity" }).selectOption("Run");
+  await chooseSelectOption(filters.getByRole("combobox", { name: "Activity" }), "Run");
   await expect.poll(() => routeSearchParam(page, "activity")).toBe("Run");
 
-  await filters.getByRole("combobox", { name: "Region" }).selectOption("Kyoto, Japan");
+  await chooseSelectOption(filters.getByRole("combobox", { name: "Region" }), "Kyoto, Japan");
   await expect.poll(() => routeSearchParam(page, "region")).toBe("Kyoto, Japan");
 
-  await filters.getByRole("combobox", { name: "Distance" }).selectOption("20-50");
+  await chooseSelectOption(filters.getByRole("combobox", { name: "Distance" }), "20 to 50 km");
   await expect.poll(() => routeSearchParam(page, "distance")).toBe("20-50");
 
-  await filters.getByRole("combobox", { name: "Climb" }).selectOption("250-750");
+  await chooseSelectOption(filters.getByRole("combobox", { name: "Climb" }), "250 to 750 m");
   await expect.poll(() => routeSearchParam(page, "climb")).toBe("250-750");
 
-  await filters.getByRole("combobox", { name: "Vibe" }).selectOption("Big Day");
+  await chooseSelectOption(filters.getByRole("combobox", { name: "Vibe" }), "Big Day");
   await expect.poll(() => routeSearchParam(page, "vibe")).toBe("Big Day");
 });
 
@@ -164,16 +165,16 @@ test("combined route filters persist through reload", async ({ page }) => {
   await expect(filters.getByRole("searchbox", { name: "Search routes" })).toHaveValue(
     "exploratory",
   );
-  await expect(filters.getByRole("combobox", { name: "Status" })).toHaveValue(
-    "completed",
+  await expect(filters.getByRole("combobox", { name: "Status" })).toHaveText(
+    "Completed",
   );
-  await expect(filters.getByRole("combobox", { name: "Activity" })).toHaveValue("Run");
-  await expect(filters.getByRole("combobox", { name: "Region" })).toHaveValue(
+  await expect(filters.getByRole("combobox", { name: "Activity" })).toHaveText("Run");
+  await expect(filters.getByRole("combobox", { name: "Region" })).toHaveText(
     "Kyoto, Japan",
   );
-  await expect(filters.getByRole("combobox", { name: "Distance" })).toHaveValue("20-50");
-  await expect(filters.getByRole("combobox", { name: "Climb" })).toHaveValue("250-750");
-  await expect(filters.getByRole("combobox", { name: "Vibe" })).toHaveValue("Big Day");
+  await expect(filters.getByRole("combobox", { name: "Distance" })).toHaveText("20 to 50 km");
+  await expect(filters.getByRole("combobox", { name: "Climb" })).toHaveText("250 to 750 m");
+  await expect(filters.getByRole("combobox", { name: "Vibe" })).toHaveText("Big Day");
   await expect(routeCards(page)).toHaveCount(1);
   await expect(routeCards(page).first()).toContainText("Kyoto, Japan");
 
@@ -183,11 +184,45 @@ test("combined route filters persist through reload", async ({ page }) => {
   await expect(filters.getByRole("searchbox", { name: "Search routes" })).toHaveValue(
     "exploratory",
   );
-  await expect(filters.getByRole("combobox", { name: "Region" })).toHaveValue(
+  await expect(filters.getByRole("combobox", { name: "Region" })).toHaveText(
     "Kyoto, Japan",
   );
   await expect(routeCards(page)).toHaveCount(1);
   await expect.poll(() => routeSearchParam(page, "climb")).toBe("250-750");
+});
+
+test("region menus stay within the viewport and support keyboard scrolling", async ({
+  page,
+}) => {
+  for (const viewport of [
+    { width: 320, height: 568 },
+    { width: 1280, height: 900 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/#/routes");
+    const filters = page.getByRole("button", { name: "Filters", exact: true });
+    if ((await filters.getAttribute("aria-expanded")) === "false")
+      await filters.click();
+    const region = page.getByRole("combobox", { name: "Region", exact: true });
+    await region.click();
+    const popup = page.getByRole("listbox", { name: "Region", exact: true });
+    const bounds = await popup.boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.y).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(viewport.width);
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport.height);
+    const lastOption = popup.getByRole("option").last();
+    const lastRegion = (await lastOption.innerText()).trim();
+    await page.keyboard.press("End");
+    await expect(lastOption).toBeFocused();
+    await expect(lastOption).toBeInViewport();
+    await page.keyboard.press("Enter");
+    await expect(region).toHaveText(lastRegion);
+    await expect.poll(() => routeSearchParam(page, "region")).toBe(lastRegion);
+    await chooseSelectOption(region, "Any region");
+    await expect.poll(() => routeSearchParam(page, "region")).toBeNull();
+  }
 });
 
 test("no matching routes are announced and all filters can be reset", async ({ page }) => {
@@ -303,7 +338,7 @@ test("invalid and unknown filter parameters are removed from the shared URL", as
   await expect(page).toHaveURL(/#\/routes$/);
   await expect(routeCards(page)).toHaveCount(24);
   await page.getByRole("button", { name: "Filters", exact: true }).click();
-  await expect(page.getByRole("combobox", { name: "Activity" })).toHaveValue("all");
+  await expect(page.getByRole("combobox", { name: "Activity" })).toHaveText("Any activity");
   await expect(page.getByRole("button", { name: "Reset filters" })).toHaveCount(0);
 });
 
@@ -319,9 +354,9 @@ for (const viewport of [
     const finder = page.getByRole("form", { name: "Find a route" });
     await finder.getByLabel("Describe your next route").fill("Kyoto");
     await finder.getByRole("button", { name: "Edit filters", exact: true }).click();
-    await finder.getByLabel("Activity").selectOption("Run");
+    await chooseSelectOption(finder.getByLabel("Activity"), "Run");
     await finder.getByLabel("Distance").fill("21");
-    await finder.getByLabel("Terrain").selectOption("mixed");
+    await chooseSelectOption(finder.getByLabel("Terrain"), "Mixed");
     await finder.getByLabel("Vibe").fill("exploratory climbing");
     await finder.getByRole("button", { name: "Find routes", exact: true }).click();
     await page.getByRole("button", { name: "Save planned route" }).click();

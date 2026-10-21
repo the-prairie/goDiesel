@@ -1,4 +1,5 @@
 import type { GoogleRouteCameraPose } from "@/surfaces/replay/playback/route-navigator-controller";
+import { interpolateLongitude, normalizeLongitude, shortestLongitudeDelta } from "@/domain/geometry/longitude";
 
 export interface RouteCameraMotionState {
   pose: GoogleRouteCameraPose;
@@ -58,11 +59,11 @@ export function advanceRouteCameraMotion(
   );
   const lng = smoothDamp(
     state.pose.center.lng,
-    desired.center.lng,
+    state.pose.center.lng + shortestLongitudeDelta(state.pose.center.lng, desired.center.lng),
     state.velocity.lng,
     elapsed,
     responseSeconds,
-    targetVelocity(desired.center.lng, state.target.center.lng),
+    movement === "tracking" ? shortestLongitudeDelta(state.target.center.lng, desired.center.lng) / elapsed : 0,
   );
   const altitude = smoothDamp(
     state.pose.center.altitude ?? desired.center.altitude ?? 0,
@@ -125,7 +126,7 @@ export function advanceRouteCameraMotion(
       ...desired,
       center: {
         lat: lat.value,
-        lng: lng.value,
+        lng: normalizeLongitude(lng.value),
         altitude:
           desired.center.altitude === undefined ? undefined : altitude.value,
       },
@@ -153,7 +154,7 @@ export function routeCameraMotionHasSettled(state: RouteCameraMotionState) {
   const headingDelta = Math.abs(((target.headingDeg - pose.headingDeg + 540) % 360) - 180);
   return (
     Math.abs(pose.center.lat - target.center.lat) < 0.000_001 &&
-    Math.abs(pose.center.lng - target.center.lng) < 0.000_001 &&
+    Math.abs(shortestLongitudeDelta(pose.center.lng, target.center.lng)) < 0.000_001 &&
     Math.abs((pose.center.altitude ?? target.center.altitude ?? 0) -
       (target.center.altitude ?? pose.center.altitude ?? 0)) < 0.5 &&
     headingDelta < 0.2 &&
@@ -223,7 +224,7 @@ export function stabilizeRouteCamera(
     ...desired,
     center: {
       lat: interpolate(current.center.lat, desired.center.lat, amount),
-      lng: interpolate(current.center.lng, desired.center.lng, amount),
+      lng: interpolateLongitude(current.center.lng, desired.center.lng, amount),
       altitude:
         desired.center.altitude === undefined
           ? undefined

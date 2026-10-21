@@ -1,0 +1,47 @@
+.course-preview-distance {
+  height: 44px;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: var(--radius-control);
+}
+
+.course-preview-distance:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.course-preview-distance:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.course-preview-distance::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 24%);
+}
+
+.course-preview-distance::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 24%);
+}
+
+.course-preview-distance::-webkit-slider-thumb {
+  width: 18px;
+  height: 18px;
+  margin-top: -7px;
+  appearance: none;
+  border: 2px solid var(--canvas);
+  border-radius: 50%;
+  background: var(--ink);
+}
+
+.course-preview-distance::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--canvas);
+  border-radius: 50%;
+  background: var(--ink);
+}

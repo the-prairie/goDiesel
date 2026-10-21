@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { chooseSelectOption } from "./helpers/select-field";
 import { readFileSync } from "node:fs";
 const manifest = JSON.parse(readFileSync("src/data/generated/routes.manifest.json", "utf8")) as { routes: { region: string; lifecycle: string }[] };
 
@@ -16,9 +17,9 @@ for (const width of [390, 1280]) {
       await expect(start.getByRole("button", { name: `${place}, ${count} ${count === 1 ? "route" : "routes"}`, exact: true })).toHaveCount(1);
     }
     await page.getByRole("button", { name: "Edit filters", exact: true }).click();
-    await page.getByRole("combobox", { name: "Activity", exact: true }).selectOption("Ride");
+    await chooseSelectOption(page.getByRole("combobox", { name: "Activity", exact: true }), "Ride");
     await page.getByRole("spinbutton", { name: "Distance km", exact: true }).fill("100");
-    await page.getByRole("combobox", { name: "Terrain", exact: true }).selectOption("road");
+    await chooseSelectOption(page.getByRole("combobox", { name: "Terrain", exact: true }), "Road");
     await start.getByRole("button", { name: "Victoria, BC, 4 routes", exact: true }).click();
     const results = page.getByRole("region", { name: "Finder results" });
     await expect(results.getByRole("article")).toHaveCount(4);
@@ -32,8 +33,8 @@ for (const width of [390, 1280]) {
     await expect(results.getByRole("article")).toHaveCount(4);
     await expect(ride.getByRole("button", { name: "Already planned", exact: true })).toBeDisabled();
     await page.getByRole("button", { name: "Edit filters", exact: true }).click();
-    await expect(page.getByRole("combobox", { name: "Activity", exact: true })).toHaveValue("Any");
-    await page.getByRole("combobox", { name: "Activity", exact: true }).selectOption("Ride");
+    await expect(page.getByRole("combobox", { name: "Activity", exact: true })).toHaveText("All activities");
+    await chooseSelectOption(page.getByRole("combobox", { name: "Activity", exact: true }), "Ride");
     await page.getByRole("button", { name: "Find routes", exact: true }).click();
     await expect(results.getByRole("article")).toHaveCount(1);
     await page.goBack();

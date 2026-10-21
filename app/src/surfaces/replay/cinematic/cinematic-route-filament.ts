@@ -1,3 +1,5 @@
+import { interpolateLongitude } from "@/domain/geometry/longitude";
+
 export type CinematicFilamentRole = "guide" | "future" | "thread" | "glint";
 
 export interface CinematicRouteTreatment {
@@ -137,7 +139,7 @@ function interpolatePathPoint<T extends { lat: number; lng: number }>(
   const amount = position - lower;
   return {
     lat: path[lower].lat + (path[upper].lat - path[lower].lat) * amount,
-    lng: path[lower].lng + (path[upper].lng - path[lower].lng) * amount,
+    lng: interpolateLongitude(path[lower].lng, path[upper].lng, amount),
   };
 }
 

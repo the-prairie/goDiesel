@@ -13,6 +13,17 @@ const headingError = (actual: number, desired: number) =>
   Math.abs(((actual - desired + 540) % 360) - 180);
 
 describe("moving camera targets", () => {
+  it("crosses the antimeridian without moving toward Greenwich and settles while paused", () => {
+    let motion = createRouteCameraMotionState({ ...start, center: { ...start.center, lng: 179.999 } });
+    const target = { ...start, center: { ...start.center, lng: -179.999 } };
+    for (let frame = 0; frame < 600; frame += 1) {
+      motion = advanceRouteCameraMotion(motion, target, 1 / 60);
+      expect(Math.abs(motion.pose.center.lng)).toBeGreaterThan(179.998);
+    }
+    expect(motion.pose.center.lng).toBeCloseTo(-179.999, 6);
+    expect(routeCameraMotionHasSettled(motion)).toBe(true);
+  });
+
   it.each([30, 60, 120])("tracks without permanent spring lag at %i fps", (fps) => {
     let motion = createRouteCameraMotionState(start);
     for (let frame = 1; frame <= fps * 8; frame++) {

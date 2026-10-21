@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Request, type Route } from "@playwright/test";
+import { chooseSelectOption } from "./helpers/select-field";
 
 const adminApi = "http://127.0.0.1:8766";
 
@@ -64,7 +65,7 @@ test("local owner workflow validates every field and regenerates route data", as
   await expect(editor.getByText("Replay")).toBeVisible();
   await expect(editor.getByText("Generation")).toBeVisible();
 
-  await editor.getByLabel("Review status").selectOption("reviewed");
+  await chooseSelectOption(editor.getByLabel("Review status"), "Reviewed");
   await expect(editor.getByRole("status")).toContainText(
     "Reviewed guides require every curation field",
   );
@@ -261,8 +262,10 @@ test("save status stays with the route that initiated the request", async ({ pag
   const editor = page.getByRole("region", { name: "Route curation editor" });
   await editor.getByRole("button", { name: "Save and regenerate" }).click();
   await saveStarted;
+  await expect(editor.getByLabel("Review status")).toBeDisabled();
   await search.fill("Kyoto");
   await expect(editor).toContainText("Kyoto Temple Climb");
+  await expect(editor.getByLabel("Review status")).toBeEnabled();
   await editor.getByLabel("Vibe").fill("Unsaved Kyoto ridge notes.");
   releaseSave?.();
   await expect(editor.getByText("Manifest and route detail regenerated")).toHaveCount(0);

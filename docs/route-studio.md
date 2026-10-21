@@ -4,6 +4,21 @@ Route Studio creates planned courses for running, walking, and cycling. Courses 
 
 The local preview is `http://127.0.0.1:8824`. The implementation has not been deployed. The examples below require the local Vite server to be running.
 
+## Viewing a saved course
+
+Open a course from **Your courses**, then choose **Open 3D preview** above the
+map. The URL is `/#/courses/{id}/preview`. Play, pause, seek by distance, change
+preview speed, or switch between Follow and Overview. Dragging the map releases
+the follow camera; the Follow action restores it. Back returns to the saved course
+and its GPX download.
+
+This is a planned-route visualization. It does not synthesize recorded pace,
+elapsed time, or completed-activity history. GPX sections preview separately so
+gaps are not connected. Missing elevations stay missing; these sections use a
+high overview. The 3D view requires the configured Google browser key and provider
+availability. A visible retry state preserves access to the saved course when
+the provider cannot load.
+
 ## Agent commands
 
 The CLI runs from `app/` with Node.js. It prints JSON to stdout and errors as JSON to stderr. Failures return a nonzero exit code. Any agent that can run commands can use it. Agents with HTTP tools can use the API directly. This implementation does not register a hosted MCP server or install a bot integration.
@@ -139,3 +154,36 @@ A subsequent local Workers runtime check caught random signing-key generation in
 The broad `npm run verify` run passed typechecking, the production build, the bundle budget, 790 unit tests, and 407 browser scenarios; 68 browser scenarios were skipped by their existing environment gates. Its one failure was the Routes screenshot baseline after adding the creation action. Both desktop and mobile compositions were inspected, their baselines updated, and the focused screenshot comparison rerun successfully. The subsequent runtime fix passed the final 79-test focused suite, typechecking, another production build, and another real generation/save/reopen browser flow. Successful unrelated checks were not repeated.
 
 These trials establish that the local request path works for the tested starts and activities. They do not establish route quality in every location or production service reliability. Mobile evidence is browser emulation, not a physical iPhone or watch test. Local screenshots and raw exports are in `app/artifacts/route-studio/`.
+
+### Shared controls and 3D preview
+
+The follow-up replaces native selects in Finder, Routes, and Admin with the
+shared `SelectField`. Route Studio uses radio-based `SegmentedControl` for short
+choices and `Disclosure` for optional instructions. Saved-course pages expose
+their preview and GPX actions above the map, without the creation form beneath.
+
+Headless desktop and mobile-emulation checks exercised the Calgary saved-course
+link against the real Google renderer on port 8824. Playback, seeking to 5 km,
+camera selection, and return navigation worked with one map, three route
+polylines, and no page errors. Screenshots and the live result are in
+`app/artifacts/course-preview/`. Course UI comparisons are in
+`app/artifacts/course-ui/`.
+
+Independent review found two defects before acceptance: direct longitude
+interpolation crossed the globe for a short antimeridian segment, and camera
+controls snapped instead of transitioning. Both are fixed. The reviewer repeated
+the failing interactions and confirmed short longitude interpolation, paused
+camera settling, Follow handoff from the explored pose, and immediate changes
+under reduced motion. The camera regression cases use the renderer test seam;
+the Calgary check uses the live provider.
+
+The focused preview checks passed 81 unit tests and six browser scenarios.
+Shared-control consumer checks passed 53 distinct scenarios across focused runs.
+Course-form keyboard navigation, cancellation, and disabled states passed at
+1440 px and 390 px. Physical-phone rendering and Suunto sync remain unverified.
+
+Final `npm run verify` passed typechecking, the production build, the 293.6 KiB
+initial-shell bundle budget, 807 unit tests, and 418 browser scenarios. Five unit
+tests and 68 browser scenarios were skipped by their existing environment gates.
+No snapshot updates were needed for this refinement. The independent review found
+no remaining must-fix issues after the two repairs.

@@ -2,6 +2,7 @@ import { useEffect, useReducer, useRef, useState } from "react";
 import { MapPin, Search, Upload, WandSparkles } from "lucide-react";
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
+import { SegmentedControl } from "@/ui/segmented-control";
 import type {
   CourseActivity,
   CourseRequest,
@@ -101,30 +102,18 @@ export function CourseForm({
   }
   return (
     <section className="min-w-0 space-y-5" aria-label="Create a course">
-      <div
-        className="flex gap-2 border-b border-line pb-3"
-        role="group"
-        aria-label="Creation method"
-      >
-        <Button
-          variant={mode === "generate" ? "secondary" : "ghost"}
-          aria-pressed={mode === "generate"}
-          onClick={() => setMode("generate")}
-          disabled={busy}
-        >
-          <WandSparkles />
-          Plan a loop
-        </Button>
-        <Button
-          variant={mode === "import" ? "secondary" : "ghost"}
-          aria-pressed={mode === "import"}
-          onClick={() => setMode("import")}
-          disabled={busy}
-        >
-          <Upload />
-          Import GPX
-        </Button>
-      </div>
+      <SegmentedControl
+        label="Create a course"
+        value={mode}
+        options={[
+          ["generate", "Plan a loop"],
+          ["import", "Import GPX"],
+        ]}
+        onChange={(value) =>
+          setMode(value === "import" ? "import" : "generate")
+        }
+        disabled={busy}
+      />
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -143,19 +132,17 @@ export function CourseForm({
       >
         <fieldset disabled={busy} className="min-w-0 space-y-5">
           <legend className="sr-only">Course preferences</legend>
-          <label className="grid gap-2 text-sm">
-            Activity
-            <select
-              aria-label="Activity"
-              className="h-11 w-full rounded-md border border-line bg-surface px-3"
-              value={activity}
-              onChange={(e) => setActivity(e.target.value as CourseActivity)}
-            >
-              <option value="Run">Run</option>
-              <option value="Walk">Walk</option>
-              <option value="Ride">Ride</option>
-            </select>
-          </label>
+          <SegmentedControl
+            label="Activity"
+            value={activity}
+            options={[
+              ["Run", "Run"],
+              ["Walk", "Walk"],
+              ["Ride", "Ride"],
+            ]}
+            onChange={(value) => setActivity(value as CourseActivity)}
+            disabled={busy}
+          />
           {mode === "generate" ? (
             <>
               <div className="space-y-2">
@@ -224,7 +211,7 @@ export function CourseForm({
                   </p>
                 ) : null}
               </div>
-              <div className="grid grid-cols-[1fr_6rem] gap-3">
+              <div className="grid grid-cols-[minmax(0,1fr)_8rem] items-end gap-3">
                 <label className="grid gap-2 text-sm">
                   Target distance
                   <Input
@@ -237,21 +224,20 @@ export function CourseForm({
                     onChange={(e) => setDistance(e.target.value)}
                   />
                 </label>
-                <label className="grid gap-2 text-sm">
-                  Unit
-                  <select
-                    className="h-11 rounded-md border border-line bg-surface px-3"
-                    value={unit}
-                    onChange={(e) => setUnit(e.target.value as "km" | "mi")}
-                  >
-                    <option value="km">km</option>
-                    <option value="mi">miles</option>
-                  </select>
-                </label>
+                <SegmentedControl
+                  label="Unit"
+                  value={unit}
+                  options={[
+                    ["km", "km"],
+                    ["mi", "mi"],
+                  ]}
+                  onChange={(value) => setUnit(value === "mi" ? "mi" : "km")}
+                  disabled={busy}
+                />
               </div>
               <fieldset className="space-y-2">
-                <legend className="mb-2 text-sm">What kind of day?</legend>
-                <div className="flex flex-wrap gap-2">
+                <legend className="mb-2 text-sm">Route preferences</legend>
+                <div className="grid grid-cols-2 gap-2">
                   {vibes.map((v) => (
                     <Button
                       key={v.value}
@@ -273,8 +259,7 @@ export function CourseForm({
                   ))}
                 </div>
                 <p className="text-xs leading-5 text-ink-secondary">
-                  Preferences guide the routing model. They are not verified
-                  claims about every path.
+                  Guides the route search; conditions are not verified.
                 </p>
               </fieldset>
               <Button
@@ -286,8 +271,8 @@ export function CourseForm({
                 Generate route
               </Button>
               <p className="text-xs leading-5 text-ink-secondary">
-                A loop back to your starting area. Actual distance depends on
-                the mapped path network.
+                Returns to your starting area. Distance follows the available
+                paths.
               </p>
             </>
           ) : (

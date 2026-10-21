@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { QuestRoute } from "@/domain/route";
+import { slicePathByRatio } from "@/surfaces/replay/cinematic/cinematic-route-filament";
 import {
   advanceGoogleRouteNavigator,
   seekGoogleRouteNavigator,
@@ -31,6 +32,16 @@ const route = {
 } as unknown as QuestRoute;
 
 describe("Google route navigator controller", () => {
+  it.each([[179.999, -179.999], [-179.999, 179.999]])("keeps the densified route and filament near the antimeridian from %s to %s", (from, to) => {
+    const path = densifyGoogleRoutePath({ route: [
+      { lat: 0, lng: from, d: 0 }, { lat: 0, lng: to, d: 222.39 },
+    ] });
+    expect(path.length).toBeGreaterThan(2);
+    expect(path.every(point => Math.abs(point.lng) >= 179.999)).toBe(true);
+    const marker = slicePathByRatio(path, 0.5, 0.5)[0];
+    expect(Math.abs(marker.lng)).toBeCloseTo(180, 8);
+  });
+
   it.each([0.5, 1, 2, 4])("opens at tracking distance at %sx without advancing recorded progress", (speed) => {
     const state = { ...initialGoogleRouteNavigatorState(), speed };
     const before = structuredClone(route);

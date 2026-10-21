@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Check, Download, Plus, Save } from "lucide-react";
+import { ArrowLeft, Compass, Download, Plus, Save } from "lucide-react";
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
+import { Disclosure } from "@/ui/disclosure";
 import { FinderRouteMap } from "@/ui/planning-route-map";
 import { PageTitle } from "@/ui/page-title";
 import {
@@ -137,9 +138,9 @@ export function CoursePage() {
     <section className="grid content-start gap-6 pb-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button asChild variant="ghost">
-          <Link to="/routes">
+          <Link to={courseId ? "/courses" : "/routes"}>
             <ArrowLeft />
-            Your collection
+            {courseId ? "Your courses" : "Your collection"}
           </Link>
         </Button>
         {state.view.kind !== "empty" ? (
@@ -159,8 +160,8 @@ export function CoursePage() {
       {state.view.kind === "empty" ? (
         <PageTitle
           eyebrow="Route studio"
-          title="Make the next outing yours."
-          copy="Plan a loop or bring a GPX. Preview the path, save your course, and take it to your watch."
+          title="Create a course"
+          copy="Plan a loop or import a GPX. Preview it in 3D and take it to your watch."
         />
       ) : (
         <h1 className="sr-only">Route studio</h1>
@@ -206,37 +207,30 @@ export function CoursePage() {
           </Button>
         </div>
       ) : null}
-      <div className="grid min-w-0 items-start gap-8 xl:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)]">
-        <div
-          className={
-            state.view.kind === "empty"
-              ? "min-w-0"
-              : "order-2 min-w-0 xl:order-1"
-          }
-        >
-          <CourseForm
-            busy={busy}
-            onGenerate={(request) => void generate(request)}
-            onImport={(file, activity) => void importGpx(file, activity)}
-          />
-        </div>
-        {state.view.kind === "empty" ? (
-          <div className="grid min-h-72 content-center gap-3 rounded-lg border border-line bg-surface p-6 sm:p-10">
-            <p className="text-xs uppercase tracking-widest text-ink-secondary">
-              Your route, your starting point
-            </p>
-            <h2 className="text-2xl font-semibold">
-              A course for the day you have in mind.
-            </h2>
-            <p className="max-w-lg text-sm leading-6 text-ink-secondary">
-              Choose a place, a distance, and a few preferences. You will see
-              the mapped path and its actual distance before adding it to your
-              courses.
-            </p>
-            <p className="text-sm text-ink-secondary">
-              Already have a route from an agent or another app? Import its GPX.
-            </p>
+      <div
+        className={
+          state.view.kind === "saved"
+            ? "min-w-0"
+            : "grid min-w-0 items-start gap-8 xl:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)]"
+        }
+      >
+        {state.view.kind !== "saved" ? (
+          <div
+            className={
+              state.view.kind === "empty"
+                ? "min-w-0"
+                : "order-2 min-w-0 xl:order-1"
+            }
+          >
+            <CourseForm
+              busy={busy}
+              onGenerate={(request) => void generate(request)}
+              onImport={(file, activity) => void importGpx(file, activity)}
+            />
           </div>
+        ) : null}
+        {state.view.kind === "empty" ? (
+          <SavedCourses courses={state.courses} />
         ) : (
           <CoursePreview
             course={state.view.course}
@@ -246,47 +240,7 @@ export function CoursePage() {
           />
         )}
       </div>
-      <section
-        aria-label="Saved courses"
-        className="mt-3 border-t border-line pt-6"
-      >
-        <h2 className="text-xl font-semibold">
-          Your courses{" "}
-          <span className="text-ink-secondary">{state.courses.length}</span>
-        </h2>
-        <p className="mt-1 text-sm text-ink-secondary">
-          Imported and generated routes, separate from your completed
-          activities.
-        </p>
-        {state.courses.length ? (
-          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {state.courses.map((course) => (
-              <Link
-                key={course.id}
-                to={`/courses/${course.id}`}
-                className="grid min-w-0 gap-2 rounded-lg border border-line p-4 transition-colors hover:bg-surface-raised focus-visible:outline-2 focus-visible:outline-ring"
-              >
-                <span className="break-words font-semibold">{course.name}</span>
-                <span className="text-sm text-ink-secondary">
-                  {course.activity} · {(course.distanceM / 1000).toFixed(2)} km
-                  ·{" "}
-                  {course.source.kind === "gpx"
-                    ? "GPX import"
-                    : "Generated loop"}
-                </span>
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <p className="mt-4 text-sm text-ink-secondary">
-            Save a preview to keep it here.
-          </p>
-        )}
-      </section>
-      <details className="border-t border-line pt-4 text-sm">
-        <summary className="min-h-11 cursor-pointer py-3 font-medium">
-          Agent access & workspace connection
-        </summary>
+      <Disclosure title="Agent access & workspace connection">
         <div className="mt-3 max-w-2xl space-y-4 text-ink-secondary">
           <p>
             Agents use the same route workspace through{" "}
@@ -330,7 +284,45 @@ export function CoursePage() {
             </Button>
           </form>
         </div>
-      </details>
+      </Disclosure>
+    </section>
+  );
+}
+
+function SavedCourses({ courses }: { courses: Course[] }) {
+  return (
+    <section
+      aria-label="Saved courses"
+      className="min-w-0 border-t border-line pt-6 xl:border-t-0 xl:pt-0"
+    >
+      <h2 className="text-xl font-semibold">
+        Your courses{" "}
+        <span className="text-ink-secondary">{courses.length}</span>
+      </h2>
+      <p className="mt-1 text-sm text-ink-secondary">
+        Imported and generated routes, separate from your completed activities.
+      </p>
+      {courses.length ? (
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {courses.map((course) => (
+            <Link
+              key={course.id}
+              to={`/courses/${course.id}`}
+              className="grid min-w-0 gap-2 rounded-lg border border-line p-4 transition-colors hover:bg-surface-raised focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              <span className="break-words font-semibold">{course.name}</span>
+              <span className="text-sm text-ink-secondary">
+                {course.activity} · {(course.distanceM / 1000).toFixed(2)} km ·{" "}
+                {course.source.kind === "gpx" ? "GPX import" : "Generated loop"}
+              </span>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-4 text-sm text-ink-secondary">
+          Save a preview to keep it here.
+        </p>
+      )}
     </section>
   );
 }
@@ -374,25 +366,14 @@ function CoursePreview({
             : `${course.segments.length} separate sections`}
         </p>
       </div>
-      <div className="h-80 overflow-hidden rounded-lg border border-line sm:h-[28rem]">
-        <FinderRouteMap lines={lines} selectedSlug={course.id} />
-      </div>
-      <p className="text-sm leading-6 text-ink-secondary">
-        {course.description}
-      </p>
-      {course.warnings.length ? (
-        <ul className="list-disc space-y-1 pl-5 text-sm leading-6 text-ink-secondary">
-          {course.warnings.map((warning, i) => (
-            <li key={i}>{warning}</li>
-          ))}
-        </ul>
-      ) : null}
       <div className="flex flex-wrap gap-2">
         {saved ? (
-          <span className="inline-flex min-h-11 items-center gap-2 px-3 text-sm">
-            <Check className="size-4" />
-            Saved
-          </span>
+          <Button asChild>
+            <Link to={`/courses/${course.id}/preview`}>
+              <Compass />
+              Open 3D preview
+            </Link>
+          </Button>
         ) : (
           <Button onClick={onSave} disabled={busy}>
             <Save />
@@ -407,10 +388,22 @@ function CoursePreview({
           Download GPX
         </Button>
       </div>
-      <details className="border-t border-line pt-2 text-sm">
-        <summary className="min-h-11 cursor-pointer py-3 font-medium">
-          Take this route to your Suunto Race S
-        </summary>
+      <div className="h-[min(52vh,28rem)] min-h-64 overflow-hidden rounded-lg border border-line">
+        <FinderRouteMap lines={lines} selectedSlug={course.id} />
+      </div>
+      {course.warnings.length ? (
+        <ul className="list-disc space-y-1 pl-5 text-sm leading-6 text-ink-secondary">
+          {course.warnings.map((warning, i) => (
+            <li key={i}>{warning}</li>
+          ))}
+        </ul>
+      ) : null}
+      <Disclosure title="About this course">
+        <p className="text-sm leading-6 text-ink-secondary">
+          {course.description}
+        </p>
+      </Disclosure>
+      <Disclosure title="Take this route to your Suunto Race S">
         <ol className="list-decimal space-y-2 pl-5 leading-6 text-ink-secondary">
           <li>Download the GPX on your phone.</li>
           <li>
@@ -433,7 +426,7 @@ function CoursePreview({
         >
           Suunto import instructions
         </a>
-      </details>
+      </Disclosure>
       {course.source.kind === "generated" ? (
         <p className="text-xs text-ink-secondary">
           Routing by BRouter using{" "}

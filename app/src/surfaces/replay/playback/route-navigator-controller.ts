@@ -1,4 +1,5 @@
 import type { QuestRoute } from "@/domain/route";
+import { interpolateLongitude } from "@/domain/geometry/longitude";
 import type { CinematicRouteTreatment } from "@/surfaces/replay/cinematic/cinematic-route-filament";
 import { routeDistanceM } from "@/domain/geometry/route-path";
 import {
@@ -225,7 +226,13 @@ function mix(start: number, end: number, amount: number) {
   return start + (end - start) * clamp(amount, 0, 1);
 }
 
-export function densifyGoogleRoutePath(route: QuestRoute, intervalM = 12) {
+export interface GoogleRouteGeometry {
+  name: string;
+  distanceKm: number;
+  route: Array<{ lat: number; lng: number; d: number }>;
+}
+
+export function densifyGoogleRoutePath(route: Pick<GoogleRouteGeometry, "route">, intervalM = 12) {
   const path: Array<{ lat: number; lng: number; d: number }> = [];
   for (let index = 0; index < route.route.length - 1; index += 1) {
     const start = route.route[index];
@@ -237,7 +244,7 @@ export function densifyGoogleRoutePath(route: QuestRoute, intervalM = 12) {
       path.push({
         d: start.d + distance * ratio,
         lat: start.lat + (end.lat - start.lat) * ratio,
-        lng: start.lng + (end.lng - start.lng) * ratio,
+        lng: interpolateLongitude(start.lng, end.lng, ratio),
       });
     }
   }

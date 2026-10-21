@@ -1,4 +1,3 @@
-import type { QuestRoute } from "@/domain/route";
 import {
   buildCinematicThreadStyles,
   slicePathByRatio,
@@ -9,10 +8,10 @@ import {
   densifyGoogleRoutePath,
   type GoogleRouteCameraPose,
   type GoogleRouteGroundingMode,
+  type GoogleRouteGeometry,
 } from "@/surfaces/replay/playback/route-navigator-controller";
 import { ProviderError, providerFailureMessage } from "@/providers/provider-error";
 import { loadGoogleMaps } from "@/providers/google-maps-loader";
-import { routeDistanceM } from "@/domain/geometry/route-path";
 
 import {
   initialGoogleRendererState,
@@ -26,7 +25,7 @@ export type { GoogleRouteNavigatorStatus } from "@/surfaces/replay/renderers/goo
 interface MountOptions {
   apiKey: string;
   container: HTMLElement;
-  route: QuestRoute;
+  route: GoogleRouteGeometry;
   groundingMode: GoogleRouteGroundingMode;
   initialCamera?: GoogleRouteCameraPose;
   onStatus: (status: GoogleRouteNavigatorStatus) => void;
@@ -258,7 +257,7 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
       this.map = map;
       this.routeLine = routeLine;
       this.routePath = routePath;
-      this.routeDistanceM = Math.max(1, routeDistanceM(route));
+      this.routeDistanceM = Math.max(1, route.distanceKm * 1_000, route.route.at(-1)?.d ?? 0);
       this.routeWidth = routeStyle?.width ?? 8;
       await waitForGoogleSceneReady(map, controller.signal);
       this.transition({ type: "sceneReady", operationId }, onStatus);
@@ -268,7 +267,7 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
         type: "operationFailed", operationId,
         message: providerFailureMessage(
           error,
-          "Google photorealistic 3D could not start in this browser. Atlas replay works everywhere.",
+          "Google photorealistic 3D could not start in this browser.",
         ),
       }, onStatus);
     }
