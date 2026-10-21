@@ -3,9 +3,12 @@ import {
   ChevronDown,
   ChevronUp,
   Compass,
+  Download,
   Minus,
 } from "lucide-react";
 import { useRef, useState } from "react";
+import { questRouteGpx } from "@/domain/courses";
+import { downloadGpx } from "@/data/course-client";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import { ElevationProfile } from "@/surfaces/routes/components/route-briefing";
@@ -342,7 +345,7 @@ function RouteMargin({
         ) : null}
       </div>
 
-      <div className="mt-auto shrink-0 border-t border-line bg-surface p-3 sm:p-4">
+      <div className={cn("mt-auto grid shrink-0 gap-2 border-t border-line bg-surface p-3 sm:p-4", route.route.length > 1 && "grid-cols-[minmax(0,1fr)_auto]")}>
         {route.replay.replayEligible ? (
           <Button
             asChild
@@ -364,6 +367,12 @@ function RouteMargin({
             Replay unavailable
           </Button>
         )}
+        {route.route.length > 1 ? (
+          <Button aria-label="Download GPX" variant="outline" onClick={() => downloadGpx(questRouteGpx(route), `${route.slug}.gpx`)}>
+            <Download aria-hidden="true" />
+            <span><span className="hidden sm:inline">Download </span>GPX</span>
+          </Button>
+        ) : null}
       </div>
     </aside>
   );

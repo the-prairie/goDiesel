@@ -29,7 +29,9 @@
     "search:index": "node scripts/build-search-index.mjs",
     "search:check": "node scripts/check-search-index.mjs",
     "admin:build": "node scripts/build-admin-modules.mjs --write",
-    "admin:check": "node scripts/build-admin-modules.mjs"
+    "admin:check": "node scripts/build-admin-modules.mjs",
+    "test:e2e:courses": "playwright test --config playwright.courses.config.ts",
+    "course:agent": "node scripts/course-agent.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
@@ -41,6 +43,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "embla-carousel-react": "^8.6.0",
+    "fast-xml-parser": "^5.11.2",
     "lucide-react": "^0.562.0",
     "maplibre-gl": "^6.14.0",
     "radix-ui": "^1.6.2",

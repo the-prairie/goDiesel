@@ -1,0 +1,293 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "goDiesel course workspace",
+    "version": "1.0.0",
+    "description": "Private route generation and GPX import. Generate/import return previews. Explicitly save, then open /#/courses/{course.id}. Courses are not completed activities."
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "security": [
+    {
+      "ownerToken": []
+    }
+  ],
+  "paths": {
+    "/api/courses": {
+      "get": {
+        "operationId": "readCourses",
+        "summary": "List saved courses, open one, or export GPX",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^course-[0-9a-f-]{36}$"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "description": "Requires id.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "gpx"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JSON {courses:Course[]} or {course:Course}. With format=gpx, application/gpx+xml."
+          },
+          "401": {
+            "description": "Owner token required."
+          },
+          "404": {
+            "description": "Course not found."
+          },
+          "503": {
+            "description": "Workspace unavailable or not configured."
+          }
+        }
+      },
+      "post": {
+        "operationId": "createCourse",
+        "summary": "Generate/import a preview, or save a course",
+        "description": "Maximum JSON request 5 MiB. Generate/import do not save. Saving identical content is idempotent. Inspect warnings and actual distance. Do not substitute fabricated geometry if routing fails.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "action",
+                      "request"
+                    ],
+                    "properties": {
+                      "action": {
+                        "const": "generate"
+                      },
+                      "request": {
+                        "$ref": "#/components/schemas/CourseRequest"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "action",
+                      "gpx",
+                      "filename",
+                      "activity"
+                    ],
+                    "properties": {
+                      "action": {
+                        "const": "import"
+                      },
+                      "gpx": {
+                        "type": "string",
+                        "description": "GPX XML, not a URL. Up to 50,000 points. Segments and optional elevation/timestamps preserved."
+                      },
+                      "filename": {
+                        "type": "string",
+                        "maxLength": 255
+                      },
+                      "activity": {
+                        "type": "string",
+                        "enum": [
+                          "Run",
+                          "Walk",
+                          "Ride"
+                        ]
+                      },
+                      "name": {
+                        "type": "string",
+                        "maxLength": 200
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "action",
+                      "course"
+                    ],
+                    "properties": {
+                      "action": {
+                        "const": "save"
+                      },
+                      "course": {
+                        "type": "object",
+                        "description": "Complete Course object returned from generate/import. Server validates and recomputes derived metrics and ID."
+                      },
+                      "receipt": {
+                        "type": "string",
+                        "description": "Required when saving a generated course. Preserve the server receipt returned by generate. Do not modify the course before saving it."
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "JSON {course:Course,receipt?:string}. Generate returns a server-signed receipt required for save. Import returns a course without a receipt."
+          },
+          "201": {
+            "description": "JSON {course:Course}. Saved."
+          },
+          "400": {
+            "description": "JSON {error:string}. Invalid input."
+          },
+          "401": {
+            "description": "Owner token required."
+          },
+          "403": {
+            "description": "Cross-origin requests rejected."
+          },
+          "408": {
+            "description": "Cancelled or timed out."
+          },
+          "413": {
+            "description": "Request too large."
+          },
+          "422": {
+            "description": "No loop close enough to requested distance."
+          },
+          "503": {
+            "description": "Storage or routing unavailable."
+          }
+        }
+      }
+    },
+    "/api/discovery": {
+      "get": {
+        "operationId": "findStartingPlaces",
+        "summary": "Find coordinates for a place name before generating a loop",
+        "security": [],
+        "parameters": [
+          {
+            "name": "place",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JSON {places:[{name,lat,lng}]}. Select the intended starting place; do not silently choose an ambiguous result."
+          },
+          "429": {
+            "description": "Wait before searching again."
+          },
+          "503": {
+            "description": "Geocoding temporarily unavailable."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ownerToken": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "schemas": {
+      "CourseRequest": {
+        "type": "object",
+        "required": [
+          "start",
+          "distance",
+          "unit",
+          "activity",
+          "vibes",
+          "seed"
+        ],
+        "properties": {
+          "start": {
+            "type": "object",
+            "required": [
+              "lat",
+              "lng",
+              "name"
+            ],
+            "properties": {
+              "lat": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90
+              },
+              "lng": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180
+              },
+              "name": {
+                "type": "string",
+                "maxLength": 200
+              }
+            }
+          },
+          "distance": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 200,
+            "description": "Target loop distance. Converted value must be 1\u2013200 km. Actual distance is returned."
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "km",
+              "mi"
+            ]
+          },
+          "activity": {
+            "type": "string",
+            "enum": [
+              "Run",
+              "Walk",
+              "Ride"
+            ]
+          },
+          "vibes": {
+            "type": "array",
+            "maxItems": 4,
+            "items": {
+              "type": "string",
+              "enum": [
+                "quiet",
+                "green",
+                "water",
+                "paved"
+              ]
+            },
+            "description": "Routing preferences, not verified claims. Inspect returned warnings."
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647,
+            "description": "Variation seed. Start at zero."
+          }
+        }
+      }
+    }
+  }
+}

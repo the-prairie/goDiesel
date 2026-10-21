@@ -36,6 +36,7 @@ const RouteDetailPage = lazy(() =>
 const RoutesPage = lazy(() =>
   import("@/surfaces/routes/routes-page").then((module) => ({ default: module.RoutesPage })),
 );
+const CoursePage = lazy(() => import("@/surfaces/courses/course-page").then(module => ({ default: module.CoursePage })));
 const DesignSystemLabPage = lazy(() =>
   import("@/labs/design-system/design-system-lab-page").then((module) => ({
     default: module.DesignSystemLabPage,
@@ -79,6 +80,8 @@ const productRoutes = [
   { path: APP_PATHS.atlas.slice(1), element: <AtlasPage /> },
   { path: APP_PATHS.finder.slice(1), element: <FinderPage /> },
   { path: APP_PATHS.routes.slice(1), element: <RoutesPage /> },
+  { path: "courses", element: <CoursePage /> },
+  { path: "courses/:courseId", element: <CoursePage /> },
   { path: "routes/:routeSlug", element: <RouteDetailPage /> },
   { path: APP_PATHS.replay.slice(1), element: <ReplayPage /> },
   { path: "replay/:routeSlug", element: <ReplayPage /> },

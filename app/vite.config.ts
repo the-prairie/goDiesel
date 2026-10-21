@@ -1,4 +1,5 @@
 import { discoveryPlugin } from "./server/discovery-plugin";
+import { coursesPlugin } from "./server/courses-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import fs from "node:fs";
@@ -27,6 +28,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
+      coursesPlugin({ token: env.GODIESEL_COURSE_TOKEN, routerUrl: env.GODIESEL_ROUTER_URL, signingKey: env.GODIESEL_COURSE_SIGNING_KEY }),
       discoveryPlugin(),
       {
         name: "godiesel-single-route-manifest",

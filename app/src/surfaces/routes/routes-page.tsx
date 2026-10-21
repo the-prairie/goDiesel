@@ -3,7 +3,7 @@ import { filterExternalPlans } from "@/surfaces/routes/external-plan-filters";
 import { ExternalPlanCard } from "./components/external-plan-card";
 import { ChevronDown, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 
 import { PageTitle } from "@/ui/page-title";
 import { RouteCard } from "@/ui/route-card";
@@ -108,6 +108,10 @@ export function RoutesPage() {
         title="Places worth returning to."
         copy="Your runs, rides, and plans. Find a place and revisit the day."
       />
+      <div className="flex flex-wrap items-center gap-3">
+        <Button asChild><Link to="/courses">Create or import route</Link></Button>
+        <p className="text-sm text-ink-secondary">Plan a loop, upload GPX, or open courses made by your agent.</p>
+      </div>
 
       {libraryRoutes.length + externalPlans.length === 0 ? (
         <LibraryState

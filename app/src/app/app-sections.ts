@@ -40,6 +40,9 @@ export const APP_SECTIONS: AppSection[] = [
 ];
 
 export function appSectionForPath(pathname: string) {
+  if (pathname === "/courses" || pathname.startsWith("/courses/")) {
+    return APP_SECTIONS.find(section => section.id === "routes")!;
+  }
   if (
     pathname.startsWith(`${PLAYABLE_EARTH_LAB_PATH}/`)
   ) {
