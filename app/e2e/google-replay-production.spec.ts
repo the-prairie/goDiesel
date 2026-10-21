@@ -57,15 +57,17 @@ test("wheel inertia releases follow only once", async ({ page }) => {
 
 async function expectMarkerOnProfile(page: Page, duringPlayback = false) {
   await expect.poll(() => page.getByTestId("replay-elevation-scrubber").evaluate((host, duringPlayback) => {
-    const reliefMarker = host.querySelector<SVGCircleElement>(".replay-chapter-pin");
+    const reliefMarker = host.querySelector<HTMLElement>(".replay-chapter-pin");
     if (reliefMarker) {
-      const svg = reliefMarker.ownerSVGElement!;
-      const x = reliefMarker.cx.baseVal.value;
-      const y = reliefMarker.cy.baseVal.value;
+      const svg = host.querySelector("svg")!;
+      const box = reliefMarker.getBoundingClientRect();
+      if (Math.abs(box.width - box.height) > 0.1) return Infinity;
+      const actual = new DOMPoint(box.x + box.width / 2, box.y + box.height / 2);
+      const x = actual.matrixTransform(svg.getScreenCTM()!.inverse()).x;
       let error = Infinity;
       for (const path of host.querySelectorAll<SVGPathElement>(".replay-chapter-edge")) {
         const length = path.getTotalLength();
-        if (x < path.getPointAtLength(0).x || x > path.getPointAtLength(length).x) continue;
+        if (x < path.getPointAtLength(0).x - .1 || x > path.getPointAtLength(length).x + .1) continue;
         let low = 0;
         let high = length;
         for (let i = 0; i < 30; i++) {
@@ -75,7 +77,6 @@ async function expectMarkerOnProfile(page: Page, duringPlayback = false) {
         }
         const point = path.getPointAtLength((low + high) / 2);
         const expected = new DOMPoint(point.x, point.y).matrixTransform(svg.getScreenCTM()!);
-        const actual = new DOMPoint(x, y).matrixTransform(svg.getScreenCTM()!);
         error = Math.min(error, Math.hypot(expected.x - actual.x, expected.y - actual.y));
       }
       return error;
@@ -150,12 +151,14 @@ for (const routeSlug of ["14023448720", "14736711660"] as const) {
     await expect(replay).toHaveAttribute("data-grounding-mode", "ground");
     if (routeSlug === "14736711660") await expect(page.getByRole("heading", { name: "just here for the zipper", exact: true })).toBeVisible();
     await expect(replay).toHaveAttribute("data-directed-camera", "chase");
+    await page.getByRole("button", { name: "Replay settings", exact: true }).click();
     await expect(
       page.getByRole("button", { name: "Auto director" }),
     ).toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("button", { name: "Close", exact: true }).click();
     await expect(
       page.getByText("Google 3D Replay", { exact: true }),
-    ).toBeVisible();
+    ).toHaveCount(0);
     await expect(
       page.getByRole("button", { name: "Change route" }),
     ).toBeVisible();
@@ -168,6 +171,7 @@ for (const routeSlug of ["14023448720", "14736711660"] as const) {
       page.getByRole("button", { name: "Pause route" }),
     ).toBeVisible();
     await expect(scrubber).toBeVisible();
+    await page.getByRole("button", { name: "Data", exact: true }).click();
     await expect(page.getByText("Grade", { exact: true })).toBeVisible();
     await page.evaluate(() => {
       const replayWindow = window as typeof window & {
@@ -292,7 +296,7 @@ test("loads legacy renderer bundles only when falling back from Google 3D to Atl
   expect(legacyBundles.some(url => url.includes("earth-replay-stage-"))).toBe(true);
 });
 
-test("keeps playback telemetry visible on a phone", async ({ page }) => {
+test("keeps playback telemetry available on demand on a phone", async ({ page }) => {
   await installGoogleReplay(page, "ready");
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/#/replay/14023448720");
@@ -300,6 +304,7 @@ test("keeps playback telemetry visible on a phone", async ({ page }) => {
   const dock = page.getByTestId("replay-controls");
   await page.getByRole("button", { name: "Play route" }).click();
   await expect(page.getByTestId("replay-elevation-scrubber")).toBeVisible();
+  await page.getByRole("button", { name: "Data", exact: true }).click();
   await expect(page.getByText("Grade", { exact: true })).toBeVisible();
   expect((await dock.boundingBox())?.height ?? 0).toBeLessThan(320);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(
@@ -346,6 +351,7 @@ for (const width of [320, 390, 820, 1280]) {
         (element) => element.scrollWidth <= element.clientWidth + 1,
       ),
     ).toBe(true);
+    await page.getByRole("button", { name: "Data", exact: true }).click();
     const metrics = page.locator(".replay-metrics");
     const cells = await metrics
       .locator(":scope > div")
@@ -471,7 +477,7 @@ for (const width of [390, 1280]) {
     await expect(stage).toHaveAttribute("data-following", "false");
     const start = Number(await page.getByLabel("Route progress").inputValue());
     await expect.poll(async () => Number(await page.getByLabel("Route progress").inputValue())).toBeGreaterThan(start);
-    await expect(page.getByTestId("replay-controls").getByLabel("Pause route")).toBeVisible();
+    await expect(page.getByTestId("replay-controls")).toBeHidden();
     await page.getByRole("button", { name: "Overview", exact: true }).click();
     await expect(stage).toHaveAttribute("data-camera-mode", "overview");
     await expect(stage).toHaveAttribute("data-following", "true");
@@ -515,8 +521,8 @@ test("renderer replacement starts a fresh native Replay session", async ({ page 
   await installGoogleReplay(page, "ready");
   await page.goto("/#/replay/14023448720");
   await page.getByRole("button", { name: "Play route" }).click();
-  await page.getByRole("button", { name: "Overview", exact: true }).click();
   await page.getByRole("button", { name: "Replay settings", exact: true }).click();
+  await page.getByRole("button", { name: "Overview", exact: true }).click();
   await setProviderStatus(page, "unavailable");
   await page.getByRole("button", { name: "Use Atlas replay" }).click();
   await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-engine", "maplibre-atlas");

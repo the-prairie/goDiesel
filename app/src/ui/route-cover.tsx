@@ -7,7 +7,7 @@ type Cover = { src: string; kind: string; width: number; height: number; points:
 const covers = artwork as Record<string, Cover>;
 
 /** Artwork is illustrative; the overlay is projected from recorded points, never AI output. */
-export function RouteCover({ route }: { route: RouteSummary }) {
+export function RouteCover({ route, showCredit = true }: { route: RouteSummary; showCredit?: boolean }) {
   const cover = covers[route.slug];
   const [failed, setFailed] = useState(false);
   if (!cover || failed) return <RouteThread route={route} className="route-cover-fallback" />;
@@ -21,7 +21,7 @@ export function RouteCover({ route }: { route: RouteSummary }) {
       </svg>
       <img className="route-cover-image" src={cover.src} alt={`${route.name}: ${enhanced ? "aerial artwork" : "satellite preview"} with recorded route trace`} loading="lazy" decoding="async" onError={() => setFailed(true)} />
       <span className="route-cover-shade" aria-hidden="true" />
-      <span className="route-cover-credit">{enhanced ? "Based on Esri imagery" : "Esri · World Imagery"}</span>
+      {showCredit ? <span className="route-cover-credit">{enhanced ? "Based on Esri imagery" : "Esri · World Imagery"}</span> : null}
     </div>
   );
 }

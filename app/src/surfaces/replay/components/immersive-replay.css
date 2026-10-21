@@ -22,8 +22,12 @@ body:has(.immersive-replay) .atlas-spine-mobile {
   transform: translateX(-50%);
 }
 
+.immersive-replay[data-hud-state="compact"] .immersive-replay-dock {
+  width: min(40rem, calc(100% - 2rem));
+}
+
 @media (max-width: 639px) {
-  .immersive-replay-dock { width: calc(100% - 1.5rem); }
+  .immersive-replay[data-hud-state] .immersive-replay-dock { width: calc(100% - 1.5rem); }
   .immersive-replay .replay-header { padding-inline: .75rem; }
 }
 

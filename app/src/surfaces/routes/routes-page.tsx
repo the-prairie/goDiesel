@@ -267,6 +267,7 @@ export function RoutesPage() {
                     />
                   ))}
                 </div>
+                {visibleRoutes.length > 0 ? <p className="text-xs text-ink-secondary">Cover artwork based on <a className="underline underline-offset-2" href="https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9" target="_blank" rel="noreferrer">Esri World Imagery</a>.</p> : null}
                 {visibleRoutes.length < matchingRoutes.length ? (
                   <div className="flex justify-center border-t border-border pt-5">
                     <Button

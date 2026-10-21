@@ -24,7 +24,7 @@ export function RouteCard({
         aria-label={planned ? `Edit planned ${route.name} route in Finder` : `Open ${route.name} route from ${route.date || "an unknown date"}, ${route.distanceKm.toFixed(1)} km`}
         className="field-note-link focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       >
-        <RouteCover key={route.slug} route={route} />
+        <RouteCover key={route.slug} route={route} showCredit={false} />
         <div className="field-note-copy">
           <p className="field-note-eyebrow">{planned ? "Planned" : route.lifecycle === "completed" ? "Recorded" : "Discovered"} {route.type} · {route.region}</p>
           <h2 className="field-note-title">{route.name}</h2>

@@ -131,7 +131,8 @@ test("chapter and moment lenses use source distances and explain their origin", 
   await openMoments(page);
   await page.getByTestId("replay-chapter-2").click();
   const preview = page.getByRole("slider", { name: "Chapter preview position", exact: true });
-  expect(Number(await preview.inputValue())).toBeCloseTo(Number(await progress.getAttribute("max")) / 4, 2);
+  expect(Number(await preview.inputValue())).toBe(Number(await preview.getAttribute("min")));
+  await expect(page.getByRole("heading", { name: "The Richmond zipper", exact: true })).toBeVisible();
   await highPoint(page);
   expect(Number(await preview.inputValue())).toBeCloseTo(highest.d, 3);
   await page.getByRole("button", { name: "Why this moment?", exact: true }).click();

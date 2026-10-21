@@ -1,0 +1,175 @@
+{
+  "activityId": "14736711660",
+  "geometrySignature": "566dca84",
+  "reviewedAt": "2026-10-20",
+  "license": "https://opendatacommons.org/licenses/odbl/1-0/",
+  "chapters": [
+    {
+      "id": "polk-to-presidio",
+      "startM": 0,
+      "label": "Polk Gulch to Presidio Heights",
+      "summary": "Leave the Polk Street area and head west past Alta Plaza Park toward Presidio Heights.",
+      "places": [
+        {
+          "name": "Polk Gulch",
+          "atDistanceM": 456.06299060628464,
+          "latitude": 37.7908077,
+          "longitude": -122.4207753,
+          "sourceUrl": "https://www.openstreetmap.org/node/11909029771"
+        },
+        {
+          "name": "Alta Plaza Park",
+          "atDistanceM": 2576.9213736471265,
+          "latitude": 37.7911812,
+          "longitude": -122.4376738,
+          "sourceUrl": "https://www.openstreetmap.org/way/16751737"
+        },
+        {
+          "name": "Presidio Heights",
+          "atDistanceM": 4190.649660430293,
+          "latitude": 37.7887511,
+          "longitude": -122.4530266,
+          "sourceUrl": "https://www.openstreetmap.org/node/1680264818"
+        }
+      ]
+    },
+    {
+      "id": "richmond-zipper",
+      "startM": 5186.00992531566,
+      "label": "The Richmond zipper",
+      "summary": "A succession of short turns draws the zipper through the Richmond, passing Richmond Playground and Rochambeau Playground.",
+      "places": [
+        {
+          "name": "Mountain Lake Park",
+          "atDistanceM": 5633.68873084096,
+          "latitude": 37.7872473,
+          "longitude": -122.4694492,
+          "sourceUrl": "https://www.openstreetmap.org/way/401354283"
+        },
+        {
+          "name": "Richmond Playground",
+          "atDistanceM": 7599.9841761400285,
+          "latitude": 37.7851396,
+          "longitude": -122.4781277,
+          "sourceUrl": "https://www.openstreetmap.org/way/85796807"
+        },
+        {
+          "name": "Rochambeau Playground",
+          "atDistanceM": 9289.064628399949,
+          "latitude": 37.784843,
+          "longitude": -122.4845589,
+          "sourceUrl": "https://www.openstreetmap.org/way/52243885"
+        }
+      ]
+    },
+    {
+      "id": "pacific-edge",
+      "startM": 11381.51110288104,
+      "label": "Out to Ocean Beach",
+      "summary": "Reach the Pacific beside Sutro Baths, turn south past Sutro Heights, then pass the Dutch Windmill near the edge of Ocean Beach.",
+      "places": [
+        {
+          "name": "Sutro Baths",
+          "atDistanceM": 12407.607176604817,
+          "latitude": 37.7801415,
+          "longitude": -122.5137957,
+          "sourceUrl": "https://www.openstreetmap.org/way/32776564"
+        },
+        {
+          "name": "Sutro Heights Park",
+          "atDistanceM": 12726.88807912523,
+          "latitude": 37.7774649,
+          "longitude": -122.5114115,
+          "sourceUrl": "https://www.openstreetmap.org/way/160025743"
+        },
+        {
+          "name": "Dutch Windmill",
+          "atDistanceM": 13547.369551360043,
+          "latitude": 37.7704405,
+          "longitude": -122.5094056,
+          "sourceUrl": "https://www.openstreetmap.org/way/287921407"
+        }
+      ]
+    },
+    {
+      "id": "golden-gate-park",
+      "startM": 14084.151335279365,
+      "label": "Across Golden Gate Park",
+      "summary": "Turn back inland through Golden Gate Park, passing the Japanese Tea Garden and Conservatory of Flowers on the way east.",
+      "places": [
+        {
+          "name": "Golden Gate Park",
+          "atDistanceM": 16337.097071909702,
+          "latitude": 37.7693969,
+          "longitude": -122.4820237,
+          "sourceUrl": "https://www.openstreetmap.org/way/158602261"
+        },
+        {
+          "name": "Japanese Tea Garden",
+          "atDistanceM": 19240.000922524716,
+          "latitude": 37.7703429,
+          "longitude": -122.4700521,
+          "sourceUrl": "https://www.openstreetmap.org/way/30900516"
+        },
+        {
+          "name": "Conservatory of Flowers",
+          "atDistanceM": 20289.412918260783,
+          "latitude": 37.7726146,
+          "longitude": -122.4602244,
+          "sourceUrl": "https://www.openstreetmap.org/way/30675038"
+        }
+      ]
+    },
+    {
+      "id": "panhandle-to-japantown",
+      "startM": 21023.358284577094,
+      "label": "Panhandle to Japantown",
+      "summary": "Leave the park by the Panhandle and continue through city streets toward Japantown.",
+      "places": [
+        {
+          "name": "Panhandle",
+          "atDistanceM": 21591.985623367364,
+          "latitude": 37.7723094,
+          "longitude": -122.44742,
+          "sourceUrl": "https://www.openstreetmap.org/way/16751151"
+        },
+        {
+          "name": "Japantown",
+          "atDistanceM": 24395.198791322964,
+          "latitude": 37.7855789,
+          "longitude": -122.4298089,
+          "sourceUrl": "https://www.openstreetmap.org/node/140983070"
+        }
+      ]
+    },
+    {
+      "id": "waterfront-finish",
+      "startM": 25886.911930089842,
+      "label": "Finish at Fisherman's Wharf",
+      "summary": "Head north toward the bay, pass Ghirardelli Square, and finish near Musée Mécanique at Fisherman's Wharf.",
+      "places": [
+        {
+          "name": "Ghirardelli Square",
+          "atDistanceM": 27492.30525477558,
+          "latitude": 37.8058709,
+          "longitude": -122.4229491,
+          "sourceUrl": "https://www.openstreetmap.org/way/27104863"
+        },
+        {
+          "name": "Fisherman's Wharf",
+          "atDistanceM": 28398.02989277368,
+          "latitude": 37.8081325,
+          "longitude": -122.4165913,
+          "sourceUrl": "https://www.openstreetmap.org/node/11283438662"
+        },
+        {
+          "name": "Musée Mécanique",
+          "atDistanceM": 28465.976270394603,
+          "latitude": 37.8092456,
+          "longitude": -122.415794,
+          "sourceUrl": "https://www.openstreetmap.org/node/368166365"
+        }
+      ]
+    }
+  ]
+}

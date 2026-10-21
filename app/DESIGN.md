@@ -1,5 +1,17 @@
 # goDiesel Field-Guide Design Contract
 
+## Current implementation precedence
+
+The owner-approved October 13 override in [root design.md](../design.md) and
+the semantic tokens in `src/index.css` supersede the earlier literal palette,
+typefaces, and radii described below. Product copy uses Inter. Map controls use
+neutral black glass, white and gray text, and indigo primary actions.
+
+Replay chapter controls use those shared tokens, including `surface-map-glass`,
+`ink`, `ink-secondary`, `primary`, `radius-control`, and `radius-panel`.
+The elevation relief stays neutral. Its filled playback point and hollow preview
+diamond distinguish recorded position from a preview without another palette.
+
 This document is the visual and interaction source of truth for goDiesel.
 
 The governing rule is:

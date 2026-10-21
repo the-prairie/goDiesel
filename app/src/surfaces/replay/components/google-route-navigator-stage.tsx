@@ -410,10 +410,6 @@ export function GoogleRouteNavigatorStage({
           </div>
         </div>
         <div className="pointer-events-auto flex shrink-0 items-center gap-1 sm:gap-2">
-          <div className="hidden items-center gap-2 border-r border-white/15 pr-3 text-[10px] font-semibold uppercase text-white/62 sm:flex">
-            <ScanLine aria-hidden="true" className="size-3.5 text-accent-foreground" />
-            {productionReplay ? "Google 3D Replay" : "Field replay"}
-          </div>
           <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
             <SheetTrigger asChild>
               <Button aria-label="Replay settings" className="border border-white/20 bg-black/35 text-white hover:bg-black/60" size="icon" type="button" variant="ghost">
@@ -474,6 +470,7 @@ export function GoogleRouteNavigatorStage({
       ) : null}
 
       <div
+        hidden={settingsOpen}
         className={cn("pointer-events-none z-30", productionReplay ? "immersive-replay-dock" : "relative")}
         data-testid={productionReplay ? "replay-controls" : undefined}
       >
@@ -495,7 +492,6 @@ export function GoogleRouteNavigatorStage({
             commitControl({ type: "progressSelected", progressM, totalDistanceM });
           }}
           onCycleSpeed={() => commitControl({ type: "speedCycled" })}
-          cameraControls={<CameraControls active={control.cameraMode} disabled={status.state !== "ready"} onSelect={selectCamera} />}
           metrics={<div className="replay-metrics grid grid-cols-4 gap-2">
             <Metric label={route.route.some(point => point.elapsedS !== undefined) ? "Elapsed" : "Elapsed · derived"} value={route.provenance.temporal.status === "recorded" ? formatDuration(telemetry.elapsedS) : "Unavailable"} />
             <Metric label={route.type.toLowerCase().includes("ride") ? "Speed" : "Pace"} value={route.provenance.temporal.status === "recorded" ? formatPace(telemetry.paceSPerKm, route.type) : "Unavailable"} />

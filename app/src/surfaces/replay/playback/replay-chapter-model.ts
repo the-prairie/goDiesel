@@ -1,5 +1,6 @@
 import { routeDistanceM } from "@/domain/geometry/route-path";
 import type { QuestRoute } from "@/domain/route";
+import { replayRouteStory, type ReplayStoryChapter } from "./replay-route-story";
 
 export interface ReplaySpan {
   startM: number;
@@ -17,6 +18,7 @@ export interface ReplayChapter extends ReplaySpan {
   label: string;
   ascentM: number;
   descentM: number;
+  story?: Pick<ReplayStoryChapter, "summary" | "places">;
 }
 
 export interface ReplayMoment extends ReplaySpan {
@@ -55,7 +57,7 @@ export function buildReplayChapterModel(route: QuestRoute): ReplayChapterModel {
 
   return {
     totalDistanceM,
-    chapters: buildChapters(segments, totalDistanceM),
+    chapters: buildChapters(segments, totalDistanceM, replayRouteStory(route)?.chapters),
     moments: buildMoments(segments, totalDistanceM, minimumElevationM, maximumElevationM),
     segments,
     minimumElevationM: minimumElevationM === Infinity ? 0 : minimumElevationM,
@@ -126,10 +128,11 @@ function recordedSegments(route: QuestRoute): ReplayProfilePoint[][] {
   return segments;
 }
 
-function buildChapters(segments: ReplayProfilePoint[][], totalDistanceM: number): ReplayChapter[] {
+function buildChapters(segments: ReplayProfilePoint[][], totalDistanceM: number, stories?: ReplayStoryChapter[]): ReplayChapter[] {
   const count = Math.min(4, Math.max(1, Math.floor(totalDistanceM / MINIMUM_CHAPTER_DISTANCE_M)));
-  return Array.from({ length: count }, (_, index) => {
-    const span = { startM: totalDistanceM * index / count, endM: totalDistanceM * (index + 1) / count };
+  const spans = stories?.map((story, index) => ({ startM: story.startM, endM: stories[index + 1]?.startM ?? totalDistanceM })) ??
+    Array.from({ length: count }, (_, index) => ({ startM: totalDistanceM * index / count, endM: totalDistanceM * (index + 1) / count }));
+  return spans.map((span, index) => {
     let ascentM = 0;
     let descentM = 0;
     let recordedDistanceM = 0;
@@ -151,7 +154,10 @@ function buildChapters(segments: ReplayProfilePoint[][], totalDistanceM: number)
     else if (ascentM - descentM > (ascentM + descentM) * 0.6) label = "Climbing";
     else if (descentM - ascentM > (ascentM + descentM) * 0.6) label = "Descending";
     else label = "Rolling";
-    return { id: `chapter-${index + 1}`, index, ...span, label, ascentM, descentM };
+    const story = stories?.[index];
+    return { id: `chapter-${index + 1}`, index, ...span, label: story?.label ?? label, ascentM, descentM,
+      ...(story ? { story: { summary: story.summary, places: story.places } } : {}),
+    };
   });
 }
 
