@@ -198,8 +198,7 @@ export function YourMarkerSettings() {
       <input
         ref={inputRef}
         id={fileId}
-        className="sr-only"
-        tabIndex={-1}
+        hidden
         type="file"
         accept="image/jpeg,image/png,image/webp"
         aria-label="Upload marker photo"
