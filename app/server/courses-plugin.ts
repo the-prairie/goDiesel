@@ -179,6 +179,7 @@ export function coursesPlugin(
   options: {
     token?: string;
     routerUrl?: string;
+    orsApiKey?: string;
     signingKey?: string;
     storeDirectory?: string;
   } = {},
@@ -266,6 +267,7 @@ export function coursesPlugin(
         store,
         token: options.token ?? process.env.GODIESEL_COURSE_TOKEN,
         routerUrl: options.routerUrl ?? process.env.GODIESEL_ROUTER_URL,
+        orsApiKey: options.orsApiKey ?? process.env.ORS_API_KEY,
         signingKey:
           options.signingKey ?? process.env.GODIESEL_COURSE_SIGNING_KEY,
         localDevelopment: loopback,

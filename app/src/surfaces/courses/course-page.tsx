@@ -198,7 +198,7 @@ export function CoursePage() {
                   load: "Opening your courses…",
                   listMore: "Loading more courses…",
                   generate:
-                    "Finding a loop on real mapped paths. This can take up to a minute…",
+                    "Comparing loops and mapped features. This can take up to 45 seconds…",
                   import: "Reading your GPX…",
                   save: "Saving your course…",
                 }[state.progress.operation]
@@ -445,6 +445,7 @@ function CoursePreview({
       <div className="h-[min(52vh,28rem)] min-h-64 overflow-hidden rounded-lg border border-line">
         <FinderRouteMap lines={lines} selectedSlug={course.id} />
       </div>
+      {course.assessment ? <CourseEvidence course={course} /> : null}
       {course.warnings.length ? (
         <ul className="list-disc space-y-1 pl-5 text-sm leading-6 text-ink-secondary">
           {course.warnings.map((warning, i) => (
@@ -483,7 +484,9 @@ function CoursePreview({
       </Disclosure>
       {course.source.kind === "generated" ? (
         <p className="text-xs text-ink-secondary">
-          Routing by BRouter using{" "}
+          Routing by {course.source.provider === "ors" ? (
+            <a href="https://openrouteservice.org/" target="_blank" rel="noreferrer" className="underline">openrouteservice by HeiGIT</a>
+          ) : "BRouter"} using{" "}
           <a
             href="https://www.openstreetmap.org/copyright"
             target="_blank"
@@ -492,12 +495,51 @@ function CoursePreview({
           >
             OpenStreetMap contributors
           </a>
-          . Check local access and conditions before setting out.
+          . {course.source.provider === "ors" ? <><a className="underline" href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noreferrer">Route result CC BY-SA 4.0</a>. </> : null}Check local access and conditions before setting out.
         </p>
       ) : null}
     </article>
   );
 }
+const evidenceLabels = { parks: "Parks", waterfront: "Near water", paved: "Paved surface", quietEstimate: "Quiet estimate", ascent: "Climbing" };
+function CourseEvidence({ course }: { course: Course }) {
+  const evidence = course.assessment!;
+  const selection = evidence.selection;
+  const formatDistance = (meters: number) => `${(meters / 1000).toFixed(1)} km`;
+  return (
+    <section aria-label="Route evidence" className="space-y-3 border-y border-line py-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="font-semibold">Why this route</h3>
+        <p className="text-xs text-ink-secondary">
+          {selection ? `${selection.comparedCount} distinct usable ${selection.comparedCount === 1 ? "loop" : "loops"} found` : "Mapped route estimates"}
+        </p>
+      </div>
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
+        {(["parks", "waterfront", "paved", "quietEstimate"] as const).map((key) => {
+          const metric = evidence[key];
+          return <div key={key}>
+            <dt className="text-xs text-ink-secondary">{evidenceLabels[key]}</dt>
+            <dd className="mt-1 font-semibold">{metric.knownM > 0 ? formatDistance(metric.matchedM) : "Unknown"}</dd>
+            <dd className="text-xs text-ink-secondary">{key === "quietEstimate" ? "on path-type ways" : key === "waterfront" ? "within 75 m" : key === "parks" ? "inside mapped parks" : "mapped as paved"}</dd>
+          </div>;
+        })}
+      </dl>
+      <Disclosure title="How we chose it">
+        <div className="space-y-2 text-sm leading-6 text-ink-secondary">
+          <p>Distance comes first. Loops within 10% of your target are preferred. We then compare your selected preferences using the same measurements for each route.</p>
+          <p>{selection?.usedDimensions.length ? `Compared ${selection.usedDimensions.map((key) => evidenceLabels[key].toLowerCase()).join(", ")}.` : "There were not enough comparable alternatives to rank your preferences."}</p>
+          {selection?.ignoredDimensions.length ? <p>Not used in selection: {selection.ignoredDimensions.map((key) => evidenceLabels[key].toLowerCase()).join(", ")}. Comparable coverage was insufficient.</p> : null}
+          <p>Park and water distances are sampled estimates from mapped polygons and waterways. Near water does not guarantee a view or shoreline access. Quiet estimates favor paths, tracks, cycleways, footways and steps; they do not measure traffic or noise. Climbing uses the returned elevation samples.</p>
+          <ul className="list-disc pl-5">
+            {(["parks", "waterfront", "paved", "quietEstimate"] as const).map((key) => <li key={key}>{evidenceLabels[key]}: {formatDistance(evidence[key].knownM)} assessed, {formatDistance(evidence[key].unknownM)} unknown.</li>)}
+          </ul>
+          <p>Evidence is saved with this course. Missing map tags and later changes can affect these estimates.</p>
+        </div>
+      </Disclosure>
+    </section>
+  );
+}
+
 function errorMessage(error: unknown) {
   return error instanceof Error
     ? error.message

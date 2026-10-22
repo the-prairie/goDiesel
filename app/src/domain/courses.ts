@@ -1,5 +1,7 @@
 import { XMLParser, XMLValidator } from "fast-xml-parser";
 
+import { parseCourseAssessment, type CourseAssessment } from "./course-planning";
+
 import type { QuestRoute } from "@/domain/route";
 
 export type CourseActivity = "Run" | "Walk" | "Ride";
@@ -12,6 +14,7 @@ export interface CourseRequest {
   activity: CourseActivity;
   vibes: CourseVibe[];
   seed: number;
+  hills?: "any" | "less" | "more";
 }
 
 export interface CoursePoint {
@@ -31,7 +34,7 @@ export interface Course {
     | { kind: "gpx"; filename: string }
     | {
         kind: "generated";
-        provider: "brouter";
+        provider: "brouter" | "ors";
         request: CourseRequest;
         profile: string;
       };
@@ -39,6 +42,7 @@ export interface Course {
   distanceM: number;
   ascentM: number | null;
   warnings: string[];
+  assessment?: CourseAssessment;
 }
 
 export interface CourseSummary {
@@ -222,6 +226,8 @@ export function parseCourseRequest(value: unknown): CourseRequest {
       input.vibes.some((vibe) => !vibes.includes(vibe as CourseVibe))) {
     throw new Error("Vibes may only include quiet, green, water, and paved.");
   }
+  if (input.hills !== undefined && !["any", "less", "more"].includes(String(input.hills)))
+    throw new Error("Hills must be any, less, or more.");
   const seed = number(input.seed, "Variation", 0, 2_147_483_647);
   if (!Number.isInteger(seed)) throw new Error("Variation must be a whole number.");
   return {
@@ -235,6 +241,7 @@ export function parseCourseRequest(value: unknown): CourseRequest {
     activity: activity(input.activity),
     vibes: [...new Set(input.vibes as CourseVibe[])],
     seed,
+    ...(input.hills !== undefined ? { hills: input.hills as CourseRequest["hills"] } : {}),
   };
 }
 
@@ -295,12 +302,12 @@ export function parseCourse(value: unknown): Course {
   let source: Course["source"];
   if (sourceInput.kind === "gpx") {
     source = { kind: "gpx", filename: text(sourceInput.filename, "GPX filename", 255) };
-  } else if (sourceInput.kind === "generated" && sourceInput.provider === "brouter") {
+  } else if (sourceInput.kind === "generated" && (sourceInput.provider === "brouter" || sourceInput.provider === "ors")) {
     const profile = text(sourceInput.profile, "Routing profile", 80);
     if (!/^[a-z0-9_-]+$/i.test(profile)) throw new Error("Routing profile contains invalid characters.");
-    source = { kind: "generated", provider: "brouter", profile, request: parseCourseRequest(sourceInput.request) };
+    source = { kind: "generated", provider: sourceInput.provider, profile, request: parseCourseRequest(sourceInput.request) };
   } else {
-    throw new Error("Course source must be GPX or a generated BRouter route.");
+    throw new Error("Course source must be GPX or a generated BRouter or ORS route.");
   }
   if (!Array.isArray(input.warnings) || input.warnings.length > 20) {
     throw new Error("Course warnings must be a list of at most 20 messages.");
@@ -319,6 +326,7 @@ export function parseCourse(value: unknown): Course {
     segments,
     ...stats,
     warnings: input.warnings.map((warning) => text(warning, "Warning", 500)),
+    ...(input.assessment !== undefined ? { assessment: parseCourseAssessment(input.assessment) } : {}),
   };
 }
 
@@ -467,7 +475,7 @@ function gpxDocument(name: string, description: string, activityType: string, se
 }
 
 export function courseGpx(course: Course): string {
-  return gpxDocument(course.name, course.description, course.activity, course.segments);
+  return gpxDocument(course.name, course.description + (course.source.kind === "generated" && course.source.provider === "ors" ? "\nRouting © openrouteservice.org by HeiGIT | Map data © OpenStreetMap contributors. Route result licensed CC BY-SA 4.0 https://creativecommons.org/licenses/by-sa/4.0/" : ""), course.activity, course.segments);
 }
 
 export function questRouteGpx(route: QuestRoute): string {

@@ -1,3 +1,4 @@
+import { generateOrsCourse, OrsError } from "./ors";
 import {
   courseGpx,
   parseCourseCursor,
@@ -21,6 +22,7 @@ export interface CourseApiOptions {
   store?: CourseStore;
   token?: string;
   routerUrl?: string;
+  orsApiKey?: string;
   signingKey?: string;
   localDevelopment?: boolean;
   fetch?: typeof fetch;
@@ -295,7 +297,7 @@ async function generateCourse(
       const response = await (options.fetch ?? fetch)(url, {
         signal: AbortSignal.any([signal, AbortSignal.timeout(22_000)]),
         headers: { Accept: "application/geo+json, application/json" },
-        redirect: "error",
+        redirect: "manual",
       });
       if (!response.ok)
         throw new CourseApiError(
@@ -355,6 +357,8 @@ async function generateCourse(
     warnings.unshift(
       `This loop is ${Math.round(best.error * 100)}% ${best.stats.distanceM > target ? "longer" : "shorter"} than requested.`,
     );
+  if (request.hills && request.hills !== "any")
+    warnings.push("Hill comparison requires the ORS planner. This BRouter course did not apply your hills preference.");
   if (request.activity !== "Ride" && request.vibes.includes("paved"))
     warnings.push(
       "The walking/running routing profile cannot enforce paved surfaces. Check the route surface before using it.",
@@ -474,7 +478,9 @@ export async function coursesResponse(
         request.signal,
         AbortSignal.timeout(65_000),
       ]);
-      const course = await generateCourse(input, executionOptions, signal);
+      const course = options.orsApiKey
+        ? await stableCourse(await generateOrsCourse(input, options.orsApiKey, signal, options.fetch))
+        : await generateCourse(input, executionOptions, signal);
       return json({
         course,
         receipt: await signCourse(course, executionOptions),
@@ -529,7 +535,7 @@ export async function coursesResponse(
     }
     throw new CourseApiError(400, "Choose generate, import or save.");
   } catch (error) {
-    if (error instanceof CourseApiError)
+    if (error instanceof CourseApiError || error instanceof OrsError)
       return json({ error: error.message }, error.status);
     if (
       error instanceof DOMException &&

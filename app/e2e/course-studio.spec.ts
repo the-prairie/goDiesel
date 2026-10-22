@@ -131,7 +131,7 @@ for (const [activity, viewport] of [
   }) => {
     test.skip(
       process.env.GODIESEL_LIVE_COURSES !== "1",
-      "Requires real Photon and BRouter services",
+      "Requires real Photon and configured routing services",
     );
     await page.setViewportSize(viewport);
     await page.goto("/#/courses");
@@ -152,7 +152,7 @@ for (const [activity, viewport] of [
       .getByLabel("Target distance", { exact: true })
       .fill(activity === "Ride" ? "12" : "5");
     await page
-      .getByRole("button", { name: "Parks & green", exact: true })
+      .getByRole("button", { name: "Parks", exact: true })
       .click();
     await page
       .getByRole("button", { name: "Generate route", exact: true })

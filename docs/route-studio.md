@@ -1,8 +1,8 @@
 # Route Studio API and agent CLI
 
-Route Studio creates planned courses for running, walking, and cycling. Courses can come from GPX files or connected BRouter loops. They are separate from completed Strava activities. Generated courses do not contain recorded elapsed time or pace.
+Route Studio creates planned courses for running, walking, and cycling. Courses can come from GPX files or ORS loops with mapped preference scoring. They are separate from completed Strava activities. Generated courses do not contain recorded elapsed time or pace.
 
-The local preview is `http://127.0.0.1:8824`. A private authenticated Cloudflare review deployment also exercises the R2 backend. Production rollout remains pending routing-service configuration. The examples below require the local Vite server to be running.
+Use the Courses workspace from Routes. Local examples require a running Vite server. Hosted access requires the workspace owner token; the ORS API key stays on the server.
 
 ## Viewing a saved course
 
@@ -80,11 +80,12 @@ The server derives IDs from validated course content. The submitted ID and creat
 | Field      | Accepted value                                         |
 | ---------- | ------------------------------------------------------ |
 | `start`    | `{lat,lng,name}` with valid WGS84 coordinates          |
-| `distance` | A number equivalent to 1–200 km                        |
+| `distance` | Hosted ORS supports 1–100 km; legacy BRouter supports 1–200 km                        |
 | `unit`     | `km` or `mi`                                           |
 | `activity` | `Run`, `Walk`, or `Ride`                               |
 | `vibes`    | An array drawn from `quiet`, `green`, `water`, `paved` |
 | `seed`     | A whole number from 0 to 2147483647                    |
+| `hills` | Optional `any`, `less`, or `more`; defaults to `any` |
 
 `Course` contains `id`, `name`, `description`, `activity`, `createdAt`, `source`, `segments`, `distanceM`, `ascentM`, and `warnings`. Its definition and parser live in `app/src/domain/courses.ts`.
 
@@ -96,7 +97,52 @@ A saved-course URL fetches that course directly without requesting the collectio
 
 The request limit is 5 MiB. Courses can contain at most 50,000 points. GPX declarations with external entities or document types are rejected. Invalid coordinates, malformed timestamps, and unsupported XML structures fail visibly.
 
-## Routing behavior
+## ORS routing and evidence
+
+`ORS_API_KEY` enables hosted ORS. It takes precedence over the optional legacy
+`GODIESEL_ROUTER_URL`. Running and walking use `foot-walking`. Riding uses
+`cycling-regular`, or `cycling-road` when paved surfaces are requested.
+
+Each search requests two seeded loops concurrently, with no automatic retries.
+Each routing call has a 40-second deadline within a 45-second search deadline.
+One valid route survives failure of its alternative, with a visible warning.
+Reversed duplicate loops count once. Connected loops within 10% of the target
+are preferred; 10–30% deviations are fallback results with a warning. Larger
+deviations are rejected. No routing profile promises a perfectly paved route.
+
+The app ranks eligible candidates using equal weights for requested preferences.
+Parks measure sampled distance inside mapped park/garden polygons. Waterfront
+measures sampled distance within 75 m of mapped water boundaries, waterways,
+and coastlines; this does not establish a view or access. Surface and quiet
+estimates use length-weighted ORS edge intervals. Quiet favors path-type ways;
+it is not a noise or traffic measurement. Hills compare ascent from returned
+elevation samples. No athlete pace or time is invented.
+
+A single bounded Overpass lookup supplies geographic features, with an 8-second
+deadline, a 12 km maximum query radius, a 4 MiB response cap and bounded geometry.
+Complete responses use an eight-entry, 15-minute process cache. Route distance
+outside the lookup extent remains unknown. Spatial lookup and explicit work
+budgets bound scoring; if a budget is exhausted, that metric becomes unknown.
+A requested dimension is used only when all candidates in the preferred distance
+band have at least 80% known coverage and coverage differs by at most 10 points.
+Only confirmed matching distance earns credit. These are disclosed heuristics,
+not a validated model of enjoyment or safety.
+
+The optional versioned `Course.assessment` stores measured/unknown distances,
+selection counts, and used/ignored dimensions. It is signed with the generated
+course and persisted unchanged. Old GPX and BRouter courses remain readable.
+The UI and ORS GPX exports retain provider and OpenStreetMap attribution.
+
+The provider remains quota-limited. Two direction calls per generation consume
+the account's allowance twice as quickly as single-route requests. Errors do not
+silently fall back to a public BRouter demo. GPX import/export remain available.
+
+Primary references: [ORS routing options](https://giscience.github.io/openrouteservice/api-reference/endpoints/directions/routing-options),
+[surface codes](https://giscience.github.io/openrouteservice/api-reference/endpoints/directions/extra-info/surface),
+[way types](https://giscience.github.io/openrouteservice/api-reference/endpoints/directions/extra-info/waytype),
+and [Overpass](https://wiki.openstreetmap.org/wiki/Overpass_API).
+
+## Legacy BRouter routing behavior
 
 The routing service must support BRouter's GeoJSON output and round-trip engine mode. Running and walking use `hiking-mountain` with SAC difficulty limited to T1. Cycling uses `trekking`, or `fastbike` when paved surfaces are requested. Ferries and straight-line connector fallback are disabled.
 
@@ -134,7 +180,7 @@ The Vite adapter persists local courses outside the served workspace in `~/.loca
 
 Unauthenticated local access requires both a loopback socket and a `localhost`, `127.0.0.1`, or `::1` host. Network access requires an owner token. When a token is configured, local callers also need it. An owner token grants access to the whole course collection. This is a single-owner API, not a multi-user account system.
 
-The Cloudflare Pages adapter requires a private `COURSE_STORE` R2 bucket binding and a `GODIESEL_COURSE_TOKEN` secret. It fails closed when either is missing. Generation also requires `GODIESEL_ROUTER_URL` pointing to an explicitly configured BRouter-compatible service and a server-only `GODIESEL_COURSE_SIGNING_KEY` of at least 32 bytes. The signing key must differ from the owner token and must not be given to agent clients. There is no production fallback to the public demo server.
+The Cloudflare Pages adapter requires a private `COURSE_STORE` R2 bucket binding and a `GODIESEL_COURSE_TOKEN` secret. It fails closed when either is missing. Generation requires server-only `ORS_API_KEY` (or an explicitly configured BRouter-compatible `GODIESEL_ROUTER_URL`) and `GODIESEL_COURSE_SIGNING_KEY` of at least 32 bytes. The signing key must differ from the owner token and must not be given to agent clients. There is no production fallback to the public demo server.
 
 R2 stores each complete course with its summary in the same object's custom metadata. Creation uses `If-None-Match: *`, so concurrent saves return the first stored course. Listing requests only object metadata and reads no geometry. R2 provides [strong read-after-write and listing consistency](https://developers.cloudflare.com/r2/reference/consistency/). Its [Workers API](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/) supports metadata listing and conditional creation. The bucket stays private and is accessed through the authenticated API.
 

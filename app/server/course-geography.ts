@@ -224,9 +224,9 @@ export async function loadCourseGeography(
     rejectAbort(new Error("Geography unavailable"));
   }, 8_000);
   try {
-    const request = fetcher("https://overpass-api.de/api/interpreter", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+    const request = fetcher("https://overpass.private.coffee/api/interpreter", {
+      method: "POST", redirect: "manual",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json", "User-Agent": "goDiesel/1.0 (+https://godiesel.pages.dev; personal route planning)" },
       body: new URLSearchParams({ data: query }),
       signal: controller.signal,
     }).then(response => readResponse(response, controller.signal));

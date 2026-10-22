@@ -38,9 +38,9 @@ export function placeReducer(state: PlaceState, event: PlaceEvent): PlaceState {
       };
 }
 const vibes: { value: CourseVibe; label: string }[] = [
-  { value: "quiet", label: "Quieter roads" },
-  { value: "green", label: "Parks & green" },
-  { value: "water", label: "Along water" },
+  { value: "quiet", label: "Quiet · estimate" },
+  { value: "green", label: "Parks" },
+  { value: "water", label: "Waterfront" },
   { value: "paved", label: "Prefer paved" },
 ];
 export function CourseForm({
@@ -59,6 +59,7 @@ export function CourseForm({
   const [distance, setDistance] = useState("10");
   const [unit, setUnit] = useState<"km" | "mi">("km");
   const [preferences, setPreferences] = useState<CourseVibe[]>([]);
+  const [hills, setHills] = useState<"any" | "less" | "more">("any");
   const [seed, setSeed] = useState(0);
   const searchRef = useRef<AbortController | null>(null);
   const searchId = useRef(0);
@@ -125,6 +126,7 @@ export function CourseForm({
               activity,
               vibes: preferences,
               seed,
+              hills,
             });
             setSeed((value) => value + 1);
           }
@@ -217,7 +219,7 @@ export function CourseForm({
                   <Input
                     type="number"
                     min={unit === "mi" ? 0.63 : 1}
-                    max={unit === "mi" ? 124 : 200}
+                    max={unit === "mi" ? 62.13 : 100}
                     step="any"
                     required
                     value={distance}
@@ -259,9 +261,16 @@ export function CourseForm({
                   ))}
                 </div>
                 <p className="text-xs leading-5 text-ink-secondary">
-                  Guides the route search; conditions are not verified.
+                  We compare mapped features. Quiet estimates use path types, not measured noise or traffic.
                 </p>
               </fieldset>
+              <SegmentedControl
+                label="Hills"
+                value={hills}
+                options={[["any", "Any"], ["less", "Less climbing"], ["more", "More climbing"]]}
+                onChange={(value) => setHills(value as typeof hills)}
+                disabled={busy}
+              />
               <Button
                 type="submit"
                 className="w-full"

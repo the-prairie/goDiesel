@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "goDiesel course workspace",
-    "version": "1.1.0",
-    "description": "Private route generation and GPX import. Generate/import return previews. Explicitly save, then open /#/courses/{course.id}. Courses are not completed activities."
+    "version": "1.2.0",
+    "description": "Private route generation and GPX import. Generate/import return previews. Explicitly save, then open /#/courses/{course.id}. Courses are not completed activities. Hosted generation uses ORS and compares at most two loops using mapped evidence. Course.assessment stores estimates and selection rationale. Quiet means a path-type estimate, not measured noise or traffic."
   },
   "servers": [
     {
@@ -289,7 +289,7 @@
             "type": "number",
             "exclusiveMinimum": 0,
             "maximum": 200,
-            "description": "Target loop distance. Converted value must be 1\u2013200 km. Actual distance is returned."
+            "description": "Target loop distance. Hosted ORS supports 1\u2013100 km or equivalent miles; imported GPX may be longer."
           },
           "unit": {
             "type": "string",
@@ -325,6 +325,15 @@
             "minimum": 0,
             "maximum": 2147483647,
             "description": "Variation seed. Start at zero."
+          },
+          "hills": {
+            "type": "string",
+            "enum": [
+              "any",
+              "less",
+              "more"
+            ],
+            "description": "Compare climbing among eligible candidates. Omit for any. Estimates use returned elevation."
           }
         }
       },

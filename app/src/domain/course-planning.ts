@@ -1,4 +1,4 @@
-import { courseStats, type CoursePoint, type CourseVibe } from "@/domain/courses";
+import { courseStats, type CoursePoint, type CourseVibe } from "./courses";
 
 export interface RouteCandidate {
   points: CoursePoint[];
@@ -134,18 +134,38 @@ function contains(bounds: Bounds, [lng, lat]: Coordinate, marginM = 0): boolean 
   return lng >= bounds.west + lngMargin && lng <= bounds.east - lngMargin && lat >= bounds.south + latMargin && lat <= bounds.north - latMargin;
 }
 
-function ringContains(ring: Coordinate[], [lng, lat]: Coordinate): boolean {
-  let inside = false;
+function geometryBounds(points: Coordinate[]): Bounds {
+  let west = Infinity, south = Infinity, east = -Infinity, north = -Infinity;
+  for (const [lng, lat] of points) { west = Math.min(west, lng); east = Math.max(east, lng); south = Math.min(south, lat); north = Math.max(north, lat); }
+  return { west, south, east, north };
+}
+
+function indexedRing(ring: Coordinate[], budget: { remaining: number }) {
+  const bounds = geometryBounds(ring);
+  const height = Math.max(1e-9, bounds.north - bounds.south);
+  const bands: Array<Array<[Coordinate, Coordinate]>> = Array.from({ length: 16 }, () => []);
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const a = ring[i];
-    const b = ring[j];
+    const a = ring[i], b = ring[j];
+    if (a[1] === b[1]) continue;
+    const low = Math.max(0, Math.min(15, Math.floor((Math.min(a[1], b[1]) - bounds.south) / height * 16)));
+    const high = Math.max(0, Math.min(15, Math.floor((Math.max(a[1], b[1]) - bounds.south) / height * 16)));
+    budget.remaining -= high - low + 1;
+    if (budget.remaining < 0) return null;
+    for (let band = low; band <= high; band++) bands[band].push([a, b]);
+  }
+  return { bounds, height, bands };
+}
+
+function ringAt(ring: NonNullable<ReturnType<typeof indexedRing>>, [lng, lat]: Coordinate, budget: { remaining: number }) {
+  if (!contains(ring.bounds, [lng, lat])) return false;
+  const edges = ring.bands[Math.max(0, Math.min(15, Math.floor((lat - ring.bounds.south) / ring.height * 16)))];
+  budget.remaining -= edges.length;
+  if (budget.remaining < 0) return false;
+  let inside = false;
+  for (const [a, b] of edges) {
     if ((a[1] > lat) !== (b[1] > lat) && lng < (b[0] - a[0]) * (lat - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside;
   }
   return inside;
-}
-
-function polygonContains(polygon: Polygon, point: Coordinate): boolean {
-  return Boolean(polygon.rings[0] && ringContains(polygon.rings[0], point)) && !polygon.rings.slice(1).some((ring) => ringContains(ring, point));
 }
 
 function nearSegment(point: Coordinate, from: Coordinate, to: Coordinate, radiusM: number): boolean {
@@ -161,11 +181,27 @@ function nearSegment(point: Coordinate, from: Coordinate, to: Coordinate, radius
   return (ax + dx * fraction) ** 2 + (ay + dy * fraction) ** 2 <= radiusM ** 2;
 }
 
-function nearLine(point: Coordinate, line: Coordinate[], closed: boolean): boolean {
-  for (let index = 1; index < line.length; index += 1) {
-    if (nearSegment(point, line[index - 1], line[index], 75)) return true;
+function waterIndex(lines: Coordinate[][], latitude: number) {
+  const xScale = metersPerDegree * Math.max(0.001, Math.cos(latitude * radians));
+  const cells = new Map<string, Array<[Coordinate, Coordinate]>>();
+  let entries = 0;
+  for (const line of lines) {
+    for (let i = 1; i < line.length; i++) {
+      const a = line[i - 1], b = line[i];
+      const minX = Math.floor(Math.min(a[0], b[0]) * xScale / 150);
+      const maxX = Math.floor(Math.max(a[0], b[0]) * xScale / 150);
+      const minY = Math.floor(Math.min(a[1], b[1]) * metersPerDegree / 150);
+      const maxY = Math.floor(Math.max(a[1], b[1]) * metersPerDegree / 150);
+      entries += (maxX - minX + 1) * (maxY - minY + 1);
+      if (entries > 32_000) return null;
+      for (let x = minX; x <= maxX; x++) for (let y = minY; y <= maxY; y++) {
+        const key = `${x},${y}`;
+        const cell = cells.get(key) ?? [];
+        cell.push([a, b]); cells.set(key, cell);
+      }
+    }
   }
-  return closed && line.length > 2 && nearSegment(point, line.at(-1)!, line[0], 75);
+  return { cells, xScale };
 }
 
 export function assessCandidate(candidate: RouteCandidate, geography: GeographicContext): CourseAssessment {
@@ -173,6 +209,12 @@ export function assessCandidate(candidate: RouteCandidate, geography: Geographic
   const distances = pathDistances(candidate.points);
   const geometrySize = [...geography.parks, ...geography.water].reduce((sum, polygon) => sum + polygon.rings.reduce((total, ring) => total + ring.length, 0), 0) + geography.waterways.reduce((sum, line) => sum + line.length, 0);
   const status = geometrySize > maxGeometryVertices ? "unavailable" : geography.status;
+  const indexBudget = { remaining: 32_000 };
+  const parks = status === "unavailable" ? [] : geography.parks.map((polygon) => polygon.rings.map((ring) => indexBudget.remaining < 0 ? null : indexedRing(ring, indexBudget)));
+  const water = status === "unavailable" || geography.bounds.south < -85 || geography.bounds.north > 85 ? null : waterIndex([...geography.water.flatMap((polygon) => polygon.rings), ...geography.waterways], (geography.bounds.north + geography.bounds.south) / 2);
+  const parkBudget = { remaining: 100_000 };
+  let waterWork = 0;
+  let parksComplete = parks.every((rings) => rings.every(Boolean)), waterComplete = water !== null;
   let parksMatched = 0;
   let parksKnown = 0;
   let waterMatched = 0;
@@ -182,20 +224,31 @@ export function assessCandidate(candidate: RouteCandidate, geography: Geographic
   const weight = samples.length ? stats.distanceM / samples.length : 0;
   for (const sample of samples) {
     if (!contains(geography.bounds, sample)) continue;
-    const park = geography.parks.some((polygon) => polygonContains(polygon, sample));
-    const water = geography.water.some((polygon) => polygon.rings.some((ring) => nearLine(sample, ring, true))) || geography.waterways.some((line) => nearLine(sample, line, false));
+    const park = parksComplete && parks.some((rings) => Boolean(rings[0] && ringAt(rings[0], sample, parkBudget)) && !rings.slice(1).some((ring) => ring && ringAt(ring, sample, parkBudget)));
+    if (parkBudget.remaining < 0) parksComplete = false;
+    let nearWater = false;
+    if (waterComplete && water) {
+      const x = Math.floor(sample[0] * water.xScale / 150);
+      const y = Math.floor(sample[1] * metersPerDegree / 150);
+      for (let dx = -1; dx <= 1 && !nearWater && waterComplete; dx++) for (let dy = -1; dy <= 1 && !nearWater && waterComplete; dy++) {
+        for (const [a, b] of water.cells.get(`${x + dx},${y + dy}`) ?? []) {
+          if (++waterWork > 100_000) { waterComplete = false; break; }
+          if (nearSegment(sample, a, b, 75)) { nearWater = true; break; }
+        }
+      }
+    }
     if (park) parksMatched += weight;
-    if (water) waterMatched += weight;
+    if (nearWater) waterMatched += weight;
     // A partial response can establish presence, but cannot establish absence.
     if (park || status === "available") parksKnown += weight;
-    if (water || (status === "available" && contains(geography.bounds, sample, 75))) waterKnown += weight;
+    if (nearWater || (status === "available" && contains(geography.bounds, sample, 75))) waterKnown += weight;
   }
   return {
     version: 1,
     ...stats,
-    geographyStatus: status,
-    parks: share(parksMatched, parksKnown, stats.distanceM),
-    waterfront: share(waterMatched, waterKnown, stats.distanceM),
+    geographyStatus: status === "available" && (!parksComplete || !waterComplete) ? "partial" : status,
+    parks: share(parksComplete ? parksMatched : 0, parksComplete ? parksKnown : 0, stats.distanceM),
+    waterfront: share(waterComplete ? waterMatched : 0, waterComplete ? waterKnown : 0, stats.distanceM),
     paved: intervalShare(candidate.surface, distances, "paved", "unpaved"),
     quietEstimate: intervalShare(candidate.waytype, distances, "path", "road"),
   };

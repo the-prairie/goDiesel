@@ -222,3 +222,29 @@ describe("persisted assessment validation", () => {
     expect(() => parseCourseAssessment({ ...assessment, geographyStatus: "unavailable" })).toThrow();
   });
 });
+
+it("keeps dense park geometry measurable with bounded indexed queries", () => {
+  const points = Array.from({ length: 601 }, (_, i) => ({ lat: 0, lng: i / 600 * .04 }));
+  const ring = Array.from({ length: 2000 }, (_, i) => [.1 * Math.cos(i / 1999 * Math.PI * 2), .1 * Math.sin(i / 1999 * Math.PI * 2)] as [number, number]);
+  const result = assessCandidate({ points, surface: [], waytype: [] }, { status: "available", bounds: { west: -1, east: 1, south: -1, north: 1 }, parks: [{ rings: [ring] }], water: [], waterways: [] });
+  expect(result.parks.knownM).toBeCloseTo(result.distanceM, 4);
+  expect(result.parks.unknownM).toBeCloseTo(0, 4);
+  expect(result.geographyStatus).toBe("available");
+});
+
+it("marks an exhausted park index unknown instead of retaining a biased partial score", () => {
+  const ring = Array.from({ length: 2040 }, (_, i) => [i / 2040 * .01, i % 2 ? .01 : -.01] as [number, number]);
+  ring.push(ring[0]);
+  const result = assessCandidate(line(), { ...geography, parks: [{ rings: [ring] }] });
+  expect(result.parks.share).toBeNull();
+  expect(result.parks.unknownM).toBe(result.distanceM);
+  expect(result.geographyStatus).toBe("partial");
+});
+
+it("does not infer shoreline absence where the local spatial projection is unsupported", () => {
+  const result = assessCandidate(candidate([{ lng: 0, lat: 86 }, { lng: .001, lat: 86 }]), {
+    ...geography, bounds: { west: -1, east: 1, south: 85, north: 87 },
+  });
+  expect(result.waterfront.share).toBeNull();
+  expect(result.waterfront.unknownM).toBe(result.distanceM);
+});
