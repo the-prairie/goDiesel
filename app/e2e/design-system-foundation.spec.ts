@@ -1,4 +1,48 @@
 import { expect, test } from "@playwright/test";
+import { chooseSelectOption } from "./helpers/select-field";
+
+test("shared selects support keyboard, pointer, empty values, and disabled states", async ({
+  page,
+}) => {
+  await page.goto("/#/lab/design-system");
+
+  const activity = page.getByRole("combobox", {
+    name: "Activity",
+    exact: true,
+  });
+  await expect(activity).toHaveText("All activities");
+  await expect(activity).toHaveCSS("min-height", "44px");
+  await expect(
+    page.getByRole("combobox", { name: "Unavailable activity" }),
+  ).toBeDisabled();
+  await activity.focus();
+  await activity.press("ArrowDown");
+  const popup = page.getByRole("listbox", { name: "Activity", exact: true });
+  await expect(popup).toBeVisible();
+  await expect(popup).toHaveCSS("color", "rgb(255, 255, 255)");
+  await expect(popup).toHaveCSS("background-color", "rgba(0, 0, 0, 0.82)");
+  await expect(popup).toHaveCSS("font-family", /Inter/);
+  await page.keyboard.press("Home");
+  await expect(page.getByRole("option", { name: "All activities" })).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(page.getByRole("option", { name: "Run", exact: true })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(activity).toHaveText("Run");
+  await expect(activity).toBeFocused();
+
+  await chooseSelectOption(activity, "Ride");
+  await expect(activity).toHaveText("Ride");
+  await chooseSelectOption(activity, "All activities");
+  await expect(activity).toHaveText("All activities");
+  await activity.click();
+  await expect(
+    page.getByRole("option", { name: "All activities" }),
+  ).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Escape");
+  await expect(popup).toHaveCount(0);
+  await expect(activity).toBeFocused();
+  await expect(activity).toHaveText("All activities");
+});
 
 test("field-guide fixture exposes the approved semantic foundation", async ({
   page,

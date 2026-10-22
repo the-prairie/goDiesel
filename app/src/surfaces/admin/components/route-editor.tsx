@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CurationStatus } from "@/surfaces/admin/components/curation-status";
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
+import { SelectField } from "@/ui/select-field";
 import {
   validateCuration,
   type AdminRouteRecord,
@@ -69,23 +70,22 @@ export function RouteEditor({
             placeholder="Easy, demanding, epic..."
             onChange={(difficulty) => onChange({ ...draft, difficulty })}
           />
-          <label className="grid gap-1.5 text-sm font-medium">
-            Review status
-            <select
-              value={draft.reviewStatus}
-              className="h-11 rounded-[var(--radius-control)] border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              onChange={(event) =>
-                onChange({
-                  ...draft,
-                  reviewStatus: event.target.value as CurationDraft["reviewStatus"],
-                })
-              }
-            >
-              <option value="draft">Draft</option>
-              <option value="reviewed">Reviewed</option>
-              <option value="published">Published</option>
-            </select>
-          </label>
+          <SelectField
+            label="Review status"
+            value={draft.reviewStatus}
+            options={[
+              ["draft", "Draft"],
+              ["reviewed", "Reviewed"],
+              ["published", "Published"],
+            ]}
+            disabled={readOnly || saving}
+            onChange={(reviewStatus) =>
+              onChange({
+                ...draft,
+                reviewStatus: reviewStatus as CurationDraft["reviewStatus"],
+              })
+            }
+          />
         </div>
 
         <ListField

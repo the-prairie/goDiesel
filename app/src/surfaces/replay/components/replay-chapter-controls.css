@@ -29,7 +29,7 @@
 .replay-chapter-browse { background: transparent; }
 .replay-chapter-button[aria-pressed="true"] { background: var(--secondary); color: var(--secondary-foreground); border-color: var(--line-strong); }
 .replay-chapter-primary { background: var(--primary); color: var(--primary-foreground); border-radius: 999px; }
-.replay-chapter-scroll { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; padding: .65rem .25rem .6rem; border-top: 1px solid var(--line); }
+.replay-chapter-scroll { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; padding: .75rem .5rem 1rem; border-top: 1px solid var(--line); }
 .replay-chapter-title-row { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
 .replay-chapter-title-row > div { min-width: 0; }
 .replay-chapter-title-row h2 { margin: .35rem 0 0; font-size: 28px; font-weight: 600; line-height: 1.15; letter-spacing: -.035em; overflow-wrap: anywhere; }
@@ -45,12 +45,13 @@
 .replay-chapter-story li small { font-variant-numeric: tabular-nums; }
 .replay-chapter-story li a { display: inline-flex; align-items: center; min-height: 44px; }
 .replay-chapter-story a, .replay-chapter-provenance a { text-decoration: underline; text-underline-offset: 3px; }
-.replay-chapter-context { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .75rem; margin-top: .6rem; color: var(--ink-secondary); font-size: 10px; }
+.replay-chapter-context { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .75rem; margin-top: 1rem; color: var(--ink-secondary); font-size: 10px; }
 .replay-chapter-profile { position: relative; height: 100%; pointer-events: none; }
 .replay-chapter-profile > svg { display: block; width: 100%; height: 100%; overflow: visible; }
 .replay-chapter-context .replay-chapter-profile { height: 32px; }
 .replay-chapter-context .replay-chapter-button { font-size: 11px; }
-.replay-chapter-lens { position: relative; height: 128px; margin-top: .2rem; }
+.replay-chapter-lens-frame { margin-block: .75rem; }
+.replay-chapter-lens { position: relative; height: 128px; }
 .replay-chapter-controls input[type="range"] { position: absolute; inset: 0 auto 0 0; height: 100%; min-height: 44px; margin: 0; appearance: none; cursor: ew-resize; opacity: 0; }
 .replay-chapter-lens:focus-within,
 .replay-chapter-route-progress:focus-within { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: var(--radius-control); }
@@ -64,7 +65,7 @@
 .replay-chapter-preview-pin { transform: translate(-50%, -50%) rotate(45deg); background: var(--canvas); border-color: var(--ink); }
 .replay-chapter-sample { fill: var(--ink-secondary); }
 .replay-chapter-grid { stroke: var(--line); stroke-width: 1; }
-.replay-chapter-axis { display: flex; justify-content: space-between; gap: .5rem; font-size: 10px; color: var(--ink-secondary); font-variant-numeric: tabular-nums; }
+.replay-chapter-axis { display: flex; justify-content: space-between; gap: .5rem; margin-top: .75rem; font-size: 10px; color: var(--ink-secondary); font-variant-numeric: tabular-nums; }
 .replay-chapter-axis > :nth-child(2) { text-align: center; }
 .replay-chapter-axis > :first-child,
 .replay-chapter-axis > :last-child { white-space: nowrap; }
@@ -73,17 +74,17 @@
 .replay-chapter-feature > span { margin-left: .15rem; font-size: 11px; font-weight: 400; line-height: 1.4; letter-spacing: normal; color: var(--ink-secondary); }
 .replay-chapter-caption { color: var(--ink-secondary); font-size: 11px; }
 .replay-chapter-explanation { padding: .6rem 0; color: var(--ink-secondary); font-size: 12px; line-height: 1.6; }
-.replay-chapter-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(4.5rem, 1fr)); gap: .6rem; margin-top: .6rem; }
-.replay-chapter-list > button { min-width: 44px; padding: .15rem 0 .4rem; color: var(--ink-secondary); text-align: left; }
-.replay-chapter-list small { display: block; margin: .4rem 0 .2rem; font-size: 10px; font-variant-numeric: tabular-nums; }
-.replay-chapter-list strong { display: block; font-size: 11px; font-weight: 500; overflow-wrap: anywhere; }
+.replay-chapter-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem 1rem; margin-top: 1rem; }
+.replay-chapter-list > button { display: flex; flex-direction: column; min-width: 44px; padding: .4rem 0 .6rem; color: var(--ink-secondary); text-align: left; }
+.replay-chapter-list small { display: block; margin: .6rem 0 .3rem; font-size: 11px; font-variant-numeric: tabular-nums; }
+.replay-chapter-list strong { display: block; font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
 .replay-chapter-list button[aria-pressed="true"] { color: var(--ink); }
 .replay-chapter-bar { display: block; height: 2px; background: var(--line); }
 .replay-chapter-bar > span { display: block; height: 100%; background: var(--ink-secondary); }
 .replay-chapter-list button[aria-pressed="true"] .replay-chapter-bar { background: var(--ink); }
-.replay-chapter-moment-label { margin-top: .6rem; font-size: 10px; color: var(--ink-secondary); }
-.replay-chapter-moments { display: flex; gap: .45rem; margin-top: .4rem; }
-.replay-chapter-moments > button { flex: 1; min-width: 44px; border: 1px solid transparent; border-radius: var(--radius-control); background: var(--surface-muted); padding: .6rem .7rem; text-align: left; }
+.replay-chapter-moment-label { margin-top: 1rem; font-size: 10px; color: var(--ink-secondary); }
+.replay-chapter-moments { display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: .6rem; margin-top: .6rem; }
+.replay-chapter-moments > button { min-width: 44px; border: 1px solid transparent; border-radius: var(--radius-control); background: var(--surface-muted); padding: .6rem .7rem; text-align: left; }
 .replay-chapter-moments > button[aria-pressed="true"] { background: var(--secondary); color: var(--ink); border-color: var(--ink-secondary); }
 .replay-chapter-moments span { display: block; font-size: 12px; }
 .replay-chapter-moments small { display: block; margin-top: .2rem; font-size: 10px; opacity: .85; }
@@ -124,11 +125,12 @@
   .replay-chapter-moments span { font-size: 11px; }
   .replay-chapter-feature { font-size: 22px; }
   .replay-chapter-stat-row .replay-chapter-button { font-size: 11px; padding-inline: .2rem; }
-  .replay-chapter-list { gap: .4rem; }
+  .replay-chapter-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
 }
 
 @media (max-height: 500px) and (orientation: landscape) {
   .replay-chapter-controls { max-height: calc(100dvh - 7rem); padding-top: .2rem; }
+  .replay-chapter-lens { height: 80px; }
   .replay-chapter-controls[data-expanded="true"] .replay-chapter-transport,
   .replay-chapter-controls[data-expanded="true"] .replay-chapter-route-progress,
   .replay-chapter-controls[data-expanded="true"] .replay-chapter-data { display: none; }

@@ -36,6 +36,7 @@ tmp/
 
 # Node dependencies (app/ has its own ignore; this covers the repository root)
 node_modules/
+/app/.local/
 
 # Published route media is product content and is tracked. Uncomment only if
 # the photo library moves out of the repository.

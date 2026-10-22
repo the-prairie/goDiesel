@@ -1,9 +1,13 @@
 ---
-last_updated: 2026-08-08
+last_updated: 2026-10-21
 status: canonical
 ---
 
 # goDiesel Context
+
+## Course workspace
+
+The route studio at `/courses` stores imported and generated navigation courses separately from completed activities. Courses preserve segmented geometry and source provenance. A generated course is not a completed activity and does not supply recorded replay telemetry. The UI and agents use the same validated HTTP commands for preview, explicit save, reopen, and GPX export. The existing canonical route catalog remains build-owned. See [ADR 0017](docs/adr/0017-course-workspace-is-separate-from-completed-activities.md) and the [route studio guide](docs/route-studio.md).
 
 This is the canonical domain document for goDiesel, referenced by `AGENTS.md` and
 `docs/agents/domain.md`. It defines the vocabulary and invariants of the system.
