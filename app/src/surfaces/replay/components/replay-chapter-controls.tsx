@@ -46,6 +46,7 @@ export function ReplayChapterControls({
   const explanationId = useId();
   const metricsId = useId();
   const browserRef = useRef<HTMLDivElement>(null);
+  const lensFrameRef = useRef<HTMLDivElement>(null);
   const lensInputRef = useRef<HTMLInputElement>(null);
   const preview = state.mode === "preview" ? state : undefined;
   const currentChapter = replayChapterAt(model, progressM);
@@ -66,10 +67,12 @@ export function ReplayChapterControls({
     if (!preview) return;
     lensInputRef.current?.focus({ preventScroll: true });
     const browser = browserRef.current;
-    const lens = lensInputRef.current?.parentElement;
-    if (!browser || !lens) return;
-    browser.scrollTop = browser.clientHeight < 300
-      ? browser.scrollTop + lens.getBoundingClientRect().top - browser.getBoundingClientRect().top
+    const frame = lensFrameRef.current;
+    if (!browser || !frame) return;
+    const padding = parseFloat(getComputedStyle(browser).paddingTop);
+    const top = browser.scrollTop + frame.getBoundingClientRect().top - browser.getBoundingClientRect().top - browser.clientTop;
+    browser.scrollTop = top + frame.offsetHeight + padding > browser.clientHeight
+      ? top - padding
       : 0;
   }, [expanded, preview?.target]);
 
@@ -86,13 +89,13 @@ export function ReplayChapterControls({
     onEvent({ type: "previewMoved", progressM: nextM, totalDistanceM: model.totalDistanceM });
   };
 
-  const lens = <>
+  const lens = <div ref={lensFrameRef} className="replay-chapter-lens-frame">
     <div className="replay-chapter-lens" data-testid="replay-chapter-lens" data-presentation={presentation}>
       <Profile model={model} span={lensSpan} progressM={progressM} previewM={preview?.progressM} relief={presentation === "relief"} />
       <input ref={lensInputRef} style={profileRangeStyle(presentation === "relief", false)} type="range" aria-label="Chapter preview position" aria-valuetext={`${distance(lensProgressM)} kilometers, ${lensElevationM === undefined ? "recording gap" : `${Math.round(lensElevationM)} meters elevation`}. Adjusting previews without moving replay.`} min={lensSpan.startM} max={lensSpan.endM} step="any" value={Math.max(lensSpan.startM, Math.min(lensSpan.endM, lensProgressM))} disabled={disabled || lensSpan.endM <= lensSpan.startM} onChange={event => movePreview(Number(event.target.value))} />
     </div>
     <div className="replay-chapter-axis"><span>{distance(lensSpan.startM)} km</span><span>{presentation === "relief" ? "Exaggerated elevation relief" : `${Math.round(model.minimumElevationM)} to ${Math.round(model.maximumElevationM)} m elevation`}</span><span>{distance(lensSpan.endM)} km</span></div>
-  </>;
+  </div>;
 
   return (
     <div className="replay-chapter-controls pointer-events-auto" data-testid="google-route-controls" data-preview-mode={state.mode} data-expanded={expanded}>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Course } from "@/domain/courses";
+import { courseSummary, type Course } from "@/domain/courses";
 import {
   initialCourseWorkspace as initial,
   reduceCourseWorkspace as reduce,
@@ -23,6 +23,17 @@ const course: Course = {
   warnings: [],
 };
 describe("course workspace", () => {
+  it("clears private course data on credential changes and ignores late completions", () => {
+    const saved = reduce(
+      reduce({ ...initial, cursor: "next" }, { type: "start", id: 1, operation: "save" }),
+      { type: "saved", id: 1, course },
+    );
+    const loading = reduce(saved, { type: "start", id: 2, operation: "load", courseId: course.id });
+    const disconnected = reduce(loading, { type: "credentialsChanged" });
+    expect(disconnected).toEqual(initial);
+    expect(reduce(disconnected, { type: "loaded", id: 2, course })).toEqual(initial);
+    expect(reduce(disconnected, { type: "listed", id: 2, page: { courses: [courseSummary(course)] } })).toEqual(initial);
+  });
   it("does not restore a preview after its request is cancelled", () => {
     const pending = reduce(initial, {
       type: "start",
@@ -72,18 +83,63 @@ describe("course workspace", () => {
   });
   it("a new course closes the selected course but preserves the library", () => {
     const loaded = reduce(
-      reduce(initial, { type: "start", id: 1, operation: "load" }),
-      { type: "loaded", id: 1, courses: [course], course },
+      reduce({ ...initial, courses: [courseSummary(course)] }, { type: "start", id: 1, operation: "load" }),
+      { type: "loaded", id: 1, course },
     );
     expect(reduce(loaded, { type: "new" })).toEqual({
       ...initial,
-      courses: [course],
+      courses: [courseSummary(course)],
     });
+  });
+  it("keeps the returned save visible while its URL loads and discards stale list completions", () => {
+    const saved = reduce(
+      reduce(initial, { type: "start", id: 1, operation: "save" }),
+      { type: "saved", id: 1, course },
+    );
+    const loading = reduce(saved, {
+      type: "start",
+      id: 2,
+      operation: "load",
+      courseId: course.id,
+    });
+    expect(loading.view).toEqual({ kind: "saved", course });
+    expect(
+      reduce(loading, { type: "listed", id: 1, page: { courses: [] } }),
+    ).toEqual(loading);
+    expect(
+      reduce(loading, { type: "failed", id: 2, message: "Offline" }).view,
+    ).toEqual(saved.view);
+  });
+  it("appends summary pages without duplicates and clears the exhausted cursor", () => {
+    const first = reduce(
+      reduce(initial, { type: "start", id: 1, operation: "load" }),
+      {
+        type: "listed",
+        id: 1,
+        page: { courses: [courseSummary(course)], cursor: "next" },
+      },
+    );
+    const next = courseSummary({
+      ...course,
+      id: "course-22222222-2222-4222-8222-222222222222",
+    });
+    const last = reduce(
+      reduce(first, { type: "start", id: 2, operation: "listMore" }),
+      {
+        type: "listed",
+        id: 2,
+        append: true,
+        page: { courses: [courseSummary(course), next] },
+      },
+    );
+    expect(last.courses).toEqual([courseSummary(course), next]);
+    expect(last.cursor).toBeUndefined();
+    expect(last.view).toEqual({ kind: "empty" });
   });
   it("navigation clears the previous downloadable course even if cancelled or failed", () => {
     const loaded = reduce(
       reduce(initial, { type: "start", id: 1, operation: "load" }),
-      { type: "loaded", id: 1, courses: [course], course },
+      { type: "loaded", id: 1, course },
     );
     const navigating = reduce(loaded, {
       type: "start",

@@ -1,5 +1,7 @@
 import {
   courseGpx,
+  parseCourseCursor,
+  type CoursePage,
   courseStats,
   importCourseGpx,
   parseCourse,
@@ -10,9 +12,9 @@ import {
 } from "../src/domain/courses";
 
 export interface CourseStore {
-  list(): Promise<Course[]>;
+  list(after?: string): Promise<CoursePage>;
   get(id: string): Promise<Course | null>;
-  put(course: Course): Promise<void>;
+  put(course: Course): Promise<{ course: Course; created: boolean }>;
 }
 
 export interface CourseApiOptions {
@@ -407,7 +409,18 @@ export async function coursesResponse(
       throw new CourseApiError(405, "Method not allowed.");
     const id = url.searchParams.get("id");
     if (request.method === "GET") {
-      if (!id) return json({ courses: await options.store.list() });
+      if (!id) {
+        let after: string | undefined;
+        const cursor = url.searchParams.get("cursor");
+        if (cursor !== null) {
+          try {
+            after = parseCourseCursor(cursor);
+          } catch {
+            throw new CourseApiError(400, "Invalid course cursor.");
+          }
+        }
+        return json(await options.store.list(after));
+      }
       if (!ID.test(id)) throw new CourseApiError(400, "Invalid course ID.");
       const course = await options.store.get(id);
       if (!course) throw new CourseApiError(404, "Course not found.");
@@ -511,8 +524,8 @@ export async function coursesResponse(
         );
       const existing = await options.store.get(course.id);
       if (existing) return json({ course: existing });
-      await options.store.put(course);
-      return json({ course }, 201);
+      const saved = await options.store.put(course);
+      return json({ course: saved.course }, saved.created ? 201 : 200);
     }
     throw new CourseApiError(400, "Choose generate, import or save.");
   } catch (error) {

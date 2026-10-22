@@ -95,6 +95,35 @@ test("provider loss cannot commit a preview or move its paused session", async (
 });
 
 for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }, { width: 844, height: 390 }, { width: 1440, height: 900 }]) {
+  test(`chapter focus and labels have room at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await installGoogleReplay(page, "ready");
+    await page.goto("/#/replay/14736711660");
+    await openMoments(page);
+    await page.getByTestId("replay-chapter-1").click();
+    const preview = page.getByRole("slider", { name: "Chapter preview position", exact: true });
+    await expect(preview).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    expect(Number(await preview.inputValue())).toBeGreaterThan(0);
+    await expect(page.getByRole("slider", { name: "Route progress", exact: true, includeHidden: true })).toHaveValue("0");
+
+    const lens = (await page.getByTestId("replay-chapter-lens").boundingBox())!;
+    const axis = (await page.locator(".replay-chapter-axis").boundingBox())!;
+    const browser = (await page.getByTestId("replay-chapter-browser").boundingBox())!;
+    expect(axis.y - lens.y - lens.height).toBeGreaterThanOrEqual(8);
+    expect(lens.y - browser.y).toBeGreaterThanOrEqual(6);
+    expect(axis.y + axis.height).toBeLessThanOrEqual(browser.y + browser.height - 4);
+    for (const chapter of await page.getByRole("group", { name: "Preview a chapter" }).getByRole("button").all()) {
+      const box = (await chapter.boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(120);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+    }
+    await page.getByRole("button", { name: "Preview high point", exact: true }).click();
+    await expect(preview).toBeFocused();
+    await page.keyboard.press("ArrowLeft");
+    await expect(page.getByRole("slider", { name: "Route progress", exact: true, includeHidden: true })).toHaveValue("0");
+  });
+
   test(`chapter controls remain reachable at ${viewport.width}x${viewport.height}`, async ({ page }) => {
     await page.setViewportSize(viewport);
     await page.emulateMedia({ reducedMotion: "reduce" });

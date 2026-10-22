@@ -2,7 +2,7 @@
 
 Route Studio creates planned courses for running, walking, and cycling. Courses can come from GPX files or connected BRouter loops. They are separate from completed Strava activities. Generated courses do not contain recorded elapsed time or pace.
 
-The local preview is `http://127.0.0.1:8824`. The implementation has not been deployed. The examples below require the local Vite server to be running.
+The local preview is `http://127.0.0.1:8824`. A private authenticated Cloudflare review deployment also exercises the R2 backend. Production rollout remains pending routing-service configuration. The examples below require the local Vite server to be running.
 
 ## Viewing a saved course
 
@@ -43,9 +43,12 @@ JSON
 ```sh
 node scripts/course-agent.mjs import route.gpx --activity Ride --save --base-url http://127.0.0.1:8824
 node scripts/course-agent.mjs list --base-url http://127.0.0.1:8824
+node scripts/course-agent.mjs list --cursor CURSOR --base-url http://127.0.0.1:8824
 node scripts/course-agent.mjs get course-UUID --base-url http://127.0.0.1:8824
 node scripts/course-agent.mjs export course-UUID --output route.gpx --base-url http://127.0.0.1:8824
 ```
+
+`list` returns at most 24 summaries. When the response includes `cursor`, pass it unchanged with `--cursor` to read the next page. The CLI does not fetch the whole collection automatically.
 
 `course-UUID` stands for an ID returned by generation or import. `export` writes GPX to stdout when `--output` is absent. It refuses to overwrite an existing output file.
 
@@ -59,7 +62,7 @@ All course operations use `/api/courses`. JSON responses use `Cache-Control: no-
 
 | Request                                                                                                           | Result                                            |
 | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| `GET /api/courses`                                                                                                | `{ "courses": Course[] }`                         |
+| `GET /api/courses?cursor=optional-cursor`                                                                                                | `{ "courses": CourseSummary[], "cursor"?: string }`                         |
 | `GET /api/courses?id=course-UUID`                                                                                 | `{ "course": Course }`                            |
 | `GET /api/courses?id=course-UUID&format=gpx`                                                                      | GPX attachment                                    |
 | `POST { "action": "generate", "request": CourseRequest }`                                                         | Unsaved `{ "course": Course, "receipt": string }` |
@@ -84,6 +87,10 @@ The server derives IDs from validated course content. The submitted ID and creat
 | `seed`     | A whole number from 0 to 2147483647                    |
 
 `Course` contains `id`, `name`, `description`, `activity`, `createdAt`, `source`, `segments`, `distanceM`, `ascentM`, and `warnings`. Its definition and parser live in `app/src/domain/courses.ts`.
+
+`CourseSummary` contains `id`, `name`, `activity`, `createdAt`, `sourceKind`, `distanceM`, `ascentM`, and `sectionCount`. It contains no geometry, source request, or description. A collection response contains at most 24 summaries in stable ID order. The optional opaque `cursor` continues after the final ID. Malformed cursors return 400. Pages are not a snapshot of concurrent writes. Refresh the first page to discover newly saved courses.
+
+A saved-course URL fetches that course directly without requesting the collection. **Load more courses** appends another summary page. A successful save remains available while navigation opens its detail URL.
 
 `segments` preserves separate GPX tracks and route segments. Each point contains `lat`, `lng`, and optional `elevationM` and `time`. Missing elevations produce a null ascent value. The server recomputes distance and ascent from geometry. It does not accept client metric claims as authoritative.
 
@@ -123,15 +130,40 @@ The implementation follows the primary BRouter sources.
 
 ## Storage and deployment configuration
 
-The Vite adapter persists local courses outside the served workspace in `~/.local/share/godiesel/workspaces/{workspace-hash}/courses/`. The hash derives from the resolved app directory. Writes use a temporary file and atomic rename. Restarting the server preserves saved courses. Explicit storage directories inside the Vite root are rejected. The middleware blocks direct filesystem URLs to course storage and the legacy `/.local/courses/` path.
+The Vite adapter persists local courses outside the served workspace in `~/.local/share/godiesel/workspaces/{workspace-hash}/courses/`. The hash derives from the resolved app directory. Course creation uses a complete temporary file and an atomic hard link that refuses to replace an existing course. Repeated saves return the stored winner. Private `.summaries/` sidecars make listing independent of geometry. Existing course files receive sidecars one page at a time, and interrupted sidecar creation is repaired on the next list request. Restarting the server preserves saved courses. Explicit storage directories inside the Vite root are rejected. The middleware blocks direct filesystem URLs to course storage and the legacy `/.local/courses/` path.
 
 Unauthenticated local access requires both a loopback socket and a `localhost`, `127.0.0.1`, or `::1` host. Network access requires an owner token. When a token is configured, local callers also need it. An owner token grants access to the whole course collection. This is a single-owner API, not a multi-user account system.
 
-The Cloudflare Pages adapter requires a `COURSE_STORE` KV binding and a `GODIESEL_COURSE_TOKEN` secret. It fails closed when either is missing. Generation also requires `GODIESEL_ROUTER_URL` pointing to an explicitly configured BRouter-compatible service and a server-only `GODIESEL_COURSE_SIGNING_KEY` of at least 32 bytes. The signing key must differ from the owner token and must not be given to agent clients. There is no production fallback to the public demo server.
+The Cloudflare Pages adapter requires a private `COURSE_STORE` R2 bucket binding and a `GODIESEL_COURSE_TOKEN` secret. It fails closed when either is missing. Generation also requires `GODIESEL_ROUTER_URL` pointing to an explicitly configured BRouter-compatible service and a server-only `GODIESEL_COURSE_SIGNING_KEY` of at least 32 bytes. The signing key must differ from the owner token and must not be given to agent clients. There is no production fallback to the public demo server.
 
-KV is eventually consistent across locations. A new save can take time to appear in another location. The local filesystem adapter does not have that delay. Production persistence, routing capacity, and deployment remain unverified until the binding and dedicated routing service are configured and exercised.
+R2 stores each complete course with its summary in the same object's custom metadata. Creation uses `If-None-Match: *`, so concurrent saves return the first stored course. Listing requests only object metadata and reads no geometry. R2 provides [strong read-after-write and listing consistency](https://developers.cloudflare.com/r2/reference/consistency/). Its [Workers API](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/) supports metadata listing and conditional creation. The bucket stays private and is accessed through the authenticated API.
+
+Local workerd verification accepted a 50,000-point, 3.84 MB save, preserved every exported point, and returned the same stored record to eight concurrent saves. A 30-course collection produced summary pages of 24 and six entries. This is local runtime evidence. Remote persistence and production routing still require deployment checks.
 
 The local default `https://brouter.de/brouter` is for bounded development evaluation. It is not a production availability commitment. Coordinates and routing preferences are sent to the configured service.
+
+## Hosted release validation
+
+The review deployment uses `godiesel-courses-preview`. Production configuration
+binds a separate `godiesel-courses-production` bucket. Both buckets remain private.
+Owner and signing credentials are distinct secrets, not client bundle values.
+
+Hosted checks passed unauthorized and cross-origin rejection, malformed cursors,
+segmented GPX import, atomic duplicate save, immediate reopen, GPX export, and the
+authenticated agent CLI. A 50,000-point course saved, reopened, and exported with
+all points retained. This establishes the tested request path on Cloudflare, not
+a load or availability guarantee.
+
+Changing workspace credentials clears the loaded course, summaries, and cursor,
+and aborts in-flight work. Ordinary same-course reloads retain the current view.
+Reducer and desktop/mobile browser regressions cover these distinct transitions.
+The published OpenAPI 1.1 contract describes summary pagination and full detail
+requests separately.
+
+Automatic route generation still requires a configured BRouter service. The
+proposed Cloudflare Containers option requires a Workers Paid subscription. No
+subscription upgrade is part of this change, and no production generation
+availability is claimed before that service passes hosted Run and Ride checks.
 
 ## Suunto Race S handoff
 
@@ -141,7 +173,11 @@ This release does not claim direct watch transfer. [Suunto's Route API](https://
 
 ## Verification evidence
 
-`npx vitest run src/domain/course-api.test.ts` checks authorization, origin rejection, preview-before-save behavior, repeated saves, GPX export, provider failure, distance bounds, signed provenance, cancellation, filesystem persistence, Vite storage isolation, and KV pagination.
+The storage revision passed 83 focused tests across `course-api.test.ts`, `courses.test.ts`, and `course-workspace-state.test.ts`, plus TypeScript checking. Headless Course Studio checks passed nine scenarios against isolated temporary storage at 1440 px and 390 px. Two live routing scenarios retained their environment skips. The checks cover import, save, reopen, export, summary pagination, direct detail access during collection failure, and saved-result retention during navigation.
+
+`app/artifacts/production-165/storage-r2.mjs` runs the real local workerd R2 checks. Its result records the 3,844,795-byte accepted request, eight concurrent saves, 24- and six-summary pages, CLI pagination, and full 50,000-point detail and export. Serialized list payloads were 5,274 and 1,304 bytes in this synthetic run. These are complete payload counts, not latency or remote memory measurements. Desktop and mobile screenshots are in `app/artifacts/course-storage/`.
+
+`npx vitest run src/domain/course-api.test.ts` checks authorization, origin rejection, preview-before-save behavior, repeated saves, GPX export, provider failure, distance bounds, signed provenance, cancellation, filesystem persistence, Vite storage isolation, metadata-only R2 pagination, invalid cursors, concurrent filesystem creation, and legacy summary indexing.
 
 The local public-provider trial generated a 5.094 km running loop for a 5 km request and a 9.396 km cycling loop for a 10 km request. A further cycling request with the paved preference returned 10.903 km using `fastbike`. All were saved, reopened, and exported using `scripts/course-agent.mjs`. The running export was imported again through the same CLI. Raw responses and exports are in the ignored `app/artifacts/route-studio/` directory.
 
@@ -149,7 +185,7 @@ The six scenarios in `GODIESEL_COURSE_PREVIEW_URL=http://127.0.0.1:8824 GODIESEL
 
 An independent review reran the initial 74 focused domain, API, and reducer tests. It also rejected modified generation receipts and owner-token-forged signatures, checked nine filesystem URL aliases, and exercised cancellation and failed navigation at 1440 px and 390 px. No blocking findings remained.
 
-A subsequent local Workers runtime check caught random signing-key generation in module scope, which Cloudflare forbids. Initialization now happens inside a request handler. A regression test covers that constraint. The final focused suite contains 79 passing tests, including four starting-place selection and stale-response cases. Local workerd with local KV rejected an unauthenticated request with 401, then imported, saved, reopened, and exported a course with the owner token. This verifies the local hosting adapter; remote KV and production routing remain untested.
+A subsequent local Workers runtime check caught random signing-key generation in module scope, which Cloudflare forbids. Initialization now happens inside a request handler. A regression test covers that constraint. The final focused suite contains 79 passing tests, including four starting-place selection and stale-response cases. Local workerd with local KV rejected an unauthenticated request with 401, then imported, saved, reopened, and exported a course with the owner token. That check covered the earlier KV adapter, which has since been replaced by R2. The R2 evidence above supersedes its persistence result.
 
 The broad `npm run verify` run passed typechecking, the production build, the bundle budget, 790 unit tests, and 407 browser scenarios; 68 browser scenarios were skipped by their existing environment gates. Its one failure was the Routes screenshot baseline after adding the creation action. Both desktop and mobile compositions were inspected, their baselines updated, and the focused screenshot comparison rerun successfully. The subsequent runtime fix passed the final 79-test focused suite, typechecking, another production build, and another real generation/save/reopen browser flow. Successful unrelated checks were not repeated.
 

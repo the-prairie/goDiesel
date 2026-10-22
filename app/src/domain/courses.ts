@@ -41,6 +41,115 @@ export interface Course {
   warnings: string[];
 }
 
+export interface CourseSummary {
+  id: string;
+  name: string;
+  activity: CourseActivity;
+  createdAt: string;
+  sourceKind: Course["source"]["kind"];
+  distanceM: number;
+  ascentM: number | null;
+  sectionCount: number;
+}
+
+export interface CoursePage {
+  courses: CourseSummary[];
+  cursor?: string;
+}
+
+export const COURSE_PAGE_SIZE = 24;
+export const COURSE_ID =
+  /^course-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+export function courseSummary(course: Course): CourseSummary {
+  return {
+    id: course.id,
+    name: course.name,
+    activity: course.activity,
+    createdAt: course.createdAt,
+    sourceKind: course.source.kind,
+    distanceM: course.distanceM,
+    ascentM: course.ascentM,
+    sectionCount: course.segments.length,
+  };
+}
+
+export function parseCourseSummary(value: unknown): CourseSummary {
+  const input = object(value, "Course summary");
+  const id = text(input.id, "Course ID", 50);
+  if (!COURSE_ID.test(id)) throw new Error("Invalid course ID.");
+  if (input.sourceKind !== "gpx" && input.sourceKind !== "generated") {
+    throw new Error("Invalid course source.");
+  }
+  const sectionCount = number(
+    input.sectionCount,
+    "Section count",
+    1,
+    COURSE_MAX_POINTS,
+  );
+  if (!Number.isInteger(sectionCount))
+    throw new Error("Invalid section count.");
+  return {
+    id,
+    name: text(input.name, "Course name", 200),
+    activity: activity(input.activity),
+    createdAt: timestamp(input.createdAt, "Creation time"),
+    sourceKind: input.sourceKind,
+    distanceM: number(
+      input.distanceM,
+      "Distance",
+      Number.MIN_VALUE,
+      Number.MAX_SAFE_INTEGER,
+    ),
+    ascentM:
+      input.ascentM === null
+        ? null
+        : number(input.ascentM, "Ascent", 0, Number.MAX_SAFE_INTEGER),
+    sectionCount,
+  };
+}
+
+export function courseCursor(id: string): string {
+  return btoa(`courses-v1:${id}`)
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/, "");
+}
+
+export function parseCourseCursor(value: string): string {
+  if (!/^[A-Za-z0-9_-]{72}$/.test(value))
+    throw new Error("Invalid course cursor.");
+  const decoded = atob(value.replaceAll("-", "+").replaceAll("_", "/"));
+  const id = decoded.slice(11);
+  if (
+    !decoded.startsWith("courses-v1:") ||
+    !COURSE_ID.test(id) ||
+    courseCursor(id) !== value
+  ) {
+    throw new Error("Invalid course cursor.");
+  }
+  return id;
+}
+
+export function parseCoursePage(value: unknown): CoursePage {
+  const input = object(value, "Course page");
+  if (
+    !Array.isArray(input.courses) ||
+    input.courses.length > COURSE_PAGE_SIZE
+  ) {
+    throw new Error("Invalid course page.");
+  }
+  if (input.cursor !== undefined) {
+    if (typeof input.cursor !== "string")
+      throw new Error("Invalid course cursor.");
+    parseCourseCursor(input.cursor);
+  }
+  return {
+    courses: input.courses.map(parseCourseSummary),
+    ...(input.cursor !== undefined ? { cursor: input.cursor as string } : {}),
+  };
+}
+
 export const COURSE_MAX_POINTS = 50_000;
 export const COURSE_MAX_GPX_BYTES = 5 * 1024 * 1024;
 export const COURSE_MIN_DISTANCE_KM = 1;

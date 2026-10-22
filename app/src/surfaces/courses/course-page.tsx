@@ -11,6 +11,7 @@ import {
   type Course,
   type CourseActivity,
   type CourseRequest,
+  type CourseSummary,
 } from "@/domain/courses";
 import {
   courseListResult,
@@ -23,6 +24,7 @@ import { CourseForm } from "./course-form";
 import {
   initialCourseWorkspace,
   reduceCourseWorkspace,
+  type CourseOperation,
 } from "./course-workspace-state";
 
 export function CoursePage() {
@@ -37,31 +39,33 @@ export function CoursePage() {
   const requestRef = useRef<AbortController | null>(null);
   const sequence = useRef(0);
   const busy = state.progress.status === "pending";
-  function begin(operation: "load" | "generate" | "import" | "save") {
+  function begin(operation: CourseOperation, courseId?: string) {
     requestRef.current?.abort();
     const controller = new AbortController();
     requestRef.current = controller;
     const id = ++sequence.current;
-    dispatch({ type: "start", operation, id });
+    dispatch({ type: "start", operation, id, courseId });
     return { id, controller };
   }
   useEffect(() => {
-    const { id, controller } = begin("load");
+    const { id, controller } = begin("load", courseId);
     void (async () => {
       try {
-        const courses = courseListResult(
-          await courseRequest(undefined, "", controller.signal),
-        );
-        const course = courseId
-          ? courseResult(
-              await courseRequest(
-                undefined,
-                `?id=${encodeURIComponent(courseId)}`,
-                controller.signal,
-              ),
-            )
-          : undefined;
-        dispatch({ type: "loaded", id, courses, course });
+        if (courseId) {
+          const course = courseResult(
+            await courseRequest(
+              undefined,
+              `?id=${encodeURIComponent(courseId)}`,
+              controller.signal,
+            ),
+          );
+          dispatch({ type: "loaded", id, course });
+        } else {
+          const page = courseListResult(
+            await courseRequest(undefined, "", controller.signal),
+          );
+          dispatch({ type: "listed", id, page });
+        }
       } catch (error) {
         if (!controller.signal.aborted)
           dispatch({ type: "failed", id, message: errorMessage(error) });
@@ -70,6 +74,23 @@ export function CoursePage() {
     return () => controller.abort();
   }, [courseId, connection]);
   useEffect(() => () => requestRef.current?.abort(), []);
+  async function loadMore() {
+    if (!state.cursor) return;
+    const { id, controller } = begin("listMore");
+    try {
+      const page = courseListResult(
+        await courseRequest(
+          undefined,
+          `?cursor=${encodeURIComponent(state.cursor)}`,
+          controller.signal,
+        ),
+      );
+      dispatch({ type: "listed", id, page, append: true });
+    } catch (error) {
+      if (!controller.signal.aborted)
+        dispatch({ type: "failed", id, message: errorMessage(error) });
+    }
+  }
   async function generate(request: CourseRequest) {
     const { id, controller } = begin("generate");
     try {
@@ -175,6 +196,7 @@ export function CoursePage() {
             {state.progress.status === "pending"
               ? {
                   load: "Opening your courses…",
+                  listMore: "Loading more courses…",
                   generate:
                     "Finding a loop on real mapped paths. This can take up to a minute…",
                   import: "Reading your GPX…",
@@ -230,7 +252,12 @@ export function CoursePage() {
           </div>
         ) : null}
         {state.view.kind === "empty" ? (
-          <SavedCourses courses={state.courses} />
+          <SavedCourses
+            courses={state.courses}
+            hasMore={!!state.cursor}
+            busy={busy}
+            onLoadMore={() => void loadMore()}
+          />
         ) : (
           <CoursePreview
             course={state.view.course}
@@ -256,6 +283,8 @@ export function CoursePage() {
             className="flex flex-wrap gap-2"
             onSubmit={(e) => {
               e.preventDefault();
+              requestRef.current?.abort();
+              dispatch({ type: "credentialsChanged" });
               sessionStorage.setItem("godiesel.course-token", token.trim());
               setToken("");
               setConnection((value) => value + 1);
@@ -276,6 +305,8 @@ export function CoursePage() {
               type="button"
               variant="ghost"
               onClick={() => {
+                requestRef.current?.abort();
+                dispatch({ type: "credentialsChanged" });
                 sessionStorage.removeItem("godiesel.course-token");
                 setConnection((value) => value + 1);
               }}
@@ -289,7 +320,17 @@ export function CoursePage() {
   );
 }
 
-function SavedCourses({ courses }: { courses: Course[] }) {
+function SavedCourses({
+  courses,
+  hasMore,
+  busy,
+  onLoadMore,
+}: {
+  courses: CourseSummary[];
+  hasMore: boolean;
+  busy: boolean;
+  onLoadMore: () => void;
+}) {
   return (
     <section
       aria-label="Saved courses"
@@ -297,7 +338,10 @@ function SavedCourses({ courses }: { courses: Course[] }) {
     >
       <h2 className="text-xl font-semibold">
         Your courses{" "}
-        <span className="text-ink-secondary">{courses.length}</span>
+        <span className="text-ink-secondary">
+          {courses.length}
+          {hasMore ? "+" : ""}
+        </span>
       </h2>
       <p className="mt-1 text-sm text-ink-secondary">
         Imported and generated routes, separate from your completed activities.
@@ -313,7 +357,7 @@ function SavedCourses({ courses }: { courses: Course[] }) {
               <span className="break-words font-semibold">{course.name}</span>
               <span className="text-sm text-ink-secondary">
                 {course.activity} · {(course.distanceM / 1000).toFixed(2)} km ·{" "}
-                {course.source.kind === "gpx" ? "GPX import" : "Generated loop"}
+                {course.sourceKind === "gpx" ? "GPX import" : "Generated loop"}
               </span>
             </Link>
           ))}
@@ -323,6 +367,16 @@ function SavedCourses({ courses }: { courses: Course[] }) {
           Save a preview to keep it here.
         </p>
       )}
+      {hasMore ? (
+        <Button
+          className="mt-4"
+          variant="outline"
+          disabled={busy}
+          onClick={onLoadMore}
+        >
+          Load more courses
+        </Button>
+      ) : null}
     </section>
   );
 }

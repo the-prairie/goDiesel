@@ -4,8 +4,24 @@ import path from "node:path";
 import { homedir } from "node:os";
 import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
-import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
-import { parseCourse, type Course } from "../src/domain/courses";
+import {
+  link,
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
+import {
+  COURSE_PAGE_SIZE,
+  courseCursor,
+  courseSummary,
+  parseCourse,
+  parseCourseSummary,
+  type Course,
+  type CoursePage,
+} from "../src/domain/courses";
 import { coursesResponse, type CourseStore } from "./courses";
 
 const ID =
@@ -57,17 +73,61 @@ function canonicalPath(filename: string): string {
 export class FileCourseStore implements CourseStore {
   constructor(private directory: string) {}
 
-  async list() {
+  async list(after?: string): Promise<CoursePage> {
     await mkdir(this.directory, { recursive: true, mode: 0o700 });
-    const names = (await readdir(this.directory)).filter(
-      (name) => name.endsWith(".json") && ID.test(name.slice(0, -5)),
-    );
-    const courses = await Promise.all(
-      names.map((name) => this.get(name.slice(0, -5))),
-    );
-    return courses
-      .filter((course): course is Course => course !== null)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const names = (await readdir(this.directory))
+      .filter(
+        (name) =>
+          name.endsWith(".json") &&
+          ID.test(name.slice(0, -5)) &&
+          (!after || name.slice(0, -5) > after),
+      )
+      .sort();
+    const courses = [];
+    for (const name of names.slice(0, COURSE_PAGE_SIZE)) {
+      const id = name.slice(0, -5);
+      try {
+        const summary = parseCourseSummary(
+          JSON.parse(await readFile(this.summaryPath(id), "utf8")),
+        );
+        if (summary.id !== id) throw new Error("Invalid course metadata.");
+        courses.push(summary);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        const course = await this.get(id);
+        if (course) {
+          await this.writeSummary(course);
+          courses.push(courseSummary(course));
+        }
+      }
+    }
+    return {
+      courses,
+      ...(names.length > COURSE_PAGE_SIZE
+        ? { cursor: courseCursor(names[COURSE_PAGE_SIZE - 1].slice(0, -5)) }
+        : {}),
+    };
+  }
+
+  private summaryPath(id: string) {
+    return path.join(this.directory, ".summaries", `${id}.json`);
+  }
+
+  private async writeSummary(course: Course) {
+    const filename = this.summaryPath(course.id);
+    await mkdir(path.dirname(filename), { recursive: true, mode: 0o700 });
+    const temporary = `${filename}.${crypto.randomUUID()}.tmp`;
+    try {
+      await writeFile(temporary, JSON.stringify(courseSummary(course)), {
+        mode: 0o600,
+        flag: "wx",
+      });
+      await rename(temporary, filename);
+    } finally {
+      await unlink(temporary).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error;
+      });
+    }
   }
 
   async get(id: string): Promise<Course | null> {
@@ -91,8 +151,27 @@ export class FileCourseStore implements CourseStore {
       this.directory,
       `${course.id}.${crypto.randomUUID()}.tmp`,
     );
-    await writeFile(temporary, JSON.stringify(course), { mode: 0o600 });
-    await rename(temporary, path.join(this.directory, `${course.id}.json`));
+    let created = true;
+    try {
+      await writeFile(temporary, JSON.stringify(course), {
+        mode: 0o600,
+        flag: "wx",
+      });
+      try {
+        await link(temporary, path.join(this.directory, `${course.id}.json`));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        created = false;
+      }
+    } finally {
+      await unlink(temporary).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error;
+      });
+    }
+    const saved = created ? course : await this.get(course.id);
+    if (!saved) throw new Error("Saved course is unavailable.");
+    await this.writeSummary(saved);
+    return { course: saved, created };
   }
 }
 

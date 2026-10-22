@@ -1,4 +1,9 @@
-import { parseCourse, type Course } from "@/domain/courses";
+import {
+  parseCourse,
+  parseCoursePage,
+  type Course,
+  type CoursePage,
+} from "@/domain/courses";
 
 export async function courseRequest(
   body?: unknown,
@@ -42,15 +47,8 @@ export function courseReceipt(data: unknown): string {
     );
   return data.receipt;
 }
-export function courseListResult(data: unknown): Course[] {
-  if (
-    !data ||
-    typeof data !== "object" ||
-    !("courses" in data) ||
-    !Array.isArray(data.courses)
-  )
-    throw new Error("The server returned an invalid course list.");
-  return data.courses.map(parseCourse);
+export function courseListResult(data: unknown): CoursePage {
+  return parseCoursePage(data);
 }
 export function downloadGpx(xml: string, filename: string) {
   const url = URL.createObjectURL(

@@ -1,51 +1,83 @@
 import { coursesResponse, type CourseStore } from "../../app/server/courses";
-import { parseCourse, type Course } from "../../app/src/domain/courses";
+import {
+  COURSE_PAGE_SIZE,
+  courseCursor,
+  courseSummary,
+  parseCourse,
+  parseCourseSummary,
+  type Course,
+  type CoursePage,
+} from "../../app/src/domain/courses";
 
-interface CourseKv {
-  get(key: string): Promise<string | null>;
-  put(key: string, value: string): Promise<void>;
+interface CourseBucket {
+  get(key: string): Promise<{ json(): Promise<unknown> } | null>;
+  put(
+    key: string,
+    value: string,
+    options: {
+      onlyIf: Headers;
+      customMetadata: Record<string, string>;
+      httpMetadata: { contentType: string };
+    },
+  ): Promise<object | null>;
   list(options: {
     prefix: string;
-    cursor?: string;
+    startAfter?: string;
+    limit: number;
+    include: ["customMetadata"];
   }): Promise<{
-    keys: { name: string }[];
-    list_complete: boolean;
-    cursor?: string;
+    objects: { key: string; customMetadata?: Record<string, string> }[];
+    truncated: boolean;
   }>;
 }
 
-export class KvCourseStore implements CourseStore {
-  constructor(private kv: CourseKv) {}
+export class R2CourseStore implements CourseStore {
+  constructor(private bucket: CourseBucket) {}
+
   async get(id: string) {
-    const value = await this.kv.get(id);
-    return value === null ? null : parseCourse(JSON.parse(value));
+    const value = await this.bucket.get(id);
+    return value === null ? null : parseCourse(await value.json());
   }
+
   async put(course: Course) {
-    await this.kv.put(course.id, JSON.stringify(course));
+    const created = await this.bucket.put(course.id, JSON.stringify(course), {
+      onlyIf: new Headers({ "If-None-Match": "*" }),
+      customMetadata: { summary: JSON.stringify(courseSummary(course)) },
+      httpMetadata: { contentType: "application/json" },
+    });
+    if (created) return { course, created: true };
+    const winner = await this.get(course.id);
+    if (!winner) throw new Error("Saved course is unavailable.");
+    return { course: winner, created: false };
   }
-  async list() {
-    const courses: Course[] = [];
-    let cursor: string | undefined;
-    do {
-      const page = await this.kv.list({ prefix: "course-", cursor });
-      const values = await Promise.all(
-        page.keys.map((key) => this.get(key.name)),
+
+  async list(after?: string): Promise<CoursePage> {
+    const page = await this.bucket.list({
+      prefix: "course-",
+      startAfter: after,
+      limit: COURSE_PAGE_SIZE,
+      include: ["customMetadata"],
+    });
+    const courses = page.objects.map((entry) => {
+      const summary = parseCourseSummary(
+        JSON.parse(entry.customMetadata?.summary ?? "null"),
       );
-      courses.push(
-        ...values.filter((course): course is Course => course !== null),
-      );
-      cursor = page.list_complete ? undefined : page.cursor;
-      if (!page.list_complete && !cursor)
-        throw new Error("Incomplete course listing");
-    } while (cursor);
-    return courses.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      if (summary.id !== entry.key) throw new Error("Invalid course metadata.");
+      return summary;
+    });
+    const last = courses.at(-1);
+    if (page.truncated && !last) throw new Error("Incomplete course listing.");
+    return {
+      courses,
+      ...(page.truncated && last ? { cursor: courseCursor(last.id) } : {}),
+    };
   }
 }
 
 export function onRequest(context: {
   request: Request;
   env: {
-    COURSE_STORE?: CourseKv;
+    COURSE_STORE?: CourseBucket;
     GODIESEL_COURSE_TOKEN?: string;
     GODIESEL_ROUTER_URL?: string;
     GODIESEL_COURSE_SIGNING_KEY?: string;
@@ -53,7 +85,7 @@ export function onRequest(context: {
 }) {
   return coursesResponse(context.request, {
     store: context.env.COURSE_STORE
-      ? new KvCourseStore(context.env.COURSE_STORE)
+      ? new R2CourseStore(context.env.COURSE_STORE)
       : undefined,
     token: context.env.GODIESEL_COURSE_TOKEN,
     routerUrl: context.env.GODIESEL_ROUTER_URL,

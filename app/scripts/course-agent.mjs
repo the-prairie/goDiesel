@@ -11,7 +11,7 @@ for (let i = 0; i < args.length; i++) {
   else if (args[i].startsWith("--")) {
     const key = args[i].slice(2);
     if (
-      !["base-url", "activity", "name", "output"].includes(key) ||
+      !["base-url", "activity", "name", "output", "cursor"].includes(key) ||
       !args[i + 1] ||
       args[i + 1].startsWith("--")
     ) {
@@ -27,7 +27,7 @@ for (let i = 0; i < args.length; i++) {
 async function main() {
   if (!command || command === "help" || command === "--help") {
     process.stdout.write(
-      `goDiesel course agent\n\nCommands\n  list\n  generate [--save] < request.json\n  import route.gpx --activity Run|Walk|Ride [--name "My route"] [--save]\n  get course-ID\n  export course-ID [--output route.gpx]\n\nOptions\n  --base-url http://127.0.0.1:8787\n  GODIESEL_COURSE_TOKEN supplies the owner bearer token.\n\nGenerate reads a JSON CourseRequest from stdin. An unsaved preview is returned unless --save is present.\n`,
+      `goDiesel course agent\n\nCommands\n  list [--cursor CURSOR]\n  generate [--save] < request.json\n  import route.gpx --activity Run|Walk|Ride [--name "My route"] [--save]\n  get course-ID\n  export course-ID [--output route.gpx]\n\nOptions\n  --base-url http://127.0.0.1:8787\n  GODIESEL_COURSE_TOKEN supplies the owner bearer token.\n\nGenerate reads a JSON CourseRequest from stdin. An unsaved preview is returned unless --save is present.\n`,
     );
     return;
   }
@@ -73,8 +73,14 @@ async function main() {
     return response;
   }
   let result;
-  if (command === "list") result = await (await request()).json();
-  else if (command === "get" || command === "export") {
+  if (command === "list") {
+    const cursor = flags.get("cursor");
+    result = await (
+      await request(
+        cursor === undefined ? "" : `?cursor=${encodeURIComponent(cursor)}`,
+      )
+    ).json();
+  } else if (command === "get" || command === "export") {
     const id = positional[0];
     if (!/^course-[0-9a-f-]{36}$/.test(id ?? ""))
       throw new Error("Supply a valid course ID.");

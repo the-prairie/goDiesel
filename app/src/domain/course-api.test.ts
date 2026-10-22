@@ -13,8 +13,16 @@ import {
   defaultCourseStoreDirectory,
   FileCourseStore,
 } from "../../server/courses-plugin";
-import { onRequest, KvCourseStore } from "../../../functions/api/courses";
-import { importCourseGpx, type Course, type CourseRequest } from "./courses";
+import { onRequest, R2CourseStore } from "../../../functions/api/courses";
+import {
+  COURSE_PAGE_SIZE,
+  courseCursor,
+  courseSummary,
+  importCourseGpx,
+  parseCourseCursor,
+  type Course,
+  type CourseRequest,
+} from "./courses";
 
 it("loads in a Workers global scope where random generation is forbidden", async () => {
   vi.resetModules();
@@ -58,10 +66,24 @@ const gpx =
 function store(): CourseStore {
   const courses = new Map<string, Course>();
   return {
-    list: async () => [...courses.values()],
+    list: async (after) => {
+      const remaining = [...courses.values()]
+        .filter((course) => !after || course.id > after)
+        .sort((a, b) => a.id.localeCompare(b.id));
+      const page = remaining.slice(0, COURSE_PAGE_SIZE).map(courseSummary);
+      return {
+        courses: page,
+        ...(remaining.length > COURSE_PAGE_SIZE
+          ? { cursor: courseCursor(page.at(-1)!.id) }
+          : {}),
+      };
+    },
     get: async (id) => courses.get(id) ?? null,
     put: async (course) => {
+      const existing = courses.get(course.id);
+      if (existing) return { course: existing, created: false };
       courses.set(course.id, course);
+      return { course, created: true };
     },
   };
 }
@@ -145,7 +167,7 @@ describe("course HTTP boundary", () => {
     );
     expect(imported.status).toBe(200);
     const { course } = await imported.json();
-    expect(await options.store.list()).toHaveLength(0);
+    expect((await options.store.list()).courses).toHaveLength(0);
     const again = await (
       await coursesResponse(
         post({ action: "import", gpx, filename: "a.gpx", activity: "Run" }),
@@ -159,7 +181,7 @@ describe("course HTTP boundary", () => {
     expect(
       (await coursesResponse(post({ action: "save", course }), options)).status,
     ).toBe(200);
-    expect(await options.store.list()).toHaveLength(1);
+    expect((await options.store.list()).courses).toHaveLength(1);
     const reopened = await coursesResponse(
       new Request(`http://localhost/api/courses?id=${course.id}`),
       options,
@@ -232,6 +254,102 @@ describe("course HTTP boundary", () => {
     );
     expect(response.status).toBe(503);
     expect(await response.text()).not.toContain("secret");
+  });
+});
+
+describe("course collection HTTP boundary", () => {
+  it("rejects malformed cursors without querying storage", async () => {
+    const list = vi.fn();
+    for (const cursor of ["", "../private", "x".repeat(72), "x".repeat(4096)]) {
+      const response = await coursesResponse(
+        new Request(
+          `http://localhost/api/courses?cursor=${encodeURIComponent(cursor)}`,
+        ),
+        {
+          store: { ...store(), list },
+          localDevelopment: true,
+        },
+      );
+      expect(response.status).toBe(400);
+    }
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it("saves the maximum point count within the existing body limit and omits its geometry from lists", async () => {
+    const course = {
+      id: "course-11111111-1111-5111-8111-111111111111",
+      name: "Maximum course",
+      description: "",
+      activity: "Run",
+      createdAt: "2026-10-21T00:00:00Z",
+      source: { kind: "gpx", filename: "capacity.gpx" },
+      warnings: [],
+      segments: [
+        Array.from({ length: 50_000 }, (_, index) => ({
+          lat: 51 + index * 0.000001,
+          lng: -114,
+          elevationM: 1000 + (index % 20),
+          time: "2026-10-21T00:00:00Z",
+        })),
+      ],
+    };
+    const body = { action: "save", course };
+    expect(
+      new TextEncoder().encode(JSON.stringify(body)).byteLength,
+    ).toBeLessThan(5 * 1024 * 1024);
+    const options = { store: store(), localDevelopment: true };
+    const response = await coursesResponse(post(body), options);
+    expect(response.status).toBe(201);
+    const saved = (await response.json()).course;
+    const reopened = await coursesResponse(
+      new Request(`http://localhost/api/courses?id=${saved.id}`),
+      options,
+    );
+    expect((await reopened.json()).course.segments).toEqual(course.segments);
+    const listed = await coursesResponse(
+      new Request("http://localhost/api/courses"),
+      options,
+    );
+    expect(await listed.json()).toEqual({ courses: [courseSummary(saved)] });
+  });
+
+  it("returns summaries while detail remains available independently of list failure", async () => {
+    const options = { store: store(), localDevelopment: true };
+    const imported = await (
+      await coursesResponse(
+        post({ action: "import", gpx, filename: "a.gpx", activity: "Run" }),
+        options,
+      )
+    ).json();
+    const saved = await (
+      await coursesResponse(
+        post({ action: "save", course: imported.course }),
+        options,
+      )
+    ).json();
+    const page = await (
+      await coursesResponse(
+        new Request("http://localhost/api/courses"),
+        options,
+      )
+    ).json();
+    expect(page).toEqual({ courses: [courseSummary(saved.course)] });
+    const response = await coursesResponse(
+      new Request(`http://localhost/api/courses?id=${saved.course.id}`),
+      {
+        ...options,
+        store: {
+          ...options.store,
+          list: async () => {
+            throw new Error("List failed");
+          },
+        },
+      },
+    );
+    expect(response.status).toBe(200);
+    expect((await response.json()).course.segments).toEqual(
+      saved.course.segments,
+    );
   });
 });
 
@@ -342,7 +460,7 @@ describe("bounded route generation", () => {
         )
       ).status,
     ).toBe(400);
-    expect(await options.store.list()).toHaveLength(0);
+    expect((await options.store.list()).courses).toHaveLength(0);
     expect(
       (
         await coursesResponse(
@@ -528,43 +646,172 @@ describe("course persistence adapters", () => {
     await new FileCourseStore(directory).put(course);
     const reopened = await new FileCourseStore(directory).get(course.id);
     expect(reopened?.segments).toEqual(course.segments);
-    expect(await new FileCourseStore(directory).list()).toHaveLength(1);
+    expect((await new FileCourseStore(directory).list()).courses).toHaveLength(
+      1,
+    );
     await expect(
       new FileCourseStore(directory).get("../secret"),
     ).rejects.toThrow();
   });
 
-  it("reads every KV page without losing courses", async () => {
+  it("lists R2 metadata in bounded pages without reading any course body", async () => {
+    const fixture = importCourseGpx(gpx, {
+      id: "course-11111111-1111-5111-8111-111111111111",
+      createdAt: "2026-10-21T00:00:00Z",
+      filename: "route.gpx",
+      activity: "Walk",
+    });
+    const courses = Array.from({ length: 30 }, (_, index) => ({
+      ...fixture,
+      id: `course-${String(index).padStart(8, "0")}-1111-5111-8111-111111111111`,
+    }));
+    const bucket = {
+      get: async () => {
+        throw new Error("Course bodies are unavailable");
+      },
+      put: async () => null,
+      list: async ({
+        startAfter,
+        limit,
+      }: {
+        startAfter?: string;
+        limit: number;
+      }) => {
+        const remaining = courses.filter(
+          (course) => !startAfter || course.id > startAfter,
+        );
+        return {
+          objects: remaining
+            .slice(0, limit)
+            .map((course) => ({
+              key: course.id,
+              customMetadata: {
+                summary: JSON.stringify(courseSummary(course)),
+              },
+            })),
+          truncated: remaining.length > limit,
+        };
+      },
+    };
+    const adapter = new R2CourseStore(bucket);
+    const first = await adapter.list();
+    expect(first.courses).toHaveLength(24);
+    expect(first.courses[0]).toEqual(courseSummary(courses[0]));
+    const last = await adapter.list(parseCourseCursor(first.cursor!));
+    expect(last.courses).toHaveLength(6);
+    expect(last.cursor).toBeUndefined();
+    expect(
+      [...first.courses, ...last.courses].map((course) => course.id),
+    ).toEqual(courses.map((course) => course.id));
+    expect(JSON.stringify(first)).not.toContain("segments");
+    await expect(adapter.get(fixture.id)).rejects.toThrow(
+      "Course bodies are unavailable",
+    );
+  });
+
+  it("creates one R2 object with its summary and returns the concurrent winner", async () => {
     const course = importCourseGpx(gpx, {
       id: "course-11111111-1111-5111-8111-111111111111",
       createdAt: "2026-10-21T00:00:00Z",
       filename: "route.gpx",
       activity: "Walk",
     });
-    const second = {
-      ...course,
-      id: "course-22222222-2222-5222-8222-222222222222",
+    let stored: { value: string; metadata: Record<string, string> } | undefined;
+    const bucket = {
+      get: async () =>
+        stored ? { json: async () => JSON.parse(stored!.value) } : null,
+      put: async (
+        _key: string,
+        value: string,
+        options: { onlyIf: Headers; customMetadata: Record<string, string> },
+      ) => {
+        if (stored && options.onlyIf.get("If-None-Match") === "*") return null;
+        stored = { value, metadata: options.customMetadata };
+        return {};
+      },
+      list: async () => ({
+        objects: stored
+          ? [{ key: course.id, customMetadata: stored.metadata }]
+          : [],
+        truncated: false,
+      }),
     };
-    const kv = {
-      get: async (id: string) =>
-        JSON.stringify(id === course.id ? course : second),
-      put: vi.fn(),
-      list: vi
-        .fn()
-        .mockResolvedValueOnce({
-          keys: [{ name: course.id }],
-          list_complete: false,
-          cursor: "next",
-        })
-        .mockResolvedValueOnce({
-          keys: [{ name: second.id }],
-          list_complete: true,
+    const results = await Promise.all(
+      Array.from({ length: 8 }, (_, index) =>
+        new R2CourseStore(bucket).put({
+          ...course,
+          createdAt: `2026-10-21T00:00:0${index}Z`,
         }),
-    };
-    expect(await new KvCourseStore(kv).list()).toHaveLength(2);
-    expect(kv.list).toHaveBeenLastCalledWith({
-      prefix: "course-",
-      cursor: "next",
+      ),
+    );
+    expect(results.filter((result) => result.created)).toHaveLength(1);
+    const winner = await new R2CourseStore(bucket).get(course.id);
+    expect(
+      results.every((result) => result.course.createdAt === winner!.createdAt),
+    ).toBe(true);
+    expect((await new R2CourseStore(bucket).list()).courses).toEqual([
+      courseSummary(winner!),
+    ]);
+  });
+
+  it("preserves the winning local save across concurrent writers", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "godiesel-courses-"));
+    temporary.push(directory);
+    const course = importCourseGpx(gpx, {
+      id: "course-11111111-1111-5111-8111-111111111111",
+      createdAt: "2026-10-21T00:00:00Z",
+      filename: "route.gpx",
+      activity: "Walk",
     });
+    const results = await Promise.all(
+      Array.from({ length: 8 }, (_, index) =>
+        new FileCourseStore(directory).put({
+          ...course,
+          createdAt: `2026-10-21T00:00:0${index}Z`,
+        }),
+      ),
+    );
+    expect(results.filter((result) => result.created)).toHaveLength(1);
+    const winner = await new FileCourseStore(directory).get(course.id);
+    expect(
+      results.every((result) => result.course.createdAt === winner!.createdAt),
+    ).toBe(true);
+    expect((await new FileCourseStore(directory).list()).courses).toEqual([
+      courseSummary(winner!),
+    ]);
+  });
+
+  it("indexes legacy files a page at a time and then lists summaries without geometry", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "godiesel-courses-"));
+    temporary.push(directory);
+    const course = importCourseGpx(gpx, {
+      id: "course-11111111-1111-5111-8111-111111111111",
+      createdAt: "2026-10-21T00:00:00Z",
+      filename: "route.gpx",
+      activity: "Walk",
+    });
+    const courses = Array.from({ length: 25 }, (_, index) => ({
+      ...course,
+      id: `course-${String(index).padStart(8, "0")}-1111-5111-8111-111111111111`,
+    }));
+    for (const legacy of courses)
+      await writeFile(
+        path.join(directory, `${legacy.id}.json`),
+        JSON.stringify(legacy),
+      );
+    const first = await new FileCourseStore(directory).list();
+    expect(first.courses).toHaveLength(24);
+    await writeFile(
+      path.join(directory, `${courses[0].id}.json`),
+      "unreadable geometry",
+    );
+    expect(await new FileCourseStore(directory).list()).toEqual(first);
+    const second = await new FileCourseStore(directory).list(
+      parseCourseCursor(first.cursor!),
+    );
+    expect(second).toEqual({ courses: [courseSummary(courses[24])] });
+    await expect(
+      new FileCourseStore(directory).get(courses[0].id),
+    ).rejects.toThrow();
   });
 });

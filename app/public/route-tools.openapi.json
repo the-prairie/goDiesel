@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "goDiesel course workspace",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "Private route generation and GPX import. Generate/import return previews. Explicitly save, then open /#/courses/{course.id}. Courses are not completed activities."
   },
   "servers": [
@@ -39,11 +39,47 @@
                 "gpx"
               ]
             }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Opaque continuation returned by a collection response. Only applies when id is absent.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "JSON {courses:Course[]} or {course:Course}. With format=gpx, application/gpx+xml."
+            "description": "CoursePage for a collection, {course:Course} for one course, or a GPX attachment when format=gpx.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/CoursePage"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "course"
+                      ],
+                      "properties": {
+                        "course": {
+                          "type": "object",
+                          "description": "Complete stored Course, including segmented geometry and provenance."
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "application/gpx+xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "401": {
             "description": "Owner token required."
@@ -53,8 +89,12 @@
           },
           "503": {
             "description": "Workspace unavailable or not configured."
+          },
+          "400": {
+            "description": "Invalid course ID or cursor."
           }
-        }
+        },
+        "description": "Without id, returns at most 24 course summaries in stable ID order. Pass the returned cursor unchanged to load the next page. Summary pages contain no geometry. Use id to load a complete course. Concurrent saves may require refreshing the first page."
       },
       "post": {
         "operationId": "createCourse",
@@ -285,6 +325,83 @@
             "minimum": 0,
             "maximum": 2147483647,
             "description": "Variation seed. Start at zero."
+          }
+        }
+      },
+      "CourseSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "activity",
+          "createdAt",
+          "sourceKind",
+          "distanceM",
+          "ascentM",
+          "sectionCount"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^course-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "activity": {
+            "type": "string",
+            "enum": [
+              "Run",
+              "Walk",
+              "Ride"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sourceKind": {
+            "type": "string",
+            "enum": [
+              "gpx",
+              "generated"
+            ]
+          },
+          "distanceM": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "ascentM": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "sectionCount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50000
+          }
+        }
+      },
+      "CoursePage": {
+        "type": "object",
+        "required": [
+          "courses"
+        ],
+        "properties": {
+          "courses": {
+            "type": "array",
+            "maxItems": 24,
+            "items": {
+              "$ref": "#/components/schemas/CourseSummary"
+            }
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Pass unchanged in the next collection request. Absence means there are no more results."
           }
         }
       }
