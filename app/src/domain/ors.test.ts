@@ -48,7 +48,7 @@ describe("ORS boundary", () => {
     const fetcher = network([Response.json(provider()), Response.json(provider(1, 10))]);
     const saved = new Map<string, Course>();
     const store: CourseStore = { list: async () => ({ courses: [] }), get: async (id) => saved.get(id) ?? null, put: async (course) => { saved.set(course.id, course); return { course, created: true }; } };
-    const options = { store, localDevelopment: true, orsApiKey: "private-test-key", fetch: fetcher };
+    const options = { store, localDevelopment: true, orsApiKey: "private-test-key", nextgisOverpassKey: "nextgis-server-option", fetch: fetcher };
     const post = (body: unknown) => coursesResponse(new Request("http://localhost/api/courses", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }), options);
     const generated = await post({ action: "generate", request });
     expect(generated.status).toBe(200);
@@ -56,12 +56,15 @@ describe("ORS boundary", () => {
     expect(result.course.source.provider).toBe("ors");
     expect(result.course.assessment.selection.comparedCount).toBe(2);
     expect(fetcher.mock.calls.filter(([url]) => String(url).includes("directions"))).toHaveLength(2);
+    expect(fetcher.mock.calls.filter(([url]) => String(url).includes("overpass")).map(([url]) => url)).toEqual(["https://overpass.nextgis.com/nextgis-server-option/api/interpreter"]);
+    expect(JSON.stringify(result)).not.toContain(options.nextgisOverpassKey);
     const response = await post({ action: "save", ...result });
     expect(response.status).toBe(201);
     const course = parseCourse((await response.json()).course);
     expect(course.assessment).toEqual(result.course.assessment);
     expect(courseGpx(course)).toContain("openrouteservice.org");
     expect(courseGpx(course)).toContain("CC BY-SA");
+    expect(courseGpx(course)).not.toContain(options.nextgisOverpassKey);
     const tampered = structuredClone(result);
     tampered.course.assessment.paved.matchedM = 0;
     tampered.course.assessment.paved.share = 0;

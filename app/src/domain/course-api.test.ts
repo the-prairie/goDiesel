@@ -575,6 +575,84 @@ describe("bounded route generation", () => {
 });
 
 describe("course persistence adapters", () => {
+  it("uses the Pages NextGIS secret and preserves unknown evidence on authentication failure", async () => {
+    const key = "nextgis-pages-secret";
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async url =>
+      String(url).includes("overpass")
+        ? new Response(key, { status: 401 })
+        : Response.json(provider()));
+    vi.stubGlobal("fetch", fetcher);
+    try {
+      const response = await onRequest({
+        request: post({ action: "generate", request }, { Authorization: "Bearer owner-secret" }, "https://example.com"),
+        env: {
+          COURSE_STORE: { get: async () => null, put: async () => null, list: async () => ({ objects: [], truncated: false }) },
+          GODIESEL_COURSE_TOKEN: "owner-secret",
+          GODIESEL_COURSE_SIGNING_KEY: "a-signing-secret-of-at-least-thirty-two-bytes",
+          ORS_API_KEY: "ors-pages-secret",
+          NEXTGIS_OVERPASS_API_KEY: key,
+        },
+      });
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.course.assessment).toMatchObject({
+        geographyStatus: "unavailable",
+        parks: { knownM: 0, share: null },
+        waterfront: { knownM: 0, share: null },
+      });
+      expect(body.course.assessment.parks.unknownM).toBe(body.course.distanceM);
+      expect(JSON.stringify(body)).not.toContain(key);
+      expect(fetcher.mock.calls.filter(([url]) => String(url).includes("overpass")).map(([url]) => url)).toEqual([
+        `https://overpass.nextgis.com/${key}/api/interpreter`,
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it.each([false, true])("uses the Vite server NextGIS setting with explicit options taking precedence", async explicit => {
+    const directory = await mkdtemp(path.join(tmpdir(), "godiesel-nextgis-"));
+    temporary.push(directory);
+    const root = path.join(directory, "site");
+    await mkdir(root);
+    const key = explicit ? "nextgis-vite-option" : "nextgis-vite-environment";
+    vi.stubEnv("NEXTGIS_OVERPASS_API_KEY", "nextgis-vite-environment");
+    const nativeFetch = fetch;
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async (url, init) => {
+      if (String(url).startsWith("http://127.0.0.1:")) return nativeFetch(url, init);
+      return Response.json(String(url).includes("overpass") ? { elements: [] } : provider());
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const server = await createServer({
+      configFile: false, root, logLevel: "silent",
+      plugins: [coursesPlugin({
+        token: "owner-secret", orsApiKey: "ors-vite-secret",
+        nextgisOverpassKey: explicit ? key : undefined,
+        storeDirectory: path.join(directory, "private"),
+      })],
+      server: { host: "127.0.0.1", port: 0 },
+    });
+    try {
+      await server.listen();
+      const address = server.httpServer!.address() as { port: number };
+      const response = await nativeFetch(`http://127.0.0.1:${address.port}/api/courses`, {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer owner-secret" },
+        body: JSON.stringify({ action: "generate", request }),
+      });
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.course.assessment.geographyStatus).toBe("available");
+      expect(JSON.stringify(body)).not.toContain(key);
+      expect(fetcher.mock.calls.filter(([url]) => String(url).includes("overpass")).map(([url]) => url)).toEqual([
+        `https://overpass.nextgis.com/${key}/api/interpreter`,
+      ]);
+    } finally {
+      await server.close();
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("keeps private course files inaccessible through Vite URLs", async () => {
     const directory = await mkdtemp(
       path.join(tmpdir(), "godiesel-private-courses-"),

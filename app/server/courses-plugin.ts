@@ -180,6 +180,7 @@ export function coursesPlugin(
     token?: string;
     routerUrl?: string;
     orsApiKey?: string;
+    nextgisOverpassKey?: string;
     signingKey?: string;
     storeDirectory?: string;
   } = {},
@@ -268,6 +269,7 @@ export function coursesPlugin(
         token: options.token ?? process.env.GODIESEL_COURSE_TOKEN,
         routerUrl: options.routerUrl ?? process.env.GODIESEL_ROUTER_URL,
         orsApiKey: options.orsApiKey ?? process.env.ORS_API_KEY,
+        nextgisOverpassKey: options.nextgisOverpassKey ?? process.env.NEXTGIS_OVERPASS_API_KEY,
         signingKey:
           options.signingKey ?? process.env.GODIESEL_COURSE_SIGNING_KEY,
         localDevelopment: loopback,

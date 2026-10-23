@@ -28,7 +28,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
-      coursesPlugin({ token: env.GODIESEL_COURSE_TOKEN, routerUrl: env.GODIESEL_ROUTER_URL, signingKey: env.GODIESEL_COURSE_SIGNING_KEY, orsApiKey: env.ORS_API_KEY }),
+      coursesPlugin({ token: env.GODIESEL_COURSE_TOKEN, routerUrl: env.GODIESEL_ROUTER_URL, signingKey: env.GODIESEL_COURSE_SIGNING_KEY, orsApiKey: env.ORS_API_KEY, nextgisOverpassKey: env.NEXTGIS_OVERPASS_API_KEY }),
       discoveryPlugin(),
       {
         name: "godiesel-single-route-manifest",

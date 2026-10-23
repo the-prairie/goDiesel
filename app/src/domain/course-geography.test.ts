@@ -21,10 +21,70 @@ it("loads mapped polygons and water lines through one bounded request", async ()
   const result = await load(start, 10_000, signal(), fetcher);
   expect(result).toMatchObject({ status: "available", parks: [{ rings: [ring] }], water: [{ rings: [ring] }], waterways: [ring.slice(0, 2), ring.slice(1, 3)] });
   expect(fetcher).toHaveBeenCalledTimes(1);
+  expect(fetcher.mock.calls[0][0]).toBe("https://overpass.private.coffee/api/interpreter");
   const query = new URLSearchParams(String(fetcher.mock.calls[0][1]!.body)).get("data");
   expect(query).toContain("[timeout:6]");
   expect(query).toContain("out geom 2001");
   expect(query).toContain(`(${result.bounds.south},${result.bounds.west},${result.bounds.north},${result.bounds.east})`);
+});
+
+it("encodes the NextGIS key as one fixed-host path segment", async () => {
+  const key = "secret/../?token=#%\\suffix";
+  const fetcher = provider([way()]);
+  const result = await load(start, 10_000, signal(), fetcher, key);
+  expect(result.status).toBe("available");
+  expect(fetcher).toHaveBeenCalledOnce();
+  const [url, init] = fetcher.mock.calls[0];
+  expect(new URL(String(url)).href).toBe("https://overpass.nextgis.com/secret%2F..%2F%3Ftoken%3D%23%25%5Csuffix/api/interpreter");
+  expect(init).toMatchObject({ method: "POST", redirect: "manual" });
+  expect(String(init?.body)).not.toContain(key);
+  expect(JSON.stringify(result)).not.toContain(key);
+});
+
+it.each(["", " ", ".", "..", "key\n", "key\u0000", "key\u007f", "\ud800", "x".repeat(1_025)])("leaves malformed configured keys unavailable without a public request", async key => {
+  const fetcher = provider();
+  const result = await load(start, 10_000, signal(), fetcher, key);
+  expect(result).toMatchObject({ status: "unavailable", parks: [], water: [], waterways: [] });
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
+it.each([301, 302, 307, 308, 401, 403, 429, 503])("keeps NextGIS HTTP %i failures unknown without following redirects or falling back", async status => {
+  const key = "private-nextgis-failure";
+  const cancel = vi.fn();
+  const response = new Response(new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode(key)); }, cancel }), {
+    status, headers: { Location: `https://other.example/${key}` },
+  });
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response);
+  const warn = vi.spyOn(console, "warn");
+  const error = vi.spyOn(console, "error");
+  try {
+    const result = await load(start, 10_000, signal(), fetcher, key);
+    expect(result).toMatchObject({ status: "unavailable", parks: [], water: [], waterways: [] });
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(fetcher.mock.calls[0][1]?.redirect).toBe("manual");
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(JSON.stringify(result)).not.toContain(key);
+    expect(warn).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+  } finally {
+    warn.mockRestore();
+    error.mockRestore();
+  }
+});
+
+it("separates cached geography by provider and credential with one shared entry limit", async () => {
+  const fetcher = vi.fn<typeof fetch>().mockImplementation(async url => Response.json({
+    elements: String(url).includes("private.coffee") ? [] : [way()],
+  }));
+  expect((await load(start, 10_000, signal(), fetcher)).parks).toHaveLength(0);
+  expect((await load(start, 10_000, signal(), fetcher, "first-key")).parks).toHaveLength(1);
+  await load(start, 10_000, signal(), fetcher, "second-key");
+  await load(start, 10_000, signal(), fetcher, "first-key");
+  expect((await load(start, 10_000, signal(), fetcher)).parks).toHaveLength(0);
+  expect(fetcher).toHaveBeenCalledTimes(3);
+  for (let i = 0; i < 6; i++) await load(start, 10_000, signal(), fetcher, `other-key-${i}`);
+  await load(start, 10_000, signal(), fetcher);
+  expect(fetcher).toHaveBeenCalledTimes(10);
 });
 
 it("joins reversed outer and inner ways with holes and suppresses duplicate members", async () => {
@@ -123,10 +183,10 @@ it("caps geometry points, relation members, and element counts", async () => {
   expect(limited.parks.flatMap(polygon => polygon.rings.flat()).length).toBeLessThanOrEqual(20_000);
 });
 
-it("aborts after eight seconds even when fetch ignores cancellation", async () => {
+it.each([undefined, "nextgis-timeout-key"])("aborts after eight seconds even when fetch ignores cancellation", async key => {
   vi.useFakeTimers();
   const fetcher = vi.fn<typeof fetch>().mockImplementation(() => new Promise(() => {}));
-  const pending = load(start, 10_000, signal(), fetcher);
+  const pending = load(start, 10_000, signal(), fetcher, key);
   await vi.advanceTimersByTimeAsync(8_000);
   expect((await pending).status).toBe("unavailable");
   expect(fetcher.mock.calls[0][1]?.signal?.aborted).toBe(true);
