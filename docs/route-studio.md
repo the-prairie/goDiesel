@@ -128,6 +128,17 @@ band have at least 80% known coverage and coverage differs by at most 10 points.
 Only confirmed matching distance earns credit. These are disclosed heuristics,
 not a validated model of enjoyment or safety.
 
+Set server-only `NEXTGIS_OVERPASS_API_KEY` in the repository-root `.env.local`
+for local Vite or as a Cloudflare Pages secret to use NextGIS for this lookup.
+Create the key under Overpass API in your account's Software and services page,
+as described in the [NextGIS documentation](https://docs.nextgis.com/docs_ngcom/source/services.html).
+The server uses `https://overpass.nextgis.com/<encoded-key>/api/interpreter`.
+Without the setting, it uses `https://overpass.private.coffee/api/interpreter`.
+The cache separates providers and credentials within the same eight-entry limit.
+Invalid keys, authentication errors, redirects, and other lookup failures leave
+geographic evidence unknown without a public-provider retry. The key stays out
+of browser configuration, course records, and application logs.
+
 The optional versioned `Course.assessment` stores measured/unknown distances,
 selection counts, and used/ignored dimensions. It is signed with the generated
 course and persisted unchanged. Old GPX and BRouter courses remain readable.

@@ -81,6 +81,7 @@ export function onRequest(context: {
     GODIESEL_COURSE_TOKEN?: string;
     GODIESEL_ROUTER_URL?: string;
     ORS_API_KEY?: string;
+    NEXTGIS_OVERPASS_API_KEY?: string;
     GODIESEL_COURSE_SIGNING_KEY?: string;
   };
 }) {
@@ -91,6 +92,7 @@ export function onRequest(context: {
     token: context.env.GODIESEL_COURSE_TOKEN,
     routerUrl: context.env.GODIESEL_ROUTER_URL,
     orsApiKey: context.env.ORS_API_KEY,
+    nextgisOverpassKey: context.env.NEXTGIS_OVERPASS_API_KEY,
     signingKey: context.env.GODIESEL_COURSE_SIGNING_KEY,
   });
 }

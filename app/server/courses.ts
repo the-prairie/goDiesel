@@ -23,6 +23,7 @@ export interface CourseApiOptions {
   token?: string;
   routerUrl?: string;
   orsApiKey?: string;
+  nextgisOverpassKey?: string;
   signingKey?: string;
   localDevelopment?: boolean;
   fetch?: typeof fetch;
@@ -479,7 +480,7 @@ export async function coursesResponse(
         AbortSignal.timeout(65_000),
       ]);
       const course = options.orsApiKey
-        ? await stableCourse(await generateOrsCourse(input, options.orsApiKey, signal, options.fetch))
+        ? await stableCourse(await generateOrsCourse(input, options.orsApiKey, signal, options.fetch, options.nextgisOverpassKey))
         : await generateCourse(input, executionOptions, signal);
       return json({
         course,

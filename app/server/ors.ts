@@ -82,13 +82,13 @@ async function readProvider(response: Response) {
   } finally { reader.releaseLock(); }
 }
 
-export async function generateOrsCourse(request: CourseRequest, apiKey: string, signal: AbortSignal, fetcher: typeof fetch = fetch): Promise<Course> {
+export async function generateOrsCourse(request: CourseRequest, apiKey: string, signal: AbortSignal, fetcher: typeof fetch = fetch, nextgisOverpassKey?: string): Promise<Course> {
   const target = request.distance * (request.unit === "mi" ? 1609.344 : 1000);
   if (target > 100_000)
     throw new OrsError(400, "ORS loop generation supports up to 100 km (62.13 mi). Imported GPX routes can be longer.");
   const profile = orsProfile(request);
   const deadline = AbortSignal.any([signal, AbortSignal.timeout(45_000)]);
-  const geographyPromise = loadCourseGeography(request.start, target, deadline, fetcher);
+  const geographyPromise = loadCourseGeography(request.start, target, deadline, fetcher, nextgisOverpassKey);
   const resultsPromise = Promise.allSettled([0, 1].map(async (variation) => {
     const response = await fetcher(`https://api.heigit.org/openrouteservice/v2/directions/${profile}/geojson`, {
       method: "POST", redirect: "manual",

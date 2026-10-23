@@ -11,6 +11,17 @@ const MAX_MEMBERS = 256;
 const CACHE_TTL_MS = 15 * 60_000;
 const cache = new Map<string, { expires: number; context: GeographicContext }>();
 
+function endpointFor(nextgisOverpassKey: string | undefined): string | undefined {
+  if (nextgisOverpassKey === undefined) return "https://overpass.private.coffee/api/interpreter";
+  if (!nextgisOverpassKey || nextgisOverpassKey.length > 1_024 ||
+      /[\s\u0000-\u001f\u007f]/u.test(nextgisOverpassKey) || /^\.{1,2}$/.test(nextgisOverpassKey)) return;
+  try {
+    return `https://overpass.nextgis.com/${encodeURIComponent(nextgisOverpassKey)}/api/interpreter`;
+  } catch {
+    return;
+  }
+}
+
 function record(value: unknown): ObjectRecord | undefined {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? value as ObjectRecord : undefined;
@@ -200,16 +211,20 @@ export async function loadCourseGeography(
   targetM: number,
   signal: AbortSignal,
   fetcher: typeof fetch = fetch,
+  nextgisOverpassKey?: string,
 ): Promise<GeographicContext> {
   signal.throwIfAborted();
   const bounds = boundsFor(start, targetM);
   const unavailable: GeographicContext = { status: "unavailable", bounds, parks: [], water: [], waterways: [] };
   if (!Number.isFinite(start.lat) || !Number.isFinite(start.lng) || Math.abs(start.lat) > 90 ||
       Math.abs(start.lng) > 180 || !Number.isFinite(targetM) || targetM <= 0) return unavailable;
+  const endpoint = endpointFor(nextgisOverpassKey);
+  if (!endpoint) return unavailable;
   const query = queryFor(bounds);
+  const cacheKey = `${endpoint}\n${query}`;
   const now = Date.now();
   for (const [key, entry] of cache) if (entry.expires <= now) cache.delete(key);
-  const hit = cache.get(query);
+  const hit = cache.get(cacheKey);
   if (hit) return structuredClone(hit.context);
   const controller = new AbortController();
   let rejectAbort: (reason: unknown) => void = () => {};
@@ -224,7 +239,7 @@ export async function loadCourseGeography(
     rejectAbort(new Error("Geography unavailable"));
   }, 8_000);
   try {
-    const request = fetcher("https://overpass.private.coffee/api/interpreter", {
+    const request = fetcher(endpoint, {
       method: "POST", redirect: "manual",
       headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json", "User-Agent": "goDiesel/1.0 (+https://godiesel.pages.dev; personal route planning)" },
       body: new URLSearchParams({ data: query }),
@@ -236,7 +251,7 @@ export async function loadCourseGeography(
     if (Date.now() - now >= 8_000) return unavailable;
     if (context.status === "available") {
       if (cache.size >= 8) cache.delete(cache.keys().next().value!);
-      cache.set(query, { expires: Date.now() + CACHE_TTL_MS, context: structuredClone(context) });
+      cache.set(cacheKey, { expires: Date.now() + CACHE_TTL_MS, context: structuredClone(context) });
     }
     return context;
   } catch {
