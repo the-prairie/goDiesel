@@ -330,7 +330,7 @@ def render_share_card(quest, baseline_photos, out_path):
         d.text((48, 268), quote, font=FONT_ITALIC, fill='#DDDDDD')
 
     # Quest rule at bottom (region already in the title — no need to repeat)
-    footer = f"{quest['theme'].upper()} QUEST · {quest['difficulty'].upper()} · {quest['date'] or ''}"
+    footer = f"{quest['theme'].upper()} QUEST · {quest['effort_tier'].upper()} · {quest['date'] or ''}"
     d.text((48, H - 64), footer, font=FONT_SMALL, fill='#7BA1BB')
 
     # Route silhouette — draw the polyline directly with PIL (left side, lower area)
@@ -445,7 +445,7 @@ for spec in quest_specs:
     )
     for _field, _target in (
         ('theme', 'theme'),
-        ('difficulty', 'difficulty'),
+        ('effort_tier', 'effort_tier'),
         ('completion_rule', 'completion_rule'),
         ('blurb', 'quest_blurb'),
     ):
@@ -557,7 +557,7 @@ def react_route_manifest_record(route):
         'type': record['type'],
         'description': record['description'],
         'completion_rule': record['completion_rule'],
-        'difficulty': record['difficulty'],
+        'effort_tier': record['effort_tier'],
         'theme': record['theme'],
         'xp': record['xp'],
         'center_lat': record['center_lat'],
@@ -1611,8 +1611,8 @@ input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 
       <select id="filterType" data-filter="type"></select>
     </div>
     <div class="filter-field">
-      <label for="filterDifficulty">Difficulty</label>
-      <select id="filterDifficulty" data-filter="difficulty"></select>
+      <label for="filterDifficulty">Effort</label>
+      <select id="filterDifficulty" data-filter="effort_tier"></select>
     </div>
     <div class="filter-field">
       <label for="filterRegion">Region</label>
@@ -1853,7 +1853,7 @@ const BEST_IN_EARTH_ROUTES = new Set([
 
 const galleryFilters = {
   type: 'All',
-  difficulty: 'All',
+  effort_tier: 'All',
   region: 'All',
   theme: 'All',
 };
@@ -2530,8 +2530,8 @@ function resetFilters() {
 function applyQuestPreset(kind) {
   Object.keys(galleryFilters).forEach(key => { galleryFilters[key] = 'All'; });
   if (kind === 'ride') galleryFilters.type = 'Ride';
-  if (kind === 'easy') galleryFilters.difficulty = 'Moderate';
-  if (kind === 'xp') galleryFilters.difficulty = 'Epic';
+  if (kind === 'easy') galleryFilters.effort_tier = 'Moderate';
+  if (kind === 'xp') galleryFilters.effort_tier = 'Epic';
   document.querySelectorAll('[data-filter]').forEach(select => {
     select.value = galleryFilters[select.dataset.filter] || 'All';
   });
@@ -2628,7 +2628,7 @@ function renderGallery() {
       <div class="quest-badges">
         <span class="quest-chip xp">${(r.xp || 0).toLocaleString()} XP</span>
         <span class="quest-chip theme">${r.theme || 'Quest'}</span>
-        <span class="quest-chip">${r.difficulty || 'Open'}</span>
+        <span class="quest-chip">${r.effort_tier || 'Open'}</span>
         ${isBestInEarth(r) ? '<span class="quest-chip earth">Best in Earth</span>' : ''}
       </div>
       <div class="quest-title">"${r.subtitle}"</div>
@@ -2645,7 +2645,7 @@ function renderCompletionPanel(route) {
   const objective = route.completion_rule || `Complete ${route.distance_km.toFixed(1)} km.`;
   const facts = [
     ['Reward', `${(route.xp || 0).toLocaleString()} XP`],
-    ['Difficulty', route.difficulty || 'Open'],
+    ['Effort', route.effort_tier || 'Open'],
     [isBestInEarth(route) ? 'Replay' : 'Proof', isBestInEarth(route) ? 'Best in Earth' : 'GPS route'],
     ['Climb', `${climb} m`],
   ];
@@ -2693,7 +2693,7 @@ async function openRoute(i, options = {}) {
   }
   else { descEl.style.display = 'none'; }
   document.getElementById('artifactContext').textContent =
-    `${r.type.toUpperCase()} · ${r.difficulty || 'OPEN'} · ${r.date || 'DATE TBD'}`;
+    `${r.type.toUpperCase()} · ${r.effort_tier || 'OPEN'} · ${r.date || 'DATE TBD'}`;
   renderCompletionPanel(r);
   document.getElementById('kmTotal').textContent =
     (r.route[r.route.length-1].d / 1000).toFixed(2) + ' km';

@@ -108,7 +108,7 @@ export function AtlasSearch({
             route.region,
             route.type,
             route.theme,
-            route.difficulty,
+            route.effortTier,
           ]
             .join(" ")
             .toLowerCase()
@@ -275,7 +275,7 @@ export function AtlasSearch({
                 >
                   <b>{route.name}</b>
                   <span className="ml-2 text-muted-foreground">
-                    {route.difficulty}
+                    {route.effortTier}
                   </span>
                 </button>
               ))}

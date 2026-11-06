@@ -380,5 +380,6 @@ not tasks with owners.
 3. ~~**`bestInEarth` is editorial data stored in code.**~~ **Closed 2026-11-06.**
    The owner sets `best_in_earth` on a route in `quests.json`. The generator
    reads that flag when it builds replay metadata.
-4. **"Difficulty" is overloaded.** It exists both as a generated quest attribute
-   and as a curated prose field, with no stated relationship between them.
+4. ~~**"Difficulty" is overloaded.**~~ **Closed 2026-11-06.** The generated
+   Easy/Moderate/Epic value is `effort_tier`. Curated prose stays
+   `curation.difficulty`.

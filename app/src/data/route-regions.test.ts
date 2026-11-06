@@ -22,7 +22,7 @@ function route(overrides: Partial<RouteSummary> = {}): RouteSummary {
     type: "Run",
     description: "",
     completionRule: "Complete the route.",
-    difficulty: "Easy",
+    effortTier: "Easy",
     theme: "Cruise",
     xp: 100,
     trace: [point(10, 179)],

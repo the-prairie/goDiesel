@@ -17,7 +17,7 @@ const fixture = parseRouteDetail({
   type: "Run",
   description: "Test description",
   completion_rule: "Complete it",
-  difficulty: "Moderate",
+  effort_tier: "Moderate",
   theme: "test",
   xp: 100,
   center_lat: 50,
