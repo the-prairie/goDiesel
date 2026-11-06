@@ -545,6 +545,7 @@ test("mobile globe supports two-finger pinch without losing region state", async
     await expect(
       page.locator('div[data-atlas-engine="cesium"]'),
     ).toHaveAttribute("data-atlas-status", "ready");
+    await expect(canvas).toHaveAttribute("data-camera-state", "settled");
     await expect
       .poll(async () =>
         Math.abs(Number(await canvas.getAttribute("data-camera-height")) - 18_500_000),
