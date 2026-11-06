@@ -373,11 +373,9 @@ Invariants 11 and 12 are enforced by `app/src/structure.test.ts`.
 Recorded per `docs/agents/domain.md`. These are known missing pieces of language,
 not tasks with owners.
 
-1. **Region has no taxonomy.** `region` is a free-text label produced by
-   geocoding, and three separate region mappings exist in the Python layer
-   (bounding boxes in `build.py`, `REGIONS` in `admin.py`, and
-   `REGION_TIME_ZONES`). They can disagree, which silently drops a route's
-   timezone. The domain has no single definition of a region.
+1. ~~**Region has no taxonomy.**~~ **Closed 2026-11-06.** One region table in
+   `route_regions.py` owns the bounding boxes and the IANA timezone for each
+   label. A recorded route whose label has no timezone fails the build.
 2. ~~**`source_kind` is not modelled.**~~ **Closed 2026-08-08.** See section 2.
 3. **`bestInEarth` is editorial data stored in code.** It is a hardcoded set of
    activity ids in `build.py` rather than curation held in `quests.json`.
