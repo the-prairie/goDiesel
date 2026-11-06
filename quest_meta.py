@@ -56,6 +56,20 @@ def build_route_curation(value):
     return curation
 
 
+def curated_best_in_earth_ids(routes):
+    ids = set()
+    for route in routes:
+        flag = route.get("best_in_earth", False)
+        if flag is False or flag is None:
+            continue
+        if flag is not True:
+            raise ValueError(
+                f"best_in_earth for {route.get('activity_id')} must be true or false"
+            )
+        ids.add(str(route["activity_id"]))
+    return ids
+
+
 def build_replay_metadata(
     activity_id,
     point_count,

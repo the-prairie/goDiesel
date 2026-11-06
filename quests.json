@@ -1,5 +1,5 @@
 {
-  "_comment": "Master routes list. Manage via admin.sh (visual UI) or edit this file directly. status: approved | pending | rejected/archived. Optional curation fields per route: title, theme, difficulty, blurb, completion_rule, visibility (public default, hidden optional). Build only renders approved.",
+  "_comment": "Master routes list. Manage via admin.sh (visual UI) or edit this file directly. status: approved | pending | rejected/archived. Optional fields per route: title, theme, difficulty, blurb, completion_rule, best_in_earth, visibility (public default, hidden optional). Build only renders approved.",
   "routes": [
     {
       "activity_id": "3519505225411091950",
@@ -130,6 +130,7 @@
     {
       "activity_id": "13935098460",
       "status": "approved",
+      "best_in_earth": true,
       "region": "Mainland Greece",
       "curation": {
         "vibe": "A long westward reach from central Athens, with the city giving way to the hills beyond Chaidari before the route turns home. The 28.4 km recording has a clear contrast between a direct urban approach through Egaleo and a more irregular loop on the western high ground. The owner’s warning about barbed-wire fences changes how to use it: a revealing exploration, but not a line to copy blindly.",
@@ -291,6 +292,7 @@
     {
       "activity_id": "9934715694",
       "status": "approved",
+      "best_in_earth": true,
       "region": "Highwood Pass",
       "curation": {
         "vibe": "Highwood Pass becomes a two-sided journey on this long out-and-back ride. The trace climbs northwest from its southern start, crosses the high section, then drops into the valley beyond before turning around. That means the big ascent is not finished at the first crest: the return asks for another climb before the long homeward descent. The mirrored elevation profile gives the ride a clear story, with two high chapters and a shared road linking them.",
@@ -318,6 +320,7 @@
     {
       "activity_id": "17636880071",
       "status": "approved",
+      "best_in_earth": true,
       "region": "Kyoto, Japan",
       "curation": {
         "vibe": "A generous cross-city loop that reaches well beyond central Kyoto. The opening leg runs west across the grid to the river and wooded western edge, where the trace folds into its main climb. It then works east along the northern side of the city before dropping south toward the start. At 32.6 km, this is a route for seeing Kyoto change character over hours rather than collecting a quick landmark circuit.",
@@ -509,6 +512,7 @@
     {
       "activity_id": "9959792315",
       "status": "approved",
+      "best_in_earth": true,
       "region": "Bali, Indonesia",
       "curation": {
         "vibe": "The coast is the payoff on this broad loop west of Canggu. The trace first heads inland through Tibubeneng and across toward Munggu, then turns through Cemagi to reach the sea. From there, a long diagonal shoreline leg carries it southeast before it bends back to the starting area. The route’s two halves have distinct shapes: a network of inland streets followed by the much simpler line of the coast.",
@@ -1460,6 +1464,7 @@
     {
       "activity_id": "17654151284",
       "status": "approved",
+      "best_in_earth": true,
       "region": null,
       "curation": {
         "vibe": "A long, exploratory Kyoto run that moves from the city into sustained climbing before returning.",
@@ -3336,6 +3341,7 @@
     {
       "activity_id": "14349820520",
       "status": "approved",
+      "best_in_earth": true,
       "region": null,
       "curation": {
         "vibe": "Lajares is the hinge of this wide loop to Fuerteventura’s western edge. The route reaches El Cotillo, follows the coast south, and bends inland into a more elevated return, including a small extra loop away from the main circuit. Its 32.9 km combine a long coastal sweep with a noticeably hillier second act: an outing with two distinct settings rather than one prolonged shoreline.",
@@ -4441,6 +4447,7 @@
     {
       "activity_id": "13358070690",
       "status": "approved",
+      "best_in_earth": true,
       "region": null,
       "curation": {
         "vibe": "A near-half-marathon that lets Banff’s valley do the work of keeping things interesting. The route leaves town along the Bow River corridor and reaches an eastern loop within a broad river bend, revisiting parts of that green pocket before returning on the shared approach. Its low overall elevation range makes a useful counterpoint to the mountain routes nearby: the distance expands, while the route stays close to the valley floor.",
