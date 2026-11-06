@@ -379,7 +379,8 @@ not tasks with owners.
    `REGION_TIME_ZONES`). They can disagree, which silently drops a route's
    timezone. The domain has no single definition of a region.
 2. ~~**`source_kind` is not modelled.**~~ **Closed 2026-08-08.** See section 2.
-3. **`bestInEarth` is editorial data stored in code.** It is a hardcoded set of
-   activity ids in `build.py` rather than curation held in `quests.json`.
+3. ~~**`bestInEarth` is editorial data stored in code.**~~ **Closed 2026-11-06.**
+   The owner sets `best_in_earth` on a route in `quests.json`. The generator
+   reads that flag when it builds replay metadata.
 4. **"Difficulty" is overloaded.** It exists both as a generated quest attribute
    and as a curated prose field, with no stated relationship between them.

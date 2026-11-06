@@ -18,6 +18,7 @@ from quest_meta import (
     build_quest_meta,
     build_replay_metadata,
     build_route_curation,
+    curated_best_in_earth_ids,
     elevation_gain_m,
     route_guide_preview,
 )
@@ -45,10 +46,6 @@ REACT_GENERATED_FILES = (
     REACT_GENERATED_DATA / 'route-stats.json',
 )
 ROUTE_GENERATION_BACKUP = REACT_ROUTE_DETAILS.parent / '.route-generation-backup'
-BEST_IN_EARTH_IDS = {
-    '13935098460', '14349820520', '17636880071', '17654151284',
-    '13358070690', '9959792315', '9934715694',
-}
 
 TEAL = '#00F19F'; STRAIN = '#0093E7'; SLEEP = '#7BA1BB'
 BG = (16, 21, 24); BG_HEX = '#101518'
@@ -537,7 +534,7 @@ def react_route_record(route):
         'replay': build_replay_metadata(
             aid,
             point_count,
-            BEST_IN_EARTH_IDS,
+            curated_best_in_earth_ids(quest_specs),
             lifecycle,
         ),
     }

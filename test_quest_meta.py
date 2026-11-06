@@ -1,9 +1,12 @@
+import json
 import unittest
+from pathlib import Path
 
 from quest_meta import (
     build_quest_meta,
     build_replay_metadata,
     build_route_curation,
+    curated_best_in_earth_ids,
     elevation_gain_m,
 )
 
@@ -118,6 +121,24 @@ class QuestMetaTests(unittest.TestCase):
         self.assertEqual(meta["theme"], "Big Day")
         self.assertEqual(meta["xp"], 1240)
         self.assertIn("1,240 m of climbing", meta["completion_rule"])
+
+    def test_best_in_earth_comes_from_quests_json(self):
+        quests_path = Path(__file__).resolve().parent / "quests.json"
+        routes = json.loads(quests_path.read_text())["routes"]
+        self.assertEqual(
+            curated_best_in_earth_ids(routes),
+            {
+                "13935098460",
+                "14349820520",
+                "17636880071",
+                "17654151284",
+                "13358070690",
+                "9959792315",
+                "9934715694",
+            },
+        )
+        with self.assertRaisesRegex(ValueError, "best_in_earth"):
+            curated_best_in_earth_ids([{"activity_id": "1", "best_in_earth": "yes"}])
 
 
 if __name__ == "__main__":
