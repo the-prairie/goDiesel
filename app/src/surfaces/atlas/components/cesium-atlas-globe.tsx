@@ -70,9 +70,7 @@ export const CesiumAtlasGlobe = forwardRef<
       .then(() => {
         if (engineRef.current === engine) {
           readyEngineRef.current = engine;
-          if (selectedRegionRef.current) {
-            engine.setSelectedRegion(selectedRegionRef.current);
-          }
+          engine.setSelectedRegion(selectedRegionRef.current);
           engine.setSelectedRoute(selectedRouteRef.current);
         }
       });

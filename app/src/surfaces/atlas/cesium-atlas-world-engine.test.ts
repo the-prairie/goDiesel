@@ -197,6 +197,29 @@ describe("CesiumAtlasWorldEngine", () => {
     expect(canvas.dataset.cameraState).toBe("settled");
   });
 
+  it("does not start another global flight when the globe is already settled", () => {
+    vi.stubGlobal("window", {
+      clearInterval,
+      matchMedia: () => ({ matches: false }),
+    });
+    const onStatus = vi.fn();
+    const canvas = { dataset: { cameraState: "settled" } as Record<string, string> };
+    const flyTo = vi.fn();
+    const engine = new CesiumAtlasWorldEngine();
+    Object.assign(engine, {
+      viewer: globalViewer(canvas, flyTo),
+      onStatus,
+    });
+
+    engine.setSelectedRegion(undefined);
+
+    expect(flyTo).not.toHaveBeenCalled();
+    expect(onStatus).toHaveBeenCalledWith({
+      state: "ready",
+      message: "Atlas world ready.",
+    });
+  });
+
   it("shares an active global camera flight with reset requests", async () => {
     vi.stubGlobal("window", {
       clearInterval,

@@ -322,6 +322,8 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   setSelectedRegion(region?: RouteRegion) {
     const viewer = this.viewer;
     if (!viewer || viewer.isDestroyed()) return;
+    const alreadyGlobal = this.regionalState.status === "global"
+      && viewer.canvas.dataset.cameraState === "settled";
     this.regionalState = reduceRegionalTransition(this.regionalState, region
       ? { type: "regionSelected", regionName: region.name }
       : { type: "selectionCleared" });
@@ -335,6 +337,10 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
       viewer.canvas.dataset.terrainState = "global";
       viewer.canvas.dataset.regionRouteCount = "0";
       this.restoreGlobalRouteGeometry();
+      if (alreadyGlobal) {
+        this.onStatus?.({ state: "ready", message: "Atlas world ready." });
+        return;
+      }
       this.onStatus?.({ state: "loading", message: "Opening the Atlas world." });
       void this.moveToGlobalView().then(() => {
         if (
