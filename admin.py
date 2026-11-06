@@ -29,6 +29,7 @@ import gpxpy
 import pandas as pd
 
 from admin_curation import curation_readiness, save_curation_and_rebuild, write_atomic
+from route_regions import classify_region
 import hashlib
 import tempfile
 
@@ -119,35 +120,6 @@ STATE_ABBREV = {
     'Vermont': 'VT', 'Virginia': 'VA', 'Washington': 'WA',
     'West Virginia': 'WV', 'Wisconsin': 'WI', 'Wyoming': 'WY',
 }
-
-# Bounding boxes for auto-region detection. Same data as build.py's region() —
-# extend here when you travel somewhere new and the auto-label says "53.1°, -106.6°".
-REGIONS = [
-    (28, 30, -16, -13, 'Canary Islands'),
-    (35, 36.5, 23, 26, 'Crete, Greece'),
-    (37, 39.5, 22, 25, 'Mainland Greece'),
-    (-9, -8, 115, 115.7, 'Bali, Indonesia'),
-    (34.5, 35.5, 135.5, 136, 'Kyoto, Japan'),
-    (34, 40, 135, 141, 'Japan'),
-    (41.5, 43, 2, 3.5, 'Costa Brava, Spain'),
-    (40, 41, -4, -3, 'Madrid, Spain'),
-    (48, 49.4, -124.2, -123, 'Victoria, BC'),
-    (49, 50, -124, -122.5, 'Vancouver, BC'),
-    (49, 50, -126, -125, 'Tofino, BC'),
-    (50.5, 51.8, -116, -115, 'Banff/Kananaskis'),
-    (50.7, 51.3, -114.4, -113.7, 'Calgary, AB'),
-    (51.5, 53, -107, -106, 'Saskatoon, SK'),
-    (32.5, 34, -118, -117, 'San Diego, CA'),
-    (37.5, 38.5, -123, -122, 'Bay Area, CA'),
-]
-
-
-def classify_region(lat, lng):
-    for lo_lat, hi_lat, lo_lng, hi_lng, name in REGIONS:
-        if lo_lat <= lat <= hi_lat and lo_lng <= lng <= hi_lng:
-            return name
-    return f'{lat:.1f}°, {lng:.1f}°'
-
 
 def parse_strava_date(s):
     if not isinstance(s, str):

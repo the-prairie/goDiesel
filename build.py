@@ -24,7 +24,7 @@ from quest_meta import (
 from route_provenance import build_route_provenance, load_source_route_points
 from route_annotations import build_route_annotations
 from route_imports import route_metadata, route_source_kind
-from route_timezones import route_time_zone
+from route_regions import classify_region, time_zone_for_recorded_region
 from owner_publication import recover_owner_publication, TOKEN_ENV, FD_ENV
 
 try: import imagehash
@@ -395,21 +395,6 @@ def render_share_card(quest, baseline_photos, out_path):
 
     img.save(out_path, 'PNG', optimize=True)
 
-# ── Region auto-detect (for fallback) ──
-def region(lat, lng):
-    R = [(28,30,-16,-13,'Canary Islands'),(35,36.5,23,26,'Crete, Greece'),
-         (37,39.5,22,25,'Mainland Greece'),(-9,-8,115,115.7,'Bali, Indonesia'),
-         (34.5,35.5,135.5,136,'Kyoto, Japan'),(34,40,135,141,'Japan'),
-         (41.5,43,2,3.5,'Costa Brava, Spain'),(40,41,-4,-3,'Madrid, Spain'),
-         (48,49,-124,-123,'Victoria, BC'),(49,50,-124,-122.5,'Vancouver, BC'),
-         (49,50,-126,-125,'Tofino, BC'),(50.5,51.8,-116,-115,'Banff/Kananaskis'),
-         (51.5,53,-107,-106,'Saskatoon, SK'),(33,34,-118,-117,'San Diego, CA'),
-         (37.5,38.5,-123,-122,'Bay Area, CA')]
-    for lo_lat, hi_lat, lo_lng, hi_lng, name in R:
-        if lo_lat <= lat <= hi_lat and lo_lng <= lng <= hi_lng:
-            return name
-    return f'{lat:.1f}°, {lng:.1f}°'
-
 # ── Build each quest ──
 print('[4/5] Building quests…')
 routes_data = []
@@ -430,11 +415,14 @@ for spec in quest_specs:
         print(f'    ✗ {aid}: empty polyline'); continue
     distance_km = route_js[-1]['d'] / 1000
 
-    # Auto-detect region if not specified
-    region_label = spec.get('region') or region(route_js[0]['lat'], route_js[0]['lng'])
+    region_label = spec.get('region') or classify_region(
+        route_js[0]['lat'], route_js[0]['lng']
+    )
     temporal_provenance = dict(route_provenance.temporal)
-    time_zone = route_time_zone(region_label)
-    if temporal_provenance.get('status') == 'recorded' and time_zone:
+    time_zone = time_zone_for_recorded_region(
+        region_label, temporal_provenance.get('status')
+    )
+    if time_zone:
         temporal_provenance['time_zone'] = time_zone
 
     # Slug from activity_id

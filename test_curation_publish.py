@@ -198,6 +198,7 @@ def _copy_workspace(workspace):
         "route_provenance.py",
         "route_imports.py",
         "route_annotations.py",
+        "route_regions.py",
         "route_timezones.py",
         "owner_publication.py",
         ".env",
