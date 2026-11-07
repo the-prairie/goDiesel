@@ -24,7 +24,7 @@ function route(overrides: Partial<TestRoute> = {}): TestRoute {
     type: "Run",
     description: "Flat paths beside the Bow River.",
     completionRule: "Complete the route.",
-    difficulty: "Easy",
+    effortTier: "Easy",
     theme: "Cruise",
     xp: 80,
     trace: [],

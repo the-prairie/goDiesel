@@ -281,7 +281,7 @@ function validatedDetailFields(
     type: requiredStringField(input, "type", false),
     description: requiredStringField(input, "description"),
     completionRule: requiredStringField(input, "completion_rule"),
-    difficulty: requiredStringField(input, "difficulty", false),
+    effortTier: requiredStringField(input, "effort_tier", false),
     theme: requiredStringField(input, "theme", false),
     xp: requiredNumberField(input, "xp", { min: 0 }),
     centerLat: requiredNumberField(input, "center_lat", { min: -90, max: 90 }),

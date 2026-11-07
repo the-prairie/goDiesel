@@ -103,7 +103,7 @@ class QuestMetaTests(unittest.TestCase):
             activity_name="crosswalk sprints",
         )
 
-        self.assertEqual(meta["difficulty"], "Easy")
+        self.assertEqual(meta["effort_tier"], "Easy")
         self.assertEqual(meta["theme"], "Local Spark")
         self.assertEqual(meta["xp"], 90)
         self.assertIn("Complete a 4.8 km run", meta["completion_rule"])
@@ -117,7 +117,7 @@ class QuestMetaTests(unittest.TestCase):
             activity_name="island roll",
         )
 
-        self.assertEqual(meta["difficulty"], "Epic")
+        self.assertEqual(meta["effort_tier"], "Epic")
         self.assertEqual(meta["theme"], "Big Day")
         self.assertEqual(meta["xp"], 1240)
         self.assertIn("1,240 m of climbing", meta["completion_rule"])

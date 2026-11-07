@@ -19,7 +19,7 @@ function validRouteDetail(overrides: Record<string, unknown> = {}) {
     type: "Run",
     description: "A representative route.",
     completion_rule: "Complete the route.",
-    difficulty: "Moderate",
+    effort_tier: "Moderate",
     theme: "Explore",
     xp: 120,
     center_lat: 51.05,

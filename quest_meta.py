@@ -113,7 +113,7 @@ def _round_to_10(value):
     return int(round(value / 10.0) * 10)
 
 
-def _difficulty(activity_type, distance_km, elevation_gain):
+def _effort_tier(activity_type, distance_km, elevation_gain):
     if activity_type == "Ride":
         if distance_km >= 75 or elevation_gain >= 1000:
             return "Epic"
@@ -142,7 +142,7 @@ def _theme(activity_type, distance_km, elevation_gain, region_label, activity_na
 
 
 def build_quest_meta(activity_type, distance_km, elevation_gain, region_label, activity_name):
-    difficulty = _difficulty(activity_type, distance_km, elevation_gain)
+    effort_tier = _effort_tier(activity_type, distance_km, elevation_gain)
     theme = _theme(activity_type, distance_km, elevation_gain, region_label, activity_name)
     verb = "ride" if activity_type == "Ride" else "run"
     xp = _round_to_10(
@@ -153,7 +153,7 @@ def build_quest_meta(activity_type, distance_km, elevation_gain, region_label, a
     climbing = f"{elevation_gain:,} m of climbing"
 
     return {
-        "difficulty": difficulty,
+        "effort_tier": effort_tier,
         "theme": theme,
         "xp": xp,
         "elevation_gain_m": int(elevation_gain),
@@ -162,7 +162,7 @@ def build_quest_meta(activity_type, distance_km, elevation_gain, region_label, a
             f"with about {climbing}."
         ),
         "quest_blurb": (
-            f"A {difficulty.lower()} {theme.lower()} quest built from Lauren's "
+            f"A {effort_tier.lower()} {theme.lower()} quest built from Lauren's "
             f"{activity_name or region_label} route."
         ),
     }
