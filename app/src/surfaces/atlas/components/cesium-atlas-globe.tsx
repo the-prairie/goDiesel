@@ -23,6 +23,9 @@ export const CesiumAtlasGlobe = forwardRef<
     presentation,
     onPresentationEvent,
     className,
+    contentInsets,
+    quietChrome,
+    onTerrainNote,
   },
   forwardedRef,
 ) {
@@ -170,6 +173,9 @@ export const CesiumAtlasGlobe = forwardRef<
           region={selectedRegion}
           selectedRoute={selectedRoute}
           onSelectRoute={(route) => onSelectRouteRef.current?.(route)}
+          contentInsets={contentInsets}
+          quietChrome={quietChrome}
+          onTerrainNote={onTerrainNote}
           onReady={() => {
             if (presentation.engineId !== null) {
               onPresentationEvent({

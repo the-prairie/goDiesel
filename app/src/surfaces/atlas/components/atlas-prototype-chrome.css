@@ -1,0 +1,509 @@
+.atlas-proto-sheet,
+  padding-bottom: 0;
+}
+
+body:has(.atlas-layout[data-atlas-layout]) main {
+  overflow: visible;
+}
+
+.atlas-layout[data-atlas-layout] {
+  height: 100dvh;
+}
+
+body:has(.atlas-layout[data-atlas-layout]) .atlas-spine-mobile {
+  background: rgb(0 0 0 / 62%);
+  border-top-color: rgb(255 255 255 / 16%);
+  backdrop-filter: blur(18px);
+}
+
+.atlas-proto-search {
+  position: absolute;
+  z-index: 32;
+  top: 12px;
+  right: 12px;
+  left: 12px;
+}
+
+.atlas-proto-pill {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 0 4px 0 12px;
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: 999px;
+  background: rgb(0 0 0 / 82%);
+  color: #fff;
+  backdrop-filter: blur(16px);
+}
+
+.atlas-proto-pill input {
+  min-width: 0;
+  flex: 1;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 1rem;
+}
+
+.atlas-proto-pill input::placeholder {
+  color: #c6c6c6;
+}
+
+.atlas-proto-pill input:focus-visible {
+  outline: none;
+}
+
+.atlas-proto-pill:focus-within {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.atlas-proto-icon-button,
+.atlas-proto-token,
+.atlas-proto-row,
+.atlas-proto-grabber,
+.atlas-proto-close,
+.atlas-proto-primary,
+.atlas-proto-quiet {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.atlas-proto-icon-button,
+.atlas-proto-close,
+.atlas-proto-grabber,
+.atlas-proto-token,
+.atlas-proto-row,
+.atlas-proto-quiet {
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+}
+
+.atlas-proto-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+}
+
+.atlas-proto-icon-button:focus-visible,
+.atlas-proto-token:focus-visible,
+.atlas-proto-row:focus-visible,
+.atlas-proto-grabber:focus-visible,
+.atlas-proto-close:focus-visible,
+.atlas-proto-primary:focus-visible,
+.atlas-proto-quiet:focus-visible,
+.atlas-proto-locate button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.atlas-proto-token {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 12%);
+  line-height: 1.15;
+  text-align: center;
+  white-space: normal;
+}
+
+.atlas-proto-token[aria-pressed="true"] {
+  background: #f5f5f5;
+  color: #111;
+}
+
+.atlas-proto-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 8px;
+  margin-right: 56px;
+  padding: 12px;
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: 16px;
+  background: rgb(0 0 0 / 88%);
+  color: #fff;
+  backdrop-filter: blur(16px);
+}
+
+.atlas-proto-panel[data-attached="true"] {
+  margin-top: 0;
+  border-top: 0;
+  border-radius: 0 0 16px 16px;
+}
+
+.atlas-proto-search:has(.atlas-proto-panel[data-attached="true"]) .atlas-proto-pill {
+  border-radius: 16px 16px 0 0;
+}
+
+.atlas-proto-panel h2 {
+  margin: 0;
+  color: #c6c6c6;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.atlas-proto-segment {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 16px;
+  background: rgb(255 255 255 / 8%);
+}
+
+.atlas-proto-segment button {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 6px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 0.8125rem;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.atlas-proto-segment button[aria-pressed="true"] {
+  background: #f5f5f5;
+  color: #111;
+}
+
+.atlas-proto-rows,
+.atlas-proto-tokens {
+  display: grid;
+  gap: 12px;
+}
+
+.atlas-proto-tokens {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.atlas-proto-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 0 12px;
+  border-radius: 12px;
+  text-align: left;
+}
+
+.atlas-proto-row[aria-pressed="true"] {
+  background: rgb(255 255 255 / 12%);
+}
+
+.atlas-proto-place {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  text-align: left;
+}
+
+.atlas-proto-place span {
+  color: #c6c6c6;
+  font-size: 0.8125rem;
+}
+
+.atlas-proto-results {
+  display: grid;
+  gap: 4px;
+  max-height: min(32dvh, 16rem);
+  overflow: auto;
+}
+
+.atlas-proto-result {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  text-align: left;
+}
+
+.atlas-proto-result small,
+.atlas-proto-note,
+.atlas-proto-meta {
+  color: #c6c6c6;
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+.atlas-proto-locate {
+  position: absolute;
+  z-index: 32;
+  top: 76px;
+  right: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.atlas-proto-locate button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: 999px;
+  background: rgb(0 0 0 / 82%);
+  color: #fff;
+  backdrop-filter: blur(16px);
+}
+
+.atlas-proto-terrain-note {
+  position: absolute;
+  top: 0;
+  right: 56px;
+  width: min(16rem, 60vw);
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgb(0 0 0 / 88%);
+  color: #fff;
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+.atlas-proto-sheet {
+  position: absolute;
+  z-index: 31;
+  right: 0;
+  bottom: var(--mobile-navigation-height);
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 4px 12px 12px;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-bottom: 0;
+  border-radius: 18px 18px 0 0;
+  background: rgb(0 0 0 / 84%);
+  color: #fff;
+  backdrop-filter: blur(18px);
+}
+
+.atlas-proto-sheet[data-detent="peek"] {
+  max-height: 220px;
+}
+
+.atlas-proto-sheet[data-detent="medium"] {
+  height: calc(50dvh - var(--mobile-navigation-height));
+}
+
+.atlas-proto-sheet[data-detent="large"] {
+  height: calc(100dvh - var(--mobile-navigation-height) - 4.75rem);
+}
+
+.atlas-proto-sheet-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  touch-action: none;
+}
+
+.atlas-proto-grabber {
+  display: grid;
+  flex: 1;
+  place-items: center;
+}
+
+.atlas-proto-grabber span {
+  width: 36px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 70%);
+}
+
+.atlas-proto-scroll {
+  min-height: 0;
+  overflow: auto;
+}
+
+.atlas-proto-title {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  overflow-wrap: break-word;
+}
+
+.atlas-proto-sheet[data-detent="peek"] .atlas-proto-scroll {
+  max-height: 5rem;
+}
+
+.atlas-proto-action-row,
+.atlas-proto-route-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.atlas-proto-action-row .atlas-proto-primary {
+  margin-left: auto;
+}
+
+.atlas-proto-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: #f5f5f5;
+  color: #111;
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.atlas-proto-quiet {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  color: #fff;
+  font-size: 0.9375rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.atlas-proto-list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.atlas-proto-route-row {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 0;
+  border: 0;
+  border-top: 1px solid rgb(255 255 255 / 12%);
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  text-align: left;
+}
+
+.atlas-proto-route-row[aria-current="true"] .atlas-proto-title {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (min-width: 768px) {
+  .atlas-proto-sheet {
+    bottom: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .atlas-proto-sheet,
+  .atlas-proto-panel,
+  .atlas-proto-pill {
+    transition: none;
+  }
+}
+
+.atlas-layout[data-atlas-layout] .maplibregl-ctrl-bottom-right,
+.atlas-layout[data-atlas-layout] .cesium-viewer-bottom {
+  right: 12px !important;
+  bottom: calc(var(--mobile-navigation-height) + var(--atlas-peek-rest, 10px)) !important;
+  left: auto !important;
+}
+
+.atlas-layout[data-atlas-layout] .maplibregl-ctrl-attrib.maplibregl-compact,
+.atlas-layout[data-atlas-layout] .maplibregl-ctrl-attrib.maplibregl-compact-show {
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  max-height: 44px;
+  margin: 0;
+  padding: 0 !important;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 82%);
+}
+
+.atlas-layout[data-atlas-layout] .maplibregl-ctrl-attrib .maplibregl-ctrl-attrib-inner {
+  display: none !important;
+}
+
+.atlas-layout[data-atlas-layout] .maplibregl-ctrl-attrib:not([data-user-open="true"]) .maplibregl-ctrl-attrib-button,
+.atlas-layout[data-atlas-layout] .maplibregl-ctrl-attrib:not([data-user-open="true"]) summary {
+  display: grid;
+  place-items: center;
+  position: absolute;
+  inset: 0;
+  width: 44px;
+  height: 44px;
+  background: none;
+}
+
+.atlas-layout[data-atlas-layout] .maplibregl-ctrl-attrib.maplibregl-compact:after,
+.atlas-layout[data-atlas-layout] .maplibregl-ctrl-attrib.maplibregl-compact-show:after {
+  content: none !important;
+  display: none !important;
+  background: none !important;
+}
+
+.atlas-layout[data-atlas-layout] .maplibregl-ctrl-attrib:not([data-user-open="true"]) .maplibregl-ctrl-attrib-button::before {
+  content: "i";
+  color: #fff;
+  font: 600 1.125rem/1 Georgia, "Iowan Old Style", "Times New Roman", serif;
+}
+
+.atlas-layout[data-atlas-layout] .maplibregl-ctrl-attrib[data-user-open="true"] {
+  width: min(18rem, calc(100vw - 24px));
+  height: auto;
+  max-height: none;
+  overflow: visible;
+  border-radius: 12px;
+  padding: 8px 8px 8px 44px !important;
+}
+
+.atlas-layout[data-atlas-layout] .maplibregl-ctrl-attrib[data-user-open="true"] .maplibregl-ctrl-attrib-inner {
+  display: block !important;
+}
+
+.atlas-layout[data-atlas-layout] [data-atlas-engine="cesium"] > [role="status"] {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}

@@ -6,6 +6,13 @@ import type { RouteRegion } from "@/data/route-regions";
 import { isValidCoordinate } from "@/domain/geometry/geographic-bounds";
 import type { RoutePoint, RouteSummary } from "@/domain/route";
 
+export interface AtlasContentInsets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
 export interface AtlasGlobeProps {
   regions: RouteRegion[];
   selectedRegion?: RouteRegion;
@@ -15,6 +22,9 @@ export interface AtlasGlobeProps {
   presentation: AtlasPresentationState;
   onPresentationEvent: (event: AtlasPresentationEvent) => void;
   className?: string;
+  contentInsets?: AtlasContentInsets;
+  quietChrome?: boolean;
+  onTerrainNote?: (note: string | null) => void;
 }
 
 export interface AtlasGlobeHandle {

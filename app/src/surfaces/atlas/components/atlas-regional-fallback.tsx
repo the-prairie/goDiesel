@@ -3,7 +3,7 @@ import { Map as MapLibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useMemo, useRef, useState, useReducer, forwardRef, useImperativeHandle } from "react";
 
-import type { AtlasGlobeHandle } from "@/surfaces/atlas/atlas-world";
+import type { AtlasContentInsets, AtlasGlobeHandle } from "@/surfaces/atlas/atlas-world";
 import { atlasViewportInsets } from "@/surfaces/atlas/atlas-region-camera";
 import type { RouteRegion } from "@/data/route-regions";
 import type { RoutePoint, RouteSummary } from "@/domain/route";
@@ -155,9 +155,10 @@ function fitRegionalRoutes(
   map: MapLibreMap,
   host: HTMLDivElement,
   bounds: [[number, number], [number, number]],
+  insets?: { top: number; right: number; bottom: number; left: number },
 ) {
   map.fitBounds(bounds, {
-    padding: regionalMapPadding(host.clientWidth, host.clientHeight),
+    padding: insets ?? regionalMapPadding(host.clientWidth, host.clientHeight),
     maxZoom: 14,
     duration: 0,
   });
@@ -171,6 +172,9 @@ interface AtlasRegionalFallbackProps {
   selectedRoute?: RouteSummary;
   onSelectRoute?: (route: RouteSummary) => void;
   onReady?: () => void;
+  contentInsets?: AtlasContentInsets;
+  quietChrome?: boolean;
+  onTerrainNote?: (note: string | null) => void;
 }
 
 export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalFallbackProps>(function AtlasRegionalFallback({
@@ -178,9 +182,14 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
   selectedRoute,
   onSelectRoute,
   onReady,
+  contentInsets,
+  quietChrome = false,
+  onTerrainNote,
 }, forwardedRef) {
   const hostRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | undefined>(undefined);
+  const contentInsetsRef = useRef(contentInsets);
+  contentInsetsRef.current = contentInsets;
   const onSelectRouteRef = useRef(onSelectRoute);
   const [lifecycle, dispatch] = useReducer(reduceRegionalFallback, undefined, initialRegionalFallbackState);
   const status = lifecycle.phase;
@@ -193,7 +202,7 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
     zoomOut: () => mapRef.current?.zoomOut(),
     resetView: () => {
       if (mapRef.current && hostRef.current && bounds) {
-        fitRegionalRoutes(mapRef.current, hostRef.current, bounds);
+        fitRegionalRoutes(mapRef.current, hostRef.current, bounds, contentInsetsRef.current);
       }
     },
   }), [bounds]);
@@ -274,7 +283,7 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
     };
     const handleResize = () => {
       map.resize();
-      fitRegionalRoutes(map, host, bounds);
+      fitRegionalRoutes(map, host, bounds, contentInsetsRef.current);
       updateRouteOverlay();
       map.once("idle", () => {
         if (active) host.dataset.mapRendered = "true";
@@ -344,7 +353,7 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
         map.getCanvas().style.cursor = "";
       });
       map.resize();
-      fitRegionalRoutes(map, host, bounds);
+      fitRegionalRoutes(map, host, bounds, contentInsetsRef.current);
       updateRouteOverlay();
       map.getCanvas().setAttribute(
         "aria-label",
@@ -383,6 +392,46 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
       : status === "ready"
         ? "3D terrain partially unavailable."
         : "Regional map unavailable.";
+
+  useEffect(() => {
+    onTerrainNote?.(statusCopy);
+    return () => onTerrainNote?.(null);
+  }, [onTerrainNote, statusCopy]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const host = hostRef.current;
+    if (!map || !host || !bounds || !contentInsets || status !== "ready") return;
+    fitRegionalRoutes(map, host, bounds, contentInsets);
+  }, [bounds, contentInsets, status]);
+
+  useEffect(() => {
+    if (!quietChrome) return;
+    const host = hostRef.current;
+    const attrib = host?.querySelector(".maplibregl-ctrl-attrib");
+    if (!(attrib instanceof HTMLDetailsElement)) return;
+    attrib.open = false;
+    delete attrib.dataset.userOpen;
+    let fromUser = false;
+    const onClick = () => {
+      fromUser = true;
+    };
+    const onToggle = () => {
+      if (attrib.open && !fromUser) {
+        attrib.open = false;
+        return;
+      }
+      if (attrib.open) attrib.dataset.userOpen = "true";
+      else delete attrib.dataset.userOpen;
+      fromUser = false;
+    };
+    attrib.addEventListener("click", onClick);
+    attrib.addEventListener("toggle", onToggle);
+    return () => {
+      attrib.removeEventListener("click", onClick);
+      attrib.removeEventListener("toggle", onToggle);
+    };
+  }, [quietChrome, status]);
 
   return (
     <div
@@ -443,13 +492,17 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
           );
         })}
       </svg>
-      <div
-        role="status"
-        aria-live="polite"
-        className="pointer-events-none absolute bottom-[calc(var(--atlas-tray-height,12rem)+2.75rem)] left-4 z-10 max-w-[calc(100%-6rem)] border border-white/25 bg-surface px-3 py-2 text-xs text-white"
-      >
-        {statusCopy}
-      </div>
+      {quietChrome ? (
+        <p className="sr-only" role="status" aria-live="polite">{statusCopy}</p>
+      ) : (
+        <div
+          role="status"
+          aria-live="polite"
+          className="pointer-events-none absolute bottom-[calc(var(--atlas-tray-height,12rem)+2.75rem)] left-4 z-10 max-w-[calc(100%-6rem)] border border-white/25 bg-surface px-3 py-2 text-xs text-white"
+        >
+          {statusCopy}
+        </div>
+      )}
     </div>
   );
 });

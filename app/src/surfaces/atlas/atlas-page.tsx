@@ -3,8 +3,9 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
-  useRef,
   useReducer,
+  useRef,
+  useState,
 } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 
@@ -19,6 +20,9 @@ import {
 } from "@/surfaces/atlas/components/atlas-globe";
 import { RegionRouteCarousel } from "@/surfaces/atlas/components/region-route-carousel";
 import { AtlasSearch } from "@/surfaces/atlas/components/atlas-search";
+import { AtlasPrototypeChrome } from "@/surfaces/atlas/components/atlas-prototype-chrome";
+import { readAtlasPrototypeLayout } from "@/surfaces/atlas/atlas-prototype-layout";
+import type { AtlasContentInsets } from "@/surfaces/atlas/atlas-world";
 import { completedRoutes } from "@/data/routes";
 import { buildRouteRegions, type RouteRegion } from "@/data/route-regions";
 import {
@@ -56,13 +60,39 @@ export function AtlasPage() {
   );
   const selection = resolveAtlasSelection(searchParams, routeRegions);
   const { selectedRegion, selectedRoute } = selection;
+  const prototypeLayout = readAtlasPrototypeLayout(searchParams);
   const [presentation, dispatchPresentation] = useReducer(
     reduceAtlasPresentation,
     selectedRegion?.name,
     initialAtlasPresentationState,
   );
-  const presentedRoute = selectedRoute ?? selectedRegion?.routes[0];
+  const presentedRoute =
+    prototypeLayout === "b" || prototypeLayout === "c"
+      ? selectedRoute
+      : selectedRoute ?? selectedRegion?.routes[0];
   const query = searchParams.get("q") ?? "";
+  const [contentInsets, setContentInsets] = useState<AtlasContentInsets>({
+    top: 88,
+    right: 76,
+    bottom: 180,
+    left: 16,
+  });
+  const [terrainNote, setTerrainNote] = useState<string | null>(null);
+  const [openSignal, setOpenSignal] = useState(0);
+  const onContentInsets = useCallback((next: AtlasContentInsets) => {
+    setContentInsets((current) => {
+      if (
+        Math.abs(current.top - next.top) < 2
+        && Math.abs(current.right - next.right) < 2
+        && Math.abs(current.bottom - next.bottom) < 2
+        && Math.abs(current.left - next.left) < 2
+      ) return current;
+      return next;
+    });
+  }, []);
+  const onTerrainNote = useCallback((note: string | null) => {
+    setTerrainNote((current) => (current === note ? current : note));
+  }, []);
 
   const updateSearchParams = useCallback(
     function updateSearchParams(
@@ -117,6 +147,7 @@ export function AtlasPage() {
   }, [selectedRegion, updateSearchParams]);
 
   function selectRegion(region: RouteRegion) {
+    setOpenSignal((value) => value + 1);
     updateSearchParams((next) => {
       next.set("region", region.name);
       next.delete("route");
@@ -124,6 +155,14 @@ export function AtlasPage() {
   }
 
   function selectRoute(route: RouteSummary) {
+    setOpenSignal((value) => value + 1);
+    updateSearchParams((next) => {
+      next.set("region", route.region);
+      next.set("route", route.slug);
+    });
+  }
+
+  function selectListedRoute(route: RouteSummary) {
     updateSearchParams((next) => {
       next.set("region", route.region);
       next.set("route", route.slug);
@@ -138,6 +177,12 @@ export function AtlasPage() {
       route.slug,
       `${location.pathname}?${returnParams.toString()}`,
     );
+  }
+
+  function clearRoute() {
+    updateSearchParams((next) => {
+      next.delete("route");
+    });
   }
 
   function clearRegion() {
@@ -170,6 +215,7 @@ export function AtlasPage() {
   return (
     <section
       data-region-selected={Boolean(selectedRegion)}
+      data-atlas-layout={prototypeLayout ?? undefined}
       className="atlas-layout relative isolate h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 overflow-hidden bg-background md:h-dvh"
     >
       <AtlasGlobe
@@ -181,9 +227,36 @@ export function AtlasPage() {
         onSelectRoute={selectRoute}
         presentation={presentation}
         onPresentationEvent={dispatchPresentation}
+        contentInsets={prototypeLayout ? contentInsets : undefined}
+        quietChrome={Boolean(prototypeLayout)}
+        onTerrainNote={prototypeLayout ? onTerrainNote : undefined}
         className="absolute inset-0 min-h-0 rounded-none border-0"
       />
 
+      {prototypeLayout ? (
+        <AtlasPrototypeChrome
+          layout={prototypeLayout}
+          routes={visibleRoutes}
+          regions={routeRegions}
+          query={query}
+          onQueryChange={setQuery}
+          mode={mode}
+          onModeChange={setMode}
+          selectedRegion={selectedRegion}
+          selectedRoute={selectedRoute}
+          onSelectRegion={selectRegion}
+          onSelectRoute={selectRoute}
+          onSelectListedRoute={selectListedRoute}
+          onClearRegion={clearRegion}
+          onClearRoute={clearRoute}
+          onLocate={() => globeRef.current?.resetView()}
+          replayPathForRoute={replayPathForRoute}
+          terrainNote={terrainNote}
+          openSignal={openSignal}
+          onContentInsets={onContentInsets}
+        />
+      ) : (
+        <>
       <div className="atlas-discovery absolute z-30 grid gap-2">
         <AtlasSearch
           routes={visibleRoutes}
@@ -217,6 +290,8 @@ export function AtlasPage() {
           />
         </div>
       ) : null}
+        </>
+      )}
     </section>
   );
 }
