@@ -159,7 +159,7 @@ export function AtlasPage() {
   }, [selectedRegion, updateSearchParams]);
 
   function selectRegion(region: RouteRegion) {
-    setOpenSignal((value) => value + 1);
+    if (prototypeLayout) setOpenSignal((value) => value + 1);
     updateSearchParams((next) => {
       next.set("region", region.name);
       next.delete("route");
@@ -167,7 +167,7 @@ export function AtlasPage() {
   }
 
   function selectRoute(route: RouteSummary) {
-    setOpenSignal((value) => value + 1);
+    if (prototypeLayout) setOpenSignal((value) => value + 1);
     updateSearchParams((next) => {
       next.set("region", route.region);
       next.set("route", route.slug);
