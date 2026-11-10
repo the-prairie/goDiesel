@@ -40,7 +40,7 @@ OUTPUT_REQUIRED_FIELDS = frozenset(
         "completion_rule",
         "date",
         "description",
-        "difficulty",
+        "effort_tier",
         "distance_km",
         "elevation_gain_m",
         "lifecycle",

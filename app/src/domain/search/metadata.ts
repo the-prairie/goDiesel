@@ -20,7 +20,7 @@ export function routeMetadata(route: Record<string, unknown>): MetadataField[] {
     ["Activity", route.type],
     ["Distance", route.distance_km ?? route.distanceKm],
     ["Climb", route.elevation_gain_m ?? route.elevationGainM],
-    ["Difficulty", route.difficulty],
+    ["Effort", route.effort_tier ?? route.effortTier],
     ["Theme", route.theme],
     ["Completion", [route.completion_rule ?? route.completionRule, route.quest_blurb]],
     ["Status", route.lifecycle],

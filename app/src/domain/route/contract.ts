@@ -120,7 +120,7 @@ export interface RouteSummary {
   type: RouteActivityType;
   description: string;
   completionRule: string;
-  difficulty: string;
+  effortTier: string;
   theme: string;
   xp: number;
   trace: RoutePoint[];
@@ -153,7 +153,7 @@ export interface GeneratedQuestRoute {
   type?: unknown;
   description?: unknown;
   completion_rule?: unknown;
-  difficulty?: unknown;
+  effort_tier?: unknown;
   theme?: unknown;
   xp?: unknown;
   trace?: unknown;

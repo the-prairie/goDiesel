@@ -85,7 +85,7 @@ function commonRouteFields(
     type: stringValue(input.type, "Run"),
     description: stringValue(input.description),
     completionRule: stringValue(input.completion_rule),
-    difficulty: stringValue(input.difficulty, "Open"),
+    effortTier: stringValue(input.effort_tier, "Open"),
     theme: stringValue(input.theme, "Quest"),
     xp: numberValue(input.xp),
     centerLat: numberValue(input.center_lat),

@@ -471,7 +471,7 @@ function cardHtml(r) {
   const region = effectiveRegion(r);
   const title = effectiveField(r, 'title');
   const theme = effectiveField(r, 'theme');
-  const difficulty = effectiveField(r, 'difficulty');
+  const effortTier = effectiveField(r, 'effort_tier');
   const blurb = effectiveField(r, 'blurb');
   const completionRule = effectiveField(r, 'completion_rule');
   const visibility = effectiveField(r, 'visibility') || 'public';
@@ -519,9 +519,9 @@ function cardHtml(r) {
                    data-meta-field="theme"
                    data-meta-for="${r.activity_id}">
             <input class="meta-input" type="text"
-                   placeholder="Difficulty"
-                   value="${escapeHtml(difficulty)}"
-                   data-meta-field="difficulty"
+                   placeholder="Effort tier"
+                   value="${escapeHtml(effortTier)}"
+                   data-meta-field="effort_tier"
                    data-meta-for="${r.activity_id}">
           </div>
           <textarea class="meta-textarea"

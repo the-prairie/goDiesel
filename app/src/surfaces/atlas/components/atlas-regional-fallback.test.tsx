@@ -26,7 +26,7 @@ function route(overrides: Partial<RouteSummary> = {}): RouteSummary {
     type: "Run",
     description: "",
     completionRule: "Complete the route.",
-    difficulty: "Moderate",
+    effortTier: "Moderate",
     theme: "Cruise",
     xp: 80,
     trace: [

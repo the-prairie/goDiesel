@@ -279,7 +279,7 @@ test("missing geometry disables one route without crashing detail", async ({
         date: "2025-11-24",
         description: "A route without geometry.",
         completion_rule: "Complete the route.",
-        difficulty: "Epic",
+        effort_tier: "Epic",
         theme: "Explore",
         xp: 390,
         center_lat: 35.01,

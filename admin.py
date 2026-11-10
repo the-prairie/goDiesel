@@ -87,7 +87,7 @@ SLUG_PATTERN = re.compile(r'^[A-Za-z0-9._-]+$')
 MEDIA_ROOT = QUESTS / 'app' / 'public' / 'media'
 OWNER_MUTATION_LOCK = threading.Lock()
 TEAL = '#00F19F'
-CURATION_TEXT_FIELDS = ('title', 'theme', 'difficulty', 'blurb', 'completion_rule')
+CURATION_TEXT_FIELDS = ('title', 'theme', 'effort_tier', 'blurb', 'completion_rule')
 CURATION_VISIBILITIES = ('public', 'hidden')
 
 # Nominatim fair-use: max 1 req/sec, descriptive User-Agent required.
