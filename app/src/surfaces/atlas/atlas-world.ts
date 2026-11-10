@@ -31,6 +31,7 @@ export interface AtlasGlobeHandle {
   zoomIn: () => void;
   zoomOut: () => void;
   resetView: () => void;
+  spinBy?: (radians: number) => void;
 }
 
 export type AtlasWorldStatus =
@@ -63,6 +64,7 @@ export interface AtlasWorldEngine {
   zoomIn(): void;
   zoomOut(): void;
   resetView(): void;
+  spinBy?(radians: number): void;
   destroy(): void;
 }
 

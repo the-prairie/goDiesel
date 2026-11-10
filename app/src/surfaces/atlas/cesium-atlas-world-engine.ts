@@ -406,6 +406,14 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     this.zoomBy(1.35);
   }
 
+  spinBy(radians: number) {
+    const viewer = this.viewer;
+    if (!viewer || viewer.isDestroyed() || !Number.isFinite(radians) || radians === 0) return;
+    const height = viewer.camera.positionCartographic?.height ?? 0;
+    if (height < 8_000_000) return;
+    viewer.camera.rotateRight(radians);
+  }
+
   resetView() {
     void this.moveToGlobalView();
   }

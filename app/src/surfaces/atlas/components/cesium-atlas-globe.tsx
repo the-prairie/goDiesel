@@ -44,6 +44,9 @@ export const CesiumAtlasGlobe = forwardRef<
     zoomIn: () => (fallbackRef.current ?? engineRef.current)?.zoomIn(),
     zoomOut: () => (fallbackRef.current ?? engineRef.current)?.zoomOut(),
     resetView: () => (fallbackRef.current ?? engineRef.current)?.resetView(),
+    spinBy: (radians: number) => {
+      (fallbackRef.current ?? engineRef.current)?.spinBy?.(radians);
+    },
   }));
 
   selectedRegionRef.current = selectedRegion;

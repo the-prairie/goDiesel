@@ -8,7 +8,7 @@ import type { RouteSummary } from "@/domain/route";
 import {
   atlasSheetOpens,
   reduceAtlasSheet,
-  type AtlasPrototypeLayout,
+  type AtlasCardLayout,
   type AtlasSheetDetent,
 } from "@/surfaces/atlas/atlas-prototype-layout";
 import type { AtlasContentInsets } from "@/surfaces/atlas/atlas-world";
@@ -18,7 +18,7 @@ import {
 import "./atlas-prototype-chrome.css";
 
 interface AtlasPrototypeChromeProps {
-  layout: AtlasPrototypeLayout;
+  layout: AtlasCardLayout;
   routes: RouteSummary[];
   regions: RouteRegion[];
   query: string;
@@ -263,7 +263,7 @@ function FilterChoices({
   mode,
   onModeChange,
 }: {
-  layout: AtlasPrototypeLayout;
+  layout: AtlasCardLayout;
   mode: AtlasActivityMode;
   onModeChange: (mode: AtlasActivityMode) => void;
 }) {
@@ -391,7 +391,7 @@ function SearchResults({
 }
 
 const Sheet = forwardRef<HTMLElement, {
-  layout: AtlasPrototypeLayout;
+  layout: AtlasCardLayout;
   detent: AtlasSheetDetent;
   region: RouteRegion;
   route?: RouteSummary;

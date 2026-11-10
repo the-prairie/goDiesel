@@ -10,14 +10,17 @@ describe("readAtlasPrototypeLayout", () => {
   it("keeps the current Atlas when the flag is absent or unknown", () => {
     expect(readAtlasPrototypeLayout(new URLSearchParams())).toBeNull();
     expect(readAtlasPrototypeLayout(new URLSearchParams("activity=runs"))).toBeNull();
-    expect(readAtlasPrototypeLayout(new URLSearchParams("atlasLayout=d"))).toBeNull();
+    expect(readAtlasPrototypeLayout(new URLSearchParams("atlasLayout=g"))).toBeNull();
     expect(readAtlasPrototypeLayout(new URLSearchParams("atlasLayout=A"))).toBeNull();
   });
 
-  it("reads the three prototype layouts", () => {
+  it("reads the card layouts and the memory layouts", () => {
     expect(readAtlasPrototypeLayout(new URLSearchParams("atlasLayout=a"))).toBe("a");
     expect(readAtlasPrototypeLayout(new URLSearchParams("atlasLayout=b"))).toBe("b");
     expect(readAtlasPrototypeLayout(new URLSearchParams("atlasLayout=c"))).toBe("c");
+    expect(readAtlasPrototypeLayout(new URLSearchParams("atlasLayout=d"))).toBe("d");
+    expect(readAtlasPrototypeLayout(new URLSearchParams("atlasLayout=e"))).toBe("e");
+    expect(readAtlasPrototypeLayout(new URLSearchParams("atlasLayout=f"))).toBe("f");
   });
 });
 
@@ -28,6 +31,8 @@ describe("atlas sheet detents", () => {
     expect(atlasSheetOpens("b", true, false)).toBe(false);
     expect(atlasSheetOpens("b", true, true)).toBe(true);
     expect(atlasSheetOpens("a", false, false)).toBe(false);
+    expect(atlasSheetOpens("d", true, true)).toBe(false);
+    expect(atlasSheetOpens("f", true, false)).toBe(false);
   });
 
   it("cycles peek, medium, and large, and swipe down from peek closes", () => {

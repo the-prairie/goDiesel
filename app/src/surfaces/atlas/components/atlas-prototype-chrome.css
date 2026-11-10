@@ -1,4 +1,4 @@
-.atlas-proto-sheet,
+body:has(.atlas-layout[data-atlas-layout]) .weathered-atlas > div {
   padding-bottom: 0;
 }
 

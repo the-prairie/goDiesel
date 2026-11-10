@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -21,7 +23,7 @@ import {
 import { RegionRouteCarousel } from "@/surfaces/atlas/components/region-route-carousel";
 import { AtlasSearch } from "@/surfaces/atlas/components/atlas-search";
 import { AtlasPrototypeChrome } from "@/surfaces/atlas/components/atlas-prototype-chrome";
-import { readAtlasPrototypeLayout } from "@/surfaces/atlas/atlas-prototype-layout";
+import { readAtlasPrototypeLayout, isMemoryLayout } from "@/surfaces/atlas/atlas-prototype-layout";
 import type { AtlasContentInsets } from "@/surfaces/atlas/atlas-world";
 import { completedRoutes } from "@/data/routes";
 import { buildRouteRegions, type RouteRegion } from "@/data/route-regions";
@@ -33,6 +35,12 @@ import {
 import { resolveAtlasSelection } from "@/surfaces/atlas/atlas-selection";
 import type { RouteSummary } from "@/domain/route";
 import { replayPath } from "@/app/route-paths";
+
+const AtlasMemoryChrome = lazy(() =>
+  import("@/surfaces/atlas/components/atlas-memory-chrome").then((module) => ({
+    default: module.AtlasMemoryChrome,
+  })),
+);
 
 export function AtlasPage() {
   const location = useLocation();
@@ -67,7 +75,11 @@ export function AtlasPage() {
     initialAtlasPresentationState,
   );
   const presentedRoute =
-    prototypeLayout === "b" || prototypeLayout === "c"
+    prototypeLayout === "b"
+    || prototypeLayout === "c"
+    || prototypeLayout === "d"
+    || prototypeLayout === "e"
+    || prototypeLayout === "f"
       ? selectedRoute
       : selectedRoute ?? selectedRegion?.routes[0];
   const query = searchParams.get("q") ?? "";
@@ -185,6 +197,14 @@ export function AtlasPage() {
     });
   }
 
+  function setYear(year: number) {
+    updateSearchParams((next) => {
+      next.set("year", String(year));
+      next.delete("region");
+      next.delete("route");
+    });
+  }
+
   function clearRegion() {
     updateSearchParams((next) => {
       next.delete("region");
@@ -233,7 +253,25 @@ export function AtlasPage() {
         className="absolute inset-0 min-h-0 rounded-none border-0"
       />
 
-      {prototypeLayout ? (
+      {isMemoryLayout(prototypeLayout) ? (
+        <Suspense fallback={null}>
+          <AtlasMemoryChrome
+            layout={prototypeLayout}
+            routes={visibleRoutes}
+            regions={routeRegions}
+            selectedRegion={selectedRegion}
+            year={Number(searchParams.get("year")) || null}
+            flying={presentation.status.state === "region-loading"}
+            terrainNote={terrainNote}
+            onSelectRegion={selectRegion}
+            onClearRegion={clearRegion}
+            onYear={setYear}
+            onSpin={(radians) => globeRef.current?.spinBy?.(radians)}
+            replayPathForRoute={replayPathForRoute}
+            onContentInsets={onContentInsets}
+          />
+        </Suspense>
+      ) : prototypeLayout ? (
         <AtlasPrototypeChrome
           layout={prototypeLayout}
           routes={visibleRoutes}
