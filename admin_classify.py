@@ -1,9 +1,3 @@
-"""Lifecycle for the admin background region classifier.
-
-The public snapshot keeps the keys the admin page already reads.
-A running classification has no finish time.
-"""
-
 from __future__ import annotations
 
 from typing import Literal, TypedDict

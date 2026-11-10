@@ -365,7 +365,6 @@ def classify_unmapped_worker(candidates):
 
 
 def start_classify_if_needed():
-    """Return started, running, or idle. A second start cannot launch another worker."""
     global _classify_state
     with _classify_lock:
         if _classify_state['phase'] == 'running':
