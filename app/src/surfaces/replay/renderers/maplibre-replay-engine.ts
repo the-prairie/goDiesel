@@ -14,8 +14,11 @@ import type { ReplayPose } from "@/surfaces/replay/playback/replay-controller";
 
 import {
   initialMapLibreReplayState,
-  reduceMapLibreReplay,
+  mapLibreFollowsPose,
   mapLibreReplayStatus,
+  mapLibreRunIsCurrent,
+  reduceMapLibreReplay,
+  type MapLibreReplayEvent,
 } from "./maplibre-replay-state";
 
 const STYLE_URL = "https://tiles.openfreemap.org/styles/fiord";
@@ -43,29 +46,15 @@ export class MapLibreAtlasReplayEngine implements ReplayEngine {
   private host?: HTMLDivElement;
   private lifecycle = initialMapLibreReplayState();
   private loadTimer?: number;
-  private generation = 0;
 
   async mount({
     container,
     route,
     onStatus,
   }: ReplayEngineMountOptions) {
-    const generation = ++this.generation;
-    this.lifecycle = reduceMapLibreReplay(this.lifecycle, {
-      type: "mapStarted",
-      operationId: generation,
-    });
-    onStatus({
-      state: "loading",
-      title: "Opening Atlas replay",
-      message: "Loading the route map and replay thread.",
-    });
+    const { operationId } = this.transition({ type: "mapStarted" }, onStatus);
     if (route.route.length < 2) {
-      onStatus({
-        state: "unavailable",
-        title: "Route geometry unavailable",
-        message: "This route does not contain enough points for Atlas replay.",
-      });
+      this.transition({ type: "inputsRejected", operationId }, onStatus);
       return;
     }
 
@@ -85,30 +74,16 @@ export class MapLibreAtlasReplayEngine implements ReplayEngine {
     });
     this.map = map;
     map.addControl(new maplibregl.NavigationControl({ showCompass: true }), "bottom-right");
-    const handleError = () => {
-      if (generation !== this.generation) return;
-      this.lifecycle = reduceMapLibreReplay(this.lifecycle, {
-        type: "mapError",
-        operationId: generation,
-      });
-      if (this.lifecycle.phase === "unavailable" && this.lifecycle.reason === "errors") {
-        onStatus(mapLibreReplayStatus(this.lifecycle)!);
-      }
-    };
-    map.on("error", handleError);
+    map.on("error", () => {
+      this.transition({ type: "mapError", operationId }, onStatus);
+    });
     this.loadTimer = window.setTimeout(() => {
-      if (generation !== this.generation) return;
-      this.lifecycle = reduceMapLibreReplay(this.lifecycle, {
-        type: "deadlineReached",
-        operationId: generation,
-      });
-      if (this.lifecycle.phase === "unavailable") {
-        onStatus(mapLibreReplayStatus(this.lifecycle)!);
-      }
+      this.transition({ type: "deadlineReached", operationId }, onStatus);
     }, 15_000);
 
     map.once("load", () => {
-      if (generation !== this.generation || this.map !== map) return;
+      if (!mapLibreRunIsCurrent(this.lifecycle, operationId) || this.map !== map)
+        return;
       if (this.loadTimer !== undefined) window.clearTimeout(this.loadTimer);
       map.resize();
       map.addSource("replay-route", {
@@ -144,17 +119,27 @@ export class MapLibreAtlasReplayEngine implements ReplayEngine {
         maxZoom: 15,
         duration: 0,
       });
-      this.lifecycle = reduceMapLibreReplay(this.lifecycle, {
-        type: "mapLoaded",
-        operationId: generation,
-      });
-      onStatus(mapLibreReplayStatus(this.lifecycle)!);
+      this.transition({ type: "mapLoaded", operationId }, onStatus);
     });
+  }
+
+  /** Every status this engine publishes comes from the reducer state. */
+  private transition(
+    event: MapLibreReplayEvent,
+    onStatus?: ReplayEngineMountOptions["onStatus"],
+  ) {
+    const previous = this.lifecycle;
+    this.lifecycle = reduceMapLibreReplay(previous, event);
+    if (this.lifecycle.statusRevision !== previous.statusRevision) {
+      const status = mapLibreReplayStatus(this.lifecycle);
+      if (status) onStatus?.(status);
+    }
+    return this.lifecycle;
   }
 
   setPose(pose: ReplayPose) {
     const map = this.map;
-    if (!map || this.lifecycle.phase !== "ready") return;
+    if (!map || !mapLibreFollowsPose(this.lifecycle)) return;
     if (!pose.following) return;
     map.jumpTo({
       center: [pose.lng, pose.lat],
@@ -165,13 +150,12 @@ export class MapLibreAtlasReplayEngine implements ReplayEngine {
   }
 
   destroy() {
-    this.generation += 1;
     if (this.loadTimer !== undefined) window.clearTimeout(this.loadTimer);
     this.map?.remove();
     this.host?.remove();
     this.map = undefined;
     this.host = undefined;
-    this.lifecycle = reduceMapLibreReplay(this.lifecycle, { type: "disposed" });
+    this.transition({ type: "disposed" });
     this.loadTimer = undefined;
   }
 }

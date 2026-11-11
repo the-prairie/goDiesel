@@ -213,4 +213,186 @@ describe("MapLibre Replay lifecycle contract", () => {
     expect(next.jumpTo).toHaveBeenCalledOnce();
     h.engine.destroy();
   });
+
+  describe("status characterization", () => {
+    const LOADING = {
+      state: "loading",
+      title: "Opening Atlas replay",
+      message: "Loading the route map and replay thread.",
+    };
+    const READY = {
+      state: "ready",
+      title: "Atlas replay ready",
+      message: "The fallback route thread is ready to move.",
+    };
+    const GEOMETRY = {
+      state: "unavailable",
+      title: "Route geometry unavailable",
+      message: "This route does not contain enough points for Atlas replay.",
+    };
+    const ERRORS = {
+      state: "unavailable",
+      title: "Atlas replay unavailable",
+      message: "The fallback map could not load in this browser session.",
+    };
+    const DEADLINE = {
+      state: "unavailable",
+      title: "Atlas replay timed out",
+      message: "The fallback map did not become ready in time.",
+    };
+    const payloads = (onStatus: ReturnType<typeof vi.fn>) =>
+      onStatus.mock.calls.map(([status]) => status);
+    async function remount(
+      h: Awaited<ReturnType<typeof mount>>,
+      selectedRoute = route,
+    ) {
+      const onStatus = vi.fn();
+      await h.engine.mount({
+        container: h.container,
+        route: selectedRoute,
+        onStatus,
+      });
+      return onStatus;
+    }
+
+    it("successful load", async () => {
+      const h = await mount();
+      h.map.emit("load");
+      await vi.advanceTimersByTimeAsync(20000);
+      expect(payloads(h.onStatus)).toEqual([LOADING, READY]);
+      h.engine.destroy();
+    });
+
+    it.each([
+      ["missing", []],
+      ["insufficient", route.route.slice(0, 1)],
+    ])("rejects %s geometry", async (_label, points) => {
+      const h = await mount({ route: points } as unknown as QuestRoute);
+      await vi.advanceTimersByTimeAsync(20000);
+      expect(payloads(h.onStatus)).toEqual([LOADING, GEOMETRY]);
+      expect(provider.maps).toHaveLength(0);
+      h.engine.destroy();
+    });
+
+    it("reports provider errors on the fourth and every later pre-load error", async () => {
+      const h = await mount();
+      for (let i = 0; i < 5; i++) h.map.emit("error");
+      expect(payloads(h.onStatus)).toEqual([LOADING, ERRORS, ERRORS]);
+      h.engine.destroy();
+    });
+
+    it("reports the provider deadline, later errors and a late load", async () => {
+      const h = await mount();
+      await vi.advanceTimersByTimeAsync(15000);
+      for (let i = 0; i < 4; i++) h.map.emit("error");
+      h.map.emit("load");
+      expect(payloads(h.onStatus)).toEqual([LOADING, DEADLINE, ERRORS, READY]);
+      h.engine.destroy();
+    });
+
+    it("reports errors, then the deadline, then a late load", async () => {
+      const h = await mount();
+      for (let i = 0; i < 4; i++) h.map.emit("error");
+      await vi.advanceTimersByTimeAsync(15000);
+      h.map.emit("load");
+      expect(payloads(h.onStatus)).toEqual([LOADING, ERRORS, DEADLINE, READY]);
+      h.engine.destroy();
+    });
+
+    it("destroy during load publishes nothing further", async () => {
+      const h = await mount();
+      h.engine.destroy();
+      for (let i = 0; i < 5; i++) h.map.emit("error");
+      h.map.emit("load");
+      await vi.advanceTimersByTimeAsync(20000);
+      expect(payloads(h.onStatus)).toEqual([LOADING]);
+    });
+
+    it("destroy after ready publishes nothing further", async () => {
+      const h = await mount();
+      h.map.emit("load");
+      h.engine.destroy();
+      for (let i = 0; i < 5; i++) h.map.emit("error");
+      await vi.advanceTimersByTimeAsync(20000);
+      expect(payloads(h.onStatus)).toEqual([LOADING, READY]);
+    });
+
+    it("a remount after destroy drops the retired run's callbacks", async () => {
+      const h = await mount();
+      h.engine.destroy();
+      const nextStatus = await remount(h);
+      const next = provider.maps.at(-1)!;
+      for (let i = 0; i < 5; i++) h.map.emit("error");
+      h.map.emit("load");
+      next.emit("load");
+      await vi.advanceTimersByTimeAsync(20000);
+      expect(payloads(h.onStatus)).toEqual([LOADING]);
+      expect(payloads(nextStatus)).toEqual([LOADING, READY]);
+      h.engine.destroy();
+    });
+
+    it("a remount without destroy drops the replaced run's callbacks", async () => {
+      const h = await mount();
+      const nextStatus = await remount(h);
+      const next = provider.maps.at(-1)!;
+      for (let i = 0; i < 5; i++) h.map.emit("error");
+      h.map.emit("load");
+      await vi.advanceTimersByTimeAsync(15000);
+      expect(h.map.addSource).not.toHaveBeenCalled();
+      expect(payloads(h.onStatus)).toEqual([LOADING]);
+      expect(payloads(nextStatus)).toEqual([LOADING, DEADLINE]);
+      next.emit("load");
+      expect(payloads(nextStatus)).toEqual([LOADING, DEADLINE, READY]);
+      h.engine.destroy();
+    });
+
+    it("readiness stays sticky through a remount without destroy", async () => {
+      const h = await mount();
+      h.map.emit("load");
+      const nextStatus = await remount(h);
+      const next = provider.maps.at(-1)!;
+      h.engine.setPose(pose);
+      expect(next.jumpTo).toHaveBeenCalledOnce();
+      for (let i = 0; i < 5; i++) next.emit("error");
+      await vi.advanceTimersByTimeAsync(20000);
+      expect(payloads(nextStatus)).toEqual([LOADING]);
+      next.emit("load");
+      expect(payloads(h.onStatus)).toEqual([LOADING, READY]);
+      expect(payloads(nextStatus)).toEqual([LOADING, READY]);
+      h.engine.destroy();
+    });
+
+    it("the error budget carries through a remount without destroy", async () => {
+      const h = await mount();
+      for (let i = 0; i < 4; i++) h.map.emit("error");
+      const nextStatus = await remount(h);
+      const next = provider.maps.at(-1)!;
+      next.emit("error");
+      next.emit("load");
+      expect(payloads(h.onStatus)).toEqual([LOADING, ERRORS]);
+      expect(payloads(nextStatus)).toEqual([LOADING, ERRORS, READY]);
+      h.engine.destroy();
+    });
+
+    it("rejected geometry after a ready run without destroy", async () => {
+      const h = await mount();
+      h.map.emit("load");
+      const nextStatus = await remount(h, {
+        route: [],
+      } as unknown as QuestRoute);
+      await vi.advanceTimersByTimeAsync(20000);
+      expect(payloads(nextStatus)).toEqual([LOADING, GEOMETRY]);
+      expect(provider.maps).toHaveLength(1);
+      h.engine.destroy();
+    });
+
+    it("a remount without destroy after rejected geometry loads normally", async () => {
+      const h = await mount({ route: [] } as unknown as QuestRoute);
+      const nextStatus = await remount(h);
+      provider.maps.at(-1)!.emit("load");
+      expect(payloads(h.onStatus)).toEqual([LOADING, GEOMETRY]);
+      expect(payloads(nextStatus)).toEqual([LOADING, READY]);
+      h.engine.destroy();
+    });
+  });
 });
