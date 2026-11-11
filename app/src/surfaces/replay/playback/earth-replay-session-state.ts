@@ -7,7 +7,7 @@ import {
   seekReplay,
   toggleReplay,
   toggleReplayFollowing,
-  zoomReplay,
+  REPLAY_CAMERA_RANGES_M,
   type ReplayControlState,
 } from "@/surfaces/replay/playback/replay-controller";
 
@@ -26,7 +26,9 @@ export type EarthReplayControlEvent =
   | { type: "progressSelected"; progressM: number; totalDistanceM: number }
   | { type: "speedCycled" }
   | { type: "followingToggled" }
-  | { type: "zoomRequested"; direction: "in" | "out" };
+  | { type: "zoomRequested"; direction: "in" | "out" }
+  /** The person zoomed the renderer itself; the session keeps that range. */
+  | { type: "cameraRangeChosen"; cameraRangeM: number };
 
 export type EarthReplayHudEvent =
   | { type: "presentationReset"; isMobile: boolean }
@@ -65,6 +67,22 @@ export function initialEarthReplaySessionState(mode: ReplayEngineMode): EarthRep
     contextState: "preview",
     mobileControlsExpanded: false,
   };
+}
+
+/** Bounds for a range chosen on the renderer, in metres. */
+const CHOSEN_CAMERA_RANGE_M = { min: 30, max: 90_000 } as const;
+
+/**
+ * The next preset in the given direction. A range between presets (chosen on
+ * the renderer) steps to the nearest preset that way; past the last preset it
+ * stays where it is.
+ */
+function steppedCameraRange(cameraRangeM: number, direction: "in" | "out") {
+  const next =
+    direction === "in"
+      ? [...REPLAY_CAMERA_RANGES_M].reverse().find((range) => range < cameraRangeM)
+      : REPLAY_CAMERA_RANGES_M.find((range) => range > cameraRangeM);
+  return next ?? cameraRangeM;
 }
 
 export function earthReplayOperational(status: ReplayStatus): boolean {
@@ -121,7 +139,24 @@ export function reduceEarthReplaySession(
     case "followingToggled":
       return { ...state, control: toggleReplayFollowing(state.control) };
     case "zoomRequested":
-      return { ...state, control: zoomReplay(state.control, event.direction) };
+      return {
+        ...state,
+        control: {
+          ...state.control,
+          cameraRangeM: steppedCameraRange(state.control.cameraRangeM, event.direction),
+        },
+      };
+    case "cameraRangeChosen": {
+      const cameraRangeM = Math.round(
+        Math.min(
+          CHOSEN_CAMERA_RANGE_M.max,
+          Math.max(CHOSEN_CAMERA_RANGE_M.min, event.cameraRangeM),
+        ),
+      );
+      return Number.isFinite(cameraRangeM) && cameraRangeM !== state.control.cameraRangeM
+        ? { ...state, control: { ...state.control, cameraRangeM } }
+        : state;
+    }
     case "presentationReset": {
       const contextState = event.isMobile ? "compact" : "preview";
       return state.contextState === contextState && !state.mobileControlsExpanded

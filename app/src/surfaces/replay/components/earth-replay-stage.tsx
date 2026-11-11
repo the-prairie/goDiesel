@@ -121,6 +121,10 @@ export function EarthReplayStage({
           engine.setPose(replayPose(route, sessionRef.current.control));
         }
       },
+      onCameraRangeChosen: (cameraRangeM) => {
+        if (engineRef.current !== engine) return;
+        dispatchSession({ type: "cameraRangeChosen", cameraRangeM });
+      },
     });
     return () => {
       engine.destroy();
@@ -350,7 +354,7 @@ export function EarthReplayStage({
                   variant="outline"
                   className="size-11"
                   disabled={
-                    !operational || control.cameraRangeM === REPLAY_CAMERA_RANGES_M[0]
+                    !operational || control.cameraRangeM <= REPLAY_CAMERA_RANGES_M[0]
                   }
                   aria-label="Zoom in to route"
                   onClick={() => commitControl({ type: "zoomRequested", direction: "in" })}
@@ -364,7 +368,7 @@ export function EarthReplayStage({
                   className="size-11"
                   disabled={
                     !operational ||
-                    control.cameraRangeM === REPLAY_CAMERA_RANGES_M.at(-1)
+                    control.cameraRangeM >= REPLAY_CAMERA_RANGES_M.at(-1)!
                   }
                   aria-label="Zoom out from route"
                   onClick={() => commitControl({ type: "zoomRequested", direction: "out" })}
@@ -468,7 +472,7 @@ export function EarthReplayStage({
             variant="outline"
             disabled={
               !operational ||
-              control.cameraRangeM === REPLAY_CAMERA_RANGES_M[0]
+              control.cameraRangeM <= REPLAY_CAMERA_RANGES_M[0]
             }
             aria-label="Zoom in to route"
             title="Zoom in to route"
@@ -482,7 +486,7 @@ export function EarthReplayStage({
             variant="outline"
             disabled={
               !operational ||
-              control.cameraRangeM === REPLAY_CAMERA_RANGES_M.at(-1)
+              control.cameraRangeM >= REPLAY_CAMERA_RANGES_M.at(-1)!
             }
             aria-label="Zoom out from route"
             title="Zoom out from route"

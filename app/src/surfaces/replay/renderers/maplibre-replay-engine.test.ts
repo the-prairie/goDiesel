@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { QuestRoute } from "@/domain/route";
 import type { ReplayPose } from "../playback/replay-controller";
-import { MapLibreAtlasReplayEngine } from "./maplibre-replay-engine";
+import {
+  MapLibreAtlasReplayEngine,
+  rangeForZoom,
+  zoomForRange,
+} from "./maplibre-replay-engine";
 
 const provider = vi.hoisted(() => {
   const maps: MapDouble[] = [];
@@ -203,18 +207,46 @@ describe("MapLibre Replay lifecycle contract", () => {
     h.engine.destroy();
   });
 
-  it("characterization: a zoom made on the map itself is overwritten by the next follow pose", async () => {
-    const h = await mount();
-    h.map.emit("load");
-    h.engine.setPose(pose);
-    expect(h.map.jumpTo).toHaveBeenLastCalledWith(expect.objectContaining({ zoom: 16 }));
+  it("reports a zoom the person makes on the map as a range the next follow pose keeps", async () => {
+    const engine = new MapLibreAtlasReplayEngine();
+    const onCameraRangeChosen = vi.fn();
+    await engine.mount({
+      container: { replaceChildren: vi.fn() } as unknown as HTMLElement,
+      route,
+      onStatus: vi.fn(),
+      onCameraRangeChosen,
+    });
+    const map = provider.maps.at(-1)!;
+    map.emit("load");
+    // Untouched: the opening follow framing comes from the session's default range.
+    engine.setPose(pose);
+    expect(map.jumpTo).toHaveBeenLastCalledWith(expect.objectContaining({ zoom: 16 }));
+    // The engine's own camera moves carry no originalEvent and are not echoed.
+    map.emit("zoomend", {});
+    map.emit("zoomend");
+    expect(onCameraRangeChosen).not.toHaveBeenCalled();
     // The person zooms out with MapLibre's own control or a pinch.
-    h.map.zoom = 12;
-    h.map.emit("zoomend", { originalEvent: {} });
-    // Play (or any later pose) re-derives the zoom from the session's range.
-    h.engine.setPose({ ...pose, progressM: 10 });
-    expect(h.map.jumpTo).toHaveBeenLastCalledWith(expect.objectContaining({ zoom: 16 }));
-    h.engine.destroy();
+    map.zoom = 12;
+    map.emit("zoomend", { originalEvent: {} });
+    expect(onCameraRangeChosen).toHaveBeenCalledOnce();
+    const [chosenRangeM] = onCameraRangeChosen.mock.calls[0];
+    expect(chosenRangeM).toBeCloseTo(1_400 * 2 ** 1.5, 6);
+    // Play: the session passes the person's range back with each pose.
+    engine.setPose({ ...pose, progressM: 10, cameraRangeM: chosenRangeM });
+    expect(map.jumpTo.mock.lastCall?.[0].zoom).toBeCloseTo(12, 9);
+    engine.destroy();
+    map.emit("zoomend", { originalEvent: {} });
+    expect(onCameraRangeChosen).toHaveBeenCalledOnce();
+  });
+
+  it("maps ranges and zooms continuously through the presets", () => {
+    for (const [rangeM, zoom] of [[60, 18], [120, 17], [240, 16], [720, 14.5], [1_400, 13.5], [2_800, 12.5]]) {
+      expect(zoomForRange(rangeM)).toBeCloseTo(zoom, 9);
+      expect(rangeForZoom(zoom)).toBeCloseTo(rangeM, 6);
+    }
+    for (const zoom of [11, 13.9, 15.2, 16.4, 19]) {
+      expect(zoomForRange(rangeForZoom(zoom))).toBeCloseTo(zoom, 9);
+    }
   });
 
   it("disposes pending resources and rejects late provider callbacks", async () => {
