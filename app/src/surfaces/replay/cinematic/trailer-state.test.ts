@@ -137,4 +137,40 @@ describe("trailer session transitions", () => {
       frame: opening,
     });
   });
+  describe("events the stage only sends while the provider is ready", () => {
+    const notReady = {
+      loading: () => start(),
+      unavailable: () =>
+        reduceTrailer(ready(), {
+          type: "providerReported",
+          sessionId: 1,
+          status: { state: "unavailable", message: "Failed" },
+        }),
+    };
+    for (const [phase, make] of Object.entries(notReady)) {
+      it(`ignores playback, skip and frame publication while ${phase}`, () => {
+        const state = make();
+        expect(
+          reduceTrailer(state, { type: "playbackChanged", playing: false }),
+        ).toBe(state);
+        expect(
+          reduceTrailer(state, { type: "playbackChanged", playing: true }),
+        ).toBe(state);
+        expect(reduceTrailer(state, { type: "skipped", frame: final })).toBe(
+          state,
+        );
+        expect(
+          reduceTrailer(state, {
+            type: "framePublished",
+            frame: routeTrailerFrame(route, 5),
+          }),
+        ).toBe(state);
+      });
+      it(`still accepts a restart while ${phase}`, () => {
+        expect(
+          reduceTrailer(make(), { type: "restarted", frame: opening }),
+        ).toMatchObject({ playback: "playing", frame: opening });
+      });
+    }
+  });
 });

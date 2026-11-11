@@ -43,6 +43,16 @@ export function reduceTrailer(
     event.sessionId !== state.sessionId
   )
     return state;
+  // The stage sends these only from ready-gated controls and the ready-gated
+  // frame loop. A restart stays unguarded: "Watch again" is not disabled and can
+  // be reached by keyboard beneath the loading and unavailable overlay.
+  if (
+    (event.type === "playbackChanged" ||
+      event.type === "skipped" ||
+      event.type === "framePublished") &&
+    state.status.state !== "ready"
+  )
+    return state;
   switch (event.type) {
     case "sessionStarted":
       return {
