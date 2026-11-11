@@ -794,3 +794,33 @@ for (const viewport of [{ width: 844, height: 390 }, { width: 667, height: 375 }
   });
 }
 
+// UX-30: "Change route" is a full touch target with a route glyph on phones;
+// desktop keeps its labelled search button.
+for (const device of [
+  { width: 320, height: 640, phone: true },
+  { width: 390, height: 844, phone: true },
+  { width: 1280, height: 800, phone: false },
+]) {
+  test(`Change route is a 44 px target that reads as a route at ${device.width}px`, async ({ page }) => {
+    await page.setViewportSize({ width: device.width, height: device.height });
+    await installGoogleReplay(page, "ready");
+    await page.goto("/#/replay/14023448720");
+    const trigger = page.getByRole("button", { name: "Change route", exact: true });
+    await expect(trigger).toBeVisible();
+    const box = (await trigger.boundingBox())!;
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(box.x + box.width).toBeLessThanOrEqual(device.width);
+    const glyphs = await trigger.locator("svg").evaluateAll(icons =>
+      icons.filter(icon => icon.checkVisibility()).map(icon => icon.getAttribute("class") ?? ""));
+    expect(glyphs).toHaveLength(1);
+    if (device.phone) {
+      expect(glyphs[0]).toContain("lucide-route");
+      await expect(trigger.getByText("Change route", { exact: true })).toBeHidden();
+    } else {
+      expect(glyphs[0]).toContain("lucide-search");
+      await expect(trigger.getByText("Change route", { exact: true })).toBeVisible();
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+}
