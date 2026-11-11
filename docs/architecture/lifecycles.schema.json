@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lifecycles.schema.json",
+  "title": "goDiesel lifecycle registry",
+  "description": "One entry per lifecycle in the repository. scripts/check-lifecycles.mjs validates this file against this schema and against the code.",
+  "type": "object",
+  "required": ["lifecycles"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "lifecycles": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/lifecycle" }
+    }
+  },
+  "$defs": {
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_.][A-Za-z0-9_./-]*$"
+    },
+    "lifecycle": {
+      "type": "object",
+      "required": ["id", "kind", "area", "summary", "module", "adapters", "identity"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "Unique kebab-case name.",
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "kind": {
+          "description": "reducer: a pure runtime transition function. disposition: a pure decision for crash recovery. protocol: marker files written by a script. derived: computed from another source, with no stored phase. left-implicit: kept as it is on purpose, with a reason.",
+          "enum": ["reducer", "disposition", "protocol", "derived", "left-implicit"]
+        },
+        "area": {
+          "description": "Where the lifecycle runs.",
+          "enum": ["react-app", "admin-ui", "python", "shell", "server"]
+        },
+        "summary": {
+          "description": "One sentence: what the lifecycle owns.",
+          "type": "string",
+          "minLength": 1
+        },
+        "module": {
+          "description": "Repository-relative path of the module that defines the lifecycle.",
+          "$ref": "#/$defs/path"
+        },
+        "transition": {
+          "description": "Exported function or constant in the module. Required for reducer and disposition.",
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "test": {
+          "description": "Repository-relative test paths. Required for every kind except left-implicit.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/path" }
+        },
+        "adapters": {
+          "description": "Repository-relative paths of the components, engines, servers, or scripts that drive the lifecycle.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/path" }
+        },
+        "states": {
+          "description": "Phase names as they appear in the module. A name may carry a group prefix, as in save:saving; only the part after the colon must appear in the module.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^([a-zA-Z]+:)?[A-Za-z0-9_-]+$"
+          }
+        },
+        "identity": {
+          "description": "What rejects a stale or superseded event, or null when nothing does.",
+          "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }]
+        },
+        "reason": {
+          "description": "Why the lifecycle has this shape. Required for left-implicit and derived.",
+          "type": "string",
+          "minLength": 1
+        },
+        "inProgress": {
+          "description": "Branch that is changing this lifecycle and has not merged.",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "enum": ["reducer", "disposition"] } } },
+          "then": { "required": ["transition", "test", "states"] }
+        },
+        {
+          "if": { "properties": { "kind": { "enum": ["protocol"] } } },
+          "then": { "required": ["test", "states"] }
+        },
+        {
+          "if": { "properties": { "kind": { "enum": ["derived"] } } },
+          "then": { "required": ["test", "reason"] }
+        },
+        {
+          "if": { "properties": { "kind": { "enum": ["left-implicit"] } } },
+          "then": { "required": ["reason"] }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,1095 @@
+{
+  "$schema": "./lifecycles.schema.json",
+  "lifecycles": [
+    {
+      "id": "route-detail-load",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "Loads one route detail and remembers the last settled result for a return to the same slug and request key.",
+      "module": "app/src/data/route-detail-state.ts",
+      "transition": "reduceRouteDetailLoad",
+      "test": [
+        "app/src/data/route-detail-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/data/use-route-detail.ts"
+      ],
+      "states": [
+        "idle",
+        "loading",
+        "settled"
+      ],
+      "identity": "slug and requestKey; the hook dispatches loadStarted during render"
+    },
+    {
+      "id": "collection-search",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "Loads the guide search index, then refines with embeddings or falls back to keywords.",
+      "module": "app/src/data/search/collection-search-state.ts",
+      "transition": "reduceCollectionSearch",
+      "test": [
+        "app/src/data/search/collection-search-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/data/search/use-collection-search.ts"
+      ],
+      "states": [
+        "idle",
+        "loadingIndex",
+        "basicFallback",
+        "keywordReady",
+        "embedding",
+        "semanticReady",
+        "keywordFallback"
+      ],
+      "identity": "requestId; indexFailed is accepted only in loadingIndex"
+    },
+    {
+      "id": "external-ranking",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "Ranks discovered routes semantically, or falls back to keywords.",
+      "module": "app/src/data/search/external-ranking-state.ts",
+      "transition": "reduceExternalRanking",
+      "test": [
+        "app/src/data/search/external-ranking-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/data/search/use-external-ranking.ts"
+      ],
+      "states": [
+        "idle",
+        "embedding",
+        "semanticReady",
+        "keywordFallback"
+      ],
+      "identity": "requestId"
+    },
+    {
+      "id": "planned-route-cache",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "The tab's view of planned routes in localStorage, including routes that storage refused.",
+      "module": "app/src/data/planned-route-store.ts",
+      "transition": "reducePlannedRouteCache",
+      "test": [
+        "app/src/data/planned-route-store.test.ts"
+      ],
+      "adapters": [
+        "app/src/data/planned-route-store.ts"
+      ],
+      "states": [
+        "unread",
+        "persisted",
+        "memory-only"
+      ],
+      "identity": "the raw storage value; memory-only ignores reads and storage events until a write succeeds"
+    },
+    {
+      "id": "finder-discovery",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "Finder external discovery: place resolution, place choice, route request, selection, and save feedback.",
+      "module": "app/src/surfaces/finder/discovery-state.ts",
+      "transition": "reduceDiscovery",
+      "test": [
+        "app/src/surfaces/finder/discovery-state.test.ts",
+        "app/e2e/discovery-state.spec.ts"
+      ],
+      "adapters": [
+        "app/src/surfaces/finder/components/external-discovery.tsx"
+      ],
+      "states": [
+        "idle",
+        "resolving-place",
+        "choosing-place",
+        "no-places",
+        "loading-routes",
+        "results",
+        "failed"
+      ],
+      "identity": "submission id per mounted component"
+    },
+    {
+      "id": "finder-draft",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "The Finder form draft, which may differ from the submitted intent in the URL until the next search.",
+      "module": "app/src/surfaces/finder/finder-draft-state.ts",
+      "transition": "reduceFinderDraft",
+      "test": [
+        "app/src/surfaces/finder/finder-draft-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/surfaces/finder/finder-page.tsx"
+      ],
+      "states": [],
+      "identity": "baseKey, the submittedIntentKey the draft was edited against; visibleDraft ignores a draft for another submission"
+    },
+    {
+      "id": "course-workspace",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "The course page view and its one pending operation, including which operation failed.",
+      "module": "app/src/surfaces/courses/course-workspace-state.ts",
+      "transition": "reduceCourseWorkspace",
+      "test": [
+        "app/src/surfaces/courses/course-workspace-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/surfaces/courses/course-page.tsx"
+      ],
+      "states": [
+        "view:empty",
+        "view:preview",
+        "view:saved",
+        "progress:idle",
+        "progress:pending",
+        "progress:failed"
+      ],
+      "identity": "pending operation id"
+    },
+    {
+      "id": "course-place-search",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "The start-place search beside the course form.",
+      "module": "app/src/surfaces/courses/course-form.tsx",
+      "transition": "placeReducer",
+      "test": [
+        "app/src/surfaces/courses/course-form.test.ts"
+      ],
+      "adapters": [
+        "app/src/surfaces/courses/course-form.tsx"
+      ],
+      "states": [
+        "idle",
+        "searching",
+        "choices",
+        "chosen",
+        "error"
+      ],
+      "identity": "search id"
+    },
+    {
+      "id": "course-preview-load",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "Loads one course for preview. The page keys the loader by course id.",
+      "module": "app/src/surfaces/replay/playback/course-preview-state.ts",
+      "transition": "reduceCoursePreviewLoad",
+      "test": [
+        "app/src/surfaces/replay/playback/course-preview-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/surfaces/replay/course-preview-page.tsx"
+      ],
+      "states": [
+        "loading",
+        "ready",
+        "failed"
+      ],
+      "identity": "operationId"
+    },
+    {
+      "id": "course-preview-session",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "Provider status and replay commands for one course preview section.",
+      "module": "app/src/surfaces/replay/playback/course-preview-state.ts",
+      "transition": "reduceCoursePreviewSession",
+      "test": [
+        "app/src/surfaces/replay/playback/course-preview-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/surfaces/replay/course-preview-page.tsx",
+        "app/src/surfaces/replay/components/course-preview-controls.tsx"
+      ],
+      "states": [
+        "loading"
+      ],
+      "identity": "none in the reducer; the page keys each section by index and attempt"
+    },
+    {
+      "id": "replay-session",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "Playback, camera, following, and grounding commands shared by the Google Replay stage and course preview.",
+      "module": "app/src/surfaces/replay/playback/replay-session-state.ts",
+      "transition": "reduceReplaySession",
+      "test": [
+        "app/src/surfaces/replay/playback/replay-session-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/surfaces/replay/playback/google-replay-stage-state.ts",
+        "app/src/surfaces/replay/playback/course-preview-state.ts"
+      ],
+      "states": [],
+      "identity": null
+    },
+    {
+      "id": "replay-chapter-controls",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "Replay chapter and moment preview against following playback, at lens or whole-route scope.",
+      "module": "app/src/surfaces/replay/playback/replay-chapter-controls-state.ts",
+      "transition": "reduceReplayChapterControls",
+      "test": [
+        "app/src/surfaces/replay/playback/replay-chapter-controls-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/surfaces/replay/components/replay-chapter-controls.tsx",
+        "app/src/surfaces/replay/components/google-route-navigator-stage.tsx"
+      ],
+      "states": [
+        "mode:following",
+        "mode:preview",
+        "scope:lens",
+        "scope:whole"
+      ],
+      "identity": null
+    },
+    {
+      "id": "replay-surface",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "Which Replay renderer the page shows: the URL renderer, or Atlas after a Google start failure.",
+      "module": "app/src/surfaces/replay/playback/replay-surface-state.ts",
+      "transition": "reduceReplaySurface",
+      "test": [
+        "app/src/surfaces/replay/playback/replay-surface-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/surfaces/replay/replay-page.tsx"
+      ],
+      "states": [
+        "kind:google",
+        "kind:atlas",
+        "kind:cesium",
+        "reason:requested",
+        "reason:degraded"
+      ],
+      "identity": "renderer query and route slug, compared by replaySurfaceMatches during render"
+    },
+    {
+      "id": "earth-replay-session",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "One Earth Replay stage: renderer mode, provider status, playback, HUD mode, and mobile controls.",
+      "module": "app/src/surfaces/replay/playback/earth-replay-session-state.ts",
+      "transition": "reduceEarthReplaySession",
+      "test": [
+        "app/src/surfaces/replay/playback/earth-replay-session-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/surfaces/replay/components/earth-replay-stage.tsx",
+        "app/src/surfaces/replay/replay-page.tsx"
+      ],
+      "states": [
+        "status:loading",
+        "context:preview",
+        "context:compact"
+      ],
+      "identity": "sessionId minted by rendererMounted; the stage is keyed by route slug and surface kind"
+    },
+    {
+      "id": "google-replay-stage",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "One Google Replay stage: provider status, replay commands, settings disclosure, and chapter expansion.",
+      "module": "app/src/surfaces/replay/playback/google-replay-stage-state.ts",
+      "transition": "reduceGoogleReplayStage",
+      "test": [
+        "app/src/surfaces/replay/playback/google-replay-stage-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/surfaces/replay/components/google-route-navigator-stage.tsx"
+      ],
+      "states": [
+        "status:loading",
+        "status:unavailable"
+      ],
+      "identity": "sessionId minted by sessionStarted"
+    },
+    {
+      "id": "google-renderer",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "The native Google 3D engine: API load, scene load, ready, unavailable, destroyed.",
+      "module": "app/src/surfaces/replay/renderers/google-renderer-state.ts",
+      "transition": "reduceGoogleRenderer",
+      "test": [
+        "app/src/surfaces/replay/renderers/google-renderer-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/surfaces/replay/renderers/google-route-navigator-engine.ts"
+      ],
+      "states": [
+        "idle",
+        "loadingApi",
+        "loadingScene",
+        "ready",
+        "unavailable",
+        "destroyed"
+      ],
+      "identity": "operationId minted by mountStarted and destroyed"
+    },
+    {
+      "id": "cesium-fidelity",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "The Cesium Replay engine run and every status it publishes.",
+      "module": "app/src/surfaces/replay/renderers/cesium-fidelity-state.ts",
+      "transition": "reduceCesiumFidelity",
+      "test": [
+        "app/src/surfaces/replay/renderers/cesium-fidelity-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/surfaces/replay/renderers/cesium-replay-engine.ts"
+      ],
+      "states": [
+        "idle",
+        "loading",
+        "ready",
+        "partial",
+        "unavailable",
+        "disposed"
+      ],
+      "identity": "operationId minted by sessionStarted (cesiumRunIsCurrent); statusRevision marks each published status"
+    },
+    {
+      "id": "maplibre-replay",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "The MapLibre Replay engine run and every status it publishes.",
+      "module": "app/src/surfaces/replay/renderers/maplibre-replay-state.ts",
+      "transition": "reduceMapLibreReplay",
+      "test": [
+        "app/src/surfaces/replay/renderers/maplibre-replay-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/surfaces/replay/renderers/maplibre-replay-engine.ts"
+      ],
+      "states": [
+        "idle",
+        "loading",
+        "ready",
+        "unavailable",
+        "disposed"
+      ],
+      "identity": "operationId minted by mapStarted (mapLibreRunIsCurrent); statusRevision marks each published status"
+    },
+    {
+      "id": "surface-sampling",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "Throttled terrain surface sampling under the moving marker.",
+      "module": "app/src/surfaces/replay/renderers/surface-sampling-state.ts",
+      "transition": "reduceSurfaceSampling",
+      "test": [
+        "app/src/surfaces/replay/renderers/surface-sampling-state.test.ts",
+        "app/src/labs/playable-earth/playable-earth-viewer.test.ts"
+      ],
+      "adapters": [
+        "app/src/surfaces/replay/renderers/cesium-replay-engine.ts",
+        "app/src/labs/playable-earth/playable-earth-viewer.ts"
+      ],
+      "states": [
+        "idle",
+        "sampling",
+        "disposed"
+      ],
+      "identity": "requestId"
+    },
+    {
+      "id": "marker-photo",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "Uploading and cropping the person's Replay marker photo.",
+      "module": "app/src/surfaces/replay/playback/marker-photo-state.ts",
+      "transition": "reduceMarkerPhoto",
+      "test": [
+        "app/src/surfaces/replay/playback/marker-photo-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/surfaces/replay/components/your-marker-settings.tsx"
+      ],
+      "states": [
+        "idle",
+        "loading",
+        "cropping"
+      ],
+      "identity": "requestId"
+    },
+    {
+      "id": "cinematic-director",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "The director cut stage: playback, audio start, sound, and renderer status for one session.",
+      "module": "app/src/surfaces/replay/cinematic/cinematic-director-state.ts",
+      "transition": "reduceCinematicDirector",
+      "test": [
+        "app/src/surfaces/replay/cinematic/cinematic-director-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/surfaces/replay/cinematic/cinematic-director-stage.tsx",
+        "app/src/labs/cinematic/cinematic-director-lab-page.tsx"
+      ],
+      "states": [
+        "playback:paused",
+        "playback:playing",
+        "audioStart:idle",
+        "audioStart:pending"
+      ],
+      "identity": "sessionId for renderer status; audio requestId minted by playRequested; the lab page keys the stage by cut"
+    },
+    {
+      "id": "route-trailer",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "The route trailer stage: playback, frame, and provider status for one session.",
+      "module": "app/src/surfaces/replay/cinematic/trailer-state.ts",
+      "transition": "reduceTrailer",
+      "test": [
+        "app/src/surfaces/replay/cinematic/trailer-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/surfaces/replay/cinematic/cinematic-route-trailer-stage.tsx"
+      ],
+      "states": [
+        "playback:paused",
+        "playback:playing",
+        "status:loading",
+        "status:unavailable"
+      ],
+      "identity": "sessionId minted by sessionStarted; playback, skip, and frames are accepted only while ready"
+    },
+    {
+      "id": "playable-earth-session",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "The Playable Earth lab stage: provider status, grounding, control, HUD mode, and mobile controls.",
+      "module": "app/src/labs/playable-earth/playable-earth-session-state.ts",
+      "transition": "reducePlayableEarthSession",
+      "test": [
+        "app/src/labs/playable-earth/playable-earth-session-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/labs/playable-earth/playable-earth-stage.tsx"
+      ],
+      "states": [],
+      "identity": "sessionId for provider and grounding reports"
+    },
+    {
+      "id": "route-intelligence",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "The route intelligence lab load: complete, partial, empty, or failed.",
+      "module": "app/src/labs/route-intelligence/route-intelligence-state.ts",
+      "transition": "reduceRouteIntelligence",
+      "test": [
+        "app/src/labs/route-intelligence/route-intelligence-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/labs/route-intelligence/route-intelligence-lab-page.tsx"
+      ],
+      "states": [
+        "loading",
+        "complete",
+        "partial",
+        "empty",
+        "failed"
+      ],
+      "identity": null
+    },
+    {
+      "id": "admin-workspace",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "The React Admin workspace, route detail loads, and per-route saves.",
+      "module": "app/src/surfaces/admin/workspace-state.ts",
+      "transition": "reduceAdminWorkspace",
+      "test": [
+        "app/src/surfaces/admin/workspace-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/surfaces/admin/admin-page.tsx"
+      ],
+      "states": [
+        "loading",
+        "ready",
+        "save:idle",
+        "save:saving",
+        "save:saved",
+        "save:failed"
+      ],
+      "identity": "requestId per route detail and per route save"
+    },
+    {
+      "id": "atlas-presentation",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "Atlas world status and whether the selected region is waiting or presented.",
+      "module": "app/src/surfaces/atlas/atlas-presentation-state.ts",
+      "transition": "reduceAtlasPresentation",
+      "test": [
+        "app/src/surfaces/atlas/atlas-presentation-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/surfaces/atlas/atlas-page.tsx",
+        "app/src/surfaces/atlas/atlas-world.ts"
+      ],
+      "states": [
+        "region:none",
+        "region:waiting",
+        "region:ready"
+      ],
+      "identity": "engineId"
+    },
+    {
+      "id": "atlas-regional-fallback",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "The MapLibre regional fallback map shown when Atlas terrain is unavailable.",
+      "module": "app/src/surfaces/atlas/regional-fallback-state.ts",
+      "transition": "reduceRegionalFallback",
+      "test": [
+        "app/src/surfaces/atlas/regional-fallback-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/surfaces/atlas/components/atlas-regional-fallback.tsx"
+      ],
+      "states": [
+        "loading",
+        "ready",
+        "unavailable"
+      ],
+      "identity": "session"
+    },
+    {
+      "id": "atlas-regional-transition",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "The Atlas globe's move into regional terrain and back to the global view.",
+      "module": "app/src/surfaces/atlas/regional-transition-state.ts",
+      "transition": "reduceRegionalTransition",
+      "test": [
+        "app/src/surfaces/atlas/regional-transition-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/surfaces/atlas/atlas-world-engine-state.ts",
+        "app/src/surfaces/atlas/cesium-atlas-world-engine.ts"
+      ],
+      "states": [
+        "global",
+        "loading",
+        "ready",
+        "fallback",
+        "disposed"
+      ],
+      "identity": "operationId (regionalOperationIsCurrent)"
+    },
+    {
+      "id": "atlas-world-engine",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "One Cesium Atlas engine: mount, the global camera flight, the published status and canvas dataset. Composes the regional transition.",
+      "module": "app/src/surfaces/atlas/atlas-world-engine-state.ts",
+      "transition": "reduceAtlasWorldEngine",
+      "test": [
+        "app/src/surfaces/atlas/atlas-world-engine-state.test.ts",
+        "app/src/surfaces/atlas/cesium-atlas-world-engine.test.ts",
+        "app/e2e/atlas-cesium.spec.ts"
+      ],
+      "adapters": [
+        "app/src/surfaces/atlas/cesium-atlas-world-engine.ts",
+        "app/src/surfaces/atlas/components/cesium-atlas-globe.tsx"
+      ],
+      "states": [
+        "mount:idle",
+        "mount:mounting",
+        "mount:ready",
+        "mount:unavailable",
+        "mount:disposed",
+        "reason:webgl",
+        "reason:mount",
+        "reason:render",
+        "camera:settled",
+        "camera:flying"
+      ],
+      "identity": "operationId per mount run (atlasEngineRunIsCurrent) and flightId per global flight; unavailable is terminal for selection and disposed is terminal"
+    },
+    {
+      "id": "route-leaf-map",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "The route guide's leaf map: waiting for the map, ready, or unavailable after a deadline or errors.",
+      "module": "app/src/surfaces/routes/components/route-leaf-map-state.ts",
+      "transition": "reduceRouteLeafMap",
+      "test": [
+        "app/src/surfaces/routes/components/route-leaf-map-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/surfaces/routes/components/route-leaf-map.tsx"
+      ],
+      "states": [
+        "inactive",
+        "waiting",
+        "ready",
+        "status:loading",
+        "status:unavailable"
+      ],
+      "identity": "sessionId"
+    },
+    {
+      "id": "planning-map",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "The planning route map: loading, ready, or unavailable after a deadline or errors.",
+      "module": "app/src/ui/planning-map-state.ts",
+      "transition": "reducePlanningMap",
+      "test": [
+        "app/src/ui/planning-map-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/ui/planning-route-map.tsx"
+      ],
+      "states": [
+        "loading",
+        "ready",
+        "unavailable"
+      ],
+      "identity": "operationId"
+    },
+    {
+      "id": "admin-ui-mutation",
+      "kind": "reducer",
+      "area": "admin-ui",
+      "summary": "Standalone admin route drafts, save, route refreshes, and the rebuild it follows to an outcome.",
+      "module": "admin-ui/mutation-state.ts",
+      "transition": "reduceMutation",
+      "test": [
+        "admin-ui/mutation-state.test.ts",
+        "app/e2e/standalone-admin.spec.ts"
+      ],
+      "adapters": [
+        "admin.html"
+      ],
+      "states": [
+        "save:idle",
+        "save:saving",
+        "save:refreshing",
+        "rebuild:idle",
+        "rebuild:starting",
+        "rebuild:running",
+        "rebuild:succeeded",
+        "rebuild:failed"
+      ],
+      "identity": "requestId for save and rebuild start; only latestRefreshId may replace routes; rebuild run id"
+    },
+    {
+      "id": "admin-ui-classifier",
+      "kind": "reducer",
+      "area": "admin-ui",
+      "summary": "Standalone admin classifier start and status polling, including a run that stopped early.",
+      "module": "admin-ui/classifier-state.ts",
+      "transition": "reduceClassifier",
+      "test": [
+        "admin-ui/classifier-state.test.ts",
+        "app/e2e/standalone-admin.spec.ts"
+      ],
+      "adapters": [
+        "admin.html"
+      ],
+      "states": [
+        "start:idle",
+        "start:starting",
+        "poll:idle",
+        "poll:checking",
+        "poll:failed",
+        "poll:running",
+        "poll:complete",
+        "notice:runFailed"
+      ],
+      "identity": "requestId for start; pollId for status"
+    },
+    {
+      "id": "admin-rebuild",
+      "kind": "reducer",
+      "area": "python",
+      "summary": "One background build.py run at a time in the owner server.",
+      "module": "admin_rebuild.py",
+      "transition": "reduce_rebuild",
+      "test": [
+        "test_admin_rebuild.py"
+      ],
+      "adapters": [
+        "admin.py"
+      ],
+      "states": [
+        "idle",
+        "running",
+        "succeeded",
+        "failed"
+      ],
+      "identity": "run id; succeed and fail must name the running id"
+    },
+    {
+      "id": "admin-classify",
+      "kind": "reducer",
+      "area": "python",
+      "summary": "The owner server's background region classifier and its snapshot phase.",
+      "module": "admin_classify.py",
+      "transition": "reduce_classify",
+      "test": [
+        "test_admin_classify.py",
+        "test_admin_classify_run.py"
+      ],
+      "adapters": [
+        "admin.py"
+      ],
+      "states": [
+        "idle",
+        "running",
+        "finished",
+        "failed"
+      ],
+      "identity": "none; admin.py serialises events under a lock, a second start while running is a no-op, and progress must be the next count"
+    },
+    {
+      "id": "publication-disposition",
+      "kind": "disposition",
+      "area": "python",
+      "summary": "What crash recovery does with a generator backup or an owner journal it finds.",
+      "module": "publication_protocol.py",
+      "transition": "publication_disposition",
+      "test": [
+        "test_publication_protocol.py",
+        "test_publication_consistency.py"
+      ],
+      "adapters": [
+        "build.py",
+        "owner_publication.py"
+      ],
+      "states": [
+        "none",
+        "discard",
+        "restore",
+        "committed-cleanup",
+        "blocked"
+      ],
+      "identity": "the generator lock; a journal with a live lock holder is blocked"
+    },
+    {
+      "id": "dist-manifest",
+      "kind": "protocol",
+      "area": "shell",
+      "summary": "What dist/ is: a full or single-route build, recorded as the last step of make-dist.sh.",
+      "module": "scripts/dist-manifest.mjs",
+      "test": [
+        "test_deployment_command.py"
+      ],
+      "adapters": [
+        "make-dist.sh",
+        "scripts/publish-route-microsite.sh"
+      ],
+      "states": [
+        "full",
+        "single-route"
+      ],
+      "identity": ".dist-manifest.json content_digest and file_count; a missing manifest is a failed or interrupted build"
+    },
+    {
+      "id": "share-publish-receipt",
+      "kind": "protocol",
+      "area": "shell",
+      "summary": "How far one single-route share publish got.",
+      "module": "scripts/publish-route-microsite.sh",
+      "test": [
+        "test_deployment_command.py"
+      ],
+      "adapters": [
+        "scripts/dist-manifest.mjs"
+      ],
+      "states": [
+        "validated",
+        "deployed",
+        "smoke-passed",
+        "smoke-failed",
+        "deploy-failed"
+      ],
+      "identity": "one receipt per run under .route-share/publish/, named by share name and UTC stamp"
+    },
+    {
+      "id": "live-gate-status",
+      "kind": "protocol",
+      "area": "shell",
+      "summary": "Whether a live-pipeline evidence directory proves a passing live gate.",
+      "module": "scripts/verify-live-pipeline.sh",
+      "test": [
+        "test_live_gate_status.py"
+      ],
+      "adapters": [
+        "scripts/live-gate-status.sh"
+      ],
+      "states": [
+        "running",
+        "passed",
+        "failed",
+        "interrupted"
+      ],
+      "identity": "status.json in each timestamped evidence directory; no status.json reads as blocked"
+    },
+    {
+      "id": "mobile-breakpoint",
+      "kind": "derived",
+      "area": "react-app",
+      "summary": "Whether the viewport is below the mobile breakpoint.",
+      "module": "app/src/ui/use-mobile.ts",
+      "transition": "useIsMobile",
+      "test": [
+        "app/src/ui/use-mobile.test.ts"
+      ],
+      "adapters": [],
+      "states": [],
+      "identity": null,
+      "reason": "Read from matchMedia with useSyncExternalStore during render, so a phone never paints the desktop layout first. There is no stored phase."
+    },
+    {
+      "id": "legacy-quest-link",
+      "kind": "derived",
+      "area": "react-app",
+      "summary": "Legacy #quest/<slug> links.",
+      "module": "app/src/app/route-paths.ts",
+      "test": [
+        "app/src/app/router.test.tsx",
+        "app/src/app/router.single.test.tsx"
+      ],
+      "adapters": [
+        "app/src/app/router.tsx",
+        "app/src/app/router.single.tsx"
+      ],
+      "states": [],
+      "identity": null,
+      "reason": "The URL is the state. The router matches quest/:legacySlug itself and its loader replaces the entry with the route guide path, so no listener races the router. A link opened before the app starts is rewritten by canonicalizeLegacyQuestHash."
+    },
+    {
+      "id": "route-film",
+      "kind": "derived",
+      "area": "react-app",
+      "summary": "A route film record: queued, rendering, failed, or ready with a poster.",
+      "module": "app/src/labs/route-film/route-film.ts",
+      "transition": "parseRouteFilm",
+      "test": [
+        "app/src/labs/route-film/route-film.test.ts"
+      ],
+      "adapters": [],
+      "states": [
+        "queued",
+        "rendering",
+        "failed",
+        "ready"
+      ],
+      "identity": null,
+      "reason": "A closed union validated at parse time. The app reads it and never transitions it."
+    },
+    {
+      "id": "route-thumbnail",
+      "kind": "derived",
+      "area": "react-app",
+      "summary": "A regional route card's satellite thumbnail state.",
+      "module": "app/src/surfaces/atlas/components/route-satellite-thumbnail.tsx",
+      "transition": "routeThumbnailState",
+      "test": [
+        "app/src/surfaces/atlas/components/route-satellite-thumbnail.test.ts"
+      ],
+      "adapters": [
+        "app/src/surfaces/atlas/components/region-route-carousel.tsx"
+      ],
+      "states": [
+        "deferred",
+        "loading",
+        "loaded",
+        "failed",
+        "unavailable"
+      ],
+      "identity": null,
+      "reason": "Only the image's own load or error outcome is stored. routeThumbnailState derives the rest from the URL and whether the card may load. Cards are keyed by route slug, so the URL is fixed while mounted."
+    },
+    {
+      "id": "geocode-outcome",
+      "kind": "derived",
+      "area": "python",
+      "summary": "The result of one reverse-geocode lookup.",
+      "module": "admin_geocode.py",
+      "transition": "outcome_from_nominatim",
+      "test": [
+        "test_admin_geocode.py"
+      ],
+      "adapters": [
+        "admin.py"
+      ],
+      "states": [
+        "label",
+        "no_place",
+        "transient"
+      ],
+      "identity": null,
+      "reason": "An outcome type, not a phase machine. A transient outcome is never cached."
+    },
+    {
+      "id": "route-status",
+      "kind": "derived",
+      "area": "python",
+      "summary": "A route's triage status in quests.json.",
+      "module": "quest_meta.py",
+      "transition": "normalize_route_status",
+      "test": [
+        "test_quest_meta.py"
+      ],
+      "adapters": [
+        "build.py",
+        "admin.py",
+        "route_status.py"
+      ],
+      "states": [
+        "pending",
+        "approved",
+        "archived"
+      ],
+      "identity": null,
+      "reason": "A closed record set, not a transition. A missing or unknown value reads as pending, legacy rejected reads as archived, and only approved is published."
+    },
+    {
+      "id": "atlas-search-panel",
+      "kind": "left-implicit",
+      "area": "react-app",
+      "summary": "The Atlas search panel phase and its open flag.",
+      "module": "app/src/surfaces/atlas/components/atlas-search.tsx",
+      "adapters": [],
+      "identity": null,
+      "reason": "searchState derives the panel phase from the query and selection on every render. searchOpen is a local disclosure."
+    },
+    {
+      "id": "carousel-programmatic-selection",
+      "kind": "left-implicit",
+      "area": "react-app",
+      "summary": "Suppresses the carousel's own echo of a selection it made by scrolling.",
+      "module": "app/src/surfaces/atlas/components/region-route-carousel.tsx",
+      "test": [
+        "app/src/surfaces/atlas/components/region-route-carousel.test.tsx"
+      ],
+      "adapters": [],
+      "identity": "the slug held in programmaticSelectionRef",
+      "reason": "A one-slot ref latch, set by selectRoute and cleared by the matching scroll settle or the next microtask. It holds no phase that rendering reads."
+    },
+    {
+      "id": "route-library-return",
+      "kind": "left-implicit",
+      "area": "react-app",
+      "summary": "The route library path and scroll position to restore after opening a route.",
+      "module": "app/src/data/route-library-return.ts",
+      "adapters": [],
+      "identity": "the record's path and routeSlug",
+      "reason": "One sessionStorage record, written on leaving the library and taken once on return. Restoration is best-effort when storage is unavailable."
+    },
+    {
+      "id": "google-maps-loader",
+      "kind": "left-implicit",
+      "area": "react-app",
+      "summary": "Loading the Google Maps JavaScript API script once per page.",
+      "module": "app/src/providers/google-maps-loader.ts",
+      "test": [
+        "app/src/providers/google-maps-loader.test.ts"
+      ],
+      "adapters": [],
+      "identity": null,
+      "reason": "A module singleton promise. A failed load clears it, so the next caller appends a fresh script."
+    },
+    {
+      "id": "route-leaf-map-carried-status",
+      "kind": "left-implicit",
+      "area": "react-app",
+      "summary": "The leaf map keeps its previous ready or unavailable presentation while a replacement session waits.",
+      "module": "app/src/surfaces/routes/components/route-leaf-map-state.ts",
+      "test": [
+        "app/src/surfaces/routes/components/route-leaf-map-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/surfaces/routes/components/route-leaf-map.tsx"
+      ],
+      "states": [
+        "waiting"
+      ],
+      "identity": "sessionId",
+      "reason": "Product behaviour pinned by the test that retains presentation during effect replacement. Readiness and the error count still reset."
+    },
+    {
+      "id": "atlas-selection-copy",
+      "kind": "left-implicit",
+      "area": "react-app",
+      "summary": "Atlas copies the selected region name into the presentation reducer.",
+      "module": "app/src/surfaces/atlas/atlas-page.tsx",
+      "adapters": [],
+      "identity": null,
+      "reason": "A layout effect dispatches selectionChanged before paint, so no stale frame shows."
+    },
+    {
+      "id": "chunk-recovery",
+      "kind": "left-implicit",
+      "area": "react-app",
+      "summary": "Reloading the shell once after a failed dynamic import.",
+      "module": "app/src/app/chunk-recovery.ts",
+      "adapters": [
+        "app/src/app/main.tsx",
+        "app/src/app/route-error.tsx"
+      ],
+      "identity": "the loaded shell URL stored under one sessionStorage key",
+      "reason": "Two outcomes, each already a function: reload once per shell, or leave the manual retry. Offline and blocked storage skip the reload."
+    },
+    {
+      "id": "finder-presentation",
+      "kind": "left-implicit",
+      "area": "react-app",
+      "summary": "Finder filter disclosure and list or map view.",
+      "module": "app/src/surfaces/finder/finder-page.tsx",
+      "adapters": [],
+      "states": [
+        "list",
+        "map"
+      ],
+      "identity": null,
+      "reason": "filtersOpen and view are local choices. view may stay map when the result is not a match list; the screen then shows the list."
+    },
+    {
+      "id": "discovery-throttle",
+      "kind": "left-implicit",
+      "area": "server",
+      "summary": "The discovery API's minimum interval between upstream searches.",
+      "module": "app/server/discovery.ts",
+      "adapters": [
+        "app/server/discovery-plugin.ts",
+        "functions/api/discovery.ts"
+      ],
+      "identity": null,
+      "reason": "One module-level timestamp per server instance. A request inside the interval gets 429 and nothing else depends on it."
+    },
+    {
+      "id": "course-store",
+      "kind": "left-implicit",
+      "area": "server",
+      "summary": "Saved courses on the server.",
+      "module": "app/server/courses.ts",
+      "test": [
+        "app/src/domain/course-api.test.ts"
+      ],
+      "adapters": [
+        "app/server/courses-plugin.ts",
+        "functions/api/courses.ts"
+      ],
+      "identity": null,
+      "reason": "The store is the record. FileCourseStore and R2CourseStore implement CourseStore with no runtime phase."
+    }
+  ]
+}
