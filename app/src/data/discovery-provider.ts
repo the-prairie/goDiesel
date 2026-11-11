@@ -4,10 +4,19 @@ import type {
   DiscoveryResult,
   DiscoveryCandidate,
   FinderIntent,
+  FinderTerrain,
   RouteDiscoveryProvider,
 } from "@/domain/planning";
 
-const candidateDefinitions = [
+interface CandidateDefinition {
+  slug: string;
+  terrain: readonly Exclude<FinderTerrain, "any">[];
+  vibes: readonly string[];
+}
+
+// Owner-curated terrain and vibes, named by route. A single-route microsite
+// build folds this to an empty list so other routes' identifiers never ship.
+const candidateDefinitions: readonly CandidateDefinition[] = import.meta.env.VITE_SINGLE_ROUTE_SLUG ? [] : [
   {
     slug: "17654151284",
     terrain: ["mixed", "mountain"],
@@ -28,7 +37,7 @@ const candidateDefinitions = [
     terrain: ["road", "mixed"],
     vibes: ["touring", "farm roads", "long ride", "big day"],
   },
-] as const;
+];
 
 export const curatedDiscoveryCandidates: DiscoveryCandidate[] = routes.filter(r => r.lifecycle !== "planned").map(route => {
   const definition = candidateDefinitions.find(d => d.slug === route.slug);

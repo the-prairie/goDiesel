@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { parseRouteDetail } from "@/domain/route";
 import { buildReplayChapterModel, replayChapterAt } from "./replay-chapter-model";
@@ -76,5 +76,19 @@ describe("place-led replay story", () => {
     expect(model.segments).toEqual(fallback.segments);
     expect(model.chapters.reduce((sum, chapter) => sum + chapter.ascentM, 0))
       .toBeCloseTo(fallback.chapters.reduce((sum, chapter) => sum + chapter.ascentM, 0), 6);
+  });
+});
+
+describe("route-scoped replay stories", () => {
+  it("skips a story that a single-route build resolved to nothing", async () => {
+    vi.resetModules();
+    vi.doMock("@/data/replay-stories/14736711660.json", () => ({ default: null }));
+    try {
+      const scoped = await import("./replay-route-story");
+      expect(scoped.replayRouteStory(route)).toBeUndefined();
+    } finally {
+      vi.doUnmock("@/data/replay-stories/14736711660.json");
+      vi.resetModules();
+    }
   });
 });

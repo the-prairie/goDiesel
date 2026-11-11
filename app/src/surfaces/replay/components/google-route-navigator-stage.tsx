@@ -59,10 +59,15 @@ import {
 } from "@/surfaces/replay/scene/route-camera-stabilizer";
 import type { GoogleRouteCameraPose } from "@/surfaces/replay/playback/route-navigator-controller";
 
-const FIELD_TEST_ROUTES = [
-  { slug: "14736711660", label: "San Francisco" },
-  { slug: "14023448720", label: "Crete" },
-] as const;
+// Lab-only shortcuts between the two field-test routes. A single-route
+// microsite build folds this to an empty list so neither route ships with it.
+const FIELD_TEST_ROUTES: ReadonlyArray<{ slug: string; label: string }> = import.meta.env
+  .VITE_SINGLE_ROUTE_SLUG
+  ? []
+  : [
+      { slug: "14736711660", label: "San Francisco" },
+      { slug: "14023448720", label: "Crete" },
+    ];
 
 const INITIAL_STATUS: GoogleRouteNavigatorStatus = {
   state: "loading",

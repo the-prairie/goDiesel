@@ -24,7 +24,11 @@ interface ReplayRouteStory {
   chapters: ReplayStoryChapter[];
 }
 
-const stories: ReplayRouteStory[] = [sanFrancisco];
+// A single-route microsite build resolves another route's story module to
+// null (see vite.config.ts), so only the shared route's story can ship.
+const stories: ReplayRouteStory[] = [sanFrancisco as ReplayRouteStory | null].filter(
+  (story): story is ReplayRouteStory => story !== null,
+);
 
 export function replayRouteGeometrySignature(route: Pick<QuestRoute, "distanceKm" | "route" | "provenance">): string {
   const geometry = JSON.stringify([route.distanceKm, route.route.map(point => [point.lat, point.lng, point.d]),
