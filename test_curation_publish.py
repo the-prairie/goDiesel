@@ -191,18 +191,12 @@ class AnnotationPublishTest(unittest.TestCase):
 def _copy_workspace(workspace):
     """Copy the files a generation run reads and writes."""
     workspace.mkdir(parents=True)
-    for name in (
-        "build.py",
-        "quests.json",
-        "quest_meta.py",
-        "route_provenance.py",
-        "route_imports.py",
-        "route_annotations.py",
-        "route_regions.py",
-        "route_timezones.py",
-        "owner_publication.py",
-        ".env",
-    ):
+    # Derive the modules, as pipeline_verification.build_files does: a hand-kept
+    # list broke this proof when build.py gained an import.
+    modules = sorted(
+        path.name for path in ROOT.glob("*.py") if not path.name.startswith("test_")
+    )
+    for name in (*modules, "quests.json", ".env"):
         source = ROOT / name
         if source.exists():
             shutil.copy2(source, workspace / name)

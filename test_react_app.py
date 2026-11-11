@@ -3,6 +3,9 @@ import json
 import shutil
 from pathlib import Path
 
+import pytest
+
+from publication_protocol import recover_generator_publication, release_generator_lock
 from quest_meta import build_route_curation
 
 
@@ -168,17 +171,29 @@ def test_release_build_packages_the_react_application():
 
 def test_generated_route_publication_is_staged_and_rollback_safe():
     build_source = (ROOT / "build.py").read_text()
+    protocol_source = (ROOT / "publication_protocol.py").read_text()
 
     assert "detail_payloads = {}" in build_source
     assert "TemporaryDirectory" in build_source
     assert "recover_interrupted_route_publication()" in build_source
-    assert "ROUTE_GENERATION_BACKUP / 'ready'" in build_source
-    assert "metadata_backup" in build_source
-    assert "shutil.copytree(REACT_ROUTE_DETAILS, backup_details)" in build_source
     assert "stale_route_file.unlink()" not in build_source
+    # The backup is written and marked ready before anything is replaced, and
+    # committed only after the last replacement.
+    backup = build_source.index(
+        "write_generator_backup(ROUTE_GENERATION_BACKUP, REACT_ROUTE_DETAILS, REACT_GENERATED_FILES)"
+    )
+    replace = build_source.index("staging_path.replace(REACT_ROUTE_DETAILS)")
+    metadata = build_source.index("write_text_atomic(path, content)", replace)
+    commit = build_source.index("commit_generator_backup(ROUTE_GENERATION_BACKUP)", metadata)
+    assert backup < replace < metadata < commit
+    assert '(backup / "ready").touch()' in protocol_source
+    assert '(backup / "committed").touch()' in protocol_source
+    assert "metadata_backup" in protocol_source
+    assert "shutil.copytree(details, backup_details)" in protocol_source
 
 
-def test_interrupted_route_publication_restores_last_complete_generation(tmp_path):
+@pytest.mark.parametrize("committed", [False, True])
+def test_interrupted_route_publication_restores_last_complete_generation(tmp_path, committed):
     build_tree = ast.parse((ROOT / "build.py").read_text())
     recovery_function = next(
         node
@@ -204,19 +219,29 @@ def test_interrupted_route_publication_restores_last_complete_generation(tmp_pat
     (route_details / "route.json").write_text("new route")
     for path in generated_files:
         path.write_text("new metadata")
+    if committed:
+        (backup / "committed").touch()
 
     namespace = {
-        "shutil": shutil,
+        "recover_generator_publication": recover_generator_publication,
         "ROUTE_GENERATION_BACKUP": backup,
         "REACT_ROUTE_DETAILS": route_details,
         "REACT_GENERATED_FILES": generated_files,
+        "QUESTS": tmp_path,
     }
     exec(compile(ast.Module(body=[recovery_function], type_ignores=[]), "build.py", "exec"), namespace)
-    namespace["recover_interrupted_route_publication"]()
+    try:
+        namespace["recover_interrupted_route_publication"]()
+    finally:
+        release_generator_lock(route_details.parent)
 
-    assert (route_details / "route.json").read_text() == "old route"
-    assert all(path.read_text() == "old metadata" for path in generated_files)
+    # A ready backup is the last complete generation. A committed one is not:
+    # the new generation finished, so recovery keeps it.
+    expected = "new" if committed else "old"
+    assert (route_details / "route.json").read_text() == f"{expected} route"
+    assert all(path.read_text() == f"{expected} metadata" for path in generated_files)
     assert not backup.exists()
+    assert not list(backup.parent.glob(".route-generation-backup*"))
 
 
 def test_atlas_globe_ports_route_heat_traces_and_interaction():

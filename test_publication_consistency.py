@@ -523,3 +523,270 @@ def test_generator_never_publishes_a_route_without_a_known_approved_status(tmp_p
     assert "[2/5] Curation: 0 approved" in build.stdout
     assert not (generated_paths(tmp_path)["detail"] / "one.json").exists()
     assert json.loads(generated_paths(tmp_path)["payload"].read_text())["routes"] == []
+
+
+# Generator publication protocol. Each scenario runs the real build.py over a
+# synthetic checkout and injects an interruption at a protocol boundary. A
+# recovery-only run uses an unreadable quests.json: build.py recovers before it
+# reads source, then stops, so the scenario sees exactly what recovery did.
+GENERATOR_BACKUP = "app/public/data/.route-generation-backup"
+DRIVER = '''import os, pathlib, runpy, shutil, sys, time
+root = pathlib.Path(sys.argv[1])
+signals = pathlib.Path(sys.argv[2])
+sys.path.insert(0, str(root))
+def pause(label):
+    (signals / label).touch()
+    deadline = time.monotonic() + 30
+    while not (signals / "release").exists():
+        if time.monotonic() > deadline:
+            os._exit(98)
+        time.sleep(0.02)
+real_rmtree, real_rename, real_replace = shutil.rmtree, pathlib.Path.rename, pathlib.Path.replace
+real_copytree = shutil.copytree
+PATCH
+runpy.run_path(str(root / "build.py"), run_name="__main__")
+'''
+
+
+def generator_checkout(tmp_path):
+    root = tmp_path / "checkout"
+    root.mkdir()
+    publication_fixture(root)
+    prepare_build_fixture(root)
+    signals = tmp_path / "signals"
+    signals.mkdir()
+    inputs = tmp_path / "inputs"
+    inputs.mkdir()
+    (inputs / "activities.csv").write_text("Activity Date,Filename,Distance\n")
+    return root, signals, inputs
+
+
+def generation_bytes(root):
+    """Published route artifacts, not hidden protocol state."""
+    return {
+        str(path.relative_to(root)): path.read_bytes()
+        for path in (root / "app").rglob("*")
+        if path.is_file() and not any(part.startswith(".") for part in path.relative_to(root).parts)
+    }
+
+
+def generator_command(root, signals, inputs, patch=""):
+    return ([sys.executable, "-c", DRIVER.replace("PATCH", patch), str(root), str(signals)],
+            {"cwd": root, "env": {**os.environ, "GODIESEL_DIESEL_DIARIES_ROOT": str(inputs),
+                                  "GODIESEL_TRAVEL_ROOT": str(inputs)}})
+
+
+def run_generator(root, signals, inputs, patch=""):
+    command, options = generator_command(root, signals, inputs, patch)
+    return subprocess.run(command, capture_output=True, text=True, check=False, **options)
+
+
+def run_recovery_only(root, signals, inputs):
+    source = (root / "quests.json").read_bytes()
+    (root / "quests.json").write_text("{ unreadable source")
+    try:
+        result = run_generator(root, signals, inputs)
+    finally:
+        (root / "quests.json").write_bytes(source)
+    assert "JSONDecodeError" in result.stderr, result.stderr
+    return result
+
+
+def wait_for(path, process):
+    deadline = time.monotonic() + 30
+    while not path.exists():
+        assert process.poll() is None, process.communicate()
+        assert time.monotonic() < deadline, f"{path.name} never appeared"
+        time.sleep(0.02)
+
+
+CRASH_IN_CLEANUP = '''def rmtree(path, *args, **kwargs):
+    path = pathlib.Path(path)
+    if path.name.startswith(".route-generation-backup"):
+        real_rmtree(path / "routes")
+        os._exit(19)
+    return real_rmtree(path, *args, **kwargs)
+shutil.rmtree = rmtree'''
+CRASH_BEFORE_COMMIT = '''def replace(self, target):
+    if pathlib.Path(target).name == "routes.manifest.json":
+        os._exit(19)
+    return real_replace(self, target)
+pathlib.Path.replace = replace'''
+
+
+def test_generator_interrupted_mid_cleanup_keeps_the_new_generation(tmp_path):
+    root, signals, inputs = generator_checkout(tmp_path)
+    old = generation_bytes(root)
+    result = run_generator(root, signals, inputs, CRASH_IN_CLEANUP)
+    assert result.returncode == 19, result.stderr
+    new = generation_bytes(root)
+    assert new != old
+    run_recovery_only(root, signals, inputs)
+    assert generation_bytes(root) == new
+    assert not (root / GENERATOR_BACKUP).exists()
+
+
+def test_generator_interrupted_after_commit_before_cleanup_keeps_the_new_generation(tmp_path):
+    root, signals, inputs = generator_checkout(tmp_path)
+    old = generation_bytes(root)
+    result = run_generator(root, signals, inputs, '''def rename(self, target):
+    if self.name == ".route-generation-backup" and (self / "committed").exists():
+        os._exit(19)
+    return real_rename(self, target)
+pathlib.Path.rename = rename''')
+    assert result.returncode == 19, result.stderr
+    assert (root / GENERATOR_BACKUP / "ready").exists()
+    new = generation_bytes(root)
+    assert new != old
+    run_recovery_only(root, signals, inputs)
+    assert generation_bytes(root) == new
+    assert not (root / GENERATOR_BACKUP).exists()
+
+
+def test_generator_interrupted_after_ready_before_commit_restores_the_old_generation(tmp_path):
+    root, signals, inputs = generator_checkout(tmp_path)
+    old = generation_bytes(root)
+    result = run_generator(root, signals, inputs, CRASH_BEFORE_COMMIT)
+    assert result.returncode == 19, result.stderr
+    assert generation_bytes(root) != old
+    assert not (root / GENERATOR_BACKUP / "committed").exists()
+    run_recovery_only(root, signals, inputs)
+    assert generation_bytes(root) == old
+    assert not (root / GENERATOR_BACKUP).exists()
+
+
+def test_generator_recovery_interrupted_while_retiring_the_backup_keeps_the_old_generation(tmp_path):
+    root, signals, inputs = generator_checkout(tmp_path)
+    old = generation_bytes(root)
+    assert run_generator(root, signals, inputs, CRASH_BEFORE_COMMIT).returncode == 19
+    source = (root / "quests.json").read_bytes()
+    (root / "quests.json").write_text("{ unreadable source")
+    result = run_generator(root, signals, inputs, CRASH_IN_CLEANUP)
+    (root / "quests.json").write_bytes(source)
+    assert result.returncode == 19, result.stderr
+    assert generation_bytes(root) == old
+    run_recovery_only(root, signals, inputs)
+    assert generation_bytes(root) == old
+    assert not (root / GENERATOR_BACKUP).exists()
+
+
+def test_concurrent_generator_refuses_and_leaves_the_live_backup_intact(tmp_path):
+    root, signals, inputs = generator_checkout(tmp_path)
+    old_details = {path.name: path.read_bytes()
+                   for path in (root / "app/public/data/routes").iterdir()}
+    command, options = generator_command(root, signals, inputs, '''def replace(self, target):
+    if pathlib.Path(target) == root / "app/public/data/routes":
+        pause("publishing")
+    return real_replace(self, target)
+pathlib.Path.replace = replace''')
+    first = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             text=True, **options)
+    try:
+        wait_for(signals / "publishing", first)
+        backup = root / GENERATOR_BACKUP
+        assert (backup / "ready").exists()
+        second = run_synthetic_build(root)
+        assert second.returncode != 0
+        assert "another generator run" in second.stderr
+        assert (backup / "ready").exists()
+        assert {path.name: path.read_bytes()
+                for path in (backup / "routes").iterdir()} == old_details
+    finally:
+        (signals / "release").touch()
+        out, err = first.communicate(timeout=60)
+    assert first.returncode == 0, err
+    assert not (root / GENERATOR_BACKUP).exists()
+    assert sorted(path.name for path in (root / "app/public/data/routes").iterdir()) == ["one.json"]
+
+
+def test_concurrent_generator_never_collects_a_live_runs_staging(tmp_path):
+    root, signals, inputs = generator_checkout(tmp_path)
+    command, options = generator_command(root, signals, inputs, '''def copytree(source, destination, *args, **kwargs):
+    destination = pathlib.Path(destination)
+    if destination.parent.name == ".route-generation-backup":
+        pause("staged")
+    return real_copytree(source, destination, *args, **kwargs)
+shutil.copytree = copytree''')
+    first = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             text=True, **options)
+    try:
+        wait_for(signals / "staged", first)
+        data = root / "app/public/data"
+        staging = sorted(data.glob(".routes-staging-*"))
+        assert len(staging) == 1 and (staging[0] / "one.json").exists()
+        second = run_synthetic_build(root)
+        assert second.returncode != 0
+        assert "another generator run" in second.stderr
+        assert sorted(data.glob(".routes-staging-*")) == staging
+        assert (staging[0] / "one.json").exists()
+        assert (root / GENERATOR_BACKUP).exists()
+    finally:
+        (signals / "release").touch()
+        out, err = first.communicate(timeout=60)
+    assert first.returncode == 0, err
+    assert not list((root / "app/public/data").glob(".routes-staging-*"))
+
+
+def test_generator_recovery_collects_only_provably_abandoned_leftovers(tmp_path):
+    import fcntl
+
+    root, signals, inputs = generator_checkout(tmp_path)
+    data = root / "app/public/data"
+    (data / ".routes-staging-abandoned").mkdir()
+    (data / ".routes-staging-abandoned/one.json").write_text("partial")
+    (data / ".route-generation-backup.cleanup-abandoned/routes").mkdir(parents=True)
+    (data / "routes/.one.json.tmp").write_text("partial")
+    (root / "app/src/data/.quests.generated.json.tmp").write_text("partial")
+    (root / "app/src/data/generated/.routes.manifest.json.recovery").write_text("partial")
+
+    def owner_dir(name, lock=True, owner=True):
+        path = root / name
+        path.mkdir()
+        if lock:
+            (path / "lock").touch()
+        if owner:
+            (path / "owner.json").write_text("{}")
+        return path
+
+    abandoned_preparation = owner_dir(".owner-publication-preparing-abandoned")
+    abandoned_cleanup = owner_dir(".owner-publication-backup.cleanup-abandoned")
+    live_preparation = owner_dir(".owner-publication-preparing-live")
+    live_cleanup = owner_dir(".owner-publication-backup.cleanup-live")
+    unproven_preparation = owner_dir(".owner-publication-preparing-unproven", owner=False)
+    lockless_preparation = owner_dir(".owner-publication-preparing-lockless", lock=False)
+    held = [(live_preparation / "lock").open("rb"), (live_cleanup / "lock").open("rb")]
+    try:
+        for handle in held:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        run_recovery_only(root, signals, inputs)
+    finally:
+        for handle in held:
+            handle.close()
+    assert not list(data.glob(".routes-staging-*"))
+    assert not list(data.glob(".route-generation-backup.cleanup-*"))
+    assert not (data / "routes/.one.json.tmp").exists()
+    assert not (root / "app/src/data/.quests.generated.json.tmp").exists()
+    assert not (root / "app/src/data/generated/.routes.manifest.json.recovery").exists()
+    assert not abandoned_preparation.exists()
+    assert not abandoned_cleanup.exists()
+    assert live_preparation.exists() and live_cleanup.exists()
+    assert unproven_preparation.exists() and lockless_preparation.exists()
+
+
+def test_generator_leaves_temporaries_alone_while_an_owner_journal_exists(tmp_path):
+    root, signals, inputs = generator_checkout(tmp_path)
+    temporary = root / "app/src/data/.quests.generated.json.tmp"
+    temporary.write_text("an owner save in flight")
+    result = interrupt_publication(root, '''import subprocess
+from owner_publication import owner_publication_subprocess_options
+with owner_publication(root):
+    source = (root / "quests.json").read_bytes()
+    (root / "quests.json").write_text("{ unreadable source")
+    child = subprocess.run([sys.executable, str(root / "build.py")], cwd=root,
+                           capture_output=True, text=True,
+                           **owner_publication_subprocess_options(root))
+    (root / "quests.json").write_bytes(source)
+    assert "JSONDecodeError" in child.stderr, child.stderr
+    assert (root / "app/src/data/.quests.generated.json.tmp").exists()''')
+    assert result.returncode == 0, result.stderr
+
