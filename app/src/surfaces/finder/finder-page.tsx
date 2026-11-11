@@ -108,8 +108,8 @@ export function FinderPage() {
     selectedDetail.status === "ready" ? selectedDetail.route : undefined;
 
   return (
-    <section className="flex h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 flex-col overflow-hidden bg-canvas md:h-dvh">
-      <header className="z-20 shrink-0 max-h-[65%] overflow-y-auto border-b border-line bg-surface/97 px-4 py-3 sm:px-5">
+    <section className="flex h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 flex-col overflow-hidden bg-canvas md:h-dvh md:pb-[var(--safe-area-bottom)]">
+      <header className="z-20 shrink-0 max-h-[65%] overflow-y-auto border-b border-line bg-surface/97 px-4 py-3 pt-[calc(0.75rem+var(--safe-area-top))] pr-[calc(1rem+var(--safe-area-right))] sm:px-5 sm:pr-[calc(1.25rem+var(--safe-area-right))]">
         <div className={submittedIntent ? "sr-only" : "mb-3 flex flex-wrap items-baseline gap-x-5 gap-y-1"}>
           <h1 className="font-editorial text-3xl font-semibold text-ink">
             Plan the next day.
@@ -138,7 +138,7 @@ export function FinderPage() {
       </header>
 
       {scope === "new" ? <ExternalDiscovery key={JSON.stringify(submittedIntent)} intent={submittedIntent ?? intent} /> : !submittedIntent ? (
-        <section aria-label="Choose a starting place" className="mx-auto min-h-0 w-full max-w-5xl overflow-y-auto px-4 py-8 sm:p-8">
+        <section aria-label="Choose a starting place" className="mx-auto min-h-0 w-full max-w-5xl overflow-y-auto px-4 py-8 pr-[calc(1rem+var(--safe-area-right))] sm:p-8 sm:pr-[calc(2rem+var(--safe-area-right))]">
           <h2 className="font-editorial text-2xl text-ink">Where would you like to go?</h2>
           <p className="mt-2 text-sm text-ink-secondary">{places.length} places · {places.reduce((count, place) => count + place.routes.length, 0)} routes in your collection.</p>
           <div className="mt-6 grid gap-3 sm:grid-cols-3">
@@ -159,7 +159,7 @@ export function FinderPage() {
           </div>
         </section>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col pr-[var(--safe-area-right)]">
           {result?.status === "matches" ? <div role="group" aria-label="Results view" className="flex shrink-0 items-center justify-between border-b border-line px-4 py-2 lg:hidden">
             <span aria-live="polite" className="text-sm text-ink-secondary">{result.candidates.length} {result.candidates.length === 1 ? "route" : "routes"}</span>
             <div className="flex gap-1">
