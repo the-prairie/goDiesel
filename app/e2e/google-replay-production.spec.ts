@@ -692,6 +692,39 @@ test("names a key Google rejects after loading and offers Atlas at once", async 
   await expect(page.locator('[data-renderer="atlas-fallback"]')).toBeVisible();
 });
 
+// The loader's key preflight reports a rejection through the same window event
+// as gm_authFailure, while the API is still loading. This stub engine listens
+// for that event exactly as the real engine does, and the loader's report
+// arrives one preflight round trip (~200 ms) after mount.
+test("shows the key-rejection copy as soon as the loader's preflight reports it", async ({ page }) => {
+  await installGoogleReplay(page, "ready");
+  await page.addInitScript(() => {
+    const replayWindow = window as unknown as Record<string, unknown>;
+    replayWindow.__GODIESEL_GOOGLE_ROUTE_NAVIGATOR_FACTORY__ = () => ({
+      async mount({ onStatus }: {
+        onStatus: (status: { state: string; message: string }, reason?: string) => void;
+      }) {
+        onStatus({ state: "loading", message: "Loading Google photorealistic 3D." });
+        window.addEventListener("godiesel:google-maps-auth-failure", () => onStatus({
+          state: "unavailable",
+          message: "Google Maps rejected this browser origin. Add the current localhost or preview URL to the key restrictions.",
+        }, "authentication"));
+        window.setTimeout(() => window.dispatchEvent(new CustomEvent("godiesel:google-maps-auth-failure")), 200);
+      },
+      readCamera() { return undefined; },
+      setCamera() {}, setFollowing() {}, setGrounding() {}, setCinematicRoute() {}, setRouteReveal() {}, destroy() {},
+    });
+  });
+  const startedAt = Date.now();
+  await page.goto("/#/replay/14023448720");
+  const alert = page.getByRole("alert");
+  await expect(alert).toContainText("Google 3D is unavailable", { timeout: 2_000 });
+  expect(Date.now() - startedAt).toBeLessThan(5_000);
+  await expect(alert).toContainText("Google is not serving photorealistic 3D to this site right now.");
+  await expect(alert).not.toContainText(/did not finish loading|API key|key restrictions|origin|localhost/i);
+  await expect(alert.getByRole("button", { name: "Use Atlas replay", exact: true })).toBeVisible();
+});
+
 for (const device of [
   { name: "phone", viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 },
   { name: "desktop", viewport: { width: 1280, height: 800 }, hasTouch: false, isMobile: false, deviceScaleFactor: 1 },
