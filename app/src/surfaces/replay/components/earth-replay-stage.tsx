@@ -46,6 +46,7 @@ import {
 } from "@/surfaces/replay/renderer-port";
 
 import {
+  earthReplayChromeMayAutoHide,
   earthReplayOperational,
   initialEarthReplaySessionState,
   reduceEarthReplaySession,
@@ -81,6 +82,7 @@ export function EarthReplayStage({
   const reducedMotion = useReducedMotion();
   const totalDistanceM = routeDistanceM(route);
   const operational = earthReplayOperational(status);
+  const chromeMayAutoHide = earthReplayChromeMayAutoHide(session, { reducedMotion });
   const recordedLight = recordedLightAt(
     route.route,
     route.provenance.temporal,
@@ -157,7 +159,7 @@ export function EarthReplayStage({
   }, [dispatchSession, isMobile]);
 
   useEffect(() => {
-    if (!control.playing || reducedMotion) {
+    if (!chromeMayAutoHide) {
       setChromeVisible(true);
       return;
     }
@@ -167,7 +169,7 @@ export function EarthReplayStage({
       if (!focused || !stage?.contains(focused)) setChromeVisible(false);
     }, 3_200);
     return () => window.clearTimeout(timer);
-  }, [control.playing, reducedMotion]);
+  }, [chromeMayAutoHide]);
 
   return (
     <section

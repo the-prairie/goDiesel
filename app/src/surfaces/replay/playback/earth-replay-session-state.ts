@@ -71,6 +71,18 @@ export function earthReplayOperational(status: ReplayStatus): boolean {
   return status.state === "ready" || status.state === "partial";
 }
 
+/**
+ * Chrome may yield to the world only while playback runs over an operational
+ * scene. Playing is retained through provider loading and unavailable, and
+ * the HUD (including Back) must stay reachable over that overlay.
+ */
+export function earthReplayChromeMayAutoHide(
+  state: Pick<EarthReplaySessionState, "control" | "status">,
+  { reducedMotion }: { reducedMotion: boolean },
+): boolean {
+  return !reducedMotion && state.control.playing && earthReplayOperational(state.status);
+}
+
 export function reduceEarthReplaySession(
   state: EarthReplaySessionState,
   event: EarthReplaySessionEvent,

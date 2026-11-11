@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  earthReplayChromeMayAutoHide,
   initialEarthReplaySessionState,
   reduceEarthReplaySession,
   type EarthReplaySessionEvent,
@@ -220,3 +221,31 @@ describe("Earth Replay HUD", () => {
   });
 });
 
+describe("Earth Replay chrome auto-hide", () => {
+  const motion = { reducedMotion: false };
+
+  it("never hides chrome while paused", () => {
+    expect(earthReplayChromeMayAutoHide(mounted("ready"), motion)).toBe(false);
+  });
+
+  it.each(["ready", "partial"] as const)("may hide chrome while playing a %s scene", (status) => {
+    expect(earthReplayChromeMayAutoHide(transition(mounted(status), { type: "playbackToggled" }), motion)).toBe(true);
+  });
+
+  it.each(["loading", "unavailable"] as const)("keeps chrome while playback intent survives %s", (status) => {
+    const state = transition(mounted(), { type: "playbackToggled" },
+      { type: "statusReceived", sessionId: 1, status: { state: status, title: "Wait", message: "Provider" } });
+    expect(state.control.playing).toBe(true);
+    expect(earthReplayChromeMayAutoHide(state, motion)).toBe(false);
+  });
+
+  it("keeps chrome while a newly selected renderer loads", () => {
+    const state = transition(mounted("partial"), { type: "playbackToggled" },
+      { type: "rendererSelected", mode: "atlas" });
+    expect(earthReplayChromeMayAutoHide(state, motion)).toBe(false);
+  });
+
+  it("keeps chrome under reduced motion", () => {
+    expect(earthReplayChromeMayAutoHide(transition(mounted(), { type: "playbackToggled" }), { reducedMotion: true })).toBe(false);
+  });
+});
