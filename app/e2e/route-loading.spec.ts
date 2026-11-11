@@ -469,17 +469,25 @@ test("map controls stay clear of the map attribution in phone landscape", async 
 test.describe("mobile route sheet on a touch screen", () => {
   test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
 
+  // Every touch carries an explicit CDP timestamp on the page's own clock, so
+  // the gesture's speed is defined here and not by how fast this machine can
+  // dispatch events. The sheet reads velocity from event.timeStamp, which
+  // honours these stamps however late the handlers run.
   async function touchDrag(page: import("@playwright/test").Page, from: { x: number; y: number }, dy: number, { steps, stepMs, holdMs }: { steps: number; stepMs: number; holdMs: number }) {
     const cdp = await page.context().newCDPSession(page);
+    const startMs = await page.evaluate(() => performance.timeOrigin + performance.now());
+    const at = (ms: number) => (startMs + ms) / 1000;
     const point = (y: number) => [{ x: from.x, y, id: 1 }];
-    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: point(from.y) });
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: point(from.y), timestamp: at(0) });
     for (let step = 1; step <= steps; step += 1) {
-      await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: point(from.y + (dy * step) / steps) });
-      await page.waitForTimeout(stepMs);
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: point(from.y + (dy * step) / steps), timestamp: at(step * stepMs) });
     }
-    if (holdMs) await page.waitForTimeout(holdMs);
-    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [], timestamp: at(steps * stepMs + Math.max(holdMs, stepMs)) });
     await cdp.detach();
+  }
+
+  async function settled(margin: import("@playwright/test").Locator) {
+    await margin.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
   }
 
   async function handleCenter(page: import("@playwright/test").Page) {
@@ -491,21 +499,24 @@ test.describe("mobile route sheet on a touch screen", () => {
     await page.goto(`/#/routes/${routeSlug}`);
     const margin = page.getByRole("complementary", { name: "Route margin" });
     await expect(margin).toHaveAttribute("data-snap", "peek");
-    await margin.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
+    await settled(margin);
 
     // A held drag settles at the nearest stop: 256 px + 240 px is closest to half.
     await touchDrag(page, await handleCenter(page), -240, { steps: 8, stepMs: 16, holdMs: 200 });
     await expect(margin).toHaveAttribute("data-snap", "half");
+    await settled(margin);
 
-    // A short, fast flick carries on to the next stop.
+    // A short, fast flick carries on to the next stop: 60 px in 48 ms, released 16 ms later.
     await touchDrag(page, await handleCenter(page), -60, { steps: 3, stepMs: 16, holdMs: 0 });
     await expect(margin).toHaveAttribute("data-snap", "expanded");
+    await settled(margin);
 
     // A touch drag in the sheet's content scrolls the content, not the sheet.
     const metric = (await margin.getByText("Distance", { exact: true }).boundingBox())!;
     await touchDrag(page, { x: metric.x + metric.width / 2, y: metric.y + metric.height / 2 }, -200, { steps: 8, stepMs: 16, holdMs: 200 });
     await expect(margin).toHaveAttribute("data-snap", "expanded");
     await expect.poll(() => margin.locator(".overflow-y-auto").first().evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    await settled(margin);
 
     // A long held drag down goes all the way back to peek.
     await touchDrag(page, await handleCenter(page), 520, { steps: 10, stepMs: 16, holdMs: 200 });
