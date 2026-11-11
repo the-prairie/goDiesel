@@ -25,6 +25,7 @@ export const CesiumAtlasGlobe = forwardRef<
     className,
     contentInsets,
     quietChrome,
+    nightBasemap,
     onTerrainNote,
   },
   forwardedRef,
@@ -47,6 +48,10 @@ export const CesiumAtlasGlobe = forwardRef<
     spinBy: (radians: number) => {
       (fallbackRef.current ?? engineRef.current)?.spinBy?.(radians);
     },
+    dragBy: (dx, dy) => {
+      engineRef.current?.dragBy?.(dx, dy);
+    },
+    aimAt: (lng, lat) => engineRef.current?.aimAt?.(lng, lat) ?? false,
     setLightroots: (mode) => {
       engineRef.current?.setLightroots?.(mode);
     },
@@ -183,6 +188,7 @@ export const CesiumAtlasGlobe = forwardRef<
           onSelectRoute={(route) => onSelectRouteRef.current?.(route)}
           contentInsets={contentInsets}
           quietChrome={quietChrome}
+          nightBasemap={nightBasemap}
           onTerrainNote={onTerrainNote}
           onReady={() => {
             if (presentation.engineId !== null) {

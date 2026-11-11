@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  activityStamp,
+  ghostCopy,
   initialAtlasObject,
   reduceAtlasObject,
   routeWear,
@@ -39,8 +41,8 @@ function route(slug: string, lat: number, lng: number): RouteSummary {
   };
 }
 
-const orbit: AtlasObjectState = { phase: "orbit", tuned: "Crete, Greece" };
-const bare: AtlasObjectState = { phase: "orbit", tuned: null };
+const orbit: AtlasObjectState = { phase: "orbit", tuned: "Crete, Greece", gesture: "still" };
+const bare: AtlasObjectState = { phase: "orbit", tuned: null, gesture: "still" };
 
 describe("reduceAtlasObject", () => {
   it("tunes in orbit and ignores the same place", () => {
@@ -76,6 +78,29 @@ describe("reduceAtlasObject", () => {
     expect(reduceAtlasObject(bare, { type: "ascend" })).toBe(bare);
   });
 
+  it("locks a dragged place before it can dive", () => {
+    expect(reduceAtlasObject(bare, { type: "drag" })).toEqual({
+      phase: "orbit",
+      tuned: null,
+      gesture: "dragging",
+    });
+    const dragging = reduceAtlasObject(orbit, { type: "drag" });
+    expect(reduceAtlasObject(dragging, { type: "commit" })).toBe(dragging);
+    expect(reduceAtlasObject(orbit, { type: "lock" })).toBe(orbit);
+    const moved = reduceAtlasObject(dragging, { type: "retune", place: "Tokyo, Japan" });
+    expect(moved).toEqual({ phase: "orbit", tuned: "Tokyo, Japan", gesture: "dragging" });
+    const locked = reduceAtlasObject(moved, { type: "lock" });
+    expect(locked).toEqual({ phase: "orbit", tuned: "Tokyo, Japan", gesture: "still" });
+    expect(reduceAtlasObject(locked, { type: "commit" })).toEqual({
+      phase: "diving",
+      place: "Tokyo, Japan",
+    });
+    expect(reduceAtlasObject({ phase: "diving", place: "Tokyo, Japan" }, { type: "drag" })).toEqual({
+      phase: "diving",
+      place: "Tokyo, Japan",
+    });
+  });
+
   it("opens on a place when the URL already names one", () => {
     expect(initialAtlasObject(null, null)).toEqual(bare);
     expect(initialAtlasObject("Crete, Greece", "14080158961")).toEqual({
@@ -98,5 +123,29 @@ describe("routeWear", () => {
     expect(routeWear(alone, [alone])).toBe(1);
     expect(routeWear(cluster[0], cluster.slice(0, 2))).toBe(2);
     expect(routeWear(cluster[0], cluster)).toBe(3);
+  });
+});
+
+describe("ghostCopy", () => {
+  it("gives two activities on the same day different stamps", () => {
+    const first = route("14080158961", 35.2, 24.1);
+    const second = { ...route("14080158962", 35.21, 24.11), date: "2024-12-27" };
+    expect(activityStamp(first, [first, second])).toBe("2024-12-27 · 1");
+    expect(activityStamp(second, [first, second])).toBe("2024-12-27 · 2");
+    expect(activityStamp(first, [first])).toBe("2024-12-27");
+  });
+
+  it("uses a clock when the record has one, and a short title when one exists", () => {
+    const timed = { ...route("a", 1, 2), date: "2024-12-27T18:40:00" };
+    const other = { ...route("b", 1, 2), date: "2024-12-27T07:05:00" };
+    expect(activityStamp(timed, [timed, other])).toBe("2024-12-27 18:40");
+    const titled = {
+      ...route("c", 1, 2),
+      name: "DONT EVER, FOR ANY REASON, DO ANYTHING, TO ANYONE",
+      subtitle: "the long way home",
+    };
+    expect(ghostCopy(titled, [titled]).heading).toBe("the long way home");
+    expect(ghostCopy(titled, [titled]).detail).toBe(titled.name);
+    expect(ghostCopy(route("d", 1, 2), [route("d", 1, 2)]).heading).toBe("2024-12-27 · 10.0 km · 100 m");
   });
 });

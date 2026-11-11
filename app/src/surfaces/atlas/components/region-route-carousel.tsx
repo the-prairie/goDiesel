@@ -112,16 +112,20 @@ export function RegionRouteCarousel({
     const index = region.routes.findIndex(
       (route) => route.slug === effectiveSelectedRoute.slug,
     );
-    if (index >= 0 && index !== emblaApi.selectedScrollSnap())
+    if (index >= 0 && index !== emblaApi.selectedScrollSnap()) {
+      if (!selectedRoute) programmaticSelectionRef.current = effectiveSelectedRoute.slug;
       emblaApi.scrollTo(index);
+    }
     const restoreSelectionAfterResize = () => {
-      if (index >= 0) emblaApi.scrollTo(index, true);
+      if (index < 0) return;
+      if (!selectedRoute) programmaticSelectionRef.current = effectiveSelectedRoute.slug;
+      emblaApi.scrollTo(index, true);
     };
     emblaApi.on("reInit", restoreSelectionAfterResize);
     return () => {
       emblaApi.off("reInit", restoreSelectionAfterResize);
     };
-  }, [effectiveSelectedRoute, emblaApi, region.routes]);
+  }, [effectiveSelectedRoute, emblaApi, region.routes, selectedRoute]);
 
   const selectRoute = useCallback(
     (route: RouteSummary, index: number) => {

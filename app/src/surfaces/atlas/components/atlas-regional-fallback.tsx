@@ -7,6 +7,7 @@ import type { AtlasContentInsets, AtlasGlobeHandle } from "@/surfaces/atlas/atla
 import { atlasViewportInsets } from "@/surfaces/atlas/atlas-region-camera";
 import type { RouteRegion } from "@/data/route-regions";
 import type { RoutePoint, RouteSummary } from "@/domain/route";
+import { activityStamp, routeWear } from "@/surfaces/atlas/atlas-object-state";
 import { initialRegionalFallbackState, reduceRegionalFallback } from "../regional-fallback-state";
 
 const ROUTE_THREAD_STYLE = {
@@ -16,6 +17,7 @@ const ROUTE_THREAD_STYLE = {
 };
 
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
+const NIGHT_STYLE_URL = "https://tiles.openfreemap.org/styles/dark";
 const LOAD_TIMEOUT_MS = 10_000;
 
 export interface RegionalRouteBounds {
@@ -174,6 +176,7 @@ interface AtlasRegionalFallbackProps {
   onReady?: () => void;
   contentInsets?: AtlasContentInsets;
   quietChrome?: boolean;
+  nightBasemap?: boolean;
   onTerrainNote?: (note: string | null) => void;
 }
 
@@ -184,6 +187,7 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
   onReady,
   contentInsets,
   quietChrome = false,
+  nightBasemap = false,
   onTerrainNote,
 }, forwardedRef) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -230,13 +234,18 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
       3.5,
       2,
     ]);
-    map.setPaintProperty("regional-route-thread", "line-opacity", [
-      "case",
-      ["==", ["get", "slug"], selectedSlug],
-      1,
-      selectedSlug ? 0.52 : 0.9,
-    ]);
-  }, [selectedRoute?.slug]);
+    map.setPaintProperty("regional-route-thread", "line-opacity", nightBasemap
+      ? 0
+      : [
+        "case",
+        ["==", ["get", "slug"], selectedSlug],
+        1,
+        selectedSlug ? 0.52 : 0.9,
+      ]);
+    if (nightBasemap && map.getLayer("regional-route-halo")) {
+      map.setPaintProperty("regional-route-halo", "line-opacity", 0);
+    }
+  }, [nightBasemap, selectedRoute?.slug]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -254,7 +263,7 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
     try {
       map = new maplibregl.Map({
         container: host,
-        style: STYLE_URL,
+        style: nightBasemap ? NIGHT_STYLE_URL : STYLE_URL,
         center: [validBounds(region)!.centerLng, (bounds[0][1] + bounds[1][1]) / 2],
         zoom: 8,
         pitch: 0,
@@ -341,6 +350,11 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
           "line-opacity": 0.01,
         },
       });
+      if (nightBasemap) {
+        map.setPaintProperty("regional-route-halo", "line-opacity", 0);
+        map.setPaintProperty("regional-route-thread", "line-opacity", 0);
+        map.setPaintProperty("regional-route-hit-target", "line-opacity", 0);
+      }
       map.on("click", "regional-route-hit-target", (event) => {
         const slug = event.features?.[0]?.properties?.slug;
         const route = region.routes.find((candidate) => candidate.slug === slug);
@@ -384,7 +398,7 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
       if (mapRef.current === map) mapRef.current = undefined;
       host.replaceChildren();
     };
-  }, [bounds, region, routes]);
+  }, [bounds, nightBasemap, region, routes]);
 
   const statusCopy =
     status === "loading"
@@ -448,46 +462,83 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
       />
       {status === "loading" ? <div className="absolute inset-0 z-[2] bg-canvas" /> : null}
       <svg
-        aria-hidden="true"
+        aria-hidden={nightBasemap ? undefined : true}
         data-regional-route-overlay="true"
         className="pointer-events-none absolute inset-0 z-[1] size-full"
       >
         {routePaths.map((path, index) => {
           const slug = routes.features[index]?.properties.slug;
           const active = slug === selectedRoute?.slug;
+          const route = region.routes.find((candidate) => candidate.slug === slug);
+          const wear = route ? routeWear(route, region.routes) : 1;
+          const choose = () => {
+            if (route) onSelectRouteRef.current?.(route);
+          };
           return (
           <g key={`${region.name}-${slug ?? index}`}>
             <path
               d={path}
               data-route-hit-target={slug}
+              role={nightBasemap ? "button" : undefined}
+              tabIndex={nightBasemap ? 0 : undefined}
+              aria-label={nightBasemap && route ? `Focus ${activityStamp(route, region.routes)}` : undefined}
               fill="none"
               stroke="transparent"
-              strokeWidth="18"
+              strokeWidth="28"
               strokeLinecap="round"
               strokeLinejoin="round"
               className="pointer-events-auto cursor-pointer"
-              onClick={() => {
-                const route = region.routes.find((candidate) => candidate.slug === slug);
-                if (route) onSelectRouteRef.current?.(route);
+              onClick={choose}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  choose();
+                }
               }}
             />
-            <path
-              d={path}
-              fill="none"
-              stroke={ROUTE_THREAD_STYLE.halo}
-              strokeWidth={active ? "4.5" : "3"}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              opacity={active ? "0.9" : "0.6"}
-            />
-            <path
-              d={path}
-              fill="none"
-              stroke={active ? ROUTE_THREAD_STYLE.marker : ROUTE_THREAD_STYLE.color}
-              strokeWidth={active ? "3.5" : "2"}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+            {nightBasemap ? (
+              <>
+                <path
+                  d={path}
+                  fill="none"
+                  stroke="#ffe7a8"
+                  strokeOpacity={active ? 0.85 : 0.35}
+                  strokeWidth={active ? 4 : 1.4 + wear}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d={path}
+                  data-ghost-thread="true"
+                  fill="none"
+                  stroke="#fff6d2"
+                  strokeWidth={active ? 6 : 3 + wear}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{ animationDelay: `${index * -0.85}s` }}
+                />
+              </>
+            ) : (
+              <>
+                <path
+                  d={path}
+                  fill="none"
+                  stroke={ROUTE_THREAD_STYLE.halo}
+                  strokeWidth={active ? "4.5" : "3"}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  opacity={active ? "0.9" : "0.6"}
+                />
+                <path
+                  d={path}
+                  fill="none"
+                  stroke={active ? ROUTE_THREAD_STYLE.marker : ROUTE_THREAD_STYLE.color}
+                  strokeWidth={active ? "3.5" : "2"}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </>
+            )}
           </g>
           );
         })}

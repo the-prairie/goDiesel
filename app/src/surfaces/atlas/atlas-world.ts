@@ -24,6 +24,7 @@ export interface AtlasGlobeProps {
   className?: string;
   contentInsets?: AtlasContentInsets;
   quietChrome?: boolean;
+  nightBasemap?: boolean;
   onTerrainNote?: (note: string | null) => void;
 }
 
@@ -32,6 +33,8 @@ export interface AtlasGlobeHandle {
   zoomOut: () => void;
   resetView: () => void;
   spinBy?: (radians: number) => void;
+  dragBy?: (dx: number, dy: number) => void;
+  aimAt?: (lng: number, lat: number) => boolean;
   setLightroots?: (mode: "day" | "night" | "flood") => void;
   nearestPlace?: (maxPx: number) => string | null;
   routeSparks?: () => { slug: string; region: string; width: number; points: { x: number; y: number }[] }[];
@@ -68,6 +71,8 @@ export interface AtlasWorldEngine {
   zoomOut(): void;
   resetView(): void;
   spinBy?(radians: number): void;
+  dragBy?(dx: number, dy: number): void;
+  aimAt?(lng: number, lat: number): boolean;
   setLightroots?(mode: "day" | "night" | "flood"): void;
   nearestPlace?(maxPx: number): string | null;
   routeSparks?(): { slug: string; region: string; width: number; points: { x: number; y: number }[] }[];

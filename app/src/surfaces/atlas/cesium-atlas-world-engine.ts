@@ -17,7 +17,9 @@ import {
   PolylineOutlineMaterialProperty,
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
+  Rectangle,
   SceneTransforms,
+  SingleTileImageryProvider,
   TileMapServiceImageryProvider,
   Viewer,
 } from "cesium";
@@ -53,6 +55,7 @@ import {
 } from "@/surfaces/atlas/regional-transition-state";
 
 const DEFAULT_VIEW = { lat: 24, lng: 12, heightM: 18_500_000 };
+const NIGHT_EARTH_URL = "/earth/black-marble-2016.jpg";
 const GLOBAL_SELECTION_HEIGHT_M = DEFAULT_VIEW.heightM;
 const ROUTE_COLOR = Color.fromCssColorString("#b8c4c0");
 const SELECTED_ROUTE_COLOR = Color.fromCssColorString("#f5f5f5");
@@ -151,6 +154,8 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   private routeSelectionHandler?: ScreenSpaceEventHandler;
   private tileset?: Cesium3DTileset;
   private baseImageryLayer?: ImageryLayer;
+  private nightLayer?: ImageryLayer;
+  private nightImagery?: Promise<void>;
   private removeTerrainFailureListener?: () => void;
   private cancelTerrainWait?: () => void;
   private terrainDiagnosticsTimer?: number;
@@ -295,6 +300,14 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
         }
         viewer.canvas.dataset.cameraHeight =
           viewer.camera.positionCartographic.height.toFixed(0);
+        viewer.canvas.dataset.cameraLat =
+          viewer.camera.positionCartographic.latitude.toFixed(5);
+        viewer.canvas.dataset.cameraLng =
+          viewer.camera.positionCartographic.longitude.toFixed(5);
+        const frustum = viewer.camera.frustum;
+        if (frustum instanceof PerspectiveFrustum && frustum.fovy) {
+          viewer.canvas.dataset.cameraFovy = frustum.fovy.toFixed(5);
+        }
         viewer.canvas.dataset.cameraTarget =
           viewer.camera.positionCartographic.height.toFixed(0);
         viewer.canvas.dataset.cameraHeading = viewer.camera.heading.toFixed(6);
@@ -417,22 +430,81 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     viewer.camera.rotateRight(radians);
   }
 
+  dragBy(dx: number, dy: number) {
+    const viewer = this.viewer;
+    if (!viewer || viewer.isDestroyed()) return;
+    const height = viewer.camera.positionCartographic?.height ?? 0;
+    if (height < 8_000_000) return;
+    if (dx) viewer.camera.rotateRight(-dx * 0.0015);
+    if (dy) viewer.camera.rotateUp(dy * 0.0015);
+  }
+
+  aimAt(lng: number, lat: number) {
+    const viewer = this.viewer;
+    if (!viewer || viewer.isDestroyed()) return false;
+    const position = Cartesian3.fromDegrees(lng, lat);
+    const projected = SceneTransforms.worldToWindowCoordinates(viewer.scene, position);
+    if (!projected) return false;
+    const dx = projected.x - viewer.canvas.clientWidth / 2;
+    const dy = projected.y - viewer.canvas.clientHeight / 2;
+    if (Math.hypot(dx, dy) < 12) return true;
+    viewer.camera.rotateRight(dx * 0.0011);
+    viewer.camera.rotateUp(-dy * 0.0011);
+    return false;
+  }
+
   setLightroots(mode: "day" | "night" | "flood") {
     this.lightMode = mode;
     const viewer = this.viewer;
     if (!viewer || viewer.isDestroyed()) return;
-    const layer = this.baseImageryLayer;
-    if (layer) {
-      layer.brightness = mode === "day" ? 1 : mode === "night" ? 0.95 : 1;
-      layer.saturation = mode === "day" ? 1 : mode === "night" ? 0.2 : 0.55;
-      layer.contrast = mode === "day" ? 1 : mode === "night" ? 1.05 : 1.05;
-    }
     if (viewer.scene.skyAtmosphere) {
-      viewer.scene.skyAtmosphere.atmosphereLightIntensity = mode === "day" ? 30 : mode === "night" ? 8 : 16;
+      viewer.scene.skyAtmosphere.atmosphereLightIntensity = mode === "day" ? 30 : mode === "night" ? 6 : 14;
     }
-    viewer.scene.globe.baseColor = Color.fromCssColorString(mode === "day" ? "#28443a" : "#16304a");
-    viewer.scene.backgroundColor = Color.fromCssColorString(mode === "day" ? "#030609" : "#020308");
+    viewer.scene.globe.baseColor = Color.fromCssColorString(mode === "day" ? "#28443a" : "#07111c");
+    viewer.scene.backgroundColor = Color.fromCssColorString(mode === "day" ? "#030609" : "#02040a");
+    if (mode === "day") {
+      if (this.baseImageryLayer) this.baseImageryLayer.alpha = 1;
+      if (this.nightLayer) this.nightLayer.alpha = 0;
+      this.styleRouteEntities();
+      return;
+    }
+    void this.ensureNightImagery();
     this.styleRouteEntities();
+  }
+
+  private ensureNightImagery() {
+    const viewer = this.viewer;
+    if (!viewer || viewer.isDestroyed()) return Promise.resolve();
+    if (this.nightLayer) {
+      this.showNightLayer();
+      return Promise.resolve();
+    }
+    if (!this.nightImagery) {
+      this.nightImagery = SingleTileImageryProvider.fromUrl(NIGHT_EARTH_URL, {
+        rectangle: Rectangle.MAX_VALUE,
+        credit: "NASA Black Marble 2016",
+      }).then((provider) => {
+        const current = this.viewer;
+        if (!current || current.isDestroyed()) return;
+        this.nightLayer = current.imageryLayers.addImageryProvider(provider);
+        if (this.lightMode === "day") this.nightLayer.alpha = 0;
+        else this.showNightLayer();
+      }).catch((error) => {
+        this.nightImagery = undefined;
+        console.warn("Night earth imagery unavailable", error);
+      });
+    }
+    return this.nightImagery;
+  }
+
+  private showNightLayer() {
+    if (!this.nightLayer) return;
+    if (this.baseImageryLayer) this.baseImageryLayer.alpha = 0;
+    this.nightLayer.alpha = 1;
+    this.nightLayer.brightness = this.lightMode === "flood" ? 1.65 : 1.35;
+    this.nightLayer.saturation = 0.85;
+    this.nightLayer.contrast = 1.08;
+    this.viewer?.scene.requestRender();
   }
 
   nearestPlace(maxPx: number): string | null {
@@ -520,6 +592,11 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
         }
         if (cameraGeneration === this.globalCameraGeneration && !viewer.isDestroyed()) {
           viewer.canvas.dataset.cameraState = "settled";
+          const cartographic = viewer.camera.positionCartographic;
+          if (cartographic) {
+            viewer.canvas.dataset.cameraLat = cartographic.latitude.toFixed(5);
+            viewer.canvas.dataset.cameraLng = cartographic.longitude.toFixed(5);
+          }
           viewer.canvas.dataset.cameraTarget = DEFAULT_VIEW.heightM.toFixed(0);
           viewer.canvas.dataset.cameraHeading = "0.000000";
           viewer.canvas.dataset.cameraPitch = (-CesiumMath.PI_OVER_TWO).toFixed(6);

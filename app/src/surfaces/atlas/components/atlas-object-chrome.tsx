@@ -5,10 +5,12 @@ import { routeDetailPath } from "@/app/route-paths";
 import type { RouteRegion } from "@/data/route-regions";
 import type { RouteSummary } from "@/domain/route";
 import {
+  ghostCopy,
   initialAtlasObject,
   reduceAtlasObject,
 } from "@/surfaces/atlas/atlas-object-state";
 import type { AtlasPresentationState } from "@/surfaces/atlas/atlas-presentation-state";
+import { NightEarthDisc } from "@/surfaces/atlas/components/night-earth-disc";
 import "./atlas-object.css";
 
 interface AtlasObjectChromeProps {
@@ -18,10 +20,11 @@ interface AtlasObjectChromeProps {
   presentation: AtlasPresentationState;
   reducedMotion: boolean;
   onSelectRegion: (region: RouteRegion) => void;
-  onSelectRoute: (route: RouteSummary) => void;
   onClearRegion: () => void;
   onClearRoute: () => void;
   onSpin: (radians: number) => void;
+  onDrag: (dx: number, dy: number) => void;
+  aimAt: (lng: number, lat: number) => boolean;
   onLight: (mode: "day" | "night" | "flood") => void;
   nearestPlace: (maxPx: number) => string | null;
   routeSparks: () => { slug: string; region: string; width: number; points: { x: number; y: number }[] }[];
@@ -35,10 +38,11 @@ export function AtlasObjectChrome({
   presentation,
   reducedMotion,
   onSelectRegion,
-  onSelectRoute,
   onClearRegion,
   onClearRoute,
   onSpin,
+  onDrag,
+  aimAt,
   onLight,
   nearestPlace,
   routeSparks,
@@ -48,10 +52,13 @@ export function AtlasObjectChrome({
     reduceAtlasObject,
     initialAtlasObject(selectedRegion?.name ?? null, selectedRoute?.slug ?? null),
   );
-  const [held, setHeld] = useState(false);
   const [sparks, setSparks] = useState<{ slug: string; region: string; width: number; points: { x: number; y: number }[] }[]>([]);
   const [sound, setSound] = useState(false);
   const audio = useRef<AudioContext | null>(null);
+  const point = useRef<{ x: number; y: number } | null>(null);
+  const dragged = useRef(false);
+  const dwell = useRef<number | undefined>(undefined);
+  const tunedBefore = useRef<string | null>(null);
   const selectRegionRef = useRef(onSelectRegion);
   selectRegionRef.current = onSelectRegion;
   const divingPlace = state.phase === "diving" ? state.place : null;
@@ -93,10 +100,13 @@ export function AtlasObjectChrome({
   }, [state.phase]);
 
   useEffect(() => {
-    if (!tuned || reducedMotion || !held) return;
-    const id = window.setTimeout(() => dispatch({ type: "commit" }), 1100);
-    return () => window.clearTimeout(id);
-  }, [held, reducedMotion, tuned]);
+    if (state.phase !== "orbit") return;
+    const previous = tunedBefore.current;
+    tunedBefore.current = state.tuned;
+    if (previous && state.tuned && previous !== state.tuned && typeof navigator.vibrate === "function") {
+      navigator.vibrate(12);
+    }
+  }, [state]);
 
   useEffect(() => {
     if (reducedMotion || state.phase !== "orbit") return;
@@ -106,7 +116,6 @@ export function AtlasObjectChrome({
     const stop = () => {
       alive = false;
     };
-    const arm = () => setHeld(true);
     const tick = (now: number) => {
       if (!alive) return;
       const elapsed = Math.min(0.05, (now - last) / 1000);
@@ -116,12 +125,10 @@ export function AtlasObjectChrome({
     };
     frame = window.requestAnimationFrame(tick);
     window.addEventListener("pointerdown", stop, { once: true });
-    window.addEventListener("pointerup", arm);
     return () => {
       alive = false;
       window.cancelAnimationFrame(frame);
       window.removeEventListener("pointerdown", stop);
-      window.removeEventListener("pointerup", arm);
     };
   }, [onSpin, reducedMotion, state.phase]);
 
@@ -152,6 +159,39 @@ export function AtlasObjectChrome({
     : undefined;
   const focused = landedRegion?.routes.find((route) => route.slug === (state.phase === "landed" ? state.focus : null));
 
+  useEffect(() => {
+    if (state.phase !== "landed" || !selectedRoute) return;
+    dispatch({ type: "focus", slug: selectedRoute.slug });
+  }, [selectedRoute, state.phase]);
+
+  const aimRef = useRef(aimAt);
+  aimRef.current = aimAt;
+  const regionsRef = useRef(regions);
+  regionsRef.current = regions;
+
+  function settle() {
+    if (dwell.current !== undefined) window.clearTimeout(dwell.current);
+    const place = nearestRef.current(120);
+    dispatch({ type: "retune", place });
+    const region = regionsRef.current.find((item) => item.name === place);
+    let frames = 0;
+    const finish = () => {
+      dispatch({ type: "lock" });
+      if (!region || !dragged.current || reducedMotion) return;
+      dwell.current = window.setTimeout(() => {
+        dispatch({ type: "lock" });
+        dispatch({ type: "commit" });
+      }, 2500);
+    };
+    const tick = () => {
+      frames += 1;
+      const done = region ? aimRef.current(region.centerLng, region.centerLat) : true;
+      if (done || frames > 28) finish();
+      else window.requestAnimationFrame(tick);
+    };
+    window.requestAnimationFrame(tick);
+  }
+
   function enableSound() {
     if (!audio.current) audio.current = new AudioContext();
     void audio.current.resume();
@@ -170,6 +210,29 @@ export function AtlasObjectChrome({
 
   return (
     <>
+      <NightEarthDisc active={state.phase === "orbit" || state.phase === "diving"} />
+      {state.phase === "orbit" ? (
+        <div
+          className="atlas-object-dial"
+          data-testid="atlas-object-dial"
+          onPointerDown={(event) => {
+            if (dwell.current !== undefined) window.clearTimeout(dwell.current);
+            dragged.current = true;
+            point.current = { x: event.clientX, y: event.clientY };
+            event.currentTarget.setPointerCapture(event.pointerId);
+            dispatch({ type: "drag" });
+          }}
+          onPointerMove={(event) => {
+            if (!point.current || state.phase !== "orbit" || state.gesture !== "dragging") return;
+            onDrag(event.clientX - point.current.x, event.clientY - point.current.y);
+            point.current = { x: event.clientX, y: event.clientY };
+          }}
+          onPointerUp={() => {
+            point.current = null;
+            settle();
+          }}
+        />
+      ) : null}
       {state.phase === "orbit" ? <div className="atlas-object-night" aria-hidden="true" /> : null}
       {state.phase === "orbit" && sparks.length > 0 ? (
         <svg className="atlas-object-sparks" aria-hidden="true">
@@ -202,50 +265,46 @@ export function AtlasObjectChrome({
           type="button"
           className="atlas-object-tune"
           data-testid="atlas-object-tune"
-          onClick={() => dispatch({ type: "commit" })}
+          onClick={() => {
+            dispatch({ type: "lock" });
+            dispatch({ type: "commit" });
+          }}
         >
           {tunedRegion.name}
-          <small>{yearsOf(tunedRegion)} · Enter</small>
+          <small>{yearsOf(tunedRegion)}{state.gesture === "still" ? " · Enter" : ""}</small>
         </button>
       ) : null}
-      {state.phase === "landed" && landedRegion && !state.focus ? (
-        <ul className="atlas-object-ghosts" data-testid="atlas-object-ghosts">
-          {landedRegion.routes.map((route) => (
-            <li key={route.slug}>
-              <button
-                type="button"
-                className="atlas-object-ghost"
-                aria-label={`Focus ${route.date.slice(0, 10)}`}
-                onClick={() => {
-                  dispatch({ type: "focus", slug: route.slug });
-                  onSelectRoute(route);
-                }}
-              >
-                {route.date.slice(0, 10)}
-              </button>
-            </li>
-          ))}
-        </ul>
+      {state.phase === "landed" && focused && landedRegion ? (
+        <FocusCard
+          route={focused}
+          siblings={landedRegion.routes}
+          replayPath={replayPathForRoute(focused)}
+        />
       ) : null}
-      {state.phase === "landed" && focused ? (
-        <FocusCard route={focused} replayPath={replayPathForRoute(focused)} />
-      ) : null}
-      {state.phase === "landed" && !reducedMotion ? <div className="atlas-object-flood" aria-hidden="true" /> : null}
+      {state.phase === "diving" && !reducedMotion ? <div className="atlas-object-flood" aria-hidden="true" /> : null}
     </>
   );
 }
 
-function FocusCard({ route, replayPath }: { route: RouteSummary; replayPath: string }) {
+function FocusCard({
+  route,
+  siblings,
+  replayPath,
+}: {
+  route: RouteSummary;
+  siblings: RouteSummary[];
+  replayPath: string;
+}) {
+  const copy = ghostCopy(route, siblings);
   const replayable = route.lifecycle !== "planned"
     && route.replay.geometryStatus === "ready"
     && route.replay.replayEligible;
   return (
-    <section className="atlas-object-focus" data-testid="atlas-object-focus" aria-label={route.name}>
-      <p>{route.region} · {route.date.slice(0, 10)}</p>
-      <h1>{route.name}</h1>
-      <p>
-        {route.distanceKm.toFixed(1)} km · {route.elevationGainM.toLocaleString()} m up · {route.type}
-      </p>
+    <section className="atlas-object-focus" data-testid="atlas-object-focus" aria-label={copy.heading}>
+      <p>{route.region}</p>
+      <h1>{copy.heading}</h1>
+      <p className="atlas-object-detail">{copy.detail}</p>
+      <p>{copy.stats}</p>
       <Link className="atlas-object-replay" to={replayable ? replayPath : routeDetailPath(route.slug)}>
         {replayable ? "Replay" : "Route guide"}
       </Link>

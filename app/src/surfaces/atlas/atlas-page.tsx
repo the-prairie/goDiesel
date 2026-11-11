@@ -256,6 +256,7 @@ export function AtlasPage() {
         onPresentationEvent={dispatchPresentation}
         contentInsets={prototypeLayout ? contentInsets : undefined}
         quietChrome={Boolean(prototypeLayout)}
+        nightBasemap={prototypeLayout === "g"}
         onTerrainNote={prototypeLayout ? onTerrainNote : undefined}
         className="absolute inset-0 min-h-0 rounded-none border-0"
       />
@@ -269,10 +270,11 @@ export function AtlasPage() {
             presentation={presentation}
             reducedMotion={window.matchMedia("(prefers-reduced-motion: reduce)").matches}
             onSelectRegion={selectRegion}
-            onSelectRoute={selectRoute}
             onClearRegion={clearRegion}
             onClearRoute={clearRoute}
             onSpin={(radians) => globeRef.current?.spinBy?.(radians)}
+            onDrag={(dx, dy) => globeRef.current?.dragBy?.(dx, dy)}
+            aimAt={(lng, lat) => globeRef.current?.aimAt?.(lng, lat) ?? false}
             onLight={(mode) => globeRef.current?.setLightroots?.(mode)}
             nearestPlace={(maxPx) => globeRef.current?.nearestPlace?.(maxPx) ?? null}
             routeSparks={() => globeRef.current?.routeSparks?.() ?? []}
