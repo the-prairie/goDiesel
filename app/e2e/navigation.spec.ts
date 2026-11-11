@@ -362,6 +362,34 @@ test("field-guide shell has stable desktop and mobile compositions", async ({
   });
 });
 
+for (const viewport of [
+  { width: 768, height: 1024 },
+  { width: 1024, height: 768 },
+]) {
+  test.describe(`rail home link at ${viewport.width}x${viewport.height} with touch`, () => {
+    test.use({ viewport, hasTouch: true });
+
+    test("is a named 44px target that leaves current-page state to the section links", async ({ page }) => {
+      await page.goto("/#/finder");
+      const rail = page.getByTestId("atlas-spine");
+      const home = rail.getByRole("link", { name: /^goDiesel/ });
+      await expect(home).toBeVisible();
+      const box = await home.boundingBox();
+      expect(box!.width).toBeGreaterThanOrEqual(44);
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+      const railBox = await rail.boundingBox();
+      expect(box!.x).toBeGreaterThanOrEqual(railBox!.x);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(railBox!.x + railBox!.width);
+      await expect(home).not.toHaveAttribute("aria-current", /.*/);
+      await expect(rail.getByRole("link", { name: "Finder", exact: true })).toHaveAttribute("aria-current", "page");
+
+      await home.tap();
+      await expect(page).toHaveURL(/#\/atlas$/);
+      await expect(rail.getByRole("link", { name: "Atlas", exact: true })).toHaveAttribute("aria-current", "page");
+    });
+  });
+}
+
 test("an unknown link says so inside the shell and offers a way to Atlas", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/#/finderr");

@@ -13,6 +13,8 @@ import { FinderRouteMap } from "@/ui/planning-route-map";
 import { routes } from "@/data/routes";
 import { RouteThread } from "@/ui/route-card";
 import { Button } from "@/ui/button";
+import { cn } from "@/ui/utils";
+import { activeFilterChips, type FinderFilterChipKey } from "@/surfaces/finder/finder-filter-chips";
 import { collectionPlaces } from "@/domain/collection-places";
 import { savePlannedRoute, usePlannedRoutes } from "@/data/planned-route-store";
 import { useRouteDetail } from "@/data/use-route-detail";
@@ -251,6 +253,7 @@ function FinderResults({
         )}
 
         <p className="border-t border-line pt-3 text-xs text-ink-muted">Routes from your collection. Save a route to plan a future outing.</p>
+        {result?.status === "matches" ? <p className="text-xs text-ink-secondary">Cover artwork based on <a className="underline underline-offset-2" href="https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9" target="_blank" rel="noreferrer">Esri World Imagery</a>.</p> : null}
       </div>
     </section>
   );
@@ -262,35 +265,10 @@ function ActiveFilterChips({
   onEditDistance,
 }: {
   intent: FinderIntent;
-  onRemove: (filter: "place" | "terrain" | "vibe" | "query") => void;
+  onRemove: (filter: FinderFilterChipKey) => void;
   onEditDistance: () => void;
 }) {
-  const chips = [
-    { key: "query" as const, label: intent.query && intent.query !== intent.place ? intent.query : "", aria: "Clear experience search" },
-    {
-      key: "place" as const,
-      label: intent.place,
-      aria: "Clear location filter",
-    },
-    ...(intent.terrain !== "any"
-      ? [
-          {
-            key: "terrain" as const,
-            label: intent.terrain,
-            aria: "Remove terrain filter",
-          },
-        ]
-      : []),
-    ...(intent.vibe
-      ? [
-          {
-            key: "vibe" as const,
-            label: intent.vibe,
-            aria: "Remove vibe filter",
-          },
-        ]
-      : []),
-  ];
+  const chips = activeFilterChips(intent);
 
   return (
     <div
@@ -301,13 +279,13 @@ function ActiveFilterChips({
       <span className="px-2 text-sm text-ink-secondary">{intent.activity === "Any" ? "All activities" : intent.activity}</span>
       <Button type="button" variant="secondary" size="sm" aria-label="Edit distance target" onClick={onEditDistance}>{intent.minDistanceKm != null || intent.maxDistanceKm != null ? `${intent.minDistanceKm ?? 0}–${intent.maxDistanceKm ?? "∞"} km` : intent.distanceKm ? `Around ${intent.distanceKm} km` : "Any distance"} <Pencil aria-hidden="true" /></Button>
       {intent.maxElevationM != null ? <span className="text-sm text-ink-secondary">Up to {intent.maxElevationM} m climbing</span> : null}
-      {chips.filter(chip => chip.label).map((chip) => (
+      {chips.map((chip) => (
         <Button
           key={chip.key}
           type="button"
           variant="outline"
           size="sm"
-          className="h-9 shrink-0 bg-surface-raised capitalize"
+          className={cn("h-9 shrink-0 bg-surface-raised", chip.capitalize && "capitalize")}
           aria-label={chip.aria}
           onClick={() => onRemove(chip.key)}
         >

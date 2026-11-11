@@ -15,3 +15,7 @@
 .route-geography-map .maplibregl-ctrl-attrib.maplibregl-compact:not(.maplibregl-compact-show) { padding: 0; }
 .route-geography-map .maplibregl-ctrl-attrib .maplibregl-ctrl-attrib-button { width: 44px; height: 44px; background-color: transparent; background-repeat: no-repeat; background-position: center; filter: invert(1); }
 .route-geography-map .maplibregl-ctrl-attrib-button:focus-visible { outline: 2px solid var(--canvas); outline-offset: -3px; }
+
+/* Static stand-in when the browser cannot start the map: fill the map slot. */
+.route-geography-static .route-cover,
+.route-geography-static .route-cover-fallback { height: 100%; min-height: 0; }

@@ -475,7 +475,7 @@ export function GoogleRouteNavigatorStage({
         <div className={cn("pointer-events-none absolute inset-0 grid place-items-center p-6", providerUnavailable ? "z-40" : "z-20")}>
           <div
             aria-live="polite"
-            className="pointer-events-auto max-w-md border border-white/20 bg-surface p-6 text-center text-white"
+            className="pointer-events-auto max-h-full max-w-md overflow-y-auto border border-white/20 bg-surface p-6 text-center text-white"
             role={status.state === "unavailable" ? "alert" : "status"}
           >
             <ScanLine

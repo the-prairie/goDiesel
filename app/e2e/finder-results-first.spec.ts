@@ -58,3 +58,41 @@ test('discovery requests a location separately and preserves the experience', as
   await page.getByRole('button',{name:'Find routes',exact:true}).click();
   await expect(page.getByRole('textbox',{name:'Near where?'})).toHaveValue('Brighton');
 });
+
+test('free-text search chip shows the words exactly as typed', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/#/finder');
+  await page.getByRole('textbox', { name: 'Describe your next route' }).fill('a hilly run in Crete about 15 km');
+  await page.getByRole('button', { name: 'Find routes', exact: true }).click();
+  const chip = page.getByRole('button', { name: 'Clear experience search' });
+  await expect(chip).toBeVisible();
+  expect(await chip.evaluate((element) => (element as HTMLElement).innerText.trim())).toBe('a hilly run in Crete about 15 km');
+});
+
+test('result covers carry no tiny overlay credit; one legible imagery credit serves the list', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/#/finder?place=beach&activity=Run&distance=20&q=beach');
+  const results = page.getByRole('region', { name: 'Finder results' });
+  await expect(results.locator('.finder-result-cover .route-cover-image').first()).toBeVisible();
+  await expect(results.locator('.route-cover-credit')).toHaveCount(0);
+  const credit = results.getByRole('link', { name: 'Esri World Imagery', exact: true });
+  await expect(credit).toHaveCount(1);
+  await credit.scrollIntoViewIfNeeded();
+  await expect(credit).toBeVisible();
+  expect(await credit.evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(12);
+});
+
+test('a phone list view does not download the map runtime until the map is shown', async ({ page }) => {
+  const scripts: string[] = [];
+  page.on('request', (request) => {
+    if (request.resourceType() === 'script') scripts.push(request.url());
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/#/finder?place=beach&activity=Run&distance=20&q=beach');
+  await expect(page.getByRole('article')).toHaveCount(2);
+  await page.waitForLoadState('networkidle');
+  expect(scripts.filter((url) => url.includes('maplibre'))).toEqual([]);
+  await page.getByRole('button', { name: 'Map', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Finder route map' })).toHaveAttribute('data-map-status', 'ready');
+  expect(scripts.some((url) => url.includes('maplibre'))).toBe(true);
+});

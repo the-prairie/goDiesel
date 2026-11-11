@@ -36,8 +36,13 @@ import {
 } from "@/surfaces/replay/scene/route-camera-stabilizer";
 import { Button } from "@/ui/button";
 import { useReducedMotion } from "@/ui/use-reduced-motion";
+import { cn } from "@/ui/utils";
 import "./components/immersive-replay.css";
 import { CoursePreviewControls } from "./components/course-preview-controls";
+
+const GOOGLE_3D_REJECTED_TITLE = "Google 3D is unavailable";
+const GOOGLE_3D_REJECTED_MESSAGE =
+  "Google is not serving photorealistic 3D to this site right now. The course page still shows this course on the map, and you can download its GPX there.";
 
 export function CoursePreviewPage() {
   const { courseId = "" } = useParams();
@@ -140,7 +145,7 @@ function CoursePreviewStage({
   const reducedMotion = useReducedMotion();
   const reducedMotionRef = useRef(reducedMotion);
   reducedMotionRef.current = reducedMotion;
-  const { control, status } = state;
+  const { control, status, statusReason } = state;
 
   const renderPosition = useCallback(
     (
@@ -235,9 +240,9 @@ function CoursePreviewStage({
         outerWidth: 0.14,
         width: 3,
       },
-      onStatus: (next) => {
+      onStatus: (next, reason) => {
         if (engineRef.current === engine)
-          commit({ type: "providerChanged", status: next });
+          commit({ type: "providerChanged", status: next, reason });
       },
     });
     return () => {
@@ -317,6 +322,10 @@ function CoursePreviewStage({
       requestControl({ type: "followingChanged", following: false });
   };
   const ready = status.state === "ready";
+  const unavailable = status.state === "unavailable";
+  // A rejected key is the site's problem, not the visitor's: say so plainly
+  // instead of the engine's diagnostic, and send them to what still works.
+  const keyRejected = unavailable && statusReason === "authentication";
   return (
     <section
       aria-label="3D course preview"
@@ -327,13 +336,30 @@ function CoursePreviewStage({
       data-section={section.sectionNumber}
       data-engine="google-3d-maps"
     >
+      {/* The map host is its own stacking context, so nothing Google injects
+          (such as its key-error dialog) can rise above the page's layers.
+          While the provider is unavailable it is hidden and inert. */}
       <div
         ref={containerRef}
-        className="absolute inset-0"
+        className={cn(
+          "absolute inset-0 isolate",
+          unavailable && "invisible opacity-0",
+        )}
+        aria-hidden={unavailable || undefined}
         aria-label={`Google photorealistic 3D view of ${course.name}`}
+        data-testid="course-preview-map-host"
+        inert={unavailable || undefined}
         onPointerDownCapture={releaseCamera}
         onWheelCapture={releaseCamera}
       />
+      {!ready ? (
+        // Opaque, under the header and controls: nothing from the map shows.
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-10 bg-canvas"
+          data-testid="course-preview-provider-backdrop"
+        />
+      ) : null}
       <header className="replay-header pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start gap-3 p-3 sm:p-6">
         <div className="pointer-events-auto flex min-w-0 items-start gap-3">
           <Button
@@ -368,12 +394,25 @@ function CoursePreviewStage({
             role={status.state === "unavailable" ? "alert" : "status"}
           >
             <h2 className="text-lg font-semibold">
-              {status.state === "unavailable"
-                ? "3D preview unavailable"
-                : "Opening the 3D map"}
+              {keyRejected
+                ? GOOGLE_3D_REJECTED_TITLE
+                : unavailable
+                  ? "3D preview unavailable"
+                  : "Opening the 3D map"}
             </h2>
-            <p className="mt-2 text-sm text-ink-secondary">{status.message}</p>
-            {status.state === "unavailable" ? (
+            <p className="mt-2 text-sm text-ink-secondary">
+              {keyRejected ? GOOGLE_3D_REJECTED_MESSAGE : status.message}
+            </p>
+            {keyRejected ? (
+              <div className="mt-4 flex justify-center">
+                <Button asChild>
+                  <Link to={`/courses/${course.id}`}>
+                    <ArrowLeft aria-hidden="true" />
+                    Back to course
+                  </Link>
+                </Button>
+              </div>
+            ) : unavailable ? (
               <div className="mt-4 flex justify-center gap-2">
                 <Button onClick={onRetry}>
                   <RotateCcw aria-hidden="true" />

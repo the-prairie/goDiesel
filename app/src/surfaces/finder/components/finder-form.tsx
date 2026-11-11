@@ -47,7 +47,7 @@ export function FinderForm({
         <Button
           type="submit"
           aria-label="Find routes"
-          className="shrink-0"
+          className="min-w-11 shrink-0"
         >
           <Search aria-hidden="true" />
           <span className="hidden sm:inline">Find routes</span>
@@ -58,6 +58,7 @@ export function FinderForm({
           aria-label={expanded ? "Hide filters" : "Edit filters"}
           aria-expanded={expanded}
           aria-controls="finder-options"
+          className="min-w-11"
           onClick={onToggleFilters}
         >
           <SlidersHorizontal aria-hidden="true" />

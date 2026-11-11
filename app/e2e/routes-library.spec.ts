@@ -518,3 +518,61 @@ for (const width of [320, 390, 768, 1280]) {
     await page.screenshot({ path: `e2e/evidence/field-notes-independent/routes-fixed-${width}.png` });
   });
 }
+
+test("on a phone, changing a filter shows the live count where the person is looking", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#/routes");
+  const filters = page.getByRole("form", { name: "Route filters" });
+  await filters.getByRole("button", { name: "Filters", exact: true }).click();
+  await chooseSelectOption(filters.getByRole("combobox", { name: "Region" }), "Kyoto, Japan");
+  await expect.poll(() => routeSearchParam(page, "region")).toBe("Kyoto, Japan");
+
+  const total = Number(await page.getByTestId("route-result-count").getAttribute("data-total"));
+  expect(total).toBeGreaterThan(0);
+  const show = filters.getByRole("button", { name: total === 1 ? "Show 1 route" : `Show ${total} routes` });
+  await expect(show).toBeInViewport({ ratio: 1 });
+  const showBox = (await show.boundingBox())!;
+  expect(showBox.height).toBeGreaterThanOrEqual(44);
+  await expect(page.getByTestId("route-result-count")).toHaveAttribute("aria-live", "polite");
+
+  await show.click();
+  await expect(filters.getByRole("button", { name: "Filters", exact: true })).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByTestId("route-result-count")).toBeInViewport();
+  await expect(routeCards(page).first()).toBeInViewport();
+});
+
+test("the library renders without downloading the map runtime and reserves cover space", async ({ page }) => {
+  const scripts: string[] = [];
+  page.on("request", (request) => {
+    if (request.resourceType() === "script") scripts.push(request.url());
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#/routes");
+  await expect(routeCards(page).first()).toBeVisible();
+  const media = routeCards(page).first().locator(".field-note-link > :first-child");
+  const coverBefore = (await media.boundingBox())!;
+  await expect(routeCards(page).first().locator(".route-cover-image")).toBeVisible();
+  const coverAfter = (await media.boundingBox())!;
+  expect(coverAfter).toEqual(coverBefore);
+  expect(scripts.filter((url) => url.includes("maplibre"))).toEqual([]);
+});
+for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
+  test(`route not found keeps the page gutter at ${viewport.width}px`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    for (const path of ["/#/routes/not-a-real-route", "/#/replay/not-a-real-route"]) {
+      await page.goto(path);
+      const heading = page.getByRole("heading", { name: "This route could not be found." });
+      await expect(heading).toBeVisible();
+      const main = (await page.locator("main").boundingBox())!;
+      const eyebrow = (await page.getByText("Route unavailable", { exact: true }).boundingBox())!;
+      const action = (await page.getByRole("link", { name: "Browse routes" }).boundingBox())!;
+      const headingBox = (await heading.boundingBox())!;
+      for (const box of [eyebrow, headingBox, action]) {
+        expect(box.x - main.x, path).toBeGreaterThanOrEqual(16);
+        expect(main.x + main.width - (box.x + box.width), path).toBeGreaterThanOrEqual(16);
+      }
+      expect(eyebrow.y - main.y, path).toBeGreaterThanOrEqual(16);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
+    }
+  });
+}

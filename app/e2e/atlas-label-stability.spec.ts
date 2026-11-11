@@ -43,3 +43,36 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     await expect(page).toHaveURL(/region=Crete/);
   });
 }
+
+// UX-18: the production Cesium world at its default view never draws two
+// region labels on top of each other.
+for (const viewport of [{ width: 1440, height: 900 }, { width: 1920, height: 1080 }]) {
+  test(`globe region labels never overlap at the default view at ${viewport.width}px`, async ({ page }) => {
+    test.setTimeout(60_000);
+    await page.setViewportSize(viewport);
+    await page.goto("/#/atlas");
+    await expect(page.locator('div[data-atlas-engine="cesium"]')).toHaveAttribute("data-atlas-status", "ready", { timeout: 30_000 });
+    const frames = await page.evaluate(async () => {
+      const samples: Array<Array<{ name: string; left: number; top: number; right: number; bottom: number }>> = [];
+      for (let index = 0; index < 12; index++) {
+        await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 60)));
+        samples.push(Array.from(document.querySelectorAll<HTMLElement>("[data-globe-region]"))
+          .filter((label) => getComputedStyle(label).visibility === "visible" && label.offsetWidth > 0)
+          .map((label) => {
+            const box = label.getBoundingClientRect();
+            return { name: label.dataset.globeRegion!, left: box.left, top: box.top, right: box.right, bottom: box.bottom };
+          }));
+      }
+      return samples;
+    });
+    expect(frames.at(-1)!.length).toBeGreaterThanOrEqual(2);
+    for (const labels of frames) {
+      for (const [index, a] of labels.entries()) {
+        for (const b of labels.slice(index + 1)) {
+          const overlap = a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+          expect(overlap, `${a.name} overlaps ${b.name}`).toBe(false);
+        }
+      }
+    }
+  });
+}

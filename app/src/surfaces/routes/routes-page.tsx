@@ -3,6 +3,7 @@ import { filterExternalPlans } from "@/surfaces/routes/external-plan-filters";
 import { ExternalPlanCard } from "./components/external-plan-card";
 import { ChevronDown, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { flushSync } from "react-dom";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 
 import { PageTitle } from "@/ui/page-title";
@@ -76,6 +77,7 @@ export function RoutesPage() {
   const page = Math.min(pageFromParams(searchParams), maximumPage);
   const visibleRoutes = matchingRoutes.slice(0, page * routesPerPage);
   const returnPath = `${location.pathname}${location.search}`;
+  const matchingTotal = matchingRoutes.length + matchingExternalPlans.length;
   const hasFilters = Object.entries(filters).some(
     ([key, value]) => value !== DEFAULT_ROUTE_FILTERS[key as keyof RouteFilters],
   );
@@ -92,6 +94,13 @@ export function RoutesPage() {
     if (scrollY === undefined) return;
     window.scrollTo(0, scrollY);
   }, [returnPath, visibleRoutes.length]);
+
+  function showResults() {
+    flushSync(() => setShowMobileFilters(false));
+    const results = document.getElementById("route-results");
+    results?.scrollIntoView({ block: "start", behavior: "auto" });
+    results?.focus({ preventScroll: true });
+  }
 
   function updateFilter<K extends keyof RouteFilters>(key: K, value: RouteFilters[K]) {
     const next = paramsFromFilters(filters);
@@ -204,10 +213,25 @@ export function RoutesPage() {
                 options={withAllOption(vibeOptions, "Any vibe")}
                 onChange={(value) => updateFilter("vibe", value)}
               />
+              {/* Filters apply as they change. On a phone the results sit below
+                  this open panel, so the count is repeated here and kept in view
+                  while the panel scrolls. The result count below stays the one
+                  live region. */}
+              <div className="sticky bottom-[calc(var(--mobile-navigation-height)+0.75rem)] z-10 flex justify-end sm:col-span-2 md:bottom-3 lg:col-span-3 xl:col-span-6">
+                <Button
+                  type="button"
+                  className="w-full sm:w-auto"
+                  onClick={showResults}
+                >
+                  {matchingTotal === 0
+                    ? "No matching routes · Close filters"
+                    : `Show ${matchingTotal} ${matchingTotal === 1 ? "route" : "routes"}`}
+                </Button>
+              </div>
             </div>
           </form>
 
-          <div className="flex min-h-9 flex-wrap items-center justify-between gap-3">
+          <div id="route-results" tabIndex={-1} className="flex min-h-9 scroll-mt-4 flex-wrap items-center justify-between gap-3 focus-visible:outline-none">
             <p
               aria-live="polite"
               data-testid="route-result-count"

@@ -1,4 +1,4 @@
-import { Check, Search } from "lucide-react";
+import { Check, Route, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -56,8 +56,10 @@ export function ReplayRoutePicker({
       }}
     >
       <SheetTrigger asChild>
-        <Button type="button" variant="outline" size="sm" aria-label="Change route" className="w-full">
-          <Search aria-hidden="true" />
+        <Button type="button" variant="outline" size="sm" aria-label="Change route" className="w-full min-w-11">
+          {/* Icon-only on phones, so the glyph names the action: a route. */}
+          <Route aria-hidden="true" className="sm:hidden" />
+          <Search aria-hidden="true" className="hidden sm:block" />
           <span className="hidden sm:inline">Change route</span>
         </Button>
       </SheetTrigger>

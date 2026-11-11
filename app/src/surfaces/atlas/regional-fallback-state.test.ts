@@ -64,4 +64,13 @@ describe("regional fallback lifecycle", () => {
     expect(reduceRegionalFallback(state, { ...start, session: 2 })).toEqual({ phase: "loading", session: 2, errors: 0 });
     expect(reduceRegionalFallback(state, { ...start, session: 2, hasGeometry: false })).toEqual({ phase: "unavailable", session: 2, reason: "geometry" });
   });
+
+  it("gives up at once without a connection and recovers when the map still loads", () => {
+    const offline = { type: "connectionLost", session: 1 } as const;
+    expect(run(start, offline)).toEqual({ phase: "unavailable", session: 1, reason: "offline" });
+    expect(run(start, offline, loaded)).toEqual({ phase: "ready", session: 1 });
+    const ready = run(start, loaded);
+    expect(reduceRegionalFallback(ready, offline)).toBe(ready);
+    expect(reduceRegionalFallback(run(start, error, { ...start, session: 2 }), offline)).toEqual({ phase: "loading", session: 2, errors: 0 });
+  });
 });

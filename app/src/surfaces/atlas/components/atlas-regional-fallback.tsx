@@ -171,6 +171,8 @@ interface AtlasRegionalFallbackProps {
   selectedRoute?: RouteSummary;
   onSelectRoute?: (route: RouteSummary) => void;
   onReady?: () => void;
+  /** The map settled without loading (offline, timeout, errors, no geometry). */
+  onUnavailable?: () => void;
 }
 
 export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalFallbackProps>(function AtlasRegionalFallback({
@@ -178,7 +180,9 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
   selectedRoute,
   onSelectRoute,
   onReady,
+  onUnavailable,
 }, forwardedRef) {
+  const frameRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | undefined>(undefined);
   const onSelectRouteRef = useRef(onSelectRoute);
@@ -204,6 +208,9 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
   useEffect(() => {
     if (status === "ready") onReady?.();
   }, [onReady, status]);
+  useEffect(() => {
+    if (status === "unavailable") onUnavailable?.();
+  }, [onUnavailable, status]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -242,6 +249,7 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
     let active = true;
     let loadTimer: number | undefined;
     let resizeObserver: ResizeObserver | undefined;
+    let creditObserver: ResizeObserver | undefined;
     let map: MapLibreMap;
 
     try {
@@ -264,6 +272,18 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
     const markUnavailable = () => {
       if (active) dispatch({ type: "loadTimedOut", session });
     };
+    // Without a connection the style cannot arrive; say so now, not at the deadline.
+    const markOffline = () => {
+      if (active) dispatch({ type: "connectionLost", session });
+    };
+    // The status notice sits above the map's credits, however tall they wrap.
+    const credits = host.querySelector<HTMLElement>(".maplibregl-ctrl-bottom-right");
+    const frame = frameRef.current;
+    const placeNoticeAboveCredits = () => {
+      if (!frame || !credits) return;
+      const offset = frame.getBoundingClientRect().bottom - credits.getBoundingClientRect().top;
+      frame.style.setProperty("--atlas-map-credit-offset", `${Math.max(0, Math.round(offset))}px`);
+    };
     const handleError = () => {
       if (active) dispatch({ type: "mapErrored", session });
     };
@@ -278,6 +298,7 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
       map.resize();
       fitRegionalRoutes(map, host, bounds);
       updateRouteOverlay();
+      placeNoticeAboveCredits();
       map.once("idle", () => {
         if (active) host.dataset.mapRendered = "true";
       });
@@ -360,16 +381,25 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
     map.on("moveend", updateRouteOverlay);
     map.once("load", handleLoad);
     loadTimer = window.setTimeout(markUnavailable, LOAD_TIMEOUT_MS);
+    window.addEventListener("offline", markOffline);
+    if (!navigator.onLine) markOffline();
 
     if (typeof ResizeObserver !== "undefined") {
       resizeObserver = new ResizeObserver(handleResize);
       resizeObserver.observe(host);
+      if (credits) {
+        creditObserver = new ResizeObserver(placeNoticeAboveCredits);
+        creditObserver.observe(credits);
+      }
     }
 
     return () => {
       active = false;
       if (loadTimer !== undefined) window.clearTimeout(loadTimer);
       resizeObserver?.disconnect();
+      creditObserver?.disconnect();
+      window.removeEventListener("offline", markOffline);
+      frame?.style.removeProperty("--atlas-map-credit-offset");
       map.off("error", handleError);
       map.off("load", handleLoad);
       map.off("moveend", updateRouteOverlay);
@@ -384,10 +414,13 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
       ? `Loading ${region.name} map.`
       : status === "ready"
         ? "3D terrain partially unavailable."
-        : "Regional map unavailable.";
+        : lifecycle.phase === "unavailable" && lifecycle.reason === "offline"
+          ? "Regional map needs a connection."
+          : "Regional map unavailable.";
 
   return (
     <div
+      ref={frameRef}
       data-atlas-engine="maplibre-regional-fallback"
       data-map-status={status}
       data-region-route-count={routes.features.length}
@@ -448,7 +481,7 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
       <div
         role="status"
         aria-live="polite"
-        className="pointer-events-none absolute bottom-[calc(var(--atlas-tray-height,12rem)+2.75rem)] left-4 z-10 max-w-[calc(100%-6rem)] border border-white/25 bg-surface px-3 py-2 text-xs text-white"
+        className="pointer-events-none absolute bottom-[max(calc(var(--atlas-tray-height,12rem)+2.75rem),calc(var(--atlas-map-credit-offset,0px)+0.5rem))] left-4 z-10 max-w-[calc(100%-6rem)] border border-white/25 bg-surface px-3 py-2 text-xs text-white"
       >
         {statusCopy}
       </div>
