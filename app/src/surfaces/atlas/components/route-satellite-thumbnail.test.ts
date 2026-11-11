@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   downsampleThumbnailPath,
-  nextThumbnailState,
+  routeThumbnailState,
   routeSatelliteThumbnailUrl,
 } from "@/surfaces/atlas/components/route-satellite-thumbnail";
 import type { RoutePoint } from "@/domain/route";
@@ -48,20 +48,25 @@ describe("route satellite thumbnail adapter", () => {
   });
 
   it("retains completed thumbnails when they leave the request window", () => {
-    expect(nextThumbnailState("loaded", false, "https://example.test/map.png")).toBe(
+    expect(routeThumbnailState(false, "https://example.test/map.png", "loaded")).toBe(
       "loaded",
     );
-    expect(nextThumbnailState("failed", false, "https://example.test/map.png")).toBe(
+    expect(routeThumbnailState(false, "https://example.test/map.png", "failed")).toBe(
       "failed",
     );
   });
 
   it("defers unfinished thumbnails outside the request window", () => {
-    expect(nextThumbnailState("loading", false, "https://example.test/map.png")).toBe(
+    expect(routeThumbnailState(false, "https://example.test/map.png", undefined)).toBe(
       "deferred",
     );
-    expect(nextThumbnailState("deferred", true, "https://example.test/map.png")).toBe(
+    expect(routeThumbnailState(true, "https://example.test/map.png", undefined)).toBe(
       "loading",
     );
+  });
+
+  it("is unavailable without a request URL in or out of the window", () => {
+    expect(routeThumbnailState(true, null, undefined)).toBe("unavailable");
+    expect(routeThumbnailState(false, null, undefined)).toBe("unavailable");
   });
 });

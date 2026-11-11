@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import type { RoutePoint, RouteSummary } from "@/domain/route";
 import { cn } from "@/ui/utils";
@@ -7,11 +7,11 @@ const thumbnailWidth = 160;
 const thumbnailHeight = 160;
 const maximumPathPoints = 36;
 
+type RouteThumbnailOutcome = "loaded" | "failed";
 type RouteThumbnailState =
   | "deferred"
   | "loading"
-  | "loaded"
-  | "failed"
+  | RouteThumbnailOutcome
   | "unavailable";
 
 declare global {
@@ -37,16 +37,10 @@ export function RouteSatelliteThumbnail({
       ),
     [route.trace],
   );
-  const [state, setState] = useState<RouteThumbnailState>(() =>
-    thumbnailState(enabled, url),
-  );
-
-  useEffect(() => {
-    setState((currentState) =>
-      nextThumbnailState(currentState, enabled, url),
-    );
-  }, [enabled, url]);
-
+  // Only the image's own outcome is state. Cards are keyed by route slug, so
+  // the URL is fixed for this component's lifetime.
+  const [outcome, setOutcome] = useState<RouteThumbnailOutcome>();
+  const state = routeThumbnailState(enabled, url, outcome);
   const requestImage =
     Boolean(url) && state !== "failed" && (enabled || state === "loaded");
 
@@ -62,8 +56,8 @@ export function RouteSatelliteThumbnail({
           alt=""
           loading="lazy"
           decoding="async"
-          onLoad={() => setState("loaded")}
-          onError={() => setState("failed")}
+          onLoad={() => setOutcome("loaded")}
+          onError={() => setOutcome("failed")}
           className={cn(
             "size-full object-contain transition-opacity duration-200 motion-reduce:transition-none",
             state === "loaded" ? "opacity-100" : "opacity-0",
@@ -74,24 +68,14 @@ export function RouteSatelliteThumbnail({
   );
 }
 
-function thumbnailState(
+/** A loaded or failed image keeps its outcome when it leaves the request window. */
+export function routeThumbnailState(
   enabled: boolean,
   url: string | null,
-): RouteThumbnailState {
-  if (!enabled) return "deferred";
-  return url ? "loading" : "unavailable";
-}
-
-export function nextThumbnailState(
-  currentState: RouteThumbnailState,
-  enabled: boolean,
-  url: string | null,
+  outcome: RouteThumbnailOutcome | undefined,
 ): RouteThumbnailState {
   if (!url) return "unavailable";
-  if (currentState === "loaded" || currentState === "failed") {
-    return currentState;
-  }
-  return enabled ? "loading" : "deferred";
+  return outcome ?? (enabled ? "loading" : "deferred");
 }
 
 export function routeSatelliteThumbnailUrl(
