@@ -757,3 +757,37 @@ test("offline, a selected region presents its routes and says the map needs a co
   await expect(page.getByText("Regional map needs a connection.", { exact: true })).toBeVisible();
   await expect(page.getByText("Loading Crete, Greece terrain")).toHaveCount(0);
 });
+
+// UX-12: the fallback notice never covers the map's attribution, however it wraps.
+for (const width of [320, 360, 390]) {
+  test(`the fallback notice stays clear of the map attribution at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 640 });
+    await page.addInitScript(() => { window.__GODIESEL_ATLAS_REGION_OUTCOME__ = "fallback"; });
+    await page.route("**/styles/liberty", (route) => route.fulfill({ json: {
+      version: 8,
+      sources: { credits: {
+        type: "geojson", data: { type: "FeatureCollection", features: [] },
+        attribution: "OpenFreeMap © OpenMapTiles Data from OpenStreetMap",
+      } },
+      layers: [
+        { id: "background", type: "background", paint: { "background-color": "#d9ddd2" } },
+        { id: "credits", type: "line", source: "credits" },
+      ],
+    } }));
+    await installDeterministicCesiumAtlas(page);
+    await page.goto("/#/atlas?region=Crete%2C+Greece");
+    const fallback = page.locator('[data-atlas-engine="maplibre-regional-fallback"]');
+    await expect(fallback).toHaveAttribute("data-map-status", "ready");
+    const notice = page.getByText("3D terrain partially unavailable.", { exact: true });
+    const attribution = fallback.locator(".maplibregl-ctrl-attrib");
+    await expect(attribution).toContainText("OpenStreetMap");
+    await expect.poll(async () => {
+      const [noticeBox, attributionBox] = [await notice.boundingBox(), await attribution.boundingBox()];
+      return Boolean(noticeBox && attributionBox && !intersects(noticeBox, attributionBox));
+    }).toBe(true);
+    const tray = (await page.getByRole("region", { name: "Crete, Greece routes", exact: true }).boundingBox())!;
+    const noticeBox = (await notice.boundingBox())!;
+    expect(noticeBox.y + noticeBox.height).toBeLessThanOrEqual(tray.y);
+    expect(noticeBox.y).toBeGreaterThanOrEqual(0);
+  });
+}
