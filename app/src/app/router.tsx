@@ -1,15 +1,12 @@
-import { lazy, type ReactNode } from "react";
-import {
-  createHashRouter,
-  Navigate,
-  RouterProvider,
-  useParams,
-} from "react-router-dom";
+import { lazy } from "react";
+import { createHashRouter, Navigate, RouterProvider } from "react-router-dom";
 
 import { RouteError } from "@/app/route-error";
 import { AppShell } from "@/app/app-shell";
-import { singleRouteMicrosite } from "@/app/single-route-microsite";
 import { APP_PATHS, canonicalizeLegacyQuestHash } from "@/app/route-paths";
+
+// A single-route microsite build aliases this module to router.single.tsx
+// (see vite.config.ts), so no product surface below reaches a share bundle.
 
 const AdminPage = lazy(() =>
   import("@/surfaces/admin/admin-page").then((module) => ({ default: module.AdminPage })),
@@ -67,15 +64,6 @@ const CinematicDirectorLabPage = lazy(() =>
 canonicalizeLegacyQuestHash();
 window.addEventListener("hashchange", canonicalizeLegacyQuestHash);
 
-function SingleRouteGuard({ children }: { children: ReactNode }) {
-  const { routeSlug } = useParams();
-  return routeSlug === singleRouteMicrosite?.slug ? (
-    children
-  ) : (
-    <Navigate to={singleRouteMicrosite?.guidePath ?? APP_PATHS.atlas} replace />
-  );
-}
-
 const productRoutes = [
   { index: true, element: <Navigate to={APP_PATHS.atlas} replace /> },
   { path: APP_PATHS.atlas.slice(1), element: <AtlasPage /> },
@@ -106,40 +94,11 @@ const productRoutes = [
   { path: "*", element: <Navigate to={APP_PATHS.atlas} replace /> },
 ];
 
-const micrositeRoutes = singleRouteMicrosite
-  ? [
-      {
-        index: true,
-        element: <Navigate to={singleRouteMicrosite.guidePath} replace />,
-      },
-      {
-        path: "routes/:routeSlug",
-        element: (
-          <SingleRouteGuard>
-            <RouteDetailPage />
-          </SingleRouteGuard>
-        ),
-      },
-      {
-        path: "replay/:routeSlug",
-        element: (
-          <SingleRouteGuard>
-            <ReplayPage />
-          </SingleRouteGuard>
-        ),
-      },
-      {
-        path: "*",
-        element: <Navigate to={singleRouteMicrosite.guidePath} replace />,
-      },
-    ]
-  : undefined;
-
 const router = createHashRouter([
   {
     element: <AppShell />,
     errorElement: <RouteError />,
-    children: micrositeRoutes ?? productRoutes,
+    children: productRoutes,
   },
 ]);
 

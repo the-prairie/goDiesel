@@ -21,7 +21,8 @@ Usage: ./scripts/route.sh <command> [arguments]
   build                     Regenerate route data from quests.json and the sources.
   curate                    Open Admin with its local owner writer.
   check <slug>              Validate and build a route-only bundle, without publishing.
-  publish <slug> <name>     Check, then publish to https://share-<name>.godiesel.pages.dev/
+  publish <slug> <name> [--replace-existing]
+                            Check, then publish to https://share-<name>.godiesel.pages.dev/
 
 Examples:
   ./scripts/route.sh status
@@ -65,17 +66,19 @@ case "$command" in
     # A publishable route is one whose geometry and generated record are sound.
     # A draft guide is not a blocker: publishing a scouted route with an
     # unfinished guide is a legitimate choice, and the page says which it is.
-    if ! "${PYTHON}" -c "
+    # The slug is passed as an argument, never interpolated into Python source.
+    if ! "${PYTHON}" - "$slug" <<'PY'
 import sys
 from pathlib import Path
 from route_status import route_status
-status = route_status(Path('.'), '$slug')
+status = route_status(Path('.'), sys.argv[1])
 sys.exit(0 if status['publishable'] else 1)
-"; then
+PY
+    then
       echo "Refusing to publish: the route is blocked above." >&2
       exit 1
     fi
-    exec ./scripts/publish-route-microsite.sh "$slug" "$share"
+    exec ./scripts/publish-route-microsite.sh "$slug" "$share" "${@:3}"
     ;;
 
   ""|-h|--help|help)

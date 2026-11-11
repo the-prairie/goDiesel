@@ -31,6 +31,7 @@ if [[ -n "$SINGLE_ROUTE_SLUG" ]]; then
   fi
   find dist/data -mindepth 1 -maxdepth 1 ! -name routes -exec rm -rf -- {} +
   find "$ROUTES_DIR" -depth -mindepth 1 ! -path "$ROUTE_FILE" -delete
+  node scripts/scope-route-microsite.mjs "$SINGLE_ROUTE_SLUG"
 fi
 
 if [[ -n "$SINGLE_ROUTE_SLUG" ]]; then
@@ -93,4 +94,8 @@ fi
 SIZE=$(du -sh dist | awk '{print $1}')
 FILES=$(find dist -type f | wc -l | tr -d ' ')
 echo "React dist ready: ${SIZE}, ${FILES} files"
-echo "Deploy with: npx wrangler pages deploy dist --project-name=godiesel"
+if [[ -n "$SINGLE_ROUTE_SLUG" ]]; then
+  echo "Publish with: ./scripts/publish-route-microsite.sh ${SINGLE_ROUTE_SLUG} <share-name>"
+else
+  echo "Deploy with: npx wrangler pages deploy dist --project-name=godiesel --branch=production"
+fi

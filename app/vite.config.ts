@@ -8,6 +8,22 @@ import { defineConfig, loadEnv } from "vite";
 
 const cesiumBaseUrl = "/cesiumStatic";
 
+function otherRouteIdentifiers(sharedSlug: string) {
+  const repositoryRoot = path.resolve(__dirname, "..");
+  const identifiers = new Set<string>();
+  const config = JSON.parse(fs.readFileSync(path.join(repositoryRoot, "quests.json"), "utf8")) as {
+    routes?: Array<{ activity_id?: string | number }>;
+  };
+  for (const route of config.routes ?? []) {
+    if (route.activity_id !== undefined) identifiers.add(String(route.activity_id));
+  }
+  for (const file of fs.readdirSync(path.join(__dirname, "public/data/routes"))) {
+    if (file.endsWith(".json")) identifiers.add(file.slice(0, -".json".length));
+  }
+  identifiers.delete(sharedSlug);
+  return identifiers;
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, path.resolve(__dirname, ".."), "");
   const liveProvidersDisabled = process.env.GODIESEL_DISABLE_LIVE_PROVIDERS === "1";
@@ -25,6 +41,14 @@ export default defineConfig(({ mode }) => {
     "src/data/generated/routes.manifest.json",
   );
   const virtualRouteManifestId = "\0godiesel-single-route-manifest";
+  const routeCoverManifestPath = path.resolve(__dirname, "src/data/route-covers/manifest.json");
+  const virtualRouteCoverManifestId = "\0godiesel-single-route-covers";
+  const virtualOmittedRouteDataId = "\0godiesel-single-route-omitted";
+  // Every route identifier other than the shared one. A single-route bundle
+  // must never carry one (ADR-0011); scripts/validate-route-microsite.mjs
+  // checks the built output for the same set.
+  const otherRouteIds = singleRouteSlug ? otherRouteIdentifiers(singleRouteSlug) : new Set<string>();
+  const sourceRoot = path.resolve(__dirname, "src") + path.sep;
 
   return {
     plugins: [
@@ -34,12 +58,21 @@ export default defineConfig(({ mode }) => {
         name: "godiesel-single-route-manifest",
         enforce: "pre" as const,
         resolveId(source: string) {
+          if (!singleRouteSlug) return;
           if (
-            singleRouteSlug &&
-            (source === "@/data/generated/routes.manifest.json" ||
-              source.endsWith("/data/generated/routes.manifest.json"))
+            source === "@/data/generated/routes.manifest.json" ||
+            source.endsWith("/data/generated/routes.manifest.json")
           ) {
             return virtualRouteManifestId;
+          }
+          if (source.endsWith("/data/route-covers/manifest.json")) {
+            return virtualRouteCoverManifestId;
+          }
+          // Per-route data modules (reviewed replay stories) are named by
+          // route. Another route's module resolves to nothing at all.
+          const perRoute = source.match(/\/data\/replay-stories\/([^/]+)\.json$/);
+          if (perRoute && perRoute[1] !== singleRouteSlug) {
+            return virtualOmittedRouteDataId;
           }
         },
         writeBundle(options: { dir?: string }) {
@@ -50,6 +83,12 @@ export default defineConfig(({ mode }) => {
           fs.writeFileSync(indexPath, JSON.stringify(index));
         },
         load(id: string) {
+          if (id === virtualOmittedRouteDataId) return "export default null;";
+          if (id === virtualRouteCoverManifestId) {
+            const covers = JSON.parse(fs.readFileSync(routeCoverManifestPath, "utf8")) as Record<string, unknown>;
+            const scoped = singleRouteSlug in covers ? { [singleRouteSlug]: covers[singleRouteSlug] } : {};
+            return `export default ${JSON.stringify(scoped)};`;
+          }
           if (id !== virtualRouteManifestId) return;
           const manifest = JSON.parse(fs.readFileSync(routeManifestPath, "utf8")) as {
             routes?: Array<{ slug?: string }>;
@@ -63,6 +102,22 @@ export default defineConfig(({ mode }) => {
             );
           }
           return `export default ${JSON.stringify({ ...manifest, routes })};`;
+        },
+        // Application code that names another route by identifier (field-test
+        // shortcuts, a hand-tuned camera score) can never match the shared
+        // route, so the literal is replaced with one that matches nothing.
+        // The comparison keeps its meaning and the identifier never ships.
+        transform(code: string, id: string) {
+          if (!singleRouteSlug || !id.startsWith(sourceRoot) || !/\.tsx?$/.test(id)) return;
+          let replaced = 0;
+          const scoped = code.replace(/(["'`])(\d{6,})\1/g, (literal, _quote, value: string) => {
+            if (!otherRouteIds.has(value)) return literal;
+            replaced += 1;
+            return '""';
+          });
+          if (!replaced) return;
+          this.info(`omitted ${replaced} other-route identifier(s) from ${path.relative(__dirname, id)}`);
+          return { code: scoped, map: null };
         },
       },
       react(),
@@ -85,9 +140,17 @@ export default defineConfig(({ mode }) => {
       chunkSizeWarningLimit: 5_600,
     },
     resolve: {
-      alias: {
-        "@": path.resolve(__dirname, "./src"),
-      },
+      // A single-route build swaps in a route table and shell that never
+      // import the product surfaces, so their chunks are not emitted at all.
+      alias: [
+        ...(singleRouteSlug
+          ? [
+              { find: "@/app/router", replacement: path.resolve(__dirname, "./src/app/router.single.tsx") },
+              { find: "@/app/app-shell", replacement: path.resolve(__dirname, "./src/app/app-shell.single.tsx") },
+            ]
+          : []),
+        { find: "@", replacement: path.resolve(__dirname, "./src") },
+      ],
     },
   };
 });

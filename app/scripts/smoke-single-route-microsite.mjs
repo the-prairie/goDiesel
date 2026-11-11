@@ -60,6 +60,21 @@ try {
     throw new Error("desktop product navigation is visible");
   }
 
+  // A share is static files for one route (ADR-0011). Another route's data
+  // and the Pages Functions APIs must not answer. Pages falls back to the
+  // single-page shell for unknown paths, so "answers" means JSON comes back.
+  const otherSlug = fs
+    .readdirSync(path.resolve(import.meta.dirname, "../public/data/routes"))
+    .map((file) => file.replace(/\.json$/, ""))
+    .find((slug) => slug !== routeSlug);
+  for (const probe of [`data/routes/${otherSlug}.json`, "api/discovery", "api/courses"]) {
+    const answer = await page.request.get(new URL(probe, publicUrl).href, { maxRedirects: 0 });
+    const contentType = answer.headers()["content-type"] ?? "";
+    if (answer.ok() && contentType.includes("json")) {
+      throw new Error(`public share serves ${probe}`);
+    }
+  }
+
   await page.getByRole("link", { name: "Open replay" }).click();
   await page.getByRole("button", { name: "Route guide" }).waitFor();
   if ((await page.getByText("Change route", { exact: true }).count()) > 0) {
