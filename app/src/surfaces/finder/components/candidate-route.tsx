@@ -41,7 +41,7 @@ export function CandidateRoute({
           <h3 className="mt-1 text-base font-medium leading-snug">{candidate.displayTitle ?? `${route.distanceKm.toFixed(1)} km ${route.type.toLowerCase()} in ${route.region.split(",")[0]}`}</h3>
           <p className="mt-2 text-sm text-ink-secondary">{route.distanceKm.toFixed(1)} km <span className="px-1 text-ink-muted">·</span> {climbLabel(route)}</p>
         </div>
-        <div aria-hidden="true" className="finder-result-cover size-20 shrink-0 overflow-hidden rounded-lg"><RouteCover route={route} /></div>
+        <div aria-hidden="true" className="finder-result-cover size-20 shrink-0 overflow-hidden rounded-lg"><RouteCover route={route} showCredit={false} /></div>
       </div>
       {matchReason && matchReason !== `Title: ${candidate.displayTitle}` ? <p className="mt-3 text-xs leading-relaxed text-ink-secondary">{matchReason}</p> : null}
       <div className="mt-3 flex flex-wrap items-center gap-1 border-t border-line pt-2">
