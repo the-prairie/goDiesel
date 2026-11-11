@@ -281,3 +281,36 @@ test('classifier reports HTTP start and poll failures and permits retry', async 
   await page.locator('#autoClassifyBtn').click();
   await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 1 / 2');
 });
+
+test('an older classifier refresh landing after a save cannot restore pre-save values', async ({ page, request, adminUrl }) => {
+  await page.clock.install();
+  await page.goto(adminUrl);
+  await expect(page.locator('#classifyStatus')).toContainText('1 unmapped');
+  await page.getByPlaceholder('Custom title').fill('Saved after classifier');
+  let releaseHeld!: () => void;
+  const held = new Promise<void>(resolve => { releaseHeld = resolve; });
+  let holdNext = true;
+  let heldFetched!: () => void;
+  const heldReady = new Promise<void>(resolve => { heldFetched = resolve; });
+  await page.route('**/api/routes', async route => {
+    if (!holdNext) return route.continue();
+    holdNext = false;
+    const preSave = await route.fetch();
+    heldFetched();
+    await held;
+    await route.fulfill({ response: preSave });
+  });
+  await page.locator('#autoClassifyBtn').click();
+  await request.post(`${adminUrl}/fixture/classification`, { data: { running: false, total: 2, updated: 2, done: 2, unmapped: 0 } });
+  await page.clock.fastForward(2000);
+  await heldReady;
+  await page.locator('#saveBtn').click();
+  await expect(page.locator('#toast')).toHaveText('SAVED 1 CHANGE');
+  await expect(page.getByPlaceholder('Custom title')).toHaveValue('Saved after classifier');
+  await expect(page.locator('#dirtyCount')).toHaveText('0');
+  await page.getByPlaceholder('Custom title').evaluate(element => { (element as HTMLElement).dataset.beforeHeldRefresh = '1'; });
+  releaseHeld();
+  await expect(page.locator('[data-before-held-refresh]')).toHaveCount(0);
+  await expect(page.getByPlaceholder('Custom title')).toHaveValue('Saved after classifier');
+  await expect(page.locator('#dirtyCount')).toHaveText('0');
+});

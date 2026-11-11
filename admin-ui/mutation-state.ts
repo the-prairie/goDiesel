@@ -10,6 +10,7 @@ export type MutationState = {
   dirty: ReadonlyMap<string, RoutePatch>;
   save: SaveOperation;
   refreshes: ReadonlySet<number>;
+  latestRefreshId: number;
   rebuilds: ReadonlySet<number>;
 };
 
@@ -25,7 +26,7 @@ export type MutationEvent =
   | { type: 'rebuildSettled'; requestId: number };
 
 export function initialMutationState(): MutationState {
-  return { routes: [], dirty: new Map(), save: { status: 'idle' }, refreshes: new Set(), rebuilds: new Set() };
+  return { routes: [], dirty: new Map(), save: { status: 'idle' }, refreshes: new Set(), latestRefreshId: 0, rebuilds: new Set() };
 }
 
 export function reduceMutation(state: MutationState, event: MutationEvent): MutationState {
@@ -57,13 +58,17 @@ export function reduceMutation(state: MutationState, event: MutationEvent): Muta
       return { ...state, save: { status: 'idle' } };
     }
     case 'refreshStarted':
-      return { ...state, refreshes: new Set([...state.refreshes, event.requestId]) };
+      return { ...state, refreshes: new Set([...state.refreshes, event.requestId]),
+        latestRefreshId: Math.max(state.latestRefreshId, event.requestId) };
     case 'routesReceived':
     case 'refreshFailed': {
       if (!state.refreshes.has(event.requestId)) return state;
       const refreshes = new Set(state.refreshes);
       refreshes.delete(event.requestId);
-      return { ...state, refreshes, routes: event.type === 'routesReceived' ? event.routes : state.routes };
+      // The latest-started refresh wins. An older result describes routes from
+      // before a later save, so it is dropped even if it lands first.
+      const accept = event.type === 'routesReceived' && event.requestId === state.latestRefreshId;
+      return { ...state, refreshes, routes: accept ? event.routes : state.routes };
     }
     case 'rebuildStarted':
       return { ...state, rebuilds: new Set([...state.rebuilds, event.requestId]) };

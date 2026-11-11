@@ -42,14 +42,36 @@ describe('standalone admin mutations', () => {
     expect([...state.refreshes]).toEqual([3]);
     expect([...state.rebuilds]).toEqual([4]);
   });
-  it('retains completion-order route refresh policy and drafts', () => {
+  it('keeps the latest-started route refresh and drops an older result that lands after it', () => {
     let state = edit();
     state = reduceMutation(state, { type: 'refreshStarted', requestId: 1 });
     state = reduceMutation(state, { type: 'refreshStarted', requestId: 2 });
     state = reduceMutation(state, { type: 'routesReceived', requestId: 2, routes: [{ activity_id: 'newer' }] });
+    const settled = state;
     state = reduceMutation(state, { type: 'routesReceived', requestId: 1, routes: [{ activity_id: 'older' }] });
-    expect(state.routes).toEqual([{ activity_id: 'older' }]);
+    expect(state.routes).toEqual([{ activity_id: 'newer' }]);
     expect(state.dirty.get('one')).toEqual({ title: 'Draft' });
+    expect(state.refreshes.size).toBe(0);
+    expect(reduceMutation(state, { type: 'routesReceived', requestId: 1, routes: [] })).toBe(state);
+    expect(settled.refreshes).toEqual(new Set([1]));
+  });
+  it('drops an older refresh result even when it lands before the latest-started one', () => {
+    let state = reduceMutation(initialMutationState(), { type: 'refreshStarted', requestId: 1 });
+    state = reduceMutation(state, { type: 'routesReceived', requestId: 1, routes: [{ activity_id: 'first' }] });
+    state = reduceMutation(state, { type: 'refreshStarted', requestId: 2 });
+    state = reduceMutation(state, { type: 'refreshStarted', requestId: 3 });
+    state = reduceMutation(state, { type: 'routesReceived', requestId: 2, routes: [{ activity_id: 'pre-save' }] });
+    expect(state.routes).toEqual([{ activity_id: 'first' }]);
+    state = reduceMutation(state, { type: 'routesReceived', requestId: 3, routes: [{ activity_id: 'post-save' }] });
+    expect(state.routes).toEqual([{ activity_id: 'post-save' }]);
+    expect(state.refreshes.size).toBe(0);
+  });
+  it('keeps the last accepted routes when the latest-started refresh fails', () => {
+    let state = reduceMutation(initialMutationState(), { type: 'refreshStarted', requestId: 1 });
+    state = reduceMutation(state, { type: 'refreshStarted', requestId: 2 });
+    state = reduceMutation(state, { type: 'routesReceived', requestId: 1, routes: [{ activity_id: 'older' }] });
+    state = reduceMutation(state, { type: 'refreshFailed', requestId: 2 });
+    expect(state.routes).toEqual([]);
     expect(state.refreshes.size).toBe(0);
   });
   it('settles refresh failure without losing last routes and settles rebuild independently', () => {
