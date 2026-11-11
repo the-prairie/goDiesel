@@ -264,8 +264,10 @@ function RouteMargin({
           "absolute inset-x-3 bottom-0 h-[58dvh] rounded-t-[var(--radius-sheet)] border",
         isMobile &&
           position === "expanded" &&
-          "absolute inset-x-3 bottom-0 h-[calc(100%-0.75rem)] rounded-t-[var(--radius-sheet)] border",
-        !isMobile && "relative h-full border-l",
+          "absolute inset-x-3 bottom-0 h-[calc(100%-0.75rem-var(--safe-area-top))] rounded-t-[var(--radius-sheet)] border",
+        // The column reaches the screen's top and right edges: its content
+        // clears those safe-area insets (0 without a notch).
+        !isMobile && "relative h-full border-l pt-[var(--safe-area-top)] pr-[var(--safe-area-right)]",
       )}
     >
       {isMobile ? (
@@ -429,7 +431,7 @@ function RouteMargin({
         ) : null}
       </div>
 
-      <div className={cn("mt-auto grid shrink-0 gap-2 border-t border-line bg-surface p-3 sm:p-4", route.route.length > 1 && "grid-cols-[minmax(0,1fr)_auto]")}>
+      <div className={cn("mt-auto grid shrink-0 gap-2 border-t border-line bg-surface p-3 sm:p-4 md:pb-[calc(1rem+var(--safe-area-bottom))]", route.route.length > 1 && "grid-cols-[minmax(0,1fr)_auto]")}>
         {route.replay.replayEligible ? (
           <Button
             asChild

@@ -217,7 +217,7 @@ export function RoutesPage() {
                   this open panel, so the count is repeated here and kept in view
                   while the panel scrolls. The result count below stays the one
                   live region. */}
-              <div className="sticky bottom-[calc(var(--mobile-navigation-height)+0.75rem)] z-10 flex justify-end sm:col-span-2 md:bottom-3 lg:col-span-3 xl:col-span-6">
+              <div className="sticky bottom-[calc(var(--mobile-navigation-height)+0.75rem)] z-10 flex justify-end sm:col-span-2 md:bottom-[calc(0.75rem+var(--safe-area-bottom))] lg:col-span-3 xl:col-span-6">
                 <Button
                   type="button"
                   className="w-full sm:w-auto"

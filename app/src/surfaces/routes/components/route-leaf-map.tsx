@@ -284,7 +284,7 @@ export function RouteLeafMap({ route, showDiagnostics = false }: { route: QuestR
       {activeRepairs.length > 0 ? (
         <RepairEvidence
           repairs={activeRepairs}
-          className="absolute left-4 top-16 z-20 max-w-[min(22rem,calc(100%-2rem))]"
+          className="absolute left-4 top-[calc(4rem+var(--safe-area-top))] z-20 max-w-[min(22rem,calc(100%-2rem))]"
         />
       ) : null}
 
@@ -301,7 +301,7 @@ export function RouteLeafMap({ route, showDiagnostics = false }: { route: QuestR
           <RouteCover route={coverRoute} />
           <div
             role="status"
-            className="absolute inset-x-4 top-4 z-10 max-w-sm rounded-[var(--radius-control)] border border-line bg-surface/94 p-3 shadow-panel backdrop-blur"
+            className="absolute inset-x-4 top-[calc(1rem+var(--safe-area-top))] z-10 max-w-sm rounded-[var(--radius-control)] border border-line bg-surface/94 p-3 shadow-panel backdrop-blur"
           >
             <p className="text-control font-semibold text-ink">Interactive map unavailable</p>
             <p className="mt-1 text-caption leading-5 text-ink-secondary">
@@ -326,7 +326,7 @@ export function RouteLeafMap({ route, showDiagnostics = false }: { route: QuestR
 
       {route.route.length > 1 && mapRunning ? (
         <>
-          <div className="absolute right-4 top-4 z-10 flex gap-3 rounded-sm border border-line bg-surface/92 px-3 py-2 text-caption font-semibold text-ink-secondary shadow-panel backdrop-blur">
+          <div className="absolute right-4 top-[calc(1rem+var(--safe-area-top))] z-10 flex gap-3 rounded-sm border border-line bg-surface/92 px-3 py-2 text-caption font-semibold text-ink-secondary shadow-panel backdrop-blur">
             <span className="inline-flex items-center gap-1.5">
               <span className="size-2 rounded-full" style={{ backgroundColor: ENDPOINT_COLORS.start }} aria-hidden="true" />
               Start
@@ -336,7 +336,7 @@ export function RouteLeafMap({ route, showDiagnostics = false }: { route: QuestR
               Finish
             </span>
           </div>
-          <div className="absolute bottom-22 left-4 z-10 flex gap-1 rounded-sm border border-line bg-surface/92 p-1 shadow-panel backdrop-blur">
+          <div className="absolute bottom-22 left-4 z-10 flex gap-1 md:bottom-[calc(5.5rem+var(--safe-area-bottom))] rounded-sm border border-line bg-surface/92 p-1 shadow-panel backdrop-blur">
             <Button
               type="button"
               variant="ghost"
