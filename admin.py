@@ -341,27 +341,37 @@ def _unmapped_route_ids():
     return out
 
 
+def _abandon_classify_if_running():
+    global _classify_state
+    with _classify_lock:
+        if _classify_state['phase'] == 'running':
+            _classify_state = reduce_classify(_classify_state, {'type': 'fail'})
+
+
 def classify_unmapped_worker(candidates):
-    print(f'[classify] starting: {len(candidates)} unmapped routes')
-    save_every = 25
-    for i, (aid, lat, lng) in enumerate(candidates):
-        label = cached_reverse_geocode(lat, lng)
-        if label:
-            geo_cache[aid]['region'] = label
-        _transition_classify({'type': 'progress', 'done': i + 1, 'label': label or ''})
-        if (i + 1) % save_every == 0:
-            try:
-                GEO_CACHE_PATH.write_text(json.dumps(geo_cache))
-                _save_geocode_buckets()
-            except Exception:
-                pass
     try:
-        GEO_CACHE_PATH.write_text(json.dumps(geo_cache))
-        _save_geocode_buckets()
-    except Exception:
-        pass
-    snapshot = _transition_classify({'type': 'finish', 'finished_at': time.time()})
-    print(f'[classify] done: {snapshot["updated"]} labels added')
+        print(f'[classify] starting: {len(candidates)} unmapped routes')
+        save_every = 25
+        for i, (aid, lat, lng) in enumerate(candidates):
+            label = cached_reverse_geocode(lat, lng)
+            if label:
+                geo_cache[aid]['region'] = label
+            _transition_classify({'type': 'progress', 'done': i + 1, 'label': label or ''})
+            if (i + 1) % save_every == 0:
+                try:
+                    GEO_CACHE_PATH.write_text(json.dumps(geo_cache))
+                    _save_geocode_buckets()
+                except Exception:
+                    pass
+        try:
+            GEO_CACHE_PATH.write_text(json.dumps(geo_cache))
+            _save_geocode_buckets()
+        except Exception:
+            pass
+        snapshot = _transition_classify({'type': 'finish', 'finished_at': time.time()})
+        print(f'[classify] done: {snapshot["updated"]} labels added')
+    finally:
+        _abandon_classify_if_running()
 
 
 def start_classify_if_needed():

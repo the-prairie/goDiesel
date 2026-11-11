@@ -41,6 +41,27 @@ def test_classify_run_cannot_finish_while_it_is_running_or_skip_ahead():
     assert reduce_classify(finished, {"type": "progress", "done": 3, "label": "Late"}) is finished
 
 
+def test_a_crashed_classify_run_stops_and_can_start_again():
+    running = reduce_classify(initial_classify_state(), {"type": "start", "total": 2})
+    partial = reduce_classify(running, {"type": "progress", "done": 1, "label": "Kyoto"})
+    failed = reduce_classify(partial, {"type": "fail"})
+    assert failed["phase"] == "failed"
+    assert "finished_at" not in failed
+    assert public_classify_state(failed) == {
+        "running": False,
+        "done": 1,
+        "total": 2,
+        "updated": 1,
+        "last_label": "Kyoto",
+        "finished_at": None,
+    }
+    idle = initial_classify_state()
+    assert reduce_classify(idle, {"type": "fail"}) is idle
+    restarted = reduce_classify(failed, {"type": "start", "total": 1})
+    assert public_classify_state(restarted)["running"] is True
+    assert public_classify_state(restarted)["done"] == 0
+
+
 def test_a_finished_classify_run_can_start_again():
     finished = reduce_classify(
         reduce_classify(initial_classify_state(), {"type": "start", "total": 1}),

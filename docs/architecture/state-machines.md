@@ -12,13 +12,13 @@ The audit found 10 implicit lifecycles and 26 that were already pure reducers. T
 
 `app/src/data/route-detail-state.ts`, read by `useRouteDetail`.
 
-States are `idle`, `loading` for one slug and request key, and `settled` with that same slug, key, and a `ready`, `not-found`, `invalid`, or `error` result. Events are `selectionCleared`, `loadStarted`, and `resultReceived`.
+States are `idle`, `loading` for one slug and request key, and `settled` with that same slug, key, and a `ready`, `not-found`, `invalid`, or `error` result. The last settled result is remembered beside the phase. Events are `selectionCleared`, `loadStarted`, and `resultReceived`.
 
-The old hook stored the last result and derived loading when the slug or key did not match. The stored object could hold one route while the screen asked for another. A loading value can no longer carry a result. A result for a different slug or key is ignored. Clearing the selection drops the result.
+Clearing the selection hides the route. Selecting that same slug and request key shows the remembered result again, with no loading phase. Selecting a different route, or the same slug with a new request key, shows loading. The loading phase has no route payload. A result for a different slug or key is ignored.
 
-No user-visible change. The repository already turns a failed fetch into `error`, so the hook does not hang on a network failure.
+Finder clears the selected route and can select it again on the same mount. The remembered result is what the previous hook kept in `loaded`, so that return does not flicker through loading. The repository still turns a failed fetch into `error`, so the hook does not hang on a network failure.
 
-UX gain is low. DX and AX gain is high, because Replay, the route guide, and Finder all read this hook.
+UX gain is that return to the same route. DX and AX gain is high, because Replay, the route guide, and Finder all read this hook.
 
 ### Replay surface choice
 
@@ -34,11 +34,11 @@ UX gain is the missing stale frame. DX and AX gain is medium. The Google engine 
 
 `admin_classify.py`, driven by `admin.py`.
 
-Phases are `idle`, `running` with `done`, `total`, `updated`, and `last_label`, and `finished` with `finished_at`. Events are `start`, `progress`, and `finish`. The HTTP body still uses `running`, `done`, `total`, `updated`, `last_label`, and `finished_at`.
+Phases are `idle`, `running` with `done`, `total`, `updated`, and `last_label`, `finished` with `finished_at`, and `failed` with the same counts and no finish time. Events are `start`, `progress`, `finish`, and `fail`. The HTTP body still uses `running`, `done`, `total`, `updated`, `last_label`, and `finished_at`. A failed run reports `running` false and leaves `finished_at` unset.
 
 The old dict allowed `running` true together with a finish time, a second thread, and a startup log of total 0, because the worker set `running` after the thread had already started. `start` now happens under a lock before the thread. A second start returns the same state. Progress must be the next count and cannot pass `total`. A blank label does not increase `updated`. Finish is ignored unless the phase is `running`.
 
-The messages stay `Started.`, `Already running.`, and `Nothing to classify.` The worker classifies the list captured at start.
+The messages stay `Started.`, `Already running.`, and `Nothing to classify.` The worker classifies the list captured at start. If that worker throws before `finish`, the phase becomes `failed`, so a later start is allowed.
 
 UX gain is that the owner no longer gets two classifiers writing the same cache. DX and AX gain is high for the one background worker in the admin server.
 

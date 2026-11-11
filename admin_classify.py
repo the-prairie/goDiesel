@@ -23,7 +23,11 @@ class FinishedClassify(_Counts):
     finished_at: float | None
 
 
-ClassifyState = IdleClassify | RunningClassify | FinishedClassify
+class FailedClassify(_Counts):
+    phase: Literal["failed"]
+
+
+ClassifyState = IdleClassify | RunningClassify | FinishedClassify | FailedClassify
 
 
 class ClassifySnapshot(TypedDict):
@@ -83,6 +87,14 @@ def reduce_classify(state: ClassifyState, event: dict) -> ClassifyState:
             "last_label": state["last_label"],
             "finished_at": event.get("finished_at"),
         }
+    if kind == "fail":
+        return {
+            "phase": "failed",
+            "done": state["done"],
+            "total": state["total"],
+            "updated": state["updated"],
+            "last_label": state["last_label"],
+        }
     return state
 
 
@@ -102,5 +114,5 @@ def public_classify_state(state: ClassifyState) -> ClassifySnapshot:
         "total": state["total"],
         "updated": state["updated"],
         "last_label": state["last_label"],
-        "finished_at": None if state["phase"] == "running" else state["finished_at"],
+        "finished_at": state["finished_at"] if state["phase"] == "finished" else None,
     }
