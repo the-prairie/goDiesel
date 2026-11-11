@@ -44,14 +44,23 @@ import {
 import { atlasOrbitalPitchLimit, atlasResolutionScale } from "@/surfaces/atlas/atlas-render-quality";
 import { installAtlasAttribution } from "@/surfaces/atlas/atlas-attribution";
 import {
-  initialRegionalTransitionState,
-  reduceRegionalTransition,
-  regionalOperationIsCurrent,
-  type RegionalTransitionEvent,
-} from "@/surfaces/atlas/regional-transition-state";
+  ATLAS_GLOBAL_POSE,
+  atlasCameraPoseIntent,
+  atlasCameraState,
+  atlasEngineDataset,
+  atlasEngineHasViewer,
+  atlasEngineRunIsCurrent,
+  atlasGlobeIsSettled,
+  atlasRegionIsCurrent,
+  initialAtlasWorldEngineState,
+  reduceAtlasWorldEngine,
+  type AtlasGlobalCamera,
+  type AtlasRegionalOutcomeEvent,
+  type AtlasWorldEngineEvent,
+  type AtlasWorldEngineState,
+} from "@/surfaces/atlas/atlas-world-engine-state";
 
-const DEFAULT_VIEW = { lat: 24, lng: 12, heightM: 18_500_000 };
-const GLOBAL_SELECTION_HEIGHT_M = DEFAULT_VIEW.heightM;
+const DEFAULT_VIEW = { lat: 24, lng: 12, heightM: ATLAS_GLOBAL_POSE.heightM };
 const ROUTE_COLOR = Color.fromCssColorString("#b8c4c0");
 const SELECTED_ROUTE_COLOR = Color.fromCssColorString("#f5f5f5");
 const ROUTE_CASING_COLOR = Color.fromCssColorString("#18221f");
@@ -135,6 +144,10 @@ function webglAvailable() {
   }
 }
 
+function globalFlightDurationMs() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 600;
+}
+
 export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   private viewer?: Viewer;
   private resizeObserver?: ResizeObserver;
@@ -152,12 +165,19 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   private removeTerrainFailureListener?: () => void;
   private cancelTerrainWait?: () => void;
   private terrainDiagnosticsTimer?: number;
-  private regionalState = initialRegionalTransitionState();
-  private selectedRouteSlug?: string;
-  private generation = 0;
-  private globalCameraGeneration = 0;
+  /**
+   * The lifecycle owner. Every status and every lifecycle dataset attribute
+   * derives from it. Measured camera telemetry (`renderScale`, `cameraHeight`,
+   * and the live `cameraTarget`/`cameraHeading`/`cameraPitch`) is written where
+   * it is measured; nothing reads the dataset back.
+   */
+  private state: AtlasWorldEngineState = initialAtlasWorldEngineState();
+  /** IO handles for the current global flight, guarded by its flight id. */
   private globalCameraReady: Promise<void> = Promise.resolve();
   private finishGlobalCameraWait?: () => void;
+  /** Lifecycle attributes already written to `datasetCanvas`. Never read as state. */
+  private datasetCanvas?: HTMLCanvasElement;
+  private writtenDataset: Record<string, string> = {};
   private surfaceNormal = new Cartesian3();
   private surfaceToCamera = new Cartesian3();
 
@@ -167,18 +187,16 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     onStatus,
     onSelectRoute,
   }: AtlasWorldEngineMountOptions) {
-    const generation = ++this.generation;
-    let renderFailed = false;
     this.regions = regions;
     this.onStatus = onStatus;
     this.onSelectRoute = onSelectRoute;
-    onStatus({ state: "loading", message: "Opening the Atlas world." });
+    const { operationId } = this.transition({
+      type: "mountStarted",
+      routeCount: regions.reduce((count, region) => count + region.routes.length, 0),
+    });
 
     if (!webglAvailable()) {
-      onStatus({
-        state: "unavailable",
-        message: "This browser cannot start the Cesium world.",
-      });
+      this.transition({ type: "webglUnavailable", operationId });
       return;
     }
 
@@ -201,7 +219,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
         requestRenderMode: false,
         contextOptions: { webgl: { preserveDrawingBuffer: true } },
       });
-      if (generation !== this.generation) {
+      if (!atlasEngineRunIsCurrent(this.state, operationId)) {
         viewer.destroy();
         return;
       }
@@ -240,23 +258,12 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
         "focus-visible:ring-[#f6f2e8]",
       );
       viewer.canvas.tabIndex = 0;
-      viewer.canvas.dataset.atlasEngine = "cesium";
-      viewer.canvas.dataset.heatLines = String(
-        regions.reduce((count, region) => count + region.routes.length, 0),
-      );
-      viewer.canvas.dataset.routePalette = "monochrome";
-      viewer.canvas.dataset.atlasState = "global";
-      viewer.canvas.dataset.cameraState = "settled";
-      viewer.canvas.dataset.terrainState = "global";
-      viewer.canvas.dataset.regionRouteCount = "0";
-      viewer.canvas.dataset.regionCameraRange = "";
-      viewer.canvas.dataset.regionSphereRadius = "";
-      viewer.canvas.dataset.regionCameraPitch = "";
+      this.transition({ type: "viewerAttached", operationId });
 
       const imagery = await TileMapServiceImageryProvider.fromUrl(
         buildModuleUrl("Assets/Textures/NaturalEarthII"),
       );
-      if (generation !== this.generation) return;
+      if (!atlasEngineRunIsCurrent(this.state, operationId)) return;
       this.baseImageryLayer = viewer.imageryLayers.addImageryProvider(imagery);
 
       this.routeEntities = regions.flatMap((region) =>
@@ -285,7 +292,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
         const height = viewer.camera.positionCartographic.height;
         const pitchLimit = atlasOrbitalPitchLimit(height);
         if (height > 1_000_000 && viewer.camera.pitch > pitchLimit + 0.001 &&
-          viewer.canvas.dataset.cameraState !== "transitioning") {
+          atlasCameraState(this.state) !== "transitioning") {
           viewer.camera.setView({ orientation: {
             heading: viewer.camera.heading, pitch: pitchLimit, roll: 0,
           } });
@@ -298,78 +305,58 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
         viewer.canvas.dataset.cameraPitch = viewer.camera.pitch.toFixed(6);
       });
       this.removeRenderErrorListener = viewer.scene.renderError.addEventListener(() => {
-        renderFailed = true;
-        onStatus({
-          state: "unavailable",
-          message: "The Cesium world stopped rendering.",
-        });
+        this.transition({ type: "renderFailed", operationId });
       });
       void this.moveToGlobalView();
       await this.waitForGlobalCameraSettlement();
-      if (generation !== this.generation || renderFailed) return;
-      if (this.regionalState.status !== "global") return;
-      onStatus({ state: "ready", message: "Atlas world ready." });
+      this.transition({ type: "mountSettled", operationId });
     } catch (error) {
-      if (generation !== this.generation) return;
+      if (!atlasEngineRunIsCurrent(this.state, operationId)) return;
       console.warn("Cesium Atlas unavailable", error);
-      onStatus({
-        state: "unavailable",
-        message: "The Cesium world could not load.",
-      });
+      this.transition({ type: "mountFailed", operationId });
     }
   }
 
   setSelectedRegion(region?: RouteRegion) {
-    const viewer = this.viewer;
-    if (!viewer || viewer.isDestroyed()) return;
-    const alreadyGlobal = this.regionalState.status === "global"
-      && viewer.canvas.dataset.cameraState === "settled";
-    this.regionalState = reduceRegionalTransition(this.regionalState, region
-      ? { type: "regionSelected", regionName: region.name }
-      : { type: "selectionCleared" });
-    const operationId = this.regionalState.operationId;
-    if (!region) this.selectedRouteSlug = undefined;
-    this.styleRouteEntities();
-    if (!region) {
-      this.leaveRegionalTerrain();
-      viewer.canvas.dataset.cameraRegion = "";
-      viewer.canvas.dataset.atlasState = "global";
-      viewer.canvas.dataset.terrainState = "global";
-      viewer.canvas.dataset.regionRouteCount = "0";
-      this.restoreGlobalRouteGeometry();
-      if (alreadyGlobal) {
-        this.onStatus?.({ state: "ready", message: "Atlas world ready." });
-        return;
-      }
-      this.onStatus?.({ state: "loading", message: "Opening the Atlas world." });
-      void this.moveToGlobalView().then(() => {
-        if (
-          this.regionalState.operationId !== operationId ||
-          this.regionalState.status !== "global" ||
-          !this.viewer ||
-          this.viewer.isDestroyed()
-        ) {
-          return;
-        }
-        this.onStatus?.({ state: "ready", message: "Atlas world ready." });
+    if (!this.liveViewer) return;
+    if (region) {
+      const previous = this.state;
+      const next = this.transition({
+        type: "regionSelected",
+        regionName: region.name,
+        routeCount: region.routes.length,
       });
+      if (next === previous) return;
+      this.styleRouteEntities();
+      void this.enterRegionalTerrain(region, next.regional.operationId);
       return;
     }
-    viewer.canvas.dataset.cameraRegion = region.name;
-    void this.enterRegionalTerrain(region, operationId);
+    const alreadyGlobal = atlasGlobeIsSettled(this.state);
+    const previous = this.state;
+    const next = this.transition({
+      type: "selectionCleared",
+      durationMs: globalFlightDurationMs(),
+    });
+    if (next === previous) return;
+    this.styleRouteEntities();
+    this.leaveRegionalTerrain();
+    this.restoreGlobalRouteGeometry();
+    if (alreadyGlobal) return;
+    this.flyGlobalIfStarted(previous.camera);
+    const regionalOperationId = next.regional.operationId;
+    void this.globalCameraReady.then(() => {
+      this.transition({ type: "globalViewRestored", regionalOperationId });
+    });
   }
 
   setSelectedRoute(route?: RouteSummary) {
-    this.selectedRouteSlug = route?.slug;
-    if (this.viewer && !this.viewer.isDestroyed()) {
-      this.viewer.canvas.dataset.selectedRoute = route?.slug ?? "";
-    }
+    this.transition({ type: "routeSelected", slug: route?.slug });
     this.styleRouteEntities();
   }
 
   projectRegions(): AtlasRegionProjection[] {
-    const viewer = this.viewer;
-    if (!viewer || viewer.isDestroyed()) return [];
+    const viewer = this.liveViewer;
+    if (!viewer) return [];
     return this.regions.map((region) => {
       const position = Cartesian3.fromDegrees(region.centerLng, region.centerLat);
       const projected = SceneTransforms.worldToWindowCoordinates(
@@ -410,19 +397,21 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     void this.moveToGlobalView();
   }
 
+  /** Starts a global flight, or joins the active one. */
   private moveToGlobalView(): Promise<void> {
-    const viewer = this.viewer;
-    if (!viewer || viewer.isDestroyed()) return Promise.resolve();
-    if (this.finishGlobalCameraWait) return this.globalCameraReady;
-    const cameraGeneration = ++this.globalCameraGeneration;
-    const duration = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-      ? 0
-      : 0.6;
-    viewer.canvas.dataset.cameraState = duration === 0 ? "settled" : "transitioning";
-    viewer.canvas.dataset.cameraDurationMs = String(Math.round(duration * 1_000));
-    viewer.canvas.dataset.cameraTarget = DEFAULT_VIEW.heightM.toFixed(0);
-    viewer.canvas.dataset.cameraHeading = "0.000000";
-    viewer.canvas.dataset.cameraPitch = (-CesiumMath.PI_OVER_TWO).toFixed(6);
+    if (!this.liveViewer) return Promise.resolve();
+    const previous = this.state.camera;
+    this.transition({ type: "globalViewRequested", durationMs: globalFlightDurationMs() });
+    this.flyGlobalIfStarted(previous);
+    return this.globalCameraReady;
+  }
+
+  /** Performs the flight IO when the last transition allocated a new global flight. */
+  private flyGlobalIfStarted(previous: AtlasGlobalCamera) {
+    const viewer = this.liveViewer;
+    const camera = this.state.camera;
+    if (!viewer || camera.state !== "flying" || camera.flightId === previous.flightId) return;
+    const { flightId, durationMs } = camera;
     this.resetFrustumOffsets();
 
     this.globalCameraReady = new Promise((resolve) => {
@@ -433,12 +422,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
         if (this.finishGlobalCameraWait === finish) {
           this.finishGlobalCameraWait = undefined;
         }
-        if (cameraGeneration === this.globalCameraGeneration && !viewer.isDestroyed()) {
-          viewer.canvas.dataset.cameraState = "settled";
-          viewer.canvas.dataset.cameraTarget = DEFAULT_VIEW.heightM.toFixed(0);
-          viewer.canvas.dataset.cameraHeading = "0.000000";
-          viewer.canvas.dataset.cameraPitch = (-CesiumMath.PI_OVER_TWO).toFixed(6);
-        }
+        this.transition({ type: "globalFlightSettled", flightId });
         resolve();
       };
       this.finishGlobalCameraWait = finish;
@@ -449,23 +433,22 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
           DEFAULT_VIEW.heightM,
         ),
         orientation: new HeadingPitchRoll(0, -CesiumMath.PI_OVER_TWO, 0),
-        duration,
+        duration: durationMs / 1_000,
         complete: finish,
         cancel: finish,
       });
-      if (duration === 0) finish();
+      if (durationMs === 0) finish();
     });
-    return this.globalCameraReady;
   }
 
+  /** Resolves once the latest global flight settled and no newer flight replaced it. */
   private async waitForGlobalCameraSettlement() {
-    const viewer = this.viewer;
-    while (viewer && !viewer.isDestroyed()) {
-      const cameraGeneration = this.globalCameraGeneration;
+    while (this.state.mount.phase !== "disposed") {
+      const { flightId } = this.state.camera;
       const cameraReady = this.globalCameraReady;
       await cameraReady;
       if (
-        cameraGeneration === this.globalCameraGeneration &&
+        flightId === this.state.camera.flightId &&
         cameraReady === this.globalCameraReady
       ) {
         return;
@@ -474,15 +457,13 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   }
 
   destroy() {
-    this.generation += 1;
-    this.globalCameraGeneration += 1;
+    this.transition({ type: "disposed" });
     this.finishGlobalCameraWait?.();
     this.finishGlobalCameraWait = undefined;
     this.resizeObserver?.disconnect();
     this.resizeObserver = undefined;
     this.removeAttribution?.();
     this.removeAttribution = undefined;
-    this.regionalState = reduceRegionalTransition(this.regionalState, { type: "disposed" });
     this.leaveRegionalTerrain();
     this.removeRenderErrorListener?.();
     this.removeCameraChangedListener?.();
@@ -490,7 +471,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
       this.viewer.canvas.removeEventListener("keydown", this.keyDownHandler);
     }
     this.routeSelectionHandler?.destroy();
-    if (this.viewer && !this.viewer.isDestroyed()) this.viewer.destroy();
+    this.viewer?.destroy();
     this.viewer = undefined;
     this.regions = [];
     this.routeEntities = [];
@@ -500,30 +481,22 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     this.routeSelectionHandler = undefined;
     this.onStatus = undefined;
     this.onSelectRoute = undefined;
-    this.selectedRouteSlug = undefined;
+    this.datasetCanvas = undefined;
+    this.writtenDataset = {};
   }
 
   private async enterRegionalTerrain(
     region: RouteRegion,
     operationId: number,
   ) {
-    const viewer = this.viewer;
-    if (!viewer || viewer.isDestroyed()) return;
-    this.globalCameraGeneration += 1;
+    const viewer = this.liveViewer;
+    if (!viewer) return;
+    // The region transition already superseded any global flight; release its waiter.
     this.finishGlobalCameraWait?.();
     this.finishGlobalCameraWait = undefined;
     this.leaveRegionalTerrain();
     viewer.useDefaultRenderLoop = true;
     viewer.scene.globe.show = true;
-    viewer.canvas.dataset.atlasState = "region-loading";
-    viewer.canvas.dataset.cameraState = "transitioning";
-    viewer.canvas.dataset.terrainState = "loading";
-    viewer.canvas.dataset.regionRouteCount = String(region.routes.length);
-    this.onStatus?.({
-      state: "region-loading",
-      regionName: region.name,
-      message: `Loading ${region.name} terrain`,
-    });
     try {
       this.showRegionalRouteGeometry(region);
       const routePositions = region.routes.flatMap((route) =>
@@ -559,12 +532,16 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
         "(prefers-reduced-motion: reduce)",
       ).matches;
       const duration = atlasRegionTransitionDurationSeconds(reducedMotion);
-      viewer.canvas.dataset.cameraDurationMs = String(Math.round(duration * 1_000));
-      viewer.canvas.dataset.cameraTarget = frame.rangeM.toFixed(0);
-      viewer.canvas.dataset.regionCameraRange = frame.rangeM.toFixed(0);
-      viewer.canvas.dataset.regionSphereRadius = sphere.radius.toFixed(0);
-      viewer.canvas.dataset.regionCameraPitch =
-        REGIONAL_CAMERA_PITCH_RADIANS.toFixed(2);
+      this.transition({
+        type: "regionFramed",
+        regionalOperationId: operationId,
+        framing: {
+          rangeM: frame.rangeM,
+          sphereRadiusM: sphere.radius,
+          pitchRadians: REGIONAL_CAMERA_PITCH_RADIANS,
+        },
+        durationMs: Math.round(duration * 1_000),
+      });
 
       const cameraReady = new Promise<void>((resolve) => {
         viewer.camera.flyToBoundingSphere(sphere, {
@@ -689,7 +666,17 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   }
 
   private get selectedRegionName() {
-    return "regionName" in this.regionalState ? this.regionalState.regionName : undefined;
+    const regional = this.state.regional;
+    return "regionName" in regional ? regional.regionName : undefined;
+  }
+
+  private get selectedRouteSlug() {
+    return this.state.routeSlug;
+  }
+
+  /** The viewer, while the reducer says this run owns one. */
+  private get liveViewer() {
+    return atlasEngineHasViewer(this.state) ? this.viewer : undefined;
   }
 
   private startTerrainDiagnostics(operationId: number) {
@@ -701,49 +688,62 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     }, TERRAIN_DIAGNOSTIC_INTERVAL_MS);
   }
 
-  private transitionRegion(event: RegionalTransitionEvent) {
-    const viewer = this.viewer;
-    if (!viewer || viewer.isDestroyed()) return;
-    const previous = this.regionalState;
-    const next = reduceRegionalTransition(previous, event);
-    this.regionalState = next;
-    if (previous.status === next.status) return;
+  private transitionRegion(event: AtlasRegionalOutcomeEvent) {
+    const previous = this.state.regional;
+    const next = this.transition({ type: "regionalOutcome", event }).regional;
+    const viewer = this.liveViewer;
+    if (!viewer || previous.status === next.status) return;
     if (next.status === "ready") {
       // Photorealistic tiles supply the surface; an ellipsoid can intersect it.
       viewer.scene.globe.show = false;
       if (this.baseImageryLayer) this.baseImageryLayer.show = false;
-      viewer.canvas.dataset.atlasState = "region-ready";
-      viewer.canvas.dataset.cameraState = "settled";
-      viewer.canvas.dataset.terrainState = "ready";
-      this.onStatus?.({
-        state: "region-ready",
-        regionName: next.regionName,
-        message: `${next.regionName} terrain ready.`,
-      });
       this.startTerrainDiagnostics(next.operationId);
     } else if (next.status === "fallback") {
       this.clearRegionalTiles();
       viewer.useDefaultRenderLoop = false;
-      viewer.canvas.dataset.atlasState = "region-fallback";
-      viewer.canvas.dataset.cameraState = "settled";
-      viewer.canvas.dataset.terrainState = "fallback";
-      this.onStatus?.({
-        state: "region-fallback",
-        regionName: next.regionName,
-        message: "3D terrain partially unavailable",
-      });
     }
   }
 
   private regionIsCurrent(operationId: number) {
-    return regionalOperationIsCurrent(this.regionalState, operationId) &&
-      Boolean(this.viewer && !this.viewer.isDestroyed());
+    return atlasRegionIsCurrent(this.state, operationId);
+  }
+
+  /**
+   * The only state change in the engine. Writes the lifecycle dataset derived
+   * from the new state, then publishes the status the transition announced.
+   */
+  private transition(event: AtlasWorldEngineEvent) {
+    const previous = this.state;
+    const next = reduceAtlasWorldEngine(previous, event);
+    this.state = next;
+    if (next !== previous) this.writeDataset(previous, next);
+    if (next.statusRevision !== previous.statusRevision && next.status) {
+      this.onStatus?.(next.status);
+    }
+    return next;
+  }
+
+  private writeDataset(previous: AtlasWorldEngineState, next: AtlasWorldEngineState) {
+    const viewer = atlasEngineHasViewer(next) ? this.viewer : undefined;
+    if (!viewer) return;
+    const dataset = viewer.canvas.dataset;
+    if (this.datasetCanvas !== viewer.canvas) {
+      this.datasetCanvas = viewer.canvas;
+      this.writtenDataset = {};
+    }
+    for (const [key, value] of Object.entries(atlasEngineDataset(next))) {
+      if (this.writtenDataset[key] === value) continue;
+      this.writtenDataset[key] = value;
+      dataset[key] = value;
+    }
+    Object.assign(dataset, atlasCameraPoseIntent(previous, next));
   }
 
   private leaveRegionalTerrain() {
     this.clearRegionalTiles();
+    // Resource release: runs on the viewer handle, including during destroy().
     const viewer = this.viewer;
-    if (!viewer || viewer.isDestroyed()) return;
+    if (!viewer) return;
     viewer.bottomContainer.setAttribute("data-google", "false");
     viewer.bottomContainer.setAttribute("data-sources-open", "false");
     viewer.useDefaultRenderLoop = true;
@@ -762,7 +762,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     }
     this.terrainDiagnosticsTimer = undefined;
     const viewer = this.viewer;
-    if (viewer && !viewer.isDestroyed() && this.tileset) {
+    if (viewer && this.tileset) {
       viewer.scene.primitives.remove(this.tileset);
     }
     this.tileset = undefined;
@@ -776,8 +776,8 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   }
 
   private zoomBy(factor: number) {
-    const viewer = this.viewer;
-    if (!viewer || viewer.isDestroyed()) return;
+    const viewer = this.liveViewer;
+    if (!viewer) return;
     viewer.camera.cancelFlight();
     const height = viewer.camera.positionCartographic.height;
     const controller = viewer.scene.screenSpaceCameraController;

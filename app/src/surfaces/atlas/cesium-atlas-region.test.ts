@@ -3,10 +3,24 @@ import { Cesium3DTileset, Event } from "cesium";
 
 import { routeRegions } from "@/data/route-regions";
 import { CesiumAtlasWorldEngine } from "@/surfaces/atlas/cesium-atlas-world-engine";
+import {
+  initialAtlasWorldEngineState,
+  reduceAtlasWorldEngine,
+  type AtlasWorldEngineEvent,
+} from "@/surfaces/atlas/atlas-world-engine-state";
 
 const kyoto = routeRegions.find((region) => region.name === "Kyoto, Japan")!;
 const crete = routeRegions.find((region) => region.name === "Crete, Greece")!;
 const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
+
+/** An engine run that owns a viewer, as mount() leaves it once the viewer exists. */
+function attachedState() {
+  const events: AtlasWorldEngineEvent[] = [
+    { type: "mountStarted", routeCount: 0 },
+    { type: "viewerAttached", operationId: 1 },
+  ];
+  return events.reduce(reduceAtlasWorldEngine, initialAtlasWorldEngineState());
+}
 
 function harness() {
   let cameraComplete = () => {};
@@ -39,7 +53,7 @@ function harness() {
     }) },
   };
   const engine = new CesiumAtlasWorldEngine();
-  Object.assign(engine, { viewer, onStatus });
+  Object.assign(engine, { viewer, onStatus, state: attachedState() });
   return { engine, viewer, onStatus, tileset, tileRequests,
     finishCamera: () => cameraComplete(), cancelCamera: () => cameraCancel(),
     setBlank: (value: boolean) => { blank = value; },

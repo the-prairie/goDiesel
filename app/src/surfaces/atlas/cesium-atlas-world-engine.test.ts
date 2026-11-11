@@ -11,6 +11,11 @@ import {
   guardAtlasCameraRotation,
   routeForPickedEntity,
 } from "@/surfaces/atlas/cesium-atlas-world-engine";
+import {
+  initialAtlasWorldEngineState,
+  reduceAtlasWorldEngine,
+  type AtlasWorldEngineEvent,
+} from "@/surfaces/atlas/atlas-world-engine-state";
 import { completedRoutes } from "@/data/routes";
 import { routeRegions } from "@/data/route-regions";
 
@@ -62,7 +67,14 @@ describe("CesiumAtlasWorldEngine", () => {
         },
       };
       const engine = new CesiumAtlasWorldEngine();
-      Object.assign(engine, { viewer });
+      const events: AtlasWorldEngineEvent[] = [
+        { type: "mountStarted", routeCount: 0 },
+        { type: "viewerAttached", operationId: 1 },
+      ];
+      Object.assign(engine, {
+        viewer,
+        state: events.reduce(reduceAtlasWorldEngine, initialAtlasWorldEngineState()),
+      });
 
       engine[command]();
       finishFlight?.();
