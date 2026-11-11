@@ -790,3 +790,44 @@ with owner_publication(root):
     assert (root / "app/src/data/.quests.generated.json.tmp").exists()''')
     assert result.returncode == 0, result.stderr
 
+
+@pytest.mark.parametrize("markers", [(), ("ready", "committed")])
+def test_owner_save_settles_an_abandoned_generator_backup_that_needs_no_restore(tmp_path, markers):
+    from owner_publication import owner_publication
+
+    publication_fixture(tmp_path)
+    backup = tmp_path / GENERATOR_BACKUP
+    (backup / "routes").mkdir(parents=True)
+    (backup / "routes/one.json").write_text("superseded generation")
+    for marker in markers:
+        (backup / marker).touch()
+    with owner_publication(tmp_path, include_source=True):
+        (tmp_path / "quests.json").write_text("committed source")
+    assert (tmp_path / "quests.json").read_text() == "committed source"
+    assert (generated_paths(tmp_path)["detail"] / "one.json").read_text() != "superseded generation"
+    assert not list((tmp_path / "app/public/data").glob(".route-generation-backup*"))
+
+
+def test_owner_save_never_touches_a_live_generator_backup(tmp_path):
+    from owner_publication import owner_publication, PublicationRecoveryError
+
+    publication_fixture(tmp_path)
+    before = published_bytes(tmp_path)
+    data = tmp_path / "app/public/data"
+    backup = data / ".route-generation-backup"
+    backup.mkdir()
+    (backup / "committed").touch()
+    holder = subprocess.Popen([sys.executable, "-c", '''import fcntl, os, sys, time
+descriptor = os.open(sys.argv[1], os.O_RDONLY)
+fcntl.flock(descriptor, fcntl.LOCK_EX)
+print("held", flush=True)
+sys.stdin.read()''', str(data)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    try:
+        assert holder.stdout.readline().strip() == "held"
+        with pytest.raises(PublicationRecoveryError, match="generator run is still publishing"):
+            with owner_publication(tmp_path, include_source=True):
+                raise AssertionError("must not start a new save")
+        assert (backup / "committed").exists()
+        assert published_bytes(tmp_path) == before
+    finally:
+        holder.communicate("")
