@@ -679,13 +679,19 @@ document.addEventListener('change', e => {
   }
 });
 
-function showToast(msg, color) {
+let toastTimer = null;
+function showToast(msg, color, duration = 2200) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.style.borderColor = color || 'var(--teal)';
   t.style.color = color || 'var(--teal)';
   t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2200);
+  // An earlier toast's timer must not hide a newer, longer message.
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toastTimer = null;
+    t.classList.remove('show');
+  }, duration);
 }
 
 document.getElementById('saveBtn').addEventListener('click', async () => {
@@ -703,11 +709,16 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
       body: JSON.stringify({routes: updates}),
     });
     const j = await r.json();
+    const reason = r.status === 409 && typeof j?.reason === 'string' ? j.reason : null;
     if (j.ok) {
       dispatchMutation({ type: 'saveAccepted', requestId });
       renderSaveBar();
       await refreshRoutes();
       showToast(`SAVED ${j.updated} CHANGE${j.updated === 1 ? '' : 'S'}`);
+    } else if (reason) {
+      // The draft stays dirty: only saveAccepted clears submitted fields.
+      showToast(`SAVE FAILED — ${reason}`, 'var(--reject)', 6000);
+      checkRebuildStatus();
     } else {
       showToast('SAVE FAILED', 'var(--reject)');
     }
@@ -814,7 +825,7 @@ document.getElementById('rebuildBtn').addEventListener('click', async () => {
     if (!body?.rebuild) showToast('REBUILD STARTED — CHECK TERMINAL');
   } catch (err) {
     dispatchRebuild({ type: 'rebuildRefused', requestId });
-    showToast(reason ? `REBUILD REFUSED — ${reason}` : 'REBUILD FAILED', 'var(--reject)');
+    showToast(reason ? `REBUILD REFUSED — ${reason}` : 'REBUILD FAILED', 'var(--reject)', reason ? 6000 : 2200);
     if (reason) checkRebuildStatus();
   }
 });

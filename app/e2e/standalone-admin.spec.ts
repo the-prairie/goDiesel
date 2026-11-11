@@ -463,3 +463,34 @@ test('a rebuild refused because another rebuild holds the lock names it and adop
   await expect(page.locator('#rebuildStatusText')).toHaveText('↻ REBUILDING SITE · run-x');
   await expect(page.locator('#rebuildBtn')).toBeDisabled();
 });
+
+test('a save refused during a rebuild names the reason and keeps the draft for retry', async ({ page, request, adminUrl }) => {
+  const owner = await stubOwnerStatus(page, rebuildSnapshot('idle', null));
+  const reason = 'rebuild run-r is running; saves and rebuilds are refused until it finishes';
+  await page.goto(adminUrl);
+  await expect(page.getByText('Synthetic river run', { exact: true })).toBeVisible();
+  await page.getByPlaceholder('Custom title').fill('Refused while rebuilding');
+  await page.route('**/api/save', route => route.fulfill({ status: 409, json: { error: 'another owner mutation is in progress', reason } }));
+  owner.rebuild = rebuildSnapshot('running', 'run-r');
+  await page.locator('#saveBtn').click();
+  await expect(page.locator('#toast')).toHaveText(`SAVE FAILED — ${reason}`);
+  await expect(page.locator('#dirtyCount')).toHaveText('1');
+  await expect(page.getByPlaceholder('Custom title')).toHaveValue('Refused while rebuilding');
+  await expect(page.locator('.card[data-id="synthetic-one"]')).toHaveClass(/\bdirty\b/);
+  await expect(page.locator('#saveBtn')).toBeEnabled();
+  await expect(page.locator('#rebuildStatusText')).toHaveText('↻ REBUILDING SITE · run-r');
+  await page.unroute('**/api/save');
+  await page.locator('#saveBtn').click();
+  await expect(page.locator('#toast')).toHaveText('SAVED 1 CHANGE');
+  await expect(page.locator('#dirtyCount')).toHaveText('0');
+  expect((await (await request.get(`${adminUrl}/fixture/calls`)).json()).saves).toEqual([[{ activity_id: 'synthetic-one', title: 'Refused while rebuilding' }]]);
+});
+
+test('a save refused without a reason keeps the plain failure toast', async ({ page, adminUrl }) => {
+  await page.goto(adminUrl);
+  await page.getByPlaceholder('Custom title').fill('Refused by a busy writer');
+  await page.route('**/api/save', route => route.fulfill({ status: 409, json: { error: 'another owner mutation is in progress' } }));
+  await page.locator('#saveBtn').click();
+  await expect(page.locator('#toast')).toHaveText('SAVE FAILED');
+  await expect(page.locator('#dirtyCount')).toHaveText('1');
+});
