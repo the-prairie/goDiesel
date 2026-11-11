@@ -1,4 +1,13 @@
-import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+} from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Compass, Download, Plus, Save } from "lucide-react";
 import { Button } from "@/ui/button";
@@ -6,6 +15,7 @@ import { Input } from "@/ui/input";
 import { Disclosure } from "@/ui/disclosure";
 import { FinderRouteMap } from "@/ui/planning-route-map";
 import { PageTitle } from "@/ui/page-title";
+import { useReducedMotion } from "@/ui/use-reduced-motion";
 import {
   courseGpx,
   type Course,
@@ -26,7 +36,59 @@ import {
   initialCourseWorkspace,
   reduceCourseWorkspace,
   type CourseOperation,
+  type CourseProgress,
 } from "./course-workspace-state";
+
+const progressCopy: Record<CourseOperation, string> = {
+  load: "Opening your courses…",
+  listMore: "Loading more courses…",
+  generate:
+    "Comparing loops and mapped features. This can take up to 45 seconds…",
+  import: "Reading your GPX…",
+  save: "Saving your course…",
+};
+/** Bottom-nav clearance for an element scrolled into view on a phone. */
+const scrollMargins =
+  "scroll-mt-4 scroll-mb-[calc(var(--mobile-navigation-height)+1rem)] md:scroll-mb-4";
+/**
+ * Where an operation's progress and failure appear: beside the control the
+ * person used. Generate and import report under the form, save under the
+ * preview's Save button, and loading the workspace at the top of the page.
+ */
+function noticePlace(progress: CourseProgress): "top" | "form" | "preview" {
+  if (progress.status === "idle") return "top";
+  switch (progress.operation) {
+    case "generate":
+    case "import":
+      return "form";
+    case "save":
+      return "preview";
+    case "load":
+    case "listMore":
+      return "top";
+  }
+}
+/**
+ * Scrolls an element into view only when it, with its scroll margins, is not
+ * already fully visible, so a result that is already on screen never moves.
+ */
+function revealIfHidden(
+  element: HTMLElement,
+  block: ScrollLogicalPosition,
+  reducedMotion: boolean,
+) {
+  const box = element.getBoundingClientRect();
+  const style = getComputedStyle(element);
+  if (
+    box.top - parseFloat(style.scrollMarginTop) >= 0 &&
+    box.bottom + parseFloat(style.scrollMarginBottom) <= window.innerHeight
+  )
+    return;
+  element.scrollIntoView({
+    block,
+    behavior: reducedMotion ? "auto" : "smooth",
+  });
+}
 
 export function CoursePage() {
   const { courseId } = useParams();
@@ -40,7 +102,49 @@ export function CoursePage() {
   const requestRef = useRef<AbortController | null>(null);
   const sequence = useRef(0);
   const busy = state.progress.status === "pending";
-  const recovery = courseFailureRecovery(state.progress);
+  const reducedMotion = useReducedMotion();
+  const place = noticePlace(state.progress);
+  const noticeRef = useRef<HTMLDivElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const previewHeadingRef = useRef<HTMLHeadingElement>(null);
+  const shownView = useRef(state.view.kind);
+  const viewCourse =
+    state.view.kind === "empty" ? undefined : state.view.course;
+  // Each change to an inline progress or failure keeps it beside the control
+  // the person just used.
+  useEffect(() => {
+    if (place !== "top" && noticeRef.current)
+      revealIfHidden(noticeRef.current, "nearest", reducedMotion);
+  }, [state.progress]);
+  // A new preview (from generating or importing) and the saved course that
+  // replaces it are results of the person's action: bring the title into
+  // view and move focus to the name so assistive tech announces it. Opening
+  // a saved course by its address leaves the page where it loads. Saving
+  // removes the form above the course, so that reveal is instant and happens
+  // before the collapsed page is painted.
+  useLayoutEffect(() => {
+    const previous = shownView.current;
+    shownView.current = state.view.kind;
+    if (!viewCourse || !previewRef.current) return;
+    if (state.view.kind !== "preview" && previous !== "preview") return;
+    revealIfHidden(
+      previewRef.current,
+      "start",
+      reducedMotion || state.view.kind === "saved",
+    );
+    previewHeadingRef.current?.focus({ preventScroll: true });
+  }, [viewCourse]);
+  const notice = (
+    <ProgressNotice
+      progress={state.progress}
+      hasPreview={state.view.kind === "preview"}
+      onCancel={() => {
+        requestRef.current?.abort();
+        dispatch({ type: "cancel" });
+      }}
+      onReload={() => setConnection((value) => value + 1)}
+    />
+  );
   function begin(operation: CourseOperation, courseId?: string) {
     requestRef.current?.abort();
     const controller = new AbortController();
@@ -171,8 +275,10 @@ export function CoursePage() {
             variant="outline"
             disabled={busy}
             onClick={() => {
-              dispatch({ type: "new" });
-              navigate("/courses");
+              // Leaving a saved course starts the list load, which clears the
+              // view in the same step; on /courses there is nothing to load.
+              if (courseId) navigate("/courses");
+              else dispatch({ type: "new" });
             }}
           >
             <Plus />
@@ -180,7 +286,7 @@ export function CoursePage() {
           </Button>
         ) : null}
       </div>
-      {state.view.kind === "empty" ? (
+      {state.view.kind !== "saved" ? (
         <PageTitle
           eyebrow="Route studio"
           title="Create a course"
@@ -189,55 +295,7 @@ export function CoursePage() {
       ) : (
         <h1 className="sr-only">Route studio</h1>
       )}
-      {busy ? (
-        <div
-          role="status"
-          className="flex items-center justify-between gap-4 rounded-md border border-line bg-surface p-4"
-        >
-          <p className="text-sm">
-            {state.progress.status === "pending"
-              ? {
-                  load: "Opening your courses…",
-                  listMore: "Loading more courses…",
-                  generate:
-                    "Comparing loops and mapped features. This can take up to 45 seconds…",
-                  import: "Reading your GPX…",
-                  save: "Saving your course…",
-                }[state.progress.operation]
-              : ""}
-          </p>
-          <Button
-            variant="ghost"
-            onClick={() => {
-              requestRef.current?.abort();
-              dispatch({ type: "cancel" });
-            }}
-          >
-            Cancel
-          </Button>
-        </div>
-      ) : null}
-      {state.progress.status === "failed" ? (
-        <div
-          role="alert"
-          className="space-y-3 rounded-md border border-line p-4"
-        >
-          <p>{state.progress.message}</p>
-          {recovery === "retrySave" && state.view.kind === "preview" ? (
-            <p className="text-sm text-ink-secondary">
-              Your preview is still here. Save course to try again.
-            </p>
-          ) : null}
-          {recovery === "reload" ? (
-            <Button
-              variant="outline"
-              onClick={() => setConnection((value) => value + 1)}
-            >
-              Reload workspace
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
+      {place === "top" ? notice : null}
       <div
         className={
           state.view.kind === "saved"
@@ -246,33 +304,50 @@ export function CoursePage() {
         }
       >
         {state.view.kind !== "saved" ? (
-          <div
-            className={
-              state.view.kind === "empty"
-                ? "min-w-0"
-                : "order-2 min-w-0 xl:order-1"
-            }
-          >
+          <div className="min-w-0">
             <CourseForm
               busy={busy}
+              generating={
+                busy &&
+                state.progress.status === "pending" &&
+                state.progress.operation === "generate"
+              }
               onGenerate={(request) => void generate(request)}
               onImport={(file, activity) => void importGpx(file, activity)}
             />
+            {place === "form" ? (
+              <div ref={noticeRef} className={`mt-5 ${scrollMargins}`}>
+                {notice}
+              </div>
+            ) : null}
           </div>
         ) : null}
         {state.view.kind === "empty" ? (
           <SavedCourses
             courses={state.courses}
+            loading={
+              state.progress.status === "pending" &&
+              state.progress.operation === "load"
+            }
             hasMore={!!state.cursor}
             busy={busy}
             onLoadMore={() => void loadMore()}
           />
         ) : (
           <CoursePreview
+            ref={previewRef}
+            headingRef={previewHeadingRef}
             course={state.view.course}
             saved={state.view.kind === "saved"}
             busy={busy}
             onSave={() => void save()}
+            notice={
+              place === "preview" ? (
+                <div ref={noticeRef} className={scrollMargins}>
+                  {notice}
+                </div>
+              ) : null
+            }
           />
         )}
       </div>
@@ -329,13 +404,59 @@ export function CoursePage() {
   );
 }
 
+function ProgressNotice({
+  progress,
+  hasPreview,
+  onCancel,
+  onReload,
+}: {
+  progress: CourseProgress;
+  hasPreview: boolean;
+  onCancel: () => void;
+  onReload: () => void;
+}) {
+  const recovery = courseFailureRecovery(progress);
+  if (progress.status === "pending")
+    return (
+      <div
+        role="status"
+        className="flex items-center justify-between gap-4 rounded-md border border-line bg-surface p-4"
+      >
+        <p className="text-sm">{progressCopy[progress.operation]}</p>
+        <Button variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    );
+  if (progress.status === "failed")
+    return (
+      <div role="alert" className="space-y-3 rounded-md border border-line p-4">
+        <p>{progress.message}</p>
+        {recovery === "retrySave" && hasPreview ? (
+          <p className="text-sm text-ink-secondary">
+            Your preview is still here. Save course to try again.
+          </p>
+        ) : null}
+        {recovery === "reload" ? (
+          <Button variant="outline" onClick={onReload}>
+            Reload workspace
+          </Button>
+        ) : null}
+      </div>
+    );
+  return null;
+}
+
 function SavedCourses({
   courses,
+  loading,
   hasMore,
   busy,
   onLoadMore,
 }: {
   courses: CourseSummary[];
+  /** The first page is still loading, so an empty list is not yet known. */
+  loading: boolean;
   hasMore: boolean;
   busy: boolean;
   onLoadMore: () => void;
@@ -346,11 +467,14 @@ function SavedCourses({
       className="min-w-0 border-t border-line pt-6 xl:border-t-0 xl:pt-0"
     >
       <h2 className="text-xl font-semibold">
-        Your courses{" "}
-        <span className="text-ink-secondary">
-          {courses.length}
-          {hasMore ? "+" : ""}
-        </span>
+        Your courses
+        {loading && !courses.length ? null : (
+          <span className="text-ink-secondary">
+            {" "}
+            {courses.length}
+            {hasMore ? "+" : ""}
+          </span>
+        )}
       </h2>
       <p className="mt-1 text-sm text-ink-secondary">
         Imported and generated routes, separate from your completed activities.
@@ -371,7 +495,7 @@ function SavedCourses({
             </Link>
           ))}
         </div>
-      ) : (
+      ) : loading ? null : (
         <p className="mt-4 text-sm text-ink-secondary">
           Save a preview to keep it here.
         </p>
@@ -391,15 +515,23 @@ function SavedCourses({
 }
 
 function CoursePreview({
+  ref,
+  headingRef,
   course,
   saved,
   busy,
   onSave,
+  notice,
 }: {
+  /** The preview's title block, which is what a new preview reveals. */
+  ref?: Ref<HTMLDivElement>;
+  headingRef?: Ref<HTMLHeadingElement>;
   course: Course;
   saved: boolean;
   busy: boolean;
   onSave: () => void;
+  /** Save progress or failure, shown under the Save button. */
+  notice?: ReactNode;
 }) {
   const lines = useMemo(
     () =>
@@ -409,15 +541,18 @@ function CoursePreview({
     [course],
   );
   return (
-    <article
-      className="order-1 min-w-0 space-y-4 xl:order-2"
-      aria-label="Course preview"
-    >
-      <div className="space-y-2">
+    <article className="min-w-0 space-y-4" aria-label="Course preview">
+      <div ref={ref} className={`space-y-2 ${scrollMargins}`}>
         <p className="text-xs uppercase tracking-widest text-ink-secondary">
           {saved ? "Saved course" : "Preview · not saved"}
         </p>
-        <h2 className="break-words text-2xl font-semibold">{course.name}</h2>
+        <h2
+          ref={headingRef}
+          tabIndex={-1}
+          className="break-words text-2xl font-semibold focus-visible:outline-none"
+        >
+          {course.name}
+        </h2>
         <p className="text-sm text-ink-secondary">
           {course.activity} · {(course.distanceM / 1000).toFixed(2)} km ·{" "}
           {course.ascentM === null
@@ -451,6 +586,7 @@ function CoursePreview({
           Download GPX
         </Button>
       </div>
+      {notice}
       <div className="h-[min(52vh,28rem)] min-h-64 overflow-hidden rounded-lg border border-line">
         <FinderRouteMap lines={lines} selectedSlug={course.id} />
       </div>
