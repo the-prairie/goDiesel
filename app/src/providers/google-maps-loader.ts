@@ -1,6 +1,18 @@
 import { ProviderError } from "@/providers/provider-error";
 
 let mapsPromise: Promise<void> | undefined;
+// Google reports a rejected key through `gm_authFailure`, often after the
+// script's load callback (InvalidKeyMapError arrives asynchronously). The
+// handler therefore stays installed once the API has loaded, and the page
+// remembers the rejection so a later mount hears it too.
+let authenticationRejected = false;
+
+const AUTH_FAILURE_EVENT = "godiesel:google-maps-auth-failure";
+
+function reportAuthenticationFailure() {
+  authenticationRejected = true;
+  window.dispatchEvent(new CustomEvent(AUTH_FAILURE_EVENT));
+}
 
 declare global {
   interface Window {
@@ -14,6 +26,7 @@ export function loadGoogleMaps(apiKey: string) {
     google?: { maps?: { importLibrary?: unknown } };
   };
   if (typeof runtime.google?.maps?.importLibrary === "function") {
+    if (authenticationRejected) reportAuthenticationFailure();
     return Promise.resolve();
   }
   if (mapsPromise) return mapsPromise;
@@ -38,12 +51,16 @@ export function loadGoogleMaps(apiKey: string) {
         if (previousReady) window.__godieselGoogleMapsReady = previousReady;
         else delete window.__godieselGoogleMapsReady;
       }
+    };
+
+    const restoreAuthFailure = () => {
       if (window.gm_authFailure === handleAuthFailure) {
         if (previousAuthFailure) window.gm_authFailure = previousAuthFailure;
         else delete window.gm_authFailure;
       }
     };
 
+    // A loaded API keeps its handler: Google can reject the key afterwards.
     const complete = () => {
       if (settled) return;
       settled = true;
@@ -55,6 +72,7 @@ export function loadGoogleMaps(apiKey: string) {
       if (settled) return;
       settled = true;
       cleanup();
+      restoreAuthFailure();
       script.remove();
       reject(error);
     };
@@ -64,8 +82,13 @@ export function loadGoogleMaps(apiKey: string) {
     }
 
     function handleAuthFailure() {
-      window.dispatchEvent(new CustomEvent("godiesel:google-maps-auth-failure"));
-      fail(new ProviderError("Google Maps rejected this browser key."));
+      previousAuthFailure?.();
+      if (!settled) {
+        window.dispatchEvent(new CustomEvent(AUTH_FAILURE_EVENT));
+        fail(new ProviderError("Google Maps rejected this browser key."));
+        return;
+      }
+      reportAuthenticationFailure();
     }
 
     window.__godieselGoogleMapsReady = complete;
