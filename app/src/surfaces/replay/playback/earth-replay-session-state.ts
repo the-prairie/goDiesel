@@ -1,3 +1,4 @@
+import type { RouteContextHudState } from "@/surfaces/replay/components/route-context-hud";
 import type { ReplayEngineMode, ReplayStatus } from "@/surfaces/replay/renderer-port";
 import {
   advanceReplay,
@@ -16,6 +17,8 @@ export interface EarthReplaySessionState {
   status: ReplayStatus;
   control: ReplayControlState;
   sessionId: number;
+  contextState: RouteContextHudState;
+  mobileControlsExpanded: boolean;
 }
 
 export type EarthReplayControlEvent =
@@ -25,8 +28,14 @@ export type EarthReplayControlEvent =
   | { type: "followingToggled" }
   | { type: "zoomRequested"; direction: "in" | "out" };
 
+export type EarthReplayHudEvent =
+  | { type: "presentationReset"; isMobile: boolean }
+  | { type: "contextChanged"; contextState: RouteContextHudState }
+  | { type: "mobileControlsToggled" };
+
 export type EarthReplaySessionEvent =
   | EarthReplayControlEvent
+  | EarthReplayHudEvent
   | { type: "rendererSelected"; mode: ReplayEngineMode }
   | { type: "rendererMounted"; routeSlug: string }
   | { type: "statusReceived"; sessionId: number; status: ReplayStatus }
@@ -53,11 +62,25 @@ export function initialEarthReplaySessionState(mode: ReplayEngineMode): EarthRep
     status: initialStatus(mode),
     control: initialReplayState(),
     sessionId: 0,
+    contextState: "preview",
+    mobileControlsExpanded: false,
   };
 }
 
 export function earthReplayOperational(status: ReplayStatus): boolean {
   return status.state === "ready" || status.state === "partial";
+}
+
+/**
+ * Chrome may yield to the world only while playback runs over an operational
+ * scene. Playing is retained through provider loading and unavailable, and
+ * the HUD (including Back) must stay reachable over that overlay.
+ */
+export function earthReplayChromeMayAutoHide(
+  state: Pick<EarthReplaySessionState, "control" | "status">,
+  { reducedMotion }: { reducedMotion: boolean },
+): boolean {
+  return !reducedMotion && state.control.playing && earthReplayOperational(state.status);
 }
 
 export function reduceEarthReplaySession(
@@ -66,7 +89,9 @@ export function reduceEarthReplaySession(
 ): EarthReplaySessionState {
   switch (event.type) {
     case "rendererSelected":
-      return state.engineMode === event.mode ? state : { ...state, engineMode: event.mode };
+      return state.engineMode === event.mode
+        ? state
+        : { ...state, engineMode: event.mode, status: initialStatus(event.mode) };
     case "rendererMounted":
       return {
         ...state,
@@ -81,8 +106,14 @@ export function reduceEarthReplaySession(
       return earthReplayOperational(state.status)
         ? { ...state, control: advanceReplay(state.control, event.elapsedSeconds, event.totalDistanceM) }
         : state;
-    case "playbackToggled":
-      return { ...state, control: toggleReplay(state.control) };
+    case "playbackToggled": {
+      const control = toggleReplay(state.control);
+      return {
+        ...state,
+        control,
+        contextState: control.playing ? "compact" : state.contextState,
+      };
+    }
     case "progressSelected":
       return { ...state, control: seekReplay(state.control, event.progressM, event.totalDistanceM) };
     case "speedCycled":
@@ -91,6 +122,18 @@ export function reduceEarthReplaySession(
       return { ...state, control: toggleReplayFollowing(state.control) };
     case "zoomRequested":
       return { ...state, control: zoomReplay(state.control, event.direction) };
+    case "presentationReset": {
+      const contextState = event.isMobile ? "compact" : "preview";
+      return state.contextState === contextState && !state.mobileControlsExpanded
+        ? state
+        : { ...state, contextState, mobileControlsExpanded: false };
+    }
+    case "contextChanged":
+      return state.contextState === event.contextState
+        ? state
+        : { ...state, contextState: event.contextState };
+    case "mobileControlsToggled":
+      return { ...state, mobileControlsExpanded: !state.mobileControlsExpanded };
     default: {
       const unhandled: never = event;
       throw new Error(`Unhandled Earth Replay session event: ${unhandled}`);

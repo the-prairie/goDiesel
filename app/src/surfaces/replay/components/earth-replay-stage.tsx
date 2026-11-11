@@ -20,10 +20,7 @@ import {
   type ReplayElevationScrubberHandle,
 } from "@/surfaces/replay/components/replay-elevation-scrubber";
 import { ReplayRoutePicker } from "@/surfaces/replay/components/replay-route-picker";
-import {
-  RouteContextHud,
-  type RouteContextHudState,
-} from "@/surfaces/replay/components/route-context-hud";
+import { RouteContextHud } from "@/surfaces/replay/components/route-context-hud";
 import {
   RecordedLightLabel,
   RecordedLightLayer,
@@ -49,6 +46,7 @@ import {
 } from "@/surfaces/replay/renderer-port";
 
 import {
+  earthReplayChromeMayAutoHide,
   earthReplayOperational,
   initialEarthReplaySessionState,
   reduceEarthReplaySession,
@@ -78,15 +76,13 @@ export function EarthReplayStage({
   const engineRef = useRef<ReplayEngine | undefined>(undefined);
   const sessionRef = useRef(initialEarthReplaySessionState(initialEngineMode));
   const [session, setSession] = useState(sessionRef.current);
-  const { status, engineMode, control } = session;
-  const [contextState, setContextState] =
-    useState<RouteContextHudState>("preview");
-  const [mobileControlsExpanded, setMobileControlsExpanded] = useState(false);
+  const { status, engineMode, control, contextState, mobileControlsExpanded } = session;
   const [chromeVisible, setChromeVisible] = useState(true);
   const isMobile = useIsMobile();
   const reducedMotion = useReducedMotion();
   const totalDistanceM = routeDistanceM(route);
   const operational = earthReplayOperational(status);
+  const chromeMayAutoHide = earthReplayChromeMayAutoHide(session, { reducedMotion });
   const recordedLight = recordedLightAt(
     route.route,
     route.provenance.temporal,
@@ -112,11 +108,6 @@ export function EarthReplayStage({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const routeChanged = sessionRef.current.routeSlug !== route.slug;
-    if (routeChanged && engineMode !== initialEngineMode) {
-      dispatchSession({ type: "rendererSelected", mode: initialEngineMode });
-      return;
-    }
     const engine = createReplayEngine(engineMode);
     engineRef.current = engine;
     const { sessionId } = dispatchSession({ type: "rendererMounted", routeSlug: route.slug });
@@ -135,7 +126,7 @@ export function EarthReplayStage({
       engine.destroy();
       if (engineRef.current === engine) engineRef.current = undefined;
     };
-  }, [dispatchSession, engineMode, initialEngineMode, route]);
+  }, [dispatchSession, engineMode, route]);
 
   useEffect(() => {
     if (!operational || !control.playing) return;
@@ -164,16 +155,11 @@ export function EarthReplayStage({
   }, [control.playing, operational, route, totalDistanceM]);
 
   useEffect(() => {
-    setContextState(isMobile ? "compact" : "preview");
-    setMobileControlsExpanded(false);
-  }, [isMobile, route.slug]);
+    dispatchSession({ type: "presentationReset", isMobile });
+  }, [dispatchSession, isMobile]);
 
   useEffect(() => {
-    if (control.playing) setContextState("compact");
-  }, [control.playing]);
-
-  useEffect(() => {
-    if (!control.playing || reducedMotion) {
+    if (!chromeMayAutoHide) {
       setChromeVisible(true);
       return;
     }
@@ -183,7 +169,7 @@ export function EarthReplayStage({
       if (!focused || !stage?.contains(focused)) setChromeVisible(false);
     }, 3_200);
     return () => window.clearTimeout(timer);
-  }, [control.playing, reducedMotion]);
+  }, [chromeMayAutoHide]);
 
   return (
     <section
@@ -222,7 +208,9 @@ export function EarthReplayStage({
           backPath={backPath}
           backLabel={backLabel}
           visible={chromeVisible}
-          onStateChange={setContextState}
+          onStateChange={(nextContextState) =>
+            dispatchSession({ type: "contextChanged", contextState: nextContextState })
+          }
           summary={
             <>
             <div className="mt-1.5">
@@ -335,9 +323,7 @@ export function EarthReplayStage({
                   mobileControlsExpanded ? "Hide more controls" : "Show more controls"
                 }
                 aria-expanded={mobileControlsExpanded}
-                onClick={() =>
-                  setMobileControlsExpanded((expanded) => !expanded)
-                }
+                onClick={() => dispatchSession({ type: "mobileControlsToggled" })}
               >
                 <Settings2 aria-hidden="true" />
               </Button>

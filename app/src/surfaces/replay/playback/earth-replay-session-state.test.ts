@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  earthReplayChromeMayAutoHide,
   initialEarthReplaySessionState,
   reduceEarthReplaySession,
   type EarthReplaySessionEvent,
@@ -107,5 +108,144 @@ describe("Earth Replay session", () => {
       expect(state.control.cameraRangeM).toBe(range);
     }
     expect(state.control).toMatchObject({ progressM: 0, following: true, playing: false });
+  });
+
+  it("keeps controls, route, and session id when the person picks another renderer", () => {
+    const before = transition(mounted("partial"), ...changedControls);
+    const switched = reduceEarthReplaySession(before, { type: "rendererSelected", mode: "atlas" });
+    expect(switched).toMatchObject({ engineMode: "atlas", routeSlug: "city", sessionId: 1 });
+    expect(switched.control).toBe(before.control);
+  });
+
+  it("switches Atlas back to Earth with the same controls", () => {
+    const back = transition(mounted(), ...changedControls,
+      { type: "rendererSelected", mode: "atlas" },
+      { type: "rendererMounted", routeSlug: "city" },
+      { type: "statusReceived", sessionId: 2, status: { state: "ready", title: "Atlas", message: "Ready" } },
+      { type: "rendererSelected", mode: "earth" },
+      { type: "rendererMounted", routeSlug: "city" });
+    expect(back).toMatchObject({ engineMode: "earth", sessionId: 3, status: { state: "loading" } });
+    expect(back.control).toEqual({ playing: true, progressM: 500, speed: 2, following: false, cameraRangeM: 720 });
+  });
+
+  it("accepts the outcome of the current engine after a renderer switch", () => {
+    const state = transition(mounted(), { type: "rendererSelected", mode: "atlas" },
+      { type: "rendererMounted", routeSlug: "city" },
+      { type: "statusReceived", sessionId: 2, status: { state: "ready", title: "Atlas", message: "Ready" } });
+    expect(state.status).toMatchObject({ state: "ready", title: "Atlas" });
+  });
+
+  it.each([["earth", "atlas", "Opening Atlas replay"], ["atlas", "earth", "Building your route world"]] as const)(
+    "resets provider status when switching %s to %s so mode and status agree",
+    (from, to, title) => {
+      const state = transition(initialEarthReplaySessionState(from),
+        { type: "rendererMounted", routeSlug: "city" },
+        { type: "statusReceived", sessionId: 1, status: { state: "partial", title: "Old", message: "Old engine" } },
+        { type: "rendererSelected", mode: to });
+      expect(state).toMatchObject({ engineMode: to, status: { state: "loading", title } });
+      expect(reduceEarthReplaySession(state, { type: "frameElapsed", elapsedSeconds: 1, totalDistanceM: 1000 })).toBe(state);
+    },
+  );
+});
+
+describe("Earth Replay HUD", () => {
+  it("starts with the desktop preview and collapsed mobile controls", () => {
+    expect(initialEarthReplaySessionState("earth")).toMatchObject({
+      contextState: "preview", mobileControlsExpanded: false,
+    });
+  });
+
+  it.each([[true, "compact"], [false, "preview"]] as const)(
+    "resets presentation for mobile=%s to %s and collapses controls",
+    (isMobile, contextState) => {
+      const state = transition(mounted(),
+        { type: "contextChanged", contextState: "expanded" },
+        { type: "mobileControlsToggled" },
+        { type: "presentationReset", isMobile });
+      expect(state).toMatchObject({ contextState, mobileControlsExpanded: false });
+    },
+  );
+
+  it("toggles mobile controls without touching playback", () => {
+    const base = mounted();
+    const opened = reduceEarthReplaySession(base, { type: "mobileControlsToggled" });
+    expect(opened.mobileControlsExpanded).toBe(true);
+    expect(opened.control).toBe(base.control);
+    expect(reduceEarthReplaySession(opened, { type: "mobileControlsToggled" }).mobileControlsExpanded).toBe(false);
+  });
+
+  it.each(["preview", "expanded"] as const)("compacts a %s HUD in the same transition as play", (contextState) => {
+    const playing = transition(mounted(),
+      { type: "contextChanged", contextState },
+      { type: "playbackToggled" });
+    expect(playing).toMatchObject({ contextState: "compact", control: { playing: true } });
+  });
+
+  it("leaves the HUD alone on pause", () => {
+    const paused = transition(mounted(), { type: "playbackToggled" },
+      { type: "contextChanged", contextState: "expanded" },
+      { type: "playbackToggled" });
+    expect(paused).toMatchObject({ contextState: "expanded", control: { playing: false } });
+  });
+
+  it("keeps a HUD the person expands during playback", () => {
+    const state = transition(mounted(), { type: "playbackToggled" },
+      { type: "contextChanged", contextState: "expanded" },
+      { type: "frameElapsed", elapsedSeconds: 0.1, totalDistanceM: 1000 },
+      { type: "speedCycled" },
+      { type: "progressSelected", progressM: 200, totalDistanceM: 1000 });
+    expect(state).toMatchObject({ contextState: "expanded", control: { playing: true } });
+  });
+
+  it("compacts again when playback restarts after reaching the endpoint", () => {
+    const ended = transition(mounted(), { type: "playbackToggled" },
+      { type: "contextChanged", contextState: "expanded" },
+      { type: "progressSelected", progressM: 999.9, totalDistanceM: 1000 },
+      { type: "frameElapsed", elapsedSeconds: 1, totalDistanceM: 1000 });
+    expect(ended).toMatchObject({ contextState: "expanded", control: { playing: false } });
+    expect(reduceEarthReplaySession(ended, { type: "playbackToggled" }).contextState).toBe("compact");
+  });
+
+  it("keeps the HUD and mobile controls across an in-stage renderer switch", () => {
+    const state = transition(mounted("partial"),
+      { type: "contextChanged", contextState: "expanded" },
+      { type: "mobileControlsToggled" },
+      { type: "rendererSelected", mode: "atlas" },
+      { type: "rendererMounted", routeSlug: "city" });
+    expect(state).toMatchObject({ contextState: "expanded", mobileControlsExpanded: true });
+  });
+
+  it("returns the same state for a HUD change that changes nothing", () => {
+    const state = mounted();
+    expect(reduceEarthReplaySession(state, { type: "contextChanged", contextState: "preview" })).toBe(state);
+  });
+});
+
+describe("Earth Replay chrome auto-hide", () => {
+  const motion = { reducedMotion: false };
+
+  it("never hides chrome while paused", () => {
+    expect(earthReplayChromeMayAutoHide(mounted("ready"), motion)).toBe(false);
+  });
+
+  it.each(["ready", "partial"] as const)("may hide chrome while playing a %s scene", (status) => {
+    expect(earthReplayChromeMayAutoHide(transition(mounted(status), { type: "playbackToggled" }), motion)).toBe(true);
+  });
+
+  it.each(["loading", "unavailable"] as const)("keeps chrome while playback intent survives %s", (status) => {
+    const state = transition(mounted(), { type: "playbackToggled" },
+      { type: "statusReceived", sessionId: 1, status: { state: status, title: "Wait", message: "Provider" } });
+    expect(state.control.playing).toBe(true);
+    expect(earthReplayChromeMayAutoHide(state, motion)).toBe(false);
+  });
+
+  it("keeps chrome while a newly selected renderer loads", () => {
+    const state = transition(mounted("partial"), { type: "playbackToggled" },
+      { type: "rendererSelected", mode: "atlas" });
+    expect(earthReplayChromeMayAutoHide(state, motion)).toBe(false);
+  });
+
+  it("keeps chrome under reduced motion", () => {
+    expect(earthReplayChromeMayAutoHide(transition(mounted(), { type: "playbackToggled" }), { reducedMotion: true })).toBe(false);
   });
 });
