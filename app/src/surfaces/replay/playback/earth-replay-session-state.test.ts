@@ -108,4 +108,29 @@ describe("Earth Replay session", () => {
     }
     expect(state.control).toMatchObject({ progressM: 0, following: true, playing: false });
   });
+
+  it("keeps controls, route, and session id when the person picks another renderer", () => {
+    const before = transition(mounted("partial"), ...changedControls);
+    const switched = reduceEarthReplaySession(before, { type: "rendererSelected", mode: "atlas" });
+    expect(switched).toMatchObject({ engineMode: "atlas", routeSlug: "city", sessionId: 1 });
+    expect(switched.control).toBe(before.control);
+  });
+
+  it("switches Atlas back to Earth with the same controls", () => {
+    const back = transition(mounted(), ...changedControls,
+      { type: "rendererSelected", mode: "atlas" },
+      { type: "rendererMounted", routeSlug: "city" },
+      { type: "statusReceived", sessionId: 2, status: { state: "ready", title: "Atlas", message: "Ready" } },
+      { type: "rendererSelected", mode: "earth" },
+      { type: "rendererMounted", routeSlug: "city" });
+    expect(back).toMatchObject({ engineMode: "earth", sessionId: 3, status: { state: "loading" } });
+    expect(back.control).toEqual({ playing: true, progressM: 500, speed: 2, following: false, cameraRangeM: 720 });
+  });
+
+  it("accepts the outcome of the current engine after a renderer switch", () => {
+    const state = transition(mounted(), { type: "rendererSelected", mode: "atlas" },
+      { type: "rendererMounted", routeSlug: "city" },
+      { type: "statusReceived", sessionId: 2, status: { state: "ready", title: "Atlas", message: "Ready" } });
+    expect(state.status).toMatchObject({ state: "ready", title: "Atlas" });
+  });
 });
