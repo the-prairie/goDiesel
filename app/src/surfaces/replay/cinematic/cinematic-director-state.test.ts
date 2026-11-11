@@ -24,7 +24,7 @@ function start(state: CinematicDirectorState) {
 
 describe("cinematic director transitions", () => {
   it("starts paused with sound enabled and loading status", () => {
-    expect(initial()).toEqual({ frame: opening, playback: "paused", audioStart: { state: "idle" }, lastAudioRequestId: 0, soundEnabled: true, status: { state: "loading", message: "Scouting the route." } });
+    expect(initial()).toEqual({ sessionId: 0, frame: opening, playback: "paused", audioStart: { state: "idle" }, lastAudioRequestId: 0, soundEnabled: true, status: { state: "loading", message: "Scouting the route." } });
   });
 
   it("selects a cut and pauses in one transition", () => {
@@ -80,9 +80,9 @@ describe("cinematic director transitions", () => {
   });
 
   it("retains playback intent during provider failure and partial recovery", () => {
-    let state = start(initial());
+    let state = start(reduceCinematicDirector(initial(), { type: "sessionStarted", frame: opening }));
     for (const providerState of ["unavailable", "partial", "ready"] as const) {
-      state = reduceCinematicDirector(state, { type: "rendererStatusReceived", status: { state: providerState, message: providerState } });
+      state = reduceCinematicDirector(state, { type: "rendererStatusReceived", sessionId: state.sessionId, status: { state: providerState, message: providerState } });
       expect(state.playback).toBe("playing");
       expect(state.status.state).toBe(providerState);
     }
@@ -100,6 +100,23 @@ describe("cinematic director transitions", () => {
     const first = request(initial());
     const restarted = reduceCinematicDirector(first.state, { type: "sessionStarted", frame: opening });
     expect(request(restarted).requestId).toBeGreaterThan(first.requestId);
+  });
+
+  it("each session start mints a new renderer session id", () => {
+    const first = reduceCinematicDirector(initial(), { type: "sessionStarted", frame: opening });
+    const second = reduceCinematicDirector(first, { type: "sessionStarted", frame: opening });
+    expect(first.sessionId).toBe(1);
+    expect(second.sessionId).toBe(2);
+  });
+
+  it("rejects renderer status from a replaced session", () => {
+    const first = reduceCinematicDirector(initial(), { type: "sessionStarted", frame: opening });
+    const ready = reduceCinematicDirector(first, { type: "rendererStatusReceived", sessionId: first.sessionId, status: { state: "ready", message: "ready" } });
+    expect(ready.status.state).toBe("ready");
+    const replaced = reduceCinematicDirector(ready, { type: "sessionStarted", frame: opening });
+    expect(replaced.status.state).toBe("loading");
+    expect(reduceCinematicDirector(replaced, { type: "rendererStatusReceived", sessionId: first.sessionId, status: { state: "unavailable", message: "late" } })).toBe(replaced);
+    expect(reduceCinematicDirector(replaced, { type: "rendererStatusReceived", sessionId: replaced.sessionId, status: { state: "ready", message: "current" } }).status.state).toBe("ready");
   });
 
   it("sound preference is independent of playback, seeking, and session reset", () => {

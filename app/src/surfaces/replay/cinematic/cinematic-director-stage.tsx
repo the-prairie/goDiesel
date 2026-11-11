@@ -131,12 +131,14 @@ export function CinematicDirectorStage({
     soundRef.current = sound;
     elapsedRef.current = 0;
     dispatch({ type: "sessionStarted", frame: initial });
+    const { sessionId } = stateRef.current;
 
     void renderer.mount({
       container,
       frame: initial,
       route,
-      onStatus: (status) => dispatch({ type: "rendererStatusReceived", status }),
+      onStatus: (status) =>
+        dispatch({ type: "rendererStatusReceived", sessionId, status }),
     });
 
     return () => {

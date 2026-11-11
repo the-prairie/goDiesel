@@ -2,6 +2,7 @@ import type { CinematicRendererStatus } from "@/surfaces/replay/cinematic/cesium
 import type { CinematicFrame } from "@/surfaces/replay/cinematic/route-cinematic-director";
 
 export interface CinematicDirectorState {
+  sessionId: number;
   frame: CinematicFrame;
   playback: "paused" | "playing";
   audioStart: { state: "idle" } | { state: "pending"; requestId: number };
@@ -12,7 +13,11 @@ export interface CinematicDirectorState {
 
 export type CinematicDirectorEvent =
   | { type: "sessionStarted"; frame: CinematicFrame }
-  | { type: "rendererStatusReceived"; status: CinematicRendererStatus }
+  | {
+      type: "rendererStatusReceived";
+      sessionId: number;
+      status: CinematicRendererStatus;
+    }
   | { type: "cutSelected" | "seeked"; frame: CinematicFrame }
   | { type: "framePublished" | "restartRequested"; frame: CinematicFrame }
   | { type: "playRequested" }
@@ -24,6 +29,7 @@ export function initialCinematicDirectorState(
   frame: CinematicFrame,
 ): CinematicDirectorState {
   return {
+    sessionId: 0,
     frame,
     playback: "paused",
     audioStart: { state: "idle" },
@@ -41,11 +47,13 @@ export function reduceCinematicDirector(
     case "sessionStarted":
       return {
         ...state,
+        sessionId: state.sessionId + 1,
         frame: event.frame,
         audioStart: { state: "idle" },
         status: initialCinematicDirectorState(event.frame).status,
       };
     case "rendererStatusReceived":
+      if (event.sessionId !== state.sessionId) return state;
       return { ...state, status: event.status };
     case "cutSelected":
     case "seeked":
