@@ -58,3 +58,18 @@ test('discovery requests a location separately and preserves the experience', as
   await page.getByRole('button',{name:'Find routes',exact:true}).click();
   await expect(page.getByRole('textbox',{name:'Near where?'})).toHaveValue('Brighton');
 });
+
+test('a phone list view does not download the map runtime until the map is shown', async ({ page }) => {
+  const scripts: string[] = [];
+  page.on('request', (request) => {
+    if (request.resourceType() === 'script') scripts.push(request.url());
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/#/finder?place=beach&activity=Run&distance=20&q=beach');
+  await expect(page.getByRole('article')).toHaveCount(2);
+  await page.waitForLoadState('networkidle');
+  expect(scripts.filter((url) => url.includes('maplibre'))).toEqual([]);
+  await page.getByRole('button', { name: 'Map', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Finder route map' })).toHaveAttribute('data-map-status', 'ready');
+  expect(scripts.some((url) => url.includes('maplibre'))).toBe(true);
+});

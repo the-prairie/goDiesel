@@ -518,3 +518,19 @@ for (const width of [320, 390, 768, 1280]) {
     await page.screenshot({ path: `e2e/evidence/field-notes-independent/routes-fixed-${width}.png` });
   });
 }
+
+test("the library renders without downloading the map runtime and reserves cover space", async ({ page }) => {
+  const scripts: string[] = [];
+  page.on("request", (request) => {
+    if (request.resourceType() === "script") scripts.push(request.url());
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#/routes");
+  await expect(routeCards(page).first()).toBeVisible();
+  const media = routeCards(page).first().locator(".field-note-link > :first-child");
+  const coverBefore = (await media.boundingBox())!;
+  await expect(routeCards(page).first().locator(".route-cover-image")).toBeVisible();
+  const coverAfter = (await media.boundingBox())!;
+  expect(coverAfter).toEqual(coverBefore);
+  expect(scripts.filter((url) => url.includes("maplibre"))).toEqual([]);
+});

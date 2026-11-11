@@ -655,7 +655,7 @@
         "app/src/ui/planning-map-state.test.ts"
       ],
       "adapters": [
-        "app/src/ui/planning-route-map.tsx"
+        "app/src/ui/planning-route-map-canvas.tsx"
       ],
       "states": [
         "loading",
