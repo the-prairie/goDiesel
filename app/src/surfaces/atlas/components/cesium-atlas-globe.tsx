@@ -221,6 +221,8 @@ export const CesiumAtlasGlobe = forwardRef<
           </button>
         ))}
       </div>
+      {/* Statuses sit above the open tray (places or routes) and the world's
+          credits on it, and clear of the map controls on phones. */}
       {status.state === "loading" || status.state === "region-loading" ? (
         <div
           role="status"
@@ -237,7 +239,7 @@ export const CesiumAtlasGlobe = forwardRef<
         <div
           role="status"
           aria-live="polite"
-          className="pointer-events-none absolute bottom-24 left-4 z-20 max-w-sm border border-white/25 bg-surface px-3 py-2 text-xs text-ink shadow-lg xl:left-5"
+          className="pointer-events-none absolute bottom-[calc(var(--atlas-tray-height,12rem)+2.75rem)] left-4 right-[4.75rem] z-20 border border-white/25 bg-surface px-3 py-2 text-xs text-ink shadow-lg md:right-auto md:max-w-sm xl:left-5"
         >
           {status.message} Search and navigation remain available.
         </div>
