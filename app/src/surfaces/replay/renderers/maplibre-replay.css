@@ -36,3 +36,10 @@
     background-repeat: no-repeat;
   }
 }
+
+/* The replay map spans to the screen's right edge, so its corner controls and
+   attribution add the right safe-area inset (0 without a notch). */
+.replay-atlas-map .maplibregl-ctrl-top-right,
+.replay-atlas-map .maplibregl-ctrl-bottom-right {
+  right: var(--safe-area-right);
+}

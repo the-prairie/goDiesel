@@ -388,7 +388,7 @@ function CoursePreviewStage({
         </div>
       </header>
       {!ready ? (
-        <div className="pointer-events-none absolute inset-0 z-30 grid place-items-center p-6">
+        <div className="pointer-events-none absolute inset-0 z-30 grid place-items-center pt-[calc(1.5rem+var(--safe-area-top))] pr-[calc(1.5rem+var(--safe-area-right))] pb-[calc(1.5rem+var(--safe-area-bottom))] pl-[calc(1.5rem+var(--safe-area-left))]">
           <div
             className="pointer-events-auto max-w-sm rounded-[var(--radius-panel)] border border-line bg-surface p-5 text-center"
             role={status.state === "unavailable" ? "alert" : "status"}

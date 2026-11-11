@@ -619,8 +619,8 @@ export function RouteIntelligenceLabPage() {
   if (loadState.status === "loading") return <div role="status" className="p-8">Reading both landscapes.</div>;
 
   return (
-    <div className="min-h-full overflow-y-auto bg-[var(--canvas)] text-[var(--ink)]" data-testid="route-intelligence-lab">
-      <header className="sticky top-0 z-20 border-b border-[var(--line)] bg-[var(--surface-map-glass)] backdrop-blur-xl">
+    <div className="min-h-full overflow-y-auto bg-[var(--canvas)] pr-[var(--safe-area-right)] text-[var(--ink)] md:pb-[var(--safe-area-bottom)]" data-testid="route-intelligence-lab">
+      <header className="sticky top-0 z-20 border-b border-[var(--line)] bg-[var(--surface-map-glass)] pt-[var(--safe-area-top)] backdrop-blur-xl">
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-4 px-5 py-4 sm:px-8">
           <div className="flex min-w-0 items-center gap-4">
             <Button asChild aria-label="Back to Atlas" size="icon" variant="ghost">

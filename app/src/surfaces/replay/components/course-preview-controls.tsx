@@ -117,7 +117,7 @@ export function CoursePreviewControls({
           </SheetTrigger>
           <SheetContent
             side="bottom"
-            className="mx-auto max-h-[calc(100dvh-2rem)] w-[min(24rem,100%)] overflow-y-auto rounded-t-[var(--radius-panel)] pb-[env(safe-area-inset-bottom)]"
+            className="mx-auto max-h-[calc(100dvh-2rem)] w-[min(24rem,100%)] overflow-y-auto rounded-t-[var(--radius-panel)]"
           >
             <SheetHeader className="pr-12">
               <SheetTitle>Preview settings</SheetTitle>

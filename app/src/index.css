@@ -729,3 +729,75 @@ a {
   padding-right: var(--safe-area-right);
 }
 /* ---- End shell ---------------------------------------------------------- */
+
+/* ---- Surfaces: safe-area insets ----------------------------------------
+   Surface-owned bars that touch a screen edge add that edge's inset (the
+   shell's --safe-area-* tokens above; 0 without a notch or home indicator) to
+   their own spacing. Atlas reaches the screen's bottom edge only from 768px,
+   where the mobile navigation (which already clears the bottom inset) is
+   gone, so its bottom bars use --atlas-edge-bottom. The tray grows by that
+   inset and pads it, so the map tools, notices and attribution that sit on
+   --atlas-tray-height clear it too. */
+.atlas-layout { --atlas-edge-bottom: 0px; }
+@media (min-width: 768px) {
+  .atlas-layout {
+    --atlas-edge-bottom: var(--safe-area-bottom);
+    --atlas-tray-height: calc(12rem + var(--atlas-edge-bottom));
+  }
+}
+@media (min-width: 768px) and (max-height: 400px) {
+  .atlas-layout { --atlas-tray-height: calc(9rem + var(--atlas-edge-bottom)); }
+}
+.atlas-route-carousel {
+  padding-right: var(--safe-area-right);
+  padding-bottom: var(--atlas-edge-bottom);
+}
+.atlas-route-loading { min-height: calc(var(--atlas-tray-height) - var(--atlas-edge-bottom)); }
+
+.atlas-discovery {
+  top: calc(0.75rem + var(--safe-area-top));
+  right: calc(0.75rem + var(--safe-area-right));
+}
+@media (min-width: 768px) {
+  .atlas-discovery {
+    top: calc(1.25rem + var(--safe-area-top));
+    right: auto;
+    width: min(26rem, calc(100% - 6.5rem - var(--safe-area-right)));
+  }
+}
+
+.atlas-map-tools {
+  right: calc(0.75rem + var(--safe-area-right));
+  bottom: calc(1.5rem + var(--atlas-edge-bottom));
+}
+@media (min-width: 768px) {
+  .atlas-map-tools { right: calc(1.25rem + var(--safe-area-right)); }
+}
+@media (max-height: 700px) {
+  .atlas-layout[data-region-selected="true"] .atlas-discovery {
+    max-width: calc(100% - 5.25rem - var(--safe-area-right));
+  }
+  .atlas-layout[data-region-selected="true"] .atlas-map-tools { top: calc(0.75rem + var(--safe-area-top)); }
+}
+@media (max-height: 500px) {
+  .atlas-layout[data-region-selected="true"] .atlas-discovery {
+    right: calc(10.75rem + var(--safe-area-right));
+  }
+}
+@media (max-height: 400px) {
+  .atlas-layout[data-region-selected="true"] .atlas-map-tools { top: calc(0.5rem + var(--safe-area-top)); }
+}
+
+/* Map attribution and corner controls stay inside the safe area (ADR-0006,
+   ADR-0009). Cesium writes its own inline bottom offset, so the inset is a
+   margin on top of it; with a tray shown the attribution already sits on
+   --atlas-tray-height, which includes the inset. */
+.atlas-layout:not([data-region-selected="true"]):not([data-places-shown="true"]) .cesium-viewer-bottom {
+  margin-bottom: var(--atlas-edge-bottom);
+}
+.atlas-layout .maplibregl-ctrl-bottom-right { right: var(--safe-area-right); }
+.cesium-viewer-bottom.atlas-attribution { max-width: calc(100% - var(--safe-area-right)); }
+@media (min-height: 401px) {
+  .atlas-layout[data-region-selected="true"] .cesium-viewer-bottom { max-width: calc(100% - 5rem - var(--safe-area-right)); }
+}
+/* ---- End surfaces ------------------------------------------------------- */

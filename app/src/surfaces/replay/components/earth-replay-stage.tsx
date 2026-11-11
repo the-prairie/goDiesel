@@ -227,7 +227,7 @@ export function EarthReplayStage({
       />
       <RecordedLightLayer light={recordedLight} reducedMotion={reducedMotion} />
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-4 p-3 sm:p-5">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-4 p-3 pt-[calc(0.75rem+var(--safe-area-top))] pr-[calc(0.75rem+var(--safe-area-right))] sm:p-5 sm:pt-[calc(1.25rem+var(--safe-area-top))] sm:pr-[calc(1.25rem+var(--safe-area-right))]">
         <RouteContextHud
           route={route}
           label={engineMode === "earth" ? "Earth Replay" : "Atlas Replay"}
@@ -334,7 +334,7 @@ export function EarthReplayStage({
       <div className="pointer-events-none relative row-start-2 z-20 flex justify-center">
         <div
           data-testid="replay-controls"
-          className="pointer-events-auto w-full border-t border-line bg-surface/96 p-2 text-ink shadow-sheet backdrop-blur sm:flex sm:items-center sm:gap-2 sm:px-3 sm:py-2"
+          className="pointer-events-auto w-full border-t border-line bg-surface/96 p-2 pr-[calc(0.5rem+var(--safe-area-right))] text-ink shadow-sheet backdrop-blur sm:flex sm:items-center sm:gap-2 sm:px-3 sm:py-2 sm:pr-[calc(0.75rem+var(--safe-area-right))] md:pb-[calc(0.5rem+var(--safe-area-bottom))]"
         >
           {isMobile ? (
           <div className="grid gap-2">
