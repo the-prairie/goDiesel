@@ -227,3 +227,18 @@ for (const viewport of [{ width: 320, height: 640 }, { width: 1280, height: 720 
     expect(world!.y + world!.height).toBeLessThan(playback!.y);
   });
 }
+
+test("changing only ?cut= on the same route opens a fresh stage on the new cut", async ({ page }) => {
+  await installDirector(page);
+  await open(page, "?cut=kinetic");
+  const director = page.getByTestId("cinematic-director");
+  await expect(director).toHaveAttribute("data-cut", "kinetic");
+  await page.getByRole("button", { name: "Play Kinetic" }).click();
+  await expect(page.getByRole("button", { name: "Pause cinematic" })).toBeVisible();
+  await page.evaluate(() => { window.location.hash = "/lab/cinematic-director/14736711660?cut=intimate"; });
+  await expect(director).toHaveAttribute("data-cut", "intimate");
+  await expect(page.getByRole("button", { name: "Intimate Closer" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("cinematic-preroll")).toBeVisible();
+  await expect(director).toHaveAttribute("data-frame-seconds", "0.000");
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { directorFixture: { destroys: number } }).directorFixture.destroys)).toBeGreaterThan(0);
+});
