@@ -1,4 +1,6 @@
 export type ClassifierStatus = {
+  /** Absent from servers that predate the phase field. */
+  phase?: 'idle' | 'running' | 'finished' | 'failed';
   running: boolean;
   total: number;
   done: number;
@@ -12,6 +14,7 @@ type ClassifierNotice =
   | { kind: 'unmapped'; count: number }
   | { kind: 'running'; progress: ClassifierStatus }
   | { kind: 'complete'; progress: ClassifierStatus }
+  | { kind: 'runFailed'; progress: ClassifierStatus }
   | { kind: 'failed' };
 
 export type ClassifierState = {
@@ -57,6 +60,8 @@ export function reduceClassifier(state: ClassifierState, event: ClassifierEvent)
       return { ...state, poll: { phase: 'failed' }, notice: { kind: 'failed' } };
     case 'noticeExpired':
       if (state.pollId !== event.pollId || state.poll.phase !== 'complete' || state.start.phase !== 'idle') return state;
+      // A stopped run stays visible until a new start replaces it.
+      if (state.notice.kind === 'runFailed') return state;
       return { ...state, notice: { kind: 'empty' } };
     case 'statusReceived': {
       if (!classifierAcceptsStatus(state, event.pollId)) return state;
@@ -67,6 +72,9 @@ export function reduceClassifier(state: ClassifierState, event: ClassifierEvent)
           poll: { phase: 'running', lastUpdatedCount: classifierShouldRefresh(state, status) ? status.updated : previous },
           notice: { kind: 'running', progress: status },
         };
+      }
+      if (status.phase === 'failed' && status.total > 0) {
+        return { ...state, poll: { phase: 'complete' }, notice: { kind: 'runFailed', progress: status } };
       }
       return { ...state, poll: { phase: 'complete' }, notice: status.total > 0
         ? { kind: 'complete', progress: status }
@@ -85,6 +93,8 @@ export function classifierPresentation(state: ClassifierState): { text: string; 
       (notice.progress.last_label ? ` · ${notice.progress.last_label}` : ''), active: true };
     case 'complete': return { text: `✓ CLASSIFIED ${notice.progress.updated} / ${notice.progress.total}` +
       (notice.progress.unmapped ? ` · ${notice.progress.unmapped} still unmapped` : ''), active: false };
+    case 'runFailed': return { text: `✕ CLASSIFYING STOPPED EARLY AT ${notice.progress.done} / ${notice.progress.total}` +
+      ' · click AUTO-CLASSIFY to start again', active: false };
   }
 }
 

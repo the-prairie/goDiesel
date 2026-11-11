@@ -55,7 +55,8 @@
     font-size: 12px; letter-spacing: 0.12em; font-weight: 600;
     transition: all 0.12s;
   }
-  .btn:hover { border-color: var(--teal); color: var(--teal); }
+  .btn:hover:not([disabled]) { border-color: var(--teal); color: var(--teal); }
+  .btn[disabled] { opacity: 0.4; cursor: not-allowed; }
   .btn.primary { background: var(--teal); color: #000; border-color: var(--teal); }
   .btn.primary:hover { background: #fff; color: #000; border-color: #fff; }
   .btn.primary[disabled] { opacity: 0.4; cursor: not-allowed; }
@@ -110,6 +111,16 @@
   .classify-status { font-size: 11px; color: var(--text-dim); letter-spacing: 0.08em;
                      padding: 0 8px; font-family: 'JetBrains Mono', 'SF Mono', monospace; }
   .classify-status.active { color: var(--teal); }
+  .rebuild-status { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: -6px 0 12px; }
+  .rebuild-status[hidden], .rebuild-status details[hidden] { display: none; }
+  .rebuild-status .classify-status { padding: 0; overflow-wrap: anywhere; }
+  .classify-status.failed { color: var(--reject); }
+  .rebuild-status summary { cursor: pointer; font-size: 11px; color: var(--text-dim); letter-spacing: 0.08em;
+                            font-family: 'JetBrains Mono', 'SF Mono', monospace; }
+  .rebuild-status details[open] { flex-basis: 100%; }
+  .rebuild-status pre { margin: 6px 0 0; max-height: 200px; overflow: auto; white-space: pre-wrap;
+                        overflow-wrap: anywhere; font-size: 11px; color: var(--text); background: var(--bg-card);
+                        border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
 
   main { padding: 20px 28px 120px; }
   .grid {
@@ -320,6 +331,13 @@
       </button>
     </div>
   </div>
+  <div class="rebuild-status" id="rebuildStatus" hidden>
+    <span class="classify-status" id="rebuildStatusText"></span>
+    <details id="rebuildDetails" hidden>
+      <summary>SHOW STDERR</summary>
+      <pre id="rebuildStderr"></pre>
+    </details>
+  </div>
 
   <div class="tabs">
     <button class="tab active" data-tab="pending">PENDING <span class="count" id="cPending">0</span></button>
@@ -360,7 +378,7 @@
 <script type="module">
 import { initialClassifierState, reduceClassifier, classifierPresentation, classifierShouldRefresh, classifierBusy, classifierAcceptsStatus } from "/admin-assets/classifier-state.js";
 import { escapeHtml } from "/admin-assets/presentation.js";
-import { initialMutationState, reduceMutation } from "/admin-assets/mutation-state.js";
+import { initialMutationState, reduceMutation, rebuildBusy, rebuildPresentation } from "/admin-assets/mutation-state.js";
 
 let mutation = initialMutationState();
 let mutationRequestId = 0;
@@ -391,6 +409,16 @@ function effectiveRegion(r) {
 function effectiveField(r, key) {
   const patch = mutation.dirty.get(r.activity_id);
   return patch?.[key] ?? r[key] ?? '';
+}
+
+function routeIsDirty(id) {
+  return mutation.dirty.has(id);
+}
+
+// Edits do not re-render the grid, to keep the cursor, so the edited card's
+// dirty class is updated in place from reducer state.
+function renderCardDirty(card) {
+  card.classList.toggle('dirty', routeIsDirty(card.dataset.id));
 }
 
 function setPatch(id, key, value) {
@@ -475,7 +503,7 @@ function cardHtml(r) {
   const blurb = effectiveField(r, 'blurb');
   const completionRule = effectiveField(r, 'completion_rule');
   const visibility = effectiveField(r, 'visibility') || 'public';
-  const dirty = mutation.dirty.has(r.activity_id);
+  const dirty = routeIsDirty(r.activity_id);
   const stravaUrl = `https://www.strava.com/activities/${r.activity_id}`;
   const placeholder = r.auto_region
     ? `auto: ${r.auto_region}`
@@ -638,14 +666,12 @@ document.addEventListener('input', e => {
   if (e.target.classList.contains('region-input')) {
     const id = e.target.dataset.regionFor;
     setPatch(id, 'region', e.target.value);
-    // Don't re-render — just mark card dirty
-    e.target.closest('.card').classList.add('dirty');
+    renderCardDirty(e.target.closest('.card'));
   }
   if (e.target.dataset.metaField && e.target.dataset.metaFor) {
     const id = e.target.dataset.metaFor;
     setPatch(id, e.target.dataset.metaField, e.target.value);
-    // Don't re-render while editing text — preserve cursor position.
-    e.target.closest('.card').classList.add('dirty');
+    renderCardDirty(e.target.closest('.card'));
   }
 });
 
@@ -657,17 +683,23 @@ document.addEventListener('change', e => {
   if (e.target.dataset.metaField && e.target.dataset.metaFor) {
     const id = e.target.dataset.metaFor;
     setPatch(id, e.target.dataset.metaField, e.target.value);
-    e.target.closest('.card').classList.add('dirty');
+    renderCardDirty(e.target.closest('.card'));
   }
 });
 
-function showToast(msg, color) {
+let toastTimer = null;
+function showToast(msg, color, duration = 2200) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.style.borderColor = color || 'var(--teal)';
   t.style.color = color || 'var(--teal)';
   t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2200);
+  // An earlier toast's timer must not hide a newer, longer message.
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toastTimer = null;
+    t.classList.remove('show');
+  }, duration);
 }
 
 document.getElementById('saveBtn').addEventListener('click', async () => {
@@ -685,11 +717,16 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
       body: JSON.stringify({routes: updates}),
     });
     const j = await r.json();
+    const reason = r.status === 409 && typeof j?.reason === 'string' ? j.reason : null;
     if (j.ok) {
       dispatchMutation({ type: 'saveAccepted', requestId });
       renderSaveBar();
       await refreshRoutes();
       showToast(`SAVED ${j.updated} CHANGE${j.updated === 1 ? '' : 'S'}`);
+    } else if (reason) {
+      // The draft stays dirty: only saveAccepted clears submitted fields.
+      showToast(`SAVE FAILED — ${reason}`, 'var(--reject)', 6000);
+      checkRebuildStatus();
     } else {
       showToast('SAVE FAILED', 'var(--reject)');
     }
@@ -701,21 +738,103 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
   }
 });
 
+// === Rebuild ===
+let rebuildPollTimer = null;
+let rebuildFadeTimer = null;
+let rebuildController = null;
+
+function renderRebuild() {
+  const { text, active, failed, detail } = rebuildPresentation(mutation.rebuild);
+  document.getElementById('rebuildStatus').hidden = !text;
+  const label = document.getElementById('rebuildStatusText');
+  label.textContent = text;
+  label.classList.toggle('active', active);
+  label.classList.toggle('failed', failed);
+  const details = document.getElementById('rebuildDetails');
+  details.hidden = !detail;
+  if (!detail) details.open = false;
+  document.getElementById('rebuildStderr').textContent = detail || '';
+  document.getElementById('rebuildBtn').toggleAttribute('disabled', rebuildBusy(mutation.rebuild));
+}
+
+function stopRebuildPoll() {
+  if (rebuildPollTimer) clearTimeout(rebuildPollTimer);
+  rebuildPollTimer = null;
+  rebuildController?.abort();
+  rebuildController = null;
+}
+
+function dispatchRebuild(event) {
+  const before = mutation.rebuild;
+  dispatchMutation(event);
+  const after = mutation.rebuild;
+  renderRebuild();
+  if (after === before) return;
+  if (rebuildFadeTimer) clearTimeout(rebuildFadeTimer);
+  rebuildFadeTimer = null;
+  if (after.phase === 'running') followRebuild();
+  else stopRebuildPoll();
+  if (after.phase === 'succeeded') {
+    refreshRoutes().catch(() => {});
+    rebuildFadeTimer = setTimeout(() => {
+      rebuildFadeTimer = null;
+      dispatchRebuild({ type: 'rebuildNoticeExpired', id: after.id });
+    }, 8000);
+  }
+}
+
+// Poll the owner status every two seconds while a rebuild runs. A failed check
+// retries: the writer is the only source of the outcome.
+function followRebuild() {
+  stopRebuildPoll();
+  const controller = new AbortController();
+  rebuildController = controller;
+  const tick = async () => {
+    rebuildPollTimer = null;
+    try {
+      const response = await fetch('/api/admin/status', { signal: controller.signal });
+      if (!response.ok) throw new Error('Rebuild check failed');
+      const { rebuild } = await response.json();
+      if (!controller.signal.aborted && rebuild) dispatchRebuild({ type: 'rebuildStatusReceived', rebuild });
+    } catch {}
+    if (!controller.signal.aborted && mutation.rebuild.phase === 'running') rebuildPollTimer = setTimeout(tick, 2000);
+  };
+  rebuildPollTimer = setTimeout(tick, 2000);
+}
+
+// Adopts a rebuild that is already running when nothing is tracked. An older
+// server without the status endpoint or snapshot is ignored.
+async function checkRebuildStatus() {
+  try {
+    const response = await fetch('/api/admin/status');
+    if (!response.ok) return;
+    const { rebuild } = await response.json();
+    if (rebuild) dispatchRebuild({ type: 'rebuildStatusReceived', rebuild });
+  } catch {}
+}
+
 document.getElementById('rebuildBtn').addEventListener('click', async () => {
+  if (rebuildBusy(mutation.rebuild)) return;
   if (mutation.dirty.size > 0) {
     showToast('SAVE FIRST', 'var(--warn)');
     return;
   }
   const requestId = ++mutationRequestId;
-  dispatchMutation({ type: 'rebuildStarted', requestId });
+  dispatchRebuild({ type: 'rebuildRequested', requestId });
+  let reason = null;
   try {
     const response = await fetch('/api/rebuild', { method: 'POST' });
-    if (!response.ok) throw new Error('Rebuild request failed');
-    showToast('REBUILD STARTED — CHECK TERMINAL');
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      reason = typeof body?.reason === 'string' ? body.reason : null;
+      throw new Error('Rebuild request failed');
+    }
+    dispatchRebuild({ type: 'rebuildAccepted', requestId, rebuild: body?.rebuild ?? null });
+    if (!body?.rebuild) showToast('REBUILD STARTED — CHECK TERMINAL');
   } catch (err) {
-    showToast('REBUILD FAILED', 'var(--reject)');
-  } finally {
-    dispatchMutation({ type: 'rebuildSettled', requestId });
+    dispatchRebuild({ type: 'rebuildRefused', requestId });
+    showToast(reason ? `REBUILD REFUSED — ${reason}` : 'REBUILD FAILED', 'var(--reject)', reason ? 6000 : 2200);
+    if (reason) checkRebuildStatus();
   }
 });
 
@@ -807,6 +926,7 @@ document.getElementById('autoClassifyBtn').addEventListener('click', async () =>
 });
 
 // Initial load
+checkRebuildStatus();
 refreshRoutes().then(() => {
   // Check if the server is already classifying in the background.
   pollClassifyStatus();

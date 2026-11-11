@@ -33,6 +33,30 @@ describe('standalone classifier', () => {
     expect(classifierPresentation(state)).toEqual({ text: '✓ CLASSIFIED 7 / 20 · 1 still unmapped', active: false });
     expect(classifierPresentation(reduceClassifier(state, { type: 'noticeExpired', pollId: 1 })).text).toBe('');
   });
+  it('reports a run that the server marks failed as stopped early, not classified', () => {
+    const status = { ...progress(3, false), done: 4, phase: 'failed' as const, unmapped: 2 };
+    expect(classifierShouldRefresh(received(), status)).toBe(true);
+    const failed = reduceClassifier(received(), { type: 'statusReceived', pollId: 1, status });
+    expect(failed.poll.phase).toBe('complete');
+    expect(failed.notice).toEqual({ kind: 'runFailed', progress: status });
+    expect(classifierPresentation(failed)).toEqual({
+      text: '✕ CLASSIFYING STOPPED EARLY AT 4 / 20 · click AUTO-CLASSIFY to start again', active: false });
+    expect(classifierBusy(failed)).toBe(false);
+    expect(reduceClassifier(failed, { type: 'noticeExpired', pollId: 1 })).toBe(failed);
+    expect(reduceClassifier(failed, { type: 'startRequested', requestId: 2 }).start.phase).toBe('starting');
+  });
+  it('keeps the completion notice byte for byte for a finished phase and for a server without phase', () => {
+    for (const phase of ['finished', undefined] as const) {
+      const status = { ...progress(7, false), ...(phase ? { phase } : {}) };
+      const state = reduceClassifier(received(), { type: 'statusReceived', pollId: 1, status });
+      expect(state.notice).toEqual({ kind: 'complete', progress: status });
+      expect(classifierPresentation(state)).toEqual({ text: '✓ CLASSIFIED 7 / 20 · 1 still unmapped', active: false });
+    }
+  });
+  it('treats an idle phase with no work like the legacy idle snapshot', () => {
+    const status = { ...progress(0, false), total: 0, unmapped: 3, phase: 'idle' as const };
+    expect(classifierPresentation(received(status))).toEqual({ text: '3 unmapped — click AUTO-CLASSIFY', active: false });
+  });
   it('shows empty or unmapped idle results without refreshing', () => {
     for (const unmapped of [0, 2]) {
       const status = { ...progress(0, false), total: 0, unmapped };
