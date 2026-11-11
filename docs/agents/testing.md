@@ -96,6 +96,64 @@ GODIESEL_ATLAS_PREVIEW_URL=<preview-url> npm run test:e2e:earth
 The default Playwright configuration serves the app on fixed port 8791 and never reuses an existing server.
 Only one run can exist at a time. Do not start a second Playwright run while one is active.
 
+## Continuous Integration
+
+`.github/workflows/verify.yml` runs on every pull request and on every push to `main`.
+Its only permission is `contents: read`. It uses no secrets and deploys nothing.
+A newer push to a pull request cancels that pull request's running check. On `main`, every commit keeps its verdict.
+
+It has three jobs, each on `ubuntu-24.04`:
+
+| Job | Commands |
+| --- | --- |
+| Python tests | Installs Python 3.12, Node 22, ffmpeg, and `requirements.txt`, then runs `python -m pytest -q --ignore=tmp -p no:cacheprovider -rs -m "not requires_private_export"`. |
+| Typecheck, unit tests, build | `npm --prefix app ci`, `npm --prefix app run typecheck`, `npm --prefix app run test:unit`, `npm --prefix app run build` (no Google key exists there, so the build blanks it), and `npm --prefix app run test:bundle`. |
+| Playwright journeys | `npm --prefix app ci`, `npx playwright install --with-deps chromium` in `app/`, then `npm run test:e2e -- --trace off --reporter=list,html` in `app/`. On failure it uploads `app/playwright-report` and `app/test-results`. |
+
+A green run does not prove two things, and CI says so with a warning and a step summary on every run:
+
+- Python tests marked `requires_private_export` are deselected. They need the private Strava export (`DieselDiaries/activities.csv`), which is not in the repository. Their status is blocked, not passed. With the export present, run them from the repository root:
+
+  ```sh
+  .venv/bin/python -m pytest -q --ignore=tmp -p no:cacheprovider -m requires_private_export
+  ```
+
+- Screenshot comparisons are not checked. The only reviewed baselines are macOS (`-darwin.png`), so `app/playwright.config.ts` sets `ignoreSnapshots` when `CI` is set. Compare them on macOS with `CI` unset. The tests' other assertions still run.
+
+## Google Maps key checks
+
+Two checks answer whether Google rejects the configured Google Maps key. Both ask the Map Tiles API's 3D Tiles root, because on the 3D Maps path Google never tells the page that it rejected a key.
+
+- The runtime preflight, `app/src/providers/google-key-preflight.ts`, runs once per browser session beside the Maps script load. Only an explicit invalid-key answer is reported to Replay.
+- The deploy-time check, `scripts/check-provider-key.mjs`, runs inside `make-dist.sh`. It fails the build when Google answers that the key is invalid.
+
+Neither check contacts Google in tests. `google-key-preflight.test.ts` injects a fake `fetch`, and `test_deployment_command.py` replaces `fetch` inside the checker with a `node --import` preload.
+
+The deploy-time check reads two variables:
+
+- `GODIESEL_REQUIRE_PROVIDER_KEY=1` is for a public deployment. A missing key fails, and a key that cannot be verified (a network failure, a timeout, or another error) fails as "could not verify" instead of warning.
+- `GODIESEL_SKIP_PROVIDER_KEY_VERIFY=1` skips the request to Google, for an offline build. The check prints a warning and still passes. It still checks that the built assets carry the key.
+
+Its output names the key only by its last four characters.
+
+## Responsive, touch, and slow-network pass
+
+This pass is a manual gate. Run it before a release that changes layout, navigation, or loading.
+
+It checks ten viewport widths, touch emulation, slow 3G with CPU throttling, offline, reduced motion, and simulated safe-area insets.
+
+Two specs now pin part of it:
+
+- `e2e/safe-area.spec.ts` simulates phone insets in portrait and landscape by overriding the shell's `--safe-area-*` tokens. It checks that edge bars clear the insets and that the Earth and Atlas Replay dock fits its stage.
+- `e2e/ui-primitives.spec.ts` checks keyboard focus rings, 16 px text fields on touch, and 44 by 44 px Finder icon buttons.
+
+These real-device checks are not automated:
+
+- iOS Safari zooming in on a focused field.
+- Safe-area insets in landscape, and in a home-screen app.
+- How a sheet feels to drag.
+- Pinching during playback.
+
 ## Gate Validity
 
 Record the exact commands and results in the pull request.
