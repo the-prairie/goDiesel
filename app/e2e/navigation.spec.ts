@@ -385,6 +385,31 @@ async function holdAsset(page: import("@playwright/test").Page, pattern: RegExp)
   return release;
 }
 
+for (const [width, staticNav, realNav] of [
+  [390, ".static-shell-tabs", "atlas-spine-mobile"],
+  [900, ".static-shell-rail", "atlas-spine"],
+  [1280, ".static-shell-rail", "atlas-spine"],
+] as const) {
+  test(`the static shell paints before the app's code, with navigation where it will stay (${width}px)`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    const release = await holdAsset(page, /\/assets\/index-[^/]+\.js$/);
+    await page.goto("/#/routes", { waitUntil: "commit" });
+
+    await expect(page.getByText("Opening goDiesel…")).toBeVisible();
+    const placeholder = await page.locator(staticNav).boundingBox();
+    expect(placeholder).not.toBeNull();
+
+    release();
+    const nav = page.getByTestId(realNav);
+    await expect(nav).toBeVisible();
+    await expect(page.locator("[data-static-shell]")).toHaveCount(0);
+    const mounted = await nav.boundingBox();
+    for (const key of ["x", "y", "width", "height"] as const) {
+      expect(Math.abs((mounted?.[key] ?? 0) - (placeholder?.[key] ?? 0))).toBeLessThanOrEqual(1);
+    }
+  });
+}
+
 test("a surface that is still downloading says what is opening, clear of the screen edge", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   for (const [path, chunk, status, ready] of [
