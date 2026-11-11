@@ -603,3 +603,134 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000
     await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
   });
 }
+
+// Google rejects a key after its script has loaded: the engine publishes an
+// unavailable status with reason "authentication", and Google injects its own
+// error dialog (.gm-err-container) into the map host. The stub injects that
+// node with an extreme z-index so it would escape any stacking context that
+// is not isolated. `__GODIESEL_REJECT_KEY__` publishes the rejection.
+async function installKeyRejectedReplay(page: Page) {
+  await installGoogleReplay(page, "ready");
+  await page.addInitScript(() => {
+    const replayWindow = window as unknown as Record<string, unknown>;
+    replayWindow.__GODIESEL_GOOGLE_ROUTE_NAVIGATOR_FACTORY__ = () => ({
+      async mount({ container, onStatus }: {
+        container: HTMLElement;
+        onStatus: (status: { state: string; message: string }, reason?: string) => void;
+      }) {
+        onStatus({ state: "loading", message: "Loading Google photorealistic 3D." });
+        const canvas = document.createElement("canvas");
+        canvas.dataset.renderer = "google-production";
+        canvas.style.cssText = "width:100%;height:100%;background:rgb(30,80,96)";
+        const error = document.createElement("div");
+        error.className = "gm-err-container";
+        error.style.cssText = "position:absolute;inset:0;z-index:2147483647;display:grid;place-items:center;background:#e5e3df;color:#3c4043";
+        error.innerHTML = '<div class="gm-err-content"><div class="gm-err-title">Oops! Something went wrong.</div><div class="gm-err-message">This page didn\'t load Google Maps correctly. See the JavaScript console for technical details.</div></div>';
+        container.replaceChildren(canvas, error);
+        replayWindow.__GODIESEL_REJECT_KEY__ = () => onStatus({
+          state: "unavailable",
+          message: "Google Maps rejected this browser origin. Add the current localhost or preview URL to the key restrictions.",
+        }, "authentication");
+      },
+      readCamera() { return undefined; },
+      setCamera() {}, setFollowing() {}, setGrounding() {}, setCinematicRoute() {}, setRouteReveal() {}, destroy() {},
+    });
+  });
+}
+
+async function rejectKey(page: Page) {
+  await page.evaluate(() => (window as unknown as { __GODIESEL_REJECT_KEY__: () => void }).__GODIESEL_REJECT_KEY__());
+}
+
+/** Proves the injected Google node cannot be seen through or above our overlay. */
+async function expectGoogleErrorOccluded(page: Page) {
+  const report = await page.evaluate(() => {
+    const stage = document.querySelector<HTMLElement>('[data-testid="replay-stage"]')!;
+    const error = stage.querySelector<HTMLElement>(".gm-err-container")!;
+    const host = error.parentElement!;
+    const card = [...stage.querySelectorAll<HTMLElement>('[role="alert"], [role="status"]')].find(element => element.querySelector("h2"))!;
+    const overlay = stage.querySelector<HTMLElement>('[data-testid="replay-provider-backdrop"]') ?? card.parentElement!;
+    const errorBox = error.getBoundingClientRect();
+    const overlayBox = overlay.getBoundingClientRect();
+    const background = getComputedStyle(overlay).backgroundColor;
+    const match = background.match(/\/\s*([\d.]+)(%?)\s*\)$/) ?? background.match(/^rgba\([^)]*,\s*([\d.]+)\)$/);
+    const alpha = background === "transparent" ? 0 : match ? Number(match[1]) / (match[2] === "%" ? 100 : 1) : 1;
+    let element: HTMLElement | null = overlay;
+    let opacity = 1;
+    while (element) { opacity *= Number(getComputedStyle(element).opacity); element = element.parentElement; }
+    return {
+      covers: overlayBox.left <= errorBox.left && overlayBox.top <= errorBox.top
+        && overlayBox.right >= errorBox.right && overlayBox.bottom >= errorBox.bottom,
+      overlayAlpha: alpha * opacity,
+      overlayZ: Number(getComputedStyle(overlay).zIndex),
+      hostIsolated: getComputedStyle(host).isolation === "isolate",
+      background,
+      errorText: error.textContent,
+    };
+  });
+  expect(report.errorText).toContain("Oops! Something went wrong.");
+  expect(report).toMatchObject({ covers: true, overlayAlpha: 1, hostIsolated: true });
+  expect(report.overlayZ).toBeGreaterThan(0);
+}
+
+test("names a key Google rejects after loading and offers Atlas at once", async ({ page }) => {
+  await installKeyRejectedReplay(page);
+  await page.goto("/#/replay/14023448720");
+  const stage = page.getByTestId("replay-stage");
+  await expect(stage).toHaveAttribute("data-state", "loading");
+  const rejectedAt = Date.now();
+  await rejectKey(page);
+  const alert = page.getByRole("alert");
+  await expect(alert).toContainText("Google 3D is unavailable", { timeout: 1_000 });
+  expect(Date.now() - rejectedAt).toBeLessThan(1_000);
+  await expect(alert).toContainText("Google is not serving photorealistic 3D to this site right now.");
+  await expect(alert).not.toContainText(/did not finish loading|API key|key restrictions|origin|localhost|InvalidKeyMapError|Error/i);
+  const atlas = alert.getByRole("button", { name: "Use Atlas replay", exact: true });
+  await expect(atlas).toBeVisible();
+  await atlas.click();
+  await expect(stage).toHaveAttribute("data-engine", "maplibre-atlas");
+  await expect(page.locator('[data-renderer="atlas-fallback"]')).toBeVisible();
+});
+
+for (const device of [
+  { name: "phone", viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 },
+  { name: "desktop", viewport: { width: 1280, height: 800 }, hasTouch: false, isMobile: false, deviceScaleFactor: 1 },
+]) {
+  test.describe(`Google's injected key error on a ${device.name}`, () => {
+    test.use({ viewport: device.viewport, hasTouch: device.hasTouch, isMobile: device.isMobile, deviceScaleFactor: device.deviceScaleFactor });
+
+    test("never shows through the loading or unavailable overlay", async ({ page }) => {
+      await installKeyRejectedReplay(page);
+      await page.goto("/#/replay/14023448720");
+      await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-state", "loading");
+      await expectGoogleErrorOccluded(page);
+
+      await rejectKey(page);
+      await expect(page.getByRole("alert")).toContainText("Google 3D is unavailable");
+      await expectGoogleErrorOccluded(page);
+      await expect(page.getByTestId("replay-stage").locator("div:has(> .gm-err-container)")).toHaveAttribute("inert", "");
+      await expect(page.locator(".gm-err-container")).toBeHidden();
+      const hit = await page.evaluate(() => {
+        const error = document.querySelector(".gm-err-container")!;
+        const host = error.parentElement!;
+        const box = error.getBoundingClientRect();
+        const leaks: string[] = [];
+        for (let row = 1; row < 6; row++) {
+          for (let column = 1; column < 6; column++) {
+            const x = box.left + box.width * column / 6;
+            const y = box.top + box.height * row / 6;
+            const target = document.elementFromPoint(x, y);
+            if (target && host.contains(target)) leaks.push(`${Math.round(x)},${Math.round(y)}`);
+          }
+        }
+        return {
+          leaks,
+          visible: error.checkVisibility({ visibilityProperty: true, opacityProperty: true }),
+          title: error.querySelector(".gm-err-title")!.checkVisibility({ visibilityProperty: true, opacityProperty: true }),
+        };
+      });
+      expect(hit).toEqual({ leaks: [], visible: false, title: false });
+      await expect(page.getByRole("button", { name: "Use Atlas replay", exact: true })).toBeVisible();
+    });
+  });
+}
