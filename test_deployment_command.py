@@ -163,3 +163,55 @@ def test_public_publish_requires_the_provider_key_and_a_dry_run_does_not(tmp_pat
     assert "make-dist require_key=0 slug=17654151284" in dry.recorded()
     assert "curl" not in dry.recorded()
     assert "wrangler" not in dry.recorded()
+
+
+def route_cli_harness(tmp_path: Path):
+    checkout = tmp_path / "checkout"
+    scripts = checkout / "scripts"
+    scripts.mkdir(parents=True)
+    shutil.copy2(ROOT / "scripts" / "route.sh", scripts / "route.sh")
+    calls = tmp_path / "calls.log"
+    executable(
+        scripts / "publish-route-microsite.sh",
+        f"#!/bin/bash\nfor argument in \"$@\"; do printf '%s\\n' \"$argument\"; done > {calls}\n",
+    )
+    # A stand-in for route_status.py: always publishable, records the slug.
+    (checkout / "route_status.py").write_text(
+        "import sys\n"
+        "def route_status(root, slug):\n"
+        "    return {'publishable': True}\n"
+        "if __name__ == '__main__':\n"
+        "    print('status', sys.argv[1:])\n",
+        encoding="utf-8",
+    )
+    return checkout, calls
+
+
+def test_publish_slug_is_never_executed_as_python(tmp_path: Path):
+    checkout, calls = route_cli_harness(tmp_path)
+    marker = checkout / "INJECTED"
+    # Harmless payload: if the slug were spliced into Python source it would
+    # close the string literal and create a marker file.
+    slug = "x'); open('INJECTED', 'w').write('1'); ('"
+
+    subprocess.run(
+        [str(checkout / "scripts" / "route.sh"), "publish", slug, "kyoto-hills"],
+        cwd=checkout, capture_output=True, text=True, check=False,
+    )
+
+    assert not marker.exists()
+    assert calls.read_text(encoding="utf-8").splitlines()[0] == slug
+
+
+def test_route_publish_passes_replacement_approval_through(tmp_path: Path):
+    checkout, calls = route_cli_harness(tmp_path)
+
+    result = subprocess.run(
+        [str(checkout / "scripts" / "route.sh"), "publish", "17654151284", "kyoto-hills", "--replace-existing"],
+        cwd=checkout, capture_output=True, text=True, check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert calls.read_text(encoding="utf-8").splitlines() == [
+        "17654151284", "kyoto-hills", "--replace-existing",
+    ]
