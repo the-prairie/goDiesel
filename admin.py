@@ -661,6 +661,8 @@ class Handler(BaseHTTPRequestHandler):
                     if manifest_path.exists() else None
                 ),
                 'rebuild': _rebuild_snapshot(),
+                'checkout_root': str(QUESTS),
+                'pid': os.getpid(),
             })
             return
         if path.startswith('/api/polyline/'):

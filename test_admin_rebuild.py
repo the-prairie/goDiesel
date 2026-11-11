@@ -327,3 +327,25 @@ def test_a_build_that_cannot_be_launched_fails_and_frees_the_lock(admin, monkeyp
     assert failed["exit_code"] is None
     assert "no interpreter" in failed["stderr_tail"]
     assert lock_is_free(admin)
+
+
+# ── Status names the serving checkout and process ──
+
+
+def test_status_names_the_serving_checkout_and_process(admin, served):
+    import os
+
+    status, body = request(f"{served}/api/admin/status")
+    assert status == 200
+    assert body["checkout_root"] == str(admin.QUESTS)
+    assert os.path.isabs(body["checkout_root"])
+    assert body["pid"] == os.getpid()
+    assert set(body) == {
+        "writer_available",
+        "mode",
+        "generation_status",
+        "generated_at",
+        "rebuild",
+        "checkout_root",
+        "pid",
+    }
