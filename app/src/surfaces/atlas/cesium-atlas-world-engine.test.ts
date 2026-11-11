@@ -528,20 +528,33 @@ describe("CesiumAtlasWorldEngine mount lifecycle (characterization)", () => {
     expect(h.statuses()).toEqual([LOADING, COULD_NOT_LOAD]);
   });
 
-  it("fails after the viewer exists (current behaviour: selection still flies)", async () => {
+  /** Selection, reset, and route commands an unavailable engine must refuse. */
+  function expectSelectionRefused(h: ReturnType<typeof mountHarness>) {
+    const statuses = h.statuses();
+    const dataset = { ...h.values };
+    const flights = [h.globalFlights.length, h.regionFlights.length];
+    h.viewer()!.useDefaultRenderLoop = false;
+    h.engine.setSelectedRegion(kyoto);
+    h.engine.setSelectedRoute(kyoto.routes[0]);
+    h.engine.setSelectedRegion(undefined);
+    h.engine.resetView();
+    expect(h.statuses()).toEqual(statuses);
+    expect([h.globalFlights.length, h.regionFlights.length]).toEqual(flights);
+    expect(h.viewer()!.useDefaultRenderLoop).toBe(false);
+    expect(h.values).toEqual(dataset);
+  }
+
+  it("keeps a mount that failed after the viewer existed unavailable for selection", async () => {
     vi.stubEnv("VITE_GOOGLE_MAPS_API_KEY", "");
     const h = mountHarness({ imagery: "rejects" });
     await h.mount();
     expect(h.statuses()).toEqual([LOADING, COULD_NOT_LOAD]);
     expect(h.globalFlights).toHaveLength(0);
-    h.viewer()!.useDefaultRenderLoop = false;
-    h.engine.setSelectedRegion(kyoto);
-    expect(h.statuses()).toEqual([LOADING, COULD_NOT_LOAD, KYOTO_LOADING]);
-    expect(h.regionFlights).toHaveLength(1);
-    expect(h.viewer()!.useDefaultRenderLoop).toBe(true);
+    expectSelectionRefused(h);
+    expect(h.statuses()).toEqual([LOADING, COULD_NOT_LOAD]);
   });
 
-  it("suppresses mount readiness after a render error (current behaviour: selection still flies)", async () => {
+  it("suppresses mount readiness after a render error and refuses later selection", async () => {
     vi.stubEnv("VITE_GOOGLE_MAPS_API_KEY", "");
     const h = mountHarness();
     let mounted = false;
@@ -552,14 +565,10 @@ describe("CesiumAtlasWorldEngine mount lifecycle (characterization)", () => {
     await flushMicrotasks();
     expect(mounted).toBe(true);
     expect(h.statuses()).toEqual([LOADING, STOPPED]);
-    h.viewer()!.useDefaultRenderLoop = false;
-    h.engine.setSelectedRegion(kyoto);
-    expect(h.statuses()).toEqual([LOADING, STOPPED, KYOTO_LOADING]);
-    expect(h.regionFlights).toHaveLength(1);
-    expect(h.viewer()!.useDefaultRenderLoop).toBe(true);
+    expectSelectionRefused(h);
   });
 
-  it("reports a render error after readiness (current behaviour: reset still flies)", async () => {
+  it("refuses reset and selection after a render error that follows readiness", async () => {
     const h = mountHarness();
     void h.mount();
     await flushMicrotasks();
@@ -567,8 +576,29 @@ describe("CesiumAtlasWorldEngine mount lifecycle (characterization)", () => {
     await flushMicrotasks();
     h.viewer()!.scene.renderError.raiseEvent();
     expect(h.statuses()).toEqual([LOADING, READY, STOPPED]);
-    h.engine.resetView();
-    expect(h.globalFlights).toHaveLength(2);
+    expectSelectionRefused(h);
+  });
+
+  it("keeps the render error when a region that was loading settles afterwards", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("VITE_GOOGLE_MAPS_API_KEY", "test-key");
+    const tileset = {
+      tilesLoaded: false, allTilesLoaded: new CesiumEvent(), tileFailed: new CesiumEvent(), destroy: vi.fn(),
+    };
+    vi.spyOn(Cesium3DTileset, "fromUrl").mockResolvedValue(tileset as unknown as Cesium3DTileset);
+    const h = mountHarness({ reducedMotion: true });
+    await h.mount();
+    h.engine.setSelectedRegion(kyoto);
+    await flushMicrotasks();
+    h.viewer()!.scene.renderError.raiseEvent();
+    h.regionFlights[0].complete!();
+    tileset.allTilesLoaded.raiseEvent();
+    await flushMicrotasks();
+    for (let i = 0; i < 8; i++) tileset.tileFailed.raiseEvent();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(h.statuses()).toEqual([LOADING, READY, KYOTO_LOADING, STOPPED]);
+    h.engine.destroy();
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("drops a mount that is destroyed while imagery loads", async () => {

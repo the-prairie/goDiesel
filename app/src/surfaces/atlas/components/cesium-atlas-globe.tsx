@@ -53,6 +53,10 @@ export const CesiumAtlasGlobe = forwardRef<
     const engine = createAtlasWorldEngine();
     engineRef.current = engine;
     const engineId = ++engineSequenceRef.current;
+    // Readiness is the engine's published phase, not "mount resolved": a mount
+    // that resolves after reporting `unavailable` (a failed load or a render
+    // error) never receives selection, and a later `unavailable` withdraws it.
+    let unavailable = false;
     onPresentationEvent({ type: "engineStarted", engineId });
     void engine
       .mount({
@@ -60,6 +64,10 @@ export const CesiumAtlasGlobe = forwardRef<
         regions,
         onSelectRoute: (route) => onSelectRouteRef.current?.(route),
         onStatus: (nextStatus) => {
+          if (nextStatus.state === "unavailable") {
+            unavailable = true;
+            if (readyEngineRef.current === engine) readyEngineRef.current = undefined;
+          }
           onPresentationEvent({
             type: "engineStatusReceived",
             engineId,
@@ -68,7 +76,7 @@ export const CesiumAtlasGlobe = forwardRef<
         },
       })
       .then(() => {
-        if (engineRef.current === engine) {
+        if (engineRef.current === engine && !unavailable) {
           readyEngineRef.current = engine;
           engine.setSelectedRegion(selectedRegionRef.current);
           engine.setSelectedRoute(selectedRouteRef.current);

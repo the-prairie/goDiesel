@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   atlasCameraPoseIntent,
   atlasCameraState,
+  atlasEngineAcceptsSelection,
   atlasEngineDataset,
   atlasEngineHasViewer,
   atlasEngineRunIsCurrent,
@@ -214,5 +215,34 @@ describe("Atlas world engine state", () => {
       framing: { rangeM: 42_000, sphereRadiusM: 1, pitchRadians: -1.02 },
     });
     expect(atlasCameraPoseIntent(superseded, framed)).toEqual({ cameraTarget: "42000" });
+  });
+
+  it.each([
+    ["a mount failure after the viewer", [...attached, { type: "mountFailed", operationId: 1 }]],
+    ["a render error during mount", [...attached, { type: "renderFailed", operationId: 1 }]],
+    ["a render error after readiness", [...mounted, { type: "renderFailed", operationId: 1 }]],
+  ] as const)("is terminal for selection after %s", (_name, events) => {
+    const unavailable = run([...events]);
+    expect(atlasEngineHasViewer(unavailable)).toBe(true);
+    expect(atlasEngineAcceptsSelection(unavailable)).toBe(false);
+    for (const event of [
+      kyoto,
+      { type: "selectionCleared", durationMs: 600 },
+      { type: "globalViewRequested", durationMs: 600 },
+      { type: "globalViewRestored", regionalOperationId: 0 },
+      { type: "routeSelected", slug: "a" },
+    ] as const) {
+      expect(reduceAtlasWorldEngine(unavailable, event)).toBe(unavailable);
+    }
+    expect(unavailable.status?.state).toBe("unavailable");
+  });
+
+  it("drops regional outcomes that arrive after a render error", () => {
+    const loading = run([...mounted, kyoto]);
+    const failed = reduceAtlasWorldEngine(loading, { type: "renderFailed", operationId: 1 });
+    expect(atlasRegionIsCurrent(failed, 1)).toBe(false);
+    expect(reduceAtlasWorldEngine(failed, {
+      type: "regionalOutcome", event: { type: "transitionSettled", operationId: 1, terrainReady: true },
+    })).toBe(failed);
   });
 });

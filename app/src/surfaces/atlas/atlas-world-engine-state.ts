@@ -146,13 +146,23 @@ export function atlasEngineHasViewer(state: AtlasWorldEngineState) {
   }
 }
 
+/**
+ * Whether the engine may start or continue camera, region, and route work.
+ * `unavailable` is terminal for selection: a failed mount or a render error
+ * keeps its message, and the viewer it may still own is never driven again.
+ */
+export function atlasEngineAcceptsSelection(state: AtlasWorldEngineState) {
+  return state.mount.phase === "ready" ||
+    (state.mount.phase === "mounting" && state.mount.viewer);
+}
+
 /** Whether outcomes captured for a regional operation still belong to it. */
 export function atlasRegionIsCurrent(
   state: AtlasWorldEngineState,
   regionalOperationId: number,
 ) {
   return regionalOperationIsCurrent(state.regional, regionalOperationId) &&
-    atlasEngineHasViewer(state);
+    atlasEngineAcceptsSelection(state);
 }
 
 /**
@@ -247,7 +257,7 @@ export function reduceAtlasWorldEngine(
         : ready;
     }
     case "globalViewRequested":
-      if (!atlasEngineHasViewer(state)) return state;
+      if (!atlasEngineAcceptsSelection(state)) return state;
       return startGlobalFlight(state, event.durationMs);
     case "globalFlightSettled":
       if (state.camera.state !== "flying" || state.camera.flightId !== event.flightId) {
@@ -258,11 +268,11 @@ export function reduceAtlasWorldEngine(
       if (
         state.regional.operationId !== event.regionalOperationId ||
         state.regional.status !== "global" ||
-        !atlasEngineHasViewer(state)
+        !atlasEngineAcceptsSelection(state)
       ) return state;
       return announce(state, { state: "ready", message: MESSAGES.ready });
     case "regionSelected":
-      if (!atlasEngineHasViewer(state)) return state;
+      if (!atlasEngineAcceptsSelection(state)) return state;
       return announce({
         ...state,
         regional: reduceRegionalTransition(state.regional, {
@@ -278,7 +288,7 @@ export function reduceAtlasWorldEngine(
         message: `Loading ${event.regionName} terrain`,
       });
     case "selectionCleared": {
-      if (!atlasEngineHasViewer(state)) return state;
+      if (!atlasEngineAcceptsSelection(state)) return state;
       const alreadyGlobal = atlasGlobeIsSettled(state);
       const cleared: AtlasWorldEngineState = {
         ...state,
@@ -297,6 +307,7 @@ export function reduceAtlasWorldEngine(
       if (!atlasRegionIsCurrent(state, event.regionalOperationId)) return state;
       return { ...state, framing: event.framing, flightDurationMs: event.durationMs };
     case "routeSelected":
+      if (state.mount.phase === "unavailable") return state;
       return {
         ...state,
         routeSlug: event.slug,
@@ -305,7 +316,7 @@ export function reduceAtlasWorldEngine(
           : state.selectedRouteAttribute,
       };
     case "regionalOutcome": {
-      if (!atlasEngineHasViewer(state)) return state;
+      if (!atlasEngineAcceptsSelection(state)) return state;
       const regional = reduceRegionalTransition(state.regional, event.event);
       if (regional === state.regional) return state;
       const next = { ...state, regional };
