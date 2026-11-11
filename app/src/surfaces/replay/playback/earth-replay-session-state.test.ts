@@ -133,4 +133,16 @@ describe("Earth Replay session", () => {
       { type: "statusReceived", sessionId: 2, status: { state: "ready", title: "Atlas", message: "Ready" } });
     expect(state.status).toMatchObject({ state: "ready", title: "Atlas" });
   });
+
+  it.each([["earth", "atlas", "Opening Atlas replay"], ["atlas", "earth", "Building your route world"]] as const)(
+    "resets provider status when switching %s to %s so mode and status agree",
+    (from, to, title) => {
+      const state = transition(initialEarthReplaySessionState(from),
+        { type: "rendererMounted", routeSlug: "city" },
+        { type: "statusReceived", sessionId: 1, status: { state: "partial", title: "Old", message: "Old engine" } },
+        { type: "rendererSelected", mode: to });
+      expect(state).toMatchObject({ engineMode: to, status: { state: "loading", title } });
+      expect(reduceEarthReplaySession(state, { type: "frameElapsed", elapsedSeconds: 1, totalDistanceM: 1000 })).toBe(state);
+    },
+  );
 });

@@ -105,6 +105,7 @@ export function ReplayPage() {
       }
     >
       <EarthReplayStage
+        key={`${detail.route.slug}:${surfaceKind}`}
         route={detail.route}
         pickerRoutes={pickerRoutes}
         backPath={backPath}

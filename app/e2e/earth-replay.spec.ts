@@ -897,3 +897,38 @@ for (const viewport of [
     }
   });
 }
+
+test("Replay renderer follows the URL on the same route", async ({ page }) => {
+  await installReplayStatusEngines(page, "partial");
+  await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
+  const replay = page.getByTestId("replay-stage");
+  const modes = () =>
+    page.evaluate(() => (window as typeof window & { __replayModes?: string[] }).__replayModes);
+  const earthSwitch = page.getByRole("button", { name: "Try Earth replay" });
+  await expect(replay).toHaveAttribute("data-engine", "cesium-bundled");
+  await expect(replay).toHaveAttribute("data-state", "partial");
+
+  await page.evaluate((slug) => {
+    window.location.hash = `#/replay/${slug}?renderer=atlas`;
+  }, routeSlug);
+  await expect(replay).toHaveAttribute("data-engine", "maplibre-atlas");
+  await expect(replay).toHaveAttribute("data-state", "ready");
+  await expect(page.getByText("Atlas Replay", { exact: true })).toBeVisible();
+  await expect(earthSwitch).toHaveCount(0);
+  await expect.poll(modes).toEqual(["earth", "atlas"]);
+
+  await page.goBack();
+  await expect(page).toHaveURL(/renderer=cesium/);
+  await expect(replay).toHaveAttribute("data-engine", "cesium-bundled");
+  await expect(replay).toHaveAttribute("data-state", "partial");
+  await expect.poll(modes).toEqual(["earth", "atlas", "earth"]);
+  await page.getByRole("button", { name: "Use Atlas replay" }).click();
+  await expect(replay).toHaveAttribute("data-engine", "maplibre-atlas");
+  await expect(earthSwitch).toBeVisible();
+
+  await page.goForward();
+  await expect(page).toHaveURL(/renderer=atlas/);
+  await expect(replay).toHaveAttribute("data-engine", "maplibre-atlas");
+  await expect(earthSwitch).toHaveCount(0);
+  await expect.poll(modes).toEqual(["earth", "atlas", "earth", "atlas", "atlas"]);
+});

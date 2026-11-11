@@ -66,7 +66,9 @@ export function reduceEarthReplaySession(
 ): EarthReplaySessionState {
   switch (event.type) {
     case "rendererSelected":
-      return state.engineMode === event.mode ? state : { ...state, engineMode: event.mode };
+      return state.engineMode === event.mode
+        ? state
+        : { ...state, engineMode: event.mode, status: initialStatus(event.mode) };
     case "rendererMounted":
       return {
         ...state,

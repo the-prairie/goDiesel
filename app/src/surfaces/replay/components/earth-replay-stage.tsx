@@ -112,11 +112,6 @@ export function EarthReplayStage({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const routeChanged = sessionRef.current.routeSlug !== route.slug;
-    if (routeChanged && engineMode !== initialEngineMode) {
-      dispatchSession({ type: "rendererSelected", mode: initialEngineMode });
-      return;
-    }
     const engine = createReplayEngine(engineMode);
     engineRef.current = engine;
     const { sessionId } = dispatchSession({ type: "rendererMounted", routeSlug: route.slug });
@@ -135,7 +130,7 @@ export function EarthReplayStage({
       engine.destroy();
       if (engineRef.current === engine) engineRef.current = undefined;
     };
-  }, [dispatchSession, engineMode, initialEngineMode, route]);
+  }, [dispatchSession, engineMode, route]);
 
   useEffect(() => {
     if (!operational || !control.playing) return;
