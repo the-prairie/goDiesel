@@ -370,9 +370,11 @@ test("an unknown link says so inside the shell and offers a way to Atlas", async
   // Not silently redirected, and the navigation stays.
   await expect(page).toHaveURL(/#\/finderr$/);
   await expect(page.getByTestId("atlas-spine-mobile")).toBeVisible();
+  await expect(page).toHaveTitle("Page not found · goDiesel");
 
   await page.getByRole("link", { name: "Open Atlas" }).click();
   await expect(page).toHaveURL(/#\/atlas$/);
+  await expect(page).toHaveTitle("Atlas · goDiesel");
 });
 
 /** Holds the matching asset until `release` is called. */
@@ -407,4 +409,9 @@ test("a surface that is still downloading says what is opening, clear of the scr
     await expect(page.getByRole("heading", { name: ready })).toBeVisible();
     await page.unrouteAll({ behavior: "ignoreErrors" });
   }
+});
+
+test("the page may draw under the notch and home indicator", async ({ page }) => {
+  await page.goto("/#/atlas");
+  await expect(page.locator('meta[name="viewport"]')).toHaveAttribute("content", /viewport-fit=cover/);
 });

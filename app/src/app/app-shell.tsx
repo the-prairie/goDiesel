@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import { Outlet, useLocation, useMatches } from "react-router-dom";
 
 import { AtlasSpine } from "@/surfaces/atlas/components/atlas-spine";
@@ -7,6 +7,7 @@ import { APP_PATHS } from "@/app/route-paths";
 import { appSectionForPath } from "@/app/app-sections";
 import {
   SurfacePlaceholder,
+  surfaceDocumentTitle,
   surfaceOfHandle,
 } from "@/app/surface-placeholder";
 import { cn } from "@/ui/utils";
@@ -30,6 +31,11 @@ export function AppShell() {
   const isUtility = section.id === "admin";
   const surface = surfaceOfHandle(useMatches().at(-1)?.handle);
 
+  // The tab names the surface, so history and tab lists are legible.
+  useEffect(() => {
+    document.title = surfaceDocumentTitle(surface);
+  }, [surface]);
+
   return (
     <div className="weathered-atlas field-guide-theme relative flex min-h-dvh bg-background text-foreground">
       {singleRouteMicrosite ? null : <AtlasSpine />}
@@ -45,7 +51,7 @@ export function AppShell() {
         {isUtility ? (
           <header
             data-testid="app-header"
-            className="sticky top-0 z-[var(--z-map-controls)] flex h-14 items-center gap-3 border-b border-line bg-surface/94 px-4 backdrop-blur sm:px-6"
+            className="sticky top-0 z-[var(--z-map-controls)] flex h-[calc(3.5rem+var(--safe-area-top))] items-center gap-3 border-b border-line bg-surface/94 px-4 pt-[var(--safe-area-top)] backdrop-blur sm:px-6"
           >
             <div className="min-w-0 flex-1">
               <div
