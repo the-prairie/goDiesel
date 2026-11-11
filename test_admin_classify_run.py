@@ -12,7 +12,8 @@ def load_admin(tmp_path, monkeypatch):
     inputs.mkdir()
     (inputs / "activities.csv").write_text("Activity Date,Filename,Distance\n")
     (tmp_path / "quests.json").write_text('{"routes": []}\n')
-    (tmp_path / ".geo_cache.json").write_text("{}\n")
+    if not (tmp_path / ".geo_cache.json").exists():
+        (tmp_path / ".geo_cache.json").write_text("{}\n")
     monkeypatch.setenv("GODIESEL_CHECKOUT_ROOT", str(tmp_path))
     monkeypatch.setenv("GODIESEL_DIESEL_DIARIES_ROOT", str(inputs))
     monkeypatch.setenv("GODIESEL_TRAVEL_ROOT", str(inputs))
