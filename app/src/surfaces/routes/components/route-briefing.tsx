@@ -1,6 +1,6 @@
 import { Flag, Mountain, Route as RouteIcon } from "lucide-react";
 
-import type { QuestRoute } from "@/domain/route";
+import { climbLabel, type QuestRoute } from "@/domain/route";
 import {
   elevationRange,
   projectRouteGeometry,
@@ -63,7 +63,7 @@ export function RouteBriefing({ route }: { route: QuestRoute }) {
               Elevation character
             </span>
             <span className="text-xs text-muted-foreground">
-              {route.elevationGainM.toLocaleString()} m total climb
+              {climbLabel(route, "m total climb")}
             </span>
           </figcaption>
           {hasGeometry ? (

@@ -1,7 +1,7 @@
 // Primitives shared by both parse tiers (ADR-0004).
 
 import type { RouteLifecycle } from "@/domain/route/lifecycle";
-import type { GeneratedQuestRoute, RoutePoint } from "@/domain/route/contract";
+import type { GeneratedQuestRoute, RouteElevationStatus, RoutePoint } from "@/domain/route/contract";
 
 export const curationFields = [
   "vibe",
@@ -51,7 +51,16 @@ export function requiredSlug(input: GeneratedQuestRoute, context: string) {
   return slug;
 }
 
-export function parsedRoutePoints(value: unknown) {
+/**
+ * A route whose source recorded no elevation carries `elev: null` points. The
+ * renderers need a number, so such a point parses as 0; the status, not the
+ * point, tells presentation that the height is unknown. A null elevation on a
+ * recorded route is still a malformed point.
+ */
+export function parsedRoutePoints(
+  value: unknown,
+  elevationStatus: RouteElevationStatus = "recorded",
+) {
   if (!Array.isArray(value) || value.length < 2) {
     return { points: [] as RoutePoint[], status: "missing" as const };
   }
@@ -67,7 +76,12 @@ export function parsedRoutePoints(value: unknown) {
         : undefined;
     const lat = source ? numberValue(source.lat, Number.NaN) : Number.NaN;
     const lng = source ? numberValue(source.lng, Number.NaN) : Number.NaN;
-    const elev = source ? numberValue(source.elev, Number.NaN) : Number.NaN;
+    const elev =
+      source?.elev === null && elevationStatus === "unavailable"
+        ? 0
+        : source
+          ? numberValue(source.elev, Number.NaN)
+          : Number.NaN;
     const d = source ? numberValue(source.d, Number.NaN) : Number.NaN;
     const rawElapsed = source?.elapsed_s;
     const elapsedS =

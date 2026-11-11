@@ -6,6 +6,7 @@ import { Link, useLocation } from "react-router-dom";
 import { RouteThread } from "@/ui/route-card";
 import { Button } from "@/ui/button";
 import type { DiscoveryCandidate, PlannedRoute } from "@/domain/planning";
+import { climbLabel, recordedClimbM } from "@/domain/route";
 import { cn } from "@/ui/utils";
 import { APP_PATHS, routeDetailPath } from "@/app/route-paths";
 
@@ -38,7 +39,7 @@ export function CandidateRoute({
         <div className="min-w-0 flex-1">
           <p className="text-xs text-ink-muted">{route.region}</p>
           <h3 className="mt-1 text-base font-medium leading-snug">{candidate.displayTitle ?? `${route.distanceKm.toFixed(1)} km ${route.type.toLowerCase()} in ${route.region.split(",")[0]}`}</h3>
-          <p className="mt-2 text-sm text-ink-secondary">{route.distanceKm.toFixed(1)} km <span className="px-1 text-ink-muted">·</span> {route.elevationGainM.toLocaleString()} m up</p>
+          <p className="mt-2 text-sm text-ink-secondary">{route.distanceKm.toFixed(1)} km <span className="px-1 text-ink-muted">·</span> {climbLabel(route)}</p>
         </div>
         <div aria-hidden="true" className="finder-result-cover size-20 shrink-0 overflow-hidden rounded-lg"><RouteCover route={route} /></div>
       </div>
@@ -88,7 +89,7 @@ export function CandidateRoute({
 
         <dl className={cn("grid grid-cols-3 gap-px overflow-hidden border border-line bg-line text-sm", compact && "text-xs")}>
           <Metric label="Distance" value={`${route.distanceKm.toFixed(1)} km`} />
-          <Metric label="Climb" value={`${route.elevationGainM.toLocaleString()} m`} />
+          <Metric label="Climb" value={recordedClimbM(route) === null ? "Not recorded" : `${route.elevationGainM.toLocaleString()} m`} />
           <Metric label="Activity" value={route.type} />
         </dl>
 

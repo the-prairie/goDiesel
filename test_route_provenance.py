@@ -1,9 +1,12 @@
 from datetime import UTC, datetime, timedelta
+import json
+from pathlib import Path
 
 from route_provenance import (
     SourceRoutePoint,
     build_route_provenance,
     load_source_route_points,
+    published_route_provenance,
     source_point_from_fit_fields,
 )
 from route_timezones import route_time_zone
@@ -133,6 +136,127 @@ def test_gpx_loader_preserves_timestamps_and_segment_boundaries(tmp_path):
     assert points[0].timestamp == datetime(2025, 11, 26, 21, 21, 5, tzinfo=UTC)
 
 
+def _gpx(tmp_path, name: str, points: str):
+    gpx = tmp_path / name
+    gpx.write_text(
+        f"""<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="goDiesel">
+  <trk><trkseg>
+{points}
+  </trkseg></trk>
+</gpx>"""
+    )
+    return gpx
+
+
+def test_gpx_without_elevation_is_unavailable_not_zero(tmp_path):
+    gpx = _gpx(
+        tmp_path,
+        "no-elevation.gpx",
+        """    <trkpt lat="27.98" lon="86.90" />
+    <trkpt lat="27.99" lon="86.91" />""",
+    )
+
+    result = build_route_provenance(load_source_route_points(gpx), sample_interval_m=0)
+
+    assert result.elevation == {"status": "unavailable"}
+    assert [route_point["elev"] for route_point in result.route] == [None, None]
+
+
+def test_partially_recorded_elevation_is_unavailable(tmp_path):
+    gpx = _gpx(
+        tmp_path,
+        "partial-elevation.gpx",
+        """    <trkpt lat="27.98" lon="86.90"><ele>5100</ele></trkpt>
+    <trkpt lat="27.99" lon="86.91" />""",
+    )
+
+    result = build_route_provenance(load_source_route_points(gpx), sample_interval_m=0)
+
+    assert result.elevation == {"status": "unavailable"}
+    assert [route_point["elev"] for route_point in result.route] == [None, None]
+
+
+def test_recorded_sea_level_elevation_stays_recorded(tmp_path):
+    gpx = _gpx(
+        tmp_path,
+        "sea-level.gpx",
+        """    <trkpt lat="35.0" lon="135.0"><ele>0</ele></trkpt>
+    <trkpt lat="35.001" lon="135.0"><ele>4</ele></trkpt>""",
+    )
+
+    result = build_route_provenance(load_source_route_points(gpx), sample_interval_m=0)
+
+    assert result.elevation == {"status": "recorded"}
+    assert [route_point["elev"] for route_point in result.route] == [0.0, 4.0]
+
+
+def test_fit_adapter_without_altitude_is_unavailable_not_zero():
+    point = source_point_from_fit_fields(
+        {"position_lat": 2**30, "position_long": -(2**30)}
+    )
+
+    assert point is not None
+    assert point.elevation is None
+
+
+def test_fit_adapter_keeps_recorded_zero_altitude():
+    point = source_point_from_fit_fields(
+        {"position_lat": 2**30, "position_long": -(2**30), "enhanced_altitude": 0.0}
+    )
+
+    assert point is not None
+    assert point.elevation == 0.0
+
+
+def _timestamped_gap_track():
+    return build_route_provenance(
+        [
+            point(35.0, 135.0, seconds=0),
+            point(35.0005, 135.0, seconds=30),
+            point(35.001, 135.0, seconds=400),
+        ],
+        sample_interval_m=0,
+    )
+
+
+def test_discovered_route_publishes_no_supplied_timing():
+    source = _timestamped_gap_track()
+    assert source.temporal["status"] == "recorded"
+    assert any("elapsed_time_s" in item for item in source.discontinuities)
+
+    published = published_route_provenance(source, "discovered")
+
+    assert published.temporal == {"status": "unavailable"}
+    assert all("elapsed_s" not in route_point for route_point in published.route)
+    assert all("elapsed_time_s" not in item for item in published.discontinuities)
+    assert [(p["lat"], p["lng"], p["elev"], p["d"]) for p in published.route] == [
+        (p["lat"], p["lng"], p["elev"], p["d"]) for p in source.route
+    ]
+    assert [item["kind"] for item in published.discontinuities] == [
+        item["kind"] for item in source.discontinuities
+    ]
+    assert published.track == source.track
+    assert published.elevation == source.elevation
+    # The source result is not mutated.
+    assert all("elapsed_s" in route_point for route_point in source.route)
+
+
+def test_completed_route_keeps_recorded_timing():
+    source = _timestamped_gap_track()
+
+    assert published_route_provenance(source, "completed") == source
+
+
+def test_build_publishes_lifecycle_filtered_provenance():
+    build = (Path(__file__).parent / "build.py").read_text()
+
+    assert "published_route_provenance(" in build
+    assert build.index("lifecycle = spec.get('lifecycle', 'completed')") < build.index(
+        "published_route_provenance("
+    )
+
+
 def test_fit_adapter_preserves_timestamp_and_converts_semicircles():
     point = source_point_from_fit_fields(
         {
@@ -160,7 +284,7 @@ def test_fit_adapter_preserves_timestamp_when_position_is_missing():
     assert point == SourceRoutePoint(
         lat=None,
         lng=None,
-        elevation=0,
+        elevation=None,
         timestamp=datetime(2025, 11, 26, 21, 21, 5, tzinfo=UTC),
         segment_index=0,
     )
@@ -224,3 +348,38 @@ def test_curated_regions_map_to_explicit_iana_timezones():
     assert route_time_zone("Banff/Kananaskis") == "America/Edmonton"
     assert route_time_zone("Canary Islands") == "Atlantic/Canary"
     assert route_time_zone("Unknown trail") is None
+
+
+def test_committed_discovered_route_regenerates_without_change():
+    """The one route whose source is in the repository must not drift.
+
+    Every other route needs the private Strava export, so this is the only
+    committed record the generator change can be replayed against here.
+    """
+    from quest_meta import build_quest_meta, elevation_gain_m
+
+    root = Path(__file__).parent
+    slug = "3519505225411091950"
+    detail = json.loads((root / f"app/public/data/routes/{slug}.json").read_text())
+    source = root / f"route_sources/strava/{slug}.gpx"
+
+    published = published_route_provenance(
+        build_route_provenance(load_source_route_points(source)), detail["lifecycle"]
+    )
+    meta = build_quest_meta(
+        activity_type=detail["type"],
+        distance_km=detail["distance_km"],
+        elevation_gain=elevation_gain_m(published.route),
+        region_label=detail["region"],
+        activity_name=detail["activity_name"],
+    )
+
+    assert detail["lifecycle"] == "discovered"
+    assert published.elevation == {"status": "recorded"}
+    assert published.route == detail["route"]
+    assert published.track == detail["provenance"]["track"]
+    assert published.discontinuities == detail["provenance"]["discontinuities"]
+    assert published.temporal == detail["provenance"]["temporal"]
+    assert meta["elevation_gain_m"] == detail["elevation_gain_m"]
+    assert "elevation_status" not in meta
+    assert "elevation_status" not in detail

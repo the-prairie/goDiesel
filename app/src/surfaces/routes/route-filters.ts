@@ -1,5 +1,5 @@
 import type { RouteLifecycle } from "@/domain/route/lifecycle";
-import type { RouteSummary } from "@/domain/route";
+import { recordedClimbM, type RouteSummary } from "@/domain/route";
 
 export interface RouteFilters {
   query: string;
@@ -33,7 +33,7 @@ export function filterRoutes(
     if (filters.activity !== "all" && route.type !== filters.activity) return false;
     if (filters.region !== "all" && route.region !== filters.region) return false;
     if (!routeMatchesDistance(route.distanceKm, filters.distance)) return false;
-    if (!routeMatchesClimb(route.elevationGainM, filters.climb)) return false;
+    if (!routeMatchesClimb(recordedClimbM(route), filters.climb)) return false;
     if (filters.vibe !== "all" && route.theme !== filters.vibe) return false;
     return true;
   });
@@ -66,10 +66,11 @@ export function routeMatchesDistance(distanceKm: number, filter: RouteFilters["d
   }
 }
 
-export function routeMatchesClimb(elevationGainM: number, filter: RouteFilters["climb"]) {
+/** An unrecorded climb (null) cannot satisfy an explicit climb filter. */
+export function routeMatchesClimb(elevationGainM: number | null, filter: RouteFilters["climb"]) {
+  if (filter === "all") return true;
+  if (elevationGainM === null) return false;
   switch (filter) {
-    case "all":
-      return true;
     case "under-250":
       return elevationGainM < 250;
     case "250-750":

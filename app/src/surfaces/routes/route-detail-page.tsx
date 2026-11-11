@@ -22,7 +22,7 @@ import { singleRouteMicrosite } from "@/app/single-route-microsite";
 import { findRouteBySlug } from "@/data/routes";
 import { routeLibraryReturnPath } from "@/data/route-library-return";
 import { useRouteDetail, type RouteDetailState } from "@/data/use-route-detail";
-import type { QuestRoute } from "@/domain/route";
+import { climbLabel, recordedClimbM, type QuestRoute } from "@/domain/route";
 import { useIsMobile } from "@/ui/use-mobile";
 import { cn } from "@/ui/utils";
 import {
@@ -280,7 +280,7 @@ function RouteMargin({
           {!hasDetails ? (
             <div className="mt-3 flex items-center justify-between gap-2">
               <p className="text-caption text-ink-secondary">
-                {route.type} · {route.distanceKm.toFixed(1)} km · {route.elevationGainM.toLocaleString()} m up
+                {route.type} · {route.distanceKm.toFixed(1)} km · {climbLabel(route)}
               </p>
               <Button type="button" variant="ghost" size="sm" onClick={readGuide}>Read guide</Button>
             </div>
@@ -300,7 +300,7 @@ function RouteMargin({
                 />
                 <LeafMetric
                   label="Climb"
-                  value={`${route.elevationGainM.toLocaleString()} m`}
+                  value={recordedClimbM(route) === null ? "Not recorded" : `${route.elevationGainM.toLocaleString()} m`}
                 />
                 <LeafMetric label="Activity" value={route.type} />
                 <LeafMetric

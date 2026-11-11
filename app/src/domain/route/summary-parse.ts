@@ -1,7 +1,7 @@
 // The lenient tier (ADR-0004). A bad manifest entry must not break the app.
 
 import { normalizeRouteLifecycle, type RouteLifecycle } from "@/domain/route/lifecycle";
-import type { GeneratedQuestRoute, ReplayMetadata, RouteGeometryStatus, RouteGuidePreview, RouteSummary } from "@/domain/route/contract";
+import type { GeneratedQuestRoute, ReplayMetadata, RouteElevationStatus, RouteGeometryStatus, RouteGuidePreview, RouteSummary } from "@/domain/route/contract";
 import { generatedRoute, numberValue, parsedRoutePoints, requiredSlug, routeName, stringValue } from "@/domain/route/parse-shared";
 
 function validatedGuidePreview(value: unknown): RouteGuidePreview {
@@ -64,12 +64,18 @@ function replayMetadata(
   };
 }
 
+// Lenient: anything but an explicit "unavailable" keeps today's recorded reading.
+function summaryElevationStatus(input: GeneratedQuestRoute): RouteElevationStatus {
+  return input.elevation_status === "unavailable" ? "unavailable" : "recorded";
+}
+
 function commonRouteFields(
   input: GeneratedQuestRoute,
   slug: string,
   geometryStatus: RouteGeometryStatus,
 ) {
   const lifecycle = normalizeRouteLifecycle(input.lifecycle ?? input.status);
+  const elevationStatus = summaryElevationStatus(input);
 
   return {
     slug,
@@ -81,7 +87,9 @@ function commonRouteFields(
     region: stringValue(input.region, "Unknown region"),
     date: stringValue(input.date),
     distanceKm: numberValue(input.distance_km),
-    elevationGainM: numberValue(input.elevation_gain_m),
+    elevationGainM:
+      elevationStatus === "unavailable" ? 0 : numberValue(input.elevation_gain_m),
+    elevationStatus,
     type: stringValue(input.type, "Run"),
     description: stringValue(input.description),
     completionRule: stringValue(input.completion_rule),
@@ -97,7 +105,7 @@ function commonRouteFields(
 export function parseRouteSummary(value: unknown): RouteSummary {
   const input = generatedRoute(value, "Route summary");
   const slug = requiredSlug(input, "Route summary");
-  const parsedTrace = parsedRoutePoints(input.trace);
+  const parsedTrace = parsedRoutePoints(input.trace, summaryElevationStatus(input));
   const trace = parsedTrace.points;
   const geometryStatus =
     input.replay &&

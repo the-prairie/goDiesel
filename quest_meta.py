@@ -142,30 +142,45 @@ def _theme(activity_type, distance_km, elevation_gain, region_label, activity_na
 
 
 def build_quest_meta(activity_type, distance_km, elevation_gain, region_label, activity_name):
-    effort_tier = _effort_tier(activity_type, distance_km, elevation_gain)
-    theme = _theme(activity_type, distance_km, elevation_gain, region_label, activity_name)
+    """Build generated quest metadata.
+
+    ``elevation_gain`` is ``None`` when the source recorded no elevation. The
+    climb then stays unknown: ``elevation_gain_m`` is ``None``, the record
+    carries ``elevation_status: "unavailable"``, the completion rule makes no
+    climbing claim, and scoring uses distance alone. A recorded gain adds no
+    status field, so existing generated records keep their exact shape.
+    """
+    recorded_elevation = elevation_gain is not None
+    scoring_elevation = elevation_gain if recorded_elevation else 0
+    effort_tier = _effort_tier(activity_type, distance_km, scoring_elevation)
+    theme = _theme(activity_type, distance_km, scoring_elevation, region_label, activity_name)
     verb = "ride" if activity_type == "Ride" else "run"
     xp = _round_to_10(
         (120 if activity_type == "Ride" else 50)
         + distance_km * (7 if activity_type == "Ride" else 8)
-        + elevation_gain * (0.43 if activity_type == "Ride" else 0.25)
+        + scoring_elevation * (0.43 if activity_type == "Ride" else 0.25)
     )
-    climbing = f"{elevation_gain:,} m of climbing"
+    completion_rule = f"Complete a {distance_km:.1f} km {verb} in {region_label}."
+    if recorded_elevation:
+        completion_rule = (
+            f"Complete a {distance_km:.1f} km {verb} in {region_label} "
+            f"with about {elevation_gain:,} m of climbing."
+        )
 
-    return {
+    meta = {
         "effort_tier": effort_tier,
         "theme": theme,
         "xp": xp,
-        "elevation_gain_m": int(elevation_gain),
-        "completion_rule": (
-            f"Complete a {distance_km:.1f} km {verb} in {region_label} "
-            f"with about {climbing}."
-        ),
+        "elevation_gain_m": int(elevation_gain) if recorded_elevation else None,
+        "completion_rule": completion_rule,
         "quest_blurb": (
             f"A {effort_tier.lower()} {theme.lower()} quest built from Lauren's "
             f"{activity_name or region_label} route."
         ),
     }
+    if not recorded_elevation:
+        meta["elevation_status"] = "unavailable"
+    return meta
 
 
 def route_guide_preview(curation):

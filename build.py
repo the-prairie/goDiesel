@@ -22,7 +22,11 @@ from quest_meta import (
     elevation_gain_m,
     route_guide_preview,
 )
-from route_provenance import build_route_provenance, load_source_route_points
+from route_provenance import (
+    build_route_provenance,
+    load_source_route_points,
+    published_route_provenance,
+)
 from route_annotations import build_route_annotations
 from route_imports import route_metadata, route_source_kind
 from route_regions import classify_region, time_zone_for_recorded_region
@@ -406,7 +410,12 @@ for spec in quest_specs:
     fp = meta.source_path or find_activity_file(aid)
     if fp is None:
         print(f'    ✗ {aid}: no .gpx/.fit file'); continue
-    route_provenance = build_route_provenance(load_source_route_points(fp))
+    lifecycle = spec.get('lifecycle', 'completed')
+    if lifecycle not in ('completed', 'planned', 'discovered'):
+        raise ValueError(f'Invalid lifecycle for {aid}: {lifecycle!r}')
+    route_provenance = published_route_provenance(
+        build_route_provenance(load_source_route_points(fp)), lifecycle
+    )
     route_js = route_provenance.route
     if not route_js:
         print(f'    ✗ {aid}: empty polyline'); continue
@@ -439,7 +448,11 @@ for spec in quest_specs:
     quest_meta = build_quest_meta(
         activity_type=typ,
         distance_km=round(distance_km, 1),
-        elevation_gain=elevation_gain_m(route_js),
+        elevation_gain=(
+            elevation_gain_m(route_js)
+            if route_provenance.elevation['status'] == 'recorded'
+            else None
+        ),
         region_label=region_label,
         activity_name=name,
     )
@@ -453,9 +466,6 @@ for spec in quest_specs:
             quest_meta[_target] = str(spec[_field]).strip()
 
     subtitle = str(spec.get('title') or name).strip()
-    lifecycle = spec.get('lifecycle', 'completed')
-    if lifecycle not in ('completed', 'planned', 'discovered'):
-        raise ValueError(f'Invalid lifecycle for {aid}: {lifecycle!r}')
 
     quest = {
         'slug': slug,
@@ -554,6 +564,12 @@ def react_route_manifest_record(route):
         'date': record['date'],
         'distance_km': record['distance_km'],
         'elevation_gain_m': record['elevation_gain_m'],
+        # Present only when the source recorded no elevation (quest_meta).
+        **(
+            {'elevation_status': record['elevation_status']}
+            if 'elevation_status' in record
+            else {}
+        ),
         'type': record['type'],
         'description': record['description'],
         'completion_rule': record['completion_rule'],

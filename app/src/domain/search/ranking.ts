@@ -1,4 +1,5 @@
 import type { DiscoveryCandidate, FinderIntent } from "../planning";
+import { CLIMB_NOT_RECORDED, recordedClimbM } from "../route";
 import { distanceBounds } from "./intent";
 import { literalTokens, matchMetadata, routeMetadata, type MetadataField } from "./metadata";
 export interface SearchDocument {
@@ -117,7 +118,9 @@ export function rankCollection(
             ]
           : []),
         `${r.distanceKm.toFixed(1)} km`,
-        `${Math.round(r.elevationGainM)} m climbing`,
+        recordedClimbM(r) === null
+          ? CLIMB_NOT_RECORDED
+          : `${Math.round(r.elevationGainM)} m climbing`,
         r.region,
       ];
       if (intent.terrain !== "any")
