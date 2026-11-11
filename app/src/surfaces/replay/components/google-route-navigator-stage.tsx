@@ -472,7 +472,7 @@ export function GoogleRouteNavigatorStage({
         />
       ) : null}
       {status.state !== "ready" ? (
-        <div className={cn("pointer-events-none absolute inset-0 grid place-items-center p-6", providerUnavailable ? "z-40" : "z-20")}>
+        <div className={cn("pointer-events-none absolute inset-0 grid place-items-center pt-[calc(1.5rem+var(--safe-area-top))] pr-[calc(1.5rem+var(--safe-area-right))] pb-[calc(1.5rem+var(--safe-area-bottom))] pl-[calc(1.5rem+var(--safe-area-left))]", providerUnavailable ? "z-40" : "z-20")}>
           <div
             aria-live="polite"
             className="pointer-events-auto max-h-full max-w-md overflow-y-auto border border-white/20 bg-surface p-6 text-center text-white"

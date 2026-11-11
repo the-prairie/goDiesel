@@ -1,5 +1,5 @@
 .course-preview-controls.immersive-replay-dock {
-  width: min(40rem, calc(100% - 2rem));
+  width: min(40rem, calc(100% - 2rem - var(--safe-area-left) - var(--safe-area-right)));
   padding: 0.65rem 0.85rem 0.5rem;
   overflow: visible;
 }
@@ -86,7 +86,7 @@
 
 @media (max-width: 639px) {
   .course-preview-controls.immersive-replay-dock {
-    width: calc(100% - 1.5rem);
+    width: calc(100% - 1.5rem - var(--safe-area-left) - var(--safe-area-right));
     padding-inline: 0.65rem;
   }
   .course-preview-controls .replay-chapter-progress strong {

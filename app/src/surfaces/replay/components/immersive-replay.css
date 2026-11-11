@@ -3,10 +3,22 @@ body:has(.immersive-replay) .atlas-spine-mobile {
   display: none;
 }
 
+/* The immersive stage covers the whole screen, so its header and dock add the
+   safe-area insets (index.css --safe-area-*, 0 without a notch or home
+   indicator) to their own spacing on every edge they touch. */
 .immersive-replay .replay-header {
-  padding-top: max(1rem, env(safe-area-inset-top));
+  padding-top: calc(1rem + var(--safe-area-top));
+  padding-right: calc(0.75rem + var(--safe-area-right));
+  padding-left: calc(0.75rem + var(--safe-area-left));
   background: linear-gradient(#101820ba, #10182040 72%, transparent);
   padding-bottom: 2rem;
+}
+
+@media (min-width: 640px) {
+  .immersive-replay .replay-header {
+    padding-right: calc(1.5rem + var(--safe-area-right));
+    padding-left: calc(1.5rem + var(--safe-area-left));
+  }
 }
 
 .immersive-replay .replay-header > :first-child {
@@ -16,23 +28,22 @@ body:has(.immersive-replay) .atlas-spine-mobile {
 
 .immersive-replay-dock {
   position: absolute;
-  bottom: calc(3rem + env(safe-area-inset-bottom));
+  bottom: calc(3rem + var(--safe-area-bottom));
   left: 50%;
-  width: min(48rem, calc(100% - 2rem));
+  width: min(48rem, calc(100% - 2rem - var(--safe-area-left) - var(--safe-area-right)));
   transform: translateX(-50%);
 }
 
 .immersive-replay[data-hud-state="compact"] .immersive-replay-dock {
-  width: min(40rem, calc(100% - 2rem));
+  width: min(40rem, calc(100% - 2rem - var(--safe-area-left) - var(--safe-area-right)));
 }
 
 @media (max-width: 639px) {
-  .immersive-replay[data-hud-state] .immersive-replay-dock { width: calc(100% - 1.5rem); }
-  .immersive-replay .replay-header { padding-inline: .75rem; }
+  .immersive-replay[data-hud-state] .immersive-replay-dock { width: calc(100% - 1.5rem - var(--safe-area-left) - var(--safe-area-right)); }
 }
 
 @media (max-height: 500px) and (orientation: landscape) {
-  .immersive-replay-dock { bottom: 2rem; width: min(44rem, calc(100% - 2rem)); }
+  .immersive-replay-dock { bottom: calc(2rem + var(--safe-area-bottom)); width: min(44rem, calc(100% - 2rem - var(--safe-area-left) - var(--safe-area-right))); }
   /* A short screen cannot hold both the unavailable notice and the dock, and
      the dock's controls need a scene: the notice and its way forward take the
      dock's place until a ready scene brings it back. */
