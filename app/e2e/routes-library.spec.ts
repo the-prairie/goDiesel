@@ -518,3 +518,24 @@ for (const width of [320, 390, 768, 1280]) {
     await page.screenshot({ path: `e2e/evidence/field-notes-independent/routes-fixed-${width}.png` });
   });
 }
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
+  test(`route not found keeps the page gutter at ${viewport.width}px`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    for (const path of ["/#/routes/not-a-real-route", "/#/replay/not-a-real-route"]) {
+      await page.goto(path);
+      const heading = page.getByRole("heading", { name: "This route could not be found." });
+      await expect(heading).toBeVisible();
+      const main = (await page.locator("main").boundingBox())!;
+      const eyebrow = (await page.getByText("Route unavailable", { exact: true }).boundingBox())!;
+      const action = (await page.getByRole("link", { name: "Browse routes" }).boundingBox())!;
+      const headingBox = (await heading.boundingBox())!;
+      for (const box of [eyebrow, headingBox, action]) {
+        expect(box.x - main.x, path).toBeGreaterThanOrEqual(16);
+        expect(main.x + main.width - (box.x + box.width), path).toBeGreaterThanOrEqual(16);
+      }
+      expect(eyebrow.y - main.y, path).toBeGreaterThanOrEqual(16);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
+    }
+  });
+}
