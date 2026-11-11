@@ -186,7 +186,10 @@ def test_ci_publishes_a_visible_notice_for_everything_it_does_not_check(raw_work
 
 
 def test_e2e_runs_without_traces_and_keeps_failure_evidence(workflow):
-    e2e_lines = [line for _, _, line in _commands(workflow) if "test:e2e" in line]
+    e2e_lines = [
+        line for _, _, line in _commands(workflow)
+        if (match := NPM_SCRIPT.match(line)) and match["script"] == "test:e2e"
+    ]
     assert e2e_lines and all("--trace off" in line for line in e2e_lines)
 
     uploads = [
@@ -198,3 +201,19 @@ def test_e2e_runs_without_traces_and_keeps_failure_evidence(workflow):
         assert step["if"] == "failure()"
         assert "app/playwright-report" in step["with"]["path"]
         assert "app/test-results" in step["with"]["path"]
+
+
+def test_javascript_job_checks_every_spec_loads_before_the_build(workflow):
+    """One spec that cannot load makes Playwright collect zero tests."""
+    steps = workflow["jobs"]["javascript"]["steps"]
+    runs = [step.get("run", "").strip() for step in steps]
+
+    list_step = runs.index("npm --prefix app run test:e2e:list")
+    assert list_step < runs.index("npm --prefix app run build")
+    assert "playwright install" not in "\n".join(runs), "listing needs no browser"
+
+    guard = json.loads((ROOT / "app" / "package.json").read_text(encoding="utf-8"))["scripts"][
+        "test:e2e:list"
+    ]
+    assert "--list" in guard
+    assert "playwright.config.ts" in guard

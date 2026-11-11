@@ -82,6 +82,11 @@ jobs:
       - name: Install application dependencies
         run: npm --prefix app ci
 
+      # One spec that cannot load makes Playwright collect no tests at all.
+      # Listing needs no browser and fails on any load error or an empty list.
+      - name: Playwright specs load
+        run: npm --prefix app run test:e2e:list
+
       - name: Typecheck
         run: npm --prefix app run typecheck
 
