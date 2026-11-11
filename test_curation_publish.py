@@ -9,6 +9,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
+
 from curation_publish import (
     CurationPublishError,
     generated_paths,
@@ -57,6 +59,7 @@ def _first_generated_slug():
 
 
 class CurationPublishTest(unittest.TestCase):
+    @pytest.mark.requires_private_export
     def test_incremental_publication_equals_a_full_rebuild(self):
         """The whole justification for this module.
 
@@ -135,6 +138,7 @@ class AnnotationPublishTest(unittest.TestCase):
         }
     ]
 
+    @pytest.mark.requires_private_export
     def test_incremental_annotation_publication_equals_a_full_rebuild(self):
         slug = _first_generated_slug()
         with tempfile.TemporaryDirectory() as directory:
