@@ -15,8 +15,55 @@ interface PlannedRouteEnvelope {
   routes: PlannedRoute[];
 }
 
-let cachedRaw: string | null | undefined;
-let cachedRoutes = EMPTY_ROUTES;
+/**
+ * The tab's view of planned routes.
+ *
+ * - `unread`: storage must be read before the routes are trusted.
+ * - `persisted`: the routes match the last raw value read from or written to storage.
+ * - `memory-only`: storage rejected a write, so the routes exist only in this tab.
+ *   Reads and storage events do not replace them until a later write succeeds.
+ */
+export type PlannedRouteCache =
+  | { mode: "unread"; routes: PlannedRoute[] }
+  | { mode: "persisted"; raw: string | null; routes: PlannedRoute[] }
+  | { mode: "memory-only"; raw: string; routes: PlannedRoute[] };
+
+export type PlannedRouteCacheEvent =
+  | { type: "storageRead"; raw: string | null }
+  | { type: "storageChanged" }
+  | { type: "writeAccepted"; raw: string; routes: PlannedRoute[] }
+  | { type: "writeRejected"; raw: string; routes: PlannedRoute[] };
+
+export type PlannedRouteStorageStatus = "persisted" | "memory-only";
+
+export const initialPlannedRouteCache: PlannedRouteCache = {
+  mode: "unread",
+  routes: EMPTY_ROUTES,
+};
+
+export function reducePlannedRouteCache(
+  state: PlannedRouteCache,
+  event: PlannedRouteCacheEvent,
+): PlannedRouteCache {
+  switch (event.type) {
+    case "storageRead":
+      if (state.mode === "memory-only") return state;
+      if (state.mode === "persisted" && state.raw === event.raw) return state;
+      return { mode: "persisted", raw: event.raw, routes: decodePlannedRouteStore(event.raw) };
+    case "storageChanged":
+      return state.mode === "persisted" ? { mode: "unread", routes: state.routes } : state;
+    case "writeAccepted":
+      return { mode: "persisted", raw: event.raw, routes: event.routes };
+    case "writeRejected":
+      return { mode: "memory-only", raw: event.raw, routes: event.routes };
+  }
+}
+
+export function plannedRouteStorageStatus(state: PlannedRouteCache): PlannedRouteStorageStatus {
+  return state.mode === "memory-only" ? "memory-only" : "persisted";
+}
+
+let cache: PlannedRouteCache = initialPlannedRouteCache;
 const listeners = new Set<() => void>();
 
 export function encodePlannedRouteStore(routes: PlannedRoute[]) {
@@ -38,12 +85,14 @@ export function decodePlannedRouteStore(raw: string | null): PlannedRoute[] {
 
 export function getPlannedRoutes() {
   if (typeof window === "undefined") return EMPTY_ROUTES;
-  const raw = safeRead();
-  if (raw !== cachedRaw) {
-    cachedRaw = raw;
-    cachedRoutes = decodePlannedRouteStore(raw);
+  if (cache.mode !== "memory-only") {
+    cache = reducePlannedRouteCache(cache, { type: "storageRead", raw: safeRead() });
   }
-  return cachedRoutes;
+  return cache.routes;
+}
+
+export function getPlannedRouteStorageStatus(): PlannedRouteStorageStatus {
+  return plannedRouteStorageStatus(cache);
 }
 
 export function savePlannedRoute(
@@ -100,15 +149,24 @@ export function usePlannedRoutes() {
   return useSyncExternalStore(subscribePlannedRoutes, getPlannedRoutes, () => EMPTY_ROUTES);
 }
 
+/** Whether saved plans reach storage, or live only in this tab after a rejected write. */
+export function usePlannedRouteStorageStatus() {
+  return useSyncExternalStore(
+    subscribePlannedRoutes,
+    getPlannedRouteStorageStatus,
+    (): PlannedRouteStorageStatus => "persisted",
+  );
+}
+
 function writeRoutes(routes: PlannedRoute[]) {
   const raw = encodePlannedRouteStore(routes);
   try {
     window.localStorage.setItem(PLANNED_ROUTE_STORAGE_KEY, raw);
+    cache = reducePlannedRouteCache(cache, { type: "writeAccepted", raw, routes });
   } catch {
     // Keep planning usable for this tab when storage is unavailable.
+    cache = reducePlannedRouteCache(cache, { type: "writeRejected", raw, routes });
   }
-  cachedRaw = raw;
-  cachedRoutes = routes;
   listeners.forEach((listener) => listener());
 }
 
@@ -116,13 +174,15 @@ function safeRead() {
   try {
     return window.localStorage.getItem(PLANNED_ROUTE_STORAGE_KEY);
   } catch {
-    return cachedRaw ?? null;
+    return cache.mode === "persisted" ? cache.raw : null;
   }
 }
 
 function handleStorage(event: StorageEvent) {
   if (event.key !== PLANNED_ROUTE_STORAGE_KEY) return;
-  cachedRaw = undefined;
+  const next = reducePlannedRouteCache(cache, { type: "storageChanged" });
+  if (next === cache) return;
+  cache = next;
   listeners.forEach((listener) => listener());
 }
 
