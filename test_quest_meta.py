@@ -175,3 +175,71 @@ class QuestMetaTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# Route triage status is a closed set. A missing or unrecognised status means
+# pending, which is never published, in every reader.
+import pytest
+
+from quest_meta import ROUTE_STATUSES, normalize_route_status, validate_route_status
+
+
+QUESTS_JSON = Path(__file__).resolve().parent / "quests.json"
+
+
+def test_route_statuses_are_closed():
+    assert ROUTE_STATUSES == ("pending", "approved", "archived")
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("pending", "pending"),
+    ("approved", "approved"),
+    ("archived", "archived"),
+    ("rejected", "archived"),
+    (None, "pending"),
+    ("", "pending"),
+    ("Approved", "pending"),
+    (" approved", "pending"),
+    ("published", "pending"),
+    (True, "pending"),
+    (["approved"], "pending"),
+    ({"status": "approved"}, "pending"),
+])
+def test_normalize_route_status(raw, expected):
+    assert normalize_route_status(raw) == expected
+
+
+@pytest.mark.parametrize("status", ROUTE_STATUSES)
+def test_validate_route_status_accepts_the_closed_set(status):
+    assert validate_route_status(status) == status
+
+
+@pytest.mark.parametrize("status", ["rejected", None, "", "Approved", "published", 1])
+def test_validate_route_status_rejects_anything_else_on_write(status):
+    with pytest.raises(ValueError, match="status must be one of: pending, approved, archived"):
+        validate_route_status(status)
+
+
+def test_committed_quests_json_has_only_known_route_statuses():
+    """Proof that a missing status defaulting to pending changes no published output.
+
+    build.py once read a missing status as approved. Every committed route
+    carries an explicit status from the closed set (plus legacy `rejected`),
+    so reading a missing one as pending cannot unpublish anything today.
+    """
+    config = json.loads(QUESTS_JSON.read_text(encoding="utf-8"))
+    routes = config.get("routes", config.get("quests", []))
+    assert routes
+    offending = [
+        (route.get("activity_id"), route.get("status", "<missing>"))
+        for route in routes
+        if route.get("status") not in {*ROUTE_STATUSES, "rejected"}
+    ]
+    assert offending == []
+    legacy_approved = [
+        route for route in routes if route.get("status", "approved") == "approved"
+    ]
+    normalized_approved = [
+        route for route in routes if normalize_route_status(route.get("status")) == "approved"
+    ]
+    assert normalized_approved == legacy_approved
