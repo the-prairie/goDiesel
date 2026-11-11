@@ -1,21 +1,44 @@
 import type { AtlasWorldStatus } from "@/surfaces/atlas/atlas-world";
 
+/**
+ * Whether the selected region's route cards are in front of the person.
+ *
+ * Route cards come from bundled data. A region waits only while a working
+ * world is moving to it, and never on the network:
+ * - `waiting`: the world is still flying to the region or loading its terrain.
+ * - `ready`: the world settled on the region in any outcome (terrain, a loaded
+ *   or an unavailable fallback map, or an unavailable world). A later
+ *   `ready`/`region-loading` status for a working world hides the cards again.
+ * - `shown`: the deadline passed while the region was waiting. The cards stay;
+ *   the world keeps catching up behind them.
+ */
 type RegionPresentation =
   | { state: "none" }
-  | { state: "waiting" | "ready"; regionName: string };
+  | { state: "waiting" | "ready" | "shown"; regionName: string };
+
+/**
+ * `opening` until any engine first shows the globe or a region. Without a
+ * world to act on, Atlas offers its places from bundled data instead.
+ */
+type WorldPresentation = "opening" | "open";
 
 export interface AtlasPresentationState {
   engineId: number | null;
   status: AtlasWorldStatus;
+  world: WorldPresentation;
   region: RegionPresentation;
 }
+
+/** The longest a selected region's cards wait for the world to reach it. */
+export const ATLAS_REGION_PRESENTATION_DEADLINE_MS = 4_000;
 
 export type AtlasPresentationEvent =
   | { type: "selectionChanged"; regionName?: string }
   | { type: "engineStarted"; engineId: number }
   | { type: "engineStopped"; engineId: number }
   | { type: "engineStatusReceived"; engineId: number; status: AtlasWorldStatus }
-  | { type: "fallbackReady"; engineId: number; regionName: string };
+  | { type: "fallbackReady" | "fallbackUnavailable"; engineId: number; regionName: string }
+  | { type: "presentationDeadlinePassed"; regionName: string };
 
 export function initialAtlasPresentationState(
   regionName?: string,
@@ -23,6 +46,7 @@ export function initialAtlasPresentationState(
   return {
     engineId: null,
     status: { state: "loading", message: "Opening the Atlas world." },
+    world: "opening",
     region: regionName ? { state: "waiting", regionName } : { state: "none" },
   };
 }
@@ -62,28 +86,37 @@ export function reduceAtlasPresentation(
         (state.region.state === "none" || state.region.regionName !== status.regionName)
       ) return state;
       let region = state.region;
-      if (region.state !== "none") {
-        switch (status.state) {
-          case "ready":
-          case "region-loading":
+      let world = state.world;
+      switch (status.state) {
+        case "ready":
+        case "region-loading":
+          world = "open";
+          if (region.state === "waiting" || region.state === "ready") {
             region = { state: "waiting", regionName: region.regionName };
-            break;
-          case "region-ready":
-          case "unavailable":
-            region = { state: "ready", regionName: region.regionName };
-            break;
-          case "loading":
-          case "region-fallback":
-            break;
-          default: {
-            const unhandled: never = status;
-            throw new Error(`Unhandled Atlas status: ${JSON.stringify(unhandled)}`);
           }
+          break;
+        case "region-ready":
+          world = "open";
+          if (region.state === "waiting") region = { state: "ready", regionName: region.regionName };
+          break;
+        case "unavailable":
+          if (region.state === "waiting") region = { state: "ready", regionName: region.regionName };
+          break;
+        case "region-fallback":
+          world = "open";
+          break;
+        case "loading":
+          break;
+        default: {
+          const unhandled: never = status;
+          throw new Error(`Unhandled Atlas status: ${JSON.stringify(unhandled)}`);
         }
       }
-      return { ...state, status, region };
+      return { ...state, status, world, region };
     }
     case "fallbackReady":
+    case "fallbackUnavailable":
+      // The fallback map settled, either way: the cards no longer wait for it.
       if (
         state.engineId !== event.engineId ||
         state.status.state !== "region-fallback" ||
@@ -92,6 +125,11 @@ export function reduceAtlasPresentation(
         state.region.regionName !== event.regionName
       ) return state;
       return { ...state, region: { state: "ready", regionName: event.regionName } };
+    case "presentationDeadlinePassed":
+      if (state.region.state !== "waiting" || state.region.regionName !== event.regionName) {
+        return state;
+      }
+      return { ...state, region: { state: "shown", regionName: event.regionName } };
     default: {
       const unhandled: never = event;
       throw new Error(`Unhandled Atlas presentation event: ${JSON.stringify(unhandled)}`);
@@ -103,5 +141,11 @@ export function isAtlasRegionPresented(
   state: AtlasPresentationState,
   regionName?: string,
 ): boolean {
-  return state.region.state === "ready" && state.region.regionName === regionName;
+  return (state.region.state === "ready" || state.region.state === "shown") &&
+    state.region.regionName === regionName;
+}
+
+/** The region whose cards are waiting for the world, if any. */
+export function atlasRegionAwaitingWorld(state: AtlasPresentationState) {
+  return state.region.state === "waiting" ? state.region.regionName : undefined;
 }

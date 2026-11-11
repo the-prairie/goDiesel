@@ -20,7 +20,7 @@ import { completedRoutes } from "@/data/routes";
 import { routeRegions } from "@/data/route-regions";
 
 const cesiumDoubles = vi.hoisted(() => ({
-  createViewer: undefined as undefined | ((container: unknown) => unknown),
+  createViewer: undefined as undefined | ((container: unknown, options?: unknown) => unknown),
 }));
 
 vi.mock("cesium", async (importOriginal) => {
@@ -28,8 +28,8 @@ vi.mock("cesium", async (importOriginal) => {
   return {
     ...actual,
     Viewer: class {
-      constructor(container: unknown) {
-        return cesiumDoubles.createViewer!(container) as object;
+      constructor(container: unknown, options?: unknown) {
+        return cesiumDoubles.createViewer!(container, options) as object;
       }
     },
     ScreenSpaceEventHandler: class {
@@ -306,6 +306,7 @@ interface FlightRequest {
 function mountHarness({
   reducedMotion = false,
   webgl = true,
+  webgl2 = true,
   viewerThrows = false,
   imagery = "resolves" as "resolves" | "rejects" | "pending",
 } = {}) {
@@ -324,7 +325,9 @@ function mountHarness({
   let height = 18_500_000;
   let pitch = -Math.PI / 2;
   const viewers: Array<Record<string, unknown>> = [];
-  cesiumDoubles.createViewer = () => {
+  const viewerOptions: unknown[] = [];
+  cesiumDoubles.createViewer = (_container, options) => {
+    viewerOptions.push(options);
     if (viewerThrows) throw new Error("Viewer construction failed");
     const camera = {
       frustum: {},
@@ -386,9 +389,16 @@ function mountHarness({
     setInterval,
     clearInterval,
   });
+  // Cesium asks for WebGL2 whenever the browser defines it, and for WebGL1
+  // only where WebGL2 does not exist at all (node defines neither).
+  if (!webgl2) vi.stubGlobal("WebGL2RenderingContext", class {});
   vi.stubGlobal("document", {
-    createElement: () => ({ getContext: () => (webgl ? {} : null) }),
+    createElement: () => ({
+      getContext: (type: string) =>
+        webgl && (type !== "webgl2" || webgl2) ? {} : null,
+    }),
   });
+  const container = { clientWidth: 1280, clientHeight: 720, replaceChildren: vi.fn() };
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
   vi.stubGlobal("HTMLElement", class {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -406,10 +416,12 @@ function mountHarness({
     globalFlights,
     regionFlights,
     viewer,
+    viewerOptions,
+    container,
     values,
     resolveImagery: () => resolveImagery({}),
     mount: () => engine.mount({
-      container: { clientWidth: 1280, clientHeight: 720 } as unknown as HTMLElement,
+      container: container as unknown as HTMLElement,
       regions: routeRegions,
       onStatus,
     }),
@@ -518,10 +530,25 @@ describe("CesiumAtlasWorldEngine mount lifecycle (characterization)", () => {
     expect(h.statuses()).toHaveLength(2);
   });
 
+  it("reports a browser without WebGL2 as unusable before Cesium can show its own error", async () => {
+    const h = mountHarness({ webgl2: false });
+    await h.mount();
+    expect(h.statuses()).toEqual([LOADING, "unavailable:This browser cannot start the Cesium world."]);
+    expect(h.viewerOptions).toHaveLength(0);
+  });
+
+  it("never lets Cesium draw its own error panel", async () => {
+    const h = mountHarness({ reducedMotion: true });
+    await h.mount();
+    expect(h.viewerOptions[0]).toMatchObject({ showRenderLoopErrors: false });
+  });
+
   it("fails before the viewer exists and ignores later selection", async () => {
     const h = mountHarness({ viewerThrows: true });
     await h.mount();
     expect(h.statuses()).toEqual([LOADING, COULD_NOT_LOAD]);
+    // A half-built widget leaves its DOM behind; the container shows only our message.
+    expect(h.container.replaceChildren).toHaveBeenCalledOnce();
     h.engine.setSelectedRegion(kyoto);
     h.engine.setSelectedRegion(undefined);
     h.engine.resetView();

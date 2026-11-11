@@ -197,7 +197,7 @@ function TextAreaField({
         value={value}
         rows={rows}
         placeholder={placeholder}
-        className="min-w-0 resize-y rounded-md border border-input bg-background px-3 py-2 text-sm leading-6 outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        className="min-w-0 resize-y rounded-md border border-input bg-background px-3 py-2 text-base leading-6 outline-none md:[@media(hover:hover)_and_(pointer:fine)]:text-sm placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
         onChange={(event) => onChange(event.target.value)}
       />
     </label>

@@ -6,6 +6,7 @@ import {
   useRef,
   useReducer,
 } from "react";
+import { MapPin } from "lucide-react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 
 import {
@@ -22,6 +23,8 @@ import { AtlasSearch } from "@/surfaces/atlas/components/atlas-search";
 import { completedRoutes } from "@/data/routes";
 import { buildRouteRegions, type RouteRegion } from "@/data/route-regions";
 import {
+  ATLAS_REGION_PRESENTATION_DEADLINE_MS,
+  atlasRegionAwaitingWorld,
   initialAtlasPresentationState,
   isAtlasRegionPresented,
   reduceAtlasPresentation,
@@ -92,6 +95,26 @@ export function AtlasPage() {
       regionName: selectedRegion?.name,
     });
   }, [selectedRegion?.name]);
+
+  // Route cards are bundled data; the world gets a bounded head start.
+  const regionAwaitingWorld = atlasRegionAwaitingWorld(presentation);
+  useEffect(() => {
+    if (!regionAwaitingWorld) return;
+    const timer = window.setTimeout(() => {
+      dispatchPresentation({
+        type: "presentationDeadlinePassed",
+        regionName: regionAwaitingWorld,
+      });
+    }, ATLAS_REGION_PRESENTATION_DEADLINE_MS);
+    return () => window.clearTimeout(timer);
+  }, [regionAwaitingWorld]);
+
+  // Without a globe to act on (still opening, or unavailable), the places
+  // come from bundled data and stand in for it.
+  const showPlaces =
+    !selectedRegion &&
+    (presentation.world === "opening" ||
+      presentation.status.state === "unavailable");
 
   useEffect(() => {
     function handleEscape(event: KeyboardEvent) {
@@ -170,6 +193,7 @@ export function AtlasPage() {
   return (
     <section
       data-region-selected={Boolean(selectedRegion)}
+      data-places-shown={showPlaces}
       className="atlas-layout relative isolate h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 overflow-hidden bg-background md:h-dvh"
     >
       <AtlasGlobe
@@ -200,11 +224,17 @@ export function AtlasPage() {
           {selectedRegion ? <Link aria-label="Return to global Atlas" to="/atlas" className="atlas-return inline-flex min-h-11 items-center rounded-md bg-surface px-3 text-sm text-ink-secondary focus-visible:outline-2 focus-visible:outline-ring">All places</Link> : null}
         </div>
       </div>
-      <AtlasControls
-        onZoomIn={() => globeRef.current?.zoomIn()}
-        onZoomOut={() => globeRef.current?.zoomOut()}
-        onResetView={() => globeRef.current?.resetView()}
-      />
+      {showPlaces ? (
+        <div className="absolute inset-x-0 bottom-0 z-30">
+          <AtlasPlaces regions={routeRegions} onSelectRegion={selectRegion} />
+        </div>
+      ) : (
+        <AtlasControls
+          onZoomIn={() => globeRef.current?.zoomIn()}
+          onZoomOut={() => globeRef.current?.zoomOut()}
+          onResetView={() => globeRef.current?.resetView()}
+        />
+      )}
       {selectedRegion ? (
         <div className="absolute inset-x-0 bottom-0 z-30">
           <RegionRouteCarousel
@@ -217,6 +247,49 @@ export function AtlasPage() {
           />
         </div>
       ) : null}
+    </section>
+  );
+}
+
+function AtlasPlaces({
+  regions,
+  onSelectRegion,
+}: {
+  regions: RouteRegion[];
+  onSelectRegion: (region: RouteRegion) => void;
+}) {
+  const places = useMemo(
+    () => [...regions].sort((a, b) => a.name.localeCompare(b.name)),
+    [regions],
+  );
+  return (
+    <section
+      aria-label="Places with routes"
+      className="atlas-route-carousel flex h-[var(--atlas-tray-height,12rem)] flex-col overflow-hidden text-white"
+    >
+      <header className="atlas-route-header flex shrink-0 items-center justify-between gap-2 px-3 sm:px-5">
+        <h2 className="truncate text-sm font-medium tracking-[-0.01em]">Places</h2>
+        <span className="shrink-0 font-mono text-xs text-white/60">
+          {places.length} {places.length === 1 ? "place" : "places"}
+        </span>
+      </header>
+      <ul className="grid min-h-0 flex-1 auto-rows-min grid-cols-1 gap-2 overflow-y-auto overscroll-contain px-3 pb-3 sm:grid-cols-2 sm:px-5 lg:grid-cols-3 xl:grid-cols-4">
+        {places.map((region) => (
+          <li key={region.name}>
+            <button
+              type="button"
+              onClick={() => onSelectRegion(region)}
+              className="flex min-h-11 w-full items-center gap-3 rounded-[var(--radius-control)] border border-white/12 px-3 text-left hover:bg-white/10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+            >
+              <MapPin className="size-4 shrink-0 text-white/60" aria-hidden="true" />
+              <span className="min-w-0 flex-1 truncate text-sm">{region.name}</span>
+              <span className="shrink-0 text-xs text-white/60">
+                {region.routes.length} {region.routes.length === 1 ? "route" : "routes"}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

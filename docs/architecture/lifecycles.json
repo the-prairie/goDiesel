@@ -532,7 +532,7 @@
       "id": "atlas-presentation",
       "kind": "reducer",
       "area": "react-app",
-      "summary": "Atlas world status and whether the selected region is waiting or presented.",
+      "summary": "Atlas world status, whether a world has opened, and whether the selected region waits for the world, is presented, or is shown at its deadline.",
       "module": "app/src/surfaces/atlas/atlas-presentation-state.ts",
       "transition": "reduceAtlasPresentation",
       "test": [
@@ -545,7 +545,10 @@
       "states": [
         "region:none",
         "region:waiting",
-        "region:ready"
+        "region:ready",
+        "region:shown",
+        "world:opening",
+        "world:open"
       ],
       "identity": "engineId"
     },
@@ -626,7 +629,7 @@
       "id": "route-leaf-map",
       "kind": "reducer",
       "area": "react-app",
-      "summary": "The route guide's leaf map: waiting for the map, ready, or unavailable after a deadline or errors.",
+      "summary": "The route guide's leaf map: waiting for the map, ready, unavailable after a deadline or errors, or unsupported when the browser cannot start a renderer.",
       "module": "app/src/surfaces/routes/components/route-leaf-map-state.ts",
       "transition": "reduceRouteLeafMap",
       "test": [
@@ -639,6 +642,7 @@
         "inactive",
         "waiting",
         "ready",
+        "unsupported",
         "status:loading",
         "status:unavailable"
       ],
@@ -655,7 +659,7 @@
         "app/src/ui/planning-map-state.test.ts"
       ],
       "adapters": [
-        "app/src/ui/planning-route-map.tsx"
+        "app/src/ui/planning-route-map-canvas.tsx"
       ],
       "states": [
         "loading",

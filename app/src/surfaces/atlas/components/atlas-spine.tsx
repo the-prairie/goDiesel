@@ -25,12 +25,16 @@ export function AtlasSpine({ className, hideDesktop = false }: AtlasSpineProps) 
           className,
         )}
       >
-        <div className="flex items-center gap-3 border-b border-line px-3 py-4 lg:px-4">
+        <div className="flex items-center gap-3 border-b border-line px-2 py-1.5 lg:px-4 lg:py-4">
           <Link
             to={APP_PATHS.atlas}
-            className="group flex min-w-0 items-center gap-3 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className={cn(
+              "group flex min-w-0 items-center gap-3 outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "max-lg:min-h-11 max-lg:w-full max-lg:rounded-[var(--radius-control)] max-lg:px-2.5 max-lg:transition-colors max-lg:duration-[var(--duration-standard)] max-lg:ease-[var(--ease-interface)] max-lg:hover:bg-surface-muted",
+            )}
           >
             <span className="atlas-spine-mark shrink-0" aria-hidden="true" />
+            <span className="sr-only lg:hidden">goDiesel home</span>
             <span className="hidden min-w-0 flex-1 lg:grid">
               <span className="font-editorial truncate text-lg font-medium tracking-[0.01em] text-ink">
                 goDiesel
