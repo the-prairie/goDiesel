@@ -177,3 +177,44 @@ test("Finder exposes applied preferences and edits distance without pretending t
     await expect(filters).toContainText("Around 25 km");
   }
 });
+
+test("Finder keeps an unapplied draft across selection and scope, and follows history to another search", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/#/finder?place=beach&activity=Run&distance=25&q=beach");
+  await page.goto("/#/finder?place=beach&activity=Run&distance=20&q=beach");
+  const cards = page.getByRole("article");
+  await expect(cards).toHaveCount(2);
+  const preferences = page.getByLabel("Search preferences");
+  const distance = page.getByRole("spinbutton", { name: "Distance km", exact: true });
+
+  await page.getByRole("button", { name: "Edit distance target" }).click();
+  await distance.fill("30");
+  await expect(preferences).toHaveText("Not applied yet: Run · around 30 km");
+
+  // (a) Selecting a candidate rewrites `selected` only.
+  await cards.last().getByRole("button", { name: "Preview Bali, Indonesia on map" }).click();
+  await expect(page).toHaveURL(/selected=9959792315/);
+  await expect(distance).toHaveValue("30");
+  await expect(preferences).toHaveText("Not applied yet: Run · around 30 km");
+
+  // (b) Toggling scope rewrites `scope` only.
+  await page.getByRole("button", { name: "Discover new routes" }).click();
+  await expect(page).toHaveURL(/scope=new/);
+  await expect(distance).toHaveValue("30");
+  await expect(preferences).toHaveText("Not applied yet: Run · around 30 km");
+  await page.getByRole("button", { name: /^My collection/ }).click();
+  await expect(page).not.toHaveURL(/scope=new/);
+  await expect(distance).toHaveValue("30");
+  await expect(preferences).toHaveText("Not applied yet: Run · around 30 km");
+
+  // (c) History to a different submitted search shows that search, and returning
+  // does not resurrect the discarded draft.
+  await page.goBack();
+  await expect(page).toHaveURL(/distance=25/);
+  await expect(distance).toHaveValue("25");
+  await expect(preferences).toHaveCount(0);
+  await page.goForward();
+  await expect(page).toHaveURL(/distance=20/);
+  await expect(distance).toHaveValue("20");
+  await expect(preferences).toHaveCount(0);
+});
