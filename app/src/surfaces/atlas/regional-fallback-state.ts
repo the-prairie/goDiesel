@@ -1,5 +1,5 @@
 type Loading = { phase: "loading"; errors: 0 | 1 | 2 | 3 };
-type UnavailableReason = "geometry" | "construction" | "errors" | "timeout";
+type UnavailableReason = "geometry" | "construction" | "errors" | "timeout" | "offline";
 
 export type RegionalFallbackState = { session: number } & (
   | Loading
@@ -9,7 +9,10 @@ export type RegionalFallbackState = { session: number } & (
 
 export type RegionalFallbackEvent =
   | { type: "sessionStarted"; session: number; hasGeometry: boolean }
-  | { type: "constructionFailed" | "mapErrored" | "loadTimedOut" | "mapLoaded"; session: number };
+  | {
+      type: "constructionFailed" | "mapErrored" | "loadTimedOut" | "connectionLost" | "mapLoaded";
+      session: number;
+    };
 
 export function initialRegionalFallbackState(): RegionalFallbackState {
   return { phase: "loading", session: 0, errors: 0 };
@@ -37,11 +40,14 @@ export function reduceRegionalFallback(
         ? { phase: "unavailable", session: state.session, reason: "errors" }
         : { ...state, errors: ([1, 2, 3] as const)[state.errors] };
     case "loadTimedOut":
+    case "connectionLost":
     case "constructionFailed":
       if (state.phase !== "loading") return state;
       return {
         phase: "unavailable", session: state.session,
-        reason: event.type === "loadTimedOut" ? "timeout" : "construction",
+        reason: event.type === "loadTimedOut"
+          ? "timeout"
+          : event.type === "connectionLost" ? "offline" : "construction",
       };
     default: {
       const unhandled: never = event;

@@ -679,3 +679,21 @@ test("reselecting the current ready region retains its carousel", async ({ page 
   await expect(page.locator('div[data-atlas-engine="cesium"]')).toHaveAttribute("data-atlas-status", "region-ready");
   await expect(carousel).toBeVisible({ timeout: 2000 });
 });
+
+// UX-06: route cards are bundled data and never wait on the network.
+test("offline, a selected region presents its routes and says the map needs a connection", async ({ page, context }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => { window.__GODIESEL_ATLAS_REGION_OUTCOME__ = "fallback"; });
+  await installDeterministicCesiumAtlas(page);
+  await page.goto("/#/atlas");
+  await expect(page.locator('div[data-atlas-engine="cesium"]')).toHaveAttribute("data-atlas-status", "ready");
+  await context.setOffline(true);
+  await page.getByRole("textbox", { name: "Search places and routes" }).fill("Crete");
+  await page.getByRole("option", { name: "Crete, Greece", exact: true }).click();
+  const carousel = page.getByRole("region", { name: "Crete, Greece recorded routes", exact: true });
+  await expect(carousel).toBeVisible({ timeout: 6_000 });
+  await expect(carousel.locator("article[data-route-slug]").first()).toBeVisible();
+  await expect(page.locator('[data-atlas-engine="maplibre-regional-fallback"]')).toHaveAttribute("data-map-status", "unavailable");
+  await expect(page.getByText("Regional map needs a connection.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Loading Crete, Greece terrain")).toHaveCount(0);
+});

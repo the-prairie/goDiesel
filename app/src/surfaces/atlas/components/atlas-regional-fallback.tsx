@@ -171,6 +171,8 @@ interface AtlasRegionalFallbackProps {
   selectedRoute?: RouteSummary;
   onSelectRoute?: (route: RouteSummary) => void;
   onReady?: () => void;
+  /** The map settled without loading (offline, timeout, errors, no geometry). */
+  onUnavailable?: () => void;
 }
 
 export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalFallbackProps>(function AtlasRegionalFallback({
@@ -178,6 +180,7 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
   selectedRoute,
   onSelectRoute,
   onReady,
+  onUnavailable,
 }, forwardedRef) {
   const hostRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | undefined>(undefined);
@@ -204,6 +207,9 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
   useEffect(() => {
     if (status === "ready") onReady?.();
   }, [onReady, status]);
+  useEffect(() => {
+    if (status === "unavailable") onUnavailable?.();
+  }, [onUnavailable, status]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -263,6 +269,10 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
 
     const markUnavailable = () => {
       if (active) dispatch({ type: "loadTimedOut", session });
+    };
+    // Without a connection the style cannot arrive; say so now, not at the deadline.
+    const markOffline = () => {
+      if (active) dispatch({ type: "connectionLost", session });
     };
     const handleError = () => {
       if (active) dispatch({ type: "mapErrored", session });
@@ -360,6 +370,8 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
     map.on("moveend", updateRouteOverlay);
     map.once("load", handleLoad);
     loadTimer = window.setTimeout(markUnavailable, LOAD_TIMEOUT_MS);
+    window.addEventListener("offline", markOffline);
+    if (!navigator.onLine) markOffline();
 
     if (typeof ResizeObserver !== "undefined") {
       resizeObserver = new ResizeObserver(handleResize);
@@ -370,6 +382,7 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
       active = false;
       if (loadTimer !== undefined) window.clearTimeout(loadTimer);
       resizeObserver?.disconnect();
+      window.removeEventListener("offline", markOffline);
       map.off("error", handleError);
       map.off("load", handleLoad);
       map.off("moveend", updateRouteOverlay);
@@ -384,7 +397,9 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
       ? `Loading ${region.name} map.`
       : status === "ready"
         ? "3D terrain partially unavailable."
-        : "Regional map unavailable.";
+        : lifecycle.phase === "unavailable" && lifecycle.reason === "offline"
+          ? "Regional map needs a connection."
+          : "Regional map unavailable.";
 
   return (
     <div

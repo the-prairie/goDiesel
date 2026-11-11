@@ -187,6 +187,15 @@ export const CesiumAtlasGlobe = forwardRef<
               });
             }
           }}
+          onUnavailable={() => {
+            if (presentation.engineId !== null) {
+              onPresentationEvent({
+                type: "fallbackUnavailable",
+                engineId: presentation.engineId,
+                regionName: selectedRegion.name,
+              });
+            }
+          }}
         />
       ) : null}
       <div
@@ -219,7 +228,7 @@ export const CesiumAtlasGlobe = forwardRef<
           data-region-loading={
             status.state === "region-loading" ? status.regionName : undefined
           }
-          className="pointer-events-none absolute bottom-24 left-4 z-20 min-h-12 min-w-52 border border-white/25 bg-[#071019]/88 px-3 py-2 text-xs text-white shadow-lg xl:bottom-56 xl:left-[15.5rem]"
+          className="pointer-events-none absolute bottom-[calc(var(--atlas-tray-height,12rem)+2.75rem)] left-4 z-20 min-h-12 min-w-52 border border-white/25 bg-[#071019]/88 px-3 py-2 text-xs text-white shadow-lg xl:left-[15.5rem]"
         >
           {status.message}
         </div>
