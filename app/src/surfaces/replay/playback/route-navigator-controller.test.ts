@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { QuestRoute } from "@/domain/route";
+import { slicePathByRatio } from "@/surfaces/replay/cinematic/cinematic-route-filament";
 import {
   advanceGoogleRouteNavigator,
+  seekGoogleRouteNavigator,
+  cycleGoogleRouteSpeed,
+  zoomGoogleRouteNavigator,
   densifyGoogleRoutePath,
   googleRouteCameraPose,
   googleRouteThreadTreatment,
@@ -28,6 +32,28 @@ const route = {
 } as unknown as QuestRoute;
 
 describe("Google route navigator controller", () => {
+  it.each([[179.999, -179.999], [-179.999, 179.999]])("keeps the densified route and filament near the antimeridian from %s to %s", (from, to) => {
+    const path = densifyGoogleRoutePath({ route: [
+      { lat: 0, lng: from, d: 0 }, { lat: 0, lng: to, d: 222.39 },
+    ] });
+    expect(path.length).toBeGreaterThan(2);
+    expect(path.every(point => Math.abs(point.lng) >= 179.999)).toBe(true);
+    const marker = slicePathByRatio(path, 0.5, 0.5)[0];
+    expect(Math.abs(marker.lng)).toBeCloseTo(180, 8);
+  });
+
+  it.each([0.5, 1, 2, 4])("opens at tracking distance at %sx without advancing recorded progress", (speed) => {
+    const state = { ...initialGoogleRouteNavigatorState(), speed };
+    const before = structuredClone(route);
+    const pose = googleRouteCameraPose(route, state);
+    expect(pose.directedMode).toBe("chase");
+    expect(pose.overviewWeight).toBe(0);
+    expect(pose.rangeM).toBeLessThanOrEqual(780);
+    expect(pose.progressM).toBe(0);
+    expect(googleRouteTelemetry(route, 0).elapsedS).toBe(0);
+    expect(route).toEqual(before);
+  });
+
   it("advances playback and stops at the route end", () => {
     const state = { ...initialGoogleRouteNavigatorState(), playing: true };
     const advanced = advanceGoogleRouteNavigator(state, 1, 2_000);
@@ -59,9 +85,10 @@ describe("Google route navigator controller", () => {
     expect(runner.rangeM).toBe(160);
     expect(runner.tiltDeg).toBeLessThanOrEqual(65);
     expect(chase.rangeM).toBeGreaterThan(200);
-    expect(chase.tiltDeg).toBeLessThan(70);
+    expect(chase.tiltDeg).toBe(70);
+    expect(chase.fovDeg).toBe(52);
     expect(initial.cameraMode).toBe("auto");
-    expect(initial.groundingMode).toBe("mesh");
+    expect(initial.groundingMode).toBe("ground");
     expect(overview.rangeM).toBeGreaterThan(1_000);
     expect(overview.center).toMatchObject({ lat: 51, lng: -1 });
     expect(overview.center.altitude).toBeCloseTo(31.67, 1);
@@ -85,8 +112,8 @@ describe("Google route navigator controller", () => {
   it("densifies long recorded segments for terrain following", () => {
     const path = densifyGoogleRoutePath(route, 20);
     expect(path.length).toBeGreaterThan(90);
-    expect(path[0]).toEqual({ lat: 51, lng: -1 });
-    expect(path.at(-1)).toEqual({ lat: 51.01, lng: -0.99 });
+    expect(path[0]).toEqual({ lat: 51, lng: -1, d: 0 });
+    expect(path.at(-1)).toEqual({ lat: 51.01, lng: -0.99, d: 2000 });
   });
 
   it("derives recorded telemetry at the current route distance", () => {
@@ -143,6 +170,14 @@ describe("Google route navigator controller", () => {
     });
   });
 
+  it("does not move the position marker to the finish during the final release", () => {
+    const treatment = googleRouteThreadTreatment(route, {
+      ...initialGoogleRouteNavigatorState(), progressM: 1_995,
+    });
+    expect(treatment.shotKind).toBe("release");
+    expect(treatment.focusRatio).toBe(0.9975);
+  });
+
   it("falls back to total elapsed time when points are not timed", () => {
     const untimed = {
       ...route,
@@ -151,4 +186,56 @@ describe("Google route navigator controller", () => {
 
     expect(googleRouteTelemetry(untimed, 1_000).elapsedS).toBeCloseTo(300);
   });
+});
+
+
+describe("native Replay command math contract", () => {
+  it("uses 1050 seconds at normal speed and clamps each frame to 100 ms", () => {
+    const playing = { ...initialGoogleRouteNavigatorState(), playing: true };
+    expect(advanceGoogleRouteNavigator(playing, 0.1, 10_500).progressM).toBe(1);
+    expect(advanceGoogleRouteNavigator(playing, 10, 10_500).progressM).toBe(1);
+    expect(advanceGoogleRouteNavigator(playing, -1, 10_500).progressM).toBe(0);
+    expect(advanceGoogleRouteNavigator({ ...playing, speed: 4 }, 0.1, 10_500).progressM).toBe(4);
+  });
+
+  it("preserves playback intent when seeking to either boundary", () => {
+    for (const playing of [false, true]) {
+      const state = { ...initialGoogleRouteNavigatorState(), playing };
+      expect(seekGoogleRouteNavigator(state, -10, 2_000)).toMatchObject({ playing, progressM: 0 });
+      expect(seekGoogleRouteNavigator(state, 3_000, 2_000)).toMatchObject({ playing, progressM: 2_000 });
+    }
+  });
+
+  it("keeps endpoint play at the end and pauses on the next tick", () => {
+    const state = { ...initialGoogleRouteNavigatorState(), playing: true, progressM: 2_000 };
+    expect(advanceGoogleRouteNavigator(state, 0, 2_000)).toMatchObject({ progressM: 2_000, playing: false });
+  });
+
+  it("cycles playback speed in the existing order", () => {
+    let state = initialGoogleRouteNavigatorState();
+    for (const speed of [2, 4, 0.5, 1]) {
+      state = cycleGoogleRouteSpeed(state);
+      expect(state.speed).toBe(speed);
+    }
+  });
+
+  it("clamps zoom without claiming camera ownership", () => {
+    let state = { ...initialGoogleRouteNavigatorState(), following: false };
+    for (let index = 0; index < 20; index += 1) state = zoomGoogleRouteNavigator(state, "in");
+    expect(state.rangeScale).toBe(0.55);
+    for (let index = 0; index < 20; index += 1) state = zoomGoogleRouteNavigator(state, "out");
+    expect(state.rangeScale).toBe(2.4);
+    expect(state.following).toBe(false);
+  });
+});
+
+it("reverses Chase zoom immediately at its visible camera floor", () => {
+  let state: ReturnType<typeof initialGoogleRouteNavigatorState> = { ...initialGoogleRouteNavigatorState(), cameraMode: "chase" };
+  for (let i = 0; i < 20; i += 1) state = zoomGoogleRouteNavigator(state, "in");
+  const close = googleRouteCameraPose(route, state);
+  expect(close.rangeM).toBe(230);
+  const farther = googleRouteCameraPose(route, zoomGoogleRouteNavigator(state, "out"));
+  expect(farther.rangeM).toBeGreaterThan(close.rangeM);
+  const switchedFromRunner = { ...state, rangeScale: 0.55 };
+  expect(googleRouteCameraPose(route, zoomGoogleRouteNavigator(switchedFromRunner, "out")).rangeM).toBeGreaterThan(230);
 });

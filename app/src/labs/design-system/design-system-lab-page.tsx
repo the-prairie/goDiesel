@@ -8,9 +8,11 @@ import {
   MapPin,
   Route,
 } from "lucide-react";
+import { useState } from "react";
 
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
+import { SelectField } from "@/ui/select-field";
 import { Separator } from "@/ui/separator";
 import {
   Sheet,
@@ -37,6 +39,8 @@ const swatches = [
 ] as const;
 
 export function DesignSystemLabPage() {
+  const [activity, setActivity] = useState("");
+
   return (
     <main
       className="field-guide-theme min-h-full w-full min-w-0 overflow-x-clip bg-[var(--canvas)] text-[var(--ink)]"
@@ -206,6 +210,26 @@ export function DesignSystemLabPage() {
           </div>
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <SelectField
+              label="Activity"
+              value={activity}
+              options={[
+                ["", "All activities"],
+                ["Run", "Run"],
+                ["Ride", "Ride"],
+              ]}
+              onChange={setActivity}
+            />
+            <SelectField
+              label="Unavailable activity"
+              value="Run"
+              options={[
+                ["Run", "Run"],
+                ["Ride", "Ride"],
+              ]}
+              onChange={() => undefined}
+              disabled
+            />
             <label className="grid gap-2 text-control font-medium" htmlFor="route-search">
               Search memories and places
               <Input id="route-search" placeholder="Crete, Kyoto, Highwood Pass" />

@@ -7,6 +7,7 @@ import {
   routePathPose,
   type RoutePathPose,
 } from "@/domain/geometry/route-path";
+import { parsedRoutePoints } from "@/domain/route/parse-shared";
 
 function referenceRoutePathPose(
   route: QuestRoute,
@@ -167,5 +168,75 @@ describe("route path pose", () => {
       progressM: 49_998.5,
     });
     expect(indexedReads).toBeLessThanOrEqual(64);
+  });
+
+  it("matches the frozen linear oracle across seeded randomized routes", () => {
+    let seed = 0x9e3779b9;
+    const random = () => {
+      seed = (seed + 0x6d2b79f5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
+    };
+    for (let trial = 0; trial < 400; trial += 1) {
+      const pointCount = 1 + Math.floor(random() * 120);
+      let distanceM = random() < 0.2 ? 0 : random() * 50;
+      const points: RoutePoint[] = [];
+      for (let index = 0; index < pointCount; index += 1) {
+        if (index > 0) {
+          const roll = random();
+          // Duplicate distances, sub-metre steps (span < 1), and long steps.
+          if (roll >= 0.3) distanceM += roll < 0.5 ? random() * 0.9 : random() * 400;
+        }
+        points.push({
+          lat: -80 + random() * 160,
+          lng: -180 + random() * 360,
+          elev: random() * 4_000 - 100,
+          d: distanceM,
+        });
+      }
+      const overshootM = [0, random() * 0.9, random() * 5_000][trial % 3];
+      const route = {
+        distanceKm: (distanceM + overshootM) / 1_000,
+        route: points,
+      } as QuestRoute;
+      const totalM = routeDistanceM(route);
+      const queries = [
+        Number.NEGATIVE_INFINITY,
+        -1,
+        -0,
+        0,
+        totalM,
+        totalM + 1,
+        Number.POSITIVE_INFINITY,
+        Number.NaN,
+        ...points.flatMap((point) => [point.d - 1e-9, point.d, point.d + 1e-9]),
+        ...Array.from({ length: 40 }, () => random() * totalM * 1.2 - totalM * 0.1),
+      ];
+      for (const progressM of queries) {
+        expect(routePathPose(route, progressM)).toEqual(
+          referenceRoutePathPose(route, progressM),
+        );
+      }
+    }
+  });
+
+  it("relies on the route parser rejecting decreasing distances", () => {
+    // The indexed lookup assumes non-decreasing `d`; the only producer of
+    // QuestRoute points enforces it, so unsorted inputs never reach the lookup.
+    expect(
+      parsedRoutePoints([
+        { lat: 0, lng: 0, elev: 0, d: 0 },
+        { lat: 0, lng: 0, elev: 0, d: 10 },
+        { lat: 0, lng: 0, elev: 0, d: 5 },
+      ]).status,
+    ).toBe("invalid");
+    expect(
+      parsedRoutePoints([
+        { lat: 0, lng: 0, elev: 0, d: 0 },
+        { lat: 0, lng: 0, elev: 0, d: 10 },
+        { lat: 0, lng: 0, elev: 0, d: 10 },
+      ]).status,
+    ).toBe("ready");
   });
 });

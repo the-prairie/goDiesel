@@ -1,7 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const previewUrl = process.env.GODIESEL_ATLAS_PREVIEW_URL;
-const localPreviewUrl = "http://localhost:8787";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -10,8 +9,13 @@ export default defineConfig({
   retries: 0,
   reporter: "list",
   use: {
-    baseURL: previewUrl ?? localPreviewUrl,
-    headless: false,
+    // Use full Chromium's GPU-capable headless mode for live 3D measurements.
+    // The default headless shell renders WebGL through SwiftShader on macOS.
+    channel: "chromium",
+    launchOptions: {
+      args: process.platform === "darwin" ? ["--use-angle=metal"] : [],
+    },
+    baseURL: previewUrl ?? "http://127.0.0.1:8787",
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },
@@ -19,7 +23,7 @@ export default defineConfig({
     ? undefined
     : {
         command: "npm run dev",
-        url: localPreviewUrl,
+        url: "http://127.0.0.1:8787",
         reuseExistingServer: true,
         timeout: 120_000,
       },

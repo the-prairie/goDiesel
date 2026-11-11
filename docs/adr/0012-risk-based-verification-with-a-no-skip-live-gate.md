@@ -24,11 +24,10 @@ Verify by risk, in four tiers, with the matrix in `docs/agents/testing.md`:
 - **Focused** — affected unit tests and focused browser scenarios, during
   implementation.
 - **Ticket** — `npm run verify:ticket` once before merge, plus each affected spec
-  named explicitly. The ticket gate does not run an unrelated fixed browser subset.
+  named explicitly.
 - **Live provider** — only for provider, terrain, imagery, or camera changes.
 - **Release** — `npm run verify` only for production cutover or changes to shared
-  application infrastructure. Its browser phase is the production-critical
-  journey set, not every diagnostic and lab scenario in the repository.
+  application infrastructure.
 
 A successful gate stays valid unless later edits touch behaviour it covered.
 
@@ -61,9 +60,8 @@ and discovered, reviewed and draft.
 - Cost: everything is manual. `.github/` contains only a pull request template —
   there is **no CI**, so every gate depends on a person running it and recording
   the result.
-- The deterministic Playwright configuration excludes every `*-live.spec.ts`.
-  Live evidence is produced only by an explicit live-provider command, never by
-  an opt-in test appearing as skipped inside a green default run.
+- Weakness: `verify:ticket` selects browser coverage with four `--grep`'d test
+  titles, which will silently match nothing if a title is renamed.
 - Weakness: the policy is duplicated in `AGENTS.md`, `README.md`, and
   `docs/agents/testing.md`, and the copies have already drifted.
 

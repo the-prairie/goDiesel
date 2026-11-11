@@ -70,7 +70,7 @@ function StatusMetric({
         <Icon className="size-3.5" aria-hidden="true" />
         {label}
       </dt>
-      <dd className={healthy ? "text-sm font-medium capitalize text-primary" : "text-sm font-medium capitalize text-foreground"}>
+      <dd className={healthy ? "text-sm font-medium capitalize text-accent-foreground" : "text-sm font-medium capitalize text-foreground"}>
         {value}
       </dd>
     </div>

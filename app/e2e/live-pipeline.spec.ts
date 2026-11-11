@@ -9,7 +9,6 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
-import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -25,13 +24,6 @@ const matrixSlugs = [
   "14736711660",
   "3519505225411091950",
 ] as const;
-// Every top-level Python module, not a hand-kept subset.
-//
-// A fixed list silently rots: admin.py grew imports for curation_publish and
-// route_media, which transitively need route_annotations and quest_meta, and
-// the isolated workspace failed with ModuleNotFoundError at stage 3 of the live
-// gate. Deriving the list means adding a module can never break this again.
-// Test modules are excluded because the workspace only has to run the app.
 async function adminWorkspaceFiles() {
   const entries = await readdir(repositoryRoot);
   const modules = entries.filter(
@@ -204,42 +196,6 @@ async function waitForAdmin() {
   );
 }
 
-async function oversizedRequestStatus() {
-  return new Promise<number>((resolve, reject) => {
-    const socket = connect(adminPort, "127.0.0.1");
-    let response = "";
-    let settled = false;
-    const finish = (error?: Error, status?: number) => {
-      if (settled) return;
-      settled = true;
-      socket.destroy();
-      if (error) reject(error);
-      else resolve(status!);
-    };
-    socket.setTimeout(5_000, () => finish(new Error("oversized request timed out")));
-    socket.on("error", (error) => finish(error));
-    socket.on("connect", () => {
-      socket.write([
-        "POST /api/rebuild HTTP/1.1",
-        `Host: 127.0.0.1:${adminPort}`,
-        "Origin: http://127.0.0.1:8787",
-        "Content-Length: 1048577",
-        "Connection: close",
-        "",
-        "",
-      ].join("\r\n"));
-    });
-    socket.on("data", (chunk) => {
-      response += String(chunk);
-      const status = /^HTTP\/1\.[01] (\d{3})/.exec(response)?.[1];
-      if (status) finish(undefined, Number(status));
-    });
-    socket.on("end", () => {
-      if (!settled) finish(new Error(`invalid oversized response: ${response}`));
-    });
-  });
-}
-
 let adminProcess: ChildProcess | undefined;
 let adminWorkspace: string | undefined;
 let adminExit: Promise<void> | undefined;
@@ -272,6 +228,7 @@ test.describe("real source to live provider pipeline", () => {
     await cp(path.join(repositoryRoot, "route_sources"), path.join(adminWorkspace, "route_sources"), {
       recursive: true,
     });
+    await mkdir(path.join(adminWorkspace, "cards"));
     await mkdir(path.join(adminWorkspace, "app/src/data/generated"), { recursive: true });
     await mkdir(path.join(adminWorkspace, "app/public/data/routes"), { recursive: true });
     await cp(
@@ -323,10 +280,9 @@ test.describe("real source to live provider pipeline", () => {
       const heading = route.lifecycle === "discovered" ? route.activity_name : route.name;
       await expect(page.getByRole("heading", { name: heading, level: 1 })).toBeVisible();
       const geography = page.getByRole("region", { name: "Route geography" });
-      await geography.scrollIntoViewIfNeeded();
       await expect(geography).toHaveAttribute("data-map-status", "ready");
       await expect(geography).toHaveAttribute("data-geometry-points", String(route.route.length));
-      await expect(page.getByRole("link", { name: "Cinematic replay" })).toBeAttached();
+      await expect(page.getByRole("link", { name: "Open replay" })).toBeVisible();
     }
 
     for (const slug of ["17654151284", "9934715694", "14736711660"]) {
@@ -378,7 +334,12 @@ test.describe("real source to live provider pipeline", () => {
       headers: { Origin: "https://attacker.invalid" },
     });
     expect(crossOriginResponse.status).toBe(403);
-    expect(await oversizedRequestStatus()).toBe(413);
+    const oversizedResponse = await fetch(`${adminOrigin}/api/rebuild`, {
+      method: "POST",
+      headers: { Origin: "http://127.0.0.1:8787" },
+      body: "x".repeat(1_048_577),
+    });
+    expect(oversizedResponse.status).toBe(413);
     const malformedResponse = await fetch(`${adminOrigin}/api/save`, {
       method: "POST",
       headers: {
@@ -431,6 +392,9 @@ test.describe("real source to live provider pipeline", () => {
     ) as { curation: { vibe: string }; route: unknown[] };
     expect(generated.curation.vibe).toBe(realValue);
     expect(generated.route.length).toBeGreaterThan(100);
+    expect((await readFile(path.join(adminWorkspace!, "app/src/data/quests.generated.json"))).length).toBeGreaterThan(
+      1_000_000,
+    );
 
     const evidence = await network.finish(testInfo);
     expect(new Set(evidence.observations.map((entry) => entry.category))).toContain(

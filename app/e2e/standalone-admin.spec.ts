@@ -1,0 +1,546 @@
+import { test as base, expect } from '@playwright/test';
+import { startStandaloneAdminFixture } from './fixtures/standalone-admin-server.mjs';
+
+const test = base.extend<{}, { adminUrl: string }>({
+  adminUrl: [async ({}, use) => {
+    const fixture = await startStandaloneAdminFixture();
+    await use(fixture.url);
+    await fixture.close();
+  }, { scope: 'worker' }],
+});
+
+test.beforeEach(async ({ request, adminUrl }) => {
+  await request.post(`${adminUrl}/fixture/reset`);
+});
+
+for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
+  test(`standalone admin edits, saves, refreshes and guards rebuild at ${viewport.width}`, async ({ page, request, adminUrl }) => {
+    await page.setViewportSize(viewport);
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.goto(adminUrl);
+    await expect(page.getByText('Synthetic river run', { exact: true })).toBeVisible();
+    await expect(page.locator('#cPending')).toHaveText('1');
+    await expect(page.locator('#cApproved')).toHaveText('1');
+    await expect(page.locator('#saveBtn')).toBeDisabled();
+    await page.getByPlaceholder('Custom title').fill('River <loop> & "views"');
+    await page.getByPlaceholder('Blurb', { exact: true }).fill('First line\nSecond line');
+    await expect(page.locator('#dirtyCount')).toHaveText('1');
+    await page.locator('#rebuildBtn').click();
+    await expect(page.locator('#toast')).toHaveText('SAVE FIRST');
+    expect((await (await request.get(`${adminUrl}/fixture/calls`)).json()).rebuilds).toBe(0);
+    await page.locator('#saveBtn').click();
+    await expect(page.locator('#toast')).toHaveText('SAVED 1 CHANGE');
+    await expect(page.locator('#saveBtn')).toBeDisabled();
+    await expect(page.getByPlaceholder('Custom title')).toHaveValue('River <loop> & "views"');
+    await expect(page.getByPlaceholder('Blurb', { exact: true })).toHaveValue('First line\nSecond line');
+    await page.reload();
+    await expect(page.getByPlaceholder('Custom title')).toHaveValue('River <loop> & "views"');
+    await page.locator('#rebuildBtn').click();
+    await expect(page.locator('#toast')).toContainText('REBUILD STARTED');
+    const calls = await (await request.get(`${adminUrl}/fixture/calls`)).json();
+    expect(calls.saves).toEqual([[{ activity_id: 'synthetic-one', title: 'River <loop> & "views"', blurb: 'First line\nSecond line' }]]);
+    expect(calls.rebuilds).toBe(1);
+    expect(errors).toEqual([]);
+  });
+}
+
+test('standalone admin reconnects to classification and polls every two seconds', async ({ page, request, adminUrl }) => {
+  await request.post(`${adminUrl}/fixture/reset`, { data: { running: true, total: 8, done: 3, updated: 3, last_label: 'Test valley' } });
+  await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-01T00:00:00Z'));
+  await page.goto(adminUrl);
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 3 / 8');
+  await expect(page.locator('#autoClassifyBtn')).toBeDisabled();
+  expect((await (await request.get(`${adminUrl}/fixture/calls`)).json()).starts).toBe(0);
+  await request.post(`${adminUrl}/fixture/classification`, { data: { running: true, total: 8, done: 6, updated: 6, last_label: 'Test hills' } });
+  await page.clock.fastForward(1999);
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 3 / 8');
+  await page.clock.fastForward(1);
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 6 / 8');
+  await expect.poll(async () => (await (await request.get(`${adminUrl}/fixture/calls`)).json()).routeReads).toBe(2);
+  await request.post(`${adminUrl}/fixture/classification`, { data: { running: false, total: 8, done: 8, updated: 7, unmapped: 1 } });
+  await page.clock.fastForward(2000);
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFIED 7 / 8');
+  await expect(page.locator('#autoClassifyBtn')).toBeEnabled();
+  await expect.poll(async () => (await (await request.get(`${adminUrl}/fixture/calls`)).json()).routeReads).toBe(3);
+});
+
+test('standalone admin starts classification and filters the preserved route list', async ({ page, adminUrl }) => {
+  await page.goto(adminUrl);
+  await expect(page.locator('#classifyStatus')).toContainText('1 unmapped');
+  await page.locator('#autoClassifyBtn').click();
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 1 / 2');
+  await page.locator('[data-tab="approved"]').click();
+  await expect(page.getByText('Synthetic hill ride', { exact: true })).toBeVisible();
+  await page.locator('#search').fill('does not match');
+  await expect(page.getByText('NO ROUTES MATCH THESE FILTERS')).toBeVisible();
+  await page.locator('#search').fill('hill');
+  await expect(page.getByText('Synthetic hill ride', { exact: true })).toBeVisible();
+});
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 320, height: 640 }]) {
+  test(`standalone admin keeps mobile controls within ${viewport.width}px`, async ({ page, adminUrl }) => {
+    await page.setViewportSize(viewport);
+    await page.goto(adminUrl);
+    await expect(page.getByText('Synthetic river run', { exact: true })).toBeVisible();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+    expect(overflow).toBeLessThanOrEqual(1);
+    for (const selector of ['#saveBtn', '#rebuildBtn', '#autoClassifyBtn', '#regionSelect', '#search']) {
+      const box = await page.locator(selector).boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width);
+    }
+    await page.getByPlaceholder('Custom title').fill('Mobile visible controls');
+    await page.locator('#saveBtn').click();
+    await expect(page.locator('#toast')).toHaveText('SAVED 1 CHANGE');
+    await page.locator('#autoClassifyBtn').click();
+    await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 1 / 2');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+  });
+}
+
+test('standalone mutation failures retain patches for retry', async ({ page, adminUrl }) => {
+  await page.goto(adminUrl);
+  await page.getByPlaceholder('Custom title').fill('Retained draft');
+  await page.route('**/api/save', route => route.fulfill({ json: { ok: false } }));
+  await page.locator('#saveBtn').click();
+  await expect(page.locator('#toast')).toHaveText('SAVE FAILED');
+  await expect(page.locator('#dirtyCount')).toHaveText('1');
+  await expect(page.getByPlaceholder('Custom title')).toHaveValue('Retained draft');
+  await page.unroute('**/api/save');
+  await page.locator('#saveBtn').click();
+  await expect(page.locator('#toast')).toHaveText('SAVED 1 CHANGE');
+});
+
+test('standalone save retains edits made while saving and allows a second save', async ({ page, adminUrl }) => {
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/api/save', async route => { await held; await route.continue(); });
+  await page.goto(adminUrl);
+  await page.getByPlaceholder('Custom title').fill('Submitted draft');
+  const sent = page.waitForRequest('**/api/save');
+  await page.locator('#saveBtn').click();
+  await sent;
+  await page.getByPlaceholder('Custom title').fill('Newer draft');
+  await page.getByPlaceholder('Custom title').blur();
+  release();
+  await expect(page.locator('#toast')).toHaveText('SAVED 1 CHANGE');
+  await expect(page.getByPlaceholder('Custom title')).toHaveValue('Newer draft');
+  await expect(page.locator('#dirtyCount')).toHaveText('1');
+  await page.locator('#saveBtn').click();
+  await expect(page.locator('#dirtyCount')).toHaveText('0');
+  await page.reload();
+  await expect(page.getByPlaceholder('Custom title')).toHaveValue('Newer draft');
+});
+
+test('standalone rebuild reports HTTP errors and permits retry', async ({ page, adminUrl }) => {
+  await page.route('**/api/rebuild', route => route.fulfill({ status: 503, json: { error: 'Unavailable' } }));
+  await page.goto(adminUrl);
+  await page.locator('#rebuildBtn').click();
+  await expect(page.locator('#toast')).toHaveText('REBUILD FAILED');
+  await page.unroute('**/api/rebuild');
+  await page.locator('#rebuildBtn').click();
+  await expect(page.locator('#toast')).toContainText('REBUILD STARTED');
+});
+
+test('standalone pending save survives classifier refresh and rejects duplicate submission', async ({ page, request, adminUrl }) => {
+  await request.post(`${adminUrl}/fixture/mutations`, { data: { holdSaves: true } });
+  await page.clock.install();
+  await page.goto(adminUrl);
+  await page.getByPlaceholder('Custom title').fill('Saved snapshot');
+  await page.locator('#saveBtn').click();
+  await expect(page.locator('#saveBtn')).toBeDisabled();
+  await page.getByPlaceholder('Custom title').fill('Retained while classifier refreshes');
+  await page.getByPlaceholder('Custom title').blur();
+  await page.locator('#autoClassifyBtn').click();
+  await request.post(`${adminUrl}/fixture/classification`, { data: { running: false, total: 2, updated: 2, done: 2, unmapped: 0 } });
+  await page.clock.fastForward(2000);
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFIED 2 / 2');
+  await expect.poll(async () => (await (await request.get(`${adminUrl}/fixture/calls`)).json()).routeReads).toBe(2);
+  await expect(page.getByPlaceholder('Custom title')).toHaveValue('Retained while classifier refreshes');
+  await expect(page.locator('#saveBtn')).toBeDisabled();
+  await request.post(`${adminUrl}/fixture/release-saves`);
+  await expect(page.locator('#saveBtn')).toBeEnabled();
+  await expect(page.getByPlaceholder('Custom title')).toHaveValue('Retained while classifier refreshes');
+  expect((await (await request.get(`${adminUrl}/fixture/calls`)).json()).saves).toHaveLength(1);
+});
+
+test('standalone save settles after a failed refresh and allows a later edit', async ({ page, adminUrl }) => {
+  await page.goto(adminUrl);
+  await page.getByPlaceholder('Custom title').fill('Persisted before refresh failure');
+  await page.route('**/api/routes', route => route.abort());
+  await page.locator('#saveBtn').click();
+  await expect(page.locator('#toast')).toHaveText('SAVE FAILED');
+  await expect(page.locator('#dirtyCount')).toHaveText('0');
+  await page.getByPlaceholder('Custom title').fill('Retry after failure');
+  await expect(page.locator('#saveBtn')).toBeEnabled();
+  await page.unroute('**/api/routes');
+  await page.locator('#saveBtn').click();
+  await expect(page.locator('#toast')).toHaveText('SAVED 1 CHANGE');
+  await page.reload();
+  await expect(page.getByPlaceholder('Custom title')).toHaveValue('Retry after failure');
+});
+
+test('classifier refreshes after five new updates and resets the threshold on reconnect', async ({ page, request, adminUrl }) => {
+  await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-01T00:00:00Z'));
+  await request.post(`${adminUrl}/fixture/classification`, { data: { running: true, total: 20, done: 4, updated: 4 } });
+  await page.goto(adminUrl);
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 4 / 20');
+  expect((await (await request.get(`${adminUrl}/fixture/calls`)).json()).routeReads).toBe(1);
+  for (const [count, reads] of [[5, 2], [9, 2], [10, 3]]) {
+    await request.post(`${adminUrl}/fixture/classification`, { data: { running: true, total: 20, done: count, updated: count } });
+    await page.clock.fastForward(2000);
+    await expect(page.locator('#classifyStatus')).toContainText(`CLASSIFYING ${count} / 20`);
+    await expect.poll(async () => (await (await request.get(`${adminUrl}/fixture/calls`)).json()).routeReads).toBe(reads);
+  }
+  await page.reload();
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 10 / 20');
+  await expect.poll(async () => (await (await request.get(`${adminUrl}/fixture/calls`)).json()).routeReads).toBe(5);
+});
+
+test('classifier completion fades after eight seconds and stops polling', async ({ page, request, adminUrl }) => {
+  await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-01T00:00:00Z'));
+  await request.post(`${adminUrl}/fixture/classification`, { data: { running: false, total: 8, done: 8, updated: 7, unmapped: 1 } });
+  await page.goto(adminUrl);
+  await expect(page.locator('#classifyStatus')).toHaveText('✓ CLASSIFIED 7 / 8 · 1 still unmapped');
+  await expect.poll(async () => (await (await request.get(`${adminUrl}/fixture/calls`)).json()).routeReads).toBe(2);
+  await page.clock.fastForward(7999);
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFIED');
+  await page.clock.fastForward(1);
+  await expect(page.locator('#classifyStatus')).toBeEmpty();
+  expect((await (await request.get(`${adminUrl}/fixture/calls`)).json()).polls).toBe(1);
+});
+
+test('classifier poll failure stops until a new start retries', async ({ page, request, adminUrl }) => {
+  await page.clock.install();
+  await page.route('**/api/classify-status', route => route.abort());
+  await page.goto(adminUrl);
+  await expect(page.locator('#classifyStatus')).toHaveText('CHECK FAILED');
+  await expect(page.locator('#autoClassifyBtn')).toBeEnabled();
+  await page.clock.fastForward(10000);
+  expect((await (await request.get(`${adminUrl}/fixture/calls`)).json()).polls).toBe(0);
+  await page.unroute('**/api/classify-status');
+  await page.locator('#autoClassifyBtn').click();
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 1 / 2');
+});
+
+test('classifier start network failure retains its notice and allows retry', async ({ page, adminUrl }) => {
+  await page.goto(adminUrl);
+  await expect(page.locator('#classifyStatus')).toContainText('1 unmapped');
+  await page.route('**/api/auto-classify', route => route.abort());
+  await page.locator('#autoClassifyBtn').click();
+  await expect(page.locator('#toast')).toHaveText('AUTO-CLASSIFY FAILED');
+  await expect(page.locator('#classifyStatus')).toContainText('1 unmapped');
+  await expect(page.locator('#autoClassifyBtn')).toBeEnabled();
+  await page.unroute('**/api/auto-classify');
+  await page.locator('#autoClassifyBtn').click();
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 1 / 2');
+});
+
+test('classifier completion fade cannot erase a newer run', async ({ page, request, adminUrl }) => {
+  await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-01T00:00:00Z'));
+  await request.post(`${adminUrl}/fixture/classification`, { data: { running: false, total: 2, done: 2, updated: 2, unmapped: 0 } });
+  await page.goto(adminUrl);
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFIED 2 / 2');
+  await page.locator('#autoClassifyBtn').click();
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 1 / 2');
+  await page.route('**/api/classify-status', () => {});
+  await page.clock.fastForward(8000);
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 1 / 2');
+  await expect(page.locator('#autoClassifyBtn')).toBeDisabled();
+});
+
+test('classifier start is single-flight while the server responds', async ({ page, request, adminUrl }) => {
+  await request.post(`${adminUrl}/fixture/classifier-options`, { data: { holdStarts: true } });
+  await page.goto(adminUrl);
+  await expect(page.locator('#classifyStatus')).toContainText('1 unmapped');
+  await page.locator('#autoClassifyBtn').click();
+  await expect(page.locator('#autoClassifyBtn')).toBeDisabled();
+  expect((await (await request.get(`${adminUrl}/fixture/calls`)).json()).starts).toBe(1);
+  await request.post(`${adminUrl}/fixture/release-starts`);
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 1 / 2');
+});
+
+test('classifier reports HTTP start and poll failures and permits retry', async ({ page, request, adminUrl }) => {
+  await page.goto(adminUrl);
+  await expect(page.locator('#classifyStatus')).toContainText('1 unmapped');
+  await request.post(`${adminUrl}/fixture/classifier-options`, { data: { startStatus: 503 } });
+  await page.locator('#autoClassifyBtn').click();
+  await expect(page.locator('#toast')).toHaveText('AUTO-CLASSIFY FAILED');
+  await expect(page.locator('#classifyStatus')).toContainText('1 unmapped');
+  await request.post(`${adminUrl}/fixture/classifier-options`, { data: { pollStatus: 503 } });
+  await page.locator('#autoClassifyBtn').click();
+  await expect(page.locator('#classifyStatus')).toHaveText('CHECK FAILED');
+  await expect(page.locator('#autoClassifyBtn')).toBeEnabled();
+  await request.post(`${adminUrl}/fixture/classifier-options`, { data: {} });
+  await page.locator('#autoClassifyBtn').click();
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 1 / 2');
+});
+
+test('an older classifier refresh landing after a save cannot restore pre-save values', async ({ page, request, adminUrl }) => {
+  await page.clock.install();
+  await page.goto(adminUrl);
+  await expect(page.locator('#classifyStatus')).toContainText('1 unmapped');
+  await page.getByPlaceholder('Custom title').fill('Saved after classifier');
+  let releaseHeld!: () => void;
+  const held = new Promise<void>(resolve => { releaseHeld = resolve; });
+  let holdNext = true;
+  let heldFetched!: () => void;
+  const heldReady = new Promise<void>(resolve => { heldFetched = resolve; });
+  await page.route('**/api/routes', async route => {
+    if (!holdNext) return route.continue();
+    holdNext = false;
+    const preSave = await route.fetch();
+    heldFetched();
+    await held;
+    await route.fulfill({ response: preSave });
+  });
+  await page.locator('#autoClassifyBtn').click();
+  await request.post(`${adminUrl}/fixture/classification`, { data: { running: false, total: 2, updated: 2, done: 2, unmapped: 0 } });
+  await page.clock.fastForward(2000);
+  await heldReady;
+  await page.locator('#saveBtn').click();
+  await expect(page.locator('#toast')).toHaveText('SAVED 1 CHANGE');
+  await expect(page.getByPlaceholder('Custom title')).toHaveValue('Saved after classifier');
+  await expect(page.locator('#dirtyCount')).toHaveText('0');
+  await page.getByPlaceholder('Custom title').evaluate(element => { (element as HTMLElement).dataset.beforeHeldRefresh = '1'; });
+  releaseHeld();
+  await expect(page.locator('[data-before-held-refresh]')).toHaveCount(0);
+  await expect(page.getByPlaceholder('Custom title')).toHaveValue('Saved after classifier');
+  await expect(page.locator('#dirtyCount')).toHaveText('0');
+});
+
+test('a classifier run the server marks failed reads as stopped early and stays until restarted', async ({ page, request, adminUrl }) => {
+  await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-01T00:00:00Z'));
+  await request.post(`${adminUrl}/fixture/reset`, { data: { phase: 'running', running: true, total: 8, done: 3, updated: 3, last_label: 'Test valley' } });
+  await page.goto(adminUrl);
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 3 / 8');
+  await request.post(`${adminUrl}/fixture/classification`, { data: { phase: 'failed', running: false, total: 8, done: 4, updated: 3, unmapped: 5 } });
+  await page.clock.fastForward(2000);
+  await expect(page.locator('#classifyStatus')).toHaveText('✕ CLASSIFYING STOPPED EARLY AT 4 / 8 · click AUTO-CLASSIFY to start again');
+  await expect(page.locator('#classifyStatus')).not.toContainText('CLASSIFIED');
+  await expect(page.locator('#autoClassifyBtn')).toBeEnabled();
+  await expect.poll(async () => (await (await request.get(`${adminUrl}/fixture/calls`)).json()).routeReads).toBe(2);
+  await page.clock.fastForward(10000);
+  await expect(page.locator('#classifyStatus')).toContainText('STOPPED EARLY AT 4 / 8');
+  await page.locator('#autoClassifyBtn').click();
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 1 / 2');
+});
+
+test('a finished classifier phase keeps the original completion notice', async ({ page, request, adminUrl }) => {
+  await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-01T00:00:00Z'));
+  await request.post(`${adminUrl}/fixture/classification`, { data: { phase: 'finished', running: false, total: 8, done: 8, updated: 7, unmapped: 1 } });
+  await page.goto(adminUrl);
+  await expect(page.locator('#classifyStatus')).toHaveText('✓ CLASSIFIED 7 / 8 · 1 still unmapped');
+});
+
+type RebuildSnapshotBody = { phase: string; id: string | null; started_at: number | null; finished_at: number | null; exit_code: number | null; stderr_tail: string | null };
+const rebuildSnapshot = (phase: string, id: string | null, extra: Partial<RebuildSnapshotBody> = {}): RebuildSnapshotBody =>
+  ({ phase, id, started_at: phase === 'idle' ? null : 1, finished_at: phase === 'idle' || phase === 'running' ? null : 2, exit_code: null, stderr_tail: null, ...extra });
+
+async function stubOwnerStatus(page: import('@playwright/test').Page, initial: RebuildSnapshotBody) {
+  const owner = { rebuild: initial, reads: 0 };
+  await page.route('**/api/admin/status', route => {
+    owner.reads++;
+    return route.fulfill({ json: { writer_available: true, mode: 'local-owner', generation_status: 'ready', rebuild: owner.rebuild } });
+  });
+  return owner;
+}
+
+async function routeReads(request: import('@playwright/test').APIRequestContext, adminUrl: string) {
+  return (await (await request.get(`${adminUrl}/fixture/calls`)).json()).routeReads;
+}
+
+test('rebuild shows running then success, refreshes routes once and re-enables the control', async ({ page, request, adminUrl }) => {
+  await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-01T00:00:00Z'));
+  const owner = await stubOwnerStatus(page, rebuildSnapshot('idle', null));
+  await page.route('**/api/rebuild', route => route.fulfill({ json: { ok: true, msg: 'Rebuild started in background.', rebuild: rebuildSnapshot('running', 'run-a') } }));
+  await page.goto(adminUrl);
+  await expect(page.getByText('Synthetic river run', { exact: true })).toBeVisible();
+  await expect(page.locator('#rebuildStatus')).toBeHidden();
+  await expect(page.locator('#rebuildBtn')).toBeEnabled();
+  owner.rebuild = rebuildSnapshot('running', 'run-a');
+  await page.locator('#rebuildBtn').click();
+  await expect(page.locator('#rebuildStatusText')).toHaveText('↻ REBUILDING SITE · run-a');
+  await expect(page.locator('#rebuildBtn')).toBeDisabled();
+  await expect(page.locator('#toast')).not.toContainText('CHECK TERMINAL');
+  await page.clock.fastForward(2000);
+  await expect.poll(() => owner.reads).toBe(2);
+  await expect(page.locator('#rebuildStatusText')).toHaveText('↻ REBUILDING SITE · run-a');
+  owner.rebuild = rebuildSnapshot('succeeded', 'run-other');
+  await page.clock.fastForward(2000);
+  await expect.poll(() => owner.reads).toBe(3);
+  await expect(page.locator('#rebuildStatusText')).toHaveText('↻ REBUILDING SITE · run-a');
+  expect(await routeReads(request, adminUrl)).toBe(1);
+  owner.rebuild = rebuildSnapshot('succeeded', 'run-a');
+  await page.clock.fastForward(2000);
+  await expect(page.locator('#rebuildStatusText')).toHaveText('✓ SITE REBUILT · run-a');
+  await expect(page.locator('#rebuildBtn')).toBeEnabled();
+  await expect.poll(() => routeReads(request, adminUrl)).toBe(2);
+  await page.clock.fastForward(7999);
+  await expect(page.locator('#rebuildStatusText')).toHaveText('✓ SITE REBUILT · run-a');
+  await page.clock.fastForward(1);
+  await expect(page.locator('#rebuildStatus')).toBeHidden();
+  expect(owner.reads).toBe(4);
+  expect(await routeReads(request, adminUrl)).toBe(2);
+});
+
+test('rebuild failure shows the exit code and keeps stderr behind a disclosure', async ({ page, adminUrl }) => {
+  await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-01T00:00:00Z'));
+  const owner = await stubOwnerStatus(page, rebuildSnapshot('idle', null));
+  let startId = 'run-b';
+  await page.route('**/api/rebuild', route => route.fulfill({ json: { ok: true, rebuild: rebuildSnapshot('running', startId) } }));
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.goto(adminUrl);
+  owner.rebuild = rebuildSnapshot('running', 'run-b');
+  await page.locator('#rebuildBtn').click();
+  await expect(page.locator('#rebuildStatusText')).toHaveText('↻ REBUILDING SITE · run-b');
+  const stderr = 'Traceback (most recent call last):\n  File "build.py", line 9\nValueError: a deliberately broken synthetic route with a long message';
+  owner.rebuild = rebuildSnapshot('failed', 'run-b', { exit_code: 2, stderr_tail: stderr });
+  await page.clock.fastForward(2000);
+  await expect(page.locator('#rebuildStatusText')).toHaveText('✕ REBUILD FAILED · EXIT 2 · run-b');
+  await expect(page.locator('#rebuildBtn')).toBeEnabled();
+  await expect(page.locator('#toast')).not.toContainText('Traceback');
+  await expect(page.locator('#rebuildStderr')).toBeHidden();
+  await page.getByText('SHOW STDERR').click();
+  await expect(page.locator('#rebuildStderr')).toBeVisible();
+  await expect(page.locator('#rebuildStderr')).toHaveText(stderr);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+  await page.clock.fastForward(10000);
+  await expect(page.locator('#rebuildStatusText')).toHaveText('✕ REBUILD FAILED · EXIT 2 · run-b');
+  const readsAfterFailure = owner.reads;
+  startId = 'run-c';
+  owner.rebuild = rebuildSnapshot('running', 'run-c');
+  await page.locator('#rebuildBtn').click();
+  await expect(page.locator('#rebuildStatusText')).toHaveText('↻ REBUILDING SITE · run-c');
+  await expect(page.locator('#rebuildDetails')).toBeHidden();
+  expect(owner.reads).toBe(readsAfterFailure);
+});
+
+test('a page loaded during a running rebuild adopts it and follows it to the end', async ({ page, request, adminUrl }) => {
+  await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-01T00:00:00Z'));
+  const owner = await stubOwnerStatus(page, rebuildSnapshot('running', 'run-z'));
+  await page.goto(adminUrl);
+  await expect(page.locator('#rebuildStatusText')).toHaveText('↻ REBUILDING SITE · run-z');
+  await expect(page.locator('#rebuildBtn')).toBeDisabled();
+  expect((await (await request.get(`${adminUrl}/fixture/calls`)).json()).rebuilds).toBe(0);
+  owner.rebuild = rebuildSnapshot('succeeded', 'run-z');
+  await page.clock.fastForward(2000);
+  await expect(page.locator('#rebuildStatusText')).toHaveText('✓ SITE REBUILT · run-z');
+  await expect(page.locator('#rebuildBtn')).toBeEnabled();
+  await expect.poll(() => routeReads(request, adminUrl)).toBe(2);
+});
+
+test('a page loaded after a finished rebuild shows no stale outcome', async ({ page, adminUrl }) => {
+  await stubOwnerStatus(page, rebuildSnapshot('failed', 'run-old', { exit_code: 1, stderr_tail: 'old failure' }));
+  await page.goto(adminUrl);
+  await expect(page.getByText('Synthetic river run', { exact: true })).toBeVisible();
+  await expect(page.locator('#rebuildStatus')).toBeHidden();
+  await expect(page.locator('#rebuildBtn')).toBeEnabled();
+});
+
+test('a rebuild refused because another rebuild holds the lock names it and adopts it', async ({ page, adminUrl }) => {
+  await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-01T00:00:00Z'));
+  const owner = await stubOwnerStatus(page, rebuildSnapshot('idle', null));
+  const reason = 'rebuild run-x is running; saves and rebuilds are refused until it finishes';
+  await page.route('**/api/rebuild', route => route.fulfill({ status: 409, json: { error: 'another owner mutation is in progress', reason } }));
+  await page.goto(adminUrl);
+  await expect(page.getByText('Synthetic river run', { exact: true })).toBeVisible();
+  owner.rebuild = rebuildSnapshot('running', 'run-x');
+  await page.locator('#rebuildBtn').click();
+  await expect(page.locator('#toast')).toHaveText(`REBUILD REFUSED — ${reason}`);
+  await expect(page.locator('#rebuildStatusText')).toHaveText('↻ REBUILDING SITE · run-x');
+  await expect(page.locator('#rebuildBtn')).toBeDisabled();
+});
+
+test('a save refused during a rebuild names the reason and keeps the draft for retry', async ({ page, request, adminUrl }) => {
+  const owner = await stubOwnerStatus(page, rebuildSnapshot('idle', null));
+  const reason = 'rebuild run-r is running; saves and rebuilds are refused until it finishes';
+  await page.goto(adminUrl);
+  await expect(page.getByText('Synthetic river run', { exact: true })).toBeVisible();
+  await page.getByPlaceholder('Custom title').fill('Refused while rebuilding');
+  await page.route('**/api/save', route => route.fulfill({ status: 409, json: { error: 'another owner mutation is in progress', reason } }));
+  owner.rebuild = rebuildSnapshot('running', 'run-r');
+  await page.locator('#saveBtn').click();
+  await expect(page.locator('#toast')).toHaveText(`SAVE FAILED — ${reason}`);
+  await expect(page.locator('#dirtyCount')).toHaveText('1');
+  await expect(page.getByPlaceholder('Custom title')).toHaveValue('Refused while rebuilding');
+  await expect(page.locator('.card[data-id="synthetic-one"]')).toHaveClass(/\bdirty\b/);
+  await expect(page.locator('#saveBtn')).toBeEnabled();
+  await expect(page.locator('#rebuildStatusText')).toHaveText('↻ REBUILDING SITE · run-r');
+  await page.unroute('**/api/save');
+  await page.locator('#saveBtn').click();
+  await expect(page.locator('#toast')).toHaveText('SAVED 1 CHANGE');
+  await expect(page.locator('#dirtyCount')).toHaveText('0');
+  expect((await (await request.get(`${adminUrl}/fixture/calls`)).json()).saves).toEqual([[{ activity_id: 'synthetic-one', title: 'Refused while rebuilding' }]]);
+});
+
+test('a save refused without a reason keeps the plain failure toast', async ({ page, adminUrl }) => {
+  await page.goto(adminUrl);
+  await page.getByPlaceholder('Custom title').fill('Refused by a busy writer');
+  await page.route('**/api/save', route => route.fulfill({ status: 409, json: { error: 'another owner mutation is in progress' } }));
+  await page.locator('#saveBtn').click();
+  await expect(page.locator('#toast')).toHaveText('SAVE FAILED');
+  await expect(page.locator('#dirtyCount')).toHaveText('1');
+});
+
+test('card dirty marking follows edits, re-renders, saves and reloads', async ({ page, adminUrl }) => {
+  const one = page.locator('.card[data-id="synthetic-one"]');
+  const dirtyCards = page.locator('.card.dirty');
+  await page.goto(adminUrl);
+  await expect(page.getByText('Synthetic river run', { exact: true })).toBeVisible();
+  await expect(dirtyCards).toHaveCount(0);
+  await one.locator('.region-input').fill('Test region');
+  await expect(one).toHaveClass(/\bdirty\b/);
+  await expect(dirtyCards).toHaveCount(1);
+  await page.locator('#search').fill('river');
+  await expect(one).toHaveClass(/\bdirty\b/);
+  await page.locator('#search').fill('');
+  await page.locator('[data-tab="approved"]').click();
+  const two = page.locator('.card[data-id="synthetic-two"]');
+  await expect(two).not.toHaveClass(/\bdirty\b/);
+  await two.locator('select[data-meta-field="visibility"]').selectOption('hidden');
+  await expect(two).toHaveClass(/\bdirty\b/);
+  await two.locator('textarea[data-meta-field="blurb"]').fill('Ridge blurb');
+  await expect(two).toHaveClass(/\bdirty\b/);
+  await two.locator('[data-action="archive"]').click();
+  await page.locator('[data-tab="archived"]').click();
+  await expect(two).toHaveClass(/\bdirty\b/);
+  await page.locator('[data-tab="pending"]').click();
+  await expect(one).toHaveClass(/\bdirty\b/);
+  await expect(page.locator('#dirtyCount')).toHaveText('2');
+  await page.locator('#saveBtn').click();
+  await expect(page.locator('#toast')).toHaveText('SAVED 2 CHANGES');
+  await expect(dirtyCards).toHaveCount(0);
+  await page.locator('[data-tab="archived"]').click();
+  await expect(two).not.toHaveClass(/\bdirty\b/);
+  await page.reload();
+  await expect(page.getByText('Synthetic river run', { exact: true })).toBeVisible();
+  await expect(dirtyCards).toHaveCount(0);
+});
+
+test('a card edited during a save stays marked dirty after the save settles', async ({ page, request, adminUrl }) => {
+  await request.post(`${adminUrl}/fixture/mutations`, { data: { holdSaves: true } });
+  const one = page.locator('.card[data-id="synthetic-one"]');
+  await page.goto(adminUrl);
+  await page.getByPlaceholder('Custom title').fill('Submitted');
+  await page.locator('#saveBtn').click();
+  await expect(page.locator('#saveBtn')).toBeDisabled();
+  await page.getByPlaceholder('Custom title').fill('Edited while saving');
+  await expect(one).toHaveClass(/\bdirty\b/);
+  await request.post(`${adminUrl}/fixture/release-saves`);
+  await expect(page.locator('#toast')).toHaveText('SAVED 1 CHANGE');
+  await expect(one).toHaveClass(/\bdirty\b/);
+  await expect(page.locator('#dirtyCount')).toHaveText('1');
+});

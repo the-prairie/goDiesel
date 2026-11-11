@@ -1,16 +1,26 @@
 import { LocateFixed, Minus, Plus } from "lucide-react";
-import maplibregl, { LngLatBounds, Map as MapLibreMap } from "maplibre-gl";
+import maplibregl from "@/providers/maplibre";
+import { LngLatBounds, Map as MapLibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 
+import { RepairEvidence } from "@/ui/repair-evidence";
 import { Button } from "@/ui/button";
-import type { QuestRoute } from "@/domain/route";
+import {
+  routeRepairAriaLabel,
+  routeRepairs,
+  type RouteRepair,
+} from "@/domain/geometry/route-repairs";
+import type { QuestRoute, RouteSummary } from "@/domain/route";
+import { RouteCover } from "@/ui/route-cover";
+
+import { initialRouteLeafMapState, reduceRouteLeafMap } from "./route-leaf-map-state";
+import "./route-leaf-map.css";
 
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
-const ROUTE_COLOR = "#3379df";
-const ROUTE_HALO = "#fffaf2";
-const ROUTE_WIDTH = 4;
-const ROUTE_HALO_WIDTH = 8;
+const ROUTE_COLOR = "#30343b";
+const ROUTE_HALO = "#ffffff";
+const ENDPOINT_COLORS = { start: "#ed916b", finish: "#88c6a1" };
 
 function routeFeature(route: QuestRoute) {
   return {
@@ -23,42 +33,74 @@ function routeFeature(route: QuestRoute) {
   };
 }
 
-export function RouteLeafMap({ route }: { route: QuestRoute }) {
+export function RouteLeafMap({ route, showDiagnostics = false }: { route: QuestRoute; showDiagnostics?: boolean }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | undefined>(undefined);
-  const [status, setStatus] = useState<"loading" | "ready" | "unavailable">(
-    route.route.length > 1 ? "loading" : "unavailable",
-  );
+  const [{ status, phase }, dispatch] = useReducer(reduceRouteLeafMap, route.route.length, initialRouteLeafMapState);
+  const sessionRef = useRef(0);
+  const repairs = useMemo(() => showDiagnostics ? routeRepairs(route) : [], [route, showDiagnostics]);
+  const [activeRepairs, setActiveRepairs] = useState<RouteRepair[]>([]);
+  const [repairPositions, setRepairPositions] = useState<
+    Array<{ id: string; x: number; y: number }>
+  >([]);
+
   useEffect(() => {
     const host = hostRef.current;
     if (!host || route.route.length < 2) return;
 
     let active = true;
-    let errorCount = 0;
-    let ready = false;
+    const sessionId = ++sessionRef.current;
+    dispatch({ type: "sessionStarted", sessionId });
     const bounds = new LngLatBounds();
     route.route.forEach((point) => bounds.extend([point.lng, point.lat]));
-    const map = new maplibregl.Map({
-      container: host,
-      style: STYLE_URL,
-      center: [route.centerLng, route.centerLat],
-      zoom: 11,
-      pitch: 38,
-      bearing: 0,
-      attributionControl: { compact: true },
-    });
+    let map: MapLibreMap;
+    try {
+      // MapLibre throws while constructing when the browser cannot give it a
+      // WebGL2 context. That must cost the map, never the guide around it.
+      map = new maplibregl.Map({
+        container: host,
+        style: STYLE_URL,
+        center: [route.centerLng, route.centerLat],
+        zoom: 11,
+        pitch: 38,
+        bearing: 0,
+        attributionControl: { compact: true },
+      });
+    } catch {
+      dispatch({ type: "rendererUnavailable", sessionId });
+      return () => {
+        active = false;
+      };
+    }
     mapRef.current = map;
+    let creditTimer: number | undefined;
+    const keepCreditsOpen = () => window.clearTimeout(creditTimer);
+    let attribution: HTMLElement | null = null;
     const resizeObserver = new ResizeObserver(() => map.resize());
     resizeObserver.observe(host);
     const loadTimer = window.setTimeout(() => {
-      if (active && !ready) setStatus("unavailable");
+      if (active) dispatch({ type: "deadlineReached", sessionId });
     }, 8_000);
 
     const handleError = () => {
-      errorCount += 1;
-      if (active && errorCount >= 4 && !ready) setStatus("unavailable");
+      if (active) dispatch({ type: "sourceError", sessionId });
+    };
+    const handleContextLost = () => {
+      if (active) dispatch({ type: "rendererUnavailable", sessionId });
+    };
+    const syncRepairPositions = () => {
+      setRepairPositions(
+        repairs.flatMap((repair) => {
+          if (!repair.point) return [];
+          const projected = map.project([repair.point.lng, repair.point.lat]);
+          return [{ id: repair.id, x: projected.x, y: projected.y }];
+        }),
+      );
     };
     map.on("error", handleError);
+    map.on("webglcontextlost", handleContextLost);
+    map.on("move", syncRepairPositions);
+    map.on("resize", syncRepairPositions);
     map.once("load", () => {
       if (!active) return;
       map.resize();
@@ -70,8 +112,8 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
           "line-color": ROUTE_HALO,
-          "line-width": ROUTE_HALO_WIDTH,
-          "line-opacity": 0.88,
+          "line-width": 5,
+          "line-opacity": 0.9,
         },
       });
       map.addLayer({
@@ -81,8 +123,8 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
           "line-color": ROUTE_COLOR,
-          "line-width": ROUTE_WIDTH,
-          "line-opacity": 0.96,
+          "line-width": 3,
+          "line-opacity": 1,
         },
       });
       const start = route.route[0];
@@ -111,10 +153,10 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
         source: "leaf-endpoints",
         filter: ["==", ["get", "kind"], "start"],
         paint: {
-          "circle-radius": 5,
-          "circle-color": "#d95d45",
+          "circle-radius": 7,
+          "circle-color": ENDPOINT_COLORS.start,
           "circle-stroke-color": ROUTE_HALO,
-          "circle-stroke-width": 2,
+          "circle-stroke-width": 3,
         },
       });
       map.addLayer({
@@ -123,10 +165,10 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
         source: "leaf-endpoints",
         filter: ["==", ["get", "kind"], "finish"],
         paint: {
-          "circle-radius": 5,
-          "circle-color": "#174f46",
+          "circle-radius": 7,
+          "circle-color": ENDPOINT_COLORS.finish,
           "circle-stroke-color": ROUTE_HALO,
-          "circle-stroke-width": 2,
+          "circle-stroke-width": 3,
         },
       });
       map.fitBounds(bounds, {
@@ -134,24 +176,37 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
         maxZoom: 14,
         duration: 0,
       });
+      syncRepairPositions();
       map.getCanvas().setAttribute("aria-label", `${route.name} interactive route map`);
       map.once("idle", () => {
         if (!active) return;
-        ready = true;
         window.clearTimeout(loadTimer);
-        setStatus("ready");
+        dispatch({ type: "mapIdle", sessionId });
+        attribution = host.querySelector<HTMLElement>(".maplibregl-ctrl-attrib");
+        attribution?.addEventListener("pointerdown", keepCreditsOpen);
+        attribution?.addEventListener("focusin", keepCreditsOpen);
+        creditTimer = window.setTimeout(() => {
+          attribution?.classList.remove("maplibregl-compact-show");
+          attribution?.removeAttribute("open");
+        }, 5_000);
       });
     });
 
     return () => {
       active = false;
       window.clearTimeout(loadTimer);
+      window.clearTimeout(creditTimer);
+      attribution?.removeEventListener("pointerdown", keepCreditsOpen);
+      attribution?.removeEventListener("focusin", keepCreditsOpen);
       resizeObserver.disconnect();
       map.off("error", handleError);
+      map.off("webglcontextlost", handleContextLost);
+      map.off("move", syncRepairPositions);
+      map.off("resize", syncRepairPositions);
       map.remove();
       mapRef.current = undefined;
     };
-  }, [route]);
+  }, [repairs, route]);
 
   function resetView() {
     const map = mapRef.current;
@@ -165,6 +220,13 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
     });
   }
 
+  const repairGroups = projectedRepairGroups(repairs, repairPositions);
+  const coverRoute = useMemo<RouteSummary>(
+    () => ({ ...route, trace: route.route, guide: { vibe: route.curation.vibe, reviewStatus: route.curation.reviewStatus } }),
+    [route],
+  );
+  const mapRunning = phase !== "unsupported";
+
   return (
     <section
       aria-label="Route geography"
@@ -172,27 +234,83 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
       data-geometry-points={route.route.length}
       data-route-color={ROUTE_COLOR}
       data-route-halo={ROUTE_HALO}
-      data-route-width={ROUTE_WIDTH}
-      data-route-halo-width={ROUTE_HALO_WIDTH}
-      className="relative min-h-0 overflow-hidden bg-[#d9ddd2]"
+      className="relative h-full min-h-0 overflow-hidden bg-canvas"
     >
       <div
         ref={hostRef}
         role="img"
         aria-label={`${route.name} recorded path on a real map`}
-        className="h-full w-full"
+        className="route-geography-map h-full w-full"
       />
+
+      {status === "ready"
+        ? repairs.map((repair) => {
+            const position = repairPositions.find(({ id }) => id === repair.id);
+            if (!position) return null;
+            return (
+              <span
+                key={repair.id}
+                data-testid="leaf-repair-mark"
+                aria-hidden="true"
+                data-repair-distance-m={repair.distanceM.toFixed(2)}
+                className="pointer-events-none absolute z-10 h-7 w-1 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded-full bg-repair shadow-[0_0_0_2px_rgba(24,33,29,0.88),0_0_0_4px_rgba(246,242,232,0.92)]"
+                style={{ left: position.x, top: position.y }}
+              />
+            );
+          })
+        : null}
+
+      {status === "ready"
+        ? repairGroups.map((group) => (
+            <button
+              key={group.repairs.map(({ id }) => id).join("-")}
+              type="button"
+              aria-label={
+                group.repairs.length === 1
+                  ? routeRepairAriaLabel(group.repairs[0])
+                  : `${group.repairs.length} recorded repairs near ${(
+                      group.repairs.reduce((sum, repair) => sum + repair.distanceM, 0) /
+                      group.repairs.length /
+                      1_000
+                    ).toFixed(2)} km`
+              }
+              className="absolute z-10 size-11 -translate-x-1/2 -translate-y-1/2 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-repair focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+              style={{ left: group.x, top: group.y }}
+              onClick={() => setActiveRepairs(group.repairs)}
+            />
+          ))
+        : null}
+
+      {activeRepairs.length > 0 ? (
+        <RepairEvidence
+          repairs={activeRepairs}
+          className="absolute left-4 top-[calc(4rem+var(--safe-area-top))] z-20 max-w-[min(22rem,calc(100%-2rem))]"
+        />
+      ) : null}
 
       {status === "loading" ? (
         <div
           role="status"
-          className="absolute left-4 top-4 rounded-sm border border-line bg-surface/92 px-3 py-2 text-caption text-ink-secondary shadow-panel"
+          className="absolute inset-0 grid place-items-center bg-canvas p-6 text-caption text-ink-secondary"
         >
           Opening route geography.
         </div>
       ) : null}
-      {status === "unavailable" ? (
-        <div className="absolute inset-0 grid place-items-center bg-surface-muted/92 p-6 text-center">
+      {phase === "unsupported" ? (
+        <div className="route-geography-static absolute inset-0 bg-canvas">
+          <RouteCover route={coverRoute} />
+          <div
+            role="status"
+            className="absolute inset-x-4 top-[calc(1rem+var(--safe-area-top))] z-10 max-w-sm rounded-[var(--radius-control)] border border-line bg-surface/94 p-3 shadow-panel backdrop-blur"
+          >
+            <p className="text-control font-semibold text-ink">Interactive map unavailable</p>
+            <p className="mt-1 text-caption leading-5 text-ink-secondary">
+              This browser could not start the map. The recorded route is shown as a static trace.
+            </p>
+          </div>
+        </div>
+      ) : status === "unavailable" ? (
+        <div className="absolute inset-0 grid place-items-center bg-canvas p-6 text-center">
           <div className="max-w-sm">
             <p className="font-semibold text-ink">
               {route.route.length > 1 ? "Map tiles unavailable" : "Recorded path unavailable"}
@@ -206,19 +324,19 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
         </div>
       ) : null}
 
-      {route.route.length > 1 ? (
+      {route.route.length > 1 && mapRunning ? (
         <>
-          <div className="absolute right-4 top-4 z-10 flex gap-3 rounded-sm border border-line bg-surface/92 px-3 py-2 text-caption font-semibold text-ink-secondary shadow-panel backdrop-blur">
+          <div className="absolute right-4 top-[calc(1rem+var(--safe-area-top))] z-10 flex gap-3 rounded-sm border border-line bg-surface/92 px-3 py-2 text-caption font-semibold text-ink-secondary shadow-panel backdrop-blur">
             <span className="inline-flex items-center gap-1.5">
-              <span className="size-2 rounded-full bg-coral" aria-hidden="true" />
+              <span className="size-2 rounded-full" style={{ backgroundColor: ENDPOINT_COLORS.start }} aria-hidden="true" />
               Start
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="size-2 rounded-full bg-forest" aria-hidden="true" />
+              <span className="size-2 rounded-full" style={{ backgroundColor: ENDPOINT_COLORS.finish }} aria-hidden="true" />
               Finish
             </span>
           </div>
-          <div className="absolute bottom-4 left-4 z-10 flex gap-1 rounded-sm border border-line bg-surface/92 p-1 shadow-panel backdrop-blur">
+          <div className="absolute bottom-22 left-4 z-10 flex gap-1 md:bottom-[calc(5.5rem+var(--safe-area-bottom))] rounded-sm border border-line bg-surface/92 p-1 shadow-panel backdrop-blur">
             <Button
               type="button"
               variant="ghost"
@@ -251,4 +369,27 @@ export function RouteLeafMap({ route }: { route: QuestRoute }) {
       ) : null}
     </section>
   );
+}
+
+function projectedRepairGroups(
+  repairs: RouteRepair[],
+  positions: Array<{ id: string; x: number; y: number }>,
+) {
+  const groups: Array<{ repairs: RouteRepair[]; x: number; y: number }> = [];
+  for (const repair of repairs) {
+    const position = positions.find(({ id }) => id === repair.id);
+    if (!position) continue;
+    const group = groups.find(
+      (candidate) => Math.hypot(candidate.x - position.x, candidate.y - position.y) < 44,
+    );
+    if (!group) {
+      groups.push({ repairs: [repair], x: position.x, y: position.y });
+      continue;
+    }
+    const count = group.repairs.length;
+    group.x = (group.x * count + position.x) / (count + 1);
+    group.y = (group.y * count + position.y) / (count + 1);
+    group.repairs.push(repair);
+  }
+  return groups;
 }

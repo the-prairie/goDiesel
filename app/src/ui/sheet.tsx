@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { XIcon } from "lucide-react"
-import * as SheetPrimitive from "@radix-ui/react-dialog"
+import { Dialog as SheetPrimitive } from "radix-ui"
 
 import { cn } from "@/ui/utils"
 
@@ -69,13 +69,29 @@ function SheetContent({
             "inset-x-0 top-0 h-auto border-b data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
           side === "bottom" &&
             "inset-x-0 bottom-0 h-auto border-t data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
-          className
+          className,
+          // The sheet's content clears the safe-area insets of the screen
+          // edges it touches (0 without a notch or home indicator). Listed
+          // after className so a caller's p-0 cannot drop them.
+          side === "right" &&
+            "pt-[var(--safe-area-top)] pr-[var(--safe-area-right)] pb-[var(--safe-area-bottom)]",
+          side === "left" &&
+            "pt-[var(--safe-area-top)] pb-[var(--safe-area-bottom)] pl-[var(--safe-area-left)]",
+          side === "top" && "pt-[var(--safe-area-top)]",
+          side === "bottom" && "pb-[var(--safe-area-bottom)]"
         )}
         {...props}
       >
         {children}
         {showCloseButton && (
-          <SheetPrimitive.Close className="absolute top-4 right-4 rounded-xs opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none data-[state=open]:bg-secondary">
+          <SheetPrimitive.Close
+            className={cn(
+              "absolute top-2 right-2 grid size-11 place-items-center rounded-xl opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none data-[state=open]:bg-secondary",
+              side !== "bottom" && "top-[calc(0.5rem+var(--safe-area-top))]",
+              (side === "right" || side === "top") &&
+                "right-[calc(0.5rem+var(--safe-area-right))]"
+            )}
+          >
             <XIcon className="size-4" />
             <span className="sr-only">Close</span>
           </SheetPrimitive.Close>

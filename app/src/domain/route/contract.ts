@@ -1,10 +1,16 @@
-// The route contract. Types only, per CONTEXT.md section 2.
+// The route contract, per CONTEXT.md section 2. Types, plus the climb accessors
+// that keep an unknown climb from reading as zero.
 
 import type { RouteLifecycle } from "@/domain/route/lifecycle";
 import { curationFields } from "@/domain/route/parse-shared";
 
 export type RouteActivityType = "Run" | "Ride" | string;
 export type RouteGeometryStatus = "ready" | "missing" | "invalid";
+/**
+ * Whether the source recorded elevation. Absent in generated data means
+ * `recorded`: every record generated before this field existed has a recorded
+ * gain. `unavailable` routes carry `elevation_gain_m: null`.
+ */
 export type RouteElevationStatus = "recorded" | "unavailable";
 
 export interface RoutePoint {
@@ -43,7 +49,6 @@ export interface RouteDiscontinuityEvidence {
 
 export interface RouteProvenance {
   temporal: RouteTemporalProvenance;
-  elevation?: { status: RouteElevationStatus };
   track: { segmentCount: number };
   discontinuities: RouteDiscontinuityEvidence[];
 }
@@ -118,12 +123,17 @@ export interface RouteSummary {
   region: string;
   date: string;
   distanceKm: number;
-  elevationGainM: number | null;
+  /**
+   * Recorded climb. It is 0, not a measurement, when `elevationStatus` is
+   * `unavailable`; present it through `recordedClimbM` or `climbLabel`.
+   */
+  elevationGainM: number;
+  /** Set by both parsers. Optional so hand-built routes default to recorded. */
   elevationStatus?: RouteElevationStatus;
   type: RouteActivityType;
   description: string;
   completionRule: string;
-  difficulty: string;
+  effortTier: string;
   theme: string;
   xp: number;
   trace: RoutePoint[];
@@ -157,7 +167,7 @@ export interface GeneratedQuestRoute {
   type?: unknown;
   description?: unknown;
   completion_rule?: unknown;
-  difficulty?: unknown;
+  effort_tier?: unknown;
   theme?: unknown;
   xp?: unknown;
   trace?: unknown;
@@ -173,3 +183,18 @@ export interface GeneratedQuestRoute {
 }
 
 export const CURATION_FIELDS = curationFields;
+
+type ClimbFields = Pick<RouteSummary, "elevationGainM" | "elevationStatus">;
+
+/** The recorded climb in metres, or null when the source recorded no elevation. */
+export function recordedClimbM(route: ClimbFields): number | null {
+  return route.elevationStatus === "unavailable" ? null : route.elevationGainM;
+}
+
+export const CLIMB_NOT_RECORDED = "Climb not recorded";
+
+/** "1,240 m up", or "Climb not recorded". Never a zero climb for unknown elevation. */
+export function climbLabel(route: ClimbFields, unit = "m up"): string {
+  const climbM = recordedClimbM(route);
+  return climbM === null ? CLIMB_NOT_RECORDED : `${climbM.toLocaleString()} ${unit}`;
+}

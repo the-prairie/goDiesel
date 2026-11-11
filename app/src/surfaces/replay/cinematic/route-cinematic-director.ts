@@ -1,4 +1,4 @@
-import type { QuestRoute } from "@/domain/route";
+import { recordedClimbM, type QuestRoute } from "@/domain/route";
 import { bearingDegrees, routeDistanceM, routePathPose } from "@/domain/geometry/route-path";
 
 export type CinematicCut = "feature" | "monumental" | "kinetic" | "intimate";
@@ -110,9 +110,8 @@ function chapterSubtitle(
   shot: Shot,
 ) {
   const distance = route.distanceKm.toFixed(1);
-  const gain = Math.round(
-    route.elevationGainM ?? profile.positiveGainM,
-  ).toLocaleString();
+  const climbM = recordedClimbM(route);
+  const gain = climbM === null ? null : Math.round(climbM).toLocaleString();
   const relief = Math.round(profile.reliefM).toLocaleString();
   const noun = routeNoun(route);
   const place = route.region || "This place";
@@ -121,9 +120,6 @@ function chapterSubtitle(
     return `The line turns hard. The ${noun} finds another way through.`;
   }
   if (shot.chapter === "The landscape sets the terms") {
-    if (route.elevationStatus === "unavailable") {
-      return "Provider-relative terrain shapes the line without claiming recorded altitude.";
-    }
     return `${relief} metres from low point to high. Scale is part of the bargain.`;
   }
 
@@ -131,14 +127,11 @@ function chapterSubtitle(
     case "establishing":
       return `${place}. ${distance} kilometres waiting beyond the horizon.`;
     case "reveal":
-      return route.lifecycle === "discovered"
-        ? `One supplied ${noun} route. A line ready for careful review.`
-        : `One recorded ${noun}. A line through the world that exists nowhere else.`;
+      return `One recorded ${noun}. A line through the world that exists nowhere else.`;
     case "tracking":
-      if (route.elevationStatus === "unavailable") {
-        return "Provider-relative terrain rises and falls without claiming recorded climbing.";
-      }
-      return `${gain} metres of climbing turns distance into consequence.`;
+      return gain === null
+        ? `${distance} kilometres. The climb was not recorded.`
+        : `${gain} metres of climbing turns distance into consequence.`;
     case "summit":
       return profile.character === "mountain"
         ? `The route reaches high country. There is no hiding from the terrain now.`
@@ -417,13 +410,11 @@ export function cinematicMoments(route: QuestRoute): CinematicMoment[] {
   let summit = points[0];
   let steepest = { point: points[1], score: Number.NEGATIVE_INFINITY };
   let sharpest = { point: points[1], score: Number.NEGATIVE_INFINITY };
-  for (const point of points.slice(1)) {
-    if (point.elev > summit.elev) summit = point;
-  }
   for (let index = 1; index < points.length - 1; index += 1) {
     const previous = points[index - 1];
     const point = points[index];
     const next = points[index + 1];
+    if (point.elev > summit.elev) summit = point;
 
     const spanM = Math.max(1, next.d - previous.d);
     const grade = ((next.elev - previous.elev) / spanM) * 100;
@@ -436,35 +427,26 @@ export function cinematicMoments(route: QuestRoute): CinematicMoment[] {
   }
 
   const ratio = (distanceM: number) => clamp(distanceM / totalDistanceM);
-  const summitRatio = ratio(summit.d);
   return [
     { kind: "origin", label: "Origin", progressRatio: 0, score: 1 },
-    ...(steepest.score > 0
-      ? [
-          {
-            kind: "climb" as const,
-            label: "Hardest rise",
-            progressRatio: ratio(steepest.point.d),
-            score: steepest.score,
-          },
-        ]
-      : []),
+    {
+      kind: "climb",
+      label: "Hardest rise",
+      progressRatio: ratio(steepest.point.d),
+      score: Math.max(0, steepest.score),
+    },
     {
       kind: "turn",
       label: "Sharpest turn",
       progressRatio: ratio(sharpest.point.d),
       score: sharpest.score,
     },
-    ...(summitRatio > 0 && summitRatio < 1
-      ? [
-          {
-            kind: "summit" as const,
-            label: "High point",
-            progressRatio: summitRatio,
-            score: summit.elev,
-          },
-        ]
-      : []),
+    {
+      kind: "summit",
+      label: "High point",
+      progressRatio: ratio(summit.d),
+      score: summit.elev,
+    },
     { kind: "arrival", label: "Arrival", progressRatio: 1, score: 1 },
   ];
 }

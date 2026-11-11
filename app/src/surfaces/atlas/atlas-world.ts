@@ -1,19 +1,19 @@
+import type {
+  AtlasPresentationEvent,
+  AtlasPresentationState,
+} from "@/surfaces/atlas/atlas-presentation-state";
 import type { RouteRegion } from "@/data/route-regions";
 import { isValidCoordinate } from "@/domain/geometry/geographic-bounds";
 import type { RoutePoint, RouteSummary } from "@/domain/route";
 
 export interface AtlasGlobeProps {
   regions: RouteRegion[];
-  illuminationTimeIso?: string;
   selectedRegion?: RouteRegion;
   selectedRoute?: RouteSummary;
-  previewedRoute?: RouteSummary;
-  framedRoute?: RouteSummary;
   onSelectRegion: (region: RouteRegion) => void;
   onSelectRoute?: (route: RouteSummary) => void;
-  onStatusChange?: (status: AtlasWorldStatus) => void;
-  onRegionPresentationReady?: (ready: boolean) => void;
-  routeDisplayMode?: "standard" | "density" | "terrain";
+  presentation: AtlasPresentationState;
+  onPresentationEvent: (event: AtlasPresentationEvent) => void;
   className?: string;
 }
 
@@ -41,19 +41,14 @@ export interface AtlasRegionProjection {
 export interface AtlasWorldEngineMountOptions {
   container: HTMLElement;
   regions: RouteRegion[];
-  illuminationTimeIso?: string;
   onStatus: (status: AtlasWorldStatus) => void;
   onSelectRoute?: (route: RouteSummary) => void;
-  routeDisplayMode?: "standard" | "density" | "terrain";
 }
 
 export interface AtlasWorldEngine {
   mount(options: AtlasWorldEngineMountOptions): Promise<void>;
   setSelectedRegion(region?: RouteRegion): void;
   setSelectedRoute(route?: RouteSummary): void;
-  setPreviewedRoute?(route?: RouteSummary): void;
-  frameRoute?(route?: RouteSummary): void;
-  setRouteDisplayMode?(mode: "standard" | "density" | "terrain"): void;
   projectRegions(): AtlasRegionProjection[];
   zoomIn(): void;
   zoomOut(): void;

@@ -7,6 +7,7 @@ import csv
 import hashlib
 import json
 import math
+import os
 import re
 import shutil
 import subprocess
@@ -22,34 +23,45 @@ from typing import Any
 
 from PIL import Image
 
-from route_provenance import build_route_provenance, load_source_route_points
+from quest_meta import normalize_route_status
+from route_provenance import (
+    build_route_provenance,
+    load_source_route_points,
+    published_route_provenance,
+)
 
 
 ROOT = Path(__file__).resolve().parent
-DEFAULT_DIESEL_DIARIES = Path("/Users/laurenzary/Desktop/DieselDiaries")
+DEFAULT_DIESEL_DIARIES = Path(
+    os.environ.get("GODIESEL_DIESEL_DIARIES_ROOT", ROOT.parent / "DieselDiaries")
+).resolve()
 OUTPUT_REQUIRED_FIELDS = frozenset(
     {
         "activity_id",
         "activity_name",
+        "baseline_photos",
         "center_lat",
         "center_lng",
         "completion_rule",
         "date",
         "description",
-        "difficulty",
+        "effort_tier",
         "distance_km",
         "elevation_gain_m",
         "lifecycle",
         "mid_idx",
         "name",
         "provenance",
+        "quest_blurb",
         "region",
         "replay",
         "route",
         "slug",
         "subtitle",
+        "svg",
         "theme",
         "type",
+        "visual_source",
         "xp",
     }
 )
@@ -125,7 +137,7 @@ def approved_specs(root: Path) -> list[dict[str, Any]]:
     specs = [
         route
         for route in routes
-        if route.get("status", "approved") == "approved"
+        if normalize_route_status(route.get("status")) == "approved"
         and route.get("visibility", "public") != "hidden"
     ]
     activity_ids = [str(route.get("activity_id", "")) for route in specs]
@@ -233,12 +245,22 @@ def compare_regeneration(root: Path, python: Path) -> dict[str, Any]:
         for relative in build_files():
             shutil.copy2(root / relative, workspace / relative)
         shutil.copytree(root / "route_sources", workspace / "route_sources")
+        (workspace / "cards").mkdir()
         (workspace / "app/src/data/generated").mkdir(parents=True)
         (workspace / "app/public/data/routes").mkdir(parents=True)
 
         result = subprocess.run(
             [str(python), "build.py"],
             cwd=workspace,
+            env={
+                **os.environ,
+                "GODIESEL_DIESEL_DIARIES_ROOT": os.environ.get(
+                    "GODIESEL_DIESEL_DIARIES_ROOT", str(root.parent / "DieselDiaries")
+                ),
+                "GODIESEL_TRAVEL_ROOT": os.environ.get(
+                    "GODIESEL_TRAVEL_ROOT", str(root.parent / "Travel")
+                ),
+            },
             check=False,
             capture_output=True,
             text=True,
@@ -250,6 +272,7 @@ def compare_regeneration(root: Path, python: Path) -> dict[str, Any]:
             )
 
         compared = (
+            "app/src/data/quests.generated.json",
             "app/src/data/generated/routes.manifest.json",
             "app/src/data/generated/route-stats.json",
         )
@@ -276,11 +299,33 @@ def compare_regeneration(root: Path, python: Path) -> dict[str, Any]:
                 + ", ".join(mismatches[:20])
             )
 
+        cards = sorted((workspace / "cards").glob("*.png"))
+        if len(cards) != len(expected_names):
+            raise VerificationError(
+                f"real-source build generated {len(cards)} share cards for "
+                f"{len(expected_names)} routes"
+            )
+        invalid_cards: list[str] = []
+        for card in cards:
+            with Image.open(card) as image:
+                extrema = image.convert("RGB").getextrema()
+                if (
+                    image.size != (1200, 630)
+                    or image.format != "PNG"
+                    or all(low == high for low, high in extrema)
+                ):
+                    invalid_cards.append(card.name)
+        if invalid_cards:
+            raise VerificationError("invalid generated share cards: " + ", ".join(invalid_cards))
+
         return {
             "workspace_kind": "isolated-temporary-copy",
             "build_exit_code": result.returncode,
             "compared_artifacts": [*compared, "app/public/data/routes/*.json"],
             "detail_files": len(expected_names),
+            "share_cards": len(cards),
+            "share_card_dimensions": [1200, 630],
+            "legacy_index_bytes": (workspace / "index.html").stat().st_size,
         }
 
 
@@ -293,29 +338,33 @@ def verify_real_pipeline(
 ) -> dict[str, Any]:
     specs = approved_specs(root)
     headers, activity_data_rows, rows_by_id = activity_rows(diesel_diaries)
+    generated = json.loads(
+        (root / "app/src/data/quests.generated.json").read_text(encoding="utf-8")
+    )
     manifest = json.loads(
         (root / "app/src/data/generated/routes.manifest.json").read_text(encoding="utf-8")
     )
+    generated_by_slug = unique_routes_by_slug(generated.get("routes"), "generated")
     manifest_by_slug = unique_routes_by_slug(manifest.get("routes"), "manifest")
     approved_ids = {str(spec["activity_id"]) for spec in specs}
     detail_dir = root / "app/public/data/routes"
     detail_ids = {path.stem for path in detail_dir.glob("*.json")}
-    if approved_ids != set(manifest_by_slug) or approved_ids != detail_ids:
-        raise VerificationError("approved route set does not match manifest and lazy details")
-    details_by_slug = {
-        slug: json.loads((detail_dir / f"{slug}.json").read_text(encoding="utf-8"))
-        for slug in sorted(detail_ids)
-    }
+    if approved_ids != set(generated_by_slug) or approved_ids != set(manifest_by_slug):
+        raise VerificationError("approved, generated, and manifest route sets do not match")
+    if approved_ids != detail_ids:
+        raise VerificationError("approved route set does not match lazy detail files")
 
     output_inventory: Counter[tuple[str, str]] = Counter()
     source_records: list[dict[str, Any]] = []
     approved_rows: list[list[str]] = []
     for spec in specs:
         slug = str(spec["activity_id"])
-        detail = details_by_slug[slug]
+        detail = json.loads((detail_dir / f"{slug}.json").read_text(encoding="utf-8"))
         missing_fields = sorted(OUTPUT_REQUIRED_FIELDS - set(detail))
         if missing_fields:
             raise VerificationError(f"route {slug} is missing output fields: {', '.join(missing_fields)}")
+        if detail != generated_by_slug[slug]:
+            raise VerificationError(f"lazy detail and complete generated record disagree for {slug}")
         if manifest_by_slug[slug]["slug"] != detail["slug"]:
             raise VerificationError(f"manifest identity disagrees for {slug}")
 
@@ -329,7 +378,11 @@ def verify_real_pipeline(
                 category=DeprecationWarning,
             )
             source_points = load_source_route_points(source_path)
-        provenance = build_route_provenance(source_points)
+        # Compare with what build.py publishes for this lifecycle: a discovered
+        # route has its source timing stripped before publication.
+        provenance = published_route_provenance(
+            build_route_provenance(source_points), spec.get("lifecycle", "completed")
+        )
         if provenance.route != detail["route"]:
             raise VerificationError(f"generated geometry does not match original source for {slug}")
 
@@ -382,7 +435,7 @@ def verify_real_pipeline(
     case_records = []
     for case in MATRIX_CASES:
         slug = case["slug"]
-        route = details_by_slug.get(slug)
+        route = generated_by_slug.get(slug)
         if route is None:
             raise VerificationError(f"required real matrix route is missing: {slug}")
         case_records.append(
@@ -420,6 +473,7 @@ def verify_real_pipeline(
             "approved_routes": len(approved_ids),
             "detail_files": len(detail_ids),
             "manifest_routes": len(manifest_by_slug),
+            "generated_routes": len(generated_by_slug),
             "field_inventory": [
                 {"path": path, "type": value_type, "occurrences": count}
                 for (path, value_type), count in sorted(output_inventory.items())

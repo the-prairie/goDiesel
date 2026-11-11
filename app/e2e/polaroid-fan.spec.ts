@@ -1,54 +1,65 @@
 import { expect, test } from "@playwright/test";
 
-// Kyoto. Two frames from real iPhone videos shot during the run become
-// source-ordered chapters in the Daydream field story.
+// Kyoto. Two frames from real iPhone videos shot during the run, placed at
+// 7.57 km and 8.63 km.
 const ROUTE = "17654151284";
 
-test("photographs appear in route-story order", async ({ page }) => {
+test("photographs fan out in route order", async ({ page }) => {
   await page.goto(`/#/routes/${ROUTE}`);
 
-  const chapters = page.locator('[data-testid="route-story-chapter"]:has([data-testid="route-story-chapter-media"])');
-  await expect(chapters).toHaveCount(2);
+  const fan = page.getByTestId("polaroid-fan");
+  await expect(fan).toBeVisible();
 
-  const distances = await chapters.evaluateAll((nodes) =>
+  const cards = page.getByTestId("polaroid-card");
+  await expect(cards).toHaveCount(2);
+
+  const distances = await cards.evaluateAll((nodes) =>
     nodes.map((node) => Number(node.getAttribute("data-at-distance-m"))),
   );
   expect(distances).toEqual([...distances].sort((a, b) => a - b));
+
+  // Left to right is earliest to latest.
+  const boxes = await cards.evaluateAll((nodes) =>
+    nodes.map((node) => node.getBoundingClientRect().x),
+  );
+  expect(boxes[0]).toBeLessThan(boxes[1]);
 });
 
-test("every photographed chapter is named and keyboard reachable", async ({ page }) => {
+test("every card is reachable and names its place on the route", async ({ page }) => {
   await page.goto(`/#/routes/${ROUTE}`);
 
-  const images = page.getByTestId("route-story-chapter-media");
-  await expect(images).toHaveCount(2);
-  for (const image of await images.all()) {
-    await expect(image).toHaveAttribute("alt", /\S+/);
-  }
-
-  const chapterButtons = page.getByRole("navigation", { name: "Story chapters" }).getByRole("button");
-  for (const button of await chapterButtons.all()) {
-    const box = await button.boundingBox();
+  const cards = page.getByTestId("polaroid-card");
+  for (const card of await cards.all()) {
+    await expect(card).toHaveAttribute("aria-label", /Photograph \d+ of \d+, at .+/);
+    const box = await card.boundingBox();
     expect(box!.height).toBeGreaterThanOrEqual(44);
   }
-  await chapterButtons.first().focus();
-  await expect(chapterButtons.first()).toBeFocused();
+  await cards.first().focus();
+  await expect(cards.first()).toBeFocused();
 });
 
-test("reduced motion removes smooth story scrolling", async ({ page }) => {
+test("reduced motion lays the photographs flat", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto(`/#/routes/${ROUTE}`);
 
-  const story = page.getByRole("region", { name: "Route story", exact: true });
-  await expect(story).toBeVisible();
-  expect(await story.evaluate((node) => getComputedStyle(node).scrollBehavior)).toBe("auto");
+  const fan = page.getByTestId("polaroid-fan");
+  await expect(fan).toHaveAttribute("data-layout", "grid");
+
+  const rotated = await page.getByTestId("polaroid-card").evaluateAll((nodes) =>
+    nodes.filter((node) => {
+      const transform = getComputedStyle(node).transform;
+      return transform !== "none" && !transform.startsWith("matrix(1, 0, 0, 1");
+    }).length,
+  );
+  expect(rotated).toBe(0);
 });
 
-test("the photographed chapter order is stable across reloads", async ({ page }) => {
+test("the fan is stable across reloads", async ({ page }) => {
   const read = async () => {
     await page.goto(`/#/routes/${ROUTE}`);
-    await page.getByTestId("route-story-chapter-media").first().waitFor();
-    return page.getByTestId("route-story-chapter-media").evaluateAll((nodes) =>
-      nodes.map((node) => node.getAttribute("src")),
+    await page.getByTestId("polaroid-fan").waitFor();
+    return page.getByTestId("polaroid-card").evaluateAll((nodes) =>
+      nodes.map((node) => getComputedStyle(node).transform),
     );
   };
   expect(await read()).toEqual(await read());

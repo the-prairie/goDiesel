@@ -1,6 +1,36 @@
+import { googleKeyFingerprint, preflightGoogleMapsKey } from "@/providers/google-key-preflight";
 import { ProviderError } from "@/providers/provider-error";
 
 let mapsPromise: Promise<void> | undefined;
+// Google reports a rejected key through `gm_authFailure`, often after the
+// script's load callback (InvalidKeyMapError arrives asynchronously). The
+// handler therefore stays installed once the API has loaded, and the page
+// remembers the rejection so a later mount hears it too.
+let authenticationRejected = false;
+// The 3D Maps path never calls `gm_authFailure`, so the key is also checked
+// once against the 3D Tiles root (google-key-preflight.ts). The check runs
+// beside the script load and is never awaited: only an explicit invalid-key
+// answer is reported, and every other outcome leaves the load as it was.
+let preflightFingerprint: string | undefined;
+
+const AUTH_FAILURE_EVENT = "godiesel:google-maps-auth-failure";
+
+function reportAuthenticationFailure() {
+  authenticationRejected = true;
+  window.dispatchEvent(new CustomEvent(AUTH_FAILURE_EVENT));
+}
+
+function startKeyPreflight(apiKey: string) {
+  if (!apiKey) return;
+  const fingerprint = googleKeyFingerprint(apiKey);
+  if (preflightFingerprint === fingerprint) return;
+  preflightFingerprint = fingerprint;
+  void preflightGoogleMapsKey(apiKey, window).then((outcome) => {
+    if (outcome === "invalid" && preflightFingerprint === fingerprint && !authenticationRejected) {
+      reportAuthenticationFailure();
+    }
+  });
+}
 
 declare global {
   interface Window {
@@ -13,6 +43,8 @@ export function loadGoogleMaps(apiKey: string) {
   const runtime = window as unknown as {
     google?: { maps?: { importLibrary?: unknown } };
   };
+  if (authenticationRejected) reportAuthenticationFailure();
+  startKeyPreflight(apiKey);
   if (typeof runtime.google?.maps?.importLibrary === "function") {
     return Promise.resolve();
   }
@@ -38,12 +70,16 @@ export function loadGoogleMaps(apiKey: string) {
         if (previousReady) window.__godieselGoogleMapsReady = previousReady;
         else delete window.__godieselGoogleMapsReady;
       }
+    };
+
+    const restoreAuthFailure = () => {
       if (window.gm_authFailure === handleAuthFailure) {
         if (previousAuthFailure) window.gm_authFailure = previousAuthFailure;
         else delete window.gm_authFailure;
       }
     };
 
+    // A loaded API keeps its handler: Google can reject the key afterwards.
     const complete = () => {
       if (settled) return;
       settled = true;
@@ -55,6 +91,7 @@ export function loadGoogleMaps(apiKey: string) {
       if (settled) return;
       settled = true;
       cleanup();
+      restoreAuthFailure();
       script.remove();
       reject(error);
     };
@@ -64,8 +101,13 @@ export function loadGoogleMaps(apiKey: string) {
     }
 
     function handleAuthFailure() {
-      window.dispatchEvent(new CustomEvent("godiesel:google-maps-auth-failure"));
-      fail(new ProviderError("Google Maps rejected this browser key."));
+      previousAuthFailure?.();
+      if (!settled) {
+        window.dispatchEvent(new CustomEvent(AUTH_FAILURE_EVENT));
+        fail(new ProviderError("Google Maps rejected this browser key."));
+        return;
+      }
+      reportAuthenticationFailure();
     }
 
     window.__godieselGoogleMapsReady = complete;

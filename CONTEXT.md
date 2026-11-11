@@ -1,9 +1,13 @@
 ---
-last_updated: 2026-08-31
+last_updated: 2026-10-21
 status: canonical
 ---
 
 # goDiesel Context
+
+## Course workspace
+
+The route studio at `/courses` stores imported and generated navigation courses separately from completed activities. Courses preserve segmented geometry and source provenance. A generated course is not a completed activity and does not supply recorded replay telemetry. The UI and agents use the same validated HTTP commands for preview, explicit save, reopen, and GPX export. The existing canonical route catalog remains build-owned. See [ADR 0017](docs/adr/0017-course-workspace-is-separate-from-completed-activities.md) and the [route studio guide](docs/route-studio.md).
 
 This is the canonical domain document for goDiesel, referenced by `AGENTS.md` and
 `docs/agents/domain.md`. It defines the vocabulary and invariants of the system.
@@ -14,17 +18,6 @@ domain-modeling gap in this file rather than inventing a local word.
 
 Architecture decisions live under `docs/adr/`. Product direction lives in
 `STRATEGY.md`. This file is the shared language between them.
-
-Agent operating mechanics live under `docs/architecture/` and focused procedures live under `docs/agents/`.
-Those documents must use this vocabulary and must not redefine it.
-
-## Live state is queried
-
-This file defines durable meaning and invariants, not live counts or readiness.
-
-Run `./scripts/route.sh status` for current atlas and route state.
-Inspect Git, provider, and deployment state directly before making a current-state claim.
-Do not maintain dynamic counts, current branches, credential status, or deployment status in canonical prose.
 
 ## 1. Product frame
 
@@ -50,15 +43,24 @@ sub-contexts and no translation layers between them.
 The central entity. A **route** is a real, specific path through the world,
 grounded in recorded activity data and enriched with owner curation.
 
-A route is identified by a **slug**.
-A Strava-backed route keeps its Strava **activity id** (for example `17665674778`).
-An imported GPX route receives one opaque `gpx-<id>` slug when its creation proposal is made.
-That imported slug is never derived from a mutable title, region, filename, checksum, or public share name.
-The slug is the stable public identifier and appears in every canonical URL.
-See ADR-0015.
+A route is identified by a **slug**, which is currently always its Strava
+**activity id** (for example `17665674778`). The slug is the stable public
+identifier and appears in every canonical URL.
 
 A route is **not** a segment, a plan, a workout, or a performance. Metrics exist
 to describe the experience, not to score it.
+
+### Discovery candidate
+
+Finder can preview an external **discovery candidate**: a named OpenStreetMap
+route relation with real member geometry and a source link. It is not yet a route
+in the owner's library, has no canonical route slug, and is never replayable.
+Source-tagged distance and derived mapped-path length are labelled separately;
+unknown climb or surface cannot satisfy an explicit filter. A candidate can be
+saved as an external plan on this device, retaining its source link and separate
+mapped sections. External plans appear in Planned routes, never in completed
+Atlas totals or Replay. GPX export preserves sections without inventing a
+recorded activity. Canonical import remains explicit. See ADR-0015.
 
 ### Activity record
 
@@ -68,10 +70,9 @@ the pointer to its original **source file**.
 
 ### Source file
 
-The original recorded geometry: a GPX or FIT file under `route_sources/`.
-Source files are the ground truth for geometry, elevation, and time.
-An imported source carries a stored SHA-256 digest that is revalidated whenever the route is read or built.
-Nothing downstream may contradict a source file.
+The original recorded geometry: a GPX or FIT file under `route_sources/`. Source
+files are the ground truth for geometry, elevation, and time. Nothing downstream
+may contradict them.
 
 ### Source kind
 
@@ -88,10 +89,13 @@ describes. `route_imports.route_source_kind()` is the single definition, and
 `admin.py` use them, so the generator and the curation surface cannot disagree
 about a route again.
 
+Current data: 66 `strava-export`, 1 `imported-gpx`.
+
 ### Master routes list
 
 `quests.json` at the repository root. The owner-curated record of every known
-activity and its editorial state.
+activity and its editorial state. It currently holds 2,237 activity records, of
+which 67 are `approved`.
 
 Only `approved` routes with `visibility != "hidden"` are generated into the
 product.
@@ -104,7 +108,9 @@ product.
 | --- | --- |
 | `completed` | The owner recorded this route by doing it. It is a memory. |
 | `discovered` | The route's geometry is real and imported, but the owner has not recorded doing it. |
-| `planned` | An intention. It has no owner-recorded completion geometry and is never replay-eligible. It may reference visibly labelled planning-source geometry. |
+| `planned` | An intention. It has no recorded geometry and is never replay-eligible. |
+
+Current data: 66 `completed`, 1 `discovered`, 0 `planned` generated.
 
 `completed` and `discovered` routes belong to Atlas. `planned` routes belong to
 Finder and are deliberately kept distinct from memories. A planned route must
@@ -137,21 +143,6 @@ Every value the product presents is one of:
 `provenance.temporal.status` is exactly `recorded` or `unavailable`. There is no
 guessed timestamp and no third state. When time is unavailable, the product says
 so rather than estimating.
-
-Supplied timestamps on a `discovered` route remain in its durable source file, but are not published as owner elapsed time or pace.
-The public route has unavailable temporal provenance until owner-recorded completion evidence exists.
-
-### Elevation provenance
-
-`elevation_status` and `provenance.elevation.status` are exactly `recorded` or `unavailable`.
-A GPX with missing elevation stores `null` at the generated source boundary and uses provider-relative terrain internally for rendering.
-It never turns missing altitude into a recorded zero, a zero-metre climb, or a zero-metre high point.
-
-### Route date
-
-An imported `discovered` route may use the empty string as the canonical unknown-date representation.
-The interface renders it as `Date not recorded`.
-A `completed` route still requires a valid `YYYY-MM-DD` activity date.
 
 ### Discontinuity
 
@@ -195,15 +186,24 @@ The schema is closed. Unknown fields are rejected rather than ignored.
 
 | Value | Meaning |
 | --- | --- |
-| `draft` | Partial curation is allowed. Admin presents it as not yet reviewed. |
+| `draft` | Partial curation is allowed. Presented as not yet reviewed. |
 | `reviewed` | The owner has approved it. All eight fields are required. |
 | `published` | Same completeness requirement as `reviewed`. |
 
-Admin and factual guide surfaces show an unreviewed route with the neutral label
-"Guide not yet reviewed".
-The Routes memory library omits guide review status and never uses draft guide
-copy as route context.
-An unreviewed route must never be given invented claims to fill the space.
+Current data: 66 `draft`, 1 `reviewed`.
+
+An unreviewed route guide discloses its draft status. Authorship/process notes
+stay in curation metadata rather than the reader-facing guide. Library cards use factual
+distance, activity, and climb summaries until prose is reviewed; they do not
+show editorial workflow badges or publish draft prose as finished guidance.
+Never invent claims to fill the space.
+
+Route-library covers omit AI badges and generation labels by product choice.
+They retain a quiet imagery-source credit; generation provenance stays in asset metadata.
+It is generated from each route's aerial source image; the recorded GPS trace is
+rendered separately. Full geography and trace share a fitted frame on mobile and
+desktop. Real maps and Replay retain their original geographic providers. See
+`scripts/route-covers/README.md` for assets, source metadata, and prompts.
 
 ## 6. Surfaces
 
@@ -221,36 +221,6 @@ routing, and tests.
 The root redirects to Atlas. Atlas is the home of the product; the card gallery
 is not.
 
-Routes uses `Collection` as the consumer-facing label for filtering by
-`lifecycle` without exposing curation workflow language.
-Its values map exactly as follows: `Atlas routes` includes `completed` and
-`discovered`, `Memories` is `completed`, `Discovered routes` is `discovered`,
-and `Planned routes` is `planned`.
-The default route library excludes `planned` routes; they appear only when the
-owner explicitly selects `Planned routes`, remain visibly labelled as plans,
-and open a source-honest plan detail that can return to Finder.
-Plan detail may edit future intent or remove the plan, but it never changes the
-planning source into recorded evidence.
-Changing place, activity, or source rebinds the plan atomically to a selected
-recorded source, resets the completion-time baseline, and updates its canonical
-plan identity.
-A saved plan may retain an immutable completed-source snapshot so Finder can
-reopen that source after catalog changes without treating the plan itself as a
-recorded activity.
-It may offer a `derived` completion candidate only when an independently
-recorded activity is later than the plan, matches its activity, region, and
-distance tolerance, and has recorded geometry near the planning trace.
-The planning source itself is never a completion candidate.
-The owner must compare and explicitly confirm a recorded candidate before the
-plan is removed and the existing recorded route opens as the memory.
-Route cards label source activity descriptions as `Recorded note`, approved
-guide interpretation as `Editorial hypothesis`, and missing source copy as
-`Recorded note unavailable`.
-Discovered routes do not promote an unproven description; they state that owner
-experience is unavailable.
-Card source labels are `Recorded activity`, `Imported geometry`, and `Planning
-intent` rather than lifecycle or guide-review workflow states.
-
 ### Related surface terms
 
 - **Leaf** — a single route's detail page, the field-guide page for one route.
@@ -267,12 +237,34 @@ intent` rather than lifecycle or guide-review workflow states.
 
 **Replay** is immersive playback of a recorded route through real-world imagery.
 
+**Chapters** divide the route into distance intervals for navigation. Their
+default terrain labels come from recorded elevation samples. A reviewed
+**route story** can replace those intervals with geographic chapters. Its
+editorial summaries use sourced place names and anchors on recorded samples.
+Nearby landmarks do not imply that the athlete entered or visited them.
+
+Route stories live in `app/src/data/replay-stories/`. Each includes map source
+links, a review date, and a geometry signature covering coordinates, distances,
+and recording-gap boundaries. A changed recording or an unreviewed route uses
+the default terrain chapters. Story data adds no runtime provider request.
+
+**Moments** identify features in the recorded elevation profile, such as its
+high point, low point, or a sustained descent. A moment's explanation states
+the measured basis. Missing recordings remain gaps in the profile.
+
+**Chapter preview** pauses playback and inspects a separate position. Browsing
+does not move the replay camera or change the session's distance. **Play from
+here** commits the preview position to the existing replay session. **Back to
+replay** discards the preview without seeking.
+
 **Replay mode** describes the intended visual world for a route:
 
 | Value | Meaning |
 | --- | --- |
 | `earth` | Best experienced in photorealistic 3D. |
 | `atlas` | Best experienced on the 2D map. |
+
+Current data: 60 `atlas`, 7 `earth`.
 
 **`bestInEarth`** marks a route the owner considers a showcase for
 photorealistic replay. A `bestInEarth` route must use `earth` mode.
@@ -304,6 +296,7 @@ prototype and survives only in:
 
 - `quests.json` (the master routes list)
 - the `QuestRoute` TypeScript type
+- `quests.generated.json`
 - the legacy `#quest/<slug>` hash, which is canonicalized to `#/routes/<slug>`
 
 Do not add new "quest" naming. Do not rename existing occurrences opportunistically
@@ -374,27 +367,19 @@ Invariants 11 and 12 are enforced by `app/src/structure.test.ts`.
 | Labs (no production commitment) | `app/src/labs/` |
 | Design system and shared components | `app/src/ui/` |
 | Private inputs | `../DieselDiaries`, `../Travel` (outside this repository) |
-| Agent orientation and task routing | `AGENTS.md` |
-| System architecture and operator model | `docs/architecture/` |
-| Focused operating procedures | `docs/agents/` |
-| Current and historical plans | `docs/plans/README.md` |
-| Agent control interface | `scripts/godiesel` |
-| Route compatibility interface | `scripts/route.sh` |
-| Ignored route-share proposals, result artifacts, receipts, staging, and recovery evidence | `.route-share/` |
-| Ignored capability verification evidence receipts | `.godiesel/evidence/` |
 
 ## 11. Domain-modeling gaps
 
 Recorded per `docs/agents/domain.md`. These are known missing pieces of language,
 not tasks with owners.
 
-1. **Region has no taxonomy.** `region` is a free-text label produced by
-   geocoding, and three separate region mappings exist in the Python layer
-   (bounding boxes in `build.py`, `REGIONS` in `admin.py`, and
-   `REGION_TIME_ZONES`). They can disagree, which silently drops a route's
-   timezone. The domain has no single definition of a region.
+1. ~~**Region has no taxonomy.**~~ **Closed 2026-11-06.** One region table in
+   `route_regions.py` owns the bounding boxes and the IANA timezone for each
+   label. A recorded route whose label has no timezone fails the build.
 2. ~~**`source_kind` is not modelled.**~~ **Closed 2026-08-08.** See section 2.
-3. **`bestInEarth` is editorial data stored in code.** It is a hardcoded set of
-   activity ids in `build.py` rather than curation held in `quests.json`.
-4. **"Difficulty" is overloaded.** It exists both as a generated quest attribute
-   and as a curated prose field, with no stated relationship between them.
+3. ~~**`bestInEarth` is editorial data stored in code.**~~ **Closed 2026-11-06.**
+   The owner sets `best_in_earth` on a route in `quests.json`. The generator
+   reads that flag when it builds replay metadata.
+4. ~~**"Difficulty" is overloaded.**~~ **Closed 2026-11-06.** The generated
+   Easy/Moderate/Epic value is `effort_tier`. Curated prose stays
+   `curation.difficulty`.

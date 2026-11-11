@@ -22,7 +22,7 @@ MAX_BODY_LENGTH = 2000
 MAX_TITLE_LENGTH = 120
 
 
-def build_route_annotations(value, route_distance_m, *, allow_unpublished_image=False):
+def build_route_annotations(value, route_distance_m):
     """Validate and order the annotations for one route.
 
     Annotations are returned sorted by anchor so that every surface presents
@@ -37,12 +37,7 @@ def build_route_annotations(value, route_distance_m, *, allow_unpublished_image=
     seen_ids = set()
     annotations = []
     for index, item in enumerate(value):
-        annotation = _build_one(
-            item,
-            index,
-            route_distance_m,
-            allow_unpublished_image=allow_unpublished_image,
-        )
+        annotation = _build_one(item, index, route_distance_m)
         if annotation["id"] in seen_ids:
             raise ValueError(f"annotation id {annotation['id']} is duplicated")
         seen_ids.add(annotation["id"])
@@ -52,7 +47,7 @@ def build_route_annotations(value, route_distance_m, *, allow_unpublished_image=
     return annotations
 
 
-def _build_one(item, index, route_distance_m, *, allow_unpublished_image):
+def _build_one(item, index, route_distance_m):
     if not isinstance(item, dict):
         raise ValueError(f"annotation {index} must be an object")
 
@@ -102,7 +97,7 @@ def _build_one(item, index, route_distance_m, *, allow_unpublished_image):
     }
 
     media = item.get("media")
-    if annotation["kind"] == "image" and media is None and not allow_unpublished_image:
+    if annotation["kind"] == "image" and media is None:
         raise ValueError(f"annotation {identifier} of kind image requires media")
     if media is not None:
         annotation["media"] = _build_media(media, identifier)

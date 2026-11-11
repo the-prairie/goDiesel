@@ -25,7 +25,7 @@ function route(
     type: "Run",
     description: "",
     completionRule: "Complete the route.",
-    difficulty: "Easy",
+    effortTier: "Easy",
     theme: "Cruise",
     xp: 100,
     trace,

@@ -5,7 +5,6 @@ import type {
   FinderIntent,
   PlannedRoute,
 } from "@/domain/planning";
-import { placesOverlap } from "@/domain/place-match";
 
 export const PLANNED_ROUTE_STORAGE_KEY = "godiesel.planned-routes.v1";
 const STORE_VERSION = 1 as const;
@@ -16,8 +15,55 @@ interface PlannedRouteEnvelope {
   routes: PlannedRoute[];
 }
 
-let cachedRaw: string | null | undefined;
-let cachedRoutes = EMPTY_ROUTES;
+/**
+ * The tab's view of planned routes.
+ *
+ * - `unread`: storage must be read before the routes are trusted.
+ * - `persisted`: the routes match the last raw value read from or written to storage.
+ * - `memory-only`: storage rejected a write, so the routes exist only in this tab.
+ *   Reads and storage events do not replace them until a later write succeeds.
+ */
+export type PlannedRouteCache =
+  | { mode: "unread"; routes: PlannedRoute[] }
+  | { mode: "persisted"; raw: string | null; routes: PlannedRoute[] }
+  | { mode: "memory-only"; raw: string; routes: PlannedRoute[] };
+
+export type PlannedRouteCacheEvent =
+  | { type: "storageRead"; raw: string | null }
+  | { type: "storageChanged" }
+  | { type: "writeAccepted"; raw: string; routes: PlannedRoute[] }
+  | { type: "writeRejected"; raw: string; routes: PlannedRoute[] };
+
+export type PlannedRouteStorageStatus = "persisted" | "memory-only";
+
+export const initialPlannedRouteCache: PlannedRouteCache = {
+  mode: "unread",
+  routes: EMPTY_ROUTES,
+};
+
+export function reducePlannedRouteCache(
+  state: PlannedRouteCache,
+  event: PlannedRouteCacheEvent,
+): PlannedRouteCache {
+  switch (event.type) {
+    case "storageRead":
+      if (state.mode === "memory-only") return state;
+      if (state.mode === "persisted" && state.raw === event.raw) return state;
+      return { mode: "persisted", raw: event.raw, routes: decodePlannedRouteStore(event.raw) };
+    case "storageChanged":
+      return state.mode === "persisted" ? { mode: "unread", routes: state.routes } : state;
+    case "writeAccepted":
+      return { mode: "persisted", raw: event.raw, routes: event.routes };
+    case "writeRejected":
+      return { mode: "memory-only", raw: event.raw, routes: event.routes };
+  }
+}
+
+export function plannedRouteStorageStatus(state: PlannedRouteCache): PlannedRouteStorageStatus {
+  return state.mode === "memory-only" ? "memory-only" : "persisted";
+}
+
+let cache: PlannedRouteCache = initialPlannedRouteCache;
 const listeners = new Set<() => void>();
 
 export function encodePlannedRouteStore(routes: PlannedRoute[]) {
@@ -30,7 +76,8 @@ export function decodePlannedRouteStore(raw: string | null): PlannedRoute[] {
   try {
     const parsed = JSON.parse(raw) as Partial<PlannedRouteEnvelope>;
     if (parsed.version !== STORE_VERSION || !Array.isArray(parsed.routes)) return EMPTY_ROUTES;
-    return parsed.routes.filter(isPersistedPlannedRoute);
+    if (!parsed.routes.every(isPersistedPlannedRoute)) return EMPTY_ROUTES;
+    return parsed.routes;
   } catch {
     return EMPTY_ROUTES;
   }
@@ -38,12 +85,14 @@ export function decodePlannedRouteStore(raw: string | null): PlannedRoute[] {
 
 export function getPlannedRoutes() {
   if (typeof window === "undefined") return EMPTY_ROUTES;
-  const raw = safeRead();
-  if (raw !== cachedRaw) {
-    cachedRaw = raw;
-    cachedRoutes = decodePlannedRouteStore(raw);
+  if (cache.mode !== "memory-only") {
+    cache = reducePlannedRouteCache(cache, { type: "storageRead", raw: safeRead() });
   }
-  return cachedRoutes;
+  return cache.routes;
+}
+
+export function getPlannedRouteStorageStatus(): PlannedRouteStorageStatus {
+  return plannedRouteStorageStatus(cache);
 }
 
 export function savePlannedRoute(
@@ -51,14 +100,10 @@ export function savePlannedRoute(
   intent: FinderIntent,
   now = new Date(),
 ) {
-  const proposedSlug = `planned-${candidate.id}`;
   const existing = getPlannedRoutes().find(
-    (route) =>
-      route.slug === proposedSlug ||
-      route.planning.candidateId === candidate.id ||
-      route.planning.sourceRouteSlug === candidate.sourceRouteSlug,
+    (route) => route.planning.candidateId === candidate.id,
   );
-  if (existing) return { created: false, persisted: true, route: existing };
+  if (existing) return { created: false, route: existing };
 
   const createdAt = now.toISOString();
   const route: PlannedRoute = {
@@ -78,82 +123,13 @@ export function savePlannedRoute(
       candidateId: candidate.id,
       sourceRouteSlug: candidate.sourceRouteSlug,
       sourceLabel: candidate.sourceLabel,
-      sourceSnapshot: candidate.route,
       createdAt,
       storeVersion: STORE_VERSION,
       intent,
     },
   };
-  const persisted = writeRoutes([...getPlannedRoutes(), route], true);
-  return { created: persisted, persisted, route };
-}
-
-export function updatePlannedRouteIntent(
-  slug: string,
-  intent: FinderIntent,
-  source?: DiscoveryCandidate,
-  now = new Date(),
-) {
-  const routes = getPlannedRoutes();
-  const index = routes.findIndex((route) => route.slug === slug);
-  if (index < 0) return undefined;
-  const current = routes[index];
-  const intentIdentityChanged =
-    intent.place.trim() !== current.planning.intent.place.trim() ||
-    intent.activity !== current.planning.intent.activity;
-  const sourceIdentityChanged = Boolean(source && (
-    source.id !== current.planning.candidateId ||
-    source.sourceRouteSlug !== current.planning.sourceRouteSlug
-  ));
-  if (intentIdentityChanged && !source) return undefined;
-  if (source && !sourceMatchesIntent(source, intent)) return undefined;
-  if (sourceIdentityChanged && source && routes.some((route, routeIndex) =>
-    routeIndex !== index && (
-      route.slug === `planned-${source.id}` ||
-      route.planning.candidateId === source.id ||
-      route.planning.sourceRouteSlug === source.sourceRouteSlug
-    )
-  )) return undefined;
-  const reboundAt = sourceIdentityChanged ? now.toISOString() : current.planning.createdAt;
-
-  const route: PlannedRoute = {
-    ...(source?.route ?? current),
-    slug: sourceIdentityChanged && source ? `planned-${source.id}` : current.slug,
-    activityId: sourceIdentityChanged && source ? `planned:${source.id}` : current.activityId,
-    lifecycle: "planned",
-    date: sourceIdentityChanged ? reboundAt.slice(0, 10) : current.date,
-    completionRule: current.completionRule,
-    xp: 0,
-    replay: {
-      ...(source?.route.replay ?? current.replay),
-      replayEligible: false,
-      bestInEarth: false,
-    },
-    planning: {
-      ...current.planning,
-      ...(source ? {
-        candidateId: source.id,
-        sourceRouteSlug: source.sourceRouteSlug,
-        sourceLabel: source.sourceLabel,
-        sourceSnapshot: source.route,
-      } : {}),
-      createdAt: reboundAt,
-      intent,
-    },
-  };
-  const persisted = writeRoutes(
-    routes.map((item, itemIndex) => itemIndex === index ? route : item),
-    true,
-  );
-  if (!persisted) return undefined;
-  return route;
-}
-
-export function removePlannedRoute(slug: string) {
-  const routes = getPlannedRoutes();
-  const remaining = routes.filter((route) => route.slug !== slug);
-  if (remaining.length === routes.length) return false;
-  return writeRoutes(remaining, true);
+  writeRoutes([...getPlannedRoutes(), route]);
+  return { created: true, route };
 }
 
 export function subscribePlannedRoutes(listener: () => void) {
@@ -173,32 +149,40 @@ export function usePlannedRoutes() {
   return useSyncExternalStore(subscribePlannedRoutes, getPlannedRoutes, () => EMPTY_ROUTES);
 }
 
-function writeRoutes(routes: PlannedRoute[], requirePersistence = false) {
+/** Whether saved plans reach storage, or live only in this tab after a rejected write. */
+export function usePlannedRouteStorageStatus() {
+  return useSyncExternalStore(
+    subscribePlannedRoutes,
+    getPlannedRouteStorageStatus,
+    (): PlannedRouteStorageStatus => "persisted",
+  );
+}
+
+function writeRoutes(routes: PlannedRoute[]) {
   const raw = encodePlannedRouteStore(routes);
-  let persisted = true;
   try {
     window.localStorage.setItem(PLANNED_ROUTE_STORAGE_KEY, raw);
+    cache = reducePlannedRouteCache(cache, { type: "writeAccepted", raw, routes });
   } catch {
-    persisted = false;
+    // Keep planning usable for this tab when storage is unavailable.
+    cache = reducePlannedRouteCache(cache, { type: "writeRejected", raw, routes });
   }
-  if (requirePersistence && !persisted) return false;
-  cachedRaw = raw;
-  cachedRoutes = routes;
   listeners.forEach((listener) => listener());
-  return persisted;
 }
 
 function safeRead() {
   try {
     return window.localStorage.getItem(PLANNED_ROUTE_STORAGE_KEY);
   } catch {
-    return cachedRaw ?? null;
+    return cache.mode === "persisted" ? cache.raw : null;
   }
 }
 
 function handleStorage(event: StorageEvent) {
   if (event.key !== PLANNED_ROUTE_STORAGE_KEY) return;
-  cachedRaw = undefined;
+  const next = reducePlannedRouteCache(cache, { type: "storageChanged" });
+  if (next === cache) return;
+  cache = next;
   listeners.forEach((listener) => listener());
 }
 
@@ -208,116 +192,12 @@ function isPersistedPlannedRoute(value: unknown): value is PlannedRoute {
   return (
     route.lifecycle === "planned" &&
     typeof route.slug === "string" &&
-    typeof route.activityId === "string" &&
-    typeof route.name === "string" &&
-    typeof route.subtitle === "string" &&
-    typeof route.activityName === "string" &&
     typeof route.region === "string" &&
-    typeof route.date === "string" &&
-    finiteNumber(route.distanceKm) &&
-    validElevationMetric(route.elevationGainM, route.elevationStatus) &&
-    typeof route.type === "string" &&
-    typeof route.description === "string" &&
-    typeof route.completionRule === "string" &&
-    typeof route.difficulty === "string" &&
-    typeof route.theme === "string" &&
-    finiteNumber(route.xp) &&
-    finiteNumber(route.centerLat) &&
-    finiteNumber(route.centerLng) &&
-    Array.isArray(route.trace) && route.trace.every(isPersistedRoutePoint) &&
+    typeof route.distanceKm === "number" &&
+    Array.isArray(route.trace) &&
     route.replay?.replayEligible === false &&
-    typeof route.replay.bestInEarth === "boolean" &&
-    ["ready", "missing", "invalid"].includes(route.replay.geometryStatus) &&
-    ["earth", "atlas"].includes(route.replay.replayMode) &&
-    typeof route.guide?.reviewStatus === "string" &&
-    ["draft", "reviewed", "published"].includes(route.guide.reviewStatus) &&
     route.planning?.storeVersion === STORE_VERSION &&
     typeof route.planning.candidateId === "string" &&
-    typeof route.planning.sourceRouteSlug === "string" &&
-    route.planning.sourceLabel === "Owner-curated from recorded GPX" &&
-    isPersistedFinderIntent(route.planning.intent) &&
-    (route.planning.sourceSnapshot === undefined || (
-      isPersistedRouteSnapshot(route.planning.sourceSnapshot) &&
-      route.planning.sourceSnapshot.slug === route.planning.sourceRouteSlug &&
-      routeMatchesIntent(route.planning.sourceSnapshot, route.planning.intent)
-    )) &&
-    validDateTime(route.planning.createdAt)
+    typeof route.planning.sourceRouteSlug === "string"
   );
-}
-
-function isPersistedFinderIntent(value: unknown): value is FinderIntent {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const intent = value as Partial<FinderIntent>;
-  return (
-    typeof intent.place === "string" &&
-    (intent.activity === "Run" || intent.activity === "Ride") &&
-    finiteNumber(intent.distanceKm) && intent.distanceKm > 0 &&
-    ["any", "road", "trail", "mixed", "mountain"].includes(intent.terrain ?? "") &&
-    typeof intent.vibe === "string"
-  );
-}
-
-function isPersistedRoutePoint(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const point = value as { lat?: unknown; lng?: unknown; elev?: unknown; d?: unknown };
-  return finiteNumber(point.lat) && finiteNumber(point.lng) &&
-    finiteNumber(point.elev) && finiteNumber(point.d);
-}
-
-function isPersistedRouteSnapshot(value: unknown): value is DiscoveryCandidate["route"] {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const route = value as Partial<DiscoveryCandidate["route"]>;
-  return (
-    route.lifecycle === "completed" &&
-    typeof route.slug === "string" &&
-    typeof route.activityId === "string" &&
-    typeof route.name === "string" &&
-    typeof route.subtitle === "string" &&
-    typeof route.activityName === "string" &&
-    typeof route.region === "string" &&
-    typeof route.date === "string" &&
-    finiteNumber(route.distanceKm) &&
-    validElevationMetric(route.elevationGainM, route.elevationStatus) &&
-    (route.type === "Run" || route.type === "Ride") &&
-    typeof route.description === "string" &&
-    typeof route.completionRule === "string" &&
-    typeof route.difficulty === "string" &&
-    typeof route.theme === "string" &&
-    finiteNumber(route.xp) &&
-    finiteNumber(route.centerLat) &&
-    finiteNumber(route.centerLng) &&
-    Array.isArray(route.trace) && route.trace.every(isPersistedRoutePoint) &&
-    typeof route.replay?.replayEligible === "boolean" &&
-    typeof route.replay.bestInEarth === "boolean" &&
-    ["ready", "missing", "invalid"].includes(route.replay.geometryStatus) &&
-    ["earth", "atlas"].includes(route.replay.replayMode) &&
-    typeof route.guide?.reviewStatus === "string" &&
-    ["draft", "reviewed", "published"].includes(route.guide.reviewStatus)
-  );
-}
-
-function sourceMatchesIntent(source: DiscoveryCandidate, intent: FinderIntent) {
-  return routeMatchesIntent(source.route, intent);
-}
-
-function routeMatchesIntent(
-  route: DiscoveryCandidate["route"],
-  intent: FinderIntent,
-) {
-  return (
-    route.type === intent.activity &&
-    placesOverlap(route.region, intent.place)
-  );
-}
-
-function validElevationMetric(value: unknown, status: unknown) {
-  return status === "unavailable" ? value === null : finiteNumber(value);
-}
-
-function finiteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
-function validDateTime(value: unknown): value is string {
-  return typeof value === "string" && Number.isFinite(Date.parse(value));
 }

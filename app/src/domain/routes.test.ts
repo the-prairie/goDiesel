@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
 
 import manifest from "@/data/generated/routes.manifest.json";
-import { parseRouteDetail, parseRouteSummary } from "@/domain/route";
+import { climbLabel, parseRouteDetail, parseRouteSummary, recordedClimbM } from "@/domain/route";
 
 function validRouteDetail(overrides: Record<string, unknown> = {}) {
   return {
@@ -19,7 +19,7 @@ function validRouteDetail(overrides: Record<string, unknown> = {}) {
     type: "Run",
     description: "A representative route.",
     completion_rule: "Complete the route.",
-    difficulty: "Moderate",
+    effort_tier: "Moderate",
     theme: "Explore",
     xp: 120,
     center_lat: 51.05,
@@ -49,6 +49,24 @@ function validRouteDetail(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
+describe("recorded route identity", () => {
+  it.each([
+    ["completed", "just here for the zipper", "just here for the zipper"],
+    ["completed", "", "Bay Area, CA"],
+    ["completed", "   ", "Bay Area, CA"],
+    ["planned", "Morning Run", "Bay Area, CA"],
+    ["discovered", "Morning Run", "Bay Area, CA"],
+  ])("preserves %s identity with activity name %j", (lifecycle, activityName, expected) => {
+    const input = validRouteDetail({ lifecycle, name: "Bay Area, CA", activity_name: activityName });
+    for (const parse of [parseRouteSummary, parseRouteDetail]) {
+      const route = parse(input);
+      expect(route.name).toBe(expected);
+      expect(route.region).toBe("Calgary, Canada");
+      expect(route.description).toBe(input.description);
+    }
+  });
+});
 
 describe("parseRouteDetail", () => {
   it("validates every generated full route record", () => {
@@ -116,7 +134,6 @@ describe("parseRouteDetail", () => {
         elapsedTimeS: 185,
         timeZone: "America/Edmonton",
       },
-      elevation: { status: "recorded" },
       track: { segmentCount: 2 },
       discontinuities: [
         {
@@ -133,7 +150,6 @@ describe("parseRouteDetail", () => {
   it("keeps legacy route records valid with unavailable provenance", () => {
     expect(parseRouteDetail(validRouteDetail()).provenance).toEqual({
       temporal: { status: "unavailable" },
-      elevation: { status: "recorded" },
       track: { segmentCount: 1 },
       discontinuities: [],
     });
@@ -153,49 +169,6 @@ describe("parseRouteDetail", () => {
 
     expect(parsed.lifecycle).toBe("discovered");
     expect(parsed.replay.replayEligible).toBe(true);
-  });
-
-  it("parses missing elevation through the mesh-relative path without recorded zeroes", () => {
-    const route = parseRouteDetail(validRouteDetail({
-      lifecycle: "discovered",
-      elevation_status: "unavailable",
-      elevation_gain_m: null,
-      route: [
-        { lat: 27.98, lng: 86.9, elev: null, d: 0 },
-        { lat: 27.99, lng: 86.91, elev: null, d: 1_500 },
-      ],
-      provenance: {
-        temporal: { status: "unavailable" },
-        elevation: { status: "unavailable" },
-        track: { segment_count: 1 },
-        discontinuities: [],
-      },
-    }));
-
-    expect(route.elevationStatus).toBe("unavailable");
-    expect(route.elevationGainM).toBeNull();
-    expect(route.route.map((point) => point.elev)).toEqual([0, 0]);
-    expect(route.provenance.elevation).toEqual({ status: "unavailable" });
-  });
-
-  it("rejects contradictory unavailable elevation metrics and points", () => {
-    expect(() => parseRouteDetail(validRouteDetail({
-      elevation_status: "unavailable",
-      elevation_gain_m: 0,
-      route: [
-        { lat: 27.98, lng: 86.9, elev: null, d: 0 },
-        { lat: 27.99, lng: 86.91, elev: null, d: 1_500 },
-      ],
-    }))).toThrow(/null elevation_gain_m/);
-
-    expect(() => parseRouteDetail(validRouteDetail({
-      elevation_status: "unavailable",
-      elevation_gain_m: null,
-      route: [
-        { lat: 27.98, lng: 86.9, elev: 0, d: 0 },
-        { lat: 27.99, lng: 86.91, elev: null, d: 1_500 },
-      ],
-    }))).toThrow(/null point elevations/);
   });
 
   it("rejects discontinuities outside recorded route distance", () => {
@@ -482,6 +455,122 @@ describe("parseRouteSummary", () => {
     ]);
   });
 });
+
+describe("elevation status", () => {
+  const detailDirectory = new URL("../../public/data/routes/", import.meta.url);
+  const committedDetails = readdirSync(detailDirectory)
+    .filter((file) => file.endsWith(".json"))
+    .map((file) => JSON.parse(readFileSync(new URL(file, detailDirectory), "utf8")) as Record<string, unknown>);
+
+  function unknownElevationDetail(overrides: Record<string, unknown> = {}) {
+    return validRouteDetail({
+      lifecycle: "discovered",
+      elevation_status: "unavailable",
+      elevation_gain_m: null,
+      route: [
+        { lat: 27.98, lng: 86.9, elev: null, d: 0 },
+        { lat: 27.99, lng: 86.91, elev: null, d: 1_500 },
+      ],
+      ...overrides,
+    });
+  }
+
+  it("parses every committed summary exactly as recorded elevation", () => {
+    const generatedRoutes = (manifest as { routes: Record<string, unknown>[] }).routes;
+
+    expect(generatedRoutes.length).toBeGreaterThan(60);
+    for (const generated of generatedRoutes) {
+      expect(generated).not.toHaveProperty("elevation_status");
+      expect(typeof generated.elevation_gain_m).toBe("number");
+      const route = parseRouteSummary(generated);
+      expect(route.elevationStatus).toBe("recorded");
+      expect(route.elevationGainM).toBe(generated.elevation_gain_m);
+      expect(recordedClimbM(route)).toBe(generated.elevation_gain_m);
+      expect(climbLabel(route)).toBe(`${(generated.elevation_gain_m as number).toLocaleString()} m up`);
+      expect(route.trace.map((point) => point.elev)).toEqual(
+        (generated.trace as unknown[][]).map((point) => point[2]),
+      );
+    }
+  });
+
+  it("parses every committed detail exactly as recorded elevation", () => {
+    expect(committedDetails.length).toBeGreaterThan(60);
+    for (const generated of committedDetails) {
+      expect(generated).not.toHaveProperty("elevation_status");
+      expect(typeof generated.elevation_gain_m).toBe("number");
+      const route = parseRouteDetail(generated);
+      expect(route.elevationStatus).toBe("recorded");
+      expect(route.elevationGainM).toBe(generated.elevation_gain_m);
+      expect(recordedClimbM(route)).toBe(generated.elevation_gain_m);
+      expect(route.route.map((point) => point.elev)).toEqual(
+        (generated.route as { elev: number }[]).map((point) => point.elev),
+      );
+    }
+  });
+
+  it("treats an explicit recorded status like an absent one", () => {
+    const route = parseRouteDetail(validRouteDetail({ elevation_status: "recorded" }));
+
+    expect(route.elevationStatus).toBe("recorded");
+    expect(recordedClimbM(route)).toBe(240);
+    expect(climbLabel(route)).toBe("240 m up");
+  });
+
+  it("parses a detail with unknown elevation without a zero climb", () => {
+    const route = parseRouteDetail(unknownElevationDetail());
+
+    expect(route.elevationStatus).toBe("unavailable");
+    expect(recordedClimbM(route)).toBeNull();
+    expect(climbLabel(route)).toBe("Climb not recorded");
+    expect(climbLabel(route)).not.toMatch(/\b0 m\b/);
+    expect(route.replay.geometryStatus).toBe("ready");
+  });
+
+  it("parses a summary with unknown elevation without a zero climb", () => {
+    const route = parseRouteSummary({
+      slug: "unknown-climb",
+      activity_id: "activity-3",
+      lifecycle: "discovered",
+      name: "Unknown climb",
+      elevation_status: "unavailable",
+      elevation_gain_m: null,
+      trace: [
+        [27.98, 86.9, null, 0],
+        [27.99, 86.91, null, 1_500],
+      ],
+      replay: { geometry_status: "ready" },
+    });
+
+    expect(route.elevationStatus).toBe("unavailable");
+    expect(route.replay.geometryStatus).toBe("ready");
+    expect(recordedClimbM(route)).toBeNull();
+    expect(climbLabel(route, "m of climbing")).toBe("Climb not recorded");
+  });
+
+  it("rejects a detail whose elevation status contradicts its climb", () => {
+    expect(() => parseRouteDetail(unknownElevationDetail({ elevation_gain_m: 0 }))).toThrow(
+      "elevation_gain_m must be null when elevation_status is unavailable",
+    );
+    expect(() => parseRouteDetail(validRouteDetail({ elevation_status: "estimated" }))).toThrow(
+      "elevation_status must be recorded or unavailable",
+    );
+    expect(() => parseRouteDetail(validRouteDetail({ elevation_gain_m: null }))).toThrow(
+      "elevation_gain_m",
+    );
+  });
+
+  it("keeps null point elevation invalid when elevation is recorded", () => {
+    const route = parseRouteDetail(validRouteDetail({
+      route: [
+        { lat: 51.05, lng: -114.07, elev: null, d: 0 },
+        { lat: 51.06, lng: -114.08, elev: 1060, d: 1000 },
+      ],
+    }));
+
+    expect(route.replay.geometryStatus).toBe("invalid");
+  });
+});
+
 
 describe("route annotations", () => {
   const annotation = {

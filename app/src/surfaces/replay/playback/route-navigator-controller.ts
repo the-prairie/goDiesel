@@ -1,8 +1,10 @@
 import type { QuestRoute } from "@/domain/route";
+import { interpolateLongitude } from "@/domain/geometry/longitude";
 import type { CinematicRouteTreatment } from "@/surfaces/replay/cinematic/cinematic-route-filament";
 import { routeDistanceM } from "@/domain/geometry/route-path";
 import {
   createRouteSceneManifest,
+  minimumRouteCameraRangeScale,
   resolveRouteSceneFrame,
   type DirectedRouteSceneCameraMode,
   type RouteSceneCameraProtection,
@@ -42,7 +44,7 @@ export interface GoogleRouteCameraPose {
 export type GoogleRouteTelemetry = RouteSceneTelemetry;
 
 export const GOOGLE_ROUTE_SPEEDS = [0.5, 1, 2, 4] as const;
-const REPLAY_DURATION_SECONDS = 210;
+export const GOOGLE_ROUTE_REPLAY_DURATION_SECONDS = 1_050;
 const manifestCache = new WeakMap<QuestRoute, RouteSceneManifest>();
 
 function clamp(value: number, minimum: number, maximum: number) {
@@ -63,7 +65,7 @@ export function initialGoogleRouteNavigatorState(): GoogleRouteNavigatorState {
     progressM: 0,
     speed: 1,
     cameraMode: "auto",
-    groundingMode: "mesh",
+    groundingMode: "ground",
     following: true,
     rangeScale: 1,
   };
@@ -79,7 +81,7 @@ export function advanceGoogleRouteNavigator(
     ? Math.min(
         totalDistanceM,
         state.progressM +
-          (totalDistanceM / REPLAY_DURATION_SECONDS) * state.speed * elapsed,
+          (totalDistanceM / GOOGLE_ROUTE_REPLAY_DURATION_SECONDS) * state.speed * elapsed,
       )
     : state.progressM;
 
@@ -115,11 +117,12 @@ export function zoomGoogleRouteNavigator(
   state: GoogleRouteNavigatorState,
   direction: "in" | "out",
 ) {
+  const minimumScale = minimumRouteCameraRangeScale(state.cameraMode);
   return {
     ...state,
     rangeScale: clamp(
-      state.rangeScale * (direction === "in" ? 0.78 : 1.28),
-      0.55,
+      Math.max(minimumScale, state.rangeScale) * (direction === "in" ? 0.78 : 1.28),
+      minimumScale,
       2.4,
     ),
   };
@@ -174,15 +177,11 @@ export function googleRouteThreadTreatment(
   const totalDistanceM = Math.max(1, routeDistanceM(route));
   const focusRatio = clamp(state.progressM / totalDistanceM, 0, 1);
   if (focusRatio >= 0.995) {
-    const camera = googleRouteCameraPose(route, state);
-    const telemetry = googleRouteTelemetry(route, state.progressM);
     return {
-      bearingDeg: telemetry.headingDeg,
-      cameraHeadingDeg: camera.headingDeg,
       endRatio: 1,
-      focusRatio: 1,
+      focusRatio,
       motionIntensity: 0.18,
-      rangeM: camera.rangeM,
+      rangeM: googleRouteCameraPose(route, state).rangeM,
       shotKind: "release",
       startRatio: 0,
     };
@@ -194,8 +193,8 @@ export function googleRouteThreadTreatment(
   const overviewWeight = state.cameraMode === "auto" ? camera.overviewWeight : 0;
   const trackingWindow =
     directedMode === "runner"
-      ? { aheadM: 120, behindM: 42 }
-      : { aheadM: 360, behindM: 260 };
+      ? { aheadM: 90, behindM: 24 }
+      : { aheadM: 480, behindM: 900 };
   const window =
     directedMode === "overview" || overviewWeight > 0
       ? {
@@ -214,16 +213,11 @@ export function googleRouteThreadTreatment(
   const grade = Math.abs(telemetry.gradePercent);
 
   return {
-    bearingDeg: telemetry.headingDeg,
-    cameraHeadingDeg: camera.headingDeg,
     endRatio: clamp((state.progressM + window.aheadM) / totalDistanceM, 0, 1),
     focusRatio,
     motionIntensity: state.playing ? clamp(0.68 + grade / 45, 0, 1) : 0.34,
     rangeM: camera.rangeM,
-    shotKind:
-      directedMode === "overview" || overviewWeight >= 0.55
-        ? "establishing"
-        : "tracking",
+    shotKind: "tracking",
     startRatio: clamp((state.progressM - window.behindM) / totalDistanceM, 0, 1),
   };
 }
@@ -232,8 +226,14 @@ function mix(start: number, end: number, amount: number) {
   return start + (end - start) * clamp(amount, 0, 1);
 }
 
-export function densifyGoogleRoutePath(route: QuestRoute, intervalM = 12) {
-  const path: Array<{ lat: number; lng: number }> = [];
+export interface GoogleRouteGeometry {
+  name: string;
+  distanceKm: number;
+  route: Array<{ lat: number; lng: number; d: number }>;
+}
+
+export function densifyGoogleRoutePath(route: Pick<GoogleRouteGeometry, "route">, intervalM = 12) {
+  const path: Array<{ lat: number; lng: number; d: number }> = [];
   for (let index = 0; index < route.route.length - 1; index += 1) {
     const start = route.route[index];
     const end = route.route[index + 1];
@@ -242,12 +242,13 @@ export function densifyGoogleRoutePath(route: QuestRoute, intervalM = 12) {
     for (let step = 0; step < steps; step += 1) {
       const ratio = step / steps;
       path.push({
+        d: start.d + distance * ratio,
         lat: start.lat + (end.lat - start.lat) * ratio,
-        lng: start.lng + (end.lng - start.lng) * ratio,
+        lng: interpolateLongitude(start.lng, end.lng, ratio),
       });
     }
   }
   const last = route.route.at(-1);
-  if (last) path.push({ lat: last.lat, lng: last.lng });
+  if (last) path.push({ lat: last.lat, lng: last.lng, d: last.d });
   return path;
 }

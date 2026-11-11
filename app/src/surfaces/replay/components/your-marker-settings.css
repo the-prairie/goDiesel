@@ -1,0 +1,87 @@
+.your-marker-settings {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+  border-top: 1px solid var(--line);
+  padding-top: 1rem;
+}
+.your-marker-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.your-marker-heading h3 {
+  font-size: 14px;
+  font-weight: 600;
+}
+.your-marker-heading p,
+.your-marker-editor > p,
+.your-marker-privacy {
+  color: var(--ink-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.your-marker-thumbnail {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  object-fit: cover;
+  flex: none;
+}
+.your-marker-dot {
+  width: 10px;
+  height: 10px;
+  margin: 13px;
+  background: var(--ink);
+  border-radius: 50%;
+  flex: none;
+}
+.your-marker-editor {
+  display: grid;
+  gap: 0.5rem;
+}
+.your-marker-crop {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  margin: 0.25rem auto;
+  overflow: hidden;
+  border-radius: 50%;
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  background: var(--canvas);
+  touch-action: none;
+  cursor: grab;
+}
+.your-marker-crop:active {
+  cursor: grabbing;
+}
+.your-marker-crop img {
+  position: absolute;
+  max-width: none;
+  user-select: none;
+  pointer-events: none;
+}
+.your-marker-slider {
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 12px;
+}
+.your-marker-slider input {
+  min-width: 0;
+  width: 100%;
+  height: 44px;
+  accent-color: var(--ink);
+  touch-action: pan-y;
+}
+.your-marker-slider input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.your-marker-settings [role="alert"] {
+  font-size: 12px;
+  color: var(--ink);
+}

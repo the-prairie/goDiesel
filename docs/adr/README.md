@@ -51,8 +51,11 @@ not by recollection.
 | [0012](0012-risk-based-verification-with-a-no-skip-live-gate.md) | Risk-based verification with a no-skip live gate | accepted |
 | [0013](0013-earth-engine-enrichment-stays-out-of-the-runtime.md) | Earth Engine enrichment stays out of the runtime | accepted |
 | [0014](0014-app-src-is-organised-by-surface.md) | app/src is organised by surface, with labs separated | accepted |
-| [0015](0015-imported-route-identity-is-allocated-once.md) | Imported route identity is allocated once | accepted |
-| [0016](0016-agent-control-plane-is-manifest-driven.md) | The agent control plane is manifest-driven | proposed |
+| [0015](0015-finder-hybrid-search-and-sourced-discovery.md) | Finder searches guides and discovers sourced paths | accepted |
+| [0016](0016-explicit-state-transitions-at-lifecycle-boundaries.md) | Explicit state transitions at lifecycle boundaries | accepted |
+| [0017](0017-course-workspace-is-separate-from-completed-activities.md) | Courses have a shared workspace separate from completed activities | proposed |
+| [0018](0018-discriminated-reducers-for-lifecycle-state.md) | Lifecycle state stays a discriminated reducer | accepted |
+| [0019](0019-recovery-dispositions-marker-protocols-and-a-checked-registry.md) | Recovery dispositions, marker-file protocols, and a checked lifecycle registry | accepted |
 
 ## Renderer history
 

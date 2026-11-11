@@ -2,13 +2,48 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#070b0f" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <title>godiesel quest atlas</title>
+    <title>goDiesel</title>
+    <style>
+      /* The static shell paints before the app's code arrives. React replaces
+         it on mount; the navigation placeholders sit exactly where the real
+         navigation renders, so nothing moves. Inline only: nothing is fetched,
+         not even the web font, which would compete with the app's code. */
+      html, body { margin: 0; background: #000; color-scheme: dark; }
+      .static-shell { min-height: 100dvh; color: #fff; font: 400 0.875rem/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+      .static-shell-status { margin: 0; padding: calc(1rem + env(safe-area-inset-top, 0px)) 1rem 0 calc(1rem + env(safe-area-inset-left, 0px)); color: #c6c6c6; }
+      .static-shell-mark { width: 0.5rem; height: 1.5rem; flex: none; border-radius: 2px; background: #fff; }
+      .static-shell-tabs { position: fixed; inset: auto 0 0 0; display: grid; grid-template-columns: repeat(4, 1fr); box-sizing: border-box; height: calc(3.5rem + env(safe-area-inset-bottom, 0px)); padding: 0 env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); border-top: 1px solid rgb(255 255 255 / 20%); background: rgb(0 0 0 / 82%); }
+      .static-shell-tabs span { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.125rem; font-size: 11px; line-height: 14px; color: #b5b5b5; }
+      .static-shell-tabs span::before { content: ""; width: 18px; height: 18px; border-radius: 4px; background: rgb(255 255 255 / 8%); }
+      .static-shell-rail { display: none; position: fixed; inset: 0 auto 0 0; box-sizing: border-box; width: calc(4rem + env(safe-area-inset-left, 0px)); padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); border-right: 1px solid rgb(255 255 255 / 20%); background: rgb(0 0 0 / 82%); }
+      .static-shell-brand { display: flex; align-items: center; gap: 0.75rem; padding: 1rem 0.75rem; border-bottom: 1px solid rgb(255 255 255 / 20%); }
+      .static-shell-name { display: none; }
+      .static-shell-name b { display: block; font-size: 1.125rem; line-height: 1.75rem; font-weight: 500; letter-spacing: 0.01em; }
+      .static-shell-name small { display: block; font-size: 0.75rem; color: #b5b5b5; }
+      @media (min-width: 48rem) {
+        .static-shell-tabs { display: none; }
+        .static-shell-rail { display: block; }
+        .static-shell-status { padding-left: calc(5rem + env(safe-area-inset-left, 0px)); }
+      }
+      @media (min-width: 64rem) {
+        .static-shell-rail { width: calc(10.375rem + env(safe-area-inset-left, 0px)); }
+        .static-shell-brand { padding: 1rem; }
+        .static-shell-name { display: block; }
+        .static-shell-status { padding-left: calc(11.375rem + env(safe-area-inset-left, 0px)); }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div class="static-shell" data-static-shell>
+        <p class="static-shell-status" role="status">Opening goDiesel…</p>
+        <div class="static-shell-rail" aria-hidden="true">
+          <div class="static-shell-brand"><span class="static-shell-mark"></span><span class="static-shell-name"><b>goDiesel</b><small>Personal atlas</small></span></div>
+        </div>
+        <div class="static-shell-tabs" aria-hidden="true"><span>Atlas</span><span>Finder</span><span>Routes</span><span>Replay</span></div>
+      </div></div>
     <script type="module" src="/src/app/main.tsx"></script>
   </body>
 </html>

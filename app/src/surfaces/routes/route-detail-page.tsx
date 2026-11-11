@@ -1,34 +1,72 @@
-import { ArrowLeft } from "lucide-react";
-import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import {
+  ArrowLeft,
+  ChevronDown,
+  ChevronsDown,
+  ChevronsUp,
+  ChevronUp,
+  Compass,
+  Download,
+} from "lucide-react";
+import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { questRouteGpx } from "@/domain/courses";
+import { downloadGpx } from "@/data/course-client";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 
-import { APP_PATHS, decodedRouteSlug } from "@/app/route-paths";
+import { ElevationProfile } from "@/surfaces/routes/components/route-briefing";
+import { RouteAnnotations } from "@/surfaces/routes/components/route-annotations";
+import { PolaroidFan } from "@/ui/route-gallery/polaroid-fan";
+import { RouteGuide } from "@/surfaces/routes/components/route-guide";
+import { RouteLeafMap } from "@/surfaces/routes/components/route-leaf-map";
+import {
+  draggedRouteSheetHeight,
+  releaseVelocity,
+  snapRouteSheet,
+  type RouteSheetPosition,
+  type SheetSample,
+} from "@/surfaces/routes/route-sheet-snap";
+import { RouteNotFound } from "@/ui/route-not-found";
+import { Button } from "@/ui/button";
 import { singleRouteMicrosite } from "@/app/single-route-microsite";
 import { findRouteBySlug } from "@/data/routes";
-import { usePlannedRoutes } from "@/data/planned-route-store";
 import { routeLibraryReturnPath } from "@/data/route-library-return";
 import { useRouteDetail, type RouteDetailState } from "@/data/use-route-detail";
-import { RouteStoryView } from "@/surfaces/routes/components/route-story-view";
-import { PlannedRouteView } from "@/surfaces/routes/components/planned-route-view";
-import { Button } from "@/ui/button";
-import { RouteNotFound } from "@/ui/route-not-found";
+import { climbLabel, recordedClimbM, type QuestRoute } from "@/domain/route";
+import { useIsMobile } from "@/ui/use-mobile";
 import { cn } from "@/ui/utils";
+import {
+  APP_PATHS,
+  atlasReturnPath,
+  decodedRouteSlug,
+  replayPath,
+} from "@/app/route-paths";
+
+type RouteMarginPosition = RouteSheetPosition;
+
+type SheetDrag = {
+  pointerId: number;
+  startY: number;
+  from: RouteMarginPosition;
+  viewportHeight: number;
+  containerHeight: number;
+  /** `t` is each event's own `timeStamp`, never the time its handler ran. */
+  samples: SheetSample[];
+};
 
 export function RouteDetailPage() {
   const { routeSlug } = useParams();
+  const [searchParams] = useSearchParams();
   const decodedSlug = decodedRouteSlug(routeSlug);
   const summary = decodedSlug ? findRouteBySlug(decodedSlug) : undefined;
-  const plannedRoutes = usePlannedRoutes();
-  const plannedRoute = decodedSlug
-    ? plannedRoutes.find((route) => route.slug === decodedSlug)
-    : undefined;
   const [requestKey, setRequestKey] = useState(0);
   const detail = useRouteDetail(summary?.slug, requestKey);
-  const routesPath = summary
-    ? (routeLibraryReturnPath(summary.slug) ?? APP_PATHS.routes)
-    : APP_PATHS.routes;
+  const finderOrigin = searchParams.get("from");
+  const finderReturn = finderOrigin === APP_PATHS.finder || finderOrigin?.startsWith(`${APP_PATHS.finder}?`) ? finderOrigin : undefined;
+  const routesPath =
+    finderReturn ?? atlasReturnPath(searchParams) ??
+    (summary
+      ? (routeLibraryReturnPath(summary.slug) ?? APP_PATHS.routes)
+      : APP_PATHS.routes);
 
-  if (plannedRoute) return <PlannedRouteView route={plannedRoute} />;
   if (!summary) return <RouteNotFound />;
 
   return (
@@ -60,39 +98,378 @@ function RouteDetailContent({
 }) {
   if (state.status === "idle" || state.status === "loading") {
     return (
-      <RouteStoryState routesPath={routesPath}>
-        <p role="status" aria-live="polite" className="font-editorial text-3xl text-ink">
-          Loading route story.
+      <RouteLeafState routesPath={routesPath}>
+        <p
+          role="status"
+          aria-live="polite"
+          className="font-editorial text-2xl font-semibold text-ink"
+        >
+          Loading route details.
         </p>
         <p className="mt-2 text-control text-ink-muted">
           Opening the recorded geography and field notes.
         </p>
-      </RouteStoryState>
+      </RouteLeafState>
     );
   }
 
   if (state.status !== "ready") {
     const message =
-      state.status === "not-found" ? "Route data could not be found." : state.message;
+      state.status === "not-found"
+        ? "Route data could not be found."
+        : state.message;
     return (
-      <RouteStoryState routesPath={routesPath}>
+      <RouteLeafState routesPath={routesPath}>
         <div role="alert">
-          <p className="font-editorial text-3xl text-ink">Route story unavailable</p>
+          <p className="font-editorial text-2xl font-semibold text-ink">
+            Route data unavailable
+          </p>
           <p className="mt-2 text-control text-ink-muted">{message}</p>
           {state.status === "error" ? (
-            <Button type="button" variant="outline" className="mt-5" onClick={onRetry}>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-5"
+              onClick={onRetry}
+            >
               Retry
             </Button>
           ) : null}
         </div>
-      </RouteStoryState>
+      </RouteLeafState>
     );
   }
 
-  return <RouteStoryView route={state.route} routesPath={routesPath} />;
+  return <RouteLeaf route={state.route} routesPath={routesPath} />;
 }
 
-function RouteStoryState({
+function RouteLeaf({
+  route,
+  routesPath,
+}: {
+  route: QuestRoute;
+  routesPath: string;
+}) {
+  const isMobile = useIsMobile();
+  const [position, setPosition] = useState<RouteMarginPosition>("peek");
+
+  return (
+    <div
+      role="region"
+      aria-label="Route briefing"
+      className="relative grid h-full min-h-0 overflow-hidden md:grid-cols-[minmax(0,1fr)_minmax(20rem,1fr)] lg:grid-cols-[minmax(0,2fr)_minmax(24rem,1fr)]"
+    >
+      <div className="min-h-0 max-md:pb-64">
+        <RouteLeafMap route={route} />
+      </div>
+      <RouteMargin
+        route={route}
+        routesPath={routesPath}
+        isMobile={isMobile}
+        position={position}
+        onPositionChange={setPosition}
+      />
+    </div>
+  );
+}
+
+function RouteMargin({
+  route,
+  routesPath,
+  isMobile,
+  position,
+  onPositionChange,
+}: {
+  route: QuestRoute;
+  routesPath: string;
+  isMobile: boolean;
+  position: RouteMarginPosition;
+  onPositionChange: (position: RouteMarginPosition) => void;
+}) {
+  const guideRef = useRef<HTMLDivElement>(null);
+  function readGuide() {
+    onPositionChange("expanded");
+    requestAnimationFrame(() => {
+      guideRef.current?.scrollIntoView({ block: "start" });
+      guideRef.current?.focus({ preventScroll: true });
+    });
+  }
+  const sheetRef = useRef<HTMLElement>(null);
+  const dragRef = useRef<SheetDrag | null>(null);
+  const [dragHeight, setDragHeight] = useState<number | null>(null);
+
+  function startSheetDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    const container = sheetRef.current?.offsetParent;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      from: position,
+      viewportHeight: window.innerHeight,
+      containerHeight: container instanceof HTMLElement ? container.clientHeight : window.innerHeight,
+      samples: [{ y: event.clientY, t: event.timeStamp }],
+    };
+  }
+
+  function moveSheetDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    drag.samples = [...drag.samples.slice(-7), { y: event.clientY, t: event.timeStamp }];
+    setDragHeight(draggedRouteSheetHeight(drag.from, event.clientY - drag.startY, drag.viewportHeight, drag.containerHeight));
+  }
+
+  function endSheetDrag(event: ReactPointerEvent<HTMLDivElement>, cancelled: boolean) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+    setDragHeight(null);
+    if (cancelled) return;
+    drag.samples.push({ y: event.clientY, t: event.timeStamp });
+    onPositionChange(
+      snapRouteSheet({
+        from: drag.from,
+        dragPx: event.clientY - drag.startY,
+        velocityPxPerMs: releaseVelocity(drag.samples),
+        viewportHeight: drag.viewportHeight,
+        containerHeight: drag.containerHeight,
+      }),
+    );
+  }
+
+  const hasDetails = !isMobile || position !== "peek";
+  const premise = route.description || (!route.curation.vibe ? route.completionRule : "");
+
+  return (
+    <aside
+      ref={sheetRef}
+      aria-label="Route margin"
+      data-snap={isMobile ? position : undefined}
+      data-dragging={dragHeight === null ? undefined : "true"}
+      style={isMobile && dragHeight !== null ? { height: dragHeight } : undefined}
+      className={cn(
+        "z-20 flex min-h-0 flex-col overflow-hidden border-line bg-surface/97 text-ink shadow-panel backdrop-blur transition-[height] duration-[var(--duration-standard)]",
+        dragHeight !== null && "transition-none",
+        isMobile &&
+          position === "peek" &&
+          "absolute inset-x-3 bottom-0 h-[16rem] rounded-t-[var(--radius-sheet)] border",
+        isMobile &&
+          position === "half" &&
+          "absolute inset-x-3 bottom-0 h-[58dvh] rounded-t-[var(--radius-sheet)] border",
+        isMobile &&
+          position === "expanded" &&
+          "absolute inset-x-3 bottom-0 h-[calc(100%-0.75rem-var(--safe-area-top))] rounded-t-[var(--radius-sheet)] border",
+        // The column reaches the screen's top and right edges: its content
+        // clears those safe-area insets (0 without a notch).
+        !isMobile && "relative h-full border-l pt-[var(--safe-area-top)] pr-[var(--safe-area-right)]",
+      )}
+    >
+      {isMobile ? (
+        // Pointer-only grab strip. touch-action is off here alone, so the
+        // sheet's scroll and the map's gestures keep their own touches;
+        // keyboard and assistive tech use the position buttons below.
+        <div
+          data-testid="route-sheet-handle"
+          className="flex h-11 shrink-0 cursor-grab touch-none select-none items-center justify-center active:cursor-grabbing"
+          onPointerDown={startSheetDrag}
+          onPointerMove={moveSheetDrag}
+          onPointerUp={(event) => endSheetDrag(event, false)}
+          onPointerCancel={(event) => endSheetDrag(event, true)}
+        >
+          <span
+            className="h-1 w-10 rounded-full bg-ink-muted"
+            aria-hidden="true"
+          />
+        </div>
+      ) : null}
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className={cn("border-b border-line", isMobile ? "px-3 pb-3" : "p-6")}>
+
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              {singleRouteMicrosite ? null : (
+                <Button
+                  asChild
+                  variant="ghost"
+                  size="sm"
+                  className="-ml-2 mb-2 w-fit"
+                >
+                  <Link to={routesPath}>
+                    <ArrowLeft aria-hidden="true" />
+                    {routesPath.startsWith(APP_PATHS.atlas)
+                      ? "Back to Atlas"
+                      : routesPath.startsWith(APP_PATHS.finder) ? "Back to Finder" : "All routes"}
+                  </Link>
+                </Button>
+              )}
+              {route.region !==
+              (route.lifecycle === "discovered"
+                ? route.activityName
+                : route.name) ? (
+                <p className="text-caption font-semibold uppercase text-forest">
+                  {route.region}
+                </p>
+              ) : null}
+              <h1 className={cn("mt-1 break-words font-editorial text-xl font-semibold leading-tight text-ink sm:text-3xl", !hasDetails && "line-clamp-2")}>
+                {route.lifecycle === "discovered"
+                  ? route.activityName
+                  : route.name}
+              </h1>
+            </div>
+            {isMobile ? (
+              // One chevron moves one stop, two chevrons go all the way.
+              <div className="flex shrink-0 gap-1">
+                {position !== "peek" ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Collapse route margin"
+                    onClick={() => onPositionChange("peek")}
+                  >
+                    {position === "expanded" ? <ChevronsDown aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
+                  </Button>
+                ) : null}
+                {position !== "half" ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Show half of route margin"
+                    onClick={() => onPositionChange("half")}
+                  >
+                    {position === "peek" ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
+                  </Button>
+                ) : null}
+                {position !== "expanded" ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Expand route margin"
+                    onClick={() => onPositionChange("expanded")}
+                  >
+                    {position === "peek" ? <ChevronsUp aria-hidden="true" /> : <ChevronUp aria-hidden="true" />}
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          {!hasDetails ? (
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <p className="text-caption text-ink-secondary">
+                {route.type} · {route.distanceKm.toFixed(1)} km · {climbLabel(route)}
+              </p>
+              <Button type="button" variant="ghost" size="sm" onClick={readGuide}>Read guide</Button>
+            </div>
+          ) : null}
+        </div>
+
+        {hasDetails ? (
+            <div className="p-4 pb-24 sm:p-6 sm:pb-24">
+              {premise ? (
+                <p className="story-copy mt-4 whitespace-pre-line text-ink-secondary">{premise}</p>
+              ) : null}
+              {route.curation.vibe ? <Button type="button" variant="outline" size="sm" onClick={readGuide}>Read guide</Button> : null}
+              <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-y border-line py-4">
+                <LeafMetric
+                  label="Distance"
+                  value={`${route.distanceKm.toFixed(1)} km`}
+                />
+                <LeafMetric
+                  label="Climb"
+                  value={recordedClimbM(route) === null ? "Not recorded" : `${route.elevationGainM.toLocaleString()} m`}
+                />
+                <LeafMetric label="Activity" value={route.type} />
+                <LeafMetric
+                  label={routeDateLabel(route.lifecycle)}
+                  value={formatRouteDate(route.date)}
+                />
+              </dl>
+              {route.route.length > 1 ? (
+                <section
+                  aria-label="Elevation"
+                  className="border-b border-line pb-6"
+                >
+                  <p className="text-caption font-semibold uppercase text-ink-muted">
+                    Elevation
+                  </p>
+                  <div className="mt-2 overflow-hidden border border-line bg-surface-muted">
+                    <ElevationProfile route={route} />
+                  </div>
+                </section>
+              ) : (
+                <div
+                  role="status"
+                  className="border-b border-line pb-6 text-control text-ink-muted"
+                >
+                  Elevation profile unavailable. Climb distribution needs recorded
+                  route points.
+                </div>
+              )}
+              <PolaroidFan
+                annotations={route.annotations}
+                seed={route.slug}
+                className="border-b border-line py-6"
+              />
+              <RouteAnnotations
+                annotations={route.annotations}
+                className="border-b border-line py-6"
+              />
+              <div ref={guideRef} tabIndex={-1} aria-label="Route guide content" className="pt-6 focus:outline-none">
+                <RouteGuide curation={route.curation} compact />
+              </div>
+            </div>
+        ) : null}
+      </div>
+
+      <div className={cn("mt-auto grid shrink-0 gap-2 border-t border-line bg-surface p-3 sm:p-4 md:pb-[calc(1rem+var(--safe-area-bottom))]", route.route.length > 1 && "grid-cols-[minmax(0,1fr)_auto]")}>
+        {route.replay.replayEligible ? (
+          <Button
+            asChild
+            className="w-full bg-primary text-primary-foreground hover:bg-primary-hover"
+          >
+            <Link
+              to={replayPath(
+                route.slug,
+                routesPath.startsWith(APP_PATHS.atlas) ? routesPath : undefined,
+              )}
+            >
+              <Compass aria-hidden="true" />
+              Open replay
+            </Link>
+          </Button>
+        ) : (
+          <Button disabled className="w-full">
+            <Compass aria-hidden="true" />
+            Replay unavailable
+          </Button>
+        )}
+        {route.route.length > 1 ? (
+          <Button aria-label="Download GPX" variant="outline" onClick={() => downloadGpx(questRouteGpx(route), `${route.slug}.gpx`)}>
+            <Download aria-hidden="true" />
+            <span><span className="hidden sm:inline">Download </span>GPX</span>
+          </Button>
+        ) : null}
+      </div>
+    </aside>
+  );
+}
+
+function LeafMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-caption font-semibold uppercase text-ink-muted">
+        {label}
+      </dt>
+      <dd className="mt-1 font-editorial text-xl text-ink">{value}</dd>
+    </div>
+  );
+}
+
+function RouteLeafState({
   routesPath,
   children,
 }: {
@@ -114,4 +491,25 @@ function RouteStoryState({
       </div>
     </div>
   );
+}
+
+function routeDateLabel(lifecycle: QuestRoute["lifecycle"]) {
+  if (lifecycle === "planned") return "Planned for";
+  if (lifecycle === "discovered") return "Discovered";
+  return "Completed";
+}
+
+function formatRouteDate(value: string) {
+  if (!value) return "Not recorded";
+
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return value;
+
+  const [, year, month, day] = match;
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(Number(year), Number(month) - 1, Number(day))));
 }

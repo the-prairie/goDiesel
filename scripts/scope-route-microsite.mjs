@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+// Prune a single-route dist to the shared route's own static files (ADR-0011).
+// make-dist.sh already reduces dist/data to the route's detail file. Media and
+// cover artwork are named per route, so everything the route does not
+// reference is removed and only referenced files are copied back.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -33,32 +37,49 @@ let route;
 try {
   route = JSON.parse(fs.readFileSync(routePath, "utf8"));
 } catch (error) {
-  fail(`could not read ${path.basename(routePath)} (${error.name})`);
+  fail(`could not read ${routeSlug}.json (${error.name})`);
 }
 
-const expected = collectMediaReferences(route);
-for (const reference of expected) {
+const media = collectMediaReferences(route);
+for (const reference of media) {
   if (
     path.posix.normalize(reference) !== reference ||
     !reference.startsWith(`media/${routeSlug}/`)
   ) {
     fail(`route media reference is outside media/${routeSlug}: ${reference}`);
   }
-}
-
-const mediaRoot = path.join(root, "dist/media");
-for (const reference of expected) {
   if (!fs.existsSync(path.join(root, "app/dist", reference))) {
     fail(`referenced media is missing from the app build: ${reference}`);
   }
 }
 
-fs.rmSync(mediaRoot, { recursive: true, force: true });
-for (const reference of expected) {
-  const source = path.join(root, "app/dist", reference);
+// Cover artwork lives at route-covers/<slug>.webp and <slug>-ai.webp.
+const coverDirectory = path.join(root, "app/dist/route-covers");
+const covers = fs.existsSync(coverDirectory)
+  ? fs
+      .readdirSync(coverDirectory)
+      .filter((name) => name.startsWith(`${routeSlug}.`) || name.startsWith(`${routeSlug}-`))
+      .map((name) => `route-covers/${name}`)
+  : [];
+
+const keep = [...media, ...covers];
+for (const directory of ["media", "route-covers"]) {
+  fs.rmSync(path.join(root, "dist", directory), { recursive: true, force: true });
+}
+for (const reference of keep) {
   const destination = path.join(root, "dist", reference);
   fs.mkdirSync(path.dirname(destination), { recursive: true });
-  fs.copyFileSync(source, destination);
+  fs.copyFileSync(path.join(root, "app/dist", reference), destination);
 }
 
-console.log(`Scoped route media to ${expected.size} referenced files.`);
+// The Vite single-route plugin filters the search index while writing the
+// bundle. Refuse to continue if it did not.
+const indexPath = path.join(root, "dist/search/collection.json");
+if (fs.existsSync(indexPath)) {
+  const index = JSON.parse(fs.readFileSync(indexPath, "utf8"));
+  if ((index.documents ?? []).some((document) => document?.slug !== routeSlug)) {
+    fail("the search index contains another route");
+  }
+}
+
+console.log(`Scoped route media and covers to ${keep.length} referenced files.`);

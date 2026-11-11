@@ -1,7 +1,6 @@
-import type { QuestRoute } from "@/domain/route";
+import { attachRoutePositionMarker } from "./route-position-marker";
 import {
   buildCinematicThreadStyles,
-  conditionCinematicPath,
   slicePathByRatio,
   type CinematicFilamentRole,
   type CinematicRouteTreatment,
@@ -10,28 +9,36 @@ import {
   densifyGoogleRoutePath,
   type GoogleRouteCameraPose,
   type GoogleRouteGroundingMode,
+  type GoogleRouteGeometry,
 } from "@/surfaces/replay/playback/route-navigator-controller";
 import { ProviderError, providerFailureMessage } from "@/providers/provider-error";
 import { loadGoogleMaps } from "@/providers/google-maps-loader";
-import { routeDistanceM } from "@/domain/geometry/route-path";
 
-export type GoogleRouteNavigatorStatus =
-  | { state: "loading"; message: string }
-  | { state: "ready"; message: string }
-  | { state: "partial"; message: string }
-  | { state: "unavailable"; message: string };
+import {
+  initialGoogleRendererState,
+  reduceGoogleRenderer,
+  type GoogleRendererEvent,
+  type GoogleRendererUnavailableReason,
+  type GoogleRouteNavigatorStatus,
+} from "@/surfaces/replay/renderers/google-renderer-state";
+
+export type {
+  GoogleRendererUnavailableReason,
+  GoogleRouteNavigatorStatus,
+} from "@/surfaces/replay/renderers/google-renderer-state";
 
 interface MountOptions {
   apiKey: string;
   container: HTMLElement;
-  route: QuestRoute;
+  route: GoogleRouteGeometry;
   groundingMode: GoogleRouteGroundingMode;
   initialCamera?: GoogleRouteCameraPose;
-  onCameraInteraction?: () => void;
-  onStatus: (status: GoogleRouteNavigatorStatus) => void;
+  /** `reason` names why an unavailable status was published, when known. */
+  onStatus: (status: GoogleRouteNavigatorStatus, reason?: GoogleRendererUnavailableReason) => void;
   routeStyle?: {
     color: string;
     mode?: "filament" | "hidden" | "solid";
+    palette?: "neutral" | "immersive";
     outerColor: string;
     outerWidth: number;
     width: number;
@@ -41,6 +48,7 @@ interface MountOptions {
 
 export interface GoogleRouteNavigatorEngine {
   mount(options: MountOptions): Promise<void>;
+  readCamera(): Omit<GoogleRouteCameraPose, "progressM"> | undefined;
   setCamera(pose: GoogleRouteCameraPose): void;
   setFollowing(following: boolean): void;
   setGrounding(mode: GoogleRouteGroundingMode): void;
@@ -58,21 +66,39 @@ declare global {
 interface FilamentLayer {
   element: google.maps.maps3d.Polyline3DElement;
   endRatio: number;
-  geometryBucket: string;
   role: CinematicFilamentRole;
   startRatio: number;
 }
 
 const FILAMENT_CLEARANCE_M: Record<CinematicFilamentRole, number> = {
-  context: 0.08,
+  guide: 0.1,
   future: 0.14,
-  traveled: 0.2,
-  lead: 0.26,
+  thread: 0.2,
+  glint: 0.24,
 };
+
+const INTERACTIVE_PALETTES = {
+  neutral: {
+    colors: { guide: "#a7b5bc", future: "#a7b5bc", thread: "#f5f5f5", glint: "#ffffff" },
+    widths: { guide: 2, future: 2, thread: 3.5, glint: 4.5 },
+    clearanceM: FILAMENT_CLEARANCE_M,
+    outerColor: "#182126",
+    outerWidth: 0.22,
+  },
+  immersive: {
+    colors: { guide: "#f5f1e4", future: "#f5f1e4", thread: "rgba(210, 198, 167, 0.72)", glint: "#fffdf5" },
+    widths: { guide: 2, future: 2.75, thread: 2, glint: 4 },
+    clearanceM: { guide: 1.25, future: 1.25, thread: 1.25, glint: 1.25 },
+    outerColor: "rgba(20, 27, 29, 0.65)",
+    outerWidth: 0.18,
+  },
+} as const;
+
+type InteractivePalette = keyof typeof INTERACTIVE_PALETTES;
 
 const GOOGLE_SCENE_READY_TIMEOUT_MS = 30_000;
 
-function waitForGoogleSceneReady(map: google.maps.maps3d.Map3DElement) {
+function waitForGoogleSceneReady(map: google.maps.maps3d.Map3DElement, signal: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       cleanup();
@@ -87,32 +113,37 @@ function waitForGoogleSceneReady(map: google.maps.maps3d.Map3DElement) {
       cleanup();
       reject(new ProviderError("Google photorealistic 3D could not render this scene."));
     };
+    const onAbort = () => {
+      cleanup();
+      reject(new DOMException("Google scene disposed.", "AbortError"));
+    };
     const cleanup = () => {
       window.clearTimeout(timeout);
       map.removeEventListener("gmp-steadychange", onSteady);
       map.removeEventListener("gmp-error", onError);
+      signal.removeEventListener("abort", onAbort);
     };
     map.addEventListener("gmp-steadychange", onSteady);
     map.addEventListener("gmp-error", onError, { once: true });
+    signal.addEventListener("abort", onAbort, { once: true });
   });
 }
 
 class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
   private map?: google.maps.maps3d.Map3DElement;
   private routeLine?: google.maps.maps3d.Polyline3DElement;
+  private disposeMarker?: () => void;
+  private positionMarker?: google.maps.maps3d.MarkerElement;
   private filamentLayers: FilamentLayer[] = [];
-  private playheadMarker?: google.maps.maps3d.MarkerElement;
-  private playheadVisual?: HTMLDivElement;
-  private routePath: Array<{ lat: number; lng: number }> = [];
+  private routePath: Array<{ lat: number; lng: number; d: number }> = [];
+  private palette?: InteractivePalette;
   private routeDistanceM = 1;
   private routeWidth = 8;
   private following = true;
   private headingDeg?: number;
   private headingSmoothing = 0.14;
-  private generation = 0;
-  private authFailure?: () => void;
-  private cameraInteractionCleanup?: () => void;
-  private lastTreatment?: CinematicRouteTreatment;
+  private lifecycle = initialGoogleRendererState();
+  private mountController?: AbortController;
 
   async mount({
     apiKey,
@@ -120,37 +151,33 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
     route,
     groundingMode,
     initialCamera,
-    onCameraInteraction,
     onStatus,
     routeStyle,
     headingSmoothing,
   }: MountOptions) {
-    const generation = ++this.generation;
-    onStatus({ state: "loading", message: "Loading Google photorealistic 3D." });
+    this.destroy();
+    const { operationId } = this.transition({ type: "mountStarted" }, onStatus);
     this.headingSmoothing = headingSmoothing ?? 0.14;
+    this.palette = routeStyle?.palette;
     if (!apiKey) {
-      onStatus({
-        state: "unavailable",
-        message: "A Google Maps JavaScript API browser key is required.",
-      });
+      this.transition({ type: "inputsRejected", operationId, reason: "key" }, onStatus);
       return;
     }
     if (route.route.length < 2) {
-      onStatus({ state: "unavailable", message: "Recorded route geometry is unavailable." });
+      this.transition({ type: "inputsRejected", operationId, reason: "geometry" }, onStatus);
       return;
     }
 
     try {
-      this.authFailure = () => {
-        onStatus({
-          state: "unavailable",
-          message:
-            "Google Maps rejected this browser origin. Add the current localhost or preview URL to the key restrictions.",
-        });
+      const controller = new AbortController();
+      this.mountController = controller;
+      const authFailure = () => {
+        this.transition({ type: "authenticationRejected", operationId }, onStatus);
       };
       window.addEventListener(
         "godiesel:google-maps-auth-failure",
-        this.authFailure,
+        authFailure,
+        { signal: controller.signal },
       );
       await loadGoogleMaps(apiKey);
       const {
@@ -161,7 +188,8 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
         MarkerElement,
         Polyline3DElement,
       } = (await google.maps.importLibrary("maps3d")) as google.maps.Maps3DLibrary;
-      if (generation !== this.generation) return;
+      this.transition({ type: "apiLoaded", operationId }, onStatus);
+      if (operationId !== this.lifecycle.operationId || this.lifecycle.phase !== "loadingScene") return;
 
       const first = route.route[0];
       const map = new Map3DElement({
@@ -180,29 +208,16 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
       map.style.height = "100%";
       map.dataset.testid = "google-route-map";
       map.addEventListener("gmp-error", () => {
-        onStatus({
-          state: "unavailable",
-          message:
-            "This browser could not start Google photorealistic 3D. Try a hardware-accelerated Chrome window.",
-        });
-      });
-      this.cameraInteractionCleanup = bindCameraInteraction(
-        map,
-        () => {
-          if (this.following) onCameraInteraction?.();
-        },
-        () => {
-          if (!this.following && this.lastTreatment) {
-            this.renderCinematicRoute(this.lastTreatment);
-          }
-        },
-      );
+        this.transition({ type: "sceneErrored", operationId }, onStatus);
+      }, { signal: controller.signal });
 
       const routePath = densifyGoogleRoutePath(route);
       const altitudeMode =
         groundingMode === "mesh"
           ? AltitudeMode.RELATIVE_TO_MESH
-          : AltitudeMode.CLAMP_TO_GROUND;
+          : this.palette === "immersive"
+            ? AltitudeMode.RELATIVE_TO_GROUND
+            : AltitudeMode.CLAMP_TO_GROUND;
       let routeLine: google.maps.maps3d.Polyline3DElement | undefined;
       if (routeStyle?.mode === "hidden") {
         routeLine = undefined;
@@ -212,23 +227,23 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
           altitudeMode,
           map,
           routePath,
+          roles: routeStyle.palette === "immersive"
+            ? ["future", "thread", "glint"]
+            : ["guide", "future", "thread", "glint"],
         });
-        const playheadVisual = document.createElement("div");
-        playheadVisual.className = "godiesel-route-playhead";
-        playheadVisual.dataset.moving = "false";
-        const playheadMarker = new MarkerElement({
-          altitudeMode,
-          anchorLeft: "-50%",
-          anchorTop: "-50%",
-          position: { ...routePath[0], altitude: 0.34 },
-          title: "Current route position",
-        });
-        playheadMarker.dataset.testid = "google-route-playhead";
-        playheadMarker.style.display = "none";
-        playheadMarker.append(playheadVisual);
-        map.append(playheadMarker);
-        this.playheadMarker = playheadMarker;
-        this.playheadVisual = playheadVisual;
+        if (routeStyle.palette === "immersive") {
+          const marker = new MarkerElement({
+            position: { lat: first.lat, lng: first.lng, altitude: 1.6 },
+            altitudeMode,
+            anchorTop: "-50%",
+            title: "Current route position",
+          });
+          this.disposeMarker = attachRoutePositionMarker(marker);
+          marker.style.pointerEvents = "none";
+          marker.dataset.testid = "replay-position-marker";
+          map.append(marker);
+          this.positionMarker = marker;
+        }
       } else {
         routeLine = new Polyline3DElement({
           path: routePath,
@@ -247,21 +262,42 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
       this.map = map;
       this.routeLine = routeLine;
       this.routePath = routePath;
-      this.routeDistanceM = Math.max(1, routeDistanceM(route));
+      this.routeDistanceM = Math.max(1, route.distanceKm * 1_000, route.route.at(-1)?.d ?? 0);
       this.routeWidth = routeStyle?.width ?? 8;
-      await waitForGoogleSceneReady(map);
-      if (generation !== this.generation) return;
-      onStatus({ state: "ready", message: "Native Google 3D route world ready." });
+      await waitForGoogleSceneReady(map, controller.signal);
+      this.transition({ type: "sceneReady", operationId }, onStatus);
     } catch (error) {
-      if (generation !== this.generation) return;
-      onStatus({
-        state: "unavailable",
+      if (operationId !== this.lifecycle.operationId) return;
+      this.transition({
+        type: "operationFailed", operationId,
         message: providerFailureMessage(
           error,
-          "Google photorealistic 3D could not start in this browser. Atlas replay works everywhere.",
+          "Google photorealistic 3D could not start in this browser.",
         ),
-      });
+      }, onStatus);
     }
+  }
+
+  private transition(event: GoogleRendererEvent, onStatus?: MountOptions["onStatus"]) {
+    const previousStatus = this.lifecycle.status;
+    this.lifecycle = reduceGoogleRenderer(this.lifecycle, event);
+    if (this.lifecycle.status && this.lifecycle.status !== previousStatus) {
+      onStatus?.(this.lifecycle.status, "reason" in this.lifecycle ? this.lifecycle.reason : undefined);
+    }
+    return this.lifecycle;
+  }
+
+  readCamera(): Omit<GoogleRouteCameraPose, "progressM"> | undefined {
+    const map = this.map;
+    const center = map?.center;
+    if (!map || !center) return undefined;
+    return {
+      center: { lat: center.lat, lng: center.lng, altitude: center.altitude },
+      headingDeg: map.heading ?? 0,
+      rangeM: map.range ?? 0,
+      tiltDeg: map.tilt ?? 0,
+      fovDeg: map.fov ?? 54,
+    };
   }
 
   setCamera(pose: GoogleRouteCameraPose) {
@@ -282,6 +318,7 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
   }
 
   setFollowing(following: boolean) {
+    if (following && !this.following) this.headingDeg = this.map?.heading ?? undefined;
     this.following = following;
   }
 
@@ -290,95 +327,73 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
     const altitudeMode =
       mode === "mesh"
         ? google.maps.maps3d.AltitudeMode.RELATIVE_TO_MESH
-        : google.maps.maps3d.AltitudeMode.CLAMP_TO_GROUND;
+        : this.palette === "immersive"
+          ? google.maps.maps3d.AltitudeMode.RELATIVE_TO_GROUND
+          : google.maps.maps3d.AltitudeMode.CLAMP_TO_GROUND;
     if (this.routeLine) this.routeLine.altitudeMode = altitudeMode;
+    if (this.positionMarker) this.positionMarker.altitudeMode = altitudeMode;
     this.filamentLayers.forEach(({ element }) => {
       element.altitudeMode = altitudeMode;
     });
-    if (this.playheadMarker) this.playheadMarker.altitudeMode = altitudeMode;
   }
 
   setCinematicRoute(treatment: CinematicRouteTreatment) {
-    this.lastTreatment = treatment;
-    this.renderCinematicRoute(treatment);
-  }
-
-  private renderCinematicRoute(treatment: CinematicRouteTreatment) {
     if (this.filamentLayers.length === 0 || this.routePath.length < 2) return;
-    const renderRangeM =
-      !this.following && this.map?.range != null
-        ? this.map.range
-        : treatment.rangeM;
+    const firstDistanceM = this.routePath[0].d;
+    const recordedDistanceM = this.routePath.at(-1)!.d - firstDistanceM;
+    const pathRatio = (ratio: number) => recordedDistanceM > 0
+      ? Math.min(1, Math.max(0, (ratio * this.routeDistanceM - firstDistanceM) / recordedDistanceM))
+      : ratio;
+    const visibleTreatment = this.palette === "immersive" ? {
+      ...treatment,
+      startRatio: pathRatio(treatment.startRatio),
+      focusRatio: pathRatio(treatment.focusRatio),
+      endRatio: pathRatio(treatment.endRatio),
+    } : treatment;
+    if (this.positionMarker) {
+      const position = slicePathByRatio(this.routePath, visibleTreatment.focusRatio, visibleTreatment.focusRatio)[0];
+      this.positionMarker.position = { ...position, altitude: 1.6 };
+    }
     const styles = buildCinematicThreadStyles(
-      { ...treatment, rangeM: renderRangeM },
+      visibleTreatment,
       this.routeDistanceM,
     );
-    const geometryBucket = cinematicGeometryBucket(renderRangeM);
+    const palette = this.palette ? INTERACTIVE_PALETTES[this.palette] : undefined;
     for (const layer of this.filamentLayers) {
       const style = styles.find(({ role }) => role === layer.role);
+      if (style && this.palette === "immersive" && layer.role === "glint") {
+        style.startRatio = Math.max(visibleTreatment.startRatio, visibleTreatment.focusRatio - 24 / Math.max(1, recordedDistanceM));
+        style.endRatio = visibleTreatment.focusRatio;
+      }
       if (!style || style.endRatio <= style.startRatio) {
         setLineVisibility(layer.element, false);
         continue;
       }
-      layer.element.strokeColor = style.color;
-      layer.element.strokeWidth = style.width;
-      layer.element.outerColor = style.outerColor;
-      layer.element.outerWidth = style.outerWidth;
-      layer.element.style.opacity = String(style.opacity);
-      layer.element.dataset.geometryRangeM = renderRangeM.toFixed(1);
-      if (style.opacity <= 0.01) {
-        setLineVisibility(layer.element, false);
-        continue;
-      }
       if (
+        (this.palette === "immersive" && layer.role === "glint" && layer.endRatio !== style.endRatio) ||
         Math.abs(layer.startRatio - style.startRatio) > 0.0001 ||
-        Math.abs(layer.endRatio - style.endRatio) > 0.0001 ||
-        layer.geometryBucket !== geometryBucket
+        Math.abs(layer.endRatio - style.endRatio) > 0.0001
       ) {
-        const renderPath = conditionCinematicPath(
-          slicePathByRatio(
-            this.routePath,
-            style.startRatio,
-            style.endRatio,
-          ),
-          renderRangeM,
-        );
-        layer.element.path = renderPath.map((point) => ({
+        layer.element.path = slicePathByRatio(
+          this.routePath,
+          style.startRatio,
+          style.endRatio,
+        ).map((point) => ({
           ...point,
-          altitude: FILAMENT_CLEARANCE_M[layer.role],
+          altitude: palette?.clearanceM[layer.role] ?? FILAMENT_CLEARANCE_M[layer.role],
         }));
-        layer.element.dataset.renderPointCount = String(renderPath.length);
         layer.startRatio = style.startRatio;
         layer.endRatio = style.endRatio;
-        layer.geometryBucket = geometryBucket;
       }
-      setLineVisibility(layer.element, true);
-    }
-    if (this.playheadMarker && this.playheadVisual) {
-      const [position] = slicePathByRatio(
-        this.routePath,
-        treatment.focusRatio,
-        treatment.focusRatio,
-      );
-      this.playheadMarker.position = { ...position, altitude: 0.34 };
-      const visible = styles.some((style) => style.opacity > 0.01);
-      this.playheadMarker.style.display = visible ? "" : "none";
-      this.playheadMarker.dataset.routeVisible = String(visible);
-      const cameraHeading =
-        (!this.following ? this.map?.heading : undefined) ??
-        this.headingDeg ??
-        treatment.cameraHeadingDeg ??
-        0;
-      const relativeBearing =
-        ((treatment.bearingDeg ?? cameraHeading) - cameraHeading + 360) % 360;
-      this.playheadVisual.style.setProperty(
-        "--route-playhead-bearing",
-        `${relativeBearing.toFixed(1)}deg`,
-      );
-      this.playheadVisual.dataset.relativeBearing = relativeBearing.toFixed(1);
-      this.playheadVisual.dataset.moving = String(
-        treatment.shotKind !== "release" && treatment.motionIntensity > 0.45,
-      );
+      layer.element.strokeColor = palette?.colors[layer.role] ?? style.color;
+      layer.element.strokeWidth = palette?.widths[layer.role] ?? style.width;
+      layer.element.outerColor = palette?.outerColor ?? style.outerColor;
+      layer.element.outerWidth = palette?.outerWidth ?? style.outerWidth;
+      const opacity = this.palette === "immersive"
+        ? 1
+        : style.opacity;
+      setLineVisibility(layer.element, opacity > 0.01);
+      layer.element.style.opacity = String(opacity);
     }
   }
 
@@ -402,99 +417,20 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
   }
 
   destroy() {
-    this.generation += 1;
+    this.transition({ type: "destroyed" });
+    this.mountController?.abort();
+    this.mountController = undefined;
     this.map?.remove();
     this.map = undefined;
     this.routeLine = undefined;
+    this.disposeMarker?.();
+    this.disposeMarker = undefined;
+    this.positionMarker = undefined;
     this.filamentLayers = [];
-    this.playheadMarker = undefined;
-    this.playheadVisual = undefined;
     this.routePath = [];
     this.routeDistanceM = 1;
     this.headingDeg = undefined;
-    this.lastTreatment = undefined;
-    this.cameraInteractionCleanup?.();
-    this.cameraInteractionCleanup = undefined;
-    if (this.authFailure) {
-      window.removeEventListener(
-        "godiesel:google-maps-auth-failure",
-        this.authFailure,
-      );
-      this.authFailure = undefined;
-    }
   }
-}
-
-function cinematicGeometryBucket(rangeM: number) {
-  if (rangeM <= 800) return "close";
-  if (rangeM <= 2_500) return "regional";
-  if (rangeM <= 6_000) return "wide";
-  return "overview";
-}
-
-function bindCameraInteraction(
-  map: google.maps.maps3d.Map3DElement,
-  onCameraInteraction: () => void,
-  onCameraViewChange: () => void,
-) {
-  let viewFrame = 0;
-  let pointerStart:
-    | { pointerId: number; x: number; y: number }
-    | undefined;
-  const beginPointer = (event: PointerEvent) => {
-    pointerStart = {
-      pointerId: event.pointerId,
-      x: event.clientX,
-      y: event.clientY,
-    };
-  };
-  const movePointer = (event: PointerEvent) => {
-    if (!pointerStart || event.pointerId !== pointerStart.pointerId) return;
-    if (Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y) < 6) {
-      return;
-    }
-    pointerStart = undefined;
-    onCameraInteraction();
-  };
-  const endPointer = (event: PointerEvent) => {
-    if (event.pointerId === pointerStart?.pointerId) pointerStart = undefined;
-  };
-  const announceWheel = () => onCameraInteraction();
-  const announceCameraView = () => {
-    if (viewFrame !== 0) return;
-    viewFrame = window.requestAnimationFrame(() => {
-      viewFrame = 0;
-      onCameraViewChange();
-    });
-  };
-  const announceKeyboard = (event: KeyboardEvent) => {
-    if (
-      ["ArrowDown", "ArrowLeft", "ArrowRight", "ArrowUp", "+", "-"].includes(
-        event.key,
-      )
-    ) {
-      onCameraInteraction();
-    }
-  };
-  map.addEventListener("pointerdown", beginPointer, { passive: true });
-  map.addEventListener("pointermove", movePointer, { passive: true });
-  map.addEventListener("pointerup", endPointer, { passive: true });
-  map.addEventListener("pointercancel", endPointer, { passive: true });
-  map.addEventListener("wheel", announceWheel, { passive: true });
-  map.addEventListener("gmp-rangechange", announceCameraView);
-  map.addEventListener("gmp-headingchange", announceCameraView);
-  map.addEventListener("keydown", announceKeyboard);
-  return () => {
-    map.removeEventListener("pointerdown", beginPointer);
-    map.removeEventListener("pointermove", movePointer);
-    map.removeEventListener("pointerup", endPointer);
-    map.removeEventListener("pointercancel", endPointer);
-    map.removeEventListener("wheel", announceWheel);
-    map.removeEventListener("gmp-rangechange", announceCameraView);
-    map.removeEventListener("gmp-headingchange", announceCameraView);
-    map.removeEventListener("keydown", announceKeyboard);
-    if (viewFrame !== 0) window.cancelAnimationFrame(viewFrame);
-  };
 }
 
 function createFilamentLayers({
@@ -502,18 +438,14 @@ function createFilamentLayers({
   altitudeMode,
   map,
   routePath,
+  roles,
 }: {
   Polyline3DElement: typeof google.maps.maps3d.Polyline3DElement;
   altitudeMode: google.maps.maps3d.AltitudeMode;
   map: google.maps.maps3d.Map3DElement;
   routePath: Array<{ lat: number; lng: number }>;
+  roles: CinematicFilamentRole[];
 }) {
-  const roles: FilamentLayer["role"][] = [
-    "context",
-    "future",
-    "traveled",
-    "lead",
-  ];
   return roles.map((role, index) => {
     const element = new Polyline3DElement({
       path: routePath.slice(0, 2),
@@ -529,13 +461,7 @@ function createFilamentLayers({
     element.dataset.routeVisible = "false";
     element.style.display = "none";
     map.append(element);
-    return {
-      element,
-      endRatio: -1,
-      geometryBucket: "unconditioned",
-      role,
-      startRatio: -1,
-    };
+    return { element, endRatio: -1, role, startRatio: -1 };
   });
 }
 

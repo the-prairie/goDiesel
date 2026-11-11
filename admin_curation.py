@@ -5,7 +5,6 @@ import json
 import os
 from pathlib import Path
 
-from curation_publish import CurationPublishError, CurationRecoveryError
 from quest_meta import (
     CURATION_LIST_FIELDS,
     CURATION_TEXT_FIELDS,
@@ -13,20 +12,6 @@ from quest_meta import (
 )
 
 REQUIRED_CURATION_FIELDS = (*CURATION_TEXT_FIELDS, *CURATION_LIST_FIELDS)
-
-
-class SourceRollbackError(RuntimeError):
-    """Canonical curation source could not be restored after publication failed."""
-
-
-def publish_curation_or_rebuild(publish, full_rebuild):
-    """Use a full rebuild only when incremental publication is safely recoverable."""
-    try:
-        publish()
-    except CurationRecoveryError:
-        raise
-    except CurationPublishError:
-        full_rebuild()
 
 
 def curation_readiness(value):
@@ -69,33 +54,17 @@ def update_route_curation(config, activity_id, value):
 def save_curation_and_rebuild(config_path, activity_id, value, rebuild):
     """Persist one route, rebuild generated data, and roll back source on failure."""
     config_path = Path(config_path)
-    recovery_path = config_path.with_name(f".{config_path.name}.rollback")
     original = config_path.read_text(encoding="utf-8")
     config = json.loads(original)
     updated = update_route_curation(config, activity_id, value)
     serialized = json.dumps(updated, indent=2) + "\n"
 
-    write_atomic(recovery_path, original)
-    try:
-        write_atomic(config_path, serialized)
-    except Exception:
-        _unlink_best_effort(recovery_path)
-        raise
-
+    write_atomic(config_path, serialized)
     try:
         rebuild()
-    except Exception as publication_error:
-        try:
-            os.replace(recovery_path, config_path)
-        except Exception as rollback_error:
-            raise SourceRollbackError(
-                f"publication failed: {publication_error}; "
-                f"source rollback failed: {rollback_error}; "
-                f"recovery copy: {recovery_path}"
-            ) from rollback_error
+    except Exception:
+        write_atomic(config_path, original)
         raise
-    else:
-        _unlink_best_effort(recovery_path)
 
     route = next(
         route for route in updated["routes"]
@@ -107,12 +76,8 @@ def save_curation_and_rebuild(config_path, activity_id, value, rebuild):
 def write_atomic(path, content):
     """Replace a text file without exposing a partially written destination."""
     temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(content, encoding="utf-8")
-    os.replace(temporary, path)
-
-
-def _unlink_best_effort(path):
     try:
-        path.unlink(missing_ok=True)
-    except Exception:
-        return
+        temporary.write_text(content, encoding="utf-8")
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)

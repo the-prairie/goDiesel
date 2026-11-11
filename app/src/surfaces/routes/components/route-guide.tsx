@@ -3,7 +3,6 @@ import {
   CircleAlert,
   MapPinned,
   Mountain,
-  Quote,
   Sparkles,
 } from "lucide-react";
 
@@ -17,7 +16,7 @@ export function RouteGuide({
   curation: RouteCuration;
   compact?: boolean;
 }) {
-  const isDraft = curation.reviewStatus === "draft";
+  if (!hasEditorialContent(curation)) return null;
 
   return (
     <article
@@ -26,19 +25,13 @@ export function RouteGuide({
     >
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase text-primary">Route guide</p>
+          <p className="text-xs font-semibold uppercase text-accent-foreground">Route guide</p>
           <h2 className="mt-1 text-xl font-semibold">Plan for the experience.</h2>
         </div>
         <span className="text-xs font-medium text-muted-foreground">
           {reviewStatusLabel(curation.reviewStatus)}
         </span>
       </header>
-
-      {isDraft && !hasEditorialContent(curation) ? (
-        <p className="max-w-2xl text-sm text-muted-foreground">
-          Editorial guidance has not been reviewed for this route.
-        </p>
-      ) : null}
 
       <div className={cn("grid gap-7", !compact && "lg:grid-cols-3")}>
         {curation.vibe ? (
@@ -82,11 +75,6 @@ export function RouteGuide({
             <p>{curation.seasonality}</p>
           </GuideSection>
         ) : null}
-        {curation.editorialNote ? (
-          <GuideSection icon={Quote} title="Why it is here">
-            <p>{curation.editorialNote}</p>
-          </GuideSection>
-        ) : null}
       </div>
     </article>
   );
@@ -103,11 +91,11 @@ function GuideSection({
 }) {
   return (
     <section className="min-w-0">
-      <div className="flex items-center gap-2 text-primary">
+      <div className="flex items-center gap-2 text-accent-foreground">
         <Icon className="size-4 shrink-0" aria-hidden="true" />
         <h3 className="text-sm font-semibold text-foreground">{title}</h3>
       </div>
-      <div className="mt-3 grid gap-2 text-sm leading-6 text-muted-foreground">
+      <div className="story-copy mt-3 grid gap-2 text-muted-foreground">
         {children}
       </div>
     </section>
@@ -119,7 +107,7 @@ function BulletList({ items }: { items: string[] }) {
     <ul className="grid gap-2">
       {items.map((item) => (
         <li key={item} className="grid grid-cols-[0.5rem_minmax(0,1fr)] gap-2">
-          <span className="mt-2.5 size-1 rounded-full bg-primary" aria-hidden="true" />
+          <span className="mt-2.5 size-1 rounded-full bg-ink" aria-hidden="true" />
           <span>{item}</span>
         </li>
       ))}
@@ -139,8 +127,7 @@ function hasEditorialContent(curation: RouteCuration) {
       curation.difficulty ||
       curation.highlights ||
       curation.caveats ||
-      curation.seasonality ||
-      curation.editorialNote,
+      curation.seasonality,
   );
 }
 

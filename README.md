@@ -6,8 +6,36 @@ The React application is the canonical product and opens directly into the Atlas
 Route source data comes from Lauren's Strava export and the owner-curated records in `quests.json`.
 Generated route summaries live in `app/src/data/generated`, while full route records are loaded lazily from `app/public/data/routes`.
 Private Strava and travel inputs remain outside this repository under `../DieselDiaries` and `../Travel`.
+The Python tools also accept `GODIESEL_DIESEL_DIARIES_ROOT` and the generator
+accepts `GODIESEL_TRAVEL_ROOT` to override these locations.
 
 ## Prerequisites
+
+### This Mac (migration setup, 2026-10-11)
+
+The active checkout is `/Users/larry/Documents/ChatGPT/goDiesel`.
+The original transfer remains under `/Users/larry/Personal-Projects-Transfer-20260928`.
+Sibling `DieselDiaries` and `Travel` symlinks point to the transferred private inputs;
+keep those targets available when rebuilding or curating routes.
+
+Node 22 is installed under `~/.local/share/node`, with commands in `~/.local/bin`.
+Python 3.12 is managed by `uv`, and this checkout has a fresh `.venv`.
+Open a new terminal to load the updated PATH, then run:
+
+```bash
+cd /Users/larry/Documents/ChatGPT/goDiesel
+./admin.sh
+```
+
+This starts the app and local owner writer. Stop them with Ctrl+C.
+For the app alone, use `npm --prefix app run dev`.
+
+Migration validation evidence is in `app/artifacts/migration/`; detailed setup
+and test logs are in `~/.local/share/godiesel-migration/`.
+Cloudflare deployment access, Earth Engine authentication, and live Google 3D
+Replay are separate checks and were not validated during local setup.
+
+### Required versions
 
 - Node.js 22 or newer.
 - Python 3.12 or newer.
@@ -46,38 +74,6 @@ The root redirects to `#/atlas`, and the sidebar links to Finder, Routes, Replay
 
 The Playable Earth route experience is available at `#/lab/playable-earth/<route-id>` as the immersive reference for production Replay.
 
-## Agent workflow
-
-Start with `AGENTS.md`, root `CONTEXT.md`, and the [architecture map](docs/architecture/README.md).
-
-Inspect the atlas or one route without changing state:
-
-```bash
-./scripts/godiesel inspect system --json
-./scripts/godiesel doctor --json
-./scripts/godiesel inspect route-share --json
-./scripts/godiesel inspect route-share <slug> --json
-./scripts/godiesel verify --explain --json
-./scripts/godiesel verify route-share <slug> --reuse --json
-```
-
-The system inspection reports Git state, the capability inventory, authority classes, blockers, and available transitions.
-The doctor additionally checks runtimes, configuration presence, owning writers, command and documentation references, and generated route inventory without invoking a writer or provider.
-
-The route-share capability composes proposal, creation, preview, verification, and publication behind the five `scripts/godiesel` verbs.
-Machine-readable results retain the existing domain payload and point to ignored digest-linked receipts under `.route-share/`.
-Route verification also writes a privacy-safe proof receipt under `.godiesel/evidence/`.
-`scripts/route.sh` remains available as the compatibility path.
-See `docs/agents/route-share.md` before using a write or publication command.
-
-The verification explanation classifies changed paths against the manifest, names the affected capabilities and exact gates, preserves live-provider requirements, and blocks unclassified paths without executing a gate.
-
-Proof reuse succeeds only when the latest schema-valid passed receipt has the same manifest-selected gates and complete covered-input fingerprint.
-It blocks without executing a gate when implementation, contracts, fixtures, configuration, data, or provider targets changed.
-
-The manifest, doctor, first full capability adapter, proof receipts, impact explanation, and guarded route-share proof reuse implement Phases 1 through 3 in `docs/architecture/agent-operating-system.md`.
-Additional capability adapters remain sequenced in `docs/plans/2026-08-31-agent-operating-system-plan.md`.
-
 ## Generate Route Data
 
 Regenerate route summaries and full route records after changing `quests.json` or refreshing the Strava export:
@@ -106,11 +102,15 @@ Run the complete release gate:
 
 ```bash
 npm --prefix app run verify
-.venv/bin/python -m pytest -q
+GODIESEL_DIESEL_DIARIES_ROOT="$(cd ../DieselDiaries && pwd)" \
+GODIESEL_TRAVEL_ROOT="$(cd ../Travel && pwd)" \
+.venv/bin/python -m pytest -q --ignore=tmp
 ```
 
 The JavaScript gate includes type checking, unit tests, production build, bundle budgets, and Playwright journeys.
 The Python gate covers generation, curation validation, atomic publication, and rollback behavior.
+The explicit input paths also support tests that rebuild in temporary checkouts.
+Ignore `tmp/` because it may contain archived experimental checkouts with their own tests.
 
 ### Complete live pipeline proof
 
@@ -129,6 +129,14 @@ The browser must receive successful responses from Google Maps JavaScript, Googl
 
 The command intentionally fails instead of skipping when a credential, provider, billing account, quota, hardware renderer, source export, or deployed response is unavailable.
 Evidence is written under ignored `app/artifacts/live-pipeline/` using hashes and field inventories rather than raw personal values.
+Each evidence directory has a `status.json` that reads `passed` only after the last step.
+Check the newest run with:
+
+```bash
+./scripts/live-gate-status.sh latest
+```
+
+It exits non-zero unless that run passed. Missing, running, failed, or interrupted evidence reads as blocked.
 
 ## Build
 
@@ -143,13 +151,25 @@ Generated deploy files are not committed.
 
 ## Deploy
 
-Deploy the generated React output with Wrangler:
+Build, then deploy only if `dist/` is still the full build that `make-dist.sh` recorded:
 
 ```bash
-npx wrangler pages deploy dist --project-name=godiesel --branch=production
+./make-dist.sh
+node scripts/dist-manifest.mjs check --scope full && npx wrangler pages deploy dist --project-name=godiesel --branch=production
 ```
 
-The `godiesel` Pages project uses `production` as its production branch. The explicit branch flag is required so the canonical `https://godiesel.pages.dev/` deployment is updated instead of creating only a preview deployment.
+`make-dist.sh` writes `.dist-manifest.json` as its last step.
+The check refuses a missing manifest, a single-route bundle, and a `dist/` that changed after packaging.
+
+When a Google Maps key is configured, `make-dist.sh` verifies it with Google by requesting the Map Tiles API's 3D Tiles root once, which is one billable request per build.
+If Google answers that the key is invalid, the build fails, and the message names the key only by its last four characters.
+If Google recognises the key but blocks the build machine by a referrer, IP, or app restriction, the build prints a warning and continues.
+If the key cannot be verified, for example without a network, the build also prints a warning and continues. With `GODIESEL_REQUIRE_PROVIDER_KEY=1`, it fails instead.
+For an offline build, skip the request:
+
+```bash
+GODIESEL_SKIP_PROVIDER_KEY_VERIFY=1 ./make-dist.sh
+```
 
 ## Publish a single-route microsite
 
@@ -170,6 +190,10 @@ Publish the validated bundle to its stable Cloudflare Pages branch URL:
 
 This produces `https://share-appian-way.godiesel.pages.dev/` and smoke-tests the public guide and replay shell.
 Choose a durable share name because it defines the stable URL.
+The publisher checks the dist manifest for this route's single-route bundle, before and after staging, and refuses anything else.
+It refuses to replace a share that already exists unless you add `--replace-existing` after explicit owner approval.
+Each real publish writes a receipt under `.route-share/publish/` that records the phase it reached: `validated`, `deployed`, then `smoke-passed` or `smoke-failed`, or `deploy-failed`.
+A failed smoke leaves the failed bundle live. Nothing is rolled back automatically.
 Live Google 3D imagery must still be reviewed in a hardware-accelerated browser.
 
 Cloudflare Pages should use `./make-dist.sh` as the build command and `dist` as the output directory.
@@ -177,7 +201,7 @@ Hash routing keeps direct Atlas, route, and Replay links compatible with static 
 
 ## Static Fallback
 
-The previous static application remains available as repository history at the annotated Git tag `static-fallback-2026-07-14`; it is no longer generated or deployed from the current branch.
+The previous static application is retained for one release at the annotated Git tag `static-fallback-2026-07-14`.
 To rebuild that exact fallback without changing the current branch:
 
 ```bash

@@ -1,0 +1,150 @@
+import { expect, test } from "@playwright/test";
+import { chooseSelectOption } from "./helpers/select-field";
+
+test("shared selects support keyboard, pointer, empty values, and disabled states", async ({
+  page,
+}) => {
+  await page.goto("/#/lab/design-system");
+
+  const activity = page.getByRole("combobox", {
+    name: "Activity",
+    exact: true,
+  });
+  await expect(activity).toHaveText("All activities");
+  await expect(activity).toHaveCSS("min-height", "44px");
+  await expect(
+    page.getByRole("combobox", { name: "Unavailable activity" }),
+  ).toBeDisabled();
+  await activity.focus();
+  await activity.press("ArrowDown");
+  const popup = page.getByRole("listbox", { name: "Activity", exact: true });
+  await expect(popup).toBeVisible();
+  await expect(popup).toHaveCSS("color", "rgb(255, 255, 255)");
+  await expect(popup).toHaveCSS("background-color", "rgba(0, 0, 0, 0.82)");
+  await expect(popup).toHaveCSS("font-family", /Inter/);
+  await page.keyboard.press("Home");
+  await expect(page.getByRole("option", { name: "All activities" })).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(page.getByRole("option", { name: "Run", exact: true })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(activity).toHaveText("Run");
+  await expect(activity).toBeFocused();
+
+  await chooseSelectOption(activity, "Ride");
+  await expect(activity).toHaveText("Ride");
+  await chooseSelectOption(activity, "All activities");
+  await expect(activity).toHaveText("All activities");
+  await activity.click();
+  await expect(
+    page.getByRole("option", { name: "All activities" }),
+  ).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Escape");
+  await expect(popup).toHaveCount(0);
+  await expect(activity).toBeFocused();
+  await expect(activity).toHaveText("All activities");
+});
+
+test("field-guide fixture exposes the approved semantic foundation", async ({
+  page,
+}) => {
+  await page.goto("/#/lab/design-system");
+
+  const fixture = page.getByTestId("field-guide-foundation");
+  await expect(
+    page.getByRole("heading", { name: "Field guide foundation" }),
+  ).toBeVisible();
+  await expect(fixture).toHaveCSS("color-scheme", "dark");
+
+  const tokens = await fixture.evaluate((element) => {
+    const styles = getComputedStyle(element);
+    return {
+      canvas: styles.getPropertyValue("--canvas").trim().replace(/^#([a-f\d])([a-f\d])([a-f\d])$/i, "#$1$1$2$2$3$3"),
+      forest: styles.getPropertyValue("--forest").trim(),
+      route: styles.getPropertyValue("--route").trim(),
+      coral: styles.getPropertyValue("--coral").trim(),
+      primary: styles.getPropertyValue("--primary").trim(),
+      interfaceFont: styles.getPropertyValue("--font-interface").trim(),
+      editorialFont: styles.getPropertyValue("--font-editorial").trim(),
+    };
+  });
+
+  expect(tokens).toEqual({
+    canvas: "#000000",
+    forest: "#c6c6c6",
+    route: "#d9d9d9",
+    coral: "#ef947e",
+    primary: "#343755",
+    interfaceFont: '"Inter Variable", Inter, system-ui, sans-serif',
+    editorialFont: '"Inter Variable", Inter, system-ui, sans-serif',
+  });
+
+  const primaryAction = page.getByRole("button", { name: "Start route" });
+  await expect(primaryAction).toBeEnabled();
+  await expect(primaryAction).toHaveCSS("min-height", "44px");
+  await expect(primaryAction).toHaveCSS("color", "rgb(255, 255, 255)");
+  await expect(primaryAction).toHaveCSS("background-color", "rgb(52, 55, 85)");
+  await primaryAction.hover();
+  await expect(primaryAction).toHaveCSS("background-color", "rgb(69, 73, 104)");
+  const activeAction = page.getByRole("button", { name: "Active route" });
+  await expect(activeAction).toHaveAttribute("aria-pressed", "true");
+  await expect(activeAction).toHaveCSS("background-color", "rgb(52, 52, 52)");
+  const iconAction = page.getByRole("button", { name: "Route information" });
+  await expect(iconAction).toHaveCSS("min-width", "44px");
+  await expect(iconAction).toHaveCSS("min-height", "44px");
+  await expect(page.getByRole("button", { name: "Saving route" })).toBeDisabled();
+  await expect(page.getByLabel("Route search error")).toHaveAttribute(
+    "aria-invalid",
+    "true",
+  );
+  const waypoint = page
+    .getByLabel("Selected route cartography example")
+    .locator("circle");
+  await expect(waypoint).toHaveAttribute("r", "14");
+  await expect(waypoint).toHaveAttribute("stroke-width", "2");
+  await expect(
+    page.getByLabel("Selected route cartography example").locator("text"),
+  ).toHaveText("1");
+});
+
+test("field-guide fixture is responsive and honors reduced motion", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+
+  for (const viewport of [
+    { width: 1440, height: 1000 },
+    { width: 390, height: 844 },
+    { width: 320, height: 568 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/#/lab/design-system");
+    await expect(page.getByTestId("field-guide-foundation")).toBeVisible();
+    // Font swapping changes paragraph wrapping; measure the rendered design.
+    await page.evaluate(() => document.fonts.ready);
+
+    const layout = await page.evaluate(() => ({
+      viewportWidth: window.innerWidth,
+      documentWidth: document.documentElement.scrollWidth,
+      clippedFixtureElements: Array.from(
+        document.querySelectorAll<HTMLElement>(
+          '[data-testid="field-guide-foundation"] [data-clipping-check]',
+        ),
+      )
+        .filter((element) => {
+          const rect = element.getBoundingClientRect();
+          return (
+            element.scrollWidth > element.clientWidth + 1 ||
+            rect.left < -1 ||
+            rect.right > window.innerWidth + 1
+          );
+        })
+        .map((element) => element.dataset.clippingCheck),
+    }));
+    expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth + 1);
+    expect(layout.clippedFixtureElements).toEqual([]);
+    await expect(page.getByTestId("foundation-skeleton")).toHaveCSS(
+      "animation-name",
+      "none",
+    );
+  }
+});

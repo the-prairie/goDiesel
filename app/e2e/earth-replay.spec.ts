@@ -9,6 +9,7 @@ async function installReplayStatusEngines(
   await page.addInitScript((state) => {
     const replayWindow = window as typeof window & {
       __replayModes?: string[];
+      __replayStatusCallbacks?: Array<(status: { state: "loading" | "ready" | "partial" | "unavailable"; title: string; message: string }) => void>;
       __replayDestroyCount?: number;
       __GODIESEL_REPLAY_ENGINE_FACTORY__?: (mode: "earth" | "atlas") => {
         mount(options: {
@@ -23,10 +24,12 @@ async function installReplayStatusEngines(
       };
     };
     replayWindow.__replayModes = [];
+    replayWindow.__replayStatusCallbacks = [];
     replayWindow.__replayDestroyCount = 0;
     replayWindow.__GODIESEL_REPLAY_ENGINE_FACTORY__ = (mode) => ({
       async mount(options) {
         replayWindow.__replayModes?.push(mode);
+        replayWindow.__replayStatusCallbacks?.push(options.onStatus);
         if (mode === "atlas") {
           options.onStatus({
             state: "ready",
@@ -92,8 +95,8 @@ async function installUnavailableEarthWithRealAtlas(page: Page) {
   });
 }
 
-async function installDeterministicReplayEngine(page: Page) {
-  await page.addInitScript(() => {
+async function installDeterministicReplayEngine(page: Page, showCredits = false) {
+  await page.addInitScript((credits) => {
     const replayWindow = window as typeof window & {
       __replayMounts?: string[];
       __replayPoses?: Array<{
@@ -143,6 +146,13 @@ async function installDeterministicReplayEngine(page: Page) {
           routeThread.dataset.testid = "route-thread";
           routeThread.textContent = "Visible route thread";
           options.container.append(routeThread);
+          if (credits) {
+            const credit = document.createElement("a");
+            credit.href = "https://cesium.com/";
+            credit.textContent = "Provider attribution fixture";
+            credit.style.cssText = "position:absolute;bottom:5px;left:5px;font-size:12px";
+            options.container.append(credit);
+          }
           options.onStatus({
             state: "ready",
             title: "Earth Replay ready",
@@ -161,7 +171,7 @@ async function installDeterministicReplayEngine(page: Page) {
         },
       };
     };
-  });
+  }, showCredits);
 }
 
 test("bundled React Replay mounts, plays, pauses, and cleans up", async ({ page }) => {
@@ -171,7 +181,7 @@ test("bundled React Replay mounts, plays, pauses, and cleans up", async ({ page 
   const replay = page.getByTestId("replay-stage");
   await expect(replay).toHaveAttribute("data-engine", "cesium-bundled");
   await expect(replay).toHaveAttribute("data-state", "ready");
-  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "🍑🍑🍑🍑💦💦💦💦" })).toBeVisible();
   await expect(replay.locator("canvas[data-replay-canvas='true']")).toHaveCount(1);
   await expect(page.getByTestId("route-thread")).toBeVisible();
   const stageBox = await replay.boundingBox();
@@ -179,7 +189,8 @@ test("bundled React Replay mounts, plays, pauses, and cleans up", async ({ page 
     .getByLabel("Earth Replay world")
     .boundingBox();
   expect(stageBox?.height).toBeGreaterThan(600);
-  expect(worldBox?.height).toBe(stageBox?.height);
+  const dockBox = await page.getByTestId("replay-controls").boundingBox();
+  expect((worldBox?.height ?? 0) + (dockBox?.height ?? 0)).toBe(stageBox?.height);
   await expect
     .poll(() =>
       page.evaluate(() =>
@@ -211,9 +222,7 @@ test("bundled React Replay mounts, plays, pauses, and cleans up", async ({ page 
     ),
   ).toBe(pausedPoseCount);
 
-  await page.evaluate(() => {
-    window.location.hash = "#/routes";
-  });
+  await page.getByRole("link", { name: "Routes", exact: true }).click();
   await expect(page).toHaveURL(/#\/routes$/);
   await expect
     .poll(() =>
@@ -250,10 +259,10 @@ test("Replay controls stay synchronized across route changes", async ({ page }) 
   await page.getByRole("button", { name: "Playback speed 1x" }).click();
   await expect(replay).toHaveAttribute("data-speed", "2");
 
-  await page.getByRole("button", { name: "Release camera" }).click();
+  await page.getByRole("button", { name: "Follow route", pressed: true }).click();
   await expect(replay).toHaveAttribute("data-following", "false");
-  await expect(page.getByRole("button", { name: "Follow route" })).toBeVisible();
-  await page.getByRole("button", { name: "Follow route" }).click();
+  await expect(page.getByRole("button", { name: "Follow route", pressed: false })).toBeVisible();
+  await page.getByRole("button", { name: "Follow route", pressed: false }).click();
   await expect(replay).toHaveAttribute("data-following", "true");
 
   await page.getByRole("button", { name: "Zoom out from route" }).click();
@@ -292,8 +301,8 @@ test("Replay uses the elevation profile as its single distance-based timeline", 
   await expect(dock).toBeVisible();
   await expect(scrubber).toBeVisible();
   await expect(scrubber).toHaveAttribute("data-distance-axis", "route-metres");
-  await expect(scrubber).toHaveAttribute("data-traveled-color", "#315fb4");
-  await expect(scrubber).toHaveAttribute("data-playhead-color", "#d95d45");
+  await expect(scrubber).toHaveAttribute("data-traveled-color", "#ffffff");
+  await expect(scrubber).toHaveAttribute("data-playhead-color", "#ffffff");
   await expect(range).toHaveAttribute("max", /[1-9][0-9]+/);
 
   await range.focus();
@@ -488,7 +497,7 @@ test("Change route searches every replay-ready route and updates the world", asy
     "data-route-slug",
     "5650407638",
   );
-  await expect(page.getByRole("heading", { name: "Victoria, BC" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tour de farm" })).toBeVisible();
 
   await page.getByRole("button", { name: "Change route" }).click();
   await expect(chooser.getByRole("searchbox", { name: "Search replay routes" })).toHaveValue(
@@ -522,6 +531,7 @@ test("Replay route chooser has intentional empty and mobile states", async ({ pa
 });
 
 for (const [device, viewport] of [
+  ["desktop", { width: 1440, height: 1000 }],
   ["mobile", { width: 390, height: 844 }],
 ] as const) {
   test(`Replay route changes expose loading on ${device}`, async ({ page }) => {
@@ -549,7 +559,10 @@ for (const [device, viewport] of [
 
 test("Earth Replay enters Playable Earth and returns to the same route", async ({ page }) => {
   await installDeterministicReplayEngine(page);
-  for (const viewport of [{ width: 390, height: 844 }]) {
+  for (const viewport of [
+    { width: 1440, height: 1000 },
+    { width: 390, height: 844 },
+  ]) {
     await page.setViewportSize(viewport);
     await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
     await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-state", "ready");
@@ -600,7 +613,7 @@ test("Replay explains when Playable Earth is unavailable", async ({ page }) => {
   );
 });
 
-for (const width of [320]) {
+for (const width of [320, 430]) {
   test(`mobile Replay HUD prioritizes the world at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
     await installDeterministicReplayEngine(page);
@@ -614,7 +627,7 @@ for (const width of [320]) {
     await expect(page.getByTestId("replay-context-details")).toBeHidden();
     await expect(page.getByTestId("replay-secondary-controls")).toHaveCount(0);
 
-    for (const label of ["Play route", "Release camera", "Show more controls"]) {
+    for (const label of ["Play route", "Follow route", "Show more controls"]) {
       const box = await page.getByRole("button", { name: label }).boundingBox();
       expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
       expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
@@ -711,7 +724,7 @@ for (const earthState of ["partial", "unavailable"] as const) {
   });
 }
 
-test("real Atlas adapter fills the stage and advances the route", async ({ page }) => {
+test("real Atlas adapter fills the space above the dock and advances the route", async ({ page }) => {
   await installUnavailableEarthWithRealAtlas(page);
   await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
   await page.getByRole("button", { name: "Use Atlas replay" }).click();
@@ -726,7 +739,8 @@ test("real Atlas adapter fills the stage and advances the route", async ({ page 
   const stageBox = await replay.boundingBox();
   const mapBox = await page.getByLabel("Atlas Replay map").boundingBox();
   expect(mapBox?.width).toBe(stageBox?.width);
-  expect(mapBox?.height).toBe(stageBox?.height);
+  const dockBox = await page.getByTestId("replay-controls").boundingBox();
+  expect((mapBox?.height ?? 0) + (dockBox?.height ?? 0)).toBe(stageBox?.height);
   const initialProgress = Number(await replay.getAttribute("data-progress"));
   await page.getByRole("button", { name: "Play route" }).click();
   await expect
@@ -747,4 +761,351 @@ test("missing Replay geometry remains intentional and navigable", async ({ page 
   await expect(page.getByRole("button", { name: "Use Atlas replay" })).toBeVisible();
   await page.getByRole("link", { name: "Return to route guide" }).click();
   await expect(page).toHaveURL(new RegExp(`#\/routes\/${routeSlug}$`));
+});
+
+async function publishReplayStatus(page: Page, state: string, index = 0) {
+  await page.evaluate(({ state, index }) => {
+    const callbacks = (window as typeof window & {
+      __replayStatusCallbacks: Array<(status: { state: string; title: string; message: string }) => void>;
+    }).__replayStatusCallbacks;
+    callbacks[index]({ state, title: "Renderer outcome", message: "Renderer lifecycle fixture." });
+  }, { state, index });
+}
+
+for (const width of [390, 1440]) {
+  test(`legacy session preserves controls across renderer loading at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await installReplayStatusEngines(page, "partial");
+    await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
+    const replay = page.getByTestId("replay-stage");
+    await expect(replay).toHaveAttribute("data-state", "partial");
+    await page.getByLabel("Route progress").fill("10000");
+    if (width < 768) await page.getByRole("button", { name: "Show more controls" }).click();
+    await page.getByRole("button", { name: "Playback speed 1x" }).click();
+    await page.getByRole("button", { name: "Follow route", pressed: true }).click();
+    await page.getByRole("button", { name: "Zoom out from route" }).click();
+    await page.getByRole("button", { name: "Play route" }).click();
+    await expect.poll(async () => Number(await replay.getAttribute("data-progress"))).toBeGreaterThan(10000);
+    await publishReplayStatus(page, "loading");
+    await expect(replay).toHaveAttribute("data-state", "loading");
+    await expect(page.getByRole("button", { name: "Pause route" })).toBeDisabled();
+    const frozen = await replay.getAttribute("data-progress");
+    await page.waitForTimeout(200);
+    await expect(replay).toHaveAttribute("data-progress", frozen!);
+    await publishReplayStatus(page, "partial");
+    await expect.poll(async () => Number(await replay.getAttribute("data-progress"))).toBeGreaterThan(Number(frozen));
+    await page.getByRole("button", { name: "Pause route" }).click();
+    const paused = await replay.getAttribute("data-progress");
+    await page.getByRole("button", { name: "Show route details" }).click();
+    await page.getByRole("button", { name: "Use Atlas replay" }).click();
+    await expect(replay).toHaveAttribute("data-engine", "maplibre-atlas");
+    await expect(replay).toHaveAttribute("data-state", "ready");
+    await expect(replay).toHaveAttribute("data-progress", paused!);
+    await expect(replay).toHaveAttribute("data-speed", "2");
+    await expect(replay).toHaveAttribute("data-following", "false");
+    await expect(replay).toHaveAttribute("data-camera-range", "720");
+    await publishReplayStatus(page, "unavailable");
+    await expect(replay).toHaveAttribute("data-state", "ready");
+    await page.getByRole("button", { name: "Try Earth replay" }).click();
+    await expect(replay).toHaveAttribute("data-state", "partial");
+    await expect(replay).toHaveAttribute("data-progress", paused!);
+    await page.getByRole("button", { name: "Change route" }).click();
+    const chooser = page.getByRole("dialog", { name: "Choose a replay route" });
+    await chooser.getByRole("searchbox", { name: "Search replay routes" }).fill("Victoria");
+    await chooser.locator("a[href$='/replay/5650407638?renderer=cesium']").click();
+    await expect(replay).toHaveAttribute("data-route-slug", "5650407638");
+    await expect(replay).toHaveAttribute("data-progress", "0.00");
+    await expect(replay).toHaveAttribute("data-speed", "1");
+    await expect(replay).toHaveAttribute("data-following", "true");
+    await expect(replay).toHaveAttribute("data-camera-range", "240");
+    await expect(page.getByRole("button", { name: "Play route" })).toBeEnabled();
+  });
+}
+
+
+test("Atlas map controls and attribution stay usable above the playback dock", async ({ page }) => {
+  await installUnavailableEarthWithRealAtlas(page);
+  await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
+  await page.getByRole("button", { name: "Use Atlas replay" }).click();
+  await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-state", "ready");
+
+  for (const viewport of [
+    { width: 1280, height: 720 },
+    { width: 390, height: 844 },
+    { width: 320, height: 640 },
+  ]) {
+    await page.setViewportSize(viewport);
+    for (const expanded of viewport.width < 768 ? [false, true] : [false]) {
+      if (viewport.width < 768 && expanded) {
+        await page.getByRole("button", { name: "Show more controls" }).click();
+      }
+      const dock = page.getByTestId("replay-controls");
+      const map = page.getByLabel("Atlas Replay map");
+      await expect.poll(async () => {
+        const canvasBox = await map.locator("canvas").boundingBox();
+        const mapBox = await map.boundingBox();
+        return Math.abs((canvasBox?.height ?? 0) - (mapBox?.height ?? 0));
+      }).toBeLessThan(1);
+      const dockBox = await dock.boundingBox();
+      for (const name of ["Zoom in", "Zoom out", "Drag to rotate map, click to reset north"]) {
+        const button = map.getByRole("button", { name, exact: true });
+        const box = await button.boundingBox();
+        expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(dockBox!.y);
+        await button.click();
+      }
+      const attribution = map.getByLabel("Toggle attribution");
+      const credit = map.getByRole("link", { name: "OpenFreeMap", exact: true });
+      if (!(await credit.isVisible())) await attribution.click();
+      await expect(credit).toBeVisible();
+      const creditBox = await credit.boundingBox();
+      expect((creditBox?.y ?? 0) + (creditBox?.height ?? 0)).toBeLessThanOrEqual(dockBox!.y);
+      await credit.click({ trial: true });
+      await attribution.click();
+      await expect(credit).toBeHidden();
+      await attribution.click();
+      await expect(credit).toBeVisible();
+      if (viewport.width < 768 && expanded) {
+        await page.getByRole("button", { name: "Hide more controls" }).click();
+      }
+    }
+  }
+});
+
+
+for (const viewport of [
+  { width: 1280, height: 720 },
+  { width: 390, height: 844 },
+  { width: 320, height: 640 },
+]) {
+  test(`Earth attribution stays above the dock at ${viewport.width}px`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await installDeterministicReplayEngine(page, true);
+    await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
+    await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-state", "ready");
+    const credit = page.getByRole("link", { name: "Provider attribution fixture" });
+    for (const expanded of viewport.width < 768 ? [false, true] : [false]) {
+      if (expanded) await page.getByRole("button", { name: "Show more controls" }).click();
+      const creditBox = await credit.boundingBox();
+      const dockBox = await page.getByTestId("replay-controls").boundingBox();
+      expect(creditBox).not.toBeNull();
+      expect(dockBox).not.toBeNull();
+      expect(creditBox!.y + creditBox!.height).toBeLessThanOrEqual(dockBox!.y);
+      await credit.click({ trial: true });
+      await page.getByRole("button", { name: "Play route", exact: true }).click();
+      await page.getByRole("button", { name: "Pause route", exact: true }).click();
+      if (expanded) await page.getByRole("button", { name: "Hide more controls" }).click();
+    }
+  });
+}
+
+test("Replay renderer follows the URL on the same route", async ({ page }) => {
+  await installReplayStatusEngines(page, "partial");
+  await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
+  const replay = page.getByTestId("replay-stage");
+  const modes = () =>
+    page.evaluate(() => (window as typeof window & { __replayModes?: string[] }).__replayModes);
+  const earthSwitch = page.getByRole("button", { name: "Try Earth replay" });
+  await expect(replay).toHaveAttribute("data-engine", "cesium-bundled");
+  await expect(replay).toHaveAttribute("data-state", "partial");
+
+  await page.evaluate((slug) => {
+    window.location.hash = `#/replay/${slug}?renderer=atlas`;
+  }, routeSlug);
+  await expect(replay).toHaveAttribute("data-engine", "maplibre-atlas");
+  await expect(replay).toHaveAttribute("data-state", "ready");
+  await expect(page.getByText("Atlas Replay", { exact: true })).toBeVisible();
+  await expect(earthSwitch).toHaveCount(0);
+  await expect.poll(modes).toEqual(["earth", "atlas"]);
+
+  await page.goBack();
+  await expect(page).toHaveURL(/renderer=cesium/);
+  await expect(replay).toHaveAttribute("data-engine", "cesium-bundled");
+  await expect(replay).toHaveAttribute("data-state", "partial");
+  await expect.poll(modes).toEqual(["earth", "atlas", "earth"]);
+  await page.getByRole("button", { name: "Use Atlas replay" }).click();
+  await expect(replay).toHaveAttribute("data-engine", "maplibre-atlas");
+  await expect(earthSwitch).toBeVisible();
+
+  await page.goForward();
+  await expect(page).toHaveURL(/renderer=atlas/);
+  await expect(replay).toHaveAttribute("data-engine", "maplibre-atlas");
+  await expect(earthSwitch).toHaveCount(0);
+  await expect.poll(modes).toEqual(["earth", "atlas", "earth", "atlas", "atlas"]);
+});
+
+test("Replay chrome stays visible while the provider reloads during playback", async ({ page }) => {
+  await installReplayStatusEngines(page, "partial");
+  await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
+  const replay = page.getByTestId("replay-stage");
+  await expect(replay).toHaveAttribute("data-state", "partial");
+  await page.getByRole("button", { name: "Play route" }).click();
+  await page.getByLabel("Earth Replay world").click({ position: { x: 700, y: 400 } });
+  await publishReplayStatus(page, "loading");
+  await expect(replay).toHaveAttribute("data-state", "loading");
+  await expect(page.getByRole("button", { name: "Pause route" })).toBeDisabled();
+  await page.waitForTimeout(3_600);
+  await expect(replay).toHaveAttribute("data-chrome-visible", "true");
+
+  await publishReplayStatus(page, "partial");
+  await expect(replay).toHaveAttribute("data-chrome-visible", "false", { timeout: 4_500 });
+});
+
+test("Atlas replay without WebGL2 says it is unsupported at once and offers the route guide", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const getContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (
+      this: HTMLCanvasElement,
+      type: string,
+      ...rest: unknown[]
+    ) {
+      if (type === "webgl2") return null;
+      return (getContext as (...args: unknown[]) => unknown).call(this, type, ...rest);
+    } as typeof getContext;
+  });
+  await page.goto(`/#/replay/${routeSlug}?renderer=atlas`);
+
+  const replay = page.getByTestId("replay-stage");
+  await expect(replay).toHaveAttribute("data-state", "unavailable", { timeout: 5_000 });
+  await expect(page.getByRole("alert")).toContainText("Atlas replay isn\u2019t supported here");
+  await expect(page.getByText("Loading the route map and replay thread.")).toHaveCount(0);
+  await page.getByRole("link", { name: "Return to route guide" }).click();
+  await expect(page).toHaveURL(new RegExp(`#/routes/${routeSlug}$`));
+});
+
+for (const width of [320, 430]) {
+  test(`Replay distance labels stay clear of the playhead at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await installDeterministicReplayEngine(page);
+    await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
+    const replay = page.getByTestId("replay-stage");
+    await expect(replay).toHaveAttribute("data-state", "ready");
+
+    const scrubber = page.getByTestId("replay-elevation-scrubber");
+    const range = page.getByRole("slider", { name: "Route progress" });
+    const max = Number(await range.getAttribute("max"));
+    const labels = [
+      scrubber.getByText("0 km", { exact: true }),
+      scrubber.getByText(`${(max / 1_000).toFixed(1)} km`, { exact: true }),
+    ];
+    const playhead = scrubber.locator(':scope > span[aria-hidden="true"]').first();
+    for (const progressM of [0, max]) {
+      await range.fill(String(progressM));
+      await expect(replay).toHaveAttribute("data-progress", progressM.toFixed(2));
+      const marks = [await playhead.boundingBox(), await playhead.locator("span").boundingBox()];
+      for (const label of labels) {
+        const labelBox = await label.boundingBox();
+        expect(labelBox).not.toBeNull();
+        for (const mark of marks) {
+          expect(mark).not.toBeNull();
+          // The label sits wholly below the playhead line and its point.
+          expect(labelBox!.y).toBeGreaterThanOrEqual(mark!.y + mark!.height - 0.5);
+        }
+      }
+    }
+  });
+}
+
+test.describe("Atlas replay map controls on touch", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+
+  test("leave zoom to the dock and give the compass and credits 44px targets", async ({ page }) => {
+    await page.goto(`/#/replay/${routeSlug}?renderer=atlas`);
+    const replay = page.getByTestId("replay-stage");
+    await expect(replay).toHaveAttribute("data-state", "ready", { timeout: 20_000 });
+    const map = page.getByLabel("Atlas Replay map");
+
+    await expect(map.getByRole("button", { name: "Zoom in", exact: true })).toBeHidden();
+    await expect(map.getByRole("button", { name: "Zoom out", exact: true })).toBeHidden();
+    const dockBox = await page.getByTestId("replay-controls").boundingBox();
+    for (const control of [
+      map.getByRole("button", { name: "Drag to rotate map, click to reset north", exact: true }),
+      map.getByLabel("Toggle attribution"),
+    ]) {
+      const box = await control.boundingBox();
+      expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
+      expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+      expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(dockBox!.y);
+    }
+    const credit = map.getByRole("link", { name: "OpenFreeMap", exact: true });
+    if (!(await credit.isVisible())) await map.getByLabel("Toggle attribution").tap();
+    await expect(credit).toBeVisible();
+
+    await page.getByRole("button", { name: "Show more controls" }).tap();
+    await page.getByRole("button", { name: "Zoom out from route" }).tap();
+    await expect(replay).toHaveAttribute("data-camera-range", "720");
+  });
+});
+
+test("Atlas replay keeps a zoom made on the map when playback starts", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(`/#/replay/${routeSlug}?renderer=atlas`);
+  const replay = page.getByTestId("replay-stage");
+  await expect(replay).toHaveAttribute("data-state", "ready", { timeout: 20_000 });
+  await expect(replay).toHaveAttribute("data-camera-range", "240");
+
+  const zoomOut = page
+    .getByLabel("Atlas Replay map")
+    .getByRole("button", { name: "Zoom out", exact: true });
+  for (let i = 0; i < 4; i++) {
+    await zoomOut.click();
+    await page.waitForTimeout(400);
+  }
+  // Four MapLibre zoom-outs from the opening follow zoom (16) reach zoom 12,
+  // which the session records as a 3960 m range once the last ease ends.
+  await expect(replay).toHaveAttribute("data-camera-range", "3960");
+  const chosen = "3960";
+
+  await page.getByRole("button", { name: "Play route" }).click();
+  await expect
+    .poll(async () => Number(await replay.getAttribute("data-progress")))
+    .toBeGreaterThan(0);
+  await expect(replay).toHaveAttribute("data-camera-range", chosen!);
+  await expect(replay).toHaveAttribute("data-following", "true");
+});
+
+for (const width of [390, 1440]) {
+  test(`Follow route is one toggle whose name, text and state agree at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await installDeterministicReplayEngine(page);
+    await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
+    const replay = page.getByTestId("replay-stage");
+    await expect(replay).toHaveAttribute("data-state", "ready");
+
+    const follow = page.getByRole("button", { name: "Follow route", exact: true });
+    await expect(follow).toHaveAttribute("aria-pressed", "true");
+    await expect(follow).toHaveText("Follow route");
+    await follow.click();
+    await expect(replay).toHaveAttribute("data-following", "false");
+    await expect(follow).toHaveAttribute("aria-pressed", "false");
+    await expect(follow).toHaveText("Follow route");
+    await follow.click();
+    await expect(replay).toHaveAttribute("data-following", "true");
+    await expect(follow).toHaveAttribute("aria-pressed", "true");
+  });
+}
+
+test("phone landscape opens the Replay HUD compact and the person can expand it", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await installDeterministicReplayEngine(page);
+  await page.goto(`/#/replay/${routeSlug}?renderer=cesium`);
+  const replay = page.getByTestId("replay-stage");
+  await expect(replay).toHaveAttribute("data-state", "ready");
+
+  // The dock is reachable without scrolling in phone landscape.
+  const dockBox = await page.getByTestId("replay-controls").boundingBox();
+  expect((dockBox?.y ?? 0) + (dockBox?.height ?? 0)).toBeLessThanOrEqual(390);
+  await expect(page.getByRole("button", { name: "Play route", exact: true })).toBeInViewport();
+
+  const context = page.getByTestId("replay-context");
+  await expect(context).toHaveAttribute("data-context-state", "compact");
+  await expect(page.getByTestId("replay-context-details")).toBeHidden();
+  await page.getByRole("button", { name: "Show route details" }).click();
+  await expect(context).toHaveAttribute("data-context-state", "expanded");
+  await expect(page.getByTestId("replay-context-details")).toBeVisible();
 });

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 import {
   ArrowLeft,
   Building2,
@@ -25,9 +25,14 @@ import {
   type RouteJourneyFrame,
   type RouteVisualScene,
 } from "@/labs/route-intelligence/route-genome";
-import type { QuestRoute } from "@/domain/route";
 import { loadRouteDetail } from "@/data/route-repository";
 import { cn } from "@/ui/utils";
+import {
+  initialRouteIntelligenceState,
+  reduceRouteIntelligence,
+  selectedRouteIntelligenceEntry,
+  type LabRoute,
+} from "@/labs/route-intelligence/route-intelligence-state";
 
 const ROUTE_IDS = ["14736711660", "14023448720"] as const;
 const SCENE_KEYS: RouteVisualScene["key"][] = [
@@ -50,10 +55,7 @@ const SCENE_NAMES: Record<RouteVisualScene["key"], string> = {
   terrain: "Terrain",
 };
 
-interface LabRoute {
-  route: QuestRoute;
-  genome: RouteGenome;
-}
+
 
 async function loadEnrichment(routeId: string) {
   try {
@@ -318,7 +320,7 @@ function EarthObservationScenes({
                 <div>
                   <h3 className="font-editorial text-xl font-semibold">{place}</h3>
                   <p className="mt-0.5 text-caption text-[var(--ink-muted)]">
-                    {route.distanceKm.toFixed(1)} km · {route.elevationStatus === "unavailable" ? "Elevation unavailable" : `${route.elevationGainM!.toLocaleString()} m up`}
+                    {route.distanceKm.toFixed(1)} km · {route.elevationGainM.toLocaleString()} m up
                   </p>
                 </div>
                 <span className="text-micro font-semibold uppercase text-[var(--coral)]">
@@ -385,12 +387,7 @@ function RoutePortrait({ entry, active }: { entry: LabRoute; active: boolean }) 
         <div className="grid grid-cols-3 gap-px self-start border border-[var(--line)] bg-[var(--line)] text-center">
           {[
             [route.distanceKm.toFixed(1), "km"],
-            [
-              route.elevationStatus === "unavailable"
-                ? "Unavailable"
-                : route.elevationGainM!.toLocaleString(),
-              route.elevationStatus === "unavailable" ? "elevation" : "m up",
-            ],
+            [route.elevationGainM.toLocaleString(), "m up"],
             [route.route.length.toLocaleString(), "points"],
           ].map(([value, label]) => (
             <div className="min-w-[4.25rem] bg-[var(--surface-raised)] px-3 py-2" key={label}>
@@ -579,9 +576,9 @@ function RoutePortrait({ entry, active }: { entry: LabRoute; active: boolean }) 
 }
 
 export function RouteIntelligenceLabPage() {
-  const [routes, setRoutes] = useState<LabRoute[]>([]);
+  const [loadState, dispatch] = useReducer(reduceRouteIntelligence, undefined, initialRouteIntelligenceState);
+  const routes = "routes" in loadState ? loadState.routes : [];
   const [activeId, setActiveId] = useState<(typeof ROUTE_IDS)[number]>(ROUTE_IDS[0]);
-  const [error, setError] = useState<string>();
   const [sceneKey, setSceneKey] = useState<RouteVisualScene["key"]>("portrait");
 
   useEffect(() => {
@@ -598,25 +595,32 @@ export function RouteIntelligenceLabPage() {
             }]
           : [],
       );
-      if (ready.length !== ROUTE_IDS.length) setError("One or more field-test routes could not be loaded.");
-      setRoutes(ready);
+      dispatch({
+        type: "routesSettled",
+        routes: ready,
+        expectedCount: ROUTE_IDS.length,
+        hasRequestFailure: results.some(({ detail }) => detail.status === "error"),
+      });
     });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const activeRoute = useMemo(() => routes.find((entry) => entry.route.activityId === activeId), [activeId, routes]);
+  const activeRoute = selectedRouteIntelligenceEntry(loadState, activeId);
+  const selectedId = activeRoute?.route.activityId ?? activeId;
   const hasMeasuredSignals = routes.length > 0 && routes.every((entry) =>
     entry.genome.environmental.every((signal) => signal.status === "earth-engine-ready"),
   );
 
-  if (error && routes.length === 0) return <div role="alert" className="p-8">{error}</div>;
-  if (routes.length === 0) return <div role="status" className="p-8">Reading both landscapes.</div>;
+  if (loadState.status === "empty" || loadState.status === "failed") {
+    return <div role="alert" className="p-8">One or more field-test routes could not be loaded.</div>;
+  }
+  if (loadState.status === "loading") return <div role="status" className="p-8">Reading both landscapes.</div>;
 
   return (
-    <div className="min-h-full overflow-y-auto bg-[var(--canvas)] text-[var(--ink)]" data-testid="route-intelligence-lab">
-      <header className="sticky top-0 z-20 border-b border-[var(--line)] bg-[var(--surface-map-glass)] backdrop-blur-xl">
+    <div className="min-h-full overflow-y-auto bg-[var(--canvas)] pr-[var(--safe-area-right)] text-[var(--ink)] md:pb-[var(--safe-area-bottom)]" data-testid="route-intelligence-lab">
+      <header className="sticky top-0 z-20 border-b border-[var(--line)] bg-[var(--surface-map-glass)] pt-[var(--safe-area-top)] backdrop-blur-xl">
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-4 px-5 py-4 sm:px-8">
           <div className="flex min-w-0 items-center gap-4">
             <Button asChild aria-label="Back to Atlas" size="icon" variant="ghost">
@@ -633,10 +637,10 @@ export function RouteIntelligenceLabPage() {
           <div aria-label="Choose field test" className="flex border border-[var(--line)] bg-[var(--surface)] p-1" role="group">
             {routes.map(({ route }) => (
               <button
-                aria-pressed={activeId === route.activityId}
+                aria-pressed={selectedId === route.activityId}
                 className={cn(
                   "min-h-10 px-4 text-control font-medium transition-colors",
-                  activeId === route.activityId ? "bg-[var(--forest)] text-white" : "text-[var(--ink-secondary)] hover:bg-[var(--surface-muted)]",
+                  selectedId === route.activityId ? "bg-[var(--forest)] text-white" : "text-[var(--ink-secondary)] hover:bg-[var(--surface-muted)]",
                 )}
                 key={route.activityId}
                 onClick={() => setActiveId(route.activityId as (typeof ROUTE_IDS)[number])}
@@ -648,19 +652,19 @@ export function RouteIntelligenceLabPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="outline">
-              <Link to={`/lab/route-trailer/${activeId}`}>
+              <Link to={`/lab/route-trailer/${selectedId}`}>
                 <Play aria-hidden="true" />
                 Original trailer
               </Link>
             </Button>
             <Button asChild variant="outline">
-              <Link to={`/lab/cinematic-director/${activeId}`}>
+              <Link to={`/lab/cinematic-director/${selectedId}`}>
                 <Sparkles aria-hidden="true" />
                 Director cut
               </Link>
             </Button>
             <Button asChild>
-              <Link to={`/lab/google-route-navigator/${activeId}`}>
+              <Link to={`/lab/google-route-navigator/${selectedId}`}>
                 <Navigation aria-hidden="true" />
                 Enter native 3D
               </Link>

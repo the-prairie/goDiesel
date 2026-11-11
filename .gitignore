@@ -18,14 +18,21 @@ venv/
 .geo_cache.json
 .geocode_buckets.json
 .rebuild.log
-/app/public/data/.route-generation-backup/
 
 # Generated build output.
 /index.html
 /cards/
 /photos/
 /dist/
+# Identity of the current dist/ (scripts/dist-manifest.mjs) and per-publish
+# share receipts (scripts/publish-route-microsite.sh). Local evidence only.
+/.dist-manifest.json*
+/.route-share/
 /app/dist/
+# Identity of the current dist/ (scripts/dist-manifest.mjs) and per-publish
+# share receipts (scripts/publish-route-microsite.sh). Local evidence only.
+/.dist-manifest.json*
+/.route-share/
 /app/artifacts/
 
 # Cloudflare/Wrangler local account cache
@@ -34,11 +41,10 @@ venv/
 # Temporary files
 tmp/
 *.tmp
-.route-share/
-.godiesel/
 
 # Node dependencies (app/ has its own ignore; this covers the repository root)
 node_modules/
+/app/.local/
 
 # Published route media is product content and is tracked. Uncomment only if
 # the photo library moves out of the repository.

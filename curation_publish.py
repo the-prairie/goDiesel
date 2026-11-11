@@ -1,7 +1,7 @@
 """Incremental publication of one route's curation.
 
 A curation edit changes no geometry, so nothing here re-reads a GPX or FIT file,
-re-geocodes, or re-renders route art. Only the two tracked artifact tiers that
+re-geocodes, or re-renders route art. Only the three tracked artifacts that
 carry curation are rewritten, and the result must equal what a full `build.py`
 run would produce. `test_curation_publish.py` asserts that equality.
 
@@ -16,14 +16,11 @@ from pathlib import Path
 
 from quest_meta import build_route_curation, route_guide_preview
 from route_annotations import build_route_annotations
+from owner_publication import owner_publication, recover_owner_publication
 
 
 class CurationPublishError(RuntimeError):
     """A generated artifact could not be patched for this route."""
-
-
-class CurationRecoveryError(CurationPublishError):
-    """Publication failed and at least one prior artifact needs recovery."""
 
 
 def generated_paths(checkout_root):
@@ -32,6 +29,7 @@ def generated_paths(checkout_root):
     return {
         "detail": root / "app" / "public" / "data" / "routes",
         "manifest": root / "app" / "src" / "data" / "generated" / "routes.manifest.json",
+        "payload": root / "app" / "src" / "data" / "quests.generated.json",
     }
 
 
@@ -43,6 +41,7 @@ def publish_annotations(checkout_root, activity_id, annotations):
     anchor is validated against the route's own recorded distance, so an
     annotation can never be published off the end of the route.
     """
+    recover_owner_publication(checkout_root)
     activity_id = str(activity_id)
     paths = generated_paths(checkout_root)
     detail_path = paths["detail"] / f"{activity_id}.json"
@@ -65,24 +64,29 @@ def publish_annotations(checkout_root, activity_id, annotations):
         )
     ]
 
+    payload = json.loads(paths["payload"].read_text(encoding="utf-8"))
+    payload["generated_at"] = generated_at
+    _replace_in_place(
+        payload.get("routes", []),
+        activity_id,
+        lambda record: _with_annotations(record, normalized),
+        "quests.generated.json",
+    )
+    staged.append((paths["payload"], json.dumps(payload, ensure_ascii=False)))
+
     # The manifest is the summary tier and carries no annotations (ADR-0004),
-    # but its timestamp stays in step with the detail tier.
+    # but its generated_at must stay in step with the payload.
     manifest = json.loads(paths["manifest"].read_text(encoding="utf-8"))
     manifest["generated_at"] = generated_at
     staged.append((paths["manifest"], json.dumps(manifest, ensure_ascii=False)))
 
-    _publish_staged_with_rollback(staged)
+    _replace_generated_files(checkout_root, staged)
     return normalized
 
 
 def publish_curation(checkout_root, activity_id, curation):
-    """Rewrite the generated artifacts for one route's curation.
-
-    Every file is staged before any file is replaced, and each replacement is
-    atomic. The pair is not a transaction: a process crash between replacements
-    can temporarily split the detail and manifest until curation is republished
-    for that route or a full rebuild runs.
-    """
+    """Rewrite one route's curation with rollback and interruption recovery."""
+    recover_owner_publication(checkout_root)
     activity_id = str(activity_id)
     normalized = build_route_curation(curation or {})
     preview = route_guide_preview(normalized)
@@ -101,7 +105,8 @@ def publish_curation(checkout_root, activity_id, curation):
         (detail_path, json.dumps(_with_curation(detail, normalized), ensure_ascii=False))
     )
 
-    # A rebuild stamps both tiers with one timestamp. Match that here.
+    # A rebuild stamps both artifacts with one timestamp. Match that, so the
+    # manifest and the payload never disagree about when they were generated.
     generated_at = _now()
 
     manifest = json.loads(paths["manifest"].read_text(encoding="utf-8"))
@@ -114,7 +119,17 @@ def publish_curation(checkout_root, activity_id, curation):
     )
     staged.append((paths["manifest"], json.dumps(manifest, ensure_ascii=False)))
 
-    _publish_staged_with_rollback(staged)
+    payload = json.loads(paths["payload"].read_text(encoding="utf-8"))
+    payload["generated_at"] = generated_at
+    _replace_in_place(
+        payload.get("routes", []),
+        activity_id,
+        lambda route: _with_curation(route, normalized),
+        "quests.generated.json",
+    )
+    staged.append((paths["payload"], json.dumps(payload, ensure_ascii=False)))
+
+    _replace_generated_files(checkout_root, staged)
     return normalized
 
 
@@ -164,71 +179,30 @@ def _replace_route(routes, activity_id, apply_change, artifact):
     apply_change(matching[0])
 
 
-def _publish_staged_with_rollback(staged):
-    """Stage every file and roll back completed replacements on failure.
+def _replace_in_place(routes, activity_id, transform, artifact):
+    """Swap one route for a transformed copy, keeping its position in the list."""
+    indexes = [
+        index
+        for index, route in enumerate(routes)
+        if str(route.get("slug")) == activity_id
+    ]
+    if not indexes:
+        raise CurationPublishError(f"route {activity_id} is missing from {artifact}")
+    if len(indexes) > 1:
+        raise CurationPublishError(f"route {activity_id} is duplicated in {artifact}")
+    routes[indexes[0]] = transform(routes[indexes[0]])
 
-    Replacement is the only step that mutates a published artifact, and each
-    replace is atomic. Staging first keeps the failure window to the replace
-    loop rather than the much longer serialize-and-write step.
-    """
+
+def _replace_generated_files(checkout_root, staged):
     temporaries = []
     try:
-        for path, content in staged:
-            temporary = path.with_name(f".{path.name}.tmp")
-            temporaries.append((temporary, path))
-            temporary.write_text(content, encoding="utf-8")
-    except Exception:
-        _cleanup_files([temporary for temporary, _ in temporaries])
-        raise
-
-    backups = []
-    replaced = []
-    preserved_backups = set()
-    try:
-        for _, path in temporaries:
-            backup = path.with_name(f".{path.name}.rollback")
-            backups.append((backup, path))
-            backup.write_bytes(path.read_bytes())
-
-        for temporary, path in temporaries:
-            os.replace(temporary, path)
-            replaced.append(path)
-    except Exception as publication_error:
-        rollback_failures = []
-        for backup, path in reversed(backups):
-            if path not in replaced:
-                continue
-            try:
-                os.replace(backup, path)
-            except Exception as error:
-                rollback_failures.append((backup, path, error))
-                preserved_backups.add(backup)
-        if rollback_failures:
-            failure_details = "; ".join(
-                f"{path}: {error}" for _, path, error in rollback_failures
-            )
-            recovery_paths = ", ".join(
-                str(backup) for backup, _, _ in rollback_failures
-            )
-            raise CurationRecoveryError(
-                f"generated publication failed: {publication_error}; "
-                f"rollback failed: {failure_details}; "
-                f"recovery copies: {recovery_paths}"
-            ) from rollback_failures[0][2]
-        raise
+        with owner_publication(checkout_root):
+            for path, content in staged:
+                temporary = path.with_name(f".{path.name}.tmp")
+                temporaries.append((temporary, path))
+                temporary.write_text(content, encoding="utf-8")
+            for temporary, path in temporaries:
+                os.replace(temporary, path)
     finally:
-        _cleanup_files(
-            [temporary for temporary, _ in temporaries]
-            + [backup for backup, _ in backups if backup not in preserved_backups]
-        )
-
-
-def _cleanup_files(paths):
-    """Remove every disposable file without changing publication outcome."""
-    for path in paths:
-        try:
-            path.unlink(missing_ok=True)
-        except Exception:
-            # Cleanup cannot turn a committed publication into a reported
-            # failure or hide the exception that triggered rollback.
-            continue
+        for temporary, _ in temporaries:
+            temporary.unlink(missing_ok=True)

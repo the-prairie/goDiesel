@@ -30,7 +30,7 @@ export interface RouteSceneManifest {
   center: { lat: number; lng: number };
   totalDistanceM: number;
   elevationGainM: number;
-  altitudeSource: "recorded-activity" | "mesh-relative";
+  altitudeSource: "recorded-activity";
   path: RouteScenePoint[];
   sourceRoute: QuestRoute;
 }
@@ -98,6 +98,7 @@ const CAMERA_PROFILES = {
     clearanceM: 22,
     lookAheadM: 90,
     rangeM: 160,
+    minimumRangeM: 0,
     smoothingRadiusM: 70,
     tiltDeg: 64,
     fovDeg: 50,
@@ -106,14 +107,21 @@ const CAMERA_PROFILES = {
     clearanceM: 10,
     lookAheadM: 90,
     rangeM: 260,
+    minimumRangeM: 230,
     smoothingRadiusM: 55,
-    tiltDeg: 65,
-    fovDeg: 54,
+    tiltDeg: 70,
+    fovDeg: 52,
   },
 } as const;
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(maximum, Math.max(minimum, value));
+}
+
+export function minimumRouteCameraRangeScale(mode: RouteSceneCameraMode) {
+  if (mode === "auto" || mode === "overview") return 0.55;
+  const profile = CAMERA_PROFILES[mode];
+  return Math.max(0.55, profile.minimumRangeM / profile.rangeM);
 }
 
 export function createRouteSceneManifest(route: QuestRoute): RouteSceneManifest {
@@ -125,9 +133,8 @@ export function createRouteSceneManifest(route: QuestRoute): RouteSceneManifest 
     activityType: route.type,
     center: { lat: route.centerLat, lng: route.centerLng },
     totalDistanceM: routeDistanceM(route),
-    elevationGainM: route.elevationGainM ?? 0,
-    altitudeSource:
-      route.elevationStatus === "unavailable" ? "mesh-relative" : "recorded-activity",
+    elevationGainM: route.elevationGainM,
+    altitudeSource: "recorded-activity",
     path: route.route.map((point) => ({
       lat: point.lat,
       lng: point.lng,
@@ -216,6 +223,7 @@ function resolveCamera(
   }
 
   const profile = CAMERA_PROFILES[request.cameraMode];
+  const rangeM = Math.max(profile.minimumRangeM, profile.rangeM * request.rangeScale);
   const current = smoothRouteTarget(
     manifest,
     progressM,
@@ -239,7 +247,7 @@ function resolveCamera(
             { ...current, d: current.progressM },
             { ...target, d: target.progressM },
           ),
-    rangeM: profile.rangeM * request.rangeScale,
+    rangeM,
     tiltDeg: profile.tiltDeg,
     fovDeg: profile.fovDeg,
     directedMode: request.cameraMode,
@@ -250,7 +258,7 @@ function resolveCamera(
     // occlusion-scaled one.
     ...cameraClearance(
       target.elev + profile.clearanceM,
-      profile.rangeM * request.rangeScale,
+      rangeM,
       profile.tiltDeg,
       localTerrainEnvelope(
         manifest.sourceRoute,
@@ -312,11 +320,16 @@ function resolveAutomaticCamera(
     58,
   );
   const plannedClearanceM = 28 + occlusionRisk * 38;
+  const framingTarget = smoothRouteTarget(
+    manifest,
+    Math.min(totalDistanceM, progressM + Math.min(65, lookAheadM * 0.35)),
+    44,
+  );
   const trackingTarget = {
-    lat: target.lat,
-    lng: target.lng,
+    lat: framingTarget.lat,
+    lng: framingTarget.lng,
     altitude: Math.max(
-      target.elev + plannedClearanceM,
+      framingTarget.elev + plannedClearanceM,
       terrain.maximumM + 28 + occlusionRisk * 20,
     ),
   };
@@ -331,9 +344,7 @@ function resolveAutomaticCamera(
     route,
     totalDistanceM * 0.25,
   ).bearingDeg;
-  const revealWeight = 1 - smoothstep(0.012, 0.065, progressRatio);
-  const releaseWeight = smoothstep(0.92, 0.985, progressRatio);
-  const overviewWeight = Math.max(revealWeight, releaseWeight);
+  const overviewWeight = smoothstep(0.92, 0.985, progressRatio);
   const protection: RouteSceneCameraProtection[] = [
     "recorded-terrain-envelope",
     "horizon-guard",

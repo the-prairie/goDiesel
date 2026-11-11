@@ -55,7 +55,8 @@
     font-size: 12px; letter-spacing: 0.12em; font-weight: 600;
     transition: all 0.12s;
   }
-  .btn:hover { border-color: var(--teal); color: var(--teal); }
+  .btn:hover:not([disabled]) { border-color: var(--teal); color: var(--teal); }
+  .btn[disabled] { opacity: 0.4; cursor: not-allowed; }
   .btn.primary { background: var(--teal); color: #000; border-color: var(--teal); }
   .btn.primary:hover { background: #fff; color: #000; border-color: #fff; }
   .btn.primary[disabled] { opacity: 0.4; cursor: not-allowed; }
@@ -76,7 +77,7 @@
   }
   .tab.active .count { background: rgba(0,241,159,0.15); color: var(--teal); }
 
-  .filters { display: flex; gap: 12px; align-items: center; padding: 12px 0 16px; }
+  .filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 12px 0 16px; }
   .filters input[type="search"] {
     flex: 1; max-width: 360px;
     background: var(--bg-card); border: 1px solid var(--border);
@@ -110,6 +111,16 @@
   .classify-status { font-size: 11px; color: var(--text-dim); letter-spacing: 0.08em;
                      padding: 0 8px; font-family: 'JetBrains Mono', 'SF Mono', monospace; }
   .classify-status.active { color: var(--teal); }
+  .rebuild-status { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: -6px 0 12px; }
+  .rebuild-status[hidden], .rebuild-status details[hidden] { display: none; }
+  .rebuild-status .classify-status { padding: 0; overflow-wrap: anywhere; }
+  .classify-status.failed { color: var(--reject); }
+  .rebuild-status summary { cursor: pointer; font-size: 11px; color: var(--text-dim); letter-spacing: 0.08em;
+                            font-family: 'JetBrains Mono', 'SF Mono', monospace; }
+  .rebuild-status details[open] { flex-basis: 100%; }
+  .rebuild-status pre { margin: 6px 0 0; max-height: 200px; overflow: auto; white-space: pre-wrap;
+                        overflow-wrap: anywhere; font-size: 11px; color: var(--text); background: var(--bg-card);
+                        border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
 
   main { padding: 20px 28px 120px; }
   .grid {
@@ -239,6 +250,21 @@
     opacity: 0; transform: translateY(8px); transition: all 0.2s;
   }
   .toast.show { opacity: 1; transform: translateY(0); }
+  @media (max-width: 700px) {
+    header { position: static; padding: 16px 16px 0; }
+    .head-row { flex-direction: column; align-items: stretch; gap: 16px; }
+    .head-actions .btn { flex: 1; justify-content: center; }
+    .tabs { gap: 0; }
+    .tab { flex: 1; padding: 10px 6px; font-size: 10px; }
+    .filters { gap: 8px; }
+    .filters input[type="search"] { flex-basis: 100%; max-width: none; min-width: 0; }
+    .region-select { max-width: 100%; }
+    .classify-status { flex-basis: 100%; padding: 4px 0; overflow-wrap: anywhere; }
+    main { padding: 16px 16px 120px; }
+    .grid { grid-template-columns: minmax(0, 1fr); }
+    .save-bar { max-width: calc(100% - 32px); white-space: nowrap; }
+    .toast { max-width: calc(100% - 32px); right: 16px; }
+  }
 </style>
 </head>
 <body>
@@ -305,6 +331,13 @@
       </button>
     </div>
   </div>
+  <div class="rebuild-status" id="rebuildStatus" hidden>
+    <span class="classify-status" id="rebuildStatusText"></span>
+    <details id="rebuildDetails" hidden>
+      <summary>SHOW STDERR</summary>
+      <pre id="rebuildStderr"></pre>
+    </details>
+  </div>
 
   <div class="tabs">
     <button class="tab active" data-tab="pending">PENDING <span class="count" id="cPending">0</span></button>
@@ -342,10 +375,18 @@
 
 <div class="toast" id="toast"></div>
 
-<script>
+<script type="module">
+import { initialClassifierState, reduceClassifier, classifierPresentation, classifierShouldRefresh, classifierBusy, classifierAcceptsStatus } from "/admin-assets/classifier-state.js";
+import { escapeHtml } from "/admin-assets/presentation.js";
+import { initialMutationState, reduceMutation, rebuildBusy, rebuildPresentation } from "/admin-assets/mutation-state.js";
+
+let mutation = initialMutationState();
+let mutationRequestId = 0;
+function dispatchMutation(event) {
+  mutation = reduceMutation(mutation, event);
+}
+
 const STATE = {
-  routes: [],         // server data
-  dirty: new Map(),   // activity_id → patch
   tab: 'pending',
   type: 'all',
   region: 'all',
@@ -354,37 +395,41 @@ const STATE = {
 };
 const UNMAPPED = '— UNMAPPED —';
 
-function escapeHtml(s) {
-  return String(s || '').replace(/[&<>"']/g, c => (
-    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
 
 function effectiveStatus(r) {
-  const patch = STATE.dirty.get(r.activity_id);
+  const patch = mutation.dirty.get(r.activity_id);
   return patch?.status ?? r.status;
 }
 
 function effectiveRegion(r) {
-  const patch = STATE.dirty.get(r.activity_id);
+  const patch = mutation.dirty.get(r.activity_id);
   return patch?.region ?? r.region;
 }
 
 function effectiveField(r, key) {
-  const patch = STATE.dirty.get(r.activity_id);
+  const patch = mutation.dirty.get(r.activity_id);
   return patch?.[key] ?? r[key] ?? '';
 }
 
+function routeIsDirty(id) {
+  return mutation.dirty.has(id);
+}
+
+// Edits do not re-render the grid, to keep the cursor, so the edited card's
+// dirty class is updated in place from reducer state.
+function renderCardDirty(card) {
+  card.classList.toggle('dirty', routeIsDirty(card.dataset.id));
+}
+
 function setPatch(id, key, value) {
-  const existing = STATE.dirty.get(id) || {};
-  existing[key] = value;
-  STATE.dirty.set(id, existing);
+  dispatchMutation({ type: 'fieldEdited', routeId: id, field: key, value });
   renderCounts();
   renderSaveBar();
 }
 
 function renderCounts() {
   const counts = { pending: 0, approved: 0, archived: 0 };
-  STATE.routes.forEach(r => {
+  mutation.routes.forEach(r => {
     const s = effectiveStatus(r);
     if (counts[s] !== undefined) counts[s]++;
   });
@@ -397,7 +442,7 @@ function populateRegionDropdown() {
   // Count per auto_region within the currently-active tab so the dropdown
   // reflects what the user is actually triaging.
   const counts = {};
-  STATE.routes.forEach(r => {
+  mutation.routes.forEach(r => {
     if (effectiveStatus(r) !== STATE.tab) return;
     const reg = r.auto_region || UNMAPPED;
     counts[reg] = (counts[reg] || 0) + 1;
@@ -415,13 +460,13 @@ function populateRegionDropdown() {
 }
 
 function renderSaveBar() {
-  const n = STATE.dirty.size;
+  const n = mutation.dirty.size;
   const bar = document.getElementById('saveBar');
   const btn = document.getElementById('saveBtn');
   document.getElementById('dirtyCount').textContent = n;
   document.getElementById('saveCount').textContent = n ? `(${n})` : '';
   if (n === 0) { bar.classList.add('hidden'); btn.disabled = true; }
-  else        { bar.classList.remove('hidden'); btn.disabled = false; }
+  else        { bar.classList.remove('hidden'); btn.disabled = mutation.save.status !== 'idle'; }
 }
 
 function typeIconHtml(t) {
@@ -454,11 +499,11 @@ function cardHtml(r) {
   const region = effectiveRegion(r);
   const title = effectiveField(r, 'title');
   const theme = effectiveField(r, 'theme');
-  const difficulty = effectiveField(r, 'difficulty');
+  const effortTier = effectiveField(r, 'effort_tier');
   const blurb = effectiveField(r, 'blurb');
   const completionRule = effectiveField(r, 'completion_rule');
   const visibility = effectiveField(r, 'visibility') || 'public';
-  const dirty = STATE.dirty.has(r.activity_id);
+  const dirty = routeIsDirty(r.activity_id);
   const stravaUrl = `https://www.strava.com/activities/${r.activity_id}`;
   const placeholder = r.auto_region
     ? `auto: ${r.auto_region}`
@@ -502,9 +547,9 @@ function cardHtml(r) {
                    data-meta-field="theme"
                    data-meta-for="${r.activity_id}">
             <input class="meta-input" type="text"
-                   placeholder="Difficulty"
-                   value="${escapeHtml(difficulty)}"
-                   data-meta-field="difficulty"
+                   placeholder="Effort tier"
+                   value="${escapeHtml(effortTier)}"
+                   data-meta-field="effort_tier"
                    data-meta-for="${r.activity_id}">
           </div>
           <textarea class="meta-textarea"
@@ -544,7 +589,7 @@ function cardHtml(r) {
 
 function filteredRoutes() {
   const s = STATE.search.toLowerCase().trim();
-  return STATE.routes.filter(r => {
+  return mutation.routes.filter(r => {
     if (effectiveStatus(r) !== STATE.tab) return false;
     if (STATE.type !== 'all' && r.type !== STATE.type) return false;
     if (r.distance_km < STATE.minKm) return false;
@@ -601,7 +646,7 @@ document.addEventListener('click', e => {
   if (act) {
     const id = act.dataset.id;
     const action = act.dataset.action;
-    const route = STATE.routes.find(r => r.activity_id === id);
+    const route = mutation.routes.find(r => r.activity_id === id);
     const current = effectiveStatus(route);
     let next;
     if (action === 'approve') next = current === 'approved' ? 'pending' : 'approved';
@@ -621,14 +666,12 @@ document.addEventListener('input', e => {
   if (e.target.classList.contains('region-input')) {
     const id = e.target.dataset.regionFor;
     setPatch(id, 'region', e.target.value);
-    // Don't re-render — just mark card dirty
-    e.target.closest('.card').classList.add('dirty');
+    renderCardDirty(e.target.closest('.card'));
   }
   if (e.target.dataset.metaField && e.target.dataset.metaFor) {
     const id = e.target.dataset.metaFor;
     setPatch(id, e.target.dataset.metaField, e.target.value);
-    // Don't re-render while editing text — preserve cursor position.
-    e.target.closest('.card').classList.add('dirty');
+    renderCardDirty(e.target.closest('.card'));
   }
 });
 
@@ -640,21 +683,31 @@ document.addEventListener('change', e => {
   if (e.target.dataset.metaField && e.target.dataset.metaFor) {
     const id = e.target.dataset.metaFor;
     setPatch(id, e.target.dataset.metaField, e.target.value);
-    e.target.closest('.card').classList.add('dirty');
+    renderCardDirty(e.target.closest('.card'));
   }
 });
 
-function showToast(msg, color) {
+let toastTimer = null;
+function showToast(msg, color, duration = 2200) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.style.borderColor = color || 'var(--teal)';
   t.style.color = color || 'var(--teal)';
   t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2200);
+  // An earlier toast's timer must not hide a newer, longer message.
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toastTimer = null;
+    t.classList.remove('show');
+  }, duration);
 }
 
 document.getElementById('saveBtn').addEventListener('click', async () => {
-  const updates = Array.from(STATE.dirty.entries()).map(([aid, patch]) => ({
+  if (mutation.save.status !== 'idle' || mutation.dirty.size === 0) return;
+  const requestId = ++mutationRequestId;
+  dispatchMutation({ type: 'saveStarted', requestId });
+  renderSaveBar();
+  const updates = Array.from(mutation.save.patches.entries()).map(([aid, patch]) => ({
     activity_id: aid, ...patch
   }));
   try {
@@ -664,38 +717,149 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
       body: JSON.stringify({routes: updates}),
     });
     const j = await r.json();
+    const reason = r.status === 409 && typeof j?.reason === 'string' ? j.reason : null;
     if (j.ok) {
-      STATE.dirty.clear();
+      dispatchMutation({ type: 'saveAccepted', requestId });
       renderSaveBar();
       await refreshRoutes();
       showToast(`SAVED ${j.updated} CHANGE${j.updated === 1 ? '' : 'S'}`);
+    } else if (reason) {
+      // The draft stays dirty: only saveAccepted clears submitted fields.
+      showToast(`SAVE FAILED — ${reason}`, 'var(--reject)', 6000);
+      checkRebuildStatus();
     } else {
       showToast('SAVE FAILED', 'var(--reject)');
     }
   } catch (err) {
     showToast('SAVE FAILED', 'var(--reject)');
+  } finally {
+    dispatchMutation({ type: 'saveSettled', requestId });
+    renderSaveBar();
   }
 });
 
+// === Rebuild ===
+let rebuildPollTimer = null;
+let rebuildFadeTimer = null;
+let rebuildController = null;
+
+function renderRebuild() {
+  const { text, active, failed, detail } = rebuildPresentation(mutation.rebuild);
+  document.getElementById('rebuildStatus').hidden = !text;
+  const label = document.getElementById('rebuildStatusText');
+  label.textContent = text;
+  label.classList.toggle('active', active);
+  label.classList.toggle('failed', failed);
+  const details = document.getElementById('rebuildDetails');
+  details.hidden = !detail;
+  if (!detail) details.open = false;
+  document.getElementById('rebuildStderr').textContent = detail || '';
+  document.getElementById('rebuildBtn').toggleAttribute('disabled', rebuildBusy(mutation.rebuild));
+}
+
+function stopRebuildPoll() {
+  if (rebuildPollTimer) clearTimeout(rebuildPollTimer);
+  rebuildPollTimer = null;
+  rebuildController?.abort();
+  rebuildController = null;
+}
+
+function dispatchRebuild(event) {
+  const before = mutation.rebuild;
+  dispatchMutation(event);
+  const after = mutation.rebuild;
+  renderRebuild();
+  if (after === before) return;
+  if (rebuildFadeTimer) clearTimeout(rebuildFadeTimer);
+  rebuildFadeTimer = null;
+  if (after.phase === 'running') followRebuild();
+  else stopRebuildPoll();
+  if (after.phase === 'succeeded') {
+    refreshRoutes().catch(() => {});
+    rebuildFadeTimer = setTimeout(() => {
+      rebuildFadeTimer = null;
+      dispatchRebuild({ type: 'rebuildNoticeExpired', id: after.id });
+    }, 8000);
+  }
+}
+
+// Poll the owner status every two seconds while a rebuild runs. A failed check
+// retries: the writer is the only source of the outcome.
+function followRebuild() {
+  stopRebuildPoll();
+  const controller = new AbortController();
+  rebuildController = controller;
+  const tick = async () => {
+    rebuildPollTimer = null;
+    try {
+      const response = await fetch('/api/admin/status', { signal: controller.signal });
+      if (!response.ok) throw new Error('Rebuild check failed');
+      const { rebuild } = await response.json();
+      if (!controller.signal.aborted && rebuild) dispatchRebuild({ type: 'rebuildStatusReceived', rebuild });
+    } catch {}
+    if (!controller.signal.aborted && mutation.rebuild.phase === 'running') rebuildPollTimer = setTimeout(tick, 2000);
+  };
+  rebuildPollTimer = setTimeout(tick, 2000);
+}
+
+// Adopts a rebuild that is already running when nothing is tracked. An older
+// server without the status endpoint or snapshot is ignored.
+async function checkRebuildStatus() {
+  try {
+    const response = await fetch('/api/admin/status');
+    if (!response.ok) return;
+    const { rebuild } = await response.json();
+    if (rebuild) dispatchRebuild({ type: 'rebuildStatusReceived', rebuild });
+  } catch {}
+}
+
 document.getElementById('rebuildBtn').addEventListener('click', async () => {
-  if (STATE.dirty.size > 0) {
+  if (rebuildBusy(mutation.rebuild)) return;
+  if (mutation.dirty.size > 0) {
     showToast('SAVE FIRST', 'var(--warn)');
     return;
   }
+  const requestId = ++mutationRequestId;
+  dispatchRebuild({ type: 'rebuildRequested', requestId });
+  let reason = null;
   try {
-    await fetch('/api/rebuild', { method: 'POST' });
-    showToast('REBUILD STARTED — CHECK TERMINAL');
+    const response = await fetch('/api/rebuild', { method: 'POST' });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      reason = typeof body?.reason === 'string' ? body.reason : null;
+      throw new Error('Rebuild request failed');
+    }
+    dispatchRebuild({ type: 'rebuildAccepted', requestId, rebuild: body?.rebuild ?? null });
+    if (!body?.rebuild) showToast('REBUILD STARTED — CHECK TERMINAL');
   } catch (err) {
-    showToast('REBUILD FAILED', 'var(--reject)');
+    dispatchRebuild({ type: 'rebuildRefused', requestId });
+    showToast(reason ? `REBUILD REFUSED — ${reason}` : 'REBUILD FAILED', 'var(--reject)', reason ? 6000 : 2200);
+    if (reason) checkRebuildStatus();
   }
 });
 
 // === Auto-classify (reverse-geocoding) ===
 let classifyPollTimer = null;
+let classifyFadeTimer = null;
+let classifyController = null;
+let classifyRequestId = 0;
+let classifier = initialClassifierState();
+function dispatchClassifier(event) {
+  classifier = reduceClassifier(classifier, event);
+  const { text, active } = classifierPresentation(classifier);
+  setClassifyStatus(text, active);
+}
 
 async function refreshRoutes() {
-  const data = await fetch('/api/routes').then(r => r.json());
-  STATE.routes = data;
+  const requestId = ++mutationRequestId;
+  dispatchMutation({ type: 'refreshStarted', requestId });
+  try {
+    const routes = await fetch('/api/routes').then(r => r.json());
+    dispatchMutation({ type: 'routesReceived', requestId, routes });
+  } catch (error) {
+    dispatchMutation({ type: 'refreshFailed', requestId });
+    throw error;
+  }
   renderCounts();
   populateRegionDropdown();
   render();
@@ -706,58 +870,64 @@ function setClassifyStatus(text, active) {
   el.textContent = text || '';
   el.classList.toggle('active', !!active);
   const btn = document.getElementById('autoClassifyBtn');
-  btn.toggleAttribute('disabled', !!active);
+  btn.toggleAttribute('disabled', classifierBusy(classifier));
 }
 
 async function pollClassifyStatus() {
-  let lastUpdatedCount = 0;
+  if (classifyPollTimer) clearTimeout(classifyPollTimer);
+  if (classifyFadeTimer) clearTimeout(classifyFadeTimer);
+  classifyController?.abort();
+  const controller = new AbortController();
+  classifyController = controller;
+  const pollId = ++classifyRequestId;
+  dispatchClassifier({ type: 'pollStarted', pollId });
   const tick = async () => {
-    let s;
-    try { s = await fetch('/api/classify-status').then(r => r.json()); }
-    catch { setClassifyStatus('CHECK FAILED', false); return; }
-    if (s.running) {
-      setClassifyStatus(`✦ CLASSIFYING ${s.done} / ${s.total}` +
-                        (s.last_label ? ` · ${s.last_label}` : ''), true);
-      // Refresh data periodically so user sees regions populate as it goes.
-      if (s.updated > lastUpdatedCount + 4) {
-        lastUpdatedCount = s.updated;
-        refreshRoutes();
-      }
+    classifyPollTimer = null;
+    let status;
+    try {
+      const response = await fetch('/api/classify-status', { signal: controller.signal });
+      if (!response.ok) throw new Error('Classification check failed');
+      status = await response.json();
+    } catch {
+      if (!controller.signal.aborted) dispatchClassifier({ type: 'checkFailed', pollId });
+      return;
+    }
+    if (controller.signal.aborted || !classifierAcceptsStatus(classifier, pollId)) return;
+    const refresh = classifierShouldRefresh(classifier, status);
+    dispatchClassifier({ type: 'statusReceived', pollId, status });
+    if (refresh) refreshRoutes();
+    if (classifier.poll.phase === 'running') {
       classifyPollTimer = setTimeout(tick, 2000);
-    } else {
-      classifyPollTimer = null;
-      if (s.total > 0) {
-        setClassifyStatus(`✓ CLASSIFIED ${s.updated} / ${s.total}` +
-                          (s.unmapped ? ` · ${s.unmapped} still unmapped` : ''), false);
-        refreshRoutes();
-        // Fade after a bit
-        setTimeout(() => setClassifyStatus('', false), 8000);
-      } else if (s.unmapped > 0) {
-        setClassifyStatus(`${s.unmapped} unmapped — click AUTO-CLASSIFY`, false);
-      } else {
-        setClassifyStatus('', false);
-      }
+    } else if (status.total > 0) {
+      classifyFadeTimer = setTimeout(() => {
+        classifyFadeTimer = null;
+        dispatchClassifier({ type: 'noticeExpired', pollId });
+      }, 8000);
     }
   };
-  if (classifyPollTimer) clearTimeout(classifyPollTimer);
   tick();
 }
 
 document.getElementById('autoClassifyBtn').addEventListener('click', async () => {
+  if (classifierBusy(classifier)) return;
+  const requestId = ++classifyRequestId;
+  dispatchClassifier({ type: 'startRequested', requestId });
+  if (classifyFadeTimer) clearTimeout(classifyFadeTimer);
+  classifyFadeTimer = null;
   try {
-    await fetch('/api/auto-classify', { method: 'POST' });
+    const response = await fetch('/api/auto-classify', { method: 'POST' });
+    if (!response.ok) throw new Error('Classification start failed');
+    dispatchClassifier({ type: 'startSettled', requestId });
     pollClassifyStatus();
   } catch {
+    dispatchClassifier({ type: 'startSettled', requestId });
     showToast('AUTO-CLASSIFY FAILED', 'var(--reject)');
   }
 });
 
 // Initial load
-fetch('/api/routes').then(r => r.json()).then(data => {
-  STATE.routes = data;
-  renderCounts();
-  populateRegionDropdown();
-  render();
+checkRebuildStatus();
+refreshRoutes().then(() => {
   // Check if the server is already classifying in the background.
   pollClassifyStatus();
 });

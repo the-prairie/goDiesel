@@ -1,8 +1,10 @@
-import maplibregl, {
+import maplibregl from "@/providers/maplibre";
+import {
   LngLatBounds,
   Map as MapLibreMap,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import "./maplibre-replay.css";
 
 import { ROUTE_THREAD_STYLE } from "@/domain/geometry/route-thread-style";
 import type {
@@ -10,6 +12,15 @@ import type {
   ReplayEngineMountOptions,
 } from "@/surfaces/replay/renderer-port";
 import type { ReplayPose } from "@/surfaces/replay/playback/replay-controller";
+
+import {
+  initialMapLibreReplayState,
+  mapLibreFollowsPose,
+  mapLibreReplayStatus,
+  mapLibreRunIsCurrent,
+  reduceMapLibreReplay,
+  type MapLibreReplayEvent,
+} from "./maplibre-replay-state";
 
 const STYLE_URL = "https://tiles.openfreemap.org/styles/fiord";
 
@@ -24,81 +35,114 @@ function routeFeature(route: ReplayEngineMountOptions["route"]) {
   };
 }
 
-function zoomForRange(cameraRangeM: number) {
-  if (cameraRangeM <= 120) return 17;
-  if (cameraRangeM <= 240) return 16;
-  if (cameraRangeM <= 720) return 14.5;
-  return 13.5;
+/**
+ * Camera range presets and the zoom each one frames. Between and beyond the
+ * presets the mapping is continuous (linear in log2 of the range, one zoom
+ * level per doubling outside), so a zoom the person makes on the map can be
+ * expressed as a range and framed again exactly.
+ */
+const RANGE_ZOOM_ANCHORS = [
+  [120, 17],
+  [240, 16],
+  [720, 14.5],
+  [1_400, 13.5],
+] as const;
+
+export function zoomForRange(cameraRangeM: number) {
+  const [firstRange, firstZoom] = RANGE_ZOOM_ANCHORS[0];
+  const [lastRange, lastZoom] = RANGE_ZOOM_ANCHORS[RANGE_ZOOM_ANCHORS.length - 1];
+  if (cameraRangeM <= firstRange) return firstZoom - Math.log2(cameraRangeM / firstRange);
+  if (cameraRangeM >= lastRange) return lastZoom - Math.log2(cameraRangeM / lastRange);
+  for (let index = 1; index < RANGE_ZOOM_ANCHORS.length; index += 1) {
+    const [range, zoom] = RANGE_ZOOM_ANCHORS[index];
+    if (cameraRangeM > range) continue;
+    const [previousRange, previousZoom] = RANGE_ZOOM_ANCHORS[index - 1];
+    const t = Math.log2(cameraRangeM / previousRange) / Math.log2(range / previousRange);
+    return previousZoom + t * (zoom - previousZoom);
+  }
+  return lastZoom;
+}
+
+export function rangeForZoom(zoom: number) {
+  const [firstRange, firstZoom] = RANGE_ZOOM_ANCHORS[0];
+  const [lastRange, lastZoom] = RANGE_ZOOM_ANCHORS[RANGE_ZOOM_ANCHORS.length - 1];
+  if (zoom >= firstZoom) return firstRange * 2 ** (firstZoom - zoom);
+  if (zoom <= lastZoom) return lastRange * 2 ** (lastZoom - zoom);
+  for (let index = 1; index < RANGE_ZOOM_ANCHORS.length; index += 1) {
+    const [range, anchorZoom] = RANGE_ZOOM_ANCHORS[index];
+    if (zoom < anchorZoom) continue;
+    const [previousRange, previousZoom] = RANGE_ZOOM_ANCHORS[index - 1];
+    const t = (zoom - previousZoom) / (anchorZoom - previousZoom);
+    return previousRange * (range / previousRange) ** t;
+  }
+  return lastRange;
 }
 
 export class MapLibreAtlasReplayEngine implements ReplayEngine {
   private map?: MapLibreMap;
   private host?: HTMLDivElement;
-  private ready = false;
+  private lifecycle = initialMapLibreReplayState();
   private loadTimer?: number;
-  private errorCount = 0;
-  private generation = 0;
 
   async mount({
     container,
     route,
     onStatus,
+    onCameraRangeChosen,
   }: ReplayEngineMountOptions) {
-    const generation = ++this.generation;
-    onStatus({
-      state: "loading",
-      title: "Opening Atlas replay",
-      message: "Loading the route map and replay thread.",
-    });
+    const { operationId } = this.transition({ type: "mapStarted" }, onStatus);
     if (route.route.length < 2) {
-      onStatus({
-        state: "unavailable",
-        title: "Route geometry unavailable",
-        message: "This route does not contain enough points for Atlas replay.",
-      });
+      this.transition({ type: "inputsRejected", operationId }, onStatus);
       return;
     }
 
+    // Arm the deadline before touching the provider, so no failure between
+    // start and load can leave the run loading without an outcome.
+    this.loadTimer = window.setTimeout(() => {
+      this.transition({ type: "deadlineReached", operationId }, onStatus);
+    }, 15_000);
+
     const host = document.createElement("div");
-    host.className = "h-full w-full";
+    host.className = "replay-atlas-map h-full w-full";
     container.replaceChildren(host);
     this.host = host;
     const start = route.route[0];
-    const map = new maplibregl.Map({
-      container: host,
-      style: STYLE_URL,
-      center: [start.lng, start.lat],
-      zoom: 13,
-      pitch: 52,
-      bearing: 0,
-      attributionControl: { compact: true },
-    });
+    let map: MapLibreMap;
+    try {
+      map = new maplibregl.Map({
+        container: host,
+        style: STYLE_URL,
+        center: [start.lng, start.lat],
+        zoom: 13,
+        pitch: 52,
+        bearing: 0,
+        attributionControl: { compact: true },
+      });
+    } catch {
+      // MapLibre throws synchronously when it cannot create a WebGL2 context.
+      window.clearTimeout(this.loadTimer);
+      this.loadTimer = undefined;
+      host.remove();
+      this.host = undefined;
+      this.transition({ type: "mapUnsupported", operationId }, onStatus);
+      return;
+    }
     this.map = map;
     map.addControl(new maplibregl.NavigationControl({ showCompass: true }), "bottom-right");
-    const handleError = () => {
-      if (generation !== this.generation) return;
-      this.errorCount += 1;
-      if (!this.ready && this.errorCount >= 4) {
-        onStatus({
-          state: "unavailable",
-          title: "Atlas replay unavailable",
-          message: "The fallback map could not load in this browser session.",
-        });
-      }
-    };
-    map.on("error", handleError);
-    this.loadTimer = window.setTimeout(() => {
-      if (generation === this.generation && !this.ready) {
-        onStatus({
-          state: "unavailable",
-          title: "Atlas replay timed out",
-          message: "The fallback map did not become ready in time.",
-        });
-      }
-    }, 15_000);
+    map.on("error", () => {
+      this.transition({ type: "mapError", operationId }, onStatus);
+    });
+    // Only a person's zoom carries an originalEvent; the engine's own
+    // jumpTo/fitBounds do not, so follow poses are never echoed back.
+    map.on("zoomend", (event?: { originalEvent?: unknown }) => {
+      if (!event?.originalEvent || this.map !== map) return;
+      if (!mapLibreRunIsCurrent(this.lifecycle, operationId)) return;
+      onCameraRangeChosen?.(rangeForZoom(map.getZoom()));
+    });
 
     map.once("load", () => {
-      if (generation !== this.generation || this.map !== map) return;
+      if (!mapLibreRunIsCurrent(this.lifecycle, operationId) || this.map !== map)
+        return;
       if (this.loadTimer !== undefined) window.clearTimeout(this.loadTimer);
       map.resize();
       map.addSource("replay-route", {
@@ -134,18 +178,27 @@ export class MapLibreAtlasReplayEngine implements ReplayEngine {
         maxZoom: 15,
         duration: 0,
       });
-      this.ready = true;
-      onStatus({
-        state: "ready",
-        title: "Atlas replay ready",
-        message: "The fallback route thread is ready to move.",
-      });
+      this.transition({ type: "mapLoaded", operationId }, onStatus);
     });
+  }
+
+  /** Every status this engine publishes comes from the reducer state. */
+  private transition(
+    event: MapLibreReplayEvent,
+    onStatus?: ReplayEngineMountOptions["onStatus"],
+  ) {
+    const previous = this.lifecycle;
+    this.lifecycle = reduceMapLibreReplay(previous, event);
+    if (this.lifecycle.statusRevision !== previous.statusRevision) {
+      const status = mapLibreReplayStatus(this.lifecycle);
+      if (status) onStatus?.(status);
+    }
+    return this.lifecycle;
   }
 
   setPose(pose: ReplayPose) {
     const map = this.map;
-    if (!map || !this.ready) return;
+    if (!map || !mapLibreFollowsPose(this.lifecycle)) return;
     if (!pose.following) return;
     map.jumpTo({
       center: [pose.lng, pose.lat],
@@ -156,14 +209,12 @@ export class MapLibreAtlasReplayEngine implements ReplayEngine {
   }
 
   destroy() {
-    this.generation += 1;
     if (this.loadTimer !== undefined) window.clearTimeout(this.loadTimer);
     this.map?.remove();
     this.host?.remove();
     this.map = undefined;
     this.host = undefined;
-    this.ready = false;
+    this.transition({ type: "disposed" });
     this.loadTimer = undefined;
-    this.errorCount = 0;
   }
 }

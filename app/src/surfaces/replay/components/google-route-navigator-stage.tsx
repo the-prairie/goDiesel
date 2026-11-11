@@ -1,78 +1,108 @@
+import { YourMarkerSettings } from "./your-marker-settings";
 import {
   ArrowLeft,
   Eye,
   Gauge,
   LocateFixed,
-  LockKeyhole,
   MapPinned,
   Mountain,
+  Navigation,
   Pause,
   Play,
-  Route,
   ScanLine,
   Settings2,
-  Unlock,
+  Sparkles,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
-import {
-  ReplayElevationScrubber,
-  type ReplayElevationScrubberHandle,
-} from "@/surfaces/replay/components/replay-elevation-scrubber";
-import {
-  formatReplayDuration,
-  formatReplayPace,
-  REPLAY_CAMERA_MODES,
-  ReplayCameraControls,
-} from "@/surfaces/replay/components/replay-presentation";
+import { ReplayElevationScrubber } from "@/surfaces/replay/components/replay-elevation-scrubber";
+import { ReplayChapterControls } from "@/surfaces/replay/components/replay-chapter-controls";
 import { ReplayRoutePicker } from "@/surfaces/replay/components/replay-route-picker";
 import { Button } from "@/ui/button";
-import type { QuestRoute, RouteSummary } from "@/domain/route";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/ui/sheet";
+import "./immersive-replay.css";
+import { CLIMB_NOT_RECORDED, recordedClimbM, type QuestRoute, type RouteSummary } from "@/domain/route";
 import { cn } from "@/ui/utils";
 import {
-  advanceGoogleRouteNavigator,
-  cycleGoogleRouteSpeed,
   googleRouteCameraPose,
   googleRouteThreadTreatment,
   googleRouteTelemetry,
-  initialGoogleRouteNavigatorState,
-  seekGoogleRouteNavigator,
-  zoomGoogleRouteNavigator,
   type GoogleRouteCameraMode,
   type GoogleRouteNavigatorState,
 } from "@/surfaces/replay/playback/route-navigator-controller";
+import type { ReplaySessionEvent } from "@/surfaces/replay/playback/replay-session-state";
+import {
+  initialReplayChapterControlsState,
+  reduceReplayChapterControls,
+  type ReplayChapterControlsEvent,
+} from "@/surfaces/replay/playback/replay-chapter-controls-state";
+import {
+  googleReplayIntentEvents,
+  initialGoogleReplayStageState,
+  reduceGoogleReplayStage,
+  type GoogleReplayIntent,
+  type GoogleReplayStageEvent,
+} from "@/surfaces/replay/playback/google-replay-stage-state";
 import {
   createGoogleRouteNavigatorEngine,
   type GoogleRouteNavigatorEngine,
-  type GoogleRouteNavigatorStatus,
 } from "@/surfaces/replay/renderers/google-route-navigator-engine";
 import { routeDistanceM } from "@/domain/geometry/route-path";
 import { useReducedMotion } from "@/ui/use-reduced-motion";
+import { sustainedRouteCamera } from "@/surfaces/replay/scene/route-camera-score";
 import {
   advanceRouteCameraMotion,
+  routeCameraMotionHasSettled,
   createRouteCameraMotionState,
   type RouteCameraMotionState,
 } from "@/surfaces/replay/scene/route-camera-stabilizer";
 import type { GoogleRouteCameraPose } from "@/surfaces/replay/playback/route-navigator-controller";
-import {
-  activeReplayStoryChapter,
-  replayStoryChapters,
-} from "@/surfaces/replay/story-flight/story-flight-chapters";
-import { StoryFlightReplayHud } from "@/surfaces/replay/story-flight/story-flight-replay-hud";
-import {
-  frameReplayCamera,
-  replaySubjectBand,
-  type ReplayViewportInsets,
-} from "@/surfaces/replay/story-flight/replay-camera-framing";
-import { ReplayPerformanceMonitor } from "@/surfaces/replay/story-flight/replay-performance";
 
-const INITIAL_STATUS: GoogleRouteNavigatorStatus = {
-  state: "loading",
-  message: "Preparing the native Google 3D route world.",
-};
+// Lab-only shortcuts between the two field-test routes. A single-route
+// microsite build folds this to an empty list so neither route ships with it.
+const FIELD_TEST_ROUTES: ReadonlyArray<{ slug: string; label: string }> = import.meta.env
+  .VITE_SINGLE_ROUTE_SLUG
+  ? []
+  : [
+      { slug: "14736711660", label: "San Francisco" },
+      { slug: "14023448720", label: "Crete" },
+    ];
+
+/**
+ * The camera smoothing the frame driver advances imperatively. Settling is
+ * derived from `motion`; every reset goes through `idleStageCamera`.
+ */
+interface StageCamera {
+  motion: RouteCameraMotionState | undefined;
+  target: GoogleRouteCameraPose | undefined;
+  lastAt: number | undefined;
+}
+
+function idleStageCamera(): StageCamera {
+  return { motion: undefined, target: undefined, lastAt: undefined };
+}
+
+function stageCameraSettling(camera: StageCamera) {
+  return camera.motion !== undefined && !routeCameraMotionHasSettled(camera.motion);
+}
+
+const CAMERA_MODES: Array<{
+  mode: GoogleRouteCameraMode;
+  label: string;
+  icon: typeof Navigation;
+}> = [
+  { mode: "auto", label: "Auto director", icon: Sparkles },
+  { mode: "runner", label: "Runner", icon: Navigation },
+  { mode: "chase", label: "Chase", icon: Eye },
+  { mode: "overview", label: "Overview", icon: MapPinned },
+];
+
+const GOOGLE_3D_REJECTED_TITLE = "Google 3D is unavailable";
+const GOOGLE_3D_REJECTED_MESSAGE =
+  "Google is not serving photorealistic 3D to this site right now. Atlas replay plays the same recorded route on the map.";
 
 interface GoogleRouteNavigatorStageProps {
   route: QuestRoute;
@@ -81,7 +111,6 @@ interface GoogleRouteNavigatorStageProps {
   backPath?: string;
   backLabel?: string;
   onUseAtlas?: () => void;
-  fieldTestRoutes?: ReadonlyArray<{ slug: string; label: string }>;
 }
 
 export function GoogleRouteNavigatorStage({
@@ -91,92 +120,53 @@ export function GoogleRouteNavigatorStage({
   backPath = "/lab/route-intelligence",
   backLabel = "Back to route intelligence",
   onUseAtlas,
-  fieldTestRoutes = [],
 }: GoogleRouteNavigatorStageProps) {
   const navigate = useNavigate();
   const productionReplay = variant === "replay";
-  const reducedMotion = useReducedMotion();
   const stageRef = useRef<HTMLElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const headerRef = useRef<HTMLElement>(null);
-  const controlsRef = useRef<HTMLDivElement>(null);
-  const elevationScrubberRef = useRef<ReplayElevationScrubberHandle>(null);
-  const engineRef = useRef<GoogleRouteNavigatorEngine | undefined>(undefined);
-  const cameraMotionRef = useRef<RouteCameraMotionState | undefined>(undefined);
-  const cameraTargetRef = useRef<GoogleRouteCameraPose | undefined>(undefined);
-  const cameraSettlingRef = useRef(false);
-  const lastCameraAtRef = useRef<number | undefined>(undefined);
-  const chromeTimerRef = useRef<number | undefined>(undefined);
-  const chromeVisibleRef = useRef(true);
-  const performanceMonitorRef = useRef(new ReplayPerformanceMonitor());
-  const lastPerformancePublishAtRef = useRef(0);
+  const reducedMotion = useReducedMotion();
   const reducedMotionRef = useRef(reducedMotion);
-  const viewportInsetsRef = useRef<ReplayViewportInsets>({
-    bottom: 0,
-    chromeVisible: true,
-    height: 0,
-    left: 0,
-    right: 0,
-    top: 0,
-    width: 0,
-  });
-  const controlRef = useRef(initialGoogleRouteNavigatorState());
-  const [control, setControl] = useState(controlRef.current);
-  const [status, setStatus] =
-    useState<GoogleRouteNavigatorStatus>(INITIAL_STATUS);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [chromeVisible, setChromeVisible] = useState(true);
+  reducedMotionRef.current = reducedMotion;
+  const viewportWidthRef = useRef(window.innerWidth);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const engineRef = useRef<GoogleRouteNavigatorEngine | undefined>(undefined);
+  const cameraRef = useRef<StageCamera>(idleStageCamera());
+  // The frame driver reads and advances the latest session every frame, so
+  // the reducer state lives in a ref and React receives throttled snapshots.
+  // `dispatchStage` is the only writer of the ref.
+  const sessionRef = useRef(initialGoogleReplayStageState());
+  const [session, setSession] = useState(sessionRef.current);
+  const { control, status, statusReason, settingsOpen, chaptersExpanded } = session;
+  const providerUnavailable = status.state === "unavailable";
+  // A rejected key is the site's problem, not the visitor's: production
+  // Replay says so plainly; the lab keeps the diagnostic message.
+  const keyRejected = productionReplay && providerUnavailable && statusReason === "authentication";
+  const [chapterControls, dispatchChapterControls] = useReducer(reduceReplayChapterControls, undefined, initialReplayChapterControlsState);
   const totalDistanceM = routeDistanceM(route);
-  const storyChapters = useMemo(
-    () => replayStoryChapters(route, totalDistanceM),
-    [route, totalDistanceM],
-  );
   const telemetry = useMemo(
     () => googleRouteTelemetry(route, control.progressM),
     [control.progressM, route],
   );
   const cameraPose = useMemo(
-    () =>
-      googleRouteCameraPose(
-        route,
-        reducedMotion && control.cameraMode === "auto"
-          ? { ...control, cameraMode: "overview" }
-          : control,
-      ),
-    [control, reducedMotion, route],
+    () => googleRouteCameraPose(route, control),
+    [control, route],
   );
-  const activeChapterIndex = activeReplayStoryChapter(
-    storyChapters,
-    control.progressM,
-  );
-  const activeChapter = storyChapters[activeChapterIndex];
 
-  chromeVisibleRef.current = chromeVisible;
-  reducedMotionRef.current = reducedMotion;
-
-  const resolveCamera = useCallback(
-    (state: GoogleRouteNavigatorState) => {
-      const cameraState =
-        reducedMotionRef.current && state.cameraMode === "auto"
-          ? { ...state, cameraMode: "overview" as const }
-          : state;
-      return frameReplayCamera(
-        route,
-        googleRouteCameraPose(route, cameraState),
-        viewportInsetsRef.current,
-      );
-    },
-    [route],
-  );
+  const desiredCamera = useCallback((state: GoogleRouteNavigatorState) => {
+    const base = googleRouteCameraPose(route, state);
+    return productionReplay
+      ? sustainedRouteCamera(route, state, base, viewportWidthRef.current)
+      : base;
+  }, [productionReplay, route]);
 
   const renderCamera = useCallback(
     (
       desired: GoogleRouteCameraPose,
       now = performance.now(),
       force = false,
+      movement: "transition" | "tracking" = "transition",
     ) => {
-      const previous = cameraMotionRef.current;
-      const previousAt = lastCameraAtRef.current;
+      const { motion: previous, lastAt: previousAt } = cameraRef.current;
       const elapsedSeconds =
         previousAt === undefined
           ? 1 / 30
@@ -184,103 +174,119 @@ export function GoogleRouteNavigatorStage({
       const motion =
         force || !previous
           ? createRouteCameraMotionState(desired)
-          : advanceRouteCameraMotion(previous, desired, elapsedSeconds, 0.48);
-      cameraMotionRef.current = motion;
-      cameraTargetRef.current = desired;
-      cameraSettlingRef.current = !cameraPoseHasSettled(motion.pose, desired);
-      lastCameraAtRef.current = now;
+          : advanceRouteCameraMotion(previous, desired, elapsedSeconds, 0.48, movement);
+      cameraRef.current = { motion, target: desired, lastAt: now };
       engineRef.current?.setCamera(motion.pose);
     },
     [],
   );
 
+  useLayoutEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const measure = () => {
+      const width = stage.getBoundingClientRect().width;
+      if (!width) return;
+      viewportWidthRef.current = width;
+      if (engineRef.current && sessionRef.current.control.following) {
+        renderCamera(desiredCamera(sessionRef.current.control));
+      }
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(stage);
+    measure();
+    return () => observer.disconnect();
+  }, [desiredCamera, renderCamera]);
+
+  const dispatchStage = useCallback(
+    (event: GoogleReplayStageEvent, publish = true) => {
+      const next = reduceGoogleReplayStage(sessionRef.current, event);
+      sessionRef.current = next;
+      if (publish) setSession(next);
+      return next;
+    },
+    [],
+  );
+
+  const publishStage = useCallback(() => setSession(sessionRef.current), []);
+
   const commitControl = useCallback(
-    (
-      update: (current: GoogleRouteNavigatorState) => GoogleRouteNavigatorState,
-    ) => {
-      const current = controlRef.current;
-      const next = update(current);
-      controlRef.current = next;
-      setControl(next);
+    (event: ReplaySessionEvent) => {
+      const previous = sessionRef.current.control;
+      const next = dispatchStage({ type: "controlRequested", event }).control;
       engineRef.current?.setFollowing(next.following);
       engineRef.current?.setGrounding(next.groundingMode);
-      const explicitCameraChange =
-        next.cameraMode !== current.cameraMode ||
-        next.following !== current.following ||
-        next.rangeScale !== current.rangeScale;
-      if (
-        next.following &&
-        (!reducedMotionRef.current || explicitCameraChange)
-      ) {
-        renderCamera(resolveCamera(next));
+      if (next.following && !previous.following) {
+        const actual = engineRef.current?.readCamera();
+        if (actual) {
+          cameraRef.current = {
+            ...cameraRef.current,
+            motion: createRouteCameraMotionState({ ...actual, progressM: next.progressM }),
+            lastAt: performance.now(),
+          };
+        }
+      }
+      if (next.following) {
+        const reposition = event.type === "progressSelected" || event.type === "cameraSelected" ||
+          event.type === "zoomRequested" || event.type === "followingChanged";
+        renderCamera(desiredCamera(next), performance.now(), reducedMotionRef.current && reposition);
       }
       engineRef.current?.setCinematicRoute(
         googleRouteThreadTreatment(route, next),
       );
-      elevationScrubberRef.current?.sync(next.progressM);
     },
-    [renderCamera, resolveCamera, route],
+    [desiredCamera, dispatchStage, renderCamera, route],
   );
 
-  const takeCameraOwnership = useCallback(() => {
-    if (!controlRef.current.following) return;
-    cameraSettlingRef.current = false;
-    if (chromeTimerRef.current !== undefined) {
-      window.clearTimeout(chromeTimerRef.current);
-      chromeTimerRef.current = undefined;
-    }
-    setChromeVisible(true);
-    commitControl((current) => ({ ...current, following: false }));
+  const releaseCamera = useCallback(() => {
+    if (sessionRef.current.control.following) commitControl({ type: "followingChanged", following: false });
   }, [commitControl]);
 
-  const recenterCamera = useCallback(() => {
-    cameraMotionRef.current = undefined;
-    cameraTargetRef.current = undefined;
-    cameraSettlingRef.current = false;
-    lastCameraAtRef.current = undefined;
-    commitControl((current) => ({ ...current, following: true }));
-  }, [commitControl]);
+  const performIntent = useCallback(
+    (intent: GoogleReplayIntent) => {
+      const events = googleReplayIntentEvents(sessionRef.current, chapterControls, intent);
+      for (const event of events.chapters) dispatchChapterControls(event);
+      for (const event of events.control) commitControl(event);
+    },
+    [chapterControls, commitControl],
+  );
+
+  const togglePlayback = useCallback(() => performIntent({ type: "playbackToggled" }), [performIntent]);
+  const browseChapter = (event: ReplayChapterControlsEvent) => performIntent({ type: "chapterBrowsed", event });
+  const playFromPreview = () => performIntent({ type: "previewPlayed", totalDistanceM });
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     const engine = createGoogleRouteNavigatorEngine();
-    const initial = initialGoogleRouteNavigatorState();
     engineRef.current = engine;
-    cameraMotionRef.current = undefined;
-    cameraTargetRef.current = undefined;
-    cameraSettlingRef.current = false;
-    lastCameraAtRef.current = undefined;
-    controlRef.current = initial;
-    setControl(initial);
-    setSettingsOpen(false);
-    setChromeVisible(true);
-    setStatus(INITIAL_STATUS);
+    cameraRef.current = idleStageCamera();
+    const { sessionId, control: initial } = dispatchStage({ type: "sessionStarted" });
+    dispatchChapterControls({ type: "routeReplaced" });
 
     void engine.mount({
       apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
       container,
       route,
       groundingMode: initial.groundingMode,
-      initialCamera: resolveCamera(initial),
-      onCameraInteraction: takeCameraOwnership,
+      headingSmoothing: 1,
+      initialCamera: desiredCamera(initial),
       routeStyle: {
-        color: "#ef684e",
+        color: "#f5f5f5",
         mode: "filament",
-        outerColor: "#15100d",
+        palette: productionReplay ? "immersive" : "neutral",
+        outerColor: "#111111",
         outerWidth: 0.14,
         width: 3,
       },
-      onStatus: (next) => {
-        setStatus(next);
+      onStatus: (next, reason) => {
+        if (engineRef.current !== engine) return;
+        dispatchStage({ type: "statusReceived", sessionId, status: next, reason });
         if (next.state === "ready") {
-          renderCamera(
-            resolveCamera(controlRef.current),
-            performance.now(),
-            true,
-          );
+          const readyTarget = desiredCamera(sessionRef.current.control);
+          renderCamera(readyTarget, performance.now(), true);
           engine.setCinematicRoute(
-            googleRouteThreadTreatment(route, controlRef.current),
+            googleRouteThreadTreatment(route, sessionRef.current.control),
           );
         }
       },
@@ -288,281 +294,123 @@ export function GoogleRouteNavigatorStage({
 
     return () => {
       engine.destroy();
-      cameraMotionRef.current = undefined;
-      cameraTargetRef.current = undefined;
-      cameraSettlingRef.current = false;
-      lastCameraAtRef.current = undefined;
+      cameraRef.current = idleStageCamera();
       if (engineRef.current === engine) engineRef.current = undefined;
     };
-  }, [renderCamera, resolveCamera, route, takeCameraOwnership]);
+  }, [desiredCamera, dispatchStage, productionReplay, renderCamera, route]);
 
   useEffect(() => {
-    const stage = stageRef.current;
-    if (!stage) return;
-    const monitor = new ReplayPerformanceMonitor();
-    performanceMonitorRef.current = monitor;
-    lastPerformancePublishAtRef.current = 0;
-    publishPerformanceReport(stage, monitor.report());
-    const onVisibilityChange = () => {
-      if (document.visibilityState !== "visible") monitor.suspend();
-    };
-    document.addEventListener("visibilitychange", onVisibilityChange);
-
-    const observer =
-      typeof PerformanceObserver !== "undefined" &&
-      PerformanceObserver.supportedEntryTypes.includes("longtask")
-        ? new PerformanceObserver((list) => {
-            for (const entry of list.getEntries()) {
-              monitor.recordLongTask(entry.duration);
-            }
-          })
-        : undefined;
-    observer?.observe({ entryTypes: ["longtask"] });
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      observer?.disconnect();
-    };
-  }, [route.slug]);
-
-  useEffect(() => {
-    const stage = stageRef.current;
-    if (!stage) return;
-
-    const measure = () => {
-      const stageRect = stage.getBoundingClientRect();
-      const next: ReplayViewportInsets = {
-        bottom:
-          productionReplay && chromeVisibleRef.current
-            ? (controlsRef.current?.getBoundingClientRect().height ?? 0)
-            : 0,
-        chromeVisible: productionReplay && chromeVisibleRef.current,
-        height: stageRect.height,
-        left: 0,
-        right: 0,
-        top:
-          productionReplay && chromeVisibleRef.current
-            ? (headerRef.current?.getBoundingClientRect().height ?? 0)
-            : 0,
-        width: stageRect.width,
-      };
-      viewportInsetsRef.current = next;
-      const band = replaySubjectBand(next);
-      stage.dataset.subjectBandMinY = band.minimumY.toFixed(1);
-      stage.dataset.subjectBandMaxY = band.maximumY.toFixed(1);
-      if (status.state === "ready" && controlRef.current.following) {
-        renderCamera(resolveCamera(controlRef.current));
-      }
-    };
-
-    const observer = new ResizeObserver(measure);
-    observer.observe(stage);
-    if (headerRef.current) observer.observe(headerRef.current);
-    if (controlsRef.current) observer.observe(controlsRef.current);
-    measure();
-    return () => observer.disconnect();
-  }, [chromeVisible, productionReplay, renderCamera, resolveCamera, status.state]);
-
-  const scheduleChromeHide = useCallback(() => {
-    if (chromeTimerRef.current !== undefined) {
-      window.clearTimeout(chromeTimerRef.current);
-      chromeTimerRef.current = undefined;
+    if (reducedMotion && status.state === "ready" && sessionRef.current.control.following) {
+      renderCamera(desiredCamera(sessionRef.current.control), performance.now(), true);
     }
-    if (
-      !productionReplay ||
-      !controlRef.current.playing ||
-      !controlRef.current.following ||
-      reducedMotion ||
-      settingsOpen
-    ) {
-      return;
-    }
-    chromeTimerRef.current = window.setTimeout(() => {
-      setChromeVisible(false);
-      chromeTimerRef.current = undefined;
-    }, 1_800);
-  }, [productionReplay, reducedMotion, settingsOpen]);
-
-  const revealChrome = useCallback(() => {
-    setChromeVisible(true);
-    scheduleChromeHide();
-  }, [scheduleChromeHide]);
-
-  useEffect(() => {
-    setChromeVisible(true);
-    scheduleChromeHide();
-    return () => {
-      if (chromeTimerRef.current !== undefined) {
-        window.clearTimeout(chromeTimerRef.current);
-        chromeTimerRef.current = undefined;
-      }
-    };
-  }, [control.following, control.playing, scheduleChromeHide]);
+  }, [desiredCamera, reducedMotion, renderCamera, status.state]);
 
   useEffect(() => {
     if (status.state !== "ready") return;
     let animationFrame = 0;
     let previous = performance.now();
+    let lastRouteUpdate = previous;
     let lastUiUpdate = previous;
     const tick = (now: number) => {
-      const current = controlRef.current;
-      const next = advanceGoogleRouteNavigator(
-        current,
-        (now - previous) / 1_000,
-        totalDistanceM,
-      );
+      const current = sessionRef.current.control;
+      const elapsedSeconds = (now - previous) / 1_000;
+      const next = dispatchStage({
+        type: "controlRequested",
+        event: { type: "frameElapsed", elapsedSeconds, totalDistanceM },
+      }, false).control;
       previous = now;
-      const performanceState = performanceMonitorRef.current.sampleFrame(
-        now,
-        next.playing && document.visibilityState === "visible",
-      );
-      if (
-        now - lastPerformancePublishAtRef.current >= 1_000 ||
-        (performanceState === "complete" &&
-          stageRef.current?.dataset.performanceState !== "complete")
-      ) {
-        const stage = stageRef.current;
-        if (stage) {
-          publishPerformanceReport(
-            stage,
-            performanceMonitorRef.current.report(),
-          );
-        }
-        lastPerformancePublishAtRef.current = now;
-      }
-      controlRef.current = next;
       const progressChanged = next.progressM !== current.progressM;
       const playbackChanged = next.playing !== current.playing;
-      const cameraSettling = cameraSettlingRef.current;
-      if (
-        next.following &&
-        !reducedMotionRef.current &&
-        (progressChanged || cameraSettling)
-      ) {
-        const desired = progressChanged
-          ? resolveCamera(next)
-          : cameraTargetRef.current;
-        if (desired) renderCamera(desired, now);
+      const cameraSettling = stageCameraSettling(cameraRef.current);
+      if (next.following && (progressChanged || cameraSettling)) {
+        const desired = progressChanged ? desiredCamera(next) : cameraRef.current.target;
+        if (desired) renderCamera(desired, now, false, progressChanged ? "tracking" : "transition");
       }
-      if (progressChanged) {
+      if (progressChanged && (playbackChanged || now - lastRouteUpdate >= 40)) {
         engineRef.current?.setCinematicRoute(
           googleRouteThreadTreatment(route, next),
         );
-        elevationScrubberRef.current?.sync(next.progressM);
+        lastRouteUpdate = now;
       }
-      if (
-        playbackChanged ||
-        (progressChanged && now - lastUiUpdate >= 90)
-      ) {
-        setControl(next);
+      if (playbackChanged || (progressChanged && now - lastUiUpdate >= 90)) {
+        publishStage();
         lastUiUpdate = now;
       }
       animationFrame = requestAnimationFrame(tick);
     };
     animationFrame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animationFrame);
-  }, [renderCamera, resolveCamera, route, status.state, totalDistanceM]);
+  }, [desiredCamera, dispatchStage, publishStage, renderCamera, route, status.state, totalDistanceM]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") navigate(backPath);
+      if (event.defaultPrevented || settingsOpen ||
+        (event.target instanceof Element && event.target.closest('[role="dialog"]'))) return;
+      if (event.key === "Escape") {
+        if (chaptersExpanded) dispatchStage({ type: "chaptersExpandedChanged", expanded: false });
+        else navigate(backPath);
+      }
       if (event.key === " " && event.target === document.body) {
         event.preventDefault();
-        commitControl((current) => ({ ...current, playing: !current.playing }));
+        togglePlayback();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [backPath, commitControl, navigate]);
-
-  const togglePlayback = () =>
-    commitControl((current) => ({
-      ...current,
-      playing: !current.playing,
-    }));
+  }, [backPath, chaptersExpanded, dispatchStage, navigate, settingsOpen, togglePlayback]);
 
   const selectCamera = (mode: GoogleRouteCameraMode) =>
-    commitControl((current) => ({
-      ...current,
-      cameraMode: mode,
-      following: true,
-    }));
+    commitControl({ type: "cameraSelected", cameraMode: mode });
 
   return (
     <section
+      ref={stageRef}
       aria-label={
         productionReplay ? "Google 3D Replay" : "Google route navigator lab"
       }
       className={cn(
-        "fixed inset-y-0 right-0 top-0 z-[100] min-h-[34rem] overflow-hidden bg-[#10182c]",
+        "fixed right-0 top-0 grid min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden bg-canvas",
         productionReplay
-          ? "left-0"
-          : "bottom-0 left-0",
+          ? "immersive-replay z-[var(--z-map-controls)] inset-0"
+          : "z-[var(--z-navigation)] bottom-0 left-0",
       )}
       data-camera-mode={control.cameraMode}
+      data-camera-entrance={status.state === "ready" ? "tracking" : "waiting"}
       data-camera-clearance-m={cameraPose.clearanceM?.toFixed(2)}
+      data-camera-clearance-source="base-plan-recorded-terrain"
       data-minimum-camera-clearance-m={cameraPose.minimumClearanceM?.toFixed(2)}
       data-camera-protection={cameraPose.protection?.join(" ") ?? "manual"}
       data-directed-camera={cameraPose.directedMode ?? control.cameraMode}
       data-following={control.following}
       data-grounding-mode={control.groundingMode}
-      data-hud-state={chromeVisible ? "expanded" : "hidden"}
-      data-reduced-motion={reducedMotion}
+      data-hud-state={productionReplay && !chaptersExpanded ? "compact" : "expanded"}
       data-engine="google-3d-maps"
-      data-replay-shell={productionReplay ? "story-flight" : "field-lab"}
       data-route-slug={route.slug}
       data-state={status.state}
       data-testid={productionReplay ? "replay-stage" : "google-route-navigator"}
-      onFocusCapture={revealChrome}
-      onPointerDown={revealChrome}
-      onPointerMove={revealChrome}
-      ref={stageRef}
     >
+      {/* The map host is its own stacking context, so nothing Google injects
+          (such as its key-error dialog) can rise above the stage overlays.
+          While the provider is unavailable it is hidden and inert. */}
       <div
+        aria-hidden={providerUnavailable || undefined}
         aria-label={`Google photorealistic 3D view of ${route.name}`}
-        className="absolute inset-0"
+        data-testid="replay-map-host"
+        inert={providerUnavailable || undefined}
+        onPointerDownCapture={releaseCamera}
+        onWheelCapture={releaseCamera}
+        className={cn(
+          productionReplay ? "absolute inset-0" : "relative min-h-0",
+          "isolate",
+          providerUnavailable && "invisible opacity-0",
+        )}
         ref={containerRef}
       />
 
-      <div
-        className={cn(
-          "pointer-events-none absolute inset-0 z-10",
-          productionReplay
-            ? "bg-transparent"
-            : "bg-[linear-gradient(180deg,rgba(0,0,0,.42)_0%,transparent_22%,transparent_70%,rgba(0,0,0,.52)_100%)]",
-        )}
-      />
+      <div className="pointer-events-none absolute inset-0 z-10 bg-[linear-gradient(180deg,rgba(0,0,0,.42)_0%,transparent_22%,transparent_70%,rgba(0,0,0,.52)_100%)]" />
 
-      {productionReplay ? (
-        <>
-          <div
-            aria-hidden="true"
-            className={cn(
-              "pointer-events-none absolute inset-x-0 top-0 z-10 h-32 bg-[linear-gradient(180deg,rgba(12,22,48,.68),rgba(12,22,48,.18)_58%,transparent)] transition-opacity duration-150",
-              !chromeVisible && "opacity-0",
-            )}
-          />
-          <div
-            aria-hidden="true"
-            className={cn(
-              "pointer-events-none absolute inset-x-0 bottom-0 z-10 h-72 bg-[linear-gradient(0deg,rgba(12,22,48,.68),rgba(12,22,48,.18)_54%,transparent)] transition-opacity duration-150",
-              !chromeVisible && "opacity-0",
-            )}
-          />
-        </>
-      ) : null}
+      <header className={cn("replay-header pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-2 px-3 py-3 text-white sm:p-6", !productionReplay && "bg-black/42 backdrop-blur-md")}>
 
-      <header
-        aria-hidden={productionReplay && !chromeVisible ? true : undefined}
-        className={cn(
-          "pointer-events-none absolute inset-x-0 top-0 z-30 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-white transition duration-150 ease-out sm:px-5",
-          productionReplay
-            ? "min-h-16 border-b border-white/12 bg-[#152345]/20 backdrop-blur-md"
-            : "border-b border-white/15 bg-black/42 backdrop-blur-md",
-          productionReplay && !chromeVisible && "-translate-y-1 opacity-0",
-        )}
-        inert={productionReplay && !chromeVisible ? true : undefined}
-        ref={headerRef}
-      >
         <div className="pointer-events-auto flex min-w-0 items-center gap-3">
           <Button
             aria-label={backLabel}
@@ -574,96 +422,36 @@ export function GoogleRouteNavigatorStage({
           >
             <ArrowLeft aria-hidden="true" />
           </Button>
-          {!productionReplay ? (
-            <div className="min-w-0">
-              <h1 className="truncate text-sm font-semibold">{route.region}</h1>
-              <div className="truncate text-[11px] text-white/58">
-                {route.distanceKm.toFixed(1)} km ·{" "}
-                {route.elevationStatus === "unavailable"
-                  ? "Elevation unavailable"
-                  : `${Math.round(route.elevationGainM!)} m up`} · {route.type}
-              </div>
+          <div className="min-w-0">
+            <p className="mb-1 truncate text-[10px] font-semibold uppercase tracking-[.14em] text-white/75">{route.region}</p>
+            <h1 className="line-clamp-2 text-sm font-semibold sm:text-xl" title={route.name}>{route.name}</h1>
+            <div className="truncate text-[11px] text-white/58">
+              {route.distanceKm.toFixed(1)} km ·{" "}
+              {recordedClimbM(route) === null
+                ? CLIMB_NOT_RECORDED
+                : `${Math.round(route.elevationGainM)} m up`}{" "}
+              · {route.type}
             </div>
-          ) : null}
+          </div>
         </div>
-
-        {productionReplay ? (
-          <div className="min-w-0 text-center">
-            <div className="text-[9px] font-semibold uppercase text-white/58">
-              Now replaying
-            </div>
-            <h1
-              className={cn(
-                "break-words font-editorial font-semibold leading-[1.05]",
-                route.activityName.length > 80
-                  ? "text-[10px] sm:text-sm"
-                  : route.activityName.length > 40
-                    ? "text-xs sm:text-lg"
-                    : "text-sm sm:text-xl",
-              )}
-            >
-              {route.activityName}
-            </h1>
-          </div>
-        ) : (
-          <div className="flex items-center justify-center gap-2 text-[10px] font-semibold uppercase text-white/62">
-            <ScanLine aria-hidden="true" className="size-3.5 text-[#ef684e]" />
-            Field replay
-          </div>
-        )}
-
-        <div className="pointer-events-auto flex items-center justify-end gap-1.5 sm:gap-2">
-          <div className="hidden items-center gap-1.5 text-[11px] text-white/72 md:flex">
-            {control.following ? (
-              <LockKeyhole aria-hidden="true" className="size-3.5" />
-            ) : (
-              <Unlock aria-hidden="true" className="size-3.5" />
-            )}
-            <span>
-              {!control.following
-                ? "Free camera"
-                : control.cameraMode === "auto"
-                ? `Auto · ${cameraPose.directedMode === "overview" ? "Reveal" : "Follow"}`
-                : REPLAY_CAMERA_MODES.find(
-                    ({ mode }) => mode === control.cameraMode,
-                  )
-                    ?.label}
-            </span>
-          </div>
-          {!control.following ? (
-            <Button
-              aria-label="Recenter route"
-              className="border-white/24 bg-white/10 text-white hover:bg-white/18"
-              onClick={recenterCamera}
-              size="sm"
-              title="Recenter route"
-              type="button"
-              variant="outline"
-            >
-              <LocateFixed aria-hidden="true" />
-              <span className="hidden sm:inline">Recenter</span>
-            </Button>
-          ) : null}
-          {productionReplay ? (
-            <span className="hidden text-[9px] font-semibold uppercase text-white/58 sm:inline">
-              Google 3D Replay
-            </span>
-          ) : null}
-          <Button
-            aria-expanded={settingsOpen}
-            aria-label="Replay settings"
-            className="text-white hover:bg-white/10 hover:text-white"
-            onClick={() => setSettingsOpen((open) => !open)}
-            size="icon-sm"
-            type="button"
-            variant="ghost"
-          >
-            <Settings2 aria-hidden="true" />
-          </Button>
+        <div className="pointer-events-auto flex shrink-0 items-center gap-1 sm:gap-2">
+          <Sheet open={settingsOpen} onOpenChange={open => dispatchStage({ type: "settingsOpenChanged", open })}>
+            <SheetTrigger asChild>
+              <Button aria-label="Replay settings" className="border border-white/20 bg-black/35 text-white hover:bg-black/60" size="icon" type="button" variant="ghost">
+                <Settings2 aria-hidden="true" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent className="w-[min(24rem,100vw)] overflow-y-auto">
+              <SheetHeader className="pr-12">
+                <SheetTitle>Replay settings</SheetTitle>
+                <SheetDescription>{route.region}. Camera, route placement and zoom.</SheetDescription>
+              </SheetHeader>
+              <ReplaySettings control={control} disabled={status.state !== "ready"} onCommit={commitControl} route={route} showFieldRoutes={!productionReplay} telemetry={telemetry} />
+            </SheetContent>
+          </Sheet>
           {productionReplay && pickerRoutes.length > 0 ? (
-            <div className="text-ink sm:min-w-36">
+            <div className="min-w-0 text-ink">
               <ReplayRoutePicker
-                compact
                 currentSlug={route.slug}
                 routes={pickerRoutes}
                 returnPath={
@@ -675,67 +463,38 @@ export function GoogleRouteNavigatorStage({
         </div>
       </header>
 
-      {productionReplay && activeChapter ? (
+      {status.state !== "ready" ? (
+        // Opaque, under the header and dock: nothing from the map host shows.
         <div
-          aria-live="polite"
-          className={cn(
-            "pointer-events-none absolute left-5 top-[18%] z-20 max-w-[min(38rem,calc(100vw-2.5rem))] text-white transition duration-150 ease-out before:absolute before:-inset-x-8 before:-inset-y-7 before:-z-10 before:bg-[radial-gradient(ellipse_at_center,rgba(12,22,48,.48),rgba(12,22,48,.14)_54%,transparent_74%)] sm:left-[6vw] sm:top-[22%]",
-            !chromeVisible && "-translate-y-1 opacity-0",
-          )}
-          data-testid="replay-active-chapter"
-        >
-          <div className="text-[10px] font-semibold uppercase text-white/72 sm:text-xs">
-            Chapter {activeChapterIndex + 1} · {route.region}
-          </div>
-          <h2 className="mt-1 font-editorial text-5xl font-medium leading-[0.88] drop-shadow-lg sm:text-7xl lg:text-8xl">
-            {activeChapter.label}
-          </h2>
-          <p className="mt-3 font-editorial text-lg italic text-[#ffd6e9] sm:text-2xl">
-            {(control.progressM / 1_000).toFixed(1)} km ·{" "}
-            {route.elevationStatus === "unavailable"
-              ? "Elevation unavailable"
-              : `${Math.round(telemetry.elevationM)} m`}
-          </p>
-        </div>
-      ) : null}
-
-      {settingsOpen ? (
-        <ReplaySettings
-          control={control}
-          onCommit={commitControl}
-          onSelectCamera={selectCamera}
-          route={route}
-          fieldTestRoutes={productionReplay ? [] : fieldTestRoutes}
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-20 bg-canvas"
+          data-testid="replay-provider-backdrop"
         />
       ) : null}
-
       {status.state !== "ready" ? (
-        <div
-          className={cn(
-            "absolute inset-0 z-20 grid place-items-center p-6",
-            status.state === "unavailable"
-              ? "bg-[#182238]"
-              : "bg-black/58 backdrop-blur-sm",
-          )}
-        >
+        <div className={cn("pointer-events-none absolute inset-0 grid place-items-center pt-[calc(1.5rem+var(--safe-area-top))] pr-[calc(1.5rem+var(--safe-area-right))] pb-[calc(1.5rem+var(--safe-area-bottom))] pl-[calc(1.5rem+var(--safe-area-left))]", providerUnavailable ? "z-40" : "z-20")}>
           <div
             aria-live="polite"
-            className="max-w-md border border-white/20 bg-[#0b1112]/94 p-6 text-center text-white shadow-2xl"
+            className="pointer-events-auto max-h-full max-w-md overflow-y-auto border border-white/20 bg-surface p-6 text-center text-white"
             role={status.state === "unavailable" ? "alert" : "status"}
           >
             <ScanLine
               aria-hidden="true"
-              className="mx-auto size-5 text-[#ef684e]"
+              className="mx-auto size-5 text-accent-foreground"
             />
             <h2 className="mt-3 font-editorial text-2xl font-semibold">
               {status.state === "loading"
                 ? "Entering the route"
-                : "3D world unavailable"}
+                : keyRejected
+                  ? GOOGLE_3D_REJECTED_TITLE
+                  : "3D world unavailable"}
             </h2>
-            <p className="mt-2 text-sm text-white/62">{status.message}</p>
+            <p className="mt-2 text-sm text-white/62">
+              {keyRejected ? GOOGLE_3D_REJECTED_MESSAGE : status.message}
+            </p>
             {status.state === "unavailable" && onUseAtlas ? (
               <Button
-                className="mt-5 bg-white text-black hover:bg-white/90"
+                className="mt-5 bg-primary text-primary-foreground hover:bg-primary-hover"
                 onClick={onUseAtlas}
                 type="button"
               >
@@ -748,84 +507,47 @@ export function GoogleRouteNavigatorStage({
       ) : null}
 
       <div
-        aria-hidden={productionReplay && !chromeVisible ? true : undefined}
-        className={cn(
-          "pointer-events-none absolute inset-x-0 bottom-0 z-30 transition duration-150 ease-out",
-          productionReplay && !chromeVisible && "translate-y-2 opacity-0",
-        )}
+        hidden={settingsOpen}
+        className={cn("pointer-events-none z-30", productionReplay ? "immersive-replay-dock" : "relative")}
         data-testid={productionReplay ? "replay-controls" : undefined}
-        inert={productionReplay && !chromeVisible ? true : undefined}
-        ref={controlsRef}
       >
-        {productionReplay ? (
-          <StoryFlightReplayHud
-            activeChapterIndex={activeChapterIndex}
-            chapters={storyChapters}
-            control={control}
-            disabled={status.state !== "ready"}
-            elevationScrubberRef={elevationScrubberRef}
-            onCommit={commitControl}
-            onSelectCamera={selectCamera}
-            onTogglePlayback={togglePlayback}
-            route={route}
-            telemetry={telemetry}
-            totalDistanceM={totalDistanceM}
-          />
-        ) : (
-          <ExpandedReplayHud
-            control={control}
-            disabled={status.state !== "ready"}
-            onCommit={commitControl}
-            onSelectCamera={selectCamera}
-            onTogglePlayback={togglePlayback}
-            route={route}
-            telemetry={telemetry}
-            totalDistanceM={totalDistanceM}
-          />
-        )}
+        {productionReplay ? <ReplayChapterControls
+          key={route.slug}
+          route={route}
+          state={chapterControls}
+          progressM={control.progressM}
+          playing={control.playing}
+          speed={control.speed}
+          disabled={status.state !== "ready"}
+          expanded={chaptersExpanded}
+          onExpandedChange={expanded => dispatchStage({ type: "chaptersExpandedChanged", expanded })}
+          onEvent={browseChapter}
+          onPlayFromPreview={playFromPreview}
+          onTogglePlayback={togglePlayback}
+          onSeek={progressM => performIntent({ type: "seekRequested", progressM, totalDistanceM })}
+          onCycleSpeed={() => commitControl({ type: "speedCycled" })}
+          metrics={<div className="replay-metrics grid grid-cols-4 gap-2">
+            <Metric label={route.route.some(point => point.elapsedS !== undefined) ? "Elapsed" : "Elapsed · derived"} value={route.provenance.temporal.status === "recorded" ? formatDuration(telemetry.elapsedS) : "Unavailable"} />
+            <Metric label={route.type.toLowerCase().includes("ride") ? "Speed" : "Pace"} value={route.provenance.temporal.status === "recorded" ? formatPace(telemetry.paceSPerKm, route.type) : "Unavailable"} />
+            <Metric label="Elevation" value={`${Math.round(telemetry.elevationM)} m`} />
+            <Metric label="Grade" value={`${telemetry.gradePercent >= 0 ? "+" : ""}${telemetry.gradePercent.toFixed(1)}%`} />
+          </div>}
+        /> : <ReplayHud
+          control={control}
+          disabled={status.state !== "ready"}
+          onCommit={commitControl}
+          onSelectCamera={selectCamera}
+          onTogglePlayback={togglePlayback}
+          route={route}
+          telemetry={telemetry}
+          totalDistanceM={totalDistanceM}
+        />}
       </div>
     </section>
   );
 }
 
-function publishPerformanceReport(
-  stage: HTMLElement,
-  report: ReturnType<ReplayPerformanceMonitor["report"]>,
-) {
-  stage.dataset.performanceState = report.state;
-  stage.dataset.performanceDurationMs = report.durationMs.toFixed(1);
-  stage.dataset.performanceFrameCount = String(report.frameCount);
-  stage.dataset.performanceP95FrameMs = report.p95FrameMs.toFixed(2);
-  stage.dataset.performanceLongestFrameMs = report.longestFrameMs.toFixed(2);
-  stage.dataset.performanceDroppedFrameRatio =
-    report.droppedFrameRatio.toFixed(4);
-  stage.dataset.performanceLongTaskCount = String(report.longTaskCount);
-  stage.dataset.performanceLongestLongTaskMs =
-    report.longestLongTaskMs.toFixed(2);
-}
-
-function cameraPoseHasSettled(
-  current: GoogleRouteCameraPose,
-  desired: GoogleRouteCameraPose,
-) {
-  const headingDelta = Math.abs(
-    ((desired.headingDeg - current.headingDeg + 540) % 360) - 180,
-  );
-  return (
-    Math.abs(current.center.lat - desired.center.lat) < 0.000_001 &&
-    Math.abs(current.center.lng - desired.center.lng) < 0.000_001 &&
-    Math.abs(
-      (current.center.altitude ?? desired.center.altitude ?? 0) -
-        (desired.center.altitude ?? current.center.altitude ?? 0),
-    ) < 0.5 &&
-    headingDelta < 0.2 &&
-    Math.abs(current.rangeM - desired.rangeM) < 1.5 &&
-    Math.abs(current.tiltDeg - desired.tiltDeg) < 0.1 &&
-    Math.abs(current.fovDeg - desired.fovDeg) < 0.1
-  );
-}
-
-function ExpandedReplayHud({
+function ReplayHud({
   control,
   disabled,
   onCommit,
@@ -837,23 +559,19 @@ function ExpandedReplayHud({
 }: ReplayHudProps) {
   return (
     <div
-      className="pointer-events-auto mx-auto w-full border-t border-white/15 bg-[#071011]/94 text-white shadow-2xl backdrop-blur-xl"
+      className="pointer-events-auto mx-auto w-full border-t border-white/15 bg-surface/98 text-white backdrop-blur"
       data-testid="google-route-controls"
     >
-      <div className="grid grid-cols-[10rem_minmax(0,1fr)] md:min-h-28 md:grid-cols-[15rem_minmax(18rem,1fr)_auto]">
+      <div className="grid grid-cols-[12rem_minmax(0,1fr)] md:grid-cols-[13rem_minmax(0,1fr)] lg:min-h-28 2xl:grid-cols-[13rem_minmax(14rem,1fr)_auto]">
         <div className="flex min-w-0 items-center gap-2 border-r border-white/12 px-3 py-2 md:gap-3 md:px-4 md:py-3">
           <ReplayButton
             disabled={disabled}
             onClick={onTogglePlayback}
             playing={control.playing}
           />
-          <Route
-            aria-hidden="true"
-            className="hidden size-4 text-[#ef684e] md:block"
-          />
           <div className="min-w-0">
-            <div className="text-[9px] font-semibold uppercase text-[#ef684e]">
-              Route telemetry
+            <div className="text-xs font-semibold uppercase text-accent-foreground">
+              Route progress
             </div>
             <div
               className="mt-0.5 truncate text-[11px] font-semibold tabular-nums md:text-sm"
@@ -869,9 +587,7 @@ function ExpandedReplayHud({
           className="h-[4.75rem] border-0 md:h-[6.25rem]"
           disabled={disabled}
           onSeek={(progressM) =>
-            onCommit((current) =>
-              seekGoogleRouteNavigator(current, progressM, totalDistanceM),
-            )
+            onCommit({ type: "progressSelected", progressM, totalDistanceM })
           }
           progressM={control.progressM}
           route={route}
@@ -879,44 +595,38 @@ function ExpandedReplayHud({
           totalDistanceM={totalDistanceM}
         />
 
-        <div className="col-span-2 flex min-w-0 items-center justify-between gap-2 border-t border-white/12 px-3 py-2 md:col-span-1 md:min-w-[27rem] md:gap-4 md:border-l md:border-t-0 md:px-4 md:py-3">
-          <div className="grid min-w-0 flex-1 grid-cols-4 gap-x-2 md:gap-x-5 md:gap-y-2">
+        <div className="col-span-2 flex min-w-0 flex-wrap items-center justify-between gap-3 border-t border-white/12 px-3 py-2 2xl:col-span-1 2xl:min-w-[27rem] 2xl:border-l 2xl:border-t-0 2xl:px-4">
+          <div className="replay-metrics grid min-w-0 flex-1 grid-cols-4 gap-x-2 sm:gap-x-5">
             <Metric
               label="Elapsed"
-              value={formatReplayDuration(telemetry.elapsedS)}
+              value={formatDuration(telemetry.elapsedS)}
             />
             <Metric
               label="Pace"
-              value={formatReplayPace(telemetry.paceSPerKm, route.type)}
+              value={formatPace(telemetry.paceSPerKm, route.type)}
             />
             <Metric
               label="Elevation"
-              value={
-                route.elevationStatus === "unavailable"
-                  ? "Unavailable"
-                  : `${Math.round(telemetry.elevationM)} m`
-              }
+              value={`${Math.round(telemetry.elevationM)} m`}
             />
             <Metric
               label="Grade"
-              value={
-                route.elevationStatus === "unavailable"
-                  ? "Unavailable"
-                  : `${telemetry.gradePercent >= 0 ? "+" : ""}${telemetry.gradePercent.toFixed(1)}%`
-              }
+              value={`${telemetry.gradePercent >= 0 ? "+" : ""}${telemetry.gradePercent.toFixed(1)}%`}
             />
           </div>
           <div className="flex items-center gap-2">
-            <ReplayCameraControls
-              active={control.cameraMode}
-              disabled={disabled}
-              onSelect={onSelectCamera}
-            />
+            <div className="hidden sm:block">
+              <CameraControls
+                active={control.cameraMode}
+                disabled={disabled}
+                onSelect={onSelectCamera}
+              />
+            </div>
             <Button
               aria-label={`Playback speed ${control.speed}x`}
               className="border-white/20 bg-transparent text-white hover:bg-white/10"
               disabled={disabled}
-              onClick={() => onCommit(cycleGoogleRouteSpeed)}
+              onClick={() => onCommit({ type: "speedCycled" })}
               size="sm"
               title="Change playback speed"
               type="button"
@@ -934,116 +644,108 @@ function ExpandedReplayHud({
 
 function ReplaySettings({
   control,
+  disabled,
   onCommit,
-  onSelectCamera,
   route,
-  fieldTestRoutes,
+  showFieldRoutes,
+  telemetry,
 }: {
   control: GoogleRouteNavigatorState;
+  disabled: boolean;
   onCommit: ReplayHudProps["onCommit"];
-  onSelectCamera: ReplayHudProps["onSelectCamera"];
   route: QuestRoute;
-  fieldTestRoutes: ReadonlyArray<{ slug: string; label: string }>;
+  showFieldRoutes: boolean;
+  telemetry: ReplayHudProps["telemetry"];
 }) {
   return (
-    <aside
-      aria-label="Replay settings panel"
-      className="absolute right-3 top-14 z-40 max-h-[calc(100dvh-4.5rem)] w-[min(27rem,calc(100%-1.5rem))] overflow-y-auto border border-white/18 bg-[#081011]/94 p-4 text-white shadow-2xl backdrop-blur-xl sm:right-5"
-    >
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-[9px] font-semibold uppercase text-[#ef684e]">
-            Replay settings
+    <div className="min-w-0 px-4 pb-6">
+      <div className="grid gap-4">
+        <fieldset disabled={disabled} className="grid min-w-0 gap-4 disabled:opacity-50">
+          <legend className="sr-only">Replay controls</legend>
+          <div>
+            <p className="mb-2 text-xs text-white/70">Camera perspective</p>
+            <CameraControls active={control.cameraMode} disabled={disabled} onSelect={cameraMode => onCommit({ type: "cameraSelected", cameraMode })} />
           </div>
-          <div className="mt-1 text-sm font-semibold">{route.region}</div>
-        </div>
-        <Settings2 aria-hidden="true" className="size-4 text-white/50" />
-      </div>
+          <SettingGroup icon={Mountain} label="Route placement">
+            {(["ground", "mesh"] as const).map((mode) => (
+              <SettingButton
+                active={control.groundingMode === mode}
+                key={mode}
+                label={mode === "ground" ? "On terrain" : "On 3D surface"}
+                onClick={() =>
+                  onCommit({ type: "groundingSelected", groundingMode: mode })
+                }
+              />
+            ))}
+          </SettingGroup>
 
-      <div className="mt-4 grid gap-4">
-        <SettingGroup icon={Mountain} label="Route placement">
-          {(["ground", "mesh"] as const).map((mode) => (
+          <p className="-mt-2 text-xs leading-5 text-ink-muted">On terrain follows the ground. On 3D surface follows the available buildings and terrain model.</p>
+          <SettingGroup icon={LocateFixed} label="Camera movement">
             <SettingButton
-              active={control.groundingMode === mode}
-              key={mode}
-              label={mode}
+              active={control.following}
+              label="Follow route"
               onClick={() =>
-                onCommit((current) => ({ ...current, groundingMode: mode }))
+                onCommit({ type: "followingChanged", following: true })
               }
             />
-          ))}
-        </SettingGroup>
-
-        <SettingGroup icon={LocateFixed} label="Camera lock">
-          <SettingButton
-            active={control.following}
-            label="Locked"
-            onClick={() =>
-              onCommit((current) => ({ ...current, following: true }))
-            }
-          />
-          <SettingButton
-            active={!control.following}
-            label="Free"
-            onClick={() =>
-              onCommit((current) => ({ ...current, following: false }))
-            }
-          />
-        </SettingGroup>
-
-        <SettingGroup icon={Eye} label="Camera view">
-          {REPLAY_CAMERA_MODES.map(({ label, mode }) => (
             <SettingButton
-              active={control.cameraMode === mode}
-              key={mode}
-              label={mode === "auto" ? "Auto" : label}
-              onClick={() => onSelectCamera(mode)}
+              active={!control.following}
+              label="Explore freely"
+              onClick={() =>
+                onCommit({ type: "followingChanged", following: false })
+              }
             />
-          ))}
-        </SettingGroup>
+          </SettingGroup>
 
-        <SettingGroup icon={Gauge} label="Lens range">
-          <Button
-            aria-label="Zoom in"
-            className="h-11 flex-1 border-white/20 bg-transparent text-white hover:bg-white/10"
-            onClick={() =>
-              onCommit((current) => zoomGoogleRouteNavigator(current, "in"))
-            }
-            size="icon-sm"
-            title="Zoom in"
-            type="button"
-            variant="outline"
-          >
-            <ZoomIn aria-hidden="true" />
-          </Button>
-          <Button
-            aria-label="Zoom out"
-            className="h-11 flex-1 border-white/20 bg-transparent text-white hover:bg-white/10"
-            onClick={() =>
-              onCommit((current) => zoomGoogleRouteNavigator(current, "out"))
-            }
-            size="icon-sm"
-            title="Zoom out"
-            type="button"
-            variant="outline"
-          >
-            <ZoomOut aria-hidden="true" />
-          </Button>
-        </SettingGroup>
-
-        {fieldTestRoutes.length > 0 ? (
+          <SettingGroup icon={Gauge} label="Zoom">
+            <Button
+              aria-label="Zoom in"
+              className="border-white/20 bg-transparent text-white hover:bg-white/10"
+              onClick={() =>
+                onCommit({ type: "zoomRequested", direction: "in" })
+              }
+              size="icon-sm"
+              title="Zoom in"
+              type="button"
+              variant="outline"
+            >
+              <ZoomIn aria-hidden="true" />
+            </Button>
+            <Button
+              aria-label="Zoom out"
+              className="border-white/20 bg-transparent text-white hover:bg-white/10"
+              onClick={() =>
+                onCommit({ type: "zoomRequested", direction: "out" })
+              }
+              size="icon-sm"
+              title="Zoom out"
+              type="button"
+              variant="outline"
+            >
+              <ZoomOut aria-hidden="true" />
+            </Button>
+          </SettingGroup>
+        </fieldset>
+        <YourMarkerSettings />
+        <div className="grid grid-cols-2 gap-3 border-t border-white/15 pt-4" aria-label="Recorded telemetry">
+          <Metric label="Elapsed" value={formatDuration(telemetry.elapsedS)} />
+          <Metric label={route.type.toLowerCase().includes("ride") ? "Speed" : "Pace"} value={formatPace(telemetry.paceSPerKm, route.type)} />
+          <Metric label="Elevation" value={`${Math.round(telemetry.elevationM)} m`} />
+          <Metric label="Grade" value={`${telemetry.gradePercent >= 0 ? "+" : ""}${telemetry.gradePercent.toFixed(1)}%`} />
+        </div>
+        {showFieldRoutes ? (
           <div className="border-t border-white/12 pt-3">
-            <div className="text-[9px] font-semibold uppercase text-white/42">
+            <div className="text-xs font-semibold uppercase text-ink-muted">
               Field routes
             </div>
             <div className="mt-2 flex gap-2">
-              {fieldTestRoutes.map((candidate) => (
+              {FIELD_TEST_ROUTES.map((candidate) => (
                 <Button
                   asChild
                   className={cn(
                     "h-8 border-white/20 bg-transparent text-white hover:bg-white/10",
                     candidate.slug === route.slug &&
-                      "border-[#ef684e] text-[#ff8a73]",
+                      "border-[#f5f5f5] text-[#ffffff]",
                   )}
                   key={candidate.slug}
                   size="sm"
@@ -1058,7 +760,7 @@ function ReplaySettings({
           </div>
         ) : null}
       </div>
-    </aside>
+    </div>
   );
 }
 
@@ -1072,12 +774,12 @@ function SettingGroup({
   label: string;
 }) {
   return (
-    <div className="grid min-w-0 gap-2 sm:grid-cols-[7.25rem_minmax(0,1fr)] sm:items-center sm:gap-3">
-      <div className="flex min-w-0 items-center gap-2 text-xs text-white/58">
+    <div className="grid gap-2">
+      <div className="flex items-center gap-2 text-xs text-white/58">
         <Icon aria-hidden="true" className="size-3.5" />
         {label}
       </div>
-      <div className="flex min-w-0 w-full border border-white/15 bg-black/25 p-0.5 [&>button]:min-w-0">
+      <div className="ember-segments">
         {children}
       </div>
     </div>
@@ -1095,11 +797,10 @@ function SettingButton({
 }) {
   return (
     <button
-      aria-label={label === "Locked" ? "Resume following" : label}
+      aria-label={label}
       aria-pressed={active}
       className={cn(
-        "min-h-11 flex-1 px-1.5 text-[11px] font-medium capitalize sm:px-2.5",
-        active ? "bg-white text-black" : "text-white/58 hover:bg-white/10",
+        "min-h-11 rounded-md px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-3px]",
       )}
       onClick={onClick}
       type="button"
@@ -1109,26 +810,55 @@ function SettingButton({
   );
 }
 
+function CameraControls({
+  active,
+  disabled,
+  onSelect,
+}: {
+  active: GoogleRouteCameraMode;
+  disabled: boolean;
+  onSelect: (mode: GoogleRouteCameraMode) => void;
+}) {
+  return (
+    <div
+      aria-label="Camera perspective"
+      className="ember-segments ember-camera"
+      role="group"
+    >
+      {CAMERA_MODES.map(({ mode, label, icon: Icon }) => (
+        <button
+          aria-label={label}
+          aria-pressed={active === mode}
+          className={cn(
+            "flex min-h-11 min-w-11 flex-col items-center justify-center gap-1 rounded-md px-2 text-ink-secondary focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-3px]",
+          )}
+          disabled={disabled}
+          key={mode}
+          onClick={() => onSelect(mode)}
+          title={`${label} camera`}
+          type="button"
+        >
+          <Icon aria-hidden="true" className="size-3.5" />
+          <span className="text-xs">{mode === "auto" ? "Auto" : label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function ReplayButton({
   disabled,
   onClick,
   playing,
-  tone = "intelligence",
 }: {
   disabled: boolean;
   onClick: () => void;
   playing: boolean;
-  tone?: "intelligence" | "story";
 }) {
   return (
     <Button
       aria-label={playing ? "Pause route" : "Play route"}
-      className={cn(
-        "border",
-        tone === "story"
-          ? "rounded-full border-[#ffcfb3] bg-[#ffdfca] text-[#1d2946] hover:bg-[#ffd2b5]"
-          : "border-[#ef684e] bg-[#ef684e] text-black hover:bg-[#ff826c]",
-      )}
+      className="border border-primary bg-primary text-primary-foreground hover:bg-primary-hover"
       disabled={disabled}
       onClick={onClick}
       size="icon"
@@ -1142,10 +872,10 @@ function ReplayButton({
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
-      <div className="whitespace-nowrap text-[11px] font-semibold tabular-nums">
+      <div className="whitespace-nowrap text-[10px] sm:text-[11px] font-semibold tabular-nums">
         {value}
       </div>
-      <div className="whitespace-nowrap text-[8px] font-semibold uppercase text-white/38">
+      <div className="whitespace-nowrap text-[10px] font-medium text-white/65">
         {label}
       </div>
     </div>
@@ -1155,12 +885,31 @@ function Metric({ label, value }: { label: string; value: string }) {
 interface ReplayHudProps {
   control: GoogleRouteNavigatorState;
   disabled: boolean;
-  onCommit: (
-    update: (current: GoogleRouteNavigatorState) => GoogleRouteNavigatorState,
-  ) => void;
+  onCommit: (event: ReplaySessionEvent) => void;
   onSelectCamera: (mode: GoogleRouteCameraMode) => void;
   onTogglePlayback: () => void;
   route: QuestRoute;
   telemetry: ReturnType<typeof googleRouteTelemetry>;
   totalDistanceM: number;
+}
+
+function formatDuration(totalSeconds: number) {
+  const safeSeconds = Math.max(0, Math.round(totalSeconds));
+  const hours = Math.floor(safeSeconds / 3_600);
+  const minutes = Math.floor((safeSeconds % 3_600) / 60);
+  const seconds = safeSeconds % 60;
+  return hours > 0
+    ? `${hours}:${minutes.toString().padStart(2, "0")}:${seconds
+        .toString()
+        .padStart(2, "0")}`
+    : `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function formatPace(paceSPerKm: number | undefined, activityType: string) {
+  if (paceSPerKm === undefined || !Number.isFinite(paceSPerKm)) return "--";
+  if (activityType.toLowerCase().includes("ride")) {
+    const speedKmh = 3_600 / paceSPerKm;
+    return `${speedKmh.toFixed(1)} km/h`;
+  }
+  return `${formatDuration(paceSPerKm)} /km`;
 }

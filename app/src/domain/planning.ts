@@ -1,9 +1,18 @@
 import type { RouteSummary } from "@/domain/route";
 
-export type FinderActivity = "Run" | "Ride";
+export type FinderActivity = "Any" | "Run" | "Ride";
 export type FinderTerrain = "any" | "road" | "trail" | "mixed" | "mountain";
 
+export const finderFilters = ["place", "activity", "distanceKm", "minDistanceKm", "maxDistanceKm", "maxElevationM", "terrain", "vibe"] as const;
+export type FinderFilter = typeof finderFilters[number];
+
 export interface FinderIntent {
+  explicitFilters?: FinderFilter[];
+  query?: string;
+  minDistanceKm?: number;
+  maxDistanceKm?: number;
+  maxElevationM?: number;
+  similarPlace?: string;
   place: string;
   activity: FinderActivity;
   distanceKm: number;
@@ -12,6 +21,8 @@ export interface FinderIntent {
 }
 
 export interface DiscoveryCandidate {
+  displayTitle?: string;
+  matchEvidence?: string;
   id: string;
   sourceRouteSlug: string;
   sourceLabel: "Owner-curated from recorded GPX";
@@ -34,7 +45,6 @@ export interface PlannedRouteMetadata {
   candidateId: string;
   sourceRouteSlug: string;
   sourceLabel: DiscoveryCandidate["sourceLabel"];
-  sourceSnapshot?: RouteSummary;
   createdAt: string;
   storeVersion: 1;
   intent: FinderIntent;

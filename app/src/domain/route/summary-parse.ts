@@ -2,7 +2,7 @@
 
 import { normalizeRouteLifecycle, type RouteLifecycle } from "@/domain/route/lifecycle";
 import type { GeneratedQuestRoute, ReplayMetadata, RouteElevationStatus, RouteGeometryStatus, RouteGuidePreview, RouteSummary } from "@/domain/route/contract";
-import { generatedRoute, numberValue, parsedRoutePoints, requiredSlug, stringValue } from "@/domain/route/parse-shared";
+import { generatedRoute, numberValue, parsedRoutePoints, requiredSlug, routeName, stringValue } from "@/domain/route/parse-shared";
 
 function validatedGuidePreview(value: unknown): RouteGuidePreview {
   if (value === undefined) return { reviewStatus: "draft" };
@@ -64,32 +64,36 @@ function replayMetadata(
   };
 }
 
+// Lenient: anything but an explicit "unavailable" keeps today's recorded reading.
+function summaryElevationStatus(input: GeneratedQuestRoute): RouteElevationStatus {
+  return input.elevation_status === "unavailable" ? "unavailable" : "recorded";
+}
+
 function commonRouteFields(
   input: GeneratedQuestRoute,
   slug: string,
   geometryStatus: RouteGeometryStatus,
 ) {
   const lifecycle = normalizeRouteLifecycle(input.lifecycle ?? input.status);
-  const elevationStatus: RouteElevationStatus =
-    input.elevation_status === "unavailable" ? "unavailable" : "recorded";
+  const elevationStatus = summaryElevationStatus(input);
 
   return {
     slug,
     activityId: stringValue(input.activity_id, slug),
     lifecycle,
-    name: stringValue(input.name, "Untitled route"),
+    name: routeName(stringValue(input.name, "Untitled route"), stringValue(input.activity_name), lifecycle),
     subtitle: stringValue(input.subtitle),
     activityName: stringValue(input.activity_name),
     region: stringValue(input.region, "Unknown region"),
     date: stringValue(input.date),
     distanceKm: numberValue(input.distance_km),
     elevationGainM:
-      elevationStatus === "unavailable" ? null : numberValue(input.elevation_gain_m),
+      elevationStatus === "unavailable" ? 0 : numberValue(input.elevation_gain_m),
     elevationStatus,
     type: stringValue(input.type, "Run"),
     description: stringValue(input.description),
     completionRule: stringValue(input.completion_rule),
-    difficulty: stringValue(input.difficulty, "Open"),
+    effortTier: stringValue(input.effort_tier, "Open"),
     theme: stringValue(input.theme, "Quest"),
     xp: numberValue(input.xp),
     centerLat: numberValue(input.center_lat),
@@ -101,9 +105,7 @@ function commonRouteFields(
 export function parseRouteSummary(value: unknown): RouteSummary {
   const input = generatedRoute(value, "Route summary");
   const slug = requiredSlug(input, "Route summary");
-  const elevationStatus: RouteElevationStatus =
-    input.elevation_status === "unavailable" ? "unavailable" : "recorded";
-  const parsedTrace = parsedRoutePoints(input.trace, elevationStatus);
+  const parsedTrace = parsedRoutePoints(input.trace, summaryElevationStatus(input));
   const trace = parsedTrace.points;
   const geometryStatus =
     input.replay &&

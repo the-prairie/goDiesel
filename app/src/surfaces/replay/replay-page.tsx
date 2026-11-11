@@ -1,18 +1,23 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useReducer } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 
-import { EarthReplayStage } from "@/surfaces/replay/components/earth-replay-stage";
 import { GoogleRouteNavigatorStage } from "@/surfaces/replay/components/google-route-navigator-stage";
 import { RouteNotFound } from "@/ui/route-not-found";
 import { singleRouteMicrosite } from "@/app/single-route-microsite";
 import { completedRoutes, findRouteBySlug } from "@/data/routes";
 import { useRouteDetail } from "@/data/use-route-detail";
+import { APP_PATHS, atlasReturnPath, decodedRouteSlug } from "@/app/route-paths";
 import {
-  APP_PATHS,
-  decodedRouteSlug,
-  replayReturnPath,
-  routeDetailPath,
-} from "@/app/route-paths";
+  initialReplaySurfaceState,
+  reduceReplaySurface,
+  replaySurfaceMatches,
+} from "@/surfaces/replay/playback/replay-surface-state";
+
+const EarthReplayStage = lazy(() =>
+  import("@/surfaces/replay/components/earth-replay-stage").then((module) => ({
+    default: module.EarthReplayStage,
+  })),
+);
 
 const representativeRoute =
   completedRoutes.find(
@@ -29,14 +34,24 @@ export function ReplayPage() {
       : undefined
     : representativeRoute;
   const detail = useRouteDetail(selectedSummary?.slug);
-  const requestedRenderer = searchParams.get("renderer");
-  const requestedAtlas = requestedRenderer === "atlas";
-  const useLegacyEarth = requestedRenderer === "cesium";
-  const [atlasFallback, setAtlasFallback] = useState(requestedAtlas);
-
-  useEffect(() => {
-    setAtlasFallback(requestedAtlas);
-  }, [requestedAtlas, selectedSummary?.slug]);
+  const rendererParam = searchParams.get("renderer");
+  const surfaceRouteSlug = selectedSummary?.slug;
+  const [surface, dispatchSurface] = useReducer(
+    reduceReplaySurface,
+    { renderer: rendererParam, routeSlug: surfaceRouteSlug },
+    (inputs) => initialReplaySurfaceState(inputs.renderer, inputs.routeSlug),
+  );
+  let visibleSurface = surface;
+  if (!replaySurfaceMatches(surface, rendererParam, surfaceRouteSlug)) {
+    const event = {
+      type: "paramsChanged" as const,
+      renderer: rendererParam,
+      routeSlug: surfaceRouteSlug,
+    };
+    visibleSurface = reduceReplaySurface(surface, event);
+    dispatchSurface(event);
+  }
+  const surfaceKind = visibleSurface.kind;
 
   if (routeSlug && !selectedSummary) return <RouteNotFound />;
 
@@ -61,17 +76,14 @@ export function ReplayPage() {
   }
   if (detail.status !== "ready") return <RouteNotFound />;
 
-  const returnPath = replayReturnPath(searchParams, detail.route.slug);
-  const backPath =
-    singleRouteMicrosite?.guidePath ??
-    returnPath ??
-    routeDetailPath(detail.route.slug);
+  const returnPath = atlasReturnPath(searchParams);
+  const backPath = singleRouteMicrosite?.guidePath ?? returnPath ?? APP_PATHS.routes;
   const backLabel = singleRouteMicrosite
     ? "Route guide"
-    : returnPath?.startsWith(APP_PATHS.atlas)
+    : returnPath
       ? "Back to Atlas"
-      : "Route story";
-  if (!useLegacyEarth && !atlasFallback) {
+      : "All routes";
+  if (surfaceKind === "google") {
     return (
       <GoogleRouteNavigatorStage
         route={detail.route}
@@ -79,19 +91,28 @@ export function ReplayPage() {
         pickerRoutes={pickerRoutes}
         backPath={backPath}
         backLabel={backLabel}
-        onUseAtlas={() => setAtlasFallback(true)}
+        onUseAtlas={() => dispatchSurface({ type: "googleDegraded" })}
       />
     );
   }
 
   return (
-    <EarthReplayStage
-      route={detail.route}
-      pickerRoutes={pickerRoutes}
-      backPath={backPath}
-      backLabel={backLabel}
-      initialEngineMode={atlasFallback ? "atlas" : "earth"}
-      allowEarthMode={useLegacyEarth}
-    />
+    <Suspense
+      fallback={
+        <div role="status" aria-live="polite" className="grid min-h-[50dvh] place-items-center">
+          Loading Earth Replay.
+        </div>
+      }
+    >
+      <EarthReplayStage
+        key={`${detail.route.slug}:${surfaceKind}`}
+        route={detail.route}
+        pickerRoutes={pickerRoutes}
+        backPath={backPath}
+        backLabel={backLabel}
+        initialEngineMode={surfaceKind === "atlas" ? "atlas" : "earth"}
+        allowEarthMode={surfaceKind === "cesium"}
+      />
+    </Suspense>
   );
 }

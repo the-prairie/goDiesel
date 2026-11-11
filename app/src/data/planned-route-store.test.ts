@@ -1,19 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  curatedDiscoveryCandidates,
-  curatedRouteDiscoveryProvider,
-} from "@/data/discovery-provider";
+import { curatedRouteDiscoveryProvider } from "@/data/discovery-provider";
 import {
   decodePlannedRouteStore,
   encodePlannedRouteStore,
-  getPlannedRoutes,
-  removePlannedRoute,
   savePlannedRoute,
-  updatePlannedRouteIntent,
 } from "@/data/planned-route-store";
 import type { FinderIntent } from "@/domain/planning";
-import { findRecordedPlanMatches } from "@/domain/plan-completion";
 
 const finderIntent: FinderIntent = {
   place: "Kyoto",
@@ -29,7 +22,7 @@ describe("planned route store", () => {
     vi.stubGlobal("window", {
       localStorage: {
         getItem: (key: string) => values.get(key) ?? null,
-        setItem: vi.fn((key: string, value: string) => values.set(key, value)),
+        setItem: (key: string, value: string) => values.set(key, value),
       },
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
@@ -68,202 +61,6 @@ describe("planned route store", () => {
     expect(savePlannedRoute(candidate, finderIntent).created).toBe(false);
   });
 
-  it("edits planning intent without promoting the plan or changing its source", () => {
-    const candidate = curatedRouteDiscoveryProvider.search(finderIntent).candidates[0];
-    const saved = savePlannedRoute(
-      candidate,
-      finderIntent,
-      new Date("2026-07-14T12:00:00Z"),
-    ).route;
-
-    const updated = updatePlannedRouteIntent(saved.slug, {
-      ...finderIntent,
-      distanceKm: 24,
-      vibe: "quiet temple roads",
-    });
-
-    expect(updated).toMatchObject({
-      slug: saved.slug,
-      lifecycle: "planned",
-      planning: {
-        sourceRouteSlug: saved.planning.sourceRouteSlug,
-        createdAt: "2026-07-14T12:00:00.000Z",
-        intent: { distanceKm: 24, vibe: "quiet temple roads" },
-      },
-      replay: { replayEligible: false },
-    });
-  });
-
-  it("rebinds place and activity edits to a coherent planning source", () => {
-    const kyoto = curatedRouteDiscoveryProvider.search(finderIntent).candidates[0];
-    const saved = savePlannedRoute(kyoto, finderIntent).route;
-    const victoriaIntent: FinderIntent = {
-      place: "Victoria, BC",
-      activity: "Ride",
-      distanceKm: 90,
-      terrain: "road",
-      vibe: "quiet farm roads",
-    };
-    const victoria = curatedDiscoveryCandidates.find(
-      (candidate) => candidate.sourceRouteSlug === "5650407638",
-    )!;
-
-    expect(updatePlannedRouteIntent(saved.slug, victoriaIntent)).toBeUndefined();
-    expect(updatePlannedRouteIntent(saved.slug, victoriaIntent, kyoto)).toBeUndefined();
-    const updated = updatePlannedRouteIntent(
-      saved.slug,
-      victoriaIntent,
-      victoria,
-      new Date("2026-08-16T12:00:00Z"),
-    );
-
-    expect(updated).toMatchObject({
-      slug: `planned-${victoria.id}`,
-      lifecycle: "planned",
-      date: "2026-08-16",
-      region: "Victoria, BC",
-      type: "Ride",
-      distanceKm: 84.6,
-      planning: {
-        candidateId: victoria.id,
-        sourceRouteSlug: victoria.sourceRouteSlug,
-        createdAt: "2026-08-16T12:00:00.000Z",
-        sourceSnapshot: victoria.route,
-        intent: victoriaIntent,
-      },
-      replay: { replayEligible: false },
-    });
-    expect(updated?.trace).toEqual(victoria.route.trace);
-    expect(findRecordedPlanMatches(updated!, [{
-      ...victoria.route,
-      slug: "victoria-before-rebind",
-      date: "2026-07-01",
-    }])).toEqual([]);
-  });
-
-  it("keeps canonical slugs and source ownership unique across rebinds", () => {
-    const kyoto = curatedDiscoveryCandidates.find(
-      (candidate) => candidate.sourceRouteSlug === "17654151284",
-    )!;
-    const victoria = curatedDiscoveryCandidates.find(
-      (candidate) => candidate.sourceRouteSlug === "5650407638",
-    )!;
-    const victoriaIntent: FinderIntent = {
-      place: "Victoria, BC",
-      activity: "Ride",
-      distanceKm: 84.6,
-      terrain: "road",
-      vibe: "farm roads",
-    };
-    const kyotoPlan = savePlannedRoute(kyoto, finderIntent).route;
-    const rebound = updatePlannedRouteIntent(
-      kyotoPlan.slug,
-      victoriaIntent,
-      victoria,
-      new Date("2026-08-16T12:00:00Z"),
-    )!;
-    const newKyotoPlan = savePlannedRoute(kyoto, finderIntent);
-
-    expect(newKyotoPlan.created).toBe(true);
-    expect(new Set(getPlannedRoutes().map((route) => route.slug)).size).toBe(2);
-    expect(getPlannedRoutes().map((route) => route.slug)).toEqual([
-      rebound.slug,
-      newKyotoPlan.route.slug,
-    ]);
-
-    const occupiedVictoria = savePlannedRoute(victoria, victoriaIntent);
-    expect(occupiedVictoria.created).toBe(false);
-    expect(updatePlannedRouteIntent(
-      newKyotoPlan.route.slug,
-      victoriaIntent,
-      victoria,
-    )).toBeUndefined();
-  });
-
-  it("treats a same-place source change as a new temporal binding", () => {
-    const kyoto = curatedDiscoveryCandidates.find(
-      (candidate) => candidate.sourceRouteSlug === "17654151284",
-    )!;
-    const alternateKyoto = {
-      ...kyoto,
-      id: "owner-route-alternate-kyoto",
-      sourceRouteSlug: "alternate-kyoto-source",
-      route: {
-        ...kyoto.route,
-        slug: "alternate-kyoto-source",
-        trace: kyoto.route.trace.slice().reverse(),
-      },
-    };
-    const saved = savePlannedRoute(
-      kyoto,
-      finderIntent,
-      new Date("2026-07-14T12:00:00Z"),
-    ).route;
-
-    const rebound = updatePlannedRouteIntent(
-      saved.slug,
-      finderIntent,
-      alternateKyoto,
-      new Date("2026-08-16T12:00:00Z"),
-    );
-
-    expect(rebound).toMatchObject({
-      slug: "planned-owner-route-alternate-kyoto",
-      activityId: "planned:owner-route-alternate-kyoto",
-      date: "2026-08-16",
-      planning: {
-        sourceRouteSlug: "alternate-kyoto-source",
-        createdAt: "2026-08-16T12:00:00.000Z",
-      },
-    });
-    expect(rebound?.trace).toEqual(alternateKyoto.route.trace);
-  });
-
-  it("removes a plan without touching the other saved plans", () => {
-    const candidate = curatedRouteDiscoveryProvider.search(finderIntent).candidates[0];
-    const first = savePlannedRoute(candidate, finderIntent).route;
-    const second = {
-      ...first,
-      slug: "planned-second-route",
-      activityId: "planned:second-route",
-      planning: { ...first.planning, candidateId: "second-route" },
-    };
-    window.localStorage.setItem(
-      "godiesel.planned-routes.v1",
-      encodePlannedRouteStore([first, second]),
-    );
-
-    expect(removePlannedRoute(first.slug)).toBe(true);
-    expect(decodePlannedRouteStore(window.localStorage.getItem("godiesel.planned-routes.v1")))
-      .toEqual([second]);
-    expect(removePlannedRoute("planned-missing")).toBe(false);
-  });
-
-  it("fails closed when an edit or removal cannot be persisted", () => {
-    const candidate = curatedRouteDiscoveryProvider.search(finderIntent).candidates[0];
-    const saved = savePlannedRoute(candidate, finderIntent).route;
-    vi.mocked(window.localStorage.setItem).mockImplementation(() => {
-      throw new Error("storage blocked");
-    });
-
-    expect(updatePlannedRouteIntent(saved.slug, { ...finderIntent, distanceKm: 30 }))
-      .toBeUndefined();
-    expect(removePlannedRoute(saved.slug)).toBe(false);
-    expect(getPlannedRoutes()[0].planning.intent.distanceKm).toBe(21);
-  });
-
-  it("does not report or cache a new plan when persistence fails", () => {
-    const candidate = curatedRouteDiscoveryProvider.search(finderIntent).candidates[0];
-    vi.mocked(window.localStorage.setItem).mockImplementation(() => {
-      throw new Error("storage blocked");
-    });
-
-    const result = savePlannedRoute(candidate, finderIntent);
-
-    expect(result).toMatchObject({ created: false, persisted: false });
-    expect(getPlannedRoutes()).toEqual([]);
-  });
-
   it("rejects malformed or unknown store versions", () => {
     expect(decodePlannedRouteStore("not json")).toEqual([]);
     expect(decodePlannedRouteStore(JSON.stringify({ version: 2, routes: [] }))).toEqual([]);
@@ -273,92 +70,135 @@ describe("planned route store", () => {
       ),
     ).toEqual([]);
   });
+});
 
-  it("rejects malformed nested intent without discarding valid sibling plans", () => {
-    const candidate = curatedRouteDiscoveryProvider.search(finderIntent).candidates[0];
-    const valid = savePlannedRoute(candidate, finderIntent).route;
-    const malformed = {
-      ...valid,
-      slug: "planned-malformed",
-      planning: {
-        ...valid.planning,
-        candidateId: "malformed",
-        intent: { ...valid.planning.intent, distanceKm: "far" },
-      },
-    };
+describe("planned route store when storage rejects a write", () => {
+  type StoreModule = typeof import("@/data/planned-route-store");
 
-    expect(decodePlannedRouteStore(JSON.stringify({
-      version: 1,
-      routes: [valid, malformed],
-    }))).toEqual([valid]);
-  });
+  let values: Map<string, string>;
+  let rejectWrites: boolean;
+  let storageListener: ((event: { key: string | null }) => void) | undefined;
+  let store: StoreModule;
 
-  it("rejects a missing intent without discarding valid sibling plans", () => {
-    const candidate = curatedRouteDiscoveryProvider.search(finderIntent).candidates[0];
-    const valid = savePlannedRoute(candidate, finderIntent).route;
-    const malformed = {
-      ...valid,
-      slug: "planned-missing-intent",
-      planning: {
-        ...valid.planning,
-        candidateId: "missing-intent",
-        intent: undefined,
-      },
-    };
-
-    expect(decodePlannedRouteStore(JSON.stringify({
-      version: 1,
-      routes: [valid, malformed],
-    }))).toEqual([valid]);
-  });
-
-  it("rejects a persisted plan with an unknown provenance label", () => {
-    const candidate = curatedRouteDiscoveryProvider.search(finderIntent).candidates[0];
-    const valid = savePlannedRoute(candidate, finderIntent).route;
-
-    expect(decodePlannedRouteStore(JSON.stringify({
-      version: 1,
-      routes: [{
-        ...valid,
-        planning: { ...valid.planning, sourceLabel: "Generated by an unknown source" },
-      }],
-    }))).toEqual([]);
-  });
-
-  it("rejects a source snapshot that does not match its declared binding", () => {
-    const kyoto = curatedDiscoveryCandidates.find(
-      (candidate) => candidate.sourceRouteSlug === "17654151284",
-    )!;
-    const victoria = curatedDiscoveryCandidates.find(
-      (candidate) => candidate.sourceRouteSlug === "5650407638",
-    )!;
-    const valid = savePlannedRoute(kyoto, finderIntent).route;
-
-    expect(decodePlannedRouteStore(JSON.stringify({
-      version: 1,
-      routes: [{
-        ...valid,
-        planning: { ...valid.planning, sourceSnapshot: victoria.route },
-      }],
-    }))).toEqual([]);
-  });
-
-  it("rejects a source snapshot that is not a completed recording", () => {
-    const candidate = curatedRouteDiscoveryProvider.search(finderIntent).candidates[0];
-    const valid = savePlannedRoute(candidate, finderIntent).route;
-
-    expect(decodePlannedRouteStore(JSON.stringify({
-      version: 1,
-      routes: [{
-        ...valid,
-        planning: {
-          ...valid.planning,
-          sourceSnapshot: {
-            ...valid.planning.sourceSnapshot,
-            lifecycle: "discovered",
-          },
+  beforeEach(async () => {
+    values = new Map<string, string>();
+    rejectWrites = false;
+    storageListener = undefined;
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          if (rejectWrites) throw new DOMException("Quota exceeded", "QuotaExceededError");
+          values.set(key, value);
         },
-      }],
-    }))).toEqual([]);
+      },
+      addEventListener: (type: string, listener: (event: { key: string | null }) => void) => {
+        if (type === "storage") storageListener = listener;
+      },
+      removeEventListener: vi.fn(),
+    });
+    vi.resetModules();
+    store = await import("@/data/planned-route-store");
+  });
+
+  function candidates() {
+    const [first] = curatedRouteDiscoveryProvider.search(finderIntent).candidates;
+    return [first, { ...first, id: `${first.id}-second` }];
+  }
+
+  it("keeps a rejected save for this tab and reports memory-only storage", () => {
+    rejectWrites = true;
+    const [candidate] = candidates();
+
+    const result = store.savePlannedRoute(candidate, finderIntent);
+
+    expect(result.created).toBe(true);
+    expect(store.getPlannedRoutes()).toEqual([result.route]);
+    expect(store.getPlannedRoutes()).toEqual([result.route]);
+    expect(store.getPlannedRouteStorageStatus()).toBe("memory-only");
+  });
+
+  it("returns to persisted storage when a later write succeeds", () => {
+    const [first, second] = candidates();
+    rejectWrites = true;
+    const unsaved = store.savePlannedRoute(first, finderIntent).route;
+
+    rejectWrites = false;
+    const saved = store.savePlannedRoute(second, finderIntent).route;
+
+    expect(store.getPlannedRouteStorageStatus()).toBe("persisted");
+    expect(store.decodePlannedRouteStore(values.get(store.PLANNED_ROUTE_STORAGE_KEY) ?? null))
+      .toEqual([unsaved, saved]);
+    expect(store.getPlannedRoutes()).toEqual([unsaved, saved]);
+  });
+
+  it("does not drop the unsaved plan when another tab changes storage", () => {
+    const unsubscribe = store.subscribePlannedRoutes(() => {});
+    const [first, second] = candidates();
+    rejectWrites = true;
+    const unsaved = store.savePlannedRoute(first, finderIntent).route;
+
+    values.set(
+      store.PLANNED_ROUTE_STORAGE_KEY,
+      store.encodePlannedRouteStore([{ ...unsaved, slug: "planned-other-tab", planning: { ...unsaved.planning, candidateId: second.id } }]),
+    );
+    storageListener?.({ key: store.PLANNED_ROUTE_STORAGE_KEY });
+
+    expect(store.getPlannedRoutes()).toEqual([unsaved]);
+    expect(store.getPlannedRouteStorageStatus()).toBe("memory-only");
+    unsubscribe();
+  });
+
+  it("still follows other tabs while storage is persisted", () => {
+    const unsubscribe = store.subscribePlannedRoutes(() => {});
+    const [first] = candidates();
+    const saved = store.savePlannedRoute(first, finderIntent).route;
+
+    values.set(store.PLANNED_ROUTE_STORAGE_KEY, store.encodePlannedRouteStore([]));
+    storageListener?.({ key: store.PLANNED_ROUTE_STORAGE_KEY });
+
+    expect(saved.lifecycle).toBe("planned");
+    expect(store.getPlannedRoutes()).toEqual([]);
+    expect(store.getPlannedRouteStorageStatus()).toBe("persisted");
+    unsubscribe();
+  });
+
+  it("returns a stable snapshot between reads", () => {
+    rejectWrites = true;
+    store.savePlannedRoute(candidates()[0], finderIntent);
+
+    expect(store.getPlannedRoutes()).toBe(store.getPlannedRoutes());
+  });
+});
+
+describe("planned route cache transitions", () => {
+  it("replaces persisted routes from a changed raw read and keeps the same state otherwise", async () => {
+    const { reducePlannedRouteCache, initialPlannedRouteCache, encodePlannedRouteStore } =
+      await import("@/data/planned-route-store");
+    const read = reducePlannedRouteCache(initialPlannedRouteCache, { type: "storageRead", raw: null });
+    expect(read).toEqual({ mode: "persisted", raw: null, routes: [] });
+    expect(reducePlannedRouteCache(read, { type: "storageRead", raw: null })).toBe(read);
+    const empty = encodePlannedRouteStore([]);
+    expect(reducePlannedRouteCache(read, { type: "storageRead", raw: empty })).toMatchObject({
+      mode: "persisted",
+      raw: empty,
+    });
+  });
+
+  it("ignores storage reads and changes while memory-only", async () => {
+    const { reducePlannedRouteCache, initialPlannedRouteCache } = await import(
+      "@/data/planned-route-store"
+    );
+    const memoryOnly = reducePlannedRouteCache(initialPlannedRouteCache, {
+      type: "writeRejected",
+      raw: "unsaved",
+      routes: [],
+    });
+    expect(memoryOnly.mode).toBe("memory-only");
+    expect(reducePlannedRouteCache(memoryOnly, { type: "storageRead", raw: null })).toBe(memoryOnly);
+    expect(reducePlannedRouteCache(memoryOnly, { type: "storageChanged" })).toBe(memoryOnly);
+    expect(
+      reducePlannedRouteCache(memoryOnly, { type: "writeAccepted", raw: "saved", routes: [] }),
+    ).toEqual({ mode: "persisted", raw: "saved", routes: [] });
   });
 });

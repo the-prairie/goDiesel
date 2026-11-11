@@ -8,7 +8,7 @@ test("compares the San Francisco and Crete route genomes", async ({ page }) => {
     "San Francisco",
   );
   await expect(page.getByTestId("route-genome-14023448720")).toContainText(
-    "Crete, Greece",
+    "holy balos batman",
   );
   await expect(page.getByText("Satellite observed")).toHaveCount(2);
   await expect(

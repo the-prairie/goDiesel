@@ -1,11 +1,19 @@
-import maplibregl, { Map as MapLibreMap } from "maplibre-gl";
+import maplibregl from "@/providers/maplibre";
+import { Map as MapLibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useReducer, forwardRef, useImperativeHandle } from "react";
 
+import type { AtlasGlobeHandle } from "@/surfaces/atlas/atlas-world";
 import { atlasViewportInsets } from "@/surfaces/atlas/atlas-region-camera";
 import type { RouteRegion } from "@/data/route-regions";
 import type { RoutePoint, RouteSummary } from "@/domain/route";
-import { ROUTE_THREAD_STYLE } from "@/domain/geometry/route-thread-style";
+import { initialRegionalFallbackState, reduceRegionalFallback } from "../regional-fallback-state";
+
+const ROUTE_THREAD_STYLE = {
+  marker: "#30343b",
+  color: "#667078",
+  halo: "#ffffff",
+};
 
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 const LOAD_TIMEOUT_MS = 10_000;
@@ -23,7 +31,6 @@ type RegionalRouteBoundsInput = Omit<RegionalRouteBounds, "spanLng"> & {
   spanLng?: number;
   longitudeSpan?: number;
 };
-type MapStatus = "loading" | "ready" | "unavailable";
 type ProjectedPoint = { x: number; y: number };
 
 export function unwrapLongitudeAroundCenter(lng: number, centerLng: number) {
@@ -107,20 +114,6 @@ export function regionalFitBounds(
   ];
 }
 
-export function regionalRouteFitBounds(
-  route: RouteSummary,
-  centerLng: number,
-): [[number, number], [number, number]] | undefined {
-  if (!validRecordedTrace(route)) return undefined;
-  const coordinates = unwrappedTrace(route.trace, centerLng);
-  const longitudes = coordinates.map(([lng]) => lng);
-  const latitudes = coordinates.map(([, lat]) => lat);
-  return [
-    [Math.min(...longitudes), Math.min(...latitudes)],
-    [Math.max(...longitudes), Math.max(...latitudes)],
-  ];
-}
-
 export function regionalRouteCollection(region: RouteRegion) {
   const bounds = validBounds(region);
   const routes = bounds ? region.routes.filter(validRecordedTrace) : [];
@@ -153,7 +146,9 @@ export function projectedRegionalRoutePaths(
 }
 
 export function regionalMapPadding(width: number, height: number) {
-  return atlasViewportInsets(Math.max(1, width), Math.max(1, height));
+  const trayHeight = height <= 400 ? 144 : 192;
+  const insets = atlasViewportInsets(Math.max(1, width), Math.max(1, height));
+  return { ...insets, bottom: Math.max(insets.bottom, trayHeight + 24) };
 }
 
 function fitRegionalRoutes(
@@ -174,92 +169,88 @@ function fitRegionalRoutes(
 interface AtlasRegionalFallbackProps {
   region: RouteRegion;
   selectedRoute?: RouteSummary;
-  previewedRoute?: RouteSummary;
-  framedRoute?: RouteSummary;
   onSelectRoute?: (route: RouteSummary) => void;
   onReady?: () => void;
-  routeDisplayMode?: "standard" | "density" | "terrain";
+  /** The map settled without loading (offline, timeout, errors, no geometry). */
+  onUnavailable?: () => void;
 }
 
-export function AtlasRegionalFallback({
+export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalFallbackProps>(function AtlasRegionalFallback({
   region,
   selectedRoute,
-  previewedRoute,
-  framedRoute,
   onSelectRoute,
   onReady,
-  routeDisplayMode = "standard",
-}: AtlasRegionalFallbackProps) {
+  onUnavailable,
+}, forwardedRef) {
+  const frameRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | undefined>(undefined);
   const onSelectRouteRef = useRef(onSelectRoute);
-  const onReadyRef = useRef(onReady);
-  const lastFramedRouteSlugRef = useRef<string | undefined>(undefined);
-  const [status, setStatus] = useState<MapStatus>("loading");
+  const [lifecycle, dispatch] = useReducer(reduceRegionalFallback, undefined, initialRegionalFallbackState);
+  const status = lifecycle.phase;
+  const sessionRef = useRef(0);
   const [routePaths, setRoutePaths] = useState<string[]>([]);
   const routes = useMemo(() => regionalRouteCollection(region), [region]);
   const bounds = useMemo(() => regionalFitBounds(region), [region]);
+  useImperativeHandle(forwardedRef, () => ({
+    zoomIn: () => mapRef.current?.zoomIn(),
+    zoomOut: () => mapRef.current?.zoomOut(),
+    resetView: () => {
+      if (mapRef.current && hostRef.current && bounds) {
+        fitRegionalRoutes(mapRef.current, hostRef.current, bounds);
+      }
+    },
+  }), [bounds]);
   onSelectRouteRef.current = onSelectRoute;
-  onReadyRef.current = onReady;
-  const activeRoute = previewedRoute ?? selectedRoute;
+  // A history transition can reuse a loaded fallback while the world engine
+  // resets presentation readiness. Reconcile the visible map with each new
+  // presentation callback, rather than only notifying on its first load.
+  useEffect(() => {
+    if (status === "ready") onReady?.();
+  }, [onReady, status]);
+  useEffect(() => {
+    if (status === "unavailable") onUnavailable?.();
+  }, [onUnavailable, status]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map?.getLayer("regional-route-thread")) return;
-    const selectedSlug = activeRoute?.slug ?? "";
+    const selectedSlug = selectedRoute?.slug ?? "";
     map.setPaintProperty("regional-route-thread", "line-color", [
       "case",
       ["==", ["get", "slug"], selectedSlug],
-      previewedRoute ? "#63d6cf" : ROUTE_THREAD_STYLE.marker,
+      ROUTE_THREAD_STYLE.marker,
       ROUTE_THREAD_STYLE.color,
     ]);
     map.setPaintProperty("regional-route-thread", "line-width", [
       "case",
       ["==", ["get", "slug"], selectedSlug],
-      7,
-      routeDisplayMode === "density" ? 5 : routeDisplayMode === "terrain" ? 2 : 3,
+      3.5,
+      2,
     ]);
     map.setPaintProperty("regional-route-thread", "line-opacity", [
       "case",
       ["==", ["get", "slug"], selectedSlug],
       1,
-      previewedRoute ? 0.12 : selectedSlug ? 0.52 : routeDisplayMode === "terrain" ? 0.24 : 0.9,
+      selectedSlug ? 0.52 : 0.9,
     ]);
-  }, [activeRoute?.slug, previewedRoute, routeDisplayMode]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    const host = hostRef.current;
-    const regionBounds = validBounds(region);
-    if (status !== "ready" || !map || !host || !regionBounds) return;
-    const routeBounds = framedRoute
-      ? regionalRouteFitBounds(framedRoute, regionBounds.centerLng)
-      : undefined;
-    if (!routeBounds && !lastFramedRouteSlugRef.current) return;
-    map.fitBounds(routeBounds ?? bounds!, {
-      padding: regionalMapPadding(host.clientWidth, host.clientHeight),
-      maxZoom: 15,
-      duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 120 : 650,
-    });
-    host.dataset.cameraRoute = framedRoute?.slug ?? "";
-    lastFramedRouteSlugRef.current = framedRoute?.slug;
-  }, [bounds, framedRoute, region, status]);
+  }, [selectedRoute?.slug]);
 
   useEffect(() => {
     const host = hostRef.current;
-    if (!host || !bounds || routes.features.length === 0) {
-      setStatus("unavailable");
-      return;
-    }
+    const session = ++sessionRef.current;
+    const hasGeometry = Boolean(host && bounds && routes.features.length);
+    dispatch({ type: "sessionStarted", session, hasGeometry });
+    // Every session starts without paths, so one without geometry cannot keep
+    // the previous region's overlay.
+    setRoutePaths([]);
+    if (!host || !bounds || routes.features.length === 0) return;
 
     let active = true;
-    let ready = false;
-    let errorCount = 0;
     let loadTimer: number | undefined;
     let resizeObserver: ResizeObserver | undefined;
+    let creditObserver: ResizeObserver | undefined;
     let map: MapLibreMap;
-    setStatus("loading");
-    setRoutePaths([]);
 
     try {
       map = new maplibregl.Map({
@@ -274,16 +265,27 @@ export function AtlasRegionalFallback({
       mapRef.current = map;
     } catch {
       host.replaceChildren();
-      setStatus("unavailable");
+      dispatch({ type: "constructionFailed", session });
       return;
     }
 
     const markUnavailable = () => {
-      if (active && !ready) setStatus("unavailable");
+      if (active) dispatch({ type: "loadTimedOut", session });
+    };
+    // Without a connection the style cannot arrive; say so now, not at the deadline.
+    const markOffline = () => {
+      if (active) dispatch({ type: "connectionLost", session });
+    };
+    // The status notice sits above the map's credits, however tall they wrap.
+    const credits = host.querySelector<HTMLElement>(".maplibregl-ctrl-bottom-right");
+    const frame = frameRef.current;
+    const placeNoticeAboveCredits = () => {
+      if (!frame || !credits) return;
+      const offset = frame.getBoundingClientRect().bottom - credits.getBoundingClientRect().top;
+      frame.style.setProperty("--atlas-map-credit-offset", `${Math.max(0, Math.round(offset))}px`);
     };
     const handleError = () => {
-      errorCount += 1;
-      if (errorCount >= 4) markUnavailable();
+      if (active) dispatch({ type: "mapErrored", session });
     };
     const updateRouteOverlay = () => {
       setRoutePaths(
@@ -296,6 +298,7 @@ export function AtlasRegionalFallback({
       map.resize();
       fitRegionalRoutes(map, host, bounds);
       updateRouteOverlay();
+      placeNoticeAboveCredits();
       map.once("idle", () => {
         if (active) host.dataset.mapRendered = "true";
       });
@@ -311,8 +314,8 @@ export function AtlasRegionalFallback({
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
           "line-color": ROUTE_THREAD_STYLE.halo,
-          "line-width": routeDisplayMode === "density" ? 18 : 9,
-          "line-opacity": routeDisplayMode === "terrain" ? 0.12 : routeDisplayMode === "density" ? 0.42 : 0.88,
+          "line-width": 4.5,
+          "line-opacity": 0.9,
         },
       });
       map.addLayer({
@@ -323,21 +326,21 @@ export function AtlasRegionalFallback({
         paint: {
           "line-color": [
             "case",
-            ["==", ["get", "slug"], activeRoute?.slug ?? ""],
-            previewedRoute ? "#63d6cf" : ROUTE_THREAD_STYLE.marker,
+            ["==", ["get", "slug"], selectedRoute?.slug ?? ""],
+            ROUTE_THREAD_STYLE.marker,
             ROUTE_THREAD_STYLE.color,
           ],
           "line-width": [
             "case",
-            ["==", ["get", "slug"], activeRoute?.slug ?? ""],
-            7,
-            routeDisplayMode === "density" ? 5 : routeDisplayMode === "terrain" ? 2 : 3,
+            ["==", ["get", "slug"], selectedRoute?.slug ?? ""],
+            3.5,
+            2,
           ],
           "line-opacity": [
             "case",
-            ["==", ["get", "slug"], activeRoute?.slug ?? ""],
+            ["==", ["get", "slug"], selectedRoute?.slug ?? ""],
             1,
-            previewedRoute ? 0.12 : activeRoute ? 0.52 : routeDisplayMode === "terrain" ? 0.24 : 0.9,
+            selectedRoute ? 0.52 : 0.9,
           ],
         },
       });
@@ -370,30 +373,33 @@ export function AtlasRegionalFallback({
         "aria-label",
         `${region.name} recorded routes on a regional map`,
       );
-      ready = true;
       if (loadTimer !== undefined) window.clearTimeout(loadTimer);
-      setStatus("ready");
-      onReadyRef.current?.();
+      dispatch({ type: "mapLoaded", session });
     };
 
     map.on("error", handleError);
     map.on("moveend", updateRouteOverlay);
     map.once("load", handleLoad);
-    map.addControl(
-      new maplibregl.NavigationControl({ showCompass: false }),
-      "bottom-right",
-    );
     loadTimer = window.setTimeout(markUnavailable, LOAD_TIMEOUT_MS);
+    window.addEventListener("offline", markOffline);
+    if (!navigator.onLine) markOffline();
 
     if (typeof ResizeObserver !== "undefined") {
       resizeObserver = new ResizeObserver(handleResize);
       resizeObserver.observe(host);
+      if (credits) {
+        creditObserver = new ResizeObserver(placeNoticeAboveCredits);
+        creditObserver.observe(credits);
+      }
     }
 
     return () => {
       active = false;
       if (loadTimer !== undefined) window.clearTimeout(loadTimer);
       resizeObserver?.disconnect();
+      creditObserver?.disconnect();
+      window.removeEventListener("offline", markOffline);
+      frame?.style.removeProperty("--atlas-map-credit-offset");
       map.off("error", handleError);
       map.off("load", handleLoad);
       map.off("moveend", updateRouteOverlay);
@@ -401,30 +407,32 @@ export function AtlasRegionalFallback({
       if (mapRef.current === map) mapRef.current = undefined;
       host.replaceChildren();
     };
-  }, [bounds, region, routeDisplayMode, routes]);
+  }, [bounds, region, routes]);
 
   const statusCopy =
     status === "loading"
       ? `Loading ${region.name} map.`
       : status === "ready"
         ? "3D terrain partially unavailable."
-        : "Regional map unavailable.";
+        : lifecycle.phase === "unavailable" && lifecycle.reason === "offline"
+          ? "Regional map needs a connection."
+          : "Regional map unavailable.";
 
   return (
     <div
+      ref={frameRef}
       data-atlas-engine="maplibre-regional-fallback"
       data-map-status={status}
       data-region-route-count={routes.features.length}
-      data-previewed-route={previewedRoute?.slug ?? ""}
-      data-selected-route={selectedRoute?.slug ?? ""}
-      className="relative h-full min-h-[420px] w-full overflow-hidden bg-[#d9ddd2]"
+      className="relative h-full w-full overflow-hidden bg-canvas"
     >
       <div
         ref={hostRef}
         role="img"
         aria-label={`${region.name} regional route map`}
-        className="absolute inset-0"
+        className="h-full w-full"
       />
+      {status === "loading" ? <div className="absolute inset-0 z-[2] bg-canvas" /> : null}
       <svg
         aria-hidden="true"
         data-regional-route-overlay="true"
@@ -432,7 +440,7 @@ export function AtlasRegionalFallback({
       >
         {routePaths.map((path, index) => {
           const slug = routes.features[index]?.properties.slug;
-          const active = slug === activeRoute?.slug;
+          const active = slug === selectedRoute?.slug;
           return (
           <g key={`${region.name}-${slug ?? index}`}>
             <path
@@ -453,16 +461,16 @@ export function AtlasRegionalFallback({
               d={path}
               fill="none"
               stroke={ROUTE_THREAD_STYLE.halo}
-              strokeWidth={routeDisplayMode === "density" ? "18" : "9"}
+              strokeWidth={active ? "4.5" : "3"}
               strokeLinecap="round"
               strokeLinejoin="round"
-              opacity={active ? "1" : previewedRoute ? "0.12" : selectedRoute ? "0.45" : routeDisplayMode === "terrain" ? "0.12" : routeDisplayMode === "density" ? "0.42" : "0.88"}
+              opacity={active ? "0.9" : "0.6"}
             />
             <path
               d={path}
               fill="none"
-              stroke={active ? (previewedRoute ? "#63d6cf" : ROUTE_THREAD_STYLE.marker) : ROUTE_THREAD_STYLE.color}
-              strokeWidth={active ? "7" : "3"}
+              stroke={active ? ROUTE_THREAD_STYLE.marker : ROUTE_THREAD_STYLE.color}
+              strokeWidth={active ? "3.5" : "2"}
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -473,10 +481,10 @@ export function AtlasRegionalFallback({
       <div
         role="status"
         aria-live="polite"
-        className="pointer-events-none absolute bottom-20 left-4 z-10 border border-white/25 bg-[#071019]/88 px-3 py-2 text-xs text-white shadow-lg"
+        className="pointer-events-none absolute bottom-[max(calc(var(--atlas-tray-height,12rem)+2.75rem),calc(var(--atlas-map-credit-offset,0px)+0.5rem))] left-4 z-10 max-w-[calc(100%-6rem)] border border-white/25 bg-surface px-3 py-2 text-xs text-white"
       >
         {statusCopy}
       </div>
     </div>
   );
-}
+});

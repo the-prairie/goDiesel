@@ -1,6 +1,6 @@
-"""Source-backed route timing and track-boundary provenance."""
+"""Source-backed route timing, elevation, and track-boundary provenance."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 import gzip
 import math
@@ -51,12 +51,10 @@ def source_point_from_fit_fields(
         lat = lat * (180 / 2**31)
     if has_position and isinstance(lng, int):
         lng = lng * (180 / 2**31)
-    enhanced_altitude = fields.get("enhanced_altitude")
-    altitude = (
-        enhanced_altitude
-        if isinstance(enhanced_altitude, (int, float))
-        else fields.get("altitude")
-    )
+    # A missing altitude stays missing. A recorded 0 m is still recorded.
+    altitude = fields.get("enhanced_altitude")
+    if not isinstance(altitude, (int, float)):
+        altitude = fields.get("altitude")
     return SourceRoutePoint(
         lat=float(lat) if has_position else None,
         lng=float(lng) if has_position else None,
@@ -168,22 +166,18 @@ def build_route_provenance(
             "start_time_utc": _utc_iso(start_time),
             "elapsed_time_s": _elapsed_seconds(start_time, end_time),
         }
-    positioned_elevations = [
-        point.elevation
-        for point in points
-        if point.lat is not None and point.lng is not None
-    ]
-    elevation = {
-        "status": "recorded"
-        if positioned_elevations and all(value is not None for value in positioned_elevations)
-        else "unavailable"
-    }
 
     positioned = [
         (source_index, point)
         for source_index, point in enumerate(points)
         if point.lat is not None and point.lng is not None
     ]
+    # Elevation is recorded only when every positioned record carries it. A
+    # partial profile is not published: a missing sample is never invented.
+    elevation_recorded = bool(positioned) and all(
+        point.elevation is not None for _, point in positioned
+    )
+    elevation = {"status": "recorded" if elevation_recorded else "unavailable"}
     if not positioned:
         return RouteProvenanceResult(
             route=[],
@@ -210,7 +204,7 @@ def build_route_provenance(
         route_point: dict[str, float | None] = {
             "lat": float(point.lat),
             "lng": float(point.lng),
-            "elev": point.elevation if elevation["status"] == "recorded" else None,
+            "elev": point.elevation if elevation_recorded else None,
             "d": distance,
         }
         if start_time is not None and point.timestamp is not None:
@@ -268,4 +262,30 @@ def build_route_provenance(
         elevation=elevation,
         track={"segment_count": segment_count},
         discontinuities=discontinuities,
+    )
+
+
+def published_route_provenance(
+    result: RouteProvenanceResult, lifecycle: str
+) -> RouteProvenanceResult:
+    """Return the provenance a route may publish for its lifecycle.
+
+    Timestamps in a discovered route's source describe whoever recorded the
+    file, not the owner. They stay in the durable source but are not published
+    as elapsed time, so a discovered route never presents someone else's pace
+    as the owner's experience.
+    """
+    if lifecycle != "discovered":
+        return result
+    return replace(
+        result,
+        route=[
+            {key: value for key, value in point.items() if key != "elapsed_s"}
+            for point in result.route
+        ],
+        temporal={"status": "unavailable"},
+        discontinuities=[
+            {key: value for key, value in item.items() if key != "elapsed_time_s"}
+            for item in result.discontinuities
+        ],
     )

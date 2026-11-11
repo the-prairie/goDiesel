@@ -40,9 +40,12 @@ export function CinematicDirectorLabPage() {
   }
   if (detail.status !== "ready") return <RouteNotFound />;
 
+  // The cut is read only when the stage mounts, so a same-route ?cut= change
+  // needs a fresh stage. renderMode is read on every render and stays out.
   return (
     <CinematicDirectorStage
       initialCut={initialCut}
+      key={initialCut}
       renderMode={searchParams.get("render") === "1"}
       route={detail.route}
     />

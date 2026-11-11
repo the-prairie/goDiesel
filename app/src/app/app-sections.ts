@@ -39,17 +39,21 @@ export const APP_SECTIONS: AppSection[] = [
   { id: "admin", path: APP_PATHS.admin, label: "Admin", icon: Settings },
 ];
 
-export function appSectionForPath(pathname: string) {
+/** The section a path belongs to; a page that does not exist belongs to none. */
+export function appSectionForPath(pathname: string): AppSection | undefined {
+  if (pathname === "/courses" || pathname.startsWith("/courses/")) {
+    return APP_SECTIONS.find(section => section.id === "routes")!;
+  }
   if (
     pathname.startsWith(`${PLAYABLE_EARTH_LAB_PATH}/`)
   ) {
-    return APP_SECTIONS.find((section) => section.id === "replay") ?? APP_SECTIONS[0];
+    return APP_SECTIONS.find((section) => section.id === "replay");
   }
   return (
     APP_SECTIONS.find(
       (section) =>
         pathname === section.path ||
         (section.includesChildren && pathname.startsWith(`${section.path}/`)),
-    ) ?? APP_SECTIONS[0]
+    )
   );
 }

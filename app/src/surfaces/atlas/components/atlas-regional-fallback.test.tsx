@@ -5,7 +5,6 @@ import {
   regionalFitBounds,
   regionalMapPadding,
   regionalRouteCollection,
-  regionalRouteFitBounds,
   type RegionalRouteBounds,
   unwrapLongitudeAroundCenter,
 } from "@/surfaces/atlas/components/atlas-regional-fallback";
@@ -27,7 +26,7 @@ function route(overrides: Partial<RouteSummary> = {}): RouteSummary {
     type: "Run",
     description: "",
     completionRule: "Complete the route.",
-    difficulty: "Moderate",
+    effortTier: "Moderate",
     theme: "Cruise",
     xp: 80,
     trace: [
@@ -128,13 +127,6 @@ describe("AtlasRegionalFallback geography", () => {
     ]);
   });
 
-  it("frames one selected route without losing antimeridian continuity", () => {
-    expect(regionalRouteFitBounds(route(), 180)).toEqual([
-      [179, 10],
-      [181, 10.2],
-    ]);
-  });
-
   it("projects recorded route geometry into a visible overlay path", () => {
     const collection = regionalRouteCollection(region([route()]));
 
@@ -147,6 +139,7 @@ describe("AtlasRegionalFallback geography", () => {
   });
 
   it("reserves responsive safe space for heading and route surfaces", () => {
+    expect(regionalMapPadding(844, 390).bottom).toBe(168);
     expect(regionalMapPadding(1_440, 900)).toEqual({
       top: 96,
       right: 420,

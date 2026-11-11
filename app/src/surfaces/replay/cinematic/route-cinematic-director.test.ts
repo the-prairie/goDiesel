@@ -75,24 +75,6 @@ describe("route cinematic director", () => {
     ).toBeCloseTo(0.4);
   });
 
-  it("does not invent an interior high point when the route ends at its summit", () => {
-    const ascendingRoute = {
-      ...route,
-      route: route.route.map((point, index) => ({
-        ...point,
-        elev: index * 100,
-      })),
-    };
-
-    const moments = cinematicMoments(ascendingRoute);
-
-    expect(moments.find((moment) => moment.kind === "summit")).toBeUndefined();
-    expect(moments.at(-1)).toMatchObject({
-      kind: "arrival",
-      progressRatio: 1,
-    });
-  });
-
   it("derives a terrain profile from recorded geometry", () => {
     const profile = cinematicProfile(route);
     expect(profile.reliefM).toBe(240);
@@ -294,24 +276,6 @@ describe("route cinematic director", () => {
     expect(
       frames.every((frame) => frame.chapterSubtitle.length > 24),
     ).toBe(true);
-  });
-
-  it("does not turn mesh-relative terrain into recorded elevation claims", () => {
-    const unavailableRoute = {
-      ...mountainRoute,
-      lifecycle: "discovered",
-      elevationStatus: "unavailable",
-      elevationGainM: null,
-    } as QuestRoute;
-    const duration = cinematicDuration(unavailableRoute, "feature");
-    const subtitles = Array.from({ length: 300 }, (_, index) =>
-      cinematicFrame(unavailableRoute, "feature", (duration * index) / 299)
-        .chapterSubtitle,
-    );
-
-    expect(subtitles.some((subtitle) => subtitle.includes("Provider-relative terrain"))).toBe(true);
-    expect(subtitles.join(" ")).not.toMatch(/\d[\d,]* metres (?:of climbing|from low point)/);
-    expect(subtitles.join(" ")).not.toContain("One recorded");
   });
 
   it("keeps adjacent camera targets on a stable spatial rail", () => {

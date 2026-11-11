@@ -36,15 +36,6 @@ async function expectActualClearance(source: Locator, timeout = 15_000) {
   expect(Number(clearanceM)).toBeGreaterThanOrEqual(Number(minimumClearanceM));
 }
 
-// ADR-0009 made native Google 3D the primary renderer on 2026-08-01 and moved
-// Cesium behind ?renderer=cesium. Every other Cesium spec was updated then;
-// this one was missed, so it had been asserting Cesium's measured camera
-// attributes against the Google engine, which publishes none of them. Because
-// the live suites only run with credentials, nothing noticed until the live
-// pipeline reached stage 6 for the first time.
-//
-// Clearance itself now comes from the scene contract rather than a renderer, so
-// the final test below covers the default path too.
 test.describe("live Earth Replay terrain clearance", () => {
   test.skip(
     !liveEarthEnabled,

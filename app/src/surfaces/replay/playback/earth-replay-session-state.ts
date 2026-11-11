@@ -1,0 +1,181 @@
+import type { RouteContextHudState } from "@/surfaces/replay/components/route-context-hud";
+import type { ReplayEngineMode, ReplayStatus } from "@/surfaces/replay/renderer-port";
+import {
+  advanceReplay,
+  cycleReplaySpeed,
+  initialReplayState,
+  seekReplay,
+  toggleReplay,
+  toggleReplayFollowing,
+  REPLAY_CAMERA_RANGES_M,
+  type ReplayControlState,
+} from "@/surfaces/replay/playback/replay-controller";
+
+export interface EarthReplaySessionState {
+  routeSlug: string | undefined;
+  engineMode: ReplayEngineMode;
+  status: ReplayStatus;
+  control: ReplayControlState;
+  sessionId: number;
+  contextState: RouteContextHudState;
+  mobileControlsExpanded: boolean;
+}
+
+export type EarthReplayControlEvent =
+  | { type: "playbackToggled" }
+  | { type: "progressSelected"; progressM: number; totalDistanceM: number }
+  | { type: "speedCycled" }
+  | { type: "followingToggled" }
+  | { type: "zoomRequested"; direction: "in" | "out" }
+  /** The person zoomed the renderer itself; the session keeps that range. */
+  | { type: "cameraRangeChosen"; cameraRangeM: number };
+
+export type EarthReplayHudEvent =
+  /**
+   * The viewport class changed. `shortViewport` is a short screen (a phone in
+   * landscape) that is not mobile by width; it opens the HUD compact too.
+   */
+  | { type: "presentationReset"; isMobile: boolean; shortViewport: boolean }
+  | { type: "contextChanged"; contextState: RouteContextHudState }
+  | { type: "mobileControlsToggled" };
+
+export type EarthReplaySessionEvent =
+  | EarthReplayControlEvent
+  | EarthReplayHudEvent
+  | { type: "rendererSelected"; mode: ReplayEngineMode }
+  | { type: "rendererMounted"; routeSlug: string }
+  | { type: "statusReceived"; sessionId: number; status: ReplayStatus }
+  | { type: "frameElapsed"; elapsedSeconds: number; totalDistanceM: number };
+
+function initialStatus(mode: ReplayEngineMode): ReplayStatus {
+  return mode === "earth"
+    ? {
+        state: "loading",
+        title: "Building your route world",
+        message: "Preparing the bundled Earth engine.",
+      }
+    : {
+        state: "loading",
+        title: "Opening Atlas replay",
+        message: "Preparing the fallback route map.",
+      };
+}
+
+export function initialEarthReplaySessionState(mode: ReplayEngineMode): EarthReplaySessionState {
+  return {
+    routeSlug: undefined,
+    engineMode: mode,
+    status: initialStatus(mode),
+    control: initialReplayState(),
+    sessionId: 0,
+    contextState: "preview",
+    mobileControlsExpanded: false,
+  };
+}
+
+/** Bounds for a range chosen on the renderer, in metres. */
+const CHOSEN_CAMERA_RANGE_M = { min: 30, max: 90_000 } as const;
+
+/**
+ * The next preset in the given direction. A range between presets (chosen on
+ * the renderer) steps to the nearest preset that way; past the last preset it
+ * stays where it is.
+ */
+function steppedCameraRange(cameraRangeM: number, direction: "in" | "out") {
+  const next =
+    direction === "in"
+      ? [...REPLAY_CAMERA_RANGES_M].reverse().find((range) => range < cameraRangeM)
+      : REPLAY_CAMERA_RANGES_M.find((range) => range > cameraRangeM);
+  return next ?? cameraRangeM;
+}
+
+export function earthReplayOperational(status: ReplayStatus): boolean {
+  return status.state === "ready" || status.state === "partial";
+}
+
+/**
+ * Chrome may yield to the world only while playback runs over an operational
+ * scene. Playing is retained through provider loading and unavailable, and
+ * the HUD (including Back) must stay reachable over that overlay.
+ */
+export function earthReplayChromeMayAutoHide(
+  state: Pick<EarthReplaySessionState, "control" | "status">,
+  { reducedMotion }: { reducedMotion: boolean },
+): boolean {
+  return !reducedMotion && state.control.playing && earthReplayOperational(state.status);
+}
+
+export function reduceEarthReplaySession(
+  state: EarthReplaySessionState,
+  event: EarthReplaySessionEvent,
+): EarthReplaySessionState {
+  switch (event.type) {
+    case "rendererSelected":
+      return state.engineMode === event.mode
+        ? state
+        : { ...state, engineMode: event.mode, status: initialStatus(event.mode) };
+    case "rendererMounted":
+      return {
+        ...state,
+        routeSlug: event.routeSlug,
+        sessionId: state.sessionId + 1,
+        status: initialStatus(state.engineMode),
+        control: state.routeSlug === event.routeSlug ? state.control : initialReplayState(),
+      };
+    case "statusReceived":
+      return event.sessionId === state.sessionId ? { ...state, status: event.status } : state;
+    case "frameElapsed":
+      return earthReplayOperational(state.status)
+        ? { ...state, control: advanceReplay(state.control, event.elapsedSeconds, event.totalDistanceM) }
+        : state;
+    case "playbackToggled": {
+      const control = toggleReplay(state.control);
+      return {
+        ...state,
+        control,
+        contextState: control.playing ? "compact" : state.contextState,
+      };
+    }
+    case "progressSelected":
+      return { ...state, control: seekReplay(state.control, event.progressM, event.totalDistanceM) };
+    case "speedCycled":
+      return { ...state, control: cycleReplaySpeed(state.control) };
+    case "followingToggled":
+      return { ...state, control: toggleReplayFollowing(state.control) };
+    case "zoomRequested":
+      return {
+        ...state,
+        control: {
+          ...state.control,
+          cameraRangeM: steppedCameraRange(state.control.cameraRangeM, event.direction),
+        },
+      };
+    case "cameraRangeChosen": {
+      const cameraRangeM = Math.round(
+        Math.min(
+          CHOSEN_CAMERA_RANGE_M.max,
+          Math.max(CHOSEN_CAMERA_RANGE_M.min, event.cameraRangeM),
+        ),
+      );
+      return Number.isFinite(cameraRangeM) && cameraRangeM !== state.control.cameraRangeM
+        ? { ...state, control: { ...state.control, cameraRangeM } }
+        : state;
+    }
+    case "presentationReset": {
+      const contextState = event.isMobile || event.shortViewport ? "compact" : "preview";
+      return state.contextState === contextState && !state.mobileControlsExpanded
+        ? state
+        : { ...state, contextState, mobileControlsExpanded: false };
+    }
+    case "contextChanged":
+      return state.contextState === event.contextState
+        ? state
+        : { ...state, contextState: event.contextState };
+    case "mobileControlsToggled":
+      return { ...state, mobileControlsExpanded: !state.mobileControlsExpanded };
+    default: {
+      const unhandled: never = event;
+      throw new Error(`Unhandled Earth Replay session event: ${unhandled}`);
+    }
+  }
+}

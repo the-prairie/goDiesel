@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 
 import { visibleAtlasLabels } from "@/surfaces/atlas/atlas-label-layout";
 import { AtlasRegionalFallback } from "@/surfaces/atlas/components/atlas-regional-fallback";
@@ -6,7 +6,6 @@ import type {
   AtlasGlobeHandle,
   AtlasGlobeProps,
   AtlasWorldEngine,
-  AtlasWorldStatus,
 } from "@/surfaces/atlas/atlas-world";
 import { createAtlasWorldEngine } from "@/surfaces/atlas/cesium-atlas-world-engine";
 import { cn } from "@/ui/utils";
@@ -17,43 +16,35 @@ export const CesiumAtlasGlobe = forwardRef<
 >(function CesiumAtlasGlobe(
   {
     regions,
-    illuminationTimeIso,
     selectedRegion,
     selectedRoute,
-    previewedRoute,
-    framedRoute,
     onSelectRegion,
     onSelectRoute,
-    onStatusChange,
-    onRegionPresentationReady,
-    routeDisplayMode = "standard",
+    presentation,
+    onPresentationEvent,
     className,
   },
   forwardedRef,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
   const labelRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const fallbackRef = useRef<AtlasGlobeHandle>(null);
   const engineRef = useRef<AtlasWorldEngine | undefined>(undefined);
   const readyEngineRef = useRef<AtlasWorldEngine | undefined>(undefined);
   const selectedRegionRef = useRef(selectedRegion);
   const selectedRouteRef = useRef(selectedRoute);
-  const previewedRouteRef = useRef(previewedRoute);
-  const lastFramedRouteSlugRef = useRef<string | undefined>(undefined);
   const onSelectRouteRef = useRef(onSelectRoute);
-  const [status, setStatus] = useState<AtlasWorldStatus>({
-    state: "loading",
-    message: "Opening the Atlas world.",
-  });
+  const engineSequenceRef = useRef(0);
+  const { status } = presentation;
 
   useImperativeHandle(forwardedRef, () => ({
-    zoomIn: () => engineRef.current?.zoomIn(),
-    zoomOut: () => engineRef.current?.zoomOut(),
-    resetView: () => engineRef.current?.resetView(),
+    zoomIn: () => (fallbackRef.current ?? engineRef.current)?.zoomIn(),
+    zoomOut: () => (fallbackRef.current ?? engineRef.current)?.zoomOut(),
+    resetView: () => (fallbackRef.current ?? engineRef.current)?.resetView(),
   }));
 
   selectedRegionRef.current = selectedRegion;
   selectedRouteRef.current = selectedRoute;
-  previewedRouteRef.current = previewedRoute;
   onSelectRouteRef.current = onSelectRoute;
 
   useEffect(() => {
@@ -61,49 +52,43 @@ export const CesiumAtlasGlobe = forwardRef<
     if (!container) return;
     const engine = createAtlasWorldEngine();
     engineRef.current = engine;
+    const engineId = ++engineSequenceRef.current;
+    // Readiness is the engine's published phase, not "mount resolved": a mount
+    // that resolves after reporting `unavailable` (a failed load or a render
+    // error) never receives selection, and a later `unavailable` withdraws it.
+    let unavailable = false;
+    onPresentationEvent({ type: "engineStarted", engineId });
     void engine
       .mount({
         container,
         regions,
-        illuminationTimeIso,
         onSelectRoute: (route) => onSelectRouteRef.current?.(route),
-        routeDisplayMode,
         onStatus: (nextStatus) => {
-          setStatus(nextStatus);
-          onStatusChange?.(nextStatus);
-          if (nextStatus.state === "region-loading") {
-            onRegionPresentationReady?.(false);
-          } else if (nextStatus.state === "region-ready") {
-            onRegionPresentationReady?.(true);
-          } else if (
-            nextStatus.state === "ready"
-          ) {
-            onRegionPresentationReady?.(false);
-          } else if (nextStatus.state === "region-fallback") {
-            onRegionPresentationReady?.(true);
-          } else if (nextStatus.state === "unavailable") {
-            onRegionPresentationReady?.(Boolean(selectedRegionRef.current));
+          if (nextStatus.state === "unavailable") {
+            unavailable = true;
+            if (readyEngineRef.current === engine) readyEngineRef.current = undefined;
           }
+          onPresentationEvent({
+            type: "engineStatusReceived",
+            engineId,
+            status: nextStatus,
+          });
         },
       })
       .then(() => {
-        if (engineRef.current === engine) {
+        if (engineRef.current === engine && !unavailable) {
           readyEngineRef.current = engine;
           engine.setSelectedRegion(selectedRegionRef.current);
           engine.setSelectedRoute(selectedRouteRef.current);
-          engine.setPreviewedRoute?.(previewedRouteRef.current);
         }
       });
     return () => {
+      onPresentationEvent({ type: "engineStopped", engineId });
       if (readyEngineRef.current === engine) readyEngineRef.current = undefined;
       engine.destroy();
       if (engineRef.current === engine) engineRef.current = undefined;
     };
-  }, [illuminationTimeIso, onRegionPresentationReady, onStatusChange, regions]);
-
-  useEffect(() => {
-    readyEngineRef.current?.setRouteDisplayMode?.(routeDisplayMode);
-  }, [routeDisplayMode]);
+  }, [onPresentationEvent, regions]);
 
   useEffect(() => {
     readyEngineRef.current?.setSelectedRegion(selectedRegion);
@@ -114,21 +99,8 @@ export const CesiumAtlasGlobe = forwardRef<
   }, [selectedRoute]);
 
   useEffect(() => {
-    readyEngineRef.current?.setPreviewedRoute?.(previewedRoute);
-  }, [previewedRoute]);
-
-  useEffect(() => {
-    if (status.state !== "region-ready") return;
-    if (framedRoute) {
-      readyEngineRef.current?.frameRoute?.(framedRoute);
-      lastFramedRouteSlugRef.current = framedRoute.slug;
-    } else if (lastFramedRouteSlugRef.current) {
-      readyEngineRef.current?.frameRoute?.(undefined);
-      lastFramedRouteSlugRef.current = undefined;
-    }
-  }, [framedRoute, status.state]);
-
-  useEffect(() => {
+    if (status.state !== "ready") return;
+    let animationFrame = 0;
     const updateLabels = () => {
       const projections = engineRef.current?.projectRegions() ?? [];
       const projectionByName = new Map(
@@ -146,8 +118,8 @@ export const CesiumAtlasGlobe = forwardRef<
             if (!projection || !label) return [];
             return [{
               ...projection,
-              width: label.offsetWidth || 130,
-              height: label.offsetHeight || 28,
+              width: label.offsetWidth,
+              height: label.offsetHeight,
               priority:
                 (selectedRegion?.name === region.name ? 100 : 0) +
                 region.routes.length,
@@ -163,14 +135,16 @@ export const CesiumAtlasGlobe = forwardRef<
         if (!label || !projection) return;
         label.style.left = `${projection.x}px`;
         label.style.top = `${projection.y}px`;
-        label.style.display = visible.has(region.name) ? "flex" : "none";
+        // Keep rejected labels measurable. display:none makes the next pass
+        // use an undersized box, repeatedly showing and hiding dense labels.
+        label.style.visibility = visible.has(region.name) ? "visible" : "hidden";
         label.dataset.active = String(selectedRegion?.name === region.name);
       });
+      animationFrame = window.requestAnimationFrame(updateLabels);
     };
     updateLabels();
-    const interval = window.setInterval(updateLabels, 80);
-    return () => window.clearInterval(interval);
-  }, [regions, selectedRegion]);
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [regions, selectedRegion, status.state]);
 
   return (
     <div
@@ -200,13 +174,28 @@ export const CesiumAtlasGlobe = forwardRef<
       />
       {status.state === "region-fallback" && selectedRegion ? (
         <AtlasRegionalFallback
+          ref={fallbackRef}
           region={selectedRegion}
           selectedRoute={selectedRoute}
-          previewedRoute={previewedRoute}
-          framedRoute={framedRoute}
-          routeDisplayMode={routeDisplayMode}
           onSelectRoute={(route) => onSelectRouteRef.current?.(route)}
-          onReady={() => onRegionPresentationReady?.(true)}
+          onReady={() => {
+            if (presentation.engineId !== null) {
+              onPresentationEvent({
+                type: "fallbackReady",
+                engineId: presentation.engineId,
+                regionName: selectedRegion.name,
+              });
+            }
+          }}
+          onUnavailable={() => {
+            if (presentation.engineId !== null) {
+              onPresentationEvent({
+                type: "fallbackUnavailable",
+                engineId: presentation.engineId,
+                regionName: selectedRegion.name,
+              });
+            }
+          }}
         />
       ) : null}
       <div
@@ -225,13 +214,15 @@ export const CesiumAtlasGlobe = forwardRef<
             data-globe-region={region.name}
             aria-label={`Select ${region.name} on globe`}
             onClick={() => onSelectRegion(region)}
-            className="pointer-events-auto absolute hidden -translate-x-1/2 -translate-y-1/2 items-center gap-2 whitespace-nowrap rounded-sm border border-white/30 bg-[#f6f2e8]/90 px-3 py-1.5 text-[11px] font-semibold uppercase text-[#24322d] shadow-lg backdrop-blur transition-colors hover:border-[#315fb4] hover:text-[#183a76] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#315fb4] focus-visible:ring-offset-2 focus-visible:ring-offset-[#02070a] data-[active=true]:border-[#df674b] data-[active=true]:text-[#9b321f]"
+            className="atlas-world-label invisible pointer-events-auto absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 whitespace-nowrap rounded-md border border-line bg-surface/95 px-2.5 py-2 text-xs font-medium text-ink shadow-lg transition-colors hover:bg-surface-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring data-[active=true]:border-primary"
           >
-            <span className="size-1.5 rounded-full bg-[#df674b]" />
-            {region.name} · {region.routes.length}
+            <span className="size-1.5 rounded-full bg-ink" />
+            {region.name}<span className="rounded bg-black/5 px-1.5 py-0.5 text-[10px] text-ink-secondary">{region.routes.length} {region.routes.length === 1 ? "route" : "routes"}</span>
           </button>
         ))}
       </div>
+      {/* Statuses sit above the open tray (places or routes) and the world's
+          credits on it, and clear of the map controls on phones. */}
       {status.state === "loading" || status.state === "region-loading" ? (
         <div
           role="status"
@@ -239,7 +230,7 @@ export const CesiumAtlasGlobe = forwardRef<
           data-region-loading={
             status.state === "region-loading" ? status.regionName : undefined
           }
-          className="pointer-events-none absolute bottom-24 left-4 z-20 min-h-12 min-w-52 border border-white/25 bg-[#071019]/88 px-3 py-2 text-xs text-white shadow-lg xl:bottom-56 xl:left-[15.5rem]"
+          className="pointer-events-none absolute bottom-[calc(var(--atlas-tray-height,12rem)+2.75rem)] left-4 z-20 min-h-12 min-w-52 border border-white/25 bg-[#071019]/88 px-3 py-2 text-xs text-white shadow-lg xl:left-[15.5rem]"
         >
           {status.message}
         </div>
@@ -248,7 +239,7 @@ export const CesiumAtlasGlobe = forwardRef<
         <div
           role="status"
           aria-live="polite"
-          className="pointer-events-none absolute bottom-24 left-4 z-20 max-w-sm border border-white/25 bg-[#f6f2e8]/96 px-3 py-2 text-xs text-[#24322d] shadow-lg xl:left-5"
+          className="pointer-events-none absolute bottom-[calc(var(--atlas-tray-height,12rem)+2.75rem)] left-4 right-[4.75rem] z-20 border border-white/25 bg-surface px-3 py-2 text-xs text-ink shadow-lg md:right-auto md:max-w-sm xl:left-5"
         >
           {status.message} Search and navigation remain available.
         </div>

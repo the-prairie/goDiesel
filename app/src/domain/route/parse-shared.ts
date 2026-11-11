@@ -1,5 +1,6 @@
 // Primitives shared by both parse tiers (ADR-0004).
 
+import type { RouteLifecycle } from "@/domain/route/lifecycle";
 import type { GeneratedQuestRoute, RouteElevationStatus, RoutePoint } from "@/domain/route/contract";
 
 export const curationFields = [
@@ -50,6 +51,12 @@ export function requiredSlug(input: GeneratedQuestRoute, context: string) {
   return slug;
 }
 
+/**
+ * A route whose source recorded no elevation carries `elev: null` points. The
+ * renderers need a number, so such a point parses as 0; the status, not the
+ * point, tells presentation that the height is unknown. A null elevation on a
+ * recorded route is still a malformed point.
+ */
 export function parsedRoutePoints(
   value: unknown,
   elevationStatus: RouteElevationStatus = "recorded",
@@ -69,12 +76,12 @@ export function parsedRoutePoints(
         : undefined;
     const lat = source ? numberValue(source.lat, Number.NaN) : Number.NaN;
     const lng = source ? numberValue(source.lng, Number.NaN) : Number.NaN;
-    if (elevationStatus === "unavailable" && source?.elev !== null) {
-      return { points: [] as RoutePoint[], status: "invalid" as const };
-    }
-    const elev = source?.elev === null && elevationStatus === "unavailable"
-      ? 0
-      : source ? numberValue(source.elev, Number.NaN) : Number.NaN;
+    const elev =
+      source?.elev === null && elevationStatus === "unavailable"
+        ? 0
+        : source
+          ? numberValue(source.elev, Number.NaN)
+          : Number.NaN;
     const d = source ? numberValue(source.d, Number.NaN) : Number.NaN;
     const rawElapsed = source?.elapsed_s;
     const elapsedS =
@@ -118,4 +125,8 @@ export function generatedRoute(value: unknown, context: string): GeneratedQuestR
     throw new Error(`${context} must be an object`);
   }
   return value as GeneratedQuestRoute;
+}
+
+export function routeName(name: string, activityName: string, lifecycle: RouteLifecycle): string {
+  return lifecycle === "completed" && activityName.trim() ? activityName : name;
 }

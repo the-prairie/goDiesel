@@ -13,8 +13,9 @@ import json
 from pathlib import Path
 
 from admin_curation import curation_readiness
+from quest_meta import normalize_route_status
 from route_annotations import build_route_annotations
-from route_imports import imported_route_from_spec, route_source_kind
+from route_imports import route_source_kind
 
 
 def route_status(checkout_root, activity_id):
@@ -46,12 +47,9 @@ def route_status(checkout_root, activity_id):
     # These are the fields scripts/validate-route-microsite.mjs refuses to
     # publish without. Reporting readiness without checking them gave false
     # confidence: it called a route ready that the publisher then rejected.
-    for field in ("name", "region", "type"):
+    for field in ("name", "region", "date", "type"):
         if generated and not str(detail.get(field) or "").strip():
             problems.append(f"{field} is empty; the publisher requires it")
-    lifecycle = detail.get("lifecycle", spec.get("lifecycle", "completed"))
-    if generated and not str(detail.get("date") or "").strip() and lifecycle != "discovered":
-        problems.append("date is empty; only discovered routes support an unknown date")
     # Mirrors scripts/validate-route-microsite.mjs: a page needs words, from
     # either the recorded activity description or the curated vibe.
     if generated and not (
@@ -64,13 +62,9 @@ def route_status(checkout_root, activity_id):
         or str(detail.get("activity_name") or "").strip()
     ):
         problems.append("subtitle or activity_name is required for the public title")
-    if spec.get("status") != "approved":
-        problems.append(f"status is {spec.get('status', 'pending')}, not approved")
-    if spec.get("source_gpx"):
-        try:
-            imported_route_from_spec(spec, root)
-        except ValueError as error:
-            problems.append(f"source health failed: {error}")
+    status = normalize_route_status(spec.get("status"))
+    if status != "approved":
+        problems.append(f"status is {status}, not approved")
     if not generated:
         problems.append("no generated record; run a build")
     elif replay.get("geometry_status") != "ready":
@@ -94,7 +88,7 @@ def route_status(checkout_root, activity_id):
         "slug": activity_id,
         "known": True,
         "source_kind": route_source_kind(spec),
-        "lifecycle": lifecycle,
+        "lifecycle": detail.get("lifecycle", spec.get("lifecycle", "completed")),
         "region": detail.get("region", spec.get("region", "")),
         "generated": generated,
         "geometry_status": replay.get("geometry_status"),
@@ -138,7 +132,7 @@ def main(argv):
         approved = [
             str(spec["activity_id"])
             for spec in config.get("routes", [])
-            if spec.get("status") == "approved"
+            if normalize_route_status(spec.get("status")) == "approved"
         ]
         ready = published = 0
         for slug in approved:

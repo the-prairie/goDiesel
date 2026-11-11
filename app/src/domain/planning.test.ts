@@ -37,7 +37,7 @@ describe("curatedRouteDiscoveryProvider", () => {
       status: "unsupported",
       candidates: [],
       message:
-        "No owner-curated route matches this search yet. Finder only returns recorded or imported GPX candidates.",
+        "No collection routes match these filters. Try a wider distance or explore new routes.",
     });
   });
 });

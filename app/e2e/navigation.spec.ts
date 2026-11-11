@@ -8,72 +8,55 @@ test("root opens Atlas and primary navigation follows browser history", async ({
 }) => {
   await page.goto("/");
 
-  await expect(page).toHaveURL(/#\/atlas\?region=Tokyo%2C\+Japan$/);
+  await expect(page).toHaveURL(/#\/atlas$/);
   await expect(
-    page.getByRole("link", { name: "Memories", exact: true }),
+    page.getByRole("link", { name: "Atlas", exact: true }),
   ).toHaveAttribute("aria-current", "page");
 
-  await page.getByRole("link", { name: "Plan", exact: true }).click();
+  await page.getByRole("link", { name: "Finder", exact: true }).click();
   await expect(page).toHaveURL(/#\/finder$/);
   await expect(page.getByRole("heading", { name: /plan/i })).toBeVisible();
 
   await page.goBack();
-  await expect(page).toHaveURL(/#\/atlas\?region=Tokyo%2C\+Japan$/);
+  await expect(page).toHaveURL(/#\/atlas$/);
 
   await page.goForward();
   await expect(page).toHaveURL(/#\/finder$/);
 });
 
-test("compact Atlas navigation supports keyboard entry and restores focus", async ({
-  page,
-}) => {
+test("compact Atlas navigation stays consistent across product surfaces", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/#/atlas");
-
-  const trigger = page.getByRole("button", {
-    name: "Open application navigation",
-  });
-  await trigger.focus();
-  await page.keyboard.press("Enter");
-
-  const navigation = page.getByRole("dialog", { name: "goDiesel navigation" });
-  await expect(navigation).toBeVisible();
-  await expect(navigation.getByRole("link", { name: "Atlas" })).toBeFocused();
+  const nav = page.getByTestId("atlas-spine");
+  const atlas = nav.getByRole("link", { name: "Atlas", exact: true });
+  await atlas.focus();
   await page.keyboard.press("Tab");
-  await expect(navigation.getByRole("link", { name: "Finder" })).toBeFocused();
-  await page.keyboard.press("Escape");
-  await expect(navigation).toBeHidden();
-  await expect(trigger).toBeFocused();
+  const finder = nav.getByRole("link", { name: "Finder", exact: true });
+  await expect(finder).toBeFocused();
+  const before = await nav.boundingBox();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/#\/finder$/);
+  expect(await nav.boundingBox()).toEqual(before);
+  await expect(finder).toHaveAttribute("aria-current", "page");
 });
 
 test("every product surface has a canonical URL", async ({ page }) => {
   await page.goto("/#/atlas");
 
-  await page.getByRole("button", { name: "Open application navigation" }).click();
 
   for (const [label, path] of [
     ["Routes", "routes"],
     ["Replay", "replay"],
     ["Admin", "admin"],
   ] as const) {
-    if (label === "Admin") {
-      await page.goto("/#/admin");
-    } else {
-      const navigation = page.getByRole("dialog", { name: "goDiesel navigation" });
-      if (!(await navigation.isVisible())) {
-        await page.getByRole("button", { name: "Open application navigation" }).click();
-      }
-      await navigation.getByRole("link", { name: label, exact: true }).click();
-    }
+    await page.getByRole("link", { name: label }).click();
     await expect(page).toHaveURL(new RegExp(`#/${path}$`));
-    if (label === "Replay") {
-      await expect(page.locator('[data-replay-shell="story-flight"]')).toBeVisible();
-      await expect(page.getByTestId("atlas-spine")).toHaveCount(0);
+    if (path === "replay") {
+      await expect(page.getByTestId("atlas-spine")).toBeHidden();
+      await page.getByRole("button", { name: "All routes", exact: true }).click();
+      await expect(page).toHaveURL(/#\/routes$/);
     } else {
-      await expect(page.getByRole("link", { name: label })).toHaveAttribute(
-        "aria-current",
-        "page",
-      );
+      await expect(page.getByRole("link", { name: label })).toHaveAttribute("aria-current", "page");
     }
   }
 });
@@ -82,8 +65,8 @@ test("canonical product and selected-route URLs load directly", async ({
   page,
 }) => {
   for (const [path, activeNavigation] of [
-    ["atlas", "Memories"],
-    ["finder", "Plan"],
+    ["atlas", "Atlas"],
+    ["finder", "Finder"],
     ["routes", "Routes"],
     ["replay", "Replay"],
     ["admin", "Admin"],
@@ -92,21 +75,12 @@ test("canonical product and selected-route URLs load directly", async ({
   ] as const) {
     await page.goto(`/#/${path}`);
     await expect(page).toHaveURL(new RegExp(`#/${path}$`));
-    if (path.startsWith("replay")) {
-      await expect(page.locator('[data-replay-shell="story-flight"]')).toBeVisible();
-      await expect(page.getByTestId("atlas-spine")).toHaveCount(0);
-      continue;
+    if (activeNavigation === "Replay") {
+      await expect(page.getByRole("button", { name: "All routes", exact: true })).toBeVisible();
+      await expect(page.getByTestId("atlas-spine")).toBeHidden();
+    } else {
+      await expect(page.getByRole("link", { name: activeNavigation, exact: true })).toHaveAttribute("aria-current", "page");
     }
-    if (path.startsWith("routes/")) {
-      await expect(
-        page.getByRole("region", { name: "Route story", exact: true }),
-      ).toBeVisible();
-      await expect(page.getByTestId("atlas-spine")).toHaveCount(0);
-      continue;
-    }
-    await expect(
-      page.getByRole("link", { name: activeNavigation, exact: true }),
-    ).toHaveAttribute("aria-current", "page");
   }
 });
 
@@ -118,11 +92,8 @@ test("legacy quest links preserve the route in canonical detail", async ({
   await expect(page).toHaveURL(new RegExp(`#\/routes\/${routeSlug}$`));
   await expect(page.getByRole("main")).toContainText(/km/i);
   await expect(
-    page.getByRole("link", { name: "Cinematic replay", exact: true }),
-  ).toHaveAttribute(
-    "href",
-    `#/replay/${routeSlug}?from=%2Froutes%2F${routeSlug}`,
-  );
+    page.getByRole("link", { name: /open replay/i }),
+  ).toHaveAttribute("href", `#/replay/${routeSlug}`);
 });
 
 test("legacy quest links are canonicalized after the app has started", async ({
@@ -135,9 +106,21 @@ test("legacy quest links are canonicalized after the app has started", async ({
 
   await expect(page).toHaveURL(new RegExp(`#\/routes\/${routeSlug}$`));
   await expect(
-    page.getByRole("region", { name: "Route story", exact: true }),
-  ).toBeVisible();
-  await expect(page.getByTestId("atlas-spine")).toHaveCount(0);
+    page.getByRole("link", { name: "Routes", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
+});
+
+test("a legacy quest link opened after start leaves no legacy history entry", async ({
+  page,
+}) => {
+  await page.goto("/#/finder");
+  await page.evaluate((slug) => {
+    window.location.hash = `quest/${slug}`;
+  }, routeSlug);
+  await expect(page).toHaveURL(new RegExp(`#\/routes\/${routeSlug}$`));
+
+  await page.goBack();
+  await expect(page).toHaveURL(/#\/finder$/);
 });
 
 test("malformed legacy quest links canonicalize to the unavailable route state", async ({
@@ -153,32 +136,28 @@ test("malformed legacy quest links canonicalize to the unavailable route state",
 
 test("browser history restores the selected Replay route", async ({ page }) => {
   await page.goto(`/#/replay/${routeSlug}`);
-  await expect(page.getByTestId("replay-stage")).toHaveAttribute(
-    "data-route-slug",
-    routeSlug,
-  );
+  await expect(
+    page.getByRole("heading", { name: "🍑🍑🍑🍑💦💦💦💦" }),
+  ).toBeVisible();
 
   await page.getByText("Change route", { exact: true }).click();
   await page.locator(`a[href="#/replay/${historyRouteSlug}"]`).click();
   await expect(page).toHaveURL(new RegExp(`#\/replay\/${historyRouteSlug}$`));
-  await expect(page.getByTestId("replay-stage")).toHaveAttribute(
-    "data-route-slug",
-    historyRouteSlug,
-  );
+  await expect(
+    page.getByRole("heading", { name: "crosswalk sprints" }),
+  ).toBeVisible();
 
   await page.goBack();
   await expect(page).toHaveURL(new RegExp(`#\/replay\/${routeSlug}$`));
-  await expect(page.getByTestId("replay-stage")).toHaveAttribute(
-    "data-route-slug",
-    routeSlug,
-  );
+  await expect(
+    page.getByRole("heading", { name: "🍑🍑🍑🍑💦💦💦💦" }),
+  ).toBeVisible();
 
   await page.goForward();
   await expect(page).toHaveURL(new RegExp(`#\/replay\/${historyRouteSlug}$`));
-  await expect(page.getByTestId("replay-stage")).toHaveAttribute(
-    "data-route-slug",
-    historyRouteSlug,
-  );
+  await expect(
+    page.getByRole("heading", { name: "crosswalk sprints" }),
+  ).toBeVisible();
 });
 
 test("mobile bottom spine navigates without covering the current page", async ({
@@ -260,33 +239,17 @@ test("navigation does not persistently overlap Replay across breakpoints", async
   }
 });
 
-test("mobile Replay owns the viewport without global navigation", async ({
-  page,
-}) => {
+test("mobile Replay leaves space for attribution and restores navigation on exit", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`/#/replay/${routeSlug}`);
   await expect(page.getByTestId("replay-controls")).toBeVisible();
-
-  await page.evaluate(() => {
-    document.documentElement.style.setProperty("--safe-area-bottom", "24px");
-  });
-
-  const layout = await page.evaluate(() => {
-    const controls = document
-      .querySelector<HTMLElement>('[data-testid="replay-controls"]')!
-      .getBoundingClientRect();
-
-    return {
-      controlsBottom: controls.bottom,
-      documentWidth: document.documentElement.scrollWidth,
-      viewportHeight: window.innerHeight,
-      viewportWidth: window.innerWidth,
-    };
-  });
-
-  await expect(page.getByTestId("atlas-spine-mobile")).toHaveCount(0);
-  expect(layout.controlsBottom).toBeLessThanOrEqual(layout.viewportHeight + 1);
-  expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth);
+  await expect(page.getByTestId("atlas-spine-mobile")).toBeHidden();
+  const dock = await page.locator(".immersive-replay-dock").boundingBox();
+  expect(dock).not.toBeNull();
+  expect(dock!.y + dock!.height).toBeLessThanOrEqual(844 - 48);
+  await page.getByRole("button", { name: "All routes", exact: true }).click();
+  await expect(page.getByTestId("atlas-spine-mobile")).toBeVisible();
+  await expect(page).toHaveURL(/#\/routes$/);
 });
 
 test("mobile spine keeps every primary destination legible", async ({
@@ -299,11 +262,18 @@ test("mobile spine keeps every primary destination legible", async ({
       ["atlas", "Atlas"],
       ["finder", "Finder"],
       ["routes", "Routes"],
-      ["admin", "Admin"],
+      ["replay", "Replay"],
     ] as const) {
       await page.goto(`/#/${path}`);
       const spine = page.getByTestId("atlas-spine-mobile");
       const link = spine.getByRole("link", { name: label, exact: true });
+      if (path === "replay") {
+        await expect(page.getByRole("button", { name: "All routes", exact: true })).toBeVisible();
+        await expect(spine).toBeHidden();
+        await page.getByRole("button", { name: "All routes", exact: true }).click();
+        await expect(spine).toBeVisible();
+        continue;
+      }
       await expect(spine).toBeVisible();
       await expect(link).toBeVisible();
       await expect(link).toHaveAttribute("aria-current", "page");
@@ -318,20 +288,14 @@ test("mobile spine keeps every primary destination legible", async ({
   }
 });
 
-test("Routes uses the immersive library shell while Admin retains utility chrome", async ({
+test("Admin retains the product subtitle while Routes has one editorial title", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/#/routes");
 
-  await expect(page.getByTestId("app-header")).toHaveCount(0);
-  await expect(page.getByTestId("atlas-spine")).toHaveCount(0);
-  await expect(page.getByTestId("atlas-compact-navigation")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Routes", exact: true })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
-
+  await expect(page.getByTestId("app-header")).toBeHidden();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Places worth returning to.");
   await page.goto("/#/admin");
   await expect(page.getByTestId("app-page-title")).toHaveText("Admin");
   await expect(page.getByTestId("global-product-subtitle")).toHaveText(
@@ -347,46 +311,23 @@ test("Finder uses the map shell without global header chrome", async ({
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/#/finder");
 
-  await expect(page.getByTestId("atlas-spine")).toHaveCount(0);
-  await expect(page.getByTestId("atlas-compact-navigation")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Plan" })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
+  await expect(page.getByTestId("atlas-spine")).toBeVisible();
   await expect(page.getByTestId("app-header")).toBeHidden();
   await expect(page.getByRole("heading", { name: "Plan the next day." })).toBeVisible();
 });
 
-test("immersive Atlas replaces the content spine with compact navigation", async ({
-  page,
-}) => {
+test("Atlas keeps all destinations in the shared navigation", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/#/atlas?region=Kyoto%2C+Japan");
-
-  await expect(page.getByTestId("atlas-spine")).toHaveCount(0);
-  await expect(page.getByTestId("atlas-compact-navigation")).toBeVisible();
-  await expect(page.getByTestId("app-header")).toBeHidden();
-
-  await expect(page.getByRole("link", { name: "Memories" })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
-  await expect(page.getByRole("link", { name: "Plan" })).toHaveAttribute(
-    "href",
-    "#/finder",
-  );
-
-  await page.getByRole("button", { name: "Open application navigation" }).click();
-  const navigation = page.getByRole("dialog", { name: "goDiesel navigation" });
+  const navigation = page.getByTestId("atlas-spine");
   await expect(navigation).toBeVisible();
+  await expect(page.getByTestId("app-header")).toBeHidden();
   for (const destination of ["Atlas", "Finder", "Routes", "Replay", "Admin"]) {
-    await expect(navigation.getByRole("link", { name: destination })).toBeVisible();
+    await expect(navigation.getByRole("link", { name: destination, exact: true })).toBeVisible();
   }
-  await page.keyboard.press("Escape");
-  await expect(navigation).toBeHidden();
-
+  await expect(navigation.getByRole("link", { name: "Atlas", exact: true })).toHaveAttribute("aria-current", "page");
   await page.getByRole("link", { name: "Return to global Atlas" }).click();
-  await expect(page).toHaveURL(/#\/atlas\?view=world$/);
+  await expect(page).toHaveURL(/#\/atlas$/);
 });
 
 test("field-guide shell has stable desktop and mobile compositions", async ({
@@ -394,11 +335,14 @@ test("field-guide shell has stable desktop and mobile compositions", async ({
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/#/routes");
-  await expect(page.getByTestId("atlas-spine")).toHaveCount(0);
-  await expect(page.getByTestId("atlas-compact-navigation")).toBeVisible();
+  await expect(page.getByTestId("atlas-spine")).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "The routes that made the map." }),
+    page.getByRole("heading", { name: "Places worth returning to." }),
   ).toBeVisible();
+  await expect.poll(() => page.locator(".route-cover-image").evaluateAll((images) =>
+    images.filter((image) => image.getBoundingClientRect().top < innerHeight)
+      .every((image) => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0)
+  )).toBe(true);
   await expect(page).toHaveScreenshot("field-guide-shell-desktop.png", {
     animations: "disabled",
   });
@@ -407,68 +351,122 @@ test("field-guide shell has stable desktop and mobile compositions", async ({
   await page.goto("/#/routes");
   await expect(page.getByTestId("atlas-spine-mobile")).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "The routes that made the map." }),
+    page.getByRole("heading", { name: "Places worth returning to." }),
   ).toBeVisible();
+  await expect.poll(() => page.locator(".route-cover-image").evaluateAll((images) =>
+    images.filter((image) => image.getBoundingClientRect().top < innerHeight)
+      .every((image) => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0)
+  )).toBe(true);
   await expect(page).toHaveScreenshot("field-guide-shell-mobile.png", {
     animations: "disabled",
   });
 });
 
-test("path navigation moves focus to the new view and history restores scroll", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 1280, height: 700 });
-  await page.goto("/#/routes");
-  await expect(
-    page.getByRole("heading", { name: "The routes that made the map." }),
-  ).toBeVisible();
+for (const viewport of [
+  { width: 768, height: 1024 },
+  { width: 1024, height: 768 },
+]) {
+  test.describe(`rail home link at ${viewport.width}x${viewport.height} with touch`, () => {
+    test.use({ viewport, hasTouch: true });
 
-  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-  const routesScrollY = await page.evaluate(() => window.scrollY);
-  expect(routesScrollY).toBeGreaterThan(200);
+    test("is a named 44px target that leaves current-page state to the section links", async ({ page }) => {
+      await page.goto("/#/finder");
+      const rail = page.getByTestId("atlas-spine");
+      const home = rail.getByRole("link", { name: /^goDiesel/ });
+      await expect(home).toBeVisible();
+      const box = await home.boundingBox();
+      expect(box!.width).toBeGreaterThanOrEqual(44);
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+      const railBox = await rail.boundingBox();
+      expect(box!.x).toBeGreaterThanOrEqual(railBox!.x);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(railBox!.x + railBox!.width);
+      await expect(home).not.toHaveAttribute("aria-current", /.*/);
+      await expect(rail.getByRole("link", { name: "Finder", exact: true })).toHaveAttribute("aria-current", "page");
 
-  await page.getByRole("link", { name: "Plan", exact: true }).click();
-  await expect(page).toHaveURL(/#\/finder$/);
-  await expect(page.getByRole("heading", { name: "Plan the next day." })).toBeVisible();
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
-  await expect(page.locator("main")).toBeFocused();
+      await home.tap();
+      await expect(page).toHaveURL(/#\/atlas$/);
+      await expect(rail.getByRole("link", { name: "Atlas", exact: true })).toHaveAttribute("aria-current", "page");
+    });
+  });
+}
 
-  await page.goBack();
-  await expect(page).toHaveURL(/#\/routes$/);
-  await expect
-    .poll(() => page.evaluate(() => window.scrollY))
-    .toBeGreaterThan(routesScrollY - 50);
-});
-
-test("immersive route stories restore their own reading position through history", async ({
-  page,
-}) => {
+test("an unknown link says so inside the shell and offers a way to Atlas", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/#/routes/17654151284");
-  const story = page.getByRole("region", { name: "Route story", exact: true });
-  await expect(page.getByRole("heading", { name: "Kyoto, Japan" })).toBeVisible();
-  await story.evaluate((element) => element.scrollTo(0, 520));
-  await expect.poll(() => story.evaluate((element) => element.scrollTop)).toBeGreaterThan(450);
+  await page.goto("/#/finderr");
 
-  await story.getByRole("link", { name: "Routes", exact: true }).click();
-  await expect(page).toHaveURL(/#\/routes$/);
-  await page.goBack();
-  await expect(page).toHaveURL(/#\/routes\/17654151284$/);
-  await expect
-    .poll(() => story.evaluate((element) => element.scrollTop))
-    .toBeGreaterThan(450);
+  await expect(page.getByRole("heading", { name: "There’s nothing at this address." })).toBeVisible();
+  // Not silently redirected, and the navigation stays.
+  await expect(page).toHaveURL(/#\/finderr$/);
+  await expect(page.getByTestId("atlas-spine-mobile")).toBeVisible();
+  // A page that does not exist is not any section.
+  await expect(page.getByTestId("atlas-spine-mobile").locator("[aria-current]")).toHaveCount(0);
+  await expect(page).toHaveTitle("Page not found · goDiesel");
+
+  await page.getByRole("link", { name: "Open Atlas" }).click();
+  await expect(page).toHaveURL(/#\/atlas$/);
+  await expect(page).toHaveTitle("Atlas · goDiesel");
 });
 
-test("reduced motion removes decorative movement without changing navigation", async ({
-  page,
-}) => {
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.goto("/#/routes");
-  const firstRoute = page.getByRole("article").first();
-  await expect(firstRoute).toBeVisible();
-  await firstRoute.hover();
-  await expect(firstRoute).toHaveCSS("transform", "none");
-  expect(
-    await page.evaluate(() => getComputedStyle(document.documentElement).scrollBehavior),
-  ).toBe("auto");
+/** Holds the matching asset until `release` is called. */
+async function holdAsset(page: import("@playwright/test").Page, pattern: RegExp) {
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(pattern, async (route) => { await released; await route.continue(); });
+  return release;
+}
+
+for (const [width, staticNav, realNav] of [
+  [390, ".static-shell-tabs", "atlas-spine-mobile"],
+  [900, ".static-shell-rail", "atlas-spine"],
+  [1280, ".static-shell-rail", "atlas-spine"],
+] as const) {
+  test(`the static shell paints before the app's code, with navigation where it will stay (${width}px)`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    const release = await holdAsset(page, /\/assets\/index-[^/]+\.js$/);
+    await page.goto("/#/routes", { waitUntil: "commit" });
+
+    await expect(page.getByText("Opening goDiesel…")).toBeVisible();
+    const placeholder = await page.locator(staticNav).boundingBox();
+    expect(placeholder).not.toBeNull();
+
+    release();
+    const nav = page.getByTestId(realNav);
+    await expect(nav).toBeVisible();
+    await expect(page.locator("[data-static-shell]")).toHaveCount(0);
+    const mounted = await nav.boundingBox();
+    for (const key of ["x", "y", "width", "height"] as const) {
+      expect(Math.abs((mounted?.[key] ?? 0) - (placeholder?.[key] ?? 0))).toBeLessThanOrEqual(1);
+    }
+  });
+}
+
+test("a surface that is still downloading says what is opening, clear of the screen edge", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const [path, chunk, status, ready] of [
+    ["routes", /\/assets\/routes-page-[^/]+\.js$/, "Opening your routes…", "Places worth returning to."],
+    ["finder", /\/assets\/finder-page-[^/]+\.js$/, "Opening Finder…", "Plan the next day."],
+  ] as const) {
+    const release = await holdAsset(page, chunk);
+    await page.goto(`/#/${path}`);
+
+    const message = page.getByRole("status").filter({ hasText: status });
+    await expect(message).toBeVisible();
+    await expect(page.getByText("Loading view.")).toHaveCount(0);
+    await expect(page.getByTestId("atlas-spine-mobile")).toBeVisible();
+    const box = await message.boundingBox();
+    expect(box?.x).toBeGreaterThanOrEqual(12);
+    expect(box?.y).toBeGreaterThanOrEqual(12);
+    // The placeholder reserves the surface's space above the navigation.
+    const reserved = await page.locator("[data-surface-placeholder]").boundingBox();
+    expect(reserved?.height).toBeGreaterThan(400);
+
+    release();
+    await expect(page.getByRole("heading", { name: ready })).toBeVisible();
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+  }
+});
+
+test("the page may draw under the notch and home indicator", async ({ page }) => {
+  await page.goto("/#/atlas");
+  await expect(page.locator('meta[name="viewport"]')).toHaveAttribute("content", /viewport-fit=cover/);
 });

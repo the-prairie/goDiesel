@@ -1,15 +1,22 @@
-import { lazy, type ReactNode } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 import {
   createHashRouter,
   Navigate,
+  replace,
   RouterProvider,
+  type RouteObject,
   useParams,
 } from "react-router-dom";
 
+import { RootRouteError, RouteError } from "@/app/route-error";
 import { AppShell } from "@/app/app-shell";
-import { canonicalizeLegacyQuestHash } from "@/app/route-paths";
+import { LEGACY_QUEST_ROUTE_PATH } from "@/app/route-paths";
 import { singleRouteMicrosite } from "@/app/single-route-microsite";
+import { SurfacePlaceholder } from "@/app/surface-placeholder";
 
+// The route table of a single-route microsite (ADR-0011). vite.config.ts
+// aliases `@/app/router` to this module when VITE_SINGLE_ROUTE_SLUG is set, so
+// the share bundle only contains the route guide and its replay.
 const ReplayPage = lazy(() =>
   import("@/surfaces/replay/replay-page").then((module) => ({ default: module.ReplayPage })),
 );
@@ -19,48 +26,66 @@ const RouteDetailPage = lazy(() =>
   })),
 );
 
-canonicalizeLegacyQuestHash();
-window.addEventListener("hashchange", canonicalizeLegacyQuestHash);
-
-function SingleRouteGuard({ children }: { children: ReactNode }) {
-  const { routeSlug } = useParams();
-  return routeSlug === singleRouteMicrosite!.slug ? (
-    children
-  ) : (
-    <Navigate to={singleRouteMicrosite!.guidePath} replace />
-  );
-}
-
 if (!singleRouteMicrosite) {
   throw new Error("A single-route build requires VITE_SINGLE_ROUTE_SLUG.");
 }
+const microsite = singleRouteMicrosite;
 
-const router = createHashRouter([
+function SingleRouteGuard({ children }: { children: ReactNode }) {
+  const { routeSlug } = useParams();
+  return routeSlug === microsite.slug ? children : <Navigate to={microsite.guidePath} replace />;
+}
+
+export const singleRouteTree: RouteObject[] = [
   {
     element: <AppShell />,
+    errorElement: <RootRouteError />,
     children: [
-      { index: true, element: <Navigate to={singleRouteMicrosite.guidePath} replace /> },
       {
-        path: "routes/:routeSlug",
-        element: (
-          <SingleRouteGuard>
-            <RouteDetailPage />
-          </SingleRouteGuard>
-        ),
+        errorElement: <RouteError />,
+        children: [
+          { index: true, element: <Navigate to={microsite.guidePath} replace /> },
+          {
+            path: "routes/:routeSlug",
+            handle: { surface: "route" },
+            element: (
+              <SingleRouteGuard>
+                <Suspense fallback={<SurfacePlaceholder surface="route" />}>
+                  <RouteDetailPage />
+                </Suspense>
+              </SingleRouteGuard>
+            ),
+          },
+          {
+            path: "replay/:routeSlug",
+            handle: { surface: "replay" },
+            element: (
+              <SingleRouteGuard>
+                <Suspense fallback={<SurfacePlaceholder surface="replay" />}>
+                  <ReplayPage />
+                </Suspense>
+              </SingleRouteGuard>
+            ),
+          },
+          // A legacy link only ever opens this share's guide. It is not rewritten
+          // to the slug it names first, so another route's identifier never
+          // becomes a microsite URL, before or after the app has started.
+          { path: LEGACY_QUEST_ROUTE_PATH, loader: () => replace(microsite.guidePath) },
+          // So does any other path: a share never names or opens another surface.
+          { path: "*", loader: () => replace(microsite.guidePath) },
+        ],
       },
-      {
-        path: "replay/:routeSlug",
-        element: (
-          <SingleRouteGuard>
-            <ReplayPage />
-          </SingleRouteGuard>
-        ),
-      },
-      { path: "*", element: <Navigate to={singleRouteMicrosite.guidePath} replace /> },
     ],
   },
-]);
+];
+
+let router: ReturnType<typeof createHashRouter> | undefined;
+
+function appRouter() {
+  router ??= createHashRouter(singleRouteTree);
+  return router;
+}
 
 export function AppRouter() {
-  return <RouterProvider router={router} />;
+  return <RouterProvider router={appRouter()} />;
 }

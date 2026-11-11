@@ -24,7 +24,7 @@ import type {
   ReplayEngineMountOptions,
 } from "@/surfaces/replay/renderer-port";
 import type { ReplayPose } from "@/surfaces/replay/playback/replay-controller";
-import { recordTileFailure, rgbaPixelsLookBlank } from "@/providers/render-health";
+import { rgbaPixelsLookBlank } from "@/providers/render-health";
 import { bearingDegrees, routePathPose } from "@/domain/geometry/route-path";
 import type { QuestRoute } from "@/domain/route";
 import {
@@ -38,13 +38,23 @@ import {
   CESIUM_GROUND_ROUTE_OPTIONS,
   GOOGLE_3D_TILES_RENDER_OPTIONS,
 } from "@/providers/cesium-render-quality";
+import {
+  initialSurfaceSamplingState,
+  reduceSurfaceSampling,
+  surfaceSampleRetryDelay,
+} from "./surface-sampling-state";
+import {
+  cesiumFidelityStatus,
+  cesiumRunIsCurrent,
+  initialCesiumFidelityState,
+  reduceCesiumFidelity,
+  type CesiumFidelityEvent,
+} from "./cesium-fidelity-state";
 
 const SURFACE_VISUAL_OFFSET_M = 3;
-const SURFACE_SAMPLE_INTERVAL_MS = 250;
 const MAX_STALE_SAMPLE_DISTANCE_M = 500;
 const MAX_STALE_CAMERA_SAMPLE_DISTANCE_M = 150;
 const MAX_CAMERA_EASING_DISTANCE_M = 500;
-const TILE_FAILURE_THRESHOLD = 8;
 
 interface CameraTarget {
   lat: number;
@@ -130,57 +140,43 @@ export class CesiumReplayEngine implements ReplayEngine {
   private pendingGroundingObservation?: RouteGroundingObservation;
   private latestPose?: ReplayPose;
   private lastGroundingUpdateMs?: number;
-  private lastSurfaceSampleMs = Number.NEGATIVE_INFINITY;
-  private surfaceSampleInFlight = false;
+  private surfaceSampling = initialSurfaceSamplingState();
   private surfaceSampleRetryTimer?: number;
   private removeTileFailureListener?: () => void;
   private cancelInitialTileWait?: () => void;
   private diagnosticsTimer?: number;
-  private tileFailureTimes: number[] = [];
-  private blankFrameCount = 0;
-  private partial = false;
+  private fidelity = initialCesiumFidelityState();
   private onStatus?: ReplayEngineMountOptions["onStatus"];
   private container?: HTMLElement;
-  private generation = 0;
 
   constructor(
     private readonly minimumCameraClearanceM = REPLAY_CAMERA_MIN_CLEARANCE_M,
   ) {}
 
   async mount({ container, route, onStatus }: ReplayEngineMountOptions) {
-    const generation = ++this.generation;
+    this.surfaceSampling = reduceSurfaceSampling(this.surfaceSampling, {
+      type: "sessionStarted",
+    });
     this.container = container;
     this.route = route;
     this.onStatus = onStatus;
-    onStatus({
-      state: "loading",
-      title: "Building your route world",
-      message: "Loading the bundled Earth engine and photorealistic tiles.",
-    });
+    const { operationId } = this.transition({ type: "sessionStarted" });
 
     if (route.route.length < 2) {
-      onStatus({
-        state: "unavailable",
-        title: "Route geometry unavailable",
-        message: "This completed route does not contain enough points to replay.",
-      });
+      this.transition({ type: "inputsRejected", operationId, reason: "geometry" });
       return;
     }
     if (!webglAvailable()) {
-      onStatus({
-        state: "unavailable",
-        title: "WebGL unavailable",
-        message: "This browser cannot start the photorealistic replay.",
-      });
+      this.transition({ type: "inputsRejected", operationId, reason: "webgl" });
       return;
     }
 
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
     if (!apiKey) {
-      onStatus({
-        state: "unavailable",
-        title: "Map tiles unavailable",
-        message: "A Google Map Tiles browser key is required for Earth Replay.",
+      this.transition({
+        type: "inputsRejected",
+        operationId,
+        reason: "credentials",
       });
       return;
     }
@@ -213,21 +209,19 @@ export class CesiumReplayEngine implements ReplayEngine {
         ...GOOGLE_3D_TILES_RENDER_OPTIONS,
         enableCollision: true,
       });
-      if (generation !== this.generation) {
-        viewer.destroy();
+      if (!cesiumRunIsCurrent(this.fidelity, operationId)) {
+        // destroy() has already released this viewer; a remount without
+        // destroy() has not, because it replaced `this.viewer`.
+        if (!viewer.isDestroyed()) viewer.destroy();
         return;
       }
       viewer.scene.primitives.add(tileset);
       this.removeTileFailureListener = tileset.tileFailed.addEventListener(() => {
-        this.tileFailureTimes = recordTileFailure(
-          this.tileFailureTimes,
-          performance.now(),
-        );
-        if (this.tileFailureTimes.length >= TILE_FAILURE_THRESHOLD) {
-          this.reportPartial(
-            "Several photorealistic tiles failed to load. Replay can continue with gaps.",
-          );
-        }
+        this.transition({
+          type: "tileFailed",
+          operationId,
+          atMs: performance.now(),
+        });
       });
 
       const routeEntity = viewer.entities.add({
@@ -262,29 +256,20 @@ export class CesiumReplayEngine implements ReplayEngine {
         },
       });
       await viewer.zoomTo(routeEntity, new HeadingPitchRange(0, -0.72, 0));
-      if (generation !== this.generation) return;
+      if (!cesiumRunIsCurrent(this.fidelity, operationId)) return;
       const initialTiles = await this.waitForInitialTiles(tileset);
-      if (generation !== this.generation) return;
-      if (!this.partial) {
-        onStatus({
-          state: "ready",
-          title: "Earth Replay ready",
-          message:
-            initialTiles === "loaded"
-              ? "The route thread is ready to move."
-              : "The route is ready while finer tile detail continues loading.",
-        });
-      }
-      this.startRenderDiagnostics(generation);
-    } catch (error) {
-      if (generation !== this.generation) return;
-      console.warn("Earth Replay unavailable", error);
-      this.destroy();
-      onStatus({
-        state: "unavailable",
-        title: "Photorealistic world unavailable",
-        message: "Google 3D tiles could not load for this route.",
+      if (!cesiumRunIsCurrent(this.fidelity, operationId)) return;
+      this.transition({
+        type: "initialTilesSettled",
+        operationId,
+        result: initialTiles,
       });
+      this.startRenderDiagnostics(operationId);
+    } catch (error) {
+      if (!cesiumRunIsCurrent(this.fidelity, operationId)) return;
+      console.warn("Earth Replay unavailable", error);
+      this.releaseResources();
+      this.transition({ type: "loadFailed", operationId }, onStatus);
     }
   }
 
@@ -311,28 +296,35 @@ export class CesiumReplayEngine implements ReplayEngine {
     });
   }
 
-  private startRenderDiagnostics(generation: number) {
+  private startRenderDiagnostics(operationId: number) {
     this.diagnosticsTimer = window.setInterval(() => {
-      if (generation !== this.generation || this.partial) return;
+      if (
+        !cesiumRunIsCurrent(this.fidelity, operationId) ||
+        this.fidelity.phase === "partial"
+      )
+        return;
       const canvas = this.viewer?.canvas;
       if (!canvas || canvas.width < 2 || canvas.height < 2) return;
-      this.blankFrameCount = canvasLooksBlank(canvas) ? this.blankFrameCount + 1 : 0;
-      if (this.blankFrameCount >= 2) {
-        this.reportPartial(
-          "The 3D scene is not rendering fully. Replay can continue in Atlas instead.",
-        );
-      }
+      this.transition({
+        type: "frameObserved",
+        operationId,
+        blank: canvasLooksBlank(canvas),
+      });
     }, 8_000);
   }
 
-  private reportPartial(message: string) {
-    if (this.partial) return;
-    this.partial = true;
-    this.onStatus?.({
-      state: "partial",
-      title: "3D tiles partially unavailable",
-      message,
-    });
+  /** Every status this engine publishes comes from the reducer state. */
+  private transition(
+    event: CesiumFidelityEvent,
+    onStatus: ReplayEngineMountOptions["onStatus"] | undefined = this.onStatus,
+  ) {
+    const previous = this.fidelity;
+    this.fidelity = reduceCesiumFidelity(previous, event);
+    if (this.fidelity.statusRevision !== previous.statusRevision) {
+      const status = cesiumFidelityStatus(this.fidelity);
+      if (status) onStatus?.(status);
+    }
+    return this.fidelity;
   }
 
   setPose(pose: ReplayPose) {
@@ -391,7 +383,6 @@ export class CesiumReplayEngine implements ReplayEngine {
         ((desiredHeadingDeg - this.cameraHeadingDeg + 540) % 360) - 180;
       this.cameraHeadingDeg = (this.cameraHeadingDeg + delta * 0.08 + 360) % 360;
     }
-    const heading = (this.cameraHeadingDeg * Math.PI) / 180;
     this.latestCameraTarget = { lat: cameraLat, lng: cameraLng };
     this.requestSurfaceSample(pose, cameraLat, cameraLng, now);
     if (!pose.following) {
@@ -463,9 +454,6 @@ export class CesiumReplayEngine implements ReplayEngine {
       renderedCameraTarget.lat,
       cameraAltitudeM,
     );
-    const easing = this.cameraInitialized
-      ? Math.min(1, Math.max(0.04, 1 - Math.exp(-5 * cameraElapsedSeconds)))
-      : 1;
     const currentCameraTarget = {
       lat: (viewer.camera.positionCartographic.latitude * 180) / Math.PI,
       lng: (viewer.camera.positionCartographic.longitude * 180) / Math.PI,
@@ -474,8 +462,14 @@ export class CesiumReplayEngine implements ReplayEngine {
       currentCameraTarget,
       renderedCameraTarget,
     );
-    let destination =
-      !this.cameraInitialized || cameraJumpDistanceM > MAX_CAMERA_EASING_DISTANCE_M
+    const snapCamera =
+      !this.cameraInitialized || cameraJumpDistanceM > MAX_CAMERA_EASING_DISTANCE_M;
+    if (snapCamera) this.cameraHeadingDeg = desiredHeadingDeg;
+    const heading = (this.cameraHeadingDeg * Math.PI) / 180;
+    const easing = snapCamera
+      ? 1
+      : Math.min(1, Math.max(0.04, 1 - Math.exp(-5 * cameraElapsedSeconds)));
+    let destination = snapCamera
         ? desiredDestination
         : Cartesian3.lerp(
             viewer.camera.positionWC,
@@ -556,14 +550,14 @@ export class CesiumReplayEngine implements ReplayEngine {
     now: number,
   ) {
     const scene = this.viewer?.scene;
-    if (
-      !scene ||
-      this.surfaceSampleInFlight ||
-      now - this.lastSurfaceSampleMs < SURFACE_SAMPLE_INTERVAL_MS
-    ) {
-      return;
-    }
-    this.lastSurfaceSampleMs = now;
+    if (!scene) return;
+    const nextSampling = reduceSurfaceSampling(this.surfaceSampling, {
+      type: "sampleRequested",
+      atMs: now,
+      supported: scene.sampleHeightSupported,
+    });
+    if (nextSampling === this.surfaceSampling) return;
+    this.surfaceSampling = nextSampling;
     if (this.surfaceSampleRetryTimer !== undefined) {
       window.clearTimeout(this.surfaceSampleRetryTimer);
       this.surfaceSampleRetryTimer = undefined;
@@ -574,11 +568,10 @@ export class CesiumReplayEngine implements ReplayEngine {
       return;
     }
 
-    const requestGeneration = this.generation;
+    const operationId = this.fidelity.operationId;
     const requestProgressM = pose.progressM;
     const requestCameraTarget = { lat: cameraLat, lng: cameraLng };
-    let retryLatestPose = false;
-    this.surfaceSampleInFlight = true;
+    const requestId = this.surfaceSampling.requestId;
     void scene
       .sampleHeightMostDetailed(
         [
@@ -589,7 +582,7 @@ export class CesiumReplayEngine implements ReplayEngine {
         2,
       )
       .then((positions) => {
-        if (requestGeneration !== this.generation) return;
+        if (!cesiumRunIsCurrent(this.fidelity, operationId)) return;
         const progressSampleIsStale =
           Math.abs(
             (this.latestPose?.progressM ?? requestProgressM) - requestProgressM,
@@ -614,30 +607,46 @@ export class CesiumReplayEngine implements ReplayEngine {
             ? { kind: "sample", heightM: sampledCameraHeightM }
             : { kind: "missing" };
         this.pendingCameraSurfaceTarget = requestCameraTarget;
-        retryLatestPose = progressSampleIsStale || cameraSampleIsStale;
+        this.surfaceSampling = reduceSurfaceSampling(this.surfaceSampling, {
+          type: "sampleObserved",
+          requestId,
+          retryLatest: progressSampleIsStale || cameraSampleIsStale,
+        });
         if (this.latestPose) this.setPose(this.latestPose);
       })
       .catch(() => {
-        if (requestGeneration === this.generation) {
+        if (cesiumRunIsCurrent(this.fidelity, operationId)) {
           this.pendingGroundingObservation = { kind: "missing" };
           this.pendingCameraSurfaceObservation = { kind: "missing" };
           this.pendingCameraSurfaceTarget = requestCameraTarget;
-          retryLatestPose = true;
+          this.surfaceSampling = reduceSurfaceSampling(this.surfaceSampling, {
+            type: "sampleFailed",
+            requestId,
+          });
         }
       })
       .finally(() => {
-        if (requestGeneration === this.generation) {
-          this.surfaceSampleInFlight = false;
+        if (cesiumRunIsCurrent(this.fidelity, operationId)) {
+          const retryLatestPose =
+            this.surfaceSampling.phase === "sampling" &&
+            this.surfaceSampling.requestId === requestId &&
+            this.surfaceSampling.retryLatest;
+          this.surfaceSampling = reduceSurfaceSampling(this.surfaceSampling, {
+            type: "sampleCompleted",
+            requestId,
+          });
           if (retryLatestPose && this.latestPose) {
             this.setPose(this.latestPose);
-            const retryDelayMs = Math.max(
-              0,
-              SURFACE_SAMPLE_INTERVAL_MS -
-                (performance.now() - this.lastSurfaceSampleMs),
+            const retryDelayMs = surfaceSampleRetryDelay(
+              this.surfaceSampling,
+              performance.now(),
             );
             this.surfaceSampleRetryTimer = window.setTimeout(() => {
               this.surfaceSampleRetryTimer = undefined;
-              if (requestGeneration === this.generation && this.latestPose) {
+              if (
+                cesiumRunIsCurrent(this.fidelity, operationId) &&
+                this.latestPose
+              ) {
                 this.setPose(this.latestPose);
               }
             }, retryDelayMs);
@@ -647,7 +656,12 @@ export class CesiumReplayEngine implements ReplayEngine {
   }
 
   destroy() {
-    this.generation += 1;
+    this.releaseResources();
+    this.transition({ type: "disposed" });
+  }
+
+  /** Releases the run's resources. The caller records why in the reducer. */
+  private releaseResources() {
     this.cancelInitialTileWait?.();
     this.removeTileFailureListener?.();
     if (this.diagnosticsTimer !== undefined) {
@@ -674,15 +688,13 @@ export class CesiumReplayEngine implements ReplayEngine {
     this.pendingGroundingObservation = undefined;
     this.latestPose = undefined;
     this.lastGroundingUpdateMs = undefined;
-    this.lastSurfaceSampleMs = Number.NEGATIVE_INFINITY;
-    this.surfaceSampleInFlight = false;
+    this.surfaceSampling = reduceSurfaceSampling(this.surfaceSampling, {
+      type: "disposed",
+    });
     this.surfaceSampleRetryTimer = undefined;
     this.removeTileFailureListener = undefined;
     this.cancelInitialTileWait = undefined;
     this.diagnosticsTimer = undefined;
-    this.tileFailureTimes = [];
-    this.blankFrameCount = 0;
-    this.partial = false;
     this.onStatus = undefined;
     this.container = undefined;
   }

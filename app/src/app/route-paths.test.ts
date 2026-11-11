@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  atlasReturnPath,
-  replayPath,
-  replayReturnPath,
-} from "@/app/route-paths";
+import { atlasReturnPath, replayPath } from "@/app/route-paths";
 
 describe("Atlas replay navigation", () => {
   it("carries a selected Atlas URL into Replay", () => {
@@ -21,26 +17,5 @@ describe("Atlas replay navigation", () => {
     );
     expect(atlasReturnPath(new URLSearchParams({ from: "https://example.com" }))).toBeUndefined();
     expect(atlasReturnPath(new URLSearchParams({ from: "/admin" }))).toBeUndefined();
-  });
-
-  it("accepts only the matching route story as a Replay return destination", () => {
-    expect(
-      replayReturnPath(
-        new URLSearchParams({ from: "/routes/route-123" }),
-        "route-123",
-      ),
-    ).toBe("/routes/route-123");
-    expect(
-      replayReturnPath(
-        new URLSearchParams({ from: "/routes/another-route" }),
-        "route-123",
-      ),
-    ).toBeUndefined();
-    expect(
-      replayReturnPath(
-        new URLSearchParams({ from: "https://example.com" }),
-        "route-123",
-      ),
-    ).toBeUndefined();
   });
 });

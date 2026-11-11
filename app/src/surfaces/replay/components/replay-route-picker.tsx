@@ -1,4 +1,4 @@
-import { Check, Search } from "lucide-react";
+import { Check, Route, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -16,13 +16,11 @@ import type { RouteSummary } from "@/domain/route";
 import { replayPath } from "@/app/route-paths";
 
 export function ReplayRoutePicker({
-  compact = false,
   currentSlug,
   renderer,
   routes,
   returnPath,
 }: {
-  compact?: boolean;
   currentSlug: string;
   renderer?: "atlas" | "cesium";
   routes: RouteSummary[];
@@ -58,16 +56,11 @@ export function ReplayRoutePicker({
       }}
     >
       <SheetTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className={compact ? "w-9 px-0 sm:w-full sm:px-3" : "w-full"}
-        >
-          <Search aria-hidden="true" />
-          <span className={compact ? "sr-only sm:not-sr-only" : undefined}>
-            Change route
-          </span>
+        <Button type="button" variant="outline" size="sm" aria-label="Change route" className="w-full min-w-11">
+          {/* Icon-only on phones, so the glyph names the action: a route. */}
+          <Route aria-hidden="true" className="sm:hidden" />
+          <Search aria-hidden="true" className="hidden sm:block" />
+          <span className="hidden sm:inline">Change route</span>
         </Button>
       </SheetTrigger>
       <SheetContent
@@ -162,7 +155,7 @@ function RouteGroup({
   return (
     <section aria-label={label} className="mt-5 first:mt-0">
       <div className="mb-2">
-        <h2 className="text-xs font-semibold uppercase text-primary">{label}</h2>
+        <h2 className="text-xs font-semibold uppercase text-accent-foreground">{label}</h2>
         {description ? (
           <p className="mt-1 text-xs text-muted-foreground">{description}</p>
         ) : null}
@@ -188,7 +181,7 @@ function RouteGroup({
                   {route.region} · {route.type} · {route.distanceKm.toFixed(1)} km
                 </span>
               </span>
-              <span className="flex items-center gap-1 text-xs font-medium text-primary">
+              <span className="flex items-center gap-1 text-xs font-medium text-accent-foreground">
                 {selected ? <Check className="size-3.5" aria-hidden="true" /> : null}
                 {route.replay.bestInEarth ? "Best in Earth" : "Replay ready"}
               </span>

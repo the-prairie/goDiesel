@@ -7,26 +7,26 @@ import {
   ScanLine,
   SkipForward,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/ui/button";
-import type { QuestRoute } from "@/domain/route";
+import { cn } from "@/ui/utils";
+import { climbLabel, type QuestRoute } from "@/domain/route";
 import {
   ROUTE_TRAILER_DURATION_SECONDS,
   routeTrailerFrame,
-  type RouteTrailerFrame,
 } from "@/surfaces/replay/cinematic/route-trailer-controller";
 import {
   createGoogleRouteNavigatorEngine,
   type GoogleRouteNavigatorEngine,
-  type GoogleRouteNavigatorStatus,
 } from "@/surfaces/replay/renderers/google-route-navigator-engine";
 
-const INITIAL_STATUS: GoogleRouteNavigatorStatus = {
-  state: "loading",
-  message: "Preparing the route world.",
-};
+import {
+  initialTrailerState,
+  reduceTrailer,
+  type TrailerEvent,
+} from "./trailer-state";
 
 function routePictureLine(route: QuestRoute) {
   const place = `${route.name} ${route.region}`.toLowerCase();
@@ -47,43 +47,58 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<GoogleRouteNavigatorEngine | undefined>(undefined);
   const elapsedRef = useRef(0);
-  const playingRef = useRef(false);
-  const [playing, setPlaying] = useState(false);
-  const [status, setStatus] = useState<GoogleRouteNavigatorStatus>(INITIAL_STATUS);
-  const [frame, setFrame] = useState<RouteTrailerFrame>(() =>
-    routeTrailerFrame(route, 0),
+  const [state, setState] = useState(() =>
+    initialTrailerState(routeTrailerFrame(route, 0)),
   );
+  // Synchronous mirror of the reducer state for the frame loop and provider
+  // callbacks. It is written only here, so the reducer stays the single owner.
+  const stateRef = useRef(state);
+  const dispatch = useCallback((event: TrailerEvent) => {
+    const next = reduceTrailer(stateRef.current, event);
+    if (next === stateRef.current) return;
+    stateRef.current = next;
+    setState(next);
+  }, []);
+  const { frame, status } = state;
+  const providerUnavailable = status.state === "unavailable";
+  const playing = state.playback === "playing";
 
   const commitFrame = (elapsedSeconds: number) => {
     const next = routeTrailerFrame(route, elapsedSeconds);
     elapsedRef.current = elapsedSeconds;
     engineRef.current?.setCamera(next.camera);
     engineRef.current?.setRouteReveal(next.reveal);
-    setFrame(next);
+    return next;
   };
 
-  const setPlayback = (next: boolean) => {
-    playingRef.current = next;
-    setPlaying(next);
-  };
+  const setPlayback = (next: boolean) =>
+    dispatch({ type: "playbackChanged", playing: next });
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    let disposed = false;
     const engine = createGoogleRouteNavigatorEngine();
     engineRef.current = engine;
     elapsedRef.current = 0;
-    setFrame(routeTrailerFrame(route, 0));
-    setStatus(INITIAL_STATUS);
+    dispatch({ type: "sessionStarted", frame: routeTrailerFrame(route, 0) });
+    const { sessionId } = stateRef.current;
 
     void engine.mount({
       apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
       container,
       route,
-      groundingMode: "mesh",
+      groundingMode: "ground",
       onStatus: (next) => {
-        setStatus(next);
-        if (next.state !== "ready") return;
+        if (disposed || stateRef.current.sessionId !== sessionId) return;
+        if (next.state !== "ready") {
+          dispatch({
+            type: "providerReported",
+            sessionId,
+            status: { ...next, state: next.state },
+          });
+          return;
+        }
         const reducedMotion = window.matchMedia(
           "(prefers-reduced-motion: reduce)",
         ).matches;
@@ -94,13 +109,18 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
         elapsedRef.current = initialElapsed;
         engine.setCamera(initialFrame.camera);
         engine.setRouteReveal(initialFrame.reveal);
-        setFrame(initialFrame);
-        setPlayback(!reducedMotion);
+        dispatch({
+          type: "providerReady",
+          sessionId,
+          message: next.message,
+          frame: initialFrame,
+          reducedMotion,
+        });
       },
     });
 
     return () => {
-      setPlayback(false);
+      disposed = true;
       engine.destroy();
       if (engineRef.current === engine) engineRef.current = undefined;
     };
@@ -114,7 +134,7 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
     const tick = (now: number) => {
       const deltaSeconds = Math.min(0.1, (now - previous) / 1_000);
       previous = now;
-      if (playingRef.current) {
+      if (stateRef.current.playback === "playing") {
         const elapsed = Math.min(
           ROUTE_TRAILER_DURATION_SECONDS,
           elapsedRef.current + deltaSeconds,
@@ -124,7 +144,7 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
         engineRef.current?.setCamera(next.camera);
         engineRef.current?.setRouteReveal(next.reveal);
         if (now - lastUiUpdate >= 80 || elapsed >= ROUTE_TRAILER_DURATION_SECONDS) {
-          setFrame(next);
+          dispatch({ type: "framePublished", frame: next });
           lastUiUpdate = now;
         }
         if (elapsed >= ROUTE_TRAILER_DURATION_SECONDS) setPlayback(false);
@@ -136,13 +156,13 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
   }, [route, status.state]);
 
   const restart = () => {
-    commitFrame(0);
-    setPlayback(true);
+    const next = commitFrame(0);
+    dispatch({ type: "restarted", frame: next });
   };
 
   const skip = () => {
-    commitFrame(ROUTE_TRAILER_DURATION_SECONDS);
-    setPlayback(false);
+    const next = commitFrame(ROUTE_TRAILER_DURATION_SECONDS);
+    dispatch({ type: "skipped", frame: next });
   };
 
   return (
@@ -153,20 +173,28 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
       data-state={status.state}
       data-testid="route-trailer"
     >
+      {/* The map host is its own stacking context, so nothing Google injects
+          (such as its key-error dialog) can rise above the scrim. While the
+          provider is unavailable it is hidden and inert. */}
       <div
+        aria-hidden={providerUnavailable || undefined}
         aria-label={`Google photorealistic 3D trailer of ${route.name}`}
-        className="absolute inset-0"
+        className={cn(
+          "absolute inset-x-0 top-3 bottom-16 isolate",
+          providerUnavailable && "invisible opacity-0",
+        )}
+        inert={providerUnavailable || undefined}
         ref={containerRef}
       />
 
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.72)_0%,transparent_22%,transparent_68%,rgba(0,0,0,0.88)_100%)]"
+        className="pointer-events-none absolute inset-x-0 top-0 bottom-[104px] bg-[linear-gradient(180deg,rgba(0,0,0,0.72)_0%,transparent_22%,transparent_68%,rgba(0,0,0,0.88)_100%)]"
       />
       <div aria-hidden="true" className="absolute inset-x-0 top-0 h-3 bg-black" />
       <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-3 bg-black" />
 
-      <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-4 px-5 pt-7 sm:px-8 sm:pt-9">
+      <div className="absolute inset-x-0 top-0 z-40 flex items-center justify-between gap-4 px-5 pt-7 sm:px-8 sm:pt-9">
         <Link
           aria-label="Back to route intelligence"
           className="inline-flex size-10 items-center justify-center border border-white/30 bg-black/35 text-white backdrop-blur-md transition-colors hover:bg-black/60"
@@ -206,7 +234,7 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
 
       {frame.showDecision ? (
         <div
-          className="absolute inset-x-0 bottom-12 z-20 border-y border-white/22 bg-black/72 px-5 py-5 backdrop-blur-md sm:bottom-14 sm:px-8 sm:py-7"
+          className="absolute inset-x-0 bottom-[104px] z-20 border-y border-white/22 bg-black/72 px-5 py-5 backdrop-blur-md sm:px-8 sm:py-7"
           data-testid="route-trailer-decision"
         >
           <div className="mx-auto grid max-w-7xl gap-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
@@ -219,7 +247,7 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
               </h1>
               <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-white/72">
                 <span>{route.distanceKm.toFixed(1)} km</span>
-                <span>{route.elevationStatus === "unavailable" ? "Elevation unavailable" : `${route.elevationGainM!.toLocaleString()} m up`}</span>
+                <span>{climbLabel(route)}</span>
                 <span>{route.type}</span>
                 <span>{route.date}</span>
               </div>
@@ -248,7 +276,10 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
       ) : null}
 
       {status.state !== "ready" ? (
-        <div className="absolute inset-0 z-30 grid place-items-center bg-black/88 p-6">
+        <div
+          className="absolute inset-0 z-30 grid place-items-center bg-black p-6"
+          data-testid="route-trailer-scrim"
+        >
           <div
             aria-live="polite"
             className="max-w-md text-center"
@@ -275,7 +306,9 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
           aria-label={playing ? "Pause trailer" : "Play trailer"}
           className="grid size-9 shrink-0 place-items-center border border-white/30 bg-black/42 text-white backdrop-blur-md hover:bg-black/70 disabled:opacity-45"
           disabled={status.state !== "ready"}
-          onClick={() => setPlayback(!playingRef.current)}
+          onClick={() =>
+            setPlayback(stateRef.current.playback !== "playing")
+          }
           type="button"
         >
           {playing ? (

@@ -1,8 +1,10 @@
 import { Save } from "lucide-react";
+import { useState } from "react";
 
 import { CurationStatus } from "@/surfaces/admin/components/curation-status";
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
+import { SelectField } from "@/ui/select-field";
 import {
   validateCuration,
   type AdminRouteRecord,
@@ -68,23 +70,22 @@ export function RouteEditor({
             placeholder="Easy, demanding, epic..."
             onChange={(difficulty) => onChange({ ...draft, difficulty })}
           />
-          <label className="grid gap-1.5 text-sm font-medium">
-            Review status
-            <select
-              value={draft.reviewStatus}
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              onChange={(event) =>
-                onChange({
-                  ...draft,
-                  reviewStatus: event.target.value as CurationDraft["reviewStatus"],
-                })
-              }
-            >
-              <option value="draft">Draft</option>
-              <option value="reviewed">Reviewed</option>
-              <option value="published">Published</option>
-            </select>
-          </label>
+          <SelectField
+            label="Review status"
+            value={draft.reviewStatus}
+            options={[
+              ["draft", "Draft"],
+              ["reviewed", "Reviewed"],
+              ["published", "Published"],
+            ]}
+            disabled={readOnly || saving}
+            onChange={(reviewStatus) =>
+              onChange({
+                ...draft,
+                reviewStatus: reviewStatus as CurationDraft["reviewStatus"],
+              })
+            }
+          />
         </div>
 
         <ListField
@@ -124,7 +125,7 @@ export function RouteEditor({
       <div
         data-testid="curation-action-bar"
         data-dirty={dirty ? "true" : "false"}
-        className="sticky bottom-[calc(var(--mobile-navigation-height)+0.75rem)] z-10 -mx-4 mt-1 flex min-h-16 flex-wrap items-center justify-between gap-3 border-t border-line bg-surface-raised/96 px-4 py-3 shadow-[0_-8px_20px_rgb(21_31_29_/_0.08)] backdrop-blur sm:-mx-5 sm:px-5 md:bottom-0"
+        className="sticky bottom-[calc(var(--mobile-navigation-height)+0.75rem)] z-10 -mx-4 mt-1 flex min-h-16 flex-wrap items-center justify-between gap-3 border-t border-line bg-black/95 px-4 py-3 backdrop-blur sm:-mx-5 sm:px-5 md:bottom-0"
       >
         <div className="grid gap-0.5">
           <p className={dirty ? "text-caption font-medium text-warning" : "text-caption font-medium text-ink-secondary"}>
@@ -196,7 +197,7 @@ function TextAreaField({
         value={value}
         rows={rows}
         placeholder={placeholder}
-        className="min-w-0 resize-y rounded-md border border-input bg-background px-3 py-2 text-sm leading-6 outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        className="min-w-0 resize-y rounded-md border border-input bg-background px-3 py-2 text-base leading-6 outline-none md:[@media(hover:hover)_and_(pointer:fine)]:text-sm placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
         onChange={(event) => onChange(event.target.value)}
       />
     </label>
@@ -214,20 +215,19 @@ function ListField({
   placeholder: string;
   onChange: (value: string[]) => void;
 }) {
+  const [buffer, setBuffer] = useState<{ value: string[]; text: string } | null>(null);
+
   return (
     <TextAreaField
       label={label}
-      value={value.join("\n")}
+      value={buffer?.value === value ? buffer.text : value.join("\n")}
       rows={3}
       placeholder={placeholder}
-      onChange={(next) =>
-        onChange(
-          next
-            .split("\n")
-            .map((item) => item.trim())
-            .filter(Boolean),
-        )
-      }
+      onChange={(text) => {
+        const next = text.split("\n").map((item) => item.trim()).filter(Boolean);
+        setBuffer({ value: next, text });
+        onChange(next);
+      }}
     />
   );
 }

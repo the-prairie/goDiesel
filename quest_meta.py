@@ -12,6 +12,27 @@ CURATION_LIST_FIELDS = ("terrain", "highlights", "caveats")
 CURATION_REVIEW_STATUSES = ("draft", "reviewed", "published")
 CURATION_FIELDS = frozenset((*CURATION_TEXT_FIELDS, *CURATION_LIST_FIELDS, "review_status"))
 
+# Route triage status in quests.json. Only `approved` is published.
+ROUTE_STATUSES = ("pending", "approved", "archived")
+_LEGACY_ROUTE_STATUSES = {"rejected": "archived"}
+
+
+def normalize_route_status(value):
+    """Read a stored triage status. Missing or unrecognised means pending."""
+    if isinstance(value, str):
+        if value in ROUTE_STATUSES:
+            return value
+        if value in _LEGACY_ROUTE_STATUSES:
+            return _LEGACY_ROUTE_STATUSES[value]
+    return "pending"
+
+
+def validate_route_status(value):
+    """Accept a triage status for writing. Legacy `rejected` is not written."""
+    if not isinstance(value, str) or value not in ROUTE_STATUSES:
+        raise ValueError(f"status must be one of: {', '.join(ROUTE_STATUSES)}")
+    return value
+
 
 def build_route_curation(value):
     """Validate owner-authored route curation for generated route details."""
@@ -56,26 +77,37 @@ def build_route_curation(value):
     return curation
 
 
+def curated_best_in_earth_ids(routes):
+    ids = set()
+    for route in routes:
+        flag = route.get("best_in_earth", False)
+        if flag is False or flag is None:
+            continue
+        if flag is not True:
+            raise ValueError(
+                f"best_in_earth for {route.get('activity_id')} must be true or false"
+            )
+        ids.add(str(route["activity_id"]))
+    return ids
+
+
 def build_replay_metadata(
     activity_id,
     point_count,
     best_in_earth_ids,
     lifecycle="completed",
-    preferred_mode=None,
 ):
     """Build replay metadata without contradicting validated route geometry."""
     if not isinstance(point_count, int) or point_count < 0:
         raise ValueError("replay point_count must be a non-negative integer")
     if lifecycle not in ("completed", "planned", "discovered"):
         raise ValueError("replay lifecycle must be completed, planned, or discovered")
-    if preferred_mode not in (None, "atlas", "earth"):
-        raise ValueError("replay preferred mode must be atlas or earth")
 
     geometry_ready = point_count > 1
     replay_eligible = geometry_ready and lifecycle in ("completed", "discovered")
     best_in_earth = replay_eligible and str(activity_id) in best_in_earth_ids
     return {
-        "mode": preferred_mode or ("earth" if best_in_earth else "atlas"),
+        "mode": "earth" if best_in_earth else "atlas",
         "replay_eligible": replay_eligible,
         "best_in_earth": best_in_earth,
         "geometry_status": "ready" if geometry_ready else "missing",
@@ -102,7 +134,7 @@ def _round_to_10(value):
     return int(round(value / 10.0) * 10)
 
 
-def _difficulty(activity_type, distance_km, elevation_gain):
+def _effort_tier(activity_type, distance_km, elevation_gain):
     if activity_type == "Ride":
         if distance_km >= 75 or elevation_gain >= 1000:
             return "Epic"
@@ -131,9 +163,17 @@ def _theme(activity_type, distance_km, elevation_gain, region_label, activity_na
 
 
 def build_quest_meta(activity_type, distance_km, elevation_gain, region_label, activity_name):
+    """Build generated quest metadata.
+
+    ``elevation_gain`` is ``None`` when the source recorded no elevation. The
+    climb then stays unknown: ``elevation_gain_m`` is ``None``, the record
+    carries ``elevation_status: "unavailable"``, the completion rule makes no
+    climbing claim, and scoring uses distance alone. A recorded gain adds no
+    status field, so existing generated records keep their exact shape.
+    """
     recorded_elevation = elevation_gain is not None
     scoring_elevation = elevation_gain if recorded_elevation else 0
-    difficulty = _difficulty(activity_type, distance_km, scoring_elevation)
+    effort_tier = _effort_tier(activity_type, distance_km, scoring_elevation)
     theme = _theme(activity_type, distance_km, scoring_elevation, region_label, activity_name)
     verb = "ride" if activity_type == "Ride" else "run"
     xp = _round_to_10(
@@ -148,13 +188,20 @@ def build_quest_meta(activity_type, distance_km, elevation_gain, region_label, a
             f"with about {elevation_gain:,} m of climbing."
         )
 
-    return {
-        "difficulty": difficulty,
+    meta = {
+        "effort_tier": effort_tier,
         "theme": theme,
         "xp": xp,
         "elevation_gain_m": int(elevation_gain) if recorded_elevation else None,
         "completion_rule": completion_rule,
+        "quest_blurb": (
+            f"A {effort_tier.lower()} {theme.lower()} quest built from Lauren's "
+            f"{activity_name or region_label} route."
+        ),
     }
+    if not recorded_elevation:
+        meta["elevation_status"] = "unavailable"
+    return meta
 
 
 def route_guide_preview(curation):

@@ -1,5 +1,36 @@
 # goDiesel Field-Guide Design Contract
 
+## Current implementation precedence
+
+The owner-approved October 13 override in [root design.md](../design.md) and
+the semantic tokens in `src/index.css` supersede the earlier literal palette,
+typefaces, and radii described below. Product copy uses Inter. Map controls use
+neutral black glass, white and gray text, and indigo primary actions.
+
+Replay chapter controls use those shared tokens, including `surface-map-glass`,
+`ink`, `ink-secondary`, `primary`, `radius-control`, and `radius-panel`.
+The elevation relief stays neutral. Its filled playback point and hollow preview
+diamond distinguish recorded position from a preview without another palette.
+
+### Form and course controls
+
+Use `SelectField` from `src/ui/select-field.tsx` for longer option lists. It owns
+the label, trigger, keyboard navigation, selected checkmark, viewport-constrained
+menu, focus ring, and disabled state. Pass `disabled` explicitly when a parent
+fieldset is busy; portalled controls cannot rely on fieldset inheritance.
+
+Use `SegmentedControl` for short, mutually exclusive choices such as activity,
+units, creation method, or camera mode. It uses radio semantics and arrow-key
+navigation. Use `Button` with `aria-pressed` for independent preferences.
+Use `Disclosure` for optional instructions and connection details. Actionable
+route warnings stay visible.
+
+All three primitives use the current semantic tokens, Inter, and targets at
+least 44 px tall. Do not create local dropdown palettes or browser-styled selects.
+Saved-course details show their map and primary actions without a second
+creation form. The 3D course preview uses one map dock and distance-based controls;
+it must not present synthetic elapsed time or pace as recorded activity data.
+
 This document is the visual and interaction source of truth for goDiesel.
 
 The governing rule is:
@@ -12,7 +43,7 @@ The governing rule is:
 | --- | --- | --- | --- |
 | Spatial atlas | Atlas | Full-bleed Cesium world with compact navigation and route carousel | Remember and revisit |
 | Planning map | Finder | Full-height terrain with controls and inspector | Plan |
-| Editorial route | Route detail | Chapter-led field story with recorded geography | Understand one route |
+| Editorial route | Route detail | Real geography with route inspector | Understand one route |
 | Immersive | Replay and approved replay labs | Full-bleed terrain with one control dock | Relive one route |
 | Utility | Routes and Admin | Dense content workspace | Compare or curate |
 
@@ -92,11 +123,9 @@ Cards must not be nested inside other cards.
 
 ### Desktop
 
-At `1024px` and wider, the desktop sidebar is fixed at the left edge except on Atlas and Route detail.
+At `1024px` and wider, the desktop sidebar is fixed at the left edge except on Atlas.
 
 Atlas uses compact navigation over a full-width world and does not reserve permanent sidebar space.
-
-Route detail uses its own compact story header over a full-width editorial canvas.
 
 Map and immersive surfaces do not use a global top header.
 
@@ -122,19 +151,13 @@ All interactive controls remain at least `44px` square and respect safe-area ins
 
 ## Inspection
 
-Finder region detail uses a collapsible `320px` inspector.
-
-Route detail is a vertically scrolling field story.
-
-It leads with a source-backed route photograph when one exists, uses an evidence-labelled chapter rail, and places the real map, elevation profile, and factual guide inside a recorded-geography section.
-
-Replay is a deliberate transition from the story and must preserve a return path to that route.
+Desktop route detail and Finder region detail use a collapsible `320px` inspector.
 
 Atlas region selection uses a centered route carousel over the world rather than a permanent inspector.
 
-Mobile route detail remains a continuous story page with its chapter rail below the compact route header.
+Mobile route detail uses a three-position sheet with `180px`, `52vh`, and `88vh` stops.
 
-The mobile navigation remains visible, and the map and factual guide stack within the story without horizontal overflow.
+The map remains visible in peek and half states.
 
 Editorial imagery is optional and must be source-backed.
 
@@ -154,7 +177,6 @@ When no source-backed image exists, geography remains the primary visual.
 | `RouteTraceLayer` | Historical and selected route annotation |
 | `WaypointLayer` | Intentional coral map points |
 | `AtlasGlobe` | Sole Cesium owner for the global and regional Atlas world |
-| `AtlasImmersiveNavigation` | Compact Atlas navigation and memory/planning mode switch |
 | `RegionRouteCarousel` | Source-backed routes for the selected Atlas region |
 | `RouteInspector` | Route metrics, narrative, and actions |
 | `MobileRouteSheet` | Mobile map inspection |

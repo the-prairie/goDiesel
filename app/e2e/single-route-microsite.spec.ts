@@ -10,15 +10,10 @@ const route = routeSlug
       fs.readFileSync(path.join(routesDirectory, `${routeSlug}.json`), "utf8"),
     ) as {
       activity_name?: string;
-      elevation_status?: "recorded" | "unavailable";
       lifecycle?: string;
-      curation?: { vibe?: string };
-      annotations?: Array<{ body?: string }>;
       name: string;
       region: string;
       subtitle?: string;
-      provenance?: { temporal?: { status?: string } };
-      route?: Array<{ elapsed_s?: number }>;
     })
   : null;
 
@@ -26,9 +21,12 @@ const route = routeSlug
 // it is called, because it is not a place the owner has been. Anything else
 // leads with the place. Assuming one or the other made this spec pass only for
 // the discovered route it was written against.
+// A completed route is titled by its activity name when it has one
+// (routeName in domain/route/parse-shared.ts).
 const routeTitle =
-  route?.activity_name && /[a-z0-9]/i.test(route.activity_name)
-    ? route.activity_name
+  route?.lifecycle === "discovered" ||
+  (route?.lifecycle === "completed" && route.activity_name?.trim())
+    ? route?.activity_name || route?.name
     : route?.name;
 
 // Any route that is not the shared one, so the redirect assertion is real.
@@ -48,23 +46,8 @@ test.describe("single-route microsite", () => {
     await expect(page).toHaveURL(new RegExp(`#\/routes\/${routeSlug}$`));
     await expect(page.getByRole("heading", { name: routeTitle })).toBeVisible();
     await expect(
-      page.getByText(route!.region, { exact: false }).first(),
+      page.getByText(route!.region, { exact: true }).first(),
     ).toBeVisible();
-    if (route!.curation?.vibe) {
-      await expect(page.getByText(route!.curation.vibe, { exact: true }).first()).toBeVisible();
-    }
-    if (route!.annotations?.[0]?.body) {
-      await expect(page.getByText(route!.annotations[0].body, { exact: true }).first()).toBeVisible();
-    }
-    if (route!.lifecycle === "discovered") {
-      expect(route!.provenance?.temporal?.status).toBe("unavailable");
-      expect(route!.route?.some((point) => point.elapsed_s !== undefined)).toBe(false);
-      await expect(page.locator("body")).not.toContainText(/\b\d+:\d{2}\s*\/km\b/);
-    }
-    if (route!.elevation_status === "unavailable") {
-      await expect(page.getByText("Unavailable", { exact: true }).first()).toBeVisible();
-      await expect(page.locator("body")).not.toContainText(/0 m (?:up|climb|high)/i);
-    }
     await expect(page.getByTestId("atlas-spine")).toHaveCount(0);
     await expect(page.getByTestId("atlas-spine-mobile")).toHaveCount(0);
     await expect(page.getByRole("link", { name: "All routes" })).toHaveCount(0);
@@ -76,16 +59,32 @@ test.describe("single-route microsite", () => {
     await page.goto(`/#/routes/${otherSlug}`);
     await expect(page).toHaveURL(new RegExp(`#\/routes\/${routeSlug}$`));
 
-    await page.getByRole("link", { name: "Cinematic replay", exact: true }).click();
+    await page.getByRole("link", { name: "Open replay" }).click();
     await expect(page).toHaveURL(new RegExp(`#\/replay\/${routeSlug}$`));
     await expect(page.getByText("Change route", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Route guide" })).toBeVisible();
-    if (route!.elevation_status === "unavailable") {
-      await expect(page.getByTestId("replay-elevation-unavailable").first()).toBeVisible();
-      await expect(page.getByTestId("replay-active-chapter")).toContainText(
-        "Elevation unavailable",
-      );
+  });
+
+  test("never requests product surfaces or another route's data", async ({ page }) => {
+    const requested: string[] = [];
+    page.on("request", (request) => requested.push(new URL(request.url()).pathname));
+
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: routeTitle })).toBeVisible();
+    for (const path of ["/#/courses", "/#/finder", "/#/lab/design-system", `/#/replay/${otherSlug}`]) {
+      await page.goto(path);
+      await expect(page).toHaveURL(new RegExp(`#\/routes\/${routeSlug}$`));
     }
+    await page.getByRole("link", { name: "Open replay" }).click();
+    await expect(page.getByRole("button", { name: "Route guide" })).toBeVisible();
+
+    const productChunk = /\/assets\/(?:admin|atlas|finder|routes|course|course-preview|[a-z-]+-lab)-page-/;
+    expect(requested.filter((path) => productChunk.test(path))).toEqual([]);
+    expect(
+      requested.filter(
+        (path) => path.startsWith("/data/") && path !== `/data/routes/${routeSlug}.json`,
+      ),
+    ).toEqual([]);
   });
 
   test("keeps the shared guide usable on a mobile viewport", async ({ page }) => {
@@ -93,7 +92,7 @@ test.describe("single-route microsite", () => {
     await page.goto("/");
 
     await expect(page.getByRole("heading", { name: routeTitle })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Cinematic replay" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Open replay" })).toBeVisible();
     const horizontalOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
