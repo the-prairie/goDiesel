@@ -29,10 +29,17 @@ import gpxpy
 import pandas as pd
 
 from admin_classify import initial_classify_state, public_classify_state, reduce_classify
+from admin_rebuild import (
+    initial_rebuild_state,
+    public_rebuild_state,
+    reduce_rebuild,
+    stderr_tail,
+)
 from admin_curation import curation_readiness, save_curation_and_rebuild, write_atomic
 from route_regions import classify_region
 import hashlib
 import tempfile
+import uuid
 
 from curation_publish import (
     CurationPublishError,
@@ -401,6 +408,114 @@ if start_classify_if_needed() == 'started':
     print(f'  Background classifier started ({_classify_snapshot()["total"]} unmapped routes).')
 
 
+# ── Background rebuild ──
+
+_rebuild_state = initial_rebuild_state()
+_rebuild_lock = threading.Lock()
+OWNER_MUTATION_BUSY = 'another owner mutation is in progress'
+
+
+def _rebuild_snapshot():
+    with _rebuild_lock:
+        return public_rebuild_state(_rebuild_state)
+
+
+def _transition_rebuild(event):
+    global _rebuild_state
+    with _rebuild_lock:
+        _rebuild_state = reduce_rebuild(_rebuild_state, event)
+        return public_rebuild_state(_rebuild_state)
+
+
+def _mutation_busy_body():
+    """The 409 body for a held mutation lock, naming a running rebuild."""
+    body = {'error': OWNER_MUTATION_BUSY}
+    rebuild = _rebuild_snapshot()
+    if rebuild['phase'] == 'running':
+        body['reason'] = (
+            f"rebuild {rebuild['id']} is running; saves and rebuilds are refused until it finishes"
+        )
+    return body
+
+
+def _run_build():
+    """Run build.py and return its exit code and stderr tail. Stdout is discarded."""
+    with tempfile.TemporaryFile() as stderr:
+        completed = subprocess.run(
+            [sys.executable, str(QUESTS / 'build.py')],
+            cwd=str(QUESTS),
+            stdout=subprocess.DEVNULL,
+            stderr=stderr,
+            check=False,
+        )
+        size = stderr.seek(0, os.SEEK_END)
+        stderr.seek(max(0, size - 4 * 1024))
+        return completed.returncode, stderr_tail(stderr.read())
+
+
+def _settle_rebuild(event):
+    """Record the outcome and free the lock together, so no reader sees one without the other."""
+    global _rebuild_state
+    with _rebuild_lock:
+        _rebuild_state = reduce_rebuild(_rebuild_state, event)
+        OWNER_MUTATION_LOCK.release()
+
+
+def _rebuild_worker(rebuild_id):
+    event = {
+        'type': 'fail', 'id': rebuild_id, 'exit_code': None,
+        'stderr_tail': 'rebuild worker stopped unexpectedly',
+    }
+    try:
+        try:
+            exit_code, tail = _run_build()
+        except Exception as error:
+            exit_code, tail = None, stderr_tail(f'{type(error).__name__}: {error}'.encode())
+        if exit_code == 0:
+            event = {'type': 'succeed', 'id': rebuild_id}
+        else:
+            event = {'type': 'fail', 'id': rebuild_id, 'exit_code': exit_code, 'stderr_tail': tail}
+            print(f'[rebuild] {rebuild_id} failed (exit {exit_code})', file=sys.stderr)
+    finally:
+        _settle_rebuild({**event, 'finished_at': time.time()})
+
+
+def start_rebuild():
+    """Start one background rebuild. Returns (HTTP status, body)."""
+    global _rebuild_state
+    rebuild_id = uuid.uuid4().hex[:12]
+    # Taking the mutation lock and entering `running` happen together, so a
+    # refused save always sees the rebuild that holds the lock.
+    with _rebuild_lock:
+        if not OWNER_MUTATION_LOCK.acquire(blocking=False):
+            busy = True
+        else:
+            busy = False
+            _rebuild_state = reduce_rebuild(
+                _rebuild_state, {'type': 'start', 'id': rebuild_id, 'started_at': time.time()},
+            )
+            snapshot = public_rebuild_state(_rebuild_state)
+    if busy:
+        return 409, _mutation_busy_body()
+    try:
+        recover_owner_publication(QUESTS)
+    except (PublicationRecoveryError, OSError) as error:
+        _settle_rebuild({
+            'type': 'fail', 'id': rebuild_id, 'finished_at': time.time(),
+            'exit_code': None, 'stderr_tail': str(error),
+        })
+        return 503, {'error': str(error)}
+    try:
+        threading.Thread(target=_rebuild_worker, args=(rebuild_id,), daemon=True).start()
+    except BaseException as error:
+        _settle_rebuild({
+            'type': 'fail', 'id': rebuild_id, 'finished_at': time.time(),
+            'exit_code': None, 'stderr_tail': f'could not start rebuild thread: {error}',
+        })
+        return 500, {'error': 'Rebuild could not start.', 'detail': str(error)}
+    return 200, {'ok': True, 'msg': 'Rebuild started in background.', 'rebuild': snapshot}
+
+
 def find_activity_file(aid):
     for ext in ('.gpx', '.fit.gz', '.fit'):
         fp = ACTIVITY_DIR / f'{aid}{ext}'
@@ -627,6 +742,7 @@ class Handler(BaseHTTPRequestHandler):
                     datetime.fromtimestamp(manifest_path.stat().st_mtime).isoformat()
                     if manifest_path.exists() else None
                 ),
+                'rebuild': _rebuild_snapshot(),
             })
             return
         if path.startswith('/api/polyline/'):
@@ -713,7 +829,7 @@ class Handler(BaseHTTPRequestHandler):
         # that every JSON endpoint depends on.
         if path == '/api/media/upload':
             if not OWNER_MUTATION_LOCK.acquire(blocking=False):
-                self._send(409, {'error': 'another owner mutation is in progress'})
+                self._send(409, _mutation_busy_body())
                 return
             try:
                 recover_owner_publication(QUESTS)
@@ -741,7 +857,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == '/api/save':
             if not OWNER_MUTATION_LOCK.acquire(blocking=False):
-                self._send(409, {'error': 'another owner mutation is in progress'})
+                self._send(409, _mutation_busy_body())
                 return
             try:
                 recover_owner_publication(QUESTS)
@@ -801,7 +917,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == '/api/curation/save':
             if not OWNER_MUTATION_LOCK.acquire(blocking=False):
-                self._send(409, {'error': 'another owner mutation is in progress'})
+                self._send(409, _mutation_busy_body())
                 return
             try:
                 data = json.loads(body)
@@ -858,7 +974,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == '/api/annotations/save':
             if not OWNER_MUTATION_LOCK.acquire(blocking=False):
-                self._send(409, {'error': 'another owner mutation is in progress'})
+                self._send(409, _mutation_busy_body())
                 return
             try:
                 data = json.loads(body)
@@ -900,30 +1016,7 @@ class Handler(BaseHTTPRequestHandler):
             })
             return
         if path == '/api/rebuild':
-            if not OWNER_MUTATION_LOCK.acquire(blocking=False):
-                self._send(409, {'error': 'another owner mutation is in progress'})
-                return
-            try:
-                recover_owner_publication(QUESTS)
-            except (PublicationRecoveryError, OSError) as error:
-                OWNER_MUTATION_LOCK.release()
-                self._send(503, {'error': str(error)})
-                return
-
-            def rebuild_in_background():
-                try:
-                    subprocess.run(
-                        [sys.executable, str(QUESTS / 'build.py')],
-                        cwd=str(QUESTS),
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        check=False,
-                    )
-                finally:
-                    OWNER_MUTATION_LOCK.release()
-
-            threading.Thread(target=rebuild_in_background, daemon=True).start()
-            self._send(200, {'ok': True, 'msg': 'Rebuild started in background.'})
+            self._send(*start_rebuild())
             return
         if path == '/api/auto-classify':
             outcome = start_classify_if_needed()
