@@ -590,13 +590,6 @@ a {
   line-height: 1rem;
 }
 
-@media (max-height: 700px) {
-  body:has(.atlas-layout[data-region-selected="true"])
-    [data-testid="atlas-mode-navigation"] {
-    display: none;
-  }
-}
-
 .ember-segments { display: inline-flex; width: fit-content; max-width: 100%; gap: 2px; padding: 3px; border: 0; border-radius: 8px; background: var(--surface-muted); }
 .ember-segments > button { min-height: 44px; min-width: 44px; border: 0; border-radius: 5px; padding: 0 14px; color: var(--ink-secondary); background: transparent; box-shadow: none; font-size: 0.875rem; font-weight: 500; }
 .ember-segments > button[aria-pressed="true"] { color: var(--ink); background: var(--forest-active); border: 0; box-shadow: none; }
