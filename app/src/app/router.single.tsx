@@ -2,13 +2,15 @@ import { lazy, type ReactNode } from "react";
 import {
   createHashRouter,
   Navigate,
+  replace,
   RouterProvider,
+  type RouteObject,
   useParams,
 } from "react-router-dom";
 
 import { RouteError } from "@/app/route-error";
 import { AppShell } from "@/app/app-shell";
-import { canonicalizeLegacyQuestHash } from "@/app/route-paths";
+import { LEGACY_QUEST_ROUTE_PATH } from "@/app/route-paths";
 import { singleRouteMicrosite } from "@/app/single-route-microsite";
 
 // The route table of a single-route microsite (ADR-0011). vite.config.ts
@@ -28,15 +30,12 @@ if (!singleRouteMicrosite) {
 }
 const microsite = singleRouteMicrosite;
 
-canonicalizeLegacyQuestHash();
-window.addEventListener("hashchange", canonicalizeLegacyQuestHash);
-
 function SingleRouteGuard({ children }: { children: ReactNode }) {
   const { routeSlug } = useParams();
   return routeSlug === microsite.slug ? children : <Navigate to={microsite.guidePath} replace />;
 }
 
-const router = createHashRouter([
+export const singleRouteTree: RouteObject[] = [
   {
     element: <AppShell />,
     errorElement: <RouteError />,
@@ -58,11 +57,22 @@ const router = createHashRouter([
           </SingleRouteGuard>
         ),
       },
+      // A legacy link only ever opens this share's guide. It is not rewritten
+      // to the slug it names first, so another route's identifier never
+      // becomes a microsite URL, before or after the app has started.
+      { path: LEGACY_QUEST_ROUTE_PATH, loader: () => replace(microsite.guidePath) },
       { path: "*", element: <Navigate to={microsite.guidePath} replace /> },
     ],
   },
-]);
+];
+
+let router: ReturnType<typeof createHashRouter> | undefined;
+
+function appRouter() {
+  router ??= createHashRouter(singleRouteTree);
+  return router;
+}
 
 export function AppRouter() {
-  return <RouterProvider router={router} />;
+  return <RouterProvider router={appRouter()} />;
 }
