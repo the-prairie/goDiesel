@@ -47,6 +47,11 @@ export const CesiumAtlasGlobe = forwardRef<
     spinBy: (radians: number) => {
       (fallbackRef.current ?? engineRef.current)?.spinBy?.(radians);
     },
+    setLightroots: (mode) => {
+      engineRef.current?.setLightroots?.(mode);
+    },
+    nearestPlace: (maxPx: number) => engineRef.current?.nearestPlace?.(maxPx) ?? null,
+    routeSparks: () => engineRef.current?.routeSparks?.() ?? [],
   }));
 
   selectedRegionRef.current = selectedRegion;

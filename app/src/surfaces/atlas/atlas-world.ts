@@ -32,6 +32,9 @@ export interface AtlasGlobeHandle {
   zoomOut: () => void;
   resetView: () => void;
   spinBy?: (radians: number) => void;
+  setLightroots?: (mode: "day" | "night" | "flood") => void;
+  nearestPlace?: (maxPx: number) => string | null;
+  routeSparks?: () => { slug: string; region: string; width: number; points: { x: number; y: number }[] }[];
 }
 
 export type AtlasWorldStatus =
@@ -65,6 +68,9 @@ export interface AtlasWorldEngine {
   zoomOut(): void;
   resetView(): void;
   spinBy?(radians: number): void;
+  setLightroots?(mode: "day" | "night" | "flood"): void;
+  nearestPlace?(maxPx: number): string | null;
+  routeSparks?(): { slug: string; region: string; width: number; points: { x: number; y: number }[] }[];
   destroy(): void;
 }
 

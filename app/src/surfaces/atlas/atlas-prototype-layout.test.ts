@@ -10,7 +10,7 @@ describe("readAtlasPrototypeLayout", () => {
   it("keeps the current Atlas when the flag is absent or unknown", () => {
     expect(readAtlasPrototypeLayout(new URLSearchParams())).toBeNull();
     expect(readAtlasPrototypeLayout(new URLSearchParams("activity=runs"))).toBeNull();
-    expect(readAtlasPrototypeLayout(new URLSearchParams("atlasLayout=g"))).toBeNull();
+    expect(readAtlasPrototypeLayout(new URLSearchParams("atlasLayout=h"))).toBeNull();
     expect(readAtlasPrototypeLayout(new URLSearchParams("atlasLayout=A"))).toBeNull();
   });
 
@@ -21,6 +21,8 @@ describe("readAtlasPrototypeLayout", () => {
     expect(readAtlasPrototypeLayout(new URLSearchParams("atlasLayout=d"))).toBe("d");
     expect(readAtlasPrototypeLayout(new URLSearchParams("atlasLayout=e"))).toBe("e");
     expect(readAtlasPrototypeLayout(new URLSearchParams("atlasLayout=f"))).toBe("f");
+    expect(readAtlasPrototypeLayout(new URLSearchParams("atlasLayout=g"))).toBe("g");
+    expect(readAtlasPrototypeLayout(new URLSearchParams("atlasLayout=h"))).toBeNull();
   });
 });
 
@@ -33,6 +35,7 @@ describe("atlas sheet detents", () => {
     expect(atlasSheetOpens("a", false, false)).toBe(false);
     expect(atlasSheetOpens("d", true, true)).toBe(false);
     expect(atlasSheetOpens("f", true, false)).toBe(false);
+    expect(atlasSheetOpens("g", true, true)).toBe(false);
   });
 
   it("cycles peek, medium, and large, and swipe down from peek closes", () => {

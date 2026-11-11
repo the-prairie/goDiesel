@@ -36,6 +36,12 @@ import { resolveAtlasSelection } from "@/surfaces/atlas/atlas-selection";
 import type { RouteSummary } from "@/domain/route";
 import { replayPath } from "@/app/route-paths";
 
+const AtlasObjectChrome = lazy(() =>
+  import("@/surfaces/atlas/components/atlas-object-chrome").then((module) => ({
+    default: module.AtlasObjectChrome,
+  })),
+);
+
 const AtlasMemoryChrome = lazy(() =>
   import("@/surfaces/atlas/components/atlas-memory-chrome").then((module) => ({
     default: module.AtlasMemoryChrome,
@@ -80,6 +86,7 @@ export function AtlasPage() {
     || prototypeLayout === "d"
     || prototypeLayout === "e"
     || prototypeLayout === "f"
+    || prototypeLayout === "g"
       ? selectedRoute
       : selectedRoute ?? selectedRegion?.routes[0];
   const query = searchParams.get("q") ?? "";
@@ -253,7 +260,26 @@ export function AtlasPage() {
         className="absolute inset-0 min-h-0 rounded-none border-0"
       />
 
-      {isMemoryLayout(prototypeLayout) ? (
+      {prototypeLayout === "g" ? (
+        <Suspense fallback={null}>
+          <AtlasObjectChrome
+            regions={routeRegions}
+            selectedRegion={selectedRegion}
+            selectedRoute={selectedRoute}
+            presentation={presentation}
+            reducedMotion={window.matchMedia("(prefers-reduced-motion: reduce)").matches}
+            onSelectRegion={selectRegion}
+            onSelectRoute={selectRoute}
+            onClearRegion={clearRegion}
+            onClearRoute={clearRoute}
+            onSpin={(radians) => globeRef.current?.spinBy?.(radians)}
+            onLight={(mode) => globeRef.current?.setLightroots?.(mode)}
+            nearestPlace={(maxPx) => globeRef.current?.nearestPlace?.(maxPx) ?? null}
+            routeSparks={() => globeRef.current?.routeSparks?.() ?? []}
+            replayPathForRoute={replayPathForRoute}
+          />
+        </Suspense>
+      ) : isMemoryLayout(prototypeLayout) ? (
         <Suspense fallback={null}>
           <AtlasMemoryChrome
             layout={prototypeLayout}

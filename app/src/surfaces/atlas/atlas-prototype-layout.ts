@@ -1,6 +1,11 @@
 export const ATLAS_CARD_LAYOUTS = ["a", "b", "c"] as const;
 export const ATLAS_MEMORY_LAYOUTS = ["d", "e", "f"] as const;
-export const ATLAS_PROTOTYPE_LAYOUTS = [...ATLAS_CARD_LAYOUTS, ...ATLAS_MEMORY_LAYOUTS] as const;
+export const ATLAS_OBJECT_LAYOUT = "g" as const;
+export const ATLAS_PROTOTYPE_LAYOUTS = [
+  ...ATLAS_CARD_LAYOUTS,
+  ...ATLAS_MEMORY_LAYOUTS,
+  ATLAS_OBJECT_LAYOUT,
+] as const;
 
 export type AtlasCardLayout = (typeof ATLAS_CARD_LAYOUTS)[number];
 export type AtlasMemoryLayout = (typeof ATLAS_MEMORY_LAYOUTS)[number];
@@ -19,6 +24,7 @@ export function readAtlasPrototypeLayout(
   if (
     value === "a" || value === "b" || value === "c"
     || value === "d" || value === "e" || value === "f"
+    || value === "g"
   ) return value;
   return null;
 }
@@ -35,7 +41,7 @@ export function atlasSheetOpens(
   hasRoute: boolean,
 ): boolean {
   if (!hasRegion) return false;
-  if (layout === "d" || layout === "e" || layout === "f") return false;
+  if (layout === "d" || layout === "e" || layout === "f" || layout === "g") return false;
   if (layout === "b") return hasRoute;
   return true;
 }
