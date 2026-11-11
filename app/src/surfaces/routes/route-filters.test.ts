@@ -156,6 +156,13 @@ describe("filterRoutes", () => {
     },
   );
 
+  it("never lets an unrecorded climb satisfy an explicit climb filter", () => {
+    const unknown = route({ slug: "unknown-climb", elevationGainM: 0, elevationStatus: "unavailable" });
+
+    expect(filterRoutes([unknown], filters({ climb: "under-250" }))).toEqual([]);
+    expect(filterRoutes([unknown], filters({ climb: "all" }))).toEqual([unknown]);
+  });
+
   it("returns no routes when nothing satisfies the filters", () => {
     expect(
       filterRoutes(
