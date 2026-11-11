@@ -314,3 +314,29 @@ test('an older classifier refresh landing after a save cannot restore pre-save v
   await expect(page.getByPlaceholder('Custom title')).toHaveValue('Saved after classifier');
   await expect(page.locator('#dirtyCount')).toHaveText('0');
 });
+
+test('a classifier run the server marks failed reads as stopped early and stays until restarted', async ({ page, request, adminUrl }) => {
+  await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-01T00:00:00Z'));
+  await request.post(`${adminUrl}/fixture/reset`, { data: { phase: 'running', running: true, total: 8, done: 3, updated: 3, last_label: 'Test valley' } });
+  await page.goto(adminUrl);
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 3 / 8');
+  await request.post(`${adminUrl}/fixture/classification`, { data: { phase: 'failed', running: false, total: 8, done: 4, updated: 3, unmapped: 5 } });
+  await page.clock.fastForward(2000);
+  await expect(page.locator('#classifyStatus')).toHaveText('✕ CLASSIFYING STOPPED EARLY AT 4 / 8 · click AUTO-CLASSIFY to start again');
+  await expect(page.locator('#classifyStatus')).not.toContainText('CLASSIFIED');
+  await expect(page.locator('#autoClassifyBtn')).toBeEnabled();
+  await expect.poll(async () => (await (await request.get(`${adminUrl}/fixture/calls`)).json()).routeReads).toBe(2);
+  await page.clock.fastForward(10000);
+  await expect(page.locator('#classifyStatus')).toContainText('STOPPED EARLY AT 4 / 8');
+  await page.locator('#autoClassifyBtn').click();
+  await expect(page.locator('#classifyStatus')).toContainText('CLASSIFYING 1 / 2');
+});
+
+test('a finished classifier phase keeps the original completion notice', async ({ page, request, adminUrl }) => {
+  await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-01T00:00:00Z'));
+  await request.post(`${adminUrl}/fixture/classification`, { data: { phase: 'finished', running: false, total: 8, done: 8, updated: 7, unmapped: 1 } });
+  await page.goto(adminUrl);
+  await expect(page.locator('#classifyStatus')).toHaveText('✓ CLASSIFIED 7 / 8 · 1 still unmapped');
+});
