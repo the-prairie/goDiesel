@@ -243,3 +243,46 @@ def test_committed_quests_json_has_only_known_route_statuses():
         route for route in routes if normalize_route_status(route.get("status")) == "approved"
     ]
     assert normalized_approved == legacy_approved
+
+
+def _status_checkout(root, routes):
+    (root / "quests.json").write_text(json.dumps({"routes": routes}))
+    return root
+
+
+@pytest.mark.parametrize("stored,published", [
+    ({}, False),
+    ({"status": "unknown"}, False),
+    ({"status": "rejected"}, False),
+    ({"status": "archived"}, False),
+    ({"status": "pending"}, False),
+    ({"status": "approved"}, True),
+])
+def test_every_status_reader_agrees_on_publication(tmp_path, stored, published):
+    from pipeline_verification import approved_specs
+    from route_status import main as route_status_main, route_status
+
+    _status_checkout(tmp_path, [{"activity_id": "one", **stored}])
+    assert [spec["activity_id"] for spec in approved_specs(tmp_path)] == (
+        ["one"] if published else []
+    )
+    problems = route_status(tmp_path, "one")["problems"]
+    blocked = [problem for problem in problems if problem.startswith("status is")]
+    if published:
+        assert blocked == []
+    else:
+        expected = normalize_route_status(stored.get("status"))
+        assert blocked == [f"status is {expected}, not approved"]
+
+
+def test_route_status_summary_counts_only_published_routes(tmp_path, monkeypatch, capsys):
+    import route_status
+
+    _status_checkout(tmp_path, [
+        {"activity_id": "one", "status": "approved"},
+        {"activity_id": "two"},
+        {"activity_id": "three", "status": "rejected"},
+    ])
+    monkeypatch.setattr(route_status, "__file__", str(tmp_path / "route_status.py"))
+    assert route_status.main([]) == 0
+    assert capsys.readouterr().out.splitlines()[0] == "1 approved routes"

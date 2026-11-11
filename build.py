@@ -20,6 +20,7 @@ from quest_meta import (
     build_route_curation,
     curated_best_in_earth_ids,
     elevation_gain_m,
+    normalize_route_status,
     route_guide_preview,
 )
 from route_provenance import (
@@ -103,11 +104,11 @@ print('[1/5] Map provider: MapLibre GL JS + Google Street View route cam')
 # ── Load quests.json ──
 config = json.loads((QUESTS / 'quests.json').read_text())
 # Schema: {routes: [{activity_id, status, region, optional curation object}]}.
-# Only build approved public routes.
+# Only build approved public routes. A missing or unknown status is pending.
 all_routes = config.get('routes', config.get('quests', []))
 quest_specs = [
     r for r in all_routes
-    if r.get('status', 'approved') == 'approved'
+    if normalize_route_status(r.get('status')) == 'approved'
     and r.get('visibility', 'public') != 'hidden'
 ]
 pending_n = sum(1 for r in all_routes if r.get('status') == 'pending')

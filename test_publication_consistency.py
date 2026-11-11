@@ -497,3 +497,29 @@ with owner_publication(root, include_source=True):
             assert time.monotonic() < deadline, "child did not release publication lock"
             time.sleep(0.02)
     assert published_bytes(tmp_path) == before
+
+
+def run_synthetic_build(root):
+    inputs = root / "synthetic-inputs"
+    inputs.mkdir(exist_ok=True)
+    (inputs / "activities.csv").write_text("Activity Date,Filename,Distance\n")
+    return subprocess.run([sys.executable, str(root / "build.py")], cwd=root,
+                          env={**os.environ, "GODIESEL_DIESEL_DIARIES_ROOT": str(inputs),
+                               "GODIESEL_TRAVEL_ROOT": str(inputs)},
+                          capture_output=True, text=True, check=False)
+
+
+@pytest.mark.parametrize("status", [None, "unknown"])
+def test_generator_never_publishes_a_route_without_a_known_approved_status(tmp_path, status):
+    publication_fixture(tmp_path)
+    config = prepare_build_fixture(tmp_path)
+    if status is None:
+        config["routes"][0].pop("status")
+    else:
+        config["routes"][0]["status"] = status
+    (tmp_path / "quests.json").write_text(json.dumps(config))
+    build = run_synthetic_build(tmp_path)
+    assert build.returncode == 0, build.stderr
+    assert "[2/5] Curation: 0 approved" in build.stdout
+    assert not (generated_paths(tmp_path)["detail"] / "one.json").exists()
+    assert json.loads(generated_paths(tmp_path)["payload"].read_text())["routes"] == []

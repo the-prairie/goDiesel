@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 
 from admin_curation import curation_readiness
+from quest_meta import normalize_route_status
 from route_annotations import build_route_annotations
 from route_imports import route_source_kind
 
@@ -61,8 +62,9 @@ def route_status(checkout_root, activity_id):
         or str(detail.get("activity_name") or "").strip()
     ):
         problems.append("subtitle or activity_name is required for the public title")
-    if spec.get("status") != "approved":
-        problems.append(f"status is {spec.get('status', 'pending')}, not approved")
+    status = normalize_route_status(spec.get("status"))
+    if status != "approved":
+        problems.append(f"status is {status}, not approved")
     if not generated:
         problems.append("no generated record; run a build")
     elif replay.get("geometry_status") != "ready":
@@ -130,7 +132,7 @@ def main(argv):
         approved = [
             str(spec["activity_id"])
             for spec in config.get("routes", [])
-            if spec.get("status") == "approved"
+            if normalize_route_status(spec.get("status")) == "approved"
         ]
         ready = published = 0
         for slug in approved:

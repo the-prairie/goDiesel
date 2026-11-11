@@ -23,6 +23,7 @@ from typing import Any
 
 from PIL import Image
 
+from quest_meta import normalize_route_status
 from route_provenance import build_route_provenance, load_source_route_points
 
 
@@ -132,7 +133,7 @@ def approved_specs(root: Path) -> list[dict[str, Any]]:
     specs = [
         route
         for route in routes
-        if route.get("status", "approved") == "approved"
+        if normalize_route_status(route.get("status")) == "approved"
         and route.get("visibility", "public") != "hidden"
     ]
     activity_ids = [str(route.get("activity_id", "")) for route in specs]
