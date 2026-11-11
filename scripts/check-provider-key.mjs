@@ -9,6 +9,9 @@ import path from "node:path";
  * a live provider. If that variable is still set when the deployable bundle is
  * built, the site ships with no key and photorealistic replay silently never
  * works. Nothing else would notice: the tests are meant to pass without a key.
+ *
+ * A local build may omit the key. A public deployment sets
+ * GODIESEL_REQUIRE_PROVIDER_KEY=1, and then a missing key is a failure.
  */
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -35,6 +38,9 @@ async function configuredKey() {
 
 const key = await configuredKey();
 if (!key) {
+  if (process.env.GODIESEL_REQUIRE_PROVIDER_KEY === "1") {
+    fail("a Google Maps key is required for a public deployment.");
+  }
   console.log("Provider key check skipped: no Google Maps key is configured.");
   process.exit(0);
 }
