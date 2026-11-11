@@ -288,20 +288,47 @@ for (const orientation of BOTH) {
       }
     });
 
-    test("the Routes filter panel's pinned button clears the bottom inset", async ({ page }) => {
+    test("the Routes filter panel's pinned button clears the insets", async ({ page }) => {
       await open(page, orientation, "/#/routes");
       const filters = page.getByRole("button", { name: "Filters", exact: true });
       if ((await filters.getAttribute("aria-expanded")) === "false") await filters.click();
       const show = page.getByRole("button", { name: /^Show \d+ routes?$/ });
       await expect(show).toBeVisible();
-      // The page's side margins belong to the shell's content area; this
-      // button owns only its pinned bottom offset.
-      await expectEdgeBarsClear(page, orientation, ["main div.sticky"], { edges: ["bottom"] });
+      // The button rides at the bottom while its panel scrolls: bring the
+      // panel to the top so the pin, not the panel's start, decides its place.
+      await page.locator("main div.sticky").evaluate((pin) => pin.parentElement!.scrollIntoView({ block: "start" }));
+      await expectEdgeBarsClear(page, orientation, ["main div.sticky"]);
       if (orientation === PORTRAIT) {
         const navigation = await boxOf(page.getByTestId("atlas-spine-mobile"));
         const button = await boxOf(show);
         expect(button.y + button.height).toBeLessThanOrEqual(navigation.y);
       }
+    });
+
+    for (const [path, heading] of [
+      ["/#/routes", "Places worth returning to."],
+      ["/#/courses", "Create a course"],
+      ["/#/nope", "There’s nothing at this address."],
+      ["/#/admin", undefined],
+    ] as const) {
+      test(`the shell's content area clears the insets on ${path}`, async ({ page }) => {
+        await open(page, orientation, path);
+        if (heading) await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+        else await expect(page.getByTestId("app-header")).toBeVisible();
+        // The page scrolls past the bottom edge; its top and sides do not move.
+        await expectEdgeBarsClear(page, orientation, ["main"], { edges: ["top", "right", "left"], targets: false });
+      });
+    }
+
+    test("the offline page inside the shell clears the insets", async ({ page, context }) => {
+      await open(page, orientation, "/#/routes");
+      await expect(page.getByRole("heading", { name: "Places worth returning to." })).toBeVisible();
+      await context.setOffline(true);
+      const navigation = page.getByTestId(orientation === PORTRAIT ? "atlas-spine-mobile" : "atlas-spine");
+      await navigation.getByRole("link", { name: "Finder", exact: true }).click();
+      await expect(page.getByRole("heading", { name: "You’re offline." })).toBeVisible();
+      await expectEdgeBarsClear(page, orientation, ["[data-testid=view-offline]"]);
+      await context.setOffline(false);
     });
 
     test("Finder's search header and results clear the insets", async ({ page }) => {
@@ -349,30 +376,73 @@ test.describe("Earth and Atlas Replay", () => {
     await expectApart({ context: page.getByTestId("replay-context"), dock: page.getByTestId("replay-controls") });
   });
 
-  test("the route context and the dock's bottom edge clear the insets in landscape", async ({ page }) => {
+  test("the route context and dock clear the insets in landscape", async ({ page }) => {
     await installEarthReplay(page);
     await open(page, LANDSCAPE, "/#/replay/17654151284?renderer=cesium");
     await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-state", "ready");
-    await expectEdgeBarsClear(page, LANDSCAPE, ["[data-testid=replay-stage] > .pointer-events-none.absolute"]);
-    await expectEdgeBarsClear(page, LANDSCAPE, ["[data-testid=replay-controls]"], { edges: ["bottom"] });
+    await expectEdgeBarsClear(page, LANDSCAPE, ["[data-testid=replay-stage] > .pointer-events-none.absolute", "[data-testid=replay-controls]"]);
     await expectApart({ context: page.getByTestId("replay-context"), dock: page.getByTestId("replay-controls") });
   });
+});
 
-  test("the dock and the map's controls fit beside the notch on a landscape phone", async ({ page }) => {
-    // Known, not spacing: on a touch screen the dock's single row needs about
-    // 727 px. At 844x390 with real insets the rail (64 px + left inset) and the
-    // right inset leave 662 px, so the speed button is cut off; and because the
-    // stage's grid column grows to the dock's min-content, the map (and its
-    // controls and attribution) is wider than the stage and its right corner is
-    // clipped. The same overflow happens on a 768 px wide touch screen without
-    // insets. Remove this annotation when the dock fits and the column cannot
-    // outgrow the stage.
-    test.fail();
-    await stubMapStyle(page);
-    await open(page, LANDSCAPE, "/#/replay/17654151284?renderer=atlas");
-    const stage = page.getByTestId("replay-stage");
-    await expect(stage).toHaveAttribute("data-state", "ready");
-    await expect(stage.locator(".maplibregl-ctrl-attrib")).toContainText("OpenStreetMap");
-    await expectEdgeBarsClear(page, LANDSCAPE, ["[data-testid=replay-controls]", "[data-testid=replay-stage] .maplibregl-control-container"]);
-  });
+/** Every dock control, the map's attribution and its compass lie inside the stage. */
+async function expectDockAndMapInsideStage(page: Page, touch: boolean) {
+  const stage = page.getByTestId("replay-stage");
+  await expect(stage).toHaveAttribute("data-state", "ready");
+  await expect(stage.locator(".maplibregl-ctrl-attrib")).toContainText("OpenStreetMap");
+  const result = await stage.evaluate((root, touch) => {
+    const bounds = root.getBoundingClientRect();
+    const problems: string[] = [];
+    const inside = (el: Element, name: string) => {
+      const r = el.getBoundingClientRect();
+      if (r.left < bounds.left - 0.5 || r.right > bounds.right + 0.5 || r.top < bounds.top - 0.5 || r.bottom > bounds.bottom + 0.5)
+        problems.push(`${name} outside the stage [${[r.left, r.right].map(Math.round)}] vs [${[bounds.left, bounds.right].map(Math.round)}]`);
+      return r;
+    };
+    for (const control of root.querySelectorAll("[data-testid=replay-controls] :is(button, a[href], [role=slider])")) {
+      if (!control.checkVisibility()) continue;
+      const name = control.getAttribute("aria-label") || control.textContent?.trim() || control.tagName;
+      const r = inside(control, name);
+      if (touch && !control.matches("input[type=range]") && (r.width < 43.5 || r.height < 43.5))
+        problems.push(`${name} ${Math.round(r.width)}x${Math.round(r.height)}`);
+    }
+    for (const selector of [".maplibregl-ctrl-attrib", ".maplibregl-ctrl-compass"]) {
+      const el = root.querySelector(selector);
+      if (!el) problems.push(`${selector} missing`);
+      else inside(el, selector);
+    }
+    const dock = root.querySelector("[data-testid=replay-controls]")!;
+    return { problems, dockOverflow: dock.scrollWidth - dock.clientWidth };
+  }, touch);
+  expect(result.problems).toEqual([]);
+  expect(result.dockOverflow, "dock content wider than the dock").toBeLessThanOrEqual(1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0);
+}
+
+// The desktop dock is one row; where its box is narrower than the row needs,
+// the stage uses the compact dock. The map's column never outgrows the stage.
+test.describe("Earth/Atlas Replay dock fits its stage on touch screens", () => {
+  test.use({ hasTouch: true, isMobile: true });
+  const none = { top: 0, right: 0, bottom: 0, left: 0 };
+  for (const [name, viewport, insets] of [
+    ["768x1024", { width: 768, height: 1024 }, none],
+    ["844x390", { width: 844, height: 390 }, none],
+    ["844x390 with simulated insets", { width: 844, height: 390 }, LANDSCAPE.insets],
+    ["1024x768", { width: 1024, height: 768 }, none],
+  ] as const) {
+    test(`at ${name}`, async ({ page }) => {
+      await stubMapStyle(page);
+      await open(page, { name, viewport, insets }, "/#/replay/17654151284?renderer=atlas");
+      await expectDockAndMapInsideStage(page, true);
+      if (insets !== none)
+        await expectEdgeBarsClear(page, LANDSCAPE, ["[data-testid=replay-controls]", "[data-testid=replay-stage] .maplibregl-control-container"]);
+    });
+  }
+});
+
+test("Earth/Atlas Replay dock fits its stage on a 1280 px desktop", async ({ page }) => {
+  await stubMapStyle(page);
+  await open(page, { name: "desktop", viewport: { width: 1280, height: 800 }, insets: { top: 0, right: 0, bottom: 0, left: 0 } }, "/#/replay/17654151284?renderer=atlas");
+  await expectDockAndMapInsideStage(page, false);
+  await expect(page.getByTestId("replay-controls")).toHaveAttribute("data-dock-form", "row");
 });
