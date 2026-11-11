@@ -1,6 +1,6 @@
 """Source-backed route timing, elevation, and track-boundary provenance."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 import gzip
 import math
@@ -264,3 +264,28 @@ def build_route_provenance(
         discontinuities=discontinuities,
     )
 
+
+def published_route_provenance(
+    result: RouteProvenanceResult, lifecycle: str
+) -> RouteProvenanceResult:
+    """Return the provenance a route may publish for its lifecycle.
+
+    Timestamps in a discovered route's source describe whoever recorded the
+    file, not the owner. They stay in the durable source but are not published
+    as elapsed time, so a discovered route never presents someone else's pace
+    as the owner's experience.
+    """
+    if lifecycle != "discovered":
+        return result
+    return replace(
+        result,
+        route=[
+            {key: value for key, value in point.items() if key != "elapsed_s"}
+            for point in result.route
+        ],
+        temporal={"status": "unavailable"},
+        discontinuities=[
+            {key: value for key, value in item.items() if key != "elapsed_time_s"}
+            for item in result.discontinuities
+        ],
+    )
