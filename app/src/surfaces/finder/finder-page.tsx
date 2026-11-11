@@ -253,6 +253,7 @@ function FinderResults({
         )}
 
         <p className="border-t border-line pt-3 text-xs text-ink-muted">Routes from your collection. Save a route to plan a future outing.</p>
+        {result?.status === "matches" ? <p className="text-xs text-ink-secondary">Cover artwork based on <a className="underline underline-offset-2" href="https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9" target="_blank" rel="noreferrer">Esri World Imagery</a>.</p> : null}
       </div>
     </section>
   );
