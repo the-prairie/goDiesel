@@ -4,6 +4,7 @@ import {
   Map as MapLibreMap,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import "./maplibre-replay.css";
 
 import { ROUTE_THREAD_STYLE } from "@/domain/geometry/route-thread-style";
 import type {
@@ -102,7 +103,7 @@ export class MapLibreAtlasReplayEngine implements ReplayEngine {
     }, 15_000);
 
     const host = document.createElement("div");
-    host.className = "h-full w-full";
+    host.className = "replay-atlas-map h-full w-full";
     container.replaceChildren(host);
     this.host = host;
     const start = route.route[0];
