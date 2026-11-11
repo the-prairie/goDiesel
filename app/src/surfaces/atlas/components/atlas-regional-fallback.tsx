@@ -3,10 +3,11 @@ import { Map as MapLibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useMemo, useRef, useState, useReducer, forwardRef, useImperativeHandle } from "react";
 
-import type { AtlasGlobeHandle } from "@/surfaces/atlas/atlas-world";
+import type { AtlasContentInsets, AtlasGlobeHandle } from "@/surfaces/atlas/atlas-world";
 import { atlasViewportInsets } from "@/surfaces/atlas/atlas-region-camera";
 import type { RouteRegion } from "@/data/route-regions";
 import type { RoutePoint, RouteSummary } from "@/domain/route";
+import { activityStamp, routeWear } from "@/surfaces/atlas/atlas-object-state";
 import { initialRegionalFallbackState, reduceRegionalFallback } from "../regional-fallback-state";
 
 const ROUTE_THREAD_STYLE = {
@@ -16,6 +17,7 @@ const ROUTE_THREAD_STYLE = {
 };
 
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
+const NIGHT_STYLE_URL = "https://tiles.openfreemap.org/styles/dark";
 const LOAD_TIMEOUT_MS = 10_000;
 
 export interface RegionalRouteBounds {
@@ -155,9 +157,10 @@ function fitRegionalRoutes(
   map: MapLibreMap,
   host: HTMLDivElement,
   bounds: [[number, number], [number, number]],
+  insets?: { top: number; right: number; bottom: number; left: number },
 ) {
   map.fitBounds(bounds, {
-    padding: regionalMapPadding(host.clientWidth, host.clientHeight),
+    padding: insets ?? regionalMapPadding(host.clientWidth, host.clientHeight),
     maxZoom: 14,
     duration: 0,
   });
@@ -171,6 +174,10 @@ interface AtlasRegionalFallbackProps {
   selectedRoute?: RouteSummary;
   onSelectRoute?: (route: RouteSummary) => void;
   onReady?: () => void;
+  contentInsets?: AtlasContentInsets;
+  quietChrome?: boolean;
+  nightBasemap?: boolean;
+  onTerrainNote?: (note: string | null) => void;
 }
 
 export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalFallbackProps>(function AtlasRegionalFallback({
@@ -178,9 +185,15 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
   selectedRoute,
   onSelectRoute,
   onReady,
+  contentInsets,
+  quietChrome = false,
+  nightBasemap = false,
+  onTerrainNote,
 }, forwardedRef) {
   const hostRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | undefined>(undefined);
+  const contentInsetsRef = useRef(contentInsets);
+  contentInsetsRef.current = contentInsets;
   const onSelectRouteRef = useRef(onSelectRoute);
   const [lifecycle, dispatch] = useReducer(reduceRegionalFallback, undefined, initialRegionalFallbackState);
   const status = lifecycle.phase;
@@ -193,7 +206,7 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
     zoomOut: () => mapRef.current?.zoomOut(),
     resetView: () => {
       if (mapRef.current && hostRef.current && bounds) {
-        fitRegionalRoutes(mapRef.current, hostRef.current, bounds);
+        fitRegionalRoutes(mapRef.current, hostRef.current, bounds, contentInsetsRef.current);
       }
     },
   }), [bounds]);
@@ -221,13 +234,18 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
       3.5,
       2,
     ]);
-    map.setPaintProperty("regional-route-thread", "line-opacity", [
-      "case",
-      ["==", ["get", "slug"], selectedSlug],
-      1,
-      selectedSlug ? 0.52 : 0.9,
-    ]);
-  }, [selectedRoute?.slug]);
+    map.setPaintProperty("regional-route-thread", "line-opacity", nightBasemap
+      ? 0
+      : [
+        "case",
+        ["==", ["get", "slug"], selectedSlug],
+        1,
+        selectedSlug ? 0.52 : 0.9,
+      ]);
+    if (nightBasemap && map.getLayer("regional-route-halo")) {
+      map.setPaintProperty("regional-route-halo", "line-opacity", 0);
+    }
+  }, [nightBasemap, selectedRoute?.slug]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -245,7 +263,7 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
     try {
       map = new maplibregl.Map({
         container: host,
-        style: STYLE_URL,
+        style: nightBasemap ? NIGHT_STYLE_URL : STYLE_URL,
         center: [validBounds(region)!.centerLng, (bounds[0][1] + bounds[1][1]) / 2],
         zoom: 8,
         pitch: 0,
@@ -274,7 +292,7 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
     };
     const handleResize = () => {
       map.resize();
-      fitRegionalRoutes(map, host, bounds);
+      fitRegionalRoutes(map, host, bounds, contentInsetsRef.current);
       updateRouteOverlay();
       map.once("idle", () => {
         if (active) host.dataset.mapRendered = "true";
@@ -332,6 +350,11 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
           "line-opacity": 0.01,
         },
       });
+      if (nightBasemap) {
+        map.setPaintProperty("regional-route-halo", "line-opacity", 0);
+        map.setPaintProperty("regional-route-thread", "line-opacity", 0);
+        map.setPaintProperty("regional-route-hit-target", "line-opacity", 0);
+      }
       map.on("click", "regional-route-hit-target", (event) => {
         const slug = event.features?.[0]?.properties?.slug;
         const route = region.routes.find((candidate) => candidate.slug === slug);
@@ -344,7 +367,7 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
         map.getCanvas().style.cursor = "";
       });
       map.resize();
-      fitRegionalRoutes(map, host, bounds);
+      fitRegionalRoutes(map, host, bounds, contentInsetsRef.current);
       updateRouteOverlay();
       map.getCanvas().setAttribute(
         "aria-label",
@@ -375,7 +398,7 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
       if (mapRef.current === map) mapRef.current = undefined;
       host.replaceChildren();
     };
-  }, [bounds, region, routes]);
+  }, [bounds, nightBasemap, region, routes]);
 
   const statusCopy =
     status === "loading"
@@ -383,6 +406,46 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
       : status === "ready"
         ? "3D terrain partially unavailable."
         : "Regional map unavailable.";
+
+  useEffect(() => {
+    onTerrainNote?.(statusCopy);
+    return () => onTerrainNote?.(null);
+  }, [onTerrainNote, statusCopy]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const host = hostRef.current;
+    if (!map || !host || !bounds || !contentInsets || status !== "ready") return;
+    fitRegionalRoutes(map, host, bounds, contentInsets);
+  }, [bounds, contentInsets, status]);
+
+  useEffect(() => {
+    if (!quietChrome) return;
+    const host = hostRef.current;
+    const attrib = host?.querySelector(".maplibregl-ctrl-attrib");
+    if (!(attrib instanceof HTMLDetailsElement)) return;
+    attrib.open = false;
+    delete attrib.dataset.userOpen;
+    let fromUser = false;
+    const onClick = () => {
+      fromUser = true;
+    };
+    const onToggle = () => {
+      if (attrib.open && !fromUser) {
+        attrib.open = false;
+        return;
+      }
+      if (attrib.open) attrib.dataset.userOpen = "true";
+      else delete attrib.dataset.userOpen;
+      fromUser = false;
+    };
+    attrib.addEventListener("click", onClick);
+    attrib.addEventListener("toggle", onToggle);
+    return () => {
+      attrib.removeEventListener("click", onClick);
+      attrib.removeEventListener("toggle", onToggle);
+    };
+  }, [quietChrome, status]);
 
   return (
     <div
@@ -399,57 +462,98 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
       />
       {status === "loading" ? <div className="absolute inset-0 z-[2] bg-canvas" /> : null}
       <svg
-        aria-hidden="true"
+        aria-hidden={nightBasemap ? undefined : true}
         data-regional-route-overlay="true"
         className="pointer-events-none absolute inset-0 z-[1] size-full"
       >
         {routePaths.map((path, index) => {
           const slug = routes.features[index]?.properties.slug;
           const active = slug === selectedRoute?.slug;
+          const route = region.routes.find((candidate) => candidate.slug === slug);
+          const wear = route ? routeWear(route, region.routes) : 1;
+          const choose = () => {
+            if (route) onSelectRouteRef.current?.(route);
+          };
           return (
           <g key={`${region.name}-${slug ?? index}`}>
             <path
               d={path}
               data-route-hit-target={slug}
+              role={nightBasemap ? "button" : undefined}
+              tabIndex={nightBasemap ? 0 : undefined}
+              aria-label={nightBasemap && route ? `Focus ${activityStamp(route, region.routes)}` : undefined}
               fill="none"
               stroke="transparent"
-              strokeWidth="18"
+              strokeWidth="28"
               strokeLinecap="round"
               strokeLinejoin="round"
               className="pointer-events-auto cursor-pointer"
-              onClick={() => {
-                const route = region.routes.find((candidate) => candidate.slug === slug);
-                if (route) onSelectRouteRef.current?.(route);
+              onClick={choose}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  choose();
+                }
               }}
             />
-            <path
-              d={path}
-              fill="none"
-              stroke={ROUTE_THREAD_STYLE.halo}
-              strokeWidth={active ? "4.5" : "3"}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              opacity={active ? "0.9" : "0.6"}
-            />
-            <path
-              d={path}
-              fill="none"
-              stroke={active ? ROUTE_THREAD_STYLE.marker : ROUTE_THREAD_STYLE.color}
-              strokeWidth={active ? "3.5" : "2"}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+            {nightBasemap ? (
+              <>
+                <path
+                  d={path}
+                  fill="none"
+                  stroke="#ffe7a8"
+                  strokeOpacity={active ? 0.85 : 0.35}
+                  strokeWidth={active ? 4 : 1.4 + wear}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d={path}
+                  data-ghost-thread="true"
+                  fill="none"
+                  stroke="#fff6d2"
+                  strokeWidth={active ? 6 : 3 + wear}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{ animationDelay: `${index * -0.85}s` }}
+                />
+              </>
+            ) : (
+              <>
+                <path
+                  d={path}
+                  fill="none"
+                  stroke={ROUTE_THREAD_STYLE.halo}
+                  strokeWidth={active ? "4.5" : "3"}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  opacity={active ? "0.9" : "0.6"}
+                />
+                <path
+                  d={path}
+                  fill="none"
+                  stroke={active ? ROUTE_THREAD_STYLE.marker : ROUTE_THREAD_STYLE.color}
+                  strokeWidth={active ? "3.5" : "2"}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </>
+            )}
           </g>
           );
         })}
       </svg>
-      <div
-        role="status"
-        aria-live="polite"
-        className="pointer-events-none absolute bottom-[calc(var(--atlas-tray-height,12rem)+2.75rem)] left-4 z-10 max-w-[calc(100%-6rem)] border border-white/25 bg-surface px-3 py-2 text-xs text-white"
-      >
-        {statusCopy}
-      </div>
+      {quietChrome ? (
+        <p className="sr-only" role="status" aria-live="polite">{statusCopy}</p>
+      ) : (
+        <div
+          role="status"
+          aria-live="polite"
+          className="pointer-events-none absolute bottom-[calc(var(--atlas-tray-height,12rem)+2.75rem)] left-4 z-10 max-w-[calc(100%-6rem)] border border-white/25 bg-surface px-3 py-2 text-xs text-white"
+        >
+          {statusCopy}
+        </div>
+      )}
     </div>
   );
 });

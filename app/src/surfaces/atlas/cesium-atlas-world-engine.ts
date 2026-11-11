@@ -13,10 +13,13 @@ import {
   HeadingPitchRange,
   ImageryLayer,
   PerspectiveFrustum,
+  PolylineGlowMaterialProperty,
   PolylineOutlineMaterialProperty,
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
+  Rectangle,
   SceneTransforms,
+  SingleTileImageryProvider,
   TileMapServiceImageryProvider,
   Viewer,
 } from "cesium";
@@ -33,6 +36,7 @@ import {
   atlasCameraFrame,
   atlasRegionTransitionDurationSeconds,
 } from "@/surfaces/atlas/atlas-region-camera";
+import { routeWear } from "@/surfaces/atlas/atlas-object-state";
 import type { RouteRegion } from "@/data/route-regions";
 import type { RouteSummary } from "@/domain/route";
 import { rgbaPixelsLookBlank } from "@/providers/render-health";
@@ -51,6 +55,7 @@ import {
 } from "@/surfaces/atlas/regional-transition-state";
 
 const DEFAULT_VIEW = { lat: 24, lng: 12, heightM: 18_500_000 };
+const NIGHT_EARTH_URL = "/earth/black-marble-2016.jpg";
 const GLOBAL_SELECTION_HEIGHT_M = DEFAULT_VIEW.heightM;
 const ROUTE_COLOR = Color.fromCssColorString("#b8c4c0");
 const SELECTED_ROUTE_COLOR = Color.fromCssColorString("#f5f5f5");
@@ -149,6 +154,8 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   private routeSelectionHandler?: ScreenSpaceEventHandler;
   private tileset?: Cesium3DTileset;
   private baseImageryLayer?: ImageryLayer;
+  private nightLayer?: ImageryLayer;
+  private nightImagery?: Promise<void>;
   private removeTerrainFailureListener?: () => void;
   private cancelTerrainWait?: () => void;
   private terrainDiagnosticsTimer?: number;
@@ -157,6 +164,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   private generation = 0;
   private globalCameraGeneration = 0;
   private globalCameraReady: Promise<void> = Promise.resolve();
+  private lightMode: "day" | "night" | "flood" = "day";
   private finishGlobalCameraWait?: () => void;
   private surfaceNormal = new Cartesian3();
   private surfaceToCamera = new Cartesian3();
@@ -292,6 +300,14 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
         }
         viewer.canvas.dataset.cameraHeight =
           viewer.camera.positionCartographic.height.toFixed(0);
+        viewer.canvas.dataset.cameraLat =
+          viewer.camera.positionCartographic.latitude.toFixed(5);
+        viewer.canvas.dataset.cameraLng =
+          viewer.camera.positionCartographic.longitude.toFixed(5);
+        const frustum = viewer.camera.frustum;
+        if (frustum instanceof PerspectiveFrustum && frustum.fovy) {
+          viewer.canvas.dataset.cameraFovy = frustum.fovy.toFixed(5);
+        }
         viewer.canvas.dataset.cameraTarget =
           viewer.camera.positionCartographic.height.toFixed(0);
         viewer.canvas.dataset.cameraHeading = viewer.camera.heading.toFixed(6);
@@ -406,6 +422,147 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     this.zoomBy(1.35);
   }
 
+  spinBy(radians: number) {
+    const viewer = this.viewer;
+    if (!viewer || viewer.isDestroyed() || !Number.isFinite(radians) || radians === 0) return;
+    const height = viewer.camera.positionCartographic?.height ?? 0;
+    if (height < 8_000_000) return;
+    viewer.camera.rotateRight(radians);
+  }
+
+  dragBy(dx: number, dy: number) {
+    const viewer = this.viewer;
+    if (!viewer || viewer.isDestroyed()) return;
+    const height = viewer.camera.positionCartographic?.height ?? 0;
+    if (height < 8_000_000) return;
+    if (dx) viewer.camera.rotateRight(-dx * 0.0015);
+    if (dy) viewer.camera.rotateUp(dy * 0.0015);
+  }
+
+  aimAt(lng: number, lat: number) {
+    const viewer = this.viewer;
+    if (!viewer || viewer.isDestroyed()) return false;
+    const position = Cartesian3.fromDegrees(lng, lat);
+    const projected = SceneTransforms.worldToWindowCoordinates(viewer.scene, position);
+    if (!projected) return false;
+    const dx = projected.x - viewer.canvas.clientWidth / 2;
+    const dy = projected.y - viewer.canvas.clientHeight / 2;
+    if (Math.hypot(dx, dy) < 12) return true;
+    viewer.camera.rotateRight(dx * 0.0011);
+    viewer.camera.rotateUp(-dy * 0.0011);
+    return false;
+  }
+
+  setLightroots(mode: "day" | "night" | "flood") {
+    this.lightMode = mode;
+    const viewer = this.viewer;
+    if (!viewer || viewer.isDestroyed()) return;
+    if (viewer.scene.skyAtmosphere) {
+      viewer.scene.skyAtmosphere.atmosphereLightIntensity = mode === "day" ? 30 : mode === "night" ? 6 : 14;
+    }
+    viewer.scene.globe.baseColor = Color.fromCssColorString(mode === "day" ? "#28443a" : "#07111c");
+    viewer.scene.backgroundColor = Color.fromCssColorString(mode === "day" ? "#030609" : "#02040a");
+    if (mode === "day") {
+      if (this.baseImageryLayer) this.baseImageryLayer.alpha = 1;
+      if (this.nightLayer) this.nightLayer.alpha = 0;
+      this.styleRouteEntities();
+      return;
+    }
+    void this.ensureNightImagery();
+    this.styleRouteEntities();
+  }
+
+  private ensureNightImagery() {
+    const viewer = this.viewer;
+    if (!viewer || viewer.isDestroyed()) return Promise.resolve();
+    if (this.nightLayer) {
+      this.showNightLayer();
+      return Promise.resolve();
+    }
+    if (!this.nightImagery) {
+      this.nightImagery = SingleTileImageryProvider.fromUrl(NIGHT_EARTH_URL, {
+        rectangle: Rectangle.MAX_VALUE,
+        credit: "NASA Black Marble 2016",
+      }).then((provider) => {
+        const current = this.viewer;
+        if (!current || current.isDestroyed()) return;
+        this.nightLayer = current.imageryLayers.addImageryProvider(provider);
+        if (this.lightMode === "day") this.nightLayer.alpha = 0;
+        else this.showNightLayer();
+      }).catch((error) => {
+        this.nightImagery = undefined;
+        console.warn("Night earth imagery unavailable", error);
+      });
+    }
+    return this.nightImagery;
+  }
+
+  private showNightLayer() {
+    if (!this.nightLayer) return;
+    if (this.baseImageryLayer) this.baseImageryLayer.alpha = 0;
+    this.nightLayer.alpha = 1;
+    this.nightLayer.brightness = this.lightMode === "flood" ? 1.65 : 1.35;
+    this.nightLayer.saturation = 0.85;
+    this.nightLayer.contrast = 1.08;
+    this.viewer?.scene.requestRender();
+  }
+
+  nearestPlace(maxPx: number): string | null {
+    const viewer = this.viewer;
+    if (!viewer || viewer.isDestroyed() || maxPx <= 0) return null;
+    const centerX = viewer.canvas.clientWidth / 2;
+    const centerY = viewer.canvas.clientHeight / 2;
+    let best: { name: string; distance: number } | null = null;
+    for (const place of this.projectRegions()) {
+      if (!place.visible) continue;
+      const distance = Math.hypot(place.x - centerX, place.y - centerY);
+      if (!best || distance < best.distance) best = { name: place.name, distance };
+    }
+    if (!best || best.distance > maxPx) return null;
+    return best.name;
+  }
+
+  routeSparks(): { slug: string; region: string; width: number; points: { x: number; y: number }[] }[] {
+    const viewer = this.viewer;
+    if (!viewer || viewer.isDestroyed()) return [];
+    const routesByRegion = new Map<string, RouteSummary[]>();
+    for (const entry of this.routeEntities) {
+      const list = routesByRegion.get(entry.regionName) ?? [];
+      list.push(entry.route);
+      routesByRegion.set(entry.regionName, list);
+    }
+    const sparks = [];
+    for (const entry of this.routeEntities) {
+      const sampled = sampleGlobalRoutePoints(entry.route);
+      const step = Math.max(1, Math.floor(sampled.length / 12));
+      const points: { x: number; y: number }[] = [];
+      for (let index = 0; index < sampled.length; index += step) {
+        const point = sampled[index];
+        const position = Cartesian3.fromDegrees(point.lng, point.lat);
+        const facing = Cartesian3.dot(
+          Cartesian3.normalize(position, this.surfaceNormal),
+          Cartesian3.normalize(
+            Cartesian3.subtract(viewer.camera.positionWC, position, this.surfaceToCamera),
+            this.surfaceToCamera,
+          ),
+        );
+        if (facing <= 0) continue;
+        const projected = SceneTransforms.worldToWindowCoordinates(viewer.scene, position);
+        if (!projected) continue;
+        points.push({ x: projected.x, y: projected.y });
+      }
+      if (points.length < 2) continue;
+      const wear = routeWear(entry.route, routesByRegion.get(entry.regionName) ?? [entry.route]);
+      sparks.push({
+        slug: entry.route.slug,
+        region: entry.regionName,
+        width: 1.2 + wear,
+        points,
+      });
+    }
+    return sparks;
+  }
+
   resetView() {
     void this.moveToGlobalView();
   }
@@ -435,6 +592,11 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
         }
         if (cameraGeneration === this.globalCameraGeneration && !viewer.isDestroyed()) {
           viewer.canvas.dataset.cameraState = "settled";
+          const cartographic = viewer.camera.positionCartographic;
+          if (cartographic) {
+            viewer.canvas.dataset.cameraLat = cartographic.latitude.toFixed(5);
+            viewer.canvas.dataset.cameraLng = cartographic.longitude.toFixed(5);
+          }
           viewer.canvas.dataset.cameraTarget = DEFAULT_VIEW.heightM.toFixed(0);
           viewer.canvas.dataset.cameraHeading = "0.000000";
           viewer.canvas.dataset.cameraPitch = (-CesiumMath.PI_OVER_TWO).toFixed(6);
@@ -642,24 +804,44 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
   }
 
   private styleRouteEntities() {
+    const routesByRegion = new Map<string, RouteSummary[]>();
+    if (this.lightMode !== "day") {
+      for (const entry of this.routeEntities) {
+        const list = routesByRegion.get(entry.regionName) ?? [];
+        list.push(entry.route);
+        routesByRegion.set(entry.regionName, list);
+      }
+    }
     this.routeEntities.forEach(({ regionName, route, entity }) => {
       if (!entity.polyline) return;
       const inSelectedRegion = regionName === this.selectedRegionName;
       const active =
         inSelectedRegion && route.slug === this.selectedRouteSlug;
-      entity.polyline.width = new ConstantProperty(active ? 3.5 : 2);
-      entity.polyline.zIndex = new ConstantProperty(active ? 11 : 10);
-      entity.polyline.material = active
-        ? new PolylineOutlineMaterialProperty({
-            color: SELECTED_ROUTE_COLOR,
-            outlineColor: ROUTE_CASING_COLOR.withAlpha(0.7),
-            outlineWidth: 0.65,
-          })
-        : new ColorMaterialProperty(
-            ROUTE_COLOR.withAlpha(
-              this.selectedRegionName ? (inSelectedRegion ? 0.65 : 0.2) : 0.8,
-            ),
-          );
+      if (this.lightMode === "day") {
+        entity.polyline.width = new ConstantProperty(active ? 3.5 : 2);
+        entity.polyline.zIndex = new ConstantProperty(active ? 11 : 10);
+        entity.polyline.material = active
+          ? new PolylineOutlineMaterialProperty({
+              color: SELECTED_ROUTE_COLOR,
+              outlineColor: ROUTE_CASING_COLOR.withAlpha(0.7),
+              outlineWidth: 0.65,
+            })
+          : new ColorMaterialProperty(
+              ROUTE_COLOR.withAlpha(
+                this.selectedRegionName ? (inSelectedRegion ? 0.65 : 0.2) : 0.8,
+              ),
+            );
+        return;
+      }
+      const high = (this.viewer?.camera.positionCartographic?.height ?? 0) > 4_000_000;
+      const wear = routeWear(route, routesByRegion.get(regionName) ?? [route]);
+      const flooded = this.lightMode === "flood" && inSelectedRegion;
+      const width = active ? 9 : flooded ? 6 + wear : high ? 6 + wear * 3 : 2 + wear * 1.6;
+      entity.polyline.width = new ConstantProperty(width);
+      entity.polyline.material = new PolylineGlowMaterialProperty({
+        glowPower: active ? 0.12 : flooded ? 0.16 : 0.3,
+        color: Color.fromCssColorString(active || flooded ? "#fff6df" : "#e8c98a"),
+      });
     });
   }
 

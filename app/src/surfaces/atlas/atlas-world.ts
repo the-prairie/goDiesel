@@ -6,6 +6,13 @@ import type { RouteRegion } from "@/data/route-regions";
 import { isValidCoordinate } from "@/domain/geometry/geographic-bounds";
 import type { RoutePoint, RouteSummary } from "@/domain/route";
 
+export interface AtlasContentInsets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
 export interface AtlasGlobeProps {
   regions: RouteRegion[];
   selectedRegion?: RouteRegion;
@@ -15,12 +22,22 @@ export interface AtlasGlobeProps {
   presentation: AtlasPresentationState;
   onPresentationEvent: (event: AtlasPresentationEvent) => void;
   className?: string;
+  contentInsets?: AtlasContentInsets;
+  quietChrome?: boolean;
+  nightBasemap?: boolean;
+  onTerrainNote?: (note: string | null) => void;
 }
 
 export interface AtlasGlobeHandle {
   zoomIn: () => void;
   zoomOut: () => void;
   resetView: () => void;
+  spinBy?: (radians: number) => void;
+  dragBy?: (dx: number, dy: number) => void;
+  aimAt?: (lng: number, lat: number) => boolean;
+  setLightroots?: (mode: "day" | "night" | "flood") => void;
+  nearestPlace?: (maxPx: number) => string | null;
+  routeSparks?: () => { slug: string; region: string; width: number; points: { x: number; y: number }[] }[];
 }
 
 export type AtlasWorldStatus =
@@ -53,6 +70,12 @@ export interface AtlasWorldEngine {
   zoomIn(): void;
   zoomOut(): void;
   resetView(): void;
+  spinBy?(radians: number): void;
+  dragBy?(dx: number, dy: number): void;
+  aimAt?(lng: number, lat: number): boolean;
+  setLightroots?(mode: "day" | "night" | "flood"): void;
+  nearestPlace?(maxPx: number): string | null;
+  routeSparks?(): { slug: string; region: string; width: number; points: { x: number; y: number }[] }[];
   destroy(): void;
 }
 

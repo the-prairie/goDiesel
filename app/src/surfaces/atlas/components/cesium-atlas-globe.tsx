@@ -23,6 +23,10 @@ export const CesiumAtlasGlobe = forwardRef<
     presentation,
     onPresentationEvent,
     className,
+    contentInsets,
+    quietChrome,
+    nightBasemap,
+    onTerrainNote,
   },
   forwardedRef,
 ) {
@@ -41,6 +45,18 @@ export const CesiumAtlasGlobe = forwardRef<
     zoomIn: () => (fallbackRef.current ?? engineRef.current)?.zoomIn(),
     zoomOut: () => (fallbackRef.current ?? engineRef.current)?.zoomOut(),
     resetView: () => (fallbackRef.current ?? engineRef.current)?.resetView(),
+    spinBy: (radians: number) => {
+      (fallbackRef.current ?? engineRef.current)?.spinBy?.(radians);
+    },
+    dragBy: (dx, dy) => {
+      engineRef.current?.dragBy?.(dx, dy);
+    },
+    aimAt: (lng, lat) => engineRef.current?.aimAt?.(lng, lat) ?? false,
+    setLightroots: (mode) => {
+      engineRef.current?.setLightroots?.(mode);
+    },
+    nearestPlace: (maxPx: number) => engineRef.current?.nearestPlace?.(maxPx) ?? null,
+    routeSparks: () => engineRef.current?.routeSparks?.() ?? [],
   }));
 
   selectedRegionRef.current = selectedRegion;
@@ -170,6 +186,10 @@ export const CesiumAtlasGlobe = forwardRef<
           region={selectedRegion}
           selectedRoute={selectedRoute}
           onSelectRoute={(route) => onSelectRouteRef.current?.(route)}
+          contentInsets={contentInsets}
+          quietChrome={quietChrome}
+          nightBasemap={nightBasemap}
+          onTerrainNote={onTerrainNote}
           onReady={() => {
             if (presentation.engineId !== null) {
               onPresentationEvent({
