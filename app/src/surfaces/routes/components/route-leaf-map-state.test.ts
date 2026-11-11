@@ -54,6 +54,31 @@ describe("Route Leaf map lifecycle", () => {
     expect(reduceRouteLeafMap(replacement, event("mapIdle", 2)).status).toBe("ready");
   });
 
+  it("settles a map that cannot start as unsupported and ignores later provider outcomes", () => {
+    const unsupported = apply(started(), "rendererUnavailable");
+    expect(unsupported).toEqual({ phase: "unsupported", status: "unavailable", sessionId: 1 });
+    for (const type of ["mapIdle", "sourceError", "deadlineReached", "rendererUnavailable"] as const) {
+      expect(reduceRouteLeafMap(unsupported, event(type))).toBe(unsupported);
+    }
+  });
+
+  it("lets a renderer failure after readiness replace the ready map", () => {
+    const ready = apply(started(), "mapIdle");
+    expect(apply(ready, "rendererUnavailable")).toEqual({ phase: "unsupported", status: "unavailable", sessionId: 1 });
+  });
+
+  it("ignores a stale renderer failure and retries the renderer in a new session", () => {
+    const replacement = reduceRouteLeafMap(started(), event("sessionStarted", 2));
+    expect(reduceRouteLeafMap(replacement, event("rendererUnavailable", 1))).toBe(replacement);
+    const unsupported = reduceRouteLeafMap(replacement, event("rendererUnavailable", 2));
+    expect(reduceRouteLeafMap(unsupported, event("sessionStarted", 3))).toEqual({ phase: "waiting", status: "unavailable", errorCount: 0, sessionId: 3 });
+  });
+
+  it("does not accept a renderer failure without a session", () => {
+    const inactive = initialRouteLeafMapState(2);
+    expect(reduceRouteLeafMap(inactive, event("rendererUnavailable", 0))).toBe(inactive);
+  });
+
   it("ignores duplicate and old starts", () => {
     const state = started();
     expect(reduceRouteLeafMap(state, event("sessionStarted"))).toBe(state);

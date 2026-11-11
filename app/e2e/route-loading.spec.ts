@@ -415,6 +415,37 @@ for (const width of [1440, 390]) {
   });
 }
 
+test("a browser that cannot create WebGL2 keeps the guide and shows a static route trace", async ({ page }) => {
+  await page.addInitScript(() => {
+    const getContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, type: string, ...rest: unknown[]) {
+      if (type === "webgl2") return null;
+      return (getContext as (...args: unknown[]) => unknown).call(this, type, ...rest);
+    } as typeof HTMLCanvasElement.prototype.getContext;
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/#/routes/${routeSlug}`);
+
+  const margin = page.getByRole("complementary", { name: "Route margin" });
+  await expect(margin.getByRole("heading", { name: generatedRoute(routeSlug).activity_name })).toBeVisible();
+  await expect(page.getByText("This view couldn’t open.")).toHaveCount(0);
+
+  const geography = page.getByRole("region", { name: "Route geography" });
+  await expect(geography).toHaveAttribute("data-map-status", "unavailable");
+  await expect(geography.getByRole("status")).toContainText("Interactive map unavailable");
+  await expect(geography.getByRole("img", { name: /recorded route trace|route trace/ }).first()).toBeVisible();
+  await expect(geography.getByRole("button", { name: "Reset route map" })).toHaveCount(0);
+  const traceBox = (await geography.getByRole("img", { name: /recorded route trace|route trace/ }).first().boundingBox())!;
+  expect(traceBox.height).toBeGreaterThan(200);
+
+  await expect(margin.getByRole("link", { name: "Open replay" })).toBeVisible();
+  await margin.getByRole("button", { name: "Expand route margin" }).click();
+  await expect(margin).toHaveAttribute("data-snap", "expanded");
+  await expect(margin.getByRole("img", { name: /elevation profile/i })).toBeVisible();
+  await margin.getByRole("link", { name: "Open replay" }).click();
+  await expect(page).toHaveURL(new RegExp(`#\/replay\/${routeSlug}$`));
+});
+
 test("map controls stay clear of the map attribution in phone landscape", async ({ page }) => {
   await page.setViewportSize({ width: 844, height: 390 });
   await page.goto(`/#/routes/${routeSlug}`);

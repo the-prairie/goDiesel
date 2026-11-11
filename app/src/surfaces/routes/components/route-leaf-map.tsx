@@ -11,7 +11,8 @@ import {
   routeRepairs,
   type RouteRepair,
 } from "@/domain/geometry/route-repairs";
-import type { QuestRoute } from "@/domain/route";
+import type { QuestRoute, RouteSummary } from "@/domain/route";
+import { RouteCover } from "@/ui/route-cover";
 
 import { initialRouteLeafMapState, reduceRouteLeafMap } from "./route-leaf-map-state";
 import "./route-leaf-map.css";
@@ -35,7 +36,7 @@ function routeFeature(route: QuestRoute) {
 export function RouteLeafMap({ route, showDiagnostics = false }: { route: QuestRoute; showDiagnostics?: boolean }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | undefined>(undefined);
-  const [{ status }, dispatch] = useReducer(reduceRouteLeafMap, route.route.length, initialRouteLeafMapState);
+  const [{ status, phase }, dispatch] = useReducer(reduceRouteLeafMap, route.route.length, initialRouteLeafMapState);
   const sessionRef = useRef(0);
   const repairs = useMemo(() => showDiagnostics ? routeRepairs(route) : [], [route, showDiagnostics]);
   const [activeRepairs, setActiveRepairs] = useState<RouteRepair[]>([]);
@@ -52,15 +53,25 @@ export function RouteLeafMap({ route, showDiagnostics = false }: { route: QuestR
     dispatch({ type: "sessionStarted", sessionId });
     const bounds = new LngLatBounds();
     route.route.forEach((point) => bounds.extend([point.lng, point.lat]));
-    const map = new maplibregl.Map({
-      container: host,
-      style: STYLE_URL,
-      center: [route.centerLng, route.centerLat],
-      zoom: 11,
-      pitch: 38,
-      bearing: 0,
-      attributionControl: { compact: true },
-    });
+    let map: MapLibreMap;
+    try {
+      // MapLibre throws while constructing when the browser cannot give it a
+      // WebGL2 context. That must cost the map, never the guide around it.
+      map = new maplibregl.Map({
+        container: host,
+        style: STYLE_URL,
+        center: [route.centerLng, route.centerLat],
+        zoom: 11,
+        pitch: 38,
+        bearing: 0,
+        attributionControl: { compact: true },
+      });
+    } catch {
+      dispatch({ type: "rendererUnavailable", sessionId });
+      return () => {
+        active = false;
+      };
+    }
     mapRef.current = map;
     let creditTimer: number | undefined;
     const keepCreditsOpen = () => window.clearTimeout(creditTimer);
@@ -74,6 +85,9 @@ export function RouteLeafMap({ route, showDiagnostics = false }: { route: QuestR
     const handleError = () => {
       if (active) dispatch({ type: "sourceError", sessionId });
     };
+    const handleContextLost = () => {
+      if (active) dispatch({ type: "rendererUnavailable", sessionId });
+    };
     const syncRepairPositions = () => {
       setRepairPositions(
         repairs.flatMap((repair) => {
@@ -84,6 +98,7 @@ export function RouteLeafMap({ route, showDiagnostics = false }: { route: QuestR
       );
     };
     map.on("error", handleError);
+    map.on("webglcontextlost", handleContextLost);
     map.on("move", syncRepairPositions);
     map.on("resize", syncRepairPositions);
     map.once("load", () => {
@@ -185,6 +200,7 @@ export function RouteLeafMap({ route, showDiagnostics = false }: { route: QuestR
       attribution?.removeEventListener("focusin", keepCreditsOpen);
       resizeObserver.disconnect();
       map.off("error", handleError);
+      map.off("webglcontextlost", handleContextLost);
       map.off("move", syncRepairPositions);
       map.off("resize", syncRepairPositions);
       map.remove();
@@ -205,6 +221,11 @@ export function RouteLeafMap({ route, showDiagnostics = false }: { route: QuestR
   }
 
   const repairGroups = projectedRepairGroups(repairs, repairPositions);
+  const coverRoute = useMemo<RouteSummary>(
+    () => ({ ...route, trace: route.route, guide: { vibe: route.curation.vibe, reviewStatus: route.curation.reviewStatus } }),
+    [route],
+  );
+  const mapRunning = phase !== "unsupported";
 
   return (
     <section
@@ -275,7 +296,20 @@ export function RouteLeafMap({ route, showDiagnostics = false }: { route: QuestR
           Opening route geography.
         </div>
       ) : null}
-      {status === "unavailable" ? (
+      {phase === "unsupported" ? (
+        <div className="route-geography-static absolute inset-0 bg-canvas">
+          <RouteCover route={coverRoute} />
+          <div
+            role="status"
+            className="absolute inset-x-4 top-4 z-10 max-w-sm rounded-[var(--radius-control)] border border-line bg-surface/94 p-3 shadow-panel backdrop-blur"
+          >
+            <p className="text-control font-semibold text-ink">Interactive map unavailable</p>
+            <p className="mt-1 text-caption leading-5 text-ink-secondary">
+              This browser could not start the map. The recorded route is shown as a static trace.
+            </p>
+          </div>
+        </div>
+      ) : status === "unavailable" ? (
         <div className="absolute inset-0 grid place-items-center bg-canvas p-6 text-center">
           <div className="max-w-sm">
             <p className="font-semibold text-ink">
@@ -290,7 +324,7 @@ export function RouteLeafMap({ route, showDiagnostics = false }: { route: QuestR
         </div>
       ) : null}
 
-      {route.route.length > 1 ? (
+      {route.route.length > 1 && mapRunning ? (
         <>
           <div className="absolute right-4 top-4 z-10 flex gap-3 rounded-sm border border-line bg-surface/92 px-3 py-2 text-caption font-semibold text-ink-secondary shadow-panel backdrop-blur">
             <span className="inline-flex items-center gap-1.5">
