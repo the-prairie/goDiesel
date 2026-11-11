@@ -57,6 +57,11 @@ for (const viewport of [
     expect(xml).toContain('lat="37.7694"');
     expect(xml).not.toContain("<time>");
     await page.getByRole("button", { name: "New route", exact: true }).click();
+    // The saved-courses list appears when its load starts; wait for it before
+    // waiting for that load to finish.
+    await expect(
+      page.getByRole("region", { name: "Saved courses", exact: true }),
+    ).toBeVisible();
     await expect(page.getByText("Opening your courses…", { exact: true })).toHaveCount(0);
     const savedLink = page.getByRole("link", { name: new RegExp(name) });
     while (await savedLink.count() === 0) {

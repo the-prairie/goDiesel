@@ -239,8 +239,10 @@ export function CoursePage() {
             variant="outline"
             disabled={busy}
             onClick={() => {
-              dispatch({ type: "new" });
-              navigate("/courses");
+              // Leaving a saved course starts the list load, which clears the
+              // view in the same step; on /courses there is nothing to load.
+              if (courseId) navigate("/courses");
+              else dispatch({ type: "new" });
             }}
           >
             <Plus />
@@ -311,6 +313,10 @@ export function CoursePage() {
         {state.view.kind === "empty" ? (
           <SavedCourses
             courses={state.courses}
+            loading={
+              state.progress.status === "pending" &&
+              state.progress.operation === "load"
+            }
             hasMore={!!state.cursor}
             busy={busy}
             onLoadMore={() => void loadMore()}
@@ -424,11 +430,14 @@ function ProgressNotice({
 
 function SavedCourses({
   courses,
+  loading,
   hasMore,
   busy,
   onLoadMore,
 }: {
   courses: CourseSummary[];
+  /** The first page is still loading, so an empty list is not yet known. */
+  loading: boolean;
   hasMore: boolean;
   busy: boolean;
   onLoadMore: () => void;
@@ -439,11 +448,14 @@ function SavedCourses({
       className="min-w-0 border-t border-line pt-6 xl:border-t-0 xl:pt-0"
     >
       <h2 className="text-xl font-semibold">
-        Your courses{" "}
-        <span className="text-ink-secondary">
-          {courses.length}
-          {hasMore ? "+" : ""}
-        </span>
+        Your courses
+        {loading && !courses.length ? null : (
+          <span className="text-ink-secondary">
+            {" "}
+            {courses.length}
+            {hasMore ? "+" : ""}
+          </span>
+        )}
       </h2>
       <p className="mt-1 text-sm text-ink-secondary">
         Imported and generated routes, separate from your completed activities.
@@ -464,7 +476,7 @@ function SavedCourses({
             </Link>
           ))}
         </div>
-      ) : (
+      ) : loading ? null : (
         <p className="mt-4 text-sm text-ink-secondary">
           Save a preview to keep it here.
         </p>
