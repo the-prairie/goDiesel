@@ -207,7 +207,8 @@
         "app/src/surfaces/replay/components/course-preview-controls.tsx"
       ],
       "states": [
-        "loading"
+        "loading",
+        "statusReason:authentication"
       ],
       "identity": "none in the reducer; the page keys each section by index and attempt"
     },
@@ -364,7 +365,7 @@
       "id": "maplibre-replay",
       "kind": "reducer",
       "area": "react-app",
-      "summary": "The MapLibre Replay engine run and every status it publishes.",
+      "summary": "The MapLibre Replay engine run and every status it publishes, including a map that cannot be constructed (unsupported).",
       "module": "app/src/surfaces/replay/renderers/maplibre-replay-state.ts",
       "transition": "reduceMapLibreReplay",
       "test": [
@@ -378,6 +379,7 @@
         "loading",
         "ready",
         "unavailable",
+        "reason:unsupported",
         "disposed"
       ],
       "identity": "operationId minted by mapStarted (mapLibreRunIsCurrent); statusRevision marks each published status"
@@ -568,7 +570,8 @@
       "states": [
         "loading",
         "ready",
-        "unavailable"
+        "unavailable",
+        "reason:offline"
       ],
       "identity": "session"
     },
@@ -924,6 +927,26 @@
       "reason": "Only the image's own load or error outcome is stored. routeThumbnailState derives the rest from the URL and whether the card may load. Cards are keyed by route slug, so the URL is fixed while mounted."
     },
     {
+      "id": "google-key-preflight",
+      "kind": "derived",
+      "area": "react-app",
+      "summary": "Whether Google rejects the Maps key, asked once per browser session of the 3D Tiles root.",
+      "module": "app/src/providers/google-key-preflight.ts",
+      "transition": "preflightGoogleMapsKey",
+      "test": [
+        "app/src/providers/google-key-preflight.test.ts"
+      ],
+      "adapters": [
+        "app/src/providers/google-maps-loader.ts"
+      ],
+      "states": [
+        "invalid",
+        "unknown"
+      ],
+      "identity": "a 32-bit fingerprint of the key; a cached answer for another key is ignored",
+      "reason": "A one-shot answer, not a phase machine. On the 3D Maps path Google gives the page no rejection signal, so the loader asks the 3D Tiles root once, beside the script load, and caches the outcome in sessionStorage under the key fingerprint. Only an explicit API_KEY_INVALID answer is invalid; it is reported through the loader's auth-failure event. Anything else is unknown and changes nothing."
+    },
+    {
       "id": "geocode-outcome",
       "kind": "derived",
       "area": "python",
@@ -1011,7 +1034,7 @@
       ],
       "adapters": [],
       "identity": null,
-      "reason": "A module singleton promise. A failed load clears it, so the next caller appends a fresh script. After a successful load the gm_authFailure handler stays installed, because Google reports a rejected key after the load callback; a rejection already received is re-reported to the next load request."
+      "reason": "A module singleton promise. A failed load clears it, so the next caller appends a fresh script. After a successful load the gm_authFailure handler stays installed, because Google reports a rejected key after the load callback; a rejection already received is re-reported to the next load request. Each load also starts the key preflight (google-key-preflight) once per key and never awaits it; only its invalid answer is reported, through the same auth-failure event."
     },
     {
       "id": "route-leaf-map-carried-status",
@@ -1045,14 +1068,14 @@
       "id": "chunk-recovery",
       "kind": "left-implicit",
       "area": "react-app",
-      "summary": "Reloading the shell once after a failed dynamic import.",
+      "summary": "Reloading the shell once after a failed dynamic import, and classifying why a view could not open.",
       "module": "app/src/app/chunk-recovery.ts",
       "adapters": [
         "app/src/app/main.tsx",
         "app/src/app/route-error.tsx"
       ],
       "identity": "the loaded shell URL stored under one sessionStorage key",
-      "reason": "Two outcomes, each already a function: reload once per shell, or leave the manual retry. Offline and blocked storage skip the reload."
+      "reason": "Two outcomes, each already a function: reload once per shell, or leave the manual retry. Offline and blocked storage skip the reload. chunkFailure classifies a failed view once, when it fails, as offline, unavailable, or error, and the in-shell RouteError words each one."
     },
     {
       "id": "finder-presentation",
