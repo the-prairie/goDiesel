@@ -14,11 +14,12 @@ export type { RouteDetailState };
 export function useRouteDetail(slug?: string, requestKey = 0) {
   const [state, dispatch] = useReducer(reduceRouteDetailLoad, undefined, initialRouteDetailLoadState);
   let current = state;
+  const phase = state.phase;
   const event: RouteDetailLoadEvent | undefined = !slug
-    ? state.status === "idle"
+    ? phase.status === "idle"
       ? undefined
       : { type: "selectionCleared" }
-    : state.status !== "idle" && state.slug === slug && state.requestKey === requestKey
+    : phase.status !== "idle" && phase.slug === slug && phase.requestKey === requestKey
       ? undefined
       : { type: "loadStarted", slug, requestKey };
   if (event) {

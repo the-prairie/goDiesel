@@ -22,6 +22,15 @@ function load(slug: string, requestKey = 0) {
   });
 }
 
+function settle(slug: string, result: RouteDetailResult, requestKey = 0) {
+  return reduceRouteDetailLoad(load(slug, requestKey), {
+    type: "resultReceived",
+    slug,
+    requestKey,
+    result,
+  });
+}
+
 describe("route detail load", () => {
   it("stays idle until a route is selected", () => {
     const idle = initialRouteDetailLoadState();
@@ -37,21 +46,35 @@ describe("route detail load", () => {
     ).toBe(idle);
   });
 
-  it("shows loading for the selected route and no earlier route", () => {
-    const kyoto = reduceRouteDetailLoad(load("kyoto"), {
-      type: "resultReceived",
-      slug: "kyoto",
-      requestKey: 0,
-      result: ready,
-    });
+  it("shows loading for a different route and keeps that phase free of a payload", () => {
+    const kyoto = settle("kyoto", ready);
     const osaka = reduceRouteDetailLoad(kyoto, {
       type: "loadStarted",
       slug: "osaka",
       requestKey: 0,
     });
-    expect(osaka).toEqual({ status: "loading", slug: "osaka", requestKey: 0 });
+    expect(osaka.phase).toEqual({ status: "loading", slug: "osaka", requestKey: 0 });
     expect(routeDetailView(osaka)).toEqual({ status: "loading" });
-    expect("result" in osaka).toBe(false);
+    expect("result" in osaka.phase).toBe(false);
+  });
+
+  it("shows the same route again after the selection clears", () => {
+    const settled = settle("kyoto", ready);
+    const cleared = reduceRouteDetailLoad(settled, { type: "selectionCleared" });
+    expect(routeDetailView(cleared)).toEqual({ status: "idle" });
+    const again = reduceRouteDetailLoad(cleared, {
+      type: "loadStarted",
+      slug: "kyoto",
+      requestKey: 0,
+    });
+    expect(routeDetailView(again)).toEqual(ready);
+    const otherKey = reduceRouteDetailLoad(cleared, {
+      type: "loadStarted",
+      slug: "kyoto",
+      requestKey: 1,
+    });
+    expect(routeDetailView(otherKey)).toEqual({ status: "loading" });
+    expect("result" in otherKey.phase).toBe(false);
   });
 
   it("ignores a result from a replaced request", () => {
@@ -77,20 +100,6 @@ describe("route detail load", () => {
     expect(routeDetailView(settled)).toBe(ready);
   });
 
-  it("drops a settled route when the selection clears", () => {
-    const settled = reduceRouteDetailLoad(load("kyoto"), {
-      type: "resultReceived",
-      slug: "kyoto",
-      requestKey: 0,
-      result: ready,
-    });
-    const cleared = reduceRouteDetailLoad(settled, { type: "selectionCleared" });
-    expect(routeDetailView(cleared)).toEqual({ status: "idle" });
-    expect(reduceRouteDetailLoad(load("kyoto"), { type: "loadStarted", slug: "kyoto", requestKey: 0 })).toEqual(
-      load("kyoto"),
-    );
-  });
-
   it("accepts each settled outcome for the matching request", () => {
     const outcomes: RouteDetailResult[] = [
       ready,
@@ -99,12 +108,7 @@ describe("route detail load", () => {
       { status: "error", message: "Route data could not be loaded." },
     ];
     for (const result of outcomes) {
-      const state: RouteDetailLoadState = reduceRouteDetailLoad(load("kyoto"), {
-        type: "resultReceived",
-        slug: "kyoto",
-        requestKey: 0,
-        result,
-      });
+      const state: RouteDetailLoadState = settle("kyoto", result);
       expect(routeDetailView(state)).toEqual(result);
     }
   });
