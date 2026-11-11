@@ -351,3 +351,98 @@ test("applies camera changes immediately when reduced motion is requested", asyn
   expect(first.rangeM).toBe(1_500);
   expect(first.tiltDeg).toBe(0);
 });
+
+// Google rejects the key after its script has loaded: the engine publishes an
+// unavailable status with reason "authentication", and Google injects its own
+// error dialog (.gm-err-container) into the map host with an extreme z-index.
+// `__GODIESEL_REJECT_KEY__` publishes the rejection.
+async function installKeyRejectedPreview(page: Page) {
+  await installPreviewEngine(page);
+  await page.addInitScript(() => {
+    const runtime = window as unknown as Record<string, unknown>;
+    window.__GODIESEL_GOOGLE_ROUTE_NAVIGATOR_FACTORY__ = () => ({
+      async mount({ container, onStatus }) {
+        onStatus({ state: "loading", message: "Loading Google photorealistic 3D." });
+        const canvas = document.createElement("canvas");
+        canvas.style.cssText = "width:100%;height:100%;background:rgb(30,80,96)";
+        const error = document.createElement("div");
+        error.className = "gm-err-container";
+        error.style.cssText = "position:absolute;inset:0;z-index:2147483647;display:grid;place-items:center;background:#e5e3df;color:#3c4043";
+        error.innerHTML = '<div class="gm-err-content"><div class="gm-err-title">Oops! Something went wrong.</div><div class="gm-err-message">This page didn\'t load Google Maps correctly. See the JavaScript console for technical details.</div></div>';
+        container.replaceChildren(canvas, error);
+        runtime.__GODIESEL_REJECT_KEY__ = () => onStatus({
+          state: "unavailable",
+          message: "Google Maps rejected this browser origin. Add the current localhost or preview URL to the key restrictions.",
+        }, "authentication");
+      },
+      readCamera: () => undefined,
+      setCamera() {}, setFollowing() {}, setGrounding() {}, setCinematicRoute() {}, setRouteReveal() {}, destroy() {},
+    });
+  });
+}
+
+/** Proves the injected Google node cannot be seen through or above the page. */
+async function googleErrorExposure(page: Page) {
+  return page.evaluate(() => {
+    const stage = document.querySelector<HTMLElement>('[data-testid="course-preview-stage"]')!;
+    const error = stage.querySelector<HTMLElement>(".gm-err-container")!;
+    const host = error.parentElement!;
+    const backdrop = stage.querySelector<HTMLElement>('[data-testid="course-preview-provider-backdrop"]');
+    const errorBox = error.getBoundingClientRect();
+    const backdropBox = backdrop?.getBoundingClientRect();
+    const background = backdrop ? getComputedStyle(backdrop).backgroundColor : "transparent";
+    const match = background.match(/\/\s*([\d.]+)(%?)\s*\)$/) ?? background.match(/^rgba\([^)]*,\s*([\d.]+)\)$/);
+    const alpha = background === "transparent" ? 0 : match ? Number(match[1]) / (match[2] === "%" ? 100 : 1) : 1;
+    const leaks: string[] = [];
+    for (let row = 1; row < 6; row++) {
+      for (let column = 1; column < 6; column++) {
+        const x = errorBox.left + errorBox.width * column / 6;
+        const y = errorBox.top + errorBox.height * row / 6;
+        const target = document.elementFromPoint(x, y);
+        if (target && host.contains(target)) leaks.push(`${Math.round(x)},${Math.round(y)}`);
+      }
+    }
+    return {
+      covers: !!backdropBox && backdropBox.left <= errorBox.left && backdropBox.top <= errorBox.top
+        && backdropBox.right >= errorBox.right && backdropBox.bottom >= errorBox.bottom,
+      backdropAlpha: alpha,
+      hostIsolated: getComputedStyle(host).isolation === "isolate",
+      leaks,
+    };
+  });
+}
+
+for (const device of [
+  { name: "phone", viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 },
+  { name: "desktop", viewport: { width: 1280, height: 800 }, hasTouch: false, isMobile: false, deviceScaleFactor: 1 },
+]) {
+  test.describe(`a rejected Google key on a ${device.name}`, () => {
+    test.use({ viewport: device.viewport, hasTouch: device.hasTouch, isMobile: device.isMobile, deviceScaleFactor: device.deviceScaleFactor });
+
+    test("hides Google's error UI, says 3D is unavailable and leads back to the course", async ({ page }) => {
+      await installKeyRejectedPreview(page);
+      await page.goto(`/#/courses/${courseId}/preview`);
+      const stage = page.getByTestId("course-preview-stage");
+      await expect(stage).toHaveAttribute("data-state", "loading");
+      // While loading the host stays live under the opaque backdrop (which
+      // lets pointer events through), so only coverage is asserted here.
+      expect(await googleErrorExposure(page)).toMatchObject({ covers: true, backdropAlpha: 1, hostIsolated: true });
+
+      await page.evaluate(() => (window as unknown as { __GODIESEL_REJECT_KEY__: () => void }).__GODIESEL_REJECT_KEY__());
+      const alert = page.getByRole("alert");
+      await expect(alert).toContainText("Google 3D is unavailable");
+      await expect(alert).toContainText("Google is not serving photorealistic 3D to this site right now.");
+      await expect(alert).not.toContainText(/API key|key restrictions|origin|localhost|InvalidKeyMapError|Error/i);
+      expect(await googleErrorExposure(page)).toEqual({ covers: true, backdropAlpha: 1, hostIsolated: true, leaks: [] });
+      await expect(page.getByTestId("course-preview-map-host")).toHaveAttribute("inert", "");
+      await expect(page.locator(".gm-err-container")).toBeHidden();
+      expect(await page.locator(".gm-err-title").evaluate(element =>
+        element.checkVisibility({ visibilityProperty: true, opacityProperty: true }))).toBe(false);
+      await expect(page.getByRole("heading", { name: savedCourse.name })).toBeVisible();
+      await expect(page.getByTestId("course-preview-controls")).toBeVisible();
+      await expect(alert.getByRole("button", { name: "Try again" })).toHaveCount(0);
+      await alert.getByRole("link", { name: "Back to course", exact: true }).click();
+      await expect(page).toHaveURL(new RegExp(`#/courses/${courseId}$`));
+    });
+  });
+}

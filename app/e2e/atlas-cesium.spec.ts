@@ -679,3 +679,115 @@ test("reselecting the current ready region retains its carousel", async ({ page 
   await expect(page.locator('div[data-atlas-engine="cesium"]')).toHaveAttribute("data-atlas-status", "region-ready");
   await expect(carousel).toBeVisible({ timeout: 2000 });
 });
+
+type Box = { x: number; y: number; width: number; height: number };
+const intersects = (a: Box, b: Box) =>
+  a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+
+// UX-04: a browser that defines WebGL2 but cannot create a WebGL2 context.
+// Cesium needs WebGL2 there; it must never get to draw its own error panel.
+test("a browser without a WebGL2 context gets only goDiesel's message and the places", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => {
+    const getContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, type: string, ...rest: unknown[]) {
+      if (type === "webgl2") return null;
+      return (getContext as (...args: unknown[]) => unknown).call(this, type, ...rest);
+    } as typeof getContext;
+  });
+  await page.goto("/#/atlas");
+  const world = page.locator('div[data-atlas-engine="cesium"]');
+  await expect(world).toHaveAttribute("data-atlas-status", "unavailable");
+  await expect(
+    page.getByText("This browser cannot start the Cesium world. Search and navigation remain available.", { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".cesium-widget-errorPanel")).toHaveCount(0);
+  await expect(page.getByText(/Error constructing CesiumWidget/)).toHaveCount(0);
+  const places = page.getByRole("region", { name: "Places with routes", exact: true });
+  await places.getByRole("button", { name: /^Crete, Greece/ }).click();
+  await expect(page.getByRole("region", { name: "Crete, Greece recorded routes", exact: true })).toBeVisible();
+});
+
+// UX-04: our message stays fully visible, clear of the map controls and trays.
+for (const width of [320, 390, 430]) {
+  test(`the unavailable message is fully visible and clear of controls at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 });
+    await page.addInitScript(() => {
+      window.__GODIESEL_ATLAS_WORLD_FACTORY__ = () => ({
+        async mount({ onStatus }) {
+          onStatus({ state: "unavailable", message: "The Cesium world could not load." });
+        },
+        setSelectedRegion() {}, setSelectedRoute() {}, projectRegions: () => [],
+        zoomIn() {}, zoomOut() {}, resetView() {}, destroy() {},
+      });
+    });
+    const message = page.getByText("The Cesium world could not load. Search and navigation remain available.", { exact: true });
+    for (const [hash, trayName] of [
+      ["/#/atlas?region=Crete%2C+Greece", "Crete, Greece routes"],
+      ["/#/atlas", "Places with routes"],
+    ]) {
+      await page.goto(hash);
+      const tray = page.getByRole("region", { name: trayName, exact: true });
+      await expect(tray).toBeVisible();
+      await expect(message).toBeVisible();
+      const messageBox = (await message.boundingBox())!;
+      expect(messageBox.x).toBeGreaterThanOrEqual(0);
+      expect(messageBox.x + messageBox.width).toBeLessThanOrEqual(width);
+      expect(intersects(messageBox, (await tray.boundingBox())!)).toBe(false);
+      const tools = page.getByRole("group", { name: "Map controls" });
+      if (await tools.isVisible()) expect(intersects(messageBox, (await tools.boundingBox())!)).toBe(false);
+    }
+  });
+}
+
+// UX-06: route cards are bundled data and never wait on the network.
+test("offline, a selected region presents its routes and says the map needs a connection", async ({ page, context }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => { window.__GODIESEL_ATLAS_REGION_OUTCOME__ = "fallback"; });
+  await installDeterministicCesiumAtlas(page);
+  await page.goto("/#/atlas");
+  await expect(page.locator('div[data-atlas-engine="cesium"]')).toHaveAttribute("data-atlas-status", "ready");
+  await context.setOffline(true);
+  await page.getByRole("textbox", { name: "Search places and routes" }).fill("Crete");
+  await page.getByRole("option", { name: "Crete, Greece", exact: true }).click();
+  const carousel = page.getByRole("region", { name: "Crete, Greece recorded routes", exact: true });
+  await expect(carousel).toBeVisible({ timeout: 6_000 });
+  await expect(carousel.locator("article[data-route-slug]").first()).toBeVisible();
+  await expect(page.locator('[data-atlas-engine="maplibre-regional-fallback"]')).toHaveAttribute("data-map-status", "unavailable");
+  await expect(page.getByText("Regional map needs a connection.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Loading Crete, Greece terrain")).toHaveCount(0);
+});
+
+// UX-12: the fallback notice never covers the map's attribution, however it wraps.
+for (const width of [320, 360, 390]) {
+  test(`the fallback notice stays clear of the map attribution at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 640 });
+    await page.addInitScript(() => { window.__GODIESEL_ATLAS_REGION_OUTCOME__ = "fallback"; });
+    await page.route("**/styles/liberty", (route) => route.fulfill({ json: {
+      version: 8,
+      sources: { credits: {
+        type: "geojson", data: { type: "FeatureCollection", features: [] },
+        attribution: "OpenFreeMap © OpenMapTiles Data from OpenStreetMap",
+      } },
+      layers: [
+        { id: "background", type: "background", paint: { "background-color": "#d9ddd2" } },
+        { id: "credits", type: "line", source: "credits" },
+      ],
+    } }));
+    await installDeterministicCesiumAtlas(page);
+    await page.goto("/#/atlas?region=Crete%2C+Greece");
+    const fallback = page.locator('[data-atlas-engine="maplibre-regional-fallback"]');
+    await expect(fallback).toHaveAttribute("data-map-status", "ready");
+    const notice = page.getByText("3D terrain partially unavailable.", { exact: true });
+    const attribution = fallback.locator(".maplibregl-ctrl-attrib");
+    await expect(attribution).toContainText("OpenStreetMap");
+    await expect.poll(async () => {
+      const [noticeBox, attributionBox] = [await notice.boundingBox(), await attribution.boundingBox()];
+      return Boolean(noticeBox && attributionBox && !intersects(noticeBox, attributionBox));
+    }).toBe(true);
+    const tray = (await page.getByRole("region", { name: "Crete, Greece routes", exact: true }).boundingBox())!;
+    const noticeBox = (await notice.boundingBox())!;
+    expect(noticeBox.y + noticeBox.height).toBeLessThanOrEqual(tray.y);
+    expect(noticeBox.y).toBeGreaterThanOrEqual(0);
+  });
+}

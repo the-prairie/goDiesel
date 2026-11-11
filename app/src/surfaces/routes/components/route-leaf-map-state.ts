@@ -3,13 +3,17 @@ type MapPresentation = "loading" | "ready" | "unavailable";
 export type RouteLeafMapState =
   | { phase: "inactive"; sessionId: 0; status: "loading" | "unavailable" }
   | { phase: "waiting"; sessionId: number; status: MapPresentation; errorCount: number }
-  | { phase: "ready"; sessionId: number; status: "ready" };
+  | { phase: "ready"; sessionId: number; status: "ready" }
+  // The browser could not give the map a renderer (no WebGL2 context, or it was lost).
+  // The guide shows a static route trace instead; only a new session retries.
+  | { phase: "unsupported"; sessionId: number; status: "unavailable" };
 
 export type RouteLeafMapEvent =
   | { type: "sessionStarted"; sessionId: number }
   | { type: "deadlineReached"; sessionId: number }
   | { type: "sourceError"; sessionId: number }
-  | { type: "mapIdle"; sessionId: number };
+  | { type: "mapIdle"; sessionId: number }
+  | { type: "rendererUnavailable"; sessionId: number };
 
 export function initialRouteLeafMapState(pointCount: number): RouteLeafMapState {
   return { phase: "inactive", sessionId: 0, status: pointCount > 1 ? "loading" : "unavailable" };
@@ -29,5 +33,8 @@ export function reduceRouteLeafMap(state: RouteLeafMapState, event: RouteLeafMap
     case "mapIdle":
       if (state.phase !== "waiting" || event.sessionId !== state.sessionId) return state;
       return { phase: "ready", sessionId: state.sessionId, status: "ready" };
+    case "rendererUnavailable":
+      if ((state.phase !== "waiting" && state.phase !== "ready") || event.sessionId !== state.sessionId) return state;
+      return { phase: "unsupported", sessionId: state.sessionId, status: "unavailable" };
   }
 }

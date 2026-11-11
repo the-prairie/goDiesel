@@ -494,3 +494,48 @@ test("read-only list fields hydrate from bundled detail after their initial summ
   await expect(terrain).toHaveValue("Bundled streets\nBundled hills");
   await expect(terrain).toBeDisabled();
 });
+
+// The e2e server is 127.0.0.1, a local origin. To exercise other origins in a real
+// browser, serve the same build under another hostname by routing its requests to
+// the e2e server; any other request (a loopback probe included) is recorded and aborted.
+function isLoopbackHost(hostname: string) {
+  return hostname === "localhost" || hostname.endsWith(".localhost") ||
+    hostname.startsWith("127.") || hostname === "[::1]";
+}
+
+async function serveBuildAs(page: Page, origin: string, baseURL: string) {
+  const loopbackRequests: string[] = [];
+  const servedHost = new URL(origin).host;
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.host !== servedHost && isLoopbackHost(url.hostname)) loopbackRequests.push(request.url());
+  });
+  await page.route("**/*", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.host !== servedHost) return route.abort();
+    const response = await route.fetch({ url: `${baseURL}${url.pathname}${url.search}` });
+    return route.fulfill({ response });
+  });
+  return loopbackRequests;
+}
+
+test("Admin served from a non-local host makes no loopback request and stays read-only", async ({ page, baseURL }) => {
+  const loopbackRequests = await serveBuildAs(page, "https://share-x.godiesel.pages.dev", baseURL!);
+  await page.goto("https://share-x.godiesel.pages.dev/#/admin");
+  await expect(page.getByText("Read-only mode.")).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Route curation editor" }).getByLabel("Vibe"),
+  ).toBeDisabled();
+  expect(await page.evaluate(() => location.hostname)).toBe("share-x.godiesel.pages.dev");
+  expect(loopbackRequests).toEqual([]);
+});
+
+test("Admin served from a .localhost name still probes the owner writer", async ({ page, baseURL }) => {
+  const loopbackRequests = await serveBuildAs(page, "http://owner.localhost", baseURL!);
+  await page.goto("http://owner.localhost/#/admin");
+  await expect(page.getByText("Read-only mode.")).toBeVisible();
+  expect(loopbackRequests.sort()).toEqual([
+    `${adminApi}/api/admin/status`,
+    `${adminApi}/api/routes`,
+  ]);
+});

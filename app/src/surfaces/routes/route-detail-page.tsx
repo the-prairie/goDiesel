@@ -1,12 +1,13 @@
 import {
   ArrowLeft,
   ChevronDown,
+  ChevronsDown,
+  ChevronsUp,
   ChevronUp,
   Compass,
   Download,
-  Minus,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { questRouteGpx } from "@/domain/courses";
 import { downloadGpx } from "@/data/course-client";
 import { Link, useParams, useSearchParams } from "react-router-dom";
@@ -16,6 +17,11 @@ import { RouteAnnotations } from "@/surfaces/routes/components/route-annotations
 import { PolaroidFan } from "@/ui/route-gallery/polaroid-fan";
 import { RouteGuide } from "@/surfaces/routes/components/route-guide";
 import { RouteLeafMap } from "@/surfaces/routes/components/route-leaf-map";
+import {
+  draggedRouteSheetHeight,
+  snapRouteSheet,
+  type RouteSheetPosition,
+} from "@/surfaces/routes/route-sheet-snap";
 import { RouteNotFound } from "@/ui/route-not-found";
 import { Button } from "@/ui/button";
 import { singleRouteMicrosite } from "@/app/single-route-microsite";
@@ -32,7 +38,25 @@ import {
   replayPath,
 } from "@/app/route-paths";
 
-type RouteMarginPosition = "peek" | "half" | "expanded";
+type RouteMarginPosition = RouteSheetPosition;
+
+type SheetDrag = {
+  pointerId: number;
+  startY: number;
+  from: RouteMarginPosition;
+  viewportHeight: number;
+  containerHeight: number;
+  samples: Array<{ y: number; t: number }>;
+};
+
+/** Finger speed over the last ~100 ms of a drag, in px/ms (positive = down). */
+function releaseVelocity(samples: SheetDrag["samples"]) {
+  const last = samples.at(-1);
+  if (!last) return 0;
+  const reference = samples.find((sample) => last.t - sample.t <= 100) ?? last;
+  const elapsed = last.t - reference.t;
+  return elapsed > 0 ? (last.y - reference.y) / elapsed : 0;
+}
 
 export function RouteDetailPage() {
   const { routeSlug } = useParams();
@@ -176,15 +200,62 @@ function RouteMargin({
       guideRef.current?.focus({ preventScroll: true });
     });
   }
+  const sheetRef = useRef<HTMLElement>(null);
+  const dragRef = useRef<SheetDrag | null>(null);
+  const [dragHeight, setDragHeight] = useState<number | null>(null);
+
+  function startSheetDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    const container = sheetRef.current?.offsetParent;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      from: position,
+      viewportHeight: window.innerHeight,
+      containerHeight: container instanceof HTMLElement ? container.clientHeight : window.innerHeight,
+      samples: [{ y: event.clientY, t: event.timeStamp }],
+    };
+  }
+
+  function moveSheetDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    drag.samples = [...drag.samples.slice(-7), { y: event.clientY, t: event.timeStamp }];
+    setDragHeight(draggedRouteSheetHeight(drag.from, event.clientY - drag.startY, drag.viewportHeight, drag.containerHeight));
+  }
+
+  function endSheetDrag(event: ReactPointerEvent<HTMLDivElement>, cancelled: boolean) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+    setDragHeight(null);
+    if (cancelled) return;
+    drag.samples.push({ y: event.clientY, t: event.timeStamp });
+    onPositionChange(
+      snapRouteSheet({
+        from: drag.from,
+        dragPx: event.clientY - drag.startY,
+        velocityPxPerMs: releaseVelocity(drag.samples),
+        viewportHeight: drag.viewportHeight,
+        containerHeight: drag.containerHeight,
+      }),
+    );
+  }
+
   const hasDetails = !isMobile || position !== "peek";
   const premise = route.description || (!route.curation.vibe ? route.completionRule : "");
 
   return (
     <aside
+      ref={sheetRef}
       aria-label="Route margin"
       data-snap={isMobile ? position : undefined}
+      data-dragging={dragHeight === null ? undefined : "true"}
+      style={isMobile && dragHeight !== null ? { height: dragHeight } : undefined}
       className={cn(
         "z-20 flex min-h-0 flex-col overflow-hidden border-line bg-surface/97 text-ink shadow-panel backdrop-blur transition-[height] duration-[var(--duration-standard)]",
+        dragHeight !== null && "transition-none",
         isMobile &&
           position === "peek" &&
           "absolute inset-x-3 bottom-0 h-[16rem] rounded-t-[var(--radius-sheet)] border",
@@ -198,7 +269,17 @@ function RouteMargin({
       )}
     >
       {isMobile ? (
-        <div className="flex min-h-6 shrink-0 items-center justify-center border-b border-line">
+        // Pointer-only grab strip. touch-action is off here alone, so the
+        // sheet's scroll and the map's gestures keep their own touches;
+        // keyboard and assistive tech use the position buttons below.
+        <div
+          data-testid="route-sheet-handle"
+          className="flex h-11 shrink-0 cursor-grab touch-none select-none items-center justify-center active:cursor-grabbing"
+          onPointerDown={startSheetDrag}
+          onPointerMove={moveSheetDrag}
+          onPointerUp={(event) => endSheetDrag(event, false)}
+          onPointerCancel={(event) => endSheetDrag(event, true)}
+        >
           <span
             className="h-1 w-10 rounded-full bg-ink-muted"
             aria-hidden="true"
@@ -207,7 +288,7 @@ function RouteMargin({
       ) : null}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className={cn("border-b border-line", isMobile ? "p-3" : "p-6")}>
+        <div className={cn("border-b border-line", isMobile ? "px-3 pb-3" : "p-6")}>
 
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -241,6 +322,7 @@ function RouteMargin({
               </h1>
             </div>
             {isMobile ? (
+              // One chevron moves one stop, two chevrons go all the way.
               <div className="flex shrink-0 gap-1">
                 {position !== "peek" ? (
                   <Button
@@ -250,18 +332,20 @@ function RouteMargin({
                     aria-label="Collapse route margin"
                     onClick={() => onPositionChange("peek")}
                   >
-                    <ChevronDown aria-hidden="true" />
+                    {position === "expanded" ? <ChevronsDown aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
                   </Button>
                 ) : null}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Set route margin to half"
-                  onClick={() => onPositionChange("half")}
-                >
-                  <Minus aria-hidden="true" />
-                </Button>
+                {position !== "half" ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Show half of route margin"
+                    onClick={() => onPositionChange("half")}
+                  >
+                    {position === "peek" ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
+                  </Button>
+                ) : null}
                 {position !== "expanded" ? (
                   <Button
                     type="button"
@@ -270,7 +354,7 @@ function RouteMargin({
                     aria-label="Expand route margin"
                     onClick={() => onPositionChange("expanded")}
                   >
-                    <ChevronUp aria-hidden="true" />
+                    {position === "peek" ? <ChevronsUp aria-hidden="true" /> : <ChevronUp aria-hidden="true" />}
                   </Button>
                 ) : null}
               </div>

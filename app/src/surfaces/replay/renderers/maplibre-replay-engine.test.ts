@@ -1,12 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { QuestRoute } from "@/domain/route";
 import type { ReplayPose } from "../playback/replay-controller";
-import { MapLibreAtlasReplayEngine } from "./maplibre-replay-engine";
+import {
+  MapLibreAtlasReplayEngine,
+  rangeForZoom,
+  zoomForRange,
+} from "./maplibre-replay-engine";
 
 const provider = vi.hoisted(() => {
   const maps: MapDouble[] = [];
+  const construction: { error?: Error; timersAtConstruction: number[] } = {
+    timersAtConstruction: [],
+  };
   class MapDouble {
-    listeners = new Map<string, Array<() => void>>();
+    listeners = new Map<string, Array<(event?: unknown) => void>>();
+    zoom = 13;
+    getZoom = vi.fn(() => this.zoom);
     addControl = vi.fn();
     resize = vi.fn();
     addSource = vi.fn();
@@ -15,22 +24,24 @@ const provider = vi.hoisted(() => {
     jumpTo = vi.fn();
     remove = vi.fn();
     constructor() {
+      construction.timersAtConstruction.push(vi.getTimerCount());
+      if (construction.error) throw construction.error;
       maps.push(this);
     }
-    on(event: string, callback: () => void) {
+    on(event: string, callback: (event?: unknown) => void) {
       this.listeners.set(event, [
         ...(this.listeners.get(event) ?? []),
         callback,
       ]);
     }
-    once(event: string, callback: () => void) {
+    once(event: string, callback: (event?: unknown) => void) {
       this.on(event, callback);
     }
-    emit(event: string) {
-      this.listeners.get(event)?.forEach((callback) => callback());
+    emit(event: string, payload?: unknown) {
+      this.listeners.get(event)?.forEach((callback) => callback(payload));
     }
   }
-  return { maps, MapDouble };
+  return { maps, MapDouble, construction };
 });
 vi.mock("@/providers/maplibre", () => ({
   default: {
@@ -74,6 +85,8 @@ describe("MapLibre Replay lifecycle contract", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     provider.maps.length = 0;
+    provider.construction.error = undefined;
+    provider.construction.timersAtConstruction.length = 0;
     vi.stubGlobal("window", { setTimeout, clearTimeout });
     vi.stubGlobal("document", {
       createElement: () => ({ className: "", remove: vi.fn() }),
@@ -139,6 +152,27 @@ describe("MapLibre Replay lifecycle contract", () => {
     h.engine.destroy();
   });
 
+  it("reports a map that cannot be constructed (no WebGL2) at once, without waiting for the deadline", async () => {
+    provider.construction.error = new Error("Failed to initialize WebGL");
+    const h = await mount();
+    expect(h.states()).toEqual(["loading", "unavailable"]);
+    expect(h.onStatus.mock.calls[1][0].title).toBe(
+      "Atlas replay isn\u2019t supported here",
+    );
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(20000);
+    expect(h.states()).toEqual(["loading", "unavailable"]);
+    h.engine.setPose(pose);
+    h.engine.destroy();
+    expect(h.states()).toEqual(["loading", "unavailable"]);
+  });
+
+  it("arms the load deadline before it touches the map provider", async () => {
+    const h = await mount();
+    expect(provider.construction.timersAtConstruction).toEqual([1]);
+    h.engine.destroy();
+  });
+
   it("cancels the deadline and ignores error outcomes after readiness", async () => {
     const h = await mount();
     h.map.emit("load");
@@ -171,6 +205,48 @@ describe("MapLibre Replay lifecycle contract", () => {
       });
     }
     h.engine.destroy();
+  });
+
+  it("reports a zoom the person makes on the map as a range the next follow pose keeps", async () => {
+    const engine = new MapLibreAtlasReplayEngine();
+    const onCameraRangeChosen = vi.fn();
+    await engine.mount({
+      container: { replaceChildren: vi.fn() } as unknown as HTMLElement,
+      route,
+      onStatus: vi.fn(),
+      onCameraRangeChosen,
+    });
+    const map = provider.maps.at(-1)!;
+    map.emit("load");
+    // Untouched: the opening follow framing comes from the session's default range.
+    engine.setPose(pose);
+    expect(map.jumpTo).toHaveBeenLastCalledWith(expect.objectContaining({ zoom: 16 }));
+    // The engine's own camera moves carry no originalEvent and are not echoed.
+    map.emit("zoomend", {});
+    map.emit("zoomend");
+    expect(onCameraRangeChosen).not.toHaveBeenCalled();
+    // The person zooms out with MapLibre's own control or a pinch.
+    map.zoom = 12;
+    map.emit("zoomend", { originalEvent: {} });
+    expect(onCameraRangeChosen).toHaveBeenCalledOnce();
+    const [chosenRangeM] = onCameraRangeChosen.mock.calls[0];
+    expect(chosenRangeM).toBeCloseTo(1_400 * 2 ** 1.5, 6);
+    // Play: the session passes the person's range back with each pose.
+    engine.setPose({ ...pose, progressM: 10, cameraRangeM: chosenRangeM });
+    expect(map.jumpTo.mock.lastCall?.[0].zoom).toBeCloseTo(12, 9);
+    engine.destroy();
+    map.emit("zoomend", { originalEvent: {} });
+    expect(onCameraRangeChosen).toHaveBeenCalledOnce();
+  });
+
+  it("maps ranges and zooms continuously through the presets", () => {
+    for (const [rangeM, zoom] of [[60, 18], [120, 17], [240, 16], [720, 14.5], [1_400, 13.5], [2_800, 12.5]]) {
+      expect(zoomForRange(rangeM)).toBeCloseTo(zoom, 9);
+      expect(rangeForZoom(zoom)).toBeCloseTo(rangeM, 6);
+    }
+    for (const zoom of [11, 13.9, 15.2, 16.4, 19]) {
+      expect(zoomForRange(rangeForZoom(zoom))).toBeCloseTo(zoom, 9);
+    }
   });
 
   it("disposes pending resources and rejects late provider callbacks", async () => {

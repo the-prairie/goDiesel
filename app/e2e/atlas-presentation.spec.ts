@@ -123,5 +123,62 @@ declare global {
       finishMount(): void; report(status: AtlasWorldStatus): void;
       worlds: Array<{ finishMount(): void; report(status: AtlasWorldStatus): void }>;
     };
+    __ATLAS_LAYOUT_SHIFT__: number;
   }
 }
+
+// UX-34: while the globe's chunk and world load, the places and their routes
+// come from bundled data, reachable by tap, and nothing jumps when the globe arrives.
+test('places stand in for the globe while it loads and the globe arrives without a layout shift', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => {
+    window.__ATLAS_LAYOUT_SHIFT__ = 0;
+    new PerformanceObserver(list => {
+      for (const entry of list.getEntries() as Array<PerformanceEntry & { value: number; hadRecentInput: boolean }>) {
+        if (!entry.hadRecentInput) window.__ATLAS_LAYOUT_SHIFT__ += entry.value;
+      }
+    }).observe({ type: 'layout-shift', buffered: true });
+  });
+  await installDeterministicCesiumAtlas(page);
+  let releaseGlobe: (() => void) | undefined;
+  await page.route('**/assets/cesium-atlas-globe-*.js', route => { releaseGlobe = () => void route.continue(); });
+  await page.goto('/#/atlas');
+  const places = page.getByRole('region', { name: 'Places with routes', exact: true });
+  await expect(places).toBeVisible();
+  await expect(page.getByText('Opening the Atlas world.', { exact: true })).toBeVisible();
+  const placeButtons = places.getByRole('button');
+  expect(await placeButtons.count()).toBeGreaterThan(5);
+  for (const button of await placeButtons.all()) {
+    const box = await button.boundingBox();
+    if (box && box.y < 844) expect(box.height).toBeGreaterThanOrEqual(44);
+  }
+
+  await places.getByRole('button', { name: /^Kyoto, Japan/ }).click();
+  await expect(page).toHaveURL(/region=Kyoto%2C\+Japan/);
+  await expect(page.getByText('Loading Kyoto, Japan terrain', { exact: true })).toBeVisible();
+  const kyotoCards = page.getByRole('region', kyoto);
+  await expect(kyotoCards).toBeVisible({ timeout: 6_000 });
+  await page.getByRole('button', { name: 'Close Kyoto, Japan routes', exact: true }).click();
+  await expect(places).toBeVisible();
+
+  await expect.poll(() => Boolean(releaseGlobe)).toBe(true);
+  releaseGlobe!();
+  await expect(page.locator(world)).toHaveAttribute('data-atlas-status', 'ready');
+  await expect(places).toHaveCount(0);
+  await expect(page.getByRole('group', { name: 'Map controls' })).toBeVisible();
+  expect(await page.evaluate(() => window.__ATLAS_LAYOUT_SHIFT__)).toBeLessThan(0.01);
+});
+
+test('route cards shown at the deadline stay when the world reaches the region', async ({ page }) => {
+  await installControlledWorld(page);
+  await page.goto('/#/atlas?region=Kyoto%2C+Japan');
+  await expect(page.locator('[data-test-world]')).toBeAttached();
+  await page.evaluate(() => window.__ATLAS_PRESENTATION_TEST__.finishMount());
+  await report(page, { state: 'region-loading', regionName: 'Kyoto, Japan', message: 'Loading Kyoto, Japan terrain' });
+  const carousel = page.getByRole('region', kyoto);
+  await expect(carousel).toHaveCount(0);
+  await expect(carousel).toBeVisible({ timeout: 6_000 });
+  await report(page, { state: 'region-loading', regionName: 'Kyoto, Japan', message: 'Loading Kyoto, Japan terrain' });
+  await report(page, { state: 'region-ready', regionName: 'Kyoto, Japan', message: 'Ready.' });
+  await expect(carousel).toBeVisible();
+});

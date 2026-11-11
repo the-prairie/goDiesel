@@ -124,4 +124,73 @@ describe("Atlas presentation", () => {
     });
     expect(state.region).toEqual({ state: "waiting", regionName: "London" });
   });
+
+  // One rule: a selected region waits only while a working world is moving
+  // to it. Route cards come from bundled data, so no network outcome (terrain,
+  // the regional map) can hold them back, and the wait has a deadline.
+  describe("never waits on the network for bundled route cards", () => {
+    const fallback = { state: "region-fallback", regionName: "Kyoto", message: "Fallback." } as const;
+
+    it("presents the region when its fallback map is unavailable", () => {
+      let state = status(mounted("Kyoto"), fallback);
+      state = reduceAtlasPresentation(state, { type: "fallbackUnavailable", engineId: 1, regionName: "Kyoto" });
+      expect(isAtlasRegionPresented(state, "Kyoto")).toBe(true);
+    });
+
+    it("ignores an unavailable fallback map from another engine or region", () => {
+      const state = status(mounted("Kyoto"), fallback);
+      expect(reduceAtlasPresentation(state, { type: "fallbackUnavailable", engineId: 0, regionName: "Kyoto" })).toBe(state);
+      expect(reduceAtlasPresentation(state, { type: "fallbackUnavailable", engineId: 1, regionName: "London" })).toBe(state);
+    });
+
+    it.each([
+      ["the world is still opening", (state: AtlasPresentationState) => state],
+      ["terrain is loading", (state: AtlasPresentationState) =>
+        status(state, { state: "region-loading", regionName: "Kyoto", message: "Loading." })],
+      ["the fallback map is loading", (state: AtlasPresentationState) => status(state, fallback)],
+    ])("presents a waiting region at its deadline while %s", (_name, advance) => {
+      let state = advance(mounted("Kyoto"));
+      expect(isAtlasRegionPresented(state, "Kyoto")).toBe(false);
+      state = reduceAtlasPresentation(state, { type: "presentationDeadlinePassed", regionName: "Kyoto" });
+      expect(isAtlasRegionPresented(state, "Kyoto")).toBe(true);
+    });
+
+    it("keeps cards shown at the deadline when the world catches up behind them", () => {
+      let state = reduceAtlasPresentation(mounted("Kyoto"), { type: "presentationDeadlinePassed", regionName: "Kyoto" });
+      for (const next of [
+        { state: "region-loading", regionName: "Kyoto", message: "Loading." },
+        { state: "region-fallback", regionName: "Kyoto", message: "Fallback." },
+        { state: "region-ready", regionName: "Kyoto", message: "Ready." },
+      ] as const) {
+        state = status(state, next);
+        expect(isAtlasRegionPresented(state, "Kyoto")).toBe(true);
+      }
+    });
+
+    it("ignores a deadline for a region that is no longer waiting", () => {
+      const waiting = mounted("London");
+      expect(reduceAtlasPresentation(waiting, { type: "presentationDeadlinePassed", regionName: "Kyoto" })).toBe(waiting);
+      const presented = status(mounted("Kyoto"), ready);
+      expect(reduceAtlasPresentation(presented, { type: "presentationDeadlinePassed", regionName: "Kyoto" })).toBe(presented);
+      const global = mounted();
+      expect(reduceAtlasPresentation(global, { type: "presentationDeadlinePassed", regionName: "Kyoto" })).toBe(global);
+    });
+  });
+
+  describe("world opening", () => {
+    it("is opening until a world first shows the globe or a region", () => {
+      expect(mounted().world).toBe("opening");
+      expect(status(mounted(), { state: "loading", message: "Opening." }).world).toBe("opening");
+      expect(status(mounted(), { state: "unavailable", message: "Failed." }).world).toBe("opening");
+      expect(status(mounted(), { state: "ready", message: "Ready." }).world).toBe("open");
+      expect(status(mounted("Kyoto"), ready).world).toBe("open");
+    });
+
+    it("stays open through later loading and a replacement engine", () => {
+      let state = status(mounted(), { state: "ready", message: "Ready." });
+      state = status(state, { state: "loading", message: "Returning." });
+      state = reduceAtlasPresentation(state, { type: "engineStarted", engineId: 2 });
+      expect(state.world).toBe("open");
+    });
+  });
 });

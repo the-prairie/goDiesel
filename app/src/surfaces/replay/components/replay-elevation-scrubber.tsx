@@ -135,64 +135,115 @@ export const ReplayElevationScrubber = forwardRef<
         } as React.CSSProperties
       }
     >
-      <svg
-        viewBox={`0 0 ${PROFILE_WIDTH} ${PROFILE_HEIGHT}`}
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-full w-full"
-        preserveAspectRatio="none"
-      >
-        <defs>
-          <clipPath id={clipId}>
-            <rect
-              x="0"
-              y="0"
-              width={PROFILE_WIDTH}
-              height={PROFILE_HEIGHT}
+      {/*
+        The profile and repair marks fill the plot above the axis band, and the
+        playhead spans the same height, so the distance labels below never sit
+        under the playhead.
+      */}
+      <div className="absolute inset-x-0 top-0 bottom-4">
+        <svg
+          viewBox={`0 0 ${PROFILE_WIDTH} ${PROFILE_HEIGHT}`}
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-full w-full"
+          preserveAspectRatio="none"
+        >
+          <defs>
+            <clipPath id={clipId}>
+              <rect
+                x="0"
+                y="0"
+                width={PROFILE_WIDTH}
+                height={PROFILE_HEIGHT}
+                style={{
+                  transform: "scaleX(var(--replay-progress-scale))",
+                  transformOrigin: "left",
+                  transformBox: "fill-box",
+                }}
+              />
+            </clipPath>
+          </defs>
+          <line
+            x1="0"
+            x2={PROFILE_WIDTH}
+            y1={PROFILE_HEIGHT - 10}
+            y2={PROFILE_HEIGHT - 10}
+            stroke={tone === "intelligence" ? "rgba(255,255,255,0.2)" : "var(--line)"}
+            strokeWidth="1"
+          />
+          <path
+            d={profile.area}
+            fill={tone === "intelligence" ? "#303030" : "#303030"}
+            opacity={tone === "intelligence" ? "0.6" : "0.72"}
+          />
+          <polyline
+            points={profile.line}
+            fill="none"
+            stroke={futureColor}
+            opacity={tone === "intelligence" ? "0.62" : "1"}
+            strokeWidth="2.5"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+          <polyline
+            points={profile.line}
+            clipPath={`url(#${clipId})`}
+            fill="none"
+            stroke={traveledColor}
+            strokeWidth="3"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
+
+
+        {repairs.map((repair) => (
+          <span
+            key={repair.id}
+            data-testid="replay-repair-mark"
+            data-repair-distance-m={repair.distanceM.toFixed(2)}
+            aria-hidden="true"
+            className="pointer-events-none absolute z-30 size-2 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-surface bg-repair"
+            style={{
+              left: `${repair.distanceRatio * 100}%`,
+              top: `${repairYRatio(repair.distanceRatio) * 100}%`,
+            }}
+          />
+        ))}
+
+        {repairGroups.map((group) => {
+          const distanceRatio =
+            group.reduce((sum, repair) => sum + repair.distanceRatio, 0) / group.length;
+          const yRatio =
+            group.reduce((sum, repair) => sum + repairYRatio(repair.distanceRatio), 0) /
+            group.length;
+          return (
+            <button
+              key={group.map(({ id }) => id).join("-")}
+              type="button"
+              aria-label={
+                group.length === 1
+                  ? routeRepairAriaLabel(group[0])
+                  : `${group.length} recorded repairs near ${(
+                      group.reduce((sum, repair) => sum + repair.distanceM, 0) /
+                      group.length /
+                      1_000
+                    ).toFixed(2)} km`
+              }
+              className="absolute z-30 size-11 -translate-x-1/2 -translate-y-1/2 outline-none focus-visible:ring-2 focus-visible:ring-repair focus-visible:ring-inset"
               style={{
-                transform: "scaleX(var(--replay-progress-scale))",
-                transformOrigin: "left",
-                transformBox: "fill-box",
+                left: `${distanceRatio * 100}%`,
+                top: `${yRatio * 100}%`,
               }}
+              onClick={() => setActiveRepairs(group)}
             />
-          </clipPath>
-        </defs>
-        <line
-          x1="0"
-          x2={PROFILE_WIDTH}
-          y1={PROFILE_HEIGHT - 10}
-          y2={PROFILE_HEIGHT - 10}
-          stroke={tone === "intelligence" ? "rgba(255,255,255,0.2)" : "var(--line)"}
-          strokeWidth="1"
-        />
-        <path
-          d={profile.area}
-          fill={tone === "intelligence" ? "#303030" : "#303030"}
-          opacity={tone === "intelligence" ? "0.6" : "0.72"}
-        />
-        <polyline
-          points={profile.line}
-          fill="none"
-          stroke={futureColor}
-          opacity={tone === "intelligence" ? "0.62" : "1"}
-          strokeWidth="2.5"
-          strokeLinejoin="round"
-          vectorEffect="non-scaling-stroke"
-        />
-        <polyline
-          points={profile.line}
-          clipPath={`url(#${clipId})`}
-          fill="none"
-          stroke={traveledColor}
-          strokeWidth="3"
-          strokeLinejoin="round"
-          vectorEffect="non-scaling-stroke"
-        />
-      </svg>
+          );
+        })}
+      </div>
 
       <span
         aria-hidden="true"
         className={cn(
-          "pointer-events-none absolute inset-y-0 left-[var(--replay-progress)] z-10 w-px -translate-x-1/2",
+          "pointer-events-none absolute top-0 bottom-4 left-[var(--replay-progress)] z-10 w-px -translate-x-1/2",
           tone === "intelligence" ? "bg-[#ffffff]" : "bg-white",
         )}
       >
@@ -205,49 +256,6 @@ export const ReplayElevationScrubber = forwardRef<
           )}
         />
       </span>
-
-      {repairs.map((repair) => (
-        <span
-          key={repair.id}
-          data-testid="replay-repair-mark"
-          data-repair-distance-m={repair.distanceM.toFixed(2)}
-          aria-hidden="true"
-          className="pointer-events-none absolute z-30 size-2 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-surface bg-repair"
-          style={{
-            left: `${repair.distanceRatio * 100}%`,
-            top: `${repairYRatio(repair.distanceRatio) * 100}%`,
-          }}
-        />
-      ))}
-
-      {repairGroups.map((group) => {
-        const distanceRatio =
-          group.reduce((sum, repair) => sum + repair.distanceRatio, 0) / group.length;
-        const yRatio =
-          group.reduce((sum, repair) => sum + repairYRatio(repair.distanceRatio), 0) /
-          group.length;
-        return (
-          <button
-            key={group.map(({ id }) => id).join("-")}
-            type="button"
-            aria-label={
-              group.length === 1
-                ? routeRepairAriaLabel(group[0])
-                : `${group.length} recorded repairs near ${(
-                    group.reduce((sum, repair) => sum + repair.distanceM, 0) /
-                    group.length /
-                    1_000
-                  ).toFixed(2)} km`
-            }
-            className="absolute z-30 size-11 -translate-x-1/2 -translate-y-1/2 outline-none focus-visible:ring-2 focus-visible:ring-repair focus-visible:ring-inset"
-            style={{
-              left: `${distanceRatio * 100}%`,
-              top: `${yRatio * 100}%`,
-            }}
-            onClick={() => setActiveRepairs(group)}
-          />
-        );
-      })}
 
       {activeRepairs.length > 0 ? (
         <RepairEvidence
@@ -270,7 +278,7 @@ export const ReplayElevationScrubber = forwardRef<
 
       <div
         className={cn(
-          "pointer-events-none absolute inset-x-3 bottom-1 z-10 flex justify-between text-[10px] font-semibold",
+          "pointer-events-none absolute inset-x-2 bottom-0 z-10 flex h-4 items-center justify-between text-[10px] leading-none font-semibold",
           tone === "intelligence" ? "text-white/55" : "text-ink-muted",
         )}
       >

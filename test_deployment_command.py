@@ -66,6 +66,144 @@ def test_local_keyless_build_is_still_allowed(tmp_path: Path):
     assert "skipped" in result.stdout
 
 
+FIXTURE_KEY = "AIzaFixtureOnlyKey000000000000000wxyz"
+INVALID_KEY_BODY = ROOT / "app" / "src" / "providers" / "fixtures" / "google-tiles-root-api-key-invalid.json"
+
+# Replaces fetch inside the checker so no test can reach Google. It records the
+# URL it was asked for and answers from FAKE_TILES_* variables.
+FAKE_FETCH = """
+import { appendFileSync, readFileSync } from "node:fs";
+globalThis.fetch = async (url) => {
+  appendFileSync(process.env.FAKE_TILES_LOG, String(url) + "\\n");
+  const mode = process.env.FAKE_TILES_MODE;
+  if (mode === "network-error") throw new TypeError("fetch failed");
+  if (mode === "timeout") throw Object.assign(new Error("timed out"), { name: "TimeoutError" });
+  const body = process.env.FAKE_TILES_BODY_FILE
+    ? readFileSync(process.env.FAKE_TILES_BODY_FILE, "utf8")
+    : process.env.FAKE_TILES_BODY ?? "{}";
+  return new Response(body, { status: Number(process.env.FAKE_TILES_STATUS ?? 200) });
+};
+"""
+
+
+def run_keyed_provider_check(tmp_path: Path, *, require: str | None = None, skip_verify: bool = False,
+                             status: int = 200, body: str | None = None, body_file: Path | None = None,
+                             mode: str | None = None):
+    scripts = tmp_path / "scripts"
+    scripts.mkdir(exist_ok=True)
+    checker = scripts / "check-provider-key.mjs"
+    shutil.copy2(ROOT / "scripts" / "check-provider-key.mjs", checker)
+    assets = tmp_path / "app" / "dist" / "assets"
+    assets.mkdir(parents=True, exist_ok=True)
+    (assets / "index.js").write_text(f'const key="{FIXTURE_KEY}";', encoding="utf-8")
+    fake = tmp_path / "fake-fetch.mjs"
+    fake.write_text(FAKE_FETCH, encoding="utf-8")
+    log = tmp_path / "fetch.log"
+    log.write_text("", encoding="utf-8")
+    environment = os.environ.copy()
+    for name in ("GOOGLE_MAPS_API_KEY", "VITE_GOOGLE_MAPS_API_KEY", "GODIESEL_REQUIRE_PROVIDER_KEY",
+                 "GODIESEL_DISABLE_LIVE_PROVIDERS", "GODIESEL_SKIP_PROVIDER_KEY_VERIFY"):
+        environment.pop(name, None)
+    environment.update({"GOOGLE_MAPS_API_KEY": FIXTURE_KEY, "FAKE_TILES_LOG": str(log),
+                        "FAKE_TILES_STATUS": str(status)})
+    if require is not None:
+        environment["GODIESEL_REQUIRE_PROVIDER_KEY"] = require
+    if skip_verify:
+        environment["GODIESEL_SKIP_PROVIDER_KEY_VERIFY"] = "1"
+    if body is not None:
+        environment["FAKE_TILES_BODY"] = body
+    if body_file is not None:
+        environment["FAKE_TILES_BODY_FILE"] = str(body_file)
+    if mode is not None:
+        environment["FAKE_TILES_MODE"] = mode
+    result = subprocess.run(
+        ["node", "--import", fake.as_uri(), str(checker)], cwd=tmp_path, env=environment,
+        capture_output=True, text=True, check=False,
+    )
+    requests = [line for line in log.read_text(encoding="utf-8").splitlines() if line]
+    return result, requests
+
+
+def assert_key_not_printed(result):
+    assert FIXTURE_KEY not in result.stdout + result.stderr
+    assert FIXTURE_KEY[:-4] not in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("require", [None, "1"])
+def test_provider_check_fails_a_key_google_reports_invalid(tmp_path: Path, require):
+    result, requests = run_keyed_provider_check(tmp_path, require=require, status=400, body_file=INVALID_KEY_BODY)
+
+    assert result.returncode != 0
+    assert "Google rejects the configured Google Maps key ending ...wxyz" in result.stderr
+    assert "API_KEY_INVALID" in result.stderr
+    assert requests == [f"https://tile.googleapis.com/v1/3dtiles/root.json?key={FIXTURE_KEY}"]
+    assert_key_not_printed(result)
+
+
+def test_provider_check_passes_a_key_google_serves(tmp_path: Path):
+    result, requests = run_keyed_provider_check(tmp_path, require="1", status=200, body='{"asset":{"version":"1.0"}}')
+
+    assert result.returncode == 0, result.stderr
+    assert "Provider key verified" in result.stdout
+    assert "Provider key check passed" in result.stdout
+    assert len(requests) == 1
+    assert_key_not_printed(result)
+
+
+@pytest.mark.parametrize("mode,status,body", [
+    ("network-error", 200, None),
+    ("timeout", 200, None),
+    (None, 403, '{"error":{"status":"PERMISSION_DENIED","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"SERVICE_DISABLED"}]}}'),
+    (None, 500, "not json"),
+])
+def test_provider_check_warns_when_google_cannot_confirm_a_local_build(tmp_path: Path, mode, status, body):
+    result, _ = run_keyed_provider_check(tmp_path, mode=mode, status=status, body=body)
+
+    assert result.returncode == 0, result.stderr
+    assert "WARNING: could not verify the Google Maps key ending ...wxyz" in result.stderr
+    assert_key_not_printed(result)
+
+
+@pytest.mark.parametrize("mode,status,body", [
+    ("network-error", 200, None),
+    (None, 403, '{"error":{"status":"PERMISSION_DENIED","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"SERVICE_DISABLED"}]}}'),
+])
+def test_provider_check_fails_an_unverifiable_key_for_a_public_deployment(tmp_path: Path, mode, status, body):
+    result, _ = run_keyed_provider_check(tmp_path, require="1", mode=mode, status=status, body=body)
+
+    assert result.returncode != 0
+    assert "could not verify the Google Maps key ending ...wxyz" in result.stderr
+    assert "Google rejects" not in result.stderr
+    assert_key_not_printed(result)
+
+
+def test_provider_check_accepts_a_key_restricted_to_browser_origins(tmp_path: Path):
+    body = ('{"error":{"code":403,"status":"PERMISSION_DENIED","details":[{"@type":'
+            '"type.googleapis.com/google.rpc.ErrorInfo","reason":"API_KEY_HTTP_REFERRER_BLOCKED"}]}}')
+    result, _ = run_keyed_provider_check(tmp_path, require="1", status=403, body=body)
+
+    assert result.returncode == 0, result.stderr
+    assert "WARNING: Google recognises the key ending ...wxyz" in result.stderr
+    assert_key_not_printed(result)
+
+
+def test_provider_check_skips_google_when_told_to(tmp_path: Path):
+    result, requests = run_keyed_provider_check(tmp_path, require="1", skip_verify=True, status=400,
+                                                body_file=INVALID_KEY_BODY)
+
+    assert result.returncode == 0, result.stderr
+    assert requests == []
+    assert "WARNING: the Google Maps key ending ...wxyz was not verified" in result.stderr
+    assert "Provider key check passed" in result.stdout
+    assert_key_not_printed(result)
+
+
+def test_provider_check_documents_its_offline_opt_out():
+    header = (ROOT / "scripts" / "check-provider-key.mjs").read_text(encoding="utf-8").split("*/")[0]
+
+    assert "GODIESEL_SKIP_PROVIDER_KEY_VERIFY=1" in header
+
+
 class PublishHarness:
     """A copy of the publish script in a fake checkout with recording stubs."""
 
