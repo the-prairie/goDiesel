@@ -529,3 +529,35 @@ for (const viewport of [{ width: 320, height: 640 }, { width: 390, height: 844 }
     await expect(page).toHaveURL(new RegExp(`#/routes/${routeSlug}$`));
   });
 }
+
+for (const away of ["blur", "hidden"] as const) {
+  test(`held steering and look release when the window ${away === "blur" ? "loses focus" : "is hidden"}`, async ({ page }) => {
+    await installDeterministicEarthRenderer(page);
+    await page.goto(`/#/lab/playable-earth/${routeSlug}`);
+    const lab = page.getByRole("region", { name: "Playable Earth Lab" });
+    await expect(lab).toHaveAttribute("data-state", "ready");
+    await lab.click({ position: { x: 500, y: 300 } });
+    await page.keyboard.press("t");
+    await expect(lab).toHaveAttribute("data-control-mode", "guided");
+    await page.keyboard.down("a");
+    await page.keyboard.down("q");
+    await expect.poll(async () => Number(await lab.getAttribute("data-lateral-offset"))).toBeLessThan(-1);
+    await page.evaluate((reason) => {
+      if (reason === "blur") {
+        window.dispatchEvent(new Event("blur"));
+        return;
+      }
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+      document.dispatchEvent(new Event("visibilitychange"));
+    }, away);
+    // The keys are released while the page is away, so no keyup reaches it.
+    await page.waitForTimeout(200);
+    const offset = await lab.getAttribute("data-lateral-offset");
+    const yaw = await lab.getAttribute("data-camera-yaw");
+    await page.waitForTimeout(400);
+    await expect(lab).toHaveAttribute("data-lateral-offset", offset!);
+    await expect(lab).toHaveAttribute("data-camera-yaw", yaw!);
+    expect(Number(offset)).toBeGreaterThan(-15);
+    expect(Number(yaw)).toBeGreaterThan(-65);
+  });
+}

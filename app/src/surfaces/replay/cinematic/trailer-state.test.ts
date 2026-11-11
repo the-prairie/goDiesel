@@ -20,7 +20,6 @@ const final = routeTrailerFrame(route, ROUTE_TRAILER_DURATION_SECONDS);
 const start = () =>
   reduceTrailer(initialTrailerState(opening), {
     type: "sessionStarted",
-    sessionId: 1,
     frame: opening,
   });
 const ready = () =>
@@ -95,9 +94,9 @@ describe("trailer session transitions", () => {
   it("rejects provider outcomes from replaced sessions", () => {
     const state = reduceTrailer(ready(), {
       type: "sessionStarted",
-      sessionId: 2,
       frame: opening,
     });
+    expect(state.sessionId).toBe(2);
     expect(
       reduceTrailer(state, {
         type: "providerReady",
@@ -114,5 +113,64 @@ describe("trailer session transitions", () => {
         status: { state: "unavailable", message: "Old" },
       }),
     ).toBe(state);
+  });
+  it("mints a new session id on every session start", () => {
+    expect(start().sessionId).toBe(1);
+    expect(
+      reduceTrailer(start(), { type: "sessionStarted", frame: opening })
+        .sessionId,
+    ).toBe(2);
+  });
+  it("a new session starts paused at its opening frame", () => {
+    const state = reduceTrailer(
+      reduceTrailer(ready(), { type: "skipped", frame: final }),
+      { type: "restarted", frame: opening },
+    );
+    expect(state.playback).toBe("playing");
+    const next = reduceTrailer(state, {
+      type: "sessionStarted",
+      frame: opening,
+    });
+    expect(next).toMatchObject({
+      playback: "paused",
+      status: { state: "loading" },
+      frame: opening,
+    });
+  });
+  describe("events the stage only sends while the provider is ready", () => {
+    const notReady = {
+      loading: () => start(),
+      unavailable: () =>
+        reduceTrailer(ready(), {
+          type: "providerReported",
+          sessionId: 1,
+          status: { state: "unavailable", message: "Failed" },
+        }),
+    };
+    for (const [phase, make] of Object.entries(notReady)) {
+      it(`ignores playback, skip and frame publication while ${phase}`, () => {
+        const state = make();
+        expect(
+          reduceTrailer(state, { type: "playbackChanged", playing: false }),
+        ).toBe(state);
+        expect(
+          reduceTrailer(state, { type: "playbackChanged", playing: true }),
+        ).toBe(state);
+        expect(reduceTrailer(state, { type: "skipped", frame: final })).toBe(
+          state,
+        );
+        expect(
+          reduceTrailer(state, {
+            type: "framePublished",
+            frame: routeTrailerFrame(route, 5),
+          }),
+        ).toBe(state);
+      });
+      it(`still accepts a restart while ${phase}`, () => {
+        expect(
+          reduceTrailer(make(), { type: "restarted", frame: opening }),
+        ).toMatchObject({ playback: "playing", frame: opening });
+      });
+    }
   });
 });

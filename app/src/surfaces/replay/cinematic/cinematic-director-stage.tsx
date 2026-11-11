@@ -10,7 +10,7 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/ui/button";
@@ -21,6 +21,7 @@ import { CinematicSoundscape } from "@/surfaces/replay/cinematic/cinematic-sound
 import {
   initialCinematicDirectorState,
   reduceCinematicDirector,
+  type CinematicDirectorEvent,
 } from "@/surfaces/replay/cinematic/cinematic-director-state";
 import { NativeCinematicRenderer } from "@/surfaces/replay/cinematic/native-cinematic-renderer";
 import {
@@ -92,13 +93,18 @@ export function CinematicDirectorStage({
   const rendererRef = useRef<NativeCinematicRenderer | undefined>(undefined);
   const soundRef = useRef<CinematicSoundscape | undefined>(undefined);
   const elapsedRef = useRef(0);
-  const playingRef = useRef(false);
-  const playRequestRef = useRef(0);
-  const [state, dispatch] = useReducer(
-    reduceCinematicDirector,
-    undefined,
-    () => initialCinematicDirectorState(cinematicFrame(route, initialCut, 0)),
+  const [state, setState] = useState(() =>
+    initialCinematicDirectorState(cinematicFrame(route, initialCut, 0)),
   );
+  // Synchronous mirror of the reducer state for the frame loop and async audio
+  // completion. It is written only here, so the reducer stays the single owner.
+  const stateRef = useRef(state);
+  const dispatch = useCallback((event: CinematicDirectorEvent) => {
+    const next = reduceCinematicDirector(stateRef.current, event);
+    if (next === stateRef.current) return;
+    stateRef.current = next;
+    setState(next);
+  }, []);
   const { frame, soundEnabled, status } = state;
   const cut = frame.cut;
   const playing = state.playback === "playing";
@@ -113,11 +119,7 @@ export function CinematicDirectorStage({
     dispatch({ type, frame: nextFrame });
   };
 
-  const pause = () => {
-    playRequestRef.current += 1;
-    playingRef.current = false;
-    dispatch({ type: "playbackPaused" });
-  };
+  const pause = () => dispatch({ type: "playbackPaused" });
 
   useEffect(() => {
     const container = containerRef.current;
@@ -129,12 +131,14 @@ export function CinematicDirectorStage({
     soundRef.current = sound;
     elapsedRef.current = 0;
     dispatch({ type: "sessionStarted", frame: initial });
+    const { sessionId } = stateRef.current;
 
     void renderer.mount({
       container,
       frame: initial,
       route,
-      onStatus: (status) => dispatch({ type: "rendererStatusReceived", status }),
+      onStatus: (status) =>
+        dispatch({ type: "rendererStatusReceived", sessionId, status }),
     });
 
     return () => {
@@ -152,8 +156,6 @@ export function CinematicDirectorStage({
       const seconds = (event as CustomEvent<{ seconds?: number }>).detail
         ?.seconds;
       if (typeof seconds !== "number" || !Number.isFinite(seconds)) return;
-      playRequestRef.current += 1;
-      playingRef.current = false;
       commitFrame(cinematicFrame(route, cut, seconds), "seeked");
     };
     window.addEventListener("godiesel:route-film-seek", seek);
@@ -168,7 +170,7 @@ export function CinematicDirectorStage({
     const tick = (now: number) => {
       const delta = Math.min(0.08, (now - previous) / 1_000);
       previous = now;
-      if (playingRef.current) {
+      if (stateRef.current.playback === "playing") {
         const next = cinematicFrame(route, cut, elapsedRef.current + delta);
         elapsedRef.current = next.elapsedSeconds;
         rendererRef.current?.setFrame(next);
@@ -186,29 +188,25 @@ export function CinematicDirectorStage({
   }, [cut, route, soundEnabled, status.state]);
 
   const selectCut = (nextCut: CinematicCut) => {
-    playRequestRef.current += 1;
-    playingRef.current = false;
     commitFrame(cinematicFrame(route, nextCut, 0), "cutSelected");
   };
 
   const play = async (restart = frame.showDecision) => {
     if (restart) commitFrame(cinematicFrame(route, cut, 0), "restartRequested");
-    const requestId = ++playRequestRef.current;
-    dispatch({ type: "playRequested", requestId });
+    dispatch({ type: "playRequested" });
+    const { audioStart } = stateRef.current;
+    if (audioStart.state !== "pending") return;
+    const { requestId } = audioStart;
     try {
       if (soundEnabled) await soundRef.current?.start();
     } catch (error) {
       dispatch({ type: "audioStartFailed", requestId });
       throw error;
     }
-    if (playRequestRef.current !== requestId) return;
-    playingRef.current = true;
     dispatch({ type: "audioStarted", requestId });
   };
 
   const scrub = (progress: number) => {
-    playRequestRef.current += 1;
-    playingRef.current = false;
     commitFrame(
       cinematicFrame(route, cut, frame.durationSeconds * progress),
       "seeked",

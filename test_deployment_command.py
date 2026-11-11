@@ -7,9 +7,11 @@ how they were called.
 
 import json
 import os
+import signal
 import shutil
 import stat
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -67,7 +69,15 @@ def test_local_keyless_build_is_still_allowed(tmp_path: Path):
 class PublishHarness:
     """A copy of the publish script in a fake checkout with recording stubs."""
 
-    def __init__(self, tmp_path: Path, public_status: str = "404", curl_exit: int = 0):
+    def __init__(
+        self,
+        tmp_path: Path,
+        public_status: str = "404",
+        curl_exit: int = 0,
+        write_manifest: bool = True,
+        manifest_slug: str | None = None,
+        etag: str | None = None,
+    ):
         self.root = tmp_path / "checkout"
         scripts = self.root / "scripts"
         scripts.mkdir(parents=True)
@@ -86,19 +96,48 @@ class PublishHarness:
         )
 
         self.calls = tmp_path / "calls.log"
+        copy_manifest_tool(self.root)
+        manifest_write = (
+            'node scripts/dist-manifest.mjs write --scope single-route '
+            f'--slug "{manifest_slug or "$GODIESEL_SINGLE_ROUTE_SLUG"}" --git-sha fixture --dirty false'
+            if write_manifest else ":"
+        )
         executable(
             self.root / "make-dist.sh",
             f"""#!/bin/bash
 printf 'make-dist require_key=%s slug=%s\\n' "$GODIESEL_REQUIRE_PROVIDER_KEY" "$GODIESEL_SINGLE_ROUTE_SLUG" >> {self.calls}
+rm -f .dist-manifest.json
 mkdir -p dist && printf '<html></html>' > dist/index.html
+{manifest_write}
 """,
         )
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
-        executable(bin_dir / "node", f"#!/bin/bash\nprintf 'node %s\\n' \"$*\" >> {self.calls}\n")
+        executable(
+            bin_dir / "node",
+            node_stub(self.calls) + """
+if [[ -n "${STUB_STAGE_TAMPER:-}" && "$2" == "17654151284" && "$3" == "stage" ]]; then
+  printf 'tampered' >> "$4/dist/index.html"
+fi
+if [[ "$1" == "scripts/smoke-single-route-microsite.mjs" ]]; then
+  exit "${STUB_SMOKE_EXIT:-0}"
+fi
+""",
+        )
+        etag_header = f"etag: {etag}\\r\\n" if etag else ""
         executable(
             bin_dir / "curl",
-            f"#!/bin/bash\nprintf 'curl %s\\n' \"$*\" >> {self.calls}\nprintf '{public_status}'\nexit {curl_exit}\n",
+            f"""#!/bin/bash
+printf 'curl %s\\n' "$*" >> {self.calls}
+while [[ $# -gt 0 ]]; do
+  if [[ "$1" == "--dump-header" ]]; then
+    printf 'HTTP/2 {public_status}\\r\\n{etag_header}\\r\\n' > "$2"
+  fi
+  shift
+done
+printf '{public_status}'
+exit {curl_exit}
+""",
         )
         executable(
             bin_dir / "npx",
@@ -106,17 +145,26 @@ mkdir -p dist && printf '<html></html>' > dist/index.html
 printf 'npx %s\\n' "$*" >> {self.calls}
 if [[ "$1" == "wrangler" ]]; then
   printf 'wrangler-cwd-entries=%s\\n' "$(ls -A | tr '\\n' ' ')" >> {self.calls}
+  exit "${{STUB_WRANGLER_EXIT:-0}}"
 fi
 """,
         )
         self.environment = os.environ.copy()
         self.environment["PATH"] = f"{bin_dir}:{self.environment['PATH']}"
 
-    def run(self, *arguments: str):
+    def run(self, *arguments: str, **extra: str):
         return subprocess.run(
             [str(self.root / "scripts" / "publish-route-microsite.sh"), *arguments],
-            cwd=self.root, env=self.environment, capture_output=True, text=True, check=False,
+            cwd=self.root, env=dict(self.environment, **extra),
+            capture_output=True, text=True, check=False,
         )
+
+    def receipts(self) -> list[Path]:
+        return sorted((self.root / ".route-share" / "publish").glob("*.json"))
+
+    def receipt(self) -> dict:
+        (only,) = self.receipts()
+        return json.loads(only.read_text(encoding="utf-8"))
 
     def recorded(self) -> str:
         return self.calls.read_text(encoding="utf-8") if self.calls.exists() else ""
@@ -226,6 +274,324 @@ def test_route_publish_passes_replacement_approval_through(tmp_path: Path):
     assert calls.read_text(encoding="utf-8").splitlines() == [
         "17654151284", "kyoto-hills", "--replace-existing",
     ]
+
+
+# --- dist identity (.dist-manifest.json) -----------------------------------
+
+REAL_NODE = shutil.which("node")
+GUARDED_PRODUCTION_DEPLOY_COMMAND = (
+    "node scripts/dist-manifest.mjs check --scope full && " + PRODUCTION_DEPLOY_COMMAND
+)
+
+
+def copy_manifest_tool(checkout: Path) -> None:
+    source = ROOT / "scripts" / "dist-manifest.mjs"
+    if source.exists():
+        (checkout / "scripts").mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, checkout / "scripts" / "dist-manifest.mjs")
+
+
+def node_stub(calls: Path) -> str:
+    """Record every node call; run the real manifest tool; fail on request."""
+    return f"""#!/bin/bash
+if [[ "$1" == "scripts/dist-manifest.mjs" ]]; then
+  exec {REAL_NODE} "$@"
+fi
+printf 'node %s\\n' "$*" >> {calls}
+if [[ -n "${{STUB_NODE_FAIL:-}}" && "$*" == *"$STUB_NODE_FAIL"* ]]; then
+  exit 1
+fi
+"""
+
+
+class DistHarness:
+    """The real make-dist.sh in a throwaway checkout, with npm and node stubbed."""
+
+    def __init__(self, tmp_path: Path):
+        self.root = tmp_path / "checkout"
+        (self.root / "scripts").mkdir(parents=True)
+        (self.root / "app").mkdir()
+        shutil.copy2(ROOT / "make-dist.sh", self.root / "make-dist.sh")
+        copy_manifest_tool(self.root)
+        subprocess.run(["git", "init", "-q"], cwd=self.root, check=True)
+        (self.root / ".gitignore").write_text("dist/\napp/dist/\n.dist-manifest.json\n", encoding="utf-8")
+        subprocess.run(["git", "add", "-A"], cwd=self.root, check=True)
+        subprocess.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+             "commit", "-q", "-m", "fixture"],
+            cwd=self.root, check=True,
+        )
+        self.calls = tmp_path / "calls.log"
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        executable(
+            bin_dir / "npm",
+            f"""#!/bin/bash
+printf 'npm %s\\n' "$*" >> {self.calls}
+if [[ "$*" == "--prefix app run build" ]]; then
+  rm -rf app/dist
+  mkdir -p app/dist/assets app/dist/data/routes
+  printf '<html></html>' > app/dist/index.html
+  printf 'console.log(1)' > app/dist/assets/index.js
+  printf '{{}}' > app/dist/data/routes/17654151284.json
+  printf '{{}}' > app/dist/data/routes/999.json
+  printf '{{}}' > app/dist/data/routes-index.json
+fi
+if [[ "$*" == "--prefix app run test:bundle" && -n "${{STUB_BUNDLE_HANG:-}}" ]]; then
+  touch "$STUB_BUNDLE_HANG"
+  sleep 30
+fi
+""",
+        )
+        executable(bin_dir / "node", node_stub(self.calls))
+        self.environment = os.environ.copy()
+        self.environment["PATH"] = f"{bin_dir}:{self.environment['PATH']}"
+        self.environment.pop("GODIESEL_SINGLE_ROUTE_SLUG", None)
+
+    @property
+    def manifest_path(self) -> Path:
+        return self.root / ".dist-manifest.json"
+
+    def manifest(self) -> dict:
+        return json.loads(self.manifest_path.read_text(encoding="utf-8"))
+
+    def build(self, slug: str | None = None, **extra: str):
+        environment = dict(self.environment, **extra)
+        if slug:
+            environment["GODIESEL_SINGLE_ROUTE_SLUG"] = slug
+        return subprocess.run(
+            [str(self.root / "make-dist.sh")], cwd=self.root, env=environment,
+            capture_output=True, text=True, check=False,
+        )
+
+    def check(self, *arguments: str):
+        return subprocess.run(
+            [REAL_NODE, "scripts/dist-manifest.mjs", "check", *arguments],
+            cwd=self.root, capture_output=True, text=True, check=False,
+        )
+
+
+def test_printed_production_deploy_command_is_guarded_by_the_manifest_check():
+    lines = (ROOT / "make-dist.sh").read_text(encoding="utf-8").splitlines()
+    guarded = [line.strip() for line in lines if GUARDED_PRODUCTION_DEPLOY_COMMAND in line]
+
+    assert len(guarded) == 1
+    assert guarded[0].startswith('echo "  node scripts/dist-manifest.mjs check')
+
+
+def test_full_build_records_its_identity_outside_dist(tmp_path: Path):
+    harness = DistHarness(tmp_path)
+
+    result = harness.build()
+
+    assert result.returncode == 0, result.stderr
+    manifest = harness.manifest()
+    assert manifest["scope"] == "full"
+    assert manifest["slug"] is None
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=harness.root,
+                          capture_output=True, text=True, check=True).stdout.strip()
+    assert manifest["git_sha"] == head
+    assert manifest["dirty"] is False
+    assert manifest["file_count"] == sum(1 for p in (harness.root / "dist").rglob("*") if p.is_file())
+    assert manifest["content_digest"].startswith("sha256:")
+    assert manifest["built_at"].endswith("Z")
+    assert not list((harness.root / "dist").rglob("*manifest*"))
+    assert GUARDED_PRODUCTION_DEPLOY_COMMAND in result.stdout
+    assert harness.check("--scope", "full").returncode == 0
+
+
+def test_single_route_build_cannot_pass_the_production_check(tmp_path: Path):
+    harness = DistHarness(tmp_path)
+
+    result = harness.build("17654151284")
+
+    assert result.returncode == 0, result.stderr
+    assert harness.manifest()["scope"] == "single-route"
+    assert harness.manifest()["slug"] == "17654151284"
+    assert "npx wrangler pages deploy" not in result.stdout
+    assert "./scripts/publish-route-microsite.sh 17654151284 <share-name>" in result.stdout
+    refused = harness.check("--scope", "full")
+    assert refused.returncode != 0
+    assert "single-route" in refused.stderr
+    assert harness.check("--scope", "single-route", "--slug", "17654151284").returncode == 0
+    assert harness.check("--scope", "single-route", "--slug", "999").returncode != 0
+
+
+def test_failed_build_leaves_dist_without_a_manifest(tmp_path: Path):
+    harness = DistHarness(tmp_path)
+    assert harness.build().returncode == 0
+    assert harness.manifest_path.exists()
+
+    # Scoping fails after dist/ was replaced: a partial dist with no identity.
+    result = harness.build("17654151284", STUB_NODE_FAIL="scope-route-microsite.mjs")
+
+    assert result.returncode != 0
+    assert (harness.root / "dist" / "index.html").exists()
+    assert not harness.manifest_path.exists()
+    refused = harness.check("--scope", "full")
+    assert refused.returncode != 0
+    assert "no dist manifest" in refused.stderr
+
+
+def test_interrupted_build_removes_the_old_manifest_first(tmp_path: Path):
+    harness = DistHarness(tmp_path)
+    assert harness.build().returncode == 0
+    assert harness.manifest_path.exists()
+    started = tmp_path / "bundle-started"
+    environment = dict(harness.environment, STUB_BUNDLE_HANG=str(started))
+
+    process = subprocess.Popen(
+        [str(harness.root / "make-dist.sh")], cwd=harness.root, env=environment,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True,
+    )
+    deadline = time.monotonic() + 10
+    while not started.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert started.exists()
+    os.killpg(process.pid, signal.SIGINT)
+    process.wait(timeout=10)
+
+    assert process.returncode != 0
+    assert not harness.manifest_path.exists()
+    assert harness.check("--scope", "full").returncode != 0
+
+
+def test_tampering_with_dist_after_the_build_is_detected(tmp_path: Path):
+    harness = DistHarness(tmp_path)
+    assert harness.build().returncode == 0
+
+    # Same size, different bytes.
+    (harness.root / "dist" / "index.html").write_text("<html></htm!>", encoding="utf-8")
+    changed = harness.check("--scope", "full")
+    assert changed.returncode != 0
+    assert "does not match" in changed.stderr
+
+    assert harness.build().returncode == 0
+    (harness.root / "dist" / "extra.txt").write_text("x", encoding="utf-8")
+    added = harness.check("--scope", "full")
+    assert added.returncode != 0
+    assert "does not match" in added.stderr
+
+
+def test_manifest_check_can_verify_a_copied_tree(tmp_path: Path):
+    harness = DistHarness(tmp_path)
+    assert harness.build("17654151284").returncode == 0
+    stage = tmp_path / "stage"
+    shutil.copytree(harness.root / "dist", stage / "dist")
+
+    assert harness.check("--scope", "single-route", "--slug", "17654151284",
+                         "--dist", str(stage / "dist")).returncode == 0
+    (stage / "dist" / "robots.txt").unlink()
+    assert harness.check("--scope", "single-route", "--slug", "17654151284",
+                         "--dist", str(stage / "dist")).returncode != 0
+
+
+# --- publish: manifest guard and receipts -----------------------------------
+
+
+def test_publish_refuses_a_dist_without_a_manifest(tmp_path: Path):
+    harness = PublishHarness(tmp_path, write_manifest=False)
+
+    result = harness.run("17654151284", "kyoto-hills")
+
+    assert result.returncode != 0
+    assert "no dist manifest" in result.stderr
+    assert "wrangler" not in harness.recorded()
+    assert harness.receipts() == []
+
+
+def test_publish_refuses_a_dist_built_for_another_route(tmp_path: Path):
+    harness = PublishHarness(tmp_path, manifest_slug="999")
+
+    result = harness.run("17654151284", "kyoto-hills")
+
+    assert result.returncode != 0
+    assert "built for route 999" in result.stderr
+    assert "wrangler" not in harness.recorded()
+
+
+def test_publish_refuses_a_stage_that_differs_from_the_manifest(tmp_path: Path):
+    harness = PublishHarness(tmp_path)
+
+    result = harness.run("17654151284", "kyoto-hills", STUB_STAGE_TAMPER="1")
+
+    assert result.returncode != 0
+    assert "does not match its manifest" in result.stderr
+    assert "wrangler" not in harness.recorded()
+
+
+def test_dry_run_writes_no_publish_receipt(tmp_path: Path):
+    harness = PublishHarness(tmp_path)
+
+    assert harness.run("17654151284", "kyoto-hills", "--dry-run").returncode == 0
+    assert harness.receipts() == []
+
+
+def test_publish_receipt_follows_a_new_share_to_a_passing_smoke(tmp_path: Path):
+    harness = PublishHarness(tmp_path, public_status="404")
+
+    result = harness.run("17654151284", "kyoto-hills")
+
+    assert result.returncode == 0, result.stderr
+    (path,) = harness.receipts()
+    assert path.name.startswith("kyoto-hills-") and path.name.endswith("Z.json")
+    receipt = harness.receipt()
+    assert receipt["phase"] == "smoke-passed"
+    assert [entry["phase"] for entry in receipt["phases"]] == ["validated", "deployed", "smoke-passed"]
+    assert all(entry["at"].endswith("Z") for entry in receipt["phases"])
+    assert receipt["share_name"] == "kyoto-hills"
+    assert receipt["branch"] == "share-kyoto-hills"
+    assert receipt["public_url"] == "https://share-kyoto-hills.godiesel.pages.dev/"
+    assert receipt["route_slug"] == "17654151284"
+    manifest = json.loads((harness.root / ".dist-manifest.json").read_text(encoding="utf-8"))
+    assert receipt["dist_content_digest"] == manifest["content_digest"]
+    assert receipt["replaced"] is None
+    assert str(path.relative_to(harness.root)) in result.stdout
+
+
+def test_publish_receipt_records_what_a_replacement_replaced(tmp_path: Path):
+    harness = PublishHarness(tmp_path, public_status="200", etag='W/"abc-1"')
+
+    result = harness.run("17654151284", "kyoto-hills", "--replace-existing")
+
+    assert result.returncode == 0, result.stderr
+    replaced = harness.receipt()["replaced"]
+    assert replaced["alias"] == "share-kyoto-hills"
+    assert replaced["public_url"] == "https://share-kyoto-hills.godiesel.pages.dev/"
+    assert replaced["previous_http_status"] == "200"
+    assert replaced["previous_etag"] == 'W/"abc-1"'
+    assert replaced["previous_deployment_id"] is None
+    assert "not observable" in replaced["previous_deployment_note"]
+    assert replaced["previous_observed_at"].endswith("Z")
+
+
+def test_failed_smoke_names_the_receipt_and_the_broken_live_share(tmp_path: Path):
+    harness = PublishHarness(tmp_path, public_status="200", etag='"v1"')
+
+    result = harness.run("17654151284", "kyoto-hills", "--replace-existing", STUB_SMOKE_EXIT="3")
+
+    assert result.returncode != 0
+    receipt = harness.receipt()
+    assert receipt["phase"] == "smoke-failed"
+    assert [entry["phase"] for entry in receipt["phases"]] == ["validated", "deployed", "smoke-failed"]
+    assert receipt["smoke_exit_code"] == 3
+    (path,) = harness.receipts()
+    assert str(path.relative_to(harness.root)) in result.stderr
+    assert "https://share-kyoto-hills.godiesel.pages.dev/ is now serving the failed bundle" in result.stderr
+    assert "No automatic rollback" in result.stderr
+    assert "Published route guide" not in result.stdout
+
+
+def test_failed_deploy_is_recorded_in_the_receipt(tmp_path: Path):
+    harness = PublishHarness(tmp_path)
+
+    result = harness.run("17654151284", "kyoto-hills", STUB_WRANGLER_EXIT="1")
+
+    assert result.returncode != 0
+    receipt = harness.receipt()
+    assert receipt["phase"] == "deploy-failed"
+    assert receipt["deploy_exit_code"] == 1
+    assert "smoke-single-route-microsite" not in harness.recorded()
 
 
 # The share validator and the app's strict detail parser

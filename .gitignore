@@ -24,7 +24,15 @@ venv/
 /cards/
 /photos/
 /dist/
+# Identity of the current dist/ (scripts/dist-manifest.mjs) and per-publish
+# share receipts (scripts/publish-route-microsite.sh). Local evidence only.
+/.dist-manifest.json*
+/.route-share/
 /app/dist/
+# Identity of the current dist/ (scripts/dist-manifest.mjs) and per-publish
+# share receipts (scripts/publish-route-microsite.sh). Local evidence only.
+/.dist-manifest.json*
+/.route-share/
 /app/artifacts/
 
 # Cloudflare/Wrangler local account cache

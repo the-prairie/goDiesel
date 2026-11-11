@@ -20,6 +20,7 @@ from quest_meta import (
     build_route_curation,
     curated_best_in_earth_ids,
     elevation_gain_m,
+    normalize_route_status,
     route_guide_preview,
 )
 from route_provenance import (
@@ -31,6 +32,11 @@ from route_annotations import build_route_annotations
 from route_imports import route_metadata, route_source_kind
 from route_regions import classify_region, time_zone_for_recorded_region
 from owner_publication import recover_owner_publication, TOKEN_ENV, FD_ENV
+from publication_protocol import (
+    commit_generator_backup,
+    recover_generator_publication,
+    write_generator_backup,
+)
 
 try: import imagehash
 except ImportError: imagehash = None
@@ -56,30 +62,11 @@ BG = (16, 21, 24); BG_HEX = '#101518'
 
 
 def recover_interrupted_route_publication():
-    if not ROUTE_GENERATION_BACKUP.exists():
-        return
-    ready_marker = ROUTE_GENERATION_BACKUP / 'ready'
-    if not ready_marker.exists():
-        shutil.rmtree(ROUTE_GENERATION_BACKUP)
-        return
-
-    backup_details = ROUTE_GENERATION_BACKUP / 'routes'
-    if REACT_ROUTE_DETAILS.exists():
-        shutil.rmtree(REACT_ROUTE_DETAILS)
-    if backup_details.exists():
-        shutil.copytree(backup_details, REACT_ROUTE_DETAILS)
-
-    metadata_backup = ROUTE_GENERATION_BACKUP / 'metadata'
-    for index, path in enumerate(REACT_GENERATED_FILES):
-        backup_file = metadata_backup / f'{index}.bin'
-        missing_marker = metadata_backup / f'{index}.missing'
-        if backup_file.exists():
-            temp_path = path.with_name(f'.{path.name}.recovery')
-            shutil.copyfile(backup_file, temp_path)
-            temp_path.replace(path)
-        elif missing_marker.exists():
-            path.unlink(missing_ok=True)
-    shutil.rmtree(ROUTE_GENERATION_BACKUP)
+    # The disposition rule lives in publication_protocol.py. Recovery takes the
+    # generator lock, which this run then keeps until it exits.
+    recover_generator_publication(
+        ROUTE_GENERATION_BACKUP, REACT_ROUTE_DETAILS, REACT_GENERATED_FILES, QUESTS
+    )
 
 
 recover_owner_publication(
@@ -103,11 +90,11 @@ print('[1/5] Map provider: MapLibre GL JS + Google Street View route cam')
 # ── Load quests.json ──
 config = json.loads((QUESTS / 'quests.json').read_text())
 # Schema: {routes: [{activity_id, status, region, optional curation object}]}.
-# Only build approved public routes.
+# Only build approved public routes. A missing or unknown status is pending.
 all_routes = config.get('routes', config.get('quests', []))
 quest_specs = [
     r for r in all_routes
-    if r.get('status', 'approved') == 'approved'
+    if normalize_route_status(r.get('status')) == 'approved'
     and r.get('visibility', 'public') != 'hidden'
 ]
 pending_n = sum(1 for r in all_routes if r.get('status') == 'pending')
@@ -643,20 +630,9 @@ with tempfile.TemporaryDirectory(
     for filename, content in detail_payloads.items():
         (staging_path / filename).write_text(content, encoding='utf-8')
 
-    if ROUTE_GENERATION_BACKUP.exists():
-        raise RuntimeError('Route generation backup already exists after recovery')
-    ROUTE_GENERATION_BACKUP.mkdir()
-    backup_details = ROUTE_GENERATION_BACKUP / 'routes'
-    if REACT_ROUTE_DETAILS.exists():
-        shutil.copytree(REACT_ROUTE_DETAILS, backup_details)
-    metadata_backup = ROUTE_GENERATION_BACKUP / 'metadata'
-    metadata_backup.mkdir()
-    for index, path in enumerate(REACT_GENERATED_FILES):
-        if path.exists():
-            shutil.copyfile(path, metadata_backup / f'{index}.bin')
-        else:
-            (metadata_backup / f'{index}.missing').touch()
-    (ROUTE_GENERATION_BACKUP / 'ready').touch()
+    # This run has held the generator lock since recovery, so no other run can
+    # restore or discard this backup while it is in use.
+    write_generator_backup(ROUTE_GENERATION_BACKUP, REACT_ROUTE_DETAILS, REACT_GENERATED_FILES)
 
     try:
         if REACT_ROUTE_DETAILS.exists():
@@ -668,7 +644,7 @@ with tempfile.TemporaryDirectory(
         recover_interrupted_route_publication()
         raise
     else:
-        shutil.rmtree(ROUTE_GENERATION_BACKUP)
+        commit_generator_backup(ROUTE_GENERATION_BACKUP)
 
 # Build app HTML — same as previous version but with Share-card button
 HTML_TEMPLATE_PATH = Path('/tmp/quests_template.html')
