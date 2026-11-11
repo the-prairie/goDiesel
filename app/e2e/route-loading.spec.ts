@@ -414,3 +414,23 @@ for (const width of [1440, 390]) {
     await expect(margin.getByRole("heading", { name: "crosswalk sprints", exact: true })).toBeVisible();
   });
 }
+
+test("map controls stay clear of the map attribution in phone landscape", async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.goto(`/#/routes/${routeSlug}`);
+  const geography = page.getByRole("region", { name: "Route geography" });
+  await expect(geography).toHaveAttribute("data-map-status", "ready", { timeout: 15_000 });
+
+  const attribution = geography.locator(".maplibregl-ctrl-attrib");
+  await attribution.evaluate((element) => { element.classList.add("maplibregl-compact-show"); element.setAttribute("open", ""); });
+  await expect(attribution).toContainText("OpenStreetMap");
+  const controls = (await page.getByRole("button", { name: "Reset route map" }).locator("..").boundingBox())!;
+  const credits = (await attribution.boundingBox())!;
+  const map = (await geography.boundingBox())!;
+  const overlaps =
+    controls.x < credits.x + credits.width && credits.x < controls.x + controls.width &&
+    controls.y < credits.y + credits.height && credits.y < controls.y + controls.height;
+  expect(overlaps).toBe(false);
+  expect(credits.y + credits.height).toBeLessThanOrEqual(map.y + map.height + 1);
+  expect(controls.y).toBeGreaterThanOrEqual(map.y);
+});
