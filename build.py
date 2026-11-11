@@ -439,7 +439,11 @@ for spec in quest_specs:
     quest_meta = build_quest_meta(
         activity_type=typ,
         distance_km=round(distance_km, 1),
-        elevation_gain=elevation_gain_m(route_js),
+        elevation_gain=(
+            elevation_gain_m(route_js)
+            if route_provenance.elevation['status'] == 'recorded'
+            else None
+        ),
         region_label=region_label,
         activity_name=name,
     )
@@ -554,6 +558,12 @@ def react_route_manifest_record(route):
         'date': record['date'],
         'distance_km': record['distance_km'],
         'elevation_gain_m': record['elevation_gain_m'],
+        # Present only when the source recorded no elevation (quest_meta).
+        **(
+            {'elevation_status': record['elevation_status']}
+            if 'elevation_status' in record
+            else {}
+        ),
         'type': record['type'],
         'description': record['description'],
         'completion_rule': record['completion_rule'],

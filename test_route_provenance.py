@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from route_provenance import (
     SourceRoutePoint,
@@ -133,6 +134,79 @@ def test_gpx_loader_preserves_timestamps_and_segment_boundaries(tmp_path):
     assert points[0].timestamp == datetime(2025, 11, 26, 21, 21, 5, tzinfo=UTC)
 
 
+def _gpx(tmp_path, name: str, points: str):
+    gpx = tmp_path / name
+    gpx.write_text(
+        f"""<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="goDiesel">
+  <trk><trkseg>
+{points}
+  </trkseg></trk>
+</gpx>"""
+    )
+    return gpx
+
+
+def test_gpx_without_elevation_is_unavailable_not_zero(tmp_path):
+    gpx = _gpx(
+        tmp_path,
+        "no-elevation.gpx",
+        """    <trkpt lat="27.98" lon="86.90" />
+    <trkpt lat="27.99" lon="86.91" />""",
+    )
+
+    result = build_route_provenance(load_source_route_points(gpx), sample_interval_m=0)
+
+    assert result.elevation == {"status": "unavailable"}
+    assert [route_point["elev"] for route_point in result.route] == [None, None]
+
+
+def test_partially_recorded_elevation_is_unavailable(tmp_path):
+    gpx = _gpx(
+        tmp_path,
+        "partial-elevation.gpx",
+        """    <trkpt lat="27.98" lon="86.90"><ele>5100</ele></trkpt>
+    <trkpt lat="27.99" lon="86.91" />""",
+    )
+
+    result = build_route_provenance(load_source_route_points(gpx), sample_interval_m=0)
+
+    assert result.elevation == {"status": "unavailable"}
+    assert [route_point["elev"] for route_point in result.route] == [None, None]
+
+
+def test_recorded_sea_level_elevation_stays_recorded(tmp_path):
+    gpx = _gpx(
+        tmp_path,
+        "sea-level.gpx",
+        """    <trkpt lat="35.0" lon="135.0"><ele>0</ele></trkpt>
+    <trkpt lat="35.001" lon="135.0"><ele>4</ele></trkpt>""",
+    )
+
+    result = build_route_provenance(load_source_route_points(gpx), sample_interval_m=0)
+
+    assert result.elevation == {"status": "recorded"}
+    assert [route_point["elev"] for route_point in result.route] == [0.0, 4.0]
+
+
+def test_fit_adapter_without_altitude_is_unavailable_not_zero():
+    point = source_point_from_fit_fields(
+        {"position_lat": 2**30, "position_long": -(2**30)}
+    )
+
+    assert point is not None
+    assert point.elevation is None
+
+
+def test_fit_adapter_keeps_recorded_zero_altitude():
+    point = source_point_from_fit_fields(
+        {"position_lat": 2**30, "position_long": -(2**30), "enhanced_altitude": 0.0}
+    )
+
+    assert point is not None
+    assert point.elevation == 0.0
+
+
 def test_fit_adapter_preserves_timestamp_and_converts_semicircles():
     point = source_point_from_fit_fields(
         {
@@ -160,7 +234,7 @@ def test_fit_adapter_preserves_timestamp_when_position_is_missing():
     assert point == SourceRoutePoint(
         lat=None,
         lng=None,
-        elevation=0,
+        elevation=None,
         timestamp=datetime(2025, 11, 26, 21, 21, 5, tzinfo=UTC),
         segment_index=0,
     )
@@ -224,3 +298,4 @@ def test_curated_regions_map_to_explicit_iana_timezones():
     assert route_time_zone("Banff/Kananaskis") == "America/Edmonton"
     assert route_time_zone("Canary Islands") == "Atlantic/Canary"
     assert route_time_zone("Unknown trail") is None
+

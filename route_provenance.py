@@ -1,4 +1,4 @@
-"""Source-backed route timing and track-boundary provenance."""
+"""Source-backed route timing, elevation, and track-boundary provenance."""
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -14,15 +14,16 @@ from fitparse import FitFile
 class SourceRoutePoint:
     lat: float | None
     lng: float | None
-    elevation: float
+    elevation: float | None
     timestamp: datetime | None = None
     segment_index: int = 0
 
 
 @dataclass(frozen=True)
 class RouteProvenanceResult:
-    route: list[dict[str, float]]
+    route: list[dict[str, float | None]]
     temporal: dict[str, object]
+    elevation: dict[str, str]
     track: dict[str, int]
     discontinuities: list[dict[str, object]]
 
@@ -50,11 +51,14 @@ def source_point_from_fit_fields(
         lat = lat * (180 / 2**31)
     if has_position and isinstance(lng, int):
         lng = lng * (180 / 2**31)
-    altitude = fields.get("enhanced_altitude") or fields.get("altitude") or 0
+    # A missing altitude stays missing. A recorded 0 m is still recorded.
+    altitude = fields.get("enhanced_altitude")
+    if not isinstance(altitude, (int, float)):
+        altitude = fields.get("altitude")
     return SourceRoutePoint(
         lat=float(lat) if has_position else None,
         lng=float(lng) if has_position else None,
-        elevation=float(altitude),
+        elevation=float(altitude) if isinstance(altitude, (int, float)) else None,
         timestamp=timestamp,
         segment_index=segment_index,
     )
@@ -74,7 +78,11 @@ def load_source_route_points(path: str | Path) -> list[SourceRoutePoint]:
                     SourceRoutePoint(
                         lat=point.latitude,
                         lng=point.longitude,
-                        elevation=float(point.elevation or 0),
+                        elevation=(
+                            float(point.elevation)
+                            if point.elevation is not None
+                            else None
+                        ),
                         timestamp=_recorded_timestamp(point.time),
                         segment_index=segment_index,
                     )
@@ -143,6 +151,7 @@ def build_route_provenance(
         return RouteProvenanceResult(
             route=[],
             temporal={"status": "unavailable"},
+            elevation={"status": "unavailable"},
             track={"segment_count": 0},
             discontinuities=[],
         )
@@ -163,15 +172,22 @@ def build_route_provenance(
         for source_index, point in enumerate(points)
         if point.lat is not None and point.lng is not None
     ]
+    # Elevation is recorded only when every positioned record carries it. A
+    # partial profile is not published: a missing sample is never invented.
+    elevation_recorded = bool(positioned) and all(
+        point.elevation is not None for _, point in positioned
+    )
+    elevation = {"status": "recorded" if elevation_recorded else "unavailable"}
     if not positioned:
         return RouteProvenanceResult(
             route=[],
             temporal=temporal,
+            elevation=elevation,
             track={"segment_count": len({point.segment_index for point in points})},
             discontinuities=[],
         )
 
-    route: list[dict[str, float]] = []
+    route: list[dict[str, float | None]] = []
     source_distances = [0.0]
     cumulative_m = 0.0
     positioned_points = [point for _, point in positioned]
@@ -185,10 +201,10 @@ def build_route_provenance(
         is_endpoint = index == 0 or index == len(positioned_points) - 1
         if not is_endpoint and distance - last_sampled_distance < sample_interval_m:
             continue
-        route_point: dict[str, float] = {
+        route_point: dict[str, float | None] = {
             "lat": float(point.lat),
             "lng": float(point.lng),
-            "elev": point.elevation,
+            "elev": point.elevation if elevation_recorded else None,
             "d": distance,
         }
         if start_time is not None and point.timestamp is not None:
@@ -243,6 +259,8 @@ def build_route_provenance(
     return RouteProvenanceResult(
         route=route,
         temporal=temporal,
+        elevation=elevation,
         track={"segment_count": segment_count},
         discontinuities=discontinuities,
     )
+

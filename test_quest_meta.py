@@ -122,6 +122,38 @@ class QuestMetaTests(unittest.TestCase):
         self.assertEqual(meta["xp"], 1240)
         self.assertIn("1,240 m of climbing", meta["completion_rule"])
 
+    def test_unknown_elevation_does_not_claim_a_zero_climb(self):
+        meta = build_quest_meta(
+            activity_type="Run",
+            distance_km=12.4,
+            elevation_gain=None,
+            region_label="High Plateau",
+            activity_name="Imported line",
+        )
+
+        self.assertIsNone(meta["elevation_gain_m"])
+        self.assertEqual(meta["elevation_status"], "unavailable")
+        self.assertEqual(
+            meta["completion_rule"], "Complete a 12.4 km run in High Plateau."
+        )
+        self.assertNotIn("climb", meta["completion_rule"])
+        # Scoring falls back to distance alone rather than inventing a climb.
+        self.assertEqual(meta["effort_tier"], "Moderate")
+        self.assertEqual(meta["xp"], 150)
+
+    def test_recorded_elevation_carries_no_status_field(self):
+        meta = build_quest_meta(
+            activity_type="Run",
+            distance_km=4.8,
+            elevation_gain=0,
+            region_label="Tokyo, Japan",
+            activity_name="crosswalk sprints",
+        )
+
+        self.assertEqual(meta["elevation_gain_m"], 0)
+        self.assertNotIn("elevation_status", meta)
+        self.assertIn("about 0 m of climbing", meta["completion_rule"])
+
     def test_best_in_earth_comes_from_quests_json(self):
         quests_path = Path(__file__).resolve().parent / "quests.json"
         routes = json.loads(quests_path.read_text())["routes"]
