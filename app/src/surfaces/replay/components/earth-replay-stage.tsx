@@ -11,7 +11,13 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/ui/button";
@@ -54,6 +60,24 @@ import {
   type EarthReplaySessionEvent,
 } from "@/surfaces/replay/playback/earth-replay-session-state";
 
+// A phone in landscape is wider than the mobile breakpoint but too short for
+// the expanded HUD. Read like useIsMobile, during render, from a media query.
+const SHORT_VIEWPORT_QUERY = "(max-height: 500px)";
+
+function subscribeShortViewport(onChange: () => void) {
+  const media = window.matchMedia(SHORT_VIEWPORT_QUERY);
+  media.addEventListener("change", onChange);
+  return () => media.removeEventListener("change", onChange);
+}
+
+function useShortViewport() {
+  return useSyncExternalStore(
+    subscribeShortViewport,
+    () => window.matchMedia(SHORT_VIEWPORT_QUERY).matches,
+    () => false,
+  );
+}
+
 export function EarthReplayStage({
   route,
   pickerRoutes,
@@ -79,6 +103,7 @@ export function EarthReplayStage({
   const { status, engineMode, control, contextState, mobileControlsExpanded } = session;
   const [chromeVisible, setChromeVisible] = useState(true);
   const isMobile = useIsMobile();
+  const shortViewport = useShortViewport();
   const reducedMotion = useReducedMotion();
   const totalDistanceM = routeDistanceM(route);
   const operational = earthReplayOperational(status);
@@ -159,8 +184,8 @@ export function EarthReplayStage({
   }, [control.playing, operational, route, totalDistanceM]);
 
   useEffect(() => {
-    dispatchSession({ type: "presentationReset", isMobile });
-  }, [dispatchSession, isMobile]);
+    dispatchSession({ type: "presentationReset", isMobile, shortViewport });
+  }, [dispatchSession, isMobile, shortViewport]);
 
   useEffect(() => {
     if (!chromeMayAutoHide) {

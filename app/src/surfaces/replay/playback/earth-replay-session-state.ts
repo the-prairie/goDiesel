@@ -31,7 +31,11 @@ export type EarthReplayControlEvent =
   | { type: "cameraRangeChosen"; cameraRangeM: number };
 
 export type EarthReplayHudEvent =
-  | { type: "presentationReset"; isMobile: boolean }
+  /**
+   * The viewport class changed. `shortViewport` is a short screen (a phone in
+   * landscape) that is not mobile by width; it opens the HUD compact too.
+   */
+  | { type: "presentationReset"; isMobile: boolean; shortViewport: boolean }
   | { type: "contextChanged"; contextState: RouteContextHudState }
   | { type: "mobileControlsToggled" };
 
@@ -158,7 +162,7 @@ export function reduceEarthReplaySession(
         : state;
     }
     case "presentationReset": {
-      const contextState = event.isMobile ? "compact" : "preview";
+      const contextState = event.isMobile || event.shortViewport ? "compact" : "preview";
       return state.contextState === contextState && !state.mobileControlsExpanded
         ? state
         : { ...state, contextState, mobileControlsExpanded: false };

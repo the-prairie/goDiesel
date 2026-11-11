@@ -199,10 +199,20 @@ describe("Earth Replay HUD", () => {
       const state = transition(mounted(),
         { type: "contextChanged", contextState: "expanded" },
         { type: "mobileControlsToggled" },
-        { type: "presentationReset", isMobile });
+        { type: "presentationReset", isMobile, shortViewport: false });
       expect(state).toMatchObject({ contextState, mobileControlsExpanded: false });
     },
   );
+
+  it("opens compact on a short viewport such as a phone in landscape, and can still expand", () => {
+    const state = transition(mounted(),
+      { type: "presentationReset", isMobile: false, shortViewport: true });
+    expect(state).toMatchObject({ contextState: "compact", mobileControlsExpanded: false });
+    expect(reduceEarthReplaySession(state, { type: "contextChanged", contextState: "expanded" }).contextState)
+      .toBe("expanded");
+    expect(transition(state, { type: "presentationReset", isMobile: false, shortViewport: false }).contextState)
+      .toBe("preview");
+  });
 
   it("toggles mobile controls without touching playback", () => {
     const base = mounted();
