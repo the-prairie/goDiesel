@@ -59,6 +59,16 @@ test('discovery requests a location separately and preserves the experience', as
   await expect(page.getByRole('textbox',{name:'Near where?'})).toHaveValue('Brighton');
 });
 
+test('free-text search chip shows the words exactly as typed', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/#/finder');
+  await page.getByRole('textbox', { name: 'Describe your next route' }).fill('a hilly run in Crete about 15 km');
+  await page.getByRole('button', { name: 'Find routes', exact: true }).click();
+  const chip = page.getByRole('button', { name: 'Clear experience search' });
+  await expect(chip).toBeVisible();
+  expect(await chip.evaluate((element) => (element as HTMLElement).innerText.trim())).toBe('a hilly run in Crete about 15 km');
+});
+
 test('a phone list view does not download the map runtime until the map is shown', async ({ page }) => {
   const scripts: string[] = [];
   page.on('request', (request) => {
