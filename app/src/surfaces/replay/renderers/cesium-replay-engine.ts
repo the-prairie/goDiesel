@@ -210,7 +210,9 @@ export class CesiumReplayEngine implements ReplayEngine {
         enableCollision: true,
       });
       if (!cesiumRunIsCurrent(this.fidelity, operationId)) {
-        viewer.destroy();
+        // destroy() has already released this viewer; a remount without
+        // destroy() has not, because it replaced `this.viewer`.
+        if (!viewer.isDestroyed()) viewer.destroy();
         return;
       }
       viewer.scene.primitives.add(tileset);

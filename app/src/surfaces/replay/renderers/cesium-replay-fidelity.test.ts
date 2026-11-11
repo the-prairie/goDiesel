@@ -290,6 +290,17 @@ describe("Cesium Replay fidelity contract", () => {
     expect(h.onStatus.mock.lastCall?.[0].title).toBe("Map tiles unavailable");
   });
 
+  it("destroys a viewer once when disposed before its tileset resolves", async () => {
+    provider.holdTileset = true;
+    provider.doubleDestroyThrows = true;
+    const h = start();
+    await flush();
+    h.engine.destroy();
+    provider.heldTilesets[0].resolve();
+    await h.mounted;
+    expect(provider.viewers[0].destroy).toHaveBeenCalledOnce();
+  });
+
   describe("status characterization", () => {
     const LOADING = {
       state: "loading",
