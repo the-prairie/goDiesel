@@ -24,7 +24,11 @@ from typing import Any
 from PIL import Image
 
 from quest_meta import normalize_route_status
-from route_provenance import build_route_provenance, load_source_route_points
+from route_provenance import (
+    build_route_provenance,
+    load_source_route_points,
+    published_route_provenance,
+)
 
 
 ROOT = Path(__file__).resolve().parent
@@ -374,7 +378,11 @@ def verify_real_pipeline(
                 category=DeprecationWarning,
             )
             source_points = load_source_route_points(source_path)
-        provenance = build_route_provenance(source_points)
+        # Compare with what build.py publishes for this lifecycle: a discovered
+        # route has its source timing stripped before publication.
+        provenance = published_route_provenance(
+            build_route_provenance(source_points), spec.get("lifecycle", "completed")
+        )
         if provenance.route != detail["route"]:
             raise VerificationError(f"generated geometry does not match original source for {slug}")
 
