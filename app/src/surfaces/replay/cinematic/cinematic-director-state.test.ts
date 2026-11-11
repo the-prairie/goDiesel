@@ -12,13 +12,19 @@ const route = {
 } as QuestRoute;
 const opening = cinematicFrame(route, "feature", 0);
 const initial = () => initialCinematicDirectorState(opening);
+function request(state: CinematicDirectorState) {
+  const next = reduceCinematicDirector(state, { type: "playRequested" });
+  if (next.audioStart.state !== "pending") throw new Error("play request was not minted");
+  return { state: next, requestId: next.audioStart.requestId };
+}
 function start(state: CinematicDirectorState) {
-  return reduceCinematicDirector(reduceCinematicDirector(state, { type: "playRequested", requestId: 1 }), { type: "audioStarted", requestId: 1 });
+  const pending = request(state);
+  return reduceCinematicDirector(pending.state, { type: "audioStarted", requestId: pending.requestId });
 }
 
 describe("cinematic director transitions", () => {
   it("starts paused with sound enabled and loading status", () => {
-    expect(initial()).toEqual({ frame: opening, playback: "paused", audioStart: { state: "idle" }, soundEnabled: true, status: { state: "loading", message: "Scouting the route." } });
+    expect(initial()).toEqual({ frame: opening, playback: "paused", audioStart: { state: "idle" }, lastAudioRequestId: 0, soundEnabled: true, status: { state: "loading", message: "Scouting the route." } });
   });
 
   it("selects a cut and pauses in one transition", () => {
@@ -42,32 +48,34 @@ describe("cinematic director transitions", () => {
 
   for (const type of ["cutSelected", "seeked", "sessionStarted"] as const) {
     it(`rejects late audio after ${type}`, () => {
-      const pending = reduceCinematicDirector(initial(), { type: "playRequested", requestId: 1 });
-      const changed = reduceCinematicDirector(pending, { type, frame: cinematicFrame(route, "kinetic", 2) });
-      expect(reduceCinematicDirector(changed, { type: "audioStarted", requestId: 1 })).toBe(changed);
+      const pending = request(initial());
+      const changed = reduceCinematicDirector(pending.state, { type, frame: cinematicFrame(route, "kinetic", 2) });
+      expect(reduceCinematicDirector(changed, { type: "audioStarted", requestId: pending.requestId })).toBe(changed);
     });
   }
 
   it("pause cancels an audio start and rejects its later completion", () => {
-    const pending = reduceCinematicDirector(initial(), { type: "playRequested", requestId: 1 });
-    const paused = reduceCinematicDirector(pending, { type: "playbackPaused" });
-    expect(reduceCinematicDirector(paused, { type: "audioStarted", requestId: 1 })).toBe(paused);
+    const pending = request(initial());
+    const paused = reduceCinematicDirector(pending.state, { type: "playbackPaused" });
+    expect(reduceCinematicDirector(paused, { type: "audioStarted", requestId: pending.requestId })).toBe(paused);
   });
 
   it("accepts only the newest start and ignores duplicate completion", () => {
-    let state = reduceCinematicDirector(initial(), { type: "playRequested", requestId: 1 });
-    state = reduceCinematicDirector(state, { type: "playRequested", requestId: 2 });
-    expect(reduceCinematicDirector(state, { type: "audioStarted", requestId: 1 })).toBe(state);
-    state = reduceCinematicDirector(state, { type: "audioStarted", requestId: 2 });
+    const first = request(initial());
+    const second = request(first.state);
+    expect(second.requestId).not.toBe(first.requestId);
+    let state = second.state;
+    expect(reduceCinematicDirector(state, { type: "audioStarted", requestId: first.requestId })).toBe(state);
+    state = reduceCinematicDirector(state, { type: "audioStarted", requestId: second.requestId });
     expect(state.playback).toBe("playing");
-    expect(reduceCinematicDirector(state, { type: "audioStarted", requestId: 2 })).toBe(state);
+    expect(reduceCinematicDirector(state, { type: "audioStarted", requestId: second.requestId })).toBe(state);
   });
 
   it("failed audio settles the matching request without changing prior playback", () => {
     for (const state of [initial(), start(initial())]) {
-      const pending = reduceCinematicDirector(state, { type: "playRequested", requestId: 2 });
-      expect(reduceCinematicDirector(pending, { type: "audioStartFailed", requestId: 1 })).toBe(pending);
-      expect(reduceCinematicDirector(pending, { type: "audioStartFailed", requestId: 2 })).toMatchObject({ playback: state.playback, audioStart: { state: "idle" } });
+      const { state: pending, requestId } = request(state);
+      expect(reduceCinematicDirector(pending, { type: "audioStartFailed", requestId: requestId - 1 })).toBe(pending);
+      expect(reduceCinematicDirector(pending, { type: "audioStartFailed", requestId })).toMatchObject({ playback: state.playback, audioStart: { state: "idle" } });
     }
   });
 
@@ -78,6 +86,20 @@ describe("cinematic director transitions", () => {
       expect(state.playback).toBe("playing");
       expect(state.status.state).toBe(providerState);
     }
+  });
+
+  it("mints a fresh request id after a cancelled start so a late completion cannot start the next one", () => {
+    const first = request(initial());
+    const paused = reduceCinematicDirector(first.state, { type: "playbackPaused" });
+    const second = request(paused);
+    expect(second.requestId).toBeGreaterThan(first.requestId);
+    expect(reduceCinematicDirector(second.state, { type: "audioStarted", requestId: first.requestId })).toBe(second.state);
+  });
+
+  it("keeps minting request ids across sessions", () => {
+    const first = request(initial());
+    const restarted = reduceCinematicDirector(first.state, { type: "sessionStarted", frame: opening });
+    expect(request(restarted).requestId).toBeGreaterThan(first.requestId);
   });
 
   it("sound preference is independent of playback, seeking, and session reset", () => {

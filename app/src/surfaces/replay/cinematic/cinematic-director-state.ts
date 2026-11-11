@@ -5,6 +5,7 @@ export interface CinematicDirectorState {
   frame: CinematicFrame;
   playback: "paused" | "playing";
   audioStart: { state: "idle" } | { state: "pending"; requestId: number };
+  lastAudioRequestId: number;
   soundEnabled: boolean;
   status: CinematicRendererStatus;
 }
@@ -14,7 +15,8 @@ export type CinematicDirectorEvent =
   | { type: "rendererStatusReceived"; status: CinematicRendererStatus }
   | { type: "cutSelected" | "seeked"; frame: CinematicFrame }
   | { type: "framePublished" | "restartRequested"; frame: CinematicFrame }
-  | { type: "playRequested" | "audioStarted" | "audioStartFailed"; requestId: number }
+  | { type: "playRequested" }
+  | { type: "audioStarted" | "audioStartFailed"; requestId: number }
   | { type: "playbackPaused" }
   | { type: "soundToggled" };
 
@@ -25,6 +27,7 @@ export function initialCinematicDirectorState(
     frame,
     playback: "paused",
     audioStart: { state: "idle" },
+    lastAudioRequestId: 0,
     soundEnabled: true,
     status: { state: "loading", message: "Scouting the route." },
   };
@@ -55,11 +58,14 @@ export function reduceCinematicDirector(
     case "framePublished":
     case "restartRequested":
       return { ...state, frame: event.frame };
-    case "playRequested":
+    case "playRequested": {
+      const requestId = state.lastAudioRequestId + 1;
       return {
         ...state,
-        audioStart: { state: "pending", requestId: event.requestId },
+        audioStart: { state: "pending", requestId },
+        lastAudioRequestId: requestId,
       };
+    }
     case "audioStarted":
     case "audioStartFailed":
       if (
