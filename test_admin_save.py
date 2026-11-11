@@ -154,3 +154,107 @@ def test_a_save_without_status_leaves_the_stored_status_alone(admin, served):
     assert (code, body) == (200, {"ok": True, "updated": 1})
     route = json.loads(stored(admin))["routes"][0]
     assert route == {"activity_id": "1", "status": "approved", "region": "Calgary"}
+
+
+# ── Publication OSError bodies for curation and annotation saves ──
+
+import owner_publication as owner_publication_module  # noqa: E402
+
+PUBLISH_PATHS = {
+    "/api/curation/save": {"activity_id": "1", "curation": {}},
+    "/api/annotations/save": {"activity_id": "1", "annotations": []},
+}
+RESTORED = "Publication failed; previous source and route data restored."
+NOTHING_PUBLISHED = "Publication failed; no changes were published."
+RECOVERY_REQUIRED = (
+    "Publication recovery is required; the owner publication journal was kept."
+)
+
+
+def journal(admin):
+    return admin.QUESTS / owner_publication_module.JOURNAL_NAME
+
+
+def fail_inside_the_publication(admin, monkeypatch):
+    """Raise OSError after the journal is ready, as a full disk would."""
+    def disk_full(*args, **kwargs):
+        assert (journal(admin) / "ready").exists()
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(admin, "publish_curation", disk_full)
+    monkeypatch.setattr(admin, "publish_annotations", disk_full)
+
+
+@pytest.mark.parametrize("path", PUBLISH_PATHS)
+def test_an_error_inside_the_publication_reports_the_restore(admin, served, monkeypatch, path):
+    write_routes(admin, [{"activity_id": "1", "status": "approved"}])
+    before = stored(admin)
+    fail_inside_the_publication(admin, monkeypatch)
+    code, body = request(f"{served}{path}", "POST", PUBLISH_PATHS[path])
+    assert code == 500
+    assert body == {"error": RESTORED, "detail": "[Errno 28] No space left on device"}
+    assert stored(admin) == before
+    assert not journal(admin).exists()
+
+
+@pytest.mark.parametrize("path", PUBLISH_PATHS)
+def test_an_error_before_anything_was_written_says_nothing_was_published(
+    admin, served, monkeypatch, path
+):
+    write_routes(admin, [{"activity_id": "1", "status": "approved"}])
+    before = stored(admin)
+
+    def unwritable(root):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(owner_publication_module, "_settle_generator_backup", unwritable)
+    code, body = request(f"{served}{path}", "POST", PUBLISH_PATHS[path])
+    assert code == 500
+    assert body == {"error": NOTHING_PUBLISHED, "detail": "[Errno 13] Permission denied"}
+    assert stored(admin) == before
+    assert not journal(admin).exists()
+
+
+@pytest.mark.parametrize("path", PUBLISH_PATHS)
+def test_an_error_during_recovery_that_keeps_the_journal_requires_recovery(
+    admin, served, path
+):
+    write_routes(admin, [{"activity_id": "1", "status": "approved"}])
+    before = stored(admin)
+    # An abandoned journal whose owner record is missing: recovery cannot read it.
+    journal(admin).mkdir()
+    (journal(admin) / "lock").write_bytes(b"")
+    code, body = request(f"{served}{path}", "POST", PUBLISH_PATHS[path])
+    assert code == 503
+    assert body["error"] == RECOVERY_REQUIRED
+    assert "owner.json" in body["detail"]
+    assert stored(admin) == before
+    assert journal(admin).exists()
+
+
+@pytest.mark.parametrize("path", PUBLISH_PATHS)
+def test_a_failed_restore_keeps_its_existing_503(admin, served, monkeypatch, path):
+    write_routes(admin, [{"activity_id": "1", "status": "approved"}])
+    fail_inside_the_publication(admin, monkeypatch)
+
+    def restore_fails(root, kept):
+        raise OSError(5, "Input/output error")
+
+    monkeypatch.setattr(owner_publication_module, "_restore", restore_fails)
+    code, body = request(f"{served}{path}", "POST", PUBLISH_PATHS[path])
+    assert code == 503
+    assert body == {"error": (
+        f"publication recovery failed; retain {journal(admin)} and retry recovery"
+    )}
+    assert journal(admin).exists()
+
+
+@pytest.mark.parametrize("path", PUBLISH_PATHS)
+def test_a_successful_publication_keeps_its_200(admin, served, monkeypatch, path):
+    write_routes(admin, [{"activity_id": "1", "status": "approved"}])
+    monkeypatch.setattr(admin, "publish_curation", lambda *args: None)
+    monkeypatch.setattr(admin, "publish_annotations", lambda *args: [])
+    code, body = request(f"{served}{path}", "POST", PUBLISH_PATHS[path])
+    assert code == 200
+    assert body["ok"] is True
+    assert not journal(admin).exists()

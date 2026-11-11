@@ -53,6 +53,7 @@ from curation_publish import (
     publish_curation,
 )
 from owner_publication import (
+    JOURNAL_NAME,
     PublicationRecoveryError,
     owner_publication,
     owner_publication_subprocess_options,
@@ -584,6 +585,29 @@ def routes_summary():
     return out
 
 
+def _publication_os_error(error, entered):
+    """The response for an OSError that escaped an owner publication.
+
+    owner_publication restores and re-raises only an error raised inside its
+    block, and a failed restore raises PublicationRecoveryError instead. An
+    OSError from its own recovery or preparation never reached the block.
+    """
+    if (QUESTS / JOURNAL_NAME).exists():
+        return 503, {
+            'error': 'Publication recovery is required; the owner publication journal was kept.',
+            'detail': str(error),
+        }
+    if entered:
+        return 500, {
+            'error': 'Publication failed; previous source and route data restored.',
+            'detail': str(error),
+        }
+    return 500, {
+        'error': 'Publication failed; no changes were published.',
+        'detail': str(error),
+    }
+
+
 ADMIN_ASSETS = {
     '/admin-assets/classifier-state.js': 'admin-ui/generated/classifier-state.js',
     '/admin-assets/mutation-state.js': 'admin-ui/generated/mutation-state.js',
@@ -835,6 +859,7 @@ class Handler(BaseHTTPRequestHandler):
             if not OWNER_MUTATION_LOCK.acquire(blocking=False):
                 self._send(409, _mutation_busy_body())
                 return
+            entered = False
             try:
                 data = json.loads(body)
                 activity_id = str(data['activity_id'])
@@ -858,6 +883,7 @@ class Handler(BaseHTTPRequestHandler):
                         )
 
                 with owner_publication(QUESTS, include_source=True):
+                    entered = True
                     route = save_curation_and_rebuild(
                         QUESTS / 'quests.json', activity_id, curation, rebuild
                     )
@@ -874,10 +900,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(503, {'error': str(error)})
                 return
             except OSError as error:
-                self._send(500, {
-                    'error': 'Publication failed; previous source and route data restored.',
-                    'detail': str(error),
-                })
+                self._send(*_publication_os_error(error, entered))
                 return
             finally:
                 OWNER_MUTATION_LOCK.release()
@@ -892,11 +915,13 @@ class Handler(BaseHTTPRequestHandler):
             if not OWNER_MUTATION_LOCK.acquire(blocking=False):
                 self._send(409, _mutation_busy_body())
                 return
+            entered = False
             try:
                 data = json.loads(body)
                 activity_id = str(data['activity_id'])
                 annotations = data['annotations']
                 with owner_publication(QUESTS, include_source=True):
+                    entered = True
                     config_path = QUESTS / 'quests.json'
                     config = json.loads(config_path.read_text(encoding='utf-8'))
                     matching = [
@@ -918,10 +943,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(503, {'error': str(error)})
                 return
             except OSError as error:
-                self._send(500, {
-                    'error': 'Publication failed; previous source and route data restored.',
-                    'detail': str(error),
-                })
+                self._send(*_publication_os_error(error, entered))
                 return
             finally:
                 OWNER_MUTATION_LOCK.release()
