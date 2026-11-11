@@ -234,13 +234,15 @@ export const AtlasRegionalFallback = forwardRef<AtlasGlobeHandle, AtlasRegionalF
     const session = ++sessionRef.current;
     const hasGeometry = Boolean(host && bounds && routes.features.length);
     dispatch({ type: "sessionStarted", session, hasGeometry });
+    // Every session starts without paths, so one without geometry cannot keep
+    // the previous region's overlay.
+    setRoutePaths([]);
     if (!host || !bounds || routes.features.length === 0) return;
 
     let active = true;
     let loadTimer: number | undefined;
     let resizeObserver: ResizeObserver | undefined;
     let map: MapLibreMap;
-    setRoutePaths([]);
 
     try {
       map = new maplibregl.Map({
