@@ -39,6 +39,13 @@ describe("single-route microsite router", () => {
     expect(router.state.location.pathname).not.toContain(otherSlug);
   });
 
+  it("sends an unknown path to the shared guide, never to a product surface", async () => {
+    const router = await settledAt("/finderr");
+
+    expect(router.state.location.pathname).toBe(`/routes/${sharedSlug}`);
+    expect(router.state.historyAction).toBe("REPLACE");
+  });
+
   it("sends a malformed legacy link to the shared guide", async () => {
     const router = await settledAt("/quest/%");
 

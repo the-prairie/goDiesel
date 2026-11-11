@@ -707,3 +707,25 @@ a {
 @media (prefers-reduced-motion: reduce) { .field-note-card { transition: none; } }
 
 .finder-result-cover .route-cover { height: 100%; min-height: 0; aspect-ratio: 1; }
+/* ---- Shell: safe-area insets ------------------------------------------
+   index.html sets viewport-fit=cover, so the page draws under the notch and
+   the home indicator and env(safe-area-inset-*) carries real values. Every
+   shell bar that touches a screen edge clears the inset on that edge. The
+   rail and sidebar grow by the left inset, and so does the content offset
+   that uses the same tokens. Surface-owned bars are their owners' job. */
+:root {
+  --spine-rail-width: calc(4rem + var(--safe-area-left));
+  --spine-width: calc(var(--sidebar-width-field-guide) + var(--safe-area-left));
+}
+
+.atlas-spine {
+  padding-top: var(--safe-area-top);
+  padding-bottom: var(--safe-area-bottom);
+  padding-left: var(--safe-area-left);
+}
+
+.atlas-spine-mobile {
+  padding-left: var(--safe-area-left);
+  padding-right: var(--safe-area-right);
+}
+/* ---- End shell ---------------------------------------------------------- */

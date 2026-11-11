@@ -12,7 +12,7 @@ interface AtlasSpineProps {
 
 export function AtlasSpine({ className, hideDesktop = false }: AtlasSpineProps) {
   const location = useLocation();
-  const activeSection = appSectionForPath(location.pathname);
+  const activeSection = appSectionForPath(location.pathname) ?? { id: undefined };
 
   return (
     <>

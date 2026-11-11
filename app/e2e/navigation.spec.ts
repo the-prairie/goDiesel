@@ -389,3 +389,84 @@ for (const viewport of [
     });
   });
 }
+
+test("an unknown link says so inside the shell and offers a way to Atlas", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#/finderr");
+
+  await expect(page.getByRole("heading", { name: "There’s nothing at this address." })).toBeVisible();
+  // Not silently redirected, and the navigation stays.
+  await expect(page).toHaveURL(/#\/finderr$/);
+  await expect(page.getByTestId("atlas-spine-mobile")).toBeVisible();
+  // A page that does not exist is not any section.
+  await expect(page.getByTestId("atlas-spine-mobile").locator("[aria-current]")).toHaveCount(0);
+  await expect(page).toHaveTitle("Page not found · goDiesel");
+
+  await page.getByRole("link", { name: "Open Atlas" }).click();
+  await expect(page).toHaveURL(/#\/atlas$/);
+  await expect(page).toHaveTitle("Atlas · goDiesel");
+});
+
+/** Holds the matching asset until `release` is called. */
+async function holdAsset(page: import("@playwright/test").Page, pattern: RegExp) {
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(pattern, async (route) => { await released; await route.continue(); });
+  return release;
+}
+
+for (const [width, staticNav, realNav] of [
+  [390, ".static-shell-tabs", "atlas-spine-mobile"],
+  [900, ".static-shell-rail", "atlas-spine"],
+  [1280, ".static-shell-rail", "atlas-spine"],
+] as const) {
+  test(`the static shell paints before the app's code, with navigation where it will stay (${width}px)`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    const release = await holdAsset(page, /\/assets\/index-[^/]+\.js$/);
+    await page.goto("/#/routes", { waitUntil: "commit" });
+
+    await expect(page.getByText("Opening goDiesel…")).toBeVisible();
+    const placeholder = await page.locator(staticNav).boundingBox();
+    expect(placeholder).not.toBeNull();
+
+    release();
+    const nav = page.getByTestId(realNav);
+    await expect(nav).toBeVisible();
+    await expect(page.locator("[data-static-shell]")).toHaveCount(0);
+    const mounted = await nav.boundingBox();
+    for (const key of ["x", "y", "width", "height"] as const) {
+      expect(Math.abs((mounted?.[key] ?? 0) - (placeholder?.[key] ?? 0))).toBeLessThanOrEqual(1);
+    }
+  });
+}
+
+test("a surface that is still downloading says what is opening, clear of the screen edge", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const [path, chunk, status, ready] of [
+    ["routes", /\/assets\/routes-page-[^/]+\.js$/, "Opening your routes…", "Places worth returning to."],
+    ["finder", /\/assets\/finder-page-[^/]+\.js$/, "Opening Finder…", "Plan the next day."],
+  ] as const) {
+    const release = await holdAsset(page, chunk);
+    await page.goto(`/#/${path}`);
+
+    const message = page.getByRole("status").filter({ hasText: status });
+    await expect(message).toBeVisible();
+    await expect(page.getByText("Loading view.")).toHaveCount(0);
+    await expect(page.getByTestId("atlas-spine-mobile")).toBeVisible();
+    const box = await message.boundingBox();
+    expect(box?.x).toBeGreaterThanOrEqual(12);
+    expect(box?.y).toBeGreaterThanOrEqual(12);
+    // The placeholder reserves the surface's space above the navigation.
+    const reserved = await page.locator("[data-surface-placeholder]").boundingBox();
+    expect(reserved?.height).toBeGreaterThan(400);
+
+    release();
+    await expect(page.getByRole("heading", { name: ready })).toBeVisible();
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+  }
+});
+
+test("the page may draw under the notch and home indicator", async ({ page }) => {
+  await page.goto("/#/atlas");
+  await expect(page.locator('meta[name="viewport"]')).toHaveAttribute("content", /viewport-fit=cover/);
+});
