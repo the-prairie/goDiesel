@@ -85,3 +85,72 @@ def test_the_list_shows_a_missing_status_as_pending(admin, served):
 def test_the_list_shows_an_unknown_status_as_pending(admin, served, stored):
     write_routes(admin, [{"activity_id": "1", "status": stored}])
     assert listed_statuses(served) == {"1": "pending"}
+
+
+# ── Write path: /api/save accepts only the three statuses ──
+
+STATUS_ERROR = {"error": "status must be one of: pending, approved, archived"}
+
+
+def stored(admin):
+    return (admin.QUESTS / "quests.json").read_bytes()
+
+
+@pytest.mark.parametrize("status", ["pending", "approved", "archived"])
+def test_save_persists_each_valid_status(admin, served, status):
+    write_routes(admin, [{"activity_id": "1", "status": "pending"}, {"activity_id": "2"}])
+    code, body = request(f"{served}/api/save", "POST", {"routes": [
+        {"activity_id": "1", "status": status},
+        {"activity_id": "2", "status": status},
+    ]})
+    assert (code, body) == (200, {"ok": True, "updated": 2})
+    routes = json.loads(stored(admin))["routes"]
+    assert [route["status"] for route in routes] == [status, status]
+    assert listed_statuses(served) == {"1": status, "2": status}
+
+
+@pytest.mark.parametrize("status", ["bogus", "rejected", "", None, 3, ["archived"]])
+def test_save_refuses_an_invalid_status_and_writes_nothing(admin, served, status):
+    write_routes(admin, [{"activity_id": "1", "status": "pending"}])
+    before = stored(admin)
+    code, body = request(f"{served}/api/save", "POST", {"routes": [
+        {"activity_id": "1", "status": status},
+    ]})
+    assert (code, body) == (400, STATUS_ERROR)
+    assert stored(admin) == before
+
+
+def test_one_invalid_status_refuses_the_whole_request(admin, served):
+    write_routes(admin, [
+        {"activity_id": "1", "status": "pending"},
+        {"activity_id": "2", "status": "pending"},
+    ])
+    before = stored(admin)
+    code, body = request(f"{served}/api/save", "POST", {"routes": [
+        {"activity_id": "1", "status": "approved", "region": "Calgary", "title": "First"},
+        {"activity_id": "2", "status": "nope"},
+    ]})
+    assert (code, body) == (400, STATUS_ERROR)
+    assert stored(admin) == before
+    assert listed_statuses(served) == {"1": "pending", "2": "pending"}
+
+
+def test_an_invalid_status_for_an_unknown_route_is_still_refused(admin, served):
+    write_routes(admin, [{"activity_id": "1", "status": "pending"}])
+    before = stored(admin)
+    code, body = request(f"{served}/api/save", "POST", {"routes": [
+        {"activity_id": "1", "status": "approved"},
+        {"activity_id": "999", "status": "bogus"},
+    ]})
+    assert (code, body) == (400, STATUS_ERROR)
+    assert stored(admin) == before
+
+
+def test_a_save_without_status_leaves_the_stored_status_alone(admin, served):
+    write_routes(admin, [{"activity_id": "1", "status": "approved"}])
+    code, body = request(f"{served}/api/save", "POST", {"routes": [
+        {"activity_id": "1", "region": "Calgary"},
+    ]})
+    assert (code, body) == (200, {"ok": True, "updated": 1})
+    route = json.loads(stored(admin))["routes"][0]
+    assert route == {"activity_id": "1", "status": "approved", "region": "Calgary"}

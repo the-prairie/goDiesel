@@ -58,7 +58,7 @@ from owner_publication import (
     owner_publication_subprocess_options,
     recover_owner_publication,
 )
-from quest_meta import normalize_route_status
+from quest_meta import normalize_route_status, validate_route_status
 from route_imports import route_metadata
 from route_media import (
     match_photo_to_route,
@@ -778,6 +778,11 @@ class Handler(BaseHTTPRequestHandler):
                 updates = data.get('routes', [])
                 if any(not isinstance(update, dict) or 'activity_id' not in update for update in updates):
                     raise ValueError('every route update must contain an activity_id')
+                # Validate every status before changing any route, so a bad
+                # status refuses the whole request.
+                for update in updates:
+                    if 'status' in update:
+                        validate_route_status(update['status'])
                 config_path = QUESTS / 'quests.json'
                 cfg = json.loads(config_path.read_text(encoding='utf-8'))
                 routes = cfg.get('routes')
