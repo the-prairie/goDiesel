@@ -414,3 +414,123 @@ for (const width of [1440, 390]) {
     await expect(margin.getByRole("heading", { name: "crosswalk sprints", exact: true })).toBeVisible();
   });
 }
+
+test("a browser that cannot create WebGL2 keeps the guide and shows a static route trace", async ({ page }) => {
+  await page.addInitScript(() => {
+    const getContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, type: string, ...rest: unknown[]) {
+      if (type === "webgl2") return null;
+      return (getContext as (...args: unknown[]) => unknown).call(this, type, ...rest);
+    } as typeof HTMLCanvasElement.prototype.getContext;
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/#/routes/${routeSlug}`);
+
+  const margin = page.getByRole("complementary", { name: "Route margin" });
+  await expect(margin.getByRole("heading", { name: generatedRoute(routeSlug).activity_name })).toBeVisible();
+  await expect(page.getByText("This view couldn’t open.")).toHaveCount(0);
+
+  const geography = page.getByRole("region", { name: "Route geography" });
+  await expect(geography).toHaveAttribute("data-map-status", "unavailable");
+  await expect(geography.getByRole("status")).toContainText("Interactive map unavailable");
+  await expect(geography.getByRole("img", { name: /recorded route trace|route trace/ }).first()).toBeVisible();
+  await expect(geography.getByRole("button", { name: "Reset route map" })).toHaveCount(0);
+  const traceBox = (await geography.getByRole("img", { name: /recorded route trace|route trace/ }).first().boundingBox())!;
+  expect(traceBox.height).toBeGreaterThan(200);
+
+  await expect(margin.getByRole("link", { name: "Open replay" })).toBeVisible();
+  await margin.getByRole("button", { name: "Expand route margin" }).click();
+  await expect(margin).toHaveAttribute("data-snap", "expanded");
+  await expect(margin.getByRole("img", { name: /elevation profile/i })).toBeVisible();
+  await margin.getByRole("link", { name: "Open replay" }).click();
+  await expect(page).toHaveURL(new RegExp(`#\/replay\/${routeSlug}$`));
+});
+
+test("map controls stay clear of the map attribution in phone landscape", async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.goto(`/#/routes/${routeSlug}`);
+  const geography = page.getByRole("region", { name: "Route geography" });
+  await expect(geography).toHaveAttribute("data-map-status", "ready", { timeout: 15_000 });
+
+  const attribution = geography.locator(".maplibregl-ctrl-attrib");
+  await attribution.evaluate((element) => { element.classList.add("maplibregl-compact-show"); element.setAttribute("open", ""); });
+  await expect(attribution).toContainText("OpenStreetMap");
+  const controls = (await page.getByRole("button", { name: "Reset route map" }).locator("..").boundingBox())!;
+  const credits = (await attribution.boundingBox())!;
+  const map = (await geography.boundingBox())!;
+  const overlaps =
+    controls.x < credits.x + credits.width && credits.x < controls.x + controls.width &&
+    controls.y < credits.y + credits.height && credits.y < controls.y + controls.height;
+  expect(overlaps).toBe(false);
+  expect(credits.y + credits.height).toBeLessThanOrEqual(map.y + map.height + 1);
+  expect(controls.y).toBeGreaterThanOrEqual(map.y);
+});
+
+test.describe("mobile route sheet on a touch screen", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+
+  async function touchDrag(page: import("@playwright/test").Page, from: { x: number; y: number }, dy: number, { steps, stepMs, holdMs }: { steps: number; stepMs: number; holdMs: number }) {
+    const cdp = await page.context().newCDPSession(page);
+    const point = (y: number) => [{ x: from.x, y, id: 1 }];
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: point(from.y) });
+    for (let step = 1; step <= steps; step += 1) {
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: point(from.y + (dy * step) / steps) });
+      await page.waitForTimeout(stepMs);
+    }
+    if (holdMs) await page.waitForTimeout(holdMs);
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await cdp.detach();
+  }
+
+  async function handleCenter(page: import("@playwright/test").Page) {
+    const box = (await page.getByTestId("route-sheet-handle").boundingBox())!;
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  }
+
+  test("the grab handle drags the sheet between its stops", async ({ page }) => {
+    await page.goto(`/#/routes/${routeSlug}`);
+    const margin = page.getByRole("complementary", { name: "Route margin" });
+    await expect(margin).toHaveAttribute("data-snap", "peek");
+    await margin.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
+
+    // A held drag settles at the nearest stop: 256 px + 240 px is closest to half.
+    await touchDrag(page, await handleCenter(page), -240, { steps: 8, stepMs: 16, holdMs: 200 });
+    await expect(margin).toHaveAttribute("data-snap", "half");
+
+    // A short, fast flick carries on to the next stop.
+    await touchDrag(page, await handleCenter(page), -60, { steps: 3, stepMs: 16, holdMs: 0 });
+    await expect(margin).toHaveAttribute("data-snap", "expanded");
+
+    // A touch drag in the sheet's content scrolls the content, not the sheet.
+    const metric = (await margin.getByText("Distance", { exact: true }).boundingBox())!;
+    await touchDrag(page, { x: metric.x + metric.width / 2, y: metric.y + metric.height / 2 }, -200, { steps: 8, stepMs: 16, holdMs: 200 });
+    await expect(margin).toHaveAttribute("data-snap", "expanded");
+    await expect.poll(() => margin.locator(".overflow-y-auto").first().evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+
+    // A long held drag down goes all the way back to peek.
+    await touchDrag(page, await handleCenter(page), 520, { steps: 10, stepMs: 16, holdMs: 200 });
+    await expect(margin).toHaveAttribute("data-snap", "peek");
+    await expect(margin.getByRole("link", { name: "Open replay" })).toBeVisible();
+  });
+
+  test("position buttons say where they move the sheet", async ({ page }) => {
+    await page.goto(`/#/routes/${routeSlug}`);
+    const margin = page.getByRole("complementary", { name: "Route margin" });
+    await expect(margin).toHaveAttribute("data-snap", "peek");
+    await expect(margin.getByRole("button", { name: "Collapse route margin" })).toHaveCount(0);
+    await margin.getByRole("button", { name: "Show half of route margin" }).click();
+    await expect(margin).toHaveAttribute("data-snap", "half");
+    await expect(margin.getByRole("button", { name: "Show half of route margin" })).toHaveCount(0);
+    await margin.getByRole("button", { name: "Expand route margin" }).click();
+    await expect(margin).toHaveAttribute("data-snap", "expanded");
+    await margin.getByRole("button", { name: "Show half of route margin" }).click();
+    await expect(margin).toHaveAttribute("data-snap", "half");
+    for (const name of ["Collapse route margin", "Expand route margin"]) {
+      const box = (await margin.getByRole("button", { name }).boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+    }
+    const handle = (await page.getByTestId("route-sheet-handle").boundingBox())!;
+    expect(handle.height).toBeGreaterThanOrEqual(44);
+  });
+});

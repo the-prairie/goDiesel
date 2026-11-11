@@ -626,7 +626,7 @@
       "id": "route-leaf-map",
       "kind": "reducer",
       "area": "react-app",
-      "summary": "The route guide's leaf map: waiting for the map, ready, or unavailable after a deadline or errors.",
+      "summary": "The route guide's leaf map: waiting for the map, ready, unavailable after a deadline or errors, or unsupported when the browser cannot start a renderer.",
       "module": "app/src/surfaces/routes/components/route-leaf-map-state.ts",
       "transition": "reduceRouteLeafMap",
       "test": [
@@ -639,6 +639,7 @@
         "inactive",
         "waiting",
         "ready",
+        "unsupported",
         "status:loading",
         "status:unavailable"
       ],
