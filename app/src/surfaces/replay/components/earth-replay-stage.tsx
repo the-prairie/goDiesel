@@ -218,7 +218,7 @@ export function EarthReplayStage({
       data-light-phase={recordedLight.phase}
       onPointerMove={() => setChromeVisible(true)}
       onFocusCapture={() => setChromeVisible(true)}
-      className="relative grid h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden bg-[#02070a] md:h-dvh md:min-h-[36rem]"
+      className="relative grid h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden bg-[#02070a] md:h-dvh md:[@media(min-height:501px)]:min-h-[36rem]"
     >
       <div
         ref={containerRef}

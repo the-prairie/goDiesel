@@ -1097,6 +1097,11 @@ test("phone landscape opens the Replay HUD compact and the person can expand it"
   const replay = page.getByTestId("replay-stage");
   await expect(replay).toHaveAttribute("data-state", "ready");
 
+  // The dock is reachable without scrolling in phone landscape.
+  const dockBox = await page.getByTestId("replay-controls").boundingBox();
+  expect((dockBox?.y ?? 0) + (dockBox?.height ?? 0)).toBeLessThanOrEqual(390);
+  await expect(page.getByRole("button", { name: "Play route", exact: true })).toBeInViewport();
+
   const context = page.getByTestId("replay-context");
   await expect(context).toHaveAttribute("data-context-state", "compact");
   await expect(page.getByTestId("replay-context-details")).toBeHidden();
