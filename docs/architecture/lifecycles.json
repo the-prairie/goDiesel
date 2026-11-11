@@ -532,7 +532,7 @@
       "id": "atlas-presentation",
       "kind": "reducer",
       "area": "react-app",
-      "summary": "Atlas world status and whether the selected region is waiting or presented.",
+      "summary": "Atlas world status, whether a world has opened, and whether the selected region waits for the world, is presented, or is shown at its deadline.",
       "module": "app/src/surfaces/atlas/atlas-presentation-state.ts",
       "transition": "reduceAtlasPresentation",
       "test": [
@@ -545,7 +545,10 @@
       "states": [
         "region:none",
         "region:waiting",
-        "region:ready"
+        "region:ready",
+        "region:shown",
+        "world:opening",
+        "world:open"
       ],
       "identity": "engineId"
     },

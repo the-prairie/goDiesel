@@ -135,10 +135,17 @@ function canvasLooksBlank(canvas: HTMLCanvasElement) {
   return rgbaPixelsLookBlank(pixels);
 }
 
+/**
+ * Whether Cesium can create its context here. Cesium asks for WebGL2 whenever
+ * the browser defines it and uses WebGL1 only where WebGL2 does not exist, so
+ * a browser that defines WebGL2 but cannot create one (a lost GPU process, a
+ * blocklisted driver, the context limit) cannot start the world.
+ */
 function webglAvailable() {
   try {
     const canvas = document.createElement("canvas");
-    return Boolean(canvas.getContext("webgl2") || canvas.getContext("webgl"));
+    const contextType = typeof WebGL2RenderingContext === "undefined" ? "webgl" : "webgl2";
+    return Boolean(canvas.getContext(contextType));
   } catch {
     return false;
   }
@@ -202,24 +209,33 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     }
 
     try {
-      const viewer = new Viewer(container, {
-        animation: false,
-        baseLayer: false,
-        baseLayerPicker: false,
-        fullscreenButton: false,
-        geocoder: false,
-        homeButton: false,
-        infoBox: false,
-        navigationHelpButton: false,
-        sceneModePicker: false,
-        scene3DOnly: true,
-        skyBox: false,
-        useBrowserRecommendedResolution: true,
-        selectionIndicator: false,
-        timeline: false,
-        requestRenderMode: false,
-        contextOptions: { webgl: { preserveDrawingBuffer: true } },
-      });
+      let viewer: Viewer;
+      try {
+        viewer = new Viewer(container, {
+          // Failures become our own `unavailable` status, never Cesium's panel.
+          showRenderLoopErrors: false,
+          animation: false,
+          baseLayer: false,
+          baseLayerPicker: false,
+          fullscreenButton: false,
+          geocoder: false,
+          homeButton: false,
+          infoBox: false,
+          navigationHelpButton: false,
+          sceneModePicker: false,
+          scene3DOnly: true,
+          skyBox: false,
+          useBrowserRecommendedResolution: true,
+          selectionIndicator: false,
+          timeline: false,
+          requestRenderMode: false,
+          contextOptions: { webgl: { preserveDrawingBuffer: true } },
+        });
+      } catch (error) {
+        // A half-built widget leaves its DOM behind; only our message remains.
+        container.replaceChildren();
+        throw error;
+      }
       if (!atlasEngineRunIsCurrent(this.state, operationId)) {
         viewer.destroy();
         return;

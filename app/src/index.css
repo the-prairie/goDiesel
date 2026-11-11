@@ -616,6 +616,7 @@ a {
 .atlas-route-carousel { background: rgb(0 0 0 / 84%); backdrop-filter: blur(4px); border-top: 1px solid rgb(247 249 250 / 14%); box-shadow: none; }
 /* Cesium writes an inline bottom offset when its viewer resizes. */
 .atlas-layout[data-region-selected="true"] .cesium-viewer-bottom,
+.atlas-layout[data-places-shown="true"] .cesium-viewer-bottom,
 .atlas-layout[data-region-selected="true"] .maplibregl-ctrl-bottom-right { bottom: var(--atlas-tray-height) !important; }
 .atlas-route-header { height: 48px; }
 .atlas-route-card { height: 132px; grid-template-columns: 76px minmax(0, 1fr); grid-template-rows: 87px 44px; border: 1px solid rgb(247 249 250 / 12%); border-radius: 12px; background: transparent; box-shadow: none; }
