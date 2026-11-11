@@ -5,8 +5,13 @@ import { MapLibreAtlasReplayEngine } from "./maplibre-replay-engine";
 
 const provider = vi.hoisted(() => {
   const maps: MapDouble[] = [];
+  const construction: { error?: Error; timersAtConstruction: number[] } = {
+    timersAtConstruction: [],
+  };
   class MapDouble {
-    listeners = new Map<string, Array<() => void>>();
+    listeners = new Map<string, Array<(event?: unknown) => void>>();
+    zoom = 13;
+    getZoom = vi.fn(() => this.zoom);
     addControl = vi.fn();
     resize = vi.fn();
     addSource = vi.fn();
@@ -15,22 +20,24 @@ const provider = vi.hoisted(() => {
     jumpTo = vi.fn();
     remove = vi.fn();
     constructor() {
+      construction.timersAtConstruction.push(vi.getTimerCount());
+      if (construction.error) throw construction.error;
       maps.push(this);
     }
-    on(event: string, callback: () => void) {
+    on(event: string, callback: (event?: unknown) => void) {
       this.listeners.set(event, [
         ...(this.listeners.get(event) ?? []),
         callback,
       ]);
     }
-    once(event: string, callback: () => void) {
+    once(event: string, callback: (event?: unknown) => void) {
       this.on(event, callback);
     }
-    emit(event: string) {
-      this.listeners.get(event)?.forEach((callback) => callback());
+    emit(event: string, payload?: unknown) {
+      this.listeners.get(event)?.forEach((callback) => callback(payload));
     }
   }
-  return { maps, MapDouble };
+  return { maps, MapDouble, construction };
 });
 vi.mock("@/providers/maplibre", () => ({
   default: {
@@ -74,6 +81,8 @@ describe("MapLibre Replay lifecycle contract", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     provider.maps.length = 0;
+    provider.construction.error = undefined;
+    provider.construction.timersAtConstruction.length = 0;
     vi.stubGlobal("window", { setTimeout, clearTimeout });
     vi.stubGlobal("document", {
       createElement: () => ({ className: "", remove: vi.fn() }),
@@ -136,6 +145,27 @@ describe("MapLibre Replay lifecycle contract", () => {
     expect(h.states()).toEqual(["loading", "unavailable"]);
     h.map.emit("error");
     expect(h.onStatus.mock.calls[2][0].title).toBe("Atlas replay unavailable");
+    h.engine.destroy();
+  });
+
+  it("reports a map that cannot be constructed (no WebGL2) at once, without waiting for the deadline", async () => {
+    provider.construction.error = new Error("Failed to initialize WebGL");
+    const h = await mount();
+    expect(h.states()).toEqual(["loading", "unavailable"]);
+    expect(h.onStatus.mock.calls[1][0].title).toBe(
+      "Atlas replay isn\u2019t supported here",
+    );
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(20000);
+    expect(h.states()).toEqual(["loading", "unavailable"]);
+    h.engine.setPose(pose);
+    h.engine.destroy();
+    expect(h.states()).toEqual(["loading", "unavailable"]);
+  });
+
+  it("arms the load deadline before it touches the map provider", async () => {
+    const h = await mount();
+    expect(provider.construction.timersAtConstruction).toEqual([1]);
     h.engine.destroy();
   });
 

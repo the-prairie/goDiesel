@@ -58,28 +58,42 @@ export class MapLibreAtlasReplayEngine implements ReplayEngine {
       return;
     }
 
+    // Arm the deadline before touching the provider, so no failure between
+    // start and load can leave the run loading without an outcome.
+    this.loadTimer = window.setTimeout(() => {
+      this.transition({ type: "deadlineReached", operationId }, onStatus);
+    }, 15_000);
+
     const host = document.createElement("div");
     host.className = "h-full w-full";
     container.replaceChildren(host);
     this.host = host;
     const start = route.route[0];
-    const map = new maplibregl.Map({
-      container: host,
-      style: STYLE_URL,
-      center: [start.lng, start.lat],
-      zoom: 13,
-      pitch: 52,
-      bearing: 0,
-      attributionControl: { compact: true },
-    });
+    let map: MapLibreMap;
+    try {
+      map = new maplibregl.Map({
+        container: host,
+        style: STYLE_URL,
+        center: [start.lng, start.lat],
+        zoom: 13,
+        pitch: 52,
+        bearing: 0,
+        attributionControl: { compact: true },
+      });
+    } catch {
+      // MapLibre throws synchronously when it cannot create a WebGL2 context.
+      window.clearTimeout(this.loadTimer);
+      this.loadTimer = undefined;
+      host.remove();
+      this.host = undefined;
+      this.transition({ type: "mapUnsupported", operationId }, onStatus);
+      return;
+    }
     this.map = map;
     map.addControl(new maplibregl.NavigationControl({ showCompass: true }), "bottom-right");
     map.on("error", () => {
       this.transition({ type: "mapError", operationId }, onStatus);
     });
-    this.loadTimer = window.setTimeout(() => {
-      this.transition({ type: "deadlineReached", operationId }, onStatus);
-    }, 15_000);
 
     map.once("load", () => {
       if (!mapLibreRunIsCurrent(this.lifecycle, operationId) || this.map !== map)
