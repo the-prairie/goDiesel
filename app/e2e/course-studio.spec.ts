@@ -529,3 +529,208 @@ for (const width of [1440, 390]) {
     }
   });
 }
+
+const generatedCourse = {
+  id: "course-66666666-1111-4111-8111-111111111111",
+  name: "Generated test loop",
+  description: "Generate fixture",
+  activity: "Run",
+  createdAt: "2026-10-21T00:00:00Z",
+  source: {
+    kind: "generated",
+    provider: "brouter",
+    profile: "foot",
+    request: {
+      start: { name: "Test park", lat: 37.77, lng: -122.48 },
+      distance: 10,
+      unit: "km",
+      activity: "Run",
+      vibes: [],
+      seed: 0,
+    },
+  },
+  segments: [
+    [
+      { lat: 37.77, lng: -122.48 },
+      { lat: 37.775, lng: -122.475 },
+      { lat: 37.77, lng: -122.47 },
+      { lat: 37.77, lng: -122.48 },
+    ],
+  ],
+  distanceM: 0,
+  ascentM: null,
+  warnings: [],
+};
+
+async function stubCourseStudio(
+  page: import("@playwright/test").Page,
+  options: { fail?: boolean } = {},
+) {
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let generateRequests = 0;
+  await page.route("**/api/discovery?place=*", (route) =>
+    route.fulfill({
+      json: { places: [{ name: "Test park", lat: 37.77, lng: -122.48 }] },
+    }),
+  );
+  await page.route("**/api/courses**", async (route) => {
+    if (route.request().method() !== "POST")
+      return route.fulfill({ json: { courses: [] } });
+    generateRequests += 1;
+    await gate;
+    await route
+      .fulfill(
+        options.fail
+          ? { status: 503, json: { error: "Test provider unavailable" } }
+          : { json: { course: generatedCourse, receipt: "receipt-fixture" } },
+      )
+      .catch(() => {});
+  });
+  return { release: () => release(), generateRequests: () => generateRequests };
+}
+
+async function choosePlaceByTyping(page: import("@playwright/test").Page) {
+  await expect(page.getByRole("radio", { name: "Run", exact: true })).toBeEnabled();
+  await page.getByLabel("Start near a place or landmark").fill("Test park");
+  // Choices appear from typing alone; the search button is not needed.
+  await page
+    .getByLabel("Starting places")
+    .getByRole("button", { name: "Test park", exact: true })
+    .click();
+}
+
+for (const viewport of [
+  { width: 390, height: 844 },
+  { width: 320, height: 640 },
+  { width: 844, height: 390 },
+]) {
+  test(`generating shows progress in view, then brings the preview into view and focus at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    const studio = await stubCourseStudio(page);
+    await page.goto("/#/courses");
+    await choosePlaceByTyping(page);
+    await page.getByRole("button", { name: "Generate route", exact: true }).click();
+    const progress = page.getByText(
+      "Comparing loops and mapped features. This can take up to 45 seconds…",
+      { exact: true },
+    );
+    await expect(progress).toBeInViewport({ ratio: 1 });
+    await expect(
+      page.getByRole("button", { name: "Generating route…", exact: true }),
+    ).toBeVisible();
+    studio.release();
+    const heading = page
+      .getByRole("article", { name: "Course preview" })
+      .getByRole("heading", { name: generatedCourse.name, exact: true });
+    await expect(heading).toBeFocused();
+    await expect(heading).toBeInViewport({ ratio: 1 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+  });
+
+  test(`a failed generate keeps the form usable and the error in view at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    const studio = await stubCourseStudio(page, { fail: true });
+    await page.goto("/#/courses");
+    await choosePlaceByTyping(page);
+    await page.getByRole("button", { name: "Generate route", exact: true }).click();
+    studio.release();
+    const alert = page.getByRole("alert");
+    await expect(alert).toContainText("Test provider unavailable");
+    await expect(alert).toBeInViewport();
+    await expect(
+      page.getByRole("button", { name: "Reload workspace", exact: true }),
+    ).toHaveCount(0);
+    await expect(page.getByLabel("Start near a place or landmark")).toBeEnabled();
+    await expect(
+      page.getByRole("button", { name: "Generate route", exact: true }),
+    ).toBeEnabled();
+  });
+}
+
+test("the preview arriving does not move a desktop page where both columns are visible", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const studio = await stubCourseStudio(page);
+  await page.goto("/#/courses");
+  await choosePlaceByTyping(page);
+  await page.getByRole("button", { name: "Generate route", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Generating route…", exact: true }),
+  ).toBeVisible();
+  const scrollBefore = await page.evaluate(() => window.scrollY);
+  studio.release();
+  const heading = page
+    .getByRole("article", { name: "Course preview" })
+    .getByRole("heading", { name: generatedCourse.name, exact: true });
+  await expect(heading).toBeFocused();
+  await expect(heading).toBeInViewport({ ratio: 1 });
+  expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore);
+});
+
+test("Generate route says what it is waiting for, one reason at a time", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  let releaseSearch: () => void = () => {};
+  const searchGate = new Promise<void>((resolve) => {
+    releaseSearch = resolve;
+  });
+  const studio = await stubCourseStudio(page);
+  await page.route("**/api/discovery?place=*", async (route) => {
+    await searchGate;
+    await route.fulfill({
+      json: { places: [{ name: "Test park", lat: 37.77, lng: -122.48 }] },
+    });
+  });
+  await page.goto("/#/courses");
+  await expect(page.getByRole("radio", { name: "Run", exact: true })).toBeEnabled();
+  const generate = page.getByRole("button", { name: "Generate route", exact: true });
+  const hint = page.locator("#course-generate-hint");
+  await expect(generate).toBeDisabled();
+  await expect(generate).toHaveAttribute("aria-describedby", "course-generate-hint");
+  await expect(hint).toHaveText(
+    "Enter a starting place, then choose it from the results.",
+  );
+  const field = page.getByLabel("Start near a place or landmark");
+  await field.fill("Test park");
+  await expect(page.getByText("Finding places…", { exact: true })).toBeVisible();
+  await expect(hint).toHaveText(
+    "Finding places. Choose one from the results to continue.",
+  );
+  releaseSearch();
+  const choice = page
+    .getByLabel("Starting places")
+    .getByRole("button", { name: "Test park", exact: true });
+  await expect(choice).toBeVisible();
+  await expect(hint).toHaveText("Choose a starting place from the results.");
+  await choice.click();
+  await expect(generate).toBeEnabled();
+  await expect(hint).toHaveCount(0);
+  await expect(generate).not.toHaveAttribute("aria-describedby");
+  const distance = page.getByLabel("Target distance", { exact: true });
+  await distance.fill("0");
+  await expect(generate).toBeDisabled();
+  await expect(hint).toHaveText("Enter a distance between 1 and 100 km.");
+  await distance.fill("5");
+  await expect(generate).toBeEnabled();
+  await field.press("Enter");
+  await expect.poll(() => studio.generateRequests()).toBe(1);
+  studio.release();
+  await expect(
+    page
+      .getByRole("article", { name: "Course preview" })
+      .getByRole("heading", { name: generatedCourse.name, exact: true }),
+  ).toBeFocused();
+});

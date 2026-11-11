@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { placeReducer } from "./course-form";
+import { generateHint, placeReducer } from "./course-form";
 
 const park = { name: "Golden Gate Park", lat: 37.7694, lng: -122.4862 };
 
@@ -47,5 +47,50 @@ describe("course starting-place selection", () => {
       places: [park],
     });
     expect(choices).toEqual({ status: "choices", places: [park] });
+  });
+});
+
+describe("why Generate route is unavailable", () => {
+  const ready = {
+    query: "Golden Gate Park",
+    place: { status: "chosen", place: park } as const,
+    distance: "10",
+    unit: "km" as const,
+  };
+
+  it("has no hint once a place is chosen and the distance is valid", () => {
+    expect(generateHint(ready)).toBeUndefined();
+  });
+
+  it("asks for a place before anything else", () => {
+    expect(
+      generateHint({ ...ready, query: " ", place: { status: "idle" }, distance: "" }),
+    ).toBe("Enter a starting place, then choose it from the results.");
+  });
+
+  it("asks for a typed place to be chosen from the results", () => {
+    expect(generateHint({ ...ready, place: { status: "idle" } })).toBe(
+      "Search for this place, then choose it from the results.",
+    );
+    expect(
+      generateHint({ ...ready, place: { status: "searching", id: 1 } }),
+    ).toBe("Finding places. Choose one from the results to continue.");
+    expect(
+      generateHint({ ...ready, place: { status: "choices", places: [park] } }),
+    ).toBe("Choose a starting place from the results.");
+    expect(
+      generateHint({ ...ready, place: { status: "error", message: "Down" } }),
+    ).toBe("Search again, then choose a starting place.");
+  });
+
+  it("names the distance range in the selected unit", () => {
+    for (const distance of ["", "0", "101", "abc"])
+      expect(generateHint({ ...ready, distance })).toBe(
+        "Enter a distance between 1 and 100 km.",
+      );
+    expect(generateHint({ ...ready, unit: "mi", distance: "0.5" })).toBe(
+      "Enter a distance between 0.63 and 62.13 mi.",
+    );
+    expect(generateHint({ ...ready, unit: "mi", distance: "62.13" })).toBeUndefined();
   });
 });

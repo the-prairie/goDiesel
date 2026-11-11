@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  type Ref,
+} from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Compass, Download, Plus, Save } from "lucide-react";
 import { Button } from "@/ui/button";
@@ -6,6 +13,7 @@ import { Input } from "@/ui/input";
 import { Disclosure } from "@/ui/disclosure";
 import { FinderRouteMap } from "@/ui/planning-route-map";
 import { PageTitle } from "@/ui/page-title";
+import { useReducedMotion } from "@/ui/use-reduced-motion";
 import {
   courseGpx,
   type Course,
@@ -26,7 +34,48 @@ import {
   initialCourseWorkspace,
   reduceCourseWorkspace,
   type CourseOperation,
+  type CourseProgress,
 } from "./course-workspace-state";
+
+const progressCopy: Record<CourseOperation, string> = {
+  load: "Opening your courses…",
+  listMore: "Loading more courses…",
+  generate:
+    "Comparing loops and mapped features. This can take up to 45 seconds…",
+  import: "Reading your GPX…",
+  save: "Saving your course…",
+};
+/** Bottom-nav clearance for an element scrolled into view on a phone. */
+const scrollMargins =
+  "scroll-mt-4 scroll-mb-[calc(var(--mobile-navigation-height)+1rem)] md:scroll-mb-4";
+/** The form's own operations report progress and failure beside the form. */
+function formOperation(progress: CourseProgress) {
+  return (
+    progress.status !== "idle" &&
+    (progress.operation === "generate" || progress.operation === "import")
+  );
+}
+/**
+ * Scrolls an element into view only when it, with its scroll margins, is not
+ * already fully visible, so a result that is already on screen never moves.
+ */
+function revealIfHidden(
+  element: HTMLElement,
+  block: ScrollLogicalPosition,
+  reducedMotion: boolean,
+) {
+  const box = element.getBoundingClientRect();
+  const style = getComputedStyle(element);
+  if (
+    box.top - parseFloat(style.scrollMarginTop) >= 0 &&
+    box.bottom + parseFloat(style.scrollMarginBottom) <= window.innerHeight
+  )
+    return;
+  element.scrollIntoView({
+    block,
+    behavior: reducedMotion ? "auto" : "smooth",
+  });
+}
 
 export function CoursePage() {
   const { courseId } = useParams();
@@ -40,7 +89,26 @@ export function CoursePage() {
   const requestRef = useRef<AbortController | null>(null);
   const sequence = useRef(0);
   const busy = state.progress.status === "pending";
-  const recovery = courseFailureRecovery(state.progress);
+  const reducedMotion = useReducedMotion();
+  const inlineProgress = formOperation(state.progress);
+  const progressRef = useRef<HTMLDivElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const previewHeadingRef = useRef<HTMLHeadingElement>(null);
+  const previewCourse =
+    state.view.kind === "preview" ? state.view.course : undefined;
+  // Each change to the form's own progress or failure keeps it beside the
+  // control the person just used.
+  useEffect(() => {
+    if (inlineProgress && progressRef.current)
+      revealIfHidden(progressRef.current, "nearest", reducedMotion);
+  }, [state.progress]);
+  // A new preview is the result of generating or importing: bring it into
+  // view and move focus to its name so assistive tech announces it.
+  useEffect(() => {
+    if (!previewCourse || !previewRef.current) return;
+    revealIfHidden(previewRef.current, "start", reducedMotion);
+    previewHeadingRef.current?.focus({ preventScroll: true });
+  }, [previewCourse]);
   function begin(operation: CourseOperation, courseId?: string) {
     requestRef.current?.abort();
     const controller = new AbortController();
@@ -189,55 +257,17 @@ export function CoursePage() {
       ) : (
         <h1 className="sr-only">Route studio</h1>
       )}
-      {busy ? (
-        <div
-          role="status"
-          className="flex items-center justify-between gap-4 rounded-md border border-line bg-surface p-4"
-        >
-          <p className="text-sm">
-            {state.progress.status === "pending"
-              ? {
-                  load: "Opening your courses…",
-                  listMore: "Loading more courses…",
-                  generate:
-                    "Comparing loops and mapped features. This can take up to 45 seconds…",
-                  import: "Reading your GPX…",
-                  save: "Saving your course…",
-                }[state.progress.operation]
-              : ""}
-          </p>
-          <Button
-            variant="ghost"
-            onClick={() => {
-              requestRef.current?.abort();
-              dispatch({ type: "cancel" });
-            }}
-          >
-            Cancel
-          </Button>
-        </div>
-      ) : null}
-      {state.progress.status === "failed" ? (
-        <div
-          role="alert"
-          className="space-y-3 rounded-md border border-line p-4"
-        >
-          <p>{state.progress.message}</p>
-          {recovery === "retrySave" && state.view.kind === "preview" ? (
-            <p className="text-sm text-ink-secondary">
-              Your preview is still here. Save course to try again.
-            </p>
-          ) : null}
-          {recovery === "reload" ? (
-            <Button
-              variant="outline"
-              onClick={() => setConnection((value) => value + 1)}
-            >
-              Reload workspace
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
+      {inlineProgress ? null : (
+        <ProgressNotice
+          progress={state.progress}
+          hasPreview={state.view.kind === "preview"}
+          onCancel={() => {
+            requestRef.current?.abort();
+            dispatch({ type: "cancel" });
+          }}
+          onReload={() => setConnection((value) => value + 1)}
+        />
+      )}
       <div
         className={
           state.view.kind === "saved"
@@ -250,14 +280,32 @@ export function CoursePage() {
             className={
               state.view.kind === "empty"
                 ? "min-w-0"
-                : "order-2 min-w-0 xl:order-1"
+                : "min-w-0"
             }
           >
             <CourseForm
               busy={busy}
+              generating={
+                busy &&
+                state.progress.status === "pending" &&
+                state.progress.operation === "generate"
+              }
               onGenerate={(request) => void generate(request)}
               onImport={(file, activity) => void importGpx(file, activity)}
             />
+            {inlineProgress ? (
+              <div ref={progressRef} className={`mt-5 ${scrollMargins}`}>
+                <ProgressNotice
+                  progress={state.progress}
+                  hasPreview={state.view.kind === "preview"}
+                  onCancel={() => {
+                    requestRef.current?.abort();
+                    dispatch({ type: "cancel" });
+                  }}
+                  onReload={() => setConnection((value) => value + 1)}
+                />
+              </div>
+            ) : null}
           </div>
         ) : null}
         {state.view.kind === "empty" ? (
@@ -269,6 +317,8 @@ export function CoursePage() {
           />
         ) : (
           <CoursePreview
+            ref={previewRef}
+            headingRef={previewHeadingRef}
             course={state.view.course}
             saved={state.view.kind === "saved"}
             busy={busy}
@@ -327,6 +377,49 @@ export function CoursePage() {
       </Disclosure>
     </section>
   );
+}
+
+function ProgressNotice({
+  progress,
+  hasPreview,
+  onCancel,
+  onReload,
+}: {
+  progress: CourseProgress;
+  hasPreview: boolean;
+  onCancel: () => void;
+  onReload: () => void;
+}) {
+  const recovery = courseFailureRecovery(progress);
+  if (progress.status === "pending")
+    return (
+      <div
+        role="status"
+        className="flex items-center justify-between gap-4 rounded-md border border-line bg-surface p-4"
+      >
+        <p className="text-sm">{progressCopy[progress.operation]}</p>
+        <Button variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    );
+  if (progress.status === "failed")
+    return (
+      <div role="alert" className="space-y-3 rounded-md border border-line p-4">
+        <p>{progress.message}</p>
+        {recovery === "retrySave" && hasPreview ? (
+          <p className="text-sm text-ink-secondary">
+            Your preview is still here. Save course to try again.
+          </p>
+        ) : null}
+        {recovery === "reload" ? (
+          <Button variant="outline" onClick={onReload}>
+            Reload workspace
+          </Button>
+        ) : null}
+      </div>
+    );
+  return null;
 }
 
 function SavedCourses({
@@ -391,11 +484,16 @@ function SavedCourses({
 }
 
 function CoursePreview({
+  ref,
+  headingRef,
   course,
   saved,
   busy,
   onSave,
 }: {
+  /** The preview's title block, which is what a new preview reveals. */
+  ref?: Ref<HTMLDivElement>;
+  headingRef?: Ref<HTMLHeadingElement>;
   course: Course;
   saved: boolean;
   busy: boolean;
@@ -409,15 +507,18 @@ function CoursePreview({
     [course],
   );
   return (
-    <article
-      className="order-1 min-w-0 space-y-4 xl:order-2"
-      aria-label="Course preview"
-    >
-      <div className="space-y-2">
+    <article className="min-w-0 space-y-4" aria-label="Course preview">
+      <div ref={ref} className={`space-y-2 ${scrollMargins}`}>
         <p className="text-xs uppercase tracking-widest text-ink-secondary">
           {saved ? "Saved course" : "Preview · not saved"}
         </p>
-        <h2 className="break-words text-2xl font-semibold">{course.name}</h2>
+        <h2
+          ref={headingRef}
+          tabIndex={-1}
+          className="break-words text-2xl font-semibold focus-visible:outline-none"
+        >
+          {course.name}
+        </h2>
         <p className="text-sm text-ink-secondary">
           {course.activity} · {(course.distanceM / 1000).toFixed(2)} km ·{" "}
           {course.ascentM === null

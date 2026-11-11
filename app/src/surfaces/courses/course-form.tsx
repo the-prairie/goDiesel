@@ -1,5 +1,11 @@
 import { useEffect, useReducer, useRef, useState } from "react";
-import { MapPin, Search, Upload, WandSparkles } from "lucide-react";
+import {
+  LoaderCircle,
+  MapPin,
+  Search,
+  Upload,
+  WandSparkles,
+} from "lucide-react";
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
 import { SegmentedControl } from "@/ui/segmented-control";
@@ -37,6 +43,48 @@ export function placeReducer(state: PlaceState, event: PlaceEvent): PlaceState {
           "No places found. Try a nearby landmark or a more specific place.",
       };
 }
+const distanceLimits = {
+  km: { min: 1, max: 100 },
+  mi: { min: 0.63, max: 62.13 },
+} as const;
+/** Typing this many characters searches without pressing the search button. */
+const AUTO_SEARCH_MIN_LENGTH = 3;
+const AUTO_SEARCH_DELAY_MS = 400;
+/**
+ * The one reason Generate route is unavailable, most blocking first, or
+ * undefined when the form can be submitted.
+ */
+export function generateHint({
+  query,
+  place,
+  distance,
+  unit,
+}: {
+  query: string;
+  place: PlaceState;
+  distance: string;
+  unit: "km" | "mi";
+}): string | undefined {
+  switch (place.status) {
+    case "idle":
+      return query.trim()
+        ? "Search for this place, then choose it from the results."
+        : "Enter a starting place, then choose it from the results.";
+    case "searching":
+      return "Finding places. Choose one from the results to continue.";
+    case "choices":
+      return "Choose a starting place from the results.";
+    case "error":
+      return "Search again, then choose a starting place.";
+    case "chosen":
+      break;
+  }
+  const { min, max } = distanceLimits[unit];
+  const value = distance.trim() ? Number(distance) : Number.NaN;
+  if (!(value >= min && value <= max))
+    return `Enter a distance between ${min} and ${max} ${unit}.`;
+  return undefined;
+}
 const vibes: { value: CourseVibe; label: string }[] = [
   { value: "quiet", label: "Quiet · estimate" },
   { value: "green", label: "Parks" },
@@ -45,10 +93,13 @@ const vibes: { value: CourseVibe; label: string }[] = [
 ];
 export function CourseForm({
   busy,
+  generating,
   onGenerate,
   onImport,
 }: {
   busy: boolean;
+  /** A generate request from this form is pending. */
+  generating: boolean;
   onGenerate: (request: CourseRequest) => void;
   onImport: (file: File, activity: CourseActivity) => void;
 }) {
@@ -63,16 +114,27 @@ export function CourseForm({
   const [seed, setSeed] = useState(0);
   const searchRef = useRef<AbortController | null>(null);
   const searchId = useRef(0);
-  useEffect(() => () => searchRef.current?.abort(), []);
-  async function search() {
+  const autoSearch = useRef<number | undefined>(undefined);
+  useEffect(
+    () => () => {
+      window.clearTimeout(autoSearch.current);
+      searchRef.current?.abort();
+    },
+    [],
+  );
+  function startSearch() {
+    window.clearTimeout(autoSearch.current);
     searchRef.current?.abort();
-    const controller = new AbortController();
-    searchRef.current = controller;
     const id = ++searchId.current;
     dispatch({ type: "search", id });
+    return id;
+  }
+  async function search(text: string, id: number) {
+    const controller = new AbortController();
+    searchRef.current = controller;
     try {
       const response = await fetch(
-        `/api/discovery?place=${encodeURIComponent(query.trim())}`,
+        `/api/discovery?place=${encodeURIComponent(text.trim())}`,
         { signal: controller.signal },
       );
       const data = await response.json();
@@ -101,6 +163,11 @@ export function CourseForm({
         });
     }
   }
+  const hint = busy
+    ? generating
+      ? undefined
+      : "Wait for the current request to finish."
+    : generateHint({ query, place, distance, unit });
   return (
     <section className="min-w-0 space-y-5" aria-label="Create a course">
       <SegmentedControl
@@ -158,14 +225,26 @@ export function CourseForm({
                     value={query}
                     maxLength={120}
                     onChange={(e) => {
-                      setQuery(e.target.value);
-                      searchRef.current?.abort();
-                      dispatch({ type: "edit" });
+                      const text = e.target.value;
+                      setQuery(text);
+                      if (text.trim().length >= AUTO_SEARCH_MIN_LENGTH) {
+                        const id = startSearch();
+                        autoSearch.current = window.setTimeout(
+                          () => void search(text, id),
+                          AUTO_SEARCH_DELAY_MS,
+                        );
+                      } else {
+                        window.clearTimeout(autoSearch.current);
+                        searchRef.current?.abort();
+                        dispatch({ type: "edit" });
+                      }
                     }}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter") {
+                      // A chosen place lets Enter submit the form; otherwise
+                      // Enter searches now instead of waiting for typing to pause.
+                      if (e.key === "Enter" && place.status !== "chosen") {
                         e.preventDefault();
-                        if (query.trim()) void search();
+                        if (query.trim()) void search(query, startSearch());
                       }
                     }}
                   />
@@ -175,7 +254,7 @@ export function CourseForm({
                     size="icon"
                     aria-label="Find starting place"
                     disabled={!query.trim() || place.status === "searching"}
-                    onClick={() => void search()}
+                    onClick={() => void search(query, startSearch())}
                   >
                     <Search />
                   </Button>
@@ -273,12 +352,27 @@ export function CourseForm({
               />
               <Button
                 type="submit"
-                className="w-full"
-                disabled={place.status !== "chosen"}
+                className={
+                  generating ? "w-full disabled:opacity-100" : "w-full"
+                }
+                disabled={hint !== undefined || generating}
+                aria-describedby={hint ? "course-generate-hint" : undefined}
               >
-                <WandSparkles />
-                Generate route
+                {generating ? (
+                  <LoaderCircle
+                    className="motion-safe:animate-spin"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <WandSparkles />
+                )}
+                {generating ? "Generating route…" : "Generate route"}
               </Button>
+              {hint ? (
+                <p id="course-generate-hint" className="text-sm text-ink">
+                  {hint}
+                </p>
+              ) : null}
               <p className="text-xs leading-5 text-ink-secondary">
                 Returns to your starting area. Distance follows the available
                 paths.
