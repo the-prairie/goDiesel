@@ -6,7 +6,11 @@ describe("surface placeholder", () => {
   it("says which surface is opening", () => {
     expect(surfaceStatus("finder")).toBe("Opening Finder…");
     expect(surfaceStatus("routes")).toBe("Opening your routes…");
-    expect(surfaceStatus("route")).toBe("Opening the route guide…");
+  });
+
+  it("says the same as the route guide's own loading state, so the guide announces loading once", () => {
+    // route-detail-page.tsx shows "Loading route details." while its data loads.
+    expect(surfaceStatus("route")).toBe("Loading route details.");
   });
 
   it("never falls back to a generic loading message", () => {

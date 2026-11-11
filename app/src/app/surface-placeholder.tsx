@@ -23,7 +23,9 @@ const SURFACE_COPY: Record<Surface, { title: string; status: string }> = {
   atlas: { title: "Atlas", status: "Opening Atlas…" },
   finder: { title: "Finder", status: "Opening Finder…" },
   routes: { title: "Routes", status: "Opening your routes…" },
-  route: { title: "Route guide", status: "Opening the route guide…" },
+  // The guide says the same while its own data loads, so the status reads as
+  // one continuous message rather than two.
+  route: { title: "Route guide", status: "Loading route details." },
   replay: { title: "Replay", status: "Opening Replay…" },
   courses: { title: "Route studio", status: "Opening the route studio…" },
   "course-preview": { title: "Course preview", status: "Opening the course preview…" },
