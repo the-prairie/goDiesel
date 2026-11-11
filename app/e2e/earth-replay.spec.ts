@@ -259,10 +259,10 @@ test("Replay controls stay synchronized across route changes", async ({ page }) 
   await page.getByRole("button", { name: "Playback speed 1x" }).click();
   await expect(replay).toHaveAttribute("data-speed", "2");
 
-  await page.getByRole("button", { name: "Release camera" }).click();
+  await page.getByRole("button", { name: "Follow route", pressed: true }).click();
   await expect(replay).toHaveAttribute("data-following", "false");
-  await expect(page.getByRole("button", { name: "Follow route" })).toBeVisible();
-  await page.getByRole("button", { name: "Follow route" }).click();
+  await expect(page.getByRole("button", { name: "Follow route", pressed: false })).toBeVisible();
+  await page.getByRole("button", { name: "Follow route", pressed: false }).click();
   await expect(replay).toHaveAttribute("data-following", "true");
 
   await page.getByRole("button", { name: "Zoom out from route" }).click();
@@ -627,7 +627,7 @@ for (const width of [320, 430]) {
     await expect(page.getByTestId("replay-context-details")).toBeHidden();
     await expect(page.getByTestId("replay-secondary-controls")).toHaveCount(0);
 
-    for (const label of ["Play route", "Release camera", "Show more controls"]) {
+    for (const label of ["Play route", "Follow route", "Show more controls"]) {
       const box = await page.getByRole("button", { name: label }).boundingBox();
       expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
       expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
@@ -782,7 +782,7 @@ for (const width of [390, 1440]) {
     await page.getByLabel("Route progress").fill("10000");
     if (width < 768) await page.getByRole("button", { name: "Show more controls" }).click();
     await page.getByRole("button", { name: "Playback speed 1x" }).click();
-    await page.getByRole("button", { name: "Release camera" }).click();
+    await page.getByRole("button", { name: "Follow route", pressed: true }).click();
     await page.getByRole("button", { name: "Zoom out from route" }).click();
     await page.getByRole("button", { name: "Play route" }).click();
     await expect.poll(async () => Number(await replay.getAttribute("data-progress"))).toBeGreaterThan(10000);

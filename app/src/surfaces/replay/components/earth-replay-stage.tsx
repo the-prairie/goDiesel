@@ -426,10 +426,10 @@ export function EarthReplayStage({
               </Button>
               <Button
                 type="button"
-                variant={control.following ? "default" : "outline"}
+                variant="outline"
                 className="h-11 flex-1"
                 disabled={!operational}
-                aria-label={control.following ? "Release camera" : "Follow route"}
+                aria-pressed={control.following}
                 onClick={() => commitControl({ type: "followingToggled" })}
               >
                 {control.following ? (
@@ -437,7 +437,7 @@ export function EarthReplayStage({
                 ) : (
                   <MousePointer2 aria-hidden="true" />
                 )}
-                {control.following ? "Following" : "Follow route"}
+                Follow route
               </Button>
             </div>
           </div>
@@ -476,10 +476,9 @@ export function EarthReplayStage({
           </Button>
           <Button
             type="button"
-            variant={control.following ? "default" : "outline"}
+            variant="outline"
             disabled={!operational}
-            aria-label={control.following ? "Release camera" : "Follow route"}
-            title={control.following ? "Release camera" : "Follow route"}
+            aria-pressed={control.following}
             onClick={() => commitControl({ type: "followingToggled" })}
           >
             {control.following ? (
@@ -487,9 +486,7 @@ export function EarthReplayStage({
             ) : (
               <MousePointer2 aria-hidden="true" />
             )}
-            <span className="hidden sm:inline">
-              {control.following ? "Following" : "Free camera"}
-            </span>
+            Follow route
           </Button>
           <Button
             type="button"
