@@ -349,3 +349,29 @@ def test_status_names_the_serving_checkout_and_process(admin, served):
         "checkout_root",
         "pid",
     }
+
+
+# build.py lets GeneratorPublicationActive escape when another run holds the
+# generator lock, so Python prints the traceback to stderr and exits 1.
+LOCKED_BUILD = """
+class GeneratorPublicationActive(RuntimeError):
+    pass
+
+raise GeneratorPublicationActive(
+    "another generator run is publishing /checkout/app/public/data; "
+    "this run stopped without touching its backup"
+)
+"""
+
+
+def test_a_build_refused_by_the_generator_lock_reports_why(admin, served):
+    (admin.QUESTS / "build.py").write_text(LOCKED_BUILD)
+    status, _ = request(f"{served}/api/rebuild", "POST", {})
+    assert status == 200
+    failed = wait_for_phase(admin, "failed")
+    assert failed["exit_code"] == 1
+    assert "another generator run is publishing" in failed["stderr_tail"]
+    assert lock_is_free(admin)
+    status, body = request(f"{served}/api/admin/status")
+    assert body["rebuild"]["phase"] == "failed"
+    assert "another generator run is publishing" in body["rebuild"]["stderr_tail"]
