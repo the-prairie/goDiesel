@@ -62,6 +62,24 @@ for (const outcome of ["success", "error", "worker-error", "timeout", "construct
   });
 }
 
+test("collection worker construction failure keeps the loaded guide index", async ({ page }) => {
+  await fakeEmbeddings(page, true);
+  // Only the loaded index carries this guide phrase, so a match proves the index survived.
+  await page.route("**/search/collection.json", async route => {
+    const response = await route.fetch();
+    const index = await response.json() as { documents: Array<{ slug: string; text: string; highlights: string[] }> };
+    for (const doc of index.documents) {
+      if (doc.slug !== "17654151284") continue;
+      doc.text += " Lanternwalk past the shrine gates.";
+      doc.highlights = [...doc.highlights, "Lanternwalk past the shrine gates"];
+    }
+    await route.fulfill({ response, json: index });
+  });
+  await page.goto("/#/finder?place=Kyoto&activity=Run&distance=21&vibe=lanternwalk");
+  await expect(page.getByText(limited, { exact: true })).toBeVisible();
+  await expect(page.getByRole("article", { name: "Kyoto, Japan candidate" })).toContainText("Lanternwalk past the shrine gates");
+});
+
 test("collection replacement and scope cleanup reject old worker outcomes", async ({ page }) => {
   await fakeEmbeddings(page);
   await page.goto(searchUrl);
