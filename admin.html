@@ -411,6 +411,16 @@ function effectiveField(r, key) {
   return patch?.[key] ?? r[key] ?? '';
 }
 
+function routeIsDirty(id) {
+  return mutation.dirty.has(id);
+}
+
+// Edits do not re-render the grid, to keep the cursor, so the edited card's
+// dirty class is updated in place from reducer state.
+function renderCardDirty(card) {
+  card.classList.toggle('dirty', routeIsDirty(card.dataset.id));
+}
+
 function setPatch(id, key, value) {
   dispatchMutation({ type: 'fieldEdited', routeId: id, field: key, value });
   renderCounts();
@@ -493,7 +503,7 @@ function cardHtml(r) {
   const blurb = effectiveField(r, 'blurb');
   const completionRule = effectiveField(r, 'completion_rule');
   const visibility = effectiveField(r, 'visibility') || 'public';
-  const dirty = mutation.dirty.has(r.activity_id);
+  const dirty = routeIsDirty(r.activity_id);
   const stravaUrl = `https://www.strava.com/activities/${r.activity_id}`;
   const placeholder = r.auto_region
     ? `auto: ${r.auto_region}`
@@ -656,14 +666,12 @@ document.addEventListener('input', e => {
   if (e.target.classList.contains('region-input')) {
     const id = e.target.dataset.regionFor;
     setPatch(id, 'region', e.target.value);
-    // Don't re-render — just mark card dirty
-    e.target.closest('.card').classList.add('dirty');
+    renderCardDirty(e.target.closest('.card'));
   }
   if (e.target.dataset.metaField && e.target.dataset.metaFor) {
     const id = e.target.dataset.metaFor;
     setPatch(id, e.target.dataset.metaField, e.target.value);
-    // Don't re-render while editing text — preserve cursor position.
-    e.target.closest('.card').classList.add('dirty');
+    renderCardDirty(e.target.closest('.card'));
   }
 });
 
@@ -675,7 +683,7 @@ document.addEventListener('change', e => {
   if (e.target.dataset.metaField && e.target.dataset.metaFor) {
     const id = e.target.dataset.metaFor;
     setPatch(id, e.target.dataset.metaField, e.target.value);
-    e.target.closest('.card').classList.add('dirty');
+    renderCardDirty(e.target.closest('.card'));
   }
 });
 
