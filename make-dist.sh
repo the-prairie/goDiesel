@@ -94,4 +94,8 @@ fi
 SIZE=$(du -sh dist | awk '{print $1}')
 FILES=$(find dist -type f | wc -l | tr -d ' ')
 echo "React dist ready: ${SIZE}, ${FILES} files"
-echo "Deploy with: npx wrangler pages deploy dist --project-name=godiesel"
+if [[ -n "$SINGLE_ROUTE_SLUG" ]]; then
+  echo "Publish with: ./scripts/publish-route-microsite.sh ${SINGLE_ROUTE_SLUG} <share-name>"
+else
+  echo "Deploy with: npx wrangler pages deploy dist --project-name=godiesel --branch=production"
+fi

@@ -23,6 +23,14 @@ def executable(path: Path, body: str) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
+def test_printed_production_deploy_command_targets_the_production_branch():
+    lines = (ROOT / "make-dist.sh").read_text(encoding="utf-8").splitlines()
+    printed = [line.strip() for line in lines if "Deploy with: npx wrangler pages deploy dist" in line]
+
+    assert len(printed) == 1
+    assert PRODUCTION_DEPLOY_COMMAND in printed[0]
+
+
 def run_provider_key_check(tmp_path: Path, require: str | None):
     scripts = tmp_path / "scripts"
     scripts.mkdir()
