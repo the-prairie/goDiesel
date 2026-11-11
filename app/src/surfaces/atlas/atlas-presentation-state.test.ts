@@ -101,4 +101,27 @@ describe("Atlas presentation", () => {
     state = reduceAtlasPresentation(state, { type: "engineStopped", engineId: 2 });
     expect(status(state, { state: "unavailable", message: "Late failure." }, 2)).toBe(state);
   });
+
+  it.each([
+    ["a failure before the viewer", "This browser cannot start the Cesium world."],
+    ["a failure after the viewer", "The Cesium world could not load."],
+    ["a render error", "The Cesium world stopped rendering."],
+  ])("presents a region selected after %s without waiting for terrain", (_name, message) => {
+    const unavailable = { state: "unavailable", message } as const;
+    for (const initial of [mounted(), status(mounted("Kyoto"), ready)]) {
+      let state = status(initial, unavailable);
+      state = reduceAtlasPresentation(state, { type: "selectionChanged", regionName: "London" });
+      expect(state.status).toEqual(unavailable);
+      expect(isAtlasRegionPresented(state, "London")).toBe(true);
+      state = reduceAtlasPresentation(state, { type: "selectionChanged" });
+      expect(state.region).toEqual({ state: "none" });
+    }
+  });
+
+  it("still waits for terrain when the selection changes on a working world", () => {
+    const state = reduceAtlasPresentation(status(mounted("Kyoto"), ready), {
+      type: "selectionChanged", regionName: "London",
+    });
+    expect(state.region).toEqual({ state: "waiting", regionName: "London" });
+  });
 });

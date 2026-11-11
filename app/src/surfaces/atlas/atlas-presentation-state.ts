@@ -37,11 +37,15 @@ export function reduceAtlasPresentation(
         ? undefined
         : state.region.regionName;
       if (regionName === event.regionName) return state;
+      if (!event.regionName) return { ...state, region: { state: "none" } };
+      // An unavailable world sends no further status, so a region picked after
+      // the failure is presented at once instead of waiting for terrain.
       return {
         ...state,
-        region: event.regionName
-          ? { state: "waiting", regionName: event.regionName }
-          : { state: "none" },
+        region: {
+          state: state.status.state === "unavailable" ? "ready" : "waiting",
+          regionName: event.regionName,
+        },
       };
     }
     case "engineStarted":

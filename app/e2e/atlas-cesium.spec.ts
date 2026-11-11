@@ -160,65 +160,74 @@ test("Cesium failure remains legible without restoring the obsolete world", asyn
     .toBe(1);
 });
 
-test("a failed Cesium world stays unavailable when a region is selected", async ({ page }) => {
-  // The globe, not this double, decides whether a failed engine receives
-  // selection. The double acts on selection the way the engine did before
-  // `unavailable` became terminal, so any forwarded call is visible.
-  await page.addInitScript(() => {
-    window.__GODIESEL_ATLAS_WORLD_DESTROY_COUNT__ = 0;
-    window.__GODIESEL_ATLAS_WORLD_CALLS__ = [];
-    window.__GODIESEL_ATLAS_WORLD_FACTORY__ = () => {
-      let report: ((status: { state: "region-loading"; regionName: string; message: string }) => void) | undefined;
-      return {
-        async mount({ onStatus }) {
-          report = onStatus;
-          onStatus({ state: "loading", message: "Opening the Atlas world." });
-          onStatus({ state: "unavailable", message: "The Cesium world could not load." });
-        },
-        setSelectedRegion(region) {
-          window.__GODIESEL_ATLAS_WORLD_CALLS__.push(`region:${region?.name ?? ""}`);
-          if (region) {
-            report?.({ state: "region-loading", regionName: region.name, message: `Loading ${region.name} terrain` });
-          }
-        },
-        setSelectedRoute(route) {
-          window.__GODIESEL_ATLAS_WORLD_CALLS__.push(`route:${route?.slug ?? ""}`);
-        },
-        projectRegions: () => [],
-        zoomIn() {},
-        zoomOut() {},
-        resetView() {},
-        destroy() {
-          window.__GODIESEL_ATLAS_WORLD_DESTROY_COUNT__ += 1;
-        },
+for (const failure of [
+  { name: "after its viewer existed", message: "The Cesium world could not load.", start: "/#/atlas?region=Kyoto%2C+Japan" },
+  { name: "before its viewer existed", message: "This browser cannot start the Cesium world.", start: "/#/atlas" },
+]) {
+  test(`a Cesium world that failed ${failure.name} stays unavailable and presents a later region`, async ({ page }) => {
+    // The globe, not this double, decides whether a failed engine receives
+    // selection. The double acts on selection the way the engine did before
+    // `unavailable` became terminal, so any forwarded call is visible.
+    await page.addInitScript((message) => {
+      window.__GODIESEL_ATLAS_WORLD_DESTROY_COUNT__ = 0;
+      window.__GODIESEL_ATLAS_WORLD_CALLS__ = [];
+      window.__GODIESEL_ATLAS_WORLD_FACTORY__ = () => {
+        let report: ((status: { state: "region-loading"; regionName: string; message: string }) => void) | undefined;
+        return {
+          async mount({ onStatus }) {
+            report = onStatus;
+            onStatus({ state: "loading", message: "Opening the Atlas world." });
+            onStatus({ state: "unavailable", message });
+          },
+          setSelectedRegion(region) {
+            window.__GODIESEL_ATLAS_WORLD_CALLS__.push(`region:${region?.name ?? ""}`);
+            if (region) {
+              report?.({ state: "region-loading", regionName: region.name, message: `Loading ${region.name} terrain` });
+            }
+          },
+          setSelectedRoute(route) {
+            window.__GODIESEL_ATLAS_WORLD_CALLS__.push(`route:${route?.slug ?? ""}`);
+          },
+          projectRegions: () => [],
+          zoomIn() {},
+          zoomOut() {},
+          resetView() {},
+          destroy() {
+            window.__GODIESEL_ATLAS_WORLD_DESTROY_COUNT__ += 1;
+          },
+        };
       };
-    };
+    }, failure.message);
+    await page.goto(failure.start);
+
+    const world = page.locator('div[data-atlas-engine="cesium"]');
+    const unavailable = page.getByText(
+      `${failure.message} Search and navigation remain available.`,
+    );
+    await expect(world).toHaveAttribute("data-atlas-status", "unavailable");
+    await expect(unavailable).toBeVisible();
+    if (failure.start.includes("region=")) {
+      await expect(
+        page.getByRole("region", { name: "Kyoto, Japan recorded routes", exact: true }),
+      ).toBeVisible();
+    }
+    await expect(page.getByText(/Loading .* terrain/)).toHaveCount(0);
+    expect(await page.evaluate(() => window.__GODIESEL_ATLAS_WORLD_CALLS__)).toEqual([]);
+
+    await page.getByRole("textbox", { name: "Search places and routes" }).fill("Crete");
+    await page.getByRole("option", { name: "Crete, Greece", exact: true }).click();
+    await expect(page).toHaveURL(/region=Crete%2C\+Greece/);
+    await expect(
+      page.getByRole("region", { name: "Crete, Greece recorded routes", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Crete, Greece" })).toBeVisible();
+    await expect(world).toHaveAttribute("data-atlas-status", "unavailable");
+    await expect(unavailable).toBeVisible();
+    await expect(page.getByText(/Loading .* terrain/)).toHaveCount(0);
+    await expect(world.locator("[data-region-loading]")).toHaveCount(0);
+    expect(await page.evaluate(() => window.__GODIESEL_ATLAS_WORLD_CALLS__)).toEqual([]);
   });
-  await page.goto("/#/atlas?region=Kyoto%2C+Japan");
-
-  const world = page.locator('div[data-atlas-engine="cesium"]');
-  const unavailable = page.getByText(
-    "The Cesium world could not load. Search and navigation remain available.",
-  );
-  await expect(world).toHaveAttribute("data-atlas-status", "unavailable");
-  await expect(unavailable).toBeVisible();
-  await expect(
-    page.getByRole("region", { name: "Kyoto, Japan recorded routes", exact: true }),
-  ).toBeVisible();
-  await expect(world.locator("[data-region-loading]")).toHaveCount(0);
-  expect(await page.evaluate(() => window.__GODIESEL_ATLAS_WORLD_CALLS__)).toEqual([]);
-
-  await page.getByRole("textbox", { name: "Search places and routes" }).fill("Crete");
-  await page.getByRole("option", { name: "Crete, Greece", exact: true }).click();
-  await expect(page).toHaveURL(/region=Crete%2C\+Greece/);
-  // The region tray opens; its carousel waits for a status the failed engine
-  // never sends, exactly as for a world that failed before its viewer existed.
-  await expect(page.getByRole("region", { name: "Crete, Greece routes", exact: true })).toBeVisible();
-  await expect(world).toHaveAttribute("data-atlas-status", "unavailable");
-  await expect(unavailable).toBeVisible();
-  await expect(world.locator("[data-region-loading]")).toHaveCount(0);
-  expect(await page.evaluate(() => window.__GODIESEL_ATLAS_WORLD_CALLS__)).toEqual([]);
-});
+}
 
 test("Cesium enters a region selected by the initial URL", async ({ page }) => {
   await installDeterministicCesiumAtlas(page);
