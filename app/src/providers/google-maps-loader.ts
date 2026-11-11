@@ -1,3 +1,4 @@
+import { googleKeyFingerprint, preflightGoogleMapsKey } from "@/providers/google-key-preflight";
 import { ProviderError } from "@/providers/provider-error";
 
 let mapsPromise: Promise<void> | undefined;
@@ -6,12 +7,29 @@ let mapsPromise: Promise<void> | undefined;
 // handler therefore stays installed once the API has loaded, and the page
 // remembers the rejection so a later mount hears it too.
 let authenticationRejected = false;
+// The 3D Maps path never calls `gm_authFailure`, so the key is also checked
+// once against the 3D Tiles root (google-key-preflight.ts). The check runs
+// beside the script load and is never awaited: only an explicit invalid-key
+// answer is reported, and every other outcome leaves the load as it was.
+let preflightFingerprint: string | undefined;
 
 const AUTH_FAILURE_EVENT = "godiesel:google-maps-auth-failure";
 
 function reportAuthenticationFailure() {
   authenticationRejected = true;
   window.dispatchEvent(new CustomEvent(AUTH_FAILURE_EVENT));
+}
+
+function startKeyPreflight(apiKey: string) {
+  if (!apiKey) return;
+  const fingerprint = googleKeyFingerprint(apiKey);
+  if (preflightFingerprint === fingerprint) return;
+  preflightFingerprint = fingerprint;
+  void preflightGoogleMapsKey(apiKey, window).then((outcome) => {
+    if (outcome === "invalid" && preflightFingerprint === fingerprint && !authenticationRejected) {
+      reportAuthenticationFailure();
+    }
+  });
 }
 
 declare global {
@@ -25,8 +43,9 @@ export function loadGoogleMaps(apiKey: string) {
   const runtime = window as unknown as {
     google?: { maps?: { importLibrary?: unknown } };
   };
+  if (authenticationRejected) reportAuthenticationFailure();
+  startKeyPreflight(apiKey);
   if (typeof runtime.google?.maps?.importLibrary === "function") {
-    if (authenticationRejected) reportAuthenticationFailure();
     return Promise.resolve();
   }
   if (mapsPromise) return mapsPromise;
