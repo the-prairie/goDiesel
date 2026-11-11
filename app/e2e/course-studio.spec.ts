@@ -592,10 +592,10 @@ async function stubCourseStudio(
   return { release: () => release(), generateRequests: () => generateRequests };
 }
 
-async function choosePlaceByTyping(page: import("@playwright/test").Page) {
+async function choosePlace(page: import("@playwright/test").Page) {
   await expect(page.getByRole("radio", { name: "Run", exact: true })).toBeEnabled();
   await page.getByLabel("Start near a place or landmark").fill("Test park");
-  // Choices appear from typing alone; the search button is not needed.
+  await page.getByRole("button", { name: "Find starting place" }).click();
   await page
     .getByLabel("Starting places")
     .getByRole("button", { name: "Test park", exact: true })
@@ -613,7 +613,7 @@ for (const viewport of [
     await page.setViewportSize(viewport);
     const studio = await stubCourseStudio(page);
     await page.goto("/#/courses");
-    await choosePlaceByTyping(page);
+    await choosePlace(page);
     await page.getByRole("button", { name: "Generate route", exact: true }).click();
     const progress = page.getByText(
       "Comparing loops and mapped features. This can take up to 45 seconds…",
@@ -642,7 +642,7 @@ for (const viewport of [
     await page.setViewportSize(viewport);
     const studio = await stubCourseStudio(page, { fail: true });
     await page.goto("/#/courses");
-    await choosePlaceByTyping(page);
+    await choosePlace(page);
     await page.getByRole("button", { name: "Generate route", exact: true }).click();
     studio.release();
     const alert = page.getByRole("alert");
@@ -666,19 +666,24 @@ test("the preview arriving does not move a desktop page where both columns are v
   await page.emulateMedia({ reducedMotion: "reduce" });
   const studio = await stubCourseStudio(page);
   await page.goto("/#/courses");
-  await choosePlaceByTyping(page);
+  await choosePlace(page);
   await page.getByRole("button", { name: "Generate route", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Generating route…", exact: true }),
   ).toBeVisible();
-  const scrollBefore = await page.evaluate(() => window.scrollY);
+  // The page title above both columns gives way to the preview, so the
+  // browser's scroll anchoring may change scrollY; what must not move is the
+  // control the person is looking at.
+  const submit = page.getByRole("button", { name: /Generat(e|ing) route/ });
+  const before = (await submit.boundingBox())!.y;
   studio.release();
   const heading = page
     .getByRole("article", { name: "Course preview" })
     .getByRole("heading", { name: generatedCourse.name, exact: true });
   await expect(heading).toBeFocused();
   await expect(heading).toBeInViewport({ ratio: 1 });
-  expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore);
+  await expect(submit).toHaveText("Generate route");
+  expect(Math.abs((await submit.boundingBox())!.y - before)).toBeLessThanOrEqual(1);
 });
 
 test("Generate route says what it is waiting for, one reason at a time", async ({
