@@ -13,6 +13,10 @@ import {
   CESIUM_GROUND_ROUTE_OPTIONS,
   GOOGLE_3D_TILES_RENDER_OPTIONS,
 } from "@/providers/cesium-render-quality";
+import {
+  initialSurfaceSamplingState,
+  reduceSurfaceSampling,
+} from "@/surfaces/replay/renderers/surface-sampling-state";
 
 export type PlayableEarthStatus =
   | { state: "loading"; title: string; message: string }
@@ -49,7 +53,9 @@ declare global {
 
 const CESIUM_VERSION = "1.120";
 const SURFACE_VISUAL_OFFSET_M = 3;
-const SURFACE_SAMPLE_INTERVAL_MS = 1_200;
+// The lab samples less often than Cesium Replay; the shared reducer's shorter
+// interval is always satisfied once this one has elapsed.
+const PLAYABLE_SURFACE_SAMPLE_INTERVAL_MS = 1_200;
 const MAX_STALE_SAMPLE_DISTANCE_M = 500;
 let cesiumPromise: Promise<CesiumGlobal | undefined> | undefined;
 
@@ -117,8 +123,7 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
   private pendingGroundingObservation?: PlayableEarthGroundingObservation;
   private latestPose?: PlayableEarthPose;
   private lastGroundingUpdateMs?: number;
-  private lastSurfaceSampleMs = Number.NEGATIVE_INFINITY;
-  private surfaceSampleInFlight = false;
+  private surfaceSampling = initialSurfaceSamplingState();
   private onGroundingChange?: (debug: PlayableEarthGroundingDebug) => void;
   private generation = 0;
 
@@ -129,6 +134,9 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
     onGroundingChange,
   }: PlayableEarthMountOptions) {
     const generation = ++this.generation;
+    this.surfaceSampling = reduceSurfaceSampling(this.surfaceSampling, {
+      type: "sessionStarted",
+    });
     this.onGroundingChange = onGroundingChange;
     onStatus({
       state: "loading",
@@ -331,21 +339,32 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
     if (
       !Cesium?.Cartographic ||
       !scene ||
-      this.surfaceSampleInFlight ||
-      now - this.lastSurfaceSampleMs < SURFACE_SAMPLE_INTERVAL_MS
+      now - this.surfaceSampling.lastStartedAtMs <
+        PLAYABLE_SURFACE_SAMPLE_INTERVAL_MS
     ) {
       return;
     }
-    this.lastSurfaceSampleMs = now;
-    if (!scene.sampleHeightSupported || !scene.sampleHeightMostDetailed) {
+    const supported = Boolean(
+      scene.sampleHeightSupported && scene.sampleHeightMostDetailed,
+    );
+    const nextSampling = reduceSurfaceSampling(this.surfaceSampling, {
+      type: "sampleRequested",
+      atMs: now,
+      supported,
+    });
+    if (nextSampling === this.surfaceSampling) return;
+    this.surfaceSampling = nextSampling;
+    if (!supported) {
       this.pendingGroundingObservation = { kind: "missing" };
       return;
     }
 
-    const requestGeneration = this.generation;
+    const { requestId } = this.surfaceSampling;
+    const isCurrent = () =>
+      this.surfaceSampling.phase === "sampling" &&
+      this.surfaceSampling.requestId === requestId;
     const requestProgressM = pose.progressM;
     const cartographic = Cesium.Cartographic.fromDegrees(pose.lng, pose.lat);
-    this.surfaceSampleInFlight = true;
     void scene
       .sampleHeightMostDetailed(
         [cartographic],
@@ -353,7 +372,7 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
         2,
       )
       .then((positions: Array<{ height?: number } | undefined>) => {
-        if (requestGeneration !== this.generation) return;
+        if (!isCurrent()) return;
         if (
           Math.abs((this.latestPose?.progressM ?? requestProgressM) - requestProgressM) >
           MAX_STALE_SAMPLE_DISTANCE_M
@@ -367,14 +386,13 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
             : { kind: "missing" };
       })
       .catch(() => {
-        if (requestGeneration === this.generation) {
-          this.pendingGroundingObservation = { kind: "missing" };
-        }
+        if (isCurrent()) this.pendingGroundingObservation = { kind: "missing" };
       })
       .finally(() => {
-        if (requestGeneration === this.generation) {
-          this.surfaceSampleInFlight = false;
-        }
+        this.surfaceSampling = reduceSurfaceSampling(this.surfaceSampling, {
+          type: "sampleCompleted",
+          requestId,
+        });
       });
   }
 
@@ -398,8 +416,9 @@ class CesiumPlayableEarthViewer implements PlayableEarthViewer {
     this.pendingGroundingObservation = undefined;
     this.latestPose = undefined;
     this.lastGroundingUpdateMs = undefined;
-    this.lastSurfaceSampleMs = Number.NEGATIVE_INFINITY;
-    this.surfaceSampleInFlight = false;
+    this.surfaceSampling = reduceSurfaceSampling(this.surfaceSampling, {
+      type: "disposed",
+    });
     this.onGroundingChange = undefined;
   }
 }
