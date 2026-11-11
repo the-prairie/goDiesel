@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { courseSummary, type Course } from "@/domain/courses";
 import {
+  courseFailureRecovery,
   initialCourseWorkspace as initial,
   reduceCourseWorkspace as reduce,
+  type CourseOperation,
 } from "./course-workspace-state";
 
 const course: Course = {
@@ -153,5 +155,41 @@ describe("course workspace", () => {
       reduce(navigating, { type: "failed", id: 2, message: "Course not found" })
         .view,
     ).toEqual({ kind: "empty" });
+  });
+  it.each<CourseOperation>(["load", "listMore", "generate", "import", "save"])(
+    "records which operation failed: %s",
+    (operation) => {
+      const failed = reduce(
+        reduce(initial, { type: "start", id: 1, operation }),
+        { type: "failed", id: 1, message: "Unavailable" },
+      );
+      expect(failed.progress).toEqual({
+        status: "failed",
+        operation,
+        message: "Unavailable",
+      });
+    },
+  );
+  it("offers a reload only when loading the workspace failed", () => {
+    const recovery = (operation: CourseOperation) =>
+      courseFailureRecovery({ status: "failed", operation, message: "x" });
+    expect(recovery("load")).toBe("reload");
+    expect(recovery("listMore")).toBe("reload");
+    expect(recovery("save")).toBe("retrySave");
+    expect(recovery("generate")).toBe("editForm");
+    expect(recovery("import")).toBe("editForm");
+    expect(courseFailureRecovery({ status: "idle" })).toBeUndefined();
+  });
+  it("keeps a generated preview and its receipt when its save fails", () => {
+    const preview = reduce(
+      reduce(initial, { type: "start", id: 1, operation: "generate" }),
+      { type: "previewed", id: 1, course, receipt: "signed-receipt" },
+    );
+    const failed = reduce(
+      reduce(preview, { type: "start", id: 2, operation: "save" }),
+      { type: "failed", id: 2, message: "Store unavailable" },
+    );
+    expect(failed.view).toEqual({ kind: "preview", course, receipt: "signed-receipt" });
+    expect(courseFailureRecovery(failed.progress)).toBe("retrySave");
   });
 });
