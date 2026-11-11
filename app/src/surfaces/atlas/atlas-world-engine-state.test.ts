@@ -113,7 +113,12 @@ describe("Atlas world engine state", () => {
     expect(disposed.camera).toEqual({ state: "settled", flightId: 3 });
     expect(atlasEngineHasViewer(disposed)).toBe(false);
     expect(reduceAtlasWorldEngine(disposed, { type: "globalFlightSettled", flightId: 2 })).toBe(disposed);
-    for (const event of [kyoto, { type: "selectionCleared", durationMs: 600 }, { type: "globalViewRequested", durationMs: 600 }] as const) {
+    for (const event of [
+      kyoto,
+      { type: "selectionCleared", durationMs: 600 },
+      { type: "globalViewRequested", durationMs: 600 },
+      { type: "mountStarted", routeCount: 66 },
+    ] as const) {
       expect(reduceAtlasWorldEngine(disposed, event)).toBe(disposed);
     }
   });

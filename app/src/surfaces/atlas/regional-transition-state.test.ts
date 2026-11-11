@@ -82,4 +82,17 @@ describe("regional transition state", () => {
     if (status === "replacement") state = reduceRegionalTransition(state, { type: "regionSelected", regionName: "Crete, Greece" });
     for (const event of outcomes) expect(reduceRegionalTransition(state, event)).toBe(state);
   });
+
+  it("keeps disposal terminal", () => {
+    const disposed = reduceRegionalTransition(selected(), { type: "disposed" });
+    expect(disposed).toEqual({ status: "disposed", operationId: 2 });
+    for (const event of [
+      { type: "regionSelected", regionName: "Crete, Greece" },
+      { type: "selectionCleared" },
+      { type: "disposed" },
+      ...outcomes,
+    ] as RegionalTransitionEvent[]) {
+      expect(reduceRegionalTransition(disposed, event)).toBe(disposed);
+    }
+  });
 });

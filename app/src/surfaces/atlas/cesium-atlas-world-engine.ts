@@ -187,6 +187,7 @@ export class CesiumAtlasWorldEngine implements AtlasWorldEngine {
     onStatus,
     onSelectRoute,
   }: AtlasWorldEngineMountOptions) {
+    if (this.state.mount.phase === "disposed") return;
     this.regions = regions;
     this.onStatus = onStatus;
     this.onSelectRoute = onSelectRoute;

@@ -630,6 +630,27 @@ describe("CesiumAtlasWorldEngine mount lifecycle (characterization)", () => {
     expect(h.globalFlights).toHaveLength(1);
   });
 
+  it("treats destroy as terminal, including a second mount of the same instance", async () => {
+    // The globe (the only caller of createAtlasWorldEngine) builds a fresh
+    // engine per effect run, clears its refs in cleanup, and guards the pending
+    // mount continuation by engine identity, so it never re-selects or
+    // re-mounts a destroyed engine. Re-mounting the same instance used to
+    // create a second viewer that never reached ready.
+    vi.stubEnv("VITE_GOOGLE_MAPS_API_KEY", "");
+    const h = mountHarness({ reducedMotion: true });
+    await h.mount();
+    const firstViewer = h.viewer();
+    h.engine.destroy();
+    h.engine.setSelectedRegion(kyoto);
+    h.engine.setSelectedRegion(undefined);
+    h.engine.resetView();
+    expect(h.statuses()).toEqual([LOADING, READY]);
+    await h.mount();
+    h.engine.setSelectedRegion(kyoto);
+    expect(h.statuses()).toEqual([LOADING, READY]);
+    expect(h.viewer()).toBe(firstViewer);
+  });
+
   it("shares the mount flight with reset and global selection requests", async () => {
     const h = mountHarness();
     void h.mount();

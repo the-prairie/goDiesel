@@ -18,6 +18,9 @@ import {
  *   (`transitionSettled`, `terrainFailed`, `tileFailed`, `frameObserved`).
  * - Every other event is the engine's alone.
  *
+ * `disposed` is terminal: it is the one disposal decision, and the run,
+ * regional, and flight identities all follow from it.
+ *
  * The engine keeps its IO handles (viewer, tileset, timers, flight resolvers)
  * and guards each late callback with `atlasEngineRunIsCurrent`,
  * `atlasRegionIsCurrent`, or the flight id carried by `globalFlightSettled`.
@@ -212,6 +215,7 @@ export function reduceAtlasWorldEngine(
 ): AtlasWorldEngineState {
   switch (event.type) {
     case "mountStarted":
+      if (state.mount.phase === "disposed") return state;
       return announce({
         ...state,
         operationId: state.operationId + 1,
