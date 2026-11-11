@@ -11,6 +11,20 @@ import type { RouteCuration } from "@/domain/route";
 const adminApiBase =
   import.meta.env.VITE_ADMIN_API_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8766";
 
+// The owner writer listens on the owner's loopback only, so it can answer only a
+// page the owner opened on that same machine. Anywhere else (a deployed site, or
+// another device on the LAN) a probe would reach the visitor's own machine.
+export function isLocalDevelopmentHost(hostname: string) {
+  const host = hostname.toLowerCase();
+  return (
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host === "127.0.0.1" ||
+    host === "[::1]" ||
+    host === "::1"
+  );
+}
+
 export type AdminWorkspace =
   | {
       mode: "editable";
@@ -25,7 +39,10 @@ export type AdminWorkspace =
       routes: AdminRouteRecord[];
     };
 
-export async function loadAdminWorkspace(): Promise<AdminWorkspace> {
+export async function loadAdminWorkspace(
+  hostname = globalThis.location?.hostname ?? "",
+): Promise<AdminWorkspace> {
+  if (!isLocalDevelopmentHost(hostname)) return bundledWorkspace();
   try {
     const [statusResponse, routesResponse] = await Promise.all([
       fetchWithTimeout(`${adminApiBase}/api/admin/status`),
@@ -43,34 +60,38 @@ export async function loadAdminWorkspace(): Promise<AdminWorkspace> {
       routes: records.map(parseAdminRoute),
     };
   } catch {
-    return {
-      mode: "read-only",
-      generationStatus: "bundled",
-      generatedAt: null,
-      routes: routes
-        .map((route) => ({
-          activityId: route.activityId,
-          name: route.name,
-          region: route.region,
-          date: route.date,
-          type: route.type,
-          distanceKm: route.distanceKm,
-          sourceStatus: route.lifecycle,
-          curation: {
-            ...emptyCurationDraft,
-            vibe: route.guide.vibe ?? "",
-            reviewStatus: route.guide.reviewStatus,
-          },
-          geometryStatus: route.replay.geometryStatus,
-          replayEligible: route.replay.replayEligible,
-          generationStatus: "ready" as const,
-        }))
-        .sort((first, second) => {
-          const statusDifference = reviewRank(first) - reviewRank(second);
-          return statusDifference || second.date.localeCompare(first.date);
-        }),
-    };
+    return bundledWorkspace();
   }
+}
+
+function bundledWorkspace(): AdminWorkspace {
+  return {
+    mode: "read-only",
+    generationStatus: "bundled",
+    generatedAt: null,
+    routes: routes
+      .map((route) => ({
+        activityId: route.activityId,
+        name: route.name,
+        region: route.region,
+        date: route.date,
+        type: route.type,
+        distanceKm: route.distanceKm,
+        sourceStatus: route.lifecycle,
+        curation: {
+          ...emptyCurationDraft,
+          vibe: route.guide.vibe ?? "",
+          reviewStatus: route.guide.reviewStatus,
+        },
+        geometryStatus: route.replay.geometryStatus,
+        replayEligible: route.replay.replayEligible,
+        generationStatus: "ready" as const,
+      }))
+      .sort((first, second) => {
+        const statusDifference = reviewRank(first) - reviewRank(second);
+        return statusDifference || second.date.localeCompare(first.date);
+      }),
+  };
 }
 
 function reviewRank(route: AdminRouteRecord) {
