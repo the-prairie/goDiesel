@@ -47,8 +47,10 @@ def test_app_shell_defines_expected_navigation_and_hash_route_support():
     assert 'window.location.hash.match(/^#quest' in navigation
     assert 'routeDetailPath(decodedRouteSlug(match[1]) ?? match[1])' in navigation
     assert 'catch {' in navigation
-    assert 'path: "routes/:routeSlug"' in router
-    assert 'path: "replay/:routeSlug"' in router
+    # Views are declared through view(path, surface, Page); the canonical
+    # route-guide and replay paths must still be routed.
+    assert 'view("routes/:routeSlug"' in router
+    assert 'view("replay/:routeSlug"' in router
     assert '<Link' in spine
     assert 'aria-label="Primary"' in spine
     assert 'appSectionForPath(location.pathname)' in spine
