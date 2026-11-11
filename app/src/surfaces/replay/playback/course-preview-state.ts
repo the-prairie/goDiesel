@@ -5,7 +5,10 @@ import {
   type ReplaySessionEvent,
   type ReplaySessionState,
 } from "@/surfaces/replay/playback/replay-session-state";
-import type { GoogleRouteNavigatorStatus } from "@/surfaces/replay/renderers/google-renderer-state";
+import type {
+  GoogleRendererUnavailableReason,
+  GoogleRouteNavigatorStatus,
+} from "@/surfaces/replay/renderers/google-renderer-state";
 
 export type CoursePreviewLoadState =
   | { phase: "loading"; operationId: number }
@@ -39,11 +42,17 @@ export function reduceCoursePreviewLoad(
 
 export interface CoursePreviewSessionState {
   status: GoogleRouteNavigatorStatus;
+  /** Why an unavailable status was published; `authentication` is a key rejection. */
+  statusReason?: GoogleRendererUnavailableReason;
   control: ReplaySessionState;
 }
 
 export type CoursePreviewSessionEvent =
-  | { type: "providerChanged"; status: GoogleRouteNavigatorStatus }
+  | {
+      type: "providerChanged";
+      status: GoogleRouteNavigatorStatus;
+      reason?: GoogleRendererUnavailableReason;
+    }
   | { type: "controlRequested"; event: ReplaySessionEvent };
 
 export function initialCoursePreviewSession(): CoursePreviewSessionState {
@@ -61,6 +70,8 @@ export function reduceCoursePreviewSession(
     case "providerChanged":
       return {
         status: event.status,
+        statusReason:
+          event.status.state === "unavailable" ? event.reason : undefined,
         control:
           event.status.state === "ready"
             ? state.control

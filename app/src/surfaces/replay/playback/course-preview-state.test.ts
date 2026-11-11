@@ -72,6 +72,27 @@ describe("course preview lifecycle", () => {
     ).toBe(unavailable);
   });
 
+  it("names a key rejection only while the provider stays unavailable", () => {
+    const rejected = reduceCoursePreviewSession(initialCoursePreviewSession(), {
+      type: "providerChanged",
+      status: { state: "unavailable", message: "Google Maps rejected this browser origin." },
+      reason: "authentication",
+    });
+    expect(rejected.status.state).toBe("unavailable");
+    expect(rejected.statusReason).toBe("authentication");
+    const ready = reduceCoursePreviewSession(rejected, {
+      type: "providerChanged",
+      status: { state: "ready", message: "Ready" },
+      reason: "authentication",
+    });
+    expect(ready.statusReason).toBeUndefined();
+    const timedOut = reduceCoursePreviewSession(ready, {
+      type: "providerChanged",
+      status: { state: "unavailable", message: "Map unavailable" },
+    });
+    expect(timedOut.statusReason).toBeUndefined();
+  });
+
   it("moves by distance, stops at the section endpoint, and starts fresh for another section", () => {
     const ready = reduceCoursePreviewSession(initialCoursePreviewSession(), {
       type: "providerChanged",
