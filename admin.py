@@ -28,6 +28,7 @@ from urllib.parse import urlparse
 import gpxpy
 import pandas as pd
 
+from admin_classify import initial_classify_state, public_classify_state, reduce_classify
 from admin_curation import curation_readiness, save_curation_and_rebuild, write_atomic
 from route_regions import classify_region
 import hashlib
@@ -310,10 +311,20 @@ def cached_reverse_geocode(lat, lng):
 
 # ── Background classify worker ──
 
-classify_state = {
-    'running': False, 'done': 0, 'total': 0, 'updated': 0,
-    'last_label': '', 'finished_at': None,
-}
+_classify_state = initial_classify_state()
+_classify_lock = threading.Lock()
+
+
+def _classify_snapshot():
+    with _classify_lock:
+        return public_classify_state(_classify_state)
+
+
+def _transition_classify(event):
+    global _classify_state
+    with _classify_lock:
+        _classify_state = reduce_classify(_classify_state, event)
+        return public_classify_state(_classify_state)
 
 
 def _unmapped_route_ids():
@@ -330,54 +341,58 @@ def _unmapped_route_ids():
     return out
 
 
-def classify_unmapped_worker():
-    candidates = _unmapped_route_ids()
-    classify_state.update({
-        'running': True, 'done': 0, 'updated': 0,
-        'total': len(candidates), 'last_label': '', 'finished_at': None,
-    })
-    if not candidates:
-        classify_state['running'] = False
-        classify_state['finished_at'] = time.time()
-        return
-    print(f'[classify] starting: {len(candidates)} unmapped routes')
-    save_every = 25
-    for i, (aid, lat, lng) in enumerate(candidates):
-        label = cached_reverse_geocode(lat, lng)
-        if label:
-            geo_cache[aid]['region'] = label
-            classify_state['updated'] += 1
-            classify_state['last_label'] = label
-        classify_state['done'] = i + 1
-        if (i + 1) % save_every == 0:
-            try:
-                GEO_CACHE_PATH.write_text(json.dumps(geo_cache))
-                _save_geocode_buckets()
-            except Exception:
-                pass
+def _abandon_classify_if_running():
+    global _classify_state
+    with _classify_lock:
+        if _classify_state['phase'] == 'running':
+            _classify_state = reduce_classify(_classify_state, {'type': 'fail'})
+
+
+def classify_unmapped_worker(candidates):
     try:
-        GEO_CACHE_PATH.write_text(json.dumps(geo_cache))
-        _save_geocode_buckets()
-    except Exception:
-        pass
-    classify_state['running'] = False
-    classify_state['finished_at'] = time.time()
-    print(f'[classify] done: {classify_state["updated"]} labels added')
+        print(f'[classify] starting: {len(candidates)} unmapped routes')
+        save_every = 25
+        for i, (aid, lat, lng) in enumerate(candidates):
+            label = cached_reverse_geocode(lat, lng)
+            if label:
+                geo_cache[aid]['region'] = label
+            _transition_classify({'type': 'progress', 'done': i + 1, 'label': label or ''})
+            if (i + 1) % save_every == 0:
+                try:
+                    GEO_CACHE_PATH.write_text(json.dumps(geo_cache))
+                    _save_geocode_buckets()
+                except Exception:
+                    pass
+        try:
+            GEO_CACHE_PATH.write_text(json.dumps(geo_cache))
+            _save_geocode_buckets()
+        except Exception:
+            pass
+        snapshot = _transition_classify({'type': 'finish', 'finished_at': time.time()})
+        print(f'[classify] done: {snapshot["updated"]} labels added')
+    finally:
+        _abandon_classify_if_running()
 
 
 def start_classify_if_needed():
-    if classify_state['running']:
-        return False
-    if not _unmapped_route_ids():
-        return False
-    t = threading.Thread(target=classify_unmapped_worker, daemon=True)
-    t.start()
-    return True
+    global _classify_state
+    with _classify_lock:
+        if _classify_state['phase'] == 'running':
+            return 'running'
+        candidates = _unmapped_route_ids()
+        if not candidates:
+            return 'idle'
+        _classify_state = reduce_classify(
+            _classify_state, {'type': 'start', 'total': len(candidates)},
+        )
+        captured = list(candidates)
+    threading.Thread(target=classify_unmapped_worker, args=(captured,), daemon=True).start()
+    return 'started'
 
 
 # Kick off auto-classify on startup if there's work to do
-if start_classify_if_needed():
-    print(f'  Background classifier started ({classify_state["total"]} unmapped routes).')
+if start_classify_if_needed() == 'started':
+    print(f'  Background classifier started ({_classify_snapshot()["total"]} unmapped routes).')
 
 
 def find_activity_file(aid):
@@ -616,7 +631,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == '/api/classify-status':
             unmapped_now = len(_unmapped_route_ids())
-            self._send(200, {**classify_state, 'unmapped': unmapped_now})
+            self._send(200, {**_classify_snapshot(), 'unmapped': unmapped_now})
             return
         self._send(404, {'error': 'not found'})
 
@@ -905,14 +920,15 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, {'ok': True, 'msg': 'Rebuild started in background.'})
             return
         if path == '/api/auto-classify':
-            if classify_state['running']:
-                self._send(200, {'ok': True, 'msg': 'Already running.', **classify_state})
-                return
-            started = start_classify_if_needed()
+            outcome = start_classify_if_needed()
             self._send(200, {
                 'ok': True,
-                'msg': 'Started.' if started else 'Nothing to classify.',
-                **classify_state,
+                'msg': {
+                    'started': 'Started.',
+                    'running': 'Already running.',
+                    'idle': 'Nothing to classify.',
+                }[outcome],
+                **_classify_snapshot(),
             })
             return
         self._send(404, {'error': 'not found'})
