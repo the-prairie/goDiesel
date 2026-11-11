@@ -111,6 +111,17 @@ describe("Google Replay stage session", () => {
     expect(transition(recovered, control({ type: "playbackToggled" })).control.playing).toBe(true);
   });
 
+  it("records why the provider is unavailable so the stage can name a key rejection", () => {
+    const rejected = started({ type: "settingsOpenChanged", open: true }, { type: "statusReceived", sessionId: 1, status: authNotice, reason: "authentication" });
+    expect(rejected).toMatchObject({ status: authNotice, statusReason: "authentication", settingsOpen: false });
+    const recovered = transition(rejected, status(1, ready));
+    expect(recovered.status).toBe(ready);
+    expect(recovered.statusReason).toBeUndefined();
+    expect(transition(rejected, status(1, { state: "unavailable", message: "Google photorealistic 3D did not finish loading." })).statusReason).toBeUndefined();
+    expect(transition(rejected, { type: "sessionStarted" }).statusReason).toBeUndefined();
+    expect(transition(rejected, { type: "statusReceived", sessionId: 2, status: authNotice, reason: "authentication" })).toBe(rejected);
+  });
+
   // Component onStatus: `if (next.state === "unavailable") setSettingsOpen(false)`.
   it("closes settings when the provider becomes unavailable and leaves other disclosures alone", () => {
     const open = started(status(1, ready), { type: "settingsOpenChanged", open: true }, { type: "chaptersExpandedChanged", expanded: true });

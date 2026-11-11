@@ -8,7 +8,10 @@ import type {
   ReplayChapterControlsEvent,
   ReplayChapterControlsState,
 } from "@/surfaces/replay/playback/replay-chapter-controls-state";
-import type { GoogleRouteNavigatorStatus } from "@/surfaces/replay/renderers/google-renderer-state";
+import type {
+  GoogleRendererUnavailableReason,
+  GoogleRouteNavigatorStatus,
+} from "@/surfaces/replay/renderers/google-renderer-state";
 
 /**
  * One mounted Google Replay stage: the provider status reported by its
@@ -20,6 +23,8 @@ import type { GoogleRouteNavigatorStatus } from "@/surfaces/replay/renderers/goo
 export interface GoogleReplayStageState {
   sessionId: number;
   status: GoogleRouteNavigatorStatus;
+  /** Why an unavailable status was published; `authentication` is a key rejection. */
+  statusReason?: GoogleRendererUnavailableReason;
   control: ReplaySessionState;
   settingsOpen: boolean;
   chaptersExpanded: boolean;
@@ -27,7 +32,7 @@ export interface GoogleReplayStageState {
 
 export type GoogleReplayStageEvent =
   | { type: "sessionStarted" }
-  | { type: "statusReceived"; sessionId: number; status: GoogleRouteNavigatorStatus }
+  | { type: "statusReceived"; sessionId: number; status: GoogleRouteNavigatorStatus; reason?: GoogleRendererUnavailableReason }
   | { type: "controlRequested"; event: ReplaySessionEvent }
   | { type: "settingsOpenChanged"; open: boolean }
   | { type: "chaptersExpandedChanged"; expanded: boolean };
@@ -56,6 +61,7 @@ export function reduceGoogleReplayStage(
       return {
         sessionId: state.sessionId + 1,
         status: GOOGLE_REPLAY_INITIAL_STATUS,
+        statusReason: undefined,
         control: reduceReplaySession(state.control, { type: "routeReplaced" }),
         settingsOpen: false,
         chaptersExpanded: false,
@@ -65,6 +71,7 @@ export function reduceGoogleReplayStage(
       return {
         ...state,
         status: event.status,
+        statusReason: event.status.state === "unavailable" ? event.reason : undefined,
         settingsOpen: event.status.state === "unavailable" ? false : state.settingsOpen,
       };
     case "controlRequested":
