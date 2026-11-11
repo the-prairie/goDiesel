@@ -662,6 +662,8 @@ test("the preview arriving does not move a desktop page where both columns are v
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
+  // Instant scrolling, so any progress reveal has finished before measuring.
+  await page.emulateMedia({ reducedMotion: "reduce" });
   const studio = await stubCourseStudio(page);
   await page.goto("/#/courses");
   await choosePlaceByTyping(page);
