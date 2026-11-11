@@ -55,6 +55,7 @@ not by recollection.
 | [0016](0016-explicit-state-transitions-at-lifecycle-boundaries.md) | Explicit state transitions at lifecycle boundaries | accepted |
 | [0017](0017-course-workspace-is-separate-from-completed-activities.md) | Courses have a shared workspace separate from completed activities | proposed |
 | [0018](0018-discriminated-reducers-for-lifecycle-state.md) | Lifecycle state stays a discriminated reducer | accepted |
+| [0019](0019-recovery-dispositions-marker-protocols-and-a-checked-registry.md) | Recovery dispositions, marker-file protocols, and a checked lifecycle registry | accepted |
 
 ## Renderer history
 

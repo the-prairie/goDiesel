@@ -1,172 +1,210 @@
 # Lifecycle state machines
 
-Reference for the lifecycles in the React app and the Python pipeline. The binding decision is [ADR-0018](../adr/0018-discriminated-reducers-for-lifecycle-state.md). It confirms [ADR-0016](../adr/0016-explicit-state-transitions-at-lifecycle-boundaries.md).
+This is the guide to lifecycles across the repository: the React app, the standalone admin UI, the Python owner tools, and the release scripts.
 
-A lifecycle here is ordered work with a phase, a request identity, or two flags that can disagree. A disclosure, a filter, or a URL parameter is listed at the end and does not earn a reducer.
+The inventory is a checked registry, [`lifecycles.json`](lifecycles.json), with a [JSON Schema](lifecycles.schema.json) beside it. The tables below are generated from it. Do not edit them by hand.
 
-The audit found 10 implicit lifecycles and 26 that were already pure reducers. This change converts the first three implicit ones. The Atlas screen is not converted. Draft PR 172 is redesigning that layout on `cursor/atlas-mobile-prototypes-53cb`.
+The binding decisions are [ADR-0016](../adr/0016-explicit-state-transitions-at-lifecycle-boundaries.md), [ADR-0018](../adr/0018-discriminated-reducers-for-lifecycle-state.md), and [ADR-0019](../adr/0019-recovery-dispositions-marker-protocols-and-a-checked-registry.md).
 
-## Converted in this change
+## What a lifecycle is
 
-### Route detail load
+A lifecycle is ordered work with a phase, an operation identity, or two values that can disagree. Loading a route, running an engine, saving a draft, and publishing a bundle are lifecycles.
 
-`app/src/data/route-detail-state.ts`, read by `useRouteDetail`.
+A boolean, a disclosure, a filter, or a URL parameter is not a lifecycle. It stays local.
 
-States are `idle`, `loading` for one slug and request key, and `settled` with that same slug, key, and a `ready`, `not-found`, `invalid`, or `error` result. The last settled result is remembered beside the phase. Events are `selectionCleared`, `loadStarted`, and `resultReceived`.
+## The registry
 
-Clearing the selection hides the route. Selecting that same slug and request key shows the remembered result again, with no loading phase. Selecting a different route, or the same slug with a new request key, shows loading. The loading phase has no route payload. A result for a different slug or key is ignored.
+Each entry names one lifecycle and its `kind`:
 
-Finder clears the selected route and can select it again on the same mount. The remembered result is what the previous hook kept in `loaded`, so that return does not flicker through loading. The repository still turns a failed fetch into `error`, so the hook does not hang on a network failure.
+- `reducer`: a pure transition function for a runtime lifecycle.
+- `disposition`: a pure function that decides what crash recovery does with what it finds on disk.
+- `protocol`: marker files that a script writes and another script or person reads.
+- `derived`: a value computed from another source, with no stored phase.
+- `left-implicit`: kept as it is on purpose. The entry records the reason.
 
-UX gain is that return to the same route. DX and AX gain is high, because Replay, the route guide, and Finder all read this hook.
+Each entry also names its `module`, its `transition` where it has one, its `test` files, its `adapters`, its `states` as they appear in the module, and its `identity`. The identity is what rejects a stale or superseded event.
 
-### Replay surface choice
+`scripts/check-lifecycles.mjs` compares the registry with the code. It runs inside `npm --prefix app run typecheck`, so the ticket gate and the release gate run it too. It fails when:
 
-`app/src/surfaces/replay/playback/replay-surface-state.ts`, owned by `ReplayPage`.
+- the registry does not match the schema, or two entries share an id;
+- a registered module, test, or adapter path does not exist;
+- a registered transition is not exported from its module;
+- no registered test mentions the transition;
+- a registered state name does not appear in the module;
+- a `*-state.ts` file under `app/src` or `admin-ui` has no entry;
+- an exported `reduce<Name>` function under `app/src` or `admin-ui`, or a top-level Python `def reduce_<name>` at the repository root, has no entry;
+- the generated block in this file is stale.
 
-The renderer query is `google`, `atlas`, or `cesium`. `degraded` is true only while the query is still Google and the person has asked to leave a Google start failure. Events are `paramsChanged` and `googleDegraded`. The visible kind is Cesium, else Atlas when the query says Atlas or the fallback is set, else Google.
+To add or change a lifecycle, edit `lifecycles.json`, then run:
 
-The old page stored a boolean and copied the query into it from an effect. After `?renderer=atlas` went away, or after the route changed, the next paint could still be the Atlas stage. That combination is now unrepresentable. The query and the route update the choice in the same render.
+```sh
+node scripts/check-lifecycles.mjs --write
+```
 
-UX gain is the missing stale frame. DX and AX gain is medium. The Google engine lifecycle stays in `google-renderer-state.ts`.
+That regenerates the block below. Commit both files.
 
-### Admin region classifier
+## Decision rules
 
-`admin_classify.py`, driven by `admin.py`.
+These rules are in force. Each one came from a defect fixed in a merged branch.
 
-Phases are `idle`, `running` with `done`, `total`, `updated`, and `last_label`, `finished` with `finished_at`, and `failed` with the same counts and no finish time. Events are `start`, `progress`, `finish`, and `fail`. The HTTP body still uses `running`, `done`, `total`, `updated`, `last_label`, and `finished_at`. A failed run reports `running` false and leaves `finished_at` unset.
+1. A runtime lifecycle is a discriminated union and a pure reducer. Do not add a state-machine library.
+2. Crash recovery is a pure disposition function. Callers observe the disk and the lock, call the function, then act. `publication_disposition` is the one rule for the generator backup and the owner journal.
+3. A script lifecycle is a marker-file protocol. Write the marker last, atomically, and treat a missing marker as a failure. `.dist-manifest.json`, the share publish receipts under `.route-share/publish/`, and the live-gate `status.json` follow this rule.
+4. Derive a value or key a component. Do not copy a prop or the URL into state with an effect. A copy paints one stale frame.
+5. A ref that mirrors reducer state has one writer: the dispatch wrapper.
+6. A frame driver may keep its state in a ref and publish throttled snapshots to React. A migration is not permission to dispatch every frame.
+7. An engine's outgoing status is derived from its reducer state in one place. The engine publishes only when the reducer records a new status.
+8. An async outcome carries an operation identity, and the reducer accepts it only in the matching phase.
 
-The old dict allowed `running` true together with a finish time, a second thread, and a startup log of total 0, because the worker set `running` after the thread had already started. `start` now happens under a lock before the thread. A second start returns the same state. Progress must be the next count and cannot pass `total`. A blank label does not increase `updated`. Finish is ignored unless the phase is `running`.
+## Stage mounting
 
-The messages stay `Started.`, `Already running.`, and `Nothing to classify.` The worker classifies the list captured at start. If that worker throws before `finish`, the phase becomes `failed`, so a later start is allowed.
+A slug change always unmounts a Replay stage or a lab stage. `useRouteDetail` moves to `loading` in the same render as the new slug, and every stage page renders a loading notice in place of the stage while the detail loads. The Earth Replay stage is also keyed by route slug and surface kind.
 
-UX gain is that the owner no longer gets two classifiers writing the same cache. DX and AX gain is high for the one background worker in the admin server.
+Only a same-slug query change can keep a stage mounted. A page that reads a query parameter only at mount keys the stage on it. Replay keys the Earth stage by surface kind, so a `?renderer=` change opens a fresh stage. The director lab keys its stage by cut, so a `?cut=` change opens a fresh stage.
 
-## Still implicit
+A scenario in which the previous route's state paints once on the next route cannot happen. Do not write a fix or a test for it.
 
-### Earth Replay chrome
+## Behaviours pinned by tests
 
-`app/src/surfaces/replay/components/earth-replay-stage.tsx`.
+These are product decisions. Do not change them as a side effect of a refactor. A change needs its own commit, a stated reason, and an updated test.
 
-The session reducer already owns playback and provider status. Beside it, the stage keeps a HUD mode of `preview`, `compact`, or `expanded`, a mobile-controls boolean, and a chrome-visible boolean. Effects reset the HUD when the route or the mobile flag changes, force `compact` when playback starts, and hide chrome after 3.2 seconds of playback unless focus is inside the stage.
+- Keyboard play intent is retained while the provider loads. The Google Replay stage and Playable Earth accept a play command in every provider phase, and playback advances once the world is ready.
+- Playback intent is retained through provider loading and unavailable. Earth Replay accepts playback commands in every status and advances frames only while the scene is operational. The director and trailer reducers keep playback intent through provider failure.
+- An authentication failure is a recoverable notice, not a terminal phase. The Google renderer lets a later `sceneReady` replace the notice while the API or scene is still loading.
+- An Atlas world that reported unavailable stays unavailable for selection. A disposed engine is terminal. `atlasEngineAcceptsSelection` decides it.
+- Earth Replay chrome may auto-hide only while playing over a ready or partial scene without reduced motion. `earthReplayChromeMayAutoHide` decides it.
+- A failed course save keeps the unsaved preview. `courseFailureRecovery` offers a reload only for a failed load or list.
+- The route leaf map keeps its previous ready or unavailable presentation while a replacement session waits.
 
-An expanded HUD from the previous route can paint once on the next route. `useIsMobile` is false until its own effect, so a phone can paint the desktop preview first. Expanded during playback is legal after the person opens it, so playback must not imply `compact` forever.
+## Inventory
 
-UX, DX, and AX gain is medium. Rank 1 among the work that remains. Leave the hide timer in the stage.
+<!-- BEGIN GENERATED: lifecycles.json -->
+<!-- Generated from docs/architecture/lifecycles.json by `node scripts/check-lifecycles.mjs --write`. Do not edit by hand. -->
 
-### Google Replay stage chrome
-
-`app/src/surfaces/replay/components/google-route-navigator-stage.tsx`.
-
-`reduceGoogleRenderer` already owns API load, scene load, ready, and unavailable. The stage copies that status into React state and keeps settings and chapter expansion as separate booleans. The mount effect resets both booleans. Until that effect, the previous route can show open settings or expanded chapters.
-
-`google-renderer-state.ts` also allows an unavailable notice while the phase is still `loadingApi` or `loadingScene`. The test named "keeps pending work recoverable after authentication failure" requires `sceneReady` to replace that notice. Do not close that combination without a product decision. Auth failure is a recoverable notice, not a terminal phase.
-
-UX and DX gain for the two booleans is low. Rank 2.
-
-### Atlas search
-
-`app/src/surfaces/atlas/components/atlas-search.tsx`.
-
-`searchState` already derives `initial`, `typing`, `loading`, `grouped-results`, `no-results`, `selected-result`, or `unsupported-query` from the query. `searchOpen` is a separate boolean. The panel can be open for an empty query after a region was selected, because the flag is not the derived state.
-
-This is an Atlas screen. Do not convert it while PR 172 is redesigning the Atlas layout. Rank 3. The derived function is already the part worth keeping.
-
-### Route thumbnail
-
-`app/src/surfaces/atlas/components/route-satellite-thumbnail.tsx`.
-
-States are `deferred`, `loading`, `loaded`, `failed`, and `unavailable`. `nextThumbnailState` keeps `loaded` or `failed` when a later URL is different. The image can stay fully opaque while the browser fetches the new URL.
-
-Atlas screen. Rank 4. Same hold as Atlas search.
-
-### Build publication
-
-`build.py`.
-
-The script runs in order. The printed stages are the map provider, the curation filter, the photo scan, the route build, and publication. Publication then writes a backup, marks it `ready`, replaces route details, and deletes the backup. On failure, or at the next process start, `recover_interrupted_route_publication` discards a backup with no `ready` marker and restores a backup that has one.
-
-`test_react_app.py` executes that function from the parsed file with a closed set of names. Moving the body into a helper fails that test until the test is updated. `owner_publication.py` is a separate journal and is already an explicit recovery procedure.
-
-UX gain is none. The product reads the published files. DX and AX gain is medium because the stage order is a 4,000-line script. Rank 5. Extract the disposition first, and update the characterization test in the same change. Do not rewrite the HTML template into a state machine.
-
-### Finder result presentation
-
-`app/src/surfaces/finder/finder-page.tsx`.
-
-Submitted intent lives in the URL. The draft intent is allowed to differ until the next search. That split is required by ADR-0016. `filtersOpen` and `view` (`list` or `map`) are local. `view` can stay `map` after the result is no longer a match list. The screen hides the map in that case.
-
-UX, DX, and AX gain is low. Rank 6. Do not merge the draft into the URL state.
-
-### Chunk recovery
-
-`app/src/app/chunk-recovery.ts`.
-
-A chunk load either reloads the shell once or leaves the manual retry in place. The session key records that this shell already reloaded. Offline and blocked storage skip the reload.
-
-The two outcomes are already functions. UX, DX, and AX gain is low. Rank 7.
-
-## Already explicit
-
-These reducers already reject a late or wrong-phase event by returning the current state. Do not wrap them again.
-
-| Module | Phases |
+| Kind | Entries |
 | --- | --- |
-| `app/src/surfaces/finder/discovery-state.ts` | idle, resolving place, choosing place, no places, loading routes, results, failed |
-| `app/src/data/search/collection-search-state.ts` | idle, loading index, basic fallback, keyword ready, embedding, semantic ready, keyword fallback |
-| `app/src/data/search/external-ranking-state.ts` | idle, embedding, semantic ready, keyword fallback |
-| `app/src/surfaces/routes/components/route-leaf-map-state.ts` | inactive, waiting, ready |
-| `app/src/ui/planning-map-state.ts` | loading, ready, unavailable |
-| `app/src/surfaces/courses/course-workspace-state.ts` | view empty, preview, or saved, and progress idle, pending, or failed |
-| `app/src/surfaces/courses/course-form.tsx` | place search idle, searching, choices, chosen, error |
-| `app/src/surfaces/replay/playback/course-preview-state.ts` | loading, ready, failed |
-| `app/src/surfaces/replay/playback/replay-session-state.ts` | playback, camera, following, and grounding commands |
-| `app/src/surfaces/replay/playback/replay-chapter-controls-state.ts` | following or preview, lens or whole route |
-| `app/src/surfaces/replay/playback/earth-replay-session-state.ts` | provider status plus playback for one mounted engine |
-| `app/src/surfaces/replay/renderers/google-renderer-state.ts` | idle, loading API, loading scene, ready, unavailable, destroyed |
-| `app/src/surfaces/replay/renderers/maplibre-replay-state.ts` | idle, loading, ready, unavailable, disposed |
-| `app/src/surfaces/replay/renderers/cesium-fidelity-state.ts` | idle, loading, ready, partial, disposed |
-| `app/src/surfaces/replay/renderers/surface-sampling-state.ts` | idle, sampling, disposed |
-| `app/src/surfaces/replay/playback/marker-photo-state.ts` | idle, loading, cropping, and the saved photo |
-| `app/src/surfaces/replay/cinematic/cinematic-director-state.ts` | playback, audio start, and renderer status for one cut |
-| `app/src/surfaces/replay/cinematic/trailer-state.ts` | playback and provider status for one trailer session |
-| `app/src/labs/playable-earth/playable-earth-session-state.ts` | provider status, grounding, control, and HUD for the lab |
-| `app/src/labs/route-intelligence/route-intelligence-state.ts` | loading, complete, partial, empty, failed |
-| `app/src/surfaces/admin/workspace-state.ts` | loading or ready workspace, with per-route save idle, saving, saved, or failed |
-| `admin-ui/mutation-state.ts` | save idle, saving, or refreshing, plus refresh and rebuild ids |
-| `admin-ui/classifier-state.ts` | start idle or starting, poll idle, checking, running, failed, or complete |
-| `app/src/surfaces/atlas/atlas-presentation-state.ts` | engine status and whether the selected region is waiting or ready |
-| `app/src/surfaces/atlas/regional-transition-state.ts` | global, loading, ready, fallback, disposed |
-| `app/src/surfaces/atlas/regional-fallback-state.ts` | loading, ready, unavailable |
+| `reducer` | 35 |
+| `disposition` | 1 |
+| `protocol` | 3 |
+| `derived` | 6 |
+| `left-implicit` | 10 |
+| total | 55 |
 
-`app/src/labs/route-film/route-film.ts` is a closed union. A queued film cannot carry a poster, and a ready film must carry one. It is validated at parse time. There is no runtime transition to convert.
+### Reducers
 
-`owner_publication.py` restores or discards a journal from the `ready` and `committed` markers. Readers should treat that module as the publication lifecycle.
+| Lifecycle | Owns | Module | Transition | States | Stale events rejected by |
+| --- | --- | --- | --- | --- | --- |
+| `route-detail-load` | Loads one route detail and remembers the last settled result for a return to the same slug and request key. | `app/src/data/route-detail-state.ts` | `reduceRouteDetailLoad` | `idle`, `loading`, `settled` | slug and requestKey; the hook dispatches loadStarted during render |
+| `collection-search` | Loads the guide search index, then refines with embeddings or falls back to keywords. | `app/src/data/search/collection-search-state.ts` | `reduceCollectionSearch` | `idle`, `loadingIndex`, `basicFallback`, `keywordReady`, `embedding`, `semanticReady`, `keywordFallback` | requestId; indexFailed is accepted only in loadingIndex |
+| `external-ranking` | Ranks discovered routes semantically, or falls back to keywords. | `app/src/data/search/external-ranking-state.ts` | `reduceExternalRanking` | `idle`, `embedding`, `semanticReady`, `keywordFallback` | requestId |
+| `planned-route-cache` | The tab's view of planned routes in localStorage, including routes that storage refused. | `app/src/data/planned-route-store.ts` | `reducePlannedRouteCache` | `unread`, `persisted`, `memory-only` | the raw storage value; memory-only ignores reads and storage events until a write succeeds |
+| `finder-discovery` | Finder external discovery: place resolution, place choice, route request, selection, and save feedback. | `app/src/surfaces/finder/discovery-state.ts` | `reduceDiscovery` | `idle`, `resolving-place`, `choosing-place`, `no-places`, `loading-routes`, `results`, `failed` | submission id per mounted component |
+| `finder-draft` | The Finder form draft, which may differ from the submitted intent in the URL until the next search. | `app/src/surfaces/finder/finder-draft-state.ts` | `reduceFinderDraft` | none | baseKey, the submittedIntentKey the draft was edited against; visibleDraft ignores a draft for another submission |
+| `course-workspace` | The course page view and its one pending operation, including which operation failed. | `app/src/surfaces/courses/course-workspace-state.ts` | `reduceCourseWorkspace` | `view:empty`, `view:preview`, `view:saved`, `progress:idle`, `progress:pending`, `progress:failed` | pending operation id |
+| `course-place-search` | The start-place search beside the course form. | `app/src/surfaces/courses/course-form.tsx` | `placeReducer` | `idle`, `searching`, `choices`, `chosen`, `error` | search id |
+| `course-preview-load` | Loads one course for preview. The page keys the loader by course id. | `app/src/surfaces/replay/playback/course-preview-state.ts` | `reduceCoursePreviewLoad` | `loading`, `ready`, `failed` | operationId |
+| `course-preview-session` | Provider status and replay commands for one course preview section. | `app/src/surfaces/replay/playback/course-preview-state.ts` | `reduceCoursePreviewSession` | `loading` | none in the reducer; the page keys each section by index and attempt |
+| `replay-session` | Playback, camera, following, and grounding commands shared by the Google Replay stage and course preview. | `app/src/surfaces/replay/playback/replay-session-state.ts` | `reduceReplaySession` | none | nothing |
+| `replay-chapter-controls` | Replay chapter and moment preview against following playback, at lens or whole-route scope. | `app/src/surfaces/replay/playback/replay-chapter-controls-state.ts` | `reduceReplayChapterControls` | `mode:following`, `mode:preview`, `scope:lens`, `scope:whole` | nothing |
+| `replay-surface` | Which Replay renderer the page shows: the URL renderer, or Atlas after a Google start failure. | `app/src/surfaces/replay/playback/replay-surface-state.ts` | `reduceReplaySurface` | `kind:google`, `kind:atlas`, `kind:cesium`, `reason:requested`, `reason:degraded` | renderer query and route slug, compared by replaySurfaceMatches during render |
+| `earth-replay-session` | One Earth Replay stage: renderer mode, provider status, playback, HUD mode, and mobile controls. | `app/src/surfaces/replay/playback/earth-replay-session-state.ts` | `reduceEarthReplaySession` | `status:loading`, `context:preview`, `context:compact` | sessionId minted by rendererMounted; the stage is keyed by route slug and surface kind |
+| `google-replay-stage` | One Google Replay stage: provider status, replay commands, settings disclosure, and chapter expansion. | `app/src/surfaces/replay/playback/google-replay-stage-state.ts` | `reduceGoogleReplayStage` | `status:loading`, `status:unavailable` | sessionId minted by sessionStarted |
+| `google-renderer` | The native Google 3D engine: API load, scene load, ready, unavailable, destroyed. | `app/src/surfaces/replay/renderers/google-renderer-state.ts` | `reduceGoogleRenderer` | `idle`, `loadingApi`, `loadingScene`, `ready`, `unavailable`, `destroyed` | operationId minted by mountStarted and destroyed |
+| `cesium-fidelity` | The Cesium Replay engine run and every status it publishes. | `app/src/surfaces/replay/renderers/cesium-fidelity-state.ts` | `reduceCesiumFidelity` | `idle`, `loading`, `ready`, `partial`, `unavailable`, `disposed` | operationId minted by sessionStarted (cesiumRunIsCurrent); statusRevision marks each published status |
+| `maplibre-replay` | The MapLibre Replay engine run and every status it publishes. | `app/src/surfaces/replay/renderers/maplibre-replay-state.ts` | `reduceMapLibreReplay` | `idle`, `loading`, `ready`, `unavailable`, `disposed` | operationId minted by mapStarted (mapLibreRunIsCurrent); statusRevision marks each published status |
+| `surface-sampling` | Throttled terrain surface sampling under the moving marker. | `app/src/surfaces/replay/renderers/surface-sampling-state.ts` | `reduceSurfaceSampling` | `idle`, `sampling`, `disposed` | requestId |
+| `marker-photo` | Uploading and cropping the person's Replay marker photo. | `app/src/surfaces/replay/playback/marker-photo-state.ts` | `reduceMarkerPhoto` | `idle`, `loading`, `cropping` | requestId |
+| `cinematic-director` | The director cut stage: playback, audio start, sound, and renderer status for one session. | `app/src/surfaces/replay/cinematic/cinematic-director-state.ts` | `reduceCinematicDirector` | `playback:paused`, `playback:playing`, `audioStart:idle`, `audioStart:pending` | sessionId for renderer status; audio requestId minted by playRequested; the lab page keys the stage by cut |
+| `route-trailer` | The route trailer stage: playback, frame, and provider status for one session. | `app/src/surfaces/replay/cinematic/trailer-state.ts` | `reduceTrailer` | `playback:paused`, `playback:playing`, `status:loading`, `status:unavailable` | sessionId minted by sessionStarted; playback, skip, and frames are accepted only while ready |
+| `playable-earth-session` | The Playable Earth lab stage: provider status, grounding, control, HUD mode, and mobile controls. | `app/src/labs/playable-earth/playable-earth-session-state.ts` | `reducePlayableEarthSession` | none | sessionId for provider and grounding reports |
+| `route-intelligence` | The route intelligence lab load: complete, partial, empty, or failed. | `app/src/labs/route-intelligence/route-intelligence-state.ts` | `reduceRouteIntelligence` | `loading`, `complete`, `partial`, `empty`, `failed` | nothing |
+| `admin-workspace` | The React Admin workspace, route detail loads, and per-route saves. | `app/src/surfaces/admin/workspace-state.ts` | `reduceAdminWorkspace` | `loading`, `ready`, `save:idle`, `save:saving`, `save:saved`, `save:failed` | requestId per route detail and per route save |
+| `atlas-presentation` | Atlas world status and whether the selected region is waiting or presented. | `app/src/surfaces/atlas/atlas-presentation-state.ts` | `reduceAtlasPresentation` | `region:none`, `region:waiting`, `region:ready` | engineId |
+| `atlas-regional-fallback` | The MapLibre regional fallback map shown when Atlas terrain is unavailable. | `app/src/surfaces/atlas/regional-fallback-state.ts` | `reduceRegionalFallback` | `loading`, `ready`, `unavailable` | session |
+| `atlas-regional-transition` | The Atlas globe's move into regional terrain and back to the global view. | `app/src/surfaces/atlas/regional-transition-state.ts` | `reduceRegionalTransition` | `global`, `loading`, `ready`, `fallback`, `disposed` | operationId (regionalOperationIsCurrent) |
+| `atlas-world-engine` | One Cesium Atlas engine: mount, the global camera flight, the published status and canvas dataset. Composes the regional transition. | `app/src/surfaces/atlas/atlas-world-engine-state.ts` | `reduceAtlasWorldEngine` | `mount:idle`, `mount:mounting`, `mount:ready`, `mount:unavailable`, `mount:disposed`, `reason:webgl`, `reason:mount`, `reason:render`, `camera:settled`, `camera:flying` | operationId per mount run (atlasEngineRunIsCurrent) and flightId per global flight; unavailable is terminal for selection and disposed is terminal |
+| `route-leaf-map` | The route guide's leaf map: waiting for the map, ready, or unavailable after a deadline or errors. | `app/src/surfaces/routes/components/route-leaf-map-state.ts` | `reduceRouteLeafMap` | `inactive`, `waiting`, `ready`, `status:loading`, `status:unavailable` | sessionId |
+| `planning-map` | The planning route map: loading, ready, or unavailable after a deadline or errors. | `app/src/ui/planning-map-state.ts` | `reducePlanningMap` | `loading`, `ready`, `unavailable` | operationId |
+| `admin-ui-mutation` | Standalone admin route drafts, save, route refreshes, and the rebuild it follows to an outcome. | `admin-ui/mutation-state.ts` | `reduceMutation` | `save:idle`, `save:saving`, `save:refreshing`, `rebuild:idle`, `rebuild:starting`, `rebuild:running`, `rebuild:succeeded`, `rebuild:failed` | requestId for save and rebuild start; only latestRefreshId may replace routes; rebuild run id |
+| `admin-ui-classifier` | Standalone admin classifier start and status polling, including a run that stopped early. | `admin-ui/classifier-state.ts` | `reduceClassifier` | `start:idle`, `start:starting`, `poll:idle`, `poll:checking`, `poll:failed`, `poll:running`, `poll:complete`, `notice:runFailed` | requestId for start; pollId for status |
+| `admin-rebuild` | One background build.py run at a time in the owner server. | `admin_rebuild.py` | `reduce_rebuild` | `idle`, `running`, `succeeded`, `failed` | run id; succeed and fail must name the running id |
+| `admin-classify` | The owner server's background region classifier and its snapshot phase. | `admin_classify.py` | `reduce_classify` | `idle`, `running`, `finished`, `failed` | none; admin.py serialises events under a lock, a second start while running is a no-op, and progress must be the next count |
 
-Cesium Atlas status is delivered into `reduceAtlasPresentation`. The globe is not a second status enum.
+### Dispositions
 
-## Ranked follow-ups
+| Lifecycle | Owns | Module | Transition | Outcomes | Guarded by |
+| --- | --- | --- | --- | --- | --- |
+| `publication-disposition` | What crash recovery does with a generator backup or an owner journal it finds. | `publication_protocol.py` | `publication_disposition` | `none`, `discard`, `restore`, `committed-cleanup`, `blocked` | the generator lock; a journal with a live lock holder is blocked |
 
-1. Earth Replay chrome, in `earth-replay-stage.tsx`.
-2. Google Replay settings and chapter expansion, in `google-route-navigator-stage.tsx`. Leave the recoverable auth notice in `google-renderer-state.ts` alone.
-3. Atlas search open flag. Atlas screen. Wait for PR 172.
-4. Route thumbnail load. Atlas screen. Same wait.
-5. Build publication disposition in `build.py`, with an update to the exec test in `test_react_app.py`.
-6. Finder `view` and `filtersOpen`. Leave the URL-owned intent alone.
-7. Chunk recovery. Only if a third outcome appears.
+### Marker-file protocols
 
-The mobile Atlas sheet on `cursor/atlas-mobile-prototypes-53cb` is not in this list as work for this change. It belongs to that draft.
+| Lifecycle | Owns | Module | States | Identity |
+| --- | --- | --- | --- | --- |
+| `dist-manifest` | What dist/ is: a full or single-route build, recorded as the last step of make-dist.sh. | `scripts/dist-manifest.mjs` | `full`, `single-route` | .dist-manifest.json content_digest and file_count; a missing manifest is a failed or interrupted build |
+| `share-publish-receipt` | How far one single-route share publish got. | `scripts/publish-route-microsite.sh` | `validated`, `deployed`, `smoke-passed`, `smoke-failed`, `deploy-failed` | one receipt per run under .route-share/publish/, named by share name and UTC stamp |
+| `live-gate-status` | Whether a live-pipeline evidence directory proves a passing live gate. | `scripts/verify-live-pipeline.sh` | `running`, `passed`, `failed`, `interrupted` | status.json in each timestamped evidence directory; no status.json reads as blocked |
+
+### Derived, not stored
+
+| Lifecycle | Owns | Module | Values | Why |
+| --- | --- | --- | --- | --- |
+| `mobile-breakpoint` | Whether the viewport is below the mobile breakpoint. | `app/src/ui/use-mobile.ts` | none | Read from matchMedia with useSyncExternalStore during render, so a phone never paints the desktop layout first. There is no stored phase. |
+| `legacy-quest-link` | Legacy #quest/<slug> links. | `app/src/app/route-paths.ts` | none | The URL is the state. The router matches quest/:legacySlug itself and its loader replaces the entry with the route guide path, so no listener races the router. A link opened before the app starts is rewritten by canonicalizeLegacyQuestHash. |
+| `route-film` | A route film record: queued, rendering, failed, or ready with a poster. | `app/src/labs/route-film/route-film.ts` | `queued`, `rendering`, `failed`, `ready` | A closed union validated at parse time. The app reads it and never transitions it. |
+| `route-thumbnail` | A regional route card's satellite thumbnail state. | `app/src/surfaces/atlas/components/route-satellite-thumbnail.tsx` | `deferred`, `loading`, `loaded`, `failed`, `unavailable` | Only the image's own load or error outcome is stored. routeThumbnailState derives the rest from the URL and whether the card may load. Cards are keyed by route slug, so the URL is fixed while mounted. |
+| `geocode-outcome` | The result of one reverse-geocode lookup. | `admin_geocode.py` | `label`, `no_place`, `transient` | An outcome type, not a phase machine. A transient outcome is never cached. |
+| `route-status` | A route's triage status in quests.json. | `quest_meta.py` | `pending`, `approved`, `archived` | A closed record set, not a transition. A missing or unknown value reads as pending, legacy rejected reads as archived, and only approved is published. |
+
+### Left implicit on purpose
+
+| Lifecycle | Owns | Module | Why |
+| --- | --- | --- | --- |
+| `atlas-search-panel` | The Atlas search panel phase and its open flag. | `app/src/surfaces/atlas/components/atlas-search.tsx` | searchState derives the panel phase from the query and selection on every render. searchOpen is a local disclosure. |
+| `carousel-programmatic-selection` | Suppresses the carousel's own echo of a selection it made by scrolling. | `app/src/surfaces/atlas/components/region-route-carousel.tsx` | A one-slot ref latch, set by selectRoute and cleared by the matching scroll settle or the next microtask. It holds no phase that rendering reads. |
+| `route-library-return` | The route library path and scroll position to restore after opening a route. | `app/src/data/route-library-return.ts` | One sessionStorage record, written on leaving the library and taken once on return. Restoration is best-effort when storage is unavailable. |
+| `google-maps-loader` | Loading the Google Maps JavaScript API script once per page. | `app/src/providers/google-maps-loader.ts` | A module singleton promise. A failed load clears it, so the next caller appends a fresh script. |
+| `route-leaf-map-carried-status` | The leaf map keeps its previous ready or unavailable presentation while a replacement session waits. | `app/src/surfaces/routes/components/route-leaf-map-state.ts` | Product behaviour pinned by the test that retains presentation during effect replacement. Readiness and the error count still reset. |
+| `atlas-selection-copy` | Atlas copies the selected region name into the presentation reducer. | `app/src/surfaces/atlas/atlas-page.tsx` | A layout effect dispatches selectionChanged before paint, so no stale frame shows. |
+| `chunk-recovery` | Reloading the shell once after a failed dynamic import. | `app/src/app/chunk-recovery.ts` | Two outcomes, each already a function: reload once per shell, or leave the manual retry. Offline and blocked storage skip the reload. |
+| `finder-presentation` | Finder filter disclosure and list or map view. | `app/src/surfaces/finder/finder-page.tsx` | filtersOpen and view are local choices. view may stay map when the result is not a match list; the screen then shows the list. |
+| `discovery-throttle` | The discovery API's minimum interval between upstream searches. | `app/server/discovery.ts` | One module-level timestamp per server instance. A request inside the interval gets 429 and nothing else depends on it. |
+| `course-store` | Saved courses on the server. | `app/server/courses.ts` | The store is the record. FileCourseStore and R2CourseStore implement CourseStore with no runtime phase. |
+
+<!-- END GENERATED: lifecycles.json -->
+
+## Left implicit
+
+The entries of kind `left-implicit` above are deliberate. Each reason is in the registry. Convert one only when a defect or a new outcome needs it, and update its entry in the same change.
+
+## Follow-ups
+
+These are open. Each is a known gap, not a decision.
+
+- In progress on another branch: an Atlas region picked after the world reported unavailable stays `waiting` in `reduceAtlasPresentation`, because the engine refuses the selection and publishes no further status. The screen shows a loading message that never ends.
+- In progress on another branch: a regional-fallback fix for stale route paths.
+- An unrecorded climb still reads as 0 in region totals, in the maximum-climb filter, in search indexing, and in the route genome.
+- `usePlannedRouteStorageStatus` exposes the planned-route memory-only mode, but no screen shows a "saved only in this tab" notice.
+- The standalone admin polls a running rebuild every two seconds with no deadline. If the owner server dies, polling never stops.
+- After a save, the standalone admin clears the drafts and refreshes. If that refresh fails, the cards are not re-rendered, so their dirty marking is stale.
+- Published media files are never removed when no route references them, so they still ship.
+- The route cover source image is cached by slug only. A changed route bounding box reuses the old image.
+- The route film resume fingerprint names the route by slug only. A changed route record does not invalidate a partial export.
+- Source and projection freshness has no named state. `search:check` compares the search index with the generated projections, but nothing records whether the projections are current with `quests.json`.
+- Real-provider behaviour of the renderer changes is unproven until the live gate passes. Read it with `./scripts/live-gate-status.sh latest`.
+- The Atlas engine conversion changed the camera. Before production, run `e2e/atlas-region-live.spec.ts` and `e2e/design-review-live.spec.ts` with the live configuration. `e2e/atlas-attribution-live.spec.ts` and `e2e/atlas-globe-quality-live.spec.ts` are advisable. Each spec skips without its environment variable, and a skip is not a pass.
+- Five Python tests and any real `build.py` run need the private Strava export. They cannot be verified without it.
 
 ## What does not earn a reducer
 
-These are one choice each. ADR-0016 leaves them local.
+Each of these is one choice. ADR-0016 leaves them local.
 
 - Atlas activity mode is the `activity` query on `atlas-page.tsx`.
 - The route guide sheet is `peek`, `half`, or `expanded` in `route-detail-page.tsx`.
-- Replay chapter relief or profile, and the two disclosure booleans, live in `replay-chapter-controls.tsx`.
-- The replay route picker is open or closed, plus a query string.
-- Course create mode is `generate` or `import`. The place search beside it is already the reducer in `course-form.tsx`.
+- Replay chapter relief or profile, and its two disclosure booleans, live in `replay-chapter-controls.tsx`.
+- The replay route picker is open or closed, plus a query string, in `replay-route-picker.tsx`.
+- Course create mode is `generate` or `import` in `course-form.tsx`.
 - The course page token and connection counter only retrigger `reduceCourseWorkspace`.
 - Hash routes are the URL. ADR-0016 forbids a second store that copies them.
+- `useIsMobile` is derived from the media query on every render. It is in the registry as `derived`.
 
-Domain enums are already closed. Geometry status is `ready`, `missing`, or `invalid`. Curation review status is `draft`, `reviewed`, or `published`. Replay provider status is `loading`, `ready`, `partial`, or `unavailable`. They are records, not UI transitions.
+Domain enums are closed records, not UI transitions. Geometry status is `ready`, `missing`, or `invalid`. Curation review status is `draft`, `reviewed`, or `published`. Route triage status is `pending`, `approved`, or `archived`.

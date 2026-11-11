@@ -7,7 +7,7 @@
     "dev": "vite --host 0.0.0.0 --port 8787",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0 --port 8788",
-    "typecheck": "npm run admin:check && tsc -b",
+    "typecheck": "npm run admin:check && npm run lifecycle:check && tsc -b",
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
     "test:e2e:earth": "GODIESEL_LIVE_EARTH_E2E=1 playwright test --config playwright.live.config.ts earth-replay-live.spec.ts",
@@ -30,6 +30,7 @@
     "search:check": "node scripts/check-search-index.mjs",
     "admin:build": "node scripts/build-admin-modules.mjs --write",
     "admin:check": "node scripts/build-admin-modules.mjs",
+    "lifecycle:check": "node ../scripts/check-lifecycles.mjs",
     "test:e2e:courses": "playwright test --config playwright.courses.config.ts",
     "course:agent": "node scripts/course-agent.mjs"
   },

@@ -129,6 +129,14 @@ The browser must receive successful responses from Google Maps JavaScript, Googl
 
 The command intentionally fails instead of skipping when a credential, provider, billing account, quota, hardware renderer, source export, or deployed response is unavailable.
 Evidence is written under ignored `app/artifacts/live-pipeline/` using hashes and field inventories rather than raw personal values.
+Each evidence directory has a `status.json` that reads `passed` only after the last step.
+Check the newest run with:
+
+```bash
+./scripts/live-gate-status.sh latest
+```
+
+It exits non-zero unless that run passed. Missing, running, failed, or interrupted evidence reads as blocked.
 
 ## Build
 
@@ -143,11 +151,15 @@ Generated deploy files are not committed.
 
 ## Deploy
 
-Deploy the generated React output with Wrangler:
+Build, then deploy only if `dist/` is still the full build that `make-dist.sh` recorded:
 
 ```bash
-npx wrangler pages deploy dist --project-name=godiesel
+./make-dist.sh
+node scripts/dist-manifest.mjs check --scope full && npx wrangler pages deploy dist --project-name=godiesel --branch=production
 ```
+
+`make-dist.sh` writes `.dist-manifest.json` as its last step.
+The check refuses a missing manifest, a single-route bundle, and a `dist/` that changed after packaging.
 
 ## Publish a single-route microsite
 
@@ -168,6 +180,10 @@ Publish the validated bundle to its stable Cloudflare Pages branch URL:
 
 This produces `https://share-appian-way.godiesel.pages.dev/` and smoke-tests the public guide and replay shell.
 Choose a durable share name because it defines the stable URL.
+The publisher checks the dist manifest for this route's single-route bundle, before and after staging, and refuses anything else.
+It refuses to replace a share that already exists unless you add `--replace-existing` after explicit owner approval.
+Each real publish writes a receipt under `.route-share/publish/` that records the phase it reached: `validated`, `deployed`, then `smoke-passed` or `smoke-failed`, or `deploy-failed`.
+A failed smoke leaves the failed bundle live. Nothing is rolled back automatically.
 Live Google 3D imagery must still be reviewed in a hardware-accelerated browser.
 
 Cloudflare Pages should use `./make-dist.sh` as the build command and `dist` as the output directory.

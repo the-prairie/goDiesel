@@ -157,3 +157,10 @@ The reducer conventions above apply unchanged. Browser IO remains in the existin
 module script. The first boundary extraction moves only `escapeHtml` to prove the
 module delivery path. Mutation and classification state remain separate follow-up
 migrations with their own characterization tests.
+
+> **Amendment, 2026-11-11.** Both follow-up migrations exist.
+> `admin-ui/mutation-state.ts` owns drafts, save, route refreshes, and the
+> rebuild lifecycle. `admin-ui/classifier-state.ts` owns classifier start and
+> polling. The sentence above is kept as the record of the decision at the
+> time. The current inventory is the
+> [lifecycle registry](../architecture/lifecycles.json).

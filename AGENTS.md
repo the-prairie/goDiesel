@@ -45,4 +45,11 @@ through characterization tests. Keep IO in the owning component, hook, or engine
 A boolean, a disclosure, or a URL parameter stays local.
 Follow `docs/adr/0016-explicit-state-transitions-at-lifecycle-boundaries.md`
 and `docs/adr/0018-discriminated-reducers-for-lifecycle-state.md`.
-The inventory is `docs/architecture/state-machines.md`.
+The inventory is the registry `docs/architecture/lifecycles.json`.
+`docs/architecture/state-machines.md` explains it, and its tables are generated from the registry.
+
+Register every new lifecycle module or reducer in the registry.
+`npm run typecheck` runs `scripts/check-lifecycles.mjs`, which fails when the registry and the code disagree.
+Regenerate the tables with `node scripts/check-lifecycles.mjs --write`.
+Follow `docs/adr/0019-recovery-dispositions-marker-protocols-and-a-checked-registry.md`
+for crash recovery and script protocols.
