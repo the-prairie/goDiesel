@@ -19,16 +19,16 @@ export function AppShell() {
   const isReplayLab = location.pathname.startsWith("/lab/");
   const isRouteDetail = /^\/routes\/[^/]+$/.test(location.pathname);
   const isCoursePreview = /^\/courses\/[^/]+\/preview$/.test(location.pathname);
-  const isRoutesLibrary = section.id === "routes" && !isRouteDetail;
-  const isWideUtility = isRoutesLibrary || section.id === "admin";
+  const isRoutesLibrary = section?.id === "routes" && !isRouteDetail;
+  const isWideUtility = isRoutesLibrary || section?.id === "admin";
   const isImmersive =
     isAtlas ||
     isReplayLab ||
     isRouteDetail ||
     isCoursePreview ||
-    section.id === "finder" ||
-    section.id === "replay";
-  const isUtility = section.id === "admin";
+    section?.id === "finder" ||
+    section?.id === "replay";
+  const isUtility = section?.id === "admin";
   const surface = surfaceOfHandle(useMatches().at(-1)?.handle);
 
   // The tab names the surface, so history and tab lists are legible.
@@ -58,7 +58,7 @@ export function AppShell() {
                 data-testid="app-page-title"
                 className="truncate text-control font-semibold text-ink"
               >
-                {section.label}
+                {section?.label}
               </div>
               <div
                 data-testid="global-product-subtitle"

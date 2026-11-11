@@ -398,6 +398,8 @@ test("an unknown link says so inside the shell and offers a way to Atlas", async
   // Not silently redirected, and the navigation stays.
   await expect(page).toHaveURL(/#\/finderr$/);
   await expect(page.getByTestId("atlas-spine-mobile")).toBeVisible();
+  // A page that does not exist is not any section.
+  await expect(page.getByTestId("atlas-spine-mobile").locator("[aria-current]")).toHaveCount(0);
   await expect(page).toHaveTitle("Page not found · goDiesel");
 
   await page.getByRole("link", { name: "Open Atlas" }).click();
