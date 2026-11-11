@@ -20,7 +20,6 @@ const final = routeTrailerFrame(route, ROUTE_TRAILER_DURATION_SECONDS);
 const start = () =>
   reduceTrailer(initialTrailerState(opening), {
     type: "sessionStarted",
-    sessionId: 1,
     frame: opening,
   });
 const ready = () =>
@@ -95,9 +94,9 @@ describe("trailer session transitions", () => {
   it("rejects provider outcomes from replaced sessions", () => {
     const state = reduceTrailer(ready(), {
       type: "sessionStarted",
-      sessionId: 2,
       frame: opening,
     });
+    expect(state.sessionId).toBe(2);
     expect(
       reduceTrailer(state, {
         type: "providerReady",
@@ -114,5 +113,28 @@ describe("trailer session transitions", () => {
         status: { state: "unavailable", message: "Old" },
       }),
     ).toBe(state);
+  });
+  it("mints a new session id on every session start", () => {
+    expect(start().sessionId).toBe(1);
+    expect(
+      reduceTrailer(start(), { type: "sessionStarted", frame: opening })
+        .sessionId,
+    ).toBe(2);
+  });
+  it("a new session starts paused at its opening frame", () => {
+    const state = reduceTrailer(
+      reduceTrailer(ready(), { type: "skipped", frame: final }),
+      { type: "restarted", frame: opening },
+    );
+    expect(state.playback).toBe("playing");
+    const next = reduceTrailer(state, {
+      type: "sessionStarted",
+      frame: opening,
+    });
+    expect(next).toMatchObject({
+      playback: "paused",
+      status: { state: "loading" },
+      frame: opening,
+    });
   });
 });

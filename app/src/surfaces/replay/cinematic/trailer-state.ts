@@ -8,7 +8,7 @@ export type TrailerState = {
   frame: RouteTrailerFrame;
 };
 export type TrailerEvent =
-  | { type: "sessionStarted"; sessionId: number; frame: RouteTrailerFrame }
+  | { type: "sessionStarted"; frame: RouteTrailerFrame }
   | {
       type: "providerReported";
       sessionId: number;
@@ -47,7 +47,8 @@ export function reduceTrailer(
     case "sessionStarted":
       return {
         ...state,
-        sessionId: event.sessionId,
+        sessionId: state.sessionId + 1,
+        playback: "paused",
         status: initialTrailerState(event.frame).status,
         frame: event.frame,
       };

@@ -7,7 +7,7 @@ import {
   ScanLine,
   SkipForward,
 } from "lucide-react";
-import { useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/ui/button";
@@ -21,7 +21,11 @@ import {
   type GoogleRouteNavigatorEngine,
 } from "@/surfaces/replay/renderers/google-route-navigator-engine";
 
-import { initialTrailerState, reduceTrailer } from "./trailer-state";
+import {
+  initialTrailerState,
+  reduceTrailer,
+  type TrailerEvent,
+} from "./trailer-state";
 
 function routePictureLine(route: QuestRoute) {
   const place = `${route.name} ${route.region}`.toLowerCase();
@@ -42,11 +46,18 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<GoogleRouteNavigatorEngine | undefined>(undefined);
   const elapsedRef = useRef(0);
-  const sessionIdRef = useRef(0);
-  const playingRef = useRef(false);
-  const [state, dispatch] = useReducer(reduceTrailer, route, (route) =>
+  const [state, setState] = useState(() =>
     initialTrailerState(routeTrailerFrame(route, 0)),
   );
+  // Synchronous mirror of the reducer state for the frame loop and provider
+  // callbacks. It is written only here, so the reducer stays the single owner.
+  const stateRef = useRef(state);
+  const dispatch = useCallback((event: TrailerEvent) => {
+    const next = reduceTrailer(stateRef.current, event);
+    if (next === stateRef.current) return;
+    stateRef.current = next;
+    setState(next);
+  }, []);
   const { frame, status } = state;
   const playing = state.playback === "playing";
 
@@ -58,23 +69,18 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
     return next;
   };
 
-  const setPlayback = (next: boolean) => {
-    playingRef.current = next;
+  const setPlayback = (next: boolean) =>
     dispatch({ type: "playbackChanged", playing: next });
-  };
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const sessionId = ++sessionIdRef.current;
+    let disposed = false;
     const engine = createGoogleRouteNavigatorEngine();
     engineRef.current = engine;
     elapsedRef.current = 0;
-    dispatch({
-      type: "sessionStarted",
-      sessionId,
-      frame: routeTrailerFrame(route, 0),
-    });
+    dispatch({ type: "sessionStarted", frame: routeTrailerFrame(route, 0) });
+    const { sessionId } = stateRef.current;
 
     void engine.mount({
       apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
@@ -82,7 +88,7 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
       route,
       groundingMode: "ground",
       onStatus: (next) => {
-        if (sessionIdRef.current !== sessionId) return;
+        if (disposed || stateRef.current.sessionId !== sessionId) return;
         if (next.state !== "ready") {
           dispatch({
             type: "providerReported",
@@ -101,7 +107,6 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
         elapsedRef.current = initialElapsed;
         engine.setCamera(initialFrame.camera);
         engine.setRouteReveal(initialFrame.reveal);
-        playingRef.current = !reducedMotion;
         dispatch({
           type: "providerReady",
           sessionId,
@@ -113,8 +118,7 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
     });
 
     return () => {
-      sessionIdRef.current += 1;
-      setPlayback(false);
+      disposed = true;
       engine.destroy();
       if (engineRef.current === engine) engineRef.current = undefined;
     };
@@ -128,7 +132,7 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
     const tick = (now: number) => {
       const deltaSeconds = Math.min(0.1, (now - previous) / 1_000);
       previous = now;
-      if (playingRef.current) {
+      if (stateRef.current.playback === "playing") {
         const elapsed = Math.min(
           ROUTE_TRAILER_DURATION_SECONDS,
           elapsedRef.current + deltaSeconds,
@@ -151,13 +155,11 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
 
   const restart = () => {
     const next = commitFrame(0);
-    playingRef.current = true;
     dispatch({ type: "restarted", frame: next });
   };
 
   const skip = () => {
     const next = commitFrame(ROUTE_TRAILER_DURATION_SECONDS);
-    playingRef.current = false;
     dispatch({ type: "skipped", frame: next });
   };
 
@@ -291,7 +293,9 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
           aria-label={playing ? "Pause trailer" : "Play trailer"}
           className="grid size-9 shrink-0 place-items-center border border-white/30 bg-black/42 text-white backdrop-blur-md hover:bg-black/70 disabled:opacity-45"
           disabled={status.state !== "ready"}
-          onClick={() => setPlayback(!playingRef.current)}
+          onClick={() =>
+            setPlayback(stateRef.current.playback !== "playing")
+          }
           type="button"
         >
           {playing ? (
