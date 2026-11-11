@@ -57,6 +57,11 @@ for (const viewport of [
     expect(xml).toContain('lat="37.7694"');
     expect(xml).not.toContain("<time>");
     await page.getByRole("button", { name: "New route", exact: true }).click();
+    // The saved-courses list appears when its load starts; wait for it before
+    // waiting for that load to finish.
+    await expect(
+      page.getByRole("region", { name: "Saved courses", exact: true }),
+    ).toBeVisible();
     await expect(page.getByText("Opening your courses…", { exact: true })).toHaveCount(0);
     const savedLink = page.getByRole("link", { name: new RegExp(name) });
     while (await savedLink.count() === 0) {
@@ -529,3 +534,319 @@ for (const width of [1440, 390]) {
     }
   });
 }
+
+const generatedCourse = {
+  id: "course-66666666-1111-4111-8111-111111111111",
+  name: "Generated test loop",
+  description: "Generate fixture",
+  activity: "Run",
+  createdAt: "2026-10-21T00:00:00Z",
+  source: {
+    kind: "generated",
+    provider: "brouter",
+    profile: "foot",
+    request: {
+      start: { name: "Test park", lat: 37.77, lng: -122.48 },
+      distance: 10,
+      unit: "km",
+      activity: "Run",
+      vibes: [],
+      seed: 0,
+    },
+  },
+  segments: [
+    [
+      { lat: 37.77, lng: -122.48 },
+      { lat: 37.775, lng: -122.475 },
+      { lat: 37.77, lng: -122.47 },
+      { lat: 37.77, lng: -122.48 },
+    ],
+  ],
+  distanceM: 0,
+  ascentM: null,
+  warnings: [],
+};
+
+async function stubCourseStudio(
+  page: import("@playwright/test").Page,
+  options: { fail?: boolean } = {},
+) {
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let generateRequests = 0;
+  await page.route("**/api/discovery?place=*", (route) =>
+    route.fulfill({
+      json: { places: [{ name: "Test park", lat: 37.77, lng: -122.48 }] },
+    }),
+  );
+  await page.route("**/api/courses**", async (route) => {
+    if (route.request().method() !== "POST")
+      return route.fulfill({ json: { courses: [] } });
+    generateRequests += 1;
+    await gate;
+    await route
+      .fulfill(
+        options.fail
+          ? { status: 503, json: { error: "Test provider unavailable" } }
+          : { json: { course: generatedCourse, receipt: "receipt-fixture" } },
+      )
+      .catch(() => {});
+  });
+  return { release: () => release(), generateRequests: () => generateRequests };
+}
+
+async function choosePlace(page: import("@playwright/test").Page) {
+  await expect(page.getByRole("radio", { name: "Run", exact: true })).toBeEnabled();
+  await page.getByLabel("Start near a place or landmark").fill("Test park");
+  await page.getByRole("button", { name: "Find starting place" }).click();
+  await page
+    .getByLabel("Starting places")
+    .getByRole("button", { name: "Test park", exact: true })
+    .click();
+}
+
+for (const viewport of [
+  { width: 390, height: 844 },
+  { width: 320, height: 640 },
+  { width: 844, height: 390 },
+]) {
+  test(`generating shows progress in view, then brings the preview into view and focus at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    const studio = await stubCourseStudio(page);
+    await page.goto("/#/courses");
+    await choosePlace(page);
+    await page.getByRole("button", { name: "Generate route", exact: true }).click();
+    const progress = page.getByText(
+      "Comparing loops and mapped features. This can take up to 45 seconds…",
+      { exact: true },
+    );
+    await expect(progress).toBeInViewport({ ratio: 1 });
+    await expect(
+      page.getByRole("button", { name: "Generating route…", exact: true }),
+    ).toBeVisible();
+    studio.release();
+    const heading = page
+      .getByRole("article", { name: "Course preview" })
+      .getByRole("heading", { name: generatedCourse.name, exact: true });
+    await expect(heading).toBeFocused();
+    await expect(heading).toBeInViewport({ ratio: 1 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+  });
+
+  test(`a failed generate keeps the form usable and the error in view at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    const studio = await stubCourseStudio(page, { fail: true });
+    await page.goto("/#/courses");
+    await choosePlace(page);
+    await page.getByRole("button", { name: "Generate route", exact: true }).click();
+    studio.release();
+    const alert = page.getByRole("alert");
+    await expect(alert).toContainText("Test provider unavailable");
+    await expect(alert).toBeInViewport();
+    await expect(
+      page.getByRole("button", { name: "Reload workspace", exact: true }),
+    ).toHaveCount(0);
+    await expect(page.getByLabel("Start near a place or landmark")).toBeEnabled();
+    await expect(
+      page.getByRole("button", { name: "Generate route", exact: true }),
+    ).toBeEnabled();
+  });
+}
+
+test("the preview arriving does not move a desktop page where both columns are visible", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  // Instant scrolling, so any progress reveal has finished before measuring.
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const studio = await stubCourseStudio(page);
+  await page.goto("/#/courses");
+  await choosePlace(page);
+  await page.getByRole("button", { name: "Generate route", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Generating route…", exact: true }),
+  ).toBeVisible();
+  const submit = page.getByRole("button", { name: /Generat(e|ing) route/ });
+  const before = (await submit.boundingBox())!.y;
+  const scrollBefore = await page.evaluate(() => window.scrollY);
+  // Every layout shift from here on counts, including ones near an input.
+  await page.evaluate(() => {
+    const runtime = window as typeof window & { __courseShift: number };
+    runtime.__courseShift = 0;
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries())
+        runtime.__courseShift += (entry as PerformanceEntry & { value: number }).value;
+    }).observe({ type: "layout-shift" });
+  });
+  studio.release();
+  const heading = page
+    .getByRole("article", { name: "Course preview" })
+    .getByRole("heading", { name: generatedCourse.name, exact: true });
+  await expect(heading).toBeFocused();
+  await expect(heading).toBeInViewport({ ratio: 1 });
+  await expect(submit).toHaveText("Generate route");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Create a course" }),
+  ).toBeVisible();
+  expect(Math.abs((await submit.boundingBox())!.y - before)).toBeLessThanOrEqual(1);
+  expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore);
+  expect(
+    await page.evaluate(
+      () => (window as typeof window & { __courseShift: number }).__courseShift,
+    ),
+  ).toBeLessThan(0.01);
+});
+
+for (const viewport of [
+  { width: 390, height: 844 },
+  { width: 320, height: 640 },
+  { width: 844, height: 390 },
+]) {
+  test(`saving shows its progress, failure and success where Save was tapped at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    const course = {
+      id: "course-77777777-1111-4111-8111-111111111111",
+      name: "Save feedback fixture",
+      description: "Save feedback fixture",
+      activity: "Run",
+      createdAt: "2026-10-21T00:00:00Z",
+      source: { kind: "gpx", filename: "fixture.gpx" },
+      segments: [
+        [
+          { lat: 37.77, lng: -122.48 },
+          { lat: 37.771, lng: -122.479 },
+        ],
+      ],
+      distanceM: 142,
+      ascentM: null,
+      warnings: [],
+    };
+    let saveAttempts = 0;
+    let releaseSave: () => void = () => {};
+    await page.route("**/api/courses**", async (route) => {
+      const request = route.request();
+      if (new URL(request.url()).searchParams.has("id"))
+        return route.fulfill({ json: { course } });
+      if (request.method() !== "POST")
+        return route.fulfill({ json: { courses: [] } });
+      if (request.postDataJSON()?.action !== "save")
+        return route.fulfill({ json: { course } });
+      saveAttempts += 1;
+      await new Promise<void>((resolve) => {
+        releaseSave = resolve;
+      });
+      if (saveAttempts === 1)
+        return route.fulfill({
+          status: 503,
+          json: { error: "Course storage unavailable" },
+        });
+      return route.fulfill({ json: { course } });
+    });
+    await page.goto("/#/courses");
+    await page.getByRole("radio", { name: "Import GPX", exact: true }).click();
+    await page.getByLabel("Upload GPX").setInputFiles({
+      name: "fixture.gpx",
+      mimeType: "application/gpx+xml",
+      buffer: Buffer.from(gpx("fixture")),
+    });
+    const preview = page.getByRole("article", { name: "Course preview" });
+    const heading = preview.getByRole("heading", { name: course.name, exact: true });
+    await expect(heading).toBeFocused();
+    const save = preview.getByRole("button", { name: "Save course", exact: true });
+    await save.click();
+    const saving = page.getByRole("status").filter({ hasText: "Saving your course…" });
+    await expect(saving).toBeInViewport({ ratio: 1 });
+    await expect.poll(() => saveAttempts).toBe(1);
+    releaseSave();
+    const alert = page.getByRole("alert");
+    await expect(alert).toContainText("Course storage unavailable");
+    await expect(alert).toContainText(
+      "Your preview is still here. Save course to try again.",
+    );
+    await expect(alert).toBeInViewport({ ratio: 1 });
+    await expect(save).toBeInViewport({ ratio: 1 });
+    await expect(save).toBeEnabled();
+    await save.click();
+    await expect(saving).toBeInViewport({ ratio: 1 });
+    await expect.poll(() => saveAttempts).toBe(2);
+    releaseSave();
+    await expect(page).toHaveURL(new RegExp(course.id));
+    await expect(preview).toContainText("Saved course");
+    await expect(preview.getByText("Saved course", { exact: true })).toBeInViewport();
+    await expect(heading).toBeInViewport({ ratio: 1 });
+    expect(saveAttempts).toBe(2);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+  });
+}
+
+test("Generate route says what it is waiting for, one reason at a time", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  let releaseSearch: () => void = () => {};
+  const searchGate = new Promise<void>((resolve) => {
+    releaseSearch = resolve;
+  });
+  const studio = await stubCourseStudio(page);
+  await page.route("**/api/discovery?place=*", async (route) => {
+    await searchGate;
+    await route.fulfill({
+      json: { places: [{ name: "Test park", lat: 37.77, lng: -122.48 }] },
+    });
+  });
+  await page.goto("/#/courses");
+  await expect(page.getByRole("radio", { name: "Run", exact: true })).toBeEnabled();
+  const generate = page.getByRole("button", { name: "Generate route", exact: true });
+  const hint = page.locator("#course-generate-hint");
+  await expect(generate).toBeDisabled();
+  await expect(generate).toHaveAttribute("aria-describedby", "course-generate-hint");
+  await expect(hint).toHaveText(
+    "Enter a starting place, then choose it from the results.",
+  );
+  const field = page.getByLabel("Start near a place or landmark");
+  await field.fill("Test park");
+  await expect(page.getByText("Finding places…", { exact: true })).toBeVisible();
+  await expect(hint).toHaveText(
+    "Finding places. Choose one from the results to continue.",
+  );
+  releaseSearch();
+  const choice = page
+    .getByLabel("Starting places")
+    .getByRole("button", { name: "Test park", exact: true });
+  await expect(choice).toBeVisible();
+  await expect(hint).toHaveText("Choose a starting place from the results.");
+  await choice.click();
+  await expect(generate).toBeEnabled();
+  await expect(hint).toHaveCount(0);
+  await expect(generate).not.toHaveAttribute("aria-describedby");
+  const distance = page.getByLabel("Target distance", { exact: true });
+  await distance.fill("0");
+  await expect(generate).toBeDisabled();
+  await expect(hint).toHaveText("Enter a distance between 1 and 100 km.");
+  await distance.fill("5");
+  await expect(generate).toBeEnabled();
+  await field.press("Enter");
+  await expect.poll(() => studio.generateRequests()).toBe(1);
+  studio.release();
+  await expect(
+    page
+      .getByRole("article", { name: "Course preview" })
+      .getByRole("heading", { name: generatedCourse.name, exact: true }),
+  ).toBeFocused();
+});
