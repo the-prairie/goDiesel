@@ -58,6 +58,7 @@ from owner_publication import (
     owner_publication_subprocess_options,
     recover_owner_publication,
 )
+from quest_meta import normalize_route_status
 from route_imports import route_metadata
 from route_media import (
     match_photo_to_route,
@@ -554,10 +555,7 @@ def routes_summary():
         typ = meta.activity_type
         desc = meta.description
         km = _summary_distance_km(act, generated_routes.get(str(aid)))
-        status = r.get('status', 'pending')
-        # Treat legacy 'rejected' as 'archived' (same concept, friendlier name)
-        if status == 'rejected':
-            status = 'archived'
+        status = normalize_route_status(r.get('status'))
         auto_region = (geo_cache.get(aid) or {}).get('region') or ''
         item = {
             'activity_id': aid,

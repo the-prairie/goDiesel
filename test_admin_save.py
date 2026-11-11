@@ -1,0 +1,87 @@
+"""The admin route list and /api/save against a synthetic checkout."""
+
+import json
+import threading
+import urllib.error
+import urllib.request
+from datetime import datetime
+from http.server import ThreadingHTTPServer
+
+import pytest
+
+from test_admin_classify_run import load_admin
+
+
+@pytest.fixture
+def admin(tmp_path, monkeypatch):
+    return load_admin(tmp_path, monkeypatch)
+
+
+@pytest.fixture
+def served(admin):
+    server = ThreadingHTTPServer(("127.0.0.1", 0), admin.Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def request(url, method="GET", body=None):
+    data = None if body is None else json.dumps(body).encode()
+    req = urllib.request.Request(url, data=data, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=5) as response:
+            return response.status, json.loads(response.read())
+    except urllib.error.HTTPError as error:
+        return error.code, json.loads(error.read())
+
+
+def write_routes(admin, routes):
+    """Store routes in quests.json, each with a synthetic export row."""
+    (admin.QUESTS / "quests.json").write_text(json.dumps({"routes": routes}, indent=2) + "\n")
+    admin.acts_by_id = {
+        route["activity_id"]: {
+            "Activity Name": f"Route {route['activity_id']}",
+            "Activity Type": "Run",
+            "date": datetime(2026, 1, int(route["activity_id"])),
+            "Distance": 5.0,
+        }
+        for route in routes
+    }
+
+
+def listed_statuses(served):
+    status, body = request(f"{served}/api/routes")
+    assert status == 200
+    return {route["activity_id"]: route["status"] for route in body}
+
+
+# ── Read path: /api/routes lists one of the three statuses ──
+
+
+def test_the_list_keeps_todays_statuses(admin, served):
+    write_routes(admin, [
+        {"activity_id": "1", "status": "pending"},
+        {"activity_id": "2", "status": "approved"},
+        {"activity_id": "3", "status": "archived"},
+    ])
+    assert listed_statuses(served) == {"1": "pending", "2": "approved", "3": "archived"}
+
+
+def test_the_list_shows_legacy_rejected_as_archived(admin, served):
+    write_routes(admin, [{"activity_id": "1", "status": "rejected"}])
+    assert listed_statuses(served) == {"1": "archived"}
+
+
+def test_the_list_shows_a_missing_status_as_pending(admin, served):
+    write_routes(admin, [{"activity_id": "1"}])
+    assert listed_statuses(served) == {"1": "pending"}
+
+
+@pytest.mark.parametrize("stored", ["bogus", None, 3, ""])
+def test_the_list_shows_an_unknown_status_as_pending(admin, served, stored):
+    write_routes(admin, [{"activity_id": "1", "status": stored}])
+    assert listed_statuses(served) == {"1": "pending"}
