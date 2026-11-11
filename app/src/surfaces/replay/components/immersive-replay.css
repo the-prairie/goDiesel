@@ -3,11 +3,12 @@ body:has(.immersive-replay) .atlas-spine-mobile {
   display: none;
 }
 
-/* The immersive stage covers the whole screen, so its header and dock add the
-   safe-area insets (index.css --safe-area-*, 0 without a notch or home
-   indicator) to their own spacing on every edge they touch. */
+/* The immersive stage covers the whole screen, so its header and dock clear
+   the safe-area insets (index.css --safe-area-*, 0 without a notch or home
+   indicator) on every edge they touch. The header's top keeps its 1rem or
+   the inset, whichever is larger; the other edges add the inset. */
 .immersive-replay .replay-header {
-  padding-top: calc(1rem + var(--safe-area-top));
+  padding-top: max(1rem, var(--safe-area-top));
   padding-right: calc(0.75rem + var(--safe-area-right));
   padding-left: calc(0.75rem + var(--safe-area-left));
   background: linear-gradient(#101820ba, #10182040 72%, transparent);

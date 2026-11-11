@@ -14,6 +14,7 @@ import {
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -21,6 +22,7 @@ import {
 import { Link } from "react-router-dom";
 
 import { Button } from "@/ui/button";
+import { cn } from "@/ui/utils";
 import {
   ReplayElevationScrubber,
   type ReplayElevationScrubberHandle,
@@ -78,6 +80,48 @@ function useShortViewport() {
   );
 }
 
+// The desktop dock is a single row. When its own box is narrower than that row
+// needs, the stage uses the compact (phone) dock instead, so no control is cut
+// off and the stage's grid column is never pushed wider than the stage. The
+// row's need is measured from the row itself the moment it overflows, never
+// hard-coded, and read from the dock's box, so it holds at any viewport,
+// pointer, rail width or safe-area inset.
+function createDockFit() {
+  let element: HTMLElement | null = null;
+  let narrow = false;
+  let neededWidth = Number.POSITIVE_INFINITY;
+  const listeners = new Set<() => void>();
+  const check = () => {
+    if (!element) return;
+    let next = narrow;
+    if (!narrow && element.scrollWidth > element.clientWidth + 1) {
+      neededWidth = element.scrollWidth;
+      next = true;
+    } else if (narrow && element.clientWidth >= neededWidth) {
+      next = false;
+    }
+    if (next === narrow) return;
+    narrow = next;
+    for (const listener of listeners) listener();
+  };
+  return {
+    check,
+    narrow: () => narrow,
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    observe(next: HTMLElement | null) {
+      element = next;
+      if (!next) return undefined;
+      const observer = new ResizeObserver(check);
+      observer.observe(next);
+      check();
+      return () => observer.disconnect();
+    },
+  };
+}
+
 export function EarthReplayStage({
   route,
   pickerRoutes,
@@ -104,6 +148,10 @@ export function EarthReplayStage({
   const [chromeVisible, setChromeVisible] = useState(true);
   const isMobile = useIsMobile();
   const shortViewport = useShortViewport();
+  const dockRef = useRef<HTMLDivElement>(null);
+  const [dockFit] = useState(createDockFit);
+  const dockNarrow = useSyncExternalStore(dockFit.subscribe, dockFit.narrow, () => false);
+  const compactDock = isMobile || dockNarrow;
   const reducedMotion = useReducedMotion();
   const totalDistanceM = routeDistanceM(route);
   const operational = earthReplayOperational(status);
@@ -183,6 +231,10 @@ export function EarthReplayStage({
     return () => cancelAnimationFrame(frame);
   }, [control.playing, operational, route, totalDistanceM]);
 
+  useLayoutEffect(() => dockFit.observe(dockRef.current), [dockFit]);
+  // Switching forms changes what the dock holds: measure again before paint.
+  useLayoutEffect(() => dockFit.check(), [dockFit, compactDock]);
+
   useEffect(() => {
     dispatchSession({ type: "presentationReset", isMobile, shortViewport });
   }, [dispatchSession, isMobile, shortViewport]);
@@ -218,7 +270,7 @@ export function EarthReplayStage({
       data-light-phase={recordedLight.phase}
       onPointerMove={() => setChromeVisible(true)}
       onFocusCapture={() => setChromeVisible(true)}
-      className="relative grid h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden bg-[#02070a] md:h-dvh md:[@media(min-height:501px)]:min-h-[36rem]"
+      className="relative grid h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto] overflow-hidden bg-[#02070a] md:h-dvh md:[@media(min-height:501px)]:min-h-[36rem]"
     >
       <div
         ref={containerRef}
@@ -333,10 +385,16 @@ export function EarthReplayStage({
 
       <div className="pointer-events-none relative row-start-2 z-20 flex justify-center">
         <div
+          ref={dockRef}
           data-testid="replay-controls"
-          className="pointer-events-auto w-full border-t border-line bg-surface/96 p-2 pr-[calc(0.5rem+var(--safe-area-right))] text-ink shadow-sheet backdrop-blur sm:flex sm:items-center sm:gap-2 sm:px-3 sm:py-2 sm:pr-[calc(0.75rem+var(--safe-area-right))] md:pb-[calc(0.5rem+var(--safe-area-bottom))]"
+          data-dock-form={compactDock ? "compact" : "row"}
+          className={cn(
+            "pointer-events-auto w-full border-t border-line bg-surface/96 p-2 pr-[calc(0.5rem+var(--safe-area-right))] text-ink shadow-sheet backdrop-blur sm:px-3 sm:py-2 sm:pr-[calc(0.75rem+var(--safe-area-right))] md:pb-[calc(0.5rem+var(--safe-area-bottom))]",
+            // A narrow desktop dock spans the stage in its compact form.
+            (isMobile || !compactDock) && "sm:flex sm:items-center sm:gap-2",
+          )}
         >
-          {isMobile ? (
+          {compactDock ? (
           <div className="grid gap-2">
             <div className="flex items-center gap-2">
               <Route className="size-4 shrink-0 text-route" aria-hidden="true" />

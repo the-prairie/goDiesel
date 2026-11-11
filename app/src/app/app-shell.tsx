@@ -77,6 +77,18 @@ export function AppShell() {
               : isWideUtility
                 ? "mx-auto grid max-w-[90rem] gap-6 p-4 sm:p-8 lg:p-10"
                 : "mx-auto grid max-w-7xl gap-6 p-4 sm:p-6",
+            // The content area adds the safe-area insets of the edges it
+            // touches: the top unless the utility header covers it, the right
+            // always, and the left below md, where no rail accounts for it.
+            !isImmersive &&
+              !isUtility &&
+              (isWideUtility
+                ? "pt-[calc(1rem+var(--safe-area-top))] sm:pt-[calc(2rem+var(--safe-area-top))] lg:pt-[calc(2.5rem+var(--safe-area-top))]"
+                : "pt-[calc(1rem+var(--safe-area-top))] sm:pt-[calc(1.5rem+var(--safe-area-top))]"),
+            !isImmersive &&
+              (isWideUtility
+                ? "pr-[calc(1rem+var(--safe-area-right))] pl-[calc(1rem+var(--safe-area-left))] sm:pr-[calc(2rem+var(--safe-area-right))] sm:pl-[calc(2rem+var(--safe-area-left))] md:pl-8 lg:pr-[calc(2.5rem+var(--safe-area-right))] lg:pl-10"
+                : "pr-[calc(1rem+var(--safe-area-right))] pl-[calc(1rem+var(--safe-area-left))] sm:pr-[calc(1.5rem+var(--safe-area-right))] sm:pl-[calc(1.5rem+var(--safe-area-left))] md:pl-6"),
           )}
         >
           <Suspense fallback={<SurfacePlaceholder surface={surface ?? "missing"} />}>

@@ -113,7 +113,7 @@ export function AdminPage() {
           <div className="grid min-w-0 items-start rounded-2xl border border-line bg-surface lg:grid-cols-[22rem_minmax(0,1fr)]">
             <aside
               aria-label="Owner route list"
-              className="grid min-w-0 content-start border-b border-line lg:sticky lg:top-[4.75rem] lg:max-h-[calc(100dvh-6rem)] lg:border-b-0 lg:border-r"
+              className="grid min-w-0 content-start border-b border-line lg:sticky lg:top-[calc(4.75rem+var(--safe-area-top))] lg:max-h-[calc(100dvh-6rem)] lg:border-b-0 lg:border-r"
             >
               <div className="grid gap-2 border-b border-line p-3">
                 <div className="relative">

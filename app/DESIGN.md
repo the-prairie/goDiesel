@@ -177,7 +177,6 @@ When no source-backed image exists, geography remains the primary visual.
 | `RouteTraceLayer` | Historical and selected route annotation |
 | `WaypointLayer` | Intentional coral map points |
 | `AtlasGlobe` | Sole Cesium owner for the global and regional Atlas world |
-| `AtlasImmersiveNavigation` | Compact Atlas navigation and memory/planning mode switch |
 | `RegionRouteCarousel` | Source-backed routes for the selected Atlas region |
 | `RouteInspector` | Route metrics, narrative, and actions |
 | `MobileRouteSheet` | Mobile map inspection |
