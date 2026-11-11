@@ -340,3 +340,126 @@ test('a finished classifier phase keeps the original completion notice', async (
   await page.goto(adminUrl);
   await expect(page.locator('#classifyStatus')).toHaveText('✓ CLASSIFIED 7 / 8 · 1 still unmapped');
 });
+
+type RebuildSnapshotBody = { phase: string; id: string | null; started_at: number | null; finished_at: number | null; exit_code: number | null; stderr_tail: string | null };
+const rebuildSnapshot = (phase: string, id: string | null, extra: Partial<RebuildSnapshotBody> = {}): RebuildSnapshotBody =>
+  ({ phase, id, started_at: phase === 'idle' ? null : 1, finished_at: phase === 'idle' || phase === 'running' ? null : 2, exit_code: null, stderr_tail: null, ...extra });
+
+async function stubOwnerStatus(page: import('@playwright/test').Page, initial: RebuildSnapshotBody) {
+  const owner = { rebuild: initial, reads: 0 };
+  await page.route('**/api/admin/status', route => {
+    owner.reads++;
+    return route.fulfill({ json: { writer_available: true, mode: 'local-owner', generation_status: 'ready', rebuild: owner.rebuild } });
+  });
+  return owner;
+}
+
+async function routeReads(request: import('@playwright/test').APIRequestContext, adminUrl: string) {
+  return (await (await request.get(`${adminUrl}/fixture/calls`)).json()).routeReads;
+}
+
+test('rebuild shows running then success, refreshes routes once and re-enables the control', async ({ page, request, adminUrl }) => {
+  await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-01T00:00:00Z'));
+  const owner = await stubOwnerStatus(page, rebuildSnapshot('idle', null));
+  await page.route('**/api/rebuild', route => route.fulfill({ json: { ok: true, msg: 'Rebuild started in background.', rebuild: rebuildSnapshot('running', 'run-a') } }));
+  await page.goto(adminUrl);
+  await expect(page.getByText('Synthetic river run', { exact: true })).toBeVisible();
+  await expect(page.locator('#rebuildStatus')).toBeHidden();
+  await expect(page.locator('#rebuildBtn')).toBeEnabled();
+  owner.rebuild = rebuildSnapshot('running', 'run-a');
+  await page.locator('#rebuildBtn').click();
+  await expect(page.locator('#rebuildStatusText')).toHaveText('↻ REBUILDING SITE · run-a');
+  await expect(page.locator('#rebuildBtn')).toBeDisabled();
+  await expect(page.locator('#toast')).not.toContainText('CHECK TERMINAL');
+  await page.clock.fastForward(2000);
+  await expect.poll(() => owner.reads).toBe(2);
+  await expect(page.locator('#rebuildStatusText')).toHaveText('↻ REBUILDING SITE · run-a');
+  owner.rebuild = rebuildSnapshot('succeeded', 'run-other');
+  await page.clock.fastForward(2000);
+  await expect.poll(() => owner.reads).toBe(3);
+  await expect(page.locator('#rebuildStatusText')).toHaveText('↻ REBUILDING SITE · run-a');
+  expect(await routeReads(request, adminUrl)).toBe(1);
+  owner.rebuild = rebuildSnapshot('succeeded', 'run-a');
+  await page.clock.fastForward(2000);
+  await expect(page.locator('#rebuildStatusText')).toHaveText('✓ SITE REBUILT · run-a');
+  await expect(page.locator('#rebuildBtn')).toBeEnabled();
+  await expect.poll(() => routeReads(request, adminUrl)).toBe(2);
+  await page.clock.fastForward(7999);
+  await expect(page.locator('#rebuildStatusText')).toHaveText('✓ SITE REBUILT · run-a');
+  await page.clock.fastForward(1);
+  await expect(page.locator('#rebuildStatus')).toBeHidden();
+  expect(owner.reads).toBe(4);
+  expect(await routeReads(request, adminUrl)).toBe(2);
+});
+
+test('rebuild failure shows the exit code and keeps stderr behind a disclosure', async ({ page, adminUrl }) => {
+  await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-01T00:00:00Z'));
+  const owner = await stubOwnerStatus(page, rebuildSnapshot('idle', null));
+  let startId = 'run-b';
+  await page.route('**/api/rebuild', route => route.fulfill({ json: { ok: true, rebuild: rebuildSnapshot('running', startId) } }));
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.goto(adminUrl);
+  owner.rebuild = rebuildSnapshot('running', 'run-b');
+  await page.locator('#rebuildBtn').click();
+  await expect(page.locator('#rebuildStatusText')).toHaveText('↻ REBUILDING SITE · run-b');
+  const stderr = 'Traceback (most recent call last):\n  File "build.py", line 9\nValueError: a deliberately broken synthetic route with a long message';
+  owner.rebuild = rebuildSnapshot('failed', 'run-b', { exit_code: 2, stderr_tail: stderr });
+  await page.clock.fastForward(2000);
+  await expect(page.locator('#rebuildStatusText')).toHaveText('✕ REBUILD FAILED · EXIT 2 · run-b');
+  await expect(page.locator('#rebuildBtn')).toBeEnabled();
+  await expect(page.locator('#toast')).not.toContainText('Traceback');
+  await expect(page.locator('#rebuildStderr')).toBeHidden();
+  await page.getByText('SHOW STDERR').click();
+  await expect(page.locator('#rebuildStderr')).toBeVisible();
+  await expect(page.locator('#rebuildStderr')).toHaveText(stderr);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+  await page.clock.fastForward(10000);
+  await expect(page.locator('#rebuildStatusText')).toHaveText('✕ REBUILD FAILED · EXIT 2 · run-b');
+  const readsAfterFailure = owner.reads;
+  startId = 'run-c';
+  owner.rebuild = rebuildSnapshot('running', 'run-c');
+  await page.locator('#rebuildBtn').click();
+  await expect(page.locator('#rebuildStatusText')).toHaveText('↻ REBUILDING SITE · run-c');
+  await expect(page.locator('#rebuildDetails')).toBeHidden();
+  expect(owner.reads).toBe(readsAfterFailure);
+});
+
+test('a page loaded during a running rebuild adopts it and follows it to the end', async ({ page, request, adminUrl }) => {
+  await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-01T00:00:00Z'));
+  const owner = await stubOwnerStatus(page, rebuildSnapshot('running', 'run-z'));
+  await page.goto(adminUrl);
+  await expect(page.locator('#rebuildStatusText')).toHaveText('↻ REBUILDING SITE · run-z');
+  await expect(page.locator('#rebuildBtn')).toBeDisabled();
+  expect((await (await request.get(`${adminUrl}/fixture/calls`)).json()).rebuilds).toBe(0);
+  owner.rebuild = rebuildSnapshot('succeeded', 'run-z');
+  await page.clock.fastForward(2000);
+  await expect(page.locator('#rebuildStatusText')).toHaveText('✓ SITE REBUILT · run-z');
+  await expect(page.locator('#rebuildBtn')).toBeEnabled();
+  await expect.poll(() => routeReads(request, adminUrl)).toBe(2);
+});
+
+test('a page loaded after a finished rebuild shows no stale outcome', async ({ page, adminUrl }) => {
+  await stubOwnerStatus(page, rebuildSnapshot('failed', 'run-old', { exit_code: 1, stderr_tail: 'old failure' }));
+  await page.goto(adminUrl);
+  await expect(page.getByText('Synthetic river run', { exact: true })).toBeVisible();
+  await expect(page.locator('#rebuildStatus')).toBeHidden();
+  await expect(page.locator('#rebuildBtn')).toBeEnabled();
+});
+
+test('a rebuild refused because another rebuild holds the lock names it and adopts it', async ({ page, adminUrl }) => {
+  await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-01T00:00:00Z'));
+  const owner = await stubOwnerStatus(page, rebuildSnapshot('idle', null));
+  const reason = 'rebuild run-x is running; saves and rebuilds are refused until it finishes';
+  await page.route('**/api/rebuild', route => route.fulfill({ status: 409, json: { error: 'another owner mutation is in progress', reason } }));
+  await page.goto(adminUrl);
+  await expect(page.getByText('Synthetic river run', { exact: true })).toBeVisible();
+  owner.rebuild = rebuildSnapshot('running', 'run-x');
+  await page.locator('#rebuildBtn').click();
+  await expect(page.locator('#toast')).toHaveText(`REBUILD REFUSED — ${reason}`);
+  await expect(page.locator('#rebuildStatusText')).toHaveText('↻ REBUILDING SITE · run-x');
+  await expect(page.locator('#rebuildBtn')).toBeDisabled();
+});

@@ -1,5 +1,5 @@
 export function initialMutationState() {
-    return { routes: [], dirty: new Map(), save: { status: 'idle' }, refreshes: new Set(), latestRefreshId: 0, rebuilds: new Set() };
+    return { routes: [], dirty: new Map(), save: { status: 'idle' }, refreshes: new Set(), latestRefreshId: 0, rebuild: { phase: 'idle' } };
 }
 export function reduceMutation(state, event) {
     switch (event.type) {
@@ -49,14 +49,79 @@ export function reduceMutation(state, event) {
             const accept = event.type === 'routesReceived' && event.requestId === state.latestRefreshId;
             return { ...state, refreshes, routes: accept ? event.routes : state.routes };
         }
-        case 'rebuildStarted':
-            return { ...state, rebuilds: new Set([...state.rebuilds, event.requestId]) };
-        case 'rebuildSettled': {
-            if (!state.rebuilds.has(event.requestId))
-                return state;
-            const rebuilds = new Set(state.rebuilds);
-            rebuilds.delete(event.requestId);
-            return { ...state, rebuilds };
+        case 'rebuildRequested':
+        case 'rebuildAccepted':
+        case 'rebuildRefused':
+        case 'rebuildStatusReceived':
+        case 'rebuildNoticeExpired': {
+            const rebuild = reduceRebuild(state.rebuild, event);
+            return rebuild === state.rebuild ? state : { ...state, rebuild };
         }
+    }
+}
+function settledRebuild(snapshot, id) {
+    if (snapshot.phase === 'succeeded')
+        return { phase: 'succeeded', id };
+    if (snapshot.phase === 'failed') {
+        return { phase: 'failed', id, exitCode: snapshot.exit_code ?? null, stderrTail: snapshot.stderr_tail ?? '' };
+    }
+    return null;
+}
+function reduceRebuild(state, event) {
+    switch (event.type) {
+        case 'rebuildRequested':
+            if (rebuildBusy(state))
+                return state;
+            return { phase: 'starting', requestId: event.requestId };
+        case 'rebuildRefused':
+            if (state.phase !== 'starting' || state.requestId !== event.requestId)
+                return state;
+            return { phase: 'idle' };
+        case 'rebuildAccepted': {
+            if (state.phase !== 'starting' || state.requestId !== event.requestId)
+                return state;
+            const snapshot = event.rebuild;
+            // A server without the rebuild snapshot gives no outcome to follow.
+            if (!snapshot || !snapshot.id)
+                return { phase: 'idle' };
+            if (snapshot.phase === 'running')
+                return { phase: 'running', id: snapshot.id };
+            return settledRebuild(snapshot, snapshot.id) ?? { phase: 'idle' };
+        }
+        case 'rebuildStatusReceived': {
+            const snapshot = event.rebuild;
+            // Adopt a run that was already going when nothing is tracked: the page
+            // loaded mid-rebuild, or a start was refused because one holds the lock.
+            if (state.phase === 'idle') {
+                return snapshot.phase === 'running' && snapshot.id ? { phase: 'running', id: snapshot.id } : state;
+            }
+            if (state.phase !== 'running')
+                return state;
+            // The server forgot every run, so the tracked one can never report.
+            if (snapshot.phase === 'idle')
+                return { phase: 'failed', id: state.id, exitCode: null, stderrTail: '' };
+            if (snapshot.id !== state.id)
+                return state;
+            return settledRebuild(snapshot, state.id) ?? state;
+        }
+        case 'rebuildNoticeExpired':
+            if (state.phase !== 'succeeded' || state.id !== event.id)
+                return state;
+            return { phase: 'idle' };
+    }
+}
+export function rebuildBusy(state) {
+    return state.phase === 'starting' || state.phase === 'running';
+}
+export function rebuildPresentation(state) {
+    switch (state.phase) {
+        case 'idle': return { text: '', active: false, failed: false, detail: null };
+        case 'starting': return { text: '↻ STARTING REBUILD…', active: true, failed: false, detail: null };
+        case 'running': return { text: `↻ REBUILDING SITE · ${state.id}`, active: true, failed: false, detail: null };
+        case 'succeeded': return { text: `✓ SITE REBUILT · ${state.id}`, active: false, failed: false, detail: null };
+        case 'failed': return {
+            text: `✕ REBUILD FAILED · ${state.exitCode === null ? 'NO EXIT CODE' : `EXIT ${state.exitCode}`} · ${state.id}`,
+            active: false, failed: true, detail: state.stderrTail || null,
+        };
     }
 }
