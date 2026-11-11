@@ -13,7 +13,9 @@ BUSY = "another owner mutation is in progress"
 
 @pytest.fixture
 def admin(tmp_path, monkeypatch):
-    return load_admin(tmp_path, monkeypatch)
+    yield load_admin(tmp_path, monkeypatch)
+    # Open the gate of any slow stub build a failed assertion left waiting.
+    (tmp_path / "release-build").write_text("")
 
 
 @pytest.fixture
@@ -171,10 +173,14 @@ def test_stderr_tail_keeps_only_the_last_bytes_as_text():
 
 # ── Adapter: admin.py drives the lifecycle and owns the lock ──
 
+# Waits for the test to open its gate, and never outlives a forgotten one.
 SLOW_BUILD = """
 import sys, time, pathlib
 gate = pathlib.Path(__file__).with_name("release-build")
+deadline = time.monotonic() + 20
 while not gate.exists():
+    if time.monotonic() > deadline or not gate.parent.exists():
+        sys.exit(9)
     time.sleep(0.01)
 sys.exit(0)
 """
