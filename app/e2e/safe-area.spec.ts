@@ -143,14 +143,17 @@ async function boxOf(locator: Locator) {
   return (await locator.boundingBox())!;
 }
 
-/** No two of the given boxes overlap. */
+/**
+ * No two of the given boxes overlap. A 1 px touch is allowed: the Atlas tray's
+ * top border already sits 1 px over the credits above it, insets or not.
+ */
 async function expectApart(named: Record<string, Locator>) {
   const boxes = await Promise.all(Object.entries(named).map(async ([name, locator]) => [name, await boxOf(locator)] as const));
   for (let i = 0; i < boxes.length; i++) {
     for (let j = i + 1; j < boxes.length; j++) {
       const [a, ab] = boxes[i];
       const [b, bb] = boxes[j];
-      const overlap = ab.x < bb.x + bb.width - 0.5 && bb.x < ab.x + ab.width - 0.5 && ab.y < bb.y + bb.height - 0.5 && bb.y < ab.y + ab.height - 0.5;
+      const overlap = ab.x < bb.x + bb.width - 1.5 && bb.x < ab.x + ab.width - 1.5 && ab.y < bb.y + bb.height - 1.5 && bb.y < ab.y + ab.height - 1.5;
       expect(overlap, `${a} overlaps ${b}`).toBe(false);
     }
   }
@@ -186,7 +189,16 @@ for (const orientation of BOTH) {
         const sheet = page.getByRole("dialog");
         await expect(sheet.getByRole("heading", { name: title })).toBeVisible();
         await expectEdgeBarsClear(page, orientation, ["[data-slot=sheet-content]"]);
-        await expectApart({ close: sheet.getByRole("button", { name: "Close", exact: true }), title: sheet.getByRole("heading", { name: title }) });
+        // The close button keeps clear of the title's text (the heading's box
+        // runs under it by design; the header reserves pr-12 for it).
+        const close = await boxOf(sheet.getByRole("button", { name: "Close", exact: true }));
+        const titleText = await sheet.getByRole("heading", { name: title }).evaluate((heading) => {
+          const range = document.createRange();
+          range.selectNodeContents(heading);
+          const rect = range.getBoundingClientRect();
+          return { right: rect.right, top: rect.top, bottom: rect.bottom };
+        });
+        expect(titleText.right <= close.x || titleText.bottom <= close.y || titleText.top >= close.y + close.height, "Close overlaps the title").toBe(true);
         await page.keyboard.press("Escape");
         await expect(sheet).toBeHidden();
       }
@@ -246,7 +258,7 @@ for (const orientation of BOTH) {
     });
 
     test("Atlas's regional map keeps its attribution inside the safe area", async ({ page }) => {
-      await page.addInitScript(() => { window.__GODIESEL_ATLAS_REGION_OUTCOME__ = "fallback"; });
+      await page.addInitScript(() => { (window as typeof window & { __GODIESEL_ATLAS_REGION_OUTCOME__?: string }).__GODIESEL_ATLAS_REGION_OUTCOME__ = "fallback"; });
       await stubMapStyle(page);
       await installDeterministicCesiumAtlas(page);
       await open(page, orientation, "/#/atlas?region=Crete%2C+Greece");
@@ -309,6 +321,9 @@ for (const orientation of BOTH) {
 }
 
 test.describe("Earth and Atlas Replay", () => {
+  // A phone: coarse pointer, so controls take their touch sizes.
+  test.use({ hasTouch: true, isMobile: true });
+
   async function installEarthReplay(page: Page) {
     await page.addInitScript(() => {
       window.__GODIESEL_REPLAY_ENGINE_FACTORY__ = () => ({
@@ -344,13 +359,14 @@ test.describe("Earth and Atlas Replay", () => {
   });
 
   test("the dock and the map's controls fit beside the notch on a landscape phone", async ({ page }) => {
-    // Known, not spacing: the dock's single row needs about 727 px. At 844x390
-    // with real insets the rail (64 px + left inset) and the right inset leave
-    // 662 px, so the speed button is cut off; and because the stage's grid
-    // column grows to the dock's min-content, the map (and its controls and
-    // attribution) is wider than the stage and its right corner is clipped.
-    // The same overflow happens at 768 px wide without insets. Remove this
-    // annotation when the dock fits and the column cannot outgrow the stage.
+    // Known, not spacing: on a touch screen the dock's single row needs about
+    // 727 px. At 844x390 with real insets the rail (64 px + left inset) and the
+    // right inset leave 662 px, so the speed button is cut off; and because the
+    // stage's grid column grows to the dock's min-content, the map (and its
+    // controls and attribution) is wider than the stage and its right corner is
+    // clipped. The same overflow happens on a 768 px wide touch screen without
+    // insets. Remove this annotation when the dock fits and the column cannot
+    // outgrow the stage.
     test.fail();
     await stubMapStyle(page);
     await open(page, LANDSCAPE, "/#/replay/17654151284?renderer=atlas");
