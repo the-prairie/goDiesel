@@ -239,3 +239,93 @@ describe("Playable Earth surface sampling", () => {
     expect(grounding.at(-1)).toEqual({ source: "sampled", reason: "sampled", offsetM: 5 });
   });
 });
+
+describe("Cesium script loading", () => {
+  type FakeElement = {
+    tag: string;
+    id?: string;
+    dataset: Record<string, string>;
+    onload?: () => void;
+    onerror?: () => void;
+    remove(): void;
+    addEventListener(): void;
+    getContext?: () => object;
+  };
+  let head: FakeElement[];
+  let timers: Array<() => void>;
+  let cesium: unknown;
+
+  let loadModule: () => Promise<
+    typeof import("@/labs/playable-earth/playable-earth-viewer")
+  >;
+
+  beforeEach(() => {
+    // Each case starts with the module-level script cache a fresh page would have.
+    vi.resetModules();
+    loadModule = () => import("@/labs/playable-earth/playable-earth-viewer");
+    cesium = (window as unknown as { Cesium: unknown }).Cesium;
+    head = [];
+    timers = [];
+    const fakeWindow: Record<string, unknown> = {
+      setTimeout: (callback: () => void) => timers.push(callback),
+    };
+    vi.stubGlobal("window", fakeWindow);
+    vi.stubGlobal("document", {
+      createElement: (tag: string): FakeElement => {
+        const element: FakeElement = {
+          tag,
+          dataset: {},
+          remove: () => {
+            head = head.filter((candidate) => candidate !== element);
+          },
+          addEventListener() {},
+        };
+        if (tag === "canvas") element.getContext = () => ({});
+        return element;
+      },
+      getElementById: (id: string) => head.find((element) => element.id === id) ?? null,
+      querySelector: () =>
+        head.find((element) => element.dataset.godieselCesium === "true") ?? null,
+      head: { appendChild: (element: FakeElement) => head.push(element) },
+    });
+  });
+
+  const scripts = () => head.filter((element) => element.tag === "script");
+
+  async function mountWith(settle: (script: FakeElement) => void) {
+    const statuses: Array<{ state: string; title: string }> = [];
+    const viewer = (await loadModule()).createPlayableEarthViewer();
+    const mounted = viewer.mount({
+      container: {} as HTMLElement,
+      route,
+      onStatus: (status) => statuses.push(status),
+    });
+    expect(scripts()).toHaveLength(1);
+    settle(scripts()[0]);
+    await mounted;
+    return statuses.at(-1);
+  }
+
+  const loadSucceeds = (script: FakeElement) => {
+    (window as unknown as { Cesium: unknown }).Cesium = cesium;
+    script.onload?.();
+  };
+
+  it("retries after a script error instead of caching the failure", async () => {
+    expect(await mountWith((script) => script.onerror?.())).toMatchObject({
+      state: "unavailable",
+      title: "Cesium unavailable",
+    });
+    expect(scripts()).toHaveLength(0);
+    expect(await mountWith(loadSucceeds)).toMatchObject({ state: "ready" });
+  });
+
+  it("retries after a load timeout instead of caching the failure", async () => {
+    expect(await mountWith(() => timers.at(-1)?.())).toMatchObject({
+      state: "unavailable",
+      title: "Cesium unavailable",
+    });
+    expect(scripts()).toHaveLength(0);
+    expect(await mountWith(loadSucceeds)).toMatchObject({ state: "ready" });
+  });
+});

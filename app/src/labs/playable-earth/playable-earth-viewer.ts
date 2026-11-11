@@ -70,7 +70,8 @@ function loadCesium() {
   if (window.Cesium?.Viewer) return Promise.resolve(window.Cesium);
   if (cesiumPromise) return cesiumPromise;
 
-  cesiumPromise = new Promise((resolve) => {
+  let script: HTMLScriptElement | undefined;
+  const loading = new Promise<CesiumGlobal | undefined>((resolve) => {
     const cssId = "goDieselCesiumCss";
     if (!document.getElementById(cssId)) {
       const link = document.createElement("link");
@@ -84,12 +85,13 @@ function loadCesium() {
       'script[data-godiesel-cesium="true"]',
     );
     if (existing) {
+      script = existing;
       existing.addEventListener("load", () => resolve(window.Cesium), { once: true });
       existing.addEventListener("error", () => resolve(undefined), { once: true });
       return;
     }
 
-    const script = document.createElement("script");
+    script = document.createElement("script");
     script.dataset.godieselCesium = "true";
     script.src = `https://cesium.com/downloads/cesiumjs/releases/${CESIUM_VERSION}/Build/Cesium/Cesium.js`;
     script.async = true;
@@ -102,7 +104,17 @@ function loadCesium() {
     );
   });
 
-  return cesiumPromise;
+  // A failed or timed-out load is not cached: the next mount removes nothing
+  // stale and appends a fresh script.
+  const settled: Promise<CesiumGlobal | undefined> = loading.then((cesium) => {
+    if (!cesium) {
+      if (cesiumPromise === settled) cesiumPromise = undefined;
+      script?.remove();
+    }
+    return cesium;
+  });
+  cesiumPromise = settled;
+  return settled;
 }
 
 function webglAvailable() {
