@@ -35,22 +35,10 @@ vi.mock("cesium", async (importOriginal) => {
   };
 });
 
-function globalViewer(
-  canvas: { dataset: Record<string, string> },
-  flyTo: ReturnType<typeof vi.fn>,
-) {
-  return {
-    canvas,
-    camera: { flyTo, frustum: {} },
-    scene: { globe: { show: false }, primitives: { remove: vi.fn() } },
-    bottomContainer: { setAttribute: vi.fn() },
-    useDefaultRenderLoop: false,
-    isDestroyed: () => false,
-  };
-}
-
 describe("CesiumAtlasWorldEngine", () => {
   afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     vi.useRealTimers();
     vi.unstubAllGlobals();
   });
@@ -167,154 +155,98 @@ describe("CesiumAtlasWorldEngine", () => {
   it.each(["complete", "cancel"] as const)(
     "reports the global Atlas ready only after its camera flight %ss",
     async (settleWith) => {
-      vi.stubGlobal("window", {
-        clearInterval,
-        matchMedia: () => ({ matches: false }),
-      });
-      let settleFlight: (() => void) | undefined;
-      const onStatus = vi.fn();
-      const canvas = { dataset: {} as Record<string, string> };
-      const flyTo = vi.fn((options: { complete?: () => void; cancel?: () => void }) => {
-        settleFlight = options[settleWith];
-      });
-      const engine = new CesiumAtlasWorldEngine();
-      Object.assign(engine, {
-        viewer: globalViewer(canvas, flyTo),
-        onStatus,
-      });
+      vi.stubEnv("VITE_GOOGLE_MAPS_API_KEY", "");
+      const h = await mountedInFallback();
+      h.onStatus.mockClear();
 
-      engine.setSelectedRegion(undefined);
+      h.engine.setSelectedRegion(undefined);
 
-      expect(onStatus.mock.calls.map(([status]) => status.state)).toEqual(["loading"]);
-      expect(canvas.dataset.cameraState).toBe("transitioning");
+      expect(h.onStatus.mock.calls.map(([status]) => status.state)).toEqual(["loading"]);
+      expect(h.values.cameraState).toBe("transitioning");
 
-      settleFlight?.();
+      h.globalFlights.at(-1)![settleWith]!();
       await Promise.resolve();
 
-      expect(onStatus.mock.calls.map(([status]) => status.state)).toEqual([
+      expect(h.onStatus.mock.calls.map(([status]) => status.state)).toEqual([
         "loading",
         "ready",
       ]);
-      expect(canvas.dataset.cameraState).toBe("settled");
+      expect(h.values.cameraState).toBe("settled");
     },
   );
 
   it("settles the global camera immediately for reduced motion", async () => {
-    vi.stubGlobal("window", {
-      clearInterval,
-      matchMedia: () => ({ matches: true }),
-    });
-    const onStatus = vi.fn();
-    const canvas = { dataset: {} as Record<string, string> };
-    const flyTo = vi.fn();
-    const engine = new CesiumAtlasWorldEngine();
-    Object.assign(engine, {
-      viewer: globalViewer(canvas, flyTo),
-      onStatus,
-    });
+    vi.stubEnv("VITE_GOOGLE_MAPS_API_KEY", "");
+    const h = await mountedInFallback({ reducedMotion: true });
+    h.onStatus.mockClear();
 
-    engine.setSelectedRegion(undefined);
+    h.engine.setSelectedRegion(undefined);
     await Promise.resolve();
 
-    expect(flyTo).toHaveBeenCalledWith(expect.objectContaining({ duration: 0 }));
-    expect(onStatus.mock.calls.map(([status]) => status.state)).toEqual([
+    expect(h.globalFlights.at(-1)!.duration).toBe(0);
+    expect(h.onStatus.mock.calls.map(([status]) => status.state)).toEqual([
       "loading",
       "ready",
     ]);
-    expect(canvas.dataset.cameraState).toBe("settled");
+    expect(h.values.cameraState).toBe("settled");
   });
 
-  it("does not start another global flight when the globe is already settled", () => {
-    vi.stubGlobal("window", {
-      clearInterval,
-      matchMedia: () => ({ matches: false }),
-    });
-    const onStatus = vi.fn();
-    const canvas = { dataset: { cameraState: "settled" } as Record<string, string> };
-    const flyTo = vi.fn();
-    const engine = new CesiumAtlasWorldEngine();
-    Object.assign(engine, {
-      viewer: globalViewer(canvas, flyTo),
-      onStatus,
-    });
+  it("does not start another global flight when the globe is already settled", async () => {
+    const h = mountHarness();
+    void h.mount();
+    await flushMicrotasks();
+    h.globalFlights[0].complete!();
+    await flushMicrotasks();
+    h.onStatus.mockClear();
 
-    engine.setSelectedRegion(undefined);
+    h.engine.setSelectedRegion(undefined);
 
-    expect(flyTo).not.toHaveBeenCalled();
-    expect(onStatus).toHaveBeenCalledWith({
+    expect(h.globalFlights).toHaveLength(1);
+    expect(h.onStatus).toHaveBeenCalledWith({
       state: "ready",
       message: "Atlas world ready.",
     });
   });
 
   it("shares an active global camera flight with reset requests", async () => {
-    vi.stubGlobal("window", {
-      clearInterval,
-      matchMedia: () => ({ matches: false }),
-    });
-    let settleFlight: (() => void) | undefined;
-    const onStatus = vi.fn();
-    const canvas = { dataset: {} as Record<string, string> };
-    const flyTo = vi.fn((options: { complete?: () => void }) => {
-      settleFlight = options.complete;
-    });
-    const engine = new CesiumAtlasWorldEngine();
-    Object.assign(engine, {
-      viewer: globalViewer(canvas, flyTo),
-      onStatus,
-    });
+    vi.stubEnv("VITE_GOOGLE_MAPS_API_KEY", "");
+    const h = await mountedInFallback();
+    const flights = h.globalFlights.length;
+    h.onStatus.mockClear();
 
-    engine.setSelectedRegion(undefined);
-    engine.resetView();
+    h.engine.setSelectedRegion(undefined);
+    h.engine.resetView();
 
-    expect(flyTo).toHaveBeenCalledOnce();
-    expect(onStatus.mock.calls.map(([status]) => status.state)).toEqual(["loading"]);
+    expect(h.globalFlights).toHaveLength(flights + 1);
+    expect(h.onStatus.mock.calls.map(([status]) => status.state)).toEqual(["loading"]);
 
-    settleFlight?.();
+    h.globalFlights.at(-1)!.complete!();
     await Promise.resolve();
 
-    expect(onStatus.mock.calls.map(([status]) => status.state)).toEqual([
+    expect(h.onStatus.mock.calls.map(([status]) => status.state)).toEqual([
       "loading",
       "ready",
     ]);
   });
 
   it("waits for the latest global camera generation", async () => {
-    let resolveInitial!: () => void;
-    let resolveReplacement!: () => void;
-    const initialCameraReady = new Promise<void>((resolve) => {
-      resolveInitial = resolve;
-    });
-    const replacementCameraReady = new Promise<void>((resolve) => {
-      resolveReplacement = resolve;
-    });
-    const engine = new CesiumAtlasWorldEngine();
-    Object.assign(engine, {
-      viewer: { isDestroyed: () => false },
-      globalCameraGeneration: 1,
-      globalCameraReady: initialCameraReady,
-    });
-    const waitForSettlement = (
-      engine as unknown as { waitForGlobalCameraSettlement: () => Promise<void> }
-    ).waitForGlobalCameraSettlement();
-    let settled = false;
-    void waitForSettlement.then(() => {
-      settled = true;
-    });
+    vi.stubEnv("VITE_GOOGLE_MAPS_API_KEY", "");
+    const h = mountHarness();
+    let mounted = false;
+    void h.mount().then(() => { mounted = true; });
+    await flushMicrotasks();
+    h.engine.setSelectedRegion(kyoto);
+    h.engine.setSelectedRegion(undefined);
 
-    resolveInitial();
-    Object.assign(engine, {
-      globalCameraGeneration: 2,
-      globalCameraReady: replacementCameraReady,
-    });
-    await Promise.resolve();
+    h.globalFlights[0].complete!();
+    await flushMicrotasks();
 
-    expect(settled).toBe(false);
+    expect(mounted).toBe(false);
 
-    resolveReplacement();
-    await waitForSettlement;
+    h.globalFlights[1].complete!();
+    await flushMicrotasks();
 
-    expect(settled).toBe(true);
+    expect(mounted).toBe(true);
   });
 
   it("resolves a picked terrain thread only within the selected region", () => {
@@ -481,6 +413,20 @@ function mountHarness({
       pitch = next.pitch ?? pitch;
     },
   };
+}
+
+/** Mounted, settled globally, then Kyoto selected and fallen back (no map key). */
+async function mountedInFallback(options: Parameters<typeof mountHarness>[0] = {}) {
+  const h = mountHarness(options);
+  void h.mount();
+  await flushMicrotasks();
+  h.globalFlights[0].complete?.();
+  await flushMicrotasks();
+  h.engine.setSelectedRegion(kyoto);
+  h.regionFlights[0].complete!();
+  await flushMicrotasks();
+  expect(h.values.atlasState).toBe("region-fallback");
+  return h;
 }
 
 const LOADING = "loading:Opening the Atlas world.";
