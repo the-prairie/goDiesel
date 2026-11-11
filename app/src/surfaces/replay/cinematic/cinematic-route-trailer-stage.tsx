@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/ui/button";
+import { cn } from "@/ui/utils";
 import { climbLabel, type QuestRoute } from "@/domain/route";
 import {
   ROUTE_TRAILER_DURATION_SECONDS,
@@ -59,6 +60,7 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
     setState(next);
   }, []);
   const { frame, status } = state;
+  const providerUnavailable = status.state === "unavailable";
   const playing = state.playback === "playing";
 
   const commitFrame = (elapsedSeconds: number) => {
@@ -171,9 +173,17 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
       data-state={status.state}
       data-testid="route-trailer"
     >
+      {/* The map host is its own stacking context, so nothing Google injects
+          (such as its key-error dialog) can rise above the scrim. While the
+          provider is unavailable it is hidden and inert. */}
       <div
+        aria-hidden={providerUnavailable || undefined}
         aria-label={`Google photorealistic 3D trailer of ${route.name}`}
-        className="absolute inset-x-0 top-3 bottom-16"
+        className={cn(
+          "absolute inset-x-0 top-3 bottom-16 isolate",
+          providerUnavailable && "invisible opacity-0",
+        )}
+        inert={providerUnavailable || undefined}
         ref={containerRef}
       />
 
@@ -266,7 +276,10 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
       ) : null}
 
       {status.state !== "ready" ? (
-        <div className="absolute inset-0 z-30 grid place-items-center bg-black/88 p-6">
+        <div
+          className="absolute inset-0 z-30 grid place-items-center bg-black p-6"
+          data-testid="route-trailer-scrim"
+        >
           <div
             aria-live="polite"
             className="max-w-md text-center"
