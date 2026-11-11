@@ -146,3 +146,77 @@ describe("Earth Replay session", () => {
     },
   );
 });
+
+describe("Earth Replay HUD", () => {
+  it("starts with the desktop preview and collapsed mobile controls", () => {
+    expect(initialEarthReplaySessionState("earth")).toMatchObject({
+      contextState: "preview", mobileControlsExpanded: false,
+    });
+  });
+
+  it.each([[true, "compact"], [false, "preview"]] as const)(
+    "resets presentation for mobile=%s to %s and collapses controls",
+    (isMobile, contextState) => {
+      const state = transition(mounted(),
+        { type: "contextChanged", contextState: "expanded" },
+        { type: "mobileControlsToggled" },
+        { type: "presentationReset", isMobile });
+      expect(state).toMatchObject({ contextState, mobileControlsExpanded: false });
+    },
+  );
+
+  it("toggles mobile controls without touching playback", () => {
+    const base = mounted();
+    const opened = reduceEarthReplaySession(base, { type: "mobileControlsToggled" });
+    expect(opened.mobileControlsExpanded).toBe(true);
+    expect(opened.control).toBe(base.control);
+    expect(reduceEarthReplaySession(opened, { type: "mobileControlsToggled" }).mobileControlsExpanded).toBe(false);
+  });
+
+  it.each(["preview", "expanded"] as const)("compacts a %s HUD in the same transition as play", (contextState) => {
+    const playing = transition(mounted(),
+      { type: "contextChanged", contextState },
+      { type: "playbackToggled" });
+    expect(playing).toMatchObject({ contextState: "compact", control: { playing: true } });
+  });
+
+  it("leaves the HUD alone on pause", () => {
+    const paused = transition(mounted(), { type: "playbackToggled" },
+      { type: "contextChanged", contextState: "expanded" },
+      { type: "playbackToggled" });
+    expect(paused).toMatchObject({ contextState: "expanded", control: { playing: false } });
+  });
+
+  it("keeps a HUD the person expands during playback", () => {
+    const state = transition(mounted(), { type: "playbackToggled" },
+      { type: "contextChanged", contextState: "expanded" },
+      { type: "frameElapsed", elapsedSeconds: 0.1, totalDistanceM: 1000 },
+      { type: "speedCycled" },
+      { type: "progressSelected", progressM: 200, totalDistanceM: 1000 });
+    expect(state).toMatchObject({ contextState: "expanded", control: { playing: true } });
+  });
+
+  it("compacts again when playback restarts after reaching the endpoint", () => {
+    const ended = transition(mounted(), { type: "playbackToggled" },
+      { type: "contextChanged", contextState: "expanded" },
+      { type: "progressSelected", progressM: 999.9, totalDistanceM: 1000 },
+      { type: "frameElapsed", elapsedSeconds: 1, totalDistanceM: 1000 });
+    expect(ended).toMatchObject({ contextState: "expanded", control: { playing: false } });
+    expect(reduceEarthReplaySession(ended, { type: "playbackToggled" }).contextState).toBe("compact");
+  });
+
+  it("keeps the HUD and mobile controls across an in-stage renderer switch", () => {
+    const state = transition(mounted("partial"),
+      { type: "contextChanged", contextState: "expanded" },
+      { type: "mobileControlsToggled" },
+      { type: "rendererSelected", mode: "atlas" },
+      { type: "rendererMounted", routeSlug: "city" });
+    expect(state).toMatchObject({ contextState: "expanded", mobileControlsExpanded: true });
+  });
+
+  it("returns the same state for a HUD change that changes nothing", () => {
+    const state = mounted();
+    expect(reduceEarthReplaySession(state, { type: "contextChanged", contextState: "preview" })).toBe(state);
+  });
+});
+
