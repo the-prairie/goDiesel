@@ -25,7 +25,7 @@ function validateRoute(route, expectedSlug) {
   }
   if (route.slug !== expectedSlug) fail(`route slug must equal ${expectedSlug}`);
 
-  for (const field of ["name", "region", "date", "type"]) {
+  for (const field of ["name", "region", "type"]) {
     if (typeof route[field] !== "string" || !route[field].trim()) {
       fail(`${field} is required`);
     }
@@ -50,16 +50,46 @@ function validateRoute(route, expectedSlug) {
   ) {
     fail("subtitle or activity_name is required for the public route title");
   }
-  const date = new Date(`${route.date}T00:00:00Z`);
-  if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(route.date) ||
-    Number.isNaN(date.valueOf()) ||
-    date.toISOString().slice(0, 10) !== route.date
-  ) {
-    fail("date must use a valid YYYY-MM-DD value");
+  // A discovered route may have no recorded date; the generator writes "".
+  // Every other date must be a real calendar day.
+  if (route.date === "") {
+    if (route.lifecycle !== "discovered") {
+      fail("date is required; only a discovered route may have an unavailable date");
+    }
+  } else {
+    const date = new Date(`${route.date}T00:00:00Z`);
+    if (
+      typeof route.date !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(route.date) ||
+      Number.isNaN(date.valueOf()) ||
+      date.toISOString().slice(0, 10) !== route.date
+    ) {
+      fail("date must use a valid YYYY-MM-DD value");
+    }
   }
   if (!Number.isFinite(route.distance_km) || route.distance_km <= 0) {
     fail("distance_km must be a positive number");
+  }
+
+  // Honest elevation, as the app's strict detail parser reads it
+  // (app/src/domain/route/detail-parse.ts): an absent status means recorded;
+  // an unavailable route has a null gain and may have null point elevations; a
+  // recorded route has a finite, non-negative gain and finite elevations.
+  const elevationStatus = route.elevation_status ?? "recorded";
+  if (elevationStatus !== "recorded" && elevationStatus !== "unavailable") {
+    fail("elevation_status must be recorded or unavailable");
+  }
+  const elevationRecorded = elevationStatus === "recorded";
+  if (
+    elevationRecorded
+      ? !Number.isFinite(route.elevation_gain_m) || route.elevation_gain_m < 0
+      : route.elevation_gain_m !== null
+  ) {
+    fail(
+      elevationRecorded
+        ? "elevation_gain_m must be a non-negative number when elevation is recorded"
+        : "elevation_gain_m must be null when elevation_status is unavailable",
+    );
   }
   if (!Array.isArray(route.route) || route.route.length < 2) {
     fail("route geometry must contain at least two points");
@@ -71,8 +101,14 @@ function validateRoute(route, expectedSlug) {
     if (!point || typeof point !== "object" || Array.isArray(point)) {
       fail(`route point ${index} must be an object`);
     }
-    if (![point.lat, point.lng, point.elev, point.d].every(Number.isFinite)) {
-      fail(`route point ${index} must contain finite lat, lng, elev, and d values`);
+    const elevationValid =
+      Number.isFinite(point.elev) || (!elevationRecorded && point.elev === null);
+    if (![point.lat, point.lng, point.d].every(Number.isFinite) || !elevationValid) {
+      fail(
+        elevationRecorded
+          ? `route point ${index} must contain finite lat, lng, elev, and d values`
+          : `route point ${index} must contain finite lat, lng, and d values and a finite or null elev`,
+      );
     }
     if (point.lat < -90 || point.lat > 90) {
       fail(`route point ${index} latitude is outside -90 to 90`);
