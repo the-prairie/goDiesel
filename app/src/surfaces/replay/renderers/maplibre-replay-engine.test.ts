@@ -203,6 +203,20 @@ describe("MapLibre Replay lifecycle contract", () => {
     h.engine.destroy();
   });
 
+  it("characterization: a zoom made on the map itself is overwritten by the next follow pose", async () => {
+    const h = await mount();
+    h.map.emit("load");
+    h.engine.setPose(pose);
+    expect(h.map.jumpTo).toHaveBeenLastCalledWith(expect.objectContaining({ zoom: 16 }));
+    // The person zooms out with MapLibre's own control or a pinch.
+    h.map.zoom = 12;
+    h.map.emit("zoomend", { originalEvent: {} });
+    // Play (or any later pose) re-derives the zoom from the session's range.
+    h.engine.setPose({ ...pose, progressM: 10 });
+    expect(h.map.jumpTo).toHaveBeenLastCalledWith(expect.objectContaining({ zoom: 16 }));
+    h.engine.destroy();
+  });
+
   it("disposes pending resources and rejects late provider callbacks", async () => {
     const h = await mount();
     h.engine.destroy();

@@ -110,6 +110,14 @@ describe("Earth Replay session", () => {
     expect(state.control).toMatchObject({ progressM: 0, following: true, playing: false });
   });
 
+  it("characterization: play leaves the camera range and follow mode as they were", () => {
+    const zoomedOut = transition(mounted(), { type: "zoomRequested", direction: "out" });
+    expect(transition(zoomedOut, { type: "playbackToggled" }).control)
+      .toMatchObject({ playing: true, following: true, cameraRangeM: 720 });
+    expect(transition(mounted(), { type: "playbackToggled" }).control)
+      .toMatchObject({ playing: true, following: true, cameraRangeM: 240 });
+  });
+
   it("keeps controls, route, and session id when the person picks another renderer", () => {
     const before = transition(mounted("partial"), ...changedControls);
     const switched = reduceEarthReplaySession(before, { type: "rendererSelected", mode: "atlas" });
