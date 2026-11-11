@@ -1,4 +1,4 @@
-import type { QuestRoute } from "@/domain/route";
+import { recordedClimbM, type QuestRoute } from "@/domain/route";
 import { bearingDegrees, routeDistanceM, routePathPose } from "@/domain/geometry/route-path";
 
 export type CinematicCut = "feature" | "monumental" | "kinetic" | "intimate";
@@ -110,9 +110,8 @@ function chapterSubtitle(
   shot: Shot,
 ) {
   const distance = route.distanceKm.toFixed(1);
-  const gain = Math.round(
-    route.elevationGainM ?? profile.positiveGainM,
-  ).toLocaleString();
+  const climbM = recordedClimbM(route);
+  const gain = climbM === null ? null : Math.round(climbM).toLocaleString();
   const relief = Math.round(profile.reliefM).toLocaleString();
   const noun = routeNoun(route);
   const place = route.region || "This place";
@@ -130,7 +129,9 @@ function chapterSubtitle(
     case "reveal":
       return `One recorded ${noun}. A line through the world that exists nowhere else.`;
     case "tracking":
-      return `${gain} metres of climbing turns distance into consequence.`;
+      return gain === null
+        ? `${distance} kilometres. The climb was not recorded.`
+        : `${gain} metres of climbing turns distance into consequence.`;
     case "summit":
       return profile.character === "mountain"
         ? `The route reaches high country. There is no hiding from the terrain now.`

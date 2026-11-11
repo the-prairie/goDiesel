@@ -16,7 +16,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/ui/button";
 import { RecordedLightLayer } from "@/surfaces/replay/components/recorded-light-layer";
 import { recordedLightAt } from "@/domain/geometry/recorded-light";
-import type { QuestRoute } from "@/domain/route";
+import { climbLabel, recordedClimbM, type QuestRoute } from "@/domain/route";
 import { CinematicSoundscape } from "@/surfaces/replay/cinematic/cinematic-soundscape";
 import {
   initialCinematicDirectorState,
@@ -46,7 +46,7 @@ function routeLogline(route: QuestRoute) {
       ? route.curation.vibe || route.curation.editorialNote
       : undefined;
   if (curated) return curated;
-  if (profile.character === "mountain") {
+  if (profile.character === "mountain" && recordedClimbM(route) !== null) {
     return `${route.region} does not give this one away: ${route.distanceKm.toFixed(1)} kilometres, ${route.elevationGainM.toLocaleString()} metres of ascent, and a line that keeps climbing into the horizon.`;
   }
   if (profile.character === "rolling") {
@@ -358,7 +358,7 @@ export function CinematicDirectorStage({
                 </p>
                 <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-xs uppercase tracking-[0.12em] text-white/58">
                   <span>{route.distanceKm.toFixed(1)} km</span>
-                  <span>{route.elevationGainM.toLocaleString()} m up</span>
+                  <span>{climbLabel(route)}</span>
                   <span>{route.type}</span>
                   <span>{route.date}</span>
                 </div>
@@ -444,8 +444,10 @@ export function CinematicDirectorStage({
               </h1>
               <p className="mt-4 max-w-2xl text-sm leading-relaxed text-white/62">
                 You have seen the shape of {route.name}. Now meet the real
-                terrain: {route.distanceKm.toFixed(1)} km and{" "}
-                {route.elevationGainM.toLocaleString()} m up.
+                terrain: {route.distanceKm.toFixed(1)} km
+                {recordedClimbM(route) === null
+                  ? "; climb not recorded."
+                  : ` and ${route.elevationGainM.toLocaleString()} m up.`}
               </p>
             </div>
             {!renderMode ? (

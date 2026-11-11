@@ -11,7 +11,7 @@ import { useEffect, useReducer, useRef } from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/ui/button";
-import type { QuestRoute } from "@/domain/route";
+import { climbLabel, type QuestRoute } from "@/domain/route";
 import {
   ROUTE_TRAILER_DURATION_SECONDS,
   routeTrailerFrame,
@@ -235,7 +235,7 @@ export function CinematicRouteTrailerStage({ route }: { route: QuestRoute }) {
               </h1>
               <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-white/72">
                 <span>{route.distanceKm.toFixed(1)} km</span>
-                <span>{route.elevationGainM.toLocaleString()} m up</span>
+                <span>{climbLabel(route)}</span>
                 <span>{route.type}</span>
                 <span>{route.date}</span>
               </div>

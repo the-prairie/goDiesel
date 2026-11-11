@@ -14,7 +14,7 @@ import { routeDetailPath } from "@/app/route-paths";
 import { Button } from "@/ui/button";
 import { RouteSatelliteThumbnail } from "@/surfaces/atlas/components/route-satellite-thumbnail";
 import type { RouteRegion } from "@/data/route-regions";
-import type { RoutePoint, RouteSummary } from "@/domain/route";
+import { climbLabel, type RoutePoint, type RouteSummary } from "@/domain/route";
 import {
   elevationRange,
   projectRouteGeometry,
@@ -348,7 +348,7 @@ function RegionalRouteCard({
         </h3>
         <p className="mt-1 flex items-center gap-2 whitespace-nowrap text-xs text-white/75">
           <span>{route.distanceKm.toFixed(1)} km</span>
-          <span>{route.elevationGainM.toLocaleString()} m up</span>
+          <span>{climbLabel(route)}</span>
           <span className="inline-flex items-center gap-1">
             {route.type === "Ride" ? <Bike className="size-3" aria-hidden="true" /> : <Footprints className="size-3" aria-hidden="true" />}
             {route.type}

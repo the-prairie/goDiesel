@@ -24,7 +24,7 @@ import { ReplayRoutePicker } from "@/surfaces/replay/components/replay-route-pic
 import { Button } from "@/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/ui/sheet";
 import "./immersive-replay.css";
-import type { QuestRoute, RouteSummary } from "@/domain/route";
+import { CLIMB_NOT_RECORDED, recordedClimbM, type QuestRoute, type RouteSummary } from "@/domain/route";
 import { cn } from "@/ui/utils";
 import {
   googleRouteCameraPose,
@@ -406,7 +406,10 @@ export function GoogleRouteNavigatorStage({
             <h1 className="line-clamp-2 text-sm font-semibold sm:text-xl" title={route.name}>{route.name}</h1>
             <div className="truncate text-[11px] text-white/58">
               {route.distanceKm.toFixed(1)} km ·{" "}
-              {Math.round(route.elevationGainM)} m up · {route.type}
+              {recordedClimbM(route) === null
+                ? CLIMB_NOT_RECORDED
+                : `${Math.round(route.elevationGainM)} m up`}{" "}
+              · {route.type}
             </div>
           </div>
         </div>

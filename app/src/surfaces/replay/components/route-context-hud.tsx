@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/ui/button";
-import type { QuestRoute } from "@/domain/route";
+import { climbLabel, type QuestRoute } from "@/domain/route";
 import { cn } from "@/ui/utils";
 import { routeDetailPath } from "@/app/route-paths";
 
@@ -101,7 +101,7 @@ export function RouteContextHud({
         className={cn(!detailsVisible && "hidden")}
       >
         <p className="mt-1 text-control text-ink-secondary">
-          {route.distanceKm.toFixed(1)} km · {route.elevationGainM.toLocaleString()} m up
+          {route.distanceKm.toFixed(1)} km · {climbLabel(route)}
         </p>
         {summary}
         {actions ? (

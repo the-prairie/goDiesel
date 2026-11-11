@@ -1,6 +1,6 @@
 import { ArrowUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
-import type { RouteSummary } from "@/domain/route";
+import { CLIMB_NOT_RECORDED, recordedClimbM, type RouteSummary } from "@/domain/route";
 import { isPlannedRoute } from "@/domain/planning";
 import { APP_PATHS, routeDetailPath } from "@/app/route-paths";
 import { RouteCover } from "@/ui/route-cover";
@@ -13,9 +13,12 @@ export function RouteCard({
   onOpen?: () => void;
 }) {
   const planned = isPlannedRoute(route);
+  const climbM = recordedClimbM(route);
   const reviewed = route.guide.reviewStatus === "reviewed" || route.guide.reviewStatus === "published";
   const summary = route.description || (reviewed ? route.guide.vibe?.split(/(?<=[.!?])\s/)[0] : undefined)
-    || `${route.distanceKm.toFixed(1)} km ${route.type.toLowerCase()} with ${route.elevationGainM.toLocaleString()} m of climbing.`;
+    || (climbM === null
+      ? `${route.distanceKm.toFixed(1)} km ${route.type.toLowerCase()}. ${CLIMB_NOT_RECORDED}.`
+      : `${route.distanceKm.toFixed(1)} km ${route.type.toLowerCase()} with ${climbM.toLocaleString()} m of climbing.`);
   return (
     <article aria-label={planned ? `Planned route ${route.region}` : undefined} className="route-preview field-note-card group">
       <Link
@@ -31,7 +34,11 @@ export function RouteCard({
           <p className="field-note-summary">{planned ? route.planning.sourceLabel : summary}</p>
           <div className="field-note-metrics">
             <span>{route.distanceKm.toFixed(1)} <small>km</small></span>
-            <span>{route.elevationGainM.toLocaleString()} <small>m up</small></span>
+            {climbM === null ? (
+              <span><small>{CLIMB_NOT_RECORDED}</small></span>
+            ) : (
+              <span>{climbM.toLocaleString()} <small>m up</small></span>
+            )}
           </div>
           <div className="field-note-footer">
             <time dateTime={route.date || undefined}>{formatCardDate(route.date)}</time>
