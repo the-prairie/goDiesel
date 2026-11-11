@@ -42,6 +42,12 @@ export function decodedRouteSlug(value: string | undefined) {
   }
 }
 
+// Legacy `#quest/<slug>` links. The router matches this path itself, so a link
+// opened after the app has started is canonicalized by the same navigation that
+// reads it, never by a separate listener racing the catch-all redirect.
+export const LEGACY_QUEST_ROUTE_PATH = "quest/:legacySlug";
+
+/** Rewrites a legacy link opened before the router reads its first location. */
 export function canonicalizeLegacyQuestHash() {
   const match = window.location.hash.match(/^#quest\/(.+)$/);
   if (!match?.[1]) return false;

@@ -39,7 +39,11 @@ def test_app_shell_defines_expected_navigation_and_hash_route_support():
     assert 'createHashRouter' in router
     assert 'Navigate to={APP_PATHS.atlas} replace' in router
     assert 'canonicalizeLegacyQuestHash()' in router
-    assert 'window.addEventListener("hashchange", canonicalizeLegacyQuestHash)' in router
+    # The router owns legacy canonicalization through a route entry; no
+    # separate hashchange listener races its catch-all redirect.
+    assert "path: LEGACY_QUEST_ROUTE_PATH" in router
+    for table in (router, (APP / "src/app/router.single.tsx").read_text()):
+        assert "hashchange" not in table
     assert 'window.location.hash.match(/^#quest' in navigation
     assert 'routeDetailPath(decodedRouteSlug(match[1]) ?? match[1])' in navigation
     assert 'catch {' in navigation

@@ -10,18 +10,27 @@ interface CameraScore {
   release: { startM: number; endM: number };
 }
 
-const sanFranciscoOpening: CameraScore = {
-  routeSlug: "14736711660",
-  rangeM: 540,
-  tiltDeg: 50,
-  headings: [
-    { distanceM: 0, degrees: 350 },
-    { distanceM: 600, degrees: 350 },
-    { distanceM: 1100, degrees: 263 },
-    { distanceM: 1900, degrees: 263 },
-  ],
-  release: { startM: 1900, endM: 2100 },
-};
+// Owner-authored camera scores, named by route. Each entry is scoped at build
+// time (ADR-0011): a single-route microsite keeps only the score of the route
+// it shares, and the comparison folds to a constant, so another route's
+// identifier never ships in a share bundle.
+const sharedRouteSlug = import.meta.env.VITE_SINGLE_ROUTE_SLUG;
+
+const sanFranciscoOpening: CameraScore | undefined =
+  !sharedRouteSlug || sharedRouteSlug === "14736711660"
+    ? {
+        routeSlug: "14736711660",
+        rangeM: 540,
+        tiltDeg: 50,
+        headings: [
+          { distanceM: 0, degrees: 350 },
+          { distanceM: 600, degrees: 350 },
+          { distanceM: 1100, degrees: 263 },
+          { distanceM: 1900, degrees: 263 },
+        ],
+        release: { startM: 1900, endM: 2100 },
+      }
+    : undefined;
 
 export function sustainedRouteCamera(
   route: QuestRoute,
@@ -30,7 +39,7 @@ export function sustainedRouteCamera(
   viewportWidth: number,
 ): GoogleRouteCameraPose {
   const score = sanFranciscoOpening;
-  if (route.slug !== score.routeSlug || state.cameraMode !== "auto" ||
+  if (!score || route.slug !== score.routeSlug || state.cameraMode !== "auto" ||
     state.progressM >= score.release.endM || route.provenance.discontinuities.some(gap => gap.startD < score.release.endM)) {
     return base;
   }

@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseRouteDetail } from "@/domain/route";
 import { googleRouteCameraPose, initialGoogleRouteNavigatorState } from "@/surfaces/replay/playback/route-navigator-controller";
 import { sustainedRouteCamera } from "./route-camera-score";
@@ -104,5 +104,38 @@ describe("authored San Francisco opening", () => {
       expect(base).toEqual(snapshotBase);
     }
     expect(route).toEqual(snapshot);
+  });
+});
+
+describe("build scope of the authored opening", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  async function scopedCamera(sharedSlug: string) {
+    vi.stubEnv("VITE_SINGLE_ROUTE_SLUG", sharedSlug);
+    vi.resetModules();
+    return (await import("./route-camera-score")).sustainedRouteCamera;
+  }
+
+  it("applies in a full build", async () => {
+    const camera = await scopedCamera("");
+    const state = stateAt(500);
+    const base = googleRouteCameraPose(route, state);
+    expect(camera(route, state, base, 390)).not.toBe(base);
+    expect(camera(route, state, base, 390)).toEqual(poseAt(500));
+  });
+
+  it("applies in the share of its own route", async () => {
+    const camera = await scopedCamera("14736711660");
+    const state = stateAt(500);
+    expect(camera(route, state, googleRouteCameraPose(route, state), 390)).toEqual(poseAt(500));
+  });
+
+  it.each(["17654151284", "14023448720"])("is absent from the share of %s", async sharedSlug => {
+    const camera = await scopedCamera(sharedSlug);
+    const state = stateAt(500);
+    const base = googleRouteCameraPose(route, state);
+    expect(camera(route, state, base, 390)).toBe(base);
   });
 });

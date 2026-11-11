@@ -14,6 +14,8 @@ import subprocess
 import time
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).parent
 PRODUCTION_DEPLOY_COMMAND = (
@@ -590,3 +592,129 @@ def test_failed_deploy_is_recorded_in_the_receipt(tmp_path: Path):
     assert receipt["phase"] == "deploy-failed"
     assert receipt["deploy_exit_code"] == 1
     assert "smoke-single-route-microsite" not in harness.recorded()
+
+
+# The share validator and the app's strict detail parser
+# (app/src/domain/route/detail-parse.ts) must agree on elevation: a share the
+# app can open must validate, and one it would reject must not. The date rule
+# is a publication rule and deliberately stricter than the parser, which takes
+# any string: a real calendar day, or "" on a discovered route only.
+def synthetic_route(**overrides):
+    points = [
+        {"lat": 49.0, "lng": -114.0, "elev": 1200.0, "d": 0.0},
+        {"lat": 49.001, "lng": -114.0, "elev": 1210.0, "d": 500.0},
+        {"lat": 49.002, "lng": -114.0, "elev": 1220.0, "d": 1000.0},
+    ]
+    route = {
+        "slug": "900000001",
+        "activity_id": "900000001",
+        "lifecycle": "completed",
+        "name": "Synthetic Ridge",
+        "subtitle": "Synthetic ridge run",
+        "activity_name": "Synthetic ridge run",
+        "region": "Synthetic Region",
+        "date": "2026-05-04",
+        "type": "Run",
+        "description": "A synthetic route used only by tests.",
+        "completion_rule": "Complete a 1.0 km run in Synthetic Region.",
+        "effort_tier": "Easy",
+        "theme": "Wander Run",
+        "xp": 60,
+        "distance_km": 1.0,
+        "elevation_gain_m": 20,
+        "center_lat": 49.001,
+        "center_lng": -114.0,
+        "mid_idx": 1,
+        "route": points,
+        "replay": {
+            "replay_eligible": True,
+            "best_in_earth": False,
+            "geometry_status": "ready",
+            "mode": "atlas",
+            "point_count": len(points),
+        },
+    }
+    route.update(overrides)
+    return route
+
+
+def without_elevation(**overrides):
+    route = synthetic_route(elevation_status="unavailable", elevation_gain_m=None)
+    route["route"] = [{**point, "elev": None} for point in route["route"]]
+    route.update(overrides)
+    return route
+
+
+def validate_source(tmp_path: Path, route: dict):
+    checkout = tmp_path / "checkout"
+    (checkout / "scripts").mkdir(parents=True, exist_ok=True)
+    shutil.copy2(
+        ROOT / "scripts" / "validate-route-microsite.mjs",
+        checkout / "scripts" / "validate-route-microsite.mjs",
+    )
+    routes = checkout / "app" / "public" / "data" / "routes"
+    routes.mkdir(parents=True, exist_ok=True)
+    (routes / f"{route['slug']}.json").write_text(json.dumps(route), encoding="utf-8")
+    return subprocess.run(
+        ["node", str(checkout / "scripts" / "validate-route-microsite.mjs"), route["slug"], "source"],
+        cwd=checkout, capture_output=True, text=True, check=False,
+    )
+
+
+def null_elevation_at_point(index: int, **overrides):
+    route = synthetic_route(**overrides)
+    route["route"][index] = {**route["route"][index], "elev": None}
+    return route
+
+
+ACCEPTED_SHARES = {
+    "recorded route without a status field": synthetic_route(),
+    "explicitly recorded elevation": synthetic_route(elevation_status="recorded"),
+    "route whose source has no elevation": without_elevation(),
+    # The parser keeps a finite point elevation on an unavailable route; only
+    # a null one is coerced. The gain is still required to be null.
+    "unavailable route with finite point elevations": without_elevation(
+        route=synthetic_route()["route"]),
+    "discovered route with no date": synthetic_route(lifecycle="discovered", date=""),
+    "discovered route with no date or elevation": without_elevation(lifecycle="discovered", date=""),
+}
+
+REJECTED_SHARES = {
+    "numeric gain on an unavailable route": (
+        without_elevation(elevation_gain_m=0), "elevation_gain_m"),
+    "missing gain on an unavailable route": (
+        {k: v for k, v in without_elevation().items() if k != "elevation_gain_m"}, "elevation_gain_m"),
+    "null gain on a recorded route": (synthetic_route(elevation_gain_m=None), "elevation_gain_m"),
+    "missing gain on a recorded route": (
+        {k: v for k, v in synthetic_route().items() if k != "elevation_gain_m"}, "elevation_gain_m"),
+    "negative gain on a recorded route": (synthetic_route(elevation_gain_m=-1), "elevation_gain_m"),
+    "string gain on a recorded route": (synthetic_route(elevation_gain_m="20"), "elevation_gain_m"),
+    "unknown elevation status": (synthetic_route(elevation_status="estimated"), "elevation_status"),
+    "null elev on a recorded route": (null_elevation_at_point(1), "route point 1"),
+    "null elev on an explicitly recorded route": (
+        null_elevation_at_point(0, elevation_status="recorded"), "route point 0"),
+    "string elev on an unavailable route": (
+        {**without_elevation(), "route": [{**p, "elev": "?"} for p in without_elevation()["route"]]},
+        "route point 0"),
+    "completed route with no date": (synthetic_route(date=""), "date"),
+    "impossible calendar date": (synthetic_route(date="2026-02-30"), "date"),
+    "unparsed date text": (synthetic_route(lifecycle="discovered", date="spring"), "date"),
+}
+
+
+@pytest.mark.parametrize("label", ACCEPTED_SHARES)
+def test_validator_accepts_a_share_the_app_can_open(tmp_path: Path, label: str):
+    route = ACCEPTED_SHARES[label]
+    result = validate_source(tmp_path, route)
+
+    assert result.returncode == 0, result.stderr
+    assert f"Validated {route['slug']} (source)." in result.stdout
+
+
+@pytest.mark.parametrize("label", REJECTED_SHARES)
+def test_validator_rejects_elevation_and_dates_the_app_cannot_trust(tmp_path: Path, label: str):
+    route, reason = REJECTED_SHARES[label]
+    result = validate_source(tmp_path, route)
+
+    assert result.returncode != 0, f"{label} was accepted"
+    assert reason in result.stderr, result.stderr

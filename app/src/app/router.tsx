@@ -1,9 +1,20 @@
 import { lazy } from "react";
-import { createHashRouter, Navigate, RouterProvider } from "react-router-dom";
+import {
+  createHashRouter,
+  Navigate,
+  replace,
+  RouterProvider,
+  type RouteObject,
+} from "react-router-dom";
 
 import { RouteError } from "@/app/route-error";
 import { AppShell } from "@/app/app-shell";
-import { APP_PATHS, canonicalizeLegacyQuestHash } from "@/app/route-paths";
+import {
+  APP_PATHS,
+  canonicalizeLegacyQuestHash,
+  LEGACY_QUEST_ROUTE_PATH,
+  routeDetailPath,
+} from "@/app/route-paths";
 
 // A single-route microsite build aliases this module to router.single.tsx
 // (see vite.config.ts), so no product surface below reaches a share bundle.
@@ -61,10 +72,7 @@ const CinematicDirectorLabPage = lazy(() =>
   })),
 );
 
-canonicalizeLegacyQuestHash();
-window.addEventListener("hashchange", canonicalizeLegacyQuestHash);
-
-const productRoutes = [
+const productRoutes: RouteObject[] = [
   { index: true, element: <Navigate to={APP_PATHS.atlas} replace /> },
   { path: APP_PATHS.atlas.slice(1), element: <AtlasPage /> },
   { path: APP_PATHS.finder.slice(1), element: <FinderPage /> },
@@ -91,17 +99,33 @@ const productRoutes = [
     element: <CinematicDirectorLabPage />,
   },
   { path: APP_PATHS.admin.slice(1), element: <AdminPage /> },
+  {
+    path: LEGACY_QUEST_ROUTE_PATH,
+    loader: ({ params }) => replace(routeDetailPath(params.legacySlug ?? "")),
+  },
   { path: "*", element: <Navigate to={APP_PATHS.atlas} replace /> },
 ];
 
-const router = createHashRouter([
+export const productRouteTree: RouteObject[] = [
   {
     element: <AppShell />,
     errorElement: <RouteError />,
     children: productRoutes,
   },
-]);
+];
+
+let router: ReturnType<typeof createHashRouter> | undefined;
+
+function appRouter() {
+  if (!router) {
+    // A legacy link opened before the app starts is rewritten before the
+    // router reads its first location.
+    canonicalizeLegacyQuestHash();
+    router = createHashRouter(productRouteTree);
+  }
+  return router;
+}
 
 export function AppRouter() {
-  return <RouterProvider router={router} />;
+  return <RouterProvider router={appRouter()} />;
 }

@@ -110,6 +110,19 @@ test("legacy quest links are canonicalized after the app has started", async ({
   ).toHaveAttribute("aria-current", "page");
 });
 
+test("a legacy quest link opened after start leaves no legacy history entry", async ({
+  page,
+}) => {
+  await page.goto("/#/finder");
+  await page.evaluate((slug) => {
+    window.location.hash = `quest/${slug}`;
+  }, routeSlug);
+  await expect(page).toHaveURL(new RegExp(`#\/routes\/${routeSlug}$`));
+
+  await page.goBack();
+  await expect(page).toHaveURL(/#\/finder$/);
+});
+
 test("malformed legacy quest links canonicalize to the unavailable route state", async ({
   page,
 }) => {
