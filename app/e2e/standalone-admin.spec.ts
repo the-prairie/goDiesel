@@ -494,3 +494,53 @@ test('a save refused without a reason keeps the plain failure toast', async ({ p
   await expect(page.locator('#toast')).toHaveText('SAVE FAILED');
   await expect(page.locator('#dirtyCount')).toHaveText('1');
 });
+
+test('card dirty marking follows edits, re-renders, saves and reloads', async ({ page, adminUrl }) => {
+  const one = page.locator('.card[data-id="synthetic-one"]');
+  const dirtyCards = page.locator('.card.dirty');
+  await page.goto(adminUrl);
+  await expect(page.getByText('Synthetic river run', { exact: true })).toBeVisible();
+  await expect(dirtyCards).toHaveCount(0);
+  await one.locator('.region-input').fill('Test region');
+  await expect(one).toHaveClass(/\bdirty\b/);
+  await expect(dirtyCards).toHaveCount(1);
+  await page.locator('#search').fill('river');
+  await expect(one).toHaveClass(/\bdirty\b/);
+  await page.locator('#search').fill('');
+  await page.locator('[data-tab="approved"]').click();
+  const two = page.locator('.card[data-id="synthetic-two"]');
+  await expect(two).not.toHaveClass(/\bdirty\b/);
+  await two.locator('select[data-meta-field="visibility"]').selectOption('hidden');
+  await expect(two).toHaveClass(/\bdirty\b/);
+  await two.locator('textarea[data-meta-field="blurb"]').fill('Ridge blurb');
+  await expect(two).toHaveClass(/\bdirty\b/);
+  await two.locator('[data-action="archive"]').click();
+  await page.locator('[data-tab="archived"]').click();
+  await expect(two).toHaveClass(/\bdirty\b/);
+  await page.locator('[data-tab="pending"]').click();
+  await expect(one).toHaveClass(/\bdirty\b/);
+  await expect(page.locator('#dirtyCount')).toHaveText('2');
+  await page.locator('#saveBtn').click();
+  await expect(page.locator('#toast')).toHaveText('SAVED 2 CHANGES');
+  await expect(dirtyCards).toHaveCount(0);
+  await page.locator('[data-tab="archived"]').click();
+  await expect(two).not.toHaveClass(/\bdirty\b/);
+  await page.reload();
+  await expect(page.getByText('Synthetic river run', { exact: true })).toBeVisible();
+  await expect(dirtyCards).toHaveCount(0);
+});
+
+test('a card edited during a save stays marked dirty after the save settles', async ({ page, request, adminUrl }) => {
+  await request.post(`${adminUrl}/fixture/mutations`, { data: { holdSaves: true } });
+  const one = page.locator('.card[data-id="synthetic-one"]');
+  await page.goto(adminUrl);
+  await page.getByPlaceholder('Custom title').fill('Submitted');
+  await page.locator('#saveBtn').click();
+  await expect(page.locator('#saveBtn')).toBeDisabled();
+  await page.getByPlaceholder('Custom title').fill('Edited while saving');
+  await expect(one).toHaveClass(/\bdirty\b/);
+  await request.post(`${adminUrl}/fixture/release-saves`);
+  await expect(page.locator('#toast')).toHaveText('SAVED 1 CHANGE');
+  await expect(one).toHaveClass(/\bdirty\b/);
+  await expect(page.locator('#dirtyCount')).toHaveText('1');
+});
