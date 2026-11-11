@@ -161,6 +161,16 @@ node scripts/dist-manifest.mjs check --scope full && npx wrangler pages deploy d
 `make-dist.sh` writes `.dist-manifest.json` as its last step.
 The check refuses a missing manifest, a single-route bundle, and a `dist/` that changed after packaging.
 
+When a Google Maps key is configured, `make-dist.sh` verifies it with Google by requesting the Map Tiles API's 3D Tiles root once, which is one billable request per build.
+If Google answers that the key is invalid, the build fails, and the message names the key only by its last four characters.
+If Google recognises the key but blocks the build machine by a referrer, IP, or app restriction, the build prints a warning and continues.
+If the key cannot be verified, for example without a network, the build also prints a warning and continues. With `GODIESEL_REQUIRE_PROVIDER_KEY=1`, it fails instead.
+For an offline build, skip the request:
+
+```bash
+GODIESEL_SKIP_PROVIDER_KEY_VERIFY=1 ./make-dist.sh
+```
+
 ## Publish a single-route microsite
 
 Prepare a route-only public share without publishing it:
