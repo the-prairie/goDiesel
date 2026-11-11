@@ -33,6 +33,7 @@ export function reduceRegionalTransition(
   state: RegionalTransitionState,
   event: RegionalTransitionEvent,
 ): RegionalTransitionState {
+  if (state.status === "disposed") return state;
   switch (event.type) {
     case "regionSelected":
       return { status: "loading", operationId: state.operationId + 1, regionName: event.regionName,
