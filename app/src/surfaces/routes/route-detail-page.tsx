@@ -19,8 +19,10 @@ import { RouteGuide } from "@/surfaces/routes/components/route-guide";
 import { RouteLeafMap } from "@/surfaces/routes/components/route-leaf-map";
 import {
   draggedRouteSheetHeight,
+  releaseVelocity,
   snapRouteSheet,
   type RouteSheetPosition,
+  type SheetSample,
 } from "@/surfaces/routes/route-sheet-snap";
 import { RouteNotFound } from "@/ui/route-not-found";
 import { Button } from "@/ui/button";
@@ -46,17 +48,9 @@ type SheetDrag = {
   from: RouteMarginPosition;
   viewportHeight: number;
   containerHeight: number;
-  samples: Array<{ y: number; t: number }>;
+  /** `t` is each event's own `timeStamp`, never the time its handler ran. */
+  samples: SheetSample[];
 };
-
-/** Finger speed over the last ~100 ms of a drag, in px/ms (positive = down). */
-function releaseVelocity(samples: SheetDrag["samples"]) {
-  const last = samples.at(-1);
-  if (!last) return 0;
-  const reference = samples.find((sample) => last.t - sample.t <= 100) ?? last;
-  const elapsed = last.t - reference.t;
-  return elapsed > 0 ? (last.y - reference.y) / elapsed : 0;
-}
 
 export function RouteDetailPage() {
   const { routeSlug } = useParams();

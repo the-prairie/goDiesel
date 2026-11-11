@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { routeSheetHeights, snapRouteSheet, type RouteSheetPosition } from "./route-sheet-snap";
+import { releaseVelocity, routeSheetHeights, snapRouteSheet, type RouteSheetPosition } from "./route-sheet-snap";
 
 // A 390x844 phone: the guide fills the viewport above the 82 px bottom bar.
 const viewport = { viewportHeight: 844, containerHeight: 762 };
@@ -55,5 +55,33 @@ describe("route sheet snap", () => {
     expect(snap("expanded", -600)).toBe("expanded");
     expect(snap("peek", 400, 3)).toBe("peek");
     expect(snap("expanded", -400, -3)).toBe("expanded");
+  });
+});
+
+describe("route sheet release velocity", () => {
+  it("is zero without movement or elapsed time", () => {
+    expect(releaseVelocity([])).toBe(0);
+    expect(releaseVelocity([{ y: 500, t: 10 }])).toBe(0);
+    expect(releaseVelocity([{ y: 500, t: 10 }, { y: 440, t: 10 }])).toBe(0);
+  });
+
+  it("measures the finger over the last 100 ms of event time", () => {
+    // A 60 px flick up in 48 ms, released 16 ms later.
+    const flick = [{ y: 500, t: 1000 }, { y: 480, t: 1016 }, { y: 460, t: 1032 }, { y: 440, t: 1048 }, { y: 440, t: 1064 }];
+    expect(releaseVelocity(flick)).toBeCloseTo(-60 / 64);
+    // Older samples outside the window do not dilute a late flick.
+    expect(releaseVelocity([{ y: 700, t: 0 }, { y: 500, t: 600 }, ...flick])).toBeCloseTo(-60 / 64);
+  });
+
+  it("reads a flick from its event stamps even when a busy main thread delivers it late", () => {
+    // Same stamps as a real 64 ms flick; the handler ran them in one late burst.
+    // Only `t` (the event's own timeStamp) enters the calculation, never handler time.
+    const deliveredLate = [{ y: 500, t: 1000 }, { y: 440, t: 1048 }, { y: 440, t: 1064 }];
+    expect(releaseVelocity(deliveredLate)).toBeCloseTo(-60 / 64);
+    expect(snapRouteSheet({ from: "half", dragPx: -60, velocityPxPerMs: releaseVelocity(deliveredLate), viewportHeight: 844, containerHeight: 762 })).toBe("expanded");
+  });
+
+  it("treats a drag held still before release as having no momentum", () => {
+    expect(releaseVelocity([{ y: 500, t: 0 }, { y: 260, t: 128 }, { y: 260, t: 328 }])).toBe(0);
   });
 });

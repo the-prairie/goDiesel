@@ -61,6 +61,26 @@ export function snapRouteSheet({
   );
 }
 
+/** One pointer sample: `y` in px, `t` the event's own `timeStamp` in ms. */
+export type SheetSample = { y: number; t: number };
+
+/** The window of event time that defines a release's velocity. */
+const VELOCITY_WINDOW_MS = 100;
+
+/**
+ * Finger speed over the last 100 ms of a drag, in px/ms (positive = down).
+ * Pass event `timeStamp`s, not the time handlers ran: a busy main thread
+ * delivers pointer events late, but their stamps still say when the finger
+ * moved, so a fast flick on a janky frame still reads as a flick.
+ */
+export function releaseVelocity(samples: readonly SheetSample[]) {
+  const last = samples.at(-1);
+  if (!last) return 0;
+  const reference = samples.find((sample) => last.t - sample.t <= VELOCITY_WINDOW_MS) ?? last;
+  const elapsed = last.t - reference.t;
+  return elapsed > 0 ? (last.y - reference.y) / elapsed : 0;
+}
+
 /** The sheet height in px while a finger holds it, bounded by the outer stops. */
 export function draggedRouteSheetHeight(from: RouteSheetPosition, dragPx: number, viewportHeight: number, containerHeight: number) {
   const heights = routeSheetHeights(viewportHeight, containerHeight);
