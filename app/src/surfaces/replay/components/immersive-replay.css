@@ -33,4 +33,8 @@ body:has(.immersive-replay) .atlas-spine-mobile {
 
 @media (max-height: 500px) and (orientation: landscape) {
   .immersive-replay-dock { bottom: 2rem; width: min(44rem, calc(100% - 2rem)); }
+  /* A short screen cannot hold both the unavailable notice and the dock, and
+     the dock's controls need a scene: the notice and its way forward take the
+     dock's place until a ready scene brings it back. */
+  .immersive-replay[data-engine="google-3d-maps"][data-state="unavailable"] .immersive-replay-dock { display: none; }
 }

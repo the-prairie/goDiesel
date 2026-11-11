@@ -734,3 +734,63 @@ for (const device of [
     });
   });
 }
+
+// UX-15: in a short landscape phone the unavailable notice and the chapter
+// dock must not interleave, and "Use Atlas replay" stays whole and on top.
+async function expectNoticeClearOfDock(page: Page, viewport: { width: number; height: number }) {
+  const alert = page.getByRole("alert");
+  const atlas = alert.getByRole("button", { name: "Use Atlas replay", exact: true });
+  await expect(atlas).toBeVisible();
+  const report = await page.evaluate(() => {
+    const box = (element: Element | null) => {
+      if (!element || !(element as HTMLElement).checkVisibility?.({ visibilityProperty: true, opacityProperty: true })) return null;
+      const rect = element.getBoundingClientRect();
+      return rect.width && rect.height ? { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom } : null;
+    };
+    const card = document.querySelector('[data-testid="replay-stage"] [role="alert"]')!;
+    const atlas = [...card.querySelectorAll("button")].find(button => button.textContent?.includes("Use Atlas replay"))!;
+    const atlasBox = atlas.getBoundingClientRect();
+    const target = document.elementFromPoint(atlasBox.left + atlasBox.width / 2, atlasBox.top + atlasBox.height / 2);
+    const header = [...document.querySelectorAll('[data-testid="replay-stage"] header button')].map(box);
+    return {
+      card: box(card),
+      atlas: box(atlas),
+      dock: box(document.querySelector('[data-testid="replay-controls"]')),
+      header,
+      atlasOnTop: !!target && atlas.contains(target),
+    };
+  });
+  const intersects = (a: { left: number; top: number; right: number; bottom: number } | null, b: typeof a) =>
+    !!a && !!b && a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+  expect(report.card).not.toBeNull();
+  expect(intersects(report.card, report.dock)).toBe(false);
+  for (const control of report.header) expect(intersects(report.card, control)).toBe(false);
+  expect(report.atlas!.top).toBeGreaterThanOrEqual(0);
+  expect(report.atlas!.left).toBeGreaterThanOrEqual(0);
+  expect(report.atlas!.bottom).toBeLessThanOrEqual(viewport.height);
+  expect(report.atlas!.right).toBeLessThanOrEqual(viewport.width);
+  expect(report.atlasOnTop).toBe(true);
+}
+
+for (const viewport of [{ width: 844, height: 390 }, { width: 667, height: 375 }]) {
+  test.describe(`the unavailable notice in phone landscape ${viewport.width}x${viewport.height}`, () => {
+    test.use({ viewport, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
+
+    test("stays clear of the chapter dock when 3D is unavailable", async ({ page }) => {
+      await installGoogleReplay(page, "unavailable");
+      await page.goto("/#/replay/14023448720");
+      await expect(page.getByRole("alert")).toContainText("3D world unavailable");
+      await expectNoticeClearOfDock(page, viewport);
+    });
+
+    test("stays clear of the chapter dock when Google rejects the key", async ({ page }) => {
+      await installKeyRejectedReplay(page);
+      await page.goto("/#/replay/14023448720");
+      await expect(page.getByTestId("replay-stage")).toHaveAttribute("data-state", "loading");
+      await rejectKey(page);
+      await expect(page.getByRole("alert")).toContainText("Google 3D is unavailable");
+      await expectNoticeClearOfDock(page, viewport);
+    });
+  });
+}
+
