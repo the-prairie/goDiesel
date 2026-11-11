@@ -1,10 +1,14 @@
 import { Suspense } from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import { Outlet, useLocation, useMatches } from "react-router-dom";
 
 import { AtlasSpine } from "@/surfaces/atlas/components/atlas-spine";
 import { singleRouteMicrosite } from "@/app/single-route-microsite";
 import { APP_PATHS } from "@/app/route-paths";
 import { appSectionForPath } from "@/app/app-sections";
+import {
+  SurfacePlaceholder,
+  surfaceOfHandle,
+} from "@/app/surface-placeholder";
 import { cn } from "@/ui/utils";
 
 export function AppShell() {
@@ -24,6 +28,7 @@ export function AppShell() {
     section.id === "finder" ||
     section.id === "replay";
   const isUtility = section.id === "admin";
+  const surface = surfaceOfHandle(useMatches().at(-1)?.handle);
 
   return (
     <div className="weathered-atlas field-guide-theme relative flex min-h-dvh bg-background text-foreground">
@@ -68,17 +73,7 @@ export function AppShell() {
                 : "mx-auto grid max-w-7xl gap-6 p-4 sm:p-6",
           )}
         >
-          <Suspense
-            fallback={
-              <div
-                role="status"
-                aria-live="polite"
-                className="rounded-md border border-border bg-card p-5 text-sm text-muted-foreground"
-              >
-                Loading view.
-              </div>
-            }
-          >
+          <Suspense fallback={<SurfacePlaceholder surface={surface ?? "missing"} />}>
             <Outlet />
           </Suspense>
         </main>

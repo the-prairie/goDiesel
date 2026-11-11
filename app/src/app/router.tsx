@@ -1,4 +1,4 @@
-import { lazy } from "react";
+import { lazy, Suspense, type ComponentType } from "react";
 import {
   createHashRouter,
   Navigate,
@@ -7,8 +7,10 @@ import {
   type RouteObject,
 } from "react-router-dom";
 
-import { RouteError } from "@/app/route-error";
+import { RootRouteError, RouteError } from "@/app/route-error";
 import { AppShell } from "@/app/app-shell";
+import { NotFoundPage } from "@/app/not-found-page";
+import { SurfacePlaceholder, type Surface } from "@/app/surface-placeholder";
 import {
   APP_PATHS,
   canonicalizeLegacyQuestHash,
@@ -72,45 +74,59 @@ const CinematicDirectorLabPage = lazy(() =>
   })),
 );
 
+/** A lazy view, with a placeholder that reserves its surface's layout. */
+function view(path: string, surface: Surface, Page: ComponentType): RouteObject {
+  return {
+    path,
+    handle: { surface },
+    element: (
+      <Suspense fallback={<SurfacePlaceholder surface={surface} />}>
+        <Page />
+      </Suspense>
+    ),
+  };
+}
+
 const productRoutes: RouteObject[] = [
   { index: true, element: <Navigate to={APP_PATHS.atlas} replace /> },
-  { path: APP_PATHS.atlas.slice(1), element: <AtlasPage /> },
-  { path: APP_PATHS.finder.slice(1), element: <FinderPage /> },
-  { path: APP_PATHS.routes.slice(1), element: <RoutesPage /> },
-  { path: "courses", element: <CoursePage /> },
-  { path: "courses/:courseId", element: <CoursePage /> },
-  { path: "courses/:courseId/preview", element: <CoursePreviewPage /> },
-  { path: "routes/:routeSlug", element: <RouteDetailPage /> },
-  { path: APP_PATHS.replay.slice(1), element: <ReplayPage /> },
-  { path: "replay/:routeSlug", element: <ReplayPage /> },
-  { path: "lab/playable-earth/:routeSlug", element: <PlayableEarthLabPage /> },
-  { path: "lab/design-system", element: <DesignSystemLabPage /> },
-  { path: "lab/route-intelligence", element: <RouteIntelligenceLabPage /> },
-  {
-    path: "lab/google-route-navigator/:routeSlug",
-    element: <GoogleRouteNavigatorLabPage />,
-  },
-  {
-    path: "lab/route-trailer/:routeSlug",
-    element: <CinematicRouteTrailerLabPage />,
-  },
-  {
-    path: "lab/cinematic-director/:routeSlug",
-    element: <CinematicDirectorLabPage />,
-  },
-  { path: APP_PATHS.admin.slice(1), element: <AdminPage /> },
+  view(APP_PATHS.atlas.slice(1), "atlas", AtlasPage),
+  view(APP_PATHS.finder.slice(1), "finder", FinderPage),
+  view(APP_PATHS.routes.slice(1), "routes", RoutesPage),
+  view("courses", "courses", CoursePage),
+  view("courses/:courseId", "courses", CoursePage),
+  view("courses/:courseId/preview", "course-preview", CoursePreviewPage),
+  view("routes/:routeSlug", "route", RouteDetailPage),
+  view(APP_PATHS.replay.slice(1), "replay", ReplayPage),
+  view("replay/:routeSlug", "replay", ReplayPage),
+  view("lab/playable-earth/:routeSlug", "lab", PlayableEarthLabPage),
+  view("lab/design-system", "lab", DesignSystemLabPage),
+  view("lab/route-intelligence", "lab", RouteIntelligenceLabPage),
+  view("lab/google-route-navigator/:routeSlug", "lab", GoogleRouteNavigatorLabPage),
+  view("lab/route-trailer/:routeSlug", "lab", CinematicRouteTrailerLabPage),
+  view("lab/cinematic-director/:routeSlug", "lab", CinematicDirectorLabPage),
+  view(APP_PATHS.admin.slice(1), "admin", AdminPage),
   {
     path: LEGACY_QUEST_ROUTE_PATH,
     loader: ({ params }) => replace(routeDetailPath(params.legacySlug ?? "")),
   },
-  { path: "*", element: <Navigate to={APP_PATHS.atlas} replace /> },
+  // A mistyped or stale link says so, inside the shell; it never silently
+  // becomes Atlas.
+  { path: "*", handle: { surface: "missing" }, element: <NotFoundPage /> },
 ];
 
 export const productRouteTree: RouteObject[] = [
   {
     element: <AppShell />,
-    errorElement: <RouteError />,
-    children: productRoutes,
+    // Last resort, for a failure in the shell itself.
+    errorElement: <RootRouteError />,
+    children: [
+      {
+        // A view that fails to open is caught here, inside the shell, so the
+        // primary navigation stays usable.
+        errorElement: <RouteError />,
+        children: productRoutes,
+      },
+    ],
   },
 ];
 

@@ -361,3 +361,50 @@ test("field-guide shell has stable desktop and mobile compositions", async ({
     animations: "disabled",
   });
 });
+
+test("an unknown link says so inside the shell and offers a way to Atlas", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#/finderr");
+
+  await expect(page.getByRole("heading", { name: "There’s nothing at this address." })).toBeVisible();
+  // Not silently redirected, and the navigation stays.
+  await expect(page).toHaveURL(/#\/finderr$/);
+  await expect(page.getByTestId("atlas-spine-mobile")).toBeVisible();
+
+  await page.getByRole("link", { name: "Open Atlas" }).click();
+  await expect(page).toHaveURL(/#\/atlas$/);
+});
+
+/** Holds the matching asset until `release` is called. */
+async function holdAsset(page: import("@playwright/test").Page, pattern: RegExp) {
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(pattern, async (route) => { await released; await route.continue(); });
+  return release;
+}
+
+test("a surface that is still downloading says what is opening, clear of the screen edge", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const [path, chunk, status, ready] of [
+    ["routes", /\/assets\/routes-page-[^/]+\.js$/, "Opening your routes…", "Places worth returning to."],
+    ["finder", /\/assets\/finder-page-[^/]+\.js$/, "Opening Finder…", "Plan the next day."],
+  ] as const) {
+    const release = await holdAsset(page, chunk);
+    await page.goto(`/#/${path}`);
+
+    const message = page.getByRole("status").filter({ hasText: status });
+    await expect(message).toBeVisible();
+    await expect(page.getByText("Loading view.")).toHaveCount(0);
+    await expect(page.getByTestId("atlas-spine-mobile")).toBeVisible();
+    const box = await message.boundingBox();
+    expect(box?.x).toBeGreaterThanOrEqual(12);
+    expect(box?.y).toBeGreaterThanOrEqual(12);
+    // The placeholder reserves the surface's space above the navigation.
+    const reserved = await page.locator("[data-surface-placeholder]").boundingBox();
+    expect(reserved?.height).toBeGreaterThan(400);
+
+    release();
+    await expect(page.getByRole("heading", { name: ready })).toBeVisible();
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+  }
+});
