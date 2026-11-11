@@ -45,6 +45,7 @@ import {
 } from "./surface-sampling-state";
 import {
   cesiumFidelityStatus,
+  cesiumRunIsCurrent,
   initialCesiumFidelityState,
   reduceCesiumFidelity,
   type CesiumFidelityEvent,
@@ -147,53 +148,35 @@ export class CesiumReplayEngine implements ReplayEngine {
   private fidelity = initialCesiumFidelityState();
   private onStatus?: ReplayEngineMountOptions["onStatus"];
   private container?: HTMLElement;
-  private generation = 0;
 
   constructor(
     private readonly minimumCameraClearanceM = REPLAY_CAMERA_MIN_CLEARANCE_M,
   ) {}
 
   async mount({ container, route, onStatus }: ReplayEngineMountOptions) {
-    const generation = ++this.generation;
-    this.fidelity = reduceCesiumFidelity(this.fidelity, {
-      type: "sessionStarted",
-      operationId: generation,
-    });
     this.surfaceSampling = reduceSurfaceSampling(this.surfaceSampling, {
       type: "sessionStarted",
     });
     this.container = container;
     this.route = route;
     this.onStatus = onStatus;
-    onStatus({
-      state: "loading",
-      title: "Building your route world",
-      message: "Loading the bundled Earth engine and photorealistic tiles.",
-    });
+    const { operationId } = this.transition({ type: "sessionStarted" });
 
     if (route.route.length < 2) {
-      onStatus({
-        state: "unavailable",
-        title: "Route geometry unavailable",
-        message: "This completed route does not contain enough points to replay.",
-      });
+      this.transition({ type: "inputsRejected", operationId, reason: "geometry" });
       return;
     }
     if (!webglAvailable()) {
-      onStatus({
-        state: "unavailable",
-        title: "WebGL unavailable",
-        message: "This browser cannot start the photorealistic replay.",
-      });
+      this.transition({ type: "inputsRejected", operationId, reason: "webgl" });
       return;
     }
 
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
     if (!apiKey) {
-      onStatus({
-        state: "unavailable",
-        title: "Map tiles unavailable",
-        message: "A Google Map Tiles browser key is required for Earth Replay.",
+      this.transition({
+        type: "inputsRejected",
+        operationId,
+        reason: "credentials",
       });
       return;
     }
@@ -226,15 +209,15 @@ export class CesiumReplayEngine implements ReplayEngine {
         ...GOOGLE_3D_TILES_RENDER_OPTIONS,
         enableCollision: true,
       });
-      if (generation !== this.generation) {
+      if (!cesiumRunIsCurrent(this.fidelity, operationId)) {
         viewer.destroy();
         return;
       }
       viewer.scene.primitives.add(tileset);
       this.removeTileFailureListener = tileset.tileFailed.addEventListener(() => {
-        this.observeFidelity({
+        this.transition({
           type: "tileFailed",
-          operationId: generation,
+          operationId,
           atMs: performance.now(),
         });
       });
@@ -271,24 +254,20 @@ export class CesiumReplayEngine implements ReplayEngine {
         },
       });
       await viewer.zoomTo(routeEntity, new HeadingPitchRange(0, -0.72, 0));
-      if (generation !== this.generation) return;
+      if (!cesiumRunIsCurrent(this.fidelity, operationId)) return;
       const initialTiles = await this.waitForInitialTiles(tileset);
-      if (generation !== this.generation) return;
-      this.observeFidelity({
+      if (!cesiumRunIsCurrent(this.fidelity, operationId)) return;
+      this.transition({
         type: "initialTilesSettled",
-        operationId: generation,
+        operationId,
         result: initialTiles,
       });
-      this.startRenderDiagnostics(generation);
+      this.startRenderDiagnostics(operationId);
     } catch (error) {
-      if (generation !== this.generation) return;
+      if (!cesiumRunIsCurrent(this.fidelity, operationId)) return;
       console.warn("Earth Replay unavailable", error);
-      this.destroy();
-      onStatus({
-        state: "unavailable",
-        title: "Photorealistic world unavailable",
-        message: "Google 3D tiles could not load for this route.",
-      });
+      this.releaseResources();
+      this.transition({ type: "loadFailed", operationId }, onStatus);
     }
   }
 
@@ -315,26 +294,35 @@ export class CesiumReplayEngine implements ReplayEngine {
     });
   }
 
-  private startRenderDiagnostics(generation: number) {
+  private startRenderDiagnostics(operationId: number) {
     this.diagnosticsTimer = window.setInterval(() => {
-      if (generation !== this.generation || this.fidelity.phase === "partial")
+      if (
+        !cesiumRunIsCurrent(this.fidelity, operationId) ||
+        this.fidelity.phase === "partial"
+      )
         return;
       const canvas = this.viewer?.canvas;
       if (!canvas || canvas.width < 2 || canvas.height < 2) return;
-      this.observeFidelity({
+      this.transition({
         type: "frameObserved",
-        operationId: generation,
+        operationId,
         blank: canvasLooksBlank(canvas),
       });
     }, 8_000);
   }
 
-  private observeFidelity(event: CesiumFidelityEvent) {
+  /** Every status this engine publishes comes from the reducer state. */
+  private transition(
+    event: CesiumFidelityEvent,
+    onStatus: ReplayEngineMountOptions["onStatus"] | undefined = this.onStatus,
+  ) {
     const previous = this.fidelity;
     this.fidelity = reduceCesiumFidelity(previous, event);
-    if (this.fidelity.phase === previous.phase) return;
-    const status = cesiumFidelityStatus(this.fidelity);
-    if (status) this.onStatus?.(status);
+    if (this.fidelity.statusRevision !== previous.statusRevision) {
+      const status = cesiumFidelityStatus(this.fidelity);
+      if (status) onStatus?.(status);
+    }
+    return this.fidelity;
   }
 
   setPose(pose: ReplayPose) {
@@ -578,7 +566,7 @@ export class CesiumReplayEngine implements ReplayEngine {
       return;
     }
 
-    const requestGeneration = this.generation;
+    const operationId = this.fidelity.operationId;
     const requestProgressM = pose.progressM;
     const requestCameraTarget = { lat: cameraLat, lng: cameraLng };
     const requestId = this.surfaceSampling.requestId;
@@ -592,7 +580,7 @@ export class CesiumReplayEngine implements ReplayEngine {
         2,
       )
       .then((positions) => {
-        if (requestGeneration !== this.generation) return;
+        if (!cesiumRunIsCurrent(this.fidelity, operationId)) return;
         const progressSampleIsStale =
           Math.abs(
             (this.latestPose?.progressM ?? requestProgressM) - requestProgressM,
@@ -625,7 +613,7 @@ export class CesiumReplayEngine implements ReplayEngine {
         if (this.latestPose) this.setPose(this.latestPose);
       })
       .catch(() => {
-        if (requestGeneration === this.generation) {
+        if (cesiumRunIsCurrent(this.fidelity, operationId)) {
           this.pendingGroundingObservation = { kind: "missing" };
           this.pendingCameraSurfaceObservation = { kind: "missing" };
           this.pendingCameraSurfaceTarget = requestCameraTarget;
@@ -636,7 +624,7 @@ export class CesiumReplayEngine implements ReplayEngine {
         }
       })
       .finally(() => {
-        if (requestGeneration === this.generation) {
+        if (cesiumRunIsCurrent(this.fidelity, operationId)) {
           const retryLatestPose =
             this.surfaceSampling.phase === "sampling" &&
             this.surfaceSampling.requestId === requestId &&
@@ -653,7 +641,10 @@ export class CesiumReplayEngine implements ReplayEngine {
             );
             this.surfaceSampleRetryTimer = window.setTimeout(() => {
               this.surfaceSampleRetryTimer = undefined;
-              if (requestGeneration === this.generation && this.latestPose) {
+              if (
+                cesiumRunIsCurrent(this.fidelity, operationId) &&
+                this.latestPose
+              ) {
                 this.setPose(this.latestPose);
               }
             }, retryDelayMs);
@@ -663,7 +654,12 @@ export class CesiumReplayEngine implements ReplayEngine {
   }
 
   destroy() {
-    this.generation += 1;
+    this.releaseResources();
+    this.transition({ type: "disposed" });
+  }
+
+  /** Releases the run's resources. The caller records why in the reducer. */
+  private releaseResources() {
     this.cancelInitialTileWait?.();
     this.removeTileFailureListener?.();
     if (this.diagnosticsTimer !== undefined) {
@@ -697,7 +693,6 @@ export class CesiumReplayEngine implements ReplayEngine {
     this.removeTileFailureListener = undefined;
     this.cancelInitialTileWait = undefined;
     this.diagnosticsTimer = undefined;
-    this.fidelity = reduceCesiumFidelity(this.fidelity, { type: "disposed" });
     this.onStatus = undefined;
     this.container = undefined;
   }
