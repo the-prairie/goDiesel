@@ -18,8 +18,6 @@ import subprocess
 import sys
 import threading
 import time
-import urllib.parse
-import urllib.request
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -29,10 +27,25 @@ import gpxpy
 import pandas as pd
 
 from admin_classify import initial_classify_state, public_classify_state, reduce_classify
+from admin_rebuild import (
+    initial_rebuild_state,
+    public_rebuild_state,
+    reduce_rebuild,
+    stderr_tail,
+)
+from admin_geocode import (
+    DEFAULT_NOMINATIM_USER_AGENT,
+    GeocodeBucketCache,
+    NominatimClient,
+    load_json_object,
+    outcome_label,
+    write_json_atomic,
+)
 from admin_curation import curation_readiness, save_curation_and_rebuild, write_atomic
 from route_regions import classify_region
 import hashlib
 import tempfile
+import uuid
 
 from curation_publish import (
     CurationPublishError,
@@ -94,33 +107,8 @@ CURATION_VISIBILITIES = ('public', 'hidden')
 # Nominatim fair-use: max 1 req/sec, descriptive User-Agent required.
 NOMINATIM_USER_AGENT = os.environ.get(
     'GODIESEL_NOMINATIM_USER_AGENT',
-    'goDieselOwnerAdmin/1.0',
+    DEFAULT_NOMINATIM_USER_AGENT,
 )
-NOMINATIM_URL = 'https://nominatim.openstreetmap.org/reverse'
-GEOCODE_BUCKET_DEG = 0.05  # ~5 km cells — nearby rides share a single API call
-
-# State / province abbreviations for clean "City, ST" labels.
-STATE_ABBREV = {
-    'Alberta': 'AB', 'British Columbia': 'BC', 'Saskatchewan': 'SK',
-    'Manitoba': 'MB', 'Ontario': 'ON', 'Quebec': 'QC', 'Québec': 'QC',
-    'Nova Scotia': 'NS', 'New Brunswick': 'NB',
-    'Newfoundland and Labrador': 'NL', 'Prince Edward Island': 'PE',
-    'Yukon': 'YT', 'Northwest Territories': 'NT', 'Nunavut': 'NU',
-    'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR',
-    'California': 'CA', 'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE',
-    'Florida': 'FL', 'Georgia': 'GA', 'Hawaii': 'HI', 'Idaho': 'ID',
-    'Illinois': 'IL', 'Indiana': 'IN', 'Iowa': 'IA', 'Kansas': 'KS',
-    'Kentucky': 'KY', 'Louisiana': 'LA', 'Maine': 'ME', 'Maryland': 'MD',
-    'Massachusetts': 'MA', 'Michigan': 'MI', 'Minnesota': 'MN',
-    'Mississippi': 'MS', 'Missouri': 'MO', 'Montana': 'MT', 'Nebraska': 'NE',
-    'Nevada': 'NV', 'New Hampshire': 'NH', 'New Jersey': 'NJ',
-    'New Mexico': 'NM', 'New York': 'NY', 'North Carolina': 'NC',
-    'North Dakota': 'ND', 'Ohio': 'OH', 'Oklahoma': 'OK', 'Oregon': 'OR',
-    'Pennsylvania': 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC',
-    'South Dakota': 'SD', 'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT',
-    'Vermont': 'VT', 'Virginia': 'VA', 'Washington': 'WA',
-    'West Virginia': 'WV', 'Wisconsin': 'WI', 'Wyoming': 'WY',
-}
 
 def parse_strava_date(s):
     if not isinstance(s, str):
@@ -187,12 +175,10 @@ def first_point(fp):
 def build_geo_cache():
     """One-time pass: extract starting GPS point for every route + classify region.
     Cached to .geo_cache.json so subsequent admin launches are instant."""
-    cache = {}
-    if GEO_CACHE_PATH.exists():
-        try:
-            cache = json.loads(GEO_CACHE_PATH.read_text())
-        except Exception:
-            cache = {}
+    cache, moved = load_json_object(GEO_CACHE_PATH, now=time.time())
+    if moved is not None:
+        print(f'WARNING: {GEO_CACHE_PATH.name} was corrupt; moved aside to {moved.name}',
+              file=sys.stderr)
     cfg = json.loads((QUESTS / 'quests.json').read_text())
     all_ids = [r['activity_id'] for r in cfg.get('routes', [])]
     todo = [aid for aid in all_ids if aid not in cache]
@@ -218,7 +204,7 @@ def build_geo_cache():
                 'lng': round(pt[1], 4),
                 'region': classify_region(pt[0], pt[1]),
             }
-    GEO_CACHE_PATH.write_text(json.dumps(cache))
+    write_json_atomic(GEO_CACHE_PATH, cache)
     print(f'  Cached: {GEO_CACHE_PATH.name}')
     return cache
 
@@ -230,83 +216,30 @@ print(f'  {sum(1 for v in geo_cache.values() if v.get("region")):,} routes geo-t
 
 # ── Reverse-geocoding (Nominatim, rate-limited, persistent bucket cache) ──
 
-def _load_geocode_buckets():
-    if not GEOCODE_BUCKETS_PATH.exists():
-        return {}
-    try:
-        raw = json.loads(GEOCODE_BUCKETS_PATH.read_text())
-        return {tuple(float(x) for x in k.split(',')): v for k, v in raw.items()}
-    except Exception:
-        return {}
+nominatim = NominatimClient(NOMINATIM_USER_AGENT)
+geocode_cache = GeocodeBucketCache.load(GEOCODE_BUCKETS_PATH)
+if geocode_cache.corrupt_moved_to is not None:
+    print(f'WARNING: {GEOCODE_BUCKETS_PATH.name} was corrupt; moved aside to '
+          f'{geocode_cache.corrupt_moved_to.name}', file=sys.stderr)
+if geocode_cache.dropped:
+    print(f'  {geocode_cache.dropped} unusable geocode bucket entries will be asked again.')
 
 
 def _save_geocode_buckets():
-    serial = {f'{k[0]:.4f},{k[1]:.4f}': v for k, v in geocode_buckets.items()}
-    GEOCODE_BUCKETS_PATH.write_text(json.dumps(serial, indent=2, sort_keys=True))
-
-
-def _bucket_for(lat, lng):
-    g = GEOCODE_BUCKET_DEG
-    return (round(lat / g) * g, round(lng / g) * g)
-
-
-geocode_buckets = _load_geocode_buckets()
-_geocode_lock = threading.Lock()
-_last_geocode_at = 0.0
-
-
-def reverse_geocode(lat, lng):
-    """Hit Nominatim, return 'City, ST' / 'City, Country' / None. Honors 1 req/sec rate limit."""
-    global _last_geocode_at
-    with _geocode_lock:
-        elapsed = time.time() - _last_geocode_at
-        if elapsed < 1.05:
-            time.sleep(1.05 - elapsed)
-        _last_geocode_at = time.time()
-    url = NOMINATIM_URL + '?' + urllib.parse.urlencode({
-        'lat': f'{lat:.5f}',
-        'lon': f'{lng:.5f}',
-        'format': 'jsonv2',
-        'zoom': 10,
-        'addressdetails': 1,
-        'accept-language': 'en',
-    })
-    req = urllib.request.Request(url, headers={
-        'User-Agent': NOMINATIM_USER_AGENT,
-        'Accept-Language': 'en',
-    })
-    try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read().decode('utf-8'))
-    except Exception:
-        return None
-    addr = data.get('address') or {}
-    city = (addr.get('city') or addr.get('town') or addr.get('village')
-            or addr.get('hamlet') or addr.get('municipality')
-            or addr.get('county') or addr.get('state_district'))
-    state = addr.get('state')
-    country_code = (addr.get('country_code') or '').upper()
-    country = addr.get('country')
-    if not city:
-        if state and country_code in ('US', 'CA'):
-            return f'{STATE_ABBREV.get(state, state)}'
-        if country:
-            return country
-        return None
-    if country_code in ('US', 'CA') and state:
-        return f'{city}, {STATE_ABBREV.get(state, state)}'
-    if country:
-        return f'{city}, {country}'
-    return city
+    geocode_cache.save()
 
 
 def cached_reverse_geocode(lat, lng):
-    b = _bucket_for(lat, lng)
-    if b in geocode_buckets:
-        return geocode_buckets[b]
-    label = reverse_geocode(lat, lng)
-    geocode_buckets[b] = label  # cache even None — avoids repeated failures
-    return label
+    """'City, ST' / 'City, Country', or None. A transient failure is not cached."""
+    return outcome_label(geocode_cache.resolve(lat, lng, nominatim.reverse))
+
+
+def _save_classify_caches():
+    try:
+        write_json_atomic(GEO_CACHE_PATH, geo_cache)
+        _save_geocode_buckets()
+    except OSError as error:
+        print(f'[classify] could not save geocode caches: {error}', file=sys.stderr)
 
 
 # ── Background classify worker ──
@@ -358,16 +291,8 @@ def classify_unmapped_worker(candidates):
                 geo_cache[aid]['region'] = label
             _transition_classify({'type': 'progress', 'done': i + 1, 'label': label or ''})
             if (i + 1) % save_every == 0:
-                try:
-                    GEO_CACHE_PATH.write_text(json.dumps(geo_cache))
-                    _save_geocode_buckets()
-                except Exception:
-                    pass
-        try:
-            GEO_CACHE_PATH.write_text(json.dumps(geo_cache))
-            _save_geocode_buckets()
-        except Exception:
-            pass
+                _save_classify_caches()
+        _save_classify_caches()
         snapshot = _transition_classify({'type': 'finish', 'finished_at': time.time()})
         print(f'[classify] done: {snapshot["updated"]} labels added')
     finally:
@@ -386,13 +311,120 @@ def start_classify_if_needed():
             _classify_state, {'type': 'start', 'total': len(candidates)},
         )
         captured = list(candidates)
-    threading.Thread(target=classify_unmapped_worker, args=(captured,), daemon=True).start()
+    try:
+        threading.Thread(target=classify_unmapped_worker, args=(captured,), daemon=True).start()
+    except BaseException:
+        # Without a worker nothing would ever leave `running`, and every later
+        # start would answer "Already running." forever.
+        _abandon_classify_if_running()
+        raise
     return 'started'
 
 
 # Kick off auto-classify on startup if there's work to do
 if start_classify_if_needed() == 'started':
     print(f'  Background classifier started ({_classify_snapshot()["total"]} unmapped routes).')
+
+
+# ── Background rebuild ──
+
+_rebuild_state = initial_rebuild_state()
+_rebuild_lock = threading.Lock()
+OWNER_MUTATION_BUSY = 'another owner mutation is in progress'
+
+
+def _rebuild_snapshot():
+    with _rebuild_lock:
+        return public_rebuild_state(_rebuild_state)
+
+
+def _mutation_busy_body():
+    """The 409 body for a held mutation lock, naming a running rebuild."""
+    body = {'error': OWNER_MUTATION_BUSY}
+    rebuild = _rebuild_snapshot()
+    if rebuild['phase'] == 'running':
+        body['reason'] = (
+            f"rebuild {rebuild['id']} is running; saves and rebuilds are refused until it finishes"
+        )
+    return body
+
+
+def _run_build():
+    """Run build.py and return its exit code and stderr tail. Stdout is discarded."""
+    with tempfile.TemporaryFile() as stderr:
+        completed = subprocess.run(
+            [sys.executable, str(QUESTS / 'build.py')],
+            cwd=str(QUESTS),
+            stdout=subprocess.DEVNULL,
+            stderr=stderr,
+            check=False,
+        )
+        size = stderr.seek(0, os.SEEK_END)
+        stderr.seek(max(0, size - 4 * 1024))
+        return completed.returncode, stderr_tail(stderr.read())
+
+
+def _settle_rebuild(event):
+    """Record the outcome and free the lock together, so no reader sees one without the other."""
+    global _rebuild_state
+    with _rebuild_lock:
+        _rebuild_state = reduce_rebuild(_rebuild_state, event)
+        OWNER_MUTATION_LOCK.release()
+
+
+def _rebuild_worker(rebuild_id):
+    event = {
+        'type': 'fail', 'id': rebuild_id, 'exit_code': None,
+        'stderr_tail': 'rebuild worker stopped unexpectedly',
+    }
+    try:
+        try:
+            exit_code, tail = _run_build()
+        except Exception as error:
+            exit_code, tail = None, stderr_tail(f'{type(error).__name__}: {error}'.encode())
+        if exit_code == 0:
+            event = {'type': 'succeed', 'id': rebuild_id}
+        else:
+            event = {'type': 'fail', 'id': rebuild_id, 'exit_code': exit_code, 'stderr_tail': tail}
+            print(f'[rebuild] {rebuild_id} failed (exit {exit_code})', file=sys.stderr)
+    finally:
+        _settle_rebuild({**event, 'finished_at': time.time()})
+
+
+def start_rebuild():
+    """Start one background rebuild. Returns (HTTP status, body)."""
+    global _rebuild_state
+    rebuild_id = uuid.uuid4().hex[:12]
+    # Taking the mutation lock and entering `running` happen together, so a
+    # refused save always sees the rebuild that holds the lock.
+    with _rebuild_lock:
+        if not OWNER_MUTATION_LOCK.acquire(blocking=False):
+            busy = True
+        else:
+            busy = False
+            _rebuild_state = reduce_rebuild(
+                _rebuild_state, {'type': 'start', 'id': rebuild_id, 'started_at': time.time()},
+            )
+            snapshot = public_rebuild_state(_rebuild_state)
+    if busy:
+        return 409, _mutation_busy_body()
+    try:
+        recover_owner_publication(QUESTS)
+    except (PublicationRecoveryError, OSError) as error:
+        _settle_rebuild({
+            'type': 'fail', 'id': rebuild_id, 'finished_at': time.time(),
+            'exit_code': None, 'stderr_tail': str(error),
+        })
+        return 503, {'error': str(error)}
+    try:
+        threading.Thread(target=_rebuild_worker, args=(rebuild_id,), daemon=True).start()
+    except BaseException as error:
+        _settle_rebuild({
+            'type': 'fail', 'id': rebuild_id, 'finished_at': time.time(),
+            'exit_code': None, 'stderr_tail': f'could not start rebuild thread: {error}',
+        })
+        return 500, {'error': 'Rebuild could not start.', 'detail': str(error)}
+    return 200, {'ok': True, 'msg': 'Rebuild started in background.', 'rebuild': snapshot}
 
 
 def find_activity_file(aid):
@@ -621,6 +653,9 @@ class Handler(BaseHTTPRequestHandler):
                     datetime.fromtimestamp(manifest_path.stat().st_mtime).isoformat()
                     if manifest_path.exists() else None
                 ),
+                'rebuild': _rebuild_snapshot(),
+                'checkout_root': str(QUESTS),
+                'pid': os.getpid(),
             })
             return
         if path.startswith('/api/polyline/'):
@@ -707,7 +742,7 @@ class Handler(BaseHTTPRequestHandler):
         # that every JSON endpoint depends on.
         if path == '/api/media/upload':
             if not OWNER_MUTATION_LOCK.acquire(blocking=False):
-                self._send(409, {'error': 'another owner mutation is in progress'})
+                self._send(409, _mutation_busy_body())
                 return
             try:
                 recover_owner_publication(QUESTS)
@@ -735,7 +770,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == '/api/save':
             if not OWNER_MUTATION_LOCK.acquire(blocking=False):
-                self._send(409, {'error': 'another owner mutation is in progress'})
+                self._send(409, _mutation_busy_body())
                 return
             try:
                 recover_owner_publication(QUESTS)
@@ -795,7 +830,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == '/api/curation/save':
             if not OWNER_MUTATION_LOCK.acquire(blocking=False):
-                self._send(409, {'error': 'another owner mutation is in progress'})
+                self._send(409, _mutation_busy_body())
                 return
             try:
                 data = json.loads(body)
@@ -852,7 +887,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == '/api/annotations/save':
             if not OWNER_MUTATION_LOCK.acquire(blocking=False):
-                self._send(409, {'error': 'another owner mutation is in progress'})
+                self._send(409, _mutation_busy_body())
                 return
             try:
                 data = json.loads(body)
@@ -894,30 +929,7 @@ class Handler(BaseHTTPRequestHandler):
             })
             return
         if path == '/api/rebuild':
-            if not OWNER_MUTATION_LOCK.acquire(blocking=False):
-                self._send(409, {'error': 'another owner mutation is in progress'})
-                return
-            try:
-                recover_owner_publication(QUESTS)
-            except (PublicationRecoveryError, OSError) as error:
-                OWNER_MUTATION_LOCK.release()
-                self._send(503, {'error': str(error)})
-                return
-
-            def rebuild_in_background():
-                try:
-                    subprocess.run(
-                        [sys.executable, str(QUESTS / 'build.py')],
-                        cwd=str(QUESTS),
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        check=False,
-                    )
-                finally:
-                    OWNER_MUTATION_LOCK.release()
-
-            threading.Thread(target=rebuild_in_background, daemon=True).start()
-            self._send(200, {'ok': True, 'msg': 'Rebuild started in background.'})
+            self._send(*start_rebuild())
             return
         if path == '/api/auto-classify':
             outcome = start_classify_if_needed()

@@ -4,6 +4,7 @@ from admin_classify import initial_classify_state, public_classify_state, reduce
 def test_classify_starts_idle_and_ignores_work_before_a_run():
     idle = initial_classify_state()
     assert public_classify_state(idle) == {
+        "phase": "idle",
         "running": False,
         "done": 0,
         "total": 0,
@@ -26,6 +27,7 @@ def test_classify_run_cannot_finish_while_it_is_running_or_skip_ahead():
     labeled = reduce_classify(running, {"type": "progress", "done": 1, "label": "Kyoto"})
     blank = reduce_classify(labeled, {"type": "progress", "done": 2, "label": ""})
     assert public_classify_state(blank) == {
+        "phase": "running",
         "running": True,
         "done": 2,
         "total": 2,
@@ -48,6 +50,7 @@ def test_a_crashed_classify_run_stops_and_can_start_again():
     assert failed["phase"] == "failed"
     assert "finished_at" not in failed
     assert public_classify_state(failed) == {
+        "phase": "failed",
         "running": False,
         "done": 1,
         "total": 2,
@@ -69,6 +72,7 @@ def test_a_finished_classify_run_can_start_again():
     )
     restarted = reduce_classify(finished, {"type": "start", "total": 3})
     assert public_classify_state(restarted) == {
+        "phase": "running",
         "running": True,
         "done": 0,
         "total": 3,
@@ -76,3 +80,25 @@ def test_a_finished_classify_run_can_start_again():
         "last_label": "",
         "finished_at": None,
     }
+
+
+LEGACY_KEYS = {"running", "done", "total", "updated", "last_label", "finished_at"}
+
+
+def test_snapshot_names_each_phase_without_changing_the_legacy_keys():
+    idle = initial_classify_state()
+    running = reduce_classify(idle, {"type": "start", "total": 2})
+    partial = reduce_classify(running, {"type": "progress", "done": 1, "label": "Kyoto"})
+    finished = reduce_classify(partial, {"type": "finish", "finished_at": 7})
+    failed = reduce_classify(partial, {"type": "fail"})
+    expected = {
+        "idle": (idle, {"running": False, "done": 0, "total": 0, "updated": 0, "last_label": "", "finished_at": None}),
+        "running": (partial, {"running": True, "done": 1, "total": 2, "updated": 1, "last_label": "Kyoto", "finished_at": None}),
+        "finished": (finished, {"running": False, "done": 1, "total": 2, "updated": 1, "last_label": "Kyoto", "finished_at": 7}),
+        "failed": (failed, {"running": False, "done": 1, "total": 2, "updated": 1, "last_label": "Kyoto", "finished_at": None}),
+    }
+    for phase, (state, legacy) in expected.items():
+        snapshot = public_classify_state(state)
+        assert snapshot["phase"] == phase
+        assert {key: snapshot[key] for key in LEGACY_KEYS} == legacy
+        assert set(snapshot) == LEGACY_KEYS | {"phase"}

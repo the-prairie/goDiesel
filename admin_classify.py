@@ -30,7 +30,11 @@ class FailedClassify(_Counts):
 ClassifyState = IdleClassify | RunningClassify | FinishedClassify | FailedClassify
 
 
+ClassifyPhase = Literal["idle", "running", "finished", "failed"]
+
+
 class ClassifySnapshot(TypedDict):
+    phase: ClassifyPhase
     running: bool
     done: int
     total: int
@@ -101,6 +105,7 @@ def reduce_classify(state: ClassifyState, event: dict) -> ClassifyState:
 def public_classify_state(state: ClassifyState) -> ClassifySnapshot:
     if state["phase"] == "idle":
         return {
+            "phase": "idle",
             "running": False,
             "done": 0,
             "total": 0,
@@ -109,6 +114,7 @@ def public_classify_state(state: ClassifyState) -> ClassifySnapshot:
             "finished_at": None,
         }
     return {
+        "phase": state["phase"],
         "running": state["phase"] == "running",
         "done": state["done"],
         "total": state["total"],

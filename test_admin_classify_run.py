@@ -12,7 +12,8 @@ def load_admin(tmp_path, monkeypatch):
     inputs.mkdir()
     (inputs / "activities.csv").write_text("Activity Date,Filename,Distance\n")
     (tmp_path / "quests.json").write_text('{"routes": []}\n')
-    (tmp_path / ".geo_cache.json").write_text("{}\n")
+    if not (tmp_path / ".geo_cache.json").exists():
+        (tmp_path / ".geo_cache.json").write_text("{}\n")
     monkeypatch.setenv("GODIESEL_CHECKOUT_ROOT", str(tmp_path))
     monkeypatch.setenv("GODIESEL_DIESEL_DIARIES_ROOT", str(inputs))
     monkeypatch.setenv("GODIESEL_TRAVEL_ROOT", str(inputs))
@@ -72,6 +73,7 @@ def test_a_worker_crash_ends_the_run_and_allows_another_start(tmp_path, monkeypa
     assert admin._classify_state["phase"] == "failed"
     snapshot = admin._classify_snapshot()
     assert set(snapshot) == {
+        "phase",
         "running",
         "done",
         "total",
@@ -79,8 +81,32 @@ def test_a_worker_crash_ends_the_run_and_allows_another_start(tmp_path, monkeypa
         "last_label",
         "finished_at",
     }
+    assert snapshot["phase"] == "failed"
     assert snapshot["running"] is False
     assert snapshot["finished_at"] is None
     admin.classify_unmapped_worker = lambda candidates: None
     admin._unmapped_route_ids = lambda: [("route-1", 35.0, 135.0)]
+    assert admin.start_classify_if_needed() == "started"
+
+
+def test_a_thread_that_cannot_start_leaves_the_run_failed_not_running(tmp_path, monkeypatch):
+    admin = load_admin(tmp_path, monkeypatch)
+    admin._unmapped_route_ids = lambda: [("route-1", 35.0, 135.0)]
+    admin._classify_state = admin.initial_classify_state()
+
+    class NoThreads:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            raise RuntimeError("can't start new thread")
+
+    monkeypatch.setattr(admin.threading, "Thread", NoThreads)
+    with pytest.raises(RuntimeError, match="can't start new thread"):
+        admin.start_classify_if_needed()
+    monkeypatch.undo()
+    assert admin._classify_state["phase"] == "failed"
+    assert admin._classify_snapshot()["phase"] == "failed"
+    assert admin._classify_snapshot()["running"] is False
+    admin.classify_unmapped_worker = lambda candidates: None
     assert admin.start_classify_if_needed() == "started"
