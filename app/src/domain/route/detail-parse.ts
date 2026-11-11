@@ -1,7 +1,7 @@
 // The strict tier (ADR-0004). Any contract violation throws.
 
 import type { RouteLifecycle } from "@/domain/route/lifecycle";
-import type { RouteAnnotation, RouteAnnotationMedia, GeneratedQuestRoute, QuestRoute, ReplayMetadata, RouteCuration, RouteGeometryStatus, RoutePoint, RouteProvenance, RouteDiscontinuityKind, RouteDiscontinuitySource, RouteTemporalProvenance } from "@/domain/route/contract";
+import type { RouteAnnotation, RouteAnnotationMedia, GeneratedQuestRoute, QuestRoute, ReplayMetadata, RouteCuration, RouteGeometryStatus, RoutePoint, RouteProvenance, RouteDiscontinuityKind, RouteDiscontinuitySource, RouteElevationStatus, RouteTemporalProvenance } from "@/domain/route/contract";
 import { curationFieldSet, curationFields, generatedRoute, numberValue, optionalCurationList, optionalCurationText, parsedRoutePoints, requiredSlug, routeName, stringValue, validTimeZone } from "@/domain/route/parse-shared";
 
 function validatedCuration(value: unknown): RouteCuration {
@@ -252,10 +252,24 @@ function validatedReplayMetadata(
   };
 }
 
+// Strict: absent means recorded (every record generated before the field), and
+// the gain must agree with the status.
+function validatedElevationStatus(input: GeneratedQuestRoute): RouteElevationStatus {
+  const status = input.elevation_status ?? "recorded";
+  if (status !== "recorded" && status !== "unavailable") {
+    throw new Error("elevation_status must be recorded or unavailable");
+  }
+  if (status === "unavailable" && input.elevation_gain_m !== null) {
+    throw new Error("elevation_gain_m must be null when elevation_status is unavailable");
+  }
+  return status;
+}
+
 function validatedDetailFields(
   input: GeneratedQuestRoute,
   slug: string,
   geometryStatus: RouteGeometryStatus,
+  elevationStatus: RouteElevationStatus,
 ) {
   const lifecycleValue = input.lifecycle;
   if (
@@ -277,7 +291,11 @@ function validatedDetailFields(
     region: requiredStringField(input, "region", false),
     date: requiredStringField(input, "date"),
     distanceKm: requiredNumberField(input, "distance_km", { min: 0 }),
-    elevationGainM: requiredNumberField(input, "elevation_gain_m", { min: 0 }),
+    elevationGainM:
+      elevationStatus === "unavailable"
+        ? 0
+        : requiredNumberField(input, "elevation_gain_m", { min: 0 }),
+    elevationStatus,
     type: requiredStringField(input, "type", false),
     description: requiredStringField(input, "description"),
     completionRule: requiredStringField(input, "completion_rule"),
@@ -431,7 +449,8 @@ function validatedAnnotations(
 export function parseRouteDetail(value: unknown): QuestRoute {
   const input = generatedRoute(value, "Route detail");
   const slug = requiredSlug(input, "Route detail");
-  const parsedRoute = parsedRoutePoints(input.route);
+  const elevationStatus = validatedElevationStatus(input);
+  const parsedRoute = parsedRoutePoints(input.route, elevationStatus);
   const route = parsedRoute.points;
   const geometryStatus = parsedRoute.status;
   const midIdx = requiredNumberField(input, "mid_idx", { min: 0, integer: true });
@@ -440,7 +459,7 @@ export function parseRouteDetail(value: unknown): QuestRoute {
   }
 
   return {
-    ...validatedDetailFields(input, slug, geometryStatus),
+    ...validatedDetailFields(input, slug, geometryStatus, elevationStatus),
     route,
     midIdx,
     annotations: validatedAnnotations(input.annotations, route),
