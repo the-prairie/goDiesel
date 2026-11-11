@@ -107,8 +107,12 @@ It has three jobs, each on `ubuntu-24.04`:
 | Job | Commands |
 | --- | --- |
 | Python tests | Installs Python 3.12, Node 22, ffmpeg, and `requirements.txt`, then runs `python -m pytest -q --ignore=tmp -p no:cacheprovider -rs -m "not requires_private_export"`. |
-| Typecheck, unit tests, build | `npm --prefix app ci`, `npm --prefix app run typecheck`, `npm --prefix app run test:unit`, `npm --prefix app run build` (no Google key exists there, so the build blanks it), and `npm --prefix app run test:bundle`. |
+| Typecheck, unit tests, build | `npm --prefix app ci`, `npm --prefix app run test:e2e:list`, `npm --prefix app run typecheck`, `npm --prefix app run test:unit`, `npm --prefix app run build` (no Google key exists there, so the build blanks it), and `npm --prefix app run test:bundle`. |
 | Playwright journeys | `npm --prefix app ci`, `npx playwright install --with-deps chromium` in `app/`, then `npm run test:e2e -- --trace off --reporter=list,html` in `app/`. On failure it uploads `app/playwright-report` and `app/test-results`. |
+
+`npm run test:e2e:list` lists the specs of `playwright.config.ts` and `playwright.courses.config.ts` without a browser.
+It fails when any spec cannot load or a configuration lists no tests, because one spec that throws on import makes Playwright collect nothing, and a run filtered to named files never shows it.
+`npm run verify` and `npm run verify:ticket` run it before the build.
 
 A green run does not prove two things, and CI says so with a warning and a step summary on every run:
 

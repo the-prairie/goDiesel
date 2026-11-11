@@ -14,7 +14,12 @@ interface CameraScore {
 // time (ADR-0011): a single-route microsite keeps only the score of the route
 // it shares, and the comparison folds to a constant, so another route's
 // identifier never ships in a share bundle.
-const sharedRouteSlug = import.meta.env.VITE_SINGLE_ROUTE_SLUG;
+//
+// Outside Vite (Playwright's loader, a Node script) `import.meta.env` does not
+// exist, so it is read with optional chaining and an absent value means a full
+// build. Vite's define still replaces the whole expression and folds the
+// comparison: a 17654151284 share build emits no 14736711660.
+const sharedRouteSlug: string | undefined = import.meta.env?.VITE_SINGLE_ROUTE_SLUG;
 
 const sanFranciscoOpening: CameraScore | undefined =
   !sharedRouteSlug || sharedRouteSlug === "14736711660"
