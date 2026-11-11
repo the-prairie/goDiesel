@@ -386,7 +386,13 @@ def start_classify_if_needed():
             _classify_state, {'type': 'start', 'total': len(candidates)},
         )
         captured = list(candidates)
-    threading.Thread(target=classify_unmapped_worker, args=(captured,), daemon=True).start()
+    try:
+        threading.Thread(target=classify_unmapped_worker, args=(captured,), daemon=True).start()
+    except BaseException:
+        # Without a worker nothing would ever leave `running`, and every later
+        # start would answer "Already running." forever.
+        _abandon_classify_if_running()
+        raise
     return 'started'
 
 
