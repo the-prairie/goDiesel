@@ -8,22 +8,6 @@ import { defineConfig, loadEnv } from "vite";
 
 const cesiumBaseUrl = "/cesiumStatic";
 
-function otherRouteIdentifiers(sharedSlug: string) {
-  const repositoryRoot = path.resolve(__dirname, "..");
-  const identifiers = new Set<string>();
-  const config = JSON.parse(fs.readFileSync(path.join(repositoryRoot, "quests.json"), "utf8")) as {
-    routes?: Array<{ activity_id?: string | number }>;
-  };
-  for (const route of config.routes ?? []) {
-    if (route.activity_id !== undefined) identifiers.add(String(route.activity_id));
-  }
-  for (const file of fs.readdirSync(path.join(__dirname, "public/data/routes"))) {
-    if (file.endsWith(".json")) identifiers.add(file.slice(0, -".json".length));
-  }
-  identifiers.delete(sharedSlug);
-  return identifiers;
-}
-
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, path.resolve(__dirname, ".."), "");
   const liveProvidersDisabled = process.env.GODIESEL_DISABLE_LIVE_PROVIDERS === "1";
@@ -44,11 +28,6 @@ export default defineConfig(({ mode }) => {
   const routeCoverManifestPath = path.resolve(__dirname, "src/data/route-covers/manifest.json");
   const virtualRouteCoverManifestId = "\0godiesel-single-route-covers";
   const virtualOmittedRouteDataId = "\0godiesel-single-route-omitted";
-  // Every route identifier other than the shared one. A single-route bundle
-  // must never carry one (ADR-0011); scripts/validate-route-microsite.mjs
-  // checks the built output for the same set.
-  const otherRouteIds = singleRouteSlug ? otherRouteIdentifiers(singleRouteSlug) : new Set<string>();
-  const sourceRoot = path.resolve(__dirname, "src") + path.sep;
 
   return {
     plugins: [
@@ -103,22 +82,6 @@ export default defineConfig(({ mode }) => {
           }
           return `export default ${JSON.stringify({ ...manifest, routes })};`;
         },
-        // Application code that names another route by identifier (field-test
-        // shortcuts, a hand-tuned camera score) can never match the shared
-        // route, so the literal is replaced with one that matches nothing.
-        // The comparison keeps its meaning and the identifier never ships.
-        transform(code: string, id: string) {
-          if (!singleRouteSlug || !id.startsWith(sourceRoot) || !/\.tsx?$/.test(id)) return;
-          let replaced = 0;
-          const scoped = code.replace(/(["'`])(\d{6,})\1/g, (literal, _quote, value: string) => {
-            if (!otherRouteIds.has(value)) return literal;
-            replaced += 1;
-            return '""';
-          });
-          if (!replaced) return;
-          this.info(`omitted ${replaced} other-route identifier(s) from ${path.relative(__dirname, id)}`);
-          return { code: scoped, map: null };
-        },
       },
       react(),
       tailwindcss(),
@@ -131,6 +94,9 @@ export default defineConfig(({ mode }) => {
     worker: { format: "es" },
     server: {
       port: 8787,
+      // admin.sh and scripts/verify-live-pipeline.sh probe this fixed port. A
+      // busy port must fail the start, not move the app to the next port.
+      strictPort: true,
     },
     build: {
       target: "esnext",
