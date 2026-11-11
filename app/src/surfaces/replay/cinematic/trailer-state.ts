@@ -8,7 +8,7 @@ export type TrailerState = {
   frame: RouteTrailerFrame;
 };
 export type TrailerEvent =
-  | { type: "sessionStarted"; sessionId: number; frame: RouteTrailerFrame }
+  | { type: "sessionStarted"; frame: RouteTrailerFrame }
   | {
       type: "providerReported";
       sessionId: number;
@@ -43,11 +43,22 @@ export function reduceTrailer(
     event.sessionId !== state.sessionId
   )
     return state;
+  // The stage sends these only from ready-gated controls and the ready-gated
+  // frame loop. A restart stays unguarded: "Watch again" is not disabled and can
+  // be reached by keyboard beneath the loading and unavailable overlay.
+  if (
+    (event.type === "playbackChanged" ||
+      event.type === "skipped" ||
+      event.type === "framePublished") &&
+    state.status.state !== "ready"
+  )
+    return state;
   switch (event.type) {
     case "sessionStarted":
       return {
         ...state,
-        sessionId: event.sessionId,
+        sessionId: state.sessionId + 1,
+        playback: "paused",
         status: initialTrailerState(event.frame).status,
         frame: event.frame,
       };

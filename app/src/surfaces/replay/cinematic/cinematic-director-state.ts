@@ -2,19 +2,26 @@ import type { CinematicRendererStatus } from "@/surfaces/replay/cinematic/cesium
 import type { CinematicFrame } from "@/surfaces/replay/cinematic/route-cinematic-director";
 
 export interface CinematicDirectorState {
+  sessionId: number;
   frame: CinematicFrame;
   playback: "paused" | "playing";
   audioStart: { state: "idle" } | { state: "pending"; requestId: number };
+  lastAudioRequestId: number;
   soundEnabled: boolean;
   status: CinematicRendererStatus;
 }
 
 export type CinematicDirectorEvent =
   | { type: "sessionStarted"; frame: CinematicFrame }
-  | { type: "rendererStatusReceived"; status: CinematicRendererStatus }
+  | {
+      type: "rendererStatusReceived";
+      sessionId: number;
+      status: CinematicRendererStatus;
+    }
   | { type: "cutSelected" | "seeked"; frame: CinematicFrame }
   | { type: "framePublished" | "restartRequested"; frame: CinematicFrame }
-  | { type: "playRequested" | "audioStarted" | "audioStartFailed"; requestId: number }
+  | { type: "playRequested" }
+  | { type: "audioStarted" | "audioStartFailed"; requestId: number }
   | { type: "playbackPaused" }
   | { type: "soundToggled" };
 
@@ -22,9 +29,11 @@ export function initialCinematicDirectorState(
   frame: CinematicFrame,
 ): CinematicDirectorState {
   return {
+    sessionId: 0,
     frame,
     playback: "paused",
     audioStart: { state: "idle" },
+    lastAudioRequestId: 0,
     soundEnabled: true,
     status: { state: "loading", message: "Scouting the route." },
   };
@@ -38,11 +47,13 @@ export function reduceCinematicDirector(
     case "sessionStarted":
       return {
         ...state,
+        sessionId: state.sessionId + 1,
         frame: event.frame,
         audioStart: { state: "idle" },
         status: initialCinematicDirectorState(event.frame).status,
       };
     case "rendererStatusReceived":
+      if (event.sessionId !== state.sessionId) return state;
       return { ...state, status: event.status };
     case "cutSelected":
     case "seeked":
@@ -55,11 +66,14 @@ export function reduceCinematicDirector(
     case "framePublished":
     case "restartRequested":
       return { ...state, frame: event.frame };
-    case "playRequested":
+    case "playRequested": {
+      const requestId = state.lastAudioRequestId + 1;
       return {
         ...state,
-        audioStart: { state: "pending", requestId: event.requestId },
+        audioStart: { state: "pending", requestId },
+        lastAudioRequestId: requestId,
       };
+    }
     case "audioStarted":
     case "audioStartFailed":
       if (

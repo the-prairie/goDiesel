@@ -164,3 +164,32 @@ for (const width of [320, 390, 1280]) {
     await page.getByRole("button", { name: "Provider information fixture" }).click();
   });
 }
+
+for (const providerState of ["loading", "unavailable"] as const) {
+  test(`a ${providerState} provider mid-playback freezes progress and disables play, pause and skip`, async ({ page }) => {
+    await installTrailer(page);
+    await page.goto(url);
+    const progress = page.getByTestId("route-trailer-progress");
+    await expect(page.getByRole("button", { name: "Pause trailer" })).toBeEnabled();
+    const started = await progress.getAttribute("style");
+    await expect(progress).not.toHaveAttribute("style", started!);
+    await page.evaluate(
+      (state) => window.__TRAILER_STATUS__?.({ state, message: `Provider ${state}` }),
+      providerState,
+    );
+    await expect(page.getByTestId("route-trailer")).toHaveAttribute("data-state", providerState);
+    await expect(page.getByRole("button", { name: "Pause trailer" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Skip", exact: true })).toBeDisabled();
+    const frozen = await progress.getAttribute("style");
+    await page.waitForTimeout(300);
+    await expect(progress).toHaveAttribute("style", frozen!);
+    await page.getByRole("button", { name: "Pause trailer" }).focus();
+    await page.keyboard.press("Enter");
+    await page.getByRole("button", { name: "Skip", exact: true }).focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("route-trailer-decision")).toHaveCount(0);
+    await expect(progress).toHaveAttribute("style", frozen!);
+    await page.evaluate(() => window.__TRAILER_STATUS__?.({ state: "ready", message: "Recovered" }));
+    await expect(page.getByRole("button", { name: "Pause trailer" })).toBeEnabled();
+  });
+}
