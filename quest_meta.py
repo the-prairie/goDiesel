@@ -12,6 +12,27 @@ CURATION_LIST_FIELDS = ("terrain", "highlights", "caveats")
 CURATION_REVIEW_STATUSES = ("draft", "reviewed", "published")
 CURATION_FIELDS = frozenset((*CURATION_TEXT_FIELDS, *CURATION_LIST_FIELDS, "review_status"))
 
+# Route triage status in quests.json. Only `approved` is published.
+ROUTE_STATUSES = ("pending", "approved", "archived")
+_LEGACY_ROUTE_STATUSES = {"rejected": "archived"}
+
+
+def normalize_route_status(value):
+    """Read a stored triage status. Missing or unrecognised means pending."""
+    if isinstance(value, str):
+        if value in ROUTE_STATUSES:
+            return value
+        if value in _LEGACY_ROUTE_STATUSES:
+            return _LEGACY_ROUTE_STATUSES[value]
+    return "pending"
+
+
+def validate_route_status(value):
+    """Accept a triage status for writing. Legacy `rejected` is not written."""
+    if not isinstance(value, str) or value not in ROUTE_STATUSES:
+        raise ValueError(f"status must be one of: {', '.join(ROUTE_STATUSES)}")
+    return value
+
 
 def build_route_curation(value):
     """Validate owner-authored route curation for generated route details."""

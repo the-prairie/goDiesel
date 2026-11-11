@@ -14,8 +14,18 @@ import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
+from publication_protocol import (
+    GeneratorPublicationActive,
+    generator_lock,
+    generator_markers,
+    journal_markers,
+    publication_disposition,
+    retire_journal,
+)
+
 
 JOURNAL_NAME = ".owner-publication-backup"
+GENERATOR_BACKUP = "app/public/data/.route-generation-backup"
 TOKEN_ENV = "GODIESEL_OWNER_PUBLICATION_TOKEN"
 FD_ENV = "GODIESEL_OWNER_PUBLICATION_FD"
 _active = threading.local()
@@ -36,13 +46,15 @@ def _targets(root, include_source):
 
 
 def _discard_journal(journal):
-    retired = journal.with_name(f"{JOURNAL_NAME}.cleanup-{uuid.uuid4().hex}")
-    journal.rename(retired)
-    shutil.rmtree(retired, ignore_errors=True)
+    retire_journal(journal)
 
 
 def _restore(root, journal):
-    if (journal / "committed").exists() or not (journal / "ready").exists():
+    """Settle a journal this process may act on. The disposition decides how."""
+    disposition = publication_disposition(journal_markers(journal))
+    if disposition == "none":
+        return
+    if disposition != "restore":
         _discard_journal(journal)
         return
     entries = json.loads((journal / "entries.json").read_text(encoding="utf-8"))
@@ -67,10 +79,36 @@ def _restore(root, journal):
                 path.unlink(missing_ok=True)
         else:
             raise PublicationRecoveryError("publication journal contains an unknown entry")
-    generator_backup = root / "app/public/data/.route-generation-backup"
+    generator_backup = root / GENERATOR_BACKUP
     if generator_backup.exists():
         shutil.rmtree(generator_backup)
     _discard_journal(journal)
+
+
+def _settle_generator_backup(root):
+    """Refuse to start over a generator backup unless it provably needs no restore.
+
+    A backup that never became ready, or whose generation committed, is retired
+    under the generator lock. A ready backup needs the generator's own recovery,
+    and a live generator run is never touched.
+    """
+    backup = root / GENERATOR_BACKUP
+    disposition = publication_disposition(generator_markers(backup))
+    if disposition in ("discard", "committed-cleanup"):
+        try:
+            with generator_lock(backup.parent):
+                disposition = publication_disposition(generator_markers(backup))
+                if disposition in ("discard", "committed-cleanup"):
+                    _discard_journal(backup)
+                    disposition = "none"
+        except GeneratorPublicationActive:
+            disposition = "blocked"
+    if disposition == "blocked":
+        raise PublicationRecoveryError(
+            "a generator run is still publishing; retry after it finishes"
+        )
+    if disposition == "restore":
+        raise PublicationRecoveryError("generator recovery is required before an owner save")
 
 
 def _same_lock(descriptor, path):
@@ -96,8 +134,11 @@ def recover_owner_publication(checkout_root, inherited_token=None, inherited_fd=
             return
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as error:
-            raise PublicationRecoveryError("another owner publication is still active") from error
+            live = False
+        except BlockingIOError:
+            live = True
+        if publication_disposition(journal_markers(journal, live=live)) == "blocked":
+            raise PublicationRecoveryError("another owner publication is still active")
         if not _same_lock(lock.fileno(), journal / "lock"):
             raise PublicationRecoveryError("publication journal changed; retry recovery")
         _restore(root, journal)
@@ -125,8 +166,7 @@ def owner_publication(checkout_root, include_source=False):
         yield
         return
     recover_owner_publication(root)
-    if (root / "app/public/data/.route-generation-backup").exists():
-        raise PublicationRecoveryError("generator recovery is required before an owner save")
+    _settle_generator_backup(root)
     token = uuid.uuid4().hex
     journal = root / JOURNAL_NAME
     preparation = Path(tempfile.mkdtemp(prefix=".owner-publication-preparing-", dir=root))
