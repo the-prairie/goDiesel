@@ -34,15 +34,24 @@ export function useCollectionSearch(intent: FinderIntent | null) {
         const refine = Boolean((intent.query || intent.vibe) && !intent.similarPlace);
         dispatch({ type: "indexReceived", requestId, docs, refine });
         if (!refine) return;
-        worker = new Worker(new URL("./embedding.worker.ts", import.meta.url), {
-          type: "module",
-        });
+        try {
+          worker = new Worker(new URL("./embedding.worker.ts", import.meta.url), {
+            type: "module",
+          });
+        } catch {
+          // The index loaded; only related-theme search is unavailable.
+          dispatch({ type: "embeddingFailed", requestId });
+          return;
+        }
         const fallback = () => {
           if (active) dispatch({ type: "embeddingFailed", requestId });
           worker?.terminate();
         };
         timer = setTimeout(fallback, 60_000);
-        worker.onerror = fallback;
+        worker.onerror = () => {
+          clearTimeout(timer);
+          fallback();
+        };
         worker.onmessage = ({ data }) => {
           clearTimeout(timer);
           if (active)

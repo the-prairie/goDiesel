@@ -11,15 +11,22 @@ type View =
   | { kind: "saved"; course: Course };
 export type CourseOperation =
   "load" | "listMore" | "generate" | "import" | "save";
-type Progress =
+export type CourseProgress =
   | { status: "idle" }
   | { status: "pending"; id: number; operation: CourseOperation }
-  | { status: "failed"; message: string };
+  | { status: "failed"; operation: CourseOperation; message: string };
+/**
+ * How the page lets the person recover from a failure.
+ * Only a failed load or list reloads the workspace; a reload would discard
+ * an unsaved preview, so a failed save keeps it and retries the save, and a
+ * failed generate or import leaves the form usable.
+ */
+export type CourseFailureRecovery = "reload" | "retrySave" | "editForm";
 export type CourseWorkspace = {
   view: View;
   courses: CourseSummary[];
   cursor?: string;
-  progress: Progress;
+  progress: CourseProgress;
 };
 export const initialCourseWorkspace: CourseWorkspace = {
   view: { kind: "empty" },
@@ -60,7 +67,14 @@ export function reduceCourseWorkspace(
   if (state.progress.status !== "pending" || state.progress.id !== event.id)
     return state;
   if (event.type === "failed")
-    return { ...state, progress: { status: "failed", message: event.message } };
+    return {
+      ...state,
+      progress: {
+        status: "failed",
+        operation: state.progress.operation,
+        message: event.message,
+      },
+    };
   if (event.type === "loaded")
     return {
       ...state,
@@ -100,4 +114,20 @@ export function reduceCourseWorkspace(
           },
     progress: { status: "idle" },
   };
+}
+
+export function courseFailureRecovery(
+  progress: CourseProgress,
+): CourseFailureRecovery | undefined {
+  if (progress.status !== "failed") return undefined;
+  switch (progress.operation) {
+    case "load":
+    case "listMore":
+      return "reload";
+    case "save":
+      return "retrySave";
+    case "generate":
+    case "import":
+      return "editForm";
+  }
 }

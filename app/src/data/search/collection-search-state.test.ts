@@ -23,11 +23,14 @@ describe("collection search lifecycle", () => {
     const state = reduceCollectionSearch(embedding, { type: "embeddingReceived", requestId: 1, vector: [0.5], failed: false });
     expect(selectCollectionSearch(state, "kyoto")).toMatchObject({ docs, vector: [0.5], limited: false });
   });
-  it.each(["index", "construction"])("discards documents on %s failure", failure => {
-    const state = reduceCollectionSearch(failure === "index" ? loading : embedding, { type: "indexFailed", requestId: 1 });
+  it("discards documents on index failure", () => {
+    const state = reduceCollectionSearch(loading, { type: "indexFailed", requestId: 1 });
     expect(selectCollectionSearch(state, "kyoto")).toMatchObject({ docs: [], vector: undefined, limited: true });
   });
-  it.each(["error", "deadline"])("retains documents on worker %s", () => {
+  it("rejects an index failure once the index has loaded", () => {
+    expect(reduceCollectionSearch(embedding, { type: "indexFailed", requestId: 1 })).toBe(embedding);
+  });
+  it.each(["construction", "error", "deadline"])("retains documents on worker %s", () => {
     const state = reduceCollectionSearch(embedding, { type: "embeddingFailed", requestId: 1 });
     expect(selectCollectionSearch(state, "kyoto")).toMatchObject({ docs, vector: undefined, limited: true });
   });

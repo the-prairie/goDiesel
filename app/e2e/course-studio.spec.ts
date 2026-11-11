@@ -429,6 +429,70 @@ test("a saved result remains visible while its detail request is pending", async
   }
 });
 
+test("a failed save keeps the preview and retries without reloading", async ({
+  page,
+}) => {
+  const course = {
+    id: "course-55555555-1111-4111-8111-111111111111",
+    name: "Unsaved after failure",
+    description: "Save failure fixture",
+    activity: "Run",
+    createdAt: "2026-10-21T00:00:00Z",
+    source: { kind: "gpx", filename: "fixture.gpx" },
+    segments: [
+      [
+        { lat: 37.77, lng: -122.48 },
+        { lat: 37.771, lng: -122.479 },
+      ],
+    ],
+    distanceM: 142,
+    ascentM: null,
+    warnings: [],
+  };
+  let saveAttempts = 0;
+  await page.route("**/api/courses**", async (route) => {
+    const request = route.request();
+    if (new URL(request.url()).searchParams.has("id"))
+      return route.fulfill({ json: { course } });
+    if (request.method() !== "POST")
+      return route.fulfill({ json: { courses: [] } });
+    if (request.postDataJSON()?.action !== "save")
+      return route.fulfill({ json: { course } });
+    saveAttempts += 1;
+    if (saveAttempts === 1)
+      return route.fulfill({
+        status: 503,
+        json: { error: "Course storage unavailable" },
+      });
+    return route.fulfill({ json: { course } });
+  });
+  await page.goto("/#/courses");
+  await page.getByRole("radio", { name: "Import GPX", exact: true }).click();
+  await page.getByLabel("Upload GPX").setInputFiles({
+    name: "fixture.gpx",
+    mimeType: "application/gpx+xml",
+    buffer: Buffer.from(gpx("fixture")),
+  });
+  const preview = page.getByRole("article", { name: "Course preview" });
+  const save = preview.getByRole("button", { name: "Save course", exact: true });
+  await save.click();
+  const alert = page.getByRole("alert");
+  await expect(alert).toContainText("Course storage unavailable");
+  await expect(alert).toContainText("Your preview is still here");
+  await expect(
+    page.getByRole("button", { name: "Reload workspace", exact: true }),
+  ).toHaveCount(0);
+  await expect(preview).toContainText("Preview · not saved");
+  await expect(
+    preview.getByRole("heading", { name: course.name, exact: true }),
+  ).toBeVisible();
+  await expect(save).toBeEnabled();
+  await save.click();
+  await expect(page).toHaveURL(new RegExp(course.id));
+  await expect(preview).toContainText("Saved course");
+  expect(saveAttempts).toBe(2);
+});
+
 for (const width of [1440, 390]) {
   test(`changing workspace credentials clears private course data at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });

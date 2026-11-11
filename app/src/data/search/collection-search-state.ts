@@ -31,7 +31,8 @@ export function reduceCollectionSearch(state: CollectionSearchState, event: Coll
         ? { ...state, phase: event.refine ? "embedding" : "keywordReady", docs: event.docs }
         : state;
     case "indexFailed":
-      return state.phase === "loadingIndex" || state.phase === "embedding"
+      // Once the index has loaded, a later failure belongs to embedding, not the index.
+      return state.phase === "loadingIndex"
         ? { phase: "basicFallback", key: state.key, requestId: state.requestId }
         : state;
     case "embeddingReceived":

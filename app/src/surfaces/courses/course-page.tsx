@@ -22,6 +22,7 @@ import {
 } from "@/data/course-client";
 import { CourseForm } from "./course-form";
 import {
+  courseFailureRecovery,
   initialCourseWorkspace,
   reduceCourseWorkspace,
   type CourseOperation,
@@ -39,6 +40,7 @@ export function CoursePage() {
   const requestRef = useRef<AbortController | null>(null);
   const sequence = useRef(0);
   const busy = state.progress.status === "pending";
+  const recovery = courseFailureRecovery(state.progress);
   function begin(operation: CourseOperation, courseId?: string) {
     requestRef.current?.abort();
     const controller = new AbortController();
@@ -221,12 +223,19 @@ export function CoursePage() {
           className="space-y-3 rounded-md border border-line p-4"
         >
           <p>{state.progress.message}</p>
-          <Button
-            variant="outline"
-            onClick={() => setConnection((value) => value + 1)}
-          >
-            Reload workspace
-          </Button>
+          {recovery === "retrySave" && state.view.kind === "preview" ? (
+            <p className="text-sm text-ink-secondary">
+              Your preview is still here. Save course to try again.
+            </p>
+          ) : null}
+          {recovery === "reload" ? (
+            <Button
+              variant="outline"
+              onClick={() => setConnection((value) => value + 1)}
+            >
+              Reload workspace
+            </Button>
+          ) : null}
         </div>
       ) : null}
       <div
