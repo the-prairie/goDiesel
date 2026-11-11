@@ -338,13 +338,6 @@ def _rebuild_snapshot():
         return public_rebuild_state(_rebuild_state)
 
 
-def _transition_rebuild(event):
-    global _rebuild_state
-    with _rebuild_lock:
-        _rebuild_state = reduce_rebuild(_rebuild_state, event)
-        return public_rebuild_state(_rebuild_state)
-
-
 def _mutation_busy_body():
     """The 409 body for a held mutation lock, naming a running rebuild."""
     body = {'error': OWNER_MUTATION_BUSY}
