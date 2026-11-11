@@ -9,9 +9,10 @@
     <style>
       /* The static shell paints before the app's code arrives. React replaces
          it on mount; the navigation placeholders sit exactly where the real
-         navigation renders, so nothing moves. Inline only: nothing is fetched. */
+         navigation renders, so nothing moves. Inline only: nothing is fetched,
+         not even the web font, which would compete with the app's code. */
       html, body { margin: 0; background: #000; color-scheme: dark; }
-      .static-shell { min-height: 100dvh; color: #fff; font: 400 0.875rem/1.5 "Inter Variable", Inter, system-ui, sans-serif; }
+      .static-shell { min-height: 100dvh; color: #fff; font: 400 0.875rem/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
       .static-shell-status { margin: 0; padding: calc(1rem + env(safe-area-inset-top, 0px)) 1rem 0 calc(1rem + env(safe-area-inset-left, 0px)); color: #c6c6c6; }
       .static-shell-mark { width: 0.5rem; height: 1.5rem; flex: none; border-radius: 2px; background: #fff; }
       .static-shell-tabs { position: fixed; inset: auto 0 0 0; display: grid; grid-template-columns: repeat(4, 1fr); box-sizing: border-box; height: calc(3.5rem + env(safe-area-inset-bottom, 0px)); padding: 0 env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); border-top: 1px solid rgb(255 255 255 / 20%); background: rgb(0 0 0 / 82%); }
