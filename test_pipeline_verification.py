@@ -17,6 +17,7 @@ def real_report():
     return verify_real_pipeline()
 
 
+@pytest.mark.requires_private_export
 def test_real_sources_cover_every_approved_generated_route_and_field(real_report):
     report = real_report
 
@@ -37,6 +38,7 @@ def test_real_sources_cover_every_approved_generated_route_and_field(real_report
     assert all(route["detail_sha256"] for route in report["inputs"]["routes"])
 
 
+@pytest.mark.requires_private_export
 def test_real_browser_matrix_spans_current_pipeline_dimensions(real_report):
     report = real_report
     cases = report["outputs"]["matrix_cases"]
@@ -49,6 +51,7 @@ def test_real_browser_matrix_spans_current_pipeline_dimensions(real_report):
     assert {case["curation_status"] for case in cases} == {"draft", "reviewed"}
 
 
+@pytest.mark.requires_private_export
 def test_real_route_sources_are_outside_generated_output_tree(real_report):
     report = real_report
     generated_root = (ROOT / "app/public/data/routes").resolve()
