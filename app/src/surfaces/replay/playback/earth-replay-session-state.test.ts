@@ -110,6 +110,44 @@ describe("Earth Replay session", () => {
     expect(state.control).toMatchObject({ progressM: 0, following: true, playing: false });
   });
 
+  it("keeps a range the person chose on the renderer when playback starts", () => {
+    const chosen = transition(mounted(), { type: "cameraRangeChosen", cameraRangeM: 3_959.6 });
+    expect(transition(chosen, { type: "playbackToggled" }).control)
+      .toMatchObject({ playing: true, following: true, cameraRangeM: 3_960 });
+  });
+
+  it("applies the opening follow range on play only when the person has not zoomed", () => {
+    expect(transition(mounted(), { type: "playbackToggled" }).control)
+      .toMatchObject({ playing: true, following: true, cameraRangeM: 240 });
+    const zoomedOut = transition(mounted(), { type: "zoomRequested", direction: "out" });
+    expect(transition(zoomedOut, { type: "playbackToggled" }).control.cameraRangeM).toBe(720);
+  });
+
+  it("bounds a chosen range and ignores one that changes nothing", () => {
+    expect(transition(mounted(), { type: "cameraRangeChosen", cameraRangeM: 5 }).control.cameraRangeM).toBe(30);
+    expect(transition(mounted(), { type: "cameraRangeChosen", cameraRangeM: 1e9 }).control.cameraRangeM).toBe(90_000);
+    const state = mounted();
+    expect(reduceEarthReplaySession(state, { type: "cameraRangeChosen", cameraRangeM: 240.2 })).toBe(state);
+    expect(reduceEarthReplaySession(state, { type: "cameraRangeChosen", cameraRangeM: Number.NaN })).toBe(state);
+  });
+
+  it("steps from a chosen range to the nearest preset in the requested direction", () => {
+    const between = transition(mounted(), { type: "cameraRangeChosen", cameraRangeM: 500 });
+    expect(reduceEarthReplaySession(between, { type: "zoomRequested", direction: "in" }).control.cameraRangeM).toBe(240);
+    expect(reduceEarthReplaySession(between, { type: "zoomRequested", direction: "out" }).control.cameraRangeM).toBe(720);
+    const far = transition(mounted(), { type: "cameraRangeChosen", cameraRangeM: 5_000 });
+    expect(reduceEarthReplaySession(far, { type: "zoomRequested", direction: "in" }).control.cameraRangeM).toBe(1_400);
+    expect(reduceEarthReplaySession(far, { type: "zoomRequested", direction: "out" }).control.cameraRangeM).toBe(5_000);
+    const near = transition(mounted(), { type: "cameraRangeChosen", cameraRangeM: 60 });
+    expect(reduceEarthReplaySession(near, { type: "zoomRequested", direction: "out" }).control.cameraRangeM).toBe(120);
+  });
+
+  it("carries a chosen range across a renderer switch on the same route", () => {
+    const switched = transition(mounted(), { type: "cameraRangeChosen", cameraRangeM: 3_000 },
+      { type: "rendererSelected", mode: "atlas" }, { type: "rendererMounted", routeSlug: "city" });
+    expect(switched.control.cameraRangeM).toBe(3_000);
+  });
+
   it("keeps controls, route, and session id when the person picks another renderer", () => {
     const before = transition(mounted("partial"), ...changedControls);
     const switched = reduceEarthReplaySession(before, { type: "rendererSelected", mode: "atlas" });
@@ -161,10 +199,20 @@ describe("Earth Replay HUD", () => {
       const state = transition(mounted(),
         { type: "contextChanged", contextState: "expanded" },
         { type: "mobileControlsToggled" },
-        { type: "presentationReset", isMobile });
+        { type: "presentationReset", isMobile, shortViewport: false });
       expect(state).toMatchObject({ contextState, mobileControlsExpanded: false });
     },
   );
+
+  it("opens compact on a short viewport such as a phone in landscape, and can still expand", () => {
+    const state = transition(mounted(),
+      { type: "presentationReset", isMobile: false, shortViewport: true });
+    expect(state).toMatchObject({ contextState: "compact", mobileControlsExpanded: false });
+    expect(reduceEarthReplaySession(state, { type: "contextChanged", contextState: "expanded" }).contextState)
+      .toBe("expanded");
+    expect(transition(state, { type: "presentationReset", isMobile: false, shortViewport: false }).contextState)
+      .toBe("preview");
+  });
 
   it("toggles mobile controls without touching playback", () => {
     const base = mounted();

@@ -15,6 +15,12 @@ export interface ReplayEngineMountOptions {
   container: HTMLElement;
   route: QuestRoute;
   onStatus: (status: ReplayStatus) => void;
+  /**
+   * The person changed the camera distance on the renderer itself (its own
+   * zoom control, a pinch or the wheel). The session owns the range; it
+   * records this so the next follow pose keeps the person's choice.
+   */
+  onCameraRangeChosen?: (cameraRangeM: number) => void;
 }
 
 export interface ReplayEngine {

@@ -22,6 +22,11 @@ export type MapLibreReplayState = MapOperation &
     | { phase: "unavailable"; reason: "errors" | "deadline" }
     | {
         phase: "unavailable";
+        /** The map could not be constructed (no WebGL2 context); final for this run. */
+        reason: "unsupported";
+      }
+    | {
+        phase: "unavailable";
         reason: "geometry";
         /** A ready map from an undisposed earlier run is still on screen and following. */
         previousMapReady: boolean;
@@ -32,6 +37,7 @@ export type MapLibreReplayEvent =
   | { type: "inputsRejected"; operationId: number }
   | { type: "mapLoaded"; operationId: number }
   | { type: "mapError"; operationId: number }
+  | { type: "mapUnsupported"; operationId: number }
   | { type: "deadlineReached"; operationId: number }
   | { type: "disposed" };
 
@@ -70,7 +76,8 @@ export function reduceMapLibreReplay(
     state.phase === "disposed" ||
     state.phase === "idle" ||
     state.operationId !== event.operationId ||
-    (state.phase === "unavailable" && state.reason === "geometry")
+    (state.phase === "unavailable" &&
+      (state.reason === "geometry" || state.reason === "unsupported"))
   )
     return state;
   const announced = operation.statusRevision + 1;
@@ -84,6 +91,13 @@ export function reduceMapLibreReplay(
         phase: "unavailable",
         reason: "geometry",
         previousMapReady: state.phase === "ready",
+      };
+    case "mapUnsupported":
+      return {
+        ...operation,
+        statusRevision: announced,
+        phase: "unavailable",
+        reason: "unsupported",
       };
     case "mapLoaded":
       return {
@@ -150,6 +164,11 @@ const UNAVAILABLE = {
   deadline: {
     title: "Atlas replay timed out",
     message: "The fallback map did not become ready in time.",
+  },
+  unsupported: {
+    title: "Atlas replay isn\u2019t supported here",
+    message:
+      "This browser couldn\u2019t start the map graphics (WebGL 2) that Atlas replay draws on.",
   },
 };
 

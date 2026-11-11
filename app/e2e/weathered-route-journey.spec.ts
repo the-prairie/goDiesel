@@ -104,7 +104,7 @@ test("Atlas selection becomes a Retrace, then restores its place", async ({
   await page.getByLabel("Route progress").fill("10000");
   await page.getByRole("button", { name: "Playback speed 1x" }).click();
   await expect(page.getByRole("button", { name: "Playback speed 2x" })).toBeVisible();
-  await page.getByRole("button", { name: "Release camera" }).click();
+  await page.getByRole("button", { name: "Follow route", pressed: true }).click();
   await expect(stage).toHaveAttribute("data-light-phase", /dawn|midday/);
 
   const replayEvidence = await page.evaluate(() => ({

@@ -227,6 +227,30 @@ describe("MapLibre run identity and status", () => {
     expect(errored.statusRevision).toBe(timedOut.statusRevision);
   });
 
+  it.each([
+    ["while loading", () => start()],
+    ["over a ready map carried into a new mount", () =>
+      start(reduce(start(), { type: "mapLoaded", operationId: 1 }))],
+  ])("reports a map that cannot be constructed %s at once and for good", (_label, begin) => {
+    const before = begin();
+    const state = reduce(before, {
+      type: "mapUnsupported",
+      operationId: before.operationId,
+    });
+    expect(state).toMatchObject({ phase: "unavailable", reason: "unsupported" });
+    expect(state.statusRevision).toBe(before.statusRevision + 1);
+    expect(mapLibreReplayStatus(state)).toEqual({
+      state: "unavailable",
+      title: "Atlas replay isn\u2019t supported here",
+      message:
+        "This browser couldn\u2019t start the map graphics (WebGL 2) that Atlas replay draws on.",
+    });
+    expect(mapLibreFollowsPose(state)).toBe(false);
+    for (const type of ["mapError", "mapLoaded", "deadlineReached", "inputsRejected"] as const)
+      expect(reduce(state, { type, operationId: before.operationId })).toBe(state);
+    expect(start(state)).toMatchObject({ phase: "loading", operationId: before.operationId + 1 });
+  });
+
   it("follows the pose only while a map is ready", () => {
     const loading = start();
     expect(mapLibreFollowsPose(loading)).toBe(false);

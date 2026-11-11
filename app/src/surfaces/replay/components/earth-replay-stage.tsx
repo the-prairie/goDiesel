@@ -11,7 +11,13 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/ui/button";
@@ -54,6 +60,24 @@ import {
   type EarthReplaySessionEvent,
 } from "@/surfaces/replay/playback/earth-replay-session-state";
 
+// A phone in landscape is wider than the mobile breakpoint but too short for
+// the expanded HUD. Read like useIsMobile, during render, from a media query.
+const SHORT_VIEWPORT_QUERY = "(max-height: 500px)";
+
+function subscribeShortViewport(onChange: () => void) {
+  const media = window.matchMedia(SHORT_VIEWPORT_QUERY);
+  media.addEventListener("change", onChange);
+  return () => media.removeEventListener("change", onChange);
+}
+
+function useShortViewport() {
+  return useSyncExternalStore(
+    subscribeShortViewport,
+    () => window.matchMedia(SHORT_VIEWPORT_QUERY).matches,
+    () => false,
+  );
+}
+
 export function EarthReplayStage({
   route,
   pickerRoutes,
@@ -79,6 +103,7 @@ export function EarthReplayStage({
   const { status, engineMode, control, contextState, mobileControlsExpanded } = session;
   const [chromeVisible, setChromeVisible] = useState(true);
   const isMobile = useIsMobile();
+  const shortViewport = useShortViewport();
   const reducedMotion = useReducedMotion();
   const totalDistanceM = routeDistanceM(route);
   const operational = earthReplayOperational(status);
@@ -121,6 +146,10 @@ export function EarthReplayStage({
           engine.setPose(replayPose(route, sessionRef.current.control));
         }
       },
+      onCameraRangeChosen: (cameraRangeM) => {
+        if (engineRef.current !== engine) return;
+        dispatchSession({ type: "cameraRangeChosen", cameraRangeM });
+      },
     });
     return () => {
       engine.destroy();
@@ -155,8 +184,8 @@ export function EarthReplayStage({
   }, [control.playing, operational, route, totalDistanceM]);
 
   useEffect(() => {
-    dispatchSession({ type: "presentationReset", isMobile });
-  }, [dispatchSession, isMobile]);
+    dispatchSession({ type: "presentationReset", isMobile, shortViewport });
+  }, [dispatchSession, isMobile, shortViewport]);
 
   useEffect(() => {
     if (!chromeMayAutoHide) {
@@ -189,7 +218,7 @@ export function EarthReplayStage({
       data-light-phase={recordedLight.phase}
       onPointerMove={() => setChromeVisible(true)}
       onFocusCapture={() => setChromeVisible(true)}
-      className="relative grid h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden bg-[#02070a] md:h-dvh md:min-h-[36rem]"
+      className="relative grid h-[calc(100dvh-var(--mobile-navigation-height))] min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden bg-[#02070a] md:h-dvh md:[@media(min-height:501px)]:min-h-[36rem]"
     >
       <div
         ref={containerRef}
@@ -350,7 +379,7 @@ export function EarthReplayStage({
                   variant="outline"
                   className="size-11"
                   disabled={
-                    !operational || control.cameraRangeM === REPLAY_CAMERA_RANGES_M[0]
+                    !operational || control.cameraRangeM <= REPLAY_CAMERA_RANGES_M[0]
                   }
                   aria-label="Zoom in to route"
                   onClick={() => commitControl({ type: "zoomRequested", direction: "in" })}
@@ -364,7 +393,7 @@ export function EarthReplayStage({
                   className="size-11"
                   disabled={
                     !operational ||
-                    control.cameraRangeM === REPLAY_CAMERA_RANGES_M.at(-1)
+                    control.cameraRangeM >= REPLAY_CAMERA_RANGES_M.at(-1)!
                   }
                   aria-label="Zoom out from route"
                   onClick={() => commitControl({ type: "zoomRequested", direction: "out" })}
@@ -397,10 +426,10 @@ export function EarthReplayStage({
               </Button>
               <Button
                 type="button"
-                variant={control.following ? "default" : "outline"}
+                variant="outline"
                 className="h-11 flex-1"
                 disabled={!operational}
-                aria-label={control.following ? "Release camera" : "Follow route"}
+                aria-pressed={control.following}
                 onClick={() => commitControl({ type: "followingToggled" })}
               >
                 {control.following ? (
@@ -408,7 +437,7 @@ export function EarthReplayStage({
                 ) : (
                   <MousePointer2 aria-hidden="true" />
                 )}
-                {control.following ? "Following" : "Follow route"}
+                Follow route
               </Button>
             </div>
           </div>
@@ -447,10 +476,9 @@ export function EarthReplayStage({
           </Button>
           <Button
             type="button"
-            variant={control.following ? "default" : "outline"}
+            variant="outline"
             disabled={!operational}
-            aria-label={control.following ? "Release camera" : "Follow route"}
-            title={control.following ? "Release camera" : "Follow route"}
+            aria-pressed={control.following}
             onClick={() => commitControl({ type: "followingToggled" })}
           >
             {control.following ? (
@@ -458,9 +486,7 @@ export function EarthReplayStage({
             ) : (
               <MousePointer2 aria-hidden="true" />
             )}
-            <span className="hidden sm:inline">
-              {control.following ? "Following" : "Free camera"}
-            </span>
+            Follow route
           </Button>
           <Button
             type="button"
@@ -468,7 +494,7 @@ export function EarthReplayStage({
             variant="outline"
             disabled={
               !operational ||
-              control.cameraRangeM === REPLAY_CAMERA_RANGES_M[0]
+              control.cameraRangeM <= REPLAY_CAMERA_RANGES_M[0]
             }
             aria-label="Zoom in to route"
             title="Zoom in to route"
@@ -482,7 +508,7 @@ export function EarthReplayStage({
             variant="outline"
             disabled={
               !operational ||
-              control.cameraRangeM === REPLAY_CAMERA_RANGES_M.at(-1)
+              control.cameraRangeM >= REPLAY_CAMERA_RANGES_M.at(-1)!
             }
             aria-label="Zoom out from route"
             title="Zoom out from route"

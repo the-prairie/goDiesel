@@ -1,0 +1,38 @@
+/*
+ * Atlas replay map controls on touch screens.
+ *
+ * The replay dock owns zoom ("Zoom in to route" / "Zoom out from route",
+ * 44 px, through the session's camera range), so MapLibre's duplicate zoom
+ * buttons are hidden on coarse pointers. The compass and the attribution
+ * toggle have no dock equivalent and grow to the 44 px touch target.
+ * Fine pointers keep MapLibre's default controls.
+ */
+@media (pointer: coarse) {
+  .replay-atlas-map .maplibregl-ctrl-group .maplibregl-ctrl-zoom-in,
+  .replay-atlas-map .maplibregl-ctrl-group .maplibregl-ctrl-zoom-out {
+    display: none;
+  }
+
+  .replay-atlas-map .maplibregl-ctrl-group button {
+    width: 44px;
+    height: 44px;
+  }
+
+  .replay-atlas-map .maplibregl-ctrl-attrib.maplibregl-compact {
+    min-height: 24px;
+    padding: 10px 44px 10px 0;
+    border-radius: 22px;
+  }
+
+  .replay-atlas-map .maplibregl-ctrl-attrib.maplibregl-compact-show {
+    padding: 12px 48px 12px 12px;
+  }
+
+  .replay-atlas-map .maplibregl-ctrl-attrib-button {
+    width: 44px;
+    height: 44px;
+    border-radius: 22px;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+}
