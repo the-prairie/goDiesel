@@ -676,11 +676,18 @@ test("the preview arriving does not move a desktop page where both columns are v
   await expect(
     page.getByRole("button", { name: "Generating route…", exact: true }),
   ).toBeVisible();
-  // The page title above both columns gives way to the preview, so the
-  // browser's scroll anchoring may change scrollY; what must not move is the
-  // control the person is looking at.
   const submit = page.getByRole("button", { name: /Generat(e|ing) route/ });
   const before = (await submit.boundingBox())!.y;
+  const scrollBefore = await page.evaluate(() => window.scrollY);
+  // Every layout shift from here on counts, including ones near an input.
+  await page.evaluate(() => {
+    const runtime = window as typeof window & { __courseShift: number };
+    runtime.__courseShift = 0;
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries())
+        runtime.__courseShift += (entry as PerformanceEntry & { value: number }).value;
+    }).observe({ type: "layout-shift" });
+  });
   studio.release();
   const heading = page
     .getByRole("article", { name: "Course preview" })
@@ -688,8 +695,105 @@ test("the preview arriving does not move a desktop page where both columns are v
   await expect(heading).toBeFocused();
   await expect(heading).toBeInViewport({ ratio: 1 });
   await expect(submit).toHaveText("Generate route");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Create a course" }),
+  ).toBeVisible();
   expect(Math.abs((await submit.boundingBox())!.y - before)).toBeLessThanOrEqual(1);
+  expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore);
+  expect(
+    await page.evaluate(
+      () => (window as typeof window & { __courseShift: number }).__courseShift,
+    ),
+  ).toBeLessThan(0.01);
 });
+
+for (const viewport of [
+  { width: 390, height: 844 },
+  { width: 320, height: 640 },
+  { width: 844, height: 390 },
+]) {
+  test(`saving shows its progress, failure and success where Save was tapped at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    const course = {
+      id: "course-77777777-1111-4111-8111-111111111111",
+      name: "Save feedback fixture",
+      description: "Save feedback fixture",
+      activity: "Run",
+      createdAt: "2026-10-21T00:00:00Z",
+      source: { kind: "gpx", filename: "fixture.gpx" },
+      segments: [
+        [
+          { lat: 37.77, lng: -122.48 },
+          { lat: 37.771, lng: -122.479 },
+        ],
+      ],
+      distanceM: 142,
+      ascentM: null,
+      warnings: [],
+    };
+    let saveAttempts = 0;
+    let releaseSave: () => void = () => {};
+    await page.route("**/api/courses**", async (route) => {
+      const request = route.request();
+      if (new URL(request.url()).searchParams.has("id"))
+        return route.fulfill({ json: { course } });
+      if (request.method() !== "POST")
+        return route.fulfill({ json: { courses: [] } });
+      if (request.postDataJSON()?.action !== "save")
+        return route.fulfill({ json: { course } });
+      saveAttempts += 1;
+      await new Promise<void>((resolve) => {
+        releaseSave = resolve;
+      });
+      if (saveAttempts === 1)
+        return route.fulfill({
+          status: 503,
+          json: { error: "Course storage unavailable" },
+        });
+      return route.fulfill({ json: { course } });
+    });
+    await page.goto("/#/courses");
+    await page.getByRole("radio", { name: "Import GPX", exact: true }).click();
+    await page.getByLabel("Upload GPX").setInputFiles({
+      name: "fixture.gpx",
+      mimeType: "application/gpx+xml",
+      buffer: Buffer.from(gpx("fixture")),
+    });
+    const preview = page.getByRole("article", { name: "Course preview" });
+    const heading = preview.getByRole("heading", { name: course.name, exact: true });
+    await expect(heading).toBeFocused();
+    const save = preview.getByRole("button", { name: "Save course", exact: true });
+    await save.click();
+    const saving = page.getByRole("status").filter({ hasText: "Saving your course…" });
+    await expect(saving).toBeInViewport({ ratio: 1 });
+    await expect.poll(() => saveAttempts).toBe(1);
+    releaseSave();
+    const alert = page.getByRole("alert");
+    await expect(alert).toContainText("Course storage unavailable");
+    await expect(alert).toContainText(
+      "Your preview is still here. Save course to try again.",
+    );
+    await expect(alert).toBeInViewport({ ratio: 1 });
+    await expect(save).toBeInViewport({ ratio: 1 });
+    await expect(save).toBeEnabled();
+    await save.click();
+    await expect(saving).toBeInViewport({ ratio: 1 });
+    await expect.poll(() => saveAttempts).toBe(2);
+    releaseSave();
+    await expect(page).toHaveURL(new RegExp(course.id));
+    await expect(preview).toContainText("Saved course");
+    await expect(preview.getByText("Saved course", { exact: true })).toBeInViewport();
+    await expect(heading).toBeInViewport({ ratio: 1 });
+    expect(saveAttempts).toBe(2);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+  });
+}
 
 test("Generate route says what it is waiting for, one reason at a time", async ({
   page,
