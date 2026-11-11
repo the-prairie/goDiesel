@@ -194,11 +194,24 @@ export function PlayableEarthStage({
       if (key === "q" && inputRef.current.look === -1) inputRef.current.look = 0;
       if (key === "e" && inputRef.current.look === 1) inputRef.current.look = 0;
     };
+    // A key released while the page is away never sends keyup, so leaving the
+    // page releases every held direction.
+    const releaseHeldInput = () => {
+      inputRef.current.steer = 0;
+      inputRef.current.look = 0;
+    };
+    const visibilityChange = () => {
+      if (document.visibilityState === "hidden") releaseHeldInput();
+    };
     window.addEventListener("keydown", keyDown);
     window.addEventListener("keyup", keyUp);
+    window.addEventListener("blur", releaseHeldInput);
+    document.addEventListener("visibilitychange", visibilityChange);
     return () => {
       window.removeEventListener("keydown", keyDown);
       window.removeEventListener("keyup", keyUp);
+      window.removeEventListener("blur", releaseHeldInput);
+      document.removeEventListener("visibilitychange", visibilityChange);
     };
   }, [commitControl]);
 
