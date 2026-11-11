@@ -308,7 +308,8 @@
       ],
       "states": [
         "status:loading",
-        "status:unavailable"
+        "status:unavailable",
+        "statusReason:authentication"
       ],
       "identity": "sessionId minted by sessionStarted"
     },
@@ -331,7 +332,8 @@
         "loadingScene",
         "ready",
         "unavailable",
-        "destroyed"
+        "destroyed",
+        "reason:authentication"
       ],
       "identity": "operationId minted by mountStarted and destroyed"
     },
@@ -1005,7 +1007,7 @@
       ],
       "adapters": [],
       "identity": null,
-      "reason": "A module singleton promise. A failed load clears it, so the next caller appends a fresh script."
+      "reason": "A module singleton promise. A failed load clears it, so the next caller appends a fresh script. After a successful load the gm_authFailure handler stays installed, because Google reports a rejected key after the load callback; a rejection already received is re-reported to the next load request."
     },
     {
       "id": "route-leaf-map-carried-status",

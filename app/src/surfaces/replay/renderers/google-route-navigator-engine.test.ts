@@ -309,6 +309,35 @@ describe("Google renderer lifecycle adapter", () => {
     expect(run.statuses.at(-1)?.state).toBe("ready");
   });
 
+  it("publishes a key rejection Google reports after the API loaded in the same tick, with its reason", async () => {
+    const statuses: GoogleRouteNavigatorStatus[] = [];
+    const reasons: unknown[] = [];
+    const run = { ...mount({ onStatus: (status, reason) => { statuses.push(status); reasons.push(reason); } }), statuses };
+    await sceneCreated();
+    await vi.advanceTimersByTimeAsync(1_200);
+    expect(run.statuses.map(({ state }) => state)).toEqual(["loading"]);
+    runtime.dispatchEvent(new Event("godiesel:google-maps-auth-failure"));
+    expect(run.statuses.map(({ state }) => state)).toEqual(["loading", "unavailable"]);
+    expect(reasons).toEqual([undefined, "authentication"]);
+    await vi.advanceTimersByTimeAsync(30_000);
+    await run.done;
+    expect(run.statuses).toHaveLength(2);
+    expect(run.statuses.at(-1)?.message).not.toContain("did not finish loading");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("recovers from a post-load key rejection when Google still delivers a ready scene", async () => {
+    const statuses: GoogleRouteNavigatorStatus[] = [];
+    const reasons: unknown[] = [];
+    const run = { ...mount({ onStatus: (status, reason) => { statuses.push(status); reasons.push(reason); } }), statuses };
+    const map = await sceneCreated();
+    runtime.dispatchEvent(new Event("godiesel:google-maps-auth-failure"));
+    steady(map);
+    await run.done;
+    expect(run.statuses.map(({ state }) => state)).toEqual(["loading", "unavailable", "ready"]);
+    expect(reasons).toEqual([undefined, "authentication", undefined]);
+  });
+
   it("reports both scene-error messages in their existing order", async () => {
     const run = mount();
     const map = await sceneCreated();

@@ -100,6 +100,10 @@ const CAMERA_MODES: Array<{
   { mode: "overview", label: "Overview", icon: MapPinned },
 ];
 
+const GOOGLE_3D_REJECTED_TITLE = "Google 3D is unavailable";
+const GOOGLE_3D_REJECTED_MESSAGE =
+  "Google is not serving photorealistic 3D to this site right now. Atlas replay plays the same recorded route on the map.";
+
 interface GoogleRouteNavigatorStageProps {
   route: QuestRoute;
   variant?: "lab" | "replay";
@@ -132,7 +136,11 @@ export function GoogleRouteNavigatorStage({
   // `dispatchStage` is the only writer of the ref.
   const sessionRef = useRef(initialGoogleReplayStageState());
   const [session, setSession] = useState(sessionRef.current);
-  const { control, status, settingsOpen, chaptersExpanded } = session;
+  const { control, status, statusReason, settingsOpen, chaptersExpanded } = session;
+  const providerUnavailable = status.state === "unavailable";
+  // A rejected key is the site's problem, not the visitor's: production
+  // Replay says so plainly; the lab keeps the diagnostic message.
+  const keyRejected = productionReplay && providerUnavailable && statusReason === "authentication";
   const [chapterControls, dispatchChapterControls] = useReducer(reduceReplayChapterControls, undefined, initialReplayChapterControlsState);
   const totalDistanceM = routeDistanceM(route);
   const telemetry = useMemo(
@@ -271,9 +279,9 @@ export function GoogleRouteNavigatorStage({
         outerWidth: 0.14,
         width: 3,
       },
-      onStatus: (next) => {
+      onStatus: (next, reason) => {
         if (engineRef.current !== engine) return;
-        dispatchStage({ type: "statusReceived", sessionId, status: next });
+        dispatchStage({ type: "statusReceived", sessionId, status: next, reason });
         if (next.state === "ready") {
           const readyTarget = desiredCamera(sessionRef.current.control);
           renderCamera(readyTarget, performance.now(), true);
@@ -381,11 +389,21 @@ export function GoogleRouteNavigatorStage({
       data-state={status.state}
       data-testid={productionReplay ? "replay-stage" : "google-route-navigator"}
     >
+      {/* The map host is its own stacking context, so nothing Google injects
+          (such as its key-error dialog) can rise above the stage overlays.
+          While the provider is unavailable it is hidden and inert. */}
       <div
+        aria-hidden={providerUnavailable || undefined}
         aria-label={`Google photorealistic 3D view of ${route.name}`}
+        data-testid="replay-map-host"
+        inert={providerUnavailable || undefined}
         onPointerDownCapture={releaseCamera}
         onWheelCapture={releaseCamera}
-        className={productionReplay ? "absolute inset-0" : "relative min-h-0"}
+        className={cn(
+          productionReplay ? "absolute inset-0" : "relative min-h-0",
+          "isolate",
+          providerUnavailable && "invisible opacity-0",
+        )}
         ref={containerRef}
       />
 
@@ -446,7 +464,15 @@ export function GoogleRouteNavigatorStage({
       </header>
 
       {status.state !== "ready" ? (
-        <div className={cn("pointer-events-none absolute inset-0 grid place-items-center bg-black/58 p-6", status.state === "unavailable" ? "z-40" : "z-20")}>
+        // Opaque, under the header and dock: nothing from the map host shows.
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-20 bg-canvas"
+          data-testid="replay-provider-backdrop"
+        />
+      ) : null}
+      {status.state !== "ready" ? (
+        <div className={cn("pointer-events-none absolute inset-0 grid place-items-center p-6", providerUnavailable ? "z-40" : "z-20")}>
           <div
             aria-live="polite"
             className="pointer-events-auto max-w-md border border-white/20 bg-surface p-6 text-center text-white"
@@ -459,9 +485,13 @@ export function GoogleRouteNavigatorStage({
             <h2 className="mt-3 font-editorial text-2xl font-semibold">
               {status.state === "loading"
                 ? "Entering the route"
-                : "3D world unavailable"}
+                : keyRejected
+                  ? GOOGLE_3D_REJECTED_TITLE
+                  : "3D world unavailable"}
             </h2>
-            <p className="mt-2 text-sm text-white/62">{status.message}</p>
+            <p className="mt-2 text-sm text-white/62">
+              {keyRejected ? GOOGLE_3D_REJECTED_MESSAGE : status.message}
+            </p>
             {status.state === "unavailable" && onUseAtlas ? (
               <Button
                 className="mt-5 bg-primary text-primary-foreground hover:bg-primary-hover"

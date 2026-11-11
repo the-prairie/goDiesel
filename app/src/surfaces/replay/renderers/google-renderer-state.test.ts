@@ -60,6 +60,38 @@ describe("Google renderer lifecycle transitions", () => {
     });
   });
 
+  it.each(["api", "scene"])("names an authentication rejection during %s loading until a ready scene replaces it", (phase) => {
+    let state = reduceGoogleRenderer(phase === "api" ? started() : scene(), { type: "authenticationRejected", operationId: 1 });
+    expect(state).toMatchObject({ status: { state: "unavailable" }, reason: "authentication" });
+    if (phase === "api") {
+      state = reduceGoogleRenderer(state, { type: "apiLoaded", operationId: 1 });
+      expect(state).toMatchObject({ phase: "loadingScene", reason: "authentication" });
+    }
+    expect(reduceGoogleRenderer(state, { type: "sceneReady", operationId: 1 })).not.toHaveProperty("reason");
+  });
+
+  it("keeps the authentication notice and reason when the scene deadline then expires", () => {
+    const rejected = reduceGoogleRenderer(scene(), { type: "authenticationRejected", operationId: 1 });
+    const settled = reduceGoogleRenderer(rejected, {
+      type: "operationFailed", operationId: 1, message: "Google photorealistic 3D did not finish loading.",
+    });
+    expect(settled).toMatchObject({ phase: "unavailable", reason: "authentication" });
+    expect(settled.status).toBe(rejected.status);
+    expect(reduceGoogleRenderer(settled, { type: "sceneReady", operationId: 1 })).toBe(settled);
+  });
+
+  it("keeps the authentication notice when the rejected scene also reports an error", () => {
+    const rejected = reduceGoogleRenderer(scene(), { type: "authenticationRejected", operationId: 1 });
+    expect(reduceGoogleRenderer(rejected, { type: "sceneErrored", operationId: 1 })).toBe(rejected);
+  });
+
+  it("names an authentication rejection that arrives after readiness", () => {
+    const ready = reduceGoogleRenderer(scene(), { type: "sceneReady", operationId: 1 });
+    expect(reduceGoogleRenderer(ready, { type: "authenticationRejected", operationId: 1 }))
+      .toMatchObject({ phase: "unavailable", reason: "authentication" });
+    expect(reduceGoogleRenderer(ready, { type: "sceneErrored", operationId: 1 })).not.toHaveProperty("reason");
+  });
+
   it("lets the scene wait settle its own failure after an error notice", () => {
     const notice = reduceGoogleRenderer(scene(), { type: "sceneErrored", operationId: 1 });
     expect(notice).toMatchObject({ phase: "loadingScene", status: { state: "unavailable" } });

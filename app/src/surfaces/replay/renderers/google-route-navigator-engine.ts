@@ -18,10 +18,14 @@ import {
   initialGoogleRendererState,
   reduceGoogleRenderer,
   type GoogleRendererEvent,
+  type GoogleRendererUnavailableReason,
   type GoogleRouteNavigatorStatus,
 } from "@/surfaces/replay/renderers/google-renderer-state";
 
-export type { GoogleRouteNavigatorStatus } from "@/surfaces/replay/renderers/google-renderer-state";
+export type {
+  GoogleRendererUnavailableReason,
+  GoogleRouteNavigatorStatus,
+} from "@/surfaces/replay/renderers/google-renderer-state";
 
 interface MountOptions {
   apiKey: string;
@@ -29,7 +33,8 @@ interface MountOptions {
   route: GoogleRouteGeometry;
   groundingMode: GoogleRouteGroundingMode;
   initialCamera?: GoogleRouteCameraPose;
-  onStatus: (status: GoogleRouteNavigatorStatus) => void;
+  /** `reason` names why an unavailable status was published, when known. */
+  onStatus: (status: GoogleRouteNavigatorStatus, reason?: GoogleRendererUnavailableReason) => void;
   routeStyle?: {
     color: string;
     mode?: "filament" | "hidden" | "solid";
@@ -277,7 +282,7 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
     const previousStatus = this.lifecycle.status;
     this.lifecycle = reduceGoogleRenderer(this.lifecycle, event);
     if (this.lifecycle.status && this.lifecycle.status !== previousStatus) {
-      onStatus?.(this.lifecycle.status);
+      onStatus?.(this.lifecycle.status, "reason" in this.lifecycle ? this.lifecycle.reason : undefined);
     }
     return this.lifecycle;
   }
