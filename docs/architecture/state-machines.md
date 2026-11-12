@@ -99,12 +99,12 @@ These describe the code as it is. The tables below list each lifecycle; these no
 
 | Kind | Entries |
 | --- | --- |
-| `reducer` | 35 |
+| `reducer` | 36 |
 | `disposition` | 1 |
 | `protocol` | 3 |
 | `derived` | 7 |
 | `left-implicit` | 10 |
-| total | 56 |
+| total | 57 |
 
 ### Reducers
 
@@ -133,6 +133,7 @@ These describe the code as it is. The tables below list each lifecycle; these no
 | `cinematic-director` | The director cut stage: playback, audio start, sound, and renderer status for one session. | `app/src/surfaces/replay/cinematic/cinematic-director-state.ts` | `reduceCinematicDirector` | `playback:paused`, `playback:playing`, `audioStart:idle`, `audioStart:pending` | sessionId for renderer status; audio requestId minted by playRequested; the lab page keys the stage by cut |
 | `route-trailer` | The route trailer stage: playback, frame, and provider status for one session. | `app/src/surfaces/replay/cinematic/trailer-state.ts` | `reduceTrailer` | `playback:paused`, `playback:playing`, `status:loading`, `status:unavailable` | sessionId minted by sessionStarted; playback, skip, and frames are accepted only while ready |
 | `playable-earth-session` | The Playable Earth lab stage: provider status, grounding, control, HUD mode, and mobile controls. | `app/src/labs/playable-earth/playable-earth-session-state.ts` | `reducePlayableEarthSession` | none | sessionId for provider and grounding reports |
+| `overland-jump` | The Overland lab's jump from the pixel world into a route's Google 3D replay and back: dive, hold, the reveal under our pixel cover, the realm, surfacing, and the pixel fallback. | `app/src/labs/overland/overland-jump-state.ts` | `reduceOverlandJump` | `browsing`, `diving`, `holding`, `resolving`, `realm`, `surfacing`, `fallback`, `transition:wipe`, `transition:live` | jumpId minted by jumpRequested; diveFinished, sceneStatusReceived, resolveStepElapsed, and surfaceFinished must name the current jump |
 | `route-intelligence` | The route intelligence lab load: complete, partial, empty, or failed. | `app/src/labs/route-intelligence/route-intelligence-state.ts` | `reduceRouteIntelligence` | `loading`, `complete`, `partial`, `empty`, `failed` | nothing |
 | `admin-workspace` | The React Admin workspace, route detail loads, and per-route saves. | `app/src/surfaces/admin/workspace-state.ts` | `reduceAdminWorkspace` | `loading`, `ready`, `save:idle`, `save:saving`, `save:saved`, `save:failed` | requestId per route detail and per route save |
 | `atlas-presentation` | Atlas world status, whether a world has opened, and whether the selected region waits for the world, is presented, or is shown at its deadline. | `app/src/surfaces/atlas/atlas-presentation-state.ts` | `reduceAtlasPresentation` | `region:none`, `region:waiting`, `region:ready`, `region:shown`, `world:opening`, `world:open` | engineId |

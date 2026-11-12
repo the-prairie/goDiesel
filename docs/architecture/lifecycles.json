@@ -486,6 +486,30 @@
       "identity": "sessionId for provider and grounding reports"
     },
     {
+      "id": "overland-jump",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "The Overland lab's jump from the pixel world into a route's Google 3D replay and back: dive, hold, the reveal under our pixel cover, the realm, surfacing, and the pixel fallback.",
+      "module": "app/src/labs/overland/overland-jump-state.ts",
+      "transition": "reduceOverlandJump",
+      "test": [
+        "app/src/labs/overland/overland-jump-state.test.ts"
+      ],
+      "adapters": [],
+      "states": [
+        "browsing",
+        "diving",
+        "holding",
+        "resolving",
+        "realm",
+        "surfacing",
+        "fallback",
+        "transition:wipe",
+        "transition:live"
+      ],
+      "identity": "jumpId minted by jumpRequested; diveFinished, sceneStatusReceived, resolveStepElapsed, and surfaceFinished must name the current jump"
+    },
+    {
       "id": "route-intelligence",
       "kind": "reducer",
       "area": "react-app",
