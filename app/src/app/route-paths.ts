@@ -7,6 +7,23 @@ export const APP_PATHS = {
 } as const;
 
 export const PLAYABLE_EARTH_LAB_PATH = "/lab/playable-earth";
+export const OVERLAND_LAB_PATH = "/lab/overland";
+
+export type OverlandView = "map" | "index";
+
+/** The Overland world map, or its index, optionally at one town. */
+export function overlandWorldPath(options: { town?: string; view?: OverlandView } = {}) {
+  const query = new URLSearchParams();
+  if (options.town) query.set("town", options.town);
+  if (options.view === "index") query.set("view", "index");
+  const search = query.toString();
+  return search ? `${OVERLAND_LAB_PATH}?${search}` : OVERLAND_LAB_PATH;
+}
+
+/** One route's entry in the Overland lab. */
+export function overlandEntryPath(slug: string) {
+  return `${OVERLAND_LAB_PATH}/${encodeURIComponent(slug)}`;
+}
 
 function encodedSlug(slug: string) {
   return encodeURIComponent(slug);

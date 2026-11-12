@@ -39,7 +39,22 @@ function requireSingleLazyChunk(label, pattern) {
 
 requireSingleLazyChunk("Replay", /^replay-page-.*\.js$/);
 requireSingleLazyChunk("route-detail", /^route-detail-page-.*\.js$/);
+requireSingleLazyChunk("Overland", /^overland-lab-page-.*\.js$/);
+
+// The Overland lab loads on demand, and stays small: its pixel engine, font
+// and world mask never reach the initial shell.
+const overlandChunk = assets.find((name) => /^overland-lab-page-.*\.js$/.test(name));
+const overlandBytes = (await stat(path.join(dist, "assets", overlandChunk))).size;
+const overlandBudgetBytes = 150 * 1024;
+if (overlandBytes > overlandBudgetBytes) {
+  throw new Error(
+    `Overland chunk is ${(overlandBytes / 1024).toFixed(1)} KiB; budget is ${overlandBudgetBytes / 1024} KiB.`,
+  );
+}
+if (entry.includes("overland-world-mask")) {
+  throw new Error("Initial shell unexpectedly contains the Overland world mask.");
+}
 
 console.log(
-  `Bundle budget passed: initial shell ${(entryBytes / 1024).toFixed(1)} KiB; Replay and route detail remain lazy.`,
+  `Bundle budget passed: initial shell ${(entryBytes / 1024).toFixed(1)} KiB; Replay and route detail remain lazy; Overland is ${(overlandBytes / 1024).toFixed(1)} KiB.`,
 );

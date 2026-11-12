@@ -54,6 +54,11 @@ describe("product router", () => {
     expect(views?.errorElement).toBeTruthy();
   });
 
+  it("opens the Overland lab world and a route entry as labs", async () => {
+    expect(surfaceOf(await settledAt("/lab/overland"))).toBe("lab");
+    expect(surfaceOf(await settledAt(`/lab/overland/${slug}`))).toBe("lab");
+  });
+
   it("names the surface of every view it can open", () => {
     const views = productRouteTree[0]?.children?.[0]?.children ?? [];
     const unnamed = views

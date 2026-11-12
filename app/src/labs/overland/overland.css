@@ -1,0 +1,294 @@
+/* The Overland lab: a handheld device around a pixel screen. Scoped to
+   .overland so nothing reaches the rest of the app. */
+
+.overland {
+  --ov-ink: #1d2433;
+  --ov-ink-2: #3a4560;
+  --ov-shell: #f3f4f0;
+  --ov-shell-2: #e2e5df;
+  --ov-glass: #171c24;
+  --ov-key: #c8402b;
+  --ov-key-hi: #e3634c;
+  --ov-key-lo: #962a1b;
+  --ov-focus: #e8503a;
+  --ov-scale: 2;
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-map-controls);
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: calc(16px + var(--safe-area-top, 0px)) calc(16px + var(--safe-area-right, 0px))
+    calc(16px + var(--safe-area-bottom, 0px)) calc(16px + var(--safe-area-left, 0px));
+  background: linear-gradient(180deg, #cfe2e4 0%, #dde5e2 30%, #ece3dc 70%, #f1dccf 100%);
+  color: var(--ov-ink);
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 767px) {
+  .overland {
+    bottom: var(--mobile-navigation-height, 0px);
+  }
+}
+
+@media (min-width: 768px) {
+  .overland {
+    left: var(--spine-rail-width, 0px);
+  }
+}
+
+@media (min-width: 1024px) {
+  .overland {
+    left: var(--spine-width, 0px);
+  }
+}
+
+@supports (color: color(display-p3 1 0 0)) {
+  .overland {
+    --ov-key: color(display-p3 0.75 0.27 0.18);
+    --ov-key-hi: color(display-p3 0.88 0.4 0.3);
+    --ov-key-lo: color(display-p3 0.56 0.17 0.1);
+  }
+}
+
+.overland-device {
+  position: relative;
+  border-radius: 34px;
+  padding: 20px;
+  background: linear-gradient(180deg, #fbfbf8 0%, var(--ov-shell) 40%, var(--ov-shell-2) 100%);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    inset 0 -2px 0 rgba(40, 50, 70, 0.08),
+    0 1px 2px rgba(40, 50, 70, 0.12),
+    0 12px 24px -10px rgba(40, 50, 70, 0.28),
+    0 40px 70px -30px rgba(40, 50, 70, 0.35);
+}
+
+@media (max-width: 480px) {
+  .overland {
+    padding-left: calc(8px + var(--safe-area-left, 0px));
+    padding-right: calc(8px + var(--safe-area-right, 0px));
+  }
+  .overland-device {
+    border-radius: 26px;
+    padding: 14px;
+  }
+}
+
+.overland-glass {
+  position: relative;
+  border-radius: 18px;
+  padding: 8px;
+  background: var(--ov-glass);
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, 0.55),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.overland-screen {
+  position: relative;
+  overflow: hidden;
+  border-radius: 3px;
+  background: #0c0f14;
+}
+
+.overland-pixels,
+.overland-screen canvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.overland-screen > canvas {
+  touch-action: none;
+  outline: none;
+}
+
+.overland-screen > canvas.overland-pan {
+  cursor: grab;
+}
+
+.overland-screen > canvas.overland-pan:active {
+  cursor: grabbing;
+}
+
+.overland-view {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.overland-towns {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
+}
+
+.overland-town {
+  position: absolute;
+  pointer-events: auto;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transform: translate(-50%, -50%);
+}
+
+.overland-hit {
+  position: absolute;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.overland-index {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  background: #f8f6ee;
+}
+
+.overland-index::-webkit-scrollbar {
+  display: none;
+}
+
+.overland-index ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.overland-row {
+  display: block;
+  width: 100%;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.overland-keys {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.overland-key-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.overland-key {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+  min-width: 48px;
+  height: 48px;
+  padding: 0 16px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #ffffff 0%, #eef0ec 55%, #e1e4de 100%);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    inset 0 -1px 0 rgba(40, 50, 70, 0.1),
+    0 3px 0 #cbd0c9,
+    0 4px 1px rgba(40, 50, 70, 0.1),
+    0 8px 14px -6px rgba(40, 50, 70, 0.35);
+  transition:
+    transform 110ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 110ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.overland-key:active {
+  transform: translateY(3px);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    inset 0 -1px 0 rgba(40, 50, 70, 0.1),
+    0 0 0 #cbd0c9,
+    0 1px 1px rgba(40, 50, 70, 0.12),
+    0 2px 4px -2px rgba(40, 50, 70, 0.3);
+}
+
+.overland-key-square {
+  width: 48px;
+  padding: 0;
+}
+
+.overland-key-primary {
+  width: 60px;
+  height: 60px;
+  min-width: 0;
+  padding: 0;
+  border-radius: 50%;
+  background: radial-gradient(120% 100% at 35% 22%, var(--ov-key-hi) 0%, var(--ov-key) 42%, var(--ov-key-lo) 100%);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.45),
+    inset 0 -2px 2px rgba(0, 0, 0, 0.18),
+    0 3px 0 #9a2f20,
+    0 10px 16px -6px rgba(178, 56, 38, 0.55);
+}
+
+.overland-key-primary:active {
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.35),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.2),
+    0 0 0 #9a2f20,
+    0 2px 4px -2px rgba(178, 56, 38, 0.6);
+}
+
+.overland-segment {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 18px;
+  background: rgba(40, 50, 70, 0.07);
+  box-shadow: inset 0 1px 2px rgba(40, 50, 70, 0.12);
+}
+
+.overland-segment .overland-key {
+  height: 44px;
+  min-width: 56px;
+  padding: 0 12px;
+}
+
+.overland-segment .overland-key[aria-pressed="false"] {
+  background: transparent;
+  box-shadow: none;
+}
+
+.overland-key:focus-visible,
+.overland-town:focus-visible,
+.overland-row:focus-visible,
+.overland-hit:focus-visible,
+.overland-screen > canvas:focus-visible {
+  outline: 3px solid var(--ov-focus);
+  outline-offset: 3px;
+}
+
+.overland-row:focus-visible {
+  outline-offset: -3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overland-key,
+  .overland-key:active {
+    transition: none;
+  }
+}

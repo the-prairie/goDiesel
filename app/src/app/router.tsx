@@ -68,6 +68,11 @@ const CinematicRouteTrailerLabPage = lazy(() =>
     default: module.CinematicRouteTrailerLabPage,
   })),
 );
+const OverlandLabPage = lazy(() =>
+  import("@/labs/overland/overland-lab-page").then((module) => ({
+    default: module.OverlandLabPage,
+  })),
+);
 const CinematicDirectorLabPage = lazy(() =>
   import("@/labs/cinematic/cinematic-director-lab-page").then((module) => ({
     default: module.CinematicDirectorLabPage,
@@ -104,6 +109,8 @@ const productRoutes: RouteObject[] = [
   view("lab/google-route-navigator/:routeSlug", "lab", GoogleRouteNavigatorLabPage),
   view("lab/route-trailer/:routeSlug", "lab", CinematicRouteTrailerLabPage),
   view("lab/cinematic-director/:routeSlug", "lab", CinematicDirectorLabPage),
+  view("lab/overland", "lab", OverlandLabPage),
+  view("lab/overland/:routeSlug", "lab", OverlandLabPage),
   view(APP_PATHS.admin.slice(1), "admin", AdminPage),
   {
     path: LEGACY_QUEST_ROUTE_PATH,
