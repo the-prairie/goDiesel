@@ -18,6 +18,8 @@ export const WORLD_BOX_HEIGHT = 34;
 export const ENTRY_HEIGHT = 184;
 export const ENTRY_BOX_HEIGHT = 46;
 export const INDEX_ROW_HEIGHT = 24;
+/** The entry's little route map, in screen pixels; the jump dives into it. */
+export const ENTRY_MAP = { left: 8, top: 23, width: 56, height: 48 } as const;
 
 /** Wraps for a text box line of the given width, in the Overland font. */
 export function wrapForBox(text: string, width: number, bold = false) {
@@ -119,13 +121,13 @@ export function drawEntryScreen(context: Ctx, frame: EntryFrame) {
   drawText(context, kind, w - 6 - measureText(kind), 5, C.paper);
 
   // Her line on its own little map, with the runner or rider at the start.
-  const map = routeMap(frame.map, 56, 48, [4, 4, 4, 4]);
-  roundRect(context, 6, 21, 60, 52, C.ink);
-  context.drawImage(map.frames[Math.floor(frame.now / 700) % 2], 8, 23);
+  const map = routeMap(frame.map, ENTRY_MAP.width, ENTRY_MAP.height, [4, 4, 4, 4]);
+  roundRect(context, ENTRY_MAP.left - 2, ENTRY_MAP.top - 2, ENTRY_MAP.width + 4, ENTRY_MAP.height + 4, C.ink);
+  context.drawImage(map.frames[Math.floor(frame.now / 700) % 2], ENTRY_MAP.left, ENTRY_MAP.top);
   const walker = entry.kind === "ride" ? sprites().ride : sprites().run;
   const [sx, sy] = map.points[0];
-  context.drawImage(sprites().shadow, 8 + Math.round(sx) - 7, 23 + Math.round(sy) - 1);
-  context.drawImage(walker.down[0], 8 + Math.round(sx) - 8, 23 + Math.round(sy) - 15);
+  context.drawImage(sprites().shadow, ENTRY_MAP.left + Math.round(sx) - 7, ENTRY_MAP.top + Math.round(sy) - 1);
+  context.drawImage(walker.down[0], ENTRY_MAP.left + Math.round(sx) - 8, ENTRY_MAP.top + Math.round(sy) - 15);
 
   // Facts.
   const sx2 = 74;
