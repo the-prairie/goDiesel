@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import {
@@ -10,7 +10,6 @@ import {
 import { routes } from "@/data/routes";
 import { context2d } from "@/labs/overland/engine/canvas";
 import { C } from "@/labs/overland/engine/palette";
-import { sprites } from "@/labs/overland/engine/sprites";
 import {
   ENTRY_BOX_HEIGHT,
   ENTRY_HEIGHT,
@@ -30,6 +29,7 @@ import { buildOverlandEntries, type OverlandEntry } from "@/labs/overland/model/
 import { WORLD_MAP, buildOverlandTowns, spreadTowns, type OverlandTown } from "@/labs/overland/model/overland-towns";
 import { placeLook } from "@/labs/overland/model/place-biomes";
 import { normaliseRouteLine } from "@/labs/overland/model/route-line";
+import { ArrowIcon, Device, Key, PixelLabel } from "@/labs/overland/overland-ui";
 import { entryBoxText, entryFacts, formatEntryDate, pageLines, routeNumberLabel } from "@/labs/overland/model/text-box";
 import { RouteNotFound } from "@/ui/route-not-found";
 import { useReducedMotion } from "@/ui/use-reduced-motion";
@@ -83,37 +83,6 @@ function usePixelLoop(canvas: React.RefObject<HTMLCanvasElement | null>, draw: (
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
   }, [canvas, reducedMotion]);
-}
-
-/** A label drawn in the Overland font; the button around it carries the name. */
-function PixelLabel({ text, colour = C.ink, bold = false, scale }: { text: string; colour?: string; bold?: boolean; scale: number }) {
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const target = ref.current;
-    if (!target) return;
-    const label = drawLabel(text, colour, bold);
-    target.width = label.width;
-    target.height = label.height;
-    context2d(target).drawImage(label, 0, 0);
-  }, [bold, colour, text]);
-  return <canvas aria-hidden="true" className="overland-pixels" ref={ref} style={{ height: 9 * scale, width: "auto" }} />;
-}
-
-function ArrowIcon({ direction, scale }: { direction: "left" | "right"; scale: number }) {
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const target = ref.current;
-    if (target) context2d(target).drawImage(sprites().icons[direction], 0, 0);
-  }, [direction]);
-  return <canvas aria-hidden="true" className="overland-pixels" height={7} ref={ref} style={{ width: 5 * scale, height: 7 * scale }} width={5} />;
-}
-
-function Key({ label, children, onClick, pressed, className = "" }: { label: string; children: ReactNode; onClick: () => void; pressed?: boolean; className?: string }) {
-  return (
-    <button aria-label={label} aria-pressed={pressed} className={`overland-key ${className}`} onClick={onClick} type="button">
-      {children}
-    </button>
-  );
 }
 
 /** How many graphemes of a text box have been typed out by `now`. */
@@ -489,19 +458,6 @@ function Entry({ entry, scale, reducedMotion }: { entry: OverlandEntry; scale: n
         </div>
       </section>
     </Device>
-  );
-}
-
-// ---------------------------------------------------------------- shell
-
-function Device({ children, keys }: { children: ReactNode; keys: ReactNode }) {
-  return (
-    <div className="overland-device">
-      <div className="overland-glass">
-        <div className="overland-screen">{children}</div>
-      </div>
-      <div className="overland-keys">{keys}</div>
-    </div>
   );
 }
 
