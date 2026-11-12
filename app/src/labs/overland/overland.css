@@ -407,9 +407,10 @@
 }
 
 .overland-jump-status-text {
+  display: grid;
+  gap: 4px;
   margin: 0;
   min-width: 0;
-  overflow: hidden;
 }
 
 .overland-key.overland-key-play {

@@ -245,10 +245,18 @@ test("play, pause and scrub from the keyboard, and the runner walks with the rep
 
 test("when the 3D world cannot open, a plain message offers the way back", async ({ page }) => {
   await installGoogleReplay(page, "unavailable");
+  await page.setViewportSize({ width: 390, height: 844 });
   await openEntry(page);
   await page.getByRole("button", { name: "Enter route", exact: true }).click();
   await expect(jump(page)).toHaveAttribute("data-jump-phase", "fallback");
-  await expect(page.getByTestId("overland-jump-fallback")).toContainText("The 3D view isn't available right now.");
+  const fallback = page.getByTestId("overland-jump-fallback");
+  await expect(fallback).toContainText("The 3D view isn't available right now.");
+  // The drawn message wraps rather than running under the key on a phone.
+  const key = (await fallback.getByRole("button", { name: "Back", exact: true }).boundingBox())!;
+  for (const line of await fallback.locator(".overland-jump-status-text canvas").all()) {
+    const box = (await line.boundingBox())!;
+    expect(box.x + box.width).toBeLessThanOrEqual(key.x);
+  }
   await page.getByTestId("overland-jump-fallback").getByRole("button", { name: "Back", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`#/lab/overland/${GOLD.slug}$`));
   await expect(page.getByTestId("overland-entry")).toBeVisible();

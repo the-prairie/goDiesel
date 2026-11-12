@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { useRouteDetail } from "@/data/use-route-detail";
 import { context2d } from "@/labs/overland/engine/canvas";
 import { coverMap, drawCover } from "@/labs/overland/engine/cover";
+import { wrapForBox } from "@/labs/overland/engine/screens";
 import type { RouteMapInput } from "@/labs/overland/engine/route-map";
 import { CROSSFADE_MS, DIVE_MS, WIPE_STEP_MS, coverPixelScale, nativeRect } from "@/labs/overland/model/dither-wipe";
 import { diveStart } from "@/labs/overland/model/dive";
@@ -55,6 +56,9 @@ function useRealmViewport(): RealmViewport {
   return viewport;
 }
 
+/** The box's padding, gap and its one key, in CSS pixels. */
+const STATUS_KEY_ROOM = 18 + 8 + 6 + 96;
+
 function StatusBox({ viewport, testId, message, children }: { viewport: RealmViewport; testId: string; message: string; children: React.ReactNode }) {
   const { controls } = realmLayout(viewport, 0);
   return (
@@ -66,7 +70,9 @@ function StatusBox({ viewport, testId, message, children }: { viewport: RealmVie
     >
       <p className="overland-jump-status-text">
         <span className="sr-only">{message}</span>
-        <PixelLabel scale={2} text={message} />
+        {wrapForBox(message, Math.floor((controls.width - STATUS_KEY_ROOM) / 2)).map((line) => (
+          <PixelLabel key={line} scale={2} text={line} />
+        ))}
       </p>
       {children}
     </div>
