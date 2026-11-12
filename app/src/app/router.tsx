@@ -111,6 +111,7 @@ const productRoutes: RouteObject[] = [
   view("lab/cinematic-director/:routeSlug", "lab", CinematicDirectorLabPage),
   view("lab/overland", "lab", OverlandLabPage),
   view("lab/overland/:routeSlug", "lab", OverlandLabPage),
+  view("lab/overland/:routeSlug/3d", "lab", OverlandLabPage),
   view(APP_PATHS.admin.slice(1), "admin", AdminPage),
   {
     path: LEGACY_QUEST_ROUTE_PATH,

@@ -25,6 +25,15 @@ export function overlandEntryPath(slug: string) {
   return `${OVERLAND_LAB_PATH}/${encodeURIComponent(slug)}`;
 }
 
+/**
+ * One route's 3D world, jumped into from its entry. `live` selects the
+ * live pixelation, kept for local comparison; the wipe is the default.
+ */
+export function overlandRealmPath(slug: string, transition: "wipe" | "live" = "wipe") {
+  const path = `${overlandEntryPath(slug)}/3d`;
+  return transition === "live" ? `${path}?jump=live` : path;
+}
+
 function encodedSlug(slug: string) {
   return encodeURIComponent(slug);
 }
