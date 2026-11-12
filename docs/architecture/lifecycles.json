@@ -305,7 +305,8 @@
         "app/src/surfaces/replay/playback/google-replay-stage-state.test.ts"
       ],
       "adapters": [
-        "app/src/surfaces/replay/components/google-route-navigator-stage.tsx"
+        "app/src/surfaces/replay/components/google-route-navigator-stage.tsx",
+        "app/src/surfaces/replay/playback/use-google-replay-driver.ts"
       ],
       "states": [
         "status:loading",

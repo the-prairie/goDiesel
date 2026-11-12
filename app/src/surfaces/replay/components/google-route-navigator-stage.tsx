@@ -15,7 +15,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { ReplayElevationScrubber } from "@/surfaces/replay/components/replay-elevation-scrubber";
@@ -28,7 +28,6 @@ import { CLIMB_NOT_RECORDED, recordedClimbM, type QuestRoute, type RouteSummary 
 import { cn } from "@/ui/utils";
 import {
   googleRouteCameraPose,
-  googleRouteThreadTreatment,
   googleRouteTelemetry,
   type GoogleRouteCameraMode,
   type GoogleRouteNavigatorState,
@@ -41,25 +40,9 @@ import {
 } from "@/surfaces/replay/playback/replay-chapter-controls-state";
 import {
   googleReplayIntentEvents,
-  initialGoogleReplayStageState,
-  reduceGoogleReplayStage,
   type GoogleReplayIntent,
-  type GoogleReplayStageEvent,
 } from "@/surfaces/replay/playback/google-replay-stage-state";
-import {
-  createGoogleRouteNavigatorEngine,
-  type GoogleRouteNavigatorEngine,
-} from "@/surfaces/replay/renderers/google-route-navigator-engine";
-import { routeDistanceM } from "@/domain/geometry/route-path";
-import { useReducedMotion } from "@/ui/use-reduced-motion";
-import { sustainedRouteCamera } from "@/surfaces/replay/scene/route-camera-score";
-import {
-  advanceRouteCameraMotion,
-  routeCameraMotionHasSettled,
-  createRouteCameraMotionState,
-  type RouteCameraMotionState,
-} from "@/surfaces/replay/scene/route-camera-stabilizer";
-import type { GoogleRouteCameraPose } from "@/surfaces/replay/playback/route-navigator-controller";
+import { useGoogleReplayDriver } from "@/surfaces/replay/playback/use-google-replay-driver";
 
 // Lab-only shortcuts between the two field-test routes. A single-route
 // microsite build folds this to an empty list so neither route ships with it.
@@ -71,23 +54,6 @@ const FIELD_TEST_ROUTES: ReadonlyArray<{ slug: string; label: string }> = import
       { slug: "14023448720", label: "Crete" },
     ];
 
-/**
- * The camera smoothing the frame driver advances imperatively. Settling is
- * derived from `motion`; every reset goes through `idleStageCamera`.
- */
-interface StageCamera {
-  motion: RouteCameraMotionState | undefined;
-  target: GoogleRouteCameraPose | undefined;
-  lastAt: number | undefined;
-}
-
-function idleStageCamera(): StageCamera {
-  return { motion: undefined, target: undefined, lastAt: undefined };
-}
-
-function stageCameraSettling(camera: StageCamera) {
-  return camera.motion !== undefined && !routeCameraMotionHasSettled(camera.motion);
-}
 
 const CAMERA_MODES: Array<{
   mode: GoogleRouteCameraMode;
@@ -123,26 +89,26 @@ export function GoogleRouteNavigatorStage({
 }: GoogleRouteNavigatorStageProps) {
   const navigate = useNavigate();
   const productionReplay = variant === "replay";
-  const stageRef = useRef<HTMLElement>(null);
-  const reducedMotion = useReducedMotion();
-  const reducedMotionRef = useRef(reducedMotion);
-  reducedMotionRef.current = reducedMotion;
-  const viewportWidthRef = useRef(window.innerWidth);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const engineRef = useRef<GoogleRouteNavigatorEngine | undefined>(undefined);
-  const cameraRef = useRef<StageCamera>(idleStageCamera());
-  // The frame driver reads and advances the latest session every frame, so
-  // the reducer state lives in a ref and React receives throttled snapshots.
-  // `dispatchStage` is the only writer of the ref.
-  const sessionRef = useRef(initialGoogleReplayStageState());
-  const [session, setSession] = useState(sessionRef.current);
+  const {
+    stageRef,
+    containerRef,
+    session,
+    sessionRef,
+    dispatchStage,
+    commitControl,
+    releaseCamera,
+    totalDistanceM,
+  } = useGoogleReplayDriver({
+    route,
+    camera: productionReplay ? "sustained" : "base",
+    palette: productionReplay ? "immersive" : "neutral",
+  });
   const { control, status, statusReason, settingsOpen, chaptersExpanded } = session;
   const providerUnavailable = status.state === "unavailable";
   // A rejected key is the site's problem, not the visitor's: production
   // Replay says so plainly; the lab keeps the diagnostic message.
   const keyRejected = productionReplay && providerUnavailable && statusReason === "authentication";
   const [chapterControls, dispatchChapterControls] = useReducer(reduceReplayChapterControls, undefined, initialReplayChapterControlsState);
-  const totalDistanceM = routeDistanceM(route);
   const telemetry = useMemo(
     () => googleRouteTelemetry(route, control.progressM),
     [control.progressM, route],
@@ -152,95 +118,10 @@ export function GoogleRouteNavigatorStage({
     [control, route],
   );
 
-  const desiredCamera = useCallback((state: GoogleRouteNavigatorState) => {
-    const base = googleRouteCameraPose(route, state);
-    return productionReplay
-      ? sustainedRouteCamera(route, state, base, viewportWidthRef.current)
-      : base;
-  }, [productionReplay, route]);
-
-  const renderCamera = useCallback(
-    (
-      desired: GoogleRouteCameraPose,
-      now = performance.now(),
-      force = false,
-      movement: "transition" | "tracking" = "transition",
-    ) => {
-      const { motion: previous, lastAt: previousAt } = cameraRef.current;
-      const elapsedSeconds =
-        previousAt === undefined
-          ? 1 / 30
-          : Math.min(0.1, (now - previousAt) / 1_000);
-      const motion =
-        force || !previous
-          ? createRouteCameraMotionState(desired)
-          : advanceRouteCameraMotion(previous, desired, elapsedSeconds, 0.48, movement);
-      cameraRef.current = { motion, target: desired, lastAt: now };
-      engineRef.current?.setCamera(motion.pose);
-    },
-    [],
-  );
-
-  useLayoutEffect(() => {
-    const stage = stageRef.current;
-    if (!stage) return;
-    const measure = () => {
-      const width = stage.getBoundingClientRect().width;
-      if (!width) return;
-      viewportWidthRef.current = width;
-      if (engineRef.current && sessionRef.current.control.following) {
-        renderCamera(desiredCamera(sessionRef.current.control));
-      }
-    };
-    const observer = new ResizeObserver(measure);
-    observer.observe(stage);
-    measure();
-    return () => observer.disconnect();
-  }, [desiredCamera, renderCamera]);
-
-  const dispatchStage = useCallback(
-    (event: GoogleReplayStageEvent, publish = true) => {
-      const next = reduceGoogleReplayStage(sessionRef.current, event);
-      sessionRef.current = next;
-      if (publish) setSession(next);
-      return next;
-    },
-    [],
-  );
-
-  const publishStage = useCallback(() => setSession(sessionRef.current), []);
-
-  const commitControl = useCallback(
-    (event: ReplaySessionEvent) => {
-      const previous = sessionRef.current.control;
-      const next = dispatchStage({ type: "controlRequested", event }).control;
-      engineRef.current?.setFollowing(next.following);
-      engineRef.current?.setGrounding(next.groundingMode);
-      if (next.following && !previous.following) {
-        const actual = engineRef.current?.readCamera();
-        if (actual) {
-          cameraRef.current = {
-            ...cameraRef.current,
-            motion: createRouteCameraMotionState({ ...actual, progressM: next.progressM }),
-            lastAt: performance.now(),
-          };
-        }
-      }
-      if (next.following) {
-        const reposition = event.type === "progressSelected" || event.type === "cameraSelected" ||
-          event.type === "zoomRequested" || event.type === "followingChanged";
-        renderCamera(desiredCamera(next), performance.now(), reducedMotionRef.current && reposition);
-      }
-      engineRef.current?.setCinematicRoute(
-        googleRouteThreadTreatment(route, next),
-      );
-    },
-    [desiredCamera, dispatchStage, renderCamera, route],
-  );
-
-  const releaseCamera = useCallback(() => {
-    if (sessionRef.current.control.following) commitControl({ type: "followingChanged", following: false });
-  }, [commitControl]);
+  // Each route starts its chapters afresh, as each starts a new session.
+  useEffect(() => {
+    dispatchChapterControls({ type: "routeReplaced" });
+  }, [route]);
 
   const performIntent = useCallback(
     (intent: GoogleReplayIntent) => {
@@ -248,99 +129,12 @@ export function GoogleRouteNavigatorStage({
       for (const event of events.chapters) dispatchChapterControls(event);
       for (const event of events.control) commitControl(event);
     },
-    [chapterControls, commitControl],
+    [chapterControls, commitControl, sessionRef],
   );
 
   const togglePlayback = useCallback(() => performIntent({ type: "playbackToggled" }), [performIntent]);
   const browseChapter = (event: ReplayChapterControlsEvent) => performIntent({ type: "chapterBrowsed", event });
   const playFromPreview = () => performIntent({ type: "previewPlayed", totalDistanceM });
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const engine = createGoogleRouteNavigatorEngine();
-    engineRef.current = engine;
-    cameraRef.current = idleStageCamera();
-    const { sessionId, control: initial } = dispatchStage({ type: "sessionStarted" });
-    dispatchChapterControls({ type: "routeReplaced" });
-
-    void engine.mount({
-      apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
-      container,
-      route,
-      groundingMode: initial.groundingMode,
-      headingSmoothing: 1,
-      initialCamera: desiredCamera(initial),
-      routeStyle: {
-        color: "#f5f5f5",
-        mode: "filament",
-        palette: productionReplay ? "immersive" : "neutral",
-        outerColor: "#111111",
-        outerWidth: 0.14,
-        width: 3,
-      },
-      onStatus: (next, reason) => {
-        if (engineRef.current !== engine) return;
-        dispatchStage({ type: "statusReceived", sessionId, status: next, reason });
-        if (next.state === "ready") {
-          const readyTarget = desiredCamera(sessionRef.current.control);
-          renderCamera(readyTarget, performance.now(), true);
-          engine.setCinematicRoute(
-            googleRouteThreadTreatment(route, sessionRef.current.control),
-          );
-        }
-      },
-    });
-
-    return () => {
-      engine.destroy();
-      cameraRef.current = idleStageCamera();
-      if (engineRef.current === engine) engineRef.current = undefined;
-    };
-  }, [desiredCamera, dispatchStage, productionReplay, renderCamera, route]);
-
-  useEffect(() => {
-    if (reducedMotion && status.state === "ready" && sessionRef.current.control.following) {
-      renderCamera(desiredCamera(sessionRef.current.control), performance.now(), true);
-    }
-  }, [desiredCamera, reducedMotion, renderCamera, status.state]);
-
-  useEffect(() => {
-    if (status.state !== "ready") return;
-    let animationFrame = 0;
-    let previous = performance.now();
-    let lastRouteUpdate = previous;
-    let lastUiUpdate = previous;
-    const tick = (now: number) => {
-      const current = sessionRef.current.control;
-      const elapsedSeconds = (now - previous) / 1_000;
-      const next = dispatchStage({
-        type: "controlRequested",
-        event: { type: "frameElapsed", elapsedSeconds, totalDistanceM },
-      }, false).control;
-      previous = now;
-      const progressChanged = next.progressM !== current.progressM;
-      const playbackChanged = next.playing !== current.playing;
-      const cameraSettling = stageCameraSettling(cameraRef.current);
-      if (next.following && (progressChanged || cameraSettling)) {
-        const desired = progressChanged ? desiredCamera(next) : cameraRef.current.target;
-        if (desired) renderCamera(desired, now, false, progressChanged ? "tracking" : "transition");
-      }
-      if (progressChanged && (playbackChanged || now - lastRouteUpdate >= 40)) {
-        engineRef.current?.setCinematicRoute(
-          googleRouteThreadTreatment(route, next),
-        );
-        lastRouteUpdate = now;
-      }
-      if (playbackChanged || (progressChanged && now - lastUiUpdate >= 90)) {
-        publishStage();
-        lastUiUpdate = now;
-      }
-      animationFrame = requestAnimationFrame(tick);
-    };
-    animationFrame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(animationFrame);
-  }, [desiredCamera, dispatchStage, publishStage, renderCamera, route, status.state, totalDistanceM]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
