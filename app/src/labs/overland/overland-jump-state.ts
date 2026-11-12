@@ -35,7 +35,7 @@ export type OverlandJumpState =
   | ({ phase: "holding" } & Jump)
   | ({ phase: "resolving"; step: number } & Jump)
   | ({ phase: "realm" } & Jump)
-  | ({ phase: "surfacing" } & Jump)
+  | ({ phase: "surfacing"; step: number } & Jump)
   | ({ phase: "fallback"; reason?: GoogleRendererUnavailableReason } & Jump);
 
 export type OverlandJumpEvent =
@@ -112,17 +112,22 @@ export function reduceOverlandJump(
       if (state.phase !== "diving") return state;
       return state.scene === "ready" ? revealed(jump) : { phase: "holding", ...jump };
     case "resolveStepElapsed":
+      if (state.phase === "surfacing") return surfaceCovered(state) ? state : { ...state, step: state.step + 1 };
       if (state.phase !== "resolving") return state;
       return state.step + 1 >= stepCount(jump)
         ? { phase: "realm", ...jump }
         : { ...state, step: state.step + 1 };
     case "skipRequested":
-      return state.phase === "resolving" ? { phase: "realm", ...jump } : state;
+      // Any key or tap during a transition jumps to where it was going.
+      if (state.phase === "diving") return state.scene === "ready" ? { phase: "realm", ...jump } : { phase: "holding", ...jump };
+      if (state.phase === "resolving") return { phase: "realm", ...jump };
+      if (state.phase === "surfacing") return browsing(jump);
+      return state;
     case "cancelRequested":
       return state.phase === "diving" || state.phase === "holding" ? browsing(jump) : state;
     case "leaveRequested":
-      if (state.phase === "fallback" || (state.phase === "realm" && jump.reducedMotion)) return browsing(jump);
-      if (state.phase === "realm" || state.phase === "resolving") return { phase: "surfacing", ...jump };
+      if (state.phase === "fallback" || state.phase === "diving" || state.phase === "holding") return browsing(jump);
+      if (state.phase === "realm" || state.phase === "resolving") return { phase: "surfacing", step: 0, ...jump };
       return state;
     case "surfaceFinished":
       return state.phase === "surfacing" ? browsing(jump) : state;
@@ -131,6 +136,16 @@ export function reduceOverlandJump(
       return unhandled;
     }
   }
+}
+
+/**
+ * Whether the way out has stepped back to a full cover, so the dive can
+ * play in reverse. With reduced motion there are no steps: the whole scene
+ * crossfades away instead.
+ */
+export function surfaceCovered(state: OverlandJumpState) {
+  if (state.phase !== "surfacing") return false;
+  return state.reducedMotion || state.step >= stepCount(state);
 }
 
 export interface JumpPresentation {
@@ -156,7 +171,11 @@ export function jumpPresentation(state: OverlandJumpState): JumpPresentation {
     case "realm":
       return { liveMap: true, pixelLevel: 1, coverCoverage: 0 };
     case "surfacing":
-      return { liveMap: true, pixelLevel: 1, coverCoverage: 1 };
+      if (state.reducedMotion) return { liveMap: true, pixelLevel: 1, coverCoverage: 0 };
+      if (surfaceCovered(state)) return { liveMap: false, pixelLevel: 1, coverCoverage: 1 };
+      return state.transition === "live"
+        ? { liveMap: true, pixelLevel: [...LIVE_PIXEL_LEVELS].reverse()[state.step], coverCoverage: 0 }
+        : { liveMap: true, pixelLevel: 1, coverCoverage: state.step / WIPE_STEPS };
     default: {
       const unhandled: never = state;
       return unhandled;

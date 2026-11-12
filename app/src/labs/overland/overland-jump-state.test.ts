@@ -6,6 +6,7 @@ import {
   initialOverlandJumpState,
   jumpPresentation,
   reduceOverlandJump,
+  surfaceCovered,
   type OverlandJumpEvent,
   type OverlandJumpState,
 } from "@/labs/overland/overland-jump-state";
@@ -81,7 +82,12 @@ describe("reduceOverlandJump", () => {
     expect(reduced).toMatchObject({ phase: "holding" });
     const realm = run([{ type: "sceneStatusReceived", jumpId: jumpIdOf(reduced), status: READY }], reduced);
     expect(realm).toMatchObject({ phase: "realm" });
-    expect(run([{ type: "leaveRequested" }], realm)).toMatchObject({ phase: "browsing", slug: "kyoto" });
+    // Leaving is one crossfade of the whole scene: nothing steps back.
+    const leaving = run([{ type: "leaveRequested" }], realm);
+    expect(leaving).toMatchObject({ phase: "surfacing" });
+    expect(jumpPresentation(leaving)).toMatchObject({ liveMap: true, pixelLevel: 1 });
+    expect(surfaceCovered(leaving)).toBe(true);
+    expect(run([{ type: "surfaceFinished", jumpId: jumpIdOf(reduced) }], leaving)).toMatchObject({ phase: "browsing", slug: "kyoto" });
   });
 
   it("5. an unavailable scene in any phase leads to the fallback and keeps the key-rejection reason", () => {
@@ -128,5 +134,47 @@ describe("reduceOverlandJump", () => {
       state = reduceOverlandJump(state, { type: "resolveStepElapsed", jumpId: 1 });
     }
     expect(jumpPresentation(run([{ type: "sceneStatusReceived", jumpId: 1, status: UNAVAILABLE }], requested()))).toMatchObject({ liveMap: false });
+  });
+
+  it("10. any key or tap during the dive skips to its end: the realm when the scene is ready, else the hold", () => {
+    const diving = requested();
+    expect(run([{ type: "skipRequested" }], diving)).toMatchObject({ phase: "holding" });
+    expect(run([{ type: "sceneStatusReceived", jumpId: 1, status: READY }, { type: "skipRequested" }], diving)).toMatchObject({ phase: "realm" });
+    const holding = run([{ type: "diveFinished", jumpId: 1 }], diving);
+    expect(reduceOverlandJump(holding, { type: "skipRequested" })).toBe(holding);
+  });
+
+  it("11. leaving reverses the wipe step by step, and a skip finishes the way out", () => {
+    const realm = run([{ type: "diveFinished", jumpId: 1 }, { type: "sceneStatusReceived", jumpId: 1, status: READY }, { type: "skipRequested" }], requested());
+    let state = run([{ type: "leaveRequested" }], realm);
+    const coverages: number[] = [];
+    while (!surfaceCovered(state)) {
+      expect(jumpPresentation(state).liveMap).toBe(true);
+      coverages.push(jumpPresentation(state).coverCoverage);
+      state = reduceOverlandJump(state, { type: "resolveStepElapsed", jumpId: 1 });
+    }
+    expect(coverages).toHaveLength(WIPE_STEPS);
+    expect(coverages).toEqual([...coverages].sort((a, b) => a - b));
+    expect(coverages[0]).toBe(0);
+    expect(jumpPresentation(state).coverCoverage).toBe(1);
+    expect(reduceOverlandJump(state, { type: "resolveStepElapsed", jumpId: 1 })).toBe(state);
+    expect(run([{ type: "skipRequested" }], run([{ type: "leaveRequested" }], realm))).toMatchObject({ phase: "browsing", slug: "kyoto" });
+  });
+
+  it("12. the live comparison leaves through the pixel levels in reverse, then the cover", () => {
+    let state = run([{ type: "sceneStatusReceived", jumpId: 1, status: READY }, { type: "diveFinished", jumpId: 1 }, { type: "skipRequested" }, { type: "leaveRequested" }], requested({ transition: "live" }));
+    const levels: number[] = [];
+    while (!surfaceCovered(state)) {
+      expect(jumpPresentation(state).coverCoverage).toBe(0);
+      levels.push(jumpPresentation(state).pixelLevel);
+      state = reduceOverlandJump(state, { type: "resolveStepElapsed", jumpId: 1 });
+    }
+    expect(levels).toEqual([...LIVE_PIXEL_LEVELS].reverse().slice(0, -1));
+    expect(jumpPresentation(state).coverCoverage).toBe(1);
+  });
+
+  it("13. leaving before the scene is shown is a cancel", () => {
+    expect(run([{ type: "leaveRequested" }], requested())).toMatchObject({ phase: "browsing", slug: "kyoto" });
+    expect(run([{ type: "diveFinished", jumpId: 1 }, { type: "leaveRequested" }], requested())).toMatchObject({ phase: "browsing" });
   });
 });
