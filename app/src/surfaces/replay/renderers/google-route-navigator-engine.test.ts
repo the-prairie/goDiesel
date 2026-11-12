@@ -183,6 +183,36 @@ describe("Google renderer lifecycle adapter", () => {
     expect(map.children[2].path.at(-1)).toEqual({ ...marker.position, altitude: 1.25 });
   });
 
+  it("lets the caller dress the position marker, in place of the default dot, and undresses it on destroy", async () => {
+    const sprite = new FakeElement({});
+    const undress = vi.fn();
+    const positionMarker = vi.fn((marker: HTMLElement) => {
+      marker.append(sprite as unknown as HTMLElement);
+      return undress;
+    });
+    const run = mount({
+      positionMarker,
+      routeStyle: { mode: "filament", palette: "immersive", color: "#fff", outerColor: "#fff", outerWidth: 0, width: 2 },
+    });
+    const map = await sceneCreated();
+    steady(map);
+    await run.done;
+    const marker = map.children[3];
+    expect(positionMarker).toHaveBeenCalledWith(marker);
+    expect(marker.children).toEqual([sprite]);
+    expect(marker.dataset.markerKind).toBeUndefined();
+    run.engine.destroy();
+    expect(undress).toHaveBeenCalledOnce();
+  });
+
+  it("dresses the immersive marker with the default dot when the caller does not", async () => {
+    const run = mount({ routeStyle: { mode: "filament", palette: "immersive", color: "#fff", outerColor: "#fff", outerWidth: 0, width: 2 } });
+    const map = await sceneCreated();
+    steady(map);
+    await run.done;
+    expect(map.children[3].dataset.markerKind).toBe("dot");
+  });
+
   it("keeps the short position tail attached during sub-metre playback and reverse seek", async () => {
     const run = mount({ routeStyle: { mode: "filament", palette: "immersive", color: "#fff", outerColor: "#fff", outerWidth: 0, width: 2 } });
     const map = await sceneCreated();
