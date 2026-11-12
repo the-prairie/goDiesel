@@ -70,3 +70,33 @@ export function buildOverlandTowns(routes: readonly RouteSummary[]): OverlandTow
     })
     .sort((a, b) => a.lng - b.lng || a.name.localeCompare(b.name));
 }
+
+/**
+ * Where to draw each town so close places do not sit on top of each other:
+ * pairs nearer than `minimum` map pixels are pushed apart along the line
+ * between them, a little at a time. A town with room keeps its place.
+ */
+export function spreadTowns(towns: readonly OverlandTown[], minimum: number): OverlandTown[] {
+  const spread = towns.map((town) => ({ ...town }));
+  for (let pass = 0; pass < 200; pass += 1) {
+    let moved = false;
+    for (let i = 0; i < spread.length; i += 1) {
+      for (let j = i + 1; j < spread.length; j += 1) {
+        const a = spread[i];
+        const b = spread[j];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const distance = Math.hypot(dx, dy) || 0.01;
+        if (distance >= minimum) continue;
+        const push = (minimum - distance) / 2 + 0.01;
+        a.x -= (dx / distance) * push;
+        a.y -= (dy / distance) * push;
+        b.x += (dx / distance) * push;
+        b.y += (dy / distance) * push;
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  return spread;
+}

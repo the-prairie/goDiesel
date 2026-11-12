@@ -6,6 +6,7 @@ import {
   WORLD_MAP,
   buildOverlandTowns,
   projectToWorldMap,
+  spreadTowns,
 } from "@/labs/overland/model/overland-towns";
 
 function summary(overrides: Record<string, unknown>) {
@@ -111,5 +112,21 @@ describe("buildOverlandTowns", () => {
     const kyoto = towns.find((town) => town.name === "Kyoto, Japan")!;
     expect(kyoto.lat).toBeCloseTo(35.0, 0);
     expect(kyoto.lng).toBeCloseTo(135.8, 0);
+  });
+});
+
+describe("spreadTowns", () => {
+  it("moves towns apart until no two are closer than the minimum, keeping the rest in place", () => {
+    const towns = buildOverlandTowns(routes);
+    const spread = spreadTowns(towns, 11);
+    expect(spread.map((town) => town.name)).toEqual(towns.map((town) => town.name));
+    for (let i = 0; i < spread.length; i += 1) {
+      for (let j = i + 1; j < spread.length; j += 1) {
+        expect(Math.hypot(spread[i].x - spread[j].x, spread[i].y - spread[j].y), `${spread[i].name} / ${spread[j].name}`).toBeGreaterThanOrEqual(10.5);
+      }
+    }
+    const london = (list: typeof towns) => list.find((town) => town.name === "London, UK")!;
+    expect(spread.find((t) => t.name === "London, UK")).toMatchObject({ x: london(towns).x, y: london(towns).y });
+    expect(towns).toEqual(buildOverlandTowns(routes));
   });
 });
