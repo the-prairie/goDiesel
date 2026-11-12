@@ -42,13 +42,17 @@ requireSingleLazyChunk("route-detail", /^route-detail-page-.*\.js$/);
 requireSingleLazyChunk("Overland", /^overland-lab-page-.*\.js$/);
 
 // The Overland lab loads on demand, and stays small: its pixel engine, font
-// and world mask never reach the initial shell.
-const overlandChunk = assets.find((name) => /^overland-lab-page-.*\.js$/.test(name));
-const overlandBytes = (await stat(path.join(dist, "assets", overlandChunk))).size;
+// and world mask never reach the initial shell. Rollup may split the lab
+// into a page chunk and shared chunks, so the cap covers every Overland
+// chunk together. The 3D realm is a chunk of its own, loaded on entering.
+requireSingleLazyChunk("Overland realm", /^overland-realm-.*\.js$/);
+const overlandChunks = assets.filter((name) => /^overland-.*\.js$/.test(name));
+let overlandBytes = 0;
+for (const name of overlandChunks) overlandBytes += (await stat(path.join(dist, "assets", name))).size;
 const overlandBudgetBytes = 150 * 1024;
 if (overlandBytes > overlandBudgetBytes) {
   throw new Error(
-    `Overland chunk is ${(overlandBytes / 1024).toFixed(1)} KiB; budget is ${overlandBudgetBytes / 1024} KiB.`,
+    `Overland chunks are ${(overlandBytes / 1024).toFixed(1)} KiB; budget is ${overlandBudgetBytes / 1024} KiB.`,
   );
 }
 if (entry.includes("overland-world-mask")) {
@@ -56,5 +60,5 @@ if (entry.includes("overland-world-mask")) {
 }
 
 console.log(
-  `Bundle budget passed: initial shell ${(entryBytes / 1024).toFixed(1)} KiB; Replay and route detail remain lazy; Overland is ${(overlandBytes / 1024).toFixed(1)} KiB.`,
+  `Bundle budget passed: initial shell ${(entryBytes / 1024).toFixed(1)} KiB; Replay and route detail remain lazy; Overland is ${(overlandBytes / 1024).toFixed(1)} KiB in ${overlandChunks.length} chunks.`,
 );
