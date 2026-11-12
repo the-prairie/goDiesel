@@ -4,6 +4,7 @@ import { useLocation, useNavigate, useParams, useSearchParams } from "react-rout
 import {
   decodedRouteSlug,
   overlandEntryPath,
+  overlandRealmPath,
   overlandWorldPath,
   type OverlandView,
 } from "@/app/route-paths";
@@ -13,6 +14,7 @@ import { C } from "@/labs/overland/engine/palette";
 import {
   ENTRY_BOX_HEIGHT,
   ENTRY_HEIGHT,
+  ENTRY_MAP,
   INDEX_ROW_HEIGHT,
   SCREEN_WIDTH,
   WORLD_BOX_HEIGHT,
@@ -29,6 +31,8 @@ import { buildOverlandEntries, type OverlandEntry } from "@/labs/overland/model/
 import { WORLD_MAP, buildOverlandTowns, spreadTowns, type OverlandTown } from "@/labs/overland/model/overland-towns";
 import { placeLook } from "@/labs/overland/model/place-biomes";
 import { normaliseRouteLine } from "@/labs/overland/model/route-line";
+import type { JumpTransition } from "@/labs/overland/overland-jump-state";
+import { OverlandJump } from "@/labs/overland/overland-jump";
 import { ArrowIcon, Device, Key, PixelLabel } from "@/labs/overland/overland-ui";
 import { entryBoxText, entryFacts, formatEntryDate, pageLines, routeNumberLabel } from "@/labs/overland/model/text-box";
 import { RouteNotFound } from "@/ui/route-not-found";
@@ -366,9 +370,18 @@ function World({ scale, reducedMotion }: { scale: number; reducedMotion: boolean
 
 // ---------------------------------------------------------------- entry
 
-function Entry({ entry, scale, reducedMotion }: { entry: OverlandEntry; scale: number; reducedMotion: boolean }) {
+interface EntryState {
+  fromOverland?: boolean;
+  /** Set when the 3D world was jumped into from this entry. */
+  via?: "jump";
+}
+
+function Entry({ entry, scale, reducedMotion, realm }: { entry: OverlandEntry; scale: number; reducedMotion: boolean; realm: boolean }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const transition: JumpTransition = searchParams.get("jump") === "live" ? "live" : "wipe";
+  const enterKey = useRef<HTMLButtonElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [page, setPage] = useState(0);
   // A separator stays with the word before it, so no line starts with "·".
@@ -395,22 +408,54 @@ function Entry({ entry, scale, reducedMotion }: { entry: OverlandEntry; scale: n
     drawEntryScreen(context, { entry, map, lines, shown: shownAt(performance.now()), morePages: page < pages.length - 1, now });
   }, reducedMotion);
 
+  const entryState = location.state as EntryState | null;
   const back = useCallback(() => {
-    if ((location.state as { fromOverland?: boolean } | null)?.fromOverland) navigate(-1);
+    if (entryState?.fromOverland) navigate(-1);
     else navigate(overlandWorldPath({ town: entry.place, view: "index" }));
-  }, [entry.place, location.state, navigate]);
+  }, [entry.place, entryState, navigate]);
+
+  // The 3D world is a URL below the entry, so Back and Escape return here.
+  const enter = useCallback(() => {
+    navigate(overlandRealmPath(entry.slug, transition), { state: { ...entryState, via: "jump" } satisfies EntryState });
+  }, [entry.slug, entryState, navigate, transition]);
+  const exitRealm = useCallback(() => {
+    if (entryState?.via === "jump") navigate(-1);
+    else navigate(`${overlandEntryPath(entry.slug)}${location.search}`, { replace: true });
+  }, [entry.slug, entryState, location.search, navigate]);
+  const miniMapRect = useCallback(() => {
+    const element = canvas.current;
+    if (!element) return undefined;
+    const box = element.getBoundingClientRect();
+    const unit = box.width / SCREEN_WIDTH;
+    return {
+      left: box.left + ENTRY_MAP.left * unit,
+      top: box.top + ENTRY_MAP.top * unit,
+      width: ENTRY_MAP.width * unit,
+      height: ENTRY_MAP.height * unit,
+    };
+  }, []);
 
   useEffect(() => {
+    if (realm) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !event.defaultPrevented) back();
+      if (event.defaultPrevented) return;
+      if (event.key === "Escape") back();
+      else if (event.key === "Enter" && !(event.target instanceof HTMLButtonElement)) enter();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [back]);
+  }, [back, enter, realm]);
+
+  // Focus returns to Enter when the person comes back from the 3D world.
+  const wasRealm = useRef(realm);
+  useEffect(() => {
+    if (wasRealm.current && !realm) enterKey.current?.focus({ preventScroll: true });
+    wasRealm.current = realm;
+  }, [realm]);
 
   const neighbour = (direction: 1 | -1) => {
     const next = ENTRIES[(entry.number - 1 + direction + ENTRIES.length) % ENTRIES.length];
-    navigate(overlandEntryPath(next.slug), { replace: true, state: location.state });
+    navigate(`${overlandEntryPath(next.slug)}${location.search}`, { replace: true, state: location.state });
   };
 
   return (
@@ -428,6 +473,9 @@ function Entry({ entry, scale, reducedMotion }: { entry: OverlandEntry; scale: n
               <ArrowIcon direction="right" scale={2} />
             </Key>
           </div>
+          <Key className="overland-key-primary" label="Enter route" onClick={enter} ref={enterKey}>
+            <PixelLabel bold colour="#ffffff" scale={2} text="Enter" />
+          </Key>
         </>
       }
     >
@@ -457,6 +505,16 @@ function Entry({ entry, scale, reducedMotion }: { entry: OverlandEntry; scale: n
           <p>{formatEntryDate(entry.date)}</p>
         </div>
       </section>
+      {realm ? (
+        <OverlandJump
+          entrance={entryState?.via === "jump" ? "dive" : "direct"}
+          entry={entry}
+          map={map}
+          miniMapRect={miniMapRect}
+          onExit={exitRealm}
+          transition={transition}
+        />
+      ) : null}
     </Device>
   );
 }
@@ -467,14 +525,16 @@ export function OverlandLabPage() {
   const reducedMotion = useReducedMotion();
   const slug = decodedRouteSlug(routeSlug);
   const entry = slug ? ENTRIES.find((candidate) => candidate.slug === slug) : undefined;
+  const { pathname } = useLocation();
+  const realm = Boolean(entry) && pathname.endsWith("/3d");
 
   if (routeSlug && !entry) return <RouteNotFound />;
 
   return (
-    <div className="overland" data-testid="overland">
+    <div className="overland" data-testid="overland" inert={realm}>
       {entry ? null : <h1 className="sr-only">Overland</h1>}
       {entry ? (
-        <Entry entry={entry} key={entry.slug} reducedMotion={reducedMotion} scale={scale} />
+        <Entry entry={entry} key={entry.slug} realm={realm} reducedMotion={reducedMotion} scale={scale} />
       ) : (
         <World reducedMotion={reducedMotion} scale={scale} />
       )}

@@ -306,7 +306,8 @@
       ],
       "adapters": [
         "app/src/surfaces/replay/components/google-route-navigator-stage.tsx",
-        "app/src/surfaces/replay/playback/use-google-replay-driver.ts"
+        "app/src/surfaces/replay/playback/use-google-replay-driver.ts",
+        "app/src/labs/overland/overland-realm.tsx"
       ],
       "states": [
         "status:loading",
@@ -496,7 +497,9 @@
       "test": [
         "app/src/labs/overland/overland-jump-state.test.ts"
       ],
-      "adapters": [],
+      "adapters": [
+        "app/src/labs/overland/overland-jump.tsx"
+      ],
       "states": [
         "browsing",
         "diving",

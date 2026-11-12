@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode, type Ref } from "react";
 
 import { context2d } from "@/labs/overland/engine/canvas";
 import { C } from "@/labs/overland/engine/palette";
@@ -30,9 +30,23 @@ export function ArrowIcon({ direction, scale }: { direction: "left" | "right"; s
   return <canvas aria-hidden="true" className="overland-pixels" height={7} ref={ref} style={{ width: 5 * scale, height: 7 * scale }} width={5} />;
 }
 
-export function Key({ label, children, onClick, pressed, className = "" }: { label: string; children: ReactNode; onClick: () => void; pressed?: boolean; className?: string }) {
+export function Key({
+  label,
+  children,
+  onClick,
+  pressed,
+  className = "",
+  ref,
+}: {
+  label: string;
+  children: ReactNode;
+  onClick: () => void;
+  pressed?: boolean;
+  className?: string;
+  ref?: Ref<HTMLButtonElement>;
+}) {
   return (
-    <button aria-label={label} aria-pressed={pressed} className={`overland-key ${className}`} onClick={onClick} type="button">
+    <button aria-label={label} aria-pressed={pressed} className={`overland-key ${className}`} onClick={onClick} ref={ref} type="button">
       {children}
     </button>
   );
