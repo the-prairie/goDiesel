@@ -555,7 +555,8 @@ export function createTownRenderer(options: TownRendererOptions): TownRenderer {
   function drawTrail(now: number) {
     const elapsed = (now - travelStart) / 1000;
     const share = reducedMotion ? 1 : 1 - Math.exp(-elapsed / 2.2);
-    if (share - trailShare < 0.01 && now - lastTrailDraw < 500) return;
+    // A repaint and upload of the trail is costly on a slow device: a few a second is plenty.
+    if (now - lastTrailDraw < 150 || (share - trailShare < 0.02 && now - lastTrailDraw < 500)) return;
     trailShare = share;
     lastTrailDraw = now;
     const half = TRAIL_SIZE / 2;

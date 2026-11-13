@@ -193,6 +193,11 @@ export interface TownCover {
   clipBand: boolean;
   /** Whether the town takes input. */
   interactive: boolean;
+  /**
+   * Whether the town keeps drawing. While it only fades over the live map
+   * its picture is still, so it rests and leaves the frame to the reveal.
+   */
+  draws: boolean;
 }
 
 /**
@@ -205,12 +210,14 @@ export function townCover(state: OverlandJumpState): TownCover {
   const { liveMap, coverCoverage } = jumpPresentation(state);
   switch (state.phase) {
     case "browsing":
-      return { opacity: 1, above: false, clipBand: false, interactive: true };
+      return { opacity: 1, above: false, clipBand: false, interactive: true, draws: true };
     case "realm":
-      return { opacity: 0, above: false, clipBand: false, interactive: false };
+      return { opacity: 0, above: false, clipBand: false, interactive: false, draws: false };
     default: {
-      const opacity = state.phase === "surfacing" && state.reducedMotion ? 1 : coverCoverage;
-      return { opacity, above: true, clipBand: liveMap && opacity > 0, interactive: false };
+      const reducedOut = state.phase === "surfacing" && state.reducedMotion;
+      const opacity = reducedOut ? 1 : coverCoverage;
+      const fading = state.phase === "resolving" || (state.phase === "surfacing" && !reducedOut && !surfaceCovered(state));
+      return { opacity, above: true, clipBand: liveMap && opacity > 0, interactive: false, draws: !fading };
     }
   }
 }

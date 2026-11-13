@@ -76,6 +76,8 @@ test("choosing a signpost lights the town at the hour that run started there", a
 });
 
 test("a signpost dives into its route; the town holds with her running until the scene is ready, then fades with the attribution band clear", async ({ page }) => {
+  // The town is drawn by the CPU on a CI runner without a GPU: give the whole journey room.
+  test.setTimeout(90_000);
   await installGoogleReplay(page, "loading");
   await page.setViewportSize({ width: 1440, height: 900 });
   await openTown(page);
@@ -89,7 +91,7 @@ test("a signpost dives into its route; the town holds with her running until the
   await expect(page.getByTestId("overland-jump-status")).toHaveCount(0);
 
   await page.evaluate(() => window.__GODIESEL_SET_PROVIDER_STATUS__?.("ready"));
-  await expect(jump(page)).toHaveAttribute("data-jump-phase", "realm");
+  await expect(jump(page)).toHaveAttribute("data-jump-phase", "realm", { timeout: 30_000 });
   expect(await page.evaluate(() => window.__townPhases?.())).toEqual(["diving", "holding", "resolving", "realm"]);
   const stage = await page.evaluate(() => window.__townStage ?? []);
   const resolving = stage.filter((sample) => sample.phase === "resolving");
@@ -118,6 +120,8 @@ test("a signpost dives into its route; the town holds with her running until the
 });
 
 test("the town works from the keyboard alone: arrows between signposts, Enter jumps, Escape returns", async ({ page }) => {
+  // The town is drawn by the CPU on a CI runner without a GPU: give the whole journey room.
+  test.setTimeout(90_000);
   await installGoogleReplay(page, "ready");
   await openTown(page);
   await sign(page, GOLD.number).focus();
@@ -126,7 +130,7 @@ test("the town works from the keyboard alone: arrows between signposts, Enter ju
   await page.keyboard.press("ArrowRight");
   await expect(sign(page, GOLD.number)).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(jump(page)).toHaveAttribute("data-jump-phase", "realm", { timeout: 15_000 });
+  await expect(jump(page)).toHaveAttribute("data-jump-phase", "realm", { timeout: 30_000 });
   await page.keyboard.press("Escape");
   await expect(jump(page)).toHaveCount(0);
   await expect(sign(page, GOLD.number)).toBeFocused();
@@ -147,6 +151,8 @@ test("with reduced motion the jump from a town cuts: no dive and no steps", asyn
 });
 
 test("a deep link to a route's 3D world from a town opens it directly, and leaving lands on its signpost", async ({ page }) => {
+  // The town is drawn by the CPU on a CI runner without a GPU: give the whole journey room.
+  test.setTimeout(90_000);
   await installGoogleReplay(page, "ready");
   await page.goto(`/#/lab/overland/town/${KYOTO.slug}/${PEACH.slug}/3d?quality=low`);
   // The town is built under the 3D world, which the software renderer takes a while over.

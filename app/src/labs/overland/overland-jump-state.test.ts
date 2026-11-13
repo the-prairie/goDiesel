@@ -207,13 +207,13 @@ describe("townCover", () => {
     );
 
   it("is the town as it is while browsing, and gone in the realm", () => {
-    expect(townCover(initialOverlandJumpState())).toEqual({ opacity: 1, above: false, clipBand: false, interactive: true });
+    expect(townCover(initialOverlandJumpState())).toEqual({ opacity: 1, above: false, clipBand: false, interactive: true, draws: true });
     expect(townCover(realmOf(false))).toMatchObject({ opacity: 0, above: false, interactive: false });
   });
 
   it("covers the map, whole, through the dive, the hold and the fallback", () => {
     const diving = requested({ transition: "town" });
-    expect(townCover(diving)).toEqual({ opacity: 1, above: true, clipBand: false, interactive: false });
+    expect(townCover(diving)).toEqual({ opacity: 1, above: true, clipBand: false, interactive: false, draws: true });
     expect(townCover(run([{ type: "diveFinished", jumpId: 1 }], diving))).toMatchObject({ opacity: 1, above: true, clipBand: false });
     expect(townCover(run([{ type: "sceneStatusReceived", jumpId: 1, status: UNAVAILABLE }], diving))).toMatchObject({ opacity: 1, above: true });
   });
@@ -232,5 +232,21 @@ describe("townCover", () => {
     const realm = realmOf(true);
     expect(townCover(realm)).toMatchObject({ opacity: 0 });
     expect(townCover(run([{ type: "leaveRequested" }], realm))).toMatchObject({ opacity: 1, clipBand: true, above: true });
+  });
+
+  it("stops drawing while it only fades over the live map, and in the realm", () => {
+    let state: OverlandJumpState = run([{ type: "diveFinished", jumpId: 1 }], requested({ transition: "town" }));
+    expect(townCover(state).draws).toBe(true);
+    state = run([{ type: "sceneStatusReceived", jumpId: 1, status: READY }, { type: "resolveStepElapsed", jumpId: 1 }], state);
+    expect(state.phase).toBe("resolving");
+    expect(townCover(state).draws).toBe(false);
+    expect(townCover(realmOf(false)).draws).toBe(false);
+    // On the way out it draws again once it covers the map, so its camera can pull back.
+    let out: OverlandJumpState = run([{ type: "leaveRequested" }], realmOf(false));
+    expect(townCover(out).draws).toBe(false);
+    while (!surfaceCovered(out)) out = reduceOverlandJump(out, { type: "resolveStepElapsed", jumpId: 1 });
+    expect(townCover(out).draws).toBe(true);
+    // With reduced motion it fades back in whole, already home.
+    expect(townCover(run([{ type: "leaveRequested" }], realmOf(true))).draws).toBe(true);
   });
 });

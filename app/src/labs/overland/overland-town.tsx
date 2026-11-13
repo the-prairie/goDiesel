@@ -363,7 +363,7 @@ export function OverlandTownView({ town, entries, realmSlug, onBack, fallback }:
   );
 
   useEffect(() => {
-    rendererRef.current?.setPaused(cover.opacity === 0 && !cover.above);
+    rendererRef.current?.setPaused(!cover.draws);
   }, [cover]);
 
   // ---------------------------------------------------------------- keys
