@@ -3,9 +3,16 @@
 // of town; pitch is degrees above the horizon.
 
 export const TOWN_FOV_DEG = 32;
-/** The runner's height in world units, and her sprite's height in the 3D world. */
+/** The runner's height in world units. */
 export const RUNNER_HEIGHT = 1.7;
-export const REALM_SPRITE_PX = 48;
+
+/**
+ * The whole-pixel scale of her 16 × 24 sprite in the 3D world: about a
+ * tenth of the screen's height, from 3× to 5×.
+ */
+export function realmSpriteScale(viewportHeight: number) {
+  return Math.min(5, Math.max(3, Math.round((viewportHeight * 0.1) / 24)));
+}
 /** The town's front path, where the signposts stand and the runner leaves. */
 export const FRONT_PATH_Z = 9.3;
 
@@ -57,7 +64,7 @@ export function diveTarget(sign: { x: number; side: -1 | 1 }, opening: { tiltDeg
     target: { x: sign.x + sign.side * 1.2, y: 0.8, z: FRONT_PATH_Z },
     yaw: sign.side < 0 ? Math.PI / 2 : -Math.PI / 2,
     pitchDeg,
-    distance: (RUNNER_HEIGHT * viewportHeight) / (REALM_SPRITE_PX * 2 * tanHalf()),
+    distance: (RUNNER_HEIGHT * viewportHeight) / (24 * realmSpriteScale(viewportHeight) * 2 * tanHalf()),
   };
 }
 

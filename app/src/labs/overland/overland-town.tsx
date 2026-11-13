@@ -29,6 +29,8 @@ import { useReducedMotion } from "@/ui/use-reduced-motion";
 
 type RendererModule = typeof import("@/labs/overland/town3d/town-renderer");
 
+const BROWSING_COVER = townCover(initialOverlandJumpState());
+
 // The town renderer and three.js load only when a town opens.
 const loadRenderer = () => import("@/labs/overland/town3d/town-renderer");
 
@@ -113,7 +115,9 @@ export function OverlandTownView({ town, entries, realmSlug, onBack, fallback }:
   const chosen = jumpSign?.slug ?? focused;
   const chosenSign = plan.signposts.find((sign) => sign.slug === chosen);
   const detail = useRouteDetail(chosen ?? undefined);
-  const [cover, setCover] = useState<TownCover>(() => townCover(initialOverlandJumpState()));
+  const [jumpCoverState, setCover] = useState<TownCover>(() => townCover(initialOverlandJumpState()));
+  // Without a 3D world open, the town is itself, whatever the last jump left.
+  const cover = realmSlug ? jumpCoverState : BROWSING_COVER;
   const sizeRef = useRef(size);
   sizeRef.current = size;
   const totalKm = plan.signposts.reduce((sum, sign) => sum + sign.km, 0);

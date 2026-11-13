@@ -878,7 +878,7 @@ export function paintTrail(canvas: HTMLCanvasElement, trail: ReadonlyArray<[numb
     context.fillStyle = colour;
     context.fillRect(Math.round(x - size / 2), Math.round(y - size / 2), size, size);
   };
-  for (const [colour, size] of [[C.ink, 4], [C.acc, 2]] as const) {
+  for (const [colour, size] of [[C.ink, 8], [C.acc, 4]] as const) {
     for (let i = 1; i <= upTo; i += 1) {
       const [x0, y0] = toTexel(trail[i - 1][0], trail[i - 1][1]);
       const [x1, y1] = toTexel(trail[i][0], trail[i][1]);
@@ -887,6 +887,6 @@ export function paintTrail(canvas: HTMLCanvasElement, trail: ReadonlyArray<[numb
     }
   }
   const [hx0, hy0] = toTexel(trail[upTo][0], trail[upTo][1]);
-  dot(hx0, hy0, 6, C.ink);
-  dot(hx0, hy0, 4, "#ffffff");
+  dot(hx0, hy0, 12, C.ink);
+  dot(hx0, hy0, 8, "#ffffff");
 }

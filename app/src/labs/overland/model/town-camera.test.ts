@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { TOWN_FOV_DEG, cameraPosition, diveTarget, homePose, mixPose, trailOnGround } from "@/labs/overland/model/town-camera";
+import { TOWN_FOV_DEG, cameraPosition, diveTarget, homePose, mixPose, realmSpriteScale, trailOnGround } from "@/labs/overland/model/town-camera";
 
 describe("homePose", () => {
   it("frames the town wider on a landscape screen and from higher on a phone", () => {
@@ -40,9 +40,16 @@ describe("diveTarget", () => {
 
   it("stands far enough back that the runner is the size of the 3D world's sprite", () => {
     const pose = diveTarget({ x: 0, side: 1 }, opening, 844);
-    // A 1.7-unit runner fills 48 of the viewport's 844 CSS pixels.
+    // A 1.7-unit runner fills the sprite's 96 of the viewport's 844 CSS pixels.
     const pixels = (1.7 / (2 * Math.tan((TOWN_FOV_DEG * Math.PI) / 360) * pose.distance)) * 844;
-    expect(pixels).toBeCloseTo(48, 0);
+    expect(pixels).toBeCloseTo(24 * realmSpriteScale(844), 0);
+  });
+
+  it("draws the 3D world's sprite at a whole-pixel scale, about a tenth of the screen tall", () => {
+    expect(realmSpriteScale(844)).toBe(4);
+    expect(realmSpriteScale(900)).toBe(4);
+    expect(realmSpriteScale(600)).toBe(3);
+    expect(realmSpriteScale(2000)).toBe(5);
   });
 
   it("keeps a sensible pitch when the opening camera is unknown or extreme", () => {

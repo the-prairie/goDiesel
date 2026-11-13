@@ -292,8 +292,10 @@ export function createTownRenderer(options: TownRendererOptions): TownRenderer {
     const position = cameraPosition(p);
     camera.position.set(position.x, position.y, position.z);
     camera.lookAt(p.target.x, p.target.y, p.target.z);
-    scene.fog.near = p.distance * 1.05;
-    scene.fog.far = p.distance * (mode === "home" ? 2.6 : 4.5);
+    // Low over the town, the fog closes in so the ground never shows an edge.
+    const low = Math.min(1, Math.max(0, (50 - p.pitchDeg) / 20));
+    scene.fog.near = p.distance * (1.05 - 0.3 * low);
+    scene.fog.far = p.distance * (2.6 - 0.75 * low);
   };
   const behindRunner = (): TownPose => {
     const sign = plan.signposts.find((candidate) => candidate.slug === diveSlug);

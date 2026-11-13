@@ -4,7 +4,9 @@ import type { QuestRoute } from "@/domain/route";
 import { context2d, makeCanvas } from "@/labs/overland/engine/canvas";
 import { C } from "@/labs/overland/engine/palette";
 import { wrapForBox } from "@/labs/overland/engine/screens";
+import { runnerFrame } from "@/labs/overland/engine/runner";
 import { sprites } from "@/labs/overland/engine/sprites";
+import { realmSpriteScale } from "@/labs/overland/model/town-camera";
 import { clipText, drawFrame, drawText } from "@/labs/overland/engine/text-draw";
 import { measureText } from "@/labs/overland/engine/font";
 import type { OverlandEntry } from "@/labs/overland/model/overland-entries";
@@ -19,15 +21,23 @@ import type { GoogleRendererUnavailableReason, GoogleRouteNavigatorStatus } from
 const SPRITE_SCALE = 3;
 const LINE = 11;
 
-/** The runner or rider from behind, as the chase camera sees them, pre-scaled for the marker. */
-function spriteFrames(kind: OverlandEntry["kind"]) {
-  const walker = kind === "ride" ? sprites().ride : sprites().run;
-  return walker.up.map((frame) => {
+/**
+ * The runner or rider from behind, as the chase camera sees them, scaled
+ * whole-pixel for the marker. The runner is the town's runner, so she is
+ * the same sprite on both sides of the jump.
+ */
+function spriteFrames(kind: OverlandEntry["kind"], viewportHeight: number) {
+  if (kind === "run") {
+    const scale = realmSpriteScale(viewportHeight);
+    return { width: 16 * scale, height: 24 * scale, urls: [0, 1, 2, 3].map((index) => runnerFrame("up", index, scale).toDataURL()) };
+  }
+  const urls = sprites().ride.up.map((frame) => {
     const canvas = makeCanvas(frame.width * SPRITE_SCALE, frame.height * SPRITE_SCALE);
     const context = context2d(canvas);
     context.drawImage(frame, 0, 0, canvas.width, canvas.height);
     return canvas.toDataURL();
   });
+  return { width: 16 * SPRITE_SCALE, height: 16 * SPRITE_SCALE, urls };
 }
 
 function isControl(target: EventTarget | null) {
@@ -100,7 +110,8 @@ export interface OverlandRealmProps {
  * and the handheld's controls above the attribution band.
  */
 export default function OverlandRealm({ route, entry, jumpId, phase, presentation, reducedMotion, viewport, onStatus, onLeave }: OverlandRealmProps) {
-  const frames = useMemo(() => spriteFrames(entry.kind), [entry.kind]);
+  const sprite = useMemo(() => spriteFrames(entry.kind, viewport.height), [entry.kind, viewport.height]);
+  const frames = sprite.urls;
   const spriteRef = useRef<HTMLImageElement | null>(null);
   const positionMarker = useCallback(
     (marker: HTMLElement) => {
@@ -108,9 +119,9 @@ export default function OverlandRealm({ route, entry, jumpId, phase, presentatio
       image.alt = "";
       image.src = frames[0];
       image.dataset.frame = "0";
-      image.width = 16 * SPRITE_SCALE;
-      image.height = 16 * SPRITE_SCALE;
-      image.style.cssText = "display:block;width:48px;height:48px;image-rendering:pixelated;pointer-events:none";
+      image.width = sprite.width;
+      image.height = sprite.height;
+      image.style.cssText = `display:block;width:${sprite.width}px;height:${sprite.height}px;image-rendering:pixelated;pointer-events:none`;
       marker.append(image);
       marker.dataset.markerKind = "overland-sprite";
       spriteRef.current = image;
@@ -119,7 +130,7 @@ export default function OverlandRealm({ route, entry, jumpId, phase, presentatio
         if (spriteRef.current === image) spriteRef.current = null;
       };
     },
-    [frames],
+    [frames, sprite.height, sprite.width],
   );
   const driver = useGoogleReplayDriver({ route, camera: "sustained", palette: "immersive", positionMarker });
   const { session, sessionRef, commitControl, totalDistanceM } = driver;
