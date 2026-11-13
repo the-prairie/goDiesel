@@ -32,9 +32,9 @@ test("the world map shows every place as a town a person can choose", async ({ p
   await expect(page.getByTestId("overland-world-text")).toContainText("2 routes");
 });
 
-test("opening a town lists its routes, and a route opens its entry with her words exactly", async ({ page }) => {
+test("a town's index lists its routes, and a route opens its entry with her words exactly", async ({ page }) => {
   await openWorld(page, `?town=${encodeURIComponent(KYOTO)}`);
-  await page.getByRole("button", { name: "Open", exact: true }).click();
+  await page.getByRole("button", { name: "Index", exact: true }).click();
   const index = page.getByTestId("overland-index");
   await expect(index).toBeVisible();
   await expect(index.getByRole("button")).toHaveCount(2);
@@ -61,7 +61,7 @@ test("a route without a note shows its place, date and distance", async ({ page 
 
 test("Back from an entry returns to the same town and view", async ({ page }) => {
   await openWorld(page, `?town=${encodeURIComponent(KYOTO)}`);
-  await page.getByRole("button", { name: "Open", exact: true }).click();
+  await page.getByRole("button", { name: "Index", exact: true }).click();
   await page.getByTestId("overland-index").getByRole("button", { name: new RegExp(GOLD.title) }).click();
   await expect(page.getByTestId("overland-entry")).toBeVisible();
   await page.getByRole("button", { name: "Back", exact: true }).click();
@@ -77,7 +77,12 @@ test("the world, index and entry work from the keyboard alone", async ({ page })
   await page.keyboard.press("ArrowRight");
   const first = page.getByTestId("overland-towns").getByRole("button", { pressed: true });
   await expect(first).toHaveCount(1);
+  // Enter on a town enters it in 3D; Escape comes back to the world.
   await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/#\/lab\/overland\/town\//);
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("overland-world")).toBeVisible();
+  await page.getByRole("button", { name: "Index", exact: true }).click();
   await expect(page.getByTestId("overland-index")).toBeVisible();
   await page.getByTestId("overland-index").getByRole("button").first().focus();
   await page.keyboard.press("Enter");
