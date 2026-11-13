@@ -77,6 +77,21 @@ if (entry.includes("overland-world-mask")) {
   throw new Error("Initial shell unexpectedly contains the Overland world mask.");
 }
 
+// The sketch world (lab): its page and its edge worker, lazy, on top of the
+// MapLibre chunk the app already loads on demand. Measured at 39.5 KiB when
+// added (page 32.1 KiB, worker 7.4 KiB); the cap leaves a little room.
+const sketchChunks = assets.filter((name) => /^sketch-.*\.js$/.test(name));
+let sketchBytes = 0;
+for (const name of sketchChunks) sketchBytes += (await stat(path.join(dist, "assets", name))).size;
+const sketchBudgetBytes = 48 * 1024;
+if (sketchChunks.length === 0) throw new Error("The sketch world's chunks are missing from the build.");
+if (sketchBytes > sketchBudgetBytes) {
+  throw new Error(`The sketch world is ${(sketchBytes / 1024).toFixed(1)} KiB; budget is ${sketchBudgetBytes / 1024} KiB.`);
+}
+if (entry.includes("sketch-edge-worker") || entry.includes("building-edges")) {
+  throw new Error("Initial shell unexpectedly contains the sketch world.");
+}
+
 console.log(
-  `Bundle budget passed: initial shell ${(entryBytes / 1024).toFixed(1)} KiB; Replay and route detail remain lazy; Overland is ${(overlandBytes / 1024).toFixed(1)} KiB in ${overlandChunks.length} chunks; the town renderer is ${(townRendererBytes / 1024).toFixed(1)} KiB.`,
+  `Bundle budget passed: initial shell ${(entryBytes / 1024).toFixed(1)} KiB; Replay and route detail remain lazy; Overland is ${(overlandBytes / 1024).toFixed(1)} KiB in ${overlandChunks.length} chunks; the town renderer is ${(townRendererBytes / 1024).toFixed(1)} KiB; the sketch world is ${(sketchBytes / 1024).toFixed(1)} KiB in ${sketchChunks.length} chunks.`,
 );

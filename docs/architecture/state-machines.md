@@ -99,12 +99,12 @@ These describe the code as it is. The tables below list each lifecycle; these no
 
 | Kind | Entries |
 | --- | --- |
-| `reducer` | 38 |
+| `reducer` | 39 |
 | `disposition` | 1 |
 | `protocol` | 3 |
 | `derived` | 7 |
 | `left-implicit` | 10 |
-| total | 59 |
+| total | 60 |
 
 ### Reducers
 
@@ -148,6 +148,7 @@ These describe the code as it is. The tables below list each lifecycle; these no
 | `admin-ui-classifier` | Standalone admin classifier start and status polling, including a run that stopped early. | `admin-ui/classifier-state.ts` | `reduceClassifier` | `start:idle`, `start:starting`, `poll:idle`, `poll:checking`, `poll:failed`, `poll:running`, `poll:complete`, `notice:runFailed` | requestId for start; pollId for status |
 | `admin-rebuild` | One background build.py run at a time in the owner server. | `admin_rebuild.py` | `reduce_rebuild` | `idle`, `running`, `succeeded`, `failed` | run id; succeed and fail must name the running id |
 | `admin-classify` | The owner server's background region classifier and its snapshot phase. | `admin_classify.py` | `reduce_classify` | `idle`, `running`, `finished`, `failed` | none; admin.py serialises events under a lock, a second start while running is a no-op, and progress must be the next count |
+| `sketch-map` | The sketch world's MapLibre map: it loads, is ready once its style has drawn, is unavailable without WebGL, and is degraded (paper and her routes, still usable) while its tiles fail, recovering when they load again. | `app/src/labs/sketch/sketch-map-state.ts` | `reduceSketchMap` | `idle`, `loading`, `ready`, `degraded`, `unavailable` | a load id per map; events from an earlier load are ignored |
 
 ### Dispositions
 

@@ -73,6 +73,11 @@ const OverlandLabPage = lazy(() =>
     default: module.OverlandLabPage,
   })),
 );
+const SketchWorldPage = lazy(() =>
+  import("@/labs/sketch/sketch-world-page").then((module) => ({
+    default: module.SketchWorldPage,
+  })),
+);
 const CinematicDirectorLabPage = lazy(() =>
   import("@/labs/cinematic/cinematic-director-lab-page").then((module) => ({
     default: module.CinematicDirectorLabPage,
@@ -114,6 +119,8 @@ const productRoutes: RouteObject[] = [
   view("lab/overland/:routeSlug/3d", "lab", OverlandLabPage),
   view("lab/overland/town/:townSlug", "lab", OverlandLabPage),
   view("lab/overland/town/:townSlug/:routeSlug/3d", "lab", OverlandLabPage),
+  view("lab/sketch", "lab", SketchWorldPage),
+  view("lab/sketch/:routeSlug/3d", "lab", SketchWorldPage),
   view(APP_PATHS.admin.slice(1), "admin", AdminPage),
   {
     path: LEGACY_QUEST_ROUTE_PATH,

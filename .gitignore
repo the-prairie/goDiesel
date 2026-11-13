@@ -53,3 +53,6 @@ node_modules/
 # Local experiments and unrelated build output, not part of goDiesel
 /lottie-player/
 /target/
+
+# Natural Earth downloads for the shelved Overland world map build (wip/overland-shelved).
+app/.cache/
