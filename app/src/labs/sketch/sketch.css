@@ -315,3 +315,115 @@
     background-size: 100% 100%;
   }
 }
+
+/* ---------------------------------------------------------------- inside the 3D world
+   The jump's boxes, keys and marker in the sketch's language: ink line on
+   paper, the one red accent. Same elements and behaviour as Overland's
+   pixel versions, restyled. */
+
+[data-skin="sketch"] .overland-key,
+[data-skin="sketch"].overland-realm-controls .overland-key {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 14px;
+  border: 1.5px solid #1d1d1f;
+  border-radius: 2px;
+  background: #fbfbf8;
+  box-shadow: 2px 2px 0 rgba(29, 29, 31, 0.18);
+  color: #1d1d1f;
+  image-rendering: auto;
+}
+
+[data-skin="sketch"].overland-realm-controls .overland-key.overland-key-play,
+[data-skin="sketch"] .overland-key.overland-key-play {
+  background: #d9412b;
+  border-color: #d9412b;
+  color: #fff;
+}
+
+.sketch-label {
+  font: 500 15px/1 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0.03em;
+  color: inherit;
+}
+
+.sketch-label-bold {
+  font-weight: 650;
+}
+
+.overland-realm-text-box[data-skin="sketch"] {
+  height: auto;
+  background: transparent;
+  box-shadow: none;
+}
+
+.sketch-story-card,
+.sketch-moment-card {
+  padding: 10px 14px 12px;
+  border: 1.5px solid #1d1d1f;
+  border-radius: 2px;
+  background: rgba(251, 251, 248, 0.96);
+  box-shadow: 3px 3px 0 rgba(29, 29, 31, 0.16);
+  color: #1d1d1f;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.sketch-box-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 4px;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #d9412b;
+}
+
+.sketch-box-progress {
+  color: #6d6d6a;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+.sketch-box-tag {
+  padding: 1px 6px;
+  border: 1px solid #1d1d1f;
+  color: #1d1d1f;
+  letter-spacing: 0.06em;
+}
+
+.sketch-box-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.sketch-box-body {
+  margin: 6px 0 0;
+  padding-top: 6px;
+  border-top: 1px solid #cfcfca;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #3a3a38;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.overland-moment[data-skin="sketch"] .sketch-box-body {
+  -webkit-line-clamp: 6;
+}
+
+[data-skin="sketch"] .overland-scrub {
+  accent-color: #d9412b;
+}
+
+.overland-jump-status-layer[data-skin="sketch"] .overland-jump-status {
+  border: 1.5px solid #1d1d1f;
+  background: #fbfbf8;
+  color: #1d1d1f;
+  image-rendering: auto;
+}

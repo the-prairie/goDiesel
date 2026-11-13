@@ -402,6 +402,7 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
           miniMapRect={() => undefined}
           onCover={setCover}
           onExit={exitRealm}
+          skin="sketch"
           transition={unavailable ? "wipe" : "town"}
         />
       ) : null}

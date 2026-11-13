@@ -21,7 +21,8 @@ import { realmLayout, type RealmViewport } from "@/labs/overland/model/realm-lay
 import { realmBoxContent } from "@/labs/overland/model/text-box";
 import { walkFrame } from "@/labs/overland/model/walk-cycle";
 import type { JumpPresentation, OverlandJumpState } from "@/labs/overland/overland-jump-state";
-import { Key, PixelLabel } from "@/labs/overland/overland-ui";
+import { Key, SkinLabel } from "@/labs/overland/overland-ui";
+import { sketchRunnerFrames } from "@/labs/sketch/sketch-runner";
 import { useGoogleReplayDriver } from "@/surfaces/replay/playback/use-google-replay-driver";
 import type { GoogleRendererUnavailableReason, GoogleRouteNavigatorStatus } from "@/surfaces/replay/renderers/google-renderer-state";
 
@@ -110,7 +111,23 @@ function distanceLabel(metres: number) {
  * text box, marked Editorial when it is interpretation, with its photo
  * beside it. Nothing here is written by us but the kind and the distance.
  */
-function MomentBox({ annotation, width, top, left, onOpenPhoto, onClose }: { annotation: RouteAnnotation; width: number; top: number; left: number; onOpenPhoto: () => void; onClose: () => void }) {
+function MomentBox({
+  annotation,
+  width,
+  top,
+  left,
+  onOpenPhoto,
+  onClose,
+  skin,
+}: {
+  annotation: RouteAnnotation;
+  width: number;
+  top: number;
+  left: number;
+  onOpenPhoto: () => void;
+  onClose: () => void;
+  skin: "pixel" | "sketch";
+}) {
   const ref = useRef<HTMLCanvasElement>(null);
   const scale = width < 420 ? 2 : 3;
   const photoWidth = annotation.media ? 76 : 0;
@@ -122,7 +139,7 @@ function MomentBox({ annotation, width, top, left, onOpenPhoto, onClose }: { ann
   const height = 6 + LINE + 3 + title.length * LINE + body.length * LINE + 6;
   useLayoutEffect(() => {
     const canvas = ref.current;
-    if (!canvas) return;
+    if (!canvas || skin === "sketch") return;
     const context = context2d(canvas);
     context.clearRect(0, 0, inner, height);
     drawFrame(context, 0, 0, inner, height);
@@ -143,10 +160,21 @@ function MomentBox({ annotation, width, top, left, onOpenPhoto, onClose }: { ann
       drawText(context, line, 8, y, C.ink2);
       y += LINE;
     }
-  }, [body, editorial, heading, height, inner, title]);
+  }, [body, editorial, heading, height, inner, skin, title]);
   return (
-    <div className="overland-moment" data-moment-id={annotation.id} data-testid="overland-moment" style={{ top, left }}>
-      <canvas aria-hidden="true" className="overland-pixels" height={height} ref={ref} style={{ width: inner * scale, height: height * scale }} width={inner} />
+    <div className="overland-moment" data-moment-id={annotation.id} data-skin={skin} data-testid="overland-moment" style={{ top, left }}>
+      {skin === "sketch" ? (
+        <div aria-hidden="true" className="sketch-moment-card" style={{ maxWidth: Math.min(width - photoWidth - 8, 420) }}>
+          <p className="sketch-box-heading">
+            <span>{heading}</span>
+            {editorial ? <span className="sketch-box-tag">Editorial</span> : null}
+          </p>
+          {annotation.title ? <p className="sketch-box-title">{annotation.title}</p> : null}
+          <p className="sketch-box-body">{annotation.body}</p>
+        </div>
+      ) : (
+        <canvas aria-hidden="true" className="overland-pixels" height={height} ref={ref} style={{ width: inner * scale, height: height * scale }} width={inner} />
+      )}
       <div className="overland-moment-side">
         {annotation.media ? (
           <button aria-label={`Open photo: ${photoLabel(annotation)}`} className="overland-moment-photo" onClick={onOpenPhoto} type="button">
@@ -154,7 +182,7 @@ function MomentBox({ annotation, width, top, left, onOpenPhoto, onClose }: { ann
           </button>
         ) : null}
         <Key className="overland-moment-close" label="Put this moment away" onClick={onClose}>
-          <PixelLabel scale={2} text="OK" />
+          <SkinLabel skin={skin} text="OK" />
         </Key>
       </div>
     </div>
@@ -171,6 +199,8 @@ export interface OverlandRealmProps {
   viewport: RealmViewport;
   onStatus: (jumpId: number, status: GoogleRouteNavigatorStatus, reason?: GoogleRendererUnavailableReason) => void;
   onLeave: () => void;
+  /** Overland's pixels, or the sketch's ink and paper. */
+  skin?: "pixel" | "sketch";
 }
 
 /**
@@ -178,8 +208,9 @@ export interface OverlandRealmProps {
  * the runner as the engine's in-scene marker, a pixel text box at the top
  * and the handheld's controls above the attribution band.
  */
-export default function OverlandRealm({ route, entry, jumpId, phase, presentation, reducedMotion, viewport, onStatus, onLeave }: OverlandRealmProps) {
-  const sprite = useMemo(() => spriteFrames(entry.kind, viewport.height), [entry.kind, viewport.height]);
+export default function OverlandRealm({ route, entry, jumpId, phase, presentation, reducedMotion, viewport, onStatus, onLeave, skin = "pixel" }: OverlandRealmProps) {
+  const sketch = skin === "sketch";
+  const sprite = useMemo(() => (sketch ? sketchRunnerFrames(entry.kind, viewport.height) : spriteFrames(entry.kind, viewport.height)), [entry.kind, sketch, viewport.height]);
   const frames = sprite.urls;
   const spriteRef = useRef<HTMLImageElement | null>(null);
   const positionMarker = useCallback(
@@ -190,16 +221,16 @@ export default function OverlandRealm({ route, entry, jumpId, phase, presentatio
       image.dataset.frame = "0";
       image.width = sprite.width;
       image.height = sprite.height;
-      image.style.cssText = `display:block;width:${sprite.width}px;height:${sprite.height}px;image-rendering:pixelated;pointer-events:none`;
+      image.style.cssText = `display:block;width:${sprite.width}px;height:${sprite.height}px;${sketch ? "" : "image-rendering:pixelated;"}pointer-events:none`;
       marker.append(image);
-      marker.dataset.markerKind = "overland-sprite";
+      marker.dataset.markerKind = sketch ? "sketch-runner" : "overland-sprite";
       spriteRef.current = image;
       return () => {
         image.remove();
         if (spriteRef.current === image) spriteRef.current = null;
       };
     },
-    [frames, sprite.height, sprite.width],
+    [frames, sketch, sprite.height, sprite.width],
   );
   // Her moments along the route. The ref mirrors the reducer; sendMoment is its one writer.
   const anchors = useMemo(() => route.annotations.map((annotation) => ({ id: annotation.id, atDistanceM: annotation.atDistanceM, hasMedia: Boolean(annotation.media) })), [route.annotations]);
@@ -289,12 +320,22 @@ export default function OverlandRealm({ route, entry, jumpId, phase, presentatio
   const boxWidth = Math.floor(realmLayout(viewport, 0).textBox.width / textScale);
   const progressKm = Math.round(session.control.progressM / 100) / 10;
   const lines = useMemo(() => textBoxLines(entry, progressKm, boxWidth), [boxWidth, entry, progressKm]);
-  const boxHeight = textBoxHeight(lines);
+  // The sketch's box is ordinary text: its height is measured, not counted in pixel lines.
+  const [sketchBoxHeight, setSketchBoxHeight] = useState(96);
+  const sketchBoxRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const element = sketchBoxRef.current;
+    if (!element) return;
+    const observer = new ResizeObserver(() => setSketchBoxHeight(element.getBoundingClientRect().height));
+    observer.observe(element);
+    return () => observer.disconnect();
+  });
+  const boxHeight = sketch ? sketchBoxHeight / textScale : textBoxHeight(lines);
   const layout = realmLayout(viewport, boxHeight * textScale);
   const boxRef = useRef<HTMLCanvasElement>(null);
   useLayoutEffect(() => {
-    if (boxRef.current) drawTextBox(boxRef.current, lines);
-  }, [lines, boxWidth, boxHeight]);
+    if (boxRef.current && !sketch) drawTextBox(boxRef.current, lines);
+  }, [lines, boxWidth, boxHeight, sketch]);
 
   const playRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -335,10 +376,23 @@ export default function OverlandRealm({ route, entry, jumpId, phase, presentatio
         <>
           <div
             className="overland-realm-text-box"
+            data-skin={skin}
             data-testid="overland-realm-text-box"
-            style={{ left: layout.textBox.left, top: layout.textBox.top, width: boxWidth * textScale, height: boxHeight * textScale }}
+            ref={sketch ? sketchBoxRef : undefined}
+            style={{ left: layout.textBox.left, top: layout.textBox.top, width: boxWidth * textScale, height: sketch ? undefined : boxHeight * textScale }}
           >
-            <canvas aria-hidden="true" className="overland-pixels" height={boxHeight} ref={boxRef} style={{ width: "100%", height: "100%" }} width={boxWidth} />
+            {sketch ? (
+              <div aria-hidden="true" className="sketch-story-card">
+                <p className="sketch-box-heading">
+                  <span>{content.heading}</span>
+                  <span className="sketch-box-progress">{content.progress}</span>
+                </p>
+                <p className="sketch-box-title">{content.title}</p>
+                {content.body ? <p className="sketch-box-body">{content.body}</p> : null}
+              </div>
+            ) : (
+              <canvas aria-hidden="true" className="overland-pixels" height={boxHeight} ref={boxRef} style={{ width: "100%", height: "100%" }} width={boxWidth} />
+            )}
             <div className="sr-only" data-testid="overland-realm-text">
               <p>{content.heading}</p>
               <p>{content.title}</p>
@@ -348,16 +402,17 @@ export default function OverlandRealm({ route, entry, jumpId, phase, presentatio
           </div>
           <div
             className="overland-realm-controls"
+            data-skin={skin}
             data-testid="overland-realm-controls"
             role="group"
             aria-label="Replay"
             style={{ left: layout.controls.left, top: layout.controls.top, width: layout.controls.width, height: layout.controls.height }}
           >
             <Key label="Back" onClick={onLeave}>
-              <PixelLabel scale={2} text="Back" />
+              <SkinLabel skin={skin} text="Back" />
             </Key>
             <Key className="overland-key-play" label={playing ? "Pause" : "Play"} onClick={toggle} ref={playRef}>
-              <PixelLabel bold colour="#ffffff" scale={2} text={playing ? "Pause" : "Play"} />
+              <SkinLabel bold colour="#ffffff" skin={skin} text={playing ? "Pause" : "Play"} />
             </Key>
             <input
               aria-label="Route progress"
@@ -380,6 +435,7 @@ export default function OverlandRealm({ route, entry, jumpId, phase, presentatio
               left={layout.textBox.left}
               onClose={() => sendMoment({ type: "dismissRequested", id: moment.id, nowMs: performance.now() })}
               onOpenPhoto={() => sendMoment({ type: "mediaOpened", id: moment.id })}
+              skin={skin}
               top={layout.textBox.top + boxHeight * textScale + 10}
               width={layout.textBox.width}
             />

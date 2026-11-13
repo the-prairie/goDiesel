@@ -106,6 +106,13 @@ test("choosing a route and jumping in hands over to the 3D replay; Back returns 
   const jump = page.locator("[data-jump-phase]");
   await expect(jump).toHaveAttribute("data-jump-phase", "realm", { timeout: 30_000 });
   await expect(page.getByTestId("overland-jump")).toContainText(GOLD.title);
+  // Inside, everything is drawn in the sketch's language, not the shelved pixel one.
+  await expect(page.getByTestId("overland-jump")).toHaveAttribute("data-skin", "sketch");
+  const box = page.getByTestId("overland-realm-text-box");
+  await expect(box).toContainText(GOLD.title);
+  await expect(box.locator("canvas")).toHaveCount(0);
+  await expect(page.locator("[data-marker-kind]")).toHaveAttribute("data-marker-kind", "sketch-runner");
+  await expect(page.getByTestId("overland-realm-controls").locator("canvas")).toHaveCount(0);
   // The sketch is out of the way and takes no input while the 3D world is up.
   await expect(page.locator(".sketch-stage")).toHaveAttribute("inert", "");
   await page.getByRole("button", { name: "Back", exact: true }).click();
