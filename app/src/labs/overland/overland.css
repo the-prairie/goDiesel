@@ -669,3 +669,129 @@
   inset: 0;
   z-index: var(--z-overlay);
 }
+
+/* ---------------------------------------------------------------- her story */
+
+.overland-town-box {
+  pointer-events: none;
+}
+
+.overland-town-box > canvas {
+  pointer-events: none;
+}
+
+.overland-town-box-page {
+  position: absolute;
+  inset: 0;
+  margin: 0 auto;
+  max-width: 100%;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.overland-town-box-page:focus-visible {
+  outline: 3px solid #ffd35a;
+  outline-offset: 2px;
+}
+
+.overland-town-polaroids {
+  position: absolute;
+  left: -200px;
+  top: -200px;
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+}
+
+.overland-polaroid {
+  min-width: 44px;
+  min-height: 44px;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+  filter: drop-shadow(0 3px 0 rgba(13, 18, 28, 0.4));
+}
+
+.overland-polaroid:focus-visible {
+  outline: 3px solid #ffd35a;
+  outline-offset: 2px;
+}
+
+.overland-viewer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: calc(var(--z-overlay) + 10);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: calc(16px + var(--safe-area-top, 0px)) 16px 12px;
+  background: rgba(13, 18, 28, 0.82);
+  color: #f8f6ee;
+}
+
+.overland-viewer-figure {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-height: 0;
+  max-width: min(640px, 100%);
+  margin: 0;
+}
+
+.overland-viewer-image {
+  display: block;
+  min-height: 0;
+  max-width: 100%;
+  max-height: calc(100dvh - 260px);
+  width: auto;
+  height: auto;
+  border: 4px solid #f8f6ee;
+  border-bottom-width: 14px;
+  background: #3a4560;
+}
+
+.overland-viewer-caption {
+  max-width: 46ch;
+  font: 15px/1.4 ui-monospace, Menlo, monospace;
+  text-align: center;
+}
+
+.overland-viewer-caption p {
+  margin: 0;
+}
+
+.overland-viewer-title {
+  font-weight: 700;
+}
+
+.overland-viewer-evidence {
+  display: inline-block;
+  margin-top: 6px !important;
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.overland-viewer .overland-key {
+  height: 44px;
+}
+
+.overland-town-box-frame {
+  position: relative;
+}

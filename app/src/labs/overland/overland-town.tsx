@@ -7,8 +7,7 @@ import { useRouteDetail } from "@/data/use-route-detail";
 import { context2d } from "@/labs/overland/engine/canvas";
 import { measureText } from "@/labs/overland/engine/font";
 import { C } from "@/labs/overland/engine/palette";
-import { wrapForBox } from "@/labs/overland/engine/screens";
-import { clipText, drawFrame, drawText } from "@/labs/overland/engine/text-draw";
+import { drawFrame, drawText } from "@/labs/overland/engine/text-draw";
 import type { OverlandEntry } from "@/labs/overland/model/overland-entries";
 import type { OverlandTown } from "@/labs/overland/model/overland-towns";
 import { placeLook } from "@/labs/overland/model/place-biomes";
@@ -16,6 +15,9 @@ import { ATTRIBUTION_BAND_PX } from "@/labs/overland/model/realm-layout";
 import { normaliseRouteLine } from "@/labs/overland/model/route-line";
 import { PLACE_DEFAULT_LIGHT, runLight, type TownLight } from "@/labs/overland/model/run-light";
 import { formatEntryDate, routeNumberLabel } from "@/labs/overland/model/text-box";
+import { signPolaroids, signStoryPages } from "@/labs/overland/model/sign-story";
+import { PhotoViewer, PixelPolaroid } from "@/labs/overland/overland-photo";
+import type { RouteAnnotation } from "@/domain/route";
 import { townInput, townSlug } from "@/labs/overland/model/town-input";
 import { planTown, type Signpost } from "@/labs/overland/model/town-plan";
 import { initialTier } from "@/labs/overland/model/town-quality";
@@ -47,15 +49,21 @@ function signLabel(sign: Signpost) {
   return `${routeNumberLabel(sign.number)}: ${sign.title}. ${sign.km.toFixed(1)} km, ${formatEntryDate(sign.date)}. Jump into the 3D world.`;
 }
 
-/** A pixel box for the chosen signpost: its number, her title, km and date. */
-function SignBox({ sign, width }: { sign: Signpost; width: number }) {
+/**
+ * The chosen signpost's story, as the route's trailer: her title and the
+ * facts, then her note on the pages after. Tapping the box, or Enter or
+ * Space on it, turns the page.
+ */
+function StoryBox({ sign, note, width, boxRef }: { sign: Signpost; note: string | null; width: number; boxRef: React.Ref<HTMLDivElement> }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const scale = width < 560 ? 2 : 3;
   const inner = Math.floor(Math.min(width - 32, 440) / scale);
-  const title = wrapForBox(sign.title, inner - 16, true);
-  const lines = title.length > 2 ? [title[0], clipText(title.slice(1).join(" "), inner - 16, true)] : title;
-  const facts = `${sign.km.toFixed(1)} km · ${formatEntryDate(sign.date)}`;
-  const height = 7 + 13 + lines.length * 11 + 3 + 9 + 8;
+  const pages = useMemo(() => signStoryPages({ number: sign.number, title: sign.title, km: sign.km, date: sign.date, note }, inner - 18, (text) => measureText(text)), [inner, note, sign]);
+  const [page, setPage] = useState(0);
+  const current = pages[Math.min(page, pages.length - 1)];
+  const more = pages.length > 1;
+  const lineCount = Math.max(...pages.map((candidate) => (candidate.kind === "facts" ? candidate.lines.length + 2 : candidate.lines.length)));
+  const height = 7 + lineCount * 11 + 10;
   useLayoutEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;
@@ -63,19 +71,39 @@ function SignBox({ sign, width }: { sign: Signpost; width: number }) {
     context.clearRect(0, 0, inner, height);
     drawFrame(context, 0, 0, inner, height);
     let y = 7;
-    drawText(context, routeNumberLabel(sign.number), 9, y, C.acc2, true);
-    y += 13;
-    for (const line of lines) {
-      drawText(context, line, 9, y, C.ink, true);
-      y += 11;
+    if (current.kind === "facts") {
+      drawText(context, current.heading, 9, y, C.acc2, true);
+      y += 13;
+      for (const line of current.lines) {
+        drawText(context, line, 9, y, C.ink, true);
+        y += 11;
+      }
+      drawText(context, current.facts, 9, y + 1, C.mute);
+    } else {
+      for (const line of current.lines) {
+        drawText(context, line, 9, y, C.ink);
+        y += 11;
+      }
     }
-    drawText(context, facts, 9, y + 3, C.mute);
-    const prompt = "Enter";
-    drawText(context, prompt, inner - 9 - measureText(prompt, true), 7, C.ink2, true);
-  }, [facts, height, inner, lines, sign.number]);
+    if (more) {
+      const marker = `${page + 1}/${pages.length}`;
+      drawText(context, marker, inner - 9 - measureText(marker), height - 13, C.mute);
+    }
+  }, [current, height, inner, more, page, pages.length]);
   return (
-    <div aria-hidden="true" className="overland-town-box" data-testid="overland-town-box">
-      <canvas className="overland-pixels" height={height} ref={ref} style={{ width: inner * scale, height: height * scale }} width={inner} />
+    <div className="overland-town-box" data-page={page + 1} data-pages={pages.length} data-testid="overland-town-box" ref={boxRef}>
+      <div className="overland-town-box-frame">
+      <canvas aria-hidden="true" className="overland-pixels" height={height} ref={ref} style={{ width: inner * scale, height: height * scale }} width={inner} />
+      {more ? (
+        <button
+          aria-label={page < pages.length - 1 ? "Next page of her note" : "Back to the first page"}
+          className="overland-town-box-page"
+          data-testid="overland-town-box-page"
+          onClick={() => setPage((value) => (value + 1) % pages.length)}
+          type="button"
+        />
+      ) : null}
+      </div>
     </div>
   );
 }
@@ -115,6 +143,15 @@ export function OverlandTownView({ town, entries, realmSlug, onBack, fallback }:
   const chosen = jumpSign?.slug ?? focused;
   const chosenSign = plan.signposts.find((sign) => sign.slug === chosen);
   const detail = useRouteDetail(chosen ?? undefined);
+  const storyRef = useRef<HTMLDivElement>(null);
+  const polaroidRef = useRef<HTMLDivElement>(null);
+  const [photo, setPhoto] = useState<RouteAnnotation | null>(null);
+  const polaroids = useMemo(() => (chosen && detail.status === "ready" && detail.route.slug === chosen ? signPolaroids(detail.route.annotations) : []), [chosen, detail]);
+  const chosenRef = useRef(chosen);
+  chosenRef.current = chosen;
+  // Focus moving into the chosen signpost's story or photos keeps it chosen.
+  const withinStory = (target: EventTarget | null) =>
+    target instanceof Node && Boolean(storyRef.current?.contains(target) || polaroidRef.current?.contains(target));
   const [jumpCoverState, setCover] = useState<TownCover>(() => townCover(initialOverlandJumpState()));
   // Without a 3D world open, the town is itself, whatever the last jump left.
   const cover = realmSlug ? jumpCoverState : BROWSING_COVER;
@@ -190,6 +227,11 @@ export function OverlandTownView({ town, entries, realmSlug, onBack, fallback }:
 
   const placeSigns = (signs: SignProjection[]) => {
     for (const sign of signs) {
+      if (sign.slug === chosenRef.current && polaroidRef.current) {
+        // The photos hang just above the chosen signpost's board.
+        polaroidRef.current.style.left = `${sign.x}px`;
+        polaroidRef.current.style.top = `${sign.y - sign.height / 2 - 4}px`;
+      }
       const button = signRefs.current.get(sign.slug);
       if (!button) continue;
       button.style.left = `${sign.x}px`;
@@ -357,7 +399,17 @@ export function OverlandTownView({ town, entries, realmSlug, onBack, fallback }:
     >
       <h1 className="sr-only">{`${town.name}, ${plural(plan.signposts.length, "route")}`}</h1>
       <div className="overland-town-stage" data-cover-opacity={cover.opacity} data-testid="overland-town-stage" inert={!cover.interactive} ref={stageRef} style={stageStyle} />
-      <div className="overland-town-ui" hidden={!cover.interactive} inert={!cover.interactive}>
+      <div
+        className="overland-town-ui"
+        hidden={!cover.interactive}
+        inert={!cover.interactive}
+        onBlur={(event) => {
+          // Leaving the story or photos for anywhere but a signpost lets the signpost go.
+          const next = event.relatedTarget;
+          if (!withinStory(event.target) || withinStory(next) || (next instanceof HTMLElement && next.classList.contains("overland-town-sign"))) return;
+          if (!photo) setFocused(null);
+        }}
+      >
         <div className="overland-town-head" aria-hidden="true">
           <PixelLabel bold scale={2} text={town.name} />
           <PixelLabel colour={C.mute} scale={2} text={`${plural(plan.signposts.length, "route")} · ${Math.round(totalKm).toLocaleString("en")} km`} />
@@ -370,11 +422,20 @@ export function OverlandTownView({ town, entries, realmSlug, onBack, fallback }:
         <ol aria-label={`Routes in ${town.name}`} className="overland-town-signs" data-testid="overland-town-signs">
           {plan.signposts.map((sign) => (
             <li key={sign.slug}>
+              {entries.find((candidate) => candidate.slug === sign.slug)?.note ? (
+                <span className="sr-only" id={`overland-sign-note-${sign.slug}`}>
+                  {entries.find((candidate) => candidate.slug === sign.slug)?.note}
+                </span>
+              ) : null}
               <button
                 aria-label={signLabel(sign)}
                 className="overland-town-sign"
                 data-slug={sign.slug}
-                onBlur={() => setFocused((current) => (current === sign.slug ? null : current))}
+                aria-describedby={entries.find((candidate) => candidate.slug === sign.slug)?.note ? `overland-sign-note-${sign.slug}` : undefined}
+                onBlur={(event) => {
+                  if (withinStory(event.relatedTarget)) return;
+                  setFocused((current) => (current === sign.slug ? null : current));
+                }}
                 onClick={() => startJump(sign.slug)}
                 onFocus={() => setFocused(sign.slug)}
                 onKeyDown={(event) => {
@@ -384,7 +445,10 @@ export function OverlandTownView({ town, entries, realmSlug, onBack, fallback }:
                   }
                 }}
                 onMouseEnter={() => setFocused(sign.slug)}
-                onMouseLeave={() => setFocused((current) => (current === sign.slug && document.activeElement !== signRefs.current.get(sign.slug) ? null : current))}
+                onMouseLeave={(event) => {
+                  if (withinStory(event.relatedTarget)) return;
+                  setFocused((current) => (current === sign.slug && document.activeElement !== signRefs.current.get(sign.slug) && !withinStory(document.activeElement) ? null : current));
+                }}
                 ref={(button) => {
                   if (button) signRefs.current.set(sign.slug, button);
                   else signRefs.current.delete(sign.slug);
@@ -394,11 +458,21 @@ export function OverlandTownView({ town, entries, realmSlug, onBack, fallback }:
             </li>
           ))}
         </ol>
-        {chosenSign && !realmSlug ? <SignBox sign={chosenSign} width={size.width} /> : null}
+        {chosenSign && !realmSlug ? (
+          <StoryBox boxRef={storyRef} key={chosenSign.slug} note={entries.find((candidate) => candidate.slug === chosenSign.slug)?.note ?? null} sign={chosenSign} width={size.width} />
+        ) : null}
+        <div className="overland-town-polaroids" data-testid="overland-town-polaroids" ref={polaroidRef}>
+          {!realmSlug
+            ? polaroids.map((annotation, index) => (
+                <PixelPolaroid annotation={annotation} key={annotation.id} onOpen={() => setPhoto(annotation)} scale={size.width < 560 ? 2 : 3} tilt={[-5, 3, -2][index] ?? 0} />
+              ))
+            : null}
+        </div>
         <p className="overland-town-hint" aria-hidden="true">
           <PixelLabel colour={C.paper} scale={2} text={state.phase === "loading" ? "Building the town" : "Tap a signpost"} />
         </p>
       </div>
+      {photo ? <PhotoViewer annotation={photo} onClose={() => setPhoto(null)} /> : null}
       {entry && map && townElement ? (
         <OverlandJump
           container={townElement}

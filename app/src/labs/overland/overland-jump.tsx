@@ -326,6 +326,8 @@ export function OverlandJump({ entry, map, transition, entrance, miniMapRect, on
   useEffect(() => {
     const transitional = phase === "diving" || phase === "resolving" || phase === "surfacing";
     const onKey = (event: KeyboardEvent) => {
+      // An open photo takes its own keys; Escape closes it, not the jump.
+      if (document.querySelector("[data-overland-viewer]")) return;
       if (event.key === "Escape") {
         if (phase === "diving" || phase === "holding") send({ type: "cancelRequested" });
         else if (phase === "surfacing") send({ type: "skipRequested" });
