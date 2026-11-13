@@ -13,10 +13,11 @@ const PEACH = { slug: "17654151284", title: "🍑🍑🍑🍑💦💦💦💦" }
 // A 1x1 transparent PNG, for the relief tiles.
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
 
-async function stubTiles(page: Page, mode: "empty" | "failing" = "empty") {
-  await page.route("https://tiles.openfreemap.org/**", (route) => {
+async function stubTiles(page: Page, mode: "empty" | "failing" = "empty", delayMs = 0) {
+  await page.route("https://tiles.openfreemap.org/**", async (route) => {
     const url = route.request().url();
     if (mode === "failing") return route.abort();
+    if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
     if (url.endsWith("/planet"))
       return route.fulfill({
         json: {
@@ -49,6 +50,16 @@ test("opens on the sketched world, her Kyoto routes listed exactly as written, O
   await expect(credit).toContainText("OpenStreetMap contributors");
   // The owner's review control stays hidden unless asked for.
   await expect(page.getByTestId("sketch-review")).toHaveCount(0);
+});
+
+test("says it is drawing the world until the first view is drawn, on a slow connection", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await stubTiles(page, "empty", 2500);
+  await page.goto("/#/lab/sketch");
+  const status = page.getByTestId("sketch-status");
+  await expect(status).toContainText("Drawing the world");
+  await expect(world(page)).toHaveAttribute("data-map-phase", "ready", { timeout: 20_000 });
+  await expect(status).toHaveCount(0);
 });
 
 test("fits a phone: 44 px targets, nothing under the credit, no sideways scroll", async ({ page }) => {

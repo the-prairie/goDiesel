@@ -283,3 +283,35 @@
     top: calc(var(--sk-top) + 50px);
   }
 }
+
+/* While the first view draws: a quiet line, a pen moving along under it. */
+.sketch-status[data-loading="true"] {
+  border-style: dashed;
+  text-align: center;
+  font-style: italic;
+}
+
+.sketch-status[data-loading="true"]::after {
+  content: "";
+  display: block;
+  height: 1.5px;
+  margin-top: 8px;
+  background: linear-gradient(90deg, transparent, var(--sk-ink), transparent) 0 0 / 40% 100% no-repeat;
+  animation: sketch-pen 1.4s ease-in-out infinite;
+}
+
+@keyframes sketch-pen {
+  from {
+    background-position: -40% 0;
+  }
+  to {
+    background-position: 140% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sketch-status[data-loading="true"]::after {
+    animation: none;
+    background-size: 100% 100%;
+  }
+}

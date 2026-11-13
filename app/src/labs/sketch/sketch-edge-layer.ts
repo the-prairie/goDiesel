@@ -10,6 +10,7 @@ import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap 
 
 import type { EdgeRequest, EdgeResponse } from "@/labs/sketch/sketch-edge-worker";
 import type { ExploredId } from "@/labs/sketch/sketch-tile";
+import { tilesToDraw } from "@/labs/sketch/sketch-tiles";
 import type { SketchLook } from "@/labs/sketch/sketch-options";
 
 /** Building tiles are made at zoom 14 and drawn larger from there. */
@@ -197,23 +198,14 @@ export function createEdgeLayer({
     if (!map || !worker || map.getZoom() < TILE_MIN_ZOOM) return [];
     const n = 2 ** TILE_ZOOM;
     const center = map.getCenter();
-    const cx = ((center.lng + 180) / 360) * n;
-    const s = Math.sin((center.lat * Math.PI) / 180);
-    const cy = (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * n;
-    // Tiles near the middle of the view first; looking far ahead adds the
-    // tiles the camera faces.
-    const bearing = (map.getBearing() * Math.PI) / 180;
-    const ahead = map.getPitch() > 45 ? 1.2 : 0;
-    const fx = cx + Math.sin(bearing) * ahead;
-    const fy = cy - Math.cos(bearing) * ahead;
-    const candidates: { x: number; y: number; d: number }[] = [];
-    for (let dy = -2; dy <= 2; dy += 1)
-      for (let dx = -2; dx <= 2; dx += 1) {
-        const x = Math.floor(fx) + dx;
-        const y = Math.floor(fy) + dy;
-        candidates.push({ x, y, d: Math.hypot(x + 0.5 - fx, y + 0.5 - fy) });
-      }
-    return candidates.sort((a, b) => a.d - b.d).slice(0, maxTiles);
+    const sin = Math.sin((center.lat * Math.PI) / 180);
+    const middle: [number, number] = [((center.lng + 180) / 360) * n, (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * n];
+    // The ground at the foot of the screen: where the nearest buildings stand.
+    const canvas = map.getCanvas();
+    const foot = map.unproject([canvas.clientWidth / 2, canvas.clientHeight]);
+    const footSin = Math.sin((foot.lat * Math.PI) / 180);
+    const camera: [number, number] = [((foot.lng + 180) / 360) * n, (0.5 - Math.log((1 + footSin) / (1 - footSin)) / (4 * Math.PI)) * n];
+    return tilesToDraw({ camera, center: middle, maxTiles });
   };
 
   /** Whether a tile lies within the reveal's reach of her routes. */

@@ -120,8 +120,10 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
     }
     mapRef.current = map;
     map.getCanvas().setAttribute("aria-label", "A sketched map of the world, from Japan down to Kyoto's streets. Her routes are drawn in red; the list of routes follows.");
+    // Ready once the first view is drawn, tiles and all, not merely styled:
+    // until then the page says it is drawing the world.
+    map.once("idle", () => dispatch({ type: "mapReady", loadId }));
     map.on("load", () => {
-      dispatch({ type: "mapReady", loadId });
       const source = map.getSource("openmaptiles") as VectorTileSource | undefined;
       const add = (tilesUrl: string) => {
         if (map.getLayer("building-edges")) return;
@@ -372,9 +374,13 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
           </section>
         </div>
 
-        {state.phase === "degraded" || unavailable ? (
-          <p className="sketch-status" data-testid="sketch-status" role="status">
-            {unavailable ? "This map needs WebGL, which this browser cannot give it. Her routes are listed below and still open in 3D." : "The map's tiles aren't loading right now; her routes are still here."}
+        {state.phase === "degraded" || unavailable || state.phase === "loading" || state.phase === "idle" ? (
+          <p className="sketch-status" data-loading={state.phase === "loading" || state.phase === "idle"} data-testid="sketch-status" role="status">
+            {unavailable
+              ? "This map needs WebGL, which this browser cannot give it. Her routes are listed below and still open in 3D."
+              : state.phase === "degraded"
+                ? "The map's tiles aren't loading right now; her routes are still here."
+                : "Drawing the world…"}
           </p>
         ) : null}
       </div>
