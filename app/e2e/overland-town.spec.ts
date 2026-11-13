@@ -224,14 +224,71 @@ for (const [width, height] of [[390, 844], [1440, 900]] as const) {
     await openTown(page);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow).toBeLessThanOrEqual(0);
+    // On a phone the signposts are chips in a strip that scrolls sideways; the strip itself fits.
+    const strip = (await page.getByTestId("overland-town-signs").boundingBox())!;
+    expect(strip.x).toBeGreaterThanOrEqual(0);
+    expect(strip.x + strip.width).toBeLessThanOrEqual(width);
     for (const button of await page.getByTestId("overland-town-signs").getByRole("button").all()) {
       const box = (await button.boundingBox())!;
       expect(box.width).toBeGreaterThanOrEqual(44);
       expect(box.height).toBeGreaterThanOrEqual(44);
-      expect(box.x).toBeGreaterThanOrEqual(0);
-      expect(box.x + box.width).toBeLessThanOrEqual(width);
+      if (width >= 768) {
+        expect(box.x).toBeGreaterThanOrEqual(0);
+        expect(box.x + box.width).toBeLessThanOrEqual(width);
+      }
     }
     const back = (await page.getByRole("button", { name: "Back to the world map" }).boundingBox())!;
     expect(back.height).toBeGreaterThanOrEqual(44);
   });
 }
+
+test.describe("on a phone", () => {
+  test.use({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true });
+
+  test("each route is a chip with its number and title in thumb reach; the first tap chooses, the second enters", async ({ page }) => {
+    await installGoogleReplay(page, "loading");
+    await page.goto("/#/lab/overland/town/crete-greece?quality=low");
+    await expect(town(page)).toHaveAttribute("data-town-phase", "ready", { timeout: 30_000 });
+    const chips = page.getByTestId("overland-town-signs").getByRole("button");
+    await expect(chips).toHaveCount(8);
+    for (const chip of await chips.all()) {
+      const box = (await chip.boundingBox())!;
+      expect(box.height).toBeGreaterThanOrEqual(44);
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      // In thumb reach: the bottom of the screen.
+      expect(box.y).toBeGreaterThan(812 * 0.6);
+    }
+    // The names are unchanged, so screen readers and keys work as before.
+    const third = chips.nth(2);
+    await expect(third).toHaveAccessibleName(/^No\. \d{3}: .+ Jump into the 3D world\.$/);
+    const url = page.url();
+    await third.tap();
+    await expect(third).toHaveAttribute("data-chosen", "true");
+    expect(page.url()).toBe(url);
+    await expect(page.locator(".overland-town-pointer")).toBeVisible();
+    await expect(page.getByTestId("overland-town-box")).toBeVisible();
+    await third.tap();
+    await expect(page).toHaveURL(/\/3d$/);
+  });
+
+  test("a tap on a board in the scene chooses its chip", async ({ page }) => {
+    await page.goto("/#/lab/overland/town/kyoto-japan?quality=low");
+    await expect(town(page)).toHaveAttribute("data-town-phase", "ready", { timeout: 30_000 });
+    const board = await page.evaluate(() => {
+      const signs = (window as Window & { __overlandTown?: { signs: () => Array<{ slug: string; x: number; y: number; visible: boolean }> } }).__overlandTown!.signs();
+      return signs.find((sign) => sign.visible)!;
+    });
+    await page.touchscreen.tap(board.x, board.y);
+    await expect(page.locator(`.overland-town-sign[data-slug="${board.slug}"]`)).toHaveAttribute("data-chosen", "true");
+    await expect(page).toHaveURL(/kyoto-japan\?quality=low$/);
+  });
+
+  test("a chip still enters from the keyboard", async ({ page }) => {
+    await installGoogleReplay(page, "ready");
+    await page.goto("/#/lab/overland/town/kyoto-japan?quality=low");
+    await expect(town(page)).toHaveAttribute("data-town-phase", "ready", { timeout: 30_000 });
+    await sign(page, GOLD.number).focus();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(new RegExp(`${GOLD.slug}/3d$`));
+  });
+});

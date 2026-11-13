@@ -22,15 +22,16 @@ export interface SignStoryInput {
   note: string | null;
 }
 
-export function signStoryPages(sign: SignStoryInput, maxWidth: number, measure: (text: string) => number): SignStoryPage[] {
+/** `measure` is told when the text is drawn bold, as her title is. */
+export function signStoryPages(sign: SignStoryInput, maxWidth: number, measure: (text: string, bold?: boolean) => number): SignStoryPage[] {
   const first: SignStoryPage = {
     kind: "facts",
     heading: routeNumberLabel(sign.number),
-    lines: wrapText(sign.title, maxWidth, measure),
+    lines: wrapText(sign.title, maxWidth, (text) => measure(text, true)),
     facts: `${sign.km.toFixed(1)} km · ${formatEntryDate(sign.date)}`,
   };
   const paragraphs = (sign.note ?? "").split("\n").map((paragraph) => paragraph.trim()).filter(Boolean);
-  const lines = paragraphs.flatMap((paragraph) => wrapText(paragraph, maxWidth, measure));
+  const lines = paragraphs.flatMap((paragraph) => wrapText(paragraph, maxWidth, (text) => measure(text)));
   const pages: SignStoryPage[] = [first];
   for (let index = 0; index < lines.length; index += SIGN_STORY_LINES) {
     pages.push({ kind: "note", lines: lines.slice(index, index + SIGN_STORY_LINES) });

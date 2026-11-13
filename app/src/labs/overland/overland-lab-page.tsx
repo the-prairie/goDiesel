@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import {
@@ -36,25 +36,13 @@ import { normaliseRouteLine } from "@/labs/overland/model/route-line";
 import type { JumpTransition } from "@/labs/overland/overland-jump-state";
 import { OverlandJump, useRealmViewport } from "@/labs/overland/overland-jump";
 import { phoneWorldScreen } from "@/labs/overland/model/world-screen";
-import { PHONE_QUERY } from "@/labs/overland/model/world-screen";
 import { OverlandTownView } from "@/labs/overland/overland-town";
 import { townBySlug, townSlug } from "@/labs/overland/model/town-input";
-import { ArrowIcon, Device, Key, PixelLabel } from "@/labs/overland/overland-ui";
+import { ArrowIcon, Device, Key, PixelLabel, usePhone } from "@/labs/overland/overland-ui";
 import { entryBoxText, entryFacts, formatEntryDate, pageLines, routeNumberLabel } from "@/labs/overland/model/text-box";
 import { RouteNotFound } from "@/ui/route-not-found";
 import { useReducedMotion } from "@/ui/use-reduced-motion";
 import "./overland.css";
-
-function subscribePhone(onChange: () => void) {
-  const query = window.matchMedia(PHONE_QUERY);
-  query.addEventListener("change", onChange);
-  return () => query.removeEventListener("change", onChange);
-}
-
-/** Read during render, so a phone never paints the handheld first. */
-function usePhone() {
-  return useSyncExternalStore(subscribePhone, () => window.matchMedia(PHONE_QUERY).matches, () => false);
-}
 
 const ENTRIES = buildOverlandEntries(routes);
 // Close places are drawn apart so each town stays visible and tappable.

@@ -65,4 +65,12 @@ describe("signPolaroids", () => {
     expect(signPolaroids([note, image("x", 60, false), image("y", 70)]).map((annotation) => annotation.id)).toEqual(["y"]);
     expect(signPolaroids([])).toEqual([]);
   });
+
+  it("wraps her title by the bold face it is drawn in", () => {
+    // Bold counts double here, so a title that fits in the regular face must wrap.
+    const boldAware = (text: string, bold?: boolean) => measure(text) * (bold ? 2 : 1);
+    const pages = signStoryPages({ ...SIGN, title: "abcd efgh", note: "abcd efgh" }, 10, boldAware);
+    expect(pages[0].lines).toEqual(["abcd", "efgh"]);
+    expect(pages[1].lines).toEqual(["abcd efgh"]);
+  });
 });

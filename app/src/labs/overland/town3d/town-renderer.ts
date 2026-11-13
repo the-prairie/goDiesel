@@ -622,7 +622,7 @@ export function createTownRenderer(options: TownRendererOptions): TownRenderer {
     },
     highlight(slug) {
       highlighted = slug;
-      for (const { sign, board } of built.signs) board.scale.setScalar(sign.slug === highlighted ? 1.08 : 1);
+      for (const { sign, board } of built.signs) board.scale.setScalar(sign.slug === highlighted ? 1.18 : 1);
       kick();
     },
     dive(slug, opening) {

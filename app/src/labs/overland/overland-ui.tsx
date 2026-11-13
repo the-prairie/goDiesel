@@ -1,9 +1,21 @@
-import { useEffect, useRef, type ReactNode, type Ref } from "react";
+import { useEffect, useRef, useSyncExternalStore, type ReactNode, type Ref } from "react";
 
 import { context2d } from "@/labs/overland/engine/canvas";
 import { C } from "@/labs/overland/engine/palette";
 import { sprites } from "@/labs/overland/engine/sprites";
 import { drawLabel } from "@/labs/overland/engine/screens";
+import { PHONE_QUERY } from "@/labs/overland/model/world-screen";
+
+function subscribePhone(onChange: () => void) {
+  const query = window.matchMedia(PHONE_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
+/** A phone, or any short screen; read during render, so a phone never paints the desktop layout first. */
+export function usePhone() {
+  return useSyncExternalStore(subscribePhone, () => window.matchMedia(PHONE_QUERY).matches, () => false);
+}
 
 // The handheld's keys and labels, shared by the world, the entry and the realm.
 
@@ -77,4 +89,14 @@ export function Device({ children, keys, bare = false, corner }: { children: Rea
       <div className="overland-keys">{keys}</div>
     </div>
   );
+}
+
+/** The pixel down-arrow, scaled whole-pixel. */
+export function DownArrow({ scale }: { scale: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const target = ref.current;
+    if (target) context2d(target).drawImage(sprites().icons.down, 0, 0);
+  }, []);
+  return <canvas aria-hidden="true" className="overland-pixels" height={4} ref={ref} style={{ width: 7 * scale, height: 4 * scale }} width={7} />;
 }

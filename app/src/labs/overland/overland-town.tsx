@@ -25,7 +25,9 @@ import { WIPE_STEP_MS, CROSSFADE_MS } from "@/labs/overland/model/dither-wipe";
 import { OverlandJump, type TownJumpCover } from "@/labs/overland/overland-jump";
 import { townCover, initialOverlandJumpState, type TownCover } from "@/labs/overland/overland-jump-state";
 import { initialOverlandTownState, reduceOverlandTown, type OverlandTownEvent } from "@/labs/overland/overland-town-state";
-import { Key, PixelLabel } from "@/labs/overland/overland-ui";
+import { DownArrow, Key, PixelLabel, usePhone } from "@/labs/overland/overland-ui";
+import { chipTap, signAtPoint } from "@/labs/overland/model/sign-pick";
+import { wrapForBox } from "@/labs/overland/engine/screens";
 import type { SignProjection, TownRenderer } from "@/labs/overland/town3d/town-renderer";
 import { useReducedMotion } from "@/ui/use-reduced-motion";
 
@@ -58,7 +60,7 @@ function StoryBox({ sign, note, width, boxRef }: { sign: Signpost; note: string 
   const ref = useRef<HTMLCanvasElement>(null);
   const scale = width < 560 ? 2 : 3;
   const inner = Math.floor(Math.min(width - 32, 440) / scale);
-  const pages = useMemo(() => signStoryPages({ number: sign.number, title: sign.title, km: sign.km, date: sign.date, note }, inner - 18, (text) => measureText(text)), [inner, note, sign]);
+  const pages = useMemo(() => signStoryPages({ number: sign.number, title: sign.title, km: sign.km, date: sign.date, note }, inner - 18, (text, bold) => measureText(text, bold)), [inner, note, sign]);
   const [page, setPage] = useState(0);
   const current = pages[Math.min(page, pages.length - 1)];
   const more = pages.length > 1;
@@ -108,6 +110,26 @@ function StoryBox({ sign, note, width, boxRef }: { sign: Signpost; note: string 
   );
 }
 
+/** A route chip's face on a phone: the number, her title whole, and how to enter. */
+function ChipFace({ sign, chosen, maxWidth }: { sign: Signpost; chosen: boolean; maxWidth: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const scale = 2;
+  const inner = Math.max(48, Math.floor(maxWidth / scale) - 4);
+  const lines = useMemo(() => wrapForBox(sign.title, inner), [inner, sign.title]);
+  const width = Math.min(inner, Math.max(measureText(routeNumberLabel(sign.number), true), ...lines.map((line) => measureText(line)), chosen ? measureText("Tap to enter", true) : 0)) + 2;
+  const height = 11 + lines.length * 11 + (chosen ? 11 : 0);
+  useLayoutEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const context = context2d(canvas);
+    context.clearRect(0, 0, width, height);
+    drawText(context, routeNumberLabel(sign.number), 1, 1, C.acc2, true);
+    lines.forEach((line, index) => drawText(context, line, 1, 12 + index * 11, C.ink));
+    if (chosen) drawText(context, "Tap to enter", 1, 12 + lines.length * 11, C.acc2, true);
+  }, [chosen, height, lines, sign.number, width]);
+  return <canvas aria-hidden="true" className="overland-pixels" height={height} ref={ref} style={{ width: width * scale, height: height * scale }} width={width} />;
+}
+
 export interface OverlandTownViewProps {
   town: OverlandTown;
   entries: readonly OverlandEntry[];
@@ -133,6 +155,14 @@ export function OverlandTownView({ town, entries, realmSlug, onBack, fallback }:
   const plan = useMemo(() => planTown(townInput(town, routes, entries)), [entries, town]);
   const [state, dispatchTown] = useReducer(reduceOverlandTown, undefined, initialOverlandTownState);
   const stageRef = useRef<HTMLDivElement>(null);
+  const phone = usePhone();
+  const phoneRef = useRef(phone);
+  phoneRef.current = phone;
+  const pointerRef = useRef<HTMLDivElement>(null);
+  const projectionsRef = useRef<SignProjection[]>([]);
+  const tapRef = useRef<{ x: number; y: number; at: number } | null>(null);
+  // Which route was chosen when a chip was pressed: a tap focuses the chip before its click.
+  const pressRef = useRef<{ slug: string; chosen: string | null } | null>(null);
   const rendererRef = useRef<TownRenderer | null>(null);
   const moduleRef = useRef<RendererModule | null>(null);
   const signRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -208,6 +238,7 @@ export function OverlandTownView({ town, entries, realmSlug, onBack, fallback }:
         renderer.resize(sizeRef.current.width, sizeRef.current.height);
         (window as Window & { __overlandTown?: unknown }).__overlandTown = {
           stats: () => renderer?.stats(),
+          signs: () => projectionsRef.current,
           trees: plan.trees.length,
           biome: plan.biome,
           season: plan.season,
@@ -226,14 +257,23 @@ export function OverlandTownView({ town, entries, realmSlug, onBack, fallback }:
   }, [plan]);
 
   const placeSigns = (signs: SignProjection[]) => {
+    projectionsRef.current = signs;
     for (const sign of signs) {
-      if (sign.slug === chosenRef.current && polaroidRef.current) {
-        // The photos hang just above the chosen signpost's board.
-        polaroidRef.current.style.left = `${sign.x}px`;
-        polaroidRef.current.style.top = `${sign.y - sign.height / 2 - 4}px`;
+      if (sign.slug === chosenRef.current) {
+        // A pointer marks the chosen board; her photos hang just above it.
+        const top = sign.y - sign.height / 2;
+        if (pointerRef.current) {
+          pointerRef.current.style.left = `${sign.x}px`;
+          pointerRef.current.style.top = `${top - 4}px`;
+        }
+        if (polaroidRef.current) {
+          polaroidRef.current.style.left = `${sign.x}px`;
+          polaroidRef.current.style.top = `${top - 30}px`;
+        }
       }
       const button = signRefs.current.get(sign.slug);
-      if (!button) continue;
+      // On a phone the signposts are chips in a strip, not hotspots on the boards.
+      if (!button || phoneRef.current) continue;
       button.style.left = `${sign.x}px`;
       button.style.top = `${sign.y}px`;
       button.style.width = `${sign.width}px`;
@@ -341,6 +381,18 @@ export function OverlandTownView({ town, entries, realmSlug, onBack, fallback }:
     return () => window.removeEventListener("keydown", onKey);
   }, [onBack, realmSlug]);
 
+  /**
+   * Chooses a signpost on a phone and brings its chip into view. A tap on
+   * the scene leaves focus where the tap puts it: the browser focuses the
+   * canvas after the tap, which would otherwise let the chip go again.
+   */
+  const chooseSign = (slug: string, moveFocus = true) => {
+    setFocused(slug);
+    const chip = signRefs.current.get(slug);
+    if (moveFocus) chip?.focus({ preventScroll: true });
+    chip?.scrollIntoView({ block: "nearest", inline: "center", behavior: reducedMotion ? "auto" : "smooth" });
+  };
+
   const stepSign = (from: string, direction: 1 | -1) => {
     const order = [...plan.signposts].sort((a, b) => a.x - b.x || a.tier - b.tier);
     const index = order.findIndex((sign) => sign.slug === from);
@@ -398,7 +450,26 @@ export function OverlandTownView({ town, entries, realmSlug, onBack, fallback }:
       ref={setTownElement}
     >
       <h1 className="sr-only">{`${town.name}, ${plural(plan.signposts.length, "route")}`}</h1>
-      <div className="overland-town-stage" data-cover-opacity={cover.opacity} data-testid="overland-town-stage" inert={!cover.interactive} ref={stageRef} style={stageStyle} />
+      <div
+        className="overland-town-stage"
+        data-cover-opacity={cover.opacity}
+        data-testid="overland-town-stage"
+        inert={!cover.interactive}
+        onPointerDown={(event) => {
+          tapRef.current = { x: event.clientX, y: event.clientY, at: performance.now() };
+        }}
+        onPointerUp={(event) => {
+          // A tap on a board in the scene chooses that signpost.
+          const tap = tapRef.current;
+          tapRef.current = null;
+          if (!tap || Math.hypot(event.clientX - tap.x, event.clientY - tap.y) > 8 || performance.now() - tap.at > 500) return;
+          const box = event.currentTarget.getBoundingClientRect();
+          const slug = signAtPoint(projectionsRef.current, event.clientX - box.left, event.clientY - box.top);
+          if (slug) chooseSign(slug, false);
+        }}
+        ref={stageRef}
+        style={stageStyle}
+      />
       <div
         className="overland-town-ui"
         hidden={!cover.interactive}
@@ -419,7 +490,10 @@ export function OverlandTownView({ town, entries, realmSlug, onBack, fallback }:
             <PixelLabel scale={2} text="World" />
           </Key>
         </div>
-        <ol aria-label={`Routes in ${town.name}`} className="overland-town-signs" data-testid="overland-town-signs">
+        <div aria-hidden="true" className="overland-town-pointer" hidden={!chosenSign || Boolean(realmSlug)} ref={pointerRef}>
+          <DownArrow scale={4} />
+        </div>
+        <ol aria-label={`Routes in ${town.name}`} className={`overland-town-signs${phone ? " overland-town-chips" : ""}`} data-testid="overland-town-signs">
           {plan.signposts.map((sign) => (
             <li key={sign.slug}>
               {entries.find((candidate) => candidate.slug === sign.slug)?.note ? (
@@ -430,13 +504,25 @@ export function OverlandTownView({ town, entries, realmSlug, onBack, fallback }:
               <button
                 aria-label={signLabel(sign)}
                 className="overland-town-sign"
+                data-chosen={chosen === sign.slug}
                 data-slug={sign.slug}
                 aria-describedby={entries.find((candidate) => candidate.slug === sign.slug)?.note ? `overland-sign-note-${sign.slug}` : undefined}
                 onBlur={(event) => {
                   if (withinStory(event.relatedTarget)) return;
                   setFocused((current) => (current === sign.slug ? null : current));
                 }}
-                onClick={() => startJump(sign.slug)}
+                onClick={(event) => {
+                  // On a phone the first tap chooses and the second enters; Enter on a focused chip enters.
+                  const press = pressRef.current;
+                  pressRef.current = null;
+                  const pointer = event.detail !== 0;
+                  const before = pointer && press?.slug === sign.slug ? press.chosen : focused;
+                  if (phone && pointer && chipTap(before, sign.slug) === "choose") chooseSign(sign.slug);
+                  else startJump(sign.slug);
+                }}
+                onPointerDown={() => {
+                  pressRef.current = { slug: sign.slug, chosen: focused };
+                }}
                 onFocus={() => setFocused(sign.slug)}
                 onKeyDown={(event) => {
                   if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
@@ -444,7 +530,9 @@ export function OverlandTownView({ town, entries, realmSlug, onBack, fallback }:
                     stepSign(sign.slug, event.key === "ArrowRight" ? 1 : -1);
                   }
                 }}
-                onMouseEnter={() => setFocused(sign.slug)}
+                onMouseEnter={() => {
+                  if (!phone) setFocused(sign.slug);
+                }}
                 onMouseLeave={(event) => {
                   if (withinStory(event.relatedTarget)) return;
                   setFocused((current) => (current === sign.slug && document.activeElement !== signRefs.current.get(sign.slug) && !withinStory(document.activeElement) ? null : current));
@@ -454,7 +542,9 @@ export function OverlandTownView({ town, entries, realmSlug, onBack, fallback }:
                   else signRefs.current.delete(sign.slug);
                 }}
                 type="button"
-              />
+              >
+                {phone ? <ChipFace chosen={chosen === sign.slug} maxWidth={Math.min(280, size.width * 0.72)} sign={sign} /> : null}
+              </button>
             </li>
           ))}
         </ol>
@@ -468,7 +558,7 @@ export function OverlandTownView({ town, entries, realmSlug, onBack, fallback }:
               ))
             : null}
         </div>
-        <p className="overland-town-hint" aria-hidden="true">
+        <p className="overland-town-hint" aria-hidden="true" hidden={phone}>
           <PixelLabel colour={C.paper} scale={2} text={state.phase === "loading" ? "Building the town" : "Tap a signpost"} />
         </p>
       </div>

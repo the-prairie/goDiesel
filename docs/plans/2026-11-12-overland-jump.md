@@ -49,6 +49,15 @@ The approved diorama (`goDiesel-brand-prototypes/overland-diorama/`) is now the 
 - Residents are placed but not drawn (another artist).
 - A frame-rate e2e on real hardware; the software renderer in CI is too slow to judge tiers, so tests pin `?quality=low` or reduced motion.
 
+### On a phone (decisions from the mobile pass)
+
+The owner: most people will use Overland on a phone, so it must be a world-class mobile experience.
+
+- **D36. Full-screen on a phone; the tab bar does not belong.** On a phone, or any screen under 520 px tall (a phone held sideways), the Overland lab is a full-screen game: it covers the app's bottom tab bar and side rail, as its 3D towns and worlds already did, and has its own Exit key (top right, to Atlas). A tab bar under a game screen takes thumb space and reads as two apps at once. Desktop keeps the handheld beside the navigation spine.
+- **D37. The world fills the phone.** `model/world-screen.ts` `phoneWorldScreen` picks the largest whole-pixel scale that keeps at least 120 pixel columns and rows (3× on a portrait phone, 2× sideways), then as many columns and rows as the screen holds after the safe areas and an 84 px key bar. The map draws edge to edge at that size with the town's text box at its foot, and the keys (previous, next, Map, Index, Open) sit in the bar at the bottom in thumb reach. Checked at 375×812, 390×844, 375×667 and 812×375.
+- **D38. Route chips on a phone.** In a town on a phone, the signpost buttons themselves become a strip of chips along the bottom, each with the route number and her title whole, scrolling sideways when the town has more routes than fit (Crete has eight). The buttons, their names, their order, arrow keys and Enter are unchanged, so keyboards and screen readers behave as before. The first tap on a chip chooses its route (its story box at the top, the town's light, its board enlarged and marked in the scene by a bobbing pointer, its photos above the pointer); a second tap enters. Which route was chosen is read when the chip is pressed, because a tap on Android focuses the button before its click. A tap on a board in the scene chooses its chip (`model/sign-pick.ts`). Larger boards or closer framing were rejected: neither scales to eight routes on a 375 px screen.
+- **D39. The runner faces the way she runs.** `runnerFacing(travel, yaw)` picks her sprite from her real direction of travel against the camera: her back when she runs away, her face when she runs towards it, her side across. It replaced the prototype's rule, which only held on the town loop (where she runs backwards along the path's points) and showed her face on the run out of town.
+
 ### Her story in Overland (decisions from the route-story work)
 
 The owner: Strava routes are generic and do not carry the story or the vibe of a run. Her own titles, notes, photos and clips are woven in as commentary. Every word shown is hers or a plain fact (number, distance, date, place, the kind of moment); nothing is written for her. The existing annotation contract (`RouteAnnotation` in `domain/route/contract.ts`, parsed strictly by `detail-parse.ts`) is the only model.
