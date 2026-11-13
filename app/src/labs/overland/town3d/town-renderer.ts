@@ -651,7 +651,7 @@ export function createTownRenderer(options: TownRendererOptions): TownRenderer {
       mode = "travel";
       travelStart = performance.now();
       trailShare = 0;
-      trail = points && points.length > 1 ? trailOnGround(points, { x: runnerX + sign.side * 1.2, z: 9.3 }, sign.side, TRAIL_SIZE / 2 - 2) : [];
+      trail = points && points.length > 1 ? trailOnGround(points, { x: runnerX + sign.side * 2.4, z: 9.3 }, sign.side, TRAIL_SIZE / 2 - 3) : [];
       trailOrigin = { x: runnerX + sign.side * (TRAIL_SIZE / 2 - 1), z: 9.3 };
       built.trailMesh.position.set(trailOrigin.x, 0.05, trailOrigin.z);
       built.trailMesh.visible = trail.length > 1;

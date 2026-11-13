@@ -927,10 +927,10 @@ export function buildTownScene(plan: TownPlan, anisotropy: number): TownScene {
   trailCanvas.width = TRAIL_SIZE * TRAIL_TEXELS;
   trailCanvas.height = TRAIL_SIZE * TRAIL_TEXELS;
   const trailTexture = kit.texture(trailCanvas);
-  const trailMesh = new Mesh(kit.track(new PlaneGeometry(TRAIL_SIZE, TRAIL_SIZE)), kit.track(new MeshBasicMaterial({ map: trailTexture, transparent: true, depthTest: false, depthWrite: false, fog: false })));
+  const trailMesh = new Mesh(kit.track(new PlaneGeometry(TRAIL_SIZE, TRAIL_SIZE)), kit.track(new MeshBasicMaterial({ map: trailTexture, transparent: true, depthWrite: false, fog: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 })));
   trailMesh.rotation.x = -Math.PI / 2;
   trailMesh.position.y = 0.05;
-  trailMesh.renderOrder = 20;
+  trailMesh.renderOrder = 2;
   trailMesh.visible = false;
   root.add(trailMesh);
 
