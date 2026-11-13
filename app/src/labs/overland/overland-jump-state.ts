@@ -11,9 +11,10 @@ import type {
  * `wipe` is the default: our pixel art covers the live map, which is only
  * ever shown at full resolution and unaltered, and the cover clears in
  * blocks. `live` steps the live map's own pixel level and exists for local
- * comparison only.
+ * comparison only. `town` starts in a 3D town: the town's own camera dives
+ * and the town is the cover, fading out over the live map in the same steps.
  */
-export type JumpTransition = "wipe" | "live";
+export type JumpTransition = "wipe" | "live" | "town";
 
 /** Blocks of the cover cleared per step, from fully covered to clear. */
 export const WIPE_STEPS = 8;
@@ -179,6 +180,37 @@ export function jumpPresentation(state: OverlandJumpState): JumpPresentation {
     default: {
       const unhandled: never = state;
       return unhandled;
+    }
+  }
+}
+
+export interface TownCover {
+  /** The town layer's opacity over the live map. */
+  opacity: number;
+  /** Whether the town is drawn above the live map. */
+  above: boolean;
+  /** Whether the bottom attribution band is cut out of the town layer. */
+  clipBand: boolean;
+  /** Whether the town takes input. */
+  interactive: boolean;
+}
+
+/**
+ * How a 3D town covers the live map through a jump that starts in it. It
+ * covers it whole until the map is shown; then it fades in the wipe's steps
+ * with the attribution band cut out, so Google's logo and credits are never
+ * under anything of ours. With reduced motion it cuts in and fades back out.
+ */
+export function townCover(state: OverlandJumpState): TownCover {
+  const { liveMap, coverCoverage } = jumpPresentation(state);
+  switch (state.phase) {
+    case "browsing":
+      return { opacity: 1, above: false, clipBand: false, interactive: true };
+    case "realm":
+      return { opacity: 0, above: false, clipBand: false, interactive: false };
+    default: {
+      const opacity = state.phase === "surfacing" && state.reducedMotion ? 1 : coverCoverage;
+      return { opacity, above: true, clipBand: liveMap && opacity > 0, interactive: false };
     }
   }
 }

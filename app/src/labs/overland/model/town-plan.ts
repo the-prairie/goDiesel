@@ -234,7 +234,7 @@ const MAIN_X = 1.55;
 const SIGN_Z = 8.45;
 const CANAL = { z0: 10.2, z1: 12.4 };
 const CREEK = { z0: 10.5, z1: 11.7 };
-const SHORE = { sand: 9.95, z0: 11.5 };
+const SHORE = { sand: 9.85, z0: 10.75 };
 const POND: Rect = { x: -3.1, z: 6.4, w: 4.8, d: 2.6 };
 
 interface Lot {
@@ -349,8 +349,9 @@ function houseCount(routes: number) {
 }
 
 function buildHouses(kinds: HouseKind[], count: number, seed: number): House[] {
-  const offset = seed % kinds.length;
-  const order = kinds.map((_, index) => kinds[(index + offset) % kinds.length]);
+  // A kit lists its houses in order of character: the first takes the
+  // front lot, as the machiya does in the approved Kyoto.
+  const order = [...kinds];
   const houses: House[] = [];
   let unused = [...order];
   for (const lot of LOTS.slice(0, count)) {
@@ -457,8 +458,7 @@ export function planTown(input: TownInput): TownPlan {
   const ground: GroundPalette = { ...kit.ground, ...(kit.seasonGround?.[season] ?? {}), ...(snow ? SNOW_GROUND : {}) };
   const canopy = kit.canopy[season];
   const accents = kit.accents[season];
-  const accentShift = seed % accents.length;
-  const accentOf = (slot: number) => accents[(slot + accentShift) % accents.length];
+  const accentOf = (slot: number) => accents[slot % accents.length];
 
   const inWater = (x: number, z: number, pad: number) => {
     if (water.kind === "canal" || water.kind === "creek") return z > water.z0 - pad && z < water.z1 + pad;

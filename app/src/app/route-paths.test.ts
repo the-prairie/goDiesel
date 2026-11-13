@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { atlasReturnPath, overlandEntryPath, overlandRealmPath, overlandWorldPath, replayPath } from "@/app/route-paths";
+import { atlasReturnPath, overlandEntryPath, overlandRealmPath, overlandTownPath, overlandTownRealmPath, overlandWorldPath, replayPath } from "@/app/route-paths";
 
 describe("Atlas replay navigation", () => {
   it("carries a selected Atlas URL into Replay", () => {
@@ -38,5 +38,11 @@ describe("Overland lab paths", () => {
     expect(overlandRealmPath("17636880071")).toBe("/lab/overland/17636880071/3d");
     expect(overlandRealmPath("a b", "live")).toBe("/lab/overland/a%20b/3d?jump=live");
     expect(overlandRealmPath("a b", "wipe")).toBe("/lab/overland/a%20b/3d");
+  });
+
+  it("opens a town in 3D, optionally at one signpost, and a route's 3D world from it", () => {
+    expect(overlandTownPath("kyoto-japan")).toBe("/lab/overland/town/kyoto-japan");
+    expect(overlandTownPath("kyoto-japan", "17636880071")).toBe("/lab/overland/town/kyoto-japan?sign=17636880071");
+    expect(overlandTownRealmPath("kyoto-japan", "a b")).toBe("/lab/overland/town/kyoto-japan/a%20b/3d");
   });
 });

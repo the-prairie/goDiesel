@@ -7,6 +7,7 @@ import {
   jumpPresentation,
   reduceOverlandJump,
   surfaceCovered,
+  townCover,
   type OverlandJumpEvent,
   type OverlandJumpState,
 } from "@/labs/overland/overland-jump-state";
@@ -19,7 +20,7 @@ function run(events: OverlandJumpEvent[], from: OverlandJumpState = initialOverl
   return events.reduce(reduceOverlandJump, from);
 }
 
-function requested(options: { reducedMotion?: boolean; transition?: "wipe" | "live" } = {}) {
+function requested(options: { reducedMotion?: boolean; transition?: "wipe" | "live" | "town" } = {}) {
   return run([{ type: "jumpRequested", slug: "kyoto", reducedMotion: options.reducedMotion ?? false, transition: options.transition ?? "wipe" }]);
 }
 
@@ -176,5 +177,60 @@ describe("reduceOverlandJump", () => {
   it("13. leaving before the scene is shown is a cancel", () => {
     expect(run([{ type: "leaveRequested" }], requested())).toMatchObject({ phase: "browsing", slug: "kyoto" });
     expect(run([{ type: "diveFinished", jumpId: 1 }, { type: "leaveRequested" }], requested())).toMatchObject({ phase: "browsing" });
+  });
+
+  it("14. from a town, the town itself is the cover: it fades in steps, and the live map is never altered", () => {
+    let state = run([{ type: "diveFinished", jumpId: 1 }], requested({ transition: "town" }));
+    expect(state).toMatchObject({ phase: "holding" });
+    expect(jumpPresentation(state)).toMatchObject({ liveMap: false });
+    state = run([{ type: "sceneStatusReceived", jumpId: 1, status: READY }], state);
+    const opacities: number[] = [];
+    while (state.phase === "resolving") {
+      expect(jumpPresentation(state)).toMatchObject({ liveMap: true, pixelLevel: 1 });
+      opacities.push(townCover(state).opacity);
+      state = reduceOverlandJump(state, { type: "resolveStepElapsed", jumpId: 1 });
+    }
+    expect(opacities).toHaveLength(WIPE_STEPS);
+    expect(opacities[0]).toBe(1);
+    expect(opacities).toEqual([...opacities].sort((a, b) => b - a));
+    expect(state).toMatchObject({ phase: "realm" });
+  });
+});
+
+describe("townCover", () => {
+  const realmOf = (reducedMotion: boolean) =>
+    run(
+      reducedMotion
+        ? [{ type: "sceneStatusReceived", jumpId: 1, status: READY }]
+        : [{ type: "diveFinished", jumpId: 1 }, { type: "sceneStatusReceived", jumpId: 1, status: READY }, { type: "skipRequested" }],
+      requested({ transition: "town", reducedMotion }),
+    );
+
+  it("is the town as it is while browsing, and gone in the realm", () => {
+    expect(townCover(initialOverlandJumpState())).toEqual({ opacity: 1, above: false, clipBand: false, interactive: true });
+    expect(townCover(realmOf(false))).toMatchObject({ opacity: 0, above: false, interactive: false });
+  });
+
+  it("covers the map, whole, through the dive, the hold and the fallback", () => {
+    const diving = requested({ transition: "town" });
+    expect(townCover(diving)).toEqual({ opacity: 1, above: true, clipBand: false, interactive: false });
+    expect(townCover(run([{ type: "diveFinished", jumpId: 1 }], diving))).toMatchObject({ opacity: 1, above: true, clipBand: false });
+    expect(townCover(run([{ type: "sceneStatusReceived", jumpId: 1, status: UNAVAILABLE }], diving))).toMatchObject({ opacity: 1, above: true });
+  });
+
+  it("leaves the attribution band clear whenever the live map shows beneath it", () => {
+    let state: OverlandJumpState = run([{ type: "leaveRequested" }], realmOf(false));
+    while (!surfaceCovered(state)) {
+      const cover = townCover(state);
+      if (cover.opacity > 0) expect(cover.clipBand).toBe(true);
+      state = reduceOverlandJump(state, { type: "resolveStepElapsed", jumpId: 1 });
+    }
+    expect(townCover(state)).toMatchObject({ opacity: 1, clipBand: false });
+  });
+
+  it("with reduced motion, cuts in and fades back on the way out", () => {
+    const realm = realmOf(true);
+    expect(townCover(realm)).toMatchObject({ opacity: 0 });
+    expect(townCover(run([{ type: "leaveRequested" }], realm))).toMatchObject({ opacity: 1, clipBand: true, above: true });
   });
 });

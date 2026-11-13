@@ -34,6 +34,17 @@ export function overlandRealmPath(slug: string, transition: "wipe" | "live" = "w
   return transition === "live" ? `${path}?jump=live` : path;
 }
 
+/** One of her places as a 3D town, optionally with one signpost chosen. */
+export function overlandTownPath(townSlug: string, sign?: string) {
+  const path = `${OVERLAND_LAB_PATH}/town/${encodeURIComponent(townSlug)}`;
+  return sign ? `${path}?${new URLSearchParams({ sign })}` : path;
+}
+
+/** A route's 3D world, jumped into from its signpost in a town. */
+export function overlandTownRealmPath(townSlug: string, routeSlug: string) {
+  return `${OVERLAND_LAB_PATH}/town/${encodeURIComponent(townSlug)}/${encodeURIComponent(routeSlug)}/3d`;
+}
+
 function encodedSlug(slug: string) {
   return encodeURIComponent(slug);
 }

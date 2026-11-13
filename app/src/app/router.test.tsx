@@ -58,6 +58,8 @@ describe("product router", () => {
     expect(surfaceOf(await settledAt("/lab/overland"))).toBe("lab");
     expect(surfaceOf(await settledAt(`/lab/overland/${slug}`))).toBe("lab");
     expect(surfaceOf(await settledAt(`/lab/overland/${slug}/3d`))).toBe("lab");
+    expect(surfaceOf(await settledAt("/lab/overland/town/kyoto-japan"))).toBe("lab");
+    expect(surfaceOf(await settledAt(`/lab/overland/town/kyoto-japan/${slug}/3d`))).toBe("lab");
   });
 
   it("names the surface of every view it can open", () => {

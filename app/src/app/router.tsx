@@ -112,6 +112,8 @@ const productRoutes: RouteObject[] = [
   view("lab/overland", "lab", OverlandLabPage),
   view("lab/overland/:routeSlug", "lab", OverlandLabPage),
   view("lab/overland/:routeSlug/3d", "lab", OverlandLabPage),
+  view("lab/overland/town/:townSlug", "lab", OverlandLabPage),
+  view("lab/overland/town/:townSlug/:routeSlug/3d", "lab", OverlandLabPage),
   view(APP_PATHS.admin.slice(1), "admin", AdminPage),
   {
     path: LEGACY_QUEST_ROUTE_PATH,

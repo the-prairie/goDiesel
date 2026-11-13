@@ -2,7 +2,8 @@
    .overland so nothing reaches the rest of the app. */
 
 .overland,
-.overland-jump {
+.overland-jump,
+.overland-jump-status-layer {
   --ov-ink: #1d2433;
   --ov-ink-2: #3a4560;
   --ov-shell: #f3f4f0;
@@ -50,7 +51,8 @@
 
 @supports (color: color(display-p3 1 0 0)) {
   .overland,
-  .overland-jump {
+  .overland-jump,
+  .overland-jump-status-layer {
     --ov-key: color(display-p3 0.75 0.27 0.18);
     --ov-key-hi: color(display-p3 0.88 0.4 0.3);
     --ov-key-lo: color(display-p3 0.56 0.17 0.1);
@@ -489,4 +491,180 @@
     animation-name: overland-fade-in;
     animation-duration: 200ms;
   }
+}
+
+/* The jump's notices sit in a layer of their own, above the map and any cover. */
+.overland-jump-status-layer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+  pointer-events: none;
+  color: var(--ov-ink);
+}
+
+.overland-jump-status-layer > * {
+  pointer-events: auto;
+}
+
+/* ---------------------------------------------------------------- the 3D town */
+
+.overland-diorama {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  isolation: isolate;
+  overflow: hidden;
+  background: #26332b;
+  color: var(--ov-ink);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.overland-town-stage {
+  position: absolute;
+  inset: 0;
+}
+
+.overland-town-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  touch-action: none;
+  cursor: grab;
+  outline: none;
+}
+
+.overland-town-canvas:active {
+  cursor: grabbing;
+}
+
+.overland-town-canvas:focus-visible {
+  outline: 3px solid #ffd35a;
+  outline-offset: -3px;
+}
+
+.overland-town-ui {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.overland-town-ui[hidden] {
+  display: none;
+}
+
+.overland-town-head {
+  position: absolute;
+  left: calc(16px + var(--safe-area-left, 0px));
+  top: calc(16px + var(--safe-area-top, 0px));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  max-width: calc(100% - 140px);
+  padding: 8px 12px;
+  border: 2px solid var(--ov-ink);
+  border-radius: 4px;
+  background: #f8f6ee;
+  box-shadow:
+    inset 0 0 0 2px #c9cfdb,
+    0 3px 0 rgba(13, 18, 28, 0.45);
+}
+
+.overland-town-back {
+  position: absolute;
+  right: calc(16px + var(--safe-area-right, 0px));
+  top: calc(16px + var(--safe-area-top, 0px));
+  pointer-events: auto;
+}
+
+.overland-town-back .overland-key {
+  height: 44px;
+  min-width: 64px;
+  padding: 0 12px;
+}
+
+.overland-town-signs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.overland-town-sign {
+  position: absolute;
+  left: -100px;
+  top: -100px;
+  min-width: 44px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+  transform: translate(-50%, -50%);
+}
+
+.overland-town-sign:focus-visible {
+  outline: 3px solid #ffd35a;
+  outline-offset: 0;
+}
+
+.overland-town-box {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: calc(68px + var(--safe-area-bottom, 0px));
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 0 rgba(13, 18, 28, 0.4));
+}
+
+.overland-town-hint {
+  position: absolute;
+  left: calc(16px + var(--safe-area-left, 0px));
+  bottom: calc(16px + var(--safe-area-bottom, 0px));
+  margin: 0;
+  padding: 5px 10px;
+  border-radius: 3px;
+  background: rgba(29, 36, 51, 0.72);
+}
+
+.overland-jump.overland-jump-town {
+  z-index: 2;
+}
+
+.overland-jump-status-layer.overland-jump-town-status {
+  z-index: 5;
+}
+
+.overland-jump-travel {
+  position: absolute;
+}
+
+.overland-jump-travel .overland-key {
+  height: 44px;
+  min-width: 72px;
+  padding: 0 12px;
+}
+
+.overland-town-notice {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  background: #f8f6ee;
+}
+
+.overland.overland-in-town {
+  /* The town is full-bleed, as the 3D world it opens into is. */
+  inset: 0;
+  z-index: var(--z-overlay);
 }

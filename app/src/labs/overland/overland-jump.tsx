@@ -15,7 +15,9 @@ import {
   jumpPresentation,
   reduceOverlandJump,
   surfaceCovered,
+  townCover,
   type JumpTransition,
+  type TownCover,
   type OverlandJumpEvent,
 } from "@/labs/overland/overland-jump-state";
 import { Key, PixelLabel } from "@/labs/overland/overland-ui";
@@ -79,6 +81,18 @@ function StatusBox({ viewport, testId, message, children }: { viewport: RealmVie
   );
 }
 
+/** What a 3D town does for a jump that starts in it. */
+export interface TownJumpCover {
+  /** The town camera dives to the signpost; resolves when it is there. */
+  dive(): Promise<void>;
+  /** Ends a dive or a way back where it was going. */
+  finish(): void;
+  /** The hold: she runs on out of town while her line draws ahead. */
+  travel(): void;
+  /** The camera returns to the town's view; resolves when it is there. */
+  surface(): Promise<void>;
+}
+
 export interface OverlandJumpProps {
   entry: OverlandEntry;
   map: RouteMapInput;
@@ -88,6 +102,12 @@ export interface OverlandJumpProps {
   /** The entry's little route map on screen, which the dive grows out of. */
   miniMapRect: () => Rect | undefined;
   onExit: () => void;
+  /** Set when the jump starts in a 3D town: the town is the cover. */
+  cover?: TownJumpCover;
+  /** Where the jump is drawn; the page's body by default. */
+  container?: HTMLElement | null;
+  /** How the town should cover the live map, at every phase. */
+  onCover?: (cover: TownCover) => void;
 }
 
 /**
@@ -95,7 +115,8 @@ export interface OverlandJumpProps {
  * owns the phases; this component owns the timers, the dive, and the cover
  * drawn over the live map, and dispatches only phase changes.
  */
-export function OverlandJump({ entry, map, transition, entrance, miniMapRect, onExit }: OverlandJumpProps) {
+export function OverlandJump({ entry, map, transition, entrance, miniMapRect, onExit, cover, container, onCover }: OverlandJumpProps) {
+  const town = cover !== undefined;
   const reducedMotion = useReducedMotion();
   const viewport = useRealmViewport();
   const [state, dispatch] = useReducer(reduceOverlandJump, undefined, initialOverlandJumpState);
@@ -135,19 +156,19 @@ export function OverlandJump({ entry, map, transition, entrance, miniMapRect, on
   const [fadedOut, setFadedOut] = useState(false);
   useEffect(() => setFadedOut(false), [coverOpacity]);
   const coverHidden = (phase === "realm" || (phase === "surfacing" && !surfaceCovered(state))) && (crossfade ? fadedOut : drawnCoverage === 0);
-  const animating = !reducedMotion && (phase === "diving" || phase === "holding" || phase === "fallback");
+  const animating = !town && !reducedMotion && (phase === "diving" || phase === "holding" || phase === "fallback");
   const clockRef = useRef(0);
   const drawnRef = useRef("");
 
   const paint = useCallback(
     (now: number) => {
-      const cover = coverRef.current;
-      if (!cover) return;
+      const canvas = coverRef.current;
+      if (!canvas) return;
       const clear = presentation.liveMap ? corners : [];
       const key = `${coverWidth}x${coverHeight}|${drawnCoverage}|${clear.length}|${Math.floor(now / 120)}`;
       if (drawnRef.current === key) return;
       drawnRef.current = key;
-      drawCover(context2d(cover), { map: routeCover, kind: entry.kind, coverage: drawnCoverage, cell, clear, now });
+      drawCover(context2d(canvas), { map: routeCover, kind: entry.kind, coverage: drawnCoverage, cell, clear, now });
     },
     [cell, corners, coverHeight, coverWidth, drawnCoverage, entry.kind, presentation.liveMap, routeCover],
   );
@@ -184,19 +205,39 @@ export function OverlandJump({ entry, map, transition, entrance, miniMapRect, on
     };
   }, [coverBox, miniMapRect]);
 
+  // From a town, the town's camera dives; a skip ends it where it was going.
+  const townDiveRef = useRef(0);
+  useEffect(() => {
+    if (!cover) return;
+    if (phase === "diving" && townDiveRef.current !== jumpId) {
+      townDiveRef.current = jumpId;
+      void cover.dive().then(() => dispatch({ type: "diveFinished", jumpId }));
+    } else if (phase !== "diving" && phase !== "surfacing") cover.finish();
+  }, [cover, jumpId, phase]);
+  const townTravelRef = useRef(0);
+  useEffect(() => {
+    if (!cover || phase !== "holding" || townTravelRef.current === jumpId) return;
+    townTravelRef.current = jumpId;
+    cover.travel();
+  }, [cover, jumpId, phase]);
   useLayoutEffect(() => {
+    if (onCover && transition === "town") onCover(townCover(state));
+  }, [onCover, state, transition]);
+
+  useLayoutEffect(() => {
+    if (town) return;
     if (phase !== "diving") {
       // A skip ends the dive where it was going.
       if (animationRef.current?.playState === "running" && phase !== "surfacing") animationRef.current.finish();
       return;
     }
-    const cover = coverRef.current;
+    const canvas = coverRef.current;
     const frames = diveKeyframes();
-    if (!cover || !frames || animationRef.current) {
+    if (!canvas || !frames || animationRef.current) {
       if (!frames) dispatch({ type: "diveFinished", jumpId });
       return;
     }
-    const animation = cover.animate(
+    const animation = canvas.animate(
       [
         { ...frames.small, opacity: 0, offset: 0 },
         { ...frames.small, opacity: 1, offset: 0.08 },
@@ -220,6 +261,16 @@ export function OverlandJump({ entry, map, transition, entrance, miniMapRect, on
   const covered = surfaceCovered(state);
   useLayoutEffect(() => {
     if (!covered) return;
+    if (cover) {
+      // The town is whole again over the map; its camera pulls back out.
+      if (state.phase === "surfacing" && state.reducedMotion) {
+        const timer = window.setTimeout(() => dispatch({ type: "surfaceFinished", jumpId }), CROSSFADE_MS);
+        void cover.surface();
+        return () => window.clearTimeout(timer);
+      }
+      void cover.surface().then(() => dispatch({ type: "surfaceFinished", jumpId }));
+      return;
+    }
     let animation: Animation | undefined;
     if (state.phase === "surfacing" && state.reducedMotion) {
       animation = rootRef.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: CROSSFADE_MS, easing: "linear", fill: "forwards" });
@@ -257,6 +308,11 @@ export function OverlandJump({ entry, map, transition, entrance, miniMapRect, on
     exitedRef.current = true;
     if (from === "surfacing") {
       onExit();
+      return;
+    }
+    if (cover) {
+      // A cancel from a town: the camera returns, and the town is the page.
+      void cover.surface().then(onExit);
       return;
     }
     const fade = rootRef.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: CROSSFADE_MS, easing: "linear", fill: "forwards" });
@@ -310,8 +366,9 @@ export function OverlandJump({ entry, map, transition, entrance, miniMapRect, on
   const fadeIn = reducedMotion || entrance === "direct";
 
   return createPortal(
+    <>
     <div
-      className={`overland-jump${fadeIn ? " overland-jump-fade-in" : ""}${presentation.liveMap ? " overland-jump-live" : ""}`}
+      className={`overland-jump${town ? " overland-jump-town" : fadeIn ? " overland-jump-fade-in" : ""}${presentation.liveMap ? " overland-jump-live" : ""}`}
       data-entrance={entrance}
       data-jump-phase={phase}
       data-pixel-level={presentation.pixelLevel}
@@ -334,6 +391,7 @@ export function OverlandJump({ entry, map, transition, entrance, miniMapRect, on
           />
         </Suspense>
       ) : null}
+      {town ? null : (
       <canvas
         aria-hidden="true"
         className="overland-jump-cover"
@@ -353,7 +411,18 @@ export function OverlandJump({ entry, map, transition, entrance, miniMapRect, on
         }}
         width={coverWidth}
       />
-      {phase === "holding" ? (
+      )}
+    </div>
+    <div className={`overland-jump-status-layer${town ? " overland-jump-town-status" : ""}`}>
+      {phase === "holding" && town ? (
+        <div className="overland-jump-travel" data-testid="overland-jump-travel" role="status" style={{ right: 12 + viewport.safe.right, bottom: 48 + viewport.safe.bottom }}>
+          <span className="sr-only">Loading the 3D view.</span>
+          <Key className="overland-jump-status-key" label="Cancel" onClick={() => dispatch({ type: "cancelRequested" })}>
+            <PixelLabel scale={2} text="Cancel" />
+          </Key>
+        </div>
+      ) : null}
+      {phase === "holding" && !town ? (
         <StatusBox message="Loading the 3D view." testId="overland-jump-status" viewport={viewport}>
           <Key className="overland-jump-status-key" label="Cancel" onClick={() => dispatch({ type: "cancelRequested" })} ref={focusOnMount}>
             <PixelLabel scale={2} text="Cancel" />
@@ -367,7 +436,8 @@ export function OverlandJump({ entry, map, transition, entrance, miniMapRect, on
           </Key>
         </StatusBox>
       ) : null}
-    </div>,
-    document.body,
+    </div>
+    </>,
+    container ?? document.body,
   );
 }

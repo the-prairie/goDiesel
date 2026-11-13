@@ -5,6 +5,7 @@ import {
   decodedRouteSlug,
   overlandEntryPath,
   overlandRealmPath,
+  overlandTownPath,
   overlandWorldPath,
   type OverlandView,
 } from "@/app/route-paths";
@@ -33,6 +34,8 @@ import { placeLook } from "@/labs/overland/model/place-biomes";
 import { normaliseRouteLine } from "@/labs/overland/model/route-line";
 import type { JumpTransition } from "@/labs/overland/overland-jump-state";
 import { OverlandJump } from "@/labs/overland/overland-jump";
+import { OverlandTownView } from "@/labs/overland/overland-town";
+import { townBySlug, townSlug } from "@/labs/overland/model/town-input";
 import { ArrowIcon, Device, Key, PixelLabel } from "@/labs/overland/overland-ui";
 import { entryBoxText, entryFacts, formatEntryDate, pageLines, routeNumberLabel } from "@/labs/overland/model/text-box";
 import { RouteNotFound } from "@/ui/route-not-found";
@@ -316,6 +319,8 @@ function World({ scale, reducedMotion }: { scale: number; reducedMotion: boolean
     [navigate, town?.name],
   );
   const openEntry = (slug: string) => navigate(overlandEntryPath(slug), { state: { fromOverland: true } });
+  // Entering a town opens it in 3D; without a town chosen, Open lists every route.
+  const openTown = () => (town ? navigate(overlandTownPath(townSlug(town.name))) : showView("index"));
   const step = (direction: 1 | -1) => {
     select(selected < 0 ? (direction === 1 ? 0 : TOWNS.length - 1) : (selected + direction + TOWNS.length) % TOWNS.length);
   };
@@ -350,7 +355,7 @@ function World({ scale, reducedMotion }: { scale: number; reducedMotion: boolean
             </Key>
           </div>
           {view === "map" ? (
-            <Key className="overland-key-primary" label="Open" onClick={() => showView("index")}>
+            <Key className="overland-key-primary" label="Open" onClick={openTown}>
               <PixelLabel bold colour="#ffffff" scale={2} text="Open" />
             </Key>
           ) : (
@@ -360,7 +365,7 @@ function World({ scale, reducedMotion }: { scale: number; reducedMotion: boolean
       }
     >
       {view === "map" ? (
-        <WorldMap onOpen={() => showView("index")} onSelect={select} reducedMotion={reducedMotion} scale={scale} selected={selected} />
+        <WorldMap onOpen={openTown} onSelect={select} reducedMotion={reducedMotion} scale={scale} selected={selected} />
       ) : (
         <RouteIndex onOpenEntry={openEntry} scale={scale} town={town} />
       )}
@@ -519,15 +524,51 @@ function Entry({ entry, scale, reducedMotion, realm }: { entry: OverlandEntry; s
   );
 }
 
+/** One of her places as a 3D town, and the pixel town's index when 3D cannot open. */
+function Town({ townName, realmSlug, scale }: { townName: string; realmSlug?: string; scale: number }) {
+  const navigate = useNavigate();
+  const town = TOWNS.find((candidate) => candidate.name === townName)!;
+  const back = useCallback(() => navigate(overlandWorldPath({ town: town.name })), [navigate, town.name]);
+  const openEntry = (slug: string) => navigate(overlandEntryPath(slug), { state: { fromOverland: true } });
+  return (
+    <OverlandTownView
+      entries={ENTRIES}
+      fallback={
+        <Device
+          keys={
+            <Key label="Back to the world map" onClick={back}>
+              <PixelLabel scale={2} text="World" />
+            </Key>
+          }
+        >
+          <RouteIndex onOpenEntry={openEntry} scale={scale} town={town} />
+        </Device>
+      }
+      onBack={back}
+      realmSlug={realmSlug}
+      town={town}
+    />
+  );
+}
+
 export function OverlandLabPage() {
-  const { routeSlug } = useParams();
+  const { routeSlug, townSlug: townParam } = useParams();
   const scale = usePixelScale();
   const reducedMotion = useReducedMotion();
   const slug = decodedRouteSlug(routeSlug);
   const entry = slug ? ENTRIES.find((candidate) => candidate.slug === slug) : undefined;
   const { pathname } = useLocation();
   const realm = Boolean(entry) && pathname.endsWith("/3d");
+  const town = townParam ? townBySlug(TOWNS, townParam) : undefined;
 
+  if (townParam) {
+    if (!town || (routeSlug && entry?.place !== town.name)) return <RouteNotFound />;
+    return (
+      <div className="overland overland-in-town" data-testid="overland">
+        <Town key={town.name} realmSlug={routeSlug} scale={scale} townName={town.name} />
+      </div>
+    );
+  }
   if (routeSlug && !entry) return <RouteNotFound />;
 
   return (

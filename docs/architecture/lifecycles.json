@@ -491,7 +491,7 @@
       "id": "overland-jump",
       "kind": "reducer",
       "area": "react-app",
-      "summary": "The Overland lab's jump from the pixel world into a route's Google 3D replay and back: dive, hold, the reveal under our pixel cover, the realm, surfacing, and the pixel fallback.",
+      "summary": "The Overland lab's jump from the pixel world into a route's Google 3D replay and back: dive, hold, the reveal under our pixel cover or the 3D town fading over the live map, the realm, surfacing, and the pixel fallback.",
       "module": "app/src/labs/overland/overland-jump-state.ts",
       "transition": "reduceOverlandJump",
       "test": [
@@ -509,9 +509,31 @@
         "surfacing",
         "fallback",
         "transition:wipe",
-        "transition:live"
+        "transition:live",
+        "transition:town"
       ],
       "identity": "jumpId minted by jumpRequested; diveFinished, sceneStatusReceived, resolveStepElapsed, and surfaceFinished must name the current jump"
+    },
+    {
+      "id": "overland-town",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "Opening one of her places as a 3D pixel town: the renderer chunk loads, WebGL starts and the town draws its first frame; a missing WebGL, a failed chunk, a renderer error or a lost context falls back to the pixel town; while ready the quality tier only steps down.",
+      "module": "app/src/labs/overland/overland-town-state.ts",
+      "transition": "reduceOverlandTown",
+      "test": [
+        "app/src/labs/overland/overland-town-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/labs/overland/overland-town.tsx"
+      ],
+      "states": [
+        "idle",
+        "loading",
+        "ready",
+        "fallback"
+      ],
+      "identity": "loadId minted by loadStarted; rendererReady, rendererFailed, contextLost and qualityLowered must name the current load, and fallback is final for its load"
     },
     {
       "id": "route-intelligence",
