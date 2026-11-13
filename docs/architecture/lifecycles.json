@@ -536,6 +536,28 @@
       "identity": "loadId minted by loadStarted; rendererReady, rendererFailed, contextLost and qualityLowered must name the current load, and fallback is final for its load"
     },
     {
+      "id": "overland-moments",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "Her annotations met along a route in the Overland realm: a moment ahead is approached (playback slows), shown when reached (slower), put away after a while or on request, paused while its photo is open; moments reached together queue; scrubbing forward skips and scrubbing back re-arms.",
+      "module": "app/src/labs/overland/overland-moments-state.ts",
+      "transition": "reduceOverlandMoments",
+      "test": [
+        "app/src/labs/overland/overland-moments-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/labs/overland/overland-realm.tsx"
+      ],
+      "states": [
+        "idle",
+        "approaching",
+        "showing",
+        "mediaOpen",
+        "dismissed"
+      ],
+      "identity": "the annotation id: dismissRequested, mediaOpened and mediaClosed must name the moment on screen; progress is compared with the last progress the reducer saw"
+    },
+    {
       "id": "route-intelligence",
       "kind": "reducer",
       "area": "react-app",
